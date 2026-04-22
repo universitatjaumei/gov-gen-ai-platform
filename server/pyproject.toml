@@ -1,0 +1,46 @@
+[project]
+name = "automatia-server"
+version = "0.1.0"
+description = "AutomatIA Brain Server - SaaS AI Services"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "automatia-shared",
+    "sqlmodel>=0.0.14",
+    "aiosqlite>=0.19.0",
+    "pydantic>=2.0.0",
+    "openpyxl>=3.1.0",
+    "python-dotenv",
+    "openai",
+    "google-genai",
+    "langchain-google-genai>=4.1.3",
+    "langchain-openai>=1.1.7",
+    "aiohttp>=3.12.15",
+    "nicegui>=2.0.0",
+    "browser-use>=0.1.0",
+    "playwright>=1.40.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest",
+    "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.0.0",
+    "ruff",
+]
+
+[tool.uv.sources]
+automatia-shared = { path = "../shared", editable = true }
+
+[project.optional-dependencies]
+shared = ["automatia-shared"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"
+addopts = [
+    "--verbose",
+    "--cov=app",
+    "--cov-report=term-missing",
+]

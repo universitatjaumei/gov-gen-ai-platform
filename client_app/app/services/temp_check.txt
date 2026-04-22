@@ -1,0 +1,4 @@
+
+# This is a shared utility for LocalBrainClient to avoid duplication if we want.
+# But putting it here just to be safe if I can't modify shared easily.
+# Actually I need to put the class definition inside ETLService.py before usage.

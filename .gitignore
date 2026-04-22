@@ -1,0 +1,79 @@
+# Environments
+.env
+.env.*
+.venv/
+**/.venv/
+venv/
+env/
+
+# Python
+_legacy_archive/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / Build
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# IDEs
+.vscode/
+.idea/
+
+# System
+.DS_Store
+Thumbs.db
+ehthumbs.db
+nul
+
+# Project Specific
+.nicegui/
+data/
+outputs/
+*.log
+*.sqlite
+*.db
+
+# Legacy/Specific ignores
+app/modules/extraccion/servicios/*
+
+# Browser Automation & Cache
+**/sessions/
+**/Cache/
+**/Cache_Data/
+**/Code Cache/
+**/blob_storage/
+**/GPUCache/
+**/IndexedDB/
+**/LocalStorage/
+copia/
