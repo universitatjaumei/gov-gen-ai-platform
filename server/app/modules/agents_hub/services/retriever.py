@@ -28,12 +28,17 @@ class HybridRetriever:
         chatbot_id: uuid.UUID,
         top_k: int = 5,
         language: str | None = None,
+        owner_id: uuid.UUID | None = None,
     ) -> list[SearchResult]:
         similarity = 1 - HubDocumentChunk.embedding.cosine_distance(query_embedding)
         query = (
             select(HubDocumentChunk, similarity.label("score"))
             .where(HubDocumentChunk.chatbot_id == chatbot_id)
             .where(HubDocumentChunk.embedding.isnot(None))
+            .where(
+                (HubDocumentChunk.is_temporary == False)
+                | (HubDocumentChunk.owner_id == owner_id)
+            )
         )
         if language:
             query = query.where(HubDocumentChunk.language == language)
@@ -58,8 +63,12 @@ class HybridRetriever:
         chatbot_id: uuid.UUID,
         top_k: int = 5,
         language: str | None = None,
+        owner_id: uuid.UUID | None = None,
     ) -> list[SearchResult]:
-        filters = [HubDocumentChunk.chatbot_id == chatbot_id]
+        filters = [
+            HubDocumentChunk.chatbot_id == chatbot_id,
+            (HubDocumentChunk.is_temporary == False) | (HubDocumentChunk.owner_id == owner_id),
+        ]
         for word in query.split():
             filters.append(HubDocumentChunk.content.ilike(f"%{word}%"))
         if language:
@@ -87,9 +96,10 @@ class HybridRetriever:
         top_k: int = 5,
         language: str | None = None,
         vector_weight: float = 0.7,
+        owner_id: uuid.UUID | None = None,
     ) -> list[SearchResult]:
-        vector_results = await self.vector_search(query_embedding, chatbot_id, top_k * 2, language)
-        keyword_results = await self.keyword_search(query, chatbot_id, top_k * 2, language)
+        vector_results = await self.vector_search(query_embedding, chatbot_id, top_k * 2, language, owner_id)
+        keyword_results = await self.keyword_search(query, chatbot_id, top_k * 2, language, owner_id)
 
         k = 60
         scores: dict[uuid.UUID, tuple[SearchResult, float]] = {}

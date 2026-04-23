@@ -161,6 +161,8 @@ class HubDocumentChunk(HubBase):
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
     chunk_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     language: Mapped[str] = mapped_column(String(10), default="es")
+    is_temporary: Mapped[bool] = mapped_column(Boolean, default=False)
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
