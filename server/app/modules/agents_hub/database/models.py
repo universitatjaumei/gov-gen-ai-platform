@@ -187,6 +187,7 @@ class HubInteraction(HubBase):
         UUID(as_uuid=True), nullable=True, index=True
     )
     feedback_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    feedback_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     interaction_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

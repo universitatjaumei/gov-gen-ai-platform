@@ -22,6 +22,7 @@ from server.app.modules.agents_hub.agent.state import create_initial_state
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.models import HubChatbot, HubInteraction
 from server.app.modules.agents_hub.services.embedding_service import GoogleEmbeddingService
+from server.app.modules.agents_hub.services.observability import create_callback_handler
 from server.app.modules.agents_hub.services.retriever import HybridRetriever
 
 router = APIRouter(prefix="/hub/chat", tags=["hub-chat"])
@@ -66,8 +67,13 @@ async def chat(
     compiled = graph.compile()
     collected: list[str] = []
 
+    langfuse_handler = create_callback_handler(
+        session_id=str(run_id), user_id=user.user_id
+    )
+    stream_config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
     async def generate() -> AsyncIterator[str]:
-        async for chunk in compiled.astream(initial_state):
+        async for chunk in compiled.astream(initial_state, stream_config):
             if "generate_response" in chunk:
                 for msg in chunk["generate_response"].get("messages", []):
                     content = msg.content if hasattr(msg, "content") else str(msg)

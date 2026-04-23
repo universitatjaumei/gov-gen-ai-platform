@@ -39,6 +39,32 @@ services:
         condition: service_healthy
     restart: on-failure
 
+  langfuse:
+    image: langfuse/langfuse:3
+    container_name: govgenai_langfuse
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/langfuse
+      NEXTAUTH_URL: ${LANGFUSE_NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
+      SALT: ${LANGFUSE_SALT}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_INIT_ORG_ID: govgenai-org
+      LANGFUSE_INIT_ORG_NAME: "Gov Gen AI"
+      LANGFUSE_INIT_PROJECT_ID: govgenai-project
+      LANGFUSE_INIT_PROJECT_NAME: govgenai
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_ADMIN_EMAIL}
+      LANGFUSE_INIT_USER_NAME: Admin
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_ADMIN_PASSWORD}
+    restart: unless-stopped
+
   postgres:
     image: pgvector/pgvector:pg16
     container_name: govgenai_db_prod
@@ -48,6 +74,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
+      - ./scripts/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
@@ -77,3 +104,4 @@ services:
 volumes:
   postgres_data_prod:
   minio_data_prod:
+  langfuse_data_prod:

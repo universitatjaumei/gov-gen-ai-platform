@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from server.app.database.db import init_server_db
 from server.app.api.v1.hub_chat import router as hub_chat_router
+from server.app.api.v1.hub_feedback import router as hub_feedback_router
 from server.app.api.v1.hub_tasks import router as hub_tasks_router
 from server.app.api.v1.ingestion import router as ingestion_router
 from server.app.routers.auth_router import router as auth_router
@@ -38,6 +39,7 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(library_router, prefix="/api")
 app.include_router(hub_chat_router, prefix="/api/v1")
+app.include_router(hub_feedback_router, prefix="/api/v1")
 app.include_router(hub_tasks_router, prefix="/api/v1")
 app.include_router(ingestion_router, prefix="/api/v1")
 

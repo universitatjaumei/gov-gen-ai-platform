@@ -27,6 +27,7 @@ dependencies = [
     "langchain-text-splitters>=0.3.0",
     "torch",
     "torchvision",
+    "langfuse>=2.0.0",
     "docling>=2.0.0",
     "langdetect>=1.0.9",
     "langgraph>=1.1.0",
