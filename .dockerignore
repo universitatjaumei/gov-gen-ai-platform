@@ -1,0 +1,31 @@
+.git
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# Dependencias locales (se instalan dentro del build)
+node_modules
+.venv
+server/.venv
+
+# Ficheros de entorno (se inyectan por docker-compose, no deben ir en la imagen)
+.env
+.env.*
+server/.env
+
+# Frontend y cliente local (no pertenecen al contenedor del servidor)
+frontend/
+client_app/
+
+# Datos y artefactos de desarrollo
+data/
+*.log
+*.sqlite
+
+# Documentación y metadatos del proyecto
+*.md
+.claude/
+.github/

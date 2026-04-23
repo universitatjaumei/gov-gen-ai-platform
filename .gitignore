@@ -1,6 +1,8 @@
 # Environments
 .env
 .env.*
+!.env.example
+!.env.production.example
 .venv/
 **/.venv/
 venv/
@@ -77,3 +79,12 @@ app/modules/extraccion/servicios/*
 **/IndexedDB/
 **/LocalStorage/
 copia/
+
+# Claude Code local settings (rutas absolutas de máquina)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# Capturas y assets temporales
+*.jpg
+*.jpeg
+*.png

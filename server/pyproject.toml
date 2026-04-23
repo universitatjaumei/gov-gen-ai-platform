@@ -25,6 +25,8 @@ dependencies = [
     "playwright>=1.40.0",
     "pgvector>=0.3.0",
     "langchain-text-splitters>=0.3.0",
+    "torch",
+    "torchvision",
     "docling>=2.0.0",
     "langdetect>=1.0.9",
     "langgraph>=1.1.0",
@@ -42,8 +44,15 @@ dev-dependencies = [
     "ruff",
 ]
 
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
 [tool.uv.sources]
 automatia-shared = { path = "../shared", editable = true }
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
 
 [project.optional-dependencies]
 shared = ["automatia-shared"]

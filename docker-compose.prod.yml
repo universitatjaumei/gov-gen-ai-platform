@@ -1,0 +1,79 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: govgenai_app
+    env_file:
+      - server/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-govgenai}:${POSTGRES_PASSWORD:-govgenai_dev}@postgres:5432/${POSTGRES_DB:-govgenai}
+      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-govgenai}:${POSTGRES_PASSWORD:-govgenai_dev}@postgres:5432/${POSTGRES_DB:-govgenai}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin_dev}
+      MINIO_ENDPOINT: minio:9000
+      ENVIRONMENT: production
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: govgenai_migrate
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-govgenai}:${POSTGRES_PASSWORD:-govgenai_dev}@postgres:5432/${POSTGRES_DB:-govgenai}
+      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-govgenai}:${POSTGRES_PASSWORD:-govgenai_dev}@postgres:5432/${POSTGRES_DB:-govgenai}
+    working_dir: /app/server
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: govgenai_db_prod
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: govgenai_minio_prod
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data_prod:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data_prod:
+  minio_data_prod:
