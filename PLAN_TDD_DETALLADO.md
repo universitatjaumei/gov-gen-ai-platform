@@ -61,6 +61,7 @@
 | FASE 3 — Ingestión Docling | ✅ COMPLETADO | 2026-04-23 | DoclingProcessor, IngestionWatcher, chunker, hasher, user_upload endpoint; tests verdes |
 | FASE 4 — Agente LangGraph | ✅ COMPLETADO | 2026-04-23 | Grafo LangGraph, HybridRetriever, ModelFactory, RAGAS, HITL, TaskRunner, PromptService; tests verdes |
 | FASE 5 — API Endpoints | ✅ COMPLETADO | 2026-04-23 | hub_chat (SSE), hub_tasks (export PDF/MD), embedding_service, bugfix deps.py 401; 13 tests verdes |
+| FASE 6 — Tests E2E y CI/CD | ✅ COMPLETADO | 2026-04-23 | 4 tests E2E (httpx+AsyncClient), 5 tests integración pipeline+auth, GitHub Actions CI/CD con pgvector |
 | FASE 9 — Frontend React | ⏳ PENDIENTE | — | — |
 
 ---
