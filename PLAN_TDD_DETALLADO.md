@@ -1,4 +1,4 @@
-# Plan de Implementación TDD - AI Chatbots Hub (v3.0 - Prompts Atómicos)
+﻿# Plan de Implementación TDD - AI Chatbots Hub (v3.0 - Prompts Atómicos)
 
 ---
 
@@ -62,6 +62,8 @@
 | FASE 4 — Agente LangGraph | ✅ COMPLETADO | 2026-04-23 | Grafo LangGraph, HybridRetriever, ModelFactory, RAGAS, HITL, TaskRunner, PromptService; tests verdes |
 | FASE 5 — API Endpoints | ✅ COMPLETADO | 2026-04-23 | hub_chat (SSE), hub_tasks (export PDF/MD), embedding_service, bugfix deps.py 401; 13 tests verdes |
 | FASE 6 — Tests E2E y CI/CD | ✅ COMPLETADO | 2026-04-23 | 4 tests E2E (httpx+AsyncClient), 5 tests integración pipeline+auth, GitHub Actions CI/CD con pgvector |
+| FASE 7 — Docker multi-stage | ✅ COMPLETADO | 2026-04-23 | Imagen CPU-only (~2.96 GB), uv sync, docker-compose.prod.yml, LangFuse self-hosted, scripts/postgres/init.sql |
+| FASE 8 — LangFuse + FeedbackService | ✅ COMPLETADO | 2026-04-23 | observability.py, FeedbackService, hub_feedback router, migración feedback_text, 10 tests verdes |
 | FASE 9 — Frontend React | ⏳ PENDIENTE | — | — |
 
 ---
@@ -4516,1319 +4518,756 @@ format = "ruff format src/"
 
 ---
 
-## FASE 9: Frontend React con Internacionalización (i18n)
+## FASE 9: Frontend React — Admin Hub, Widget y Migración NiceGUI
+
+> ## NOTA DE ARQUITECTURA (2026-04-23)
+>
+> Esta fase fue rediseñada antes de su ejecución. Decisiones adoptadas:
+>
+> - **Un único panel admin** en `frontend/src/admin/` cubre Hub, Automatización y Plataforma.
+>   No hay dos paneles separados. El sidebar agrupa las secciones.
+> - **Stack**: Vite + React 18 + TypeScript + Tailwind CSS + **shadcn/ui** (Radix UI) +
+>   @tanstack/react-query + react-hook-form + zod + i18next (CA/ES/EN)
+> - **Widget** (`frontend/src/widget/`) es un bundle independiente compilado en modo librería
+>   (Vite library mode). Se incrusta como `<script>` en la web de la institución.
+> - **Prioridad**: 9A (Admin Hub) → 9B (Widget/Agente) → 9C (Automatización) → 9D (Agente local)
+> - **Migración NiceGUI**: se hace pantalla a pantalla en 9C. Cada commit incluye la pantalla
+>   nueva + el borrado del fichero NiceGUI equivalente (ver CLAUDE.md).
 
 ---
 
 ### Contexto: Estrategia de Internacionalización
 
 **Requisitos del proyecto:**
-- Universidad bilingüe: **Castellano (es)**, **Catalán (ca)**, **Inglés (en)**
-- El chatbot se integra como widget en la web de la universidad
-- El idioma debe sincronizarse con el idioma seleccionado en la web principal
-- El panel de administración se gestiona directamente desde PostgreSQL (pgAdmin)
+- Universidad trilingüe: **Castellano (es)**, **Catalán (ca)**, **Inglés (en)**
+- El widget del chatbot se integra en la web de la institución — detecta el idioma de la página host
+- El panel admin es para gestión interna (Admin, Partner) — idioma persistido en localStorage
 
-**Estrategia seleccionada: react-i18next**
+**Estrategia i18n:**
 
 | Aspecto | Decisión |
 |---------|----------|
 | Librería | `react-i18next` + `i18next` |
-| Formato de traducciones | JSON por idioma (`es.json`, `ca.json`, `en.json`) |
-| Detección de idioma | Parámetro URL o mensaje desde web padre (postMessage) |
-| Namespace | Un namespace principal (`common`) + uno para el chat (`chat`) |
-| Interpolación | Soportada para variables dinámicas |
+| Formato | JSON por idioma y namespace (`common.json`, `chat.json`, `admin.json`) |
+| Detección widget | `postMessage` desde página host; fallback: parámetro URL `?lang=ca` |
+| Detección admin | `localStorage`; fallback: `navigator.language` |
 | Pluralización | Configurada para los 3 idiomas |
 
 ---
 
-### Prompt 9.1 - Estructura del Proyecto Frontend
+## BLOQUE 9A — Admin Hub
 
-**Objetivo**: Crear la estructura base del proyecto React con Vite y TypeScript.
-
-**Instrucciones**:
-```
-Crea el proyecto frontend para el widget de chatbot.
-
-ESTRUCTURA:
-frontend/
-├── src/
-│   ├── components/
-│   │   ├── ChatWidget/
-│   │   ├── ChatMessage/
-│   │   ├── ChatInput/
-│   │   └── LanguageSelector/
-│   ├── hooks/
-│   │   ├── useChat.ts
-│   │   ├── useLanguage.ts
-│   │   └── useParentMessage.ts
-│   ├── i18n/
-│   │   ├── index.ts
-│   │   └── locales/
-│   │       ├── es.json
-│   │       ├── ca.json
-│   │       └── en.json
-│   ├── services/
-│   │   └── chatApi.ts
-│   ├── types/
-│   │   └── index.ts
-│   ├── App.tsx
-│   └── main.tsx
-├── package.json
-├── vite.config.ts
-├── tsconfig.json
-└── index.html
-```
-
-**Comandos para crear**:
-```bash
-# Crear proyecto con Vite
-npm create vite@latest frontend -- --template react-ts
-cd frontend
-
-# Instalar dependencias de i18n
-npm install i18next react-i18next i18next-browser-languagedetector
-
-# Instalar dependencias adicionales
-npm install @tanstack/react-query  # Para gestión de estado async
-npm install clsx                    # Para clases condicionales
-
-# Instalar dependencias de desarrollo
-npm install -D @testing-library/react @testing-library/jest-dom vitest jsdom
-npm install -D @types/node
-```
+*Objetivo: panel de administración unificado operativo con CRUD de chatbots, clientes y documentos.*
 
 ---
 
-### Prompt 9.2 - Configuración de i18next
+### Prompt 9.1 - Scaffolding: Vite + shadcn/ui + i18n
 
-**Objetivo**: Configurar react-i18next con soporte para es, ca, en.
+**Objetivo**: Crear la estructura base del proyecto frontend con todas las dependencias.
 
-**frontend/src/i18n/index.ts**:
+**Comandos de inicialización**:
+```bash
+npm create vite@latest frontend -- --template react-ts
+cd frontend
+
+# UI y estilos
+npm install tailwindcss @tailwindcss/vite
+npx shadcn@latest init          # elige: New York, Zinc, CSS variables: yes
+
+# Estado y formularios
+npm install @tanstack/react-query @tanstack/react-table
+npm install react-hook-form zod @hookform/resolvers
+npm install react-router-dom
+
+# i18n
+npm install i18next react-i18next i18next-browser-languagedetector
+
+# Gráficas (informes)
+npm install recharts
+
+# Dev
+npm install -D vitest @vitest/ui jsdom @testing-library/react @testing-library/jest-dom
+npm install -D @types/node
+```
+
+**Estructura de carpetas**:
+```
+frontend/
+├── src/
+│   ├── admin/              # SPA de administración
+│   │   ├── components/     # Componentes específicos del admin
+│   │   ├── pages/          # Páginas del admin (Chatbots, Clients, Docs, Reports)
+│   │   └── main.tsx        # Punto de entrada del admin
+│   ├── widget/             # Bundle embebible (Vite library mode)
+│   │   ├── components/
+│   │   └── main.tsx
+│   ├── shared/             # Componentes y utils compartidos
+│   │   ├── api/            # Cliente HTTP + hooks react-query
+│   │   ├── auth/           # Contexto JWT, rutas protegidas
+│   │   └── i18n/           # Configuración i18n + locales
+│   └── components/ui/      # Componentes shadcn/ui (autogenerados)
+├── index.html              # Entry point admin
+├── widget.html             # Entry point widget
+├── vite.config.ts
+└── package.json
+```
+
+**`vite.config.ts`** (multi-entry):
 ```typescript
-import i18n from 'i18next';
-import { initReactI18next } from 'react-i18next';
-import LanguageDetector from 'i18next-browser-languagedetector';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+import path from 'path'
 
-// Importar traducciones
-import es from './locales/es.json';
-import ca from './locales/ca.json';
-import en from './locales/en.json';
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: { alias: { '@': path.resolve(__dirname, './src') } },
+  build: {
+    rollupOptions: {
+      input: {
+        admin: 'index.html',
+        widget: 'widget.html',
+      },
+    },
+  },
+})
+```
 
-// Idiomas soportados
-export const SUPPORTED_LANGUAGES = ['es', 'ca', 'en'] as const;
-export type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number];
+**Tests requeridos** (`src/shared/i18n/__tests__/i18n.test.ts`):
+```typescript
+// should_load_spanish_translations
+// should_load_catalan_translations
+// should_load_english_translations
+// should_fallback_to_spanish_for_unknown_language
+```
 
-// Idioma por defecto
-export const DEFAULT_LANGUAGE: SupportedLanguage = 'es';
+**Criterio de done**: `npm run dev` arranca el admin en `/`; `npm test` pasa.
 
-// Mapeo de idiomas a sus nombres nativos
-export const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
-  es: 'Español',
-  ca: 'Català',
-  en: 'English',
-};
+---
+
+### Prompt 9.2 - i18n: locales es / ca / en
+
+**Objetivo**: Configurar react-i18next con los tres idiomas y los namespaces `common`, `chat` y `admin`.
+
+**`src/shared/i18n/index.ts`**:
+```typescript
+import i18n from 'i18next'
+import { initReactI18next } from 'react-i18next'
+import LanguageDetector from 'i18next-browser-languagedetector'
+
+import esCommon from './locales/es/common.json'
+import esChat   from './locales/es/chat.json'
+import esAdmin  from './locales/es/admin.json'
+import caCommon from './locales/ca/common.json'
+import caChat   from './locales/ca/chat.json'
+import caAdmin  from './locales/ca/admin.json'
+import enCommon from './locales/en/common.json'
+import enChat   from './locales/en/chat.json'
+import enAdmin  from './locales/en/admin.json'
+
+export const SUPPORTED_LANGUAGES = ['es', 'ca', 'en'] as const
+export type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number]
 
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources: {
-      es: { translation: es },
-      ca: { translation: ca },
-      en: { translation: en },
+      es: { common: esCommon, chat: esChat, admin: esAdmin },
+      ca: { common: caCommon, chat: caChat, admin: caAdmin },
+      en: { common: enCommon, chat: enChat, admin: enAdmin },
     },
-    fallbackLng: DEFAULT_LANGUAGE,
+    fallbackLng: 'es',
     supportedLngs: SUPPORTED_LANGUAGES,
+    ns: ['common', 'chat', 'admin'],
+    defaultNS: 'common',
+    interpolation: { escapeValue: false },
+  })
 
-    // Configuración del detector de idioma
-    detection: {
-      // Orden de prioridad para detectar el idioma
-      order: ['querystring', 'localStorage', 'navigator'],
-      // Parámetro de URL para el idioma
-      lookupQuerystring: 'lang',
-      // Clave en localStorage
-      lookupLocalStorage: 'i18nextLng',
-      // Cachear la selección
-      caches: ['localStorage'],
-    },
-
-    interpolation: {
-      escapeValue: false, // React ya escapa
-    },
-
-    // Configuración de namespaces
-    ns: ['translation'],
-    defaultNS: 'translation',
-  });
-
-// Función para cambiar idioma programáticamente
-export const changeLanguage = (lang: SupportedLanguage): Promise<void> => {
-  return i18n.changeLanguage(lang);
-};
-
-// Función para obtener idioma actual
-export const getCurrentLanguage = (): SupportedLanguage => {
-  const current = i18n.language;
-  if (SUPPORTED_LANGUAGES.includes(current as SupportedLanguage)) {
-    return current as SupportedLanguage;
-  }
-  // Si el idioma tiene región (es-ES), extraer solo el código base
-  const base = current.split('-')[0];
-  if (SUPPORTED_LANGUAGES.includes(base as SupportedLanguage)) {
-    return base as SupportedLanguage;
-  }
-  return DEFAULT_LANGUAGE;
-};
-
-export default i18n;
+export default i18n
 ```
 
----
-
-### Prompt 9.3 - Ficheros de Traducción
-
-**Objetivo**: Crear los ficheros JSON de traducción para los 3 idiomas.
-
-**frontend/src/i18n/locales/es.json**:
+**Claves mínimas en cada locale** (`es/common.json`):
 ```json
 {
-  "chat": {
-    "title": "Asistente Virtual",
-    "subtitle": "Universidad - Ayuda 24/7",
-    "placeholder": "Escribe tu pregunta...",
-    "send": "Enviar",
-    "thinking": "Pensando...",
-    "error": "Ha ocurrido un error. Por favor, inténtalo de nuevo.",
-    "retry": "Reintentar",
-    "newConversation": "Nueva conversación",
-    "minimize": "Minimizar",
-    "expand": "Expandir",
-    "close": "Cerrar",
-    "welcomeMessage": "¡Hola! Soy el asistente virtual de la universidad. ¿En qué puedo ayudarte?",
-    "connectionError": "Error de conexión. Comprueba tu conexión a internet.",
-    "rateResponse": "¿Te ha sido útil esta respuesta?",
-    "yes": "Sí",
-    "no": "No",
-    "feedbackThanks": "¡Gracias por tu feedback!",
-    "typing": "Escribiendo..."
-  },
-  "language": {
-    "select": "Seleccionar idioma",
-    "es": "Español",
-    "ca": "Català",
-    "en": "English"
-  },
-  "accessibility": {
-    "chatWidget": "Widget de chat de ayuda",
-    "sendMessage": "Enviar mensaje",
-    "messageInput": "Campo de entrada de mensaje",
-    "botMessage": "Mensaje del asistente",
-    "userMessage": "Tu mensaje",
-    "loading": "Cargando respuesta"
-  },
-  "errors": {
-    "emptyMessage": "Por favor, escribe un mensaje",
-    "messageTooLong": "El mensaje es demasiado largo (máximo {{max}} caracteres)",
-    "serverError": "Error del servidor. Inténtalo más tarde.",
-    "networkError": "Error de red. Comprueba tu conexión."
-  },
-  "time": {
-    "justNow": "Ahora mismo",
-    "minutesAgo": "Hace {{count}} minuto",
-    "minutesAgo_plural": "Hace {{count}} minutos",
-    "hoursAgo": "Hace {{count}} hora",
-    "hoursAgo_plural": "Hace {{count}} horas",
-    "today": "Hoy",
-    "yesterday": "Ayer"
-  }
-}
-```
-
-**frontend/src/i18n/locales/ca.json**:
-```json
-{
-  "chat": {
-    "title": "Assistent Virtual",
-    "subtitle": "Universitat - Ajuda 24/7",
-    "placeholder": "Escriu la teva pregunta...",
-    "send": "Enviar",
-    "thinking": "Pensant...",
-    "error": "S'ha produït un error. Si us plau, torna-ho a provar.",
-    "retry": "Reintentar",
-    "newConversation": "Nova conversa",
-    "minimize": "Minimitzar",
-    "expand": "Expandir",
-    "close": "Tancar",
-    "welcomeMessage": "Hola! Soc l'assistent virtual de la universitat. En què puc ajudar-te?",
-    "connectionError": "Error de connexió. Comprova la teva connexió a internet.",
-    "rateResponse": "T'ha estat útil aquesta resposta?",
-    "yes": "Sí",
-    "no": "No",
-    "feedbackThanks": "Gràcies pel teu feedback!",
-    "typing": "Escrivint..."
-  },
-  "language": {
-    "select": "Seleccionar idioma",
-    "es": "Español",
-    "ca": "Català",
-    "en": "English"
-  },
-  "accessibility": {
-    "chatWidget": "Widget de xat d'ajuda",
-    "sendMessage": "Enviar missatge",
-    "messageInput": "Camp d'entrada de missatge",
-    "botMessage": "Missatge de l'assistent",
-    "userMessage": "El teu missatge",
-    "loading": "Carregant resposta"
-  },
-  "errors": {
-    "emptyMessage": "Si us plau, escriu un missatge",
-    "messageTooLong": "El missatge és massa llarg (màxim {{max}} caràcters)",
-    "serverError": "Error del servidor. Intenta-ho més tard.",
-    "networkError": "Error de xarxa. Comprova la teva connexió."
-  },
-  "time": {
-    "justNow": "Ara mateix",
-    "minutesAgo": "Fa {{count}} minut",
-    "minutesAgo_plural": "Fa {{count}} minuts",
-    "hoursAgo": "Fa {{count}} hora",
-    "hoursAgo_plural": "Fa {{count}} hores",
-    "today": "Avui",
-    "yesterday": "Ahir"
-  }
-}
-```
-
-**frontend/src/i18n/locales/en.json**:
-```json
-{
-  "chat": {
-    "title": "Virtual Assistant",
-    "subtitle": "University - 24/7 Help",
-    "placeholder": "Type your question...",
-    "send": "Send",
-    "thinking": "Thinking...",
-    "error": "An error occurred. Please try again.",
-    "retry": "Retry",
-    "newConversation": "New conversation",
-    "minimize": "Minimize",
-    "expand": "Expand",
-    "close": "Close",
-    "welcomeMessage": "Hello! I'm the university's virtual assistant. How can I help you?",
-    "connectionError": "Connection error. Please check your internet connection.",
-    "rateResponse": "Was this response helpful?",
-    "yes": "Yes",
-    "no": "No",
-    "feedbackThanks": "Thanks for your feedback!",
-    "typing": "Typing..."
-  },
-  "language": {
-    "select": "Select language",
-    "es": "Español",
-    "ca": "Català",
-    "en": "English"
-  },
-  "accessibility": {
-    "chatWidget": "Help chat widget",
-    "sendMessage": "Send message",
-    "messageInput": "Message input field",
-    "botMessage": "Assistant message",
-    "userMessage": "Your message",
-    "loading": "Loading response"
-  },
-  "errors": {
-    "emptyMessage": "Please type a message",
-    "messageTooLong": "Message is too long (maximum {{max}} characters)",
-    "serverError": "Server error. Please try again later.",
-    "networkError": "Network error. Please check your connection."
-  },
-  "time": {
-    "justNow": "Just now",
-    "minutesAgo": "{{count}} minute ago",
-    "minutesAgo_plural": "{{count}} minutes ago",
-    "hoursAgo": "{{count}} hour ago",
-    "hoursAgo_plural": "{{count}} hours ago",
-    "today": "Today",
-    "yesterday": "Yesterday"
-  }
+  "app_name": "Gov Gen AI Platform",
+  "loading": "Cargando...",
+  "error": "Error",
+  "save": "Guardar",
+  "cancel": "Cancelar",
+  "delete": "Eliminar",
+  "edit": "Editar",
+  "create": "Crear",
+  "search": "Buscar",
+  "back": "Volver",
+  "confirm_delete": "¿Confirmar eliminación?",
+  "no_results": "Sin resultados"
 }
 ```
 
 ---
 
-### Prompt 9.4 - Hook para Sincronización con Web Padre
+### Prompt 9.3 - Auth: contexto JWT y rutas protegidas
 
-**Objetivo**: Crear un hook que escuche mensajes de la web padre para sincronizar el idioma.
+**Objetivo**: Contexto React para gestión del JWT, login/logout y protección de rutas por rol.
 
-**frontend/src/hooks/useParentMessage.ts**:
+**`src/shared/auth/AuthContext.tsx`**:
 ```typescript
-import { useEffect, useCallback } from 'react';
-import { changeLanguage, SUPPORTED_LANGUAGES, SupportedLanguage } from '../i18n';
+import { createContext, useContext, useState, useEffect } from 'react'
+import { jwtDecode } from 'jwt-decode'
 
-interface ParentMessage {
-  type: 'SET_LANGUAGE' | 'INIT_CHAT' | 'CLOSE_CHAT';
-  payload?: {
-    language?: string;
-    chatbotId?: string;
-    userId?: string;
-  };
+interface AuthUser {
+  user_id: string
+  email: string
+  role: 'admin' | 'partner' | 'end_user'
 }
 
-/**
- * Hook para comunicación con la web padre (cuando el chat está en un iframe).
- * Permite sincronizar el idioma y recibir configuración inicial.
- */
-export function useParentMessage(onMessage?: (msg: ParentMessage) => void) {
-  const handleMessage = useCallback((event: MessageEvent) => {
-    // Validar origen si es necesario
-    // if (event.origin !== 'https://universidad.edu') return;
+interface AuthContextType {
+  user: AuthUser | null
+  token: string | null
+  login: (token: string) => void
+  logout: () => void
+  isAuthenticated: boolean
+}
 
-    const data = event.data as ParentMessage;
+const AuthContext = createContext<AuthContextType | null>(null)
 
-    if (!data || !data.type) return;
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [token, setToken] = useState<string | null>(
+    () => localStorage.getItem('auth_token')
+  )
 
-    switch (data.type) {
-      case 'SET_LANGUAGE':
-        if (data.payload?.language) {
-          const lang = data.payload.language.toLowerCase();
-          // Extraer código base (es-ES -> es)
-          const baseLang = lang.split('-')[0];
+  const user = token ? (jwtDecode(token) as AuthUser) : null
 
-          if (SUPPORTED_LANGUAGES.includes(baseLang as SupportedLanguage)) {
-            changeLanguage(baseLang as SupportedLanguage);
-          }
-        }
-        break;
+  const login = (newToken: string) => {
+    localStorage.setItem('auth_token', newToken)
+    setToken(newToken)
+  }
 
-      case 'INIT_CHAT':
-      case 'CLOSE_CHAT':
-        // Propagar a callback personalizado
-        break;
-    }
+  const logout = () => {
+    localStorage.removeItem('auth_token')
+    setToken(null)
+  }
 
-    // Llamar callback si existe
-    onMessage?.(data);
-  }, [onMessage]);
+  return (
+    <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated: !!user }}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
 
-  useEffect(() => {
-    window.addEventListener('message', handleMessage);
-
-    // Notificar al padre que el chat está listo
-    if (window.parent !== window) {
-      window.parent.postMessage({ type: 'CHAT_READY' }, '*');
-    }
-
-    return () => {
-      window.removeEventListener('message', handleMessage);
-    };
-  }, [handleMessage]);
-
-  // Función para enviar mensajes al padre
-  const sendToParent = useCallback((message: { type: string; payload?: unknown }) => {
-    if (window.parent !== window) {
-      window.parent.postMessage(message, '*');
-    }
-  }, []);
-
-  return { sendToParent };
+export const useAuth = () => {
+  const ctx = useContext(AuthContext)
+  if (!ctx) throw new Error('useAuth must be used inside AuthProvider')
+  return ctx
 }
 ```
 
-**Ejemplo de uso desde la web de la universidad**:
+**`src/shared/auth/ProtectedRoute.tsx`**:
+```typescript
+// Redirige a /login si no autenticado
+// Redirige a /unauthorized si el rol no está en allowedRoles
+```
+
+**`src/shared/api/client.ts`** (Axios con interceptor JWT):
+```typescript
+import axios from 'axios'
+
+const api = axios.create({ baseURL: import.meta.env.VITE_API_URL ?? '/api/v1' })
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('auth_token')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
+export default api
+```
+
+**Tests requeridos** (`src/shared/auth/__tests__/AuthContext.test.tsx`):
+```typescript
+// should_store_token_on_login
+// should_clear_token_on_logout
+// should_decode_user_from_token
+// should_redirect_unauthenticated_user
+// should_redirect_insufficient_role
+```
+
+---
+
+### Prompt 9.4 - Layout: sidebar seccional y header
+
+**Objetivo**: Layout del panel admin con sidebar colapsable, secciones Hub / Automatización / Plataforma, y header con selector de idioma y menú de usuario.
+
+**Componentes shadcn/ui a instalar**:
+```bash
+npx shadcn@latest add sidebar sheet avatar dropdown-menu badge
+```
+
+**`src/admin/components/AppSidebar.tsx`** (estructura de navegación):
+```typescript
+const navSections = [
+  {
+    label: 'Hub',
+    icon: MessageSquare,
+    items: [
+      { label: 'Chatbots',   href: '/admin/chatbots',   roles: ['admin', 'partner'] },
+      { label: 'Clientes',   href: '/admin/clients',    roles: ['admin', 'partner'] },
+      { label: 'Documentos', href: '/admin/documents',  roles: ['admin', 'partner'] },
+      { label: 'Informes',   href: '/admin/reports',    roles: ['admin', 'partner'] },
+    ],
+  },
+  {
+    label: 'Automatización',
+    icon: Workflow,
+    items: [
+      { label: 'Flujos',    href: '/admin/flows',    roles: ['admin', 'partner'] },
+      { label: 'PDF',       href: '/admin/pdf',      roles: ['admin', 'partner'] },
+      { label: 'Scripts',   href: '/admin/scripts',  roles: ['admin', 'partner'] },
+    ],
+  },
+  {
+    label: 'Plataforma',
+    icon: Settings,
+    items: [
+      { label: 'Modelos LLM',  href: '/admin/llm-configs', roles: ['admin'] },
+      { label: 'Prompts',      href: '/admin/prompts',      roles: ['admin'] },
+      { label: 'Licencias',    href: '/admin/licenses',     roles: ['admin'] },
+      { label: 'Usuarios',     href: '/admin/users',        roles: ['admin'] },
+    ],
+  },
+]
+```
+
+**Tests requeridos**:
+```typescript
+// should_render_hub_section
+// should_hide_platform_section_for_partner_role
+// should_collapse_sidebar_on_mobile
+// should_highlight_active_route
+```
+
+---
+
+### Prompt 9.5 - Hub > Pantalla de Chatbots
+
+**Objetivo**: CRUD completo de chatbots con tabla paginada, diálogo de creación/edición y confirmación de borrado.
+
+**Componentes shadcn/ui a instalar**:
+```bash
+npx shadcn@latest add table dialog form input textarea select switch alert-dialog
+```
+
+**Endpoints que consume**:
+- `GET  /api/v1/hub/chatbots` — listado (paginado)
+- `POST /api/v1/hub/chatbots` — crear
+- `PUT  /api/v1/hub/chatbots/{id}` — editar
+- `DELETE /api/v1/hub/chatbots/{id}` — eliminar
+
+**`src/admin/pages/ChatbotsPage.tsx`** — estructura clave:
+```typescript
+// useQuery: lista chatbots con react-query
+// useMutation: crear/editar/eliminar con invalidación de caché
+// DataTable con columnas: nombre, cliente, modelo, estado (Switch activo/inactivo), acciones
+// ChatbotDialog: formulario react-hook-form + zod
+//   campos: nombre, system_prompt, llm_config_id (Select), client_id (Select)
+// AlertDialog para confirmar borrado
+```
+
+**Schema de validación** (zod):
+```typescript
+const chatbotSchema = z.object({
+  name:          z.string().min(1).max(255),
+  system_prompt: z.string().min(10),
+  llm_config_id: z.string().uuid(),
+  client_id:     z.string().uuid(),
+  is_active:     z.boolean().default(true),
+})
+```
+
+**Tests requeridos** (`src/admin/pages/__tests__/ChatbotsPage.test.tsx`):
+```typescript
+// should_display_chatbots_list_on_load
+// should_open_create_dialog_on_button_click
+// should_validate_required_fields_before_submit
+// should_show_success_toast_after_create
+// should_show_confirm_dialog_before_delete
+// should_toggle_chatbot_active_status
+```
+
+---
+
+### Prompt 9.6 - Hub > Pantalla de Clientes
+
+**Objetivo**: CRUD de clientes (HubClient) con asignación de chatbots activos.
+
+**Endpoints que consume**:
+- `GET  /api/v1/hub/clients`
+- `POST /api/v1/hub/clients`
+- `PUT  /api/v1/hub/clients/{id}`
+- `DELETE /api/v1/hub/clients/{id}`
+
+**`src/admin/pages/ClientsPage.tsx`** — estructura clave:
+```typescript
+// DataTable con columnas: nombre, partner_id, chatbots asignados (Badge count), activo, acciones
+// ClientDialog: formulario con nombre, partner_id, theme_config (JSON editor simple)
+// Panel de chatbots asignados: lista de chatbots del cliente con toggle activo/inactivo
+```
+
+**Tests requeridos**:
+```typescript
+// should_list_clients_on_mount
+// should_create_client_with_valid_data
+// should_show_assigned_chatbots_count
+// should_filter_clients_by_name
+```
+
+---
+
+### Prompt 9.7 - Hub > Pantalla de Documentos
+
+**Objetivo**: Gestión de documentos por chatbot: upload múltiple, listado con estado de ingestión y borrado.
+
+**Endpoints que consume**:
+- `GET  /api/v1/hub/ingestion/{chatbot_id}/jobs` — jobs de ingestión
+- `POST /api/v1/hub/ingestion/upload` — subida de documento
+- `DELETE /api/v1/hub/ingestion/{chatbot_id}/chunks` — borrar colección
+
+**Componentes shadcn/ui**:
+```bash
+npx shadcn@latest add progress tabs
+```
+
+**`src/admin/pages/DocumentsPage.tsx`** — estructura clave:
+```typescript
+// Selector de chatbot (Select) — scope de la vista
+// Dropzone para subir PDFs (react-dropzone o input file)
+// Tabla de jobs: nombre, estado (pending/processing/done/error), chunks generados, fecha
+// Progress bar animado para jobs en curso (polling cada 3s con react-query refetch)
+// Botón "Limpiar colección" con confirmación AlertDialog
+```
+
+**Tests requeridos**:
+```typescript
+// should_list_ingestion_jobs_for_selected_chatbot
+// should_accept_pdf_files_only_in_dropzone
+// should_show_progress_for_processing_job
+// should_show_error_state_for_failed_job
+// should_confirm_before_clearing_collection
+```
+
+---
+
+### Prompt 9.8 - Hub > Pantalla de Informes
+
+**Objetivo**: Tabla de interacciones del chatbot con filtros, visualización de feedback y export CSV.
+
+**Endpoints que consume**:
+- `GET /api/v1/hub/feedback/{chatbot_id}/review?only_low_scores=false&limit=100`
+
+**Componentes shadcn/ui**:
+```bash
+npx shadcn@latest add card
+```
+
+**`src/admin/pages/ReportsPage.tsx`** — estructura clave:
+```typescript
+// Cabecera con métricas: total interacciones, media de puntuación (Card con recharts)
+// Filtros: chatbot selector, rango de fechas, solo puntuaciones bajas (Switch)
+// DataTable expandible: mensaje usuario, respuesta asistente, puntuación (Star rating), comentario
+// Export CSV (genera blob en cliente sin endpoint adicional)
+```
+
+**Tests requeridos**:
+```typescript
+// should_display_interactions_table
+// should_filter_low_score_interactions
+// should_expand_row_to_show_full_messages
+// should_export_data_as_csv
+// should_display_average_score_metric
+```
+
+---
+
+## BLOQUE 9B — Widget y Modo Agente
+
+*Objetivo: widget embebible funcional + modo agente expandido para usuarios identificados.*
+
+---
+
+### Prompt 9.9 - Widget: bundle embebible
+
+**Objetivo**: Compilar el widget como librería independiente que cualquier página HTML puede incrustar sin depender del SPA admin.
+
+**`vite.config.widget.ts`** (config específica del widget):
+```typescript
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    lib: {
+      entry: 'src/widget/main.tsx',
+      name: 'GovGenAIWidget',
+      fileName: 'widget',
+      formats: ['iife'],   // un único fichero JS auto-ejecutable
+    },
+    rollupOptions: {
+      output: { inlineDynamicImports: true },
+    },
+    outDir: 'dist/widget',
+  },
+})
+```
+
+**Integración en página externa**:
 ```html
-<!-- En la web de la universidad -->
-<iframe id="chatbot-widget" src="https://chatbot.universidad.edu?chatbotId=xxx"></iframe>
-
-<script>
-  // Cuando el usuario cambia el idioma en la web principal
-  function onLanguageChange(newLang) {
-    const chatFrame = document.getElementById('chatbot-widget');
-    chatFrame.contentWindow.postMessage({
-      type: 'SET_LANGUAGE',
-      payload: { language: newLang }
-    }, '*');
-  }
-
-  // Escuchar cuando el chat está listo
-  window.addEventListener('message', (event) => {
-    if (event.data.type === 'CHAT_READY') {
-      // Enviar idioma actual
-      onLanguageChange(getCurrentLanguage());
-    }
-  });
-</script>
+<div id="govgenai-widget"
+     data-chatbot-id="<uuid>"
+     data-lang="ca"
+     data-api-url="https://api.govgenai.example">
+</div>
+<script src="https://cdn.govgenai.example/widget.js"></script>
 ```
 
----
-
-### Prompt 9.5 - Hook de Idioma con Persistencia
-
-**Objetivo**: Implementar el hook React `useLanguage` que gestiona el idioma activo con persistencia en `localStorage` y sincronización con el hook de mensajes del padre.
-
-**frontend/src/hooks/useLanguage.ts**:
+**`src/widget/main.tsx`**:
 ```typescript
-import { useState, useEffect, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
-import {
-  changeLanguage,
-  getCurrentLanguage,
-  SUPPORTED_LANGUAGES,
-  LANGUAGE_NAMES,
-  SupportedLanguage
-} from '../i18n';
-
-interface UseLanguageReturn {
-  currentLanguage: SupportedLanguage;
-  languages: typeof SUPPORTED_LANGUAGES;
-  languageNames: typeof LANGUAGE_NAMES;
-  setLanguage: (lang: SupportedLanguage) => Promise<void>;
-  t: (key: string, options?: object) => string;
-}
-
-/**
- * Hook para gestionar el idioma de la aplicación.
- */
-export function useLanguage(): UseLanguageReturn {
-  const { t, i18n } = useTranslation();
-  const [currentLanguage, setCurrentLanguage] = useState<SupportedLanguage>(
-    getCurrentLanguage()
-  );
-
-  // Actualizar estado cuando cambia el idioma
-  useEffect(() => {
-    const handleLanguageChange = (lng: string) => {
-      const baseLang = lng.split('-')[0] as SupportedLanguage;
-      if (SUPPORTED_LANGUAGES.includes(baseLang)) {
-        setCurrentLanguage(baseLang);
-      }
-    };
-
-    i18n.on('languageChanged', handleLanguageChange);
-
-    return () => {
-      i18n.off('languageChanged', handleLanguageChange);
-    };
-  }, [i18n]);
-
-  const setLanguage = useCallback(async (lang: SupportedLanguage) => {
-    await changeLanguage(lang);
-    setCurrentLanguage(lang);
-
-    // Notificar al padre si estamos en iframe
-    if (window.parent !== window) {
-      window.parent.postMessage({
-        type: 'LANGUAGE_CHANGED',
-        payload: { language: lang }
-      }, '*');
-    }
-  }, []);
-
-  return {
-    currentLanguage,
-    languages: SUPPORTED_LANGUAGES,
-    languageNames: LANGUAGE_NAMES,
-    setLanguage,
-    t,
-  };
-}
+// Lee los atributos data-* del contenedor
+// Detecta el idioma del host vía postMessage o data-lang
+// Monta el componente ChatWidget en el contenedor
 ```
 
----
-
-### Prompt 9.6 - Componente Selector de Idioma
-
-**Objetivo**: Implementar el componente visual `LanguageSelector` que permite al usuario cambiar entre Catalán, Castellano e Inglés, adaptándose al modo compacto o expandido del widget.
-
-**frontend/src/components/LanguageSelector/LanguageSelector.tsx**:
+**Tests requeridos**:
 ```typescript
-import React from 'react';
-import { useLanguage } from '../../hooks/useLanguage';
-import type { SupportedLanguage } from '../../i18n';
-import styles from './LanguageSelector.module.css';
-
-interface LanguageSelectorProps {
-  /** Mostrar como dropdown o como botones inline */
-  variant?: 'dropdown' | 'inline';
-  /** Clase CSS adicional */
-  className?: string;
-  /** Mostrar solo iconos de bandera */
-  iconOnly?: boolean;
-}
-
-// Emojis de banderas para cada idioma
-const LANGUAGE_FLAGS: Record<SupportedLanguage, string> = {
-  es: '🇪🇸',
-  ca: '🏴󠁥󠁳󠁣󠁴󠁿', // Senyera catalana
-  en: '🇬🇧',
-};
-
-export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
-  variant = 'dropdown',
-  className = '',
-  iconOnly = false,
-}) => {
-  const { currentLanguage, languages, languageNames, setLanguage, t } = useLanguage();
-
-  const handleChange = async (lang: SupportedLanguage) => {
-    await setLanguage(lang);
-  };
-
-  if (variant === 'inline') {
-    return (
-      <div
-        className={`${styles.inlineContainer} ${className}`}
-        role="radiogroup"
-        aria-label={t('language.select')}
-      >
-        {languages.map((lang) => (
-          <button
-            key={lang}
-            type="button"
-            role="radio"
-            aria-checked={lang === currentLanguage}
-            className={`${styles.inlineButton} ${lang === currentLanguage ? styles.active : ''}`}
-            onClick={() => handleChange(lang)}
-            title={languageNames[lang]}
-          >
-            <span className={styles.flag}>{LANGUAGE_FLAGS[lang]}</span>
-            {!iconOnly && <span className={styles.label}>{languageNames[lang]}</span>}
-          </button>
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <div className={`${styles.dropdownContainer} ${className}`}>
-      <label htmlFor="language-select" className={styles.srOnly}>
-        {t('language.select')}
-      </label>
-      <select
-        id="language-select"
-        value={currentLanguage}
-        onChange={(e) => handleChange(e.target.value as SupportedLanguage)}
-        className={styles.select}
-        aria-label={t('language.select')}
-      >
-        {languages.map((lang) => (
-          <option key={lang} value={lang}>
-            {LANGUAGE_FLAGS[lang]} {languageNames[lang]}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-};
-```
-
-**frontend/src/components/LanguageSelector/LanguageSelector.module.css**:
-```css
-.dropdownContainer {
-  position: relative;
-}
-
-.select {
-  padding: 0.5rem 1rem;
-  border: 1px solid var(--border-color, #e0e0e0);
-  border-radius: 4px;
-  background-color: var(--bg-color, white);
-  font-size: 0.875rem;
-  cursor: pointer;
-  min-width: 120px;
-}
-
-.select:focus {
-  outline: 2px solid var(--primary-color, #0066cc);
-  outline-offset: 2px;
-}
-
-.inlineContainer {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.inlineButton {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.375rem 0.5rem;
-  border: 1px solid var(--border-color, #e0e0e0);
-  border-radius: 4px;
-  background: transparent;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.inlineButton:hover {
-  background-color: var(--hover-color, #f5f5f5);
-}
-
-.inlineButton.active {
-  background-color: var(--primary-color, #0066cc);
-  color: white;
-  border-color: var(--primary-color, #0066cc);
-}
-
-.flag {
-  font-size: 1.25rem;
-}
-
-.label {
-  font-size: 0.75rem;
-}
-
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  border: 0;
-}
+// should_mount_widget_from_data_attributes
+// should_use_lang_from_data_attribute
+// should_update_lang_on_postmessage_from_parent
+// should_hide_widget_if_chatbot_id_missing
 ```
 
 ---
 
-### Prompt 9.7 - Tests del Sistema i18n
+### Prompt 9.10 - Widget: chat SSE y feedback
 
-**Objetivo**: Validar la carga de archivos de traducción, el cambio dinámico de idioma, la sincronización con la web padre via `postMessage` y el fallback ante claves ausentes.
+**Objetivo**: Componente de chat completo con streaming SSE, historial de mensajes y valoración por estrellas.
 
-**frontend/src/i18n/__tests__/i18n.test.ts**:
+**`src/widget/components/ChatWidget.tsx`**:
 ```typescript
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import i18n, {
-  changeLanguage,
-  getCurrentLanguage,
-  SUPPORTED_LANGUAGES,
-  DEFAULT_LANGUAGE
-} from '../index';
-
-describe('i18n Configuration', () => {
-  beforeEach(async () => {
-    // Resetear al idioma por defecto antes de cada test
-    await changeLanguage(DEFAULT_LANGUAGE);
-  });
-
-  it('should have all supported languages configured', () => {
-    expect(SUPPORTED_LANGUAGES).toContain('es');
-    expect(SUPPORTED_LANGUAGES).toContain('ca');
-    expect(SUPPORTED_LANGUAGES).toContain('en');
-  });
-
-  it('should default to Spanish', () => {
-    expect(DEFAULT_LANGUAGE).toBe('es');
-  });
-
-  it('should change language correctly', async () => {
-    await changeLanguage('ca');
-    expect(getCurrentLanguage()).toBe('ca');
-
-    await changeLanguage('en');
-    expect(getCurrentLanguage()).toBe('en');
-  });
-
-  it('should translate keys correctly in Spanish', async () => {
-    await changeLanguage('es');
-    expect(i18n.t('chat.title')).toBe('Asistente Virtual');
-    expect(i18n.t('chat.send')).toBe('Enviar');
-  });
-
-  it('should translate keys correctly in Catalan', async () => {
-    await changeLanguage('ca');
-    expect(i18n.t('chat.title')).toBe('Assistent Virtual');
-    expect(i18n.t('chat.send')).toBe('Enviar');
-  });
-
-  it('should translate keys correctly in English', async () => {
-    await changeLanguage('en');
-    expect(i18n.t('chat.title')).toBe('Virtual Assistant');
-    expect(i18n.t('chat.send')).toBe('Send');
-  });
-
-  it('should handle interpolation', async () => {
-    await changeLanguage('es');
-    const result = i18n.t('errors.messageTooLong', { max: 1000 });
-    expect(result).toContain('1000');
-  });
-
-  it('should handle pluralization', async () => {
-    await changeLanguage('es');
-    const singular = i18n.t('time.minutesAgo', { count: 1 });
-    const plural = i18n.t('time.minutesAgo', { count: 5 });
-
-    expect(singular).toContain('1 minuto');
-    expect(plural).toContain('5 minutos');
-  });
-
-  it('should fallback to default language for unsupported languages', async () => {
-    // Intentar cambiar a un idioma no soportado
-    await i18n.changeLanguage('fr');
-    // Debe usar el fallback (es)
-    expect(i18n.t('chat.title')).toBe('Asistente Virtual');
-  });
-});
+// Estado: messages[], isLoading, error
+// useChat hook: POST /api/v1/hub/chat/{chatbot_id} → EventSource SSE
+//   - acumula chunks en el último mensaje del asistente
+//   - emite evento 'done' al recibir {done: true}
+// StarRating: 1-5 estrellas, visible al finalizar cada respuesta
+//   → llama POST /api/v1/hub/feedback/{interaction_id} con score
+// Botón flotante (cerrar/abrir) con posición configurable vía CSS custom properties
 ```
 
-**frontend/src/hooks/__tests__/useLanguage.test.tsx**:
+**Tests requeridos**:
 ```typescript
-import { describe, it, expect, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
-import { I18nextProvider } from 'react-i18next';
-import { ReactNode } from 'react';
-import i18n, { changeLanguage, DEFAULT_LANGUAGE } from '../../i18n';
-import { useLanguage } from '../useLanguage';
-
-// Wrapper con provider de i18n
-const wrapper = ({ children }: { children: ReactNode }) => (
-  <I18nextProvider i18n={i18n}>{children}</I18nextProvider>
-);
-
-describe('useLanguage Hook', () => {
-  beforeEach(async () => {
-    await changeLanguage(DEFAULT_LANGUAGE);
-  });
-
-  it('should return current language', () => {
-    const { result } = renderHook(() => useLanguage(), { wrapper });
-    expect(result.current.currentLanguage).toBe('es');
-  });
-
-  it('should return all supported languages', () => {
-    const { result } = renderHook(() => useLanguage(), { wrapper });
-    expect(result.current.languages).toContain('es');
-    expect(result.current.languages).toContain('ca');
-    expect(result.current.languages).toContain('en');
-  });
-
-  it('should change language', async () => {
-    const { result } = renderHook(() => useLanguage(), { wrapper });
-
-    await act(async () => {
-      await result.current.setLanguage('ca');
-    });
-
-    expect(result.current.currentLanguage).toBe('ca');
-  });
-
-  it('should provide translation function', () => {
-    const { result } = renderHook(() => useLanguage(), { wrapper });
-    expect(result.current.t('chat.title')).toBe('Asistente Virtual');
-  });
-});
+// should_display_user_and_assistant_messages
+// should_stream_chunks_in_real_time
+// should_show_star_rating_after_response
+// should_submit_feedback_on_star_click
+// should_show_loading_indicator_during_stream
 ```
 
 ---
 
-### Prompt 9.8 - Actualización del Backend para Soporte Multi-idioma
+### Prompt 9.11 - Modo agente: panel expandido
 
-**Objetivo**: Actualizar el backend para responder en el idioma correcto.
+**Objetivo**: Versión expandida del widget para usuarios identificados: añade Dropzone de PDFs temporales, preview de borrador y botón "Solicitar cambios".
 
-**Actualización en src/api/schemas.py**:
-```python
-"""Schemas Pydantic para la API con soporte i18n."""
-from pydantic import BaseModel, Field
-from typing import Literal, Optional
-
-
-# Idiomas soportados (sincronizado con frontend)
-SupportedLanguage = Literal["es", "ca", "en"]
-
-
-class ChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=10000)
-    language: SupportedLanguage = Field(
-        default="es",
-        description="Idioma para la respuesta (es, ca, en)"
-    )
-
-
-class ChatResponse(BaseModel):
-    content: str
-    language: SupportedLanguage
-    run_id: Optional[str] = None
-```
-
-**Actualización en src/agent/graph.py** (system prompt multi-idioma):
-```python
-"""Grafo con soporte multi-idioma."""
-
-# Prompts del sistema por idioma
-SYSTEM_PROMPTS = {
-    "es": """Eres un asistente virtual de la universidad.
-Responde siempre en español de manera clara y profesional.
-Si no conoces la respuesta, indícalo amablemente.""",
-
-    "ca": """Ets un assistent virtual de la universitat.
-Respon sempre en català de manera clara i professional.
-Si no coneixes la resposta, indica-ho amablement.""",
-
-    "en": """You are a university virtual assistant.
-Always respond in English in a clear and professional manner.
-If you don't know the answer, kindly indicate so.""",
-}
-
-
-async def generate_response_node(state: AgentState) -> dict:
-    """Genera la respuesta en el idioma configurado."""
-    language = state.get("language", "es")
-    context = state.get("retrieved_context", [])
-
-    # Obtener prompt del sistema en el idioma correcto
-    base_prompt = SYSTEM_PROMPTS.get(language, SYSTEM_PROMPTS["es"])
-
-    context_str = "\n".join(context) if context else ""
-
-    system_prompt = f"""{base_prompt}
-
-Información relevante:
-{context_str}"""
-
-    # ... resto de la implementación
-```
-
----
-
-### Prompt 9.9 - Widget de Chat Principal
-
-**Objetivo**: Implementar el componente React `ChatWidget` principal que soporta los modos `compact` (widget de esquina) y `expanded` (Modo Agente), con integración de i18n y sincronización de idioma con la web padre.
-
-**frontend/src/components/ChatWidget/ChatWidget.tsx**:
+**`src/widget/components/AgentPanel.tsx`**:
 ```typescript
-import React, { useState, useRef, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
-import { ChatMessage } from '../ChatMessage/ChatMessage';
-import { ChatInput } from '../ChatInput/ChatInput';
-import { LanguageSelector } from '../LanguageSelector/LanguageSelector';
-import { useChat } from '../../hooks/useChat';
-import { useParentMessage } from '../../hooks/useParentMessage';
-import { useLanguage } from '../../hooks/useLanguage';
-import styles from './ChatWidget.module.css';
-
-interface ChatWidgetProps {
-  chatbotId: string;
-  /** Mostrar selector de idioma (false si lo controla la web padre) */
-  showLanguageSelector?: boolean;
-  /** Posición del widget */
-  position?: 'bottom-right' | 'bottom-left' | 'embedded';
-  /** Modo de presentación: 'compact' (widget clásico) | 'expanded' (ventana ancha/Modo Agente) */
-  layout?: 'compact' | 'expanded';
-}
-
-export const ChatWidget: React.FC<ChatWidgetProps> = ({
-  chatbotId,
-  showLanguageSelector = true,
-  position = 'bottom-right',
-}) => {
-  const { t } = useTranslation();
-  const { currentLanguage } = useLanguage();
-  const [isOpen, setIsOpen] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const {
-    messages,
-    isLoading,
-    error,
-    sendMessage,
-    clearMessages
-  } = useChat(chatbotId, currentLanguage);
-
-  // Escuchar mensajes del padre (sincronización de idioma)
-  useParentMessage();
-
-  // Scroll al último mensaje
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  // Mensaje de bienvenida al abrir
-  useEffect(() => {
-    if (isOpen && messages.length === 0) {
-      // El mensaje de bienvenida se añade como mensaje del bot
-    }
-  }, [isOpen, messages.length]);
-
-  if (position !== 'embedded' && !isOpen) {
-    return (
-      <button
-        className={`${styles.launcher} ${styles[position]}`}
-        onClick={() => setIsOpen(true)}
-        aria-label={t('accessibility.chatWidget')}
-      >
-        <span className={styles.launcherIcon}>💬</span>
-      </button>
-    );
-  }
-
-  return (
-    <div
-      className={`${styles.widget} ${styles[position]} ${isMinimized ? styles.minimized : ''}`}
-      role="dialog"
-      aria-label={t('accessibility.chatWidget')}
-    >
-      {/* Header */}
-      <header className={styles.header}>
-        <div className={styles.headerContent}>
-          <h2 className={styles.title}>{t('chat.title')}</h2>
-          <p className={styles.subtitle}>{t('chat.subtitle')}</p>
-        </div>
-
-        <div className={styles.headerActions}>
-          {showLanguageSelector && (
-            <LanguageSelector variant="inline" iconOnly />
-          )}
-
-          {position !== 'embedded' && (
-            <>
-              <button
-                onClick={() => setIsMinimized(!isMinimized)}
-                className={styles.headerButton}
-                aria-label={isMinimized ? t('chat.expand') : t('chat.minimize')}
-              >
-                {isMinimized ? '🔼' : '🔽'}
-              </button>
-              <button
-                onClick={() => setIsOpen(false)}
-                className={styles.headerButton}
-                aria-label={t('chat.close')}
-              >
-                ✕
-              </button>
-            </>
-          )}
-        </div>
-      </header>
-
-      {/* Messages */}
-      {!isMinimized && (
-        <>
-          <div className={styles.messages} role="log" aria-live="polite">
-            {messages.length === 0 && (
-              <div className={styles.welcomeMessage}>
-                {t('chat.welcomeMessage')}
-              </div>
-            )}
-
-            {messages.map((msg) => (
-              <ChatMessage
-                key={msg.id}
-                message={msg}
-                isBot={msg.role === 'assistant'}
-              />
-            ))}
-
-            {isLoading && (
-              <div className={styles.thinking} aria-label={t('accessibility.loading')}>
-                {t('chat.thinking')}
-              </div>
-            )}
-
-            {error && (
-              <div className={styles.error} role="alert">
-                {t('chat.error')}
-                <button onClick={() => sendMessage(messages[messages.length - 1]?.content || '')}>
-                  {t('chat.retry')}
-                </button>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input */}
-          <ChatInput
-            onSend={sendMessage}
-            disabled={isLoading}
-            placeholder={t('chat.placeholder')}
-          />
-        </>
-      )}
-    </div>
-  );
-};
+// Solo visible si el usuario tiene token JWT válido (modo agente)
+// Dropzone: acepta PDFs, llama POST /api/v1/hub/ingestion/upload?temporary=true
+//   → muestra progreso con barra
+// LivePreview: panel derecho con el borrador generado (markdown renderizado)
+// Toolbar: "Solicitar cambios" (abre campo de comentario → regenera con instrucción adicional)
+// "Exportar" → llama GET /api/v1/hub/tasks/export/{run_id}?fmt=pdf|markdown
 ```
 
----
-
-### Prompt 9.10 - App Principal con Providers
-
-**Objetivo**: Configurar la aplicación React raíz que inicializa y compone todos los providers necesarios (i18n, ThemeProvider, React Query) y lee la configuración del chatbot desde los parámetros de URL del iframe.
-
-**frontend/src/App.tsx**:
+**Tests requeridos**:
 ```typescript
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ChatWidget } from './components/ChatWidget/ChatWidget';
-import './i18n'; // Inicializar i18n
-
-// Crear cliente de React Query
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 2,
-      staleTime: 1000 * 60 * 5, // 5 minutos
-    },
-  },
-});
-
-// Obtener chatbotId de la URL o usar default
-const getChatbotId = (): string => {
-  const params = new URLSearchParams(window.location.search);
-  return params.get('chatbotId') || 'default';
-};
-
-// Determinar si mostrar selector de idioma
-const shouldShowLanguageSelector = (): boolean => {
-  const params = new URLSearchParams(window.location.search);
-  return params.get('showLangSelector') !== 'false';
-};
-
-// Determinar posición del widget
-const getPosition = (): 'bottom-right' | 'bottom-left' | 'embedded' => {
-  const params = new URLSearchParams(window.location.search);
-  const pos = params.get('position');
-  if (pos === 'bottom-left' || pos === 'embedded') return pos;
-  return 'bottom-right';
-};
-
-function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <ChatWidget
-        chatbotId={getChatbotId()}
-        showLanguageSelector={shouldShowLanguageSelector()}
-        position={getPosition()}
-      />
-    </QueryClientProvider>
-  );
-}
-
-export default App;
+// should_show_dropzone_when_user_authenticated
+// should_upload_pdf_and_show_progress
+// should_render_draft_in_live_preview
+// should_send_change_request_and_regenerate
+// should_export_as_pdf_on_button_click
 ```
 
-**frontend/src/main.tsx**:
+---
+
+## BLOQUE 9C — Automatización (migración NiceGUI)
+
+*Prerrequisito: Bloque 9A completado (layout admin disponible). Cada prompt incluye el borrado del equivalente NiceGUI.*
+
+---
+
+### Prompt 9.12 - Automation > Flujos
+
+**Objetivo**: Pantalla de gestión de flujos de automatización. Reemplaza la vista NiceGUI equivalente.
+
+**Endpoints que consume**:
+- `GET  /api/v1/automation/flows`
+- `POST /api/v1/automation/flows`
+- `POST /api/v1/automation/flows/{id}/run`
+
+**`src/admin/pages/FlowsPage.tsx`** — estructura clave:
 ```typescript
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App';
-import './index.css';
+// DataTable: nombre, descripción, estado última ejecución, acciones (ejecutar, editar, eliminar)
+// Diálogo crear flujo: nombre + descripción
+// Botón "Ejecutar": dispara ejecución; polling del estado con react-query
+// Badge de estado: pending / running / done / error
+```
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+**Tests requeridos**:
+```typescript
+// should_list_flows_on_mount
+// should_open_create_dialog_on_button_click
+// should_show_running_status_during_execution
+// should_poll_until_execution_completes
+```
+
+**Limpieza NiceGUI** (en el mismo commit):
+```bash
+# Identificar equivalente:
+grep -r "flows\|flujos" client_app/app/ui/ --include="*.py" -l
+# Borrar el fichero encontrado
+# Verificar: grep -r "from client_app.app.ui.<módulo>" --include="*.py"
+# Confirmar: docker compose up + pytest
 ```
 
 ---
 
----
+### Prompt 9.13 - Automation > PDF extractor
 
-### Prompt 9.11 - Interfaz Expandida para el "Modo Agente"
+**Objetivo**: Interfaz de extracción PDF. Reemplaza la vista NiceGUI equivalente.
 
-**Objetivo**: Evolucionar el widget de React para soportar el modo de trabajo expandido, permitiendo la gestión de archivos y una visualización más cómoda para interacciones complejas.
-
-**Instrucciones**:
-
+**`src/admin/pages/PdfExtractPage.tsx`** — estructura clave:
+```typescript
+// Dropzone multi-fichero (solo PDFs)
+// Select de estrategia: texto lineal / tablas complejas
+// Barra de progreso durante procesamiento
+// Panel de resultados: JSON formateado + botones "Descargar JSON" / "Descargar CSV"
 ```
-Actúa como un experto en Frontend (React + Tailwind). Evoluciona el componente `ChatWidget` para soportar el modo 'Agente Expandido'.
 
-REQUISITOS DE UI:
-1. Prop `layout`: 'compact' (widget clásico) | 'expanded' (ventana ancha/pantalla completa).
-2. Zona de Dropzone: Implementar un área de 'Arrastra tu PDF aquí' que se active solo en modo identificado.
-3. Panel de 'Contexto Activo': Una barra lateral o lista superior que muestre los archivos que el usuario ha subido y que el agente está usando actualmente.
-4. Layout de Mensajes: En modo 'expanded', los mensajes deben ocupar el 70% del ancho y permitir renderizar tablas de Markdown complejas de forma legible.
-
-LÓGICA DE NEGOCIO:
-1. Sincronizar el estado de subida: Mostrar una barra de progreso mientras Docling procesa el PDF del usuario.
-2. Toggle de Visibilidad: Permitir al usuario alternar entre la vista compacta y la expandida mediante un botón de 'Modo Agente'.
-
-TESTS REQUERIDOS (Vitest):
-- should_render_dropzone_only_in_expanded_mode: Verificar la visibilidad condicional del área de carga.
-- should_update_context_list_after_upload: Validar que la lista de archivos activos se actualiza tras una subida exitosa.
+**Tests requeridos**:
+```typescript
+// should_accept_pdf_files_only
+// should_show_progress_during_extraction
+// should_display_extracted_data_on_success
+// should_download_json_result
 ```
+
+**Limpieza NiceGUI** en el mismo commit.
 
 ---
 
-### Prompt 9.12 - Panel de Previsualización de Documentos (Live Preview)
+### Prompt 9.14 - Automation > Scripts
 
-**Objetivo**: Implementar un panel lateral en el modo 'Agente Expandido' que renderice en tiempo real el documento (informe, memoria, justificación) que el asistente está construyendo.
+**Objetivo**: Catálogo y ejecución de scripts. Reemplaza la vista NiceGUI equivalente.
 
-**Instrucciones**:
-
+**`src/admin/pages/ScriptsPage.tsx`** — estructura clave:
+```typescript
+// Tabs por categoría: trigger / input / processor / output
+// Para cada script: nombre, descripción, formulario dinámico generado desde ui_contract
+// Historial de ejecuciones por script (tabla colapsable)
+// Toggle "Promover a átomo" (solo admin/partner)
 ```
-Actúa como un experto en Frontend (React + Tailwind). Implementa el componente `DocumentPreview` para el modo expandido del agente.
 
-REQUISITOS DE UI:
-1. Split-View Layout: En modo 'expanded', divide la pantalla en dos columnas. Izquierda: Chat e Ingesta. Derecha: Previsualización del Documento.
-2. Renderizado de Markdown: Utiliza `react-markdown` para convertir el 'borrador actual' generado por el agente en una vista formateada (con títulos, tablas y listas).
-3. Barra de Herramientas de Exportación: Añade botones de 'Descargar PDF' y 'Descargar DOCX' que llamen al endpoint `/api/v1/tasks/export/{run_id}`.
-4. Indicador de Sincronización: Muestra un pequeño spinner o luz de 'Escribiendo...' en la esquina del documento cuando el agente esté actualizando el contenido.
-
-LÓGICA DE NEGOCIO:
-1. Sincronización de Estado: El componente debe suscribirse al flujo de 'mensajes de tipo documento' del agente para actualizar el borrador sin refrescar toda la pantalla.
-2. Persistencia Local: Guarda el borrador actual en el estado del componente para que no se pierda si el usuario alterna entre pestañas.
-
-TESTS REQUERIDOS (Vitest):
-- test_markdown_rendering: Verificar que las tablas y negritas se visualizan correctamente en el panel de vista previa.
-- test_export_button_trigger: Validar que el botón de descarga envía el `run_id` correcto al servicio de backend.
+**Tests requeridos**:
+```typescript
+// should_render_dynamic_form_from_ui_contract
+// should_filter_scripts_by_category
+// should_display_execution_history
 ```
+
+**Limpieza NiceGUI** en el mismo commit.
 
 ---
 
-### Prompt 9.13 - Componentes de Feedback y Edición de Borradores
+### Prompt 9.15 - Limpieza NiceGUI restante
 
-**Objetivo**: Añadir mecanismos de feedback al usuario final: valoración por estrellas en el chat público y solicitud de cambios en el modo agente.
+**Objetivo**: Verificar que no queda ningún módulo NiceGUI sin migrar. Borrar los que queden.
 
-**Instrucciones**:
+**Checklist** (ver CLAUDE.md para el procedimiento completo):
+```bash
+# 1. Verificar qué módulos de client_app/app/ui/ quedan
+ls client_app/app/ui/
 
-```
-En el frontend:
+# 2. Por cada módulo sin equivalente React todavía:
+#    - Si tiene endpoint en el server → posponer (documentar)
+#    - Si es UI pura sin backend → eliminar directamente
 
-Para Chat Público: Añadir un componente de valoración (1-5 estrellas) al final de cada respuesta del bot. Los datos se envían al endpoint de feedback (Prompt 8.3) para análisis de calidad RAGAS.
+# 3. Confirmar que no hay imports rotos
+grep -r "from client_app.app.ui" . --include="*.py"
 
-Para Modo Agente: Añadir un botón de 'Solicitar Cambios' que abra un área de texto para instrucciones adicionales sobre el borrador actual. Al enviar, se dispara el nodo de refinamiento iterativo (Prompt 4.11).
-
-TESTS REQUERIDOS (Vitest):
-- should_show_star_rating_after_bot_message: Verificar que el componente de estrellas aparece solo tras mensajes del bot en modo público.
-- should_show_change_request_only_in_agent_mode: Validar que el botón 'Solicitar Cambios' no aparece en modo chatbot público.
+# 4. docker compose up + pytest → todo verde
 ```
 
 ---
 
-### Prompt 9.14 - UI Automation: Pantalla de Gestión de Flujos — NUEVA
+## BLOQUE 9D — Agente de ejecución local
 
-**Objetivo**: Primera pantalla React que reemplaza la vista de flujos de NiceGUI. Marca el inicio de la migración del módulo Automation al frontend unificado.
-
-**Contexto**: Esta pantalla es parte de `frontend/src/automation/` y conecta con los endpoints existentes del módulo `automation/` del servidor.
-
-**Instrucciones**:
-
-```
-Actúa como experto en React + Tailwind. Crea la pantalla de gestión de flujos de automatización
-en frontend/src/automation/FlowsPage.tsx.
-
-REQUISITOS:
-1. Listar flujos existentes del usuario (GET /automation/flows)
-2. Crear nuevo flujo (POST /automation/flows) con nombre y descripción
-3. Ejecutar un flujo (POST /automation/flows/{id}/run)
-4. Ver estado de ejecución en tiempo real (SSE o polling)
-5. Acceso solo para usuarios con rol admin o partner (ruta protegida)
-
-TESTS REQUERIDOS (Vitest):
-- should_list_flows_on_mount
-- should_open_create_dialog_on_button_click
-- should_show_running_status_during_execution
-```
+*El agente local reemplaza el cliente NiceGUI como proceso sin UI. Patrón GitLab Runner.*
 
 ---
 
-### Prompt 9.15 - UI Automation: Pantalla de Extracción PDF — NUEVA
+### Prompt 9.16 - Agente de ejecución local: scaffolding
 
-**Objetivo**: Interfaz React para el procesador de extracción PDF (PDFFactory), reemplazando la vista NiceGUI equivalente.
+**Objetivo**: Proceso Python ligero en `client_app/local_agent/` que se conecta al servidor por WebSocket, recibe jobs y los ejecuta localmente.
 
-**Instrucciones**:
-
+**Estructura**:
 ```
-Crea frontend/src/automation/PdfExtractPage.tsx.
-
-REQUISITOS:
-1. Dropzone para subir uno o varios PDFs al servidor (POST /automation/pdf/extract)
-2. Configuración de estrategia de extracción (texto lineal / tablas complejas)
-3. Visualización del resultado estructurado (JSON/Markdown)
-4. Descarga del resultado en JSON o CSV
-5. Indicador de progreso durante el procesamiento
-
-TESTS REQUERIDOS (Vitest):
-- should_accept_pdf_files_only
-- should_show_progress_during_extraction
-- should_display_extracted_data_on_success
-```
-
----
-
-### Prompt 9.16 - UI Automation: Panel de Scripts — NUEVA
-
-**Objetivo**: Interfaz para gestionar y ejecutar Custom Scripts, reemplazando la vista NiceGUI de scripts.
-
-**Instrucciones**:
-
-```
-Crea frontend/src/automation/ScriptsPage.tsx.
-
-REQUISITOS:
-1. Catálogo de scripts disponibles con categoría (trigger/input/processor/output)
-2. Ejecutar script con parámetros dinámicos (generados desde el ui_contract del script)
-3. Ver historial de ejecuciones del script
-4. Promover un script a átomo visible (solo admin/partner)
-
-TESTS REQUERIDOS (Vitest):
-- should_render_dynamic_form_from_ui_contract
-- should_filter_scripts_by_category
-- should_display_execution_history
-```
-
----
-
-### Prompt 9.17 - Agente de Ejecución Local: Scaffolding — NUEVA
-
-**Objetivo**: Crear el proceso ligero (sin UI) que recibe jobs del servidor y los ejecuta localmente. Patrón GitLab Runner.
-
-**Contexto**: Va en `client_app/` — es el único componente nuevo que se añade ahí. Todo lo demás en `client_app/` es legacy pendiente de migrar.
-
-**Instrucciones**:
-
-```
-Crea el agente de ejecución local en client_app/local_agent/.
-
-ESTRUCTURA:
 client_app/local_agent/
-├── main.py          # Punto de entrada; conecta al servidor por websocket
-├── runner.py        # Recibe jobs y los despacha al handler correcto
+├── main.py          # Punto de entrada; conecta al server por WebSocket
+├── runner.py        # Recibe jobs {job_id, type, payload} y despacha al handler
 ├── handlers/
-│   ├── script.py    # Ejecuta scripts Python generados (sandbox existente)
+│   ├── script.py    # Ejecuta scripts Python (sandbox existente de AutomatIA)
 │   ├── rpa.py       # Ejecuta Playwright RPA
 │   └── watcher.py   # FolderWatcher y EmailWatcher locales
-└── config.py        # URL del servidor, token de autenticación
-
-PROTOCOLO:
-- Conectar al servidor vía websocket en /agent/ws
-- Autenticarse con token de agente (generado desde el panel admin)
-- Recibir jobs en formato: {job_id, type, payload}
-- Reportar resultado: {job_id, status, output, error}
-
-TESTS REQUERIDOS:
-- test_runner_dispatches_script_job
-- test_runner_dispatches_rpa_job
-- test_runner_reports_error_on_failure
+└── config.py        # AGENT_SERVER_URL, AGENT_TOKEN (desde .env local)
 ```
 
----
+**Protocolo WebSocket**:
+```json
+// Job recibido del servidor:
+{ "job_id": "uuid", "type": "script|rpa|watcher", "payload": {...} }
 
-### Prompt 9.18 - Limpieza NiceGUI post-migración — NUEVA
-
-**Objetivo**: Checklist de borrado del código NiceGUI una vez cada pantalla ha sido migrada a React. Se ejecuta módulo a módulo, no al final de todo.
-
-**Instrucciones**:
-
-```
-Una vez que una pantalla NiceGUI tiene su equivalente React verificado con tests:
-
-CHECKLIST OBLIGATORIO (ver CLAUDE.md):
-1. Verificar que los tests de la nueva pantalla React pasan en CI
-2. Identificar el fichero o módulo NiceGUI equivalente en client_app/app/ui/
-3. Eliminar el fichero NiceGUI (no comentar, no archivar)
-4. Buscar y eliminar todos los imports del fichero eliminado:
-   grep -r "from client_app.app.ui.<modulo>" --include="*.py"
-5. Verificar que docker compose up + suite completa de tests sigue pasando
-6. Commit único que incluye la pantalla nueva + el borrado del legacy
-
-NO usar _legacy_archive/. El historial de git es la fuente del pasado.
+// Resultado reportado al servidor:
+{ "job_id": "uuid", "status": "done|error", "output": "...", "error": null }
 ```
 
----
+**`main.py`** (esqueleto):
+```python
+import asyncio, websockets, json, os
+from runner import Runner
+
+async def connect():
+    url = os.getenv("AGENT_SERVER_URL", "ws://localhost:8000/agent/ws")
+    token = os.getenv("AGENT_TOKEN", "")
+    runner = Runner()
+    async with websockets.connect(url, additional_headers={"Authorization": f"Bearer {token}"}) as ws:
+        async for message in ws:
+            job = json.loads(message)
+            result = await runner.dispatch(job)
+            await ws.send(json.dumps(result))
+
+if __name__ == "__main__":
+    asyncio.run(connect())
+```
+
+**Tests requeridos** (`client_app/tests/test_runner.py`):
+```python
+# test_runner_dispatches_script_job
+# test_runner_dispatches_rpa_job
+# test_runner_reports_error_on_failure
+# test_runner_unknown_type_returns_error
+```
+
+**Criterio de done**: El agente conecta al server, recibe un job de tipo `script`, lo ejecuta y reporta el resultado. Tests pasan.
 
 ## ANEXO A: Componentes Complementarios
 

@@ -27,7 +27,7 @@ El proyecto existe localmente en esta carpeta **sin git inicializado**. Contiene
 2. **Monorepo**: Un solo repositorio GitHub con `server/`, `frontend/` y `client_app/` (agente local).
 3. **Nuevo repositorio GitHub** (no branch de automatia, ya que no hay git previo y el alcance cambia sustancialmente).
 4. **Dual-license**: AGPLv3 para instituciones públicas / Licencia comercial para partners.
-5. **Frontend**: React + Vite + TypeScript + Tailwind CSS + i18next (CA/ES/EN).
+5. **Frontend**: React + Vite + TypeScript + Tailwind CSS + **shadcn/ui** + i18next (CA/ES/EN). Panel admin unificado (Hub + Automatización + Plataforma); widget embebible como bundle independiente (Vite library mode).
 6. **pgvector**: Introducido en el sprint de Infraestructura Hub, sin esperar a necesitarlo en Automation.
 7. **Auth**: Migrar de `X-License-Key` + Bearer email a JWT real en Fase 0; OIDC/SAML en Q2 2026.
 8. **MCP Client**: Implementado una sola vez, compartido por Automation y Hub.
@@ -104,10 +104,21 @@ El Hub se construye **encima** de esta base, sin duplicar infraestructura.
 | ID | Tarea | Detalle |
 |---|---|---|
 | 1.1 | Crear `frontend/` | `npm create vite@latest frontend -- --template react-ts` |
-| 1.2 | Stack base | Tailwind CSS, React Router v6, i18next (CA/ES/EN), React Query, Zustand |
+| 1.2 | Stack base | Tailwind CSS + **shadcn/ui**, React Router v6, i18next (CA/ES/EN), @tanstack/react-query, react-hook-form + zod |
 | 1.3 | Auth frontend | JWT + interceptores Axios, rutas protegidas por rol (Admin, Partner, EndUser) |
-| 1.4 | Panel Admin y Partner (esqueleto) | Layout, navegación, pantallas vacías conectadas al server existente |
+| 1.4 | Panel Admin unificado (esqueleto) | Sidebar seccional: Hub / Automatización / Plataforma; layout conectado al server |
 | 1.5 | CI/CD básico | GitHub Actions: lint + tests en cada push a main |
+
+**Stack completo**:
+```
+Vite + React + TypeScript
+Tailwind CSS + shadcn/ui (componentes accesibles sobre Radix UI)
+@tanstack/react-query    → estado del servidor (fetch, cache, invalidación)
+@tanstack/react-table    → tablas de datos
+react-hook-form + zod    → formularios con validación
+recharts                 → gráficas en informes
+i18next + react-i18next  → CA / ES / EN
+```
 
 **Criterio de éxito**: Frontend arranca con login funcional conectado al server FastAPI existente.
 
@@ -167,25 +178,54 @@ GET    /hub/admin/ragas             → métricas de calidad
 
 ---
 
-### FASE 4 — Frontend Hub completo
-*Duración estimada: 4-5 semanas | Julio-Agosto 2026*
+### FASE 4 — Frontend completo (Hub, Widget, Automatización)
+*Duración estimada: 6-8 semanas | Julio-Septiembre 2026*
+
+Se ejecuta en cuatro bloques secuenciales. Ver Fase 9 del PLAN_TDD_DETALLADO.md para prompts detallados.
+
+**Bloque 4A — Admin Hub** *(prioridad)*
 
 | ID | Tarea | Usuarios | Detalle |
 |---|---|---|---|
-| 4.1 | Widget chatbot público | Ciudadanos anónimos | Build autónomo embebible vía iframe; bilingüe; detección idioma página host |
-| 4.2 | Modo agente expandido | Personal identificado | Dropzone PDFs, live preview borrador, botón "Solicitar cambios" |
-| 4.3 | Panel admin Hub | Partner/Admin | CRUD chatbots, knowledge bases, prompts, métricas RAGAS |
-| 4.4 | Sistema de temas (cascada) | Partner | CSS custom properties: Plataforma → Cliente → Chatbot |
-| 4.5 | Primera pantalla Automation en React | Partner | Gestión de flujos — primera sustitución real de NiceGUI |
+| 4A.1 | Setup shadcn/ui + i18n + auth context | Admin/Partner | Base del SPA; login conectado al server |
+| 4A.2 | Layout unificado | Admin/Partner | Sidebar seccional: Hub / Automatización / Plataforma |
+| 4A.3 | Hub > Chatbots | Partner | CRUD: listar, crear, editar, desactivar |
+| 4A.4 | Hub > Clientes | Partner | CRUD clientes + asignación de chatbots |
+| 4A.5 | Hub > Documentos | Partner | Upload, listado y borrado por chatbot |
+| 4A.6 | Hub > Informes | Admin/Partner | Tabla interacciones, filtro puntuación, export |
 
-**Sistema de temas (cascada):**
+**Bloque 4B — Widget y modo agente**
+
+| ID | Tarea | Usuarios | Detalle |
+|---|---|---|---|
+| 4B.1 | Widget embebible | Ciudadanos anónimos | Bundle independiente (Vite library mode); iframe; bilingüe; sincronización idioma página host |
+| 4B.2 | Chat SSE + feedback | Usuarios finales | Stream en tiempo real; valoración 1–5 estrellas |
+| 4B.3 | Modo agente expandido | Personal identificado | Dropzone PDFs, live preview borrador, "Solicitar cambios" |
+
+**Bloque 4C — Automatización (migración NiceGUI)**
+
+| ID | Tarea | Usuarios | Detalle |
+|---|---|---|---|
+| 4C.1 | Automation > Flujos | Partner/Admin | Reemplaza vista NiceGUI de flujos |
+| 4C.2 | Automation > PDF extractor | Partner/Admin | Reemplaza vista NiceGUI de extracción |
+| 4C.3 | Automation > Scripts | Partner/Admin | Reemplaza vista NiceGUI de scripts |
+| 4C.4 | Limpieza NiceGUI | — | Borrado módulo a módulo (ver CLAUDE.md) |
+
+**Bloque 4D — Agente de ejecución local**
+
+| ID | Tarea | Detalle |
+|---|---|---|
+| 4D.1 | `client_app/local_agent/` | Proceso sin UI; patrón GitLab Runner; WebSocket con el server |
+
+**Sistema de temas (Fase 10, tras este bloque):**
 ```
 Plataforma (defaults globales — Admin)
     └── Cliente (logo, colores corporativos — Partner)
             └── Chatbot (overrides por instancia: botón flotante, avatar — Partner)
 ```
 
-**Criterio de éxito**: Widget funcional embebible + panel admin operativo.
+**Criterio de éxito de Bloque 4A**: Panel admin operativo con CRUD de chatbots y documentos.
+**Criterio de éxito de Bloque 4B**: Widget funcional embebible en página HTML externa.
 
 ---
 
