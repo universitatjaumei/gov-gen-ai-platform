@@ -7,13 +7,16 @@ from sqlmodel import SQLModel
 
 # Import all models so Alembic can detect them
 import server.app.database.models  # noqa: F401
+from server.app.modules.agents_hub.database.models import HubBase  # noqa: F401
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = SQLModel.metadata
+# Combine both metadatas so Alembic tracks Hub tables alongside SQLModel tables
+from sqlalchemy import MetaData
+target_metadata = [SQLModel.metadata, HubBase.metadata]
 
 # Use the sync URL for Alembic (psycopg2, not asyncpg)
 database_url = os.environ.get("DATABASE_URL_SYNC")

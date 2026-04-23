@@ -56,8 +56,8 @@
 | Alembic configurado | ✅ COMPLETADO | 2026-04-22 | `server/migrations/` con `env.py` y `script.py.mako` |
 | Migración inicial BD (`initial_schema`) | ✅ COMPLETADO | 2026-04-22 | 20 tablas creadas en PostgreSQL `govgenai` |
 | **FASE 1 — Auth JWT** | ✅ COMPLETADO | 2026-04-22 | JWT real (HS256): UserInfo, UserRole, create_token/decode_token, deps.py, auth_router.py; 19 tests verdes |
-| FASE 2.1 — Alembic Hub migration | ⏳ PENDIENTE | — | Crear migración con tablas agents_hub |
-| FASE 2.2+ — ORM Hub | ⏳ PENDIENTE | — | — |
+| FASE 2.1 — Alembic Hub migration | ✅ COMPLETADO | 2026-04-23 | Migración a1b2c3d4e5f6: pgvector + 7 tablas hub_ |
+| FASE 2.2–2.9 — ORM Hub, conexión, retriever, gobernanza | ✅ COMPLETADO | 2026-04-23 | 11 tests verdes; módulo agents_hub creado |
 | FASE 3 — Ingestión Docling | ⏳ PENDIENTE | — | — |
 | FASE 4 — Agente LangGraph | ⏳ PENDIENTE | — | — |
 | FASE 9 — Frontend React | ⏳ PENDIENTE | — | — |
