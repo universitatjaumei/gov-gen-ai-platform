@@ -51,7 +51,7 @@ async def user_upload(
         chunks = await watcher.process_user_upload(
             source_url=tmp_path,
             chatbot_id=chatbot_id,
-            owner_id=uuid.UUID(current_user.sub),
+            owner_id=uuid.UUID(current_user.user_id),
         )
     finally:
         Path(tmp_path).unlink(missing_ok=True)

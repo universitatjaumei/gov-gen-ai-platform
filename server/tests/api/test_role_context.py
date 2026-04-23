@@ -55,10 +55,10 @@ def test_partner_jwt_is_accepted():
         assert response.json()["role"] == "partner"
 
 
-def test_missing_authorization_header_returns_422():
-    client = TestClient(app)
+def test_missing_authorization_header_returns_401():
+    client = TestClient(app, raise_server_exceptions=False)
     response = client.get("/test-protected")
-    assert response.status_code == 422
+    assert response.status_code == 401
 
 
 def test_invalid_token_returns_401():

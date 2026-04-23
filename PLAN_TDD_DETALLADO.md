@@ -58,8 +58,9 @@
 | **FASE 1 — Auth JWT** | ✅ COMPLETADO | 2026-04-22 | JWT real (HS256): UserInfo, UserRole, create_token/decode_token, deps.py, auth_router.py; 19 tests verdes |
 | FASE 2.1 — Alembic Hub migration | ✅ COMPLETADO | 2026-04-23 | Migración a1b2c3d4e5f6: pgvector + 7 tablas hub_ |
 | FASE 2.2–2.9 — ORM Hub, conexión, retriever, gobernanza | ✅ COMPLETADO | 2026-04-23 | 11 tests verdes; módulo agents_hub creado |
-| FASE 3 — Ingestión Docling | ⏳ PENDIENTE | — | — |
-| FASE 4 — Agente LangGraph | ⏳ PENDIENTE | — | — |
+| FASE 3 — Ingestión Docling | ✅ COMPLETADO | 2026-04-23 | DoclingProcessor, IngestionWatcher, chunker, hasher, user_upload endpoint; tests verdes |
+| FASE 4 — Agente LangGraph | ✅ COMPLETADO | 2026-04-23 | Grafo LangGraph, HybridRetriever, ModelFactory, RAGAS, HITL, TaskRunner, PromptService; tests verdes |
+| FASE 5 — API Endpoints | ✅ COMPLETADO | 2026-04-23 | hub_chat (SSE), hub_tasks (export PDF/MD), embedding_service, bugfix deps.py 401; 13 tests verdes |
 | FASE 9 — Frontend React | ⏳ PENDIENTE | — | — |
 
 ---

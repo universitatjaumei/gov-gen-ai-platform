@@ -56,6 +56,15 @@ app.include_router(auth_router, prefix="/api/v1")
 from server.app.routers.telemetry_router import router as telemetry_router
 app.include_router(telemetry_router, prefix="/api")
 
+from server.app.api.v1.ingestion import router as ingestion_router
+app.include_router(ingestion_router, prefix="/api/v1")
+
+from server.app.api.v1.hub_chat import router as hub_chat_router
+app.include_router(hub_chat_router, prefix="/api/v1")
+
+from server.app.api.v1.hub_tasks import router as hub_tasks_router
+app.include_router(hub_tasks_router, prefix="/api/v1")
+
 # --- STARTUP ---
 # --- STARTUP ---
 @app.on_startup
