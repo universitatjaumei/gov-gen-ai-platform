@@ -83,6 +83,7 @@ async def _seed_dev_client(session: AsyncSession):
             client_id="client_dev",
             partner_id="partner_dev",
             name="Cliente Desarrollo Local",
+            email="client@automatia.local",
             license_key=license_key_hash,
             is_active=True
         )

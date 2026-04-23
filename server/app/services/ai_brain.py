@@ -14,14 +14,14 @@ from datetime import datetime
 from typing import List, Dict, Any, Union, Optional, Tuple
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from server.app.modules.brain.infrastructure.llm_gateway import ejecutar_tarea
+from server.app.modules.automation.infrastructure.llm_gateway import ejecutar_tarea
 
 # Server-Side Imports
 from server.app.database.db import server_engine
 from server.app.database.models import AIConfig, ExtractionServiceConfig, License, ClientAccount, LicenseActivation
 from automatia_shared.enums import LicenseStatus
-from server.app.modules.brain.cortex import analyze_recording_with_ai, refine_playbook_with_ai, locate_visual_element
-from server.app.modules.brain.extraction_strategies import (
+from server.app.modules.automation.cortex import analyze_recording_with_ai, refine_playbook_with_ai, locate_visual_element
+from server.app.modules.automation.extraction_strategies import (
     analyze_document_structure,
     extraer_datos_precision,
     generar_script_determinista,
@@ -308,7 +308,7 @@ class AIBrainService:
         Returns:
             Dict[str, Any]: Datos extraídos en formato clave-valor.
         """
-        from server.app.modules.brain.extraction_strategies import extraer_datos_precision
+        from server.app.modules.automation.extraction_strategies import extraer_datos_precision
         from automatia_shared.core.reader import extraer_texto_dual
 
         # 1. Resolver Config + Prompt (Dynamic)
@@ -397,7 +397,7 @@ class AIBrainService:
 
         # 0. Pre-flight Billing Validation
         if license_key:
-             from server.app.modules.brain.billing_engine import BillingEngine, PartnerCreditError, LicenseError
+             from server.app.modules.automation.billing_engine import BillingEngine, PartnerCreditError, LicenseError
              billing = BillingEngine()
              try:
                  # Hash the key as the server expects hashed IDs for internal lookup from hashed keys
@@ -813,7 +813,7 @@ class AIBrainService:
             tokens: Cantidad de tokens consumidos
         """
         # Lazy import to avoid circular dependencies if any, though here it should be fine
-        from server.app.modules.brain.billing_engine import BillingEngine
+        from server.app.modules.automation.billing_engine import BillingEngine
         billing_engine = BillingEngine()
         await billing_engine.record_consumption(
              license_id=license_id,

@@ -44,7 +44,7 @@ ui.add_head_html('''
 app.add_static_files('/uploads', 'data/uploads')
 
 # Register API Routers
-from server.app.api.v1.brain import router as brain_router
+from server.app.api.v1.automation import router as brain_router
 from server.app.routers.library_router import router as library_router
 
 app.include_router(brain_router, prefix="/api")

@@ -46,6 +46,24 @@
 
 ---
 
+## Estado de Implementación
+
+> Actualizado automáticamente. Consultar antes de cada sesión.
+
+| Tarea | Estado | Fecha | Notas |
+|-------|--------|-------|-------|
+| Docker Compose (postgres + minio) | ✅ COMPLETADO | 2026-04-22 | Imágenes pgvector/pgvector:pg16 y minio/minio:latest |
+| Alembic configurado | ✅ COMPLETADO | 2026-04-22 | `server/migrations/` con `env.py` y `script.py.mako` |
+| Migración inicial BD (`initial_schema`) | ✅ COMPLETADO | 2026-04-22 | 20 tablas creadas en PostgreSQL `govgenai` |
+| **FASE 1 — Auth JWT** | ✅ COMPLETADO | 2026-04-22 | JWT real (HS256): UserInfo, UserRole, create_token/decode_token, deps.py, auth_router.py; 19 tests verdes |
+| FASE 2.1 — Alembic Hub migration | ⏳ PENDIENTE | — | Crear migración con tablas agents_hub |
+| FASE 2.2+ — ORM Hub | ⏳ PENDIENTE | — | — |
+| FASE 3 — Ingestión Docling | ⏳ PENDIENTE | — | — |
+| FASE 4 — Agente LangGraph | ⏳ PENDIENTE | — | — |
+| FASE 9 — Frontend React | ⏳ PENDIENTE | — | — |
+
+---
+
 ## Resumen Ejecutivo
 
 Este plan sigue la metodología **Test-Driven Development (TDD)**: escribir tests primero, verlos fallar, implementar el código mínimo para pasarlos, y refactorizar. Cada prompt es **atómico y autocontenido**, incluyendo ejemplos de código y tests listos para ejecutar.

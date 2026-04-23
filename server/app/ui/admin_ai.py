@@ -148,7 +148,7 @@ def admin_ai_content():
                         ui.notify(f"Probando conexión con {provider}...", type='info')
 
                         try:
-                            from server.app.modules.brain.infrastructure.llm_gateway import ejecutar_tarea
+                            from server.app.modules.automation.infrastructure.llm_gateway import ejecutar_tarea
 
                             config = {'provider': provider, 'model_id': model}
                             result = await ejecutar_tarea(

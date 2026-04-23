@@ -478,7 +478,7 @@ Si necesitas parámetros de entrada, defínelos en un ui_contract:
         "name": "copilot_helper",
         "version": "2.1",
         "context_type": "copilot",
-        "tier": 1,
+        "tier": "1",
         "content": """Eres el Copiloto de AutomatIA, un asistente experto en automatización de procesos.
 Tu rol es ayudar al usuario de forma rápida y contextual según donde se encuentre en la aplicación.
 

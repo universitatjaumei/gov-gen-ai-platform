@@ -1,62 +1,48 @@
 """
-Server database configuration and initialization.
-
-This module manages the Brain server database (brain_server.db) which stores:
-- AI configurations
-- System prompts
-- Token logs
-- Model pricing
-- Multitenancy data (Partners, Clients, Licenses)
+Server database configuration and initialization (PostgreSQL + asyncpg).
 """
 
 import os
 from sqlmodel import SQLModel
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 # Import models to register them with SQLModel metadata
-from server.app.database import models
+from server.app.database import models  # noqa: F401
 
-# Ensure data directory exists
-os.makedirs("data", exist_ok=True)
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    "postgresql+asyncpg://govgenai:govgenai_dev@localhost:5432/govgenai",
+)
 
-SERVER_DB_URL = "sqlite+aiosqlite:///data/brain_server.db"
+server_engine = create_async_engine(DATABASE_URL, echo=False, future=True)
 
-sqlite_connect_args = {
-    "check_same_thread": False,
-    "timeout": 15
-}
-
-server_engine = create_async_engine(
-    SERVER_DB_URL,
-    echo=False,
-    future=True,
-    connect_args=sqlite_connect_args
+AsyncSessionLocal = async_sessionmaker(
+    server_engine, class_=AsyncSession, expire_on_commit=False
 )
 
 
 async def init_server_db():
-    """Initialize server database and create all tables."""
+    """Create all tables (development only — use Alembic in production)."""
     async with server_engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
-        await conn.execute(text("PRAGMA journal_mode=WAL;"))
-        await conn.execute(text("PRAGMA synchronous=NORMAL;"))
 
 
 # Alias for backwards compatibility
 init_db = init_server_db
 
 
-async def seed_server_db():
-    """
-    Populates server DB with default configurations.
-    """
-    from server.app.database.models import AIConfig, ExtractionServiceConfig
-    from sqlmodel import select
-    from sqlmodel.ext.asyncio.session import AsyncSession
+async def get_session() -> AsyncSession:
+    async with AsyncSessionLocal() as session:
+        yield session
 
-    async with AsyncSession(server_engine) as session:
-        # 1. Seed AI Configs
+
+async def seed_server_db():
+    """Populates server DB with default configurations."""
+    from server.app.database.models import AIConfig
+    from sqlmodel import select
+
+    async with AsyncSessionLocal() as session:
         print("[SERVER DB] Checking/Seeding AI Configs...")
 
         required_roles = {
@@ -72,16 +58,11 @@ async def seed_server_db():
 
             if not existing:
                 print(f"[SERVER DB] Creating role: {role_key}")
-                new_config = AIConfig(
+                session.add(AIConfig(
                     role_key=role_key,
                     provider=default_cfg["provider"],
-                    model_id=default_cfg["model_id"]
-                )
-                session.add(new_config)
-            elif existing.model_id == "gemini-3-pro-preview":
-                print(f"[SERVER DB] Migrating role {role_key}: gemini-3-pro-preview -> gemini-3.1-pro-preview")
-                existing.model_id = "gemini-3.1-pro-preview"
-                session.add(existing)
+                    model_id=default_cfg["model_id"],
+                ))
 
         await session.commit()
         print("[SERVER DB] Seeding complete.")

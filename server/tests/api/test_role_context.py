@@ -1,98 +1,78 @@
+"""Tests de integración para rutas protegidas con JWT."""
+from unittest.mock import patch
 
 import pytest
-from fastapi import FastAPI, Depends, Header
+from fastapi import FastAPI, Depends
 from fastapi.testclient import TestClient
-from sqlmodel import SQLModel, create_engine, Session
-from sqlmodel.pool import StaticPool
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlmodel.ext.asyncio.session import AsyncSession
-import asyncio
 
-from server.app.api.deps import get_current_active_user, get_session
-from server.app.database.models import AdminAccount, PartnerAccount
+from server.app.api.deps import get_current_user, require_role
+from server.app.core.auth import UserInfo
+
+JWT_ENV = {
+    "JWT_SECRET_KEY": "test-secret-key-that-is-at-least-32-characters-long",
+    "JWT_ALGORITHM": "HS256",
+    "JWT_EXPIRATION_MINUTES": "60",
+}
 
 app = FastAPI()
 
+
 @app.get("/test-protected")
-async def protected_route(user = Depends(get_current_active_user)):
-    return {"user_type": type(user).__name__, "email": user.email}
+async def protected_route(user: UserInfo = Depends(get_current_user)):
+    return {"email": user.email, "role": user.role}
 
-@pytest.fixture(name="session")
-async def session_fixture():
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool
-    )
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
 
-    async with AsyncSession(engine) as session:
-        yield session
-    
-    await engine.dispose()
+@app.get("/test-admin-only")
+async def admin_only_route(user: UserInfo = Depends(require_role("admin"))):
+    return {"email": user.email}
 
-@pytest.mark.asyncio
-async def test_admin_context_success(session):
-    # 1. Setup Admin
-    admin = AdminAccount(name="Admin", email="admin@test.com", hashed_password="pw")
-    session.add(admin)
-    await session.commit()
-    
-    # Override dependency
-    app.dependency_overrides[get_session] = lambda: session
-    
+
+def _make_token(role: str, email: str = "test@test.com", user_id: str = "u-1") -> str:
+    from server.app.core.auth import create_token
+    return create_token(UserInfo(user_id=user_id, email=email, role=role))
+
+
+def test_valid_jwt_returns_user_info():
+    with patch.dict("os.environ", JWT_ENV, clear=False):
+        token = _make_token("admin", "admin@test.com")
+        client = TestClient(app)
+
+        response = client.get("/test-protected", headers={"Authorization": f"Bearer {token}"})
+
+        assert response.status_code == 200
+        assert response.json()["email"] == "admin@test.com"
+        assert response.json()["role"] == "admin"
+
+
+def test_partner_jwt_is_accepted():
+    with patch.dict("os.environ", JWT_ENV, clear=False):
+        token = _make_token("partner", "partner@test.com")
+        client = TestClient(app)
+
+        response = client.get("/test-protected", headers={"Authorization": f"Bearer {token}"})
+
+        assert response.status_code == 200
+        assert response.json()["role"] == "partner"
+
+
+def test_missing_authorization_header_returns_422():
     client = TestClient(app)
-    
-    # Test Admin
-    response = client.get(
-        "/test-protected", 
-        headers={"X-Role-Context": "admin", "Authorization": "Bearer admin@test.com"}
-    )
-    
-    # Cleanup overrides for next tests if needed, but here we use session fixture per test
-    del app.dependency_overrides[get_session]
-    
-    assert response.status_code == 200
-    assert response.json()["user_type"] == "AdminAccount"
-    assert response.json()["email"] == "admin@test.com"
-
-@pytest.mark.asyncio
-async def test_partner_context_success(session):
-    # 1. Setup Partner
-    partner = PartnerAccount(partner_id="p1", name="Partner", email="partner@test.com")
-    session.add(partner)
-    await session.commit()
-    
-    app.dependency_overrides[get_session] = lambda: session
-    client = TestClient(app)
-    
-    # Test Partner
-    response = client.get(
-        "/test-protected", 
-        headers={"X-Role-Context": "partner", "Authorization": "Bearer partner@test.com"}
-    )
-    
-    del app.dependency_overrides[get_session]
-    
-    assert response.status_code == 200
-    assert response.json()["user_type"] == "PartnerAccount"
-    assert response.json()["email"] == "partner@test.com"
-
-@pytest.mark.asyncio
-async def test_missing_header_fail():
-    client = TestClient(app)
-    # FastAPI returns 422 for missing required headers
     response = client.get("/test-protected")
     assert response.status_code == 422
 
-@pytest.mark.asyncio
-async def test_invalid_role_fail(session):
-    app.dependency_overrides[get_session] = lambda: session
-    client = TestClient(app)
-    response = client.get(
-        "/test-protected", 
-        headers={"X-Role-Context": "invalid", "Authorization": "Bearer any"}
-    )
-    del app.dependency_overrides[get_session]
-    assert response.status_code == 400 # Bad Request
+
+def test_invalid_token_returns_401():
+    with patch.dict("os.environ", JWT_ENV, clear=False):
+        client = TestClient(app)
+        response = client.get("/test-protected", headers={"Authorization": "Bearer bad.token.here"})
+        assert response.status_code == 401
+
+
+def test_wrong_role_returns_403():
+    with patch.dict("os.environ", JWT_ENV, clear=False):
+        token = _make_token("partner")
+        client = TestClient(app)
+
+        response = client.get("/test-admin-only", headers={"Authorization": f"Bearer {token}"})
+
+        assert response.status_code == 403

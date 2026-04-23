@@ -10,9 +10,9 @@ import base64
 import traceback
 
 from server.app.services.knowledge_orchestrator_service import knowledge_orchestrator
-from server.app.modules.brain.infrastructure.llm_gateway import ejecutar_tarea
+from server.app.modules.automation.infrastructure.llm_gateway import ejecutar_tarea
 from server.app.services.ai_brain import AIBrainService
-from server.app.modules.brain.billing_engine import billing_engine
+from server.app.modules.automation.billing_engine import billing_engine
 
 router = APIRouter(
     prefix="/brain",

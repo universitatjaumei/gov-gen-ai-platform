@@ -87,11 +87,11 @@ El Hub se construye **encima** de esta base, sin duplicar infraestructura.
 
 | ID | Tarea | Detalle |
 |---|---|---|
-| 0.1 | Inicializar git | `git init`, `.gitignore`, dos ficheros `LICENSE` (AGPLv3 server, MIT frontend) |
-| 0.2 | Crear repositorio GitHub | Nuevo repo, push inicial con estructura base |
-| 0.3 | Docker Compose unificado | Extender el existente: PostgreSQL con `pgvector`, MinIO, Ollama (opcional) |
-| 0.4 | Alembic | Setup de migraciones; primera migration del schema existente desde SQLite a PostgreSQL |
-| 0.5 | Renombrar `brain/` → `automation/` | Refactor limpio del módulo existente |
+| ~~0.1~~ | ~~Inicializar git~~ ✅ | `git init`, `.gitignore`, dos ficheros `LICENSE` (AGPLv3 server, MIT frontend) |
+| ~~0.2~~ | ~~Crear repositorio GitHub~~ ✅ | Nuevo repo `gov-gen-ai-platform` (ModestoFabra), push inicial |
+| ~~0.3~~ | ~~Docker Compose unificado~~ ✅ | `docker-compose.yml` con PostgreSQL+pgvector y MinIO. Pendiente: `docker compose up` tras instalar Docker Desktop |
+| ~~0.4~~ | ~~Alembic~~ ✅ | `alembic.ini` + `migrations/env.py` listos. Pendiente: `alembic revision --autogenerate` + `upgrade head` tras levantar PG |
+| ~~0.5~~ | ~~Renombrar `brain/` → `automation/`~~ ✅ | Módulo renombrado, todos los imports actualizados, legacy eliminado |
 | 0.6 | Auth JWT | Migrar de cabecera `X-License-Key` + Bearer email a JWT estándar (base para OIDC/SAML) |
 
 **Criterio de éxito**: `docker compose up` levanta server sobre PostgreSQL; todos los tests existentes pasan.

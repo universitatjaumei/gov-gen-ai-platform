@@ -16,7 +16,7 @@ import openai
 from nicegui import run
 
 # Importar el gestor de LLM existente
-from server.app.modules.brain.infrastructure.llm_gateway import ejecutar_tarea
+from server.app.modules.automation.infrastructure.llm_gateway import ejecutar_tarea
 from server.app.services.api_key_service import get_api_key
 
 def _clean_json_markdown(text: str) -> Union[List[Dict], Dict]:

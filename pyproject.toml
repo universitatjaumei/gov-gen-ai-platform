@@ -7,6 +7,11 @@ requires-python = ">=3.11"
 dependencies = [
     "nicegui==3.4.1",
     "sqlmodel>=0.0.14",
+    "asyncpg>=0.29.0",
+    "psycopg2-binary>=2.9.0",
+    "alembic>=1.13.0",
+    "PyJWT>=2.8.0",
+    "bcrypt>=4.0.0",
     "aiosqlite>=0.19.0",
     "pandas",
     "openpyxl",

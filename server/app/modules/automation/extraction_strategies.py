@@ -10,7 +10,7 @@ Este módulo contiene funciones puras para las diferentes fases de extracción:
 import json
 import re
 from typing import Dict, Any, List, Optional
-from server.app.modules.brain.infrastructure.llm_gateway import ejecutar_tarea, limpiar_respuesta_json
+from server.app.modules.automation.infrastructure.llm_gateway import ejecutar_tarea, limpiar_respuesta_json
 
 # --- AI STRATEGIES (PURE FUNCTIONS) ---
 
