@@ -23,8 +23,12 @@ function parseJwtPayload(token: string): AuthUser | null {
     const json = atob(base64.replace(/-/g, '+').replace(/_/g, '/'))
     const payload = JSON.parse(json) as Record<string, unknown>
     const user_id = (payload['user_id'] ?? payload['sub']) as unknown
-    const { email, role } = payload
+    const { email, role, exp } = payload
     if (typeof user_id !== 'string' || typeof email !== 'string' || typeof role !== 'string') {
+      return null
+    }
+    // Check if token is expired
+    if (typeof exp === 'number' && exp * 1000 < Date.now()) {
       return null
     }
     return { user_id, email, role }
