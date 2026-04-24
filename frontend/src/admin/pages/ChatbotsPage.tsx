@@ -196,8 +196,8 @@ export function ChatbotsPage() {
                 <label className="text-sm font-medium">{t('hub.chatbot_prompt')}</label>
                 <textarea
                   {...register('system_prompt')}
-                  rows={4}
-                  className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background resize-none"
+                  rows={10}
+                  className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background resize-y"
                 />
                 {errors.system_prompt && <p className="text-destructive text-xs mt-1">{errors.system_prompt.message}</p>}
               </div>
