@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.modules.agents_hub.database.connection import create_async_engine, create_session_factory
-from server.app.modules.agents_hub.database.models import HubClient, HubChatbot, HubLLMConfig
+from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig
 
 _DEV_LLM_CONFIG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 _DEV_CLIENT_ID = uuid.UUID("00000000-0000-0000-0000-000000000010")

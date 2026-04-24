@@ -1,4 +1,7 @@
-"""Endpoint de ingestión de documentos de usuario."""
+"""Endpoint de ingestión de documentos de usuario.
+
+Deploy: edge
+"""
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status

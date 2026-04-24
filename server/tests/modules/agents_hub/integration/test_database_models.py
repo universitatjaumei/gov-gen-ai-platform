@@ -13,7 +13,7 @@ async def db_session():
         create_async_engine,
         create_session_factory,
     )
-    from server.app.modules.agents_hub.database.models import HubBase
+    from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
 
     engine = create_async_engine(DB_URL)
     async with engine.begin() as conn:
@@ -34,7 +34,7 @@ class TestHubLLMConfigModel:
     @pytest.mark.asyncio
     async def test_llm_config_persistence(self, db_session) -> None:
         """Prompt 2.8 — Validar que se pueden guardar y recuperar parámetros LLM."""
-        from server.app.modules.agents_hub.database.models import HubLLMConfig
+        from server.app.modules.agents_hub.database.config_models import HubLLMConfig
 
         config = HubLLMConfig(
             provider="google",
@@ -59,8 +59,7 @@ class TestHubChatbotModel:
     @pytest.mark.asyncio
     async def test_create_chatbot_requires_llm_config(self, db_session) -> None:
         """Prompt 2.9 — Validar que no se puede crear un chatbot sin llm_config_id."""
-        from server.app.modules.agents_hub.database.models import HubChatbot, HubClient
-        import sqlalchemy.exc
+        from server.app.modules.agents_hub.database.config_models import HubChatbot
 
         client = HubClient(name="Test Inst", partner_id="partner_dev")
         db_session.add(client)
@@ -80,11 +79,7 @@ class TestHubChatbotModel:
     @pytest.mark.asyncio
     async def test_create_chatbot_with_valid_model(self, db_session) -> None:
         """Chatbot con llm_config válido se persiste correctamente."""
-        from server.app.modules.agents_hub.database.models import (
-            HubChatbot,
-            HubClient,
-            HubLLMConfig,
-        )
+        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig
 
         llm = HubLLMConfig(provider="openai", model_name="gpt-4o", temperature=0.5)
         db_session.add(llm)
@@ -116,12 +111,7 @@ class TestHubPromptTemplateModel:
     @pytest.mark.asyncio
     async def test_chatbot_retrieves_correct_prompt_by_language(self, db_session) -> None:
         """Prompt 2.8 — Al pedir 'system_base' en catalán no devuelve el de castellano."""
-        from server.app.modules.agents_hub.database.models import (
-            HubChatbot,
-            HubClient,
-            HubLLMConfig,
-            HubPromptTemplate,
-        )
+        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig, HubPromptTemplate
 
         llm = HubLLMConfig(provider="google", model_name="gemini-flash")
         db_session.add(llm)
@@ -171,12 +161,8 @@ class TestHubDocumentChunkModel:
 
     @pytest.mark.asyncio
     async def test_create_chunk_with_vector(self, db_session) -> None:
-        from server.app.modules.agents_hub.database.models import (
-            HubChatbot,
-            HubClient,
-            HubDocumentChunk,
-            HubLLMConfig,
-        )
+        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig
+from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
 
         llm = HubLLMConfig(provider="google", model_name="gemini-flash")
         db_session.add(llm)

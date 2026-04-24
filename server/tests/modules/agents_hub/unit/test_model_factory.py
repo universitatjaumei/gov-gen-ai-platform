@@ -19,16 +19,13 @@ class TestModelFactory:
             api_key_secret_name="GOOGLE_API_KEY",
         )
 
-        mock_session = AsyncMock()
-        # Two consecutive execute() calls return different Mock results
-        mock_session.execute.side_effect = [
-            Mock(scalar_one_or_none=Mock(return_value=mock_chatbot)),
-            Mock(scalar_one_or_none=Mock(return_value=mock_config)),
-        ]
+        mock_config_provider = AsyncMock()
+        mock_config_provider.get_chatbot.return_value = mock_chatbot
+        mock_config_provider.get_llm_config.return_value = mock_config
 
         with patch('server.app.modules.agents_hub.services.model_factory.ChatGoogleGenerativeAI') as mock_cls:
             mock_cls.return_value = Mock()
-            model = await get_model(uuid.uuid4(), mock_session)
+            model = await get_model(uuid.uuid4(), mock_config_provider)
 
         mock_cls.assert_called_once()
         assert model is not None
@@ -46,15 +43,13 @@ class TestModelFactory:
             api_key_secret_name="OPENAI_API_KEY",
         )
 
-        mock_session = AsyncMock()
-        mock_session.execute.side_effect = [
-            Mock(scalar_one_or_none=Mock(return_value=mock_chatbot)),
-            Mock(scalar_one_or_none=Mock(return_value=mock_config)),
-        ]
+        mock_config_provider = AsyncMock()
+        mock_config_provider.get_chatbot.return_value = mock_chatbot
+        mock_config_provider.get_llm_config.return_value = mock_config
 
         with patch('server.app.modules.agents_hub.services.model_factory.ChatOpenAI') as mock_cls:
             mock_cls.return_value = Mock()
-            model = await get_model(uuid.uuid4(), mock_session)
+            model = await get_model(uuid.uuid4(), mock_config_provider)
 
         mock_cls.assert_called_once()
 

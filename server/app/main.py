@@ -14,6 +14,7 @@ from server.app.api.v1.hub_chat import router as hub_chat_router
 from server.app.api.v1.hub_feedback import router as hub_feedback_router
 from server.app.api.v1.hub_tasks import router as hub_tasks_router
 from server.app.api.v1.ingestion import router as ingestion_router
+from server.app.api.v1.edge_sync import router as edge_sync_router
 from server.app.routers.auth_router import router as auth_router
 from server.app.routers.library_router import router as library_router
 from server.app.routers.hub_chatbots_router import router as hub_chatbots_router
@@ -40,14 +41,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth_router, prefix="/api/v1")
-app.include_router(library_router, prefix="/api")
-app.include_router(hub_chat_router, prefix="/api/v1")
-app.include_router(hub_feedback_router, prefix="/api/v1")
-app.include_router(hub_tasks_router, prefix="/api/v1")
-app.include_router(ingestion_router, prefix="/api/v1")
-app.include_router(hub_chatbots_router, prefix="/api/v1")
-app.include_router(hub_clients_router, prefix="/api/v1")
+import os
+DEPLOY_MODE = os.getenv("DEPLOY_MODE", "all").lower()
+if DEPLOY_MODE not in ("cloud", "edge", "all"):
+    raise RuntimeError(f"Invalid DEPLOY_MODE: {DEPLOY_MODE}")
+
+def _register_cloud(app: FastAPI) -> None:
+    app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(library_router, prefix="/api")
+    app.include_router(hub_chatbots_router, prefix="/api/v1")
+    app.include_router(hub_clients_router, prefix="/api/v1")
+    app.include_router(edge_sync_router, prefix="/api/v1")  # servido por cloud
+
+def _register_edge(app: FastAPI) -> None:
+    app.include_router(hub_chat_router, prefix="/api/v1")
+    app.include_router(hub_feedback_router, prefix="/api/v1")
+    app.include_router(hub_tasks_router, prefix="/api/v1")
+    app.include_router(ingestion_router, prefix="/api/v1")
+
+if DEPLOY_MODE in ("cloud", "all"):
+    _register_cloud(app)
+if DEPLOY_MODE in ("edge", "all"):
+    _register_edge(app)
 
 
 @app.get("/health")

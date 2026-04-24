@@ -6,7 +6,7 @@ from typing import Protocol
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.modules.agents_hub.database.models import HubDocumentChunk, HubIngestionJob
+from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk, HubIngestionJob
 from server.app.modules.agents_hub.ingestion.chunker import MarkdownChunker
 from server.app.modules.agents_hub.ingestion.docling_processor import DoclingProcessor
 from server.app.modules.agents_hub.ingestion.hasher import hash_content

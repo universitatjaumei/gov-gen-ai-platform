@@ -13,13 +13,9 @@ async def populated_session():
         create_async_engine,
         create_session_factory,
     )
-    from server.app.modules.agents_hub.database.models import (
-        HubBase,
-        HubChatbot,
-        HubClient,
-        HubDocumentChunk,
-        HubLLMConfig,
-    )
+    from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
+from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig
+from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
 
     engine = create_async_engine(DB_URL)
     async with engine.begin() as conn:

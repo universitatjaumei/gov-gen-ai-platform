@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.modules.agents_hub.database.models import HubDocumentChunk
+from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
 
 
 @dataclass

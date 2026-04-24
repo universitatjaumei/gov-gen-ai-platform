@@ -1,4 +1,4 @@
-﻿# Plan de Implementación TDD - AI Chatbots Hub (v3.0 - Prompts Atómicos)
+# Plan de Implementación TDD - AI Chatbots Hub (v3.0 - Prompts Atómicos)
 
 ---
 
@@ -4936,7 +4936,7 @@ const chatbotSchema = z.object({
 
 ---
 
-### Prompt 9.6.5 - Frontera Edge-Cloud (preparación del despliegue híbrido)
+### Prompt 9.6.5 - Frontera Edge-Cloud (preparación del despliegue híbrido) ✅ COMPLETADO
 
 **Objetivo**: Establecer la separación estructural entre módulos **cloud** (administración, gobernanza, configuración) y módulos **edge** (RAG, chat, ingesta, datos del cliente) antes de que la superficie de modelos/servicios crezca más. No se implementa el despliegue edge; se fija la frontera en el código para que la futura separación sea mecánica, no un refactor transversal.
 
@@ -5096,7 +5096,7 @@ El objetivo de este prompt es **congelar la frontera en el código**; la separac
 
 ---
 
-### Prompt 9.6.6 - Frontera Edge-Cloud en la capa de aplicación (routers y módulos)
+### Prompt 9.6.6 - Frontera Edge-Cloud en la capa de aplicación (routers y módulos) ✅ COMPLETADO
 
 **Objetivo**: Clasificar routers HTTP y módulos de lógica según su pertenencia a cloud o edge. Introducir `DEPLOY_MODE` para que el mismo codebase pueda arrancarse como cloud-only, edge-only o all (por defecto). Fijar las reglas anti-import para que los módulos edge no dependan de módulos cloud.
 

@@ -1,4 +1,7 @@
-"""CRUD de clientes del Hub."""
+"""CRUD de clientes del Hub.
+
+Deploy: cloud
+"""
 import uuid
 from datetime import datetime, timezone
 
@@ -9,7 +12,7 @@ from sqlalchemy import func, select, delete as sql_delete
 from server.app.api.deps import get_current_user, require_role
 from server.app.core.auth.models import UserInfo
 from server.app.modules.agents_hub.database.connection import get_async_session
-from server.app.modules.agents_hub.database.models import HubChatbot, HubClient
+from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient
 
 router = APIRouter(prefix="/hub/clients", tags=["hub-clients"])
 

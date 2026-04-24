@@ -33,7 +33,7 @@ def _set_jwt_env():
 async def db_engine():
     """Motor de BD por test: crea las tablas hub_ si no existen."""
     from server.app.modules.agents_hub.database.connection import create_async_engine
-    from server.app.modules.agents_hub.database.models import HubBase
+    from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
 
     engine = create_async_engine(_TEST_DB_URL)
     async with engine.begin() as conn:
@@ -77,23 +77,8 @@ def admin_headers():
 @pytest.fixture
 async def setup_chatbot(db_session):
     """Crea un chatbot de prueba con cliente, config LLM y chunk de conocimiento."""
-    from server.app.modules.agents_hub.database.models import (
-        HubChatbot,
-        HubClient,
-        HubDocumentChunk,
-        HubLLMConfig,
-    )
-    from server.app.modules.agents_hub.ingestion.hasher import hash_content
-
-    llm_config = HubLLMConfig(
-        provider="google",
-        model_name="gemini-2.0-flash",
-        temperature=0.7,
-        max_tokens=2048,
-        api_key_secret_name="GOOGLE_API_KEY",
-    )
-    db_session.add(llm_config)
-    await db_session.flush()
+    from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig
+from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
 
     client = HubClient(name="E2E Test Client", partner_id="partner-e2e-1")
     db_session.add(client)

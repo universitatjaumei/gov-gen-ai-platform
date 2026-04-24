@@ -6,6 +6,9 @@ POST /api/v1/hub/feedback/{interaction_id}
 
 GET /api/v1/hub/feedback/{chatbot_id}/review
   Devuelve interacciones para revisión humana (solo admin).
+
+
+Deploy: edge
 """
 import uuid
 

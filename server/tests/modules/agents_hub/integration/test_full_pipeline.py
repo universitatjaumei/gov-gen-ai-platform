@@ -35,20 +35,9 @@ class TestRAGPipeline:
             create_async_engine,
             create_session_factory,
         )
-        from server.app.modules.agents_hub.database.models import (
-            HubBase,
-            HubChatbot,
-            HubClient,
-            HubDocumentChunk,
-            HubLLMConfig,
-        )
-        from server.app.modules.agents_hub.ingestion.chunker import MarkdownChunker
-        from server.app.modules.agents_hub.ingestion.hasher import hash_content
-        from server.app.modules.agents_hub.services.retriever import HybridRetriever
-
-        engine = create_async_engine(DB_URL)
-        async with engine.begin() as conn:
-            await conn.run_sync(HubBase.metadata.create_all)
+        from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
+from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig
+from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
 
         factory = create_session_factory(engine)
         async with factory() as session:

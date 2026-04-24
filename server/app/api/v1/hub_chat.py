@@ -4,6 +4,9 @@ POST /api/v1/hub/chat/{chatbot_id}
   Invoca el grafo LangGraph y devuelve la respuesta del agente
   en tiempo real como Server-Sent Events (text/event-stream).
   Guarda la interacción completa en hub_interactions al terminar el stream.
+
+
+Deploy: edge
 """
 import json
 import uuid
@@ -20,7 +23,8 @@ from server.app.core.auth import UserInfo
 from server.app.modules.agents_hub.agent.graph import create_agent_graph
 from server.app.modules.agents_hub.agent.state import create_initial_state
 from server.app.modules.agents_hub.database.connection import get_async_session
-from server.app.modules.agents_hub.database.models import HubChatbot, HubInteraction
+from server.app.modules.agents_hub.database.config_models import HubChatbot
+from server.app.modules.agents_hub.database.operational_models import HubInteraction
 from server.app.modules.agents_hub.services.embedding_service import GoogleEmbeddingService
 from server.app.modules.agents_hub.services.observability import create_callback_handler
 from server.app.modules.agents_hub.services.retriever import HybridRetriever

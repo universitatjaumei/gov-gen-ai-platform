@@ -60,7 +60,7 @@ class TestChatFlowE2E:
         self, test_app, setup_chatbot, auth_headers, db_session
     ) -> None:
         """Tras el chat, la interacción queda guardada en hub_interactions."""
-        from server.app.modules.agents_hub.database.models import HubInteraction
+        from server.app.modules.agents_hub.database.operational_models import HubInteraction
 
         chatbot = setup_chatbot
 

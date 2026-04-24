@@ -4,7 +4,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.modules.agents_hub.database.models import HubPromptTemplate
+from server.app.modules.agents_hub.database.config_models import HubPromptTemplate
 
 
 async def get_formatted_prompt(

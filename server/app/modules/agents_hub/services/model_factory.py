@@ -7,35 +7,29 @@ from langchain_openai import ChatOpenAI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.modules.agents_hub.database.models import HubLLMConfig
+from server.app.modules.agents_hub.database.config_models import HubLLMConfig
+
+from server.app.modules.agents_hub.services.config_provider import ConfigProvider
 
 
-async def get_model(chatbot_id: uuid.UUID, session: AsyncSession):
+async def get_model(chatbot_id: uuid.UUID, config_provider: ConfigProvider):
     """Devuelve la instancia LLM configurada para el chatbot.
 
-    Consulta la tabla hub_llm_configs y devuelve el objeto LangChain
+    Consulta a través del ConfigProvider y devuelve el objeto LangChain
     correspondiente al provider (google | openai | ollama).
 
     Args:
         chatbot_id: ID del chatbot
-        session: Sesión de base de datos
+        config_provider: Proveedor de configuración
 
     Returns:
         Instancia del modelo LLM
     """
-    from server.app.modules.agents_hub.database.models import HubChatbot
-
-    result = await session.execute(
-        select(HubChatbot).where(HubChatbot.id == chatbot_id)
-    )
-    chatbot = result.scalar_one_or_none()
+    chatbot = await config_provider.get_chatbot(chatbot_id)
     if chatbot is None:
         raise ValueError(f"Chatbot {chatbot_id} not found")
 
-    result = await session.execute(
-        select(HubLLMConfig).where(HubLLMConfig.id == chatbot.llm_config_id)
-    )
-    config = result.scalar_one_or_none()
+    config = await config_provider.get_llm_config(chatbot.llm_config_id)
     if config is None:
         raise ValueError(f"LLM config not found for chatbot {chatbot_id}")
 

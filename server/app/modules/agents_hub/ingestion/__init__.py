@@ -1,1 +1,4 @@
-"""Módulo de ingestión de documentos."""
+"""Módulo de ingestión de documentos.
+
+Deploy: edge
+"""

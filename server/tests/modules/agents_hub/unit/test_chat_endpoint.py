@@ -104,8 +104,7 @@ class TestChatEndpointStreaming:
     @patch.dict("os.environ", _JWT_ENV)
     def test_chat_returns_sse_stream(self) -> None:
         """Petición válida → 200 con Content-Type text/event-stream."""
-        from server.app.modules.agents_hub.database.models import HubChatbot
-        from langchain_core.messages import AIMessage
+        
 
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.id = uuid.uuid4()
@@ -140,8 +139,7 @@ class TestChatEndpointStreaming:
     @patch.dict("os.environ", _JWT_ENV)
     def test_chat_stream_contains_content_and_run_id(self) -> None:
         """El stream incluye 'content' y 'run_id' en cada chunk de respuesta."""
-        from server.app.modules.agents_hub.database.models import HubChatbot
-        from langchain_core.messages import AIMessage
+        
 
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.id = uuid.uuid4()
@@ -178,8 +176,7 @@ class TestChatEndpointStreaming:
     @patch.dict("os.environ", _JWT_ENV)
     def test_chat_stream_ends_with_done_event(self) -> None:
         """El stream termina con un evento {done: true, run_id: ...}."""
-        from server.app.modules.agents_hub.database.models import HubChatbot
-        from langchain_core.messages import AIMessage
+        
 
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.id = uuid.uuid4()

@@ -4,7 +4,7 @@ import uuid
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.modules.agents_hub.database.models import HubInteraction
+from server.app.modules.agents_hub.database.operational_models import HubInteraction
 from server.app.modules.agents_hub.services.observability import get_langfuse_client
 
 

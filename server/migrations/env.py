@@ -7,7 +7,7 @@ from sqlmodel import SQLModel
 
 # Import all models so Alembic can detect them
 import server.app.database.models  # noqa: F401
-from server.app.modules.agents_hub.database.models import HubBase  # noqa: F401
+
 
 config = context.config
 

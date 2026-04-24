@@ -28,13 +28,7 @@ def _make_token(role: str = "user", user_id: str = _OWNER_ID) -> str:
 
 
 def _make_interaction(user_id: str = _OWNER_ID):
-    from server.app.modules.agents_hub.database.models import HubInteraction
-    interaction = MagicMock(spec=HubInteraction)
-    interaction.run_id = uuid.uuid4()
-    interaction.user_id = user_id
-    interaction.user_message = "¿Cuál es la normativa de contratación?"
-    interaction.assistant_message = "## Informe\n\nLa normativa vigente establece..."
-    return interaction
+    
 
 
 def _build_export_app(interaction_mock) -> FastAPI:
