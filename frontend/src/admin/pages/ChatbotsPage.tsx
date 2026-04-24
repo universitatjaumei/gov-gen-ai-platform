@@ -29,6 +29,7 @@ export function ChatbotsPage() {
   const [editing, setEditing] = useState<Chatbot | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Chatbot | null>(null)
+  const [deleteError, setDeleteError] = useState('')
 
   const { data: chatbots = [], isLoading } = useQuery({
     queryKey: ['chatbots'],
@@ -73,7 +74,9 @@ export function ChatbotsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['chatbots'] })
       setDeleteTarget(null)
+      setDeleteError('')
     },
+    onError: (err: Error) => setDeleteError(err.message),
   })
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>({
@@ -229,10 +232,11 @@ export function ChatbotsPage() {
           <div className="bg-card rounded-lg p-6 w-full max-w-sm shadow-lg space-y-4">
             <p className="text-sm">{t('hub.delete_confirm')}</p>
             <p className="font-medium">{deleteTarget.name}</p>
+            {deleteError && <p className="text-destructive text-xs">{deleteError}</p>}
             <div className="flex gap-2 justify-end">
               <button
                 type="button"
-                onClick={() => setDeleteTarget(null)}
+                onClick={() => { setDeleteTarget(null); setDeleteError('') }}
                 className="px-3 py-2 border rounded-md text-sm"
               >
                 {tc('cancel')}

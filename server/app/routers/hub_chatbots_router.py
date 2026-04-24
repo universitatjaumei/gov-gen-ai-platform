@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, delete as sql_delete
 
 from server.app.api.deps import get_current_user, require_role
 from server.app.core.auth.models import UserInfo
@@ -105,5 +105,5 @@ async def delete_chatbot(
     chatbot = await session.get(HubChatbot, chatbot_id)
     if not chatbot:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chatbot not found")
-    await session.delete(chatbot)
+    await session.execute(sql_delete(HubChatbot).where(HubChatbot.id == chatbot_id))
     await session.commit()
