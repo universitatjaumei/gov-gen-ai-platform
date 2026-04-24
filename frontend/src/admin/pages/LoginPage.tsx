@@ -19,7 +19,7 @@ export function LoginPage() {
     setLoading(true)
     const form = new FormData(e.currentTarget)
     try {
-      const res = await fetch(`${API_BASE}/auth/token/admin`, {
+      const res = await fetch(`${API_BASE}/api/v1/auth/token/admin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: form.get('email'), password: form.get('password') }),

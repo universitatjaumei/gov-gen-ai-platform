@@ -8,7 +8,7 @@ Este módulo crea los datos iniciales necesarios para desarrollo:
 - Licencia de desarrollo con cuota amplia
 
 Credenciales de desarrollo:
-  Admin:   admin@govgenai.local  /  admin1234
+  Admin:   fabra@uji.es  /  admin1234
   Partner: dev@automatia.local   /  (cualquiera — login partner no verifica pwd)
 
 La clave de licencia de desarrollo es: DEV_LICENSE_KEY_12345
@@ -25,7 +25,7 @@ from automatia_shared.enums import LicenseStatus
 
 # Constante para desarrollo - usar en tests y desarrollo local
 DEV_LICENSE_KEY = "DEV_LICENSE_KEY_12345"
-DEV_ADMIN_EMAIL = "admin@govgenai.local"
+DEV_ADMIN_EMAIL = "fabra@uji.es"
 DEV_ADMIN_PASSWORD = "admin1234"
 
 

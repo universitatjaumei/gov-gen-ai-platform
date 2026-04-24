@@ -22,7 +22,8 @@ function parseJwtPayload(token: string): AuthUser | null {
     const base64 = token.split('.')[1]
     const json = atob(base64.replace(/-/g, '+').replace(/_/g, '/'))
     const payload = JSON.parse(json) as Record<string, unknown>
-    const { user_id, email, role } = payload
+    const user_id = (payload['user_id'] ?? payload['sub']) as unknown
+    const { email, role } = payload
     if (typeof user_id !== 'string' || typeof email !== 'string' || typeof role !== 'string') {
       return null
     }

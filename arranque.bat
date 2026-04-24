@@ -6,17 +6,30 @@ echo ========================================
 echo       GOV GEN AI PLATFORM
 echo ========================================
 echo.
-echo  1. Servidor FastAPI (desarrollo)
-echo  2. Aplicacion NiceGUI legacy
+echo  1. FastAPI + Frontend React (desarrollo completo)
+echo  2. Solo servidor FastAPI
+echo  3. Aplicacion NiceGUI legacy
 echo.
-set /p OPCION="Selecciona [1/2]: "
+set /p OPCION="Selecciona [1/2/3]: "
 
-if "%OPCION%"=="1" goto :servidor
-if "%OPCION%"=="2" goto :legacy
+if "%OPCION%"=="1" goto :completo
+if "%OPCION%"=="2" goto :servidor
+if "%OPCION%"=="3" goto :legacy
 
 echo [ERROR] Opcion no valida.
 pause
 exit /b 1
+
+:completo
+echo.
+echo [INFO] Verificando que Docker Desktop esta corriendo (PostgreSQL + MinIO)...
+echo [INFO] Levantando servidor FastAPI en http://localhost:8000
+echo [INFO] Levantando frontend React en http://localhost:5173
+echo.
+set PYTHONUNBUFFERED=1
+start "FastAPI" cmd /k "cd /d "%~dp0" && uv run --project server uvicorn server.app.main:app --reload --host 0.0.0.0 --port 8000"
+start "Frontend" cmd /k "cd /d "%~dp0frontend" && npm run dev"
+goto :fin
 
 :servidor
 echo.
@@ -25,9 +38,7 @@ echo [INFO] Levantando servidor FastAPI en http://localhost:8000
 echo [INFO] Swagger UI en http://localhost:8000/docs
 echo.
 set PYTHONUNBUFFERED=1
-cd /d "%~dp0server"
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-cd /d "%~dp0"
+uv run --project server uvicorn server.app.main:app --reload --host 0.0.0.0 --port 8000
 goto :fin
 
 :legacy
