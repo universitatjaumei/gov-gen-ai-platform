@@ -1,0 +1,20 @@
+{
+  "nav": {
+    "hub": "Hub",
+    "automation": "Automatització",
+    "platform": "Plataforma"
+  },
+  "hub": {
+    "chatbots": "Chatbots",
+    "clients": "Clients",
+    "documents": "Documents",
+    "reports": "Informes"
+  },
+  "login": {
+    "title": "Iniciar sessió",
+    "email": "Usuari",
+    "password": "Contrasenya",
+    "submit": "Entrar",
+    "error": "Credencials incorrectes"
+  }
+}

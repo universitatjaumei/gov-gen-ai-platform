@@ -1,0 +1,15 @@
+{
+  "app_name": "Gov Gen AI Platform",
+  "loading": "Loading...",
+  "error": "Error",
+  "save": "Save",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "edit": "Edit",
+  "create": "Create",
+  "search": "Search",
+  "confirm": "Confirm",
+  "back": "Back",
+  "logout": "Log out",
+  "language": "Language"
+}

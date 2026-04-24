@@ -1,0 +1,20 @@
+{
+  "nav": {
+    "hub": "Hub",
+    "automation": "Automation",
+    "platform": "Platform"
+  },
+  "hub": {
+    "chatbots": "Chatbots",
+    "clients": "Clients",
+    "documents": "Documents",
+    "reports": "Reports"
+  },
+  "login": {
+    "title": "Sign in",
+    "email": "Username",
+    "password": "Password",
+    "submit": "Sign in",
+    "error": "Invalid credentials"
+  }
+}

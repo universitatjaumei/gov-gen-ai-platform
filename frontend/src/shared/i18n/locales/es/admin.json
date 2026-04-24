@@ -1,0 +1,20 @@
+{
+  "nav": {
+    "hub": "Hub",
+    "automation": "Automatización",
+    "platform": "Plataforma"
+  },
+  "hub": {
+    "chatbots": "Chatbots",
+    "clients": "Clientes",
+    "documents": "Documentos",
+    "reports": "Informes"
+  },
+  "login": {
+    "title": "Iniciar sesión",
+    "email": "Usuario",
+    "password": "Contraseña",
+    "submit": "Entrar",
+    "error": "Credenciales incorrectas"
+  }
+}
