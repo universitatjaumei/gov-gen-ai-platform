@@ -65,6 +65,18 @@
 | FASE 7 — Docker multi-stage | ✅ COMPLETADO | 2026-04-23 | Imagen CPU-only (~2.96 GB), uv sync, docker-compose.prod.yml, LangFuse self-hosted, scripts/postgres/init.sql |
 | FASE 8 — LangFuse + FeedbackService | ✅ COMPLETADO | 2026-04-23 | observability.py, FeedbackService, hub_feedback router, migración feedback_text, 10 tests verdes |
 | FASE 9 — Frontend React | ⏳ PENDIENTE | — | — |
+| FASE 10 — Sistema de temas y panel de IA | ⏳ PENDIENTE | — | — |
+| FASE 11 — Autoinstalación | ⏳ PENDIENTE | — | — |
+| FASE 12 — Gestor de Expedientes | ⏳ PENDIENTE | — | Ampliada con Analista/Validador/Fábricas/UJI/G400/ENI/ENS |
+| FASE 13 — Privacidad NER (Zero-Knowledge) | ⏳ PENDIENTE | — | Migración legacy → `server/app/core/privacy/`; vault en Edge |
+| FASE 14 — Sandbox distribuido Edge ↔ Thin-client | ⏳ PENDIENTE | — | Split: AST+firma→server, ejecución→thin client |
+| FASE 15 — RunManifest + AuditService + Script Registry | ⏳ PENDIENTE | — | Unificación transversal automation+expedientes; IA Frugal |
+| FASE 16 — Determinista-first + Fábricas como nodos LangGraph | ⏳ PENDIENTE | — | Migración fábricas + NodoFabrica + NodoValidador |
+| FASE 17 — Agente Analista + base vectorial de normativa | ⏳ PENDIENTE | — | KB `regulation` + NodoAnalista; solo expedientes |
+| FASE 18 — Bridges semánticos ampliados | ⏳ PENDIENTE | — | Migración + generalización multi-contexto |
+| FASE 19 — Adaptadores UJI + Gestión 400 + ENI/ENS | ⏳ PENDIENTE | — | Ver Fase 12 Prompt E5 (ya actualizado) |
+| FASE 20 — Accesibilidad WCAG 2.2 AA + admin conversacional | ⏳ PENDIENTE | — | Transversal sobre Fases 9-10 |
+| FASE 21 — RPA web (diferido a v2) | ⏳ FUERA ALCANCE v1 | — | Decisión documentada; worker Playwright en Edge si necesario |
 
 ---
 
@@ -5103,65 +5115,579 @@ export default defineConfig({
 
 *Prerrequisito: Bloque 9A completado (layout admin disponible). Cada prompt incluye el borrado del equivalente NiceGUI.*
 
+**Orden de ejecución dentro del bloque** (las dependencias son estrictas):
+
+```
+Guía 9C.0 (conceptual, se lee antes de escribir código)
+  ├── 9.12a  Focus Mode React          ──┐
+  │                                       ├──► 9.12  Flujos
+  │                                       │
+  └── 9.12b  Refactor backend Docling  ──┼──► 9.13  PDF extractor (UI)
+                                          │
+                                          └──► 9.14  Scripts
+                                               9.15  Limpieza NiceGUI restante
+```
+
+---
+
+### Guía 9C.0 — Separación de lógica NiceGUI → React/FastAPI
+
+**Objetivo**: Regla única y reutilizable para decidir, ante cualquier página NiceGUI a migrar, qué sube al servidor FastAPI y qué queda como estado local React. Aplica a los prompts 9.12, 9.13, 9.14 y a cualquier átomo/procesador que se migre en el futuro sin necesidad de una nueva revisión arquitectónica.
+
+Esta guía **no produce código**: es el filtro conceptual que cada prompt de migración aplica en su sección "Separación de lógica". Léela antes de abrir el fichero NiceGUI y clasifica cada bloque según las reglas de abajo.
+
+#### Reglas de clasificación
+
+| Tipo de código en NiceGUI | Destino | Justificación |
+|---|---|---|
+| Acceso a BD, llamadas a LLM, lectura/escritura de ficheros de servidor | **FastAPI** (endpoint nuevo o existente) | Privilegios, credenciales y transaccionalidad viven en el servidor |
+| Máquinas de estado con fases canónicas (`PHASE_RANGES`, progreso de ejecución, checkpoints) | **FastAPI** (persistido) | Debe sobrevivir a refresco de página y ser auditable |
+| Servicios de automatización (WorkflowHealthService, CoherenceService, BridgeService, PillProvider, validaciones estructurales de FlowSpec/TaskSpec) | **FastAPI** (módulo `server/app/modules/automation/`) | Son reglas de dominio, no de UI; deben poder invocarse también desde ejecución headless |
+| Orquestación de pasos, validación cruzada entre campos, cálculo de variables disponibles (data pills) | **FastAPI** | Dominio |
+| Singletons `FocusManager`, `LayoutState`, `layout_manager` | **React state** (Context o Zustand) | Son estado de presentación puro; no tienen sentido en el servidor |
+| Visibilidad de pestañas/drawer, pestaña activa, modo expert, colapso del sidebar | **React state local** | UI puro; volátil por diseño |
+| Selección actual del usuario (`editing_step`, `designing_atom_type`, fila seleccionada) | **React state local** | UI puro |
+| Caché de listados, mutaciones, invalidación | **react-query** (cliente) | Estándar del stack frontend |
+| Formularios antes de `submit` | **react-hook-form + zod** (cliente) | Validación síncrona sin round-trip |
+| Mensajes i18n, etiquetas, tooltips | **React + i18next** | Nunca hardcodeados en TSX |
+
+#### Contrato de datos que viaja por la API
+
+Por cada pantalla que se migra, el prompt correspondiente **debe** documentar:
+
+1. **Endpoints consumidos** (verbo + path + body/query + response schema resumido).
+2. **Esquema del estado de servidor** que persiste (tabla/columna o documento) y cuál es su clave primaria.
+3. **Esquema del estado de cliente** (qué campos viven en React y cuándo se pierden al navegar).
+4. **Polling / SSE**: si hay procesos largos, se indica cadencia y condición de parada.
+
+#### Checklist aplicado en cada prompt de migración
+
+Antes de cerrar un prompt 9.1x debe cumplirse:
+
+- [ ] Toda lógica clasificable como "dominio" según la tabla vive en `server/app/modules/...`, con tests unitarios en `server/tests/`.
+- [ ] La UI React es declarativa: no contiene `if/else` sobre reglas de negocio más allá de "qué componente renderizar".
+- [ ] No hay duplicación cliente/servidor de la misma validación (una validación de dominio se aplica **solo** en el servidor; la validación de formulario del cliente es puramente ergonómica).
+- [ ] El fichero NiceGUI equivalente está eliminado (no comentado, no archivado).
+- [ ] Ningún `grep -r` devuelve imports del módulo NiceGUI eliminado.
+- [ ] `docker compose up` + `pytest` completan en verde tras el borrado.
+
+---
+
+### Prompt 9.12a - Focus Mode React: LayoutContext + DrawerHub
+
+**Objetivo**: Replicar en React el "focus mode" de NiceGUI: drawer lateral derecho con tres pestañas (**Configuración**, **Data Pills**, **Copilot**) y colapso del sidebar izquierdo. Las pestañas visibles dependen del modo activo y del tipo de átomo/paso que se está diseñando. Prerequisito de 9.12 (Flujos); reutilizable por cualquier pantalla de automatización que necesite drawer contextual.
+
+**Elección de arquitectura de estado — Zustand (no Context)**:
+
+Justificación:
+- El estado de layout lo leen y mutan componentes muy dispersos (sidebar, drawer, toolbar, páginas hijas). Con Context cualquier mutación re-renderiza a todos los consumidores; con Zustand cada componente se suscribe solo a las slices que usa.
+- El equivalente NiceGUI (`FocusManager` + `LayoutState` + `layout_manager`) son singletons con polling cada 200 ms. En React eso se traduce a un store global con suscripción fina, no a un árbol de Providers.
+- Zustand tiene API mínima, no exige Provider wrapper y se integra trivialmente con tests (se puede resetear entre tests con `useLayoutStore.setState(initialState)`).
+
+**Instalación**:
+```bash
+npm install zustand
+npx shadcn@latest add sheet scroll-area tabs
+```
+
+**`src/automation/state/useLayoutStore.ts`** — store de layout:
+```typescript
+// slices: viewMode ('standard' | 'focus'), drawerVisible, activeTab ('config' | 'pills' | 'copilot'),
+//         currentMode ('gallery' | 'design' | 'documentation' | 'flow_edit'),
+//         designingAtomType (string | null), editingStep (StepSpec | null),
+//         sidebarCollapsed (boolean)
+// acciones: enterFocusMode(step, flow?), exitFocusMode(), setActiveTab(tab),
+//           setDesigningAtomType(type | null), setEditingStep(step | null)
+// selectores derivados: selectVisibleTabs(state) → ('config' | 'pills' | 'copilot')[]
+//   ├── regla: en flow_edit → las tres pestañas
+//   ├── regla: si hay designingAtomType → según capabilityMap[type] (has_stepper, has_variables)
+//   ├── regla: gallery/documentation → config + (pills si documentation)
+//   └── regla: fallback → solo copilot
+// efecto: al entrar en focus mode, sidebarCollapsed = true y drawerVisible = true
+```
+
+**`src/automation/config/capabilityMap.ts`** — réplica del mapa NiceGUI:
+```typescript
+// Mapa atomType → { hasStepper: boolean, hasVariables: boolean }
+// Se exporta DEFAULT_CAPABILITY = { hasStepper: true, hasVariables: true }
+// Derivado 1:1 de client_app/app/config/capability_map.py
+```
+
+**`src/automation/components/DrawerHub.tsx`**:
+```typescript
+// <Sheet side="right" open={drawerVisible} onOpenChange={...}>
+//   <header>: icono contextual + título i18n + botón cerrar
+//   <Tabs value={activeTab}>:
+//     renderiza solo las pestañas devueltas por selectVisibleTabs
+//     tabs posibles: Configuración (tune), Data Pills (data_object), Copilot (auto_awesome)
+//   <TabsContent value="config">  → <ConfigPanel />
+//   <TabsContent value="pills">   → <DataPillsPanel />
+//   <TabsContent value="copilot"> → <CopilotPanel />
+// </Sheet>
+// Sincronización automática: un useEffect corrige activeTab si la pestaña
+//   activa deja de ser visible (replica la lógica de drawer_hub.py líneas 62-77).
+```
+
+**`src/automation/components/DataPillsPanel.tsx`**:
+```typescript
+// Props: flowId, currentStepIndex
+// useQuery: GET /api/v1/automation/flows/{flowId}/pills?beforeStep={currentStepIndex}
+//   → DataPill[] = { label, originStep, varName, reference: "{{STEP.var}}" }
+// Render agrupado por originStep (accordion)
+// Cada pill es un botón copyable: click → navigator.clipboard.writeText(pill.reference)
+// onInsert?: callback opcional que recibe la referencia para insertarla en el campo activo
+```
+
+**`src/automation/components/AutomationLayout.tsx`** — integración con sidebar:
+```typescript
+// Layout wrapper que lee viewMode + sidebarCollapsed del store
+// <aside className={cn(
+//   'transition-all',
+//   sidebarCollapsed ? 'w-16' : 'w-64'
+// )}>
+// <main className={viewMode === 'focus' ? 'h-screen overflow-hidden' : 'max-w-7xl mx-auto p-4'}>
+// <DrawerHub /> (solo montado cuando drawerVisible)
+```
+
+**Separación de lógica aplicada (según Guía 9C.0)**:
+
+- **Servidor**: `PillProvider.get_available_pills(step_index)` se expone como `GET /api/v1/automation/flows/{id}/pills?beforeStep={n}` y devuelve `DataPill[]`. Se elimina la lógica Python de `client_app/app/ui/pill_logic.py` de la UI; queda un servicio en `server/app/modules/automation/pills_service.py`. El `capability_map` se expone adicionalmente como `GET /api/v1/automation/atoms/capabilities` para que el frontend lo cachee al arranque (react-query, `staleTime: Infinity`).
+- **Cliente**: viewMode, drawerVisible, activeTab, editingStep, designingAtomType, sidebarCollapsed. Ninguno se persiste en BD; se pierden al recargar por diseño.
+- **Contrato API**:
+  ```
+  GET /api/v1/automation/flows/{id}/pills?beforeStep=<int>
+  → 200 { pills: [{ label, origin_step, var_name, reference }] }
+
+  GET /api/v1/automation/atoms/capabilities
+  → 200 { capabilities: { "email.send": {has_stepper, has_variables}, ... } }
+  ```
+
+**Tests requeridos** (Vitest + Testing Library):
+```typescript
+// src/automation/state/__tests__/useLayoutStore.test.ts
+// should_enter_focus_mode_and_collapse_sidebar
+// should_exit_focus_mode_and_restore_sidebar
+// should_show_all_three_tabs_in_flow_edit_mode
+// should_hide_pills_tab_when_capability_disables_variables
+// should_auto_switch_active_tab_when_current_becomes_invisible
+
+// src/automation/components/__tests__/DrawerHub.test.tsx
+// should_render_only_visible_tabs
+// should_close_drawer_on_header_button_click
+// should_copy_pill_reference_to_clipboard_on_click
+
+// src/automation/components/__tests__/DataPillsPanel.test.tsx
+// should_group_pills_by_origin_step
+// should_call_onInsert_with_reference_when_provided
+// should_show_empty_state_when_no_previous_steps
+```
+
+**Limpieza NiceGUI** (se aplica parcialmente aquí; el resto al cerrar 9.12/9.13/9.14):
+```bash
+# El borrado de focus_manager/layout_state/drawer_hub/pill_logic NO ocurre en este commit
+# porque las páginas NiceGUI que aún no se han migrado siguen dependiendo de ellos.
+# Se documenta como deuda que se cancela en 9.15 (Limpieza NiceGUI restante).
+```
+
 ---
 
 ### Prompt 9.12 - Automation > Flujos
 
-**Objetivo**: Pantalla de gestión de flujos de automatización. Reemplaza la vista NiceGUI equivalente.
+**Objetivo**: Pantalla de gestión de flujos de automatización con editor en Focus Mode. Reemplaza `client_app/app/ui/flows_page.py` (950 líneas, ~50% lógica mezclada).
 
 **Endpoints que consume**:
-- `GET  /api/v1/automation/flows`
-- `POST /api/v1/automation/flows`
-- `POST /api/v1/automation/flows/{id}/run`
+- `GET    /api/v1/automation/flows`
+- `POST   /api/v1/automation/flows`
+- `GET    /api/v1/automation/flows/{id}`
+- `PUT    /api/v1/automation/flows/{id}`
+- `DELETE /api/v1/automation/flows/{id}`
+- `POST   /api/v1/automation/flows/{id}/run`
+- `GET    /api/v1/automation/flows/{id}/runs/{run_id}`
+- `POST   /api/v1/automation/flows/{id}/validate` *(nuevo, ver separación)*
+- `GET    /api/v1/automation/flows/{id}/pills?beforeStep={n}` *(de 9.12a)*
 
-**`src/admin/pages/FlowsPage.tsx`** — estructura clave:
+**Estructura de ficheros**:
+```
+src/admin/pages/FlowsPage.tsx           ← listado + acciones CRUD
+src/automation/pages/FlowEditor.tsx     ← editor en focus mode
+src/automation/components/FlowStepList.tsx
+src/automation/components/FlowStepCard.tsx
+src/automation/components/FlowValidationBadge.tsx
+src/automation/hooks/useFlowValidation.ts
+```
+
+**`src/admin/pages/FlowsPage.tsx`** — listado:
 ```typescript
-// DataTable: nombre, descripción, estado última ejecución, acciones (ejecutar, editar, eliminar)
-// Diálogo crear flujo: nombre + descripción
-// Botón "Ejecutar": dispara ejecución; polling del estado con react-query
-// Badge de estado: pending / running / done / error
+// DataTable (@tanstack/react-table): nombre, descripción, estado última ejecución, versión publicada, acciones
+// Diálogo crear flujo: nombre + descripción (react-hook-form + zod)
+// Botón "Ejecutar": POST /flows/{id}/run → navegar a vista de ejecución
+// Badge de estado: pending / running / done / error (polling con react-query refetchInterval mientras running)
+// Botón "Editar" → navega a /admin/flows/{id}/edit
+```
+
+**`src/automation/pages/FlowEditor.tsx`** — editor (usa Focus Mode):
+```typescript
+// Al montar: enterFocusMode() del store (9.12a)
+// Layout de tres zonas:
+//   - Sidebar izquierdo colapsado (desde 9.12a)
+//   - Main: lista de pasos reordenables (dnd-kit)
+//   - DrawerHub (desde 9.12a) con las tres pestañas
+// Seleccionar paso: setEditingStep(step) → el DrawerHub muestra
+//   Configuración (form del átomo), Data Pills (variables anteriores) y Copilot
+// Validación del flujo: POST /flows/{id}/validate → devuelve issues[]
+//   useFlowValidation() invalida cada vez que el usuario guarda un paso
+// Guardar: PUT /flows/{id}; optimistic update con react-query
+// Salir: exitFocusMode() + router back
+```
+
+**Separación de lógica aplicada (según Guía 9C.0)**:
+
+| Lógica en `flows_page.py` | Destino nuevo | Notas |
+|---|---|---|
+| `FlowsState` (filtros, orden) | **React local** (`useState` en FlowsPage) | UI puro |
+| `async flow loading` + `save` (líneas 148-256, 840-924) | **FastAPI** existente (`GET/PUT /flows/{id}`) | Ya están |
+| Validación estructural (líneas 900-920) | **FastAPI** nuevo endpoint `POST /flows/{id}/validate` | Reutiliza `WorkflowHealthService` que sube al servidor |
+| `WorkflowHealthService`, `CoherenceService` | **FastAPI** (`server/app/modules/automation/health.py`) | Dominio, deben poder invocarse también en ejecución headless |
+| Integración con copilot (callbacks `on_atom_select`) | **React** (`CopilotPanel` lee del store) | El copilot es UI |
+| `FlowRegistryService` | **FastAPI** (si no existe ya) | Persistencia |
+| Selección de paso, expansión de filas, modo edición | **React local** | UI puro |
+
+**Nuevos endpoints a crear en el servidor**:
+```
+POST /api/v1/automation/flows/{id}/validate
+  → 200 { issues: [{ step_index, severity, type, message, fix_suggestion? }] }
+  Reutiliza WorkflowHealthService (movido desde client_app al servidor).
 ```
 
 **Tests requeridos**:
 ```typescript
+// src/admin/pages/__tests__/FlowsPage.test.tsx
 // should_list_flows_on_mount
 // should_open_create_dialog_on_button_click
 // should_show_running_status_during_execution
 // should_poll_until_execution_completes
+// should_invalidate_cache_after_create
+
+// src/automation/pages/__tests__/FlowEditor.test.tsx
+// should_enter_focus_mode_on_mount
+// should_exit_focus_mode_on_unmount
+// should_show_step_form_in_drawer_when_step_selected
+// should_show_validation_badge_for_step_with_issues
+// should_reorder_steps_via_drag_and_drop
+// should_save_flow_and_invalidate_queries
 ```
 
-**Limpieza NiceGUI** (en el mismo commit):
+**Tests backend (pytest)**:
+```python
+# server/tests/modules/automation/test_health_service.py
+# test_detects_missing_required_input
+# test_detects_type_mismatch_between_steps
+# test_validates_via_endpoint_returns_issues_list
+
+# server/tests/modules/automation/test_pills_service.py  (de 9.12a)
+# test_returns_only_outputs_of_previous_steps
+# test_pill_reference_format_uses_step_id
+```
+
+**Limpieza NiceGUI** (en el mismo commit que GREEN):
 ```bash
-# Identificar equivalente:
-grep -r "flows\|flujos" client_app/app/ui/ --include="*.py" -l
-# Borrar el fichero encontrado
-# Verificar: grep -r "from client_app.app.ui.<módulo>" --include="*.py"
-# Confirmar: docker compose up + pytest
+# Borrar: client_app/app/ui/flows_page.py
+# Borrar: client_app/app/ui/flows_translations.json (migrado a i18next)
+# Mover al servidor (no borrar antes de migrar lógica): servicios de health/coherence
+#   client_app/app/services/health_service.py       → server/app/modules/automation/health.py
+#   client_app/app/services/coherence_service.py    → server/app/modules/automation/coherence.py
+#   client_app/app/services/bridge_creator.py       → server/app/modules/automation/bridge.py
+# Verificar sin residuos:
+grep -rn "flows_page\|FlowsState\b" client_app/ --include="*.py"   # debe ser vacío
+grep -rn "health_service\|coherence_service" client_app/ --include="*.py"  # debe ser vacío
+# Confirmar: docker compose up && pytest && npm test
 ```
 
 ---
 
-### Prompt 9.13 - Automation > PDF extractor
+### Prompt 9.12b - Refactor backend PDF extractor a Docling
 
-**Objetivo**: Interfaz de extracción PDF. Reemplaza la vista NiceGUI equivalente.
+**Objetivo**: Sustituir el motor dual `pdfplumber` + `fitz` (actualmente en `shared/automatia_shared/core/pdf_reader.py::PdfReaderDual` y consumido por `server/app/modules/automation/extraction_strategies.py`) por **Docling** (ya instalado para el módulo RAG). El cliente deja de extraer texto localmente: ahora sube el PDF y el servidor hace toda la extracción + prompting. Prerequisito obligatorio de 9.13 (UI del extractor).
 
-**`src/admin/pages/PdfExtractPage.tsx`** — estructura clave:
-```typescript
-// Dropzone multi-fichero (solo PDFs)
-// Select de estrategia: texto lineal / tablas complejas
-// Barra de progreso durante procesamiento
-// Panel de resultados: JSON formateado + botones "Descargar JSON" / "Descargar CSV"
+**Por qué ahora y no después de la UI**: el contrato de datos que consumen los endpoints de extracción (`texto_fitz` + `texto_plumber`) cambia radicalmente tras el refactor. Diseñar la UI React sobre la API actual y luego rehacerla es trabajo duplicado. Ver PLAN_DESARROLLO.md §Bloque 4C para la decisión.
+
+**Estructura de ficheros a crear**:
 ```
+server/app/modules/automation/pdf_extractor/
+├── __init__.py
+├── docling_extractor.py          ← Wrapper de alto nivel sobre DoclingProcessor
+├── schemas.py                    ← Pydantic: ExtractedDocument, ExtractedTable, ExtractedPage
+├── extraction_service.py         ← Orquestación fases 0-3 (refactor de extraction_strategies.py)
+├── prompts.py                    ← Prompts adaptados al nuevo formato Docling
+└── storage.py                    ← Persistencia de PDFs temporales (MinIO) y runs
+```
+
+**Ficheros a eliminar al cerrar el prompt**:
+```
+shared/automatia_shared/core/pdf_reader.py                   ← PdfReaderDual (fitz)
+server/app/modules/automation/extraction_strategies.py       ← lógica basada en texto_fitz/texto_plumber
+client_app/app/modules/utilities/pdf_tools.py                ← extracción cliente (si solo se usa para extractor)
+client_app/app/modules/extraction/pdf_text_detector.py       ← detector de calidad de texto (obsoleto)
+client_app/app/services/extraction_service.py                ← cliente del antiguo API
+# Revisar y limpiar en pyproject.toml: pdfplumber, pymupdf (fitz)
+```
+
+**Nuevo contrato de salida (`schemas.py`)**:
+```python
+from pydantic import BaseModel
+from typing import Literal
+
+class ExtractedCell(BaseModel):
+    text: str
+    row: int
+    col: int
+    row_span: int = 1
+    col_span: int = 1
+
+class ExtractedTable(BaseModel):
+    page: int                       # 1-based
+    caption: str | None
+    headers: list[str]
+    cells: list[ExtractedCell]
+    bbox: tuple[float, float, float, float] | None
+
+class ExtractedPage(BaseModel):
+    page: int                       # 1-based
+    markdown: str                   # render markdown de la página (Docling)
+    plain_text: str                 # texto lineal legible para LLM
+    tables: list[ExtractedTable]
+
+class ExtractedDocument(BaseModel):
+    source_id: str                  # UUID del run (persistido)
+    filename: str
+    num_pages: int
+    markdown: str                   # documento completo en markdown (Docling)
+    pages: list[ExtractedPage]
+    tables: list[ExtractedTable]    # vista plana de todas las tablas
+    extraction_strategy: Literal["text_linear", "complex_tables"]
+    docling_version: str
+```
+
+Este `ExtractedDocument` sustituye al "fichero acordeón" de la versión anterior (pares `texto_fitz` / `texto_plumber`). Los prompts de extracción consumirán `markdown` + `tables` estructuradas en lugar de dos vistas de texto plano.
+
+**`docling_extractor.py`** — wrapper:
+```python
+# Reutiliza DoclingProcessor de server/app/modules/agents_hub/ingestion/docling_processor.py
+# pero expone la estructura completa (no solo markdown):
+#   result = DocumentConverter().convert(path)
+#   - result.document.export_to_markdown()   → ExtractedDocument.markdown
+#   - result.document.pages                  → ExtractedPage[] (iterar pages y extraer tables de cada page)
+#   - result.document.tables                 → ExtractedTable[] (vista plana)
+#
+# async def extract(pdf_path: Path, strategy: str) -> ExtractedDocument
+#   usa asyncio.to_thread para Docling (la librería es síncrona)
+#
+# Performance: Docling sobre CPU tarda segundos por PDF. El endpoint de upload
+#   debe devolver un run_id inmediatamente y hacer la extracción en background
+#   (BackgroundTasks de FastAPI). El cliente hace polling del estado.
+```
+
+**`extraction_service.py`** — refactor de `extraction_strategies.py`:
+```python
+# Fases refactorizadas:
+#   Fase 0: analyze_document_structure(doc: ExtractedDocument, language_hint, config)
+#     Antes: (doc_text_a, doc_text_b, ...)      → dos vistas de texto
+#     Ahora: (doc.markdown[:30000], doc.tables) → markdown + tablas estructuradas
+#   Fase 1: extract_precision(doc, selected_fields, user_definition, config)
+#   Fase 2: refine_with_feedback(doc, previous_data, user_feedback, config)
+#   Fase 3: generate_deterministic_script(docs: list[ExtractedDocument], ...)
+#     El script generado YA NO debe usar fitz/pdfplumber directamente; debe
+#     consumir un ExtractedDocument proporcionado por el runtime. Ver prompts.py.
+#
+# Prompts adaptados: el template ahora espera {markdown} y {tables_json}
+# en lugar de {texto_fitz} y {texto_plumber}.
+```
+
+**Nuevos endpoints** (reemplazan los actuales en `server/app/api/v1/automation.py`):
+```
+POST /api/v1/automation/extraction/uploads
+  multipart/form-data: files[] (PDFs)
+  → 200 { run_id: str, file_ids: [str] }
+  Dispara extracción en background via BackgroundTasks.
+
+GET /api/v1/automation/extraction/uploads/{run_id}
+  → 200 { status: "pending|extracting|done|error", progress: 0..100,
+          documents: [ExtractedDocument]? , error?: str }
+  El cliente hace polling cada 1s mientras status != done|error.
+
+POST /api/v1/automation/extraction/{run_id}/analyze_structure
+POST /api/v1/automation/extraction/{run_id}/extract
+POST /api/v1/automation/extraction/{run_id}/refine
+POST /api/v1/automation/extraction/{run_id}/generate_script
+  Todos reciben campos + config + system_prompt y usan los ExtractedDocument del run.
+  Los endpoints antiguos que aceptaban texto_fitz/texto_plumber se BORRAN.
+```
+
+**Separación de lógica aplicada (según Guía 9C.0)**:
+
+| Lógica anterior | Destino | Notas |
+|---|---|---|
+| Extracción PDF en cliente (`pdf_tools.py`, `PdfReaderDual`) | **FastAPI** | El cliente ya no procesa PDFs |
+| Estrategia dual fitz/plumber | **Eliminada** | Docling la reemplaza |
+| Máquina de fases (analyze → extract → refine → generate) | **FastAPI** existente, prompts adaptados | Sin cambios de diseño, solo de datos de entrada |
+| Storage temporal de PDFs | **MinIO** (ya en el stack) | Con TTL de 24h por `run_id` |
+| Validación de tipos (IBAN, NIF, fecha, importe) | **FastAPI** `extract_field_from_snippet` | Ya está, se mantiene |
+
+**Tests TDD requeridos**:
+
+```python
+# server/tests/modules/automation/pdf_extractor/test_docling_extractor.py
+# --- RED primero, GREEN después ---
+# test_extracts_markdown_from_text_pdf
+# test_extracts_tables_from_tabular_pdf
+# test_returns_page_numbers_1_based
+# test_handles_multi_page_document
+# test_raises_clear_error_on_corrupted_pdf
+# test_extracted_document_schema_validates
+
+# server/tests/modules/automation/pdf_extractor/test_extraction_service.py
+# test_analyze_structure_receives_markdown_and_tables
+# test_extract_precision_injects_markdown_into_prompt
+# test_refine_with_feedback_preserves_previous_data_shape
+# test_generate_script_no_longer_uses_fitz_or_pdfplumber  ← grep assertion en el script generado
+
+# server/tests/api/v1/test_extraction_uploads.py
+# test_upload_returns_run_id_immediately
+# test_get_status_reports_progress
+# test_get_status_returns_extracted_documents_on_done
+# test_old_endpoint_with_texto_fitz_returns_410_gone  ← verificación de borrado
+```
+
+**Criterios de cierre (checklist obligatorio antes de pasar a 9.13)**:
+
+- [ ] `pytest server/tests/modules/automation/pdf_extractor/` en verde
+- [ ] `grep -rn "pdfplumber\|import fitz\|import pymupdf\|PdfReaderDual" server/ shared/ client_app/` no devuelve coincidencias (excepto `.venv/`)
+- [ ] `pdfplumber` y `pymupdf` eliminados de `pyproject.toml` (raíz, `server/`, `shared/`, `client_app/`)
+- [ ] `uv lock` regenerado tras el borrado de dependencias
+- [ ] `server/app/modules/automation/extraction_strategies.py` **borrado** (no comentado)
+- [ ] `shared/automatia_shared/core/pdf_reader.py` **borrado**
+- [ ] `docker compose up` arranca sin errores y el endpoint `POST /extraction/uploads` devuelve un `run_id` contra un PDF de test
+
+**Impacto documentado para 9.13 (UI)**:
+
+Cuando 9.13 se implemente, dispondrá de esta API estable:
+```
+Upload → { run_id }                        (1 round-trip, devuelve en <500ms)
+Polling → { status, progress, documents }  (cada 1s hasta done)
+Analyze/Extract/Refine/Generate → operan sobre run_id, no sobre texto plano
+```
+La UI no necesita conocer nada sobre Docling; solo consume `ExtractedDocument`.
+
+---
+
+### Prompt 9.13 - Automation > PDF extractor (UI)
+
+**Objetivo**: Interfaz React de extracción PDF sobre los contratos Docling definidos en 9.12b. Reemplaza `client_app/app/ui/extraction_page.py` (2.370 líneas, ~60% lógica mezclada). Es la migración más densa del bloque.
+
+**Prerequisito**: 9.12b completado y verde. Si el `grep` de `pdfplumber`/`fitz` aún devuelve coincidencias, **no** arrancar este prompt.
+
+**Endpoints que consume** (todos definidos en 9.12b):
+- `POST /api/v1/automation/extraction/uploads`
+- `GET  /api/v1/automation/extraction/uploads/{run_id}`
+- `POST /api/v1/automation/extraction/{run_id}/analyze_structure`
+- `POST /api/v1/automation/extraction/{run_id}/extract`
+- `POST /api/v1/automation/extraction/{run_id}/refine`
+- `POST /api/v1/automation/extraction/{run_id}/generate_script`
+
+**Estructura de ficheros**:
+```
+src/admin/pages/PdfExtractPage.tsx                 ← Entry point, lista de runs
+src/automation/pages/PdfExtractRun.tsx             ← Detalle de un run (Focus Mode)
+src/automation/components/PdfDropzone.tsx
+src/automation/components/ExtractionPhaseStepper.tsx
+src/automation/components/FieldSelector.tsx         ← seleccionar campos tras Fase 0
+src/automation/components/ExtractedDataTable.tsx    ← resultado Fase 1
+src/automation/components/RefineFeedbackPanel.tsx   ← Fase 2
+src/automation/components/GeneratedScriptViewer.tsx ← Fase 3
+src/automation/hooks/useExtractionRun.ts            ← polling + mutaciones
+```
+
+**`PdfExtractPage.tsx`** — listado de runs:
+```typescript
+// DataTable: filename, status, fecha, nº de campos extraídos, acciones
+// Botón "Nueva extracción" → abre <PdfDropzone /> modal
+// Al subir: mutación POST /uploads → navegar a /admin/extraction/{run_id}
+```
+
+**`PdfExtractRun.tsx`** — editor en Focus Mode (reutiliza 9.12a):
+```typescript
+// Al montar: enterFocusMode()
+// Stepper horizontal con 4 fases canónicas: Descubrir → Extraer → Refinar → Generar script
+// Main area cambia según fase activa
+// DrawerHub (desde 9.12a) con tabs: Configuración (estrategia, definición usuario), Data Pills (campos detectados), Copilot
+// Barra de progreso global (0-100) mapeada desde el backend
+```
+
+**`useExtractionRun.ts`** — polling + fases:
+```typescript
+// useQuery GET /uploads/{run_id} con refetchInterval: 1000 mientras status !== 'done' && status !== 'error'
+// useMutation para cada fase (analyze_structure, extract, refine, generate_script)
+// Cada mutación invalida la query del run
+// Expone: { run, phase, isLoading, analyze(), extract(fields), refine(feedback), generateScript() }
+```
+
+**`ExtractionPhaseStepper.tsx`** — fases:
+```typescript
+// Mapa fijo de fases (antes PHASE_RANGES en Python, ahora TypeScript):
+//   { id: 'discover', label: i18n, range: [0, 25] }
+//   { id: 'extract',  label: i18n, range: [25, 55] }
+//   { id: 'refine',   label: i18n, range: [55, 80] }
+//   { id: 'script',   label: i18n, range: [80, 100] }
+// El stepper colorea la fase activa según run.progress
+```
+
+**Separación de lógica aplicada (según Guía 9C.0)**:
+
+| Lógica en `extraction_page.py` (2.370 líneas) | Destino nuevo | Notas |
+|---|---|---|
+| `ExtractionState`, `DesignState`, `ExecutionState` | **React local** (estado del componente + react-query) | UI puro |
+| `PHASE_RANGES` + mapeo de progreso global | **React constante** + cálculo derivado | Ya no hay fases internas distintas; el servidor reporta `progress` 0-100 directo |
+| Orquestación fases 0-3 (llamadas a `extraction_strategies`) | **FastAPI** (ya movido en 9.12b) | La UI solo dispara mutaciones |
+| Servicios `asset_finishing_service`, `extraction_service` | **FastAPI** `server/app/modules/automation/pdf_extractor/` | Ya en 9.12b |
+| Validación de campos seleccionados antes de Fase 1 | **FastAPI** + **zod en cliente** | Doble: cliente para UX, servidor como fuente de verdad |
+| Upload de PDFs vía NiceGUI | **React** `<PdfDropzone />` con `react-dropzone` | UI puro |
+| Cola de procesamiento en Python (threads locales) | **FastAPI BackgroundTasks** | Ya en 9.12b |
+| Preview del script generado | **React** `<GeneratedScriptViewer />` con `prismjs` | Render puro |
+
+**Nota sobre Focus Mode**: el extractor original tenía un wizard en pantalla completa similar al focus mode de flujos. Se replica el patrón: al entrar al detalle del run, el sidebar se colapsa y el drawer contextual aparece a la derecha. Si el usuario quiere volver al listado, sale del focus mode.
 
 **Tests requeridos**:
 ```typescript
+// src/admin/pages/__tests__/PdfExtractPage.test.tsx
+// should_list_runs_on_mount
+// should_open_dropzone_on_new_extraction_click
 // should_accept_pdf_files_only
-// should_show_progress_during_extraction
-// should_display_extracted_data_on_success
-// should_download_json_result
+// should_navigate_to_run_detail_after_upload
+
+// src/automation/pages/__tests__/PdfExtractRun.test.tsx
+// should_enter_focus_mode_on_mount
+// should_show_discover_phase_when_progress_below_25
+// should_show_extract_phase_when_progress_25_to_55
+// should_display_extracted_document_markdown_preview
+// should_trigger_analyze_mutation_on_button_click
+
+// src/automation/hooks/__tests__/useExtractionRun.test.ts
+// should_poll_every_second_while_pending
+// should_stop_polling_when_status_done
+// should_stop_polling_on_error
 ```
 
-**Limpieza NiceGUI** en el mismo commit.
+**Limpieza NiceGUI** (en el mismo commit que GREEN):
+```bash
+# Borrar:
+rm client_app/app/ui/extraction_page.py                 # 2.370 líneas
+rm client_app/app/ui/extraction_page_refactored.py
+rm client_app/app/ui/extraction_translations.json
+# Verificar residuos:
+grep -rn "extraction_page\|ExtractionState\|DesignState\|ExecutionState" client_app/ --include="*.py"
+# Debe ser vacío. Si devuelve algo, investigar antes de cerrar.
+# Confirmar: docker compose up && pytest && npm test
+```
 
 ---
 
@@ -9271,34 +9797,248 @@ TESTS REQUERIDOS (Vitest):
 
 ---
 
-### Prompt E5 - AdaptadorOracle via MCP Client (TDD RED/GREEN)
+### Prompt E5 - AdaptadorUJI + AdaptadorGestion400 + capa ENI/ENS (TDD RED/GREEN)
 
-**Objetivo**: Implementar la integracion bidireccional con Oracle a traves del MCP Client.
-**Prerequisito**: MCP Client operativo (Fase 5 de PLAN_DESARROLLO.md).
+**Objetivo**: Implementar los adaptadores de tramitación para los dos sistemas destino del piloto (UJI y Gestión 400) y la capa transversal ENI/ENS. Reemplaza el `AdaptadorOracle` descartado en la decisión 11 de `PLAN_DESARROLLO.md`.
+**Prerequisito**: MCP Client operativo (Fase 5 de PLAN_DESARROLLO.md), sprints E2/E2.5/E2.6 completados.
 
 **Instrucciones**:
 
 ```
-Implementa AdaptadorOracle en server/app/modules/expedientes/adapters/oracle_adapter.py.
+Implementa en server/app/modules/expedientes/adapters/:
 
-INTERFAZ A IMPLEMENTAR (Protocol):
-async def consultar_expediente(self, ref_externa: str) -> dict
-async def crear_tramitacion(self, tipo: str, datos: dict) -> str
-async def actualizar_estado(self, ref_externa: str, estado: dict) -> bool
-async def obtener_documentos(self, ref_externa: str) -> list[bytes]
+1. INTERFAZ COMÚN AdaptadorTramitacion (Protocol):
+   async def consultar_expediente(self, ref_externa: str) -> dict
+   async def crear_tramitacion(self, tipo: str, datos: dict) -> str
+   async def actualizar_estado(self, ref_externa: str, estado: dict) -> bool
+   async def adjuntar_documento(self, ref_externa: str, doc: bytes, meta: dict) -> bool
+   async def publicar_resolucion(self, ref_externa: str, resolucion: dict) -> bool
+   async def obtener_documentos(self, ref_externa: str) -> list[bytes]
+
+2. AdaptadorUJI (uji_adapter.py):
+   - Cliente HTTP contra el API institucional de la Universitat Jaume I
+   - Autenticación: token institucional (via MCP Client)
+   - Configurado por tipo de expediente, no globalmente
+
+3. AdaptadorGestion400 (gestion400_adapter.py):
+   - Cliente contra el API público de Gestión 400 (opensea)
+   - Mapeo de esquemas: expediente interno ↔ formato G400
+   - Detección de discordancias via BridgeService (Fase 6.6)
+
+4. CAPA ENI TRANSVERSAL (eni_layer.py):
+   - Resolvedor DIR3: valida/enriquece códigos de unidades administrativas
+   - Enriquecedor eEMGDE: metadatos de gestión de documentos
+   - Generador/verificador CSV (Código Seguro de Verificación)
+   - Empaquetador de evidencia: conjunto de documentos + metadatos ENI
+
+5. CAPA ENS (ens_policy.py):
+   - Política por tipo de expediente: categorización alta/media/baja
+   - Aplicada al sandbox (Fase 5.4) + AuditService (Fase 6.2)
 
 NUEVOS ENDPOINTS:
-POST /expedientes/{id}/sincronizar  -> pull del estado desde Oracle
-POST /expedientes/{id}/publicar     -> push de la resolucion a Oracle
-
-ESTRATEGIA:
-- En fase inicial actua como CAPA DE IA SOBRE ORACLE, no lo reemplaza
-- El adaptador activo se configura por tipo de expediente (no globalmente)
-- Algunos tipos pueden ser nativos (sin Oracle), otros sincronizados
+POST /expedientes/{id}/sincronizar   -> pull del estado desde el sistema origen
+POST /expedientes/{id}/publicar      -> push de la resolución al sistema origen
+GET  /expedientes/{id}/evidencia-eni -> genera el paquete de evidencia ENI
 
 TESTS REQUERIDOS:
-- test_sincronizar_trae_estado_actualizado_de_oracle
-- test_publicar_envia_resolucion_a_oracle
-- test_adaptador_nativo_funciona_sin_oracle
+- test_adaptador_uji_consulta_expediente_real (mock HTTP)
+- test_adaptador_gestion400_mapea_esquema_bidireccional
+- test_capa_eni_enriquece_metadatos_eemgde
+- test_csv_generado_supera_verificacion_propia
+- test_ens_categoria_alta_activa_sandbox_estricto
 - test_adaptador_activo_se_configura_por_tipo_no_globalmente
+- test_flujo_completo_consulta_proceso_publicacion_mock (E2E)
+- test_serializacion_eni_valida_contra_xsd
 ```
+
+---
+
+## FASE 13: Privacidad y Anonimización Reversible NER (Zero-Knowledge)
+
+**Tipo**: Migración + integración  
+**Prerequisitos**: FASE 9 (Frontend), FASE 12.E2 (grafo LangGraph de expedientes)  
+**Corresponde a**: Fase 6.1 de `PLAN_DESARROLLO.md`  
+**Estado**: ⏳ Pendiente — prompts TDD a detallar antes de ejecutar
+
+**Objetivo**: Migrar el pipeline NER de anonimización reversible de `client_app/` al servidor FastAPI y conectarlo como hook pre/post-LLM en el grafo de expedientes y en automation. El chatbot informativo (información pública) no aplica.
+
+**Componentes legacy a migrar** (`client_app/app/`):
+- `modules/privacy/anonymizer.py` (1010 LoC) + `services/anonymization_service.py` (216 LoC)
+- `utils/pii_detector.py` + `services/privacy_guardian.py` + `services/screenshot_guard.py`
+
+**Destino**: `server/app/core/privacy/`
+
+**Capacidades clave**:
+- Pipeline NER (spaCy / transformers / Presidio) ejecutado antes de enviar contexto al LLM
+- Vault de mapeos pseudónimo ↔ valor real cifrado at rest, persistido solo en el Edge node
+- Rehidratación post-LLM del output antes de mostrarlo al tramitador
+- Tests de no-fuga: golden-set de entradas con PII, asserts de que ningún dato real cruza la frontera LLM
+
+**Tests legacy a migrar**: `test_ner_upgrade`, `test_etl_anonymization_ia`, `test_rpa_anonymization`, `test_privacy_audit`, `test_privacy_consent`, `test_privacy_indicator`, `test_anonymizer_initials`
+
+---
+
+## FASE 14: Sandbox Distribuido Edge ↔ Thin-client
+
+**Tipo**: Migración + split arquitectónico  
+**Prerequisitos**: FASE 5 (thin client operativo)  
+**Corresponde a**: Fase 5.4–5.5 de `PLAN_DESARROLLO.md`  
+**Estado**: ⏳ Pendiente — prompts TDD a detallar antes de ejecutar
+
+**Objetivo**: Separar la responsabilidad del sandbox entre el Edge node (diseño + auditoría AST + firma del script) y el Thin client (ejecución aislada del script firmado). El Edge firma con clave privada; el thin client verifica con la pública antes de ejecutar.
+
+**Componentes legacy a migrar** (`client_app/app/`):
+- `modules/sandbox/safety_sandbox.py` (76 LoC) → **Edge** `server/app/core/sandbox/`
+- `services/sandbox_worker.py` (241 LoC) → **Thin client** `client_app/local_agent/sandbox/`
+- `services/sandbox_service.py` (214 LoC) → **Edge** (orquestación)
+
+**Contrato Edge ↔ Thin-client**:
+1. Edge genera script + RunManifest firmado con ECDSA
+2. Thin client verifica firma; rechaza si inválida
+3. Thin client ejecuta en sandbox con CPU cap + network egress off + FS restringido
+4. Thin client devuelve resultado + manifest de ejecución firmado
+5. Edge verifica la firma del resultado y registra en AuditService
+
+**Tests legacy a migrar**: `test_safety_sandbox`, `test_sandbox_isolation`
+
+---
+
+## FASE 15: RunManifest + AuditService + Script Registry Unificados (IA Frugal)
+
+**Tipo**: Migración + refactor  
+**Prerequisitos**: FASE 12.E3 (AuditService de expedientes), FASE 13 (privacidad)  
+**Corresponde a**: Fase 6.2–6.4 de `PLAN_DESARROLLO.md`  
+**Estado**: ⏳ Pendiente — prompts TDD a detallar antes de ejecutar
+
+**Objetivo**: Unificar el formato `run_manifest.json` y la cadena de auditoría SHA-256 para que sea válida en los tres módulos (automation, Hub, expedientes). Migrar el Script Registry con índice semántico para reuso directo sin LLM.
+
+**Componentes legacy a migrar** (`client_app/app/`):
+- `services/manifest_generator.py` (165 LoC) + `manifest_signature_service.py` (258 LoC)
+- `services/enterprise_audit_service.py` (281 LoC) + `external_script_audit_service.py` (188 LoC)
+- `services/script_library_service.py` (840 LoC) + `flow_registry_service.py` (374 LoC)
+- `services/script_generator_service.py` (405 LoC) + `script_adaptation_service.py` + `validation_loop.py` (143 LoC) + `custom_script_service.py`
+
+**Destino**: `server/app/core/manifest/` + `server/app/core/audit/` + `server/app/modules/automation/scripts/`
+
+**Capacidades clave**:
+- Tabla `scripts_aprobados` con hash + versión + tenant + etiqueta semántica (bge-m3)
+- Endpoint de búsqueda por taxonomía (reuso directo sin LLM)
+- Métricas de reuso (% tareas resueltas sin invocar LLM) expuestas en panel admin
+- Cache semántico pre-LLM (campo `intent_embedding`): activar solo si el piloto lo justifica — evaluar tras tener métricas de taxonomía
+
+**Tests legacy a migrar**: `test_manifest_signature`, `test_script_signing`, `test_external_script_audit`, `test_script_generator_service`, `test_script_adaptation`, `test_script_ingestion`, `test_validation_loop`, `test_flow_registry`
+
+---
+
+## FASE 16: Determinista-first + Fábricas como Nodos LangGraph
+
+**Tipo**: Migración + wrapper LangGraph  
+**Prerequisitos**: FASE 12.E2 (motor LangGraph expedientes), FASE 15 (Script Registry)  
+**Corresponde a**: Fase 6.5 + Fase 7.E2.6 de `PLAN_DESARROLLO.md`  
+**Estado**: ⏳ Pendiente — prompts TDD a detallar antes de ejecutar
+
+**Objetivo**: Migrar los servicios deterministas y las fábricas de código al servidor y exponerlos como nodos invocables desde el grafo LangGraph. La lógica "determinista por defecto, LLM si no encaja" se preserva como estrategia de ejecución.
+
+**Componentes legacy a migrar** (`client_app/app/`):
+- `services/deterministic_etl_service.py` (350 LoC) + `deterministic_graphics_service.py` (605 LoC)
+- `modules/factory/etl_factory.py` (369 LoC) + `graphics_factory.py` (342 LoC) + `report_factory.py` (540+243 LoC)
+
+**Destino**: `server/app/modules/automation/factories/`
+
+**Nodos LangGraph nuevos** (Fase 7.E2.6):
+- `NodoFabrica`: wrapper que invoca `etl_factory` / `graphics_factory` / `report_factory` o cualquier script del Registry
+- `NodoValidador`: AST audit + `validation_loop` + heurísticas; etiqueta la propuesta como `segura | requiere_revisión | bloqueada`; intercalado antes del `NodoHuman`
+
+**Tests legacy a migrar**: `test_etl_factory`, `test_graphics_factory`, `test_pdf_factory_refinements`, `test_etl_brain_decoupling`
+
+---
+
+## FASE 17: Agente Analista + Base Vectorial de Normativa
+
+**Tipo**: Nuevo desarrollo  
+**Prerequisitos**: FASE 12.E2 (motor LangGraph), FASE 3 (ingestión Docling)  
+**Corresponde a**: Fase 7.E2.5 de `PLAN_DESARROLLO.md`  
+**Estado**: ⏳ Pendiente — prompts TDD a detallar antes de ejecutar
+
+**Objetivo**: Añadir un nodo LangGraph previo al enrutado que clasifica la intención del tramitador e identifica la normativa aplicable, devolviendo citas trazables al nodo siguiente.
+
+**Capacidades clave**:
+- Knowledge base `regulation` (tipo nuevo) ingerida por Docling: BOE, DOGC, ordenanzas UJI, normativa autonómica y local relevante
+- `NodoAnalista`: clasifica intención + recupera normativa aplicable por RAG sobre `regulation` KB
+- Output del nodo alimenta al siguiente nodo (LLM o Script) como contexto + citas normativas con referencia trazable
+- Solo para el grafo de expedientes; el chatbot informativo no usa este nodo
+
+**Tests requeridos**: clasificación correcta en golden-set de peticiones, normativa devuelta con referencia trazable, nodo no invocado en grafo de chatbot informativo
+
+---
+
+## FASE 18: Bridges Semánticos Ampliados (Multi-contexto)
+
+**Tipo**: Migración + extensión  
+**Prerequisitos**: FASE 15 (Script Registry), FASE 7.E5 (Adaptadores UJI/G400)  
+**Corresponde a**: Fase 6.6 de `PLAN_DESARROLLO.md`  
+**Estado**: ⏳ Pendiente — prompts TDD a detallar antes de ejecutar
+
+**Objetivo**: Migrar los bridges semánticos y generalizarlos para ser invocables desde flows, expedientes y adaptadores de tramitación.
+
+**Componentes legacy a migrar** (`client_app/app/`):
+- `services/bridge_creator.py` (118 LoC) + `bridge_generation_service.py` (83 LoC) + `library_bridge.py`
+
+**Destino**: `server/app/modules/automation/bridge/`
+
+**Capacidades nuevas**:
+- Interfaz común reutilizable desde flows, expedientes y adaptadores de tramitación
+- Detección de discordancias entre esquemas (UJI ↔ Gestión 400) con score de confianza
+- Catálogo de bridges reutilizables por par `(sistema_origen, sistema_destino)`
+- Bridge como nodo invocable desde el grafo de expedientes
+
+**Tests legacy a migrar**: `test_type_compatibility_bridge`
+
+---
+
+## FASE 19: Adaptadores UJI + Gestión 400 + Capa ENI/ENS
+
+**Tipo**: Nuevo desarrollo  
+**Prerequisitos**: FASE 5 (MCP Client), FASE 12.E2 (motor LangGraph), FASE 14 (sandbox), FASE 18 (bridges)  
+**Corresponde a**: Fase 7.E5 de `PLAN_DESARROLLO.md`  
+**Estado**: ⏳ Pendiente — prompts TDD a detallar antes de ejecutar
+
+> Los prompts detallados de esta fase están en la Fase 12, Prompt E5 de este documento.
+
+**Objetivo**: Implementar los dos adaptadores del piloto v1 y la capa transversal ENI/ENS. Reemplaza el `AdaptadorOracle` descartado.
+
+**Ver**: Fase 12, Prompt E5 de este documento (ya actualizado con este contenido).
+
+---
+
+## FASE 20: Accesibilidad WCAG 2.2 AA + Admin Conversacional
+
+**Tipo**: Nuevo (transversal)  
+**Prerequisitos**: FASE 9 (Frontend React), FASE 10 (temas)  
+**Corresponde a**: Fase 8 de `PLAN_DESARROLLO.md`  
+**Estado**: ⏳ Pendiente — prompts TDD a detallar antes de ejecutar
+
+**Objetivo**: Garantizar WCAG 2.2 AA en todas las rutas del frontend e implementar una consola conversacional de administración en lenguaje natural.
+
+**Capacidades clave**:
+- WCAG 2.2 AA como criterio de aceptación obligatorio en cada pantalla (Bloques 9A/9B/9C y pantallas de expedientes)
+- `@axe-core/react` integrado en Vitest; Lighthouse CI en GitHub Actions (umbral a11y ≥ 95)
+- Reutilización de `client_app/tests/a11y/test_accessibility.py` legacy como seed
+- Consola conversacional admin: el partner escribe en lenguaje natural (*"crea un chatbot para el padrón que use el LLM local"*) y el sistema ejecuta la configuración usando el grafo del Hub con tools de administración
+
+**Integración**: la consola conversacional admin se integra en la Fase 10 (panel de IA), pues depende del grafo agéntico del Hub estable.
+
+---
+
+## FASE 21: RPA Web (Diferido a v2)
+
+**Tipo**: Decisión de no-migración  
+**Fuera del alcance del piloto v1**  
+**Corresponde a**: Fase 9 de `PLAN_DESARROLLO.md`  
+**Estado**: ⏳ Fuera de roadmap v1 — decisión documentada
+
+**Decisión**: `client_app/app/core/rpa_executor.py` (1049 LoC) y `client_app/app/services/web_watcher_service.py` (878 LoC) **no se migran** al thin client en v1. El peso de Playwright (~300-400 MB de navegadores) es incompatible con el objetivo de thin client ligero.
+
+**Durante v1**: código legacy intacto en `client_app/` pero no incluido en el empaquetado del thin client. Si un flujo crítico del piloto requiere web RPA, se despliega un worker Playwright centralizado en el Edge node (Docker headless).
+
+**En v2**: decidir entre re-empaquetar Playwright en el thin client o mantener el worker centralizado en Edge, según la demanda real del piloto.
