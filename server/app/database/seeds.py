@@ -2,9 +2,14 @@
 Seeds de multitenancy para desarrollo.
 
 Este módulo crea los datos iniciales necesarios para desarrollo:
+- Admin de desarrollo
 - Partner de desarrollo
 - Cliente de desarrollo
 - Licencia de desarrollo con cuota amplia
+
+Credenciales de desarrollo:
+  Admin:   admin@govgenai.local  /  admin1234
+  Partner: dev@automatia.local   /  (cualquiera — login partner no verifica pwd)
 
 La clave de licencia de desarrollo es: DEV_LICENSE_KEY_12345
 """
@@ -13,12 +18,15 @@ from datetime import datetime, timedelta
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from server.app.database.db import server_engine
-from server.app.database.models import PartnerAccount, ClientAccount, License, ExtractionServiceConfig
+from server.app.database.models import AdminAccount, PartnerAccount, ClientAccount, License, ExtractionServiceConfig
+from server.app.core.security import hash_password
 from automatia_shared.enums import LicenseStatus
 
 
 # Constante para desarrollo - usar en tests y desarrollo local
 DEV_LICENSE_KEY = "DEV_LICENSE_KEY_12345"
+DEV_ADMIN_EMAIL = "admin@govgenai.local"
+DEV_ADMIN_PASSWORD = "admin1234"
 
 
 async def seed_multitenancy_defaults():
@@ -29,11 +37,15 @@ async def seed_multitenancy_defaults():
     no duplicará los datos.
 
     Crea:
+    - 1 AdminAccount  (admin@govgenai.local / admin1234)
     - 1 PartnerAccount (partner_dev)
     - 1 ClientAccount (client_dev)
     - 1 License (lic_dev) con 10M tokens de cuota
     """
     async with AsyncSession(server_engine) as session:
+        # 0. Crear Admin de desarrollo
+        await _seed_dev_admin(session)
+
         # 1. Crear Partner de desarrollo
         await _seed_dev_partner(session)
 
@@ -45,6 +57,26 @@ async def seed_multitenancy_defaults():
 
         await session.commit()
         print("[SEED] Multitenancy de desarrollo creado/verificado.")
+
+
+async def _seed_dev_admin(session: AsyncSession):
+    """Crea el AdminAccount de desarrollo si no existe."""
+    result = await session.execute(
+        select(AdminAccount).where(AdminAccount.email == DEV_ADMIN_EMAIL)
+    )
+    existing = result.scalar_one_or_none()
+
+    if not existing:
+        admin = AdminAccount(
+            name="Admin Desarrollo",
+            email=DEV_ADMIN_EMAIL,
+            hashed_password=hash_password(DEV_ADMIN_PASSWORD),
+            is_active=True,
+        )
+        session.add(admin)
+        print(f"[SEED] Admin de desarrollo creado: {DEV_ADMIN_EMAIL}")
+    else:
+        print("[SEED] Admin de desarrollo ya existe.")
 
 
 async def _seed_dev_partner(session: AsyncSession):
