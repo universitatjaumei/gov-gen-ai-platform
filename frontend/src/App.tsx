@@ -3,8 +3,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Suspense } from 'react'
 import { AuthProvider, PrivateRoute } from '@/shared/auth'
 import { AppLayout } from '@/admin/AppLayout'
+import { HubLayout } from '@/admin/HubLayout'
 import { LoginPage } from '@/admin/pages/LoginPage'
 import { ChatbotsPage } from '@/admin/pages/ChatbotsPage'
+import { ClientsPage } from '@/admin/pages/ClientsPage'
 import { PlaceholderPage } from '@/admin/pages/PlaceholderPage'
 import './index.css'
 import '@/shared/i18n'
@@ -22,7 +24,11 @@ function App() {
               <Route element={<PrivateRoute />}>
                 <Route element={<AppLayout />}>
                   <Route index element={<Navigate to="/hub" replace />} />
-                  <Route path="/hub" element={<ChatbotsPage />} />
+                  <Route path="/hub" element={<HubLayout />}>
+                    <Route index element={<Navigate to="/hub/chatbots" replace />} />
+                    <Route path="chatbots" element={<ChatbotsPage />} />
+                    <Route path="clients" element={<ClientsPage />} />
+                  </Route>
                   <Route path="/automation" element={<PlaceholderPage section="Automatización" />} />
                   <Route path="/platform" element={<PlaceholderPage section="Plataforma" />} />
                 </Route>

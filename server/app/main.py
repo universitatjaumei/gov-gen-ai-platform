@@ -17,6 +17,7 @@ from server.app.api.v1.ingestion import router as ingestion_router
 from server.app.routers.auth_router import router as auth_router
 from server.app.routers.library_router import router as library_router
 from server.app.routers.hub_chatbots_router import router as hub_chatbots_router
+from server.app.routers.hub_clients_router import router as hub_clients_router
 
 
 @asynccontextmanager
@@ -46,6 +47,7 @@ app.include_router(hub_feedback_router, prefix="/api/v1")
 app.include_router(hub_tasks_router, prefix="/api/v1")
 app.include_router(ingestion_router, prefix="/api/v1")
 app.include_router(hub_chatbots_router, prefix="/api/v1")
+app.include_router(hub_clients_router, prefix="/api/v1")
 
 
 @app.get("/health")

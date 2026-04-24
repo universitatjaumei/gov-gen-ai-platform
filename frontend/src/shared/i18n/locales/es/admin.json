@@ -16,7 +16,16 @@
     "chatbot_client": "Cliente",
     "chatbot_model": "Modelo LLM",
     "no_chatbots": "No hay chatbots creados",
-    "delete_confirm": "¿Eliminar este chatbot?"
+    "delete_confirm": "¿Eliminar este chatbot?",
+    "new_client": "Nuevo cliente",
+    "client_name": "Nombre del cliente",
+    "client_partner": "Partner ID",
+    "client_theme": "Configuración de tema (JSON)",
+    "client_active": "Activo",
+    "client_chatbots": "Chatbots",
+    "no_clients": "No hay clientes creados",
+    "delete_client_confirm": "¿Eliminar este cliente?",
+    "filter_placeholder": "Filtrar por nombre…"
   },
   "login": {
     "title": "Iniciar sesión",

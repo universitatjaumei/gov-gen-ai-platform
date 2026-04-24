@@ -16,7 +16,16 @@
     "chatbot_client": "Client",
     "chatbot_model": "Model LLM",
     "no_chatbots": "No hi ha chatbots creats",
-    "delete_confirm": "Eliminar aquest chatbot?"
+    "delete_confirm": "Eliminar aquest chatbot?",
+    "new_client": "Nou client",
+    "client_name": "Nom del client",
+    "client_partner": "Partner ID",
+    "client_theme": "Configuració de tema (JSON)",
+    "client_active": "Actiu",
+    "client_chatbots": "Chatbots",
+    "no_clients": "No hi ha clients creats",
+    "delete_client_confirm": "Eliminar aquest client?",
+    "filter_placeholder": "Filtra per nom…"
   },
   "login": {
     "title": "Iniciar sessió",
