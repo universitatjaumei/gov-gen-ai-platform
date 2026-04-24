@@ -8,7 +8,15 @@
     "chatbots": "Chatbots",
     "clients": "Clients",
     "documents": "Documents",
-    "reports": "Reports"
+    "reports": "Reports",
+    "new_chatbot": "New chatbot",
+    "chatbot_name": "Name",
+    "chatbot_prompt": "System prompt",
+    "chatbot_active": "Active",
+    "chatbot_client": "Client",
+    "chatbot_model": "LLM model",
+    "no_chatbots": "No chatbots created",
+    "delete_confirm": "Delete this chatbot?"
   },
   "login": {
     "title": "Sign in",

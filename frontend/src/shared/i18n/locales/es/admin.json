@@ -8,7 +8,15 @@
     "chatbots": "Chatbots",
     "clients": "Clientes",
     "documents": "Documentos",
-    "reports": "Informes"
+    "reports": "Informes",
+    "new_chatbot": "Nuevo chatbot",
+    "chatbot_name": "Nombre",
+    "chatbot_prompt": "Prompt del sistema",
+    "chatbot_active": "Activo",
+    "chatbot_client": "Cliente",
+    "chatbot_model": "Modelo LLM",
+    "no_chatbots": "No hay chatbots creados",
+    "delete_confirm": "¿Eliminar este chatbot?"
   },
   "login": {
     "title": "Iniciar sesión",

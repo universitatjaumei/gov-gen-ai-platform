@@ -4,6 +4,7 @@ import { Suspense } from 'react'
 import { AuthProvider, PrivateRoute } from '@/shared/auth'
 import { AppLayout } from '@/admin/AppLayout'
 import { LoginPage } from '@/admin/pages/LoginPage'
+import { ChatbotsPage } from '@/admin/pages/ChatbotsPage'
 import { PlaceholderPage } from '@/admin/pages/PlaceholderPage'
 import './index.css'
 import '@/shared/i18n'
@@ -21,7 +22,7 @@ function App() {
               <Route element={<PrivateRoute />}>
                 <Route element={<AppLayout />}>
                   <Route index element={<Navigate to="/hub" replace />} />
-                  <Route path="/hub" element={<PlaceholderPage section="Hub" />} />
+                  <Route path="/hub" element={<ChatbotsPage />} />
                   <Route path="/automation" element={<PlaceholderPage section="Automatización" />} />
                   <Route path="/platform" element={<PlaceholderPage section="Plataforma" />} />
                 </Route>
