@@ -27,8 +27,8 @@ echo [INFO] Levantando servidor FastAPI en http://localhost:8000
 echo [INFO] Levantando frontend React en http://localhost:5173
 echo.
 set PYTHONUNBUFFERED=1
-start "FastAPI" cmd /k "cd /d "%~dp0" && uv run --project server uvicorn server.app.main:app --reload --host 0.0.0.0 --port 8000"
-start "Frontend" cmd /k "cd /d "%~dp0frontend" && npm run dev"
+start "FastAPI" cmd /k "cd /d ""%~dp0"" && uv run --project server uvicorn server.app.main:app --reload --reload-dir server --host 0.0.0.0 --port 8000"
+start "Frontend" cmd /k "cd /d ""%~dp0frontend"" && npm run dev"
 goto :fin
 
 :servidor
@@ -38,7 +38,7 @@ echo [INFO] Levantando servidor FastAPI en http://localhost:8000
 echo [INFO] Swagger UI en http://localhost:8000/docs
 echo.
 set PYTHONUNBUFFERED=1
-uv run --project server uvicorn server.app.main:app --reload --host 0.0.0.0 --port 8000
+uv run --project server uvicorn server.app.main:app --reload --reload-dir server --host 0.0.0.0 --port 8000
 goto :fin
 
 :legacy
