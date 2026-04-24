@@ -2,6 +2,7 @@
 
 Deploy: edge
 """
+
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -17,6 +18,7 @@ router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 
 class _NoOpEmbeddingService:
     """Placeholder — se reemplaza por el LLM Gateway en Fase 4."""
+
     async def embed(self, text: str) -> list[float]:
         return [0.0] * 1536
 

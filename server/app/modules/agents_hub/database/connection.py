@@ -1,4 +1,5 @@
 """Conexión asíncrona a PostgreSQL para agents_hub."""
+
 import os
 from collections.abc import AsyncGenerator
 from typing import Any

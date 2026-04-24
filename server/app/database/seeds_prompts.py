@@ -269,8 +269,8 @@ INITIAL_PROMPTS = [
         "module": "custom_script",
         "description": "Generación de scripts Python generales",
         "template": SYS_CUSTOM_SCRIPT_GEN,
-        "suggested_model": "gemini-3-pro-preview", 
-        "tier_override": 3
+        "suggested_model": "gemini-3-pro-preview",
+        "tier_override": 3,
     },
     {
         "service_id": "sys_clarification_custom",
@@ -278,8 +278,8 @@ INITIAL_PROMPTS = [
         "module": "custom_script",
         "description": "Análisis de ambigüedad para scripts",
         "template": SYS_CLARIFICATION_ANALYSIS_CUSTOM,
-        "suggested_model": "gemini-3-pro-preview", 
-        "tier_override": 3
+        "suggested_model": "gemini-3-pro-preview",
+        "tier_override": 3,
     },
     {
         "service_id": "sys_clarification_etl",
@@ -288,7 +288,7 @@ INITIAL_PROMPTS = [
         "description": "Análisis de ambigüedad para ETL",
         "template": SYS_CLARIFICATION_ANALYSIS_ETL,
         "suggested_model": "gemini-3.1-pro-preview",
-        "tier_override": 3
+        "tier_override": 3,
     },
     {
         "service_id": "sys_clarification_rpa",
@@ -297,7 +297,7 @@ INITIAL_PROMPTS = [
         "description": "Análisis de ambigüedad para RPA Web",
         "template": SYS_CLARIFICATION_ANALYSIS_RPA,
         "suggested_model": "gemini-3-flash-preview",
-        "tier_override": 2
+        "tier_override": 2,
     },
     {
         "service_id": "sys_clarification_extraction",
@@ -306,7 +306,7 @@ INITIAL_PROMPTS = [
         "description": "Análisis de ambigüedad para Extracción",
         "template": SYS_CLARIFICATION_ANALYSIS_EXTRACTION,
         "suggested_model": "gemini-3-flash-preview",
-        "tier_override": 2
+        "tier_override": 2,
     },
     {
         "service_id": "sys_flow_orchestrator",
@@ -315,7 +315,7 @@ INITIAL_PROMPTS = [
         "description": "Arquitecto de Soluciones y Orquestador de Flujos",
         "template": SYS_FLOW_ORCHESTRATOR,
         "suggested_model": "gemini-3.1-pro-preview",
-        "tier_override": 3
+        "tier_override": 3,
     },
     # 3. Metaprogramming Copilot (Prompt 11 - Tier 3)
     {
@@ -332,7 +332,7 @@ REGLAS:
 4. PRIVACIDAD: Prioriza la soberanía local y la anonimización.
 """,
         "suggested_model": "gemini-1.5-pro",
-        "tier_override": 3
+        "tier_override": 3,
     },
     {
         "service_id": "sys_semantic_naming",
@@ -341,7 +341,7 @@ REGLAS:
         "description": "Sugerencia de nombres de variables para átomos",
         "template": SYS_SEMANTIC_NAMING,
         "suggested_model": "gemini-3-flash-preview",
-        "tier_override": 1
+        "tier_override": 1,
     },
     {
         "service_id": "sys_llm_process",
@@ -350,8 +350,8 @@ REGLAS:
         "description": "Procesamiento de texto con LLM: resumen, clasificación, traducción, transformación",
         "template": SYS_LLM_PROCESS,
         "suggested_model": "gemini-3-flash-preview",
-        "tier_override": 1
-    }
+        "tier_override": 1,
+    },
 ]
 
 
@@ -360,7 +360,7 @@ async def seed_system_prompts():
     Puebla la base de datos con los prompts del sistema definidos arriba.
     """
     print("[SEED] Iniciando poblado de Prompts de Sistema...")
-    
+
     async with AsyncSession(server_engine) as session:
         count = 0
         for p_data in INITIAL_PROMPTS:
@@ -374,13 +374,13 @@ async def seed_system_prompts():
                     description=p_data["description"],
                     system_prompt_template=p_data["template"],
                     suggested_model=p_data.get("suggested_model"),
-                    tier_override=p_data.get("tier_override")
+                    tier_override=p_data.get("tier_override"),
                 )
                 session.add(new_config)
                 count += 1
                 print(f"  -> Creado: {p_data['service_id']}")
             else:
-                existing.system_prompt_template = p_data["template"] 
+                existing.system_prompt_template = p_data["template"]
                 existing.tier_override = p_data.get("tier_override")
                 # Migrate suggested model if discontinued
                 if existing.suggested_model == "gemini-3-pro-preview":
@@ -389,9 +389,9 @@ async def seed_system_prompts():
                     existing.suggested_model = p_data.get("suggested_model")
                 session.add(existing)
                 print(f"  -> Actualizado: {p_data['service_id']}")
-        
+
         await session.commit()
-    
+
     print(f"[SEED] Completado. {count} prompts nuevos insertados.")
 
 
@@ -444,7 +444,7 @@ Al sugerir un recurso, indica su origen:
 - ORGANIZATION: "Un compañero de tu organización ya creó..."
 - PARTNER: "Existe una solución validada por tu Partner..."
 - GLOBAL: "Hay una plantilla oficial de AutomatIA..."
-"""
+""",
     },
     {
         "name": "script_generator",
@@ -472,7 +472,7 @@ Si necesitas parámetros de entrada, defínelos en un ui_contract:
   "inputs": [{"id": "param_name", "type": "string|file|number", "label": "Descripción"}],
   "outputs": [{"id": "result", "type": "any"}]
 }
-"""
+""",
     },
     {
         "name": "copilot_helper",
@@ -537,23 +537,24 @@ EJEMPLOS DE RESPUESTAS CONCISAS:
 - "Esta acción requiere un archivo CSV. Asegúrate de que tenga encabezados en la primera fila."
 - "Detecto que el paso anterior devuelve texto pero este espera un número. Te sugiero crear un **paso puente** para la conversión."
 - "Para usar los datos del correo entrante, usa la variable `{{trigger.body}}` o `{{trigger.attachments}}`."
-"""
-    }
+""",
+    },
 ]
+
 
 async def seed_v12_system_prompts():
     """
     Puebla la nueva tabla SystemPrompt en el servidor con los prompts del Prompt 12.
     """
     print("[SEED] Iniciando poblado de SystemPrompt (V12 Architecture)...")
-    
+
     async with AsyncSession(server_engine) as session:
         count = 0
         for p_data in INITIAL_V12_SYSTEM_PROMPTS:
             stmt = select(SystemPrompt).where(SystemPrompt.name == p_data["name"])
             result = await session.execute(stmt)
             existing = result.scalars().first()
-            
+
             if not existing:
                 new_prompt = SystemPrompt(
                     name=p_data["name"],
@@ -561,7 +562,7 @@ async def seed_v12_system_prompts():
                     content=p_data["content"],
                     context_type=p_data["context_type"],
                     tier=p_data.get("tier"),
-                    is_active=True
+                    is_active=True,
                 )
                 session.add(new_prompt)
                 count += 1
@@ -574,6 +575,6 @@ async def seed_v12_system_prompts():
                 existing.updated_at = datetime.utcnow()
                 session.add(existing)
                 print(f"  -> Actualizado (SystemPrompt): {p_data['name']}")
-        
+
         await session.commit()
     print(f"[SEED] Completado. {count} prompts V12 nuevos insertados.")

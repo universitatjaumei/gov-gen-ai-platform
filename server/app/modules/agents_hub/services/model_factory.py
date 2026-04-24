@@ -1,11 +1,10 @@
 """Factoría dinámica de modelos LLM según configuración de la base de datos."""
+
 import os
 import uuid
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.modules.agents_hub.database.config_models import HubLLMConfig
 
@@ -56,6 +55,7 @@ def _build_model(config: HubLLMConfig):
         )
     elif config.provider == "ollama":
         from langchain_community.chat_models import ChatOllama
+
         return ChatOllama(
             model=config.model_name,
             temperature=config.temperature,

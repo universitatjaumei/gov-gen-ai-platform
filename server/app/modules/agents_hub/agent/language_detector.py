@@ -1,4 +1,5 @@
 """Detector de idioma para mensajes."""
+
 from langdetect import LangDetectException, detect
 
 

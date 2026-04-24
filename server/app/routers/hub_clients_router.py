@@ -2,6 +2,7 @@
 
 Deploy: cloud
 """
+
 import uuid
 from datetime import datetime, timezone
 
@@ -9,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import func, select, delete as sql_delete
 
-from server.app.api.deps import get_current_user, require_role
+from server.app.api.deps import require_role
 from server.app.core.auth.models import UserInfo
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient
@@ -59,8 +60,9 @@ async def list_clients(
 ):
     rows = (
         await session.execute(
-            select(HubClient, _count_sq.label("chatbot_count"))
-            .order_by(HubClient.created_at.desc())
+            select(HubClient, _count_sq.label("chatbot_count")).order_by(
+                HubClient.created_at.desc()
+            )
         )
     ).all()
     return [
@@ -114,7 +116,9 @@ async def update_client(
 ):
     client = await session.get(HubClient, client_id)
     if not client:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
+        )
 
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(client, field, value)
@@ -142,6 +146,8 @@ async def delete_client(
 ):
     client = await session.get(HubClient, client_id)
     if not client:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
+        )
     await session.execute(sql_delete(HubClient).where(HubClient.id == client_id))
     await session.commit()

@@ -4,6 +4,7 @@ Soporta dos modos de operación:
 - Modo Público (Chatbot): user_id=None, solo herramientas RAG públicas.
 - Modo Agente (Identificado): user_id válido, desbloquea MCP y docs de usuario.
 """
+
 import os
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -74,23 +75,25 @@ def create_agent_graph(retriever, embedding_service, user_id: str | None = None)
 
         context_str = "\n".join(context) if context else "Sin información adicional."
 
-        system_prompt = f"""Eres un asistente útil. Responde en {state.get('language', 'es')}.
+        system_prompt = f"""Eres un asistente útil. Responde en {state.get("language", "es")}.
 
 Información relevante:
 {context_str}
 
 Responde de forma concisa y útil."""
 
-        response = await llm.ainvoke([
-            {"role": "system", "content": system_prompt},
-            *[
-                {
-                    "role": "user" if isinstance(m, HumanMessage) else "assistant",
-                    "content": m.content,
-                }
-                for m in messages
-            ],
-        ])
+        response = await llm.ainvoke(
+            [
+                {"role": "system", "content": system_prompt},
+                *[
+                    {
+                        "role": "user" if isinstance(m, HumanMessage) else "assistant",
+                        "content": m.content,
+                    }
+                    for m in messages
+                ],
+            ]
+        )
 
         return {"messages": [AIMessage(content=response.content)]}
 

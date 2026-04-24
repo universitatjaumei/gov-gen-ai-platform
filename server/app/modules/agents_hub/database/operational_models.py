@@ -1,4 +1,5 @@
 """Modelos ORM operacionales para agents_hub."""
+
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -20,6 +21,7 @@ from server.app.modules.agents_hub.database.base import HubOperationalBase
 
 class HubDocumentChunk(HubOperationalBase):
     """Fragmento de documento con embedding vectorial."""
+
     __tablename__ = "hub_document_chunks"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -35,7 +37,9 @@ class HubDocumentChunk(HubOperationalBase):
     chunk_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     language: Mapped[str] = mapped_column(String(10), default="es")
     is_temporary: Mapped[bool] = mapped_column(Boolean, default=False)
-    owner_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -43,6 +47,7 @@ class HubDocumentChunk(HubOperationalBase):
 
 class HubInteraction(HubOperationalBase):
     """Conversación usuario–asistente."""
+
     __tablename__ = "hub_interactions"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -67,6 +72,7 @@ class HubInteraction(HubOperationalBase):
 
 class HubIngestionJob(HubOperationalBase):
     """Job de ingestión de documentos."""
+
     __tablename__ = "hub_ingestion_jobs"
 
     id: Mapped[uuid.UUID] = mapped_column(

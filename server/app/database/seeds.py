@@ -13,12 +13,19 @@ Credenciales de desarrollo:
 
 La clave de licencia de desarrollo es: DEV_LICENSE_KEY_12345
 """
+
 import hashlib
 from datetime import datetime, timedelta
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from server.app.database.db import server_engine
-from server.app.database.models import AdminAccount, PartnerAccount, ClientAccount, License, ExtractionServiceConfig
+from server.app.database.models import (
+    AdminAccount,
+    PartnerAccount,
+    ClientAccount,
+    License,
+    ExtractionServiceConfig,
+)
 from server.app.core.security import hash_password
 from automatia_shared.enums import LicenseStatus
 
@@ -92,7 +99,7 @@ async def _seed_dev_partner(session: AsyncSession):
             name="Partner Desarrollo",
             email="dev@automatia.local",
             credits_balance=1000000,  # 1M de créditos para desarrollo
-            is_active=True
+            is_active=True,
         )
         session.add(partner)
         print("[SEED] Partner de desarrollo creado: partner_dev")
@@ -117,7 +124,7 @@ async def _seed_dev_client(session: AsyncSession):
             name="Cliente Desarrollo Local",
             email="client@automatia.local",
             license_key=license_key_hash,
-            is_active=True
+            is_active=True,
         )
         session.add(client)
         print("[SEED] Cliente de desarrollo creado: client_dev")
@@ -139,7 +146,7 @@ async def _seed_dev_license(session: AsyncSession):
             quota_tokens=10000000,  # 10M tokens para desarrollo
             consumed_tokens=0,
             valid_until=datetime.utcnow() + timedelta(days=365),  # 1 año
-            status=LicenseStatus.ACTIVE.value
+            status=LicenseStatus.ACTIVE.value,
         )
         session.add(license)
         print("[SEED] Licencia de desarrollo creada: lic_dev")
@@ -155,33 +162,32 @@ async def seed_prompt_tiers():
         "sys_phase1_extraction": 1,
         "sys_fallback_snippet": 1,
         "sys_pdf_extraction": 1,
-        
         # Tier 2: Lógica/Navegación (Flash/Standard)
         "sys_phase1_refinement": 2,
         "sys_rpa_analysis": 2,
         "sys_rpa_vision": 2,
         "sys_utility_noise_filter": 2,
-        
         # Tier 3: Supervisión (Pro)
-        "sys_phase3_factory_gen": 2, # Cambiado de 3 a 2 para programación (Tier 2: Lógica)
+        "sys_phase3_factory_gen": 2,  # Cambiado de 3 a 2 para programación (Tier 2: Lógica)
         "sys_phase3_refinement": 3,
         "sys_phase3_audit_forensic": 3,
         "sys_script_gen": 3,  # Legacy alias
-        "factory_gen": 3,     # Legacy alias
-        "anchor_based": 3,    # Legacy alias
+        "factory_gen": 3,  # Legacy alias
+        "anchor_based": 3,  # Legacy alias
     }
-    
+
     async with AsyncSession(server_engine) as session:
         print("[SEED] Aplicando migración de Tiers a Prompts...")
         for service_id, tier in TIER_MAPPING.items():
             prompt = await session.get(ExtractionServiceConfig, service_id)
             if prompt:
-                if prompt.tier_override is None: # Solo si no tiene tier
+                if prompt.tier_override is None:  # Solo si no tiene tier
                     prompt.tier_override = tier
                     session.add(prompt)
                     print(f"  -> Asignado Tier {tier} a {service_id}")
-        
+
         await session.commit()
+
 
 async def seed_all():
     """
@@ -200,7 +206,11 @@ async def seed_all():
     await seed_multitenancy_defaults()
 
     # 3. Seeds de Prompts del Sistema (Nuevos Phase 4)
-    from server.app.database.seeds_prompts import seed_system_prompts, seed_v12_system_prompts
+    from server.app.database.seeds_prompts import (
+        seed_system_prompts,
+        seed_v12_system_prompts,
+    )
+
     await seed_system_prompts()
     await seed_v12_system_prompts()
 

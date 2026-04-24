@@ -1,4 +1,5 @@
 """Prompt 2.7 — Retriever híbrido (vector + keyword, Reciprocal Rank Fusion)."""
+
 import uuid
 from dataclasses import dataclass, field
 
@@ -36,7 +37,7 @@ class HybridRetriever:
             .where(HubDocumentChunk.chatbot_id == chatbot_id)
             .where(HubDocumentChunk.embedding.isnot(None))
             .where(
-                (HubDocumentChunk.is_temporary == False)
+                (not HubDocumentChunk.is_temporary)
                 | (HubDocumentChunk.owner_id == owner_id)
             )
         )
@@ -67,7 +68,8 @@ class HybridRetriever:
     ) -> list[SearchResult]:
         filters = [
             HubDocumentChunk.chatbot_id == chatbot_id,
-            (HubDocumentChunk.is_temporary == False) | (HubDocumentChunk.owner_id == owner_id),
+            (not HubDocumentChunk.is_temporary)
+            | (HubDocumentChunk.owner_id == owner_id),
         ]
         for word in query.split():
             filters.append(HubDocumentChunk.content.ilike(f"%{word}%"))
@@ -98,8 +100,12 @@ class HybridRetriever:
         vector_weight: float = 0.7,
         owner_id: uuid.UUID | None = None,
     ) -> list[SearchResult]:
-        vector_results = await self.vector_search(query_embedding, chatbot_id, top_k * 2, language, owner_id)
-        keyword_results = await self.keyword_search(query, chatbot_id, top_k * 2, language, owner_id)
+        vector_results = await self.vector_search(
+            query_embedding, chatbot_id, top_k * 2, language, owner_id
+        )
+        keyword_results = await self.keyword_search(
+            query, chatbot_id, top_k * 2, language, owner_id
+        )
 
         k = 60
         scores: dict[uuid.UUID, tuple[SearchResult, float]] = {}

@@ -1,4 +1,5 @@
 """Orquestador de ingestión asíncrona."""
+
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Protocol
@@ -6,7 +7,10 @@ from typing import Protocol
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk, HubIngestionJob
+from server.app.modules.agents_hub.database.operational_models import (
+    HubDocumentChunk,
+    HubIngestionJob,
+)
 from server.app.modules.agents_hub.ingestion.chunker import MarkdownChunker
 from server.app.modules.agents_hub.ingestion.docling_processor import DoclingProcessor
 from server.app.modules.agents_hub.ingestion.hasher import hash_content
@@ -14,6 +18,7 @@ from server.app.modules.agents_hub.ingestion.hasher import hash_content
 
 class EmbeddingService(Protocol):
     """Protocolo para servicio de embeddings."""
+
     async def embed(self, text: str) -> list[float]: ...
 
 
@@ -160,7 +165,7 @@ async def cleanup_temporary_chunks(session: AsyncSession, ttl_hours: int = 24) -
     """
     cutoff = datetime.now(timezone.utc) - timedelta(hours=ttl_hours)
     result = await session.execute(
-        select(HubDocumentChunk).where(HubDocumentChunk.is_temporary == True)
+        select(HubDocumentChunk).where(HubDocumentChunk.is_temporary)
     )
     deleted = 0
     for chunk in result.scalars():

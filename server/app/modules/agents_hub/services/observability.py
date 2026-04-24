@@ -3,6 +3,7 @@
 Si LANGFUSE_SECRET_KEY no está definida, todas las funciones devuelven None
 y el agente funciona normalmente sin tracing.
 """
+
 import os
 from functools import lru_cache
 

@@ -1,4 +1,5 @@
 """Servicio de recuperación y formateo de prompts desde la base de datos."""
+
 import uuid
 
 from sqlalchemy import select
@@ -46,6 +47,6 @@ async def get_formatted_prompt(
 
     try:
         return template.template_text.format(**kwargs)
-    except KeyError as e:
+    except KeyError:
         # Variable inexistente: devolver template sin formatear para no romper el flujo
         return template.template_text

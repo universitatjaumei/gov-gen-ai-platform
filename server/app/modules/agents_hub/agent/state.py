@@ -1,5 +1,6 @@
 """Estado del agente LangGraph."""
-from typing import Annotated, Any
+
+from typing import Annotated
 from typing_extensions import TypedDict
 
 from langchain_core.messages import BaseMessage, HumanMessage
@@ -8,6 +9,7 @@ from langgraph.graph.message import add_messages
 
 class AgentState(TypedDict):
     """Estado compartido del grafo del agente."""
+
     messages: Annotated[list[BaseMessage], add_messages]
     language: str
     chatbot_id: str

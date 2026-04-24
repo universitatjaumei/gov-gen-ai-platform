@@ -1,6 +1,7 @@
 """
 Deploy: cloud
 """
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlmodel import select
@@ -36,7 +37,11 @@ async def login_admin(
     )
     admin = result.first()
 
-    if not admin or not admin.is_active or not verify_password(body.password, admin.hashed_password):
+    if (
+        not admin
+        or not admin.is_active
+        or not verify_password(body.password, admin.hashed_password)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",

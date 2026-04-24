@@ -1,4 +1,5 @@
 """Herramienta de búsqueda en la base de conocimiento."""
+
 import uuid
 from typing import Protocol
 

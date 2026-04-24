@@ -1,18 +1,19 @@
 """Servicio para gestionar los precios de modelos de IA vía API de OpenRouter."""
+
 import aiohttp
 from datetime import datetime
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from typing import Optional
 
 from server.app.database.db import server_engine
 from server.app.database.models import ModelPricing
 
+
 async def update_prices_from_openrouter():
     """
     Sincroniza los precios más recientes de los modelos desde OpenRouter hacia la BD local.
-    
-    Actualiza los costes de entrada y salida por millón de tokens para todos los 
+
+    Actualiza los costes de entrada y salida por millón de tokens para todos los
     modelos soportados, creando nuevos registros si no existen.
     """
     print("Updating model prices from OpenRouter...")
@@ -36,13 +37,18 @@ async def update_prices_from_openrouter():
                             pricing = model_info.get("pricing", {})
 
                             prompt_price = float(pricing.get("prompt", 0)) * 1_000_000
-                            completion_price = float(pricing.get("completion", 0)) * 1_000_000
+                            completion_price = (
+                                float(pricing.get("completion", 0)) * 1_000_000
+                            )
 
                             if model_id in existing_map:
                                 # Update existing
                                 existing_model = existing_map[model_id]
-                                if (existing_model.input_cost_per_m != prompt_price or
-                                    existing_model.output_cost_per_m != completion_price):
+                                if (
+                                    existing_model.input_cost_per_m != prompt_price
+                                    or existing_model.output_cost_per_m
+                                    != completion_price
+                                ):
                                     existing_model.input_cost_per_m = prompt_price
                                     existing_model.output_cost_per_m = completion_price
                                     existing_model.updated_at = datetime.utcnow()
@@ -54,23 +60,30 @@ async def update_prices_from_openrouter():
                                     id=model_id,
                                     input_cost_per_m=prompt_price,
                                     output_cost_per_m=completion_price,
-                                    updated_at=datetime.utcnow()
+                                    updated_at=datetime.utcnow(),
                                 )
                                 session.add(new_pricing)
                                 count_new += 1
 
                         await session.commit()
-                        print(f"Updated prices: {count_new} new, {count_updated} updated via OpenRouter")
+                        print(
+                            f"Updated prices: {count_new} new, {count_updated} updated via OpenRouter"
+                        )
                 else:
-                    print(f"Failed to fetch prices from OpenRouter: Status {resp.status}")
+                    print(
+                        f"Failed to fetch prices from OpenRouter: Status {resp.status}"
+                    )
     except Exception as e:
         print(f"Error updating model prices: {e}")
 
-async def calculate_cost(provider: str, model: str, input_tokens: int, output_tokens: int) -> float:
+
+async def calculate_cost(
+    provider: str, model: str, input_tokens: int, output_tokens: int
+) -> float:
     """
     Calcula el coste real de una solicitud de IA en dólares.
-    
-    Normaliza el proveedor y el modelo para localizar su configuración de precio 
+
+    Normaliza el proveedor y el modelo para localizar su configuración de precio
     en la base de datos local y aplica las fórmulas de coste por millón de tokens.
 
     Args:
@@ -101,10 +114,10 @@ async def calculate_cost(provider: str, model: str, input_tokens: int, output_to
 
         # Fallback: try searching by suffix if exact match fails
         if not pricing and provider_lower == "google":
-             # Try to find a model that ends with the model name (e.g. 'gemini-1.5-flash' matching 'google/gemini-1.5-flash-latest' etc?)
-             # For now, let's just stick to "google/" prefix or exact match.
-             # Maybe the model name used in app is just "gemini-1.5-flash"
-             pass
+            # Try to find a model that ends with the model name (e.g. 'gemini-1.5-flash' matching 'google/gemini-1.5-flash-latest' etc?)
+            # For now, let's just stick to "google/" prefix or exact match.
+            # Maybe the model name used in app is just "gemini-1.5-flash"
+            pass
 
         if pricing:
             input_cost = (input_tokens / 1_000_000) * pricing.input_cost_per_m

@@ -1,11 +1,15 @@
 """Proveedor de configuración (Costura Edge-Cloud)."""
+
 import uuid
 from typing import Protocol
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.modules.agents_hub.database.config_models import HubChatbot, HubLLMConfig
+from server.app.modules.agents_hub.database.config_models import (
+    HubChatbot,
+    HubLLMConfig,
+)
 
 
 class ConfigProvider(Protocol):
@@ -40,8 +44,7 @@ class LocalConfigProvider:
         """Obtiene los chatbots activos de un cliente."""
         result = await self.session.execute(
             select(HubChatbot).where(
-                HubChatbot.client_id == client_id,
-                HubChatbot.is_active.is_(True)
+                HubChatbot.client_id == client_id, HubChatbot.is_active.is_(True)
             )
         )
         return list(result.scalars().all())

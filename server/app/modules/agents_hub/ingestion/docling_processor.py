@@ -1,4 +1,5 @@
 """Procesador de documentos usando Docling."""
+
 from pathlib import Path
 
 from docling.document_converter import DocumentConverter
@@ -43,6 +44,6 @@ class DoclingProcessor:
         Returns:
             Contenido en formato Markdown
         """
-        if source.startswith(('http://', 'https://')):
+        if source.startswith(("http://", "https://")):
             return self.process_url(source)
         return self.process_pdf(source)

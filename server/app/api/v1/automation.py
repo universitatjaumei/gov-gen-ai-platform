@@ -3,8 +3,8 @@ Brain API Router - V1
 Endpoints para orquestación de IA y servicios de cerebro.
 """
 
-from typing import List, Dict, Any, Optional, Tuple
-from fastapi import APIRouter, Depends, HTTPException, Header, Body
+from typing import List, Dict, Any, Optional
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 import base64
 import traceback
@@ -14,19 +14,18 @@ from server.app.modules.automation.infrastructure.llm_gateway import ejecutar_ta
 from server.app.services.ai_brain import AIBrainService
 from server.app.modules.automation.billing_engine import billing_engine
 
-router = APIRouter(
-    prefix="/brain",
-    tags=["brain"]
-)
+router = APIRouter(prefix="/brain", tags=["brain"])
 
 
 # =============================================================================
 # REQUEST MODELS
 # =============================================================================
 
+
 # --- Script Generation ---
 class GenerateScriptRequest(BaseModel):
     """Solicitud para generar un script de automatización mediante un prompt."""
+
     prompt: str
     output_schema: Dict[str, Any]
     model: Optional[str] = None
@@ -36,6 +35,7 @@ class GenerateScriptRequest(BaseModel):
 # --- Extraction ---
 class AnalyzeDocumentRequest(BaseModel):
     """Solicitud para analizar la estructura de documentos (Fase 0)."""
+
     texto_a: str
     texto_b: str
     definicion_usuario: str
@@ -44,6 +44,7 @@ class AnalyzeDocumentRequest(BaseModel):
 
 class ExtractDataRequest(BaseModel):
     """Solicitud para extraer datos de un documento (Fase 1)."""
+
     user_definition: str
     target_fields: List[str] = []
     usar_tier_2: bool = False
@@ -54,6 +55,7 @@ class ExtractDataRequest(BaseModel):
 
 class RefineExtractionRequest(BaseModel):
     """Solicitud para refinar una extracción con feedback (Fase 1.5)."""
+
     texto_fitz: str
     texto_plumber: str
     datos_anteriores: Dict[str, Any]
@@ -63,6 +65,7 @@ class RefineExtractionRequest(BaseModel):
 
 class GuidedFieldRequest(BaseModel):
     """Solicitud para extraer un campo específico mediante un snippet de texto."""
+
     field_name: str
     snippet_text: str
     expected_format: str = "text"
@@ -71,6 +74,7 @@ class GuidedFieldRequest(BaseModel):
 # --- Factory ---
 class GenerateExtractionScriptRequest(BaseModel):
     """Solicitud para generar un script de extracción determinista (Fase 3)."""
+
     docs_text_list: List[Dict[str, str]]
     campos_objetivo: List[str]
     values_example: Optional[Dict[str, Any]] = None
@@ -81,6 +85,7 @@ class GenerateExtractionScriptRequest(BaseModel):
 
 class RefineScriptRequest(BaseModel):
     """Solicitud para refinar un script de extracción tras un error."""
+
     script_actual: str
     reporte_forense: str
     feedback_history: List[Dict[str, Any]]
@@ -90,6 +95,7 @@ class RefineScriptRequest(BaseModel):
 
 class ScriptEscalationRequest(BaseModel):
     """Solicitud para escalar la creación/corrección de un script al Partner."""
+
     script_name: str
     original_code: str
     client_notes: Optional[str] = None
@@ -98,6 +104,7 @@ class ScriptEscalationRequest(BaseModel):
 
 class ForensicAuditRequest(BaseModel):
     """Solicitud para auditar un script comparando sus resultados con la IA."""
+
     referencia_ia: Dict[str, Any]
     resultado_script: Any
 
@@ -105,12 +112,14 @@ class ForensicAuditRequest(BaseModel):
 # --- RPA ---
 class AnalyzeRecordingRequest(BaseModel):
     """Solicitud para analizar una grabación de usuario y generar un playbook RPA."""
+
     recording_logs: List[Dict[str, Any]]
     context_dict: Optional[Dict[str, Any]] = None
 
 
 class RefinePlaybookRequest(BaseModel):
     """Solicitud para refinar un playbook RPA existente."""
+
     current_playbook: List[Dict[str, Any]]
     recording_logs: List[Dict[str, Any]]
     error_logs: str
@@ -120,6 +129,7 @@ class RefinePlaybookRequest(BaseModel):
 
 class VisualLocateRequest(BaseModel):
     """Solicitud para localizar un elemento visualmente en una captura de pantalla."""
+
     png_base64: str  # Base64 encoded image
     description: str
     viewport: Dict[str, int]
@@ -128,10 +138,13 @@ class VisualLocateRequest(BaseModel):
 # --- LLM ---
 class CallLLMRequest(BaseModel):
     """Solicitud genérica de llamada al LLM."""
+
     prompt: str
     role: str = "general"  # Role hint for model selection
-    service_id: Optional[str] = None # Nuevo: ID de prompt específico
-    config_summary: Optional[Dict[str, Any]] = None # Nuevo: Contexto para formatear el prompt
+    service_id: Optional[str] = None  # Nuevo: ID de prompt específico
+    config_summary: Optional[Dict[str, Any]] = (
+        None  # Nuevo: Contexto para formatear el prompt
+    )
     model: Optional[str] = None
     temperature: float = 0.5
 
@@ -139,6 +152,7 @@ class CallLLMRequest(BaseModel):
 # --- COPILOT ---
 class CopilotAskRequest(BaseModel):
     """Solicitud de consulta al asistente Copilot."""
+
     query: str
     local_context: str = ""
     conversation_history: List[Dict[str, str]] = []
@@ -151,6 +165,7 @@ class CopilotAskRequest(BaseModel):
 
 class GenerateBridgeRequest(BaseModel):
     """Solicitud para generar código de conversión entre tipos (Bridge)."""
+
     source_type: str
     target_type: str
     source_name: str
@@ -162,17 +177,19 @@ class GenerateBridgeRequest(BaseModel):
 # --- AGENT ---
 class AgentStepRequest(BaseModel):
     """Solicitud para ejecutar un paso del agente autónomo."""
+
     task_instruction: str
     page_state: Dict[str, Any]  # {url, title, screenshot_base64, html_snippet}
-    action_history: List[Dict[str, Any]]  # [{action, selector, value, result, timestamp}]
+    action_history: List[
+        Dict[str, Any]
+    ]  # [{action, selector, value, result, timestamp}]
 
 
 # --- SECURITY ENDPOINTS ---
 
+
 @router.get("/security/effective_policy")
-async def get_effective_policy(
-    x_license_key: str = Header(...)
-):
+async def get_effective_policy(x_license_key: str = Header(...)):
     """
     Obtiene la política de seguridad efectiva para el cliente actual.
 
@@ -204,7 +221,7 @@ async def get_effective_policy(
         "max_execution_time": 300,
         "applied_level": "SYSTEM",
         "scope": "SYSTEM",
-        "screenshot_policy": "REVIEW"
+        "screenshot_policy": "REVIEW",
     }
 
     try:
@@ -223,7 +240,9 @@ async def get_effective_policy(
 
             # Get effective policy using cascade
             policy_service = SecurityPolicyService(session)
-            effective_policy = await policy_service.get_effective_policy(client.client_id)
+            effective_policy = await policy_service.get_effective_policy(
+                client.client_id
+            )
 
             return effective_policy
 
@@ -233,6 +252,7 @@ async def get_effective_policy(
 
 
 # --- LICENSE ENDPOINTS ---
+
 
 @router.get("/validate_license")
 async def validate_license(x_license_key: str = Header(...)):
@@ -250,7 +270,7 @@ async def validate_license(x_license_key: str = Header(...)):
         return {
             "valid": True,
             "quota_remaining": license_obj.remaining_tokens(),
-            "expires_at": license_obj.valid_until.isoformat()
+            "expires_at": license_obj.valid_until.isoformat(),
         }
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
@@ -258,12 +278,15 @@ async def validate_license(x_license_key: str = Header(...)):
 
 # --- ORCHESTRATION ENDPOINTS ---
 
+
 class OrchestrateRequest(BaseModel):
     """Solicitud para la orquestación central de un flujo basado en lenguaje natural."""
+
     prompt: str
     local_inventory: List[Dict[str, Any]] = []
     client_id: Optional[str] = None
     partner_id: Optional[str] = None
+
 
 @router.post("/orchestrate")
 async def orchestrate(
@@ -296,27 +319,27 @@ async def orchestrate(
         5. Ejecuta la tarea en el LLM y registra el consumo en el motor de facturación.
     """
     brain_service = AIBrainService()
-    
+
     try:
         # 1. Validar Licencia
         # Internamente _validate_license lanza ValueError si falla
         license_obj = await brain_service._validate_license(x_license_key)
-        
+
         # Uso de identificadores del contexto de licencia si no vienen en la request
         client_id = request.client_id or license_obj.client_id
         # El partner_id lo sacamos del Cliente asociado a la licencia
         # Para simplificar en este paso, asumimos que AIBrainService tiene acceso a estos datos
         # si no vienen explícitamente.
-        
+
         partner_id = request.partner_id
         if not partner_id:
-             from sqlmodel import select
-             from sqlmodel.ext.asyncio.session import AsyncSession
-             from server.app.database.db import server_engine
-             from server.app.database.models import ClientAccount
-             async with AsyncSession(server_engine) as session:
-                 client = await session.get(ClientAccount, client_id)
-                 partner_id = client.partner_id if client else None
+            from sqlmodel.ext.asyncio.session import AsyncSession
+            from server.app.database.db import server_engine
+            from server.app.database.models import ClientAccount
+
+            async with AsyncSession(server_engine) as session:
+                client = await session.get(ClientAccount, client_id)
+                partner_id = client.partner_id if client else None
 
         # 2. Construir System Prompt Híbrido
         system_prompt = await knowledge_orchestrator.build_hybrid_system_prompt(
@@ -324,36 +347,34 @@ async def orchestrate(
             local_inventory=request.local_inventory,
             client_id=client_id,
             partner_id=partner_id,
-            prompt_name="flow_orchestrator"
+            prompt_name="flow_orchestrator",
         )
-        
+
         # 3. Resolver Config de Modelo para Orquestación
         # Usamos el rol "supervision" por defecto para orquestación de flujos
         config, _ = await brain_service._resolve_server_config(role_key="supervision")
-        
+
         # 4. Ejecutar Tarea en LLM
         # Combinamos system_prompt y prompt del usuario
         full_query = f"{system_prompt}\n\nUSER QUERY:\n{request.prompt}"
-        
+
         result = await ejecutar_tarea(
-            prompt=full_query,
-            config=config,
-            script_origen="orchestrator"
+            prompt=full_query, config=config, script_origen="orchestrator"
         )
-        
+
         # 5. Registrar Consumo (Opcional, pero recomendado)
         try:
-             await billing_engine.record_consumption(
-                 client_id=license_obj.client_id,
-                 tokens=result.get("tokens_used", 0),
-                 model=config.get("model", "unknown"),
-                 operation_type="orchestrate_flow"
-             )
+            await billing_engine.record_consumption(
+                client_id=license_obj.client_id,
+                tokens=result.get("tokens_used", 0),
+                model=config.get("model", "unknown"),
+                operation_type="orchestrate_flow",
+            )
         except Exception as billing_err:
-             print(f"[BILLING ERROR] Could not record consumption: {billing_err}")
-        
+            print(f"[BILLING ERROR] Could not record consumption: {billing_err}")
+
         return result
-        
+
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
     except Exception as e:
@@ -366,10 +387,10 @@ async def orchestrate(
 # SCRIPT GENERATION ENDPOINTS
 # =============================================================================
 
+
 @router.post("/generate_script")
 async def generate_script(
-    request: GenerateScriptRequest,
-    x_license_key: str = Header(...)
+    request: GenerateScriptRequest, x_license_key: str = Header(...)
 ) -> Dict[str, Any]:
     """
     Genera un script de extracción basado en un prompt y un esquema de salida.
@@ -392,12 +413,11 @@ async def generate_script(
 
     try:
         # 1. Validar licencia
-        await brain_service._validate_license(x_license_key)
+        license_obj = await brain_service._validate_license(x_license_key)
 
         # 2. Resolver config para generación de scripts
         config, system_prompt = await brain_service._resolve_server_config(
-            service_id="sys_phase3_factory_gen",
-            role_key="supervision"
+            service_id="sys_phase3_factory_gen", role_key="supervision"
         )
 
         # 3. Construir prompt completo
@@ -406,25 +426,23 @@ async def generate_script(
 
         # 4. Ejecutar
         result = await ejecutar_tarea(
-            prompt=full_prompt,
-            config=config,
-            script_origen="generate_script_api"
+            prompt=full_prompt, config=config, script_origen="generate_script_api"
         )
 
         # 5. Registrar Consumo (Proceso en background para no bloquear)
         try:
-             await billing_engine.record_consumption(
-                 client_id=license_obj.client_id,
-                 tokens=result.get("tokens_used", 0),
-                 model=result.get("model_used") or config.get("model", "unknown"),
-                 operation_type="generate_script"
-             )
+            await billing_engine.record_consumption(
+                client_id=license_obj.client_id,
+                tokens=result.get("tokens_used", 0),
+                model=result.get("model_used") or config.get("model", "unknown"),
+                operation_type="generate_script",
+            )
         except Exception as billing_err:
-             print(f"[BILLING ERROR] Could not record consumption: {billing_err}")
+            print(f"[BILLING ERROR] Could not record consumption: {billing_err}")
 
         return {
             "script": result.get("response", ""),
-            "tokens_used": result.get("tokens_used", 0)
+            "tokens_used": result.get("tokens_used", 0),
         }
 
     except ValueError as e:
@@ -437,8 +455,7 @@ async def generate_script(
 
 @router.post("/call_llm")
 async def call_llm(
-    request: CallLLMRequest,
-    x_license_key: str = Header(...)
+    request: CallLLMRequest, x_license_key: str = Header(...)
 ) -> Dict[str, Any]:
     """
     Realiza una llamada genérica al LLM para tareas auxiliares.
@@ -463,9 +480,9 @@ async def call_llm(
     try:
         # Mapear role a tier
         role_mapping = {
-            "general": "extraccion_pdf",      # Tier 1
+            "general": "extraccion_pdf",  # Tier 1
             "analysis": "logico_navegacion",  # Tier 2
-            "supervision": "supervision"       # Tier 3
+            "supervision": "supervision",  # Tier 3
         }
         role_key = role_mapping.get(request.role, "logico_navegacion")
 
@@ -477,9 +494,9 @@ async def call_llm(
                 config_summary=request.config_summary,
                 model=request.model,
                 temperature=request.temperature,
-                license_key=x_license_key
+                license_key=x_license_key,
             ),
-            "tokens_used": 0 # TODO: AIBrainService.call_llm should return tokens too
+            "tokens_used": 0,  # TODO: AIBrainService.call_llm should return tokens too
         }
 
     except ValueError as e:
@@ -494,10 +511,10 @@ async def call_llm(
 # EXTRACTION ENDPOINTS
 # =============================================================================
 
+
 @router.post("/extraction/analyze_structure")
 async def analyze_document_structure(
-    request: AnalyzeDocumentRequest,
-    x_license_key: str = Header(...)
+    request: AnalyzeDocumentRequest, x_license_key: str = Header(...)
 ):
     """
     Fase 0: Descubrimiento de estructura de documentos.
@@ -512,7 +529,7 @@ async def analyze_document_structure(
             texto_a=request.texto_a,
             texto_b=request.texto_b,
             definicion_usuario=request.definicion_usuario,
-            service_id=request.service_id
+            service_id=request.service_id,
         )
 
         return result
@@ -526,10 +543,7 @@ async def analyze_document_structure(
 
 
 @router.post("/extraction/extract")
-async def extract_data(
-    request: ExtractDataRequest,
-    x_license_key: str = Header(...)
-):
+async def extract_data(request: ExtractDataRequest, x_license_key: str = Header(...)):
     """
     Fase 1: Extracción de datos desde texto pre-procesado.
     Requiere texto_fitz y texto_plumber (el cliente debe extraer el texto del PDF).
@@ -542,7 +556,7 @@ async def extract_data(
         if not request.texto_fitz or not request.texto_plumber:
             raise HTTPException(
                 status_code=400,
-                detail="Se requiere texto_fitz y texto_plumber. El cliente debe extraer el texto del PDF."
+                detail="Se requiere texto_fitz y texto_plumber. El cliente debe extraer el texto del PDF.",
             )
 
         result = await brain_service.extract_data(
@@ -552,7 +566,7 @@ async def extract_data(
             usar_tier_2=request.usar_tier_2,
             ejemplos_validacion=request.ejemplos_validacion,
             texto_fitz=request.texto_fitz,
-            texto_plumber=request.texto_plumber
+            texto_plumber=request.texto_plumber,
         )
 
         return result
@@ -569,8 +583,7 @@ async def extract_data(
 
 @router.post("/extraction/refine")
 async def refine_extraction(
-    request: RefineExtractionRequest,
-    x_license_key: str = Header(...)
+    request: RefineExtractionRequest, x_license_key: str = Header(...)
 ):
     """
     Fase 1.5: Refinamiento de extracción con feedback del usuario.
@@ -585,7 +598,7 @@ async def refine_extraction(
             texto_plumber=request.texto_plumber,
             datos_anteriores=request.datos_anteriores,
             feedback_usuario=request.feedback_usuario,
-            service_id=request.service_id
+            service_id=request.service_id,
         )
 
         return result
@@ -600,8 +613,7 @@ async def refine_extraction(
 
 @router.post("/extraction/guided_field")
 async def extract_guided_field(
-    request: GuidedFieldRequest,
-    x_license_key: str = Header(...)
+    request: GuidedFieldRequest, x_license_key: str = Header(...)
 ):
     """
     Extracción guiada de un campo específico desde un snippet.
@@ -615,7 +627,7 @@ async def extract_guided_field(
         result = await brain_service.extract_field_generic_guided(
             field_name=request.field_name,
             snippet_text=request.snippet_text,
-            expected_format=request.expected_format
+            expected_format=request.expected_format,
         )
 
         return result
@@ -632,10 +644,10 @@ async def extract_guided_field(
 # FACTORY ENDPOINTS (Script Generation & Audit)
 # =============================================================================
 
+
 @router.post("/factory/generate_script")
 async def generate_extraction_script(
-    request: GenerateExtractionScriptRequest,
-    x_license_key: str = Header(...)
+    request: GenerateExtractionScriptRequest, x_license_key: str = Header(...)
 ):
     """
     Fase 3: Genera script de extracción determinista.
@@ -653,7 +665,7 @@ async def generate_extraction_script(
             info_discovery=request.info_discovery,
             feedback=request.feedback,
             field_definitions=request.field_definitions,
-            license_key=x_license_key
+            license_key=x_license_key,
         )
 
         return {"script": script}
@@ -663,14 +675,13 @@ async def generate_extraction_script(
     except Exception as e:
         print(f"[API ERROR] generate_extraction_script: {e}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Error generando script de extracción")
+        raise HTTPException(
+            status_code=500, detail="Error generando script de extracción"
+        )
 
 
 @router.post("/factory/refine_script")
-async def refine_script(
-    request: RefineScriptRequest,
-    x_license_key: str = Header(...)
-):
+async def refine_script(request: RefineScriptRequest, x_license_key: str = Header(...)):
     """
     Refinamiento iterativo de script con logs de error.
     Usa reporte forense para corregir el script.
@@ -685,7 +696,7 @@ async def refine_script(
             reporte_forense=request.reporte_forense,
             feedback_history=request.feedback_history,
             texto_documento=request.texto_documento,
-            target_fields=request.target_fields
+            target_fields=request.target_fields,
         )
 
         return {"script": script}
@@ -700,8 +711,7 @@ async def refine_script(
 
 @router.post("/factory/audit")
 async def forensic_audit(
-    request: ForensicAuditRequest,
-    x_license_key: str = Header(...)
+    request: ForensicAuditRequest, x_license_key: str = Header(...)
 ):
     """
     Genera reporte forense comparando resultado esperado vs obtenido.
@@ -713,7 +723,7 @@ async def forensic_audit(
 
         report = await brain_service.generate_forensic_audit(
             referencia_ia=request.referencia_ia,
-            resultado_script=request.resultado_script
+            resultado_script=request.resultado_script,
         )
 
         return {"report": report}
@@ -730,10 +740,10 @@ async def forensic_audit(
 # RPA ENDPOINTS
 # =============================================================================
 
+
 @router.post("/factory/escalate")
 async def escalate_script(
-    request: ScriptEscalationRequest,
-    x_license_key: str = Header(...)
+    request: ScriptEscalationRequest, x_license_key: str = Header(...)
 ):
     """
     Escala un script fallido al buzón del Partner para su revisión.
@@ -756,7 +766,7 @@ async def escalate_script(
                 select(ClientAccount).where(ClientAccount.license_key == key_hash)
             )
             client = result.scalar_one_or_none()
-            
+
             if not client:
                 raise ValueError("Licencia no corresponde a ningún cliente válido")
 
@@ -768,13 +778,13 @@ async def escalate_script(
                 original_code=request.original_code,
                 escalation_type=request.escalation_type,
                 client_notes=request.client_notes,
-                status="PENDING"
+                status="PENDING",
             )
-            
+
             session.add(new_escalation)
             await session.commit()
             await session.refresh(new_escalation)
-            
+
             return {"status": "success", "escalation_id": new_escalation.id}
 
     except ValueError as e:
@@ -789,10 +799,10 @@ async def escalate_script(
 # RPA ENDPOINTS
 # =============================================================================
 
+
 @router.post("/rpa/analyze")
 async def analyze_recording(
-    request: AnalyzeRecordingRequest,
-    x_license_key: str = Header(...)
+    request: AnalyzeRecordingRequest, x_license_key: str = Header(...)
 ):
     """
     Analiza logs de grabación para generar Playbook RPA.
@@ -804,8 +814,7 @@ async def analyze_recording(
         await brain_service._validate_license(x_license_key)
 
         playbook = await brain_service.analyze_recording(
-            recording_logs=request.recording_logs,
-            context=request.context_dict or {}
+            recording_logs=request.recording_logs, context=request.context_dict or {}
         )
 
         return {"playbook": playbook}
@@ -820,8 +829,7 @@ async def analyze_recording(
 
 @router.post("/rpa/refine")
 async def refine_playbook(
-    request: RefinePlaybookRequest,
-    x_license_key: str = Header(...)
+    request: RefinePlaybookRequest, x_license_key: str = Header(...)
 ):
     """
     Refina Playbook existente con feedback y logs de error.
@@ -836,7 +844,7 @@ async def refine_playbook(
             recording_logs=request.recording_logs,
             error_logs=request.error_logs,
             user_feedback_history=request.user_feedback_history,
-            context=request.context_data
+            context=request.context_data,
         )
 
         return {"playbook": playbook}
@@ -851,8 +859,7 @@ async def refine_playbook(
 
 @router.post("/rpa/visual_locate")
 async def visual_locate_element(
-    request: VisualLocateRequest,
-    x_license_key: str = Header(...)
+    request: VisualLocateRequest, x_license_key: str = Header(...)
 ):
     """
     Localiza coordenadas de un elemento visual en una imagen.
@@ -880,7 +887,7 @@ async def visual_locate_element(
         coords = await brain_service.get_element_coordinates(
             image_bytes=image_bytes,
             element_description=request.description,
-            viewport=request.viewport
+            viewport=request.viewport,
         )
 
         return {"coordinates": list(coords) if coords else None}
@@ -899,11 +906,9 @@ async def visual_locate_element(
 # COPILOT ENDPOINTS
 # =============================================================================
 
+
 @router.post("/copilot/ask")
-async def ask_copilot(
-    request: CopilotAskRequest,
-    x_license_key: str = Header(...)
-):
+async def ask_copilot(request: CopilotAskRequest, x_license_key: str = Header(...)):
     """
     Copiloto RAG para consultas sobre átomos y flujos.
 
@@ -947,7 +952,9 @@ async def ask_copilot(
 
         # Reemplazar placeholders en el prompt
         system_prompt = system_prompt.replace("{mode}", request.mode or "idle")
-        system_prompt = system_prompt.replace("{atom_context}", atom_context or "No hay contexto disponible")
+        system_prompt = system_prompt.replace(
+            "{atom_context}", atom_context or "No hay contexto disponible"
+        )
 
         # Construir historial de conversación
         conversation = ""
@@ -958,16 +965,18 @@ async def ask_copilot(
                 conversation += f"\n{role.upper()}: {content}"
 
         # Construir prompt completo
-        full_prompt = f"{system_prompt}\n\nHISTORIAL:{conversation}\n\nUSUARIO: {request.query}"
+        full_prompt = (
+            f"{system_prompt}\n\nHISTORIAL:{conversation}\n\nUSUARIO: {request.query}"
+        )
 
         # Resolver config - usar Tier 1 para velocidad (ayuda contextual rápida)
-        config, _ = await brain_service._resolve_server_config(role_key="extraccion_pdf")
+        config, _ = await brain_service._resolve_server_config(
+            role_key="extraccion_pdf"
+        )
 
         # Ejecutar
         result = await ejecutar_tarea(
-            prompt=full_prompt,
-            config_rol=config,
-            script_origen="copilot_ask"
+            prompt=full_prompt, config_rol=config, script_origen="copilot_ask"
         )
 
         response_text = result.get("response", "")
@@ -989,7 +998,7 @@ async def ask_copilot(
             "response": response_text,
             "suggestions": suggestions[:5],  # Máximo 5 sugerencias
             "has_bridge_suggestion": has_bridge,
-            "tokens_used": result.get("tokens_used", 0)
+            "tokens_used": result.get("tokens_used", 0),
         }
 
     except ValueError as e:
@@ -1002,8 +1011,7 @@ async def ask_copilot(
 
 @router.post("/copilot/generate_bridge")
 async def generate_bridge_code(
-    request: GenerateBridgeRequest,
-    x_license_key: str = Header(...)
+    request: GenerateBridgeRequest, x_license_key: str = Header(...)
 ):
     """
     Genera código puente para conversión entre tipos incompatibles.
@@ -1041,9 +1049,7 @@ Responde SOLO con el código Python, sin explicaciones ni markdown.
         config, _ = await brain_service._resolve_server_config(role_key="supervision")
 
         result = await ejecutar_tarea(
-            prompt=bridge_prompt,
-            config=config,
-            script_origen="bridge_generator"
+            prompt=bridge_prompt, config=config, script_origen="bridge_generator"
         )
 
         code = result.get("response", "")
@@ -1054,10 +1060,7 @@ Responde SOLO con el código Python, sin explicaciones ni markdown.
         elif "```" in code:
             code = code.split("```")[1].split("```")[0].strip()
 
-        return {
-            "code": code,
-            "tokens_used": result.get("tokens_used", 0)
-        }
+        return {"code": code, "tokens_used": result.get("tokens_used", 0)}
 
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
@@ -1071,11 +1074,9 @@ Responde SOLO con el código Python, sin explicaciones ni markdown.
 # AGENT ENDPOINTS
 # =============================================================================
 
+
 @router.post("/agent/step")
-async def agent_step(
-    request: AgentStepRequest,
-    x_license_key: str = Header(...)
-):
+async def agent_step(request: AgentStepRequest, x_license_key: str = Header(...)):
     """
     Ejecuta un paso del agente autónomo.
 
@@ -1100,14 +1101,16 @@ async def agent_step(
         # Build agent prompt
         history_summary = ""
         if request.action_history:
-            history_summary = "\\n".join([
-                f"Step {h.get('step', '?')}: {h.get('action', '?')} -> {h.get('result', {}).get('success', '?')}"
-                for h in request.action_history[-5:]  # Last 5 actions
-            ])
+            history_summary = "\\n".join(
+                [
+                    f"Step {h.get('step', '?')}: {h.get('action', '?')} -> {h.get('result', {}).get('success', '?')}"
+                    for h in request.action_history[-5:]  # Last 5 actions
+                ]
+            )
 
         page_info = f"""
-URL: {request.page_state.get('url', 'unknown')}
-Title: {request.page_state.get('title', 'unknown')}
+URL: {request.page_state.get("url", "unknown")}
+Title: {request.page_state.get("title", "unknown")}
 """
 
         agent_prompt = f"""Eres un agente de automatización web. Tu tarea es:
@@ -1141,19 +1144,20 @@ Responde SOLO con el JSON, sin explicaciones adicionales."""
         config, _ = await brain_service._resolve_server_config(role_key="supervision")
 
         result = await ejecutar_tarea(
-            prompt=agent_prompt,
-            config=config,
-            script_origen="agent_step"
+            prompt=agent_prompt, config=config, script_origen="agent_step"
         )
 
         response_text = result.get("response", "")
 
         # Parse JSON response
         import json as json_module
+
         try:
             # Clean response if wrapped in code blocks
             if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0].strip()
+                response_text = (
+                    response_text.split("```json")[1].split("```")[0].strip()
+                )
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].split("```")[0].strip()
 
@@ -1164,7 +1168,7 @@ Responde SOLO con el JSON, sin explicaciones adicionales."""
                 "selector": parsed.get("selector", ""),
                 "value": parsed.get("value", ""),
                 "reasoning": parsed.get("reasoning", ""),
-                "is_complete": parsed.get("is_complete", False)
+                "is_complete": parsed.get("is_complete", False),
             }
 
         except json_module.JSONDecodeError:
@@ -1174,7 +1178,7 @@ Responde SOLO con el JSON, sin explicaciones adicionales."""
                 "selector": "",
                 "value": "",
                 "reasoning": f"Failed to parse agent response: {response_text[:200]}",
-                "is_complete": True
+                "is_complete": True,
             }
 
     except ValueError as e:

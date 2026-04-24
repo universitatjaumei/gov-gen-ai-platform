@@ -1,4 +1,5 @@
 """Orquestador de tareas: triangulación RAG + Oracle + evidencias de usuario."""
+
 from typing import Any
 
 

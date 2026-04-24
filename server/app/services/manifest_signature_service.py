@@ -19,6 +19,7 @@ logger = logging.getLogger("automatia.security.signatures")
 
 class SignatureConfigError(Exception):
     """Error de configuración del servicio de firmas (clave no disponible, etc.)."""
+
     pass
 
 
@@ -62,7 +63,7 @@ class ManifestSignatureService:
         if key_data:
             # Normalizar saltos de línea (algunos sistemas usan \\n literal)
             key_data = key_data.replace("\\n", "\n")
-            self._private_key = key_data.encode('utf-8')
+            self._private_key = key_data.encode("utf-8")
             logger.info("Clave de firma cargada desde variable de entorno")
         else:
             logger.warning(
@@ -119,7 +120,7 @@ class ManifestSignatureService:
                 manifest_name=manifest_dict.get("name", "unknown"),
                 manifest_type=manifest_dict.get("type", "unknown"),
                 partner_id=manifest_dict.get("partner_id"),
-                success=True
+                success=True,
             )
 
             return signature
@@ -132,7 +133,7 @@ class ManifestSignatureService:
                 manifest_type=manifest_dict.get("type", "unknown"),
                 partner_id=manifest_dict.get("partner_id"),
                 success=False,
-                error=str(e)
+                error=str(e),
             )
             raise SignatureConfigError(f"Clave de firma inválida: {e}") from e
 
@@ -144,7 +145,7 @@ class ManifestSignatureService:
                 manifest_type=manifest_dict.get("type", "unknown"),
                 partner_id=manifest_dict.get("partner_id"),
                 success=False,
-                error=str(e)
+                error=str(e),
             )
             raise
 
@@ -155,7 +156,7 @@ class ManifestSignatureService:
         manifest_type: str,
         partner_id: Optional[str],
         success: bool,
-        error: Optional[str] = None
+        error: Optional[str] = None,
     ) -> None:
         """
         Registra un evento de firma en el log de auditoría.

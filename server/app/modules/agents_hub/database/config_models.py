@@ -1,4 +1,5 @@
 """Modelos ORM de configuración para agents_hub."""
+
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -21,6 +22,7 @@ from server.app.modules.agents_hub.database.base import HubConfigBase
 
 class HubLLMConfig(HubConfigBase):
     """Configuración de modelo LLM reutilizable por chatbot."""
+
     __tablename__ = "hub_llm_configs"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -39,6 +41,7 @@ class HubLLMConfig(HubConfigBase):
 
 class HubClient(HubConfigBase):
     """Institución (cliente) gestionada por un partner."""
+
     __tablename__ = "hub_clients"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -62,6 +65,7 @@ class HubClient(HubConfigBase):
 
 class HubChatbot(HubConfigBase):
     """Chatbot RAG asociado a un cliente."""
+
     __tablename__ = "hub_chatbots"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -98,9 +102,12 @@ class HubChatbot(HubConfigBase):
 
 class HubPromptTemplate(HubConfigBase):
     """Prompt parametrizable por chatbot, slug e idioma."""
+
     __tablename__ = "hub_prompt_templates"
     __table_args__ = (
-        UniqueConstraint("chatbot_id", "slug", "language", name="uq_prompt_chatbot_slug_lang"),
+        UniqueConstraint(
+            "chatbot_id", "slug", "language", name="uq_prompt_chatbot_slug_lang"
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

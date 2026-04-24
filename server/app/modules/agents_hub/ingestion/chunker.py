@@ -1,13 +1,18 @@
 """Chunker para documentos Markdown."""
+
 from dataclasses import dataclass, field
 from typing import Any
 
-from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
+from langchain_text_splitters import (
+    MarkdownHeaderTextSplitter,
+    RecursiveCharacterTextSplitter,
+)
 
 
 @dataclass
 class Chunk:
     """Representa un chunk de documento."""
+
     content: str
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -35,7 +40,9 @@ class MarkdownChunker:
             chunk_overlap=chunk_overlap,
         )
 
-    def split(self, content: str, metadata: dict[str, Any] | None = None) -> list[Chunk]:
+    def split(
+        self, content: str, metadata: dict[str, Any] | None = None
+    ) -> list[Chunk]:
         """Divide el contenido en chunks.
 
         Args:
@@ -57,10 +64,12 @@ class MarkdownChunker:
             if len(doc_content) > self.chunk_size:
                 sub_docs = self.text_splitter.split_text(doc_content)
                 for i, sub_content in enumerate(sub_docs):
-                    chunks.append(Chunk(
-                        content=sub_content,
-                        metadata={**doc_metadata, "chunk_index": i},
-                    ))
+                    chunks.append(
+                        Chunk(
+                            content=sub_content,
+                            metadata={**doc_metadata, "chunk_index": i},
+                        )
+                    )
             else:
                 chunks.append(Chunk(content=doc_content, metadata=doc_metadata))
 

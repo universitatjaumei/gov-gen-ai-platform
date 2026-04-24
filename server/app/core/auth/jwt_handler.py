@@ -1,4 +1,5 @@
 """Manejador de tokens JWT."""
+
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -26,7 +27,9 @@ def create_token(user: UserInfo, expires_in_minutes: int | None = None) -> str:
         "iat": datetime.now(timezone.utc),
     }
 
-    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode(
+        payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
+    )
 
 
 def decode_token(token: str) -> UserInfo:
@@ -53,7 +56,9 @@ def decode_token(token: str) -> UserInfo:
 
     missing = [c for c in ("sub", "email") if c not in payload]
     if missing:
-        raise AuthenticationError(f"Token missing required claims: {', '.join(missing)}")
+        raise AuthenticationError(
+            f"Token missing required claims: {', '.join(missing)}"
+        )
 
     return UserInfo(
         user_id=payload["sub"],

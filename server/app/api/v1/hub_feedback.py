@@ -10,6 +10,7 @@ GET /api/v1/hub/feedback/{chatbot_id}/review
 
 Deploy: edge
 """
+
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status

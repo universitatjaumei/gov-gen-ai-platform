@@ -6,10 +6,11 @@ Este módulo proporciona:
 - Refinamiento de playbooks basado en feedback.
 - Localización de elementos visuales mediante IA multimodal.
 """
+
 import json
 import re
 import base64
-from typing import List, Dict, Optional, Any, Union, Tuple
+from typing import List, Dict, Optional, Union, Tuple
 from google import genai
 from google.genai import types
 import openai
@@ -19,23 +20,31 @@ from nicegui import run
 from server.app.modules.automation.infrastructure.llm_gateway import ejecutar_tarea
 from server.app.services.api_key_service import get_api_key
 
+
 def _clean_json_markdown(text: str) -> Union[List[Dict], Dict]:
     """Limpia el markdown de la respuesta JSON."""
     text = text.strip()
     if "```" in text:
         pattern = r"```(?:json)?\s*(.*?)\s*```"
         matches = re.findall(pattern, text, re.DOTALL)
-        if matches: text = matches[0]
+        if matches:
+            text = matches[0]
     try:
         return json.loads(text)
-    except:
+    except Exception:
         return []
 
-async def analyze_recording_with_ai(recording_logs: List[Dict], context_dict: Dict, config: Dict, system_prompt_override: Optional[str] = None) -> List[Dict]:
+
+async def analyze_recording_with_ai(
+    recording_logs: List[Dict],
+    context_dict: Dict,
+    config: Dict,
+    system_prompt_override: Optional[str] = None,
+) -> List[Dict]:
     """
     Analiza una secuencia de acciones grabadas y las generaliza en un Playbook.
-    
-    Transforma eventos de bajo nivel (clicks, tipos de teclado) en pasos 
+
+    Transforma eventos de bajo nivel (clicks, tipos de teclado) en pasos
     automatizados resilientes utilizando selectores semánticos.
 
     Args:
@@ -69,7 +78,10 @@ async def analyze_recording_with_ai(recording_logs: List[Dict], context_dict: Di
     logs_context = json.dumps(recording_logs, ensure_ascii=False)
 
     # 2. Construir Prompt
-    prompt = system_prompt_override if system_prompt_override else f"""
+    prompt = (
+        system_prompt_override
+        if system_prompt_override
+        else f"""
     Eres un experto en automatizacion RPA y Playwright.
 
     OBJETIVO:
@@ -114,6 +126,7 @@ async def analyze_recording_with_ai(recording_logs: List[Dict], context_dict: Di
 
     Responde SOLO con el JSON.
     """
+    )
 
     res = await ejecutar_tarea(prompt, rol_to_use, script_origen="brain_cortex.py")
 
@@ -127,12 +140,21 @@ async def analyze_recording_with_ai(recording_logs: List[Dict], context_dict: Di
 
     return []
 
-async def refine_playbook_with_ai(current_playbook: List[Dict], recording_logs: List[Dict], error_logs: str, user_feedback_history: List[str], context_data: Dict, config: Dict, system_prompt_override: Optional[str] = None) -> List[Dict]:
+
+async def refine_playbook_with_ai(
+    current_playbook: List[Dict],
+    recording_logs: List[Dict],
+    error_logs: str,
+    user_feedback_history: List[str],
+    context_data: Dict,
+    config: Dict,
+    system_prompt_override: Optional[str] = None,
+) -> List[Dict]:
     """
     Refina un playbook existente utilizando logs de error y feedback humano.
-    
-    Actúa como un agente de "mantenimiento" que repara selectores obsoletos 
-    o añade pasos faltantes basándose en la discrepancia entre el éxito 
+
+    Actúa como un agente de "mantenimiento" que repara selectores obsoletos
+    o añade pasos faltantes basándose en la discrepancia entre el éxito
     esperado y el resultado técnico reportado.
 
     Args:
@@ -155,7 +177,7 @@ async def refine_playbook_with_ai(current_playbook: List[Dict], recording_logs: 
         if "supervision" in config:
             rol_to_use = config["supervision"]
         elif "logico_navegacion" in config:
-             rol_to_use = config["logico_navegacion"]
+            rol_to_use = config["logico_navegacion"]
 
     # Preparar contextos
     ctx_str = json.dumps(context_data, ensure_ascii=False) if context_data else "{}"
@@ -165,7 +187,10 @@ async def refine_playbook_with_ai(current_playbook: List[Dict], recording_logs: 
 
     hay_logs_originales = bool(recording_logs)
 
-    prompt = system_prompt_override if system_prompt_override else f"""
+    prompt = (
+        system_prompt_override
+        if system_prompt_override
+        else f"""
     Eres un experto en debugging de Playwright y RPA (Nivel Senior).
 
     OBJETIVO:
@@ -203,25 +228,33 @@ async def refine_playbook_with_ai(current_playbook: List[Dict], recording_logs: 
 
     Responde SOLO con el JSON (lista de objetos).
     """
+    )
 
     res = await ejecutar_tarea(prompt, rol_to_use, script_origen="brain_cortex.py")
 
     if "response" in res:
-         try:
+        try:
             new_pb = _clean_json_markdown(res["response"])
             if isinstance(new_pb, list):
                 return new_pb
-         except Exception as e:
+        except Exception as e:
             print(f"[refine_playbook] Error parseando JSON: {e}")
 
     return current_playbook
 
-async def locate_visual_element(image_bytes: bytes, element_description: str, viewport_size: dict, config: dict, system_prompt: str = None) -> Optional[Tuple[int, int]]:
+
+async def locate_visual_element(
+    image_bytes: bytes,
+    element_description: str,
+    viewport_size: dict,
+    config: dict,
+    system_prompt: str = None,
+) -> Optional[Tuple[int, int]]:
     """
     Identifica las coordenadas (x, y) de un elemento visual mediante IA Multimodal.
-    
-    Utiliza capacidades de visión (como Gemini 2.0 Flash) para analizar capturas 
-    de pantalla y devolver la ubicación exacta de componentes que no son 
+
+    Utiliza capacidades de visión (como Gemini 2.0 Flash) para analizar capturas
+    de pantalla y devolver la ubicación exacta de componentes que no son
     detectables mediante selectores DOM tradicionales.
 
     Args:
@@ -241,17 +274,21 @@ async def locate_visual_element(image_bytes: bytes, element_description: str, vi
 
     # Warn if using defaults (indicates missing config)
     if not provider:
-        print(f"[Cortex] WARNING: No provider in config, defaulting to 'google'")
+        print("[Cortex] WARNING: No provider in config, defaulting to 'google'")
         provider = "google"
     if not model_id:
-        print(f"[Cortex] WARNING: No model_id in config, defaulting to 'gemini-2.0-flash-exp'")
+        print(
+            "[Cortex] WARNING: No model_id in config, defaulting to 'gemini-2.0-flash-exp'"
+        )
         model_id = "gemini-2.0-flash-exp"
 
     print(f"[Cortex] Using provider={provider}, model={model_id}")
 
     # Construir Prompt Final
     dims_str = f"{viewport_size.get('width', '?')}x{viewport_size.get('height', '?')}"
-    user_msg = f"Elemento a buscar: {element_description}. \nDimensiones Imagen: {dims_str}"
+    user_msg = (
+        f"Elemento a buscar: {element_description}. \nDimensiones Imagen: {dims_str}"
+    )
 
     # Prompt System + User
     full_prompt_text = (system_prompt or "") + "\n\n" + user_msg
@@ -260,7 +297,7 @@ async def locate_visual_element(image_bytes: bytes, element_description: str, vi
 
     try:
         if provider == "google":
-            api_key = await get_api_key('google')
+            api_key = await get_api_key("google")
             if not api_key:
                 print("[Cortex] No Google API Key found.")
                 return None
@@ -273,8 +310,8 @@ async def locate_visual_element(image_bytes: bytes, element_description: str, vi
                     model=model_id,
                     contents=[
                         full_prompt_text,
-                        types.Part.from_bytes(data=image_bytes, mime_type='image/png')
-                    ]
+                        types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
+                    ],
                 )
 
             response = await run.io_bound(_call_vision)
@@ -284,14 +321,17 @@ async def locate_visual_element(image_bytes: bytes, element_description: str, vi
 
         elif provider == "openrouter" or provider == "openai":
             # For OpenRouter/OpenAI we usually need URL or Base64
-            api_key = await get_api_key('openrouter') # Or openai
-            if not api_key: return None
+            api_key = await get_api_key("openrouter")  # Or openai
+            if not api_key:
+                return None
 
-            b64_image = base64.b64encode(image_bytes).decode('utf-8')
+            b64_image = base64.b64encode(image_bytes).decode("utf-8")
 
             client = openai.AsyncOpenAI(
                 api_key=api_key,
-                base_url="https://openrouter.ai/api/v1" if provider == "openrouter" else None
+                base_url="https://openrouter.ai/api/v1"
+                if provider == "openrouter"
+                else None,
             )
 
             resp = await client.chat.completions.create(
@@ -301,10 +341,15 @@ async def locate_visual_element(image_bytes: bytes, element_description: str, vi
                         "role": "user",
                         "content": [
                             {"type": "text", "text": full_prompt_text},
-                            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_image}"}}
-                        ]
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{b64_image}"
+                                },
+                            },
+                        ],
                     }
-                ]
+                ],
             )
             content = resp.choices[0].message.content
             response_json = _clean_json_markdown(content)
@@ -322,10 +367,14 @@ async def locate_visual_element(image_bytes: bytes, element_description: str, vi
             reasoning = response_json.get("reasoning", "")
 
             if x is not None and y is not None:
-                print(f"[Cortex] Elemento localizado en ({x}, {y}) conf={confidence}. Razon: {reasoning}")
+                print(
+                    f"[Cortex] Elemento localizado en ({x}, {y}) conf={confidence}. Razon: {reasoning}"
+                )
                 return (int(x), int(y))
 
-        print(f"[Cortex] Elemento no encontrado o baja confianza. Resp: {response_json}")
+        print(
+            f"[Cortex] Elemento no encontrado o baja confianza. Resp: {response_json}"
+        )
         return None
 
     except Exception as e:

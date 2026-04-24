@@ -1,10 +1,11 @@
 """
 Servicio de gestión de claves de API (Lado Servidor).
 
-En producción, las claves de API se gestionan exclusivamente en el servidor 
-mediante variables de entorno. Los clientes nunca tienen acceso directo a 
+En producción, las claves de API se gestionan exclusivamente en el servidor
+mediante variables de entorno. Los clientes nunca tienen acceso directo a
 los secretos de los proveedores de LLM.
 """
+
 import os
 from typing import Optional
 
@@ -20,9 +21,9 @@ async def get_api_key(provider: str) -> Optional[str]:
         Optional[str]: La clave de API encontrada o None.
     """
     env_mapping = {
-        'google': 'GOOGLE_API_KEY',
-        'openrouter': 'OPENROUTER_API_KEY',
-        'openai': 'OPENAI_API_KEY',
+        "google": "GOOGLE_API_KEY",
+        "openrouter": "OPENROUTER_API_KEY",
+        "openai": "OPENAI_API_KEY",
     }
     env_var = env_mapping.get(provider.lower())
     if env_var:
@@ -35,9 +36,9 @@ def get_api_key_sync(provider: str) -> Optional[str]:
     Synchronous version of get_api_key for use in non-async contexts.
     """
     env_mapping = {
-        'google': 'GOOGLE_API_KEY',
-        'openrouter': 'OPENROUTER_API_KEY',
-        'openai': 'OPENAI_API_KEY',
+        "google": "GOOGLE_API_KEY",
+        "openrouter": "OPENROUTER_API_KEY",
+        "openai": "OPENAI_API_KEY",
     }
     env_var = env_mapping.get(provider.lower())
     if env_var:

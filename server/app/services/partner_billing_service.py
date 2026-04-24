@@ -7,12 +7,13 @@ from io import StringIO
 
 from server.app.database.models import BillingRecord, ClientAccount
 
+
 class PartnerBillingService:
     """
     Servicio de facturación diseñado para el portal de Partners.
-    
-    A diferencia del servicio de consulta general, esta clase está vinculada a 
-    un `partner_id` específico y proporciona utilidades de exportación (CSV), 
+
+    A diferencia del servicio de consulta general, esta clase está vinculada a
+    un `partner_id` específico y proporciona utilidades de exportación (CSV),
     análisis de tendencias históricas y alertas preventivas de consumo.
     """
 
@@ -39,12 +40,11 @@ class PartnerBillingService:
 
         # Total tokens y coste
         stmt = select(
-            func.sum(BillingRecord.tokens_used),
-            func.sum(BillingRecord.cost_usd)
+            func.sum(BillingRecord.tokens_used), func.sum(BillingRecord.cost_usd)
         ).where(
             BillingRecord.partner_id == self.partner_id,
             BillingRecord.timestamp >= start_date,
-            BillingRecord.timestamp < end_date
+            BillingRecord.timestamp < end_date,
         )
         result = await self.db.exec(stmt)
         row = result.first()
@@ -64,10 +64,12 @@ class PartnerBillingService:
             "total_tokens": total_tokens,
             "total_cost_usd": round(total_cost, 4),
             "by_client": by_client,
-            "by_model": by_model
+            "by_model": by_model,
         }
 
-    async def get_consumption_by_client(self, year: int, month: int) -> List[Dict[str, Any]]:
+    async def get_consumption_by_client(
+        self, year: int, month: int
+    ) -> List[Dict[str, Any]]:
         """
         Calcula el desglose de consumo individual para cada cliente del Partner.
 
@@ -84,15 +86,19 @@ class PartnerBillingService:
         else:
             end_date = datetime(year, month + 1, 1)
 
-        stmt = select(
-            BillingRecord.client_id,
-            func.sum(BillingRecord.tokens_used).label("tokens"),
-            func.sum(BillingRecord.cost_usd).label("cost")
-        ).where(
-            BillingRecord.partner_id == self.partner_id,
-            BillingRecord.timestamp >= start_date,
-            BillingRecord.timestamp < end_date
-        ).group_by(BillingRecord.client_id)
+        stmt = (
+            select(
+                BillingRecord.client_id,
+                func.sum(BillingRecord.tokens_used).label("tokens"),
+                func.sum(BillingRecord.cost_usd).label("cost"),
+            )
+            .where(
+                BillingRecord.partner_id == self.partner_id,
+                BillingRecord.timestamp >= start_date,
+                BillingRecord.timestamp < end_date,
+            )
+            .group_by(BillingRecord.client_id)
+        )
 
         result = await self.db.exec(stmt)
         rows = result.all()
@@ -101,16 +107,20 @@ class PartnerBillingService:
         output = []
         for row in rows:
             client = await self.db.get(ClientAccount, row.client_id)
-            output.append({
-                "client_id": row.client_id,
-                "client_name": client.name if client else "Unknown",
-                "tokens": row.tokens or 0,
-                "cost_usd": round(row.cost or 0, 4)
-            })
+            output.append(
+                {
+                    "client_id": row.client_id,
+                    "client_name": client.name if client else "Unknown",
+                    "tokens": row.tokens or 0,
+                    "cost_usd": round(row.cost or 0, 4),
+                }
+            )
 
         return sorted(output, key=lambda x: x["tokens"], reverse=True)
 
-    async def get_consumption_by_model(self, year: int, month: int) -> List[Dict[str, Any]]:
+    async def get_consumption_by_model(
+        self, year: int, month: int
+    ) -> List[Dict[str, Any]]:
         """Desglose por modelo de IA."""
         start_date = datetime(year, month, 1)
         if month == 12:
@@ -118,15 +128,19 @@ class PartnerBillingService:
         else:
             end_date = datetime(year, month + 1, 1)
 
-        stmt = select(
-            BillingRecord.model_id,
-            func.sum(BillingRecord.tokens_used).label("tokens"),
-            func.sum(BillingRecord.cost_usd).label("cost")
-        ).where(
-            BillingRecord.partner_id == self.partner_id,
-            BillingRecord.timestamp >= start_date,
-            BillingRecord.timestamp < end_date
-        ).group_by(BillingRecord.model_id)
+        stmt = (
+            select(
+                BillingRecord.model_id,
+                func.sum(BillingRecord.tokens_used).label("tokens"),
+                func.sum(BillingRecord.cost_usd).label("cost"),
+            )
+            .where(
+                BillingRecord.partner_id == self.partner_id,
+                BillingRecord.timestamp >= start_date,
+                BillingRecord.timestamp < end_date,
+            )
+            .group_by(BillingRecord.model_id)
+        )
 
         result = await self.db.exec(stmt)
         rows = result.all()
@@ -135,7 +149,7 @@ class PartnerBillingService:
             {
                 "model_id": row.model_id,
                 "tokens": row.tokens or 0,
-                "cost_usd": round(row.cost or 0, 4)
+                "cost_usd": round(row.cost or 0, 4),
             }
             for row in rows
         ]
@@ -160,11 +174,13 @@ class PartnerBillingService:
             month = target_date.month
 
             summary = await self.get_monthly_summary(year, month)
-            trend.append({
-                "month": f"{year}-{month:02d}",
-                "tokens": summary["total_tokens"],
-                "cost_usd": summary["total_cost_usd"]
-            })
+            trend.append(
+                {
+                    "month": f"{year}-{month:02d}",
+                    "tokens": summary["total_tokens"],
+                    "cost_usd": summary["total_cost_usd"],
+                }
+            )
 
         return trend
 
@@ -186,20 +202,24 @@ class PartnerBillingService:
         writer.writerow(["client_id", "client_name", "tokens", "cost_usd"])
 
         for item in by_client:
-            writer.writerow([
-                item["client_id"],
-                item["client_name"],
-                item["tokens"],
-                item["cost_usd"]
-            ])
+            writer.writerow(
+                [
+                    item["client_id"],
+                    item["client_name"],
+                    item["tokens"],
+                    item["cost_usd"],
+                ]
+            )
 
         return output.getvalue()
 
-    async def get_high_consumption_alerts(self, threshold_percent: int = 150) -> List[Dict[str, Any]]:
+    async def get_high_consumption_alerts(
+        self, threshold_percent: int = 150
+    ) -> List[Dict[str, Any]]:
         """
         Detecta anomalías de consumo en los clientes del Partner.
-        
-        Compara el consumo del mes actual con el promedio de los últimos 3 meses 
+
+        Compara el consumo del mes actual con el promedio de los últimos 3 meses
         para detectar picos inusuales que superen un umbral definido.
 
         Args:
@@ -213,14 +233,18 @@ class PartnerBillingService:
         three_months_ago = now - timedelta(days=90)
 
         # Consumo promedio historico
-        stmt_avg = select(
-            BillingRecord.client_id,
-            (func.sum(BillingRecord.tokens_used) / 3).label("avg_tokens")
-        ).where(
-            BillingRecord.partner_id == self.partner_id,
-            BillingRecord.timestamp >= three_months_ago,
-            BillingRecord.timestamp < now.replace(day=1)
-        ).group_by(BillingRecord.client_id)
+        stmt_avg = (
+            select(
+                BillingRecord.client_id,
+                (func.sum(BillingRecord.tokens_used) / 3).label("avg_tokens"),
+            )
+            .where(
+                BillingRecord.partner_id == self.partner_id,
+                BillingRecord.timestamp >= three_months_ago,
+                BillingRecord.timestamp < now.replace(day=1),
+            )
+            .group_by(BillingRecord.client_id)
+        )
 
         result_avg = await self.db.exec(stmt_avg)
         avg_map = {row.client_id: row.avg_tokens or 0 for row in result_avg.all()}
@@ -234,12 +258,14 @@ class PartnerBillingService:
             if avg > 0:
                 percent = (item["tokens"] / avg) * 100
                 if percent >= threshold_percent:
-                    alerts.append({
-                        "client_id": item["client_id"],
-                        "client_name": item["client_name"],
-                        "current_consumption": item["tokens"],
-                        "average_consumption": int(avg),
-                        "percent_increase": round(percent, 1)
-                    })
+                    alerts.append(
+                        {
+                            "client_id": item["client_id"],
+                            "client_name": item["client_name"],
+                            "current_consumption": item["tokens"],
+                            "average_consumption": int(avg),
+                            "percent_increase": round(percent, 1),
+                        }
+                    )
 
         return sorted(alerts, key=lambda x: x["percent_increase"], reverse=True)

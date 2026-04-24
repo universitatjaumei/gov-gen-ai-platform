@@ -1,4 +1,5 @@
 """Servicio de embeddings vectoriales para búsqueda semántica."""
+
 import os
 
 
@@ -7,6 +8,7 @@ class GoogleEmbeddingService:
 
     def __init__(self) -> None:
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
         self._model = GoogleGenerativeAIEmbeddings(
             model="models/text-embedding-004",
             google_api_key=os.getenv("GOOGLE_API_KEY", ""),

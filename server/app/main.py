@@ -4,7 +4,9 @@ Incluye únicamente routers sin dependencias de NiceGUI/client_app.
 Los routers automation y telemetry dependen de AIBrainService→cortex→nicegui
 y se registran en main.py (NiceGUI) hasta completar la migración.
 """
+
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,8 +27,10 @@ from server.app.routers.hub_clients_router import router as hub_clients_router
 async def lifespan(app: FastAPI):
     await init_server_db()
     from server.app.database.seeds import seed_all
+
     await seed_all()
     from server.app.modules.agents_hub.database.seeds import seed_hub_defaults
+
     await seed_hub_defaults()
     yield
 
@@ -41,10 +45,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-import os
 DEPLOY_MODE = os.getenv("DEPLOY_MODE", "all").lower()
 if DEPLOY_MODE not in ("cloud", "edge", "all"):
     raise RuntimeError(f"Invalid DEPLOY_MODE: {DEPLOY_MODE}")
+
 
 def _register_cloud(app: FastAPI) -> None:
     app.include_router(auth_router, prefix="/api/v1")
@@ -53,11 +57,13 @@ def _register_cloud(app: FastAPI) -> None:
     app.include_router(hub_clients_router, prefix="/api/v1")
     app.include_router(edge_sync_router, prefix="/api/v1")  # servido por cloud
 
+
 def _register_edge(app: FastAPI) -> None:
     app.include_router(hub_chat_router, prefix="/api/v1")
     app.include_router(hub_feedback_router, prefix="/api/v1")
     app.include_router(hub_tasks_router, prefix="/api/v1")
     app.include_router(ingestion_router, prefix="/api/v1")
+
 
 if DEPLOY_MODE in ("cloud", "all"):
     _register_cloud(app)

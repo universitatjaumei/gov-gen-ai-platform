@@ -1,10 +1,7 @@
 """Servicio para la obtención y almacenamiento en caché de modelos de IA disponibles."""
-import os
-import asyncio
-import subprocess
+
 from datetime import datetime, timedelta
 from typing import List
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 import aiohttp
 
@@ -14,17 +11,18 @@ from server.app.database.models import ModelCache
 # Staleness threshold: refresh if cache is older than 24 hours
 CACHE_MAX_AGE = timedelta(hours=24)
 
+
 async def fetch_google_models() -> List[str]:
     """
     Consulta los modelos disponibles en la API de Google AI (Gemini).
-    
+
     Returns:
         List[str]: Lista de identificadores de modelos (ej: 'gemini-1.5-pro').
     """
     from server.app.services.api_key_service import get_api_key
 
     try:
-        api_key = await get_api_key('google')
+        api_key = await get_api_key("google")
         if not api_key:
             print("[Model Fetcher] Google API key not configured")
             # Return hardcoded list as fallback
@@ -34,26 +32,28 @@ async def fetch_google_models() -> List[str]:
                 "gemini-3.1-pro-preview",
                 "gemini-1.5-flash",
                 "gemini-1.5-pro",
-                "gemini-2.0-flash-exp"
+                "gemini-2.0-flash-exp",
             ]
 
         if api_key:
             async with aiohttp.ClientSession() as session:
                 headers = {"x-goog-api-key": api_key}
                 async with session.get(
-                    "https://generativelanguage.googleapis.com/v1beta/models", 
-                    headers=headers
+                    "https://generativelanguage.googleapis.com/v1beta/models",
+                    headers=headers,
                 ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         # Extract model names, removing 'models/' prefix if present
                         return [
-                            m["name"].replace("models/", "") 
+                            m["name"].replace("models/", "")
                             for m in data.get("models", [])
                             if "gemini" in m["name"]  # Filter for Gemini models
                         ]
                     else:
-                        print(f"[Model Fetcher] Google API returned status {resp.status}")
+                        print(
+                            f"[Model Fetcher] Google API returned status {resp.status}"
+                        )
 
         # Fallback list (verified IDs as of Jan 2026)
         print("[Model Fetcher] Using fallback model list for Google")
@@ -65,11 +65,12 @@ async def fetch_google_models() -> List[str]:
             "gemini-2.5-flash",
             "gemini-2.5-pro",
             "gemini-1.5-flash",
-            "gemini-2.0-flash-exp"
+            "gemini-2.0-flash-exp",
         ]
     except Exception as e:
         print(f"[Model Fetcher] Error fetching Google models: {e}")
         return []
+
 
 async def fetch_openrouter_models() -> List[str]:
     """Fetch available models from OpenRouter API."""
@@ -95,21 +96,27 @@ async def fetch_openrouter_models() -> List[str]:
     ]
 
     try:
-        api_key = await get_api_key('openrouter')
+        api_key = await get_api_key("openrouter")
         if not api_key:
-            print("[Model Fetcher] OpenRouter API key not configured, using fallback list")
+            print(
+                "[Model Fetcher] OpenRouter API key not configured, using fallback list"
+            )
             return fallback_models
 
         async with aiohttp.ClientSession() as session:
             headers = {"Authorization": f"Bearer {api_key}"}
-            async with session.get("https://openrouter.ai/api/v1/models", headers=headers) as resp:
+            async with session.get(
+                "https://openrouter.ai/api/v1/models", headers=headers
+            ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     # Extract model IDs from response
                     models = [m["id"] for m in data.get("data", [])]
                     return models if models else fallback_models
                 else:
-                    print(f"[Model Fetcher] OpenRouter API returned status {resp.status}, using fallback")
+                    print(
+                        f"[Model Fetcher] OpenRouter API returned status {resp.status}, using fallback"
+                    )
                     return fallback_models
     except Exception as e:
         print(f"[Model Fetcher] Error fetching OpenRouter models: {e}")
@@ -119,8 +126,8 @@ async def fetch_openrouter_models() -> List[str]:
 async def refresh_model_cache():
     """
     Actualiza la caché de modelos de todos los proveedores soportados.
-    
-    Persiste los resultados en la base de datos local para evitar latencia en 
+
+    Persiste los resultados en la base de datos local para evitar latencia en
     consultas subsiguientes de los clientes.
     """
     print("[Model Fetcher] Refreshing model cache...")
@@ -148,6 +155,7 @@ async def refresh_model_cache():
                 await session.commit()
             except Exception as e:
                 print(f"[Model Fetcher] Error caching {provider} models: {e}")
+
 
 async def get_models_for_provider(provider: str) -> List[str]:
     """Get models for a provider, using cache if fresh, otherwise fetch."""

@@ -1,4 +1,5 @@
 """Servicio de feedback para interacciones del Hub."""
+
 import uuid
 
 from sqlalchemy import select, update

@@ -46,9 +46,15 @@ async def seed_server_db():
         print("[SERVER DB] Checking/Seeding AI Configs...")
 
         required_roles = {
-            "logico_navegacion": {"provider": "google", "model_id": "gemini-3-flash-preview"},
+            "logico_navegacion": {
+                "provider": "google",
+                "model_id": "gemini-3-flash-preview",
+            },
             "supervision": {"provider": "google", "model_id": "gemini-3.1-pro-preview"},
-            "extraccion_pdf": {"provider": "google", "model_id": "gemini-2.5-flash-lite"},
+            "extraccion_pdf": {
+                "provider": "google",
+                "model_id": "gemini-2.5-flash-lite",
+            },
         }
 
         for role_key, default_cfg in required_roles.items():
@@ -58,11 +64,13 @@ async def seed_server_db():
 
             if not existing:
                 print(f"[SERVER DB] Creating role: {role_key}")
-                session.add(AIConfig(
-                    role_key=role_key,
-                    provider=default_cfg["provider"],
-                    model_id=default_cfg["model_id"],
-                ))
+                session.add(
+                    AIConfig(
+                        role_key=role_key,
+                        provider=default_cfg["provider"],
+                        model_id=default_cfg["model_id"],
+                    )
+                )
 
         await session.commit()
         print("[SERVER DB] Seeding complete.")

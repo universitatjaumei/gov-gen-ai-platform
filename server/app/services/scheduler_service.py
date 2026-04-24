@@ -1,8 +1,8 @@
 """
 Servicio de programación de tareas en segundo plano.
 
-Gestiona la actualización periódica de la caché de modelos de IA y los 
-datos de precios. Es configurable a través de la interfaz de administración 
+Gestiona la actualización periódica de la caché de modelos de IA y los
+datos de precios. Es configurable a través de la interfaz de administración
 (habilitar/deshabilitar, hora de ejecución).
 """
 
@@ -11,7 +11,6 @@ from datetime import datetime
 from typing import Optional
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from server.app.database.db import server_engine
@@ -22,7 +21,7 @@ class ModelRefreshScheduler:
     """
     Planificador de tareas (Singleton) para el mantenimiento del servidor.
 
-    Utiliza APScheduler para ejecutar tareas asíncronas de sincronización con 
+    Utiliza APScheduler para ejecutar tareas asíncronas de sincronización con
     proveedores externos (OpenRouter, Google) en horarios programados o bajo demanda.
     """
 
@@ -67,7 +66,7 @@ class ModelRefreshScheduler:
     async def _refresh_task(self):
         """
         Tarea principal de mantenimiento que se ejecuta según el cron.
-        
+
         Realiza:
         1. Refresco de la caché de modelos disponibles.
         2. Actualización de precios (USD per million tokens).
@@ -78,16 +77,22 @@ class ModelRefreshScheduler:
         try:
             # Refresh model cache
             from server.app.services.model_fetcher import refresh_model_cache
+
             await refresh_model_cache()
 
             # Update pricing data
-            from server.app.services.pricing_service import update_prices_from_openrouter
+            from server.app.services.pricing_service import (
+                update_prices_from_openrouter,
+            )
+
             await update_prices_from_openrouter()
 
             # Update last run timestamp
             await self._update_last_run()
 
-            print(f"[Scheduler] Model refresh completed successfully at {datetime.now()}")
+            print(
+                f"[Scheduler] Model refresh completed successfully at {datetime.now()}"
+            )
         except Exception as e:
             print(f"[Scheduler] Error during model refresh: {e}")
 
@@ -104,7 +109,7 @@ class ModelRefreshScheduler:
             trigger=trigger,
             id=self._job_id,
             name="Daily Model Cache Refresh",
-            replace_existing=True
+            replace_existing=True,
         )
         print(f"[Scheduler] Job scheduled for {hour:02d}:{minute:02d} daily")
 
@@ -131,7 +136,9 @@ class ModelRefreshScheduler:
 
         self._add_job(config.refresh_hour, config.refresh_minute)
         self._scheduler.start()
-        print(f"[Scheduler] Started - next refresh at {config.refresh_hour:02d}:{config.refresh_minute:02d}")
+        print(
+            f"[Scheduler] Started - next refresh at {config.refresh_hour:02d}:{config.refresh_minute:02d}"
+        )
         return True
 
     async def stop(self):
@@ -187,7 +194,9 @@ class ModelRefreshScheduler:
             "refresh_hour": config.refresh_hour,
             "refresh_minute": config.refresh_minute,
             "last_run": config.last_run.isoformat() if config.last_run else None,
-            "next_run": job.next_run_time.isoformat() if job and job.next_run_time else None
+            "next_run": job.next_run_time.isoformat()
+            if job and job.next_run_time
+            else None,
         }
 
 

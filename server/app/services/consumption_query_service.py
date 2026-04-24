@@ -1,17 +1,21 @@
 """
 Servicio centralizado de consultas de consumo.
 
-Proporciona capacidades de agregación y consulta sobre los registros de 
-facturación (BillingRecords). Permite obtener resúmenes detallados para 
+Proporciona capacidades de agregación y consulta sobre los registros de
+facturación (BillingRecords). Permite obtener resúmenes detallados para
 administradores, partners y clientes finales.
 """
+
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 from sqlmodel import select, func
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from server.app.database.models import (
-    BillingRecord, ClientAccount, PartnerAccount, License
+    BillingRecord,
+    ClientAccount,
+    PartnerAccount,
+    License,
 )
 
 
@@ -19,8 +23,8 @@ class ConsumptionQueryService:
     """
     Servicio de consultas de consumo para paneles de administración y portales de partner.
 
-    Esta clase encapsula la lógica de agregación SQL para calcular totales de tokens, 
-    costes en USD y desgloses por modelo de IA, filtrados por diferentes dimensiones 
+    Esta clase encapsula la lógica de agregación SQL para calcular totales de tokens,
+    costes en USD y desgloses por modelo de IA, filtrados por diferentes dimensiones
     temporales y jerarquías (Partner -> Cliente -> Licencia).
     """
 
@@ -45,11 +49,13 @@ class ConsumptionQueryService:
             end_date = datetime(year, month + 1, 1)
         return start_date, end_date
 
-    async def get_partner_summary(self, partner_id: str, year: int, month: int) -> Dict[str, Any]:
+    async def get_partner_summary(
+        self, partner_id: str, year: int, month: int
+    ) -> Dict[str, Any]:
         """
         Calcula el resumen de consumo mensual para un Partner.
-        
-        Agrega los datos de todos los clientes pertenecientes a dicho partner y 
+
+        Agrega los datos de todos los clientes pertenecientes a dicho partner y
         proporciona desgloses por cliente y por modelo de IA utilizado.
 
         Args:
@@ -64,12 +70,11 @@ class ConsumptionQueryService:
 
         # Total tokens y coste
         stmt = select(
-            func.sum(BillingRecord.tokens_used),
-            func.sum(BillingRecord.cost_usd)
+            func.sum(BillingRecord.tokens_used), func.sum(BillingRecord.cost_usd)
         ).where(
             BillingRecord.partner_id == partner_id,
             BillingRecord.timestamp >= start_date,
-            BillingRecord.timestamp < end_date
+            BillingRecord.timestamp < end_date,
         )
         result = await self.db.exec(stmt)
         row = result.first()
@@ -92,10 +97,12 @@ class ConsumptionQueryService:
             "total_tokens": total_tokens,
             "total_cost_usd": round(total_cost, 4),
             "by_client": by_client,
-            "by_model": by_model
+            "by_model": by_model,
         }
 
-    async def get_client_summary(self, client_id: str, year: int, month: int) -> Dict[str, Any]:
+    async def get_client_summary(
+        self, client_id: str, year: int, month: int
+    ) -> Dict[str, Any]:
         """
         Calcula el resumen de consumo mensual para un Cliente específico.
 
@@ -111,12 +118,11 @@ class ConsumptionQueryService:
 
         # Total tokens y coste
         stmt = select(
-            func.sum(BillingRecord.tokens_used),
-            func.sum(BillingRecord.cost_usd)
+            func.sum(BillingRecord.tokens_used), func.sum(BillingRecord.cost_usd)
         ).where(
             BillingRecord.client_id == client_id,
             BillingRecord.timestamp >= start_date,
-            BillingRecord.timestamp < end_date
+            BillingRecord.timestamp < end_date,
         )
         result = await self.db.exec(stmt)
         row = result.first()
@@ -139,14 +145,14 @@ class ConsumptionQueryService:
             "total_tokens": total_tokens,
             "total_cost_usd": round(total_cost, 4),
             "by_model": by_model,
-            "recent_operations": recent_ops
+            "recent_operations": recent_ops,
         }
 
     async def get_license_summary(self, license_id: str) -> Dict[str, Any]:
         """
         Obtiene el estado de consumo actual de una Licencia de software.
-        
-        Calcula el porcentaje de uso respecto a la cuota contratada y recupera 
+
+        Calcula el porcentaje de uso respecto a la cuota contratada y recupera
         la información del cliente propietario.
 
         Args:
@@ -165,11 +171,8 @@ class ConsumptionQueryService:
 
         # Calcular coste total acumulado desde BillingRecord
         stmt = select(
-            func.sum(BillingRecord.tokens_used),
-            func.sum(BillingRecord.cost_usd)
-        ).where(
-            BillingRecord.client_id == license.client_id
-        )
+            func.sum(BillingRecord.tokens_used), func.sum(BillingRecord.cost_usd)
+        ).where(BillingRecord.client_id == license.client_id)
         result = await self.db.exec(stmt)
         row = result.first()
         total_cost = row[1] or 0.0
@@ -188,16 +191,18 @@ class ConsumptionQueryService:
             "remaining_tokens": license.quota_tokens - license.consumed_tokens,
             "usage_percent": round(
                 (license.consumed_tokens / license.quota_tokens) * 100, 1
-            ) if license.quota_tokens > 0 else 0,
+            )
+            if license.quota_tokens > 0
+            else 0,
             "total_cost_usd": round(total_cost, 4),
-            "recent_operations": recent_ops
+            "recent_operations": recent_ops,
         }
 
     async def get_recent_operations(
         self,
         client_id: Optional[str] = None,
         partner_id: Optional[str] = None,
-        limit: int = 20
+        limit: int = 20,
     ) -> List[Dict[str, Any]]:
         """
         Obtiene las últimas operaciones de billing.
@@ -220,7 +225,7 @@ class ConsumptionQueryService:
                 "operation": r.operation,
                 "model_id": r.model_id,
                 "tokens_used": r.tokens_used,
-                "cost_usd": round(r.cost_usd, 6)
+                "cost_usd": round(r.cost_usd, 6),
             }
             for r in records
         ]
@@ -229,15 +234,19 @@ class ConsumptionQueryService:
         self, partner_id: str, start_date: datetime, end_date: datetime
     ) -> List[Dict[str, Any]]:
         """Desglose de consumo por cliente."""
-        stmt = select(
-            BillingRecord.client_id,
-            func.sum(BillingRecord.tokens_used).label("tokens"),
-            func.sum(BillingRecord.cost_usd).label("cost")
-        ).where(
-            BillingRecord.partner_id == partner_id,
-            BillingRecord.timestamp >= start_date,
-            BillingRecord.timestamp < end_date
-        ).group_by(BillingRecord.client_id)
+        stmt = (
+            select(
+                BillingRecord.client_id,
+                func.sum(BillingRecord.tokens_used).label("tokens"),
+                func.sum(BillingRecord.cost_usd).label("cost"),
+            )
+            .where(
+                BillingRecord.partner_id == partner_id,
+                BillingRecord.timestamp >= start_date,
+                BillingRecord.timestamp < end_date,
+            )
+            .group_by(BillingRecord.client_id)
+        )
 
         result = await self.db.exec(stmt)
         rows = result.all()
@@ -245,12 +254,14 @@ class ConsumptionQueryService:
         output = []
         for row in rows:
             client = await self.db.get(ClientAccount, row.client_id)
-            output.append({
-                "client_id": row.client_id,
-                "client_name": client.name if client else "Unknown",
-                "tokens": row.tokens or 0,
-                "cost_usd": round(row.cost or 0, 4)
-            })
+            output.append(
+                {
+                    "client_id": row.client_id,
+                    "client_name": client.name if client else "Unknown",
+                    "tokens": row.tokens or 0,
+                    "cost_usd": round(row.cost or 0, 4),
+                }
+            )
 
         return sorted(output, key=lambda x: x["tokens"], reverse=True)
 
@@ -259,13 +270,13 @@ class ConsumptionQueryService:
         partner_id: Optional[str] = None,
         client_id: Optional[str] = None,
         start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
+        end_date: Optional[datetime] = None,
     ) -> List[Dict[str, Any]]:
         """Desglose de consumo por modelo."""
         stmt = select(
             BillingRecord.model_id,
             func.sum(BillingRecord.tokens_used).label("tokens"),
-            func.sum(BillingRecord.cost_usd).label("cost")
+            func.sum(BillingRecord.cost_usd).label("cost"),
         )
 
         if partner_id:
@@ -286,7 +297,7 @@ class ConsumptionQueryService:
             {
                 "model_id": row.model_id or "unknown",
                 "tokens": row.tokens or 0,
-                "cost_usd": round(row.cost or 0, 4)
+                "cost_usd": round(row.cost or 0, 4),
             }
             for row in sorted(rows, key=lambda x: x.tokens or 0, reverse=True)
         ]
@@ -299,14 +310,18 @@ class ConsumptionQueryService:
         """
         start_date, end_date = self._get_date_range(year, month)
 
-        stmt = select(
-            BillingRecord.partner_id,
-            func.sum(BillingRecord.tokens_used).label("tokens"),
-            func.sum(BillingRecord.cost_usd).label("cost")
-        ).where(
-            BillingRecord.timestamp >= start_date,
-            BillingRecord.timestamp < end_date
-        ).group_by(BillingRecord.partner_id)
+        stmt = (
+            select(
+                BillingRecord.partner_id,
+                func.sum(BillingRecord.tokens_used).label("tokens"),
+                func.sum(BillingRecord.cost_usd).label("cost"),
+            )
+            .where(
+                BillingRecord.timestamp >= start_date,
+                BillingRecord.timestamp < end_date,
+            )
+            .group_by(BillingRecord.partner_id)
+        )
 
         result = await self.db.exec(stmt)
         rows = result.all()
@@ -314,11 +329,13 @@ class ConsumptionQueryService:
         output = []
         for row in rows:
             partner = await self.db.get(PartnerAccount, row.partner_id)
-            output.append({
-                "partner_id": row.partner_id,
-                "partner_name": partner.name if partner else "Unknown",
-                "tokens": row.tokens or 0,
-                "cost_usd": round(row.cost or 0, 4)
-            })
+            output.append(
+                {
+                    "partner_id": row.partner_id,
+                    "partner_name": partner.name if partner else "Unknown",
+                    "tokens": row.tokens or 0,
+                    "cost_usd": round(row.cost or 0, 4),
+                }
+            )
 
         return sorted(output, key=lambda x: x["tokens"], reverse=True)

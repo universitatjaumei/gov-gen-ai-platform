@@ -44,6 +44,7 @@ async def get_current_user(
 
 def require_role(*roles: str):
     """Dependency factory que exige uno de los roles dados."""
+
     async def _check(user: UserInfo = Depends(get_current_user)) -> UserInfo:
         if user.role not in roles:
             raise HTTPException(
@@ -51,4 +52,5 @@ def require_role(*roles: str):
                 detail=f"Role '{user.role}' is not allowed. Required: {', '.join(roles)}",
             )
         return user
+
     return _check

@@ -7,6 +7,7 @@ GET /api/v1/hub/tasks/export/{run_id}[?fmt=markdown|pdf]
 
 Deploy: edge
 """
+
 import io
 import uuid
 
@@ -68,7 +69,9 @@ async def export_task(
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="task_{run_id}.pdf"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="task_{run_id}.pdf"'
+            },
         )
 
     return Response(

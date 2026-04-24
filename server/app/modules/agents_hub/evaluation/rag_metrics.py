@@ -1,4 +1,5 @@
 """Métricas de calidad RAG usando RAGAS."""
+
 try:
     from datasets import Dataset
     from ragas import evaluate
@@ -36,7 +37,9 @@ async def calculate_faithfulness(answer: str, context: str) -> float:
     # Fallback: overlap de palabras clave entre contexto y respuesta
     context_words = set(context.lower().split())
     answer_words = set(answer.lower().split())
-    overlap = len(context_words & answer_words) / len(context_words) if context_words else 0
+    overlap = (
+        len(context_words & answer_words) / len(context_words) if context_words else 0
+    )
     return min(overlap * 2, 1.0)
 
 
@@ -65,8 +68,23 @@ async def calculate_answer_relevance(question: str, answer: str) -> float:
 
     # Fallback: overlap de palabras significativas entre pregunta y respuesta
     import re
-    stop_words = {"qué", "cómo", "cuál", "es", "para", "un", "una", "de", "la", "el", "en"}
-    q_words = {re.sub(r'[^\w]', '', w) for w in question.lower().split()} - stop_words - {""}
-    a_words = {re.sub(r'[^\w]', '', w) for w in answer.lower().split()} - {""}
+
+    stop_words = {
+        "qué",
+        "cómo",
+        "cuál",
+        "es",
+        "para",
+        "un",
+        "una",
+        "de",
+        "la",
+        "el",
+        "en",
+    }
+    q_words = (
+        {re.sub(r"[^\w]", "", w) for w in question.lower().split()} - stop_words - {""}
+    )
+    a_words = {re.sub(r"[^\w]", "", w) for w in answer.lower().split()} - {""}
     overlap = len(q_words & a_words) / len(q_words) if q_words else 0
     return min(overlap * 2, 1.0)

@@ -1,23 +1,28 @@
 """
 Motor de facturación y control de consumo.
 
-Este módulo orquesta el registro de uso de tokens y la actualización de 
-balances financieros para Partners y Clientes. Actúa como el árbitro de 
+Este módulo orquesta el registro de uso de tokens y la actualización de
+balances financieros para Partners y Clientes. Actúa como el árbitro de
 acceso a los recursos de IA del servidor.
 """
-from datetime import datetime
+
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from server.app.database.db import server_engine
 from server.app.database.models import License, ClientAccount, PartnerAccount
 
+
 class LicenseError(Exception):
     """Error relacionado con la validez de la licencia."""
+
     pass
+
 
 class PartnerCreditError(Exception):
     """Error relacionado con los créditos del Partner."""
+
     pass
+
 
 class BillingEngine:
     """
@@ -46,11 +51,13 @@ class BillingEngine:
                 await self._session.commit()
             await self._session.close()
             self._session = None
-    
-    async def validate_access(self, license_id: str, estimated_cost: float = 0.0) -> bool:
+
+    async def validate_access(
+        self, license_id: str, estimated_cost: float = 0.0
+    ) -> bool:
         """
         Valida si una ejecución está permitida antes de consumir recursos.
-        
+
         Realiza una verificación en cascada:
         1. Validez temporal y de estado de la Licencia.
         2. Existencia del Cliente propietario.
@@ -72,33 +79,39 @@ class BillingEngine:
             license = await session.get(License, license_id)
             if not license:
                 raise LicenseError("No active license found (Invalid ID)")
-            
+
             if not license.is_valid():
-                raise LicenseError(f"License is not active or expired (Status: {license.status})")
-            
+                raise LicenseError(
+                    f"License is not active or expired (Status: {license.status})"
+                )
+
             # 2. Obtener Cliente y Partner
             client = await session.get(ClientAccount, license.client_id)
             if not client:
-                 raise LicenseError("License orphaned (No Client found)")
-                 
+                raise LicenseError("License orphaned (No Client found)")
+
             partner = await session.get(PartnerAccount, client.partner_id)
             if not partner:
-                 raise LicenseError("Client orphan (No Partner assigned)")
-            
+                raise LicenseError("Client orphan (No Partner assigned)")
+
             # 3. Validar Crédito Global (Partner)
             # Permitimos pasar si balance >= estimated_cost
             # Si estimated_cost es 0, solo validamos que tenga > 0 o is_active
             if partner.credits_balance <= 0 or partner.credits_balance < estimated_cost:
-                 raise PartnerCreditError(f"Partner credit limit exceeded (Balance: {partner.credits_balance})")
-                 
+                raise PartnerCreditError(
+                    f"Partner credit limit exceeded (Balance: {partner.credits_balance})"
+                )
+
             return True
 
-    async def record_consumption(self, license_id: str, tokens_used: int, operation: str = "text_generation"):
+    async def record_consumption(
+        self, license_id: str, tokens_used: int, operation: str = "text_generation"
+    ):
         """
         Registra el consumo de tokens y actualiza balances de forma atómica.
-        
-        Aumenta el contador de la licencia y descuenta el equivalente en créditos 
-        del Partner asociado. Utiliza cargas explícitas para evitar errores de 
+
+        Aumenta el contador de la licencia y descuenta el equivalente en créditos
+        del Partner asociado. Utiliza cargas explícitas para evitar errores de
         contexto asíncrono (MissingGreenlet).
 
         Args:
@@ -112,13 +125,13 @@ class BillingEngine:
             if not license:
                 print(f"[Billing] Error: Licencia {license_id} no encontrada.")
                 return
-            
+
             license.consumed_tokens += tokens_used
             session.add(license)
-            
+
             # 2. Obtener cliente de forma independiente usando la FK
             client = await session.get(ClientAccount, license.client_id)
-            
+
             # 3. Descontar créditos del Partner usando la FK del cliente
             pid = "?"
             if client and client.partner_id:
@@ -127,16 +140,18 @@ class BillingEngine:
                 if partner:
                     partner.credits_balance -= tokens_used
                     session.add(partner)
-            
+
             await session.commit()
-            
+
             # Log limpio de caracteres especiales para Windows (ASCII)
-            print(f"[Billing] Facturacion: {tokens_used} tokens | Lic: {license_id} | Partner: {pid}")
-    
+            print(
+                f"[Billing] Facturacion: {tokens_used} tokens | Lic: {license_id} | Partner: {pid}"
+            )
+
     async def deduct_partner_credits(self, partner_id: str, amount: int):
         """
         Descuenta créditos del balance del Partner.
-        
+
         Args:
             partner_id: ID del partner
             amount: Cantidad a descontar (positivo)
@@ -149,6 +164,7 @@ class BillingEngine:
             partner.credits_balance -= amount
             session.add(partner)
             await session.commit()
+
 
 # Singleton Instance
 billing_engine = BillingEngine()

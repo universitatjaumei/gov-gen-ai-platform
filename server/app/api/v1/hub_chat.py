@@ -8,6 +8,7 @@ POST /api/v1/hub/chat/{chatbot_id}
 
 Deploy: edge
 """
+
 import json
 import uuid
 from typing import AsyncIterator
@@ -25,7 +26,9 @@ from server.app.modules.agents_hub.agent.state import create_initial_state
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.config_models import HubChatbot
 from server.app.modules.agents_hub.database.operational_models import HubInteraction
-from server.app.modules.agents_hub.services.embedding_service import GoogleEmbeddingService
+from server.app.modules.agents_hub.services.embedding_service import (
+    GoogleEmbeddingService,
+)
 from server.app.modules.agents_hub.services.observability import create_callback_handler
 from server.app.modules.agents_hub.services.retriever import HybridRetriever
 

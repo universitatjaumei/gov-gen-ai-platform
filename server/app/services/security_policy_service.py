@@ -2,6 +2,7 @@
 Servicio de gestión de políticas de seguridad.
 Implementa la lógica de cascada: CLIENT > PARTNER > SYSTEM
 """
+
 import json
 from datetime import datetime
 from typing import Dict, Any, Optional, List
@@ -9,7 +10,9 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from server.app.database.models import (
-    ServerSecurityPolicy as SecurityPolicy, ClientAccount, PartnerAccount
+    ServerSecurityPolicy as SecurityPolicy,
+    ClientAccount,
+    PartnerAccount,
 )
 
 
@@ -17,7 +20,7 @@ class SecurityPolicyService:
     """
     Gestor de políticas de seguridad y cumplimiento normativo.
 
-    Implementa un sistema de resolución en cascada donde el nivel más 
+    Implementa un sistema de resolución en cascada donde el nivel más
     específico sobreescribe al general:
     1. CLIENT - Restricciones específicas para un cliente final.
     2. PARTNER - Políticas aplicadas a toda la base instalada de un Partner.
@@ -39,16 +42,15 @@ class SecurityPolicyService:
     async def get_system_policy(self) -> SecurityPolicy:
         """
         Obtiene la política global del sistema (SYSTEM).
-        
-        Si no existe, la inicializa automáticamente con los valores predefinidos 
+
+        Si no existe, la inicializa automáticamente con los valores predefinidos
         de alta seguridad (Hardened Defaults).
 
         Returns:
             SecurityPolicy: La instancia de la política global.
         """
         stmt = select(SecurityPolicy).where(
-            SecurityPolicy.scope == "SYSTEM",
-            SecurityPolicy.is_active == True
+            SecurityPolicy.scope == "SYSTEM", SecurityPolicy.is_active
         )
         result = await self.db.exec(stmt)
         policy = result.first()
@@ -64,7 +66,7 @@ class SecurityPolicyService:
                 forbidden_libraries=self.SYSTEM_DEFAULTS["forbidden_libraries"],
                 max_execution_time=self.SYSTEM_DEFAULTS["max_execution_time"],
                 max_memory_mb=self.SYSTEM_DEFAULTS["max_memory_mb"],
-                is_active=True
+                is_active=True,
             )
             self.db.add(policy)
             await self.db.commit()
@@ -79,7 +81,7 @@ class SecurityPolicyService:
         stmt = select(SecurityPolicy).where(
             SecurityPolicy.scope == "PARTNER",
             SecurityPolicy.partner_id == partner_id,
-            SecurityPolicy.is_active == True
+            SecurityPolicy.is_active,
         )
         result = await self.db.exec(stmt)
         return result.first()
@@ -91,7 +93,7 @@ class SecurityPolicyService:
         stmt = select(SecurityPolicy).where(
             SecurityPolicy.scope == "CLIENT",
             SecurityPolicy.client_id == client_id,
-            SecurityPolicy.is_active == True
+            SecurityPolicy.is_active,
         )
         result = await self.db.exec(stmt)
         return result.first()
@@ -99,7 +101,7 @@ class SecurityPolicyService:
     async def get_effective_policy(self, client_id: str) -> Dict[str, Any]:
         """
         Calcula la política de seguridad efectiva aplicando la jerarquía de cascada.
-        
+
         Prioridad descendente: Política de Cliente -> Política de Partner -> Sistema.
 
         Args:
@@ -137,7 +139,9 @@ class SecurityPolicyService:
         system_policy = await self.get_system_policy()
         return self._policy_to_dict(system_policy, "SYSTEM")
 
-    def _policy_to_dict(self, policy: SecurityPolicy, applied_level: str) -> Dict[str, Any]:
+    def _policy_to_dict(
+        self, policy: SecurityPolicy, applied_level: str
+    ) -> Dict[str, Any]:
         """Convierte una política a diccionario con metadatos."""
         return {
             "id": policy.id,
@@ -151,7 +155,9 @@ class SecurityPolicyService:
             "max_execution_time": policy.max_execution_time,
             "max_memory_mb": policy.max_memory_mb,
             "screenshot_policy": getattr(policy, "screenshot_policy", "REVIEW"),
-            "trusted_screenshot_domains": self._parse_json(getattr(policy, "trusted_screenshot_domains", "[]")),
+            "trusted_screenshot_domains": self._parse_json(
+                getattr(policy, "trusted_screenshot_domains", "[]")
+            ),
             "is_active": policy.is_active,
             "created_at": policy.created_at.isoformat() if policy.created_at else None,
             "updated_at": policy.updated_at.isoformat() if policy.updated_at else None,
@@ -164,7 +170,16 @@ class SecurityPolicyService:
         except (json.JSONDecodeError, TypeError):
             return []
 
-    async def save_system_policy(self, allowed_domains: List[str], allowed_libraries: List[str], forbidden_libraries: List[str], max_execution_time: int, max_memory_mb: int, screenshot_policy: str = "REVIEW", trusted_screenshot_domains: List[str] = []) -> SecurityPolicy:
+    async def save_system_policy(
+        self,
+        allowed_domains: List[str],
+        allowed_libraries: List[str],
+        forbidden_libraries: List[str],
+        max_execution_time: int,
+        max_memory_mb: int,
+        screenshot_policy: str = "REVIEW",
+        trusted_screenshot_domains: List[str] = [],
+    ) -> SecurityPolicy:
         """
         Actualiza los parámetros globales de seguridad del sistema.
 
@@ -205,7 +220,7 @@ class SecurityPolicyService:
         max_execution_time: int,
         max_memory_mb: int,
         screenshot_policy: str = "REVIEW",
-        trusted_screenshot_domains: List[str] = []
+        trusted_screenshot_domains: List[str] = [],
     ) -> SecurityPolicy:
         """
         Crea o actualiza la política de un partner.
@@ -214,9 +229,7 @@ class SecurityPolicyService:
 
         if not policy:
             policy = SecurityPolicy(
-                scope="PARTNER",
-                partner_id=partner_id,
-                client_id=None
+                scope="PARTNER", partner_id=partner_id, client_id=None
             )
 
         policy.allowed_domains = json.dumps(allowed_domains)
@@ -244,7 +257,7 @@ class SecurityPolicyService:
         max_execution_time: int,
         max_memory_mb: int,
         screenshot_policy: str = "REVIEW",
-        trusted_screenshot_domains: List[str] = []
+        trusted_screenshot_domains: List[str] = [],
     ) -> SecurityPolicy:
         """
         Crea o actualiza la política de un cliente.
@@ -253,9 +266,7 @@ class SecurityPolicyService:
 
         if not policy:
             policy = SecurityPolicy(
-                scope="CLIENT",
-                partner_id=partner_id,
-                client_id=client_id
+                scope="CLIENT", partner_id=partner_id, client_id=client_id
             )
 
         policy.allowed_domains = json.dumps(allowed_domains)
@@ -297,8 +308,7 @@ class SecurityPolicyService:
         Para uso en el panel de admin.
         """
         stmt = select(SecurityPolicy).where(
-            SecurityPolicy.scope == "PARTNER",
-            SecurityPolicy.is_active == True
+            SecurityPolicy.scope == "PARTNER", SecurityPolicy.is_active
         )
         result = await self.db.exec(stmt)
         policies = result.all()
@@ -306,20 +316,24 @@ class SecurityPolicyService:
         output = []
         for p in policies:
             partner = await self.db.get(PartnerAccount, p.partner_id)
-            output.append({
-                **self._policy_to_dict(p, "PARTNER"),
-                "partner_name": partner.name if partner else "Unknown"
-            })
+            output.append(
+                {
+                    **self._policy_to_dict(p, "PARTNER"),
+                    "partner_name": partner.name if partner else "Unknown",
+                }
+            )
         return output
 
-    async def get_partner_client_policies(self, partner_id: str) -> List[Dict[str, Any]]:
+    async def get_partner_client_policies(
+        self, partner_id: str
+    ) -> List[Dict[str, Any]]:
         """
         Obtiene todas las políticas de clientes de un partner.
         """
         stmt = select(SecurityPolicy).where(
             SecurityPolicy.scope == "CLIENT",
             SecurityPolicy.partner_id == partner_id,
-            SecurityPolicy.is_active == True
+            SecurityPolicy.is_active,
         )
         result = await self.db.exec(stmt)
         policies = result.all()
@@ -327,21 +341,24 @@ class SecurityPolicyService:
         output = []
         for p in policies:
             client = await self.db.get(ClientAccount, p.client_id)
-            output.append({
-                **self._policy_to_dict(p, "CLIENT"),
-                "client_name": client.name if client else "Unknown"
-            })
+            output.append(
+                {
+                    **self._policy_to_dict(p, "CLIENT"),
+                    "client_name": client.name if client else "Unknown",
+                }
+            )
         return output
 
-    async def get_clients_with_policy_status(self, partner_id: str) -> List[Dict[str, Any]]:
+    async def get_clients_with_policy_status(
+        self, partner_id: str
+    ) -> List[Dict[str, Any]]:
         """
         Obtiene todos los clientes de un partner con info de su política.
         Indica si tienen política propia o heredada.
         """
         # Obtener todos los clientes del partner
         stmt = select(ClientAccount).where(
-            ClientAccount.partner_id == partner_id,
-            ClientAccount.is_active == True
+            ClientAccount.partner_id == partner_id, ClientAccount.is_active
         )
         result = await self.db.exec(stmt)
         clients = result.all()
@@ -364,12 +381,14 @@ class SecurityPolicyService:
                 system_policy = await self.get_system_policy()
                 policy_id = system_policy.id
 
-            output.append({
-                "client_id": client.client_id,
-                "client_name": client.name,
-                "has_custom_policy": client_policy is not None,
-                "policy_level": policy_level,
-                "policy_id": policy_id
-            })
+            output.append(
+                {
+                    "client_id": client.client_id,
+                    "client_name": client.name,
+                    "has_custom_policy": client_policy is not None,
+                    "policy_level": policy_level,
+                    "policy_id": policy_id,
+                }
+            )
 
         return output
