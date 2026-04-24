@@ -75,3 +75,84 @@ para y consulta si pertenece al servidor o al frontend.
 - **i18n obligatorio en el frontend**: ningún string hardcodeado en la UI. Usa `i18next`.
 - **Sin features no pedidas**: no añadas manejo de errores, validaciones, flags ni abstracciones
   para escenarios que no están en la tarea actual.
+
+---
+
+## Frontera Edge-Cloud (preparación del despliegue híbrido)
+
+El sistema se despliega en dos modos:
+
+1. **Cloud-only** — toda la lógica corre en el servidor del partner/admin; los
+   datos se anonimizan antes de enviarse al LLM. Protección de datos por contrato.
+2. **Edge + Cloud** — la lógica operacional (RAG, grafos, ingesta, automation,
+   tratamiento de expedientes) corre en un **edge node** dentro de la nube del
+   cliente; el **cloud** (admin/partner) sólo conserva configuración
+   administrativa y métricas anonimizadas. Requisito regulatorio estricto.
+
+El mismo codebase sirve a ambos modos. Para que eso siga siendo cierto, respeta
+**dos fronteras** a la vez: la de datos (modelos ORM) y la de aplicación
+(routers y módulos). La línea base de este split se establece en los prompts
+**9.6.5** (capa ORM, `ConfigProvider`, sync API) y **9.6.6** (`DEPLOY_MODE`,
+clasificación de routers/módulos) del `PLAN_TDD_DETALLADO.md`.
+
+### 1. Frontera de datos (modelos ORM)
+
+Dos `DeclarativeBase` separadas:
+
+- **`HubConfigBase`** → se sincroniza cloud→edge. Modelos: `HubClient`,
+  `HubChatbot`, `HubLLMConfig`, `HubPromptTemplate`.
+- **`HubOperationalBase`** → vive sólo en el edge. Modelos: `HubDocumentChunk`,
+  `HubInteraction`, `HubIngestionJob`.
+
+**Reglas duras**:
+
+- **Sin `relationship()` cross-base**. Si un modelo operacional necesita un
+  chatbot, consulta por `chatbot_id` con un query explícito — no navegues por
+  `.chatbot`. Las FK con `ondelete="CASCADE"` se conservan; la navegación ORM
+  no.
+- **Los servicios edge no importan modelos de config directamente**. El acceso
+  a configuración pasa por `ConfigProvider` (protocolo con `LocalConfigProvider`
+  por defecto; `RemoteConfigProvider` llegará cuando se implemente la sync API
+  real).
+- **El router `edge_sync`** (`/api/v1/edge/config`, `/api/v1/edge/telemetry`)
+  es la única superficie que ve ambos mundos.
+
+### 2. Frontera de aplicación (routers y módulos)
+
+Clasificación, regulada en runtime por `DEPLOY_MODE=cloud|edge|all` (default
+`all`, comportamiento actual):
+
+| Capa | Cloud (admin/partner) | Edge (cliente) | Compartidos |
+|---|---|---|---|
+| **Routers HTTP** | `auth_router`, `hub_chatbots_router`, `hub_clients_router`, `library_router`, futuros `/hub/prompts`, `/hub/themes` | `hub_chat_router`, `ingestion_router`, `hub_tasks_router`, `hub_feedback_router`, futuros `/automation/*` | `edge_sync_router` (servido por cloud, consumido por edge) |
+| **Módulos lógica** | `services/prompt_service` (CRUD), gestión partners / billing | `agents_hub/agent/` (graph, task_runner, tools, hitl), `agents_hub/ingestion/`, `agents_hub/services/retriever`, `agents_hub/evaluation/`, **`modules/automation/` íntegro** | `core/auth`, `services/model_factory`, `services/embedding_service`, `services/config_provider` |
+
+**Reglas duras**:
+
+- **Un módulo edge no puede importar** desde un módulo cloud (ni routers ni
+  servicios admin/billing/partners). La configuración se lee vía
+  `ConfigProvider`.
+- **Los grafos LangGraph, el task runner y los tools** son edge: no leen
+  `HubChatbot` ni `HubPromptTemplate` directamente.
+- **El módulo `modules/automation/` es edge**: factories, flows, ETL, PDF y
+  scripts procesan documentos/expedientes del cliente. No importa routers
+  cloud ni gestión admin.
+- **Al registrar un router nuevo** en `main.py`, **etiquétalo** en su docstring
+  (`Deploy: cloud|edge|shared`) y regístralo en la función `_register_cloud`,
+  `_register_edge` o ambas.
+- **La anonimización previa al LLM** es responsabilidad edge: los servicios
+  edge entregan datos ya anonimizados a `model_factory`; el factory no
+  anonimiza.
+
+### Si dudas dónde va algo nuevo
+
+Pregunta:
+
+- ¿Toca datos del cliente final (conversaciones, documentos, expedientes,
+  chunks, embeddings)? → **edge**.
+- ¿Sólo toca configuración, prompts, chatbots, clientes, partners, billing,
+  usuarios? → **cloud**.
+- ¿Ambos? Probablemente hay que partir la responsabilidad en dos servicios.
+
+Si violas estas reglas, bloqueas el despliegue edge. Para, reconsidera, o
+razona en el PR por qué es inevitable.

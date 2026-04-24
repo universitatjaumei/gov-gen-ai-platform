@@ -4936,6 +4936,315 @@ const chatbotSchema = z.object({
 
 ---
 
+### Prompt 9.6.5 - Frontera Edge-Cloud (preparación del despliegue híbrido)
+
+**Objetivo**: Establecer la separación estructural entre módulos **cloud** (administración, gobernanza, configuración) y módulos **edge** (RAG, chat, ingesta, datos del cliente) antes de que la superficie de modelos/servicios crezca más. No se implementa el despliegue edge; se fija la frontera en el código para que la futura separación sea mecánica, no un refactor transversal.
+
+**Motivación** (contexto para el agente):
+
+El producto tiene dos modos de despliegue previstos:
+
+1. **Cloud-only** (partners que protegen datos por contrato): toda la lógica corre en el servidor del partner; los datos se anonimizan antes de enviarse al LLM.
+2. **Edge + Cloud** (clientes con requisitos regulatorios estrictos, p. ej. hospitales, universidades con datos sensibles): las operaciones sobre los datos del cliente corren en un **edge node** dentro de la nube del cliente; el **cloud** solo conserva configuración administrativa y métricas anonimizadas.
+
+En ambos modos el mismo código debe servir. Si hoy se mezclan en el mismo `DeclarativeBase`, las mismas rutas y los mismos servicios los modelos de configuración y los operacionales, cada prompt futuro acumula acoplamientos que harán el split posterior caro.
+
+**Partición conceptual**:
+
+| Grupo | Vive en | Modelos actuales |
+|---|---|---|
+| **Configuración** (se sincroniza cloud → edge) | Cloud (authoritative), edge (réplica) | `HubClient`, `HubChatbot`, `HubLLMConfig`, `HubPromptTemplate` |
+| **Operacional** (nunca sale del edge en crudo) | Edge exclusivamente | `HubDocumentChunk`, `HubInteraction`, `HubIngestionJob` |
+
+**Tareas concretas**:
+
+1. **Separar ORM en dos `DeclarativeBase`** dentro de `server/app/modules/agents_hub/database/`:
+
+   ```python
+   # base.py
+   class HubConfigBase(DeclarativeBase):
+       """Modelos de configuración: se sincronizan de cloud a edge."""
+       type_annotation_map = {dict[str, Any]: JSONB, list[str]: ARRAY(String)}
+
+   class HubOperationalBase(DeclarativeBase):
+       """Modelos operacionales: viven sólo en el edge node."""
+       type_annotation_map = {dict[str, Any]: JSONB, list[str]: ARRAY(String)}
+   ```
+
+   - `config_models.py` — `HubClient`, `HubChatbot`, `HubLLMConfig`, `HubPromptTemplate` heredan de `HubConfigBase`.
+   - `operational_models.py` — `HubDocumentChunk`, `HubInteraction`, `HubIngestionJob` heredan de `HubOperationalBase`.
+   - Eliminar `models.py` actual (no dejar shim de re-exports).
+   - Actualizar todos los imports en el proyecto.
+
+2. **Romper las relaciones ORM que cruzan la frontera**:
+
+   Las FK a `hub_chatbots.id` se conservan como columnas, pero **se eliminan los `relationship()` cross-base**:
+   - Quitar `HubChatbot.document_chunks`, `HubChatbot.interactions`
+   - Quitar `HubDocumentChunk.chatbot`, `HubInteraction.chatbot`, `HubIngestionJob.chatbot`
+   - Quitar `cascade="all, delete-orphan"` en esas relaciones (el borrado en cascada lo maneja la DB con `ondelete="CASCADE"`, que ya existe).
+
+   Los servicios que usen `.chatbot` o `.document_chunks` deben refactorizarse para consultar por `chatbot_id` con queries explícitas (grep previo obligatorio: `\.chatbot\b`, `\.document_chunks`, `\.interactions`, `\.prompt_templates` en `server/`).
+
+3. **Stub de la API de sincronización** en `server/app/api/v1/edge_sync.py`:
+
+   ```python
+   router = APIRouter(prefix="/edge", tags=["edge-sync"])
+
+   class EdgeConfigSnapshot(BaseModel):
+       clients: list[ClientOut]
+       chatbots: list[ChatbotOut]
+       llm_configs: list[LLMConfigOut]
+       prompt_templates: list[PromptTemplateOut]
+       generated_at: datetime
+
+   class EdgeTelemetryBatch(BaseModel):
+       edge_node_id: str
+       interactions_count: int
+       avg_latency_ms: float
+       window_start: datetime
+       window_end: datetime
+
+   @router.get("/config", response_model=EdgeConfigSnapshot)
+   async def get_edge_config(...): raise HTTPException(501, "Not implemented")
+
+   @router.post("/telemetry", status_code=202)
+   async def ingest_edge_telemetry(body: EdgeTelemetryBatch, ...): raise HTTPException(501, "Not implemented")
+   ```
+
+   Registrar en `main.py`. Auth: se usará el mismo `get_current_user` por ahora; la autenticación por device token / mTLS queda para la fase de implementación real.
+
+4. **Actualizar `CLAUDE.md`** añadiendo una sección tras "Estructura de módulos":
+
+   ```markdown
+   ## Frontera Edge-Cloud
+
+   El sistema se despliega en dos modos: cloud-only y edge+cloud. Para que el split
+   sea viable sin refactor masivo, el código respeta dos grupos de módulos:
+
+   ### Modelos ORM: dos bases separadas
+   - `HubConfigBase` → se sincroniza cloud→edge (HubClient, HubChatbot, HubLLMConfig, HubPromptTemplate)
+   - `HubOperationalBase` → vive sólo en edge (HubDocumentChunk, HubInteraction, HubIngestionJob)
+
+   ### Reglas duras
+   - **Sin relaciones ORM cross-base**. Si un modelo operacional necesita un
+     chatbot, consulta por `chatbot_id` explícitamente — no navegues por `.chatbot`.
+   - **Los servicios edge no importan modelos de config directamente**. El acceso
+     a configuración pasa por un `ConfigProvider` (stub por ahora, sync API después).
+   - **El router `edge_sync` es la única superficie que ve ambos mundos**.
+
+   Si escribes código que viola estas reglas, estás creando deuda que bloqueará
+   el despliegue edge. Para, reconsidera, o razona en el PR por qué es necesario.
+   ```
+
+5. **`ConfigProvider` como punto de indirección** en `server/app/modules/agents_hub/services/config_provider.py`:
+
+   ```python
+   class ConfigProvider(Protocol):
+       async def get_chatbot(self, chatbot_id: uuid.UUID) -> ChatbotConfig | None: ...
+       async def get_llm_config(self, llm_config_id: uuid.UUID) -> LLMConfig | None: ...
+       async def list_active_chatbots(self, client_id: uuid.UUID) -> list[ChatbotConfig]: ...
+
+   class LocalConfigProvider:
+       """Implementación cloud-only: lee directamente de la DB."""
+       # ...
+
+   # Futuro: RemoteConfigProvider que consulta /api/v1/edge/config
+   ```
+
+   Los servicios RAG (`retriever`, `task_runner`, `graph`) deben migrarse para usar `ConfigProvider` en lugar de importar `HubChatbot` directamente. No se crea el `RemoteConfigProvider` ahora; basta con la abstracción y la `LocalConfigProvider`.
+
+**Tests requeridos** (`server/tests/modules/agents_hub/unit/test_edge_boundary.py`):
+
+```python
+# test_config_base_contains_only_config_models
+#   Verifica que HubConfigBase.metadata.tables tiene exactamente los 4 tablenames esperados
+#
+# test_operational_base_contains_only_operational_models
+#   Verifica que HubOperationalBase.metadata.tables tiene exactamente los 3 esperados
+#
+# test_no_cross_base_relationships
+#   Introspecciona mappers: ninguna relationship() en HubConfigBase apunta a clases
+#   de HubOperationalBase y viceversa
+#
+# test_edge_sync_config_endpoint_exists_returns_501
+# test_edge_sync_telemetry_endpoint_exists_returns_501
+#
+# test_rag_services_dont_import_config_models_directly
+#   Grep estático: módulos agent/ e ingestion/ no contienen `from ...config_models import`
+#   (permitido sólo en services/config_provider.py)
+```
+
+**Checklist de cierre**:
+
+- [ ] `models.py` eliminado; `config_models.py` y `operational_models.py` creados
+- [ ] Imports actualizados en todo `server/` (0 referencias a `from .models import`)
+- [ ] `relationship()` cross-base eliminados; servicios refactorizados a queries por FK
+- [ ] `config_provider.py` con `Protocol` + `LocalConfigProvider` en uso desde `retriever`, `task_runner`, `graph`
+- [ ] `edge_sync.py` registrado en `main.py`, devuelve 501 con schemas Pydantic visibles en `/docs`
+- [ ] `CLAUDE.md` actualizado con la sección "Frontera Edge-Cloud"
+- [ ] Suite completa en verde: `pytest server/` y tests de agents_hub existentes siguen pasando
+
+**Fuera de alcance** (se abordarán en la fase de implementación edge real):
+
+- Conexiones a DBs separadas (hoy ambas bases usan el mismo engine)
+- Autenticación por device token / mTLS
+- `RemoteConfigProvider` que consume la sync API
+- Dockerización del edge node
+- Migración de interacciones/chunks a DB dedicada
+
+El objetivo de este prompt es **congelar la frontera en el código**; la separación física de procesos y DBs llega en una fase posterior cuando se aborde el primer cliente con requisitos edge reales.
+
+---
+
+### Prompt 9.6.6 - Frontera Edge-Cloud en la capa de aplicación (routers y módulos)
+
+**Objetivo**: Clasificar routers HTTP y módulos de lógica según su pertenencia a cloud o edge. Introducir `DEPLOY_MODE` para que el mismo codebase pueda arrancarse como cloud-only, edge-only o all (por defecto). Fijar las reglas anti-import para que los módulos edge no dependan de módulos cloud.
+
+**Motivación** (contexto para el agente):
+
+El prompt 9.6.5 fija la frontera en la capa de datos (modelos ORM, `ConfigProvider`). Esto es necesario pero no suficiente: falta fijar la frontera en la **capa de aplicación**, es decir, clasificar qué endpoints HTTP y qué módulos de lógica corren en cada lado del split.
+
+En el modo **edge+cloud**, el nodo edge ejecuta:
+- Los grafos LangGraph, el task runner y los tools (interacción con expedientes)
+- La ingesta de documentos y la extracción con Docling
+- El retriever RAG y la evaluación de calidad
+- **Todo el módulo `automation/`**: factories, flows, ETL, generación de PDF, scripts
+
+El cloud (admin/partner) ejecuta:
+- CRUD de chatbots, clientes, partners, LLM configs, prompt templates
+- Gestión de usuarios, autenticación central, billing
+- Exposición de la sync API para los edge nodes
+
+**Partición de routers y módulos**:
+
+| Capa | Cloud (admin/partner) | Edge (cliente) | Compartidos |
+|---|---|---|---|
+| **Routers HTTP** | `auth_router`, `hub_chatbots_router`, `hub_clients_router`, `library_router`, futuros `/hub/prompts`, `/hub/themes` | `hub_chat_router`, `ingestion_router`, `hub_tasks_router`, `hub_feedback_router`, futuros `/automation/*` | `edge_sync_router` (servido por cloud, consumido por edge) |
+| **Módulos lógica** | `services/prompt_service` (CRUD), gestión partners/billing | `agents_hub/agent/` (graph, task_runner, tools, hitl), `agents_hub/ingestion/`, `agents_hub/services/retriever`, `agents_hub/evaluation/`, **`modules/automation/` íntegro** | `core/auth`, `services/model_factory`, `services/embedding_service`, `services/config_provider` |
+
+**Tareas concretas**:
+
+1. **`DEPLOY_MODE` en `main.py`**:
+
+   ```python
+   import os
+   DEPLOY_MODE = os.getenv("DEPLOY_MODE", "all").lower()
+   if DEPLOY_MODE not in ("cloud", "edge", "all"):
+       raise RuntimeError(f"Invalid DEPLOY_MODE: {DEPLOY_MODE}")
+
+   def _register_cloud(app: FastAPI) -> None:
+       app.include_router(auth_router, prefix="/api/v1")
+       app.include_router(library_router, prefix="/api")
+       app.include_router(hub_chatbots_router, prefix="/api/v1")
+       app.include_router(hub_clients_router, prefix="/api/v1")
+       app.include_router(edge_sync_router, prefix="/api/v1")  # servido por cloud
+
+   def _register_edge(app: FastAPI) -> None:
+       app.include_router(hub_chat_router, prefix="/api/v1")
+       app.include_router(hub_feedback_router, prefix="/api/v1")
+       app.include_router(hub_tasks_router, prefix="/api/v1")
+       app.include_router(ingestion_router, prefix="/api/v1")
+
+   if DEPLOY_MODE in ("cloud", "all"):
+       _register_cloud(app)
+   if DEPLOY_MODE in ("edge", "all"):
+       _register_edge(app)
+   ```
+
+   - Por defecto `DEPLOY_MODE=all` → comportamiento actual intacto.
+   - Documentar la variable en `.env.production.example`.
+
+2. **Etiquetado de routers**: cada router existente y futuro lleva un comentario en su `__init__` o docstring que identifica su modo:
+
+   ```python
+   # server/app/routers/hub_chatbots_router.py
+   """CRUD de chatbots del Hub.
+
+   Deploy: cloud
+   """
+   ```
+
+   Valores válidos: `cloud`, `edge`, `shared`.
+
+3. **Registro de `modules/automation/` como módulo edge**:
+
+   Añadir a `server/app/modules/automation/__init__.py`:
+
+   ```python
+   """Módulo de automatización: flows, ETL, scripts, PDF.
+
+   Deploy: edge — procesa documentos/expedientes del cliente.
+   No debe importar routers ni servicios cloud (partners, billing, CRUD admin).
+   """
+   ```
+
+   Hacer lo mismo en `agents_hub/agent/__init__.py`, `agents_hub/ingestion/__init__.py`, `agents_hub/evaluation/__init__.py` con etiqueta `edge`.
+
+4. **Reglas anti-import (tests estáticos)**: un módulo edge no puede importar desde:
+   - Routers cloud (`hub_chatbots_router`, `hub_clients_router`, etc.)
+   - Modelos de config directamente (regla heredada de 9.6.5, reforzada aquí)
+   - Servicios exclusivos de cloud (billing, partner management)
+
+   Excepción permitida: `services/config_provider` (costura explícita).
+
+5. **Anonimización como responsabilidad edge**: documentar en `core/llm/` (o donde viva `model_factory`) que la entrada al gateway LLM asume datos ya anonimizados; el paso de anonimización vive en los servicios edge (retriever, task_runner) antes de llamar al factory.
+
+**Tests requeridos** (`server/tests/modules/agents_hub/unit/test_deploy_mode.py`):
+
+```python
+# test_default_deploy_mode_registers_all_routers
+#   Arranca app con DEPLOY_MODE no definido; verifica que /api/v1/hub/chatbots
+#   y /api/v1/hub/chat responden (ambos existen)
+#
+# test_deploy_mode_cloud_excludes_edge_routers
+#   Arranca app con DEPLOY_MODE=cloud; /api/v1/hub/chat devuelve 404, /api/v1/hub/chatbots OK
+#
+# test_deploy_mode_edge_excludes_cloud_routers
+#   Arranca app con DEPLOY_MODE=edge; /api/v1/hub/chatbots devuelve 404, /api/v1/hub/chat OK
+#
+# test_deploy_mode_invalid_raises
+#   DEPLOY_MODE=foo → RuntimeError al importar
+```
+
+Tests estáticos en `server/tests/architecture/test_edge_cloud_boundary.py`:
+
+```python
+# test_automation_module_has_no_cloud_imports
+#   AST-parse o grep de server/app/modules/automation/**/*.py
+#   Falla si encuentra: from server.app.routers.hub_chatbots_router,
+#   from server.app.routers.hub_clients_router, o imports a billing/partners
+#
+# test_agent_module_doesnt_import_config_models
+#   server/app/modules/agents_hub/agent/**/*.py no contiene
+#   `from ..database.config_models import` (debe ir vía config_provider)
+#
+# test_all_routers_have_deploy_label
+#   Cada fichero router*.py tiene un docstring con "Deploy: cloud|edge|shared"
+```
+
+**Checklist de cierre**:
+
+- [ ] `DEPLOY_MODE` implementado en `main.py` con las tres funciones `_register_*`
+- [ ] `.env.production.example` documenta `DEPLOY_MODE` con sus 3 valores
+- [ ] Todos los routers tienen etiqueta `Deploy: ...` en su docstring
+- [ ] `__init__.py` de automation, agent, ingestion, evaluation etiquetados como `edge`
+- [ ] Tests de arranque con los 3 modos en verde
+- [ ] Tests estáticos de anti-import en verde
+- [ ] `CLAUDE.md` contiene la sección "Frontera Edge-Cloud" con las dos partes (datos y aplicación)
+- [ ] Suite completa en verde tras la reorganización
+
+**Fuera de alcance** (fase de implementación edge real):
+
+- Arrancar dos procesos FastAPI distintos (cloud y edge) en producción
+- Despliegue con Docker Compose separado por modo
+- Autenticación device-token entre edge y cloud
+- `RemoteConfigProvider` real (cliente HTTP que habla con `edge_sync`)
+- Replicación física de la DB de configuración al edge
+
+El objetivo: que el día que se aborde un cliente con requisitos edge, el split sea `DEPLOY_MODE=edge` en su contenedor y `DEPLOY_MODE=cloud` en el nuestro. Nada más.
+
+---
+
 ### Prompt 9.7 - Hub > Pantalla de Documentos
 
 **Objetivo**: Gestión de documentos por chatbot: upload múltiple, listado con estado de ingestión y borrado.
