@@ -11,5 +11,7 @@
   "confirm": "Confirm",
   "back": "Back",
   "logout": "Log out",
-  "language": "Language"
+  "language": "Language",
+  "confirm_delete": "Confirm deletion?",
+  "no_results": "No results"
 }

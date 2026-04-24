@@ -35,4 +35,24 @@ describe('i18n configuration', () => {
     expect(SUPPORTED_LANGUAGES).toContain('en')
     expect(SUPPORTED_LANGUAGES).toHaveLength(3)
   })
+
+  it('should_have_confirm_delete_and_no_results_in_all_locales', async () => {
+    for (const lang of ['es', 'ca', 'en']) {
+      await i18n.changeLanguage(lang)
+      expect(i18n.t('confirm_delete')).not.toBe('confirm_delete')
+      expect(i18n.t('no_results')).not.toBe('no_results')
+    }
+  })
+
+  it('should_load_admin_namespace', async () => {
+    await i18n.changeLanguage('es')
+    expect(i18n.t('nav.hub', { ns: 'admin' })).toBe('Hub')
+    expect(i18n.t('login.title', { ns: 'admin' })).toBe('Iniciar sesión')
+  })
+
+  it('should_load_chat_namespace', async () => {
+    await i18n.changeLanguage('es')
+    expect(i18n.t('send', { ns: 'chat' })).toBe('Enviar')
+    expect(i18n.t('placeholder', { ns: 'chat' })).toBe('Escribe tu pregunta...')
+  })
 })

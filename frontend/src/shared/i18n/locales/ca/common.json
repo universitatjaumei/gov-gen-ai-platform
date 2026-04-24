@@ -11,5 +11,7 @@
   "confirm": "Confirmar",
   "back": "Tornar",
   "logout": "Tancar sessió",
-  "language": "Idioma"
+  "language": "Idioma",
+  "confirm_delete": "Confirmar eliminació?",
+  "no_results": "Sense resultats"
 }
