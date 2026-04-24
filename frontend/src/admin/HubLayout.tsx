@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 const HUB_SUBNAV = [
   { key: 'chatbots', path: '/hub/chatbots' },
   { key: 'clients', path: '/hub/clients' },
+  { key: 'documents', path: '/hub/documents' },
 ] as const
 
 export function HubLayout() {

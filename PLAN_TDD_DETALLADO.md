@@ -5245,7 +5245,7 @@ El objetivo: que el día que se aborde un cliente con requisitos edge, el split 
 
 ---
 
-### Prompt 9.7 - Hub > Pantalla de Documentos
+### Prompt 9.7 - Hub > Pantalla de Documentos ✅ COMPLETADO
 
 **Objetivo**: Gestión de documentos por chatbot: upload múltiple, listado con estado de ingestión y borrado.
 
