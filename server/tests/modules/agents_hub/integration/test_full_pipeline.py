@@ -1,13 +1,13 @@
-"""Tests de integración del pipeline completo (Prompt 6.2).
+﻿"""Tests de integraciÃ³n del pipeline completo (Prompt 6.2).
 
-Validan la integración entre BD, componentes RAG y autenticación JWT
+Validan la integraciÃ³n entre BD, componentes RAG y autenticaciÃ³n JWT
 en flujos reales de extremo a extremo.
 
 Requieren PostgreSQL con pgvector corriendo en localhost:5432.
 
 Rutas reales (monorepo):
   tests/integration/test_full_pipeline.py
-    → server/tests/modules/agents_hub/integration/test_full_pipeline.py
+    â†’ server/tests/modules/agents_hub/integration/test_full_pipeline.py
 """
 import os
 import uuid
@@ -30,7 +30,7 @@ class TestRAGPipeline:
 
     @pytest.mark.asyncio
     async def test_ingestion_to_retrieval_pipeline(self) -> None:
-        """Pipeline completo: ingestión → chunking → embedding → retrieval."""
+        """Pipeline completo: ingestiÃ³n â†’ chunking â†’ embedding â†’ retrieval."""
         from server.app.modules.agents_hub.database.connection import (
             create_async_engine,
             create_session_factory,
@@ -70,35 +70,35 @@ from server.app.modules.agents_hub.database.operational_models import HubDocumen
 
             # 2. Chunking
             markdown_content = (
-                "# Documentación de FastAPI\n\n"
-                "FastAPI es un framework web moderno y rápido para construir APIs con Python.\n\n"
-                "## Características\n\n"
+                "# DocumentaciÃ³n de FastAPI\n\n"
+                "FastAPI es un framework web moderno y rÃ¡pido para construir APIs con Python.\n\n"
+                "## CaracterÃ­sticas\n\n"
                 "- Alto rendimiento\n"
-                "- Fácil de usar\n"
-                "- Basado en estándares\n"
+                "- FÃ¡cil de usar\n"
+                "- Basado en estÃ¡ndares\n"
             )
             chunker = MarkdownChunker(chunk_size=200, chunk_overlap=20)
             chunks = chunker.split(markdown_content)
             assert len(chunks) >= 1
 
-            # 3. Guardar chunks con embeddings sintéticos
+            # 3. Guardar chunks con embeddings sintÃ©ticos
             for i, chunk in enumerate(chunks):
                 db_chunk = HubDocumentChunk(
                     chatbot_id=chatbot.id,
                     content=chunk.content,
                     source_url="https://fastapi.tiangolo.com",
                     content_hash=hash_content(chunk.content),
-                    embedding=[0.1 + i * 0.01] * 1536,
+                    embedding=[0.1 + i * 0.01] * 1024,
                     language="es",
                 )
                 session.add(db_chunk)
 
             await session.commit()
 
-            # 4. Retrieval: búsqueda vectorial
+            # 4. Retrieval: bÃºsqueda vectorial
             retriever = HybridRetriever(session)
             results = await retriever.vector_search(
-                query_embedding=[0.11] * 1536,
+                query_embedding=[0.11] * 1024,
                 chatbot_id=chatbot.id,
                 top_k=3,
             )
@@ -106,10 +106,10 @@ from server.app.modules.agents_hub.database.operational_models import HubDocumen
             assert len(results) >= 1
             assert any("FastAPI" in r.content for r in results)
 
-            # 5. Retrieval: búsqueda híbrida
+            # 5. Retrieval: bÃºsqueda hÃ­brida
             hybrid_results = await retriever.hybrid_search(
                 query="FastAPI framework",
-                query_embedding=[0.11] * 1536,
+                query_embedding=[0.11] * 1024,
                 chatbot_id=chatbot.id,
                 top_k=3,
             )
@@ -124,9 +124,9 @@ from server.app.modules.agents_hub.database.operational_models import HubDocumen
         from server.app.modules.agents_hub.ingestion.hasher import hash_content
 
         content = (
-            "# Sección 1\n\nTexto largo de prueba para verificar que el chunker "
-            "divide el contenido correctamente cuando supera el tamaño máximo configurado.\n\n"
-            "# Sección 2\n\nOtro bloque de contenido independiente.\n"
+            "# SecciÃ³n 1\n\nTexto largo de prueba para verificar que el chunker "
+            "divide el contenido correctamente cuando supera el tamaÃ±o mÃ¡ximo configurado.\n\n"
+            "# SecciÃ³n 2\n\nOtro bloque de contenido independiente.\n"
         )
         chunker = MarkdownChunker(chunk_size=100, chunk_overlap=10)
         chunks = chunker.split(content)
@@ -136,13 +136,13 @@ from server.app.modules.agents_hub.database.operational_models import HubDocumen
 
         # Verifica que hashes distintos para contenidos distintos
         hashes = {hash_content(c.content) for c in chunks}
-        assert len(hashes) == len(chunks), "El hasher generó colisiones"
+        assert len(hashes) == len(chunks), "El hasher generÃ³ colisiones"
 
 
 class TestAuthPipeline:
 
     def test_token_creation_and_validation(self) -> None:
-        """Pipeline auth: crear token → decodificar → validar claims."""
+        """Pipeline auth: crear token â†’ decodificar â†’ validar claims."""
         os.environ.update(_JWT_ENV)
         from server.app.core.auth import UserInfo, create_token, decode_token
 
@@ -162,7 +162,7 @@ class TestAuthPipeline:
         assert decoded.role == user.role
 
     def test_token_rejects_tampered_payload(self) -> None:
-        """Un token con firma inválida lanza AuthenticationError."""
+        """Un token con firma invÃ¡lida lanza AuthenticationError."""
         import base64
         os.environ.update(_JWT_ENV)
         from server.app.core.auth import UserInfo, create_token, decode_token

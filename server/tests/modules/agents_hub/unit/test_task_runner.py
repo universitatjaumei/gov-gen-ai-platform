@@ -1,4 +1,4 @@
-"""Tests para el orquestador de tareas y síntesis (Prompt 4.9)."""
+﻿"""Tests para el orquestador de tareas y sÃ­ntesis (Prompt 4.9)."""
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -7,12 +7,12 @@ class TestTaskRunner:
 
     @pytest.mark.asyncio
     async def test_task_data_integration(self) -> None:
-        """El agente combina un dato numérico de Oracle con texto del PDF del usuario."""
+        """El agente combina un dato numÃ©rico de Oracle con texto del PDF del usuario."""
         from server.app.modules.agents_hub.agent.task_runner import TaskRunner
 
         runner = TaskRunner(
             retriever=AsyncMock(hybrid_search=AsyncMock(return_value=[])),
-            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1536)),
+            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
         )
 
         oracle_data = {"gasto_total": 15000.0, "fecha_fin": "2025-12-31"}
@@ -22,8 +22,8 @@ class TestTaskRunner:
         with patch.object(runner, '_generate_draft', new_callable=AsyncMock) as mock_gen:
             mock_gen.return_value = (
                 "## Informe\n\n"
-                f"Gasto total: {oracle_data['gasto_total']} €\n\n"
-                f"Justificación: {user_evidence}"
+                f"Gasto total: {oracle_data['gasto_total']} â‚¬\n\n"
+                f"JustificaciÃ³n: {user_evidence}"
             )
 
             draft = await runner.synthesize(
@@ -33,7 +33,7 @@ class TestTaskRunner:
             )
 
         assert "15000" in draft or "15.000" in draft or "gasto" in draft.lower()
-        assert "justificación" in draft.lower() or user_evidence[:20] in draft
+        assert "justificaciÃ³n" in draft.lower() or user_evidence[:20] in draft
 
     @pytest.mark.asyncio
     async def test_gap_detection(self) -> None:
@@ -42,7 +42,7 @@ class TestTaskRunner:
 
         runner = TaskRunner(
             retriever=AsyncMock(hybrid_search=AsyncMock(return_value=[])),
-            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1536)),
+            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
         )
 
         # Falta el campo 'fecha_fin' requerido por la normativa

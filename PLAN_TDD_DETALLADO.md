@@ -60,7 +60,8 @@
 | FASE 2.2–2.9 — ORM Hub, conexión, retriever, gobernanza | ✅ COMPLETADO | 2026-04-23 | 11 tests verdes; módulo agents_hub creado |
 | FASE 3 — Ingestión Docling | ✅ COMPLETADO | 2026-04-23 | DoclingProcessor, IngestionWatcher, chunker, hasher, user_upload endpoint; tests verdes |
 | FASE 4 — Agente LangGraph | ✅ COMPLETADO | 2026-04-23 | Grafo LangGraph, HybridRetriever, ModelFactory, RAGAS, HITL, TaskRunner, PromptService; tests verdes |
-| FASE 5 — API Endpoints | ✅ COMPLETADO | 2026-04-23 | hub_chat (SSE), hub_tasks (export PDF/MD), embedding_service, bugfix deps.py 401; 13 tests verdes |
+| FASE 5 — API Endpoints | ✅ COMPLETADO | 2026-04-23 | hub_chat (SSE), hub_tasks (export PDF/MD), embedding_service (GoogleEmbeddingService stub), bugfix deps.py 401; 13 tests verdes |
+| FASE 5B — LocalEmbeddingService BGE-M3 | ✅ COMPLETADO | 2026-04-25 | `LocalEmbeddingService` (BAAI/bge-m3, sentence-transformers, 1024 dims); singleton `get_embedding_service()`; cableado en hub_chat, hub_ingestion_router, ingestion; migración vector(1536→1024); todos los tests actualizados |
 | FASE 6 — Tests E2E y CI/CD | ✅ COMPLETADO | 2026-04-23 | 4 tests E2E (httpx+AsyncClient), 5 tests integración pipeline+auth, GitHub Actions CI/CD con pgvector |
 | FASE 7 — Docker multi-stage | ✅ COMPLETADO | 2026-04-23 | Imagen CPU-only (~2.96 GB), uv sync, docker-compose.prod.yml, LangFuse self-hosted, scripts/postgres/init.sql |
 | FASE 8 — LangFuse + FeedbackService | ✅ COMPLETADO | 2026-04-23 | observability.py, FeedbackService, hub_feedback router, migración feedback_text, 10 tests verdes |
@@ -202,7 +203,7 @@ uv run pytest tests/unit/test_config.py -v
 | **6** | Tests E2E | 6.1 - 6.3 | **MANTENIDA** (CI/CD: GitHub Actions) | Fases 1-5 |
 | **7** | Despliegue | 7.1 - 7.4 | **REDUCIDA** — extender docker-compose existente | Fases 1-6 |
 | **8** | Observabilidad | 8.1 - 8.3 | **MANTENIDA** | Fases 1-5 |
-| **9** | Frontend + i18n + Modo Agente | 9.1 - 9.18 | **MANTENIDA + AMPLIADA** (añadidos 9.14–9.18) | Fase 5 (API) |
+| **9** | Frontend + i18n + Modo Agente | 9.1 - 9.18 (+ 9.7.1 crawler) | **MANTENIDA + AMPLIADA** (añadidos 9.7.1 crawler ✅, 9.14–9.18) | Fase 5 (API) |
 | **10** | Temas y Panel de IA | 10.1 - 10.11 | **MANTENIDA** | Fase 9 |
 | **11** | Autoinstalación | 11.1 - 11.3 | **ADAPTADA** — extender docker-compose unificado | Fases 1-10 |
 | **12** | Gestor de Expedientes | E1 - E5 | **NUEVA** | Fases 3, 4, Auth OIDC |
@@ -5247,34 +5248,212 @@ El objetivo: que el día que se aborde un cliente con requisitos edge, el split 
 
 ### Prompt 9.7 - Hub > Pantalla de Documentos ✅ COMPLETADO
 
-**Objetivo**: Gestión de documentos por chatbot: upload múltiple, listado con estado de ingestión y borrado.
+**Objetivo**: Gestión de documentos PDF por chatbot: upload con URL canónica opcional, listado con estado de ingestión, borrado individual y borrado de colección completa.
 
 **Endpoints que consume**:
-- `GET  /api/v1/hub/ingestion/{chatbot_id}/jobs` — jobs de ingestión
-- `POST /api/v1/hub/ingestion/upload` — subida de documento
-- `DELETE /api/v1/hub/ingestion/{chatbot_id}/chunks` — borrar colección
+- `GET  /api/v1/hub/ingestion/{chatbot_id}/jobs` — lista jobs de ingestión
+- `POST /api/v1/hub/ingestion/upload` — sube PDF; acepta `chatbot_id`, `file`, `canonical_url` (opcional)
+- `DELETE /api/v1/hub/ingestion/{chatbot_id}/jobs/{job_id}` — borra un documento y sus chunks
+- `DELETE /api/v1/hub/ingestion/{chatbot_id}/chunks` — borra toda la colección
 
-**Componentes shadcn/ui**:
-```bash
-npx shadcn@latest add progress tabs
-```
+**Modelo `HubIngestionJob`** (campos añadidos sobre la spec inicial):
+- `original_filename` — nombre real del archivo subido
+- `canonical_url` — URL pública del documento para citación en el chat; si se proporciona, los chunks almacenan esta URL en lugar de la ruta temporal, lo que también garantiza deduplicación correcta al re-ingestar el mismo documento
 
-**`src/admin/pages/DocumentsPage.tsx`** — estructura clave:
-```typescript
-// Selector de chatbot (Select) — scope de la vista
-// Dropzone para subir PDFs (react-dropzone o input file)
-// Tabla de jobs: nombre, estado (pending/processing/done/error), chunks generados, fecha
-// Progress bar animado para jobs en curso (polling cada 3s con react-query refetch)
-// Botón "Limpiar colección" con confirmación AlertDialog
-```
+**Comportamiento de citación**:
+- `search_knowledge.py` formatea la fuente como enlace Markdown `[url](url)` cuando `source_url` es http/https; en caso contrario muestra solo el nombre de archivo
 
 **Tests requeridos**:
 ```typescript
 // should_list_ingestion_jobs_for_selected_chatbot
 // should_accept_pdf_files_only_in_dropzone
+// should_show_original_filename_in_table
+// should_show_canonical_url_link_when_present
 // should_show_progress_for_processing_job
 // should_show_error_state_for_failed_job
+// should_delete_individual_job_and_its_chunks
 // should_confirm_before_clearing_collection
+```
+
+---
+
+### Prompt 9.7.1 - Hub > Fuentes web monitorizadas (crawler de ingestión) ✅ COMPLETADO (2026-04-25)
+
+**Objetivo**: El administrador configura URLs públicas que el sistema comprueba periódicamente. Cuando Docling detecta que el contenido ha cambiado (hash distinto), re-ingesta el documento automáticamente. Esto sustituye la actualización manual cuando la base documental vive en una web institucional que se actualiza con regularidad.
+
+**Aclaración de responsabilidad** (importante para no confundir con el RPA):
+- Este crawler es un proceso **server-side**, iniciado por el propio Edge node según un calendario fijado por el administrador.
+- El Playwright del **Prompt 9.16** (`handlers/rpa.py`) es exclusivamente para **automatización web interactiva de usuario final** (rellenar formularios, extraer datos en sesión): lo dispara un usuario, no el scheduler.
+- Si una URL es simple HTML/PDF, Docling la procesa directamente. Solo si requiere JavaScript dinámico (SPA, login) se utilizará Playwright headless dentro del pipeline de ingestión (decisión de implementación futura).
+
+---
+
+#### Prompt 9.7.1a — Tests modelo `HubIngestionSource` (TDD - RED)
+
+**Prerequisitos**: Prompt 9.7 completado; Alembic en uso.
+
+**Nuevo modelo ORM** en `server/app/modules/agents_hub/database/operational_models.py`:
+
+```python
+class HubIngestionSource(HubOperationalBase):
+    """URL pública que el sistema monitoriza para re-ingestión automática."""
+    __tablename__ = "hub_ingestion_sources"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    chatbot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    label: Mapped[str | None] = mapped_column(String(255), nullable=True)   # etiqueta legible
+    check_interval_hours: Mapped[int] = mapped_column(Integer, default=24)  # 1..168
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="active")       # active|paused|error
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+```
+
+**Nota de frontera edge/cloud**: `HubIngestionSource` vive en `HubOperationalBase` (edge) porque su estado operacional (`last_content_hash`, `last_checked_at`) reside en el edge. En despliegue edge+cloud separados, el admin cloud configura las fuentes a través del router `edge_sync`; el scheduler edge las lee localmente.
+
+**`tests/modules/agents_hub/integration/test_ingestion_sources.py`**:
+```python
+# test_can_create_ingestion_source
+# test_source_defaults_to_active_status
+# test_source_check_interval_defaults_to_24h
+# test_label_is_optional
+# test_can_update_last_checked_at_and_hash
+# test_can_pause_and_resume_source
+```
+
+---
+
+#### Prompt 9.7.1b — Endpoints CRUD de fuentes (TDD - RED → GREEN)
+
+**Router**: `server/app/routers/hub_ingestion_router.py` (Deploy: cloud — el admin configura, el scheduler edge consume).
+
+**Nuevos endpoints**:
+
+```python
+# GET  /hub/ingestion/{chatbot_id}/sources         — lista fuentes del chatbot
+# POST /hub/ingestion/{chatbot_id}/sources         — añade fuente
+#      body: { url: str, label?: str, check_interval_hours?: int (1..168) }
+# PATCH /hub/ingestion/{chatbot_id}/sources/{id}  — edita label, intervalo o status
+# DELETE /hub/ingestion/{chatbot_id}/sources/{id} — elimina fuente (no borra los chunks ya ingestados)
+# POST /hub/ingestion/{chatbot_id}/sources/{id}/check — fuerza comprobación inmediata (background task)
+```
+
+**Tests requeridos**:
+```python
+# test_create_source_returns_201
+# test_create_source_validates_url_format
+# test_create_source_rejects_duplicate_url_for_same_chatbot
+# test_list_sources_returns_only_chatbot_sources
+# test_patch_source_updates_interval
+# test_patch_source_can_pause_and_resume
+# test_delete_source_removes_it_without_deleting_chunks
+# test_manual_check_triggers_background_job
+```
+
+---
+
+#### Prompt 9.7.1c — Scheduler de comprobación periódica (TDD - RED → GREEN)
+
+**Dependency**: añadir `apscheduler>=3.10` a `pyproject.toml`.
+
+**`server/app/modules/agents_hub/ingestion/source_scheduler.py`**:
+
+```python
+"""Scheduler que comprueba periódicamente las fuentes web configuradas."""
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+async def check_all_sources(session_factory) -> None:
+    """Para cada fuente activa con check_interval vencido:
+    1. Llama a DoclingProcessor para obtener el Markdown de la URL
+    2. Calcula hash del contenido
+    3. Si hash != last_content_hash:
+       - Crea un HubIngestionJob con source_url=url y canonical_url=url
+       - Lanza run_job() en background
+       - Actualiza last_content_hash
+    4. Actualiza last_checked_at y status (error si falla)
+    """
+
+def create_scheduler(session_factory) -> AsyncIOScheduler:
+    """Crea el scheduler con un job master cada 15 min que decide qué fuentes comprobar."""
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        check_all_sources,
+        trigger="interval",
+        minutes=15,
+        args=[session_factory],
+        id="source_checker",
+        replace_existing=True,
+    )
+    return scheduler
+```
+
+**Integración en lifespan** (`server/app/main.py`):
+```python
+# En lifespan: scheduler = create_scheduler(session_factory); scheduler.start()
+# Al cerrar:   scheduler.shutdown()
+```
+
+**Tests requeridos**:
+```python
+# test_check_all_sources_skips_paused_sources
+# test_check_all_sources_skips_recently_checked_sources
+# test_check_all_sources_creates_job_when_content_changed
+# test_check_all_sources_skips_job_when_content_unchanged
+# test_check_all_sources_marks_source_error_on_fetch_failure
+# test_check_all_sources_updates_last_checked_at
+```
+
+---
+
+#### Prompt 9.7.1d — UI: sección "Fuentes web" en DocumentsPage (TDD - RED → GREEN)
+
+**Estrategia**: añadir un segundo tab `Tabs` en `DocumentsPage.tsx` con dos vistas: "Documentos subidos" (existente) y "Fuentes web".
+
+**`frontend/src/shared/api/ingestion.ts`** — nuevas funciones:
+```typescript
+export interface IngestionSource {
+  id: string
+  chatbot_id: string
+  url: string
+  label: string | null
+  check_interval_hours: number
+  last_checked_at: string | null
+  last_content_hash: string | null
+  status: 'active' | 'paused' | 'error'
+  error_message: string | null
+  created_at: string
+}
+
+// fetchSources(chatbotId)
+// createSource(chatbotId, { url, label?, check_interval_hours? })
+// updateSource(chatbotId, sourceId, { label?, check_interval_hours?, status? })
+// deleteSource(chatbotId, sourceId)
+// triggerSourceCheck(chatbotId, sourceId)
+```
+
+**`frontend/src/admin/pages/DocumentsPage.tsx`** — estructura ampliada:
+```typescript
+// Tab "Documentos subidos": contenido actual (Dropzone + tabla de jobs)
+// Tab "Fuentes web":
+//   Form inline: input URL + input Etiqueta + select Intervalo (6h/12h/24h/48h/semanal)
+//   Tabla de fuentes: URL (enlace), etiqueta, intervalo, último check, estado (badge)
+//   Acciones por fila: Pausar/Reanudar, Comprobar ahora, Eliminar
+//   Badge de estado: active→verde, paused→gris, error→rojo con tooltip del error
+```
+
+**Tests requeridos**:
+```typescript
+// should_render_sources_tab
+// should_create_source_with_valid_url
+// should_reject_invalid_url_format
+// should_show_last_checked_timestamp
+// should_show_error_badge_with_tooltip
+// should_pause_and_resume_source
+// should_trigger_manual_check
+// should_confirm_before_deleting_source
 ```
 
 ---
@@ -6052,7 +6231,12 @@ grep -r "from client_app.app.ui" . --include="*.py"
 
 ### Prompt 9.16 - Agente de ejecución local: scaffolding
 
-**Objetivo**: Proceso Python ligero en `client_app/local_agent/` que se conecta al servidor por WebSocket, recibe jobs y los ejecuta localmente.
+**Objetivo**: Proceso Python ligero en `client_app/local_agent/` que se conecta al servidor por WebSocket, recibe jobs y los ejecuta localmente. Reemplaza la necesidad de que el usuario tenga abierto el cliente NiceGUI pesado para ejecutar tareas de automatización.
+
+**Responsabilidad de Playwright en este agente** (distinción crítica):
+- `handlers/rpa.py` implementa **automatización web interactiva para el usuario final**: rellenar formularios, navegar sesiones autenticadas, extraer datos en nombre del usuario. Es una acción puntual iniciada por el usuario a través del frontend.
+- Este componente **no tiene nada que ver con el crawler de ingestión documental** (Prompt 9.7.1), que es un proceso server-side con scheduler propio. El crawler corre en el Edge node; el RPA corre en la máquina local del usuario tramitador.
+- Playwright puede aparecer en ambos contextos pero con propósitos radicalmente distintos: aquí es un actor humano delegado; en el crawler es un fetcher automatizado de contenido público.
 
 **Estructura**:
 ```
@@ -6061,7 +6245,9 @@ client_app/local_agent/
 ├── runner.py        # Recibe jobs {job_id, type, payload} y despacha al handler
 ├── handlers/
 │   ├── script.py    # Ejecuta scripts Python (sandbox existente de AutomatIA)
-│   ├── rpa.py       # Ejecuta Playwright RPA
+│   ├── rpa.py       # Playwright RPA interactivo: simula acciones de usuario en webs
+│   │                #   (formularios, login, extracción de datos en sesión)
+│   │                #   NO se usa para ingesta documental automatizada
 │   └── watcher.py   # FolderWatcher y EmailWatcher locales
 └── config.py        # AGENT_SERVER_URL, AGENT_TOKEN (desde .env local)
 ```

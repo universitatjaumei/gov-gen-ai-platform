@@ -24,16 +24,43 @@ from server.app.routers.hub_clients_router import router as hub_clients_router
 from server.app.routers.hub_ingestion_router import router as hub_ingestion_router
 
 
+async def _init_hub_db() -> None:
+    """Crea las tablas de agents_hub (config y operacionales) si no existen."""
+    from server.app.modules.agents_hub.database.connection import create_async_engine as hub_engine
+    from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
+    import server.app.modules.agents_hub.database.config_models  # noqa: F401 — registra tablas
+    import server.app.modules.agents_hub.database.operational_models  # noqa: F401 — registra tablas
+
+    engine = hub_engine()
+    async with engine.begin() as conn:
+        await conn.run_sync(HubConfigBase.metadata.create_all)
+        await conn.run_sync(HubOperationalBase.metadata.create_all)
+    await engine.dispose()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_server_db()
+    await _init_hub_db()
     from server.app.database.seeds import seed_all
 
     await seed_all()
     from server.app.modules.agents_hub.database.seeds import seed_hub_defaults
 
     await seed_hub_defaults()
+
+    from server.app.modules.agents_hub.database.connection import (
+        create_session_factory,
+        get_engine,
+    )
+    from server.app.modules.agents_hub.ingestion.source_scheduler import create_scheduler
+
+    scheduler = create_scheduler(create_session_factory(get_engine()))
+    scheduler.start()
+
     yield
+
+    scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="Gov Gen AI Platform", version="1.0.0", lifespan=lifespan)
@@ -41,7 +68,7 @@ app = FastAPI(title="Gov Gen AI Platform", version="1.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

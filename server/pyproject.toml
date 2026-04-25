@@ -34,6 +34,8 @@ dependencies = [
     "ragas>=0.2.0",
     "datasets>=3.0.0",
     "reportlab>=4.0.0",
+    "sentence-transformers>=3.0.0",
+    "apscheduler>=3.10.4",
 ]
 
 [dependency-groups]

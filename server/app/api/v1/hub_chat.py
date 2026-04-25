@@ -26,9 +26,7 @@ from server.app.modules.agents_hub.agent.state import create_initial_state
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.config_models import HubChatbot
 from server.app.modules.agents_hub.database.operational_models import HubInteraction
-from server.app.modules.agents_hub.services.embedding_service import (
-    GoogleEmbeddingService,
-)
+from server.app.modules.agents_hub.services.embedding_service import get_embedding_service
 from server.app.modules.agents_hub.services.observability import create_callback_handler
 from server.app.modules.agents_hub.services.retriever import HybridRetriever
 
@@ -63,7 +61,7 @@ async def chat(
         )
 
     retriever = HybridRetriever(session)
-    embedding_service = GoogleEmbeddingService()
+    embedding_service = get_embedding_service()
     initial_state = create_initial_state(
         user_id=user.user_id,
         chatbot_id=str(chatbot_id),

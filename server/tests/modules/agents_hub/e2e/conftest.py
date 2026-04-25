@@ -1,10 +1,10 @@
-"""Fixtures compartidas para tests E2E de agents_hub.
+﻿"""Fixtures compartidas para tests E2E de agents_hub.
 
 Requieren PostgreSQL con pgvector corriendo en localhost:5432.
 Por defecto usan la misma BD de desarrollo (govgenai).
 En CI se sobreescribe DATABASE_URL con las credenciales del servicio.
 
-Nota de diseño: todos los fixtures de BD tienen scope="function" para
+Nota de diseÃ±o: todos los fixtures de BD tienen scope="function" para
 evitar conflictos de event loop entre pytest-asyncio y httpx.AsyncClient.
 """
 import os
@@ -44,7 +44,7 @@ async def db_engine():
 
 @pytest.fixture
 async def db_session(db_engine):
-    """Sesión de BD por test."""
+    """SesiÃ³n de BD por test."""
     from server.app.modules.agents_hub.database.connection import create_session_factory
 
     factory = create_session_factory(db_engine)
@@ -94,13 +94,13 @@ from server.app.modules.agents_hub.database.operational_models import HubDocumen
     db_session.add(chatbot)
     await db_session.flush()
 
-    content = "Python es un lenguaje de programación versátil y fácil de aprender."
+    content = "Python es un lenguaje de programaciÃ³n versÃ¡til y fÃ¡cil de aprender."
     chunk = HubDocumentChunk(
         chatbot_id=chatbot.id,
         content=content,
         source_url="https://example.com/python",
         content_hash=hash_content(content),
-        embedding=[0.1] * 1536,
+        embedding=[0.1] * 1024,
         language="es",
     )
     db_session.add(chunk)
@@ -111,7 +111,7 @@ from server.app.modules.agents_hub.database.operational_models import HubDocumen
 
 @pytest.fixture
 def test_app(db_engine):
-    """App FastAPI de test con los routers hub y la sesión de test inyectada."""
+    """App FastAPI de test con los routers hub y la sesiÃ³n de test inyectada."""
     from fastapi import FastAPI
     from server.app.api.v1.hub_chat import router as chat_router
     from server.app.api.v1.hub_tasks import router as tasks_router

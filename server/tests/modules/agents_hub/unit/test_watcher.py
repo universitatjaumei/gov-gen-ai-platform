@@ -1,4 +1,4 @@
-"""Tests para el watcher de ingestión."""
+﻿"""Tests para el watcher de ingestiÃ³n."""
 import uuid
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
@@ -23,7 +23,7 @@ class TestIngestionWatcher:
 
             watcher = IngestionWatcher(
                 session=mock_session,
-                embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1536)),
+                embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
             )
 
             chunks = await watcher.process_source(
@@ -56,5 +56,5 @@ class TestIngestionWatcher:
                     source_url="https://example.com",
                     chatbot_id=uuid.uuid4(),
                 )
-                # Debe devolver lista vacía si no hay cambios
+                # Debe devolver lista vacÃ­a si no hay cambios
                 assert len(result) == 0

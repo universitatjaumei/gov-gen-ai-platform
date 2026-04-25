@@ -1,4 +1,4 @@
-"""Tests para el grafo de LangGraph."""
+﻿"""Tests para el grafo de LangGraph."""
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -29,7 +29,7 @@ class TestAgentGraph:
 
             graph = create_agent_graph(
                 retriever=AsyncMock(hybrid_search=AsyncMock(return_value=[])),
-                embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1536)),
+                embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
             )
 
             initial_state = create_initial_state(

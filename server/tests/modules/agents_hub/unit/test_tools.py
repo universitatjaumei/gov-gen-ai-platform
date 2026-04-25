@@ -1,4 +1,4 @@
-"""Tests para las herramientas del agente."""
+﻿"""Tests para las herramientas del agente."""
 import uuid
 import pytest
 from unittest.mock import AsyncMock, Mock
@@ -20,7 +20,7 @@ class TestSearchKnowledgeTool:
             query="test query",
             chatbot_id=str(uuid.uuid4()),
             retriever=mock_retriever,
-            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1536)),
+            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
         )
 
         assert "Resultado 1" in result
@@ -37,7 +37,7 @@ class TestSearchKnowledgeTool:
             query="nonexistent",
             chatbot_id=str(uuid.uuid4()),
             retriever=mock_retriever,
-            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1536)),
+            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
         )
 
         assert "no se encontr" in result.lower() or "not found" in result.lower()

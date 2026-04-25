@@ -12,15 +12,9 @@ from server.app.api.deps import get_current_user
 from server.app.core.auth import UserInfo
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+from server.app.modules.agents_hub.services.embedding_service import get_embedding_service
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
-
-
-class _NoOpEmbeddingService:
-    """Placeholder — se reemplaza por el LLM Gateway en Fase 4."""
-
-    async def embed(self, text: str) -> list[float]:
-        return [0.0] * 1536
 
 
 @router.post("/user-upload", status_code=status.HTTP_201_CREATED)
@@ -51,7 +45,7 @@ async def user_upload(
     try:
         watcher = IngestionWatcher(
             session=session,
-            embedding_service=_NoOpEmbeddingService(),
+            embedding_service=get_embedding_service(),
         )
         chunks = await watcher.process_user_upload(
             source_url=tmp_path,

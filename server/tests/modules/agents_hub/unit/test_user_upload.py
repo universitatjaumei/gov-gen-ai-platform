@@ -1,4 +1,4 @@
-"""Tests para la ingestión de documentos de usuario (contexto temporal)."""
+﻿"""Tests para la ingestiÃ³n de documentos de usuario (contexto temporal)."""
 import uuid
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock, patch
@@ -29,7 +29,7 @@ class TestUserUploadIngestion:
 
             watcher = IngestionWatcher(
                 session=mock_session,
-                embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1536)),
+                embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
             )
 
             chunks = await watcher.process_user_upload(
@@ -53,7 +53,7 @@ class TestUserUploadIngestion:
 
         old_chunk = Mock()
         old_chunk.is_temporary = True
-        old_chunk.created_at = cutoff - timedelta(hours=1)  # más de 24h
+        old_chunk.created_at = cutoff - timedelta(hours=1)  # mÃ¡s de 24h
 
         recent_chunk = Mock()
         recent_chunk.is_temporary = True

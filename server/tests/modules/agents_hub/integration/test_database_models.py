@@ -1,4 +1,4 @@
-"""Prompt 2.4 — Tests de modelos ORM (TDD - RED → GREEN)."""
+﻿"""Prompt 2.4 â€” Tests de modelos ORM (TDD - RED â†’ GREEN)."""
 import uuid
 import pytest
 from sqlalchemy import select, text
@@ -8,7 +8,7 @@ DB_URL = "postgresql+asyncpg://govgenai:govgenai_dev@localhost:5432/govgenai"
 
 @pytest.fixture
 async def db_session():
-    """Sesión con tablas Hub creadas y eliminadas al finalizar el test."""
+    """SesiÃ³n con tablas Hub creadas y eliminadas al finalizar el test."""
     from server.app.modules.agents_hub.database.connection import (
         create_async_engine,
         create_session_factory,
@@ -33,7 +33,7 @@ class TestHubLLMConfigModel:
 
     @pytest.mark.asyncio
     async def test_llm_config_persistence(self, db_session) -> None:
-        """Prompt 2.8 — Validar que se pueden guardar y recuperar parámetros LLM."""
+        """Prompt 2.8 â€” Validar que se pueden guardar y recuperar parÃ¡metros LLM."""
         from server.app.modules.agents_hub.database.config_models import HubLLMConfig
 
         config = HubLLMConfig(
@@ -58,7 +58,7 @@ class TestHubChatbotModel:
 
     @pytest.mark.asyncio
     async def test_create_chatbot_requires_llm_config(self, db_session) -> None:
-        """Prompt 2.9 — Validar que no se puede crear un chatbot sin llm_config_id."""
+        """Prompt 2.9 â€” Validar que no se puede crear un chatbot sin llm_config_id."""
         from server.app.modules.agents_hub.database.config_models import HubChatbot
 
         client = HubClient(name="Test Inst", partner_id="partner_dev")
@@ -67,7 +67,7 @@ class TestHubChatbotModel:
 
         chatbot = HubChatbot(
             client_id=client.id,
-            llm_config_id=uuid.uuid4(),  # FK inválido — debe fallar
+            llm_config_id=uuid.uuid4(),  # FK invÃ¡lido â€” debe fallar
             name="Bot sin modelo",
             system_prompt="Test",
             sources=[],
@@ -78,7 +78,7 @@ class TestHubChatbotModel:
 
     @pytest.mark.asyncio
     async def test_create_chatbot_with_valid_model(self, db_session) -> None:
-        """Chatbot con llm_config válido se persiste correctamente."""
+        """Chatbot con llm_config vÃ¡lido se persiste correctamente."""
         from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig
 
         llm = HubLLMConfig(provider="openai", model_name="gpt-4o", temperature=0.5)
@@ -92,15 +92,15 @@ class TestHubChatbotModel:
         chatbot = HubChatbot(
             client_id=client.id,
             llm_config_id=llm.id,
-            name="Bot Válido",
-            system_prompt="Eres útil.",
+            name="Bot VÃ¡lido",
+            system_prompt="Eres Ãºtil.",
             sources=[],
         )
         db_session.add(chatbot)
         await db_session.commit()
 
         result = await db_session.execute(
-            select(HubChatbot).where(HubChatbot.name == "Bot Válido")
+            select(HubChatbot).where(HubChatbot.name == "Bot VÃ¡lido")
         )
         saved = result.scalar_one()
         assert saved.llm_config_id == llm.id
@@ -110,7 +110,7 @@ class TestHubPromptTemplateModel:
 
     @pytest.mark.asyncio
     async def test_chatbot_retrieves_correct_prompt_by_language(self, db_session) -> None:
-        """Prompt 2.8 — Al pedir 'system_base' en catalán no devuelve el de castellano."""
+        """Prompt 2.8 â€” Al pedir 'system_base' en catalÃ¡n no devuelve el de castellano."""
         from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig, HubPromptTemplate
 
         llm = HubLLMConfig(provider="google", model_name="gemini-flash")
@@ -185,7 +185,7 @@ from server.app.modules.agents_hub.database.operational_models import HubDocumen
             content="Python es genial",
             source_url="https://example.com",
             content_hash="abc123",
-            embedding=[0.1] * 1536,
+            embedding=[0.1] * 1024,
         )
         db_session.add(chunk)
         await db_session.commit()
@@ -194,4 +194,4 @@ from server.app.modules.agents_hub.database.operational_models import HubDocumen
             select(HubDocumentChunk).where(HubDocumentChunk.content_hash == "abc123")
         )
         saved = result.scalar_one()
-        assert len(saved.embedding) == 1536
+        assert len(saved.embedding) == 1024

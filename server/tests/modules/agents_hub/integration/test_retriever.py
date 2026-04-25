@@ -1,4 +1,4 @@
-"""Prompt 2.6 — Tests del retriever híbrido (TDD - RED → GREEN)."""
+﻿"""Prompt 2.6 â€” Tests del retriever hÃ­brido (TDD - RED â†’ GREEN)."""
 import uuid
 import pytest
 from sqlalchemy import text
@@ -8,7 +8,7 @@ DB_URL = "postgresql+asyncpg://govgenai:govgenai_dev@localhost:5432/govgenai"
 
 @pytest.fixture
 async def populated_session():
-    """Sesión con tablas Hub y datos de prueba para el retriever."""
+    """SesiÃ³n con tablas Hub y datos de prueba para el retriever."""
     from server.app.modules.agents_hub.database.connection import (
         create_async_engine,
         create_session_factory,
@@ -47,14 +47,14 @@ from server.app.modules.agents_hub.database.operational_models import HubDocumen
                 content="Python es genial para ciencia de datos",
                 source_url="url1",
                 content_hash="h1",
-                embedding=[0.1] * 1536,
+                embedding=[0.1] * 1024,
             ),
             HubDocumentChunk(
                 chatbot_id=chatbot.id,
                 content="Java es diferente a Python",
                 source_url="url2",
                 content_hash="h2",
-                embedding=[0.9] * 1536,
+                embedding=[0.9] * 1024,
             ),
         ]
         session.add_all(chunks)
@@ -76,7 +76,7 @@ class TestHybridRetriever:
         session, chatbot_id = populated_session
         retriever = HybridRetriever(session)
 
-        results = await retriever.vector_search([0.12] * 1536, chatbot_id, top_k=2)
+        results = await retriever.vector_search([0.12] * 1024, chatbot_id, top_k=2)
 
         assert len(results) >= 1
         assert "Python" in results[0].content
@@ -102,13 +102,13 @@ class TestHybridRetriever:
 
         results = await retriever.hybrid_search(
             query="Python datos",
-            query_embedding=[0.12] * 1536,
+            query_embedding=[0.12] * 1024,
             chatbot_id=chatbot_id,
             top_k=2,
         )
 
         assert len(results) >= 1
-        # El primer resultado debe ser el más relevante para Python
+        # El primer resultado debe ser el mÃ¡s relevante para Python
         assert "Python" in results[0].content
 
     @pytest.mark.asyncio
@@ -120,11 +120,11 @@ class TestHybridRetriever:
 
         # Los chunks de prueba tienen language="es" por defecto
         results_es = await retriever.vector_search(
-            [0.12] * 1536, chatbot_id, top_k=5, language="es"
+            [0.12] * 1024, chatbot_id, top_k=5, language="es"
         )
         results_ca = await retriever.vector_search(
-            [0.12] * 1536, chatbot_id, top_k=5, language="ca"
+            [0.12] * 1024, chatbot_id, top_k=5, language="ca"
         )
 
         assert len(results_es) >= 1
-        assert len(results_ca) == 0  # No hay chunks en catalán
+        assert len(results_ca) == 0  # No hay chunks en catalÃ¡n

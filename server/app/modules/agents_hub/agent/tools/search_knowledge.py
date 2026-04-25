@@ -56,6 +56,10 @@ async def search_knowledge(
     formatted = "**Información encontrada:**\n\n"
     for i, result in enumerate(results, 1):
         formatted += f"{i}. {result.content[:200]}...\n"
-        formatted += f"   _Fuente: {result.source_url}_\n\n"
+        src = result.source_url
+        if src.startswith("http://") or src.startswith("https://"):
+            formatted += f"   _Fuente: [{src}]({src})_\n\n"
+        else:
+            formatted += f"   _Fuente: {result.source_url.split('/')[-1].split(chr(92))[-1]}_\n\n"
 
     return formatted
