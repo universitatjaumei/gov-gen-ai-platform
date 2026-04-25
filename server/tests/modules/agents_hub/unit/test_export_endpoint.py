@@ -28,7 +28,12 @@ def _make_token(role: str = "user", user_id: str = _OWNER_ID) -> str:
 
 
 def _make_interaction(user_id: str = _OWNER_ID):
-    
+    interaction = MagicMock()
+    interaction.run_id = uuid.uuid4()
+    interaction.user_id = user_id
+    interaction.user_message = "¿Cuál es el estado del expediente?"
+    interaction.assistant_message = "Informe del expediente generado correctamente."
+    return interaction
 
 
 def _build_export_app(interaction_mock) -> FastAPI:

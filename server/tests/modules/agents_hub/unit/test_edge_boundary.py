@@ -22,6 +22,7 @@ def test_operational_base_contains_only_operational_models() -> None:
         "hub_document_chunks",
         "hub_interactions",
         "hub_ingestion_jobs",
+        "hub_ingestion_sources",
     }
 
 def test_no_cross_base_relationships() -> None:
@@ -36,12 +37,12 @@ def test_no_cross_base_relationships() -> None:
 
 def test_edge_sync_config_endpoint_exists_returns_501() -> None:
     from server.app.api.v1.edge_sync import router
-    route = next((r for r in router.routes if r.path == "/config"), None)
+    route = next((r for r in router.routes if r.path == "/edge/config"), None)
     assert route is not None
     assert "GET" in route.methods
 
 def test_edge_sync_telemetry_endpoint_exists_returns_501() -> None:
     from server.app.api.v1.edge_sync import router
-    route = next((r for r in router.routes if r.path == "/telemetry"), None)
+    route = next((r for r in router.routes if r.path == "/edge/telemetry"), None)
     assert route is not None
     assert "POST" in route.methods

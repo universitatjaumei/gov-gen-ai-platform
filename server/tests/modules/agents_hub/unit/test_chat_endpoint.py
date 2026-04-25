@@ -11,6 +11,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from langchain_core.messages import AIMessage
+
+from server.app.modules.agents_hub.database.config_models import HubChatbot
 
 # JWT env para tests
 _JWT_ENV = {
@@ -110,7 +113,7 @@ class TestChatEndpointStreaming:
         chatbot.id = uuid.uuid4()
         app = _build_test_app(chatbot)
 
-        async def _mock_astream(state):
+        async def _mock_astream(state, config=None):
             yield {"generate_response": {"messages": [AIMessage(content="Hola! ¿En qué puedo ayudarte?")]}}
 
         mock_compiled = MagicMock()
@@ -122,7 +125,7 @@ class TestChatEndpointStreaming:
         token = _make_token()
         with (
             patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
-            patch("server.app.api.v1.hub_chat.GoogleEmbeddingService"),
+            patch("server.app.api.v1.hub_chat.get_embedding_service"),
         ):
             with TestClient(app) as client:
                 with client.stream(
@@ -145,7 +148,7 @@ class TestChatEndpointStreaming:
         chatbot.id = uuid.uuid4()
         app = _build_test_app(chatbot)
 
-        async def _mock_astream(state):
+        async def _mock_astream(state, config=None):
             yield {"generate_response": {"messages": [AIMessage(content="Respuesta de prueba")]}}
 
         mock_compiled = MagicMock()
@@ -156,7 +159,7 @@ class TestChatEndpointStreaming:
         token = _make_token()
         with (
             patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
-            patch("server.app.api.v1.hub_chat.GoogleEmbeddingService"),
+            patch("server.app.api.v1.hub_chat.get_embedding_service"),
         ):
             with TestClient(app) as client:
                 with client.stream(
@@ -182,7 +185,7 @@ class TestChatEndpointStreaming:
         chatbot.id = uuid.uuid4()
         app = _build_test_app(chatbot)
 
-        async def _mock_astream(state):
+        async def _mock_astream(state, config=None):
             yield {"generate_response": {"messages": [AIMessage(content="Ok")]}}
 
         mock_compiled = MagicMock()
@@ -193,7 +196,7 @@ class TestChatEndpointStreaming:
         token = _make_token()
         with (
             patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
-            patch("server.app.api.v1.hub_chat.GoogleEmbeddingService"),
+            patch("server.app.api.v1.hub_chat.get_embedding_service"),
         ):
             with TestClient(app) as client:
                 with client.stream(
