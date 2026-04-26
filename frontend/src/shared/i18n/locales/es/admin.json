@@ -25,7 +25,19 @@
     "client_chatbots": "Chatbots",
     "no_clients": "No hay clientes creados",
     "delete_client_confirm": "¿Eliminar este cliente?",
-    "filter_placeholder": "Filtrar por nombre…"
+    "filter_placeholder": "Filtrar por nombre…",
+    "reports_total": "Total interacciones",
+    "reports_avg_score": "Puntuación media",
+    "reports_only_low": "Solo puntuaciones bajas",
+    "reports_export_csv": "Exportar CSV",
+    "reports_date": "Fecha",
+    "reports_user_msg": "Mensaje usuario",
+    "reports_assistant_msg": "Respuesta asistente",
+    "reports_score": "Puntuación",
+    "reports_comment": "Comentario",
+    "reports_expand": "Expandir",
+    "reports_collapse": "Colapsar",
+    "reports_no_data": "Sin interacciones para este chatbot"
   },
   "login": {
     "title": "Iniciar sesión",

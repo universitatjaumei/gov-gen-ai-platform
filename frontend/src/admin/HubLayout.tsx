@@ -5,6 +5,7 @@ const HUB_SUBNAV = [
   { key: 'chatbots', path: '/hub/chatbots' },
   { key: 'clients', path: '/hub/clients' },
   { key: 'documents', path: '/hub/documents' },
+  { key: 'reports', path: '/hub/reports' },
 ] as const
 
 export function HubLayout() {

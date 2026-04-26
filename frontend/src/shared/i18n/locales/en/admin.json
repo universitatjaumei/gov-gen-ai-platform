@@ -25,7 +25,19 @@
     "client_chatbots": "Chatbots",
     "no_clients": "No clients created",
     "delete_client_confirm": "Delete this client?",
-    "filter_placeholder": "Filter by name…"
+    "filter_placeholder": "Filter by name…",
+    "reports_total": "Total interactions",
+    "reports_avg_score": "Average score",
+    "reports_only_low": "Low scores only",
+    "reports_export_csv": "Export CSV",
+    "reports_date": "Date",
+    "reports_user_msg": "User message",
+    "reports_assistant_msg": "Assistant response",
+    "reports_score": "Score",
+    "reports_comment": "Comment",
+    "reports_expand": "Expand",
+    "reports_collapse": "Collapse",
+    "reports_no_data": "No interactions for this chatbot"
   },
   "login": {
     "title": "Sign in",

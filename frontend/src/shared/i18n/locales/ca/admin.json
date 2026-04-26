@@ -25,7 +25,19 @@
     "client_chatbots": "Chatbots",
     "no_clients": "No hi ha clients creats",
     "delete_client_confirm": "Eliminar aquest client?",
-    "filter_placeholder": "Filtra per nom…"
+    "filter_placeholder": "Filtra per nom…",
+    "reports_total": "Total interaccions",
+    "reports_avg_score": "Puntuació mitjana",
+    "reports_only_low": "Només puntuacions baixes",
+    "reports_export_csv": "Exportar CSV",
+    "reports_date": "Data",
+    "reports_user_msg": "Missatge usuari",
+    "reports_assistant_msg": "Resposta assistent",
+    "reports_score": "Puntuació",
+    "reports_comment": "Comentari",
+    "reports_expand": "Expandir",
+    "reports_collapse": "Col·lapsar",
+    "reports_no_data": "Sense interaccions per a aquest chatbot"
   },
   "login": {
     "title": "Iniciar sessió",
