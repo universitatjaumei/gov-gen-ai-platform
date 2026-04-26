@@ -3957,6 +3957,51 @@ class TestFallbackHandler:
         response_ca = await generate_fallback_response(language="ca")
         response_en = await generate_fallback_response(language="en")
         assert response_ca != response_en
+
+
+class TestRetrievalValidator:
+    """Valida el nodo que decide si el contexto recuperado es suficiente
+    para generar respuesta directamente o si hay que hacer fallback
+    de idioma (re-búsqueda sin filtro de idioma + advertencia de traducción)."""
+
+    @pytest.mark.asyncio
+    async def test_sufficient_results_pass(self) -> None:
+        from server.app.modules.agents_hub.agent.retrieval_validator import validate_retrieval
+        from server.app.modules.agents_hub.services.retriever import SearchResult
+        import uuid
+
+        results = [
+            SearchResult(id=uuid.uuid4(), content="x", source_url="u", language="ca", score=0.8),
+            SearchResult(id=uuid.uuid4(), content="y", source_url="u", language="ca", score=0.75),
+        ]
+        decision = validate_retrieval(results, min_results=2, min_score=0.25)
+        assert decision == "ok"
+
+    @pytest.mark.asyncio
+    async def test_zero_results_triggers_language_fallback(self) -> None:
+        from server.app.modules.agents_hub.agent.retrieval_validator import validate_retrieval
+
+        decision = validate_retrieval([], min_results=2, min_score=0.25)
+        assert decision == "language_fallback"
+
+    @pytest.mark.asyncio
+    async def test_low_score_triggers_language_fallback(self) -> None:
+        from server.app.modules.agents_hub.agent.retrieval_validator import validate_retrieval
+        from server.app.modules.agents_hub.services.retriever import SearchResult
+        import uuid
+
+        results = [
+            SearchResult(id=uuid.uuid4(), content="x", source_url="u", language="ca", score=0.1),
+        ]
+        decision = validate_retrieval(results, min_results=2, min_score=0.25)
+        assert decision == "language_fallback"
+
+    @pytest.mark.asyncio
+    async def test_language_fallback_warning_in_context(self) -> None:
+        from server.app.modules.agents_hub.agent.fallback_handler import build_translation_warning
+
+        warning = build_translation_warning(source_language="es", query_language="ca")
+        assert "ca" in warning.lower() or "català" in warning.lower() or "idioma" in warning.lower()
 ```
 
 ---
@@ -4013,7 +4058,46 @@ _FALLBACK_MESSAGES = {
 
 async def generate_fallback_response(language: str = "es") -> str:
     return _FALLBACK_MESSAGES.get(language, _FALLBACK_MESSAGES["es"])
+
+
+_TRANSLATION_WARNINGS = {
+    "es": "⚠️ No se ha encontrado información en el idioma de tu consulta. La respuesta se ha generado a partir de fuentes en otro idioma y puede contener adaptaciones.",
+    "ca": "⚠️ No s'ha trobat informació en l'idioma de la consulta. La resposta s'ha generat a partir de fonts en un altre idioma i pot contenir adaptacions.",
+    "en": "⚠️ No information was found in your query language. The response was generated from sources in another language and may contain adaptations.",
+}
+
+
+def build_translation_warning(source_language: str, query_language: str) -> str:
+    return _TRANSLATION_WARNINGS.get(query_language, _TRANSLATION_WARNINGS["es"])
 ```
+
+**server/app/modules/agents_hub/agent/retrieval_validator.py**:
+```python
+"""Decide si el contexto recuperado es suficiente o se necesita fallback de idioma."""
+from server.app.modules.agents_hub.services.retriever import SearchResult
+
+
+def validate_retrieval(
+    results: list[SearchResult],
+    min_results: int = 2,
+    min_score: float = 0.25,
+) -> str:
+    """Evalúa si los resultados de búsqueda son suficientes.
+
+    Returns:
+        "ok" — context suficiente, continuar con generate_response
+        "language_fallback" — re-buscar sin filtro de idioma y añadir advertencia
+    """
+    if not results:
+        return "language_fallback"
+    if len(results) < min_results or max(r.score for r in results) < min_score:
+        return "language_fallback"
+    return "ok"
+```
+
+**Nota de diseño**: `min_results` y `min_score` se leen de `HubChatbot.min_retrieval_results` y
+`HubChatbot.min_retrieval_score` vía `ConfigProvider` en el nodo del grafo. Los defaults (2 y 0.25)
+son los valores de columna en la migración Alembic (ver Prompt 4B.2).
 
 ---
 
@@ -4076,7 +4160,9 @@ class TestEnrichedPublicGraph:
     reranked_context: list[str]     # Contexto tras reranking
     quality_score: float            # Score compuesto del evaluador (0.0–1.0)
     quality_metrics: dict           # {faithfulness: float, relevance: float}
-    fallback_triggered: bool        # True si la respuesta fue sustituida por fallback
+    fallback_triggered: bool        # True si la respuesta fue sustituida por fallback honesto
+    language_fallback_triggered: bool  # True si se re-buscó sin filtro de idioma
+    context_source_language: str | None  # Idioma predominante de los chunks usados (None si no aplica)
 ```
 
 **Cambios en create_initial_state** — inicializar campos nuevos:
@@ -4087,12 +4173,39 @@ class TestEnrichedPublicGraph:
     quality_score=0.0,
     quality_metrics={},
     fallback_triggered=False,
+    language_fallback_triggered=False,
+    context_source_language=None,
 ```
 
-**Cambios en graph.py** — integrar nodos y arista condicional:
+**Cambios en graph.py** — flujo completo con validación de retrieval y language fallback:
+
+```
+[route_by_capability] → [detect_language] → [query_classifier]
+                                                    │
+                                      [search_knowledge]  ← búsqueda con filtro de idioma
+                                              │
+                                   [validate_retrieval]
+                                     /               \
+                               "ok"               "language_fallback"
+                                 │                       │
+                           [reranker]        [search_knowledge_fallback]  ← sin filtro idioma
+                                 │                       │
+                           [generate_response] ←─────────┘  (con advertencia de traducción si fallback)
+                                 │
+                        [quality_evaluator]
+                           /            \
+                    [score ≥ umbral]  [score < umbral]
+                           │                │
+                  [log_interaction]  [fallback_response]  ← respuesta honesta "no tengo info"
+                           │                │
+                         [END]            [END]
+```
+
 ```python
     # Nuevos nodos (Fase 4B)
     graph.add_node("query_classifier", query_classifier_node)
+    graph.add_node("validate_retrieval", validate_retrieval_node)
+    graph.add_node("search_knowledge_fallback", search_knowledge_fallback_node)
     graph.add_node("reranker", reranker_node)
     graph.add_node("quality_evaluator", quality_evaluator_node)
     graph.add_node("fallback_response", fallback_response_node)
@@ -4103,11 +4216,19 @@ class TestEnrichedPublicGraph:
     graph.add_edge("route_by_capability", "detect_language")
     graph.add_edge("detect_language", "query_classifier")
     graph.add_edge("query_classifier", "search_knowledge")
-    graph.add_edge("search_knowledge", "reranker")
+
+    # Arista condicional: validate_retrieval decide si hay suficiente contexto en el idioma detectado
+    graph.add_edge("search_knowledge", "validate_retrieval")
+    graph.add_conditional_edges(
+        "validate_retrieval",
+        lambda state: state.get("retrieval_decision", "ok"),
+        {"ok": "reranker", "language_fallback": "search_knowledge_fallback"},
+    )
+    graph.add_edge("search_knowledge_fallback", "reranker")
     graph.add_edge("reranker", "generate_response")
     graph.add_edge("generate_response", "quality_evaluator")
 
-    # Arista condicional: quality_evaluator decide si la respuesta es suficiente
+    # Arista condicional: quality_evaluator decide si la respuesta es suficientemente buena
     graph.add_conditional_edges(
         "quality_evaluator",
         lambda state: "ok" if state["quality_score"] >= quality_threshold else "fallback",
@@ -4117,11 +4238,54 @@ class TestEnrichedPublicGraph:
     graph.add_edge("fallback_response", END)
 ```
 
-**Cambios en config_models.py** — campo portal:
+**Lógica de `validate_retrieval_node`**:
+```python
+async def validate_retrieval_node(state: AgentState) -> dict:
+    results = state.get("raw_search_results", [])
+    config = await config_provider.get_chatbot_config(state["chatbot_id"])
+    decision = validate_retrieval(
+        results,
+        min_results=config.min_retrieval_results,   # default 2
+        min_score=config.min_retrieval_score,        # default 0.25
+    )
+    return {"retrieval_decision": decision}
+```
+
+**Lógica de `search_knowledge_fallback_node`** (re-búsqueda sin filtro de idioma):
+```python
+async def search_knowledge_fallback_node(state: AgentState) -> dict:
+    result = await search_knowledge(
+        query=state["messages"][-1].content,
+        chatbot_id=state["chatbot_id"],
+        retriever=retriever,
+        embedding_service=embedding_service,
+        language=None,   # sin filtro — busca en todos los idiomas
+    )
+    # Detectar idioma predominante de los resultados para la advertencia
+    source_lang = detect_source_language(result)
+    return {
+        "retrieved_context": [result],
+        "language_fallback_triggered": True,
+        "context_source_language": source_lang,
+    }
+```
+
+**El nodo `generate_response` lee `language_fallback_triggered`** y, si es True, añade
+`build_translation_warning(source_language, query_language)` al inicio del system_prompt.
+
+**Cambios en config_models.py** — campos portal y umbrales de retrieval:
 ```python
     # En HubChatbot, añadir:
     portal_chatbot_ids: Mapped[list[uuid.UUID] | None] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=True)
     quality_threshold: Mapped[float] = mapped_column(default=0.6)
+    min_retrieval_results: Mapped[int] = mapped_column(Integer, default=2)
+    min_retrieval_score: Mapped[float] = mapped_column(default=0.25)
+```
+
+**Migración Alembic adicional** (se añade a la de 4B.2):
+```python
+    op.add_column("hub_chatbots", sa.Column("min_retrieval_results", sa.Integer(), nullable=False, server_default="2"))
+    op.add_column("hub_chatbots", sa.Column("min_retrieval_score", sa.Float(), nullable=False, server_default="0.25"))
 ```
 
 ---
@@ -6076,6 +6240,191 @@ npx shadcn@latest add card
 
 ---
 
+### Prompt 9.8.1 - Etiquetado de idioma en la ingestión
+
+**Objetivo**: Garantizar que todos los chunks almacenados tienen el campo `language` correcto,
+eliminando el `default="es"` que etiqueta erróneamente documentos en catalán o inglés.
+Esto es prerequisito para que el filtro de idioma del retriever funcione correctamente.
+
+**Deploy**: edge
+
+**Cambios en modelos ORM** (`operational_models.py`):
+```python
+# HubIngestionSource — añadir campo de idioma opcional
+language: Mapped[str | None] = mapped_column(String(10), nullable=True)
+# None = auto-detectar del contenido; valor explícito = forzar ese idioma
+
+# HubIngestionJob — propagar idioma al job
+language: Mapped[str | None] = mapped_column(String(10), nullable=True)
+
+# HubDocumentChunk — eliminar default="es" y hacer nullable durante migración
+language: Mapped[str] = mapped_column(String(10), nullable=False)
+# El valor lo asigna siempre el IngestionWatcher, nunca el default del ORM
+```
+
+**Migración Alembic**:
+```python
+op.add_column("hub_ingestion_sources", sa.Column("language", sa.String(10), nullable=True))
+op.add_column("hub_ingestion_jobs",    sa.Column("language", sa.String(10), nullable=True))
+# Backfill: chunks existentes sin language válido → detectar del contenido
+# (script de migración de datos separado, ver nota abajo)
+```
+
+**Cambios en `IngestionWatcher`** (`ingestion/watcher.py`):
+```python
+# process_source(): si language es None, detectar del contenido tras procesado Docling
+async def process_source(self, ..., language: str | None = None, ...) -> list[HubDocumentChunk]:
+    content = prefetched_content or await asyncio.to_thread(processor.process, source_url)
+    if language is None:
+        language = detect_language(content) or "es"   # fallback a es solo si langdetect falla
+    ...
+
+# run_job(): propagar job.language al llamar a process_source
+async def run_job(self, job_id, prefetched_content=None) -> None:
+    job = await self.session.get(HubIngestionJob, job_id)
+    ...
+    await self.process_source(..., language=job.language, ...)
+
+# process_user_upload(): auto-detectar siempre (upload temporal del usuario)
+async def process_user_upload(self, ...) -> list[HubDocumentChunk]:
+    content = await asyncio.to_thread(processor.process, source_url)
+    language = detect_language(content) or "es"
+    ...
+```
+
+**Cambios en `source_scheduler.check_source()`**:
+```python
+# Propagar source.language al job creado
+job = HubIngestionJob(
+    ...,
+    language=source.language,   # None → IngestionWatcher auto-detecta
+)
+```
+
+**Cambios en el endpoint `/ingestion/user-upload`**:
+```python
+# Aceptar language opcional; auto-detectar si no se proporciona
+@router.post("/user-upload")
+async def user_upload(
+    chatbot_id: uuid.UUID = Form(...),
+    file: UploadFile = File(...),
+    language: str | None = Form(None),   # NUEVO — None = auto-detect
+    ...
+)
+```
+
+**Cambios en `DocumentsPage.tsx`** — añadir selector de idioma al formulario de upload:
+```typescript
+// Selector con opciones: "Auto-detectar" (vacío), "Castellano" (es), "Català" (ca), "English" (en)
+// Cuando el admin conoce el idioma del documento, puede forzarlo; si no, se deja en blanco
+```
+
+**Tests requeridos** (TDD — todos los caminos):
+```python
+# test_process_source_auto_detects_catalan_content
+# test_process_source_respects_explicit_language_parameter
+# test_run_job_propagates_language_from_job_model
+# test_check_source_propagates_source_language_to_job
+# test_process_user_upload_auto_detects_language
+# test_upload_endpoint_accepts_language_param
+# test_upload_endpoint_auto_detects_when_no_language
+```
+
+**Nota de migración de datos**: los chunks existentes con `language="es"` que realmente son en
+catalán o inglés solo pueden corregirse re-ingiriendo los documentos. Añadir un script de
+mantenimiento `scripts/backfill_chunk_language.py` que recorra chunks, detecte idioma del
+`content` con `detect_language()` y actualice los que difieran del valor almacenado.
+
+---
+
+### Prompt 9.8.2 - SSE streaming en el endpoint de chat (backend)
+
+**Objetivo**: Refactorizar el endpoint de chat para emitir Server-Sent Events, permitiendo
+al cliente recibir: (a) eventos de progreso por nodo del grafo, (b) tokens del LLM en tiempo
+real, (c) evento `done` con fuentes y advertencia de traducción si aplica.
+
+**Deploy**: edge
+
+**Protocolo de eventos SSE**:
+```
+event: status   data: {"node": "detect_language",        "msg": "Detectando idioma..."}
+event: status   data: {"node": "search_knowledge",       "msg": "Buscando en la base de conocimiento..."}
+event: status   data: {"node": "validate_retrieval",     "msg": "Validando resultados..."}
+event: status   data: {"node": "search_knowledge_fallback", "msg": "Buscando en otros idiomas..."}
+event: status   data: {"node": "generate_response",      "msg": "Generando respuesta..."}
+event: token    data: {"delta": "La "}
+event: token    data: {"delta": "respuesta "}
+...
+event: done     data: {"interaction_id": "uuid", "sources": [...], "language_fallback": bool,
+                        "translation_warning": "⚠️ ..." | null}
+event: error    data: {"message": "..."}
+```
+
+**`server/app/api/v1/hub_chat.py`** — endpoint SSE:
+```python
+@router.post("/{chatbot_id}")
+async def chat_stream(
+    chatbot_id: uuid.UUID,
+    request: ChatRequest,
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> StreamingResponse:
+    async def event_generator():
+        graph = create_agent_graph(retriever, embedding_service, user_id=user.user_id)
+        compiled = graph.compile()
+
+        async for event in compiled.astream_events(initial_state, version="v2"):
+            kind = event["event"]
+
+            if kind == "on_chain_start" and event["name"] in NODE_STATUS_MESSAGES:
+                yield f"event: status\ndata: {json.dumps({'node': event['name'], 'msg': NODE_STATUS_MESSAGES[event['name']]})}\n\n"
+
+            elif kind == "on_chat_model_stream":
+                delta = event["data"]["chunk"].content
+                if delta:
+                    yield f"event: token\ndata: {json.dumps({'delta': delta})}\n\n"
+
+            elif kind == "on_chain_end" and event["name"] == "generate_response":
+                final_state = event["data"]["output"]
+                yield f"event: done\ndata: {json.dumps({
+                    'interaction_id': str(interaction_id),
+                    'sources': final_state.get('sources', []),
+                    'language_fallback': final_state.get('language_fallback_triggered', False),
+                    'translation_warning': build_translation_warning(...) if final_state.get('language_fallback_triggered') else None,
+                })}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+```
+
+**Mapeo de nodos a mensajes de progreso** (`NODE_STATUS_MESSAGES`):
+```python
+NODE_STATUS_MESSAGES = {
+    "route_by_capability":        "Iniciando...",
+    "detect_language":            "Detectando idioma...",
+    "query_classifier":           "Clasificando consulta...",
+    "search_knowledge":           "Buscando en la base de conocimiento...",
+    "validate_retrieval":         "Validando resultados...",
+    "search_knowledge_fallback":  "Buscando en otros idiomas...",
+    "reranker":                   "Reordenando resultados...",
+    "generate_response":          "Generando respuesta...",
+    "quality_evaluator":          "Evaluando calidad...",
+    "log_interaction":            "Guardando interacción...",
+}
+```
+
+**Tests requeridos**:
+```python
+# test_chat_endpoint_returns_streaming_response
+# test_chat_endpoint_emits_status_events_per_node
+# test_chat_endpoint_emits_token_events
+# test_chat_endpoint_emits_done_event_with_sources
+# test_chat_endpoint_includes_translation_warning_when_language_fallback
+# test_chat_endpoint_emits_error_event_on_graph_failure
+```
+
+---
+
 ## BLOQUE 9B — Widget y Modo Agente
 
 *Objetivo: widget embebible funcional + modo agente expandido para usuarios identificados.*
@@ -6137,14 +6486,44 @@ export default defineConfig({
 
 ### Prompt 9.10 - Widget: chat SSE y feedback
 
-**Objetivo**: Componente de chat completo con streaming SSE, historial de mensajes y valoración por estrellas.
+**Objetivo**: Componente de chat completo con streaming SSE, historial de mensajes, eventos de
+progreso de nodos del grafo y valoración por estrellas.
+
+**Dependencia backend**: Prompt 9.8.2 (endpoint SSE con eventos `status`, `token`, `done`, `error`).
+
+**`src/widget/hooks/useChat.ts`**:
+```typescript
+// Protocolo SSE que consume (definido en Prompt 9.8.2):
+//   event: status  → { node: string, msg: string }
+//   event: token   → { delta: string }
+//   event: done    → { interaction_id: string, sources: string[],
+//                      language_fallback: boolean, translation_warning: string | null }
+//   event: error   → { message: string }
+//
+// Estado interno del hook:
+//   messages: Message[]                    — historial de mensajes
+//   currentNodeStatus: string | null       — mensaje del último evento status
+//   isStreaming: boolean                   — true mientras llegan tokens
+//   translationWarning: string | null      — advertencia de traducción si language_fallback
+//   sources: string[]                      — fuentes del evento done
+//   interactionId: string | null           — para el feedback post-respuesta
+//
+// Implementación: fetch() con ReadableStream (mejor control que EventSource sobre POST)
+//   - Lee el stream línea a línea, parsea los eventos SSE manualmente
+//   - Para event:status → actualiza currentNodeStatus (mostrar en burbuja de "pensando")
+//   - Para event:token → acumula delta en el último mensaje del asistente
+//   - Para event:done  → guarda sources, interactionId, translationWarning; isStreaming=false
+//   - Para event:error → guarda error; isStreaming=false
+```
 
 **`src/widget/components/ChatWidget.tsx`**:
 ```typescript
-// Estado: messages[], isLoading, error
-// useChat hook: POST /api/v1/hub/chat/{chatbot_id} → EventSource SSE
-//   - acumula chunks en el último mensaje del asistente
-//   - emite evento 'done' al recibir {done: true}
+// Estado: messages[], isLoading, currentNodeStatus, translationWarning, sources
+// useChat hook → ver arriba
+// Área de progreso: mientras isStreaming, muestra currentNodeStatus en itálica gris
+//   (e.g., "Buscando en la base de conocimiento..." debajo del input)
+// Cuando language_fallback=true: muestra translationWarning como banner amarillo
+//   encima del mensaje del asistente
 // StarRating: 1-5 estrellas, visible al finalizar cada respuesta
 //   → llama POST /api/v1/hub/feedback/{interaction_id} con score
 // Botón flotante (cerrar/abrir) con posición configurable vía CSS custom properties
@@ -6154,6 +6533,9 @@ export default defineConfig({
 ```typescript
 // should_display_user_and_assistant_messages
 // should_stream_chunks_in_real_time
+// should_show_node_status_during_stream          ← NUEVO
+// should_hide_status_when_streaming_ends         ← NUEVO
+// should_show_translation_warning_on_language_fallback  ← NUEVO
 // should_show_star_rating_after_response
 // should_submit_feedback_on_star_click
 // should_show_loading_indicator_during_stream
