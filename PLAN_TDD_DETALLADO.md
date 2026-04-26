@@ -4668,7 +4668,156 @@ async def search_knowledge_fallback_node(state: AgentState) -> dict:
 
 ---
 
+## BLOQUE 9D — Panel de administración LLM y Prompts
 
+**Objetivo**: Dar a administradores y partners control total sobre qué modelo usa cada proceso y qué instrucciones recibe, sin tocar código ni reiniciar el servidor. El sistema de tiers unifica la configuración tanto para chatbots/agentes como para flujos de automatización.
+
+**Prerrequisito**: Bloque 9A completado (layout admin disponible).
+
+**Dependencia con Fase 10**: El prompt 10.11 original ("Cerebro de la IA") queda **absorbido y reemplazado** por este bloque, que es más completo. Al ejecutar 9D el prompt 10.11 puede marcarse directamente como COMPLETADO.
+
+### Contexto: sistema de tiers (legado NiceGUI)
+
+En la aplicación NiceGUI existente los modelos LLM se organizaban en tres tiers:
+
+| Tier | Uso | Características |
+|---|---|---|
+| **1 — Texto** | Generación de respuestas, redacción, resumen | Más rápido y barato; suficiente para la mayoría de tareas |
+| **2 — Lógica** | Razonamiento, clasificación, extracción estructurada | Mayor capacidad analítica; coste moderado |
+| **3 — Supervisión** | Validación final, evaluación de calidad, auditoría | El más capaz; se usa puntualmente |
+
+Cada proceso o prompt tenía un **tier por defecto** y podía sobreescribirse con un **override** para ese prompt concreto. El mismo sistema de tiers aplica a **chatbots/agentes** (nodos del grafo LangGraph) y a **flujos de automatización** (factories, ETL, scripts).
+
+### Modelo de datos a añadir (migración Alembic)
+
+```python
+# Cambios en hub_llm_configs
+ALTER TABLE hub_llm_configs
+  ADD COLUMN tier        SMALLINT NOT NULL DEFAULT 1,   -- 1 | 2 | 3
+  ADD COLUMN label       VARCHAR(100),                   -- etiqueta legible ("Gemini Flash")
+  ADD COLUMN is_default  BOOLEAN NOT NULL DEFAULT FALSE; -- config por defecto de ese tier
+
+# Cambios en hub_prompt_templates
+ALTER TABLE hub_prompt_templates
+  ADD COLUMN default_tier   SMALLINT NOT NULL DEFAULT 1,
+  ADD COLUMN override_tier  SMALLINT;   -- NULL = usar default_tier
+```
+
+### Seeding inicial obligatorio
+
+El Prompt 9D.1 debe incluir un comando `seed_llm_configs` que cree configuraciones por defecto para que la BD nunca arranque vacía. Ejemplo:
+
+```
+Tier 1 → google / gemini-2.0-flash   / GOOGLE_API_KEY      (default)
+Tier 2 → google / gemini-2.5-pro     / GOOGLE_API_KEY
+Tier 3 → openai / gpt-4o             / OPENAI_API_KEY
+Tier 1 → ollama / llama3.2           / —     (alternativa local, sin coste)
+```
+
+---
+
+### Prompt 9D.1 — Backend: tiers, CRUD de LLM configs y seeding
+
+**Objetivo**: Ampliar el modelo `HubLLMConfig` con el sistema de tiers, exponer endpoints CRUD completos para que la UI los gestione, y añadir un comando de seeding para poblar la BD al arrancar.
+
+**Ámbito**: cloud (la configuración es responsabilidad del admin/partner).
+
+**Migración Alembic** — añade `tier`, `label`, `is_default` a `hub_llm_configs` y `default_tier`, `override_tier` a `hub_prompt_templates`.
+
+**Endpoints nuevos** (router: `hub_llm_configs_router`, prefijo `/api/v1/hub/llm-configs`, Deploy: cloud):
+```
+GET    /api/v1/hub/llm-configs            → lista todas las configs
+POST   /api/v1/hub/llm-configs            → crear nueva config
+PATCH  /api/v1/hub/llm-configs/{id}      → editar (label, tier, model_name, api_key_secret_name, is_default)
+DELETE /api/v1/hub/llm-configs/{id}      → eliminar (guard: no borrar si hay chatbots asignados)
+POST   /api/v1/hub/llm-configs/{id}/test → probar conexión: envía prompt mínimo y devuelve latencia ms
+```
+
+**Endpoint ampliado** en `hub_prompt_templates`:
+```
+PATCH  /api/v1/hub/prompts/{id}  → ahora acepta default_tier y override_tier
+```
+
+**`model_factory.py`** — ampliar `get_model()` para aceptar `tier` opcional:
+```python
+async def get_model_for_tier(tier: int, config_provider: ConfigProvider) -> BaseChatModel:
+    """Devuelve el modelo marcado como is_default para ese tier."""
+```
+
+**Comando de seeding** — `server/app/scripts/seed_llm_configs.py`:
+- Idempotente: no duplica si ya existen configs
+- Lee variables de entorno para detectar qué proveedores están disponibles
+- Ejecutable como `uv run python -m server.app.scripts.seed_llm_configs`
+
+**Tests requeridos** (`server/tests/modules/agents_hub/unit/`):
+```python
+# test_llm_configs_router.py
+# should_list_llm_configs
+# should_create_llm_config_with_tier
+# should_reject_duplicate_default_for_same_tier
+# should_delete_config_not_in_use
+# should_block_delete_config_in_use
+# should_return_latency_on_test_connection   ← mockea el LLM
+# should_get_model_for_tier_returns_default
+```
+
+---
+
+### Prompt 9D.2 — Frontend: pantalla "Modelos LLM"
+
+**Objetivo**: Tabla con todas las configs LLM, gestión CRUD y botón "Probar conexión" con feedback de latencia.
+
+**Ruta**: `/admin/llm-configs` (ya en el sidebar del Prompt 9.4).
+
+**`src/admin/pages/LLMConfigsPage.tsx`**:
+```typescript
+// Tabla: columnas provider | modelo | tier (chip 1/2/3 con color) | etiqueta | default | acciones
+// Chip tier: Tier 1 = verde, Tier 2 = amarillo, Tier 3 = rojo
+// Columna "Clave API": muestra solo el nombre de la variable de entorno (no el valor)
+// Botón "Probar" → POST /hub/llm-configs/{id}/test → muestra badge "OK · 342 ms" o error
+// Formulario crear/editar: provider (select), modelo, tier (1/2/3), etiqueta, nombre var env, is_default
+// Guard al borrar: si hay chatbots asignados, muestra lista de afectados
+```
+
+**Tests requeridos**:
+```typescript
+// should_list_llm_configs_with_tier_chips
+// should_open_create_form
+// should_show_latency_badge_after_test_connection
+// should_show_affected_chatbots_before_delete
+```
+
+---
+
+### Prompt 9D.3 — Frontend: pantalla "Prompts del sistema"
+
+**Objetivo**: Editor de prompt templates con override de tier por prompt y vista previa con variables de ejemplo.
+
+**Ruta**: `/admin/prompts` (ya en el sidebar del Prompt 9.4).
+
+**`src/admin/pages/PromptsPage.tsx`**:
+```typescript
+// Lista izquierda: prompt templates con nombre, proceso asociado y tier efectivo
+// Editor derecho: textarea con resaltado de variables {variable} (fondo amarillo claro)
+//   - Selector "Tier por defecto": chips 1/2/3
+//   - Toggle "Override tier": activa dropdown con tier concreto para este prompt
+//   - Vista previa: rellena {variables} con valores de ejemplo y muestra el prompt final
+//   - Botón "Guardar versión": incrementa el campo version en BD
+//   - Badge "v3" junto al nombre para indicar la versión actual
+// Aplica a: prompt templates de chatbots Y de flujos de automatización
+//   (campo proceso_tipo: 'chatbot' | 'automation')
+```
+
+**Tests requeridos**:
+```typescript
+// should_list_prompt_templates
+// should_highlight_variables_in_editor
+// should_show_effective_tier_with_override
+// should_increment_version_on_save
+// should_preview_prompt_with_example_values
+```
+
+---
 
 ## FASE 10: Sistema de Plantillas y Temas (Chatbots, Panel Admin, Partners y UI Principal)
 
