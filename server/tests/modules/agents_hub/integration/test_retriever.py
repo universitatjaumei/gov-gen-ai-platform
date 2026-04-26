@@ -14,14 +14,14 @@ async def populated_session():
         create_session_factory,
     )
     from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
-from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig
-from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
+    from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig
+    from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
 
     engine = create_async_engine(DB_URL)
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        await conn.run_sync(HubBase.metadata.drop_all)
-        await conn.run_sync(HubBase.metadata.create_all)
+        await conn.run_sync(HubConfigBase.metadata.create_all)
+        await conn.run_sync(HubOperationalBase.metadata.create_all)
 
     session_factory = create_session_factory(engine)
     async with session_factory() as session:
@@ -63,7 +63,8 @@ from server.app.modules.agents_hub.database.operational_models import HubDocumen
         yield session, chatbot.id
 
     async with engine.begin() as conn:
-        await conn.run_sync(HubBase.metadata.drop_all)
+        await conn.run_sync(HubOperationalBase.metadata.drop_all)
+        await conn.run_sync(HubConfigBase.metadata.drop_all)
     await engine.dispose()
 
 

@@ -13,6 +13,7 @@ import os
 import uuid
 
 import pytest
+from sqlalchemy import text
 
 _JWT_ENV = {
     "JWT_SECRET_KEY": "test-secret-key-that-is-at-least-32-characters-long",
@@ -36,8 +37,17 @@ class TestRAGPipeline:
             create_session_factory,
         )
         from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
-from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig
-from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
+        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig
+        from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
+        from server.app.modules.agents_hub.ingestion.chunker import MarkdownChunker
+        from server.app.modules.agents_hub.ingestion.hasher import hash_content
+        from server.app.modules.agents_hub.services.retriever import HybridRetriever
+
+        engine = create_async_engine(DB_URL)
+        async with engine.begin() as conn:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            await conn.run_sync(HubConfigBase.metadata.create_all)
+            await conn.run_sync(HubOperationalBase.metadata.create_all)
 
         factory = create_session_factory(engine)
         async with factory() as session:

@@ -1,10 +1,10 @@
-﻿"""Fixtures compartidas para tests E2E de agents_hub.
+"""Fixtures compartidas para tests E2E de agents_hub.
 
 Requieren PostgreSQL con pgvector corriendo en localhost:5432.
 Por defecto usan la misma BD de desarrollo (govgenai).
 En CI se sobreescribe DATABASE_URL con las credenciales del servicio.
 
-Nota de diseÃ±o: todos los fixtures de BD tienen scope="function" para
+Nota de diseño: todos los fixtures de BD tienen scope="function" para
 evitar conflictos de event loop entre pytest-asyncio y httpx.AsyncClient.
 """
 import os
@@ -37,14 +37,15 @@ async def db_engine():
 
     engine = create_async_engine(_TEST_DB_URL)
     async with engine.begin() as conn:
-        await conn.run_sync(HubBase.metadata.create_all)
+        await conn.run_sync(HubConfigBase.metadata.create_all)
+        await conn.run_sync(HubOperationalBase.metadata.create_all)
     yield engine
     await engine.dispose()
 
 
 @pytest.fixture
 async def db_session(db_engine):
-    """SesiÃ³n de BD por test."""
+    """Sesión de BD por test."""
     from server.app.modules.agents_hub.database.connection import create_session_factory
 
     factory = create_session_factory(db_engine)
@@ -78,7 +79,16 @@ def admin_headers():
 async def setup_chatbot(db_session):
     """Crea un chatbot de prueba con cliente, config LLM y chunk de conocimiento."""
     from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig
-from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
+    from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
+    from server.app.modules.agents_hub.ingestion.hasher import hash_content
+
+    llm_config = HubLLMConfig(
+        provider="google",
+        model_name="gemini-2.0-flash",
+        temperature=0.7,
+    )
+    db_session.add(llm_config)
+    await db_session.flush()
 
     client = HubClient(name="E2E Test Client", partner_id="partner-e2e-1")
     db_session.add(client)
@@ -94,7 +104,7 @@ from server.app.modules.agents_hub.database.operational_models import HubDocumen
     db_session.add(chatbot)
     await db_session.flush()
 
-    content = "Python es un lenguaje de programaciÃ³n versÃ¡til y fÃ¡cil de aprender."
+    content = "Python es un lenguaje de programación versátil y fácil de aprender."
     chunk = HubDocumentChunk(
         chatbot_id=chatbot.id,
         content=content,
@@ -111,7 +121,7 @@ from server.app.modules.agents_hub.database.operational_models import HubDocumen
 
 @pytest.fixture
 def test_app(db_engine):
-    """App FastAPI de test con los routers hub y la sesiÃ³n de test inyectada."""
+    """App FastAPI de test con los routers hub y la sesión de test inyectada."""
     from fastapi import FastAPI
     from server.app.api.v1.hub_chat import router as chat_router
     from server.app.api.v1.hub_tasks import router as tasks_router
