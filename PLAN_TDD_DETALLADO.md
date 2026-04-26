@@ -4668,13 +4668,13 @@ async def search_knowledge_fallback_node(state: AgentState) -> dict:
 
 ---
 
-## BLOQUE 9D — Panel de administración LLM y Prompts
+## BLOQUE 9E — Panel de administración LLM y Prompts
 
 **Objetivo**: Dar a administradores y partners control total sobre qué modelo usa cada proceso y qué instrucciones recibe, sin tocar código ni reiniciar el servidor. El sistema de tiers unifica la configuración tanto para chatbots/agentes como para flujos de automatización.
 
 **Prerrequisito**: Bloque 9A completado (layout admin disponible).
 
-**Dependencia con Fase 10**: El prompt 10.11 original ("Cerebro de la IA") queda **absorbido y reemplazado** por este bloque, que es más completo. Al ejecutar 9D el prompt 10.11 puede marcarse directamente como COMPLETADO.
+**Dependencia con Fase 10**: El prompt 10.11 original ("Cerebro de la IA") queda **absorbido y reemplazado** por este bloque, que es más completo. Al ejecutar 9E el prompt 10.11 puede marcarse directamente como COMPLETADO.
 
 ### Contexto: sistema de tiers (legado NiceGUI)
 
@@ -4705,7 +4705,7 @@ ALTER TABLE hub_prompt_templates
 
 ### Seeding inicial obligatorio
 
-El Prompt 9D.1 debe incluir un comando `seed_llm_configs` que cree configuraciones por defecto para que la BD nunca arranque vacía. Ejemplo:
+El Prompt 9E.1 debe incluir un comando `seed_llm_configs` que cree configuraciones por defecto para que la BD nunca arranque vacía. Ejemplo:
 
 ```
 Tier 1 → google / gemini-2.0-flash   / GOOGLE_API_KEY      (default)
@@ -4716,7 +4716,7 @@ Tier 1 → ollama / llama3.2           / —     (alternativa local, sin coste)
 
 ---
 
-### Prompt 9D.1 — Backend: tiers, CRUD de LLM configs y seeding
+### Prompt 9E.1 — Backend: tiers, CRUD de LLM configs y seeding
 
 **Objetivo**: Ampliar el modelo `HubLLMConfig` con el sistema de tiers, exponer endpoints CRUD completos para que la UI los gestione, y añadir un comando de seeding para poblar la BD al arrancar.
 
@@ -4763,7 +4763,7 @@ async def get_model_for_tier(tier: int, config_provider: ConfigProvider) -> Base
 
 ---
 
-### Prompt 9D.2 — Frontend: pantalla "Modelos LLM"
+### Prompt 9E.2 — Frontend: pantalla "Modelos LLM"
 
 **Objetivo**: Tabla con todas las configs LLM, gestión CRUD y botón "Probar conexión" con feedback de latencia.
 
@@ -4789,7 +4789,7 @@ async def get_model_for_tier(tier: int, config_provider: ConfigProvider) -> Base
 
 ---
 
-### Prompt 9D.3 — Frontend: pantalla "Prompts del sistema"
+### Prompt 9E.3 — Frontend: pantalla "Prompts del sistema"
 
 **Objetivo**: Editor de prompt templates con override de tier por prompt y vista previa con variables de ejemplo.
 
