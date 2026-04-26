@@ -15,8 +15,8 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Combine both metadatas so Alembic tracks Hub tables alongside SQLModel tables
-from sqlalchemy import MetaData
-target_metadata = [SQLModel.metadata, HubBase.metadata]
+from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
+target_metadata = [SQLModel.metadata, HubConfigBase.metadata, HubOperationalBase.metadata]
 
 # Use the sync URL for Alembic (psycopg2, not asyncpg)
 database_url = os.environ.get("DATABASE_URL_SYNC")
