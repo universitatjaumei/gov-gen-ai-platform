@@ -67,6 +67,41 @@ para y consulta si pertenece al servidor o al frontend.
 
 ---
 
+## Pruebas manuales después de cada prompt
+
+Al terminar la implementación de un prompt y **antes de marcarlo como COMPLETADO** en el plan, sugiere al usuario las pruebas manuales que debe realizar para validar el trabajo más allá de los tests automáticos.
+
+### Qué debe incluir la sugerencia
+
+- **Verificación del build**: comando exacto para compilar sin errores.
+- **Test en el entorno real**: pasos para arrancar el servidor/frontend y probar el flujo completo en el navegador (URL, credenciales de demo, acciones a ejecutar).
+- **Casos límite**: escenarios que los tests automáticos no cubren fácilmente (timeouts, errores de red, recarga de página, sesión expirada, etc.).
+- **Verificación de integración**: comprobar que el nuevo código funciona con los componentes existentes (rutas, auth, i18n, edge/cloud split).
+- **Checks de regresión**: funcionalidades adyacentes que podrían haberse roto (listar cuáles y cómo verificarlas).
+
+### Formato de la sugerencia
+
+```
+## Pruebas manuales — Prompt X.Y
+
+### Requisitos previos
+- [ ] `docker compose up -d` y servidor arriba
+
+### Smoke tests
+1. <paso concreto con URL, clic o comando>
+2. ...
+
+### Casos límite
+- [ ] <escenario + resultado esperado>
+
+### Regresiones a verificar
+- [ ] <funcionalidad existente + cómo comprobarla>
+```
+
+La sugerencia debe ser **accionable y específica**: rutas reales, valores de ejemplo, resultados esperados. No sirve "comprobar que funciona".
+
+---
+
 ## Estándares de desarrollo
 
 - **TDD obligatorio**: escribe el test antes del código de producción. No hay PR sin tests.

@@ -1,12 +1,45 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import '@/shared/i18n'
+import i18n from '@/shared/i18n'
 
-const root = document.getElementById('widget-root')
-if (root) {
-  createRoot(root).render(
+export interface WidgetConfig {
+  chatbotId: string
+  lang: string
+  apiUrl: string
+}
+
+export function readConfig(container: Element): WidgetConfig | null {
+  const chatbotId = container.getAttribute('data-chatbot-id')
+  if (!chatbotId) return null
+  return {
+    chatbotId,
+    lang: container.getAttribute('data-lang') ?? 'es',
+    apiUrl: container.getAttribute('data-api-url') ?? '/api/v1',
+  }
+}
+
+export function mountWidget(container: Element, config: WidgetConfig): () => void {
+  i18n.changeLanguage(config.lang)
+
+  const handleMessage = (event: MessageEvent) => {
+    if (event.data?.type === 'govgenai:setLang' && typeof event.data.lang === 'string') {
+      i18n.changeLanguage(event.data.lang)
+    }
+  }
+
+  window.addEventListener('message', handleMessage)
+
+  createRoot(container).render(
     <StrictMode>
-      <div>Widget — pendiente Prompt 9.9</div>
-    </StrictMode>
+      <div data-testid="widget-root" />
+    </StrictMode>,
   )
+
+  return () => window.removeEventListener('message', handleMessage)
+}
+
+const container = document.getElementById('govgenai-widget')
+if (container) {
+  const config = readConfig(container)
+  if (config) mountWidget(container, config)
 }
