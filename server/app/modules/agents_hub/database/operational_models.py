@@ -32,7 +32,7 @@ class HubDocumentChunk(HubOperationalBase):
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
     chunk_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
-    language: Mapped[str] = mapped_column(String(10), default="es")
+    language: Mapped[str] = mapped_column(String(10), nullable=False)
     is_temporary: Mapped[bool] = mapped_column(Boolean, default=False)
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True, index=True
@@ -81,6 +81,7 @@ class HubIngestionSource(HubOperationalBase):
         DateTime(timezone=True), nullable=True
     )
     last_content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    language: Mapped[str | None] = mapped_column(String(10), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="active")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -101,6 +102,7 @@ class HubIngestionJob(HubOperationalBase):
     source_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     original_filename: Mapped[str | None] = mapped_column(String(500), nullable=True)
     canonical_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    language: Mapped[str | None] = mapped_column(String(10), nullable=True)
     chunks_processed: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

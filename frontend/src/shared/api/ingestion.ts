@@ -27,11 +27,12 @@ export async function fetchIngestionJobs(chatbotId: string): Promise<IngestionJo
   return data.jobs
 }
 
-export async function uploadDocument(chatbotId: string, file: File, canonicalUrl?: string): Promise<any> {
+export async function uploadDocument(chatbotId: string, file: File, canonicalUrl?: string, language?: string): Promise<any> {
   const formData = new FormData()
   formData.append('chatbot_id', chatbotId)
   formData.append('file', file)
   if (canonicalUrl) formData.append('canonical_url', canonicalUrl)
+  if (language) formData.append('language', language)
 
   const token = localStorage.getItem('access_token')
   const res = await fetch(`${API_BASE}/api/v1/hub/ingestion/upload`, {
@@ -80,7 +81,7 @@ export async function fetchSources(chatbotId: string): Promise<IngestionSource[]
 
 export async function createSource(
   chatbotId: string,
-  body: { url: string; label?: string; check_interval_hours?: number },
+  body: { url: string; label?: string; check_interval_hours?: number; language?: string },
 ): Promise<IngestionSource> {
   const res = await fetch(`${API_BASE}/api/v1/hub/ingestion/${chatbotId}/sources`, {
     method: 'POST',

@@ -34,8 +34,10 @@ async def check_source(source_id: uuid.UUID, session: AsyncSession) -> None:
 
     now = datetime.now(timezone.utc)
     try:
-        processor = await asyncio.to_thread(DoclingProcessor)
-        content = await asyncio.to_thread(processor.process, source.url)
+        def _fetch() -> str:
+            return DoclingProcessor().process(source.url)
+
+        content = await asyncio.to_thread(_fetch)
         new_hash = hash_content(content)
 
         if new_hash != source.last_content_hash:
@@ -45,6 +47,7 @@ async def check_source(source_id: uuid.UUID, session: AsyncSession) -> None:
                 canonical_url=source.url,
                 original_filename=source.label or source.url,
                 status="pending",
+                language=source.language,
             )
             session.add(job)
             await session.flush()

@@ -37,7 +37,8 @@
     "reports_comment": "Comentari",
     "reports_expand": "Expandir",
     "reports_collapse": "Col·lapsar",
-    "reports_no_data": "Sense interaccions per a aquest chatbot"
+    "reports_no_data": "Sense interaccions per a aquest chatbot",
+    "language_label": "Idioma"
   },
   "login": {
     "title": "Iniciar sessió",

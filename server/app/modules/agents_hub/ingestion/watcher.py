@@ -8,6 +8,7 @@ from typing import Protocol
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from server.app.modules.agents_hub.agent.language_detector import detect_language
 from server.app.modules.agents_hub.database.operational_models import (
     HubDocumentChunk,
     HubIngestionJob,
@@ -41,7 +42,7 @@ class IngestionWatcher:
         self,
         source_url: str,
         chatbot_id: uuid.UUID,
-        language: str = "es",
+        language: str | None = None,
         citation_url: str | None = None,
         prefetched_content: str | None = None,
     ) -> list[HubDocumentChunk]:
@@ -62,6 +63,8 @@ class IngestionWatcher:
         else:
             processor = await self._get_processor()
             content = await asyncio.to_thread(processor.process, source_url)
+        if language is None:
+            language = detect_language(content)
         content_hash = hash_content(content)
         chunk_source = citation_url or source_url
 
@@ -108,7 +111,6 @@ class IngestionWatcher:
         source_url: str,
         chatbot_id: uuid.UUID,
         owner_id: uuid.UUID,
-        language: str = "es",
     ) -> list[HubDocumentChunk]:
         """Procesa un documento subido por un usuario (siempre re-procesa, marca como temporal).
 
@@ -116,13 +118,15 @@ class IngestionWatcher:
             source_url: URL o ruta al documento
             chatbot_id: ID del chatbot
             owner_id: ID del usuario propietario
-            language: Idioma del documento
 
         Returns:
             Lista de chunks creados
         """
-        processor = await self._get_processor()
-        content = await asyncio.to_thread(processor.process, source_url)
+        def _process() -> str:
+            return DoclingProcessor().process(source_url)
+
+        content = await asyncio.to_thread(_process)
+        language = detect_language(content)
         chunks = self.chunker.split(content, metadata={"source_url": source_url})
         created_chunks = []
 
@@ -170,6 +174,7 @@ class IngestionWatcher:
                 job.chatbot_id,
                 citation_url=job.canonical_url,
                 prefetched_content=prefetched_content,
+                language=job.language,
             )
             job.status = "completed"
             job.chunks_processed = len(chunks)

@@ -38,6 +38,7 @@ class IngestionSourceCreate(BaseModel):
     url: str
     label: str | None = None
     check_interval_hours: int = Field(24, ge=1, le=168)
+    language: str | None = None
 
     @field_validator("url")
     @classmethod
@@ -79,6 +80,7 @@ async def upload_document(
     chatbot_id: uuid.UUID = Form(...),
     file: UploadFile = File(...),
     canonical_url: str | None = Form(None),
+    language: str | None = Form(None),
     session: AsyncSession = Depends(get_async_session),
     current_user: UserInfo = Depends(get_current_user),
 ):
@@ -110,6 +112,7 @@ async def upload_document(
         original_filename=file.filename,
         canonical_url=canonical_url or None,
         status="pending",
+        language=language,
     )
     session.add(job)
     await session.commit()
@@ -207,6 +210,7 @@ async def create_source(
         url=body.url,
         label=body.label,
         check_interval_hours=body.check_interval_hours,
+        language=body.language,
     )
     session.add(source)
     await session.commit()

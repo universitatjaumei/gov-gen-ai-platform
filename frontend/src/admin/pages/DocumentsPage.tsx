@@ -23,6 +23,13 @@ const INTERVAL_OPTIONS = [
   { value: 168, label: 'Semanal' },
 ]
 
+const LANGUAGE_OPTIONS = [
+  { value: '',   label: 'Auto-detectar' },
+  { value: 'es', label: 'Español' },
+  { value: 'ca', label: 'Català' },
+  { value: 'en', label: 'English' },
+]
+
 export function DocumentsPage() {
   const { t } = useTranslation('admin')
   const { t: tc } = useTranslation('common')
@@ -37,11 +44,14 @@ export function DocumentsPage() {
   const [uploadError, setUploadError] = useState<string>('')
   const [canonicalUrl, setCanonicalUrl] = useState<string>('')
   const canonicalUrlRef = useRef<string>('')
+  const [uploadLanguage, setUploadLanguage] = useState<string>('')
+  const uploadLanguageRef = useRef<string>('')
 
   // Sources tab state
   const [newUrl, setNewUrl] = useState('')
   const [newLabel, setNewLabel] = useState('')
   const [newInterval, setNewInterval] = useState(24)
+  const [newSourceLanguage, setNewSourceLanguage] = useState('')
   const [sourceError, setSourceError] = useState('')
   const [deleteSourceTarget, setDeleteSourceTarget] = useState<IngestionSource | null>(null)
 
@@ -67,7 +77,12 @@ export function DocumentsPage() {
   })
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => uploadDocument(selectedChatbotId, file, canonicalUrlRef.current || undefined),
+    mutationFn: (file: File) => uploadDocument(
+      selectedChatbotId,
+      file,
+      canonicalUrlRef.current || undefined,
+      uploadLanguageRef.current || undefined,
+    ),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['ingestion-jobs', selectedChatbotId] }); setUploadError('') },
     onError: (err: Error) => setUploadError(err.message),
   })
@@ -85,11 +100,12 @@ export function DocumentsPage() {
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setUploadError('')
     canonicalUrlRef.current = canonicalUrl
+    uploadLanguageRef.current = uploadLanguage
     for (const file of acceptedFiles) {
       if (file.size > 10 * 1024 * 1024) { setUploadError('El archivo supera el límite de 10 MB.'); continue }
       uploadMutation.mutate(file)
     }
-  }, [uploadMutation, canonicalUrl])
+  }, [uploadMutation, canonicalUrl, uploadLanguage])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -109,10 +125,11 @@ export function DocumentsPage() {
       url: newUrl,
       label: newLabel || undefined,
       check_interval_hours: newInterval,
+      language: newSourceLanguage || undefined,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ingestion-sources', selectedChatbotId] })
-      setNewUrl(''); setNewLabel(''); setNewInterval(24); setSourceError('')
+      setNewUrl(''); setNewLabel(''); setNewInterval(24); setNewSourceLanguage(''); setSourceError('')
     },
     onError: (err: Error) => setSourceError(err.message),
   })
@@ -197,16 +214,28 @@ export function DocumentsPage() {
           {/* ── Tab: Documentos ── */}
           {activeTab === 'documents' && (
             <div className="space-y-4">
-              {/* URL canónica opcional */}
-              <div className="flex items-center gap-2">
-                <Link className="w-4 h-4 text-muted-foreground shrink-0" />
-                <input
-                  type="url"
-                  value={canonicalUrl}
-                  onChange={e => setCanonicalUrl(e.target.value)}
-                  placeholder={t('hub.canonical_url_placeholder', 'URL pública del documento (opcional, para citar la fuente en el chat)')}
-                  className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                />
+              {/* URL canónica y idioma */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                <div className="flex flex-1 items-center gap-2">
+                  <Link className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <input
+                    type="url"
+                    value={canonicalUrl}
+                    onChange={e => setCanonicalUrl(e.target.value)}
+                    placeholder={t('hub.canonical_url_placeholder', 'URL pública del documento (opcional, para citar la fuente en el chat)')}
+                    className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </div>
+                <select
+                  value={uploadLanguage}
+                  onChange={e => setUploadLanguage(e.target.value)}
+                  className="w-full sm:w-40 px-3 py-2 text-sm border rounded-md bg-background"
+                  aria-label={t('hub.language_label', 'Idioma')}
+                >
+                  {LANGUAGE_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Dropzone */}
@@ -337,6 +366,16 @@ export function DocumentsPage() {
                     className="w-full sm:w-36 px-3 py-2 text-sm border rounded-md bg-background"
                   >
                     {INTERVAL_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={newSourceLanguage}
+                    onChange={e => setNewSourceLanguage(e.target.value)}
+                    className="w-full sm:w-40 px-3 py-2 text-sm border rounded-md bg-background"
+                    aria-label={t('hub.language_label', 'Idioma')}
+                  >
+                    {LANGUAGE_OPTIONS.map(o => (
                       <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </select>

@@ -37,7 +37,8 @@
     "reports_comment": "Comment",
     "reports_expand": "Expand",
     "reports_collapse": "Collapse",
-    "reports_no_data": "No interactions for this chatbot"
+    "reports_no_data": "No interactions for this chatbot",
+    "language_label": "Language"
   },
   "login": {
     "title": "Sign in",
