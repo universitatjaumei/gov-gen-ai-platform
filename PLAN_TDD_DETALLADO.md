@@ -1062,4225 +1062,35 @@ uv run pytest tests/unit/test_logging.py -v
 
 ## FASE 1: Autenticación y Estado del Agente — REDUCIDA
 
-> **En Gov Gen AI Platform, la infraestructura de auth ya existe** (modelos AdminAccount, PartnerAccount,
-> JWT por cabecera, RBAC). Esta fase se reduce a **dos tareas**:
->
-> 1. **Añadir el rol `end_user`** al sistema de roles existente (usuarios anónimos del chatbot y
->    usuarios identificados del modo agente). Adaptar los prompts 1.1–1.4 a este alcance reducido.
->
-> 2. **Migrar de `X-License-Key` + Bearer email a JWT estándar** (base para OIDC/SAML en Fase 5
->    del `PLAN_DESARROLLO.md`). Adaptar los prompts 1.3–1.4 a esta migración.
->
-> Los prompts 1.5–1.6 (AgentState) se mantienen íntegros: el estado del agente LangGraph
-> es nuevo y no existe en AutomatIA.
->
-> **No implementar** autenticación OIDC/SAML en esta fase — está diferida a Q2 2026 (Fase 5).
-
----
-
-### Prompt 1.1 - Tests de Modelos de Usuario (TDD - RED)
-
-**Objetivo**: Escribir tests para los modelos de autenticación.
-
-**Instrucciones**:
-
-```
-Escribe tests para src/auth/models.py que definan el modelo UserInfo.
-
-TESTS REQUERIDOS:
-1. UserInfo contiene user_id, email, role
-2. UserInfo es inmutable (frozen dataclass)
-3. UserInfo es serializable a dict
-4. role tiene valores válidos: "user", "admin", "partner", "informer"
-```
-
-**Archivos a crear**:
-
-**tests/unit/test_auth_models.py**:
-```python
-"""Tests para modelos de autenticación - TDD RED PHASE."""
-from dataclasses import FrozenInstanceError
-
-import pytest
-
-
-class TestUserInfoModel:
-    """Tests para el modelo UserInfo."""
-
-    def test_user_info_has_required_fields(self) -> None:
-        """UserInfo debe tener user_id, email y role."""
-        from src.auth.models import UserInfo
-
-        user = UserInfo(
-            user_id="user-123",
-            email="test@example.com",
-            role="user",
-        )
-
-        assert user.user_id == "user-123"
-        assert user.email == "test@example.com"
-        assert user.role == "user"
-
-    def test_user_info_is_immutable(self) -> None:
-        """UserInfo debe ser inmutable (frozen)."""
-        from src.auth.models import UserInfo
-
-        user = UserInfo(
-            user_id="user-123",
-            email="test@example.com",
-            role="user",
-        )
-
-        with pytest.raises(FrozenInstanceError):
-            user.user_id = "other-id"  # type: ignore
-
-    def test_user_info_serializable_to_dict(self) -> None:
-        """UserInfo debe poder convertirse a diccionario."""
-        from src.auth.models import UserInfo
-
-        user = UserInfo(
-            user_id="user-123",
-            email="test@example.com",
-            role="admin",
-        )
-
-        user_dict = user.to_dict()
-
-        assert isinstance(user_dict, dict)
-        assert user_dict["user_id"] == "user-123"
-        assert user_dict["email"] == "test@example.com"
-        assert user_dict["role"] == "admin"
-
-    def test_user_info_role_validation(self) -> None:
-        """role debe ser uno de: user, admin, partner, informer."""
-        from src.auth.models import UserInfo, UserRole
-
-        # Roles válidos
-        for role in ["user", "admin", "partner", "informer"]:
-            user = UserInfo(user_id="123", email="test@test.com", role=role)
-            assert user.role == role
-
-    def test_user_info_invalid_role_raises_error(self) -> None:
-        """role inválido debe lanzar error."""
-        from src.auth.models import UserInfo
-
-        with pytest.raises(ValueError) as exc_info:
-            UserInfo(user_id="123", email="test@test.com", role="superuser")
-
-        assert "role" in str(exc_info.value).lower()
-
-
-class TestUserRole:
-    """Tests para el enum UserRole."""
-
-    def test_user_role_values(self) -> None:
-        """UserRole debe tener los valores correctos."""
-        from src.auth.models import UserRole
-
-        assert UserRole.USER.value == "user"
-        assert UserRole.ADMIN.value == "admin"
-        assert UserRole.PARTNER.value == "partner"
-        assert UserRole.INFORMER.value == "informer"
-```
-
-**Comando para ejecutar (debe fallar)**:
-```bash
-uv run pytest tests/unit/test_auth_models.py -v
-# Expected: FAILED - ModuleNotFoundError: No module named 'src.auth'
-```
-
----
-
-### Prompt 1.2 - Implementación de Modelos de Usuario (TDD - GREEN)
-
-**Objetivo**: Implementar los modelos de autenticación para pasar los tests.
-
-**Archivos a crear**:
-
-**src/auth/__init__.py**:
-```python
-"""Módulo de autenticación."""
-from src.auth.models import UserInfo, UserRole
-
-__all__ = ["UserInfo", "UserRole"]
-```
-
-**src/auth/models.py**:
-```python
-"""Modelos de autenticación y usuario."""
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any
-
-
-class UserRole(str, Enum):
-    """Roles de usuario disponibles.
-
-    - ADMIN: gestiona la plataforma global (proveedores LLM, partners, config sistema).
-    - PARTNER: crea y configura chatbots/agentes para sus clientes.
-    - INFORMER: supervisa y valida respuestas de la IA.
-    - USER: usuario final del chatbot/agente.
-    """
-
-    USER = "user"
-    ADMIN = "admin"
-    PARTNER = "partner"
-    INFORMER = "informer"
-
-
-def _validate_role(role: str) -> str:
-    """Valida que el rol sea válido."""
-    valid_roles = {r.value for r in UserRole}
-    if role not in valid_roles:
-        raise ValueError(
-            f"Invalid role '{role}'. Must be one of: {', '.join(valid_roles)}"
-        )
-    return role
-
-
-@dataclass(frozen=True)
-class UserInfo:
-    """Información del usuario autenticado.
-
-    Es inmutable (frozen) para garantizar que no se modifique
-    accidentalmente durante el procesamiento de requests.
-    """
-
-    user_id: str
-    email: str
-    role: str = field(default="user")
-
-    def __post_init__(self) -> None:
-        """Valida los campos después de la inicialización."""
-        # Usamos object.__setattr__ porque es frozen
-        object.__setattr__(self, "role", _validate_role(self.role))
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convierte a diccionario para serialización."""
-        return {
-            "user_id": self.user_id,
-            "email": self.email,
-            "role": self.role,
-        }
-
-    @property
-    def is_admin(self) -> bool:
-        """Verifica si el usuario es administrador de plataforma."""
-        return self.role == UserRole.ADMIN.value
-
-    @property
-    def is_partner(self) -> bool:
-        """Verifica si el usuario es partner (gestiona chatbots de clientes)."""
-        return self.role == UserRole.PARTNER.value
-
-    @property
-    def is_informer(self) -> bool:
-        """Verifica si el usuario es informador."""
-        return self.role == UserRole.INFORMER.value
-```
-
-**Comando para verificar**:
-```bash
-uv run pytest tests/unit/test_auth_models.py -v
-# Expected: All tests PASSED
-```
-
----
-
-### Prompt 1.3 - Tests de Validación JWT (TDD - RED)
-
-**Objetivo**: Escribir tests para la validación de tokens JWT.
-
-**Instrucciones**:
-
-```
-Escribe tests para src/auth/jwt_handler.py.
-
-TESTS REQUERIDOS:
-1. Token válido extrae user_info correctamente
-2. Token expirado lanza AuthenticationError
-3. Firma inválida lanza AuthenticationError
-4. Token sin claims requeridos lanza AuthenticationError
-5. Función para crear tokens de prueba
-```
-
-**Archivos a crear**:
-
-**tests/unit/test_jwt_handler.py**:
-```python
-"""Tests para el manejador de JWT - TDD RED PHASE."""
-import time
-from unittest.mock import patch
-
-import pytest
-
-
-class TestJWTValidation:
-    """Tests para validación de tokens JWT."""
-
-    @pytest.fixture
-    def jwt_settings(self):
-        """Configura variables de entorno para JWT."""
-        env_vars = {
-            "DATABASE_URL": "postgresql+asyncpg://user:pass@localhost:5432/testdb",
-            "JWT_SECRET_KEY": "test-secret-key-that-is-at-least-32-characters-long",
-            "JWT_ALGORITHM": "HS256",
-            "JWT_EXPIRATION_MINUTES": "60",
-        }
-        with patch.dict("os.environ", env_vars, clear=False):
-            # Forzar recarga de config
-            import importlib
-            import src.config
-            importlib.reload(src.config)
-            yield
-
-    def test_valid_token_extracts_user_info(self, jwt_settings) -> None:
-        """Un token válido debe extraer UserInfo correctamente."""
-        from src.auth.jwt_handler import create_token, decode_token
-        from src.auth.models import UserInfo
-
-        # Crear token de prueba
-        user = UserInfo(user_id="user-123", email="test@example.com", role="admin")
-        token = create_token(user)
-
-        # Decodificar
-        decoded_user = decode_token(token)
-
-        assert decoded_user.user_id == "user-123"
-        assert decoded_user.email == "test@example.com"
-        assert decoded_user.role == "admin"
-
-    def test_expired_token_raises_error(self, jwt_settings) -> None:
-        """Un token expirado debe lanzar AuthenticationError."""
-        from src.auth.jwt_handler import create_token, decode_token
-        from src.auth.exceptions import AuthenticationError
-        from src.auth.models import UserInfo
-
-        user = UserInfo(user_id="user-123", email="test@example.com", role="user")
-
-        # Crear token que expira inmediatamente
-        token = create_token(user, expires_in_minutes=-1)
-
-        with pytest.raises(AuthenticationError) as exc_info:
-            decode_token(token)
-
-        assert "expired" in str(exc_info.value).lower()
-
-    def test_invalid_signature_raises_error(self, jwt_settings) -> None:
-        """Una firma inválida debe lanzar AuthenticationError."""
-        from src.auth.jwt_handler import decode_token
-        from src.auth.exceptions import AuthenticationError
-
-        # Token con firma manipulada
-        invalid_token = (
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
-            "eyJzdWIiOiJ1c2VyLTEyMyIsImVtYWlsIjoidGVzdEBleGFtcGxlLmNvbSJ9."
-            "invalid_signature_here"
-        )
-
-        with pytest.raises(AuthenticationError) as exc_info:
-            decode_token(invalid_token)
-
-        assert "invalid" in str(exc_info.value).lower() or "signature" in str(exc_info.value).lower()
-
-    def test_token_missing_required_claims_raises_error(self, jwt_settings) -> None:
-        """Token sin claims requeridos debe lanzar error."""
-        import jwt
-        from src.auth.jwt_handler import decode_token
-        from src.auth.exceptions import AuthenticationError
-        from src.config import get_settings
-
-        settings = get_settings()
-
-        # Token sin email
-        payload = {"sub": "user-123"}  # Falta email
-        token = jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
-
-        with pytest.raises(AuthenticationError) as exc_info:
-            decode_token(token)
-
-        assert "claim" in str(exc_info.value).lower() or "missing" in str(exc_info.value).lower()
-
-    def test_malformed_token_raises_error(self, jwt_settings) -> None:
-        """Token malformado debe lanzar AuthenticationError."""
-        from src.auth.jwt_handler import decode_token
-        from src.auth.exceptions import AuthenticationError
-
-        with pytest.raises(AuthenticationError):
-            decode_token("not.a.valid.jwt.token")
-
-        with pytest.raises(AuthenticationError):
-            decode_token("")
-
-        with pytest.raises(AuthenticationError):
-            decode_token("just_random_string")
-```
-
-**Comando para ejecutar (debe fallar)**:
-```bash
-uv run pytest tests/unit/test_jwt_handler.py -v
-# Expected: FAILED - ModuleNotFoundError
-```
-
----
-
-### Prompt 1.4 - Implementación de JWT Handler (TDD - GREEN)
-
-**Objetivo**: Implementar el manejador de JWT para pasar los tests.
-
-**Archivos a crear**:
-
-**src/auth/exceptions.py**:
-```python
-"""Excepciones personalizadas para autenticación."""
-
-
-class AuthenticationError(Exception):
-    """Error de autenticación."""
-
-    def __init__(self, message: str = "Authentication failed"):
-        self.message = message
-        super().__init__(self.message)
-
-
-class AuthorizationError(Exception):
-    """Error de autorización (permisos insuficientes)."""
-
-    def __init__(self, message: str = "Insufficient permissions"):
-        self.message = message
-        super().__init__(self.message)
-```
-
-**src/auth/jwt_handler.py**:
-```python
-"""Manejador de tokens JWT."""
-from datetime import datetime, timedelta, timezone
-
-import jwt
-from jwt.exceptions import DecodeError, ExpiredSignatureError, InvalidSignatureError
-
-from src.auth.exceptions import AuthenticationError
-from src.auth.models import UserInfo
-from src.config import get_settings
-
-
-def create_token(user: UserInfo, expires_in_minutes: int | None = None) -> str:
-    """Crea un token JWT para el usuario.
-
-    Args:
-        user: Información del usuario
-        expires_in_minutes: Minutos hasta expiración (None usa config)
-
-    Returns:
-        Token JWT codificado
-    """
-    settings = get_settings()
-
-    if expires_in_minutes is None:
-        expires_in_minutes = settings.jwt_expiration_minutes
-
-    expire = datetime.now(timezone.utc) + timedelta(minutes=expires_in_minutes)
-
-    payload = {
-        "sub": user.user_id,
-        "email": user.email,
-        "role": user.role,
-        "exp": expire,
-        "iat": datetime.now(timezone.utc),
-    }
-
-    return jwt.encode(
-        payload,
-        settings.jwt_secret_key,
-        algorithm=settings.jwt_algorithm,
-    )
-
-
-def decode_token(token: str) -> UserInfo:
-    """Decodifica y valida un token JWT.
-
-    Args:
-        token: Token JWT a decodificar
-
-    Returns:
-        UserInfo extraído del token
-
-    Raises:
-        AuthenticationError: Si el token es inválido
-    """
-    settings = get_settings()
-
-    if not token or not isinstance(token, str):
-        raise AuthenticationError("Invalid token format")
-
-    try:
-        payload = jwt.decode(
-            token,
-            settings.jwt_secret_key,
-            algorithms=[settings.jwt_algorithm],
-        )
-    except ExpiredSignatureError:
-        raise AuthenticationError("Token has expired")
-    except InvalidSignatureError:
-        raise AuthenticationError("Invalid token signature")
-    except DecodeError:
-        raise AuthenticationError("Invalid token format")
-    except Exception as e:
-        raise AuthenticationError(f"Token validation failed: {str(e)}")
-
-    # Validar claims requeridos
-    required_claims = ["sub", "email"]
-    missing_claims = [c for c in required_claims if c not in payload]
-    if missing_claims:
-        raise AuthenticationError(
-            f"Token missing required claims: {', '.join(missing_claims)}"
-        )
-
-    return UserInfo(
-        user_id=payload["sub"],
-        email=payload["email"],
-        role=payload.get("role", "user"),
-    )
-```
-
-**Comando para verificar**:
-```bash
-uv run pytest tests/unit/test_jwt_handler.py -v
-# Expected: All tests PASSED
-```
-
----
-
-### Prompt 1.5 - Tests del AgentState (TDD - RED)
-
-**Objetivo**: Escribir tests para el estado del agente LangGraph.
-
-**Instrucciones**:
-
-```
-Escribe tests para src/agent/state.py que definan el AgentState de LangGraph.
-
-TESTS REQUERIDOS:
-1. AgentState tiene campos: messages, user_id, chatbot_id, language
-2. messages es una lista que se puede extender (append-only)
-3. AgentState es serializable a JSON
-4. user_id y chatbot_id son strings requeridos
-```
-
-**Archivos a crear**:
-
-**tests/unit/test_agent_state.py**:
-```python
-"""Tests para el AgentState de LangGraph - TDD RED PHASE."""
-import json
-
-import pytest
-
-
-class TestAgentState:
-    """Tests para el estado del agente."""
-
-    def test_agent_state_has_required_fields(self) -> None:
-        """AgentState debe tener todos los campos requeridos."""
-        from src.agent.state import AgentState
-
-        state = AgentState(
-            messages=[],
-            user_id="user-123",
-            chatbot_id="chatbot-456",
-            language="es",
-        )
-
-        assert hasattr(state, "messages")
-        assert hasattr(state, "user_id")
-        assert hasattr(state, "chatbot_id")
-        assert hasattr(state, "language")
-
-    def test_agent_state_messages_is_list(self) -> None:
-        """messages debe ser una lista."""
-        from src.agent.state import AgentState
-        from langchain_core.messages import HumanMessage
-
-        state = AgentState(
-            messages=[HumanMessage(content="Hello")],
-            user_id="user-123",
-            chatbot_id="chatbot-456",
-        )
-
-        assert isinstance(state["messages"], list)
-        assert len(state["messages"]) == 1
-
-    def test_agent_state_messages_append_via_reducer(self) -> None:
-        """Los mensajes deben poder añadirse vía el reducer de LangGraph."""
-        from src.agent.state import AgentState
-        from langchain_core.messages import AIMessage, HumanMessage
-
-        initial_state: AgentState = {
-            "messages": [HumanMessage(content="Hello")],
-            "user_id": "user-123",
-            "chatbot_id": "chatbot-456",
-            "language": "en",
-        }
-
-        # Simular update de LangGraph
-        new_messages = [AIMessage(content="Hi there!")]
-
-        # El reducer debe combinar mensajes
-        from src.agent.state import messages_reducer
-        combined = messages_reducer(initial_state["messages"], new_messages)
-
-        assert len(combined) == 2
-        assert combined[0].content == "Hello"
-        assert combined[1].content == "Hi there!"
-
-    def test_agent_state_serializable(self) -> None:
-        """AgentState debe ser serializable a JSON."""
-        from src.agent.state import AgentState, serialize_state
-        from langchain_core.messages import HumanMessage
-
-        state: AgentState = {
-            "messages": [HumanMessage(content="Test")],
-            "user_id": "user-123",
-            "chatbot_id": "chatbot-456",
-            "language": "es",
-        }
-
-        serialized = serialize_state(state)
-
-        # Debe ser JSON válido
-        json_str = json.dumps(serialized)
-        parsed = json.loads(json_str)
-
-        assert parsed["user_id"] == "user-123"
-        assert len(parsed["messages"]) == 1
-
-    def test_agent_state_default_language(self) -> None:
-        """language debe tener un valor por defecto."""
-        from src.agent.state import create_initial_state
-
-        state = create_initial_state(
-            user_id="user-123",
-            chatbot_id="chatbot-456",
-        )
-
-        assert state["language"] == "es"  # Español por defecto
-
-    def test_agent_state_optional_fields(self) -> None:
-        """AgentState debe soportar campos opcionales."""
-        from src.agent.state import AgentState
-
-        state: AgentState = {
-            "messages": [],
-            "user_id": "user-123",
-            "chatbot_id": "chatbot-456",
-            "language": "en",
-            "retrieved_context": ["doc1", "doc2"],
-            "current_tool": "search_knowledge",
-        }
-
-        assert state.get("retrieved_context") == ["doc1", "doc2"]
-        assert state.get("current_tool") == "search_knowledge"
-```
-
-**Comando para ejecutar (debe fallar)**:
-```bash
-uv run pytest tests/unit/test_agent_state.py -v
-# Expected: FAILED - ModuleNotFoundError
-```
-
----
-
-### Prompt 1.6 - Implementación del AgentState (TDD - GREEN)
-
-**Objetivo**: Implementar el AgentState para LangGraph.
-
-**Archivos a crear**:
-
-**src/agent/__init__.py**:
-```python
-"""Módulo del agente LangGraph."""
-```
-
-**src/agent/state.py**:
-```python
-"""Definición del estado del agente para LangGraph."""
-from typing import Annotated, Any, TypedDict
-
-from langchain_core.messages import AnyMessage, BaseMessage
-
-
-def messages_reducer(
-    existing: list[AnyMessage],
-    new: list[AnyMessage] | AnyMessage
-) -> list[AnyMessage]:
-    """Reducer para combinar mensajes (append-only).
-
-    Este reducer implementa la lógica de LangGraph para
-    acumular mensajes en el estado.
-
-    Args:
-        existing: Lista de mensajes existentes
-        new: Nuevo(s) mensaje(s) a añadir
-
-    Returns:
-        Lista combinada de mensajes
-    """
-    if isinstance(new, list):
-        return existing + new
-    return existing + [new]
-
-
-class AgentState(TypedDict, total=False):
-    """Estado del agente para el grafo de LangGraph.
-
-    Attributes:
-        messages: Historial de mensajes (append-only via reducer)
-        user_id: ID del usuario autenticado
-        chatbot_id: ID del chatbot que procesa la conversación
-        language: Idioma detectado o configurado (default: "es")
-        retrieved_context: Documentos recuperados del RAG
-        current_tool: Herramienta actualmente en ejecución
-        run_id: ID de la ejecución para LangSmith
-    """
-
-    messages: Annotated[list[AnyMessage], messages_reducer]
-    user_id: str
-    chatbot_id: str
-    language: str
-    retrieved_context: list[str]
-    current_tool: str | None
-    run_id: str | None
-
-
-def create_initial_state(
-    user_id: str,
-    chatbot_id: str,
-    initial_message: str | None = None,
-    language: str = "es",
-) -> AgentState:
-    """Crea el estado inicial del agente.
-
-    Args:
-        user_id: ID del usuario
-        chatbot_id: ID del chatbot
-        initial_message: Mensaje inicial opcional
-        language: Idioma por defecto
-
-    Returns:
-        Estado inicial configurado
-    """
-    from langchain_core.messages import HumanMessage
-
-    messages: list[AnyMessage] = []
-    if initial_message:
-        messages.append(HumanMessage(content=initial_message))
-
-    return AgentState(
-        messages=messages,
-        user_id=user_id,
-        chatbot_id=chatbot_id,
-        language=language,
-        retrieved_context=[],
-        current_tool=None,
-        run_id=None,
-    )
-
-
-def serialize_state(state: AgentState) -> dict[str, Any]:
-    """Serializa el estado a un diccionario JSON-compatible.
-
-    Args:
-        state: Estado del agente
-
-    Returns:
-        Diccionario serializable
-    """
-    serialized: dict[str, Any] = {
-        "user_id": state.get("user_id"),
-        "chatbot_id": state.get("chatbot_id"),
-        "language": state.get("language", "es"),
-        "messages": [],
-        "retrieved_context": state.get("retrieved_context", []),
-        "current_tool": state.get("current_tool"),
-        "run_id": state.get("run_id"),
-    }
-
-    for msg in state.get("messages", []):
-        serialized["messages"].append({
-            "type": msg.__class__.__name__,
-            "content": msg.content,
-        })
-
-    return serialized
-```
-
-**Comando para verificar**:
-```bash
-uv run pytest tests/unit/test_agent_state.py -v
-# Expected: All tests PASSED
-```
-
----
+> ✅ **Fase Completada y Validada**. Los detalles (prompts y especificaciones técnicas) han sido ejecutados con éxito y están documentados en el código. Se ha compactado esta sección para mejorar la legibilidad del documento.
 
 ## FASE 2: Base de Datos y Migraciones — PARCIALMENTE REDUCIDA
 
-> El prompt 2.1 (configuración de Alembic) está **reducido**: Alembic ya está configurado en el servidor.
-> Solo hay que crear la nueva migration que añade las tablas del Hub al schema existente
-> (chatbots, knowledge_bases, documents, document_chunks con vector, conversations, messages,
-> feedback_ratings, ragas_evaluations) y habilitar la extensión `pgvector` si no está activa.
->
-> Los prompts 2.2–2.9 se mantienen íntegros: definen modelos ORM, retriever híbrido y
-> esquema de gobernanza de IA específicos del Hub.
-
----
-
-### Prompt 2.1 - Configuración de Alembic (Setup)
-
-**Objetivo**: Configurar Alembic para migraciones asíncronas con asyncpg.
-
-**Instrucciones**:
-
-```
-Configura Alembic para el proyecto con soporte asíncrono.
-
-TAREAS:
-1. Inicializar Alembic: alembic init migrations
-2. Configurar alembic.ini para usar DATABASE_URL
-3. Configurar env.py para operaciones async
-
-CRITERIOS DE ACEPTACIÓN:
-- alembic upgrade head funciona sin errores
-- La extensión vector está habilitada en PostgreSQL
-```
-
-**Archivos a crear**:
-
-**alembic.ini**:
-```ini
-[alembic]
-script_location = migrations
-prepend_sys_path = .
-
-[loggers]
-keys = root,sqlalchemy,alembic
-
-[handlers]
-keys = console
-
-[formatters]
-keys = generic
-
-[logger_root]
-level = WARN
-handlers = console
-
-[logger_alembic]
-level = INFO
-handlers =
-qualname = alembic
-
-[handler_console]
-class = StreamHandler
-args = (sys.stderr,)
-level = NOTSET
-formatter = generic
-
-[formatter_generic]
-format = %(levelname)-5.5s [%(name)s] %(message)s
-```
-
-**migrations/env.py**:
-```python
-"""Configuración de Alembic para migraciones asíncronas."""
-import asyncio
-from logging.config import fileConfig
-
-from alembic import context
-from sqlalchemy import pool
-from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
-
-from src.config import get_settings
-from src.database.models import Base
-
-config = context.config
-
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
-
-target_metadata = Base.metadata
-
-
-def get_url() -> str:
-    return get_settings().database_url
-
-
-def run_migrations_offline() -> None:
-    context.configure(
-        url=get_url(),
-        target_metadata=target_metadata,
-        literal_binds=True,
-    )
-    with context.begin_transaction():
-        context.run_migrations()
-
-
-async def run_async_migrations() -> None:
-    configuration = config.get_section(config.config_ini_section) or {}
-    configuration["sqlalchemy.url"] = get_url()
-
-    connectable = async_engine_from_config(
-        configuration,
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
-
-    async with connectable.connect() as connection:
-        await connection.run_sync(
-            lambda conn: context.configure(connection=conn, target_metadata=target_metadata)
-        )
-        await connection.run_sync(lambda conn: context.run_migrations())
-
-    await connectable.dispose()
-
-
-def run_migrations_online() -> None:
-    asyncio.run(run_async_migrations())
-
-
-if context.is_offline_mode():
-    run_migrations_offline()
-else:
-    run_migrations_online()
-```
-
----
-
-### Prompt 2.2 - Tests de Conexión a Base de Datos (TDD - RED)
-
-**Objetivo**: Validar la conexión asíncrona a PostgreSQL con soporte de la extensión `pgvector`, asegurando que el motor y la fábrica de sesiones funcionan correctamente.
-
-**Archivos a crear**:
-
-**tests/integration/test_database_connection.py**:
-```python
-"""Tests de integración para la conexión a base de datos."""
-import pytest
-from sqlalchemy import text
-
-
-@pytest.fixture
-def db_url():
-    return "postgresql+asyncpg://chatbots:chatbots_secret@localhost:5432/chatbots_hub_test"
-
-
-class TestAsyncDatabaseConnection:
-
-    @pytest.mark.asyncio
-    async def test_async_engine_creates_connection(self, db_url: str) -> None:
-        from src.database.connection import create_async_engine
-
-        engine = create_async_engine(db_url)
-        async with engine.connect() as conn:
-            result = await conn.execute(text("SELECT 1"))
-            assert result.scalar() == 1
-        await engine.dispose()
-
-    @pytest.mark.asyncio
-    async def test_async_session_commits_transaction(self, db_url: str) -> None:
-        from src.database.connection import create_async_engine, create_session_factory
-
-        engine = create_async_engine(db_url)
-        session_factory = create_session_factory(engine)
-
-        async with session_factory() as session:
-            await session.execute(text("CREATE TEMP TABLE test_commit (id SERIAL, value TEXT)"))
-            await session.execute(text("INSERT INTO test_commit (value) VALUES ('test')"))
-            await session.commit()
-            result = await session.execute(text("SELECT value FROM test_commit"))
-            assert result.scalar() == "test"
-        await engine.dispose()
-```
-
----
-
-### Prompt 2.3 - Implementación de Conexión a BD (TDD - GREEN)
-
-**Objetivo**: Implementar el motor de conexión asíncrona y la fábrica de sesiones SQLAlchemy que supere los tests de conexión anteriores.
-
-**src/database/__init__.py**:
-```python
-"""Módulo de base de datos."""
-from src.database.connection import get_async_session
-
-__all__ = ["get_async_session"]
-```
-
-**src/database/connection.py**:
-```python
-"""Conexión asíncrona a PostgreSQL."""
-from collections.abc import AsyncGenerator
-from typing import Any
-
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine, AsyncSession, async_sessionmaker,
-    create_async_engine as sa_create_async_engine,
-)
-
-from src.config import get_settings
-
-
-def create_async_engine(url: str | None = None, **kwargs: Any) -> AsyncEngine:
-    if url is None:
-        url = get_settings().database_url
-    return sa_create_async_engine(url, echo=False, pool_pre_ping=True, **kwargs)
-
-
-def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
-    return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-
-_engine: AsyncEngine | None = None
-
-
-def get_engine() -> AsyncEngine:
-    global _engine
-    if _engine is None:
-        _engine = create_async_engine()
-    return _engine
-
-
-async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
-    session_factory = create_session_factory(get_engine())
-    async with session_factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-```
-
----
-
-### Prompt 2.4 - Tests de Modelos ORM (TDD - RED)
-
-**Objetivo**: Validar los modelos SQLAlchemy (`Chatbot`, `DocumentChunk`, `IngestionJob`) con sus campos, relaciones y constraints antes de implementarlos.
-
-**tests/integration/test_database_models.py**:
-```python
-"""Tests para modelos ORM."""
-import uuid
-from datetime import datetime, timezone
-import pytest
-from sqlalchemy import select, text
-
-
-@pytest.fixture
-def db_url():
-    return "postgresql+asyncpg://chatbots:chatbots_secret@localhost:5432/chatbots_hub_test"
-
-
-class TestChatbotModel:
-
-    @pytest.mark.asyncio
-    async def test_create_chatbot_model(self, db_url: str) -> None:
-        from src.database.connection import create_async_engine, create_session_factory
-        from src.database.models import Base, Chatbot
-
-        engine = create_async_engine(db_url)
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-
-        session_factory = create_session_factory(engine)
-        async with session_factory() as session:
-            chatbot = Chatbot(
-                id=uuid.uuid4(), name="Test Bot",
-                system_prompt="You are helpful.", sources=[]
-            )
-            session.add(chatbot)
-            await session.commit()
-
-            result = await session.execute(select(Chatbot).where(Chatbot.name == "Test Bot"))
-            assert result.scalar_one().name == "Test Bot"
-
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
-        await engine.dispose()
-
-
-class TestDocumentChunkModel:
-
-    @pytest.mark.asyncio
-    async def test_create_chunk_with_vector(self, db_url: str) -> None:
-        from src.database.connection import create_async_engine, create_session_factory
-        from src.database.models import Base, Chatbot, DocumentChunk
-
-        engine = create_async_engine(db_url)
-        async with engine.begin() as conn:
-            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-            await conn.run_sync(Base.metadata.create_all)
-
-        session_factory = create_session_factory(engine)
-        async with session_factory() as session:
-            chatbot = Chatbot(id=uuid.uuid4(), name="Bot", system_prompt="Test", sources=[])
-            session.add(chatbot)
-            await session.flush()
-
-            chunk = DocumentChunk(
-                chatbot_id=chatbot.id, content="Test content",
-                source_url="https://example.com", content_hash="abc123",
-                embedding=[0.1] * 1536, metadata={"page": 1}
-            )
-            session.add(chunk)
-            await session.commit()
-
-            result = await session.execute(select(DocumentChunk).where(DocumentChunk.content_hash == "abc123"))
-            saved = result.scalar_one()
-            assert len(saved.embedding) == 1536
-
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
-        await engine.dispose()
-```
-
----
-
-### Prompt 2.5 - Implementación de Modelos ORM (TDD - GREEN)
-
-**Objetivo**: Implementar los modelos ORM completos con sus relaciones, índices vectoriales y migraciones Alembic correspondientes.
-
-**src/database/models.py**:
-```python
-"""Modelos ORM de SQLAlchemy."""
-import uuid
-from datetime import datetime, timezone
-from typing import Any
-
-from pgvector.sqlalchemy import Vector
-from sqlalchemy import ARRAY, DateTime, ForeignKey, String, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-
-
-class Base(DeclarativeBase):
-    type_annotation_map = {dict[str, Any]: JSONB, list[str]: ARRAY(String)}
-
-
-class Client(Base):
-    """Entidad cliente (institución) gestionada por un partner."""
-    __tablename__ = "clients"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    partner_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)  # user_id del partner responsable
-    theme_config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)  # overrides visuales a nivel cliente
-    is_active: Mapped[bool] = mapped_column(default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    chatbots: Mapped[list["Chatbot"]] = relationship(back_populates="client", cascade="all, delete-orphan")
-
-
-class Chatbot(Base):
-    __tablename__ = "chatbots"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    client_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    system_prompt: Mapped[str] = mapped_column(Text, nullable=False)
-    sources: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
-    theme_config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)  # overrides visuales a nivel chatbot (cascada sobre cliente)
-    is_active: Mapped[bool] = mapped_column(default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    client: Mapped["Client"] = relationship(back_populates="chatbots")
-    document_chunks: Mapped[list["DocumentChunk"]] = relationship(back_populates="chatbot", cascade="all, delete-orphan")
-    interactions: Mapped[list["Interaction"]] = relationship(back_populates="chatbot", cascade="all, delete-orphan")
-
-
-class DocumentChunk(Base):
-    __tablename__ = "document_chunks"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    chatbot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("chatbots.id", ondelete="CASCADE"))
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    source_url: Mapped[str] = mapped_column(String(2048), nullable=False)
-    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    embedding: Mapped[list[float]] = mapped_column(Vector(1536), nullable=True)
-    metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
-    language: Mapped[str] = mapped_column(String(10), default="es")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    chatbot: Mapped["Chatbot"] = relationship(back_populates="document_chunks")
-
-
-class Interaction(Base):
-    __tablename__ = "interactions"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    chatbot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("chatbots.id", ondelete="CASCADE"))
-    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    user_message: Mapped[str] = mapped_column(Text, nullable=False)
-    assistant_message: Mapped[str] = mapped_column(Text, nullable=False)
-    run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
-    metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
-    feedback_score: Mapped[int | None] = mapped_column(nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    chatbot: Mapped["Chatbot"] = relationship(back_populates="interactions")
-
-
-class IngestionJob(Base):
-    __tablename__ = "ingestion_jobs"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    chatbot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("chatbots.id", ondelete="CASCADE"))
-    status: Mapped[str] = mapped_column(String(50), default="pending")
-    source_url: Mapped[str] = mapped_column(String(2048), nullable=False)
-    chunks_processed: Mapped[int] = mapped_column(default=0)
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-```
-
----
-
-### Prompt 2.6 - Tests del Retriever Híbrido (TDD - RED)
-
-**Objetivo**: Validar el sistema de búsqueda que combina similitud vectorial (semántica) con búsqueda por palabras clave (full-text), devolviendo resultados rankeados por relevancia.
-
-**tests/integration/test_retriever.py**:
-```python
-"""Tests para el retriever híbrido."""
-import uuid
-import pytest
-from sqlalchemy import text
-
-
-@pytest.fixture
-def db_url():
-    return "postgresql+asyncpg://chatbots:chatbots_secret@localhost:5432/chatbots_hub_test"
-
-
-class TestHybridRetriever:
-
-    @pytest.mark.asyncio
-    async def test_vector_similarity_search(self, db_url: str) -> None:
-        from src.database.connection import create_async_engine, create_session_factory
-        from src.database.models import Base, Chatbot, DocumentChunk
-        from src.services.retriever import HybridRetriever
-
-        engine = create_async_engine(db_url)
-        async with engine.begin() as conn:
-            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-            await conn.run_sync(Base.metadata.drop_all)
-            await conn.run_sync(Base.metadata.create_all)
-
-        session_factory = create_session_factory(engine)
-        async with session_factory() as session:
-            chatbot_id = uuid.uuid4()
-            chatbot = Chatbot(id=chatbot_id, name="Test", system_prompt="Test", sources=[])
-            session.add(chatbot)
-            await session.flush()
-
-            chunks = [
-                DocumentChunk(chatbot_id=chatbot_id, content="Python es genial", source_url="url1", content_hash="h1", embedding=[0.1]*1536),
-                DocumentChunk(chatbot_id=chatbot_id, content="Java es diferente", source_url="url2", content_hash="h2", embedding=[0.9]*1536),
-            ]
-            session.add_all(chunks)
-            await session.commit()
-
-            retriever = HybridRetriever(session)
-            results = await retriever.vector_search([0.12]*1536, chatbot_id, top_k=2)
-            assert len(results) >= 1
-            assert "Python" in results[0].content
-
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
-        await engine.dispose()
-```
-
----
-
-### Prompt 2.7 - Implementación del Retriever Híbrido (TDD - GREEN)
-
-**Objetivo**: Implementar el `HybridRetriever` que ejecuta búsquedas vectoriales con `pgvector` y full-text en PostgreSQL, fusionando y rankeando los resultados.
-
-**src/services/__init__.py**:
-```python
-"""Módulo de servicios."""
-```
-
-**src/services/retriever.py**:
-```python
-"""Servicio de búsqueda híbrida."""
-import uuid
-from dataclasses import dataclass
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from src.database.models import DocumentChunk
-
-
-@dataclass
-class SearchResult:
-    id: uuid.UUID
-    content: str
-    source_url: str
-    language: str
-    score: float
-    metadata: dict
-
-
-class HybridRetriever:
-    def __init__(self, session: AsyncSession):
-        self.session = session
-
-    async def vector_search(
-        self, query_embedding: list[float], chatbot_id: uuid.UUID,
-        top_k: int = 5, language: str | None = None
-    ) -> list[SearchResult]:
-        similarity = 1 - DocumentChunk.embedding.cosine_distance(query_embedding)
-        query = (
-            select(DocumentChunk, similarity.label("score"))
-            .where(DocumentChunk.chatbot_id == chatbot_id)
-            .where(DocumentChunk.embedding.isnot(None))
-        )
-        if language:
-            query = query.where(DocumentChunk.language == language)
-        query = query.order_by(similarity.desc()).limit(top_k)
-        result = await self.session.execute(query)
-        return [
-            SearchResult(
-                id=row.DocumentChunk.id, content=row.DocumentChunk.content,
-                source_url=row.DocumentChunk.source_url, language=row.DocumentChunk.language,
-                score=float(row.score), metadata=row.DocumentChunk.metadata or {}
-            )
-            for row in result.all()
-        ]
-
-    async def keyword_search(
-        self, query: str, chatbot_id: uuid.UUID,
-        top_k: int = 5, language: str | None = None
-    ) -> list[SearchResult]:
-        filters = [DocumentChunk.chatbot_id == chatbot_id]
-        for word in query.split():
-            filters.append(DocumentChunk.content.ilike(f"%{word}%"))
-        if language:
-            filters.append(DocumentChunk.language == language)
-        stmt = select(DocumentChunk).where(*filters).limit(top_k)
-        result = await self.session.execute(stmt)
-        return [
-            SearchResult(
-                id=c.id, content=c.content, source_url=c.source_url,
-                language=c.language, score=1.0, metadata=c.metadata or {}
-            )
-            for c in result.scalars().all()
-        ]
-
-    async def hybrid_search(
-        self, query: str, query_embedding: list[float], chatbot_id: uuid.UUID,
-        top_k: int = 5, language: str | None = None, vector_weight: float = 0.7
-    ) -> list[SearchResult]:
-        vector_results = await self.vector_search(query_embedding, chatbot_id, top_k*2, language)
-        keyword_results = await self.keyword_search(query, chatbot_id, top_k*2, language)
-
-        scores: dict[uuid.UUID, tuple[SearchResult, float]] = {}
-        k = 60
-        for rank, r in enumerate(vector_results):
-            scores[r.id] = (r, vector_weight * (1/(k+rank+1)))
-        for rank, r in enumerate(keyword_results):
-            rrf = (1-vector_weight) * (1/(k+rank+1))
-            if r.id in scores:
-                scores[r.id] = (r, scores[r.id][1] + rrf)
-            else:
-                scores[r.id] = (r, rrf)
-
-        sorted_results = sorted(scores.values(), key=lambda x: x[1], reverse=True)
-        return [SearchResult(id=r.id, content=r.content, source_url=r.source_url, language=r.language, score=s, metadata=r.metadata) for r, s in sorted_results[:top_k]]
-```
-
----
-
----
-
-### Prompt 2.8 - Esquema de Gobernanza de IA (TDD - RED/GREEN)
-
-**Objetivo**: Crear el soporte en base de datos para almacenar prompts y configuraciones de modelos de forma dinámica, permitiendo editar el comportamiento de la IA sin tocar el código.
-
-**Instrucciones**:
-
-```
-Actúa como un experto en Bases de Datos. Actualiza el modelo de SQLAlchemy en `src/database/models.py`.
-
-TAREAS:
-1. Tabla `llm_configs`: Campos `id`, `provider` (enum: google, openai, ollama), `model_name`, `temperature`, `max_tokens`, `api_key_secret_name` (string para referencia a Secret Manager).
-2. Tabla `prompt_templates`: Campos `id`, `chatbot_id` (FK), `slug` (ej: 'system_base'), `language` (ca, es, en), `template_text` (Text), `version` (int).
-3. Relación: Actualizar el modelo `Chatbot` para que tenga una relación 1:1 con `llm_configs` y 1:N con `prompt_templates`.
-
-TESTS REQUERIDOS (RED):
-- test_chatbot_retrieves_correct_prompt_by_language: Validar que al pedir el prompt 'system' en catalán, no devuelva el de castellano.
-- test_llm_config_persistence: Validar que se pueden guardar y recuperar parámetros de temperatura y modelo.
-```
-
----
-
-### Prompt 2.9 - Estructura de Asignación de Modelos por Chatbot (TDD - RED/GREEN)
-
-**Objetivo**: Garantizar que cada bot tenga un modelo LLM asignado de forma explícita y que el administrador pueda cambiarlo sin reiniciar el servidor.
-
-**Instrucciones**:
-
-```
-Actualiza la tabla `chatbots` para incluir una relación obligatoria con `llm_configs`. Cada bot debe tener un `model_id` asignado. El sistema debe permitir que el administrador cambie este ID en cualquier momento para que el bot empiece a usar un modelo distinto (ej. pasar de Flash a Pro para mayor precisión).
-
-TESTS REQUERIDOS (RED):
-- test_chatbot_has_required_model: Validar que no se puede crear un chatbot sin `model_id`.
-- test_model_hot_swap: Validar que cambiar el `model_id` en base de datos hace que la siguiente petición use el nuevo modelo sin reiniciar el proceso.
-```
-
----
+> ✅ **Fase Completada y Validada**. Los detalles (prompts y especificaciones técnicas) han sido ejecutados con éxito y están documentados en el código. Se ha compactado esta sección para mejorar la legibilidad del documento.
 
 ## FASE 3: Ingestión de Documentos (Asíncrona)
 
----
-
-### Prompt 3.1 - Tests del Hasher de Documentos (TDD - RED)
-
-**Objetivo**: Crear un sistema para detectar cambios en documentos usando SHA-256.
-
-**tests/unit/test_hasher.py**:
-```python
-"""Tests para el hasher de documentos."""
-import pytest
-
-
-class TestDocumentHasher:
-
-    def test_hash_content_returns_sha256(self) -> None:
-        from src.ingestion.hasher import hash_content
-
-        content = "Este es un documento de prueba."
-        result = hash_content(content)
-
-        assert len(result) == 64  # SHA-256 hex
-        assert result.isalnum()
-
-    def test_same_content_same_hash(self) -> None:
-        from src.ingestion.hasher import hash_content
-
-        content = "Contenido idéntico"
-        hash1 = hash_content(content)
-        hash2 = hash_content(content)
-
-        assert hash1 == hash2
-
-    def test_different_content_different_hash(self) -> None:
-        from src.ingestion.hasher import hash_content
-
-        hash1 = hash_content("Contenido A")
-        hash2 = hash_content("Contenido B")
-
-        assert hash1 != hash2
-
-    def test_hash_file_returns_hash(self) -> None:
-        from src.ingestion.hasher import hash_file
-        from pathlib import Path
-        import tempfile
-
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-            f.write("Contenido del archivo")
-            temp_path = f.name
-
-        result = hash_file(Path(temp_path))
-        assert len(result) == 64
-
-        Path(temp_path).unlink()
-```
-
----
-
-### Prompt 3.2 - Implementación del Hasher (TDD - GREEN)
-
-**Objetivo**: Implementar el sistema de hashing SHA-256 para detectar si un documento ha cambiado desde la última ingestión, evitando reprocesamiento innecesario.
-
-**src/ingestion/__init__.py**:
-```python
-"""Módulo de ingestión de documentos."""
-```
-
-**src/ingestion/hasher.py**:
-```python
-"""Hasher para detección de cambios en documentos."""
-import hashlib
-from pathlib import Path
-
-
-def hash_content(content: str) -> str:
-    """Genera hash SHA-256 del contenido.
-
-    Args:
-        content: Texto a hashear
-
-    Returns:
-        Hash hexadecimal de 64 caracteres
-    """
-    return hashlib.sha256(content.encode('utf-8')).hexdigest()
-
-
-def hash_file(file_path: Path) -> str:
-    """Genera hash SHA-256 de un archivo.
-
-    Args:
-        file_path: Ruta al archivo
-
-    Returns:
-        Hash hexadecimal de 64 caracteres
-    """
-    sha256 = hashlib.sha256()
-    with open(file_path, 'rb') as f:
-        for chunk in iter(lambda: f.read(8192), b''):
-            sha256.update(chunk)
-    return sha256.hexdigest()
-```
-
----
-
-### Prompt 3.3 - Tests del Chunker de Markdown (TDD - RED)
-
-**Objetivo**: Validar el sistema de división de documentos Markdown en chunks semánticos con metadatos (fuente, posición, idioma) que preserven el contexto para el RAG.
-
-**tests/unit/test_chunker.py**:
-```python
-"""Tests para el chunker de markdown."""
-import pytest
-
-
-class TestMarkdownChunker:
-
-    def test_split_by_headers(self) -> None:
-        from src.ingestion.chunker import MarkdownChunker
-
-        markdown = '''# Título Principal
-
-Este es el contenido del título principal.
-
-## Sección 1
-
-Contenido de la sección 1.
-
-## Sección 2
-
-Contenido de la sección 2.
-'''
-        chunker = MarkdownChunker(chunk_size=500, chunk_overlap=50)
-        chunks = chunker.split(markdown)
-
-        assert len(chunks) >= 2
-        assert any("Sección 1" in c.content for c in chunks)
-
-    def test_preserves_metadata(self) -> None:
-        from src.ingestion.chunker import MarkdownChunker
-
-        markdown = '''# Título
-
-Contenido bajo el título.
-'''
-        chunker = MarkdownChunker()
-        chunks = chunker.split(markdown, metadata={"source": "test.md"})
-
-        assert chunks[0].metadata["source"] == "test.md"
-
-    def test_respects_chunk_size(self) -> None:
-        from src.ingestion.chunker import MarkdownChunker
-
-        long_content = "# Título\n\n" + "Palabra " * 1000
-        chunker = MarkdownChunker(chunk_size=200, chunk_overlap=20)
-        chunks = chunker.split(long_content)
-
-        for chunk in chunks:
-            assert len(chunk.content) <= 300  # Con margen
-```
-
----
-
-### Prompt 3.4 - Implementación del Chunker (TDD - GREEN)
-
-**Objetivo**: Implementar el splitter de Markdown que genera chunks vectorizables manteniendo coherencia semántica y metadatos de trazabilidad.
-
-**src/ingestion/chunker.py**:
-```python
-"""Chunker para documentos Markdown."""
-from dataclasses import dataclass, field
-from typing import Any
-
-from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
-
-
-@dataclass
-class Chunk:
-    """Representa un chunk de documento."""
-    content: str
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-class MarkdownChunker:
-    """Divide documentos Markdown en chunks semánticos."""
-
-    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 100):
-        self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
-
-        self.headers_to_split = [
-            ("#", "header_1"),
-            ("##", "header_2"),
-            ("###", "header_3"),
-        ]
-
-        self.md_splitter = MarkdownHeaderTextSplitter(
-            headers_to_split_on=self.headers_to_split,
-            strip_headers=False,
-        )
-
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-        )
-
-    def split(self, content: str, metadata: dict[str, Any] | None = None) -> list[Chunk]:
-        """Divide el contenido en chunks.
-
-        Args:
-            content: Contenido Markdown
-            metadata: Metadatos adicionales
-
-        Returns:
-            Lista de chunks
-        """
-        base_metadata = metadata or {}
-
-        # Primero dividir por headers
-        md_docs = self.md_splitter.split_text(content)
-
-        # Luego dividir documentos grandes
-        chunks = []
-        for doc in md_docs:
-            doc_content = doc.page_content
-            doc_metadata = {**base_metadata, **doc.metadata}
-
-            if len(doc_content) > self.chunk_size:
-                sub_docs = self.text_splitter.split_text(doc_content)
-                for i, sub_content in enumerate(sub_docs):
-                    chunks.append(Chunk(
-                        content=sub_content,
-                        metadata={**doc_metadata, "chunk_index": i},
-                    ))
-            else:
-                chunks.append(Chunk(content=doc_content, metadata=doc_metadata))
-
-        return chunks
-```
-
----
-
-### Prompt 3.5 - Tests del Procesador Docling (TDD - RED)
-
-**Objetivo**: Validar la conversión de PDFs y páginas web (incluyendo webs dinámicas con JavaScript) a Markdown estructurado usando Docling y Playwright.
-
-**tests/unit/test_docling_processor.py**:
-```python
-"""Tests para el procesador Docling."""
-import pytest
-from unittest.mock import Mock, patch
-
-
-class TestDoclingProcessor:
-
-    def test_process_pdf_returns_markdown(self) -> None:
-        from src.ingestion.docling_processor import DoclingProcessor
-
-        with patch('src.ingestion.docling_processor.DocumentConverter') as mock_converter:
-            mock_result = Mock()
-            mock_result.document.export_to_markdown.return_value = "# Título\n\nContenido"
-            mock_converter.return_value.convert.return_value = mock_result
-
-            processor = DoclingProcessor()
-            result = processor.process_pdf("test.pdf")
-
-            assert "# Título" in result
-            assert "Contenido" in result
-
-    def test_process_url_returns_markdown(self) -> None:
-        from src.ingestion.docling_processor import DoclingProcessor
-
-        with patch('src.ingestion.docling_processor.DocumentConverter') as mock_converter:
-            mock_result = Mock()
-            mock_result.document.export_to_markdown.return_value = "# Web Page\n\nContent"
-            mock_converter.return_value.convert.return_value = mock_result
-
-            processor = DoclingProcessor()
-            result = processor.process_url("https://example.com")
-
-            assert "# Web Page" in result
-```
-
----
-
-### Prompt 3.6 - Implementación del Procesador Docling (TDD - GREEN)
-
-**Objetivo**: Implementar el procesador que usa Docling (IBM) y Playwright para convertir cualquier fuente documental a Markdown limpio y estructurado.
-
-**src/ingestion/docling_processor.py**:
-```python
-"""Procesador de documentos usando Docling."""
-from pathlib import Path
-
-from docling.document_converter import DocumentConverter
-
-
-class DoclingProcessor:
-    """Convierte PDFs y URLs a Markdown usando Docling."""
-
-    def __init__(self):
-        self.converter = DocumentConverter()
-
-    def process_pdf(self, pdf_path: str | Path) -> str:
-        """Convierte un PDF a Markdown.
-
-        Args:
-            pdf_path: Ruta al archivo PDF
-
-        Returns:
-            Contenido en formato Markdown
-        """
-        result = self.converter.convert(str(pdf_path))
-        return result.document.export_to_markdown()
-
-    def process_url(self, url: str) -> str:
-        """Convierte una página web a Markdown.
-
-        Args:
-            url: URL de la página
-
-        Returns:
-            Contenido en formato Markdown
-        """
-        result = self.converter.convert(url)
-        return result.document.export_to_markdown()
-
-    def process(self, source: str) -> str:
-        """Procesa automáticamente PDF o URL.
-
-        Args:
-            source: Ruta a PDF o URL
-
-        Returns:
-            Contenido en formato Markdown
-        """
-        if source.startswith(('http://', 'https://')):
-            return self.process_url(source)
-        return self.process_pdf(source)
-```
-
----
-
-### Prompt 3.7 - Tests del Watcher Asíncrono (TDD - RED)
-
-**Objetivo**: Validar el sistema de vigilancia asíncrono que detecta cambios en fuentes configuradas (URLs, carpetas) y dispara automáticamente el pipeline de ingestión.
-
-**tests/unit/test_watcher.py**:
-```python
-"""Tests para el watcher de ingestión."""
-import uuid
-import pytest
-from unittest.mock import AsyncMock, Mock, patch
-
-
-class TestIngestionWatcher:
-
-    @pytest.mark.asyncio
-    async def test_process_source_creates_chunks(self) -> None:
-        from src.ingestion.watcher import IngestionWatcher
-
-        with patch('src.ingestion.watcher.DoclingProcessor') as mock_docling:
-            mock_docling.return_value.process.return_value = "# Test\n\nContent"
-
-            watcher = IngestionWatcher(
-                session=AsyncMock(),
-                embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1]*1536)),
-            )
-
-            chunks = await watcher.process_source(
-                source_url="https://example.com",
-                chatbot_id=uuid.uuid4(),
-            )
-
-            assert len(chunks) >= 1
-
-    @pytest.mark.asyncio
-    async def test_process_skips_unchanged_content(self) -> None:
-        from src.ingestion.watcher import IngestionWatcher
-
-        mock_session = AsyncMock()
-        mock_session.execute = AsyncMock(return_value=Mock(scalar_one_or_none=Mock(return_value=Mock(content_hash="existing_hash"))))
-
-        watcher = IngestionWatcher(
-            session=mock_session,
-            embedding_service=AsyncMock(),
-        )
-
-        # El hash del nuevo contenido coincide
-        with patch('src.ingestion.watcher.hash_content', return_value="existing_hash"):
-            with patch('src.ingestion.watcher.DoclingProcessor') as mock_docling:
-                mock_docling.return_value.process.return_value = "Content"
-
-                result = await watcher.process_source(
-                    source_url="https://example.com",
-                    chatbot_id=uuid.uuid4(),
-                )
-                # Debe devolver lista vacía si no hay cambios
-                assert len(result) == 0
-```
-
----
-
-### Prompt 3.8 - Implementación del Watcher (TDD - GREEN)
-
-**Objetivo**: Implementar el `IngestionWatcher` asíncrono que orquesta el pipeline completo: detectar cambios → procesar con Docling → chunkear → vectorizar → almacenar en PostgreSQL.
-
-**src/ingestion/watcher.py**:
-```python
-"""Orquestador de ingestión asíncrona."""
-import uuid
-from datetime import datetime, timezone
-from typing import Protocol
-
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.database.models import DocumentChunk, IngestionJob
-from src.ingestion.chunker import MarkdownChunker
-from src.ingestion.docling_processor import DoclingProcessor
-from src.ingestion.hasher import hash_content
-
-
-class EmbeddingService(Protocol):
-    """Protocolo para servicio de embeddings."""
-    async def embed(self, text: str) -> list[float]: ...
-
-
-class IngestionWatcher:
-    """Orquesta la ingestión de documentos."""
-
-    def __init__(self, session: AsyncSession, embedding_service: EmbeddingService):
-        self.session = session
-        self.embedding_service = embedding_service
-        self.processor = DoclingProcessor()
-        self.chunker = MarkdownChunker()
-
-    async def process_source(
-        self,
-        source_url: str,
-        chatbot_id: uuid.UUID,
-        language: str = "es",
-    ) -> list[DocumentChunk]:
-        """Procesa una fuente y crea chunks.
-
-        Args:
-            source_url: URL o ruta al documento
-            chatbot_id: ID del chatbot
-            language: Idioma del documento
-
-        Returns:
-            Lista de chunks creados
-        """
-        # Obtener contenido
-        content = self.processor.process(source_url)
-        content_hash = hash_content(content)
-
-        # Verificar si ya existe con el mismo hash
-        existing = await self.session.execute(
-            select(DocumentChunk)
-            .where(DocumentChunk.source_url == source_url)
-            .where(DocumentChunk.content_hash == content_hash)
-            .limit(1)
-        )
-        if existing.scalar_one_or_none():
-            return []  # Sin cambios
-
-        # Eliminar chunks antiguos de esta fuente
-        old_chunks = await self.session.execute(
-            select(DocumentChunk).where(DocumentChunk.source_url == source_url)
-        )
-        for chunk in old_chunks.scalars():
-            await self.session.delete(chunk)
-
-        # Crear nuevos chunks
-        chunks = self.chunker.split(content, metadata={"source_url": source_url})
-        created_chunks = []
-
-        for chunk in chunks:
-            embedding = await self.embedding_service.embed(chunk.content)
-            db_chunk = DocumentChunk(
-                chatbot_id=chatbot_id,
-                content=chunk.content,
-                source_url=source_url,
-                content_hash=hash_content(chunk.content),
-                embedding=embedding,
-                metadata=chunk.metadata,
-                language=language,
-            )
-            self.session.add(db_chunk)
-            created_chunks.append(db_chunk)
-
-        await self.session.commit()
-        return created_chunks
-
-    async def run_job(self, job_id: uuid.UUID) -> None:
-        """Ejecuta un job de ingestión.
-
-        Args:
-            job_id: ID del job
-        """
-        job = await self.session.get(IngestionJob, job_id)
-        if not job:
-            return
-
-        job.status = "running"
-        job.started_at = datetime.now(timezone.utc)
-        await self.session.commit()
-
-        try:
-            chunks = await self.process_source(job.source_url, job.chatbot_id)
-            job.status = "completed"
-            job.chunks_processed = len(chunks)
-            job.completed_at = datetime.now(timezone.utc)
-        except Exception as e:
-            job.status = "failed"
-            job.error_message = str(e)
-            job.completed_at = datetime.now(timezone.utc)
-
-        await self.session.commit()
-```
-
----
-
----
-
-### Prompt 3.9 - Ingestión de Documentos de Usuario (Contexto Temporal)
-
-**Objetivo**: Implementar la capacidad de procesar y vectorizar PDFs subidos por el usuario en tiempo real, asegurando que esta información esté aislada y vinculada únicamente a su sesión/identidad.
-
-**Instrucciones**:
-
-```
-Actúa como un experto en Backend. Implementa la lógica de 'Ingesta Prioritaria' para documentos subidos por el usuario.
-
-TAREAS:
-1. Crear el endpoint `POST /api/v1/ingestion/user-upload` que reciba un archivo PDF y un `user_id` (del SSO).
-2. Modificar `DocumentChunk` en `src/database/models.py` para incluir una columna `is_temporary: bool` y `owner_id: UUID` (opcional).
-3. Implementar un flujo en `IngestionWatcher` que procese estos archivos ignorando el sistema de 'hashing' global (siempre se procesan) y los marque como temporales.
-4. Asegurar que el sistema de búsqueda (Retriever) incluya estos chunks SOLO si el `user_id` de la consulta coincide con el `owner_id` del documento.
-
-TESTS REQUERIDOS (RED):
-- test_user_upload_is_not_visible_to_other_users: Validar que un documento subido por el Usuario A no es recuperado en una búsqueda del Usuario B.
-- test_temporary_chunks_cleanup: Validar una función que elimine chunks temporales después de 24 horas (TTL).
-```
-
----
+> ✅ **Fase Completada y Validada**. Los detalles (prompts y especificaciones técnicas) han sido ejecutados con éxito y están documentados en el código. Se ha compactado esta sección para mejorar la legibilidad del documento.
 
 ## FASE 4: Agente LangGraph con Herramientas y RAGAS
 
----
-
-### Prompt 4.1 - Tests del Detector de Idioma (TDD - RED)
-
-**Objetivo**: Validar la detección automática del idioma del mensaje del usuario (Catalán, Castellano e Inglés) para adaptar las respuestas del agente.
-
-**tests/unit/test_language_detector.py**:
-```python
-"""Tests para el detector de idioma."""
-import pytest
-
-
-class TestLanguageDetector:
-
-    def test_detects_spanish(self) -> None:
-        from src.agent.language_detector import detect_language
-
-        text = "Hola, ¿cómo estás? Necesito ayuda con un problema."
-        result = detect_language(text)
-        assert result == "es"
-
-    def test_detects_english(self) -> None:
-        from src.agent.language_detector import detect_language
-
-        text = "Hello, how are you? I need help with a problem."
-        result = detect_language(text)
-        assert result == "en"
-
-    def test_defaults_to_spanish_on_short_text(self) -> None:
-        from src.agent.language_detector import detect_language
-
-        text = "Hola"
-        result = detect_language(text)
-        assert result == "es"  # Default
-```
-
----
-
-### Prompt 4.2 - Implementación del Detector de Idioma (TDD - GREEN)
-
-**Objetivo**: Implementar el detector de idioma que analiza el texto de entrada y devuelve el código de idioma (`ca`, `es`, `en`) para su uso en el grafo LangGraph.
-
-**src/agent/language_detector.py**:
-```python
-"""Detector de idioma para mensajes."""
-from langdetect import detect, LangDetectException
-
-
-def detect_language(text: str, default: str = "es") -> str:
-    """Detecta el idioma de un texto.
-
-    Args:
-        text: Texto a analizar
-        default: Idioma por defecto si no se puede detectar
-
-    Returns:
-        Código de idioma (es, en, etc.)
-    """
-    if len(text.strip()) < 10:
-        return default
-
-    try:
-        return detect(text)
-    except LangDetectException:
-        return default
-```
-
----
-
-### Prompt 4.3 - Tests de la Herramienta search_knowledge (TDD - RED)
-
-**Objetivo**: Validar la herramienta de búsqueda en la base de conocimiento que el agente LangGraph usa para recuperar contexto relevante antes de generar respuestas.
-
-**tests/unit/test_tools.py**:
-```python
-"""Tests para las herramientas del agente."""
-import uuid
-import pytest
-from unittest.mock import AsyncMock, Mock
-
-
-class TestSearchKnowledgeTool:
-
-    @pytest.mark.asyncio
-    async def test_search_returns_formatted_results(self) -> None:
-        from src.agent.tools.search_knowledge import search_knowledge
-
-        mock_retriever = AsyncMock()
-        mock_retriever.hybrid_search = AsyncMock(return_value=[
-            Mock(content="Resultado 1", source_url="url1", score=0.9),
-            Mock(content="Resultado 2", source_url="url2", score=0.8),
-        ])
-
-        result = await search_knowledge(
-            query="test query",
-            chatbot_id=str(uuid.uuid4()),
-            retriever=mock_retriever,
-            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1]*1536)),
-        )
-
-        assert "Resultado 1" in result
-        assert "Resultado 2" in result
-
-    @pytest.mark.asyncio
-    async def test_search_handles_no_results(self) -> None:
-        from src.agent.tools.search_knowledge import search_knowledge
-
-        mock_retriever = AsyncMock()
-        mock_retriever.hybrid_search = AsyncMock(return_value=[])
-
-        result = await search_knowledge(
-            query="nonexistent",
-            chatbot_id=str(uuid.uuid4()),
-            retriever=mock_retriever,
-            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1]*1536)),
-        )
-
-        assert "no se encontr" in result.lower() or "not found" in result.lower()
-```
-
----
-
-### Prompt 4.4 - Implementación de search_knowledge (TDD - GREEN)
-
-**Objetivo**: Implementar la herramienta `search_knowledge` que el agente invoca para realizar búsquedas RAG filtradas por idioma y acceso (público o privado del usuario).
-
-**src/agent/tools/__init__.py**:
-```python
-"""Herramientas del agente."""
-```
-
-**src/agent/tools/search_knowledge.py**:
-```python
-"""Herramienta de búsqueda en la base de conocimiento."""
-import uuid
-from typing import Protocol
-
-
-class RetrieverProtocol(Protocol):
-    async def hybrid_search(self, query: str, query_embedding: list[float], chatbot_id: uuid.UUID, top_k: int, language: str | None) -> list: ...
-
-
-class EmbeddingProtocol(Protocol):
-    async def embed(self, text: str) -> list[float]: ...
-
-
-async def search_knowledge(
-    query: str,
-    chatbot_id: str,
-    retriever: RetrieverProtocol,
-    embedding_service: EmbeddingProtocol,
-    top_k: int = 5,
-    language: str | None = None,
-) -> str:
-    """Busca información relevante en la base de conocimiento.
-
-    Args:
-        query: Consulta de búsqueda
-        chatbot_id: ID del chatbot
-        retriever: Servicio de recuperación
-        embedding_service: Servicio de embeddings
-        top_k: Número de resultados
-        language: Filtro de idioma
-
-    Returns:
-        Texto formateado con los resultados
-    """
-    query_embedding = await embedding_service.embed(query)
-
-    results = await retriever.hybrid_search(
-        query=query,
-        query_embedding=query_embedding,
-        chatbot_id=uuid.UUID(chatbot_id),
-        top_k=top_k,
-        language=language,
-    )
-
-    if not results:
-        return "No se encontró información relevante para tu consulta."
-
-    formatted = "**Información encontrada:**\n\n"
-    for i, result in enumerate(results, 1):
-        formatted += f"{i}. {result.content[:200]}...\n"
-        formatted += f"   _Fuente: {result.source_url}_\n\n"
-
-    return formatted
-```
-
----
-
-### Prompt 4.5 - Tests del Grafo LangGraph (TDD - RED)
-
-**Objetivo**: Validar el flujo completo del grafo de decisión: detección de idioma → selección de herramientas según rol → búsqueda → generación de respuesta.
-
-**tests/unit/test_graph.py**:
-```python
-"""Tests para el grafo de LangGraph."""
-import pytest
-from unittest.mock import AsyncMock, Mock, patch
-
-
-class TestAgentGraph:
-
-    def test_graph_has_required_nodes(self) -> None:
-        from src.agent.graph import create_agent_graph
-
-        with patch('src.agent.graph.ChatGoogleGenerativeAI'):
-            graph = create_agent_graph(
-                retriever=Mock(),
-                embedding_service=Mock(),
-            )
-
-            # Verificar nodos
-            assert "detect_language" in str(graph.nodes)
-            assert "generate_response" in str(graph.nodes)
-
-    @pytest.mark.asyncio
-    async def test_graph_processes_message(self) -> None:
-        from src.agent.graph import create_agent_graph
-        from src.agent.state import create_initial_state
-
-        with patch('src.agent.graph.ChatGoogleGenerativeAI') as mock_llm:
-            mock_llm.return_value.ainvoke = AsyncMock(
-                return_value=Mock(content="Respuesta de prueba")
-            )
-
-            graph = create_agent_graph(
-                retriever=AsyncMock(hybrid_search=AsyncMock(return_value=[])),
-                embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1]*1536)),
-            )
-
-            initial_state = create_initial_state(
-                user_id="user-123",
-                chatbot_id="chatbot-456",
-                initial_message="Hola, necesito ayuda",
-            )
-
-            # El grafo debe poder compilarse y ejecutarse
-            compiled = graph.compile()
-            assert compiled is not None
-```
-
----
-
-### Prompt 4.6 - Implementación del Grafo LangGraph (TDD - GREEN)
-
-**Objetivo**: Implementar el grafo de decisión LangGraph con soporte de modo dual: en modo Público ejecuta solo RAG con fuentes abiertas; en modo Agente (usuario identificado) desbloquea herramientas MCP y acceso a documentos temporales del usuario.
-
-> **Nota — Modo Dual (Chatbot/Agente):** El grafo es consciente del contexto del usuario. Si se recibe un `user_id` válido (modo Agente identificado), el nodo inicial desbloquea herramientas adicionales: consulta MCP (`query_oracle_mcp`) y búsqueda en documentos temporales del usuario. En modo Público (anónimo), solo está disponible `search_knowledge_base` con fuentes públicas. Ver Prompt 4.9 para la lógica de síntesis y Prompt 4.10 para el selector de modelos dinámico.
-
-**src/agent/graph.py**:
-```python
-"""Grafo de LangGraph para el agente.
-
-Soporta dos modos de operación:
-- Modo Público (Chatbot): user_id=None, solo herramientas RAG públicas.
-- Modo Agente (Identificado): user_id válido, desbloquea MCP y docs de usuario.
-"""
-from typing import Literal
-
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain_google_vertexai import ChatGoogleGenerativeAI
-from langgraph.graph import END, StateGraph
-
-from src.agent.language_detector import detect_language
-from src.agent.state import AgentState
-from src.agent.tools.search_knowledge import search_knowledge
-from src.config import get_settings
-
-
-def create_agent_graph(retriever, embedding_service, user_id: str | None = None):
-    """Crea el grafo del agente.
-
-    Args:
-        retriever: Servicio de recuperación
-        embedding_service: Servicio de embeddings
-
-    Returns:
-        StateGraph configurado
-    """
-    settings = get_settings()
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-pro",
-        google_api_key=settings.google_api_key,
-    )
-
-    async def detect_language_node(state: AgentState) -> dict:
-        """Detecta el idioma del último mensaje."""
-        messages = state.get("messages", [])
-        if messages:
-            last_message = messages[-1]
-            if isinstance(last_message, HumanMessage):
-                language = detect_language(last_message.content)
-                return {"language": language}
-        return {"language": state.get("language", "es")}
-
-    async def search_knowledge_node(state: AgentState) -> dict:
-        """Busca información relevante."""
-        messages = state.get("messages", [])
-        if not messages:
-            return {"retrieved_context": []}
-
-        last_message = messages[-1]
-        if not isinstance(last_message, HumanMessage):
-            return {"retrieved_context": []}
-
-        result = await search_knowledge(
-            query=last_message.content,
-            chatbot_id=state["chatbot_id"],
-            retriever=retriever,
-            embedding_service=embedding_service,
-            language=state.get("language"),
-        )
-        return {"retrieved_context": [result]}
-
-    async def generate_response_node(state: AgentState) -> dict:
-        """Genera la respuesta final."""
-        messages = state.get("messages", [])
-        context = state.get("retrieved_context", [])
-
-        # Construir prompt con contexto
-        context_str = "\n".join(context) if context else "Sin información adicional."
-
-        system_prompt = f"""Eres un asistente útil. Responde en {state.get('language', 'es')}.
-
-Información relevante:
-{context_str}
-
-Responde de forma concisa y útil."""
-
-        response = await llm.ainvoke([
-            {"role": "system", "content": system_prompt},
-            *[{"role": "user" if isinstance(m, HumanMessage) else "assistant", "content": m.content} for m in messages]
-        ])
-
-        return {"messages": [AIMessage(content=response.content)]}
-
-    async def route_by_capability_node(state: AgentState) -> dict:
-        """Determina las capacidades disponibles según el rol del usuario."""
-        available_tools = ["search_knowledge"]
-        if user_id:
-            # Modo Agente: desbloquear herramientas avanzadas
-            available_tools.extend(["query_oracle_mcp", "search_user_docs"])
-        return {"user_id": user_id, "available_tools": available_tools}
-
-    # Construir grafo
-    graph = StateGraph(AgentState)
-
-    graph.add_node("route_by_capability", route_by_capability_node)
-    graph.add_node("detect_language", detect_language_node)
-    graph.add_node("search_knowledge", search_knowledge_node)
-    graph.add_node("generate_response", generate_response_node)
-
-    graph.set_entry_point("route_by_capability")
-    graph.add_edge("route_by_capability", "detect_language")
-    graph.add_edge("detect_language", "search_knowledge")
-    graph.add_edge("search_knowledge", "generate_response")
-    graph.add_edge("generate_response", END)
-
-    return graph
-```
-
----
-
-### Prompt 4.7 - Tests de Evaluación RAGAS (TDD - RED)
-
-**Objetivo**: Validar las métricas de calidad RAG (fidelidad, relevancia de respuesta, recall de contexto) usando el framework RAGAS con pares pregunta-respuesta de referencia.
-
-**tests/evaluation/test_rag_quality.py**:
-```python
-"""Tests de calidad RAG usando RAGAS."""
-import pytest
-from unittest.mock import AsyncMock, Mock
-
-
-class TestRAGQuality:
-
-    @pytest.fixture
-    def golden_qa_pairs(self):
-        return [
-            {
-                "question": "¿Qué es Python?",
-                "answer": "Python es un lenguaje de programación.",
-                "context": "Python es un lenguaje de programación versátil y fácil de aprender.",
-            },
-            {
-                "question": "¿Para qué sirve FastAPI?",
-                "answer": "FastAPI es un framework para crear APIs.",
-                "context": "FastAPI es un framework web moderno para construir APIs con Python.",
-            },
-        ]
-
-    @pytest.mark.asyncio
-    async def test_rag_faithfulness(self, golden_qa_pairs) -> None:
-        """La respuesta no debe alucinar fuera del contexto."""
-        from src.evaluation.rag_metrics import calculate_faithfulness
-
-        for qa in golden_qa_pairs:
-            score = await calculate_faithfulness(
-                answer=qa["answer"],
-                context=qa["context"],
-            )
-            assert score >= 0.7, f"Faithfulness bajo para: {qa['question']}"
-
-    @pytest.mark.asyncio
-    async def test_rag_answer_relevance(self, golden_qa_pairs) -> None:
-        """La respuesta debe ser relevante a la pregunta."""
-        from src.evaluation.rag_metrics import calculate_answer_relevance
-
-        for qa in golden_qa_pairs:
-            score = await calculate_answer_relevance(
-                question=qa["question"],
-                answer=qa["answer"],
-            )
-            assert score >= 0.7, f"Relevancia baja para: {qa['question']}"
-```
-
----
-
-### Prompt 4.8 - Implementación de Métricas RAGAS (TDD - GREEN)
-
-**Objetivo**: Implementar el pipeline de evaluación automática con RAGAS que mide la calidad del agente de forma objetiva y genera informes de calidad.
-
-**src/evaluation/__init__.py**:
-```python
-"""Módulo de evaluación."""
-```
-
-**src/evaluation/rag_metrics.py**:
-```python
-"""Métricas de calidad RAG usando RAGAS."""
-from ragas.metrics import faithfulness, answer_relevancy
-from ragas import evaluate
-from datasets import Dataset
-
-
-async def calculate_faithfulness(answer: str, context: str) -> float:
-    """Calcula la fidelidad de la respuesta al contexto.
-
-    Args:
-        answer: Respuesta generada
-        context: Contexto proporcionado
-
-    Returns:
-        Score de fidelidad (0-1)
-    """
-    data = {
-        "question": ["placeholder"],
-        "answer": [answer],
-        "contexts": [[context]],
-    }
-    dataset = Dataset.from_dict(data)
-
-    try:
-        result = evaluate(dataset, metrics=[faithfulness])
-        return result["faithfulness"]
-    except Exception:
-        # Fallback simple: verificar que palabras clave del contexto estén en la respuesta
-        context_words = set(context.lower().split())
-        answer_words = set(answer.lower().split())
-        overlap = len(context_words & answer_words) / len(context_words) if context_words else 0
-        return min(overlap * 2, 1.0)
-
-
-async def calculate_answer_relevance(question: str, answer: str) -> float:
-    """Calcula la relevancia de la respuesta a la pregunta.
-
-    Args:
-        question: Pregunta original
-        answer: Respuesta generada
-
-    Returns:
-        Score de relevancia (0-1)
-    """
-    data = {
-        "question": [question],
-        "answer": [answer],
-        "contexts": [[""]],
-    }
-    dataset = Dataset.from_dict(data)
-
-    try:
-        result = evaluate(dataset, metrics=[answer_relevancy])
-        return result["answer_relevancy"]
-    except Exception:
-        # Fallback: verificar overlap de palabras significativas
-        q_words = set(question.lower().split()) - {"qué", "cómo", "cuál", "es", "para", "un", "una"}
-        a_words = set(answer.lower().split())
-        overlap = len(q_words & a_words) / len(q_words) if q_words else 0
-        return min(overlap * 2, 1.0)
-```
-
----
-
----
-
-### Prompt 4.9 - Orquestador de Tareas y Síntesis (The Task Runner)
-
-**Objetivo**: Implementar la lógica en LangGraph para que el agente pueda realizar una "triangulación" de datos: Normativa + Datos del Sistema + Evidencias del Usuario = Informe Final.
-
-**Instrucciones**:
-
-```
-Actúa como un experto en IA Agéntica. Implementa un nodo de 'Planificación y Síntesis' en LangGraph.
-
-LÓGICA DE NEGOCIO:
-1. Identificación de Requisitos: El agente debe extraer de la 'Materia' (RAG) qué campos o criterios son obligatorios para la tarea (ej: criterios de una subvención).
-2. Mapeo de Datos:
-   - Consultar en Oracle (MCP) los datos reales ejecutados (ej: gastos, fechas).
-   - Analizar los documentos del usuario para extraer la 'Justificación' o evidencias.
-3. Análisis de Gaps: Si falta información crítica para completar el informe, el agente debe detenerse y preguntar al usuario específicamente por ese dato.
-4. Generación Estructurada: Una vez tiene todo, debe generar un borrador completo siguiendo una plantilla de Markdown predefinida para esa tarea específica.
-
-TESTS REQUERIDOS (RED):
-- test_task_data_integration: Verificar que el agente combina correctamente un dato de Oracle (numérico) con una explicación del PDF del usuario.
-- test_gap_detection: Validar que el agente no genera el informe si falta un campo obligatorio definido en la normativa.
-```
-
----
-
-### Prompt 4.10 - Model Factory y Dynamic Prompt Service
-
-**Objetivo**: Implementar el motor que instancia modelos y recupera prompts de la base de datos en tiempo real, eliminando los valores hardcodeados del código.
-
-**Instrucciones**:
-
-```
-Actúa como un experto en LangChain y Patrones de Diseño. Implementa los servicios de factoría en `src/services/`.
-
-ARCHIVOS A CREAR/MODIFICAR:
-1. `src/services/model_factory.py`:
-   - Implementar `get_model(chatbot_id: UUID)`: Consulta la tabla `llm_configs`, recupera la API Key del Secret Manager y devuelve la instancia correcta (`ChatGoogleGenerativeAI`, `ChatOpenAI`, o `ChatOllama`).
-2. `src/services/prompt_service.py`:
-   - Implementar `get_formatted_prompt(chatbot_id: UUID, slug: str, language: str, **kwargs)`: Recupera el template de la DB y usa python `.format()` para inyectar las variables.
-
-INTEGRACIÓN EN LANGGRAPH:
-- Refactorizar el nodo `generate_response` en `src/agent/graph.py` para que use estos servicios en lugar de variables hardcodeadas.
-
-TESTS REQUERIDOS (RED):
-- test_model_factory_switching: Validar que si cambio el provider en la DB de 'google' a 'openai', la factoría devuelve el tipo de objeto correcto sin reiniciar el servidor.
-- test_prompt_injection_safety: Validar que el formateo de templates de la DB maneja correctamente las variables inexistentes sin romper el flujo.
-```
-
----
-
-### Prompt 4.11 - Nodo de Refinamiento Iterativo (Human-in-the-Loop)
-
-**Objetivo**: Implementar un bucle de validación en LangGraph que permita al usuario revisar y corregir el borrador generado antes de la exportación final.
-
-**Instrucciones**:
-
-```
-Implementa en LangGraph un nodo de 'Validación de Usuario'. Si el modo es 'Agente', el sistema no finalizará tras la primera respuesta. Debe presentar el borrador y esperar un mensaje de feedback. Si el usuario pide cambios, el agente debe re-generar el contenido integrando las correcciones. Solo al recibir la señal 'FINALIZAR', se procederá a la exportación.
-
-TESTS REQUERIDOS (RED):
-- test_draft_revision_loop: Validar que tras el feedback del usuario el agente genera una segunda versión del borrador.
-- test_finalize_signal_triggers_export: Validar que la señal 'FINALIZAR' cierra el bucle y activa el endpoint de exportación.
-```
-
----
-
-
-## FASE 4B: Grafo Público Enriquecido (Clasificador, Reranker, Evaluador de Calidad)
-
-**Objetivo de la Fase**: Enriquecer el grafo LangGraph del modo público (chatbot) con nodos inteligentes: clasificación por dominio entre chatbots, reranking de chunks, evaluación de calidad inline y fallback honesto. Esto justifica plenamente el uso de LangGraph incluso sin usuario identificado.
-
-**Dependencias**: Fase 4 (grafo LangGraph operativo), Fase 5B (LocalEmbeddingService BGE-M3)
-
-**Decisiones de diseño**:
-- **Chatbot Portal**: en lugar de crear categorías de KB dentro de un chatbot, se introduce el concepto de "portal": un chatbot con un campo `portal_chatbot_ids` que clasifica consultas entre los chatbots hijos del mismo cliente. Si el chatbot no es portal, el clasificador es pass-through.
-- **Clasificador dual**: embeddings por defecto (comparación con centroides de los `system_prompt` de los chatbots hijos), LLM como fallback si la confianza es baja.
-- **Reranker configurable**: `ms-marco-MiniLM-L-6-v2` por defecto, modelo cambiable desde panel admin. `NoopReranker` si se desactiva.
-- **Umbral de calidad**: 0.6 por defecto, configurable por chatbot desde panel partner.
-
-**Flujo del grafo público enriquecido**:
-```
-[route_by_capability] → [detect_language] → [query_classifier]
-                                                    │
-                                          ¿portal con hijos?
-                                           /              \
-                                    [selecciona KB]    [pass-through]
-                                           \              /
-                                      [search_knowledge]
-                                              │
-                                        [reranker]
-                                              │
-                                    [generate_response]
-                                              │
-                                    [quality_evaluator]
-                                       /            \
-                                [score ≥ umbral]  [score < umbral]
-                                    │                │
-                            [log_interaction]  [fallback_response]
-                                    │                │
-                                  [END]            [END]
-```
-
----
-
-### Prompt 4B.1 - Tests del Query Classifier (TDD - RED)
-
-**Objetivo**: Validar la clasificación de consultas por dominio para enrutar a la KB del chatbot temático correcto. El clasificador usa embeddings de los `system_prompt` de los chatbots hijos y LLM como fallback.
-
-**tests/modules/agents_hub/unit/test_query_classifier.py**:
-```python
-"""Tests para el clasificador de consultas por dominio — TDD RED."""
-import uuid
-import pytest
-from unittest.mock import AsyncMock, Mock
-from dataclasses import dataclass
-
-
-@dataclass
-class FakeChatbot:
-    id: uuid.UUID
-    name: str
-    system_prompt: str
-
-
-class TestQueryClassifier:
-
-    @pytest.fixture
-    def chatbots_hijos(self):
-        return [
-            FakeChatbot(id=uuid.uuid4(), name="RRHH", system_prompt="Resuelve dudas sobre nóminas, permisos y contratos laborales."),
-            FakeChatbot(id=uuid.uuid4(), name="Normativa", system_prompt="Consultas sobre normativa académica, reglamentos y BOE."),
-            FakeChatbot(id=uuid.uuid4(), name="Económico", system_prompt="Gestión económica, presupuestos y justificación de gastos."),
-        ]
-
-    @pytest.mark.asyncio
-    async def test_classifies_rrhh_query(self, chatbots_hijos) -> None:
-        from server.app.modules.agents_hub.agent.query_classifier import QueryClassifier
-
-        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
-        classifier = QueryClassifier(embedding_service=embedding_service)
-        result = await classifier.classify(
-            query="¿Cuántos días de vacaciones me corresponden?",
-            candidate_chatbots=chatbots_hijos,
-        )
-        assert result.chatbot_id == chatbots_hijos[0].id
-        assert result.confidence > 0.0
-
-    @pytest.mark.asyncio
-    async def test_pass_through_single_chatbot(self, chatbots_hijos) -> None:
-        """Si solo hay un chatbot candidato, devuelve ese directamente."""
-        from server.app.modules.agents_hub.agent.query_classifier import QueryClassifier
-
-        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
-        classifier = QueryClassifier(embedding_service=embedding_service)
-        single = [chatbots_hijos[0]]
-        result = await classifier.classify(query="cualquier cosa", candidate_chatbots=single)
-        assert result.chatbot_id == single[0].id
-        assert result.confidence == 1.0
-
-    @pytest.mark.asyncio
-    async def test_pass_through_empty_list(self) -> None:
-        """Sin candidatos, devuelve None."""
-        from server.app.modules.agents_hub.agent.query_classifier import QueryClassifier
-
-        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
-        classifier = QueryClassifier(embedding_service=embedding_service)
-        result = await classifier.classify(query="hola", candidate_chatbots=[])
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_returns_classification_result_with_confidence(self, chatbots_hijos) -> None:
-        from server.app.modules.agents_hub.agent.query_classifier import QueryClassifier, ClassificationResult
-
-        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
-        classifier = QueryClassifier(embedding_service=embedding_service)
-        result = await classifier.classify(
-            query="¿Cómo justifico los gastos del proyecto?",
-            candidate_chatbots=chatbots_hijos,
-        )
-        assert isinstance(result, ClassificationResult)
-        assert hasattr(result, "chatbot_id")
-        assert hasattr(result, "confidence")
-        assert 0.0 <= result.confidence <= 1.0
-```
-
----
-
-### Prompt 4B.2 - Implementación del Query Classifier + Migración (TDD - GREEN)
-
-**Objetivo**: Implementar el clasificador de consultas y añadir el campo `portal_chatbot_ids` a `HubChatbot`.
-
-**Migración Alembic**: añadir a `hub_chatbots`:
-- `portal_chatbot_ids: ARRAY(UUID)` — lista de chatbot_ids a los que enrutar (NULL = no es portal)
-- `quality_threshold: Float` — umbral de calidad (default 0.6)
-
-**server/app/modules/agents_hub/agent/query_classifier.py**:
-```python
-"""Clasificador de consultas por dominio para enrutado entre chatbots."""
-import uuid
-from dataclasses import dataclass
-from typing import Protocol, Sequence
-
-import numpy as np
-
-
-class EmbeddingProtocol(Protocol):
-    async def embed(self, text: str) -> list[float]: ...
-
-
-@dataclass
-class ClassificationResult:
-    chatbot_id: uuid.UUID
-    chatbot_name: str
-    confidence: float
-
-
-@dataclass
-class ChatbotCandidate:
-    id: uuid.UUID
-    name: str
-    system_prompt: str
-
-
-class QueryClassifier:
-    """Clasifica consultas comparando embeddings de la query con los system_prompt de los chatbots candidatos."""
-
-    def __init__(self, embedding_service: EmbeddingProtocol):
-        self.embedding_service = embedding_service
-        self._centroid_cache: dict[uuid.UUID, list[float]] = {}
-
-    async def classify(
-        self,
-        query: str,
-        candidate_chatbots: Sequence[ChatbotCandidate],
-    ) -> ClassificationResult | None:
-        if not candidate_chatbots:
-            return None
-        if len(candidate_chatbots) == 1:
-            c = candidate_chatbots[0]
-            return ClassificationResult(chatbot_id=c.id, chatbot_name=c.name, confidence=1.0)
-
-        query_emb = await self.embedding_service.embed(query)
-        best, best_score = None, -1.0
-
-        for chatbot in candidate_chatbots:
-            if chatbot.id not in self._centroid_cache:
-                self._centroid_cache[chatbot.id] = await self.embedding_service.embed(chatbot.system_prompt)
-            centroid = self._centroid_cache[chatbot.id]
-            score = self._cosine_similarity(query_emb, centroid)
-            if score > best_score:
-                best, best_score = chatbot, score
-
-        return ClassificationResult(
-            chatbot_id=best.id, chatbot_name=best.name, confidence=max(0.0, min(1.0, best_score))
-        )
-
-    @staticmethod
-    def _cosine_similarity(a: list[float], b: list[float]) -> float:
-        va, vb = np.array(a), np.array(b)
-        denom = np.linalg.norm(va) * np.linalg.norm(vb)
-        return float(np.dot(va, vb) / denom) if denom > 0 else 0.0
-```
-
----
-
-### Prompt 4B.3 - Tests del Reranker (TDD - RED)
-
-**Objetivo**: Validar que el reranker reordena chunks por relevancia real y que NoopReranker no altera el orden.
-
-**tests/modules/agents_hub/unit/test_reranker.py**:
-```python
-"""Tests para el reranker de chunks — TDD RED."""
-import pytest
-from dataclasses import dataclass
-
-
-@dataclass
-class FakeChunk:
-    content: str
-    score: float
-
-
-class TestCrossEncoderReranker:
-
-    @pytest.mark.asyncio
-    async def test_reranker_reorders_by_relevance(self) -> None:
-        from server.app.modules.agents_hub.agent.reranker import CrossEncoderReranker
-
-        reranker = CrossEncoderReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
-        chunks = [
-            FakeChunk(content="Python es un lenguaje de programación.", score=0.5),
-            FakeChunk(content="Las vacaciones son 22 días laborables al año.", score=0.9),
-        ]
-        result = await reranker.rerank(query="¿Cuántos días de vacaciones tengo?", documents=chunks, top_k=2)
-        assert result[0].content == chunks[1].content
-
-    @pytest.mark.asyncio
-    async def test_reranker_truncates_to_top_k(self) -> None:
-        from server.app.modules.agents_hub.agent.reranker import CrossEncoderReranker
-
-        reranker = CrossEncoderReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
-        chunks = [FakeChunk(content=f"Chunk {i}", score=0.5) for i in range(10)]
-        result = await reranker.rerank(query="test", documents=chunks, top_k=3)
-        assert len(result) == 3
-
-
-class TestNoopReranker:
-
-    @pytest.mark.asyncio
-    async def test_noop_preserves_order(self) -> None:
-        from server.app.modules.agents_hub.agent.reranker import NoopReranker
-
-        reranker = NoopReranker()
-        chunks = [FakeChunk(content=f"Chunk {i}", score=float(i)) for i in range(5)]
-        result = await reranker.rerank(query="test", documents=chunks, top_k=5)
-        assert [r.content for r in result] == [c.content for c in chunks]
-
-    @pytest.mark.asyncio
-    async def test_noop_truncates_to_top_k(self) -> None:
-        from server.app.modules.agents_hub.agent.reranker import NoopReranker
-
-        reranker = NoopReranker()
-        chunks = [FakeChunk(content=f"Chunk {i}", score=float(i)) for i in range(10)]
-        result = await reranker.rerank(query="test", documents=chunks, top_k=3)
-        assert len(result) == 3
-```
-
----
-
-### Prompt 4B.4 - Implementación del Reranker (TDD - GREEN)
-
-**Objetivo**: Implementar reranker desacoplado con interfaz `RerankerProtocol`.
-
-**Dependencia**: añadir `sentence-transformers>=2.6.0` a `server/pyproject.toml` (si no está ya por BGE-M3).
-
-**server/app/modules/agents_hub/agent/reranker.py**:
-```python
-"""Reranker de chunks con interfaz desacoplada."""
-from dataclasses import dataclass
-from typing import Protocol, Sequence, TypeVar
-
-T = TypeVar("T")
-
-
-class HasContent(Protocol):
-    content: str
-
-
-@dataclass
-class RankedDocument:
-    content: str
-    score: float
-    original_index: int
-
-
-class RerankerProtocol(Protocol):
-    async def rerank(self, query: str, documents: Sequence[HasContent], top_k: int = 5) -> list[RankedDocument]: ...
-
-
-class NoopReranker:
-    """Reranker que no altera el orden — para desactivar sin cambiar el grafo."""
-
-    async def rerank(self, query: str, documents: Sequence[HasContent], top_k: int = 5) -> list[RankedDocument]:
-        return [
-            RankedDocument(content=d.content, score=getattr(d, "score", 0.0), original_index=i)
-            for i, d in enumerate(documents[:top_k])
-        ]
-
-
-class CrossEncoderReranker:
-    """Reranker basado en cross-encoder (sentence-transformers)."""
-
-    def __init__(self, model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"):
-        self._model_name = model_name
-        self._model = None
-
-    def _get_model(self):
-        if self._model is None:
-            from sentence_transformers import CrossEncoder
-            self._model = CrossEncoder(self._model_name)
-        return self._model
-
-    async def rerank(self, query: str, documents: Sequence[HasContent], top_k: int = 5) -> list[RankedDocument]:
-        if not documents:
-            return []
-        model = self._get_model()
-        pairs = [(query, d.content) for d in documents]
-        scores = model.predict(pairs)
-        indexed = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
-        return [
-            RankedDocument(content=documents[i].content, score=float(s), original_index=i)
-            for i, s in indexed[:top_k]
-        ]
-
-
-_reranker_instance: RerankerProtocol | None = None
-
-def get_reranker(model_name: str | None = None, enabled: bool = True) -> RerankerProtocol:
-    global _reranker_instance
-    if not enabled:
-        return NoopReranker()
-    if _reranker_instance is None:
-        _reranker_instance = CrossEncoderReranker(model_name or "cross-encoder/ms-marco-MiniLM-L-6-v2")
-    return _reranker_instance
-```
-
----
-
-### Prompt 4B.5 - Tests del Quality Evaluator y Fallback (TDD - RED)
-
-**Objetivo**: Validar la evaluación inline de calidad y el mecanismo de fallback.
-
-**tests/modules/agents_hub/unit/test_quality_evaluator.py**:
-```python
-"""Tests para evaluador de calidad inline y fallback — TDD RED."""
-import pytest
-
-
-class TestQualityEvaluator:
-
-    @pytest.mark.asyncio
-    async def test_high_quality_passes(self) -> None:
-        from server.app.modules.agents_hub.agent.quality_evaluator import evaluate_response_quality
-
-        result = await evaluate_response_quality(
-            question="¿Qué es Python?",
-            answer="Python es un lenguaje de programación versátil.",
-            context="Python es un lenguaje de programación versátil y fácil de aprender.",
-        )
-        assert result.score >= 0.6
-        assert result.passed is True
-
-    @pytest.mark.asyncio
-    async def test_low_quality_fails(self) -> None:
-        from server.app.modules.agents_hub.agent.quality_evaluator import evaluate_response_quality
-
-        result = await evaluate_response_quality(
-            question="¿Cuántos días de vacaciones tengo?",
-            answer="La temperatura media en Marte es de -60 grados.",
-            context="Los empleados tienen 22 días laborables de vacaciones.",
-        )
-        assert result.passed is False
-
-    @pytest.mark.asyncio
-    async def test_custom_threshold(self) -> None:
-        from server.app.modules.agents_hub.agent.quality_evaluator import evaluate_response_quality
-
-        result = await evaluate_response_quality(
-            question="test", answer="test related", context="test context",
-            threshold=0.9,
-        )
-        assert isinstance(result.passed, bool)
-
-    @pytest.mark.asyncio
-    async def test_metrics_include_faithfulness_and_relevance(self) -> None:
-        from server.app.modules.agents_hub.agent.quality_evaluator import evaluate_response_quality
-
-        result = await evaluate_response_quality(
-            question="test", answer="test", context="test",
-        )
-        assert "faithfulness" in result.metrics
-        assert "relevance" in result.metrics
-
-
-class TestFallbackHandler:
-
-    @pytest.mark.asyncio
-    async def test_fallback_generates_honest_message(self) -> None:
-        from server.app.modules.agents_hub.agent.fallback_handler import generate_fallback_response
-
-        response = await generate_fallback_response(language="es")
-        assert "información suficiente" in response.lower() or "no dispongo" in response.lower()
-
-    @pytest.mark.asyncio
-    async def test_fallback_respects_language(self) -> None:
-        from server.app.modules.agents_hub.agent.fallback_handler import generate_fallback_response
-
-        response_ca = await generate_fallback_response(language="ca")
-        response_en = await generate_fallback_response(language="en")
-        assert response_ca != response_en
-
-
-class TestRetrievalValidator:
-    """Valida el nodo que decide si el contexto recuperado es suficiente
-    para generar respuesta directamente o si hay que hacer fallback
-    de idioma (re-búsqueda sin filtro de idioma + advertencia de traducción)."""
-
-    @pytest.mark.asyncio
-    async def test_sufficient_results_pass(self) -> None:
-        from server.app.modules.agents_hub.agent.retrieval_validator import validate_retrieval
-        from server.app.modules.agents_hub.services.retriever import SearchResult
-        import uuid
-
-        results = [
-            SearchResult(id=uuid.uuid4(), content="x", source_url="u", language="ca", score=0.8),
-            SearchResult(id=uuid.uuid4(), content="y", source_url="u", language="ca", score=0.75),
-        ]
-        decision = validate_retrieval(results, min_results=2, min_score=0.25)
-        assert decision == "ok"
-
-    @pytest.mark.asyncio
-    async def test_zero_results_triggers_language_fallback(self) -> None:
-        from server.app.modules.agents_hub.agent.retrieval_validator import validate_retrieval
-
-        decision = validate_retrieval([], min_results=2, min_score=0.25)
-        assert decision == "language_fallback"
-
-    @pytest.mark.asyncio
-    async def test_low_score_triggers_language_fallback(self) -> None:
-        from server.app.modules.agents_hub.agent.retrieval_validator import validate_retrieval
-        from server.app.modules.agents_hub.services.retriever import SearchResult
-        import uuid
-
-        results = [
-            SearchResult(id=uuid.uuid4(), content="x", source_url="u", language="ca", score=0.1),
-        ]
-        decision = validate_retrieval(results, min_results=2, min_score=0.25)
-        assert decision == "language_fallback"
-
-    @pytest.mark.asyncio
-    async def test_language_fallback_warning_in_context(self) -> None:
-        from server.app.modules.agents_hub.agent.fallback_handler import build_translation_warning
-
-        warning = build_translation_warning(source_language="es", query_language="ca")
-        assert "ca" in warning.lower() or "català" in warning.lower() or "idioma" in warning.lower()
-```
-
----
-
-### Prompt 4B.6 - Implementación del Quality Evaluator + Fallback (TDD - GREEN)
-
-**Objetivo**: Implementar evaluador de calidad reutilizando `rag_metrics.py` y handler de fallback i18n.
-
-**server/app/modules/agents_hub/agent/quality_evaluator.py**:
-```python
-"""Evaluador de calidad de respuestas inline (pre-envío)."""
-from dataclasses import dataclass, field
-
-from server.app.modules.agents_hub.evaluation.rag_metrics import (
-    calculate_answer_relevance,
-    calculate_faithfulness,
-)
-
-
-@dataclass
-class QualityResult:
-    score: float
-    passed: bool
-    metrics: dict = field(default_factory=dict)
-
-
-async def evaluate_response_quality(
-    question: str,
-    answer: str,
-    context: str,
-    threshold: float = 0.6,
-) -> QualityResult:
-    faithfulness = await calculate_faithfulness(answer=answer, context=context)
-    relevance = await calculate_answer_relevance(question=question, answer=answer)
-
-    combined = (faithfulness + relevance) / 2.0
-    return QualityResult(
-        score=combined,
-        passed=combined >= threshold,
-        metrics={"faithfulness": faithfulness, "relevance": relevance},
-    )
-```
-
-**server/app/modules/agents_hub/agent/fallback_handler.py**:
-```python
-"""Respuesta de fallback cuando la calidad es insuficiente."""
-
-_FALLBACK_MESSAGES = {
-    "es": "No dispongo de información suficiente para responder con confianza a esta consulta. Te recomiendo contactar directamente con el servicio correspondiente.",
-    "ca": "No dispose d'informació suficient per respondre amb confiança a aquesta consulta. Et recomane contactar directament amb el servei corresponent.",
-    "en": "I don't have enough information to answer this query with confidence. I recommend contacting the relevant service directly.",
-}
-
-
-async def generate_fallback_response(language: str = "es") -> str:
-    return _FALLBACK_MESSAGES.get(language, _FALLBACK_MESSAGES["es"])
-
-
-_TRANSLATION_WARNINGS = {
-    "es": "⚠️ No se ha encontrado información en el idioma de tu consulta. La respuesta se ha generado a partir de fuentes en otro idioma y puede contener adaptaciones.",
-    "ca": "⚠️ No s'ha trobat informació en l'idioma de la consulta. La resposta s'ha generat a partir de fonts en un altre idioma i pot contenir adaptacions.",
-    "en": "⚠️ No information was found in your query language. The response was generated from sources in another language and may contain adaptations.",
-}
-
-
-def build_translation_warning(source_language: str, query_language: str) -> str:
-    return _TRANSLATION_WARNINGS.get(query_language, _TRANSLATION_WARNINGS["es"])
-```
-
-**server/app/modules/agents_hub/agent/retrieval_validator.py**:
-```python
-"""Decide si el contexto recuperado es suficiente o se necesita fallback de idioma."""
-from server.app.modules.agents_hub.services.retriever import SearchResult
-
-
-def validate_retrieval(
-    results: list[SearchResult],
-    min_results: int = 2,
-    min_score: float = 0.25,
-) -> str:
-    """Evalúa si los resultados de búsqueda son suficientes.
-
-    Returns:
-        "ok" — context suficiente, continuar con generate_response
-        "language_fallback" — re-buscar sin filtro de idioma y añadir advertencia
-    """
-    if not results:
-        return "language_fallback"
-    if len(results) < min_results or max(r.score for r in results) < min_score:
-        return "language_fallback"
-    return "ok"
-```
-
-**Nota de diseño**: `min_results` y `min_score` se leen de `HubChatbot.min_retrieval_results` y
-`HubChatbot.min_retrieval_score` vía `ConfigProvider` en el nodo del grafo. Los defaults (2 y 0.25)
-son los valores de columna en la migración Alembic (ver Prompt 4B.2).
-
----
-
-### Prompt 4B.7 - Tests del Grafo Público Integrado (TDD - RED)
-
-**Objetivo**: Validar el flujo completo del grafo enriquecido con aristas condicionales.
-
-**tests/modules/agents_hub/integration/test_enriched_graph.py**:
-```python
-"""Tests de integración del grafo público enriquecido — TDD RED."""
-import pytest
-from unittest.mock import AsyncMock, Mock, patch
-
-
-class TestEnrichedPublicGraph:
-
-    @pytest.mark.asyncio
-    async def test_graph_has_new_nodes(self) -> None:
-        from server.app.modules.agents_hub.agent.graph import create_agent_graph
-
-        with patch("server.app.modules.agents_hub.agent.graph.ChatGoogleGenerativeAI"):
-            graph = create_agent_graph(retriever=Mock(), embedding_service=Mock())
-            node_names = list(graph.nodes.keys())
-            assert "query_classifier" in node_names
-            assert "reranker" in node_names
-            assert "quality_evaluator" in node_names
-            assert "fallback_response" in node_names
-
-    @pytest.mark.asyncio
-    async def test_graph_has_conditional_edge_after_quality(self) -> None:
-        """El grafo debe tener una bifurcación tras quality_evaluator."""
-        from server.app.modules.agents_hub.agent.graph import create_agent_graph
-
-        with patch("server.app.modules.agents_hub.agent.graph.ChatGoogleGenerativeAI"):
-            graph = create_agent_graph(retriever=Mock(), embedding_service=Mock())
-            compiled = graph.compile()
-            assert compiled is not None
-
-    @pytest.mark.asyncio
-    async def test_new_state_fields_initialized(self) -> None:
-        from server.app.modules.agents_hub.agent.state import create_initial_state
-
-        state = create_initial_state(user_id=None, chatbot_id="test-123", initial_message="Hola")
-        assert state["classified_chatbot_id"] == ""
-        assert state["quality_score"] == 0.0
-        assert state["fallback_triggered"] is False
-```
-
----
-
-### Prompt 4B.8 - Integración en graph.py y state.py (TDD - GREEN)
-
-**Objetivo**: Modificar `state.py` con los campos nuevos e integrar todos los nodos en `graph.py` con aristas condicionales.
-
-**Cambios en state.py** — añadir al `AgentState`:
-```python
-    # --- Fase 4B: Grafo Público Enriquecido ---
-    classified_chatbot_id: str      # ID del chatbot seleccionado por clasificador ("" = sin clasificar)
-    classifier_confidence: float    # Confianza del clasificador (0.0–1.0)
-    reranked_context: list[str]     # Contexto tras reranking
-    quality_score: float            # Score compuesto del evaluador (0.0–1.0)
-    quality_metrics: dict           # {faithfulness: float, relevance: float}
-    fallback_triggered: bool        # True si la respuesta fue sustituida por fallback honesto
-    language_fallback_triggered: bool  # True si se re-buscó sin filtro de idioma
-    context_source_language: str | None  # Idioma predominante de los chunks usados (None si no aplica)
-```
-
-**Cambios en create_initial_state** — inicializar campos nuevos:
-```python
-    classified_chatbot_id="",
-    classifier_confidence=0.0,
-    reranked_context=[],
-    quality_score=0.0,
-    quality_metrics={},
-    fallback_triggered=False,
-    language_fallback_triggered=False,
-    context_source_language=None,
-```
-
-**Cambios en graph.py** — flujo completo con validación de retrieval y language fallback:
-
-```
-[route_by_capability] → [detect_language] → [query_classifier]
-                                                    │
-                                      [search_knowledge]  ← búsqueda con filtro de idioma
-                                              │
-                                   [validate_retrieval]
-                                     /               \
-                               "ok"               "language_fallback"
-                                 │                       │
-                           [reranker]        [search_knowledge_fallback]  ← sin filtro idioma
-                                 │                       │
-                           [generate_response] ←─────────┘  (con advertencia de traducción si fallback)
-                                 │
-                        [quality_evaluator]
-                           /            \
-                    [score ≥ umbral]  [score < umbral]
-                           │                │
-                  [log_interaction]  [fallback_response]  ← respuesta honesta "no tengo info"
-                           │                │
-                         [END]            [END]
-```
-
-```python
-    # Nuevos nodos (Fase 4B)
-    graph.add_node("query_classifier", query_classifier_node)
-    graph.add_node("validate_retrieval", validate_retrieval_node)
-    graph.add_node("search_knowledge_fallback", search_knowledge_fallback_node)
-    graph.add_node("reranker", reranker_node)
-    graph.add_node("quality_evaluator", quality_evaluator_node)
-    graph.add_node("fallback_response", fallback_response_node)
-    graph.add_node("log_interaction", log_interaction_node)
-
-    # Flujo actualizado
-    graph.set_entry_point("route_by_capability")
-    graph.add_edge("route_by_capability", "detect_language")
-    graph.add_edge("detect_language", "query_classifier")
-    graph.add_edge("query_classifier", "search_knowledge")
-
-    # Arista condicional: validate_retrieval decide si hay suficiente contexto en el idioma detectado
-    graph.add_edge("search_knowledge", "validate_retrieval")
-    graph.add_conditional_edges(
-        "validate_retrieval",
-        lambda state: state.get("retrieval_decision", "ok"),
-        {"ok": "reranker", "language_fallback": "search_knowledge_fallback"},
-    )
-    graph.add_edge("search_knowledge_fallback", "reranker")
-    graph.add_edge("reranker", "generate_response")
-    graph.add_edge("generate_response", "quality_evaluator")
-
-    # Arista condicional: quality_evaluator decide si la respuesta es suficientemente buena
-    graph.add_conditional_edges(
-        "quality_evaluator",
-        lambda state: "ok" if state["quality_score"] >= quality_threshold else "fallback",
-        {"ok": "log_interaction", "fallback": "fallback_response"},
-    )
-    graph.add_edge("log_interaction", END)
-    graph.add_edge("fallback_response", END)
-```
-
-**Lógica de `validate_retrieval_node`**:
-```python
-async def validate_retrieval_node(state: AgentState) -> dict:
-    results = state.get("raw_search_results", [])
-    config = await config_provider.get_chatbot_config(state["chatbot_id"])
-    decision = validate_retrieval(
-        results,
-        min_results=config.min_retrieval_results,   # default 2
-        min_score=config.min_retrieval_score,        # default 0.25
-    )
-    return {"retrieval_decision": decision}
-```
-
-**Lógica de `search_knowledge_fallback_node`** (re-búsqueda sin filtro de idioma):
-```python
-async def search_knowledge_fallback_node(state: AgentState) -> dict:
-    result = await search_knowledge(
-        query=state["messages"][-1].content,
-        chatbot_id=state["chatbot_id"],
-        retriever=retriever,
-        embedding_service=embedding_service,
-        language=None,   # sin filtro — busca en todos los idiomas
-    )
-    # Detectar idioma predominante de los resultados para la advertencia
-    source_lang = detect_source_language(result)
-    return {
-        "retrieved_context": [result],
-        "language_fallback_triggered": True,
-        "context_source_language": source_lang,
-    }
-```
-
-**El nodo `generate_response` lee `language_fallback_triggered`** y, si es True, añade
-`build_translation_warning(source_language, query_language)` al inicio del system_prompt.
-
-**Cambios en config_models.py** — campos portal y umbrales de retrieval:
-```python
-    # En HubChatbot, añadir:
-    portal_chatbot_ids: Mapped[list[uuid.UUID] | None] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=True)
-    quality_threshold: Mapped[float] = mapped_column(default=0.6)
-    min_retrieval_results: Mapped[int] = mapped_column(Integer, default=2)
-    min_retrieval_score: Mapped[float] = mapped_column(default=0.25)
-```
-
-**Migración Alembic adicional** (se añade a la de 4B.2):
-```python
-    op.add_column("hub_chatbots", sa.Column("min_retrieval_results", sa.Integer(), nullable=False, server_default="2"))
-    op.add_column("hub_chatbots", sa.Column("min_retrieval_score", sa.Float(), nullable=False, server_default="0.25"))
-```
-
----
-
-
+> ✅ **Fase Completada y Validada**. Los detalles (prompts y especificaciones técnicas) han sido ejecutados con éxito y están documentados en el código. Se ha compactado esta sección para mejorar la legibilidad del documento.
 
 ## FASE 5: API Endpoints y Robustez
 
----
-
-### Prompt 5.1 - Tests del Endpoint de Chat (TDD - RED)
-
-**Objetivo**: Validar el endpoint de streaming de chat con autenticación JWT, manejo de errores, y respuesta en Server-Sent Events (SSE) o WebSocket.
-
-**tests/e2e/test_chat_endpoint.py**:
-```python
-"""Tests E2E para el endpoint de chat."""
-import pytest
-from httpx import AsyncClient
-from unittest.mock import AsyncMock, patch
-
-
-class TestChatEndpoint:
-
-    @pytest.mark.asyncio
-    async def test_chat_returns_stream(self) -> None:
-        from src.main import app
-
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            with patch('src.api.routers.chat.get_agent_graph') as mock_graph:
-                mock_graph.return_value.astream = AsyncMock(return_value=iter([
-                    {"messages": [{"content": "Hola"}]},
-                ]))
-
-                response = await client.post(
-                    "/api/v1/chat/chatbot-123",
-                    json={"message": "Hola"},
-                    headers={"Authorization": "Bearer test-token"},
-                )
-
-                assert response.status_code == 200
-
-    @pytest.mark.asyncio
-    async def test_chat_requires_authentication(self) -> None:
-        from src.main import app
-
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            response = await client.post(
-                "/api/v1/chat/chatbot-123",
-                json={"message": "Hola"},
-            )
-
-            assert response.status_code == 401
-```
-
----
-
-### Prompt 5.2 - Implementación del Endpoint de Chat
-
-**Objetivo**: Implementar el endpoint FastAPI `/api/v1/chat` que recibe el mensaje del usuario, invoca el agente LangGraph y devuelve la respuesta en streaming.
-
-**src/api/__init__.py**:
-```python
-"""Módulo de API."""
-```
-
-**src/api/schemas.py**:
-```python
-"""Schemas Pydantic para la API."""
-from pydantic import BaseModel, Field
-from typing import Optional
-import uuid
-
-
-class ChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=10000)
-
-
-class ChatResponse(BaseModel):
-    content: str
-    run_id: Optional[str] = None
-
-
-class ErrorResponse(BaseModel):
-    error: str
-    type: str
-    request_id: str
-```
-
-**src/api/routers/__init__.py**:
-```python
-"""Routers de la API."""
-```
-
-**src/api/routers/chat.py**:
-```python
-"""Router para el endpoint de chat."""
-import uuid
-from typing import AsyncIterator
-
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.api.schemas import ChatRequest
-from src.auth.dependencies import get_current_user
-from src.auth.models import UserInfo
-from src.database import get_async_session
-
-router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
-
-
-@router.post("/{chatbot_id}")
-async def chat(
-    chatbot_id: str,
-    request: ChatRequest,
-    user: UserInfo = Depends(get_current_user),
-    session: AsyncSession = Depends(get_async_session),
-) -> StreamingResponse:
-    """Endpoint de chat con streaming SSE.
-
-    Args:
-        chatbot_id: ID del chatbot
-        request: Mensaje del usuario
-        user: Usuario autenticado
-        session: Sesión de base de datos
-
-    Returns:
-        Stream de eventos SSE
-    """
-    async def generate() -> AsyncIterator[str]:
-        # Aquí iría la lógica del grafo
-        yield f"data: {{'content': 'Procesando...'}}\n\n"
-        yield f"data: {{'content': 'Respuesta de ejemplo'}}\n\n"
-        yield "data: [DONE]\n\n"
-
-    return StreamingResponse(
-        generate(),
-        media_type="text/event-stream",
-    )
-```
-
----
-
-### Prompt 5.3 - Global Error Handler
-
-**Objetivo**: Implementar el manejador global de excepciones de FastAPI que devuelve respuestas JSON consistentes para errores de autenticación, validación y errores internos.
-
-**src/main.py**:
-```python
-"""Aplicación principal FastAPI."""
-import uuid
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from pydantic import ValidationError
-
-from src.api.routers import chat
-from src.config import get_settings
-from src.logging_config import setup_logging
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Gestiona el ciclo de vida de la aplicación."""
-    setup_logging()
-    yield
-
-
-app = FastAPI(
-    title="AI Chatbots Hub",
-    version="1.0.0",
-    lifespan=lifespan,
-)
-
-
-@app.exception_handler(ValidationError)
-async def validation_error_handler(request: Request, exc: ValidationError):
-    """Maneja errores de validación Pydantic."""
-    return JSONResponse(
-        status_code=422,
-        content={
-            "error": "Validation error",
-            "type": "validation_error",
-            "request_id": str(uuid.uuid4()),
-            "details": exc.errors(),
-        },
-    )
-
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """Maneja todas las excepciones no capturadas."""
-    return JSONResponse(
-        status_code=500,
-        content={
-            "error": "Internal server error",
-            "type": "internal_error",
-            "request_id": str(uuid.uuid4()),
-        },
-    )
-
-
-app.include_router(chat.router)
-
-
-@app.get("/health")
-async def health_check():
-    """Endpoint de health check."""
-    return {"status": "healthy"}
-```
-
----
-
----
-
-### Prompt 5.4 - Exportación de Documentos y Cierre de Tarea
-
-**Objetivo**: Transformar el resultado del agente en un archivo descargable oficial, permitiendo que el trabajo salga del chat hacia los procesos administrativos de la universidad.
-
-**Instrucciones**:
-
-```
-Actúa como un experto en Backend. Implementa un servicio de generación de documentos oficiales.
-
-TAREAS:
-1. Crear el endpoint `GET /api/v1/tasks/export/{run_id}`.
-2. Motor de Conversión: Transformar el Markdown final generado por el agente en formatos PDF y DOCX (usando librerías como `ReportLab` o `Pandoc`).
-3. Plantillas Institucionales: Aplicar una hoja de estilos que incluya el logo de la universidad, pie de página oficial y numeración.
-4. Registro de Versiones: Guardar una copia del documento generado en la tabla `interactions` vinculada a la sesión del usuario para auditoría.
-
-TESTS REQUERIDOS (RED):
-- test_pdf_generation_content: Verificar que el texto del informe generado por la IA coincide exactamente con el contenido del PDF final.
-- test_export_security: Asegurar que solo el dueño de la tarea (o un administrador) puede descargar el archivo generado.
-```
-
----
+> ✅ **Fase Completada y Validada**. Los detalles (prompts y especificaciones técnicas) han sido ejecutados con éxito y están documentados en el código. Se ha compactado esta sección para mejorar la legibilidad del documento.
 
 ## FASE 6: Tests End-to-End y Flujos Completos
 
----
-
-### Prompt 6.1 - Tests E2E del Flujo de Chat Completo
-
-**Objetivo**: Validar el flujo completo desde la API hasta la respuesta.
-
-**tests/e2e/test_chat_flow.py**:
-```python
-"""Tests E2E para el flujo completo de chat."""
-import uuid
-import pytest
-from httpx import AsyncClient
-from unittest.mock import AsyncMock, patch
-
-
-class TestChatFlowE2E:
-
-    @pytest.fixture
-    async def setup_chatbot(self, db_session):
-        """Crea un chatbot de prueba con datos."""
-        from src.database.models import Chatbot, DocumentChunk
-
-        chatbot = Chatbot(
-            id=uuid.uuid4(),
-            name="E2E Test Bot",
-            system_prompt="Eres un asistente de prueba.",
-            sources=["https://example.com"],
-        )
-        db_session.add(chatbot)
-        await db_session.flush()
-
-        # Añadir chunks de conocimiento
-        chunk = DocumentChunk(
-            chatbot_id=chatbot.id,
-            content="Python es un lenguaje de programación versátil y fácil de aprender.",
-            source_url="https://example.com/python",
-            content_hash="test_hash_123",
-            embedding=[0.1] * 1536,
-            language="es",
-        )
-        db_session.add(chunk)
-        await db_session.commit()
-
-        return chatbot
-
-    @pytest.mark.asyncio
-    async def test_full_chat_flow(self, setup_chatbot, auth_headers) -> None:
-        """Test del flujo completo: pregunta -> búsqueda -> respuesta."""
-        from src.main import app
-
-        chatbot = setup_chatbot
-
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            with patch('src.agent.graph.ChatGoogleGenerativeAI') as mock_llm:
-                mock_llm.return_value.ainvoke = AsyncMock(
-                    return_value=type('Response', (), {'content': 'Python es un lenguaje muy versátil.'})()
-                )
-
-                response = await client.post(
-                    f"/api/v1/chat/{chatbot.id}",
-                    json={"message": "¿Qué es Python?"},
-                    headers=auth_headers,
-                )
-
-                assert response.status_code == 200
-                # Verificar que es un stream SSE
-                assert "text/event-stream" in response.headers.get("content-type", "")
-
-    @pytest.mark.asyncio
-    async def test_chat_stores_interaction(self, setup_chatbot, auth_headers, db_session) -> None:
-        """El chat debe guardar la interacción en la BD."""
-        from src.main import app
-        from src.database.models import Interaction
-        from sqlalchemy import select
-
-        chatbot = setup_chatbot
-
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            with patch('src.agent.graph.ChatGoogleGenerativeAI') as mock_llm:
-                mock_llm.return_value.ainvoke = AsyncMock(
-                    return_value=type('Response', (), {'content': 'Respuesta de prueba'})()
-                )
-
-                await client.post(
-                    f"/api/v1/chat/{chatbot.id}",
-                    json={"message": "Pregunta de prueba"},
-                    headers=auth_headers,
-                )
-
-        # Verificar que se guardó la interacción
-        result = await db_session.execute(
-            select(Interaction).where(Interaction.chatbot_id == chatbot.id)
-        )
-        interactions = result.scalars().all()
-        # Debería haber al menos una interacción
-        # (depende de la implementación del endpoint)
-
-
-class TestIngestionFlowE2E:
-
-    @pytest.mark.asyncio
-    async def test_full_ingestion_flow(self, db_session, auth_headers) -> None:
-        """Test del flujo completo de ingestión."""
-        from src.main import app
-        from src.database.models import Chatbot
-
-        # Crear chatbot
-        chatbot = Chatbot(
-            name="Ingestion Test Bot",
-            system_prompt="Test",
-            sources=[],
-        )
-        db_session.add(chatbot)
-        await db_session.commit()
-        await db_session.refresh(chatbot)
-
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            with patch('src.ingestion.docling_processor.DocumentConverter') as mock_docling:
-                mock_result = type('Result', (), {
-                    'document': type('Doc', (), {
-                        'export_to_markdown': lambda: '# Test\n\nContenido de prueba'
-                    })()
-                })()
-                mock_docling.return_value.convert.return_value = mock_result
-
-                # Disparar ingestión
-                response = await client.post(
-                    f"/api/v1/admin/chatbots/{chatbot.id}/ingest",
-                    json={"source_url": "https://example.com/doc.pdf"},
-                    headers=auth_headers,
-                )
-
-                assert response.status_code == 200
-                data = response.json()
-                assert "job_id" in data
-                assert data["status"] == "pending"
-```
-
----
-
-### Prompt 6.2 - Tests de Integración de Componentes
-
-**Objetivo**: Validar la integración entre autenticación SSO, base de datos, agente LangGraph y endpoints API en flujos reales de extremo a extremo.
-
-**tests/integration/test_full_pipeline.py**:
-```python
-"""Tests de integración del pipeline completo."""
-import uuid
-import pytest
-from unittest.mock import AsyncMock, patch
-
-
-class TestRAGPipeline:
-
-    @pytest.mark.asyncio
-    async def test_ingestion_to_retrieval_pipeline(self, db_session) -> None:
-        """Test: ingestión -> chunking -> embedding -> retrieval."""
-        from src.database.models import Chatbot, DocumentChunk
-        from src.ingestion.chunker import MarkdownChunker
-        from src.ingestion.hasher import hash_content
-        from src.services.retriever import HybridRetriever
-
-        # 1. Crear chatbot
-        chatbot = Chatbot(
-            id=uuid.uuid4(),
-            name="Pipeline Test",
-            system_prompt="Test",
-            sources=[],
-        )
-        db_session.add(chatbot)
-        await db_session.flush()
-
-        # 2. Simular ingestión
-        markdown_content = """# Documentación de FastAPI
-
-FastAPI es un framework web moderno y rápido para construir APIs con Python.
-
-## Características
-
-- Alto rendimiento
-- Fácil de usar
-- Basado en estándares
-"""
-        chunker = MarkdownChunker(chunk_size=200, chunk_overlap=20)
-        chunks = chunker.split(markdown_content)
-
-        # 3. Guardar chunks con embeddings simulados
-        for i, chunk in enumerate(chunks):
-            db_chunk = DocumentChunk(
-                chatbot_id=chatbot.id,
-                content=chunk.content,
-                source_url="https://fastapi.tiangolo.com",
-                content_hash=hash_content(chunk.content),
-                embedding=[0.1 + i * 0.01] * 1536,  # Embeddings únicos
-                language="es",
-            )
-            db_session.add(db_chunk)
-
-        await db_session.commit()
-
-        # 4. Probar retrieval
-        retriever = HybridRetriever(db_session)
-        results = await retriever.vector_search(
-            query_embedding=[0.11] * 1536,
-            chatbot_id=chatbot.id,
-            top_k=3,
-        )
-
-        assert len(results) >= 1
-        assert any("FastAPI" in r.content for r in results)
-
-
-class TestAuthPipeline:
-
-    @pytest.mark.asyncio
-    async def test_token_creation_and_validation(self) -> None:
-        """Test: crear token -> decodificar -> validar usuario."""
-        from src.auth.jwt_handler import create_token, decode_token
-        from src.auth.models import UserInfo
-
-        # Crear usuario
-        user = UserInfo(
-            user_id="test-user-456",
-            email="pipeline@test.com",
-            role="admin",
-        )
-
-        # Crear token
-        token = create_token(user)
-        assert token is not None
-        assert len(token) > 50
-
-        # Decodificar y validar
-        decoded = decode_token(token)
-        assert decoded.user_id == user.user_id
-        assert decoded.email == user.email
-        assert decoded.role == user.role
-```
-
----
-
-### Prompt 6.3 - Configuración de CI/CD (Bitbucket Pipelines)
-
-**Objetivo**: Configurar la integración continua en Bitbucket para ejecutar la batería de tests (unitarios, integración y E2E) automáticamente en cada subida de código.
-
-**Instrucciones**:
-
-```
-Actúa como un experto en DevOps. Configura el archivo `bitbucket-pipelines.yml` para automatizar las pruebas del proyecto.
-
-REQUISITOS DEL PIPELINE:
-1. Imagen Base: Usar una imagen ligera de Python 3.11 (ej: python:3.11-slim).
-2. Servicios: Configurar un servicio adicional 'database' usando la imagen `ankane/pgvector:latest`.
-3. Pasos (Steps):
-   - Instalación de uv: Descargar e instalar el binario de uv.
-   - Cache: Configurar el cache de uv para acelerar ejecuciones futuras.
-   - Linting: Ejecutar `ruff check src/`.
-   - Tests: Ejecutar `pytest tests/` pasando las variables de entorno necesarias (DATABASE_URL, JWT_SECRET_KEY, etc.).
-4. Artefactos: Guardar los informes de cobertura de tests (coverage.xml) para su visualización.
-
-CRITERIOS DE ACEPTACIÓN:
-- El pipeline debe ponerse en "verde" solo si todos los tests pasan.
-- La base de datos vectorial debe estar disponible para los tests de integración.
-```
-
-**bitbucket-pipelines.yml** (colocar en la raíz del repositorio):
-```yaml
-image: python:3.11-slim
-
-# Definición de servicios adicionales (Bases de datos)
-definitions:
-  services:
-    postgres:
-      image: ankane/pgvector:latest
-      variables:
-        POSTGRES_USER: 'postgres'
-        POSTGRES_PASSWORD: 'ci_password_secret'
-        POSTGRES_DB: 'test_db'
-
-pipelines:
-  default: # Se ejecuta en todas las ramas excepto las especificadas
-    - step:
-        name: "Linting & Testing (TDD Pipeline)"
-        caches:
-          - pip
-        services:
-          - postgres
-        script:
-          # 1. Instalar dependencias del sistema necesarias para pg_isready y uv
-          - apt-get update && apt-get install -y curl postgresql-client
-
-          # 2. Instalar uv (Gestor de paquetes rápido)
-          - curl -LsSf https://astral.sh/uv/install.sh | sh
-          - export PATH="$HOME/.cargo/bin:$PATH"
-
-          # 3. Instalar dependencias del proyecto
-          - uv sync --all-extras
-
-          # 4. Esperar a que la base de datos esté lista
-          - sleep 5
-          - pg_isready -h localhost -p 5432 -U postgres
-
-          # 5. Ejecutar Linter (Calidad de código)
-          - uv run ruff check src/
-
-          # 6. Ejecutar Batería de Tests
-          - export DATABASE_URL="postgresql+asyncpg://postgres:ci_password_secret@localhost:5432/test_db"
-          - export JWT_SECRET_KEY="ci-test-secret-key-at-least-32-chars-long"
-          - export MOCK_AUTH="true"
-          - uv run pytest tests/ --cov=src --cov-report=xml
-        artifacts:
-          - coverage.xml
-```
-
----
+> ✅ **Fase Completada y Validada**. Los detalles (prompts y especificaciones técnicas) han sido ejecutados con éxito y están documentados en el código. Se ha compactado esta sección para mejorar la legibilidad del documento.
 
 ## FASE 7: Despliegue y Containerización — REDUCIDA
 
-> **En Gov Gen AI Platform, Docker ya está configurado.** Esta fase se reduce a:
->
-> - **Prompt 7.1 (Dockerfile)**: Verificar que el Dockerfile existente del servidor incorpora
->   las nuevas dependencias Hub. No crear uno nuevo.
-> - **Prompt 7.2 (docker-compose.prod.yml)**: Extender el `docker-compose.yml` existente con
->   los servicios nuevos que requiere el Hub (MinIO si no está, Ollama opcional).
->   El servicio de PostgreSQL ya existe; solo añadir la extensión `pgvector`.
-> - **Prompts 7.3–7.4 (scripts y entornos)**: Adaptar los scripts existentes del servidor
->   para incluir los datos de ejemplo del Hub en la inicialización.
->
-> **No crear** un docker-compose nuevo desde cero — extender el existente.
-
----
-
-### Prompt 7.1 - Dockerfile Multi-stage
-
-**Objetivo**: Crear imagen Docker optimizada para producción.
-
-**Dockerfile**:
-```dockerfile
-# Stage 1: Builder
-FROM python:3.11-slim as builder
-
-WORKDIR /app
-
-# Instalar uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-
-# Copiar archivos de dependencias
-COPY pyproject.toml uv.lock ./
-
-# Instalar dependencias
-RUN uv sync --frozen --no-dev --no-editable
-
-# Stage 2: Runtime
-FROM python:3.11-slim as runtime
-
-WORKDIR /app
-
-# Crear usuario no-root
-RUN useradd --create-home --shell /bin/bash appuser
-
-# Copiar entorno virtual desde builder
-COPY --from=builder /app/.venv /app/.venv
-
-# Copiar código fuente
-COPY src/ ./src/
-COPY migrations/ ./migrations/
-COPY alembic.ini ./
-
-# Configurar PATH
-ENV PATH="/app/.venv/bin:$PATH"
-ENV PYTHONPATH="/app"
-ENV PYTHONUNBUFFERED=1
-
-# Cambiar a usuario no-root
-USER appuser
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import httpx; httpx.get('http://localhost:8000/health')" || exit 1
-
-# Exponer puerto
-EXPOSE 8000
-
-# Comando de inicio
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
----
-
-### Prompt 7.2 - Docker Compose para Producción
-
-**Objetivo**: Configurar el stack Docker Compose de producción con todos los servicios necesarios (Backend, Frontend, PostgreSQL, almacenamiento) listos para desplegarse.
-
-**docker-compose.prod.yml**:
-```yaml
-version: "3.9"
-
-services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: chatbots_hub_app
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
-      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-true}
-      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-ai-chatbots-hub}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - MOCK_AUTH=false
-      - LOG_FORMAT=json
-      - LOG_LEVEL=INFO
-    ports:
-      - "8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  postgres:
-    image: ankane/pgvector:latest
-    container_name: chatbots_hub_db_prod
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes:
-      - postgres_data_prod:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: chatbots_hub_migrate
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-    command: ["alembic", "upgrade", "head"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-volumes:
-  postgres_data_prod:
-```
-
----
-
-### Prompt 7.3 - Scripts de Despliegue
-
-**Objetivo**: Implementar los scripts de despliegue, actualización y rollback del sistema en producción, incluyendo migraciones de base de datos automáticas.
-
-**scripts/deploy.sh**:
-```bash
-#!/bin/bash
-set -e
-
-echo "🚀 Iniciando despliegue de AI Chatbots Hub..."
-
-# Verificar variables de entorno requeridas
-required_vars=("DATABASE_URL" "JWT_SECRET_KEY" "GOOGLE_API_KEY")
-for var in "${required_vars[@]}"; do
-    if [ -z "${!var}" ]; then
-        echo "❌ Error: Variable $var no está definida"
-        exit 1
-    fi
-done
-
-echo "✅ Variables de entorno verificadas"
-
-# Construir imagen
-echo "📦 Construyendo imagen Docker..."
-docker compose -f docker-compose.prod.yml build
-
-# Ejecutar migraciones
-echo "🗄️ Ejecutando migraciones..."
-docker compose -f docker-compose.prod.yml run --rm migrate
-
-# Iniciar servicios
-echo "🔄 Iniciando servicios..."
-docker compose -f docker-compose.prod.yml up -d app
-
-# Verificar health
-echo "🏥 Verificando health del servicio..."
-sleep 10
-if curl -s http://localhost:8000/health | grep -q "healthy"; then
-    echo "✅ Despliegue completado exitosamente!"
-else
-    echo "❌ Error: El servicio no está healthy"
-    docker compose -f docker-compose.prod.yml logs app
-    exit 1
-fi
-```
-
-**scripts/init_db.py**:
-```python
-#!/usr/bin/env python
-"""Script para inicializar la base de datos."""
-import asyncio
-import sys
-from pathlib import Path
-
-# Añadir el directorio raíz al path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from sqlalchemy import text
-
-from src.config import get_settings
-from src.database.connection import create_async_engine
-from src.database.models import Base
-
-
-async def init_database():
-    """Inicializa la base de datos."""
-    settings = get_settings()
-    engine = create_async_engine(settings.database_url)
-
-    print(f"🗄️ Conectando a: {settings.database_url.split('@')[1]}")
-
-    async with engine.begin() as conn:
-        # Habilitar extensión pgvector
-        print("📦 Habilitando extensión pgvector...")
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-
-        # Crear tablas
-        print("📋 Creando tablas...")
-        await conn.run_sync(Base.metadata.create_all)
-
-    await engine.dispose()
-    print("✅ Base de datos inicializada correctamente!")
-
-
-if __name__ == "__main__":
-    asyncio.run(init_database())
-```
-
----
-
-### Prompt 7.4 - Configuración de Entornos
-
-**Objetivo**: Definir la gestión de variables de entorno y secretos para los diferentes entornos (desarrollo, staging, producción) con validación al arranque.
-
-**.env.production.example**:
-```env
-# Database (Producción)
-POSTGRES_USER=chatbots_prod
-POSTGRES_PASSWORD=<GENERAR_PASSWORD_SEGURO>
-POSTGRES_DB=chatbots_hub_prod
-DATABASE_URL=postgresql+asyncpg://chatbots_prod:<PASSWORD>@postgres:5432/chatbots_hub_prod
-
-# Google/Vertex AI
-GOOGLE_API_KEY=<TU_API_KEY>
-
-# LangSmith
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=<TU_LANGSMITH_KEY>
-LANGCHAIN_PROJECT=ai-chatbots-hub-prod
-
-# Auth (GENERAR CON: openssl rand -hex 32)
-JWT_SECRET_KEY=<GENERAR_SECRET_32_CHARS_MINIMO>
-JWT_ALGORITHM=HS256
-JWT_EXPIRATION_MINUTES=60
-MOCK_AUTH=false
-
-# Logging
-LOG_LEVEL=INFO
-LOG_FORMAT=json
-```
-
----
+> ✅ **Fase Completada y Validada**. Los detalles (prompts y especificaciones técnicas) han sido ejecutados con éxito y están documentados en el código. Se ha compactado esta sección para mejorar la legibilidad del documento.
 
 ## FASE 8: Observabilidad y Panel de Feedback
 
----
-
-### Prompt 8.1 - Integración LangSmith Run ID
-
-**Objetivo**: Integrar el tracking de trazas LangSmith en el agente para tener observabilidad completa de cada invocación: entradas, salidas, herramientas usadas y latencias.
-
-**src/api/routers/chat.py** (actualización):
-```python
-"""Router de chat con integración LangSmith."""
-import uuid
-from langsmith import Client as LangSmithClient
-
-from src.config import get_settings
-
-
-def get_langsmith_trace_url(run_id: str) -> str:
-    """Genera la URL de la traza en LangSmith.
-
-    Args:
-        run_id: ID de la ejecución
-
-    Returns:
-        URL completa a la traza
-    """
-    settings = get_settings()
-    project = settings.langchain_project
-    return f"https://smith.langchain.com/o/default/projects/{project}/runs/{run_id}"
-```
-
----
-
-### Prompt 8.2 - Tests del Servicio de Feedback (TDD - RED)
-
-**Objetivo**: Validar el almacenamiento y consulta de valoraciones de usuarios (estrellas, correcciones), asegurando su vinculación correcta a la sesión y al run de LangSmith.
-
-**tests/unit/test_feedback_service.py**:
-```python
-"""Tests para el servicio de feedback."""
-import uuid
-import pytest
-from unittest.mock import AsyncMock
-
-
-class TestFeedbackService:
-
-    @pytest.mark.asyncio
-    async def test_submit_feedback(self) -> None:
-        from src.services.feedback_service import FeedbackService
-
-        mock_session = AsyncMock()
-        service = FeedbackService(mock_session)
-
-        await service.submit_feedback(
-            interaction_id=uuid.uuid4(),
-            score=5,
-            comment="Excelente respuesta",
-        )
-
-        mock_session.commit.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_get_interactions_for_review(self) -> None:
-        from src.services.feedback_service import FeedbackService
-
-        mock_session = AsyncMock()
-        service = FeedbackService(mock_session)
-
-        result = await service.get_interactions_for_review(
-            chatbot_id=uuid.uuid4(),
-            limit=10,
-        )
-
-        assert isinstance(result, list)
-```
-
----
-
-### Prompt 8.3 - Implementación del Servicio de Feedback
-
-**Objetivo**: Implementar el servicio que captura valoraciones de usuarios en chats públicos y correcciones de informadores humanos, alimentando el ciclo de mejora continua con RAGAS.
-
-**src/services/feedback_service.py**:
-```python
-"""Servicio de gestión de feedback."""
-import uuid
-from datetime import datetime, timezone
-
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.database.models import Interaction
-
-
-class FeedbackService:
-    """Gestiona el feedback de interacciones."""
-
-    def __init__(self, session: AsyncSession):
-        self.session = session
-
-    async def submit_feedback(
-        self,
-        interaction_id: uuid.UUID,
-        score: int,
-        comment: str | None = None,
-    ) -> None:
-        """Envía feedback para una interacción.
-
-        Args:
-            interaction_id: ID de la interacción
-            score: Puntuación (1-5)
-            comment: Comentario opcional
-        """
-        await self.session.execute(
-            update(Interaction)
-            .where(Interaction.id == interaction_id)
-            .values(feedback_score=score, feedback_text=comment)
-        )
-        await self.session.commit()
-
-    async def get_interactions_for_review(
-        self,
-        chatbot_id: uuid.UUID,
-        limit: int = 50,
-        only_low_scores: bool = False,
-    ) -> list[Interaction]:
-        """Obtiene interacciones para revisión.
-
-        Args:
-            chatbot_id: ID del chatbot
-            limit: Número máximo de resultados
-            only_low_scores: Solo mostrar puntuaciones bajas
-
-        Returns:
-            Lista de interacciones
-        """
-        query = (
-            select(Interaction)
-            .where(Interaction.chatbot_id == chatbot_id)
-            .order_by(Interaction.created_at.desc())
-            .limit(limit)
-        )
-
-        if only_low_scores:
-            query = query.where(Interaction.feedback_score <= 2)
-
-        result = await self.session.execute(query)
-        return list(result.scalars().all())
-```
-
----
-
-## Scripts de Utilidad
-
-**pyproject.toml** (scripts section):
-```toml
-[project.scripts]
-dev = "uvicorn src.main:app --reload --port 8000"
-test = "pytest tests/ -v"
-test-cov = "pytest tests/ --cov=src --cov-report=html"
-test-unit = "pytest tests/unit -v"
-test-integration = "pytest tests/integration -v"
-test-e2e = "pytest tests/e2e -v"
-test-eval = "pytest tests/evaluation -v"
-migrate = "alembic upgrade head"
-makemigrations = "alembic revision --autogenerate"
-lint = "ruff check src/"
-format = "ruff format src/"
-```
-
----
+> ✅ **Fase Completada y Validada**. Los detalles (prompts y especificaciones técnicas) han sido ejecutados con éxito y están documentados en el código. Se ha compactado esta sección para mejorar la legibilidad del documento.
 
 ## FASE 9: Frontend React — Admin Hub, Widget y Migración NiceGUI
 
@@ -5296,7 +1106,7 @@ format = "ruff format src/"
 >   (Vite library mode). Se incrusta como `<script>` en la web de la institución.
 > - **Prioridad**: 9A (Admin Hub) → 9B (Widget/Agente) → 9C (Automatización) → 9D (Agente local)
 > - **Migración NiceGUI**: se hace pantalla a pantalla en 9C. Cada commit incluye la pantalla
->   nueva + el borrado del fichero NiceGUI equivalente (ver CLAUDE.md).
+>   nueva + el traslado del fichero NiceGUI equivalente a _legacy_nicegui (ver CLAUDE.md).
 
 ---
 
@@ -6570,7 +2380,7 @@ progreso de nodos del grafo y valoración por estrellas.
 
 ## BLOQUE 9C — Automatización (migración NiceGUI)
 
-*Prerrequisito: Bloque 9A completado (layout admin disponible). Cada prompt incluye el borrado del equivalente NiceGUI.*
+*Prerrequisito: Bloque 9A completado (layout admin disponible). Cada prompt incluye el traslado del equivalente NiceGUI a _legacy_nicegui.*
 
 **Orden de ejecución dentro del bloque** (las dependencias son estrictas):
 
@@ -6582,7 +2392,7 @@ Guía 9C.0 (conceptual, se lee antes de escribir código)
   └── 9.12b  Refactor backend Docling  ──┼──► 9.13  PDF extractor (UI)
                                           │
                                           └──► 9.14  Scripts
-                                               9.15  Limpieza NiceGUI restante
+                                               9.15  Traslado final NiceGUI a _legacy_nicegui
 ```
 
 ---
@@ -6624,7 +2434,7 @@ Antes de cerrar un prompt 9.1x debe cumplirse:
 - [ ] Toda lógica clasificable como "dominio" según la tabla vive en `server/app/modules/...`, con tests unitarios en `server/tests/`.
 - [ ] La UI React es declarativa: no contiene `if/else` sobre reglas de negocio más allá de "qué componente renderizar".
 - [ ] No hay duplicación cliente/servidor de la misma validación (una validación de dominio se aplica **solo** en el servidor; la validación de formulario del cliente es puramente ergonómica).
-- [ ] El fichero NiceGUI equivalente está eliminado (no comentado, no archivado).
+- [ ] El fichero NiceGUI equivalente está movido a _legacy_nicegui (no borrado).
 - [ ] Ningún `grep -r` devuelve imports del módulo NiceGUI eliminado.
 - [ ] `docker compose up` + `pytest` completan en verde tras el borrado.
 
@@ -6739,11 +2549,11 @@ npx shadcn@latest add sheet scroll-area tabs
 // should_show_empty_state_when_no_previous_steps
 ```
 
-**Limpieza NiceGUI** (se aplica parcialmente aquí; el resto al cerrar 9.12/9.13/9.14):
+**Traslado NiceGUI a _legacy_nicegui** (se aplica parcialmente aquí; el resto al cerrar 9.12/9.13/9.14):
 ```bash
 # El borrado de focus_manager/layout_state/drawer_hub/pill_logic NO ocurre en este commit
 # porque las páginas NiceGUI que aún no se han migrado siguen dependiendo de ellos.
-# Se documenta como deuda que se cancela en 9.15 (Limpieza NiceGUI restante).
+# Se documenta como deuda que se cancela en 9.15 (Traslado final NiceGUI a _legacy_nicegui).
 ```
 
 ---
@@ -6846,7 +2656,7 @@ POST /api/v1/automation/flows/{id}/validate
 # test_pill_reference_format_uses_step_id
 ```
 
-**Limpieza NiceGUI** (en el mismo commit que GREEN):
+**Traslado NiceGUI a _legacy_nicegui** (en el mismo commit que GREEN):
 ```bash
 # Borrar: client_app/app/ui/flows_page.py
 # Borrar: client_app/app/ui/flows_translations.json (migrado a i18next)
@@ -7134,7 +2944,7 @@ src/automation/hooks/useExtractionRun.ts            ← polling + mutaciones
 // should_stop_polling_on_error
 ```
 
-**Limpieza NiceGUI** (en el mismo commit que GREEN):
+**Traslado NiceGUI a _legacy_nicegui** (en el mismo commit que GREEN):
 ```bash
 # Borrar:
 rm client_app/app/ui/extraction_page.py                 # 2.370 líneas
@@ -7167,11 +2977,11 @@ grep -rn "extraction_page\|ExtractionState\|DesignState\|ExecutionState" client_
 // should_display_execution_history
 ```
 
-**Limpieza NiceGUI** en el mismo commit.
+**Traslado NiceGUI a _legacy_nicegui** en el mismo commit.
 
 ---
 
-### Prompt 9.15 - Limpieza NiceGUI restante
+### Prompt 9.15 - Traslado final NiceGUI a _legacy_nicegui
 
 **Objetivo**: Verificar que no queda ningún módulo NiceGUI sin migrar. Borrar los que queden.
 
@@ -7353,51 +3163,7 @@ require_informer = require_role(["admin", "informer"])
 
 ### Prompt A.2 - Servicio de Embeddings
 
-**Objetivo**: Implementar el servicio de embeddings con Google/Vertex AI.
-
-**src/services/embedding_service.py**:
-```python
-"""Servicio de embeddings usando Google Generative AI."""
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-
-from src.config import get_settings
-
-
-class EmbeddingService:
-    """Genera embeddings usando Google Generative AI."""
-
-    def __init__(self):
-        settings = get_settings()
-        self.model = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",
-            google_api_key=settings.google_api_key,
-        )
-
-    async def embed(self, text: str) -> list[float]:
-        """Genera el embedding de un texto.
-
-        Args:
-            text: Texto a embeber
-
-        Returns:
-            Vector de 1536 dimensiones
-        """
-        # LangChain embeddings son síncronos, wrapeamos
-        return self.model.embed_query(text)
-
-    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        """Genera embeddings para múltiples textos.
-
-        Args:
-            texts: Lista de textos
-
-        Returns:
-            Lista de vectores
-        """
-        return self.model.embed_documents(texts)
-```
-
----
+**Objetivo**: Verificar que el servicio de embeddings BGE-M3 local (implementado en la Fase 5B) funciona correctamente con el sistema completo. (La implementación inicial basada en Google/Vertex AI fue descartada a favor del modelo local BAAI/bge-m3 para asegurar la privacidad Zero-Knowledge).
 
 ### Prompt A.3 - Conftest.py Completo para Tests
 
@@ -8156,7 +3922,755 @@ Si todos los comandos pasan sin errores, estás listo para comenzar con el **Pro
 
 ---
 
-## FASE 10: Sistema de Plantillas y Temas Personalizables
+## FASE 9B: Grafo Público Enriquecido (Clasificador, Reranker, Evaluador de Calidad)
+
+**Objetivo de la Fase**: Enriquecer el grafo LangGraph del modo público (chatbot) con nodos inteligentes: clasificación por dominio entre chatbots, reranking de chunks, evaluación de calidad inline y fallback honesto. Esto justifica plenamente el uso de LangGraph incluso sin usuario identificado.
+
+**Dependencias**: Fase 4 (grafo LangGraph operativo), Fase 5B (LocalEmbeddingService BGE-M3)
+
+**Decisiones de diseño**:
+- **Chatbot Portal**: en lugar de crear categorías de KB dentro de un chatbot, se introduce el concepto de "portal": un chatbot con un campo `portal_chatbot_ids` que clasifica consultas entre los chatbots hijos del mismo cliente. Si el chatbot no es portal, el clasificador es pass-through.
+- **Clasificador dual**: embeddings por defecto (comparación con centroides de los `system_prompt` de los chatbots hijos), LLM como fallback si la confianza es baja.
+- **Reranker configurable**: `ms-marco-MiniLM-L-6-v2` por defecto, modelo cambiable desde panel admin. `NoopReranker` si se desactiva.
+- **Umbral de calidad**: 0.6 por defecto, configurable por chatbot desde panel partner.
+
+**Flujo del grafo público enriquecido**:
+```
+[route_by_capability] → [detect_language] → [query_classifier]
+                                                    │
+                                          ¿portal con hijos?
+                                           /              \
+                                    [selecciona KB]    [pass-through]
+                                           \              /
+                                      [search_knowledge]
+                                              │
+                                        [reranker]
+                                              │
+                                    [generate_response]
+                                              │
+                                    [quality_evaluator]
+                                       /            \
+                                [score ≥ umbral]  [score < umbral]
+                                    │                │
+                            [log_interaction]  [fallback_response]
+                                    │                │
+                                  [END]            [END]
+```
+
+---
+
+### Prompt 4B.1 - Tests del Query Classifier (TDD - RED)
+
+**Objetivo**: Validar la clasificación de consultas por dominio para enrutar a la KB del chatbot temático correcto. El clasificador usa embeddings de los `system_prompt` de los chatbots hijos y LLM como fallback.
+
+**tests/modules/agents_hub/unit/test_query_classifier.py**:
+```python
+"""Tests para el clasificador de consultas por dominio — TDD RED."""
+import uuid
+import pytest
+from unittest.mock import AsyncMock, Mock
+from dataclasses import dataclass
+
+
+@dataclass
+class FakeChatbot:
+    id: uuid.UUID
+    name: str
+    system_prompt: str
+
+
+class TestQueryClassifier:
+
+    @pytest.fixture
+    def chatbots_hijos(self):
+        return [
+            FakeChatbot(id=uuid.uuid4(), name="RRHH", system_prompt="Resuelve dudas sobre nóminas, permisos y contratos laborales."),
+            FakeChatbot(id=uuid.uuid4(), name="Normativa", system_prompt="Consultas sobre normativa académica, reglamentos y BOE."),
+            FakeChatbot(id=uuid.uuid4(), name="Económico", system_prompt="Gestión económica, presupuestos y justificación de gastos."),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_classifies_rrhh_query(self, chatbots_hijos) -> None:
+        from server.app.modules.agents_hub.agent.query_classifier import QueryClassifier
+
+        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
+        classifier = QueryClassifier(embedding_service=embedding_service)
+        result = await classifier.classify(
+            query="¿Cuántos días de vacaciones me corresponden?",
+            candidate_chatbots=chatbots_hijos,
+        )
+        assert result.chatbot_id == chatbots_hijos[0].id
+        assert result.confidence > 0.0
+
+    @pytest.mark.asyncio
+    async def test_pass_through_single_chatbot(self, chatbots_hijos) -> None:
+        """Si solo hay un chatbot candidato, devuelve ese directamente."""
+        from server.app.modules.agents_hub.agent.query_classifier import QueryClassifier
+
+        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
+        classifier = QueryClassifier(embedding_service=embedding_service)
+        single = [chatbots_hijos[0]]
+        result = await classifier.classify(query="cualquier cosa", candidate_chatbots=single)
+        assert result.chatbot_id == single[0].id
+        assert result.confidence == 1.0
+
+    @pytest.mark.asyncio
+    async def test_pass_through_empty_list(self) -> None:
+        """Sin candidatos, devuelve None."""
+        from server.app.modules.agents_hub.agent.query_classifier import QueryClassifier
+
+        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
+        classifier = QueryClassifier(embedding_service=embedding_service)
+        result = await classifier.classify(query="hola", candidate_chatbots=[])
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_classification_result_with_confidence(self, chatbots_hijos) -> None:
+        from server.app.modules.agents_hub.agent.query_classifier import QueryClassifier, ClassificationResult
+
+        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
+        classifier = QueryClassifier(embedding_service=embedding_service)
+        result = await classifier.classify(
+            query="¿Cómo justifico los gastos del proyecto?",
+            candidate_chatbots=chatbots_hijos,
+        )
+        assert isinstance(result, ClassificationResult)
+        assert hasattr(result, "chatbot_id")
+        assert hasattr(result, "confidence")
+        assert 0.0 <= result.confidence <= 1.0
+```
+
+---
+
+### Prompt 4B.2 - Implementación del Query Classifier + Migración (TDD - GREEN)
+
+**Objetivo**: Implementar el clasificador de consultas y añadir el campo `portal_chatbot_ids` a `HubChatbot`.
+
+**Migración Alembic**: añadir a `hub_chatbots`:
+- `portal_chatbot_ids: ARRAY(UUID)` — lista de chatbot_ids a los que enrutar (NULL = no es portal)
+- `quality_threshold: Float` — umbral de calidad (default 0.6)
+
+**server/app/modules/agents_hub/agent/query_classifier.py**:
+```python
+"""Clasificador de consultas por dominio para enrutado entre chatbots."""
+import uuid
+from dataclasses import dataclass
+from typing import Protocol, Sequence
+
+import numpy as np
+
+
+class EmbeddingProtocol(Protocol):
+    async def embed(self, text: str) -> list[float]: ...
+
+
+@dataclass
+class ClassificationResult:
+    chatbot_id: uuid.UUID
+    chatbot_name: str
+    confidence: float
+
+
+@dataclass
+class ChatbotCandidate:
+    id: uuid.UUID
+    name: str
+    system_prompt: str
+
+
+class QueryClassifier:
+    """Clasifica consultas comparando embeddings de la query con los system_prompt de los chatbots candidatos."""
+
+    def __init__(self, embedding_service: EmbeddingProtocol):
+        self.embedding_service = embedding_service
+        self._centroid_cache: dict[uuid.UUID, list[float]] = {}
+
+    async def classify(
+        self,
+        query: str,
+        candidate_chatbots: Sequence[ChatbotCandidate],
+    ) -> ClassificationResult | None:
+        if not candidate_chatbots:
+            return None
+        if len(candidate_chatbots) == 1:
+            c = candidate_chatbots[0]
+            return ClassificationResult(chatbot_id=c.id, chatbot_name=c.name, confidence=1.0)
+
+        query_emb = await self.embedding_service.embed(query)
+        best, best_score = None, -1.0
+
+        for chatbot in candidate_chatbots:
+            if chatbot.id not in self._centroid_cache:
+                self._centroid_cache[chatbot.id] = await self.embedding_service.embed(chatbot.system_prompt)
+            centroid = self._centroid_cache[chatbot.id]
+            score = self._cosine_similarity(query_emb, centroid)
+            if score > best_score:
+                best, best_score = chatbot, score
+
+        return ClassificationResult(
+            chatbot_id=best.id, chatbot_name=best.name, confidence=max(0.0, min(1.0, best_score))
+        )
+
+    @staticmethod
+    def _cosine_similarity(a: list[float], b: list[float]) -> float:
+        va, vb = np.array(a), np.array(b)
+        denom = np.linalg.norm(va) * np.linalg.norm(vb)
+        return float(np.dot(va, vb) / denom) if denom > 0 else 0.0
+```
+
+---
+
+### Prompt 4B.3 - Tests del Reranker (TDD - RED)
+
+**Objetivo**: Validar que el reranker reordena chunks por relevancia real y que NoopReranker no altera el orden.
+
+**tests/modules/agents_hub/unit/test_reranker.py**:
+```python
+"""Tests para el reranker de chunks — TDD RED."""
+import pytest
+from dataclasses import dataclass
+
+
+@dataclass
+class FakeChunk:
+    content: str
+    score: float
+
+
+class TestCrossEncoderReranker:
+
+    @pytest.mark.asyncio
+    async def test_reranker_reorders_by_relevance(self) -> None:
+        from server.app.modules.agents_hub.agent.reranker import CrossEncoderReranker
+
+        reranker = CrossEncoderReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
+        chunks = [
+            FakeChunk(content="Python es un lenguaje de programación.", score=0.5),
+            FakeChunk(content="Las vacaciones son 22 días laborables al año.", score=0.9),
+        ]
+        result = await reranker.rerank(query="¿Cuántos días de vacaciones tengo?", documents=chunks, top_k=2)
+        assert result[0].content == chunks[1].content
+
+    @pytest.mark.asyncio
+    async def test_reranker_truncates_to_top_k(self) -> None:
+        from server.app.modules.agents_hub.agent.reranker import CrossEncoderReranker
+
+        reranker = CrossEncoderReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
+        chunks = [FakeChunk(content=f"Chunk {i}", score=0.5) for i in range(10)]
+        result = await reranker.rerank(query="test", documents=chunks, top_k=3)
+        assert len(result) == 3
+
+
+class TestNoopReranker:
+
+    @pytest.mark.asyncio
+    async def test_noop_preserves_order(self) -> None:
+        from server.app.modules.agents_hub.agent.reranker import NoopReranker
+
+        reranker = NoopReranker()
+        chunks = [FakeChunk(content=f"Chunk {i}", score=float(i)) for i in range(5)]
+        result = await reranker.rerank(query="test", documents=chunks, top_k=5)
+        assert [r.content for r in result] == [c.content for c in chunks]
+
+    @pytest.mark.asyncio
+    async def test_noop_truncates_to_top_k(self) -> None:
+        from server.app.modules.agents_hub.agent.reranker import NoopReranker
+
+        reranker = NoopReranker()
+        chunks = [FakeChunk(content=f"Chunk {i}", score=float(i)) for i in range(10)]
+        result = await reranker.rerank(query="test", documents=chunks, top_k=3)
+        assert len(result) == 3
+```
+
+---
+
+### Prompt 4B.4 - Implementación del Reranker (TDD - GREEN)
+
+**Objetivo**: Implementar reranker desacoplado con interfaz `RerankerProtocol`.
+
+**Dependencia**: añadir `sentence-transformers>=2.6.0` a `server/pyproject.toml` (si no está ya por BGE-M3).
+
+**server/app/modules/agents_hub/agent/reranker.py**:
+```python
+"""Reranker de chunks con interfaz desacoplada."""
+from dataclasses import dataclass
+from typing import Protocol, Sequence, TypeVar
+
+T = TypeVar("T")
+
+
+class HasContent(Protocol):
+    content: str
+
+
+@dataclass
+class RankedDocument:
+    content: str
+    score: float
+    original_index: int
+
+
+class RerankerProtocol(Protocol):
+    async def rerank(self, query: str, documents: Sequence[HasContent], top_k: int = 5) -> list[RankedDocument]: ...
+
+
+class NoopReranker:
+    """Reranker que no altera el orden — para desactivar sin cambiar el grafo."""
+
+    async def rerank(self, query: str, documents: Sequence[HasContent], top_k: int = 5) -> list[RankedDocument]:
+        return [
+            RankedDocument(content=d.content, score=getattr(d, "score", 0.0), original_index=i)
+            for i, d in enumerate(documents[:top_k])
+        ]
+
+
+class CrossEncoderReranker:
+    """Reranker basado en cross-encoder (sentence-transformers)."""
+
+    def __init__(self, model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"):
+        self._model_name = model_name
+        self._model = None
+
+    def _get_model(self):
+        if self._model is None:
+            from sentence_transformers import CrossEncoder
+            self._model = CrossEncoder(self._model_name)
+        return self._model
+
+    async def rerank(self, query: str, documents: Sequence[HasContent], top_k: int = 5) -> list[RankedDocument]:
+        if not documents:
+            return []
+        model = self._get_model()
+        pairs = [(query, d.content) for d in documents]
+        scores = model.predict(pairs)
+        indexed = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
+        return [
+            RankedDocument(content=documents[i].content, score=float(s), original_index=i)
+            for i, s in indexed[:top_k]
+        ]
+
+
+_reranker_instance: RerankerProtocol | None = None
+
+def get_reranker(model_name: str | None = None, enabled: bool = True) -> RerankerProtocol:
+    global _reranker_instance
+    if not enabled:
+        return NoopReranker()
+    if _reranker_instance is None:
+        _reranker_instance = CrossEncoderReranker(model_name or "cross-encoder/ms-marco-MiniLM-L-6-v2")
+    return _reranker_instance
+```
+
+---
+
+### Prompt 4B.5 - Tests del Quality Evaluator y Fallback (TDD - RED)
+
+**Objetivo**: Validar la evaluación inline de calidad y el mecanismo de fallback.
+
+**tests/modules/agents_hub/unit/test_quality_evaluator.py**:
+```python
+"""Tests para evaluador de calidad inline y fallback — TDD RED."""
+import pytest
+
+
+class TestQualityEvaluator:
+
+    @pytest.mark.asyncio
+    async def test_high_quality_passes(self) -> None:
+        from server.app.modules.agents_hub.agent.quality_evaluator import evaluate_response_quality
+
+        result = await evaluate_response_quality(
+            question="¿Qué es Python?",
+            answer="Python es un lenguaje de programación versátil.",
+            context="Python es un lenguaje de programación versátil y fácil de aprender.",
+        )
+        assert result.score >= 0.6
+        assert result.passed is True
+
+    @pytest.mark.asyncio
+    async def test_low_quality_fails(self) -> None:
+        from server.app.modules.agents_hub.agent.quality_evaluator import evaluate_response_quality
+
+        result = await evaluate_response_quality(
+            question="¿Cuántos días de vacaciones tengo?",
+            answer="La temperatura media en Marte es de -60 grados.",
+            context="Los empleados tienen 22 días laborables de vacaciones.",
+        )
+        assert result.passed is False
+
+    @pytest.mark.asyncio
+    async def test_custom_threshold(self) -> None:
+        from server.app.modules.agents_hub.agent.quality_evaluator import evaluate_response_quality
+
+        result = await evaluate_response_quality(
+            question="test", answer="test related", context="test context",
+            threshold=0.9,
+        )
+        assert isinstance(result.passed, bool)
+
+    @pytest.mark.asyncio
+    async def test_metrics_include_faithfulness_and_relevance(self) -> None:
+        from server.app.modules.agents_hub.agent.quality_evaluator import evaluate_response_quality
+
+        result = await evaluate_response_quality(
+            question="test", answer="test", context="test",
+        )
+        assert "faithfulness" in result.metrics
+        assert "relevance" in result.metrics
+
+
+class TestFallbackHandler:
+
+    @pytest.mark.asyncio
+    async def test_fallback_generates_honest_message(self) -> None:
+        from server.app.modules.agents_hub.agent.fallback_handler import generate_fallback_response
+
+        response = await generate_fallback_response(language="es")
+        assert "información suficiente" in response.lower() or "no dispongo" in response.lower()
+
+    @pytest.mark.asyncio
+    async def test_fallback_respects_language(self) -> None:
+        from server.app.modules.agents_hub.agent.fallback_handler import generate_fallback_response
+
+        response_ca = await generate_fallback_response(language="ca")
+        response_en = await generate_fallback_response(language="en")
+        assert response_ca != response_en
+
+
+class TestRetrievalValidator:
+    """Valida el nodo que decide si el contexto recuperado es suficiente
+    para generar respuesta directamente o si hay que hacer fallback
+    de idioma (re-búsqueda sin filtro de idioma + advertencia de traducción)."""
+
+    @pytest.mark.asyncio
+    async def test_sufficient_results_pass(self) -> None:
+        from server.app.modules.agents_hub.agent.retrieval_validator import validate_retrieval
+        from server.app.modules.agents_hub.services.retriever import SearchResult
+        import uuid
+
+        results = [
+            SearchResult(id=uuid.uuid4(), content="x", source_url="u", language="ca", score=0.8),
+            SearchResult(id=uuid.uuid4(), content="y", source_url="u", language="ca", score=0.75),
+        ]
+        decision = validate_retrieval(results, min_results=2, min_score=0.25)
+        assert decision == "ok"
+
+    @pytest.mark.asyncio
+    async def test_zero_results_triggers_language_fallback(self) -> None:
+        from server.app.modules.agents_hub.agent.retrieval_validator import validate_retrieval
+
+        decision = validate_retrieval([], min_results=2, min_score=0.25)
+        assert decision == "language_fallback"
+
+    @pytest.mark.asyncio
+    async def test_low_score_triggers_language_fallback(self) -> None:
+        from server.app.modules.agents_hub.agent.retrieval_validator import validate_retrieval
+        from server.app.modules.agents_hub.services.retriever import SearchResult
+        import uuid
+
+        results = [
+            SearchResult(id=uuid.uuid4(), content="x", source_url="u", language="ca", score=0.1),
+        ]
+        decision = validate_retrieval(results, min_results=2, min_score=0.25)
+        assert decision == "language_fallback"
+
+    @pytest.mark.asyncio
+    async def test_language_fallback_warning_in_context(self) -> None:
+        from server.app.modules.agents_hub.agent.fallback_handler import build_translation_warning
+
+        warning = build_translation_warning(source_language="es", query_language="ca")
+        assert "ca" in warning.lower() or "català" in warning.lower() or "idioma" in warning.lower()
+```
+
+---
+
+### Prompt 4B.6 - Implementación del Quality Evaluator + Fallback (TDD - GREEN)
+
+**Objetivo**: Implementar evaluador de calidad reutilizando `rag_metrics.py` y handler de fallback i18n.
+
+**server/app/modules/agents_hub/agent/quality_evaluator.py**:
+```python
+"""Evaluador de calidad de respuestas inline (pre-envío)."""
+from dataclasses import dataclass, field
+
+from server.app.modules.agents_hub.evaluation.rag_metrics import (
+    calculate_answer_relevance,
+    calculate_faithfulness,
+)
+
+
+@dataclass
+class QualityResult:
+    score: float
+    passed: bool
+    metrics: dict = field(default_factory=dict)
+
+
+async def evaluate_response_quality(
+    question: str,
+    answer: str,
+    context: str,
+    threshold: float = 0.6,
+) -> QualityResult:
+    faithfulness = await calculate_faithfulness(answer=answer, context=context)
+    relevance = await calculate_answer_relevance(question=question, answer=answer)
+
+    combined = (faithfulness + relevance) / 2.0
+    return QualityResult(
+        score=combined,
+        passed=combined >= threshold,
+        metrics={"faithfulness": faithfulness, "relevance": relevance},
+    )
+```
+
+**server/app/modules/agents_hub/agent/fallback_handler.py**:
+```python
+"""Respuesta de fallback cuando la calidad es insuficiente."""
+
+_FALLBACK_MESSAGES = {
+    "es": "No dispongo de información suficiente para responder con confianza a esta consulta. Te recomiendo contactar directamente con el servicio correspondiente.",
+    "ca": "No dispose d'informació suficient per respondre amb confiança a aquesta consulta. Et recomane contactar directament amb el servei corresponent.",
+    "en": "I don't have enough information to answer this query with confidence. I recommend contacting the relevant service directly.",
+}
+
+
+async def generate_fallback_response(language: str = "es") -> str:
+    return _FALLBACK_MESSAGES.get(language, _FALLBACK_MESSAGES["es"])
+
+
+_TRANSLATION_WARNINGS = {
+    "es": "⚠️ No se ha encontrado información en el idioma de tu consulta. La respuesta se ha generado a partir de fuentes en otro idioma y puede contener adaptaciones.",
+    "ca": "⚠️ No s'ha trobat informació en l'idioma de la consulta. La resposta s'ha generat a partir de fonts en un altre idioma i pot contenir adaptacions.",
+    "en": "⚠️ No information was found in your query language. The response was generated from sources in another language and may contain adaptations.",
+}
+
+
+def build_translation_warning(source_language: str, query_language: str) -> str:
+    return _TRANSLATION_WARNINGS.get(query_language, _TRANSLATION_WARNINGS["es"])
+```
+
+**server/app/modules/agents_hub/agent/retrieval_validator.py**:
+```python
+"""Decide si el contexto recuperado es suficiente o se necesita fallback de idioma."""
+from server.app.modules.agents_hub.services.retriever import SearchResult
+
+
+def validate_retrieval(
+    results: list[SearchResult],
+    min_results: int = 2,
+    min_score: float = 0.25,
+) -> str:
+    """Evalúa si los resultados de búsqueda son suficientes.
+
+    Returns:
+        "ok" — context suficiente, continuar con generate_response
+        "language_fallback" — re-buscar sin filtro de idioma y añadir advertencia
+    """
+    if not results:
+        return "language_fallback"
+    if len(results) < min_results or max(r.score for r in results) < min_score:
+        return "language_fallback"
+    return "ok"
+```
+
+**Nota de diseño**: `min_results` y `min_score` se leen de `HubChatbot.min_retrieval_results` y
+`HubChatbot.min_retrieval_score` vía `ConfigProvider` en el nodo del grafo. Los defaults (2 y 0.25)
+son los valores de columna en la migración Alembic (ver Prompt 4B.2).
+
+---
+
+### Prompt 4B.7 - Tests del Grafo Público Integrado (TDD - RED)
+
+**Objetivo**: Validar el flujo completo del grafo enriquecido con aristas condicionales.
+
+**tests/modules/agents_hub/integration/test_enriched_graph.py**:
+```python
+"""Tests de integración del grafo público enriquecido — TDD RED."""
+import pytest
+from unittest.mock import AsyncMock, Mock, patch
+
+
+class TestEnrichedPublicGraph:
+
+    @pytest.mark.asyncio
+    async def test_graph_has_new_nodes(self) -> None:
+        from server.app.modules.agents_hub.agent.graph import create_agent_graph
+
+        with patch("server.app.modules.agents_hub.agent.graph.ChatGoogleGenerativeAI"):
+            graph = create_agent_graph(retriever=Mock(), embedding_service=Mock())
+            node_names = list(graph.nodes.keys())
+            assert "query_classifier" in node_names
+            assert "reranker" in node_names
+            assert "quality_evaluator" in node_names
+            assert "fallback_response" in node_names
+
+    @pytest.mark.asyncio
+    async def test_graph_has_conditional_edge_after_quality(self) -> None:
+        """El grafo debe tener una bifurcación tras quality_evaluator."""
+        from server.app.modules.agents_hub.agent.graph import create_agent_graph
+
+        with patch("server.app.modules.agents_hub.agent.graph.ChatGoogleGenerativeAI"):
+            graph = create_agent_graph(retriever=Mock(), embedding_service=Mock())
+            compiled = graph.compile()
+            assert compiled is not None
+
+    @pytest.mark.asyncio
+    async def test_new_state_fields_initialized(self) -> None:
+        from server.app.modules.agents_hub.agent.state import create_initial_state
+
+        state = create_initial_state(user_id=None, chatbot_id="test-123", initial_message="Hola")
+        assert state["classified_chatbot_id"] == ""
+        assert state["quality_score"] == 0.0
+        assert state["fallback_triggered"] is False
+```
+
+---
+
+### Prompt 4B.8 - Integración en graph.py y state.py (TDD - GREEN)
+
+**Objetivo**: Modificar `state.py` con los campos nuevos e integrar todos los nodos en `graph.py` con aristas condicionales.
+
+**Cambios en state.py** — añadir al `AgentState`:
+```python
+    # --- Fase 4B: Grafo Público Enriquecido ---
+    classified_chatbot_id: str      # ID del chatbot seleccionado por clasificador ("" = sin clasificar)
+    classifier_confidence: float    # Confianza del clasificador (0.0–1.0)
+    reranked_context: list[str]     # Contexto tras reranking
+    quality_score: float            # Score compuesto del evaluador (0.0–1.0)
+    quality_metrics: dict           # {faithfulness: float, relevance: float}
+    fallback_triggered: bool        # True si la respuesta fue sustituida por fallback honesto
+    language_fallback_triggered: bool  # True si se re-buscó sin filtro de idioma
+    context_source_language: str | None  # Idioma predominante de los chunks usados (None si no aplica)
+```
+
+**Cambios en create_initial_state** — inicializar campos nuevos:
+```python
+    classified_chatbot_id="",
+    classifier_confidence=0.0,
+    reranked_context=[],
+    quality_score=0.0,
+    quality_metrics={},
+    fallback_triggered=False,
+    language_fallback_triggered=False,
+    context_source_language=None,
+```
+
+**Cambios en graph.py** — flujo completo con validación de retrieval y language fallback:
+
+```
+[route_by_capability] → [detect_language] → [query_classifier]
+                                                    │
+                                      [search_knowledge]  ← búsqueda con filtro de idioma
+                                              │
+                                   [validate_retrieval]
+                                     /               \
+                               "ok"               "language_fallback"
+                                 │                       │
+                           [reranker]        [search_knowledge_fallback]  ← sin filtro idioma
+                                 │                       │
+                           [generate_response] ←─────────┘  (con advertencia de traducción si fallback)
+                                 │
+                        [quality_evaluator]
+                           /            \
+                    [score ≥ umbral]  [score < umbral]
+                           │                │
+                  [log_interaction]  [fallback_response]  ← respuesta honesta "no tengo info"
+                           │                │
+                         [END]            [END]
+```
+
+```python
+    # Nuevos nodos (Fase 4B)
+    graph.add_node("query_classifier", query_classifier_node)
+    graph.add_node("validate_retrieval", validate_retrieval_node)
+    graph.add_node("search_knowledge_fallback", search_knowledge_fallback_node)
+    graph.add_node("reranker", reranker_node)
+    graph.add_node("quality_evaluator", quality_evaluator_node)
+    graph.add_node("fallback_response", fallback_response_node)
+    graph.add_node("log_interaction", log_interaction_node)
+
+    # Flujo actualizado
+    graph.set_entry_point("route_by_capability")
+    graph.add_edge("route_by_capability", "detect_language")
+    graph.add_edge("detect_language", "query_classifier")
+    graph.add_edge("query_classifier", "search_knowledge")
+
+    # Arista condicional: validate_retrieval decide si hay suficiente contexto en el idioma detectado
+    graph.add_edge("search_knowledge", "validate_retrieval")
+    graph.add_conditional_edges(
+        "validate_retrieval",
+        lambda state: state.get("retrieval_decision", "ok"),
+        {"ok": "reranker", "language_fallback": "search_knowledge_fallback"},
+    )
+    graph.add_edge("search_knowledge_fallback", "reranker")
+    graph.add_edge("reranker", "generate_response")
+    graph.add_edge("generate_response", "quality_evaluator")
+
+    # Arista condicional: quality_evaluator decide si la respuesta es suficientemente buena
+    graph.add_conditional_edges(
+        "quality_evaluator",
+        lambda state: "ok" if state["quality_score"] >= quality_threshold else "fallback",
+        {"ok": "log_interaction", "fallback": "fallback_response"},
+    )
+    graph.add_edge("log_interaction", END)
+    graph.add_edge("fallback_response", END)
+```
+
+**Lógica de `validate_retrieval_node`**:
+```python
+async def validate_retrieval_node(state: AgentState) -> dict:
+    results = state.get("raw_search_results", [])
+    config = await config_provider.get_chatbot_config(state["chatbot_id"])
+    decision = validate_retrieval(
+        results,
+        min_results=config.min_retrieval_results,   # default 2
+        min_score=config.min_retrieval_score,        # default 0.25
+    )
+    return {"retrieval_decision": decision}
+```
+
+**Lógica de `search_knowledge_fallback_node`** (re-búsqueda sin filtro de idioma):
+```python
+async def search_knowledge_fallback_node(state: AgentState) -> dict:
+    result = await search_knowledge(
+        query=state["messages"][-1].content,
+        chatbot_id=state["chatbot_id"],
+        retriever=retriever,
+        embedding_service=embedding_service,
+        language=None,   # sin filtro — busca en todos los idiomas
+    )
+    # Detectar idioma predominante de los resultados para la advertencia
+    source_lang = detect_source_language(result)
+    return {
+        "retrieved_context": [result],
+        "language_fallback_triggered": True,
+        "context_source_language": source_lang,
+    }
+```
+
+**El nodo `generate_response` lee `language_fallback_triggered`** y, si es True, añade
+`build_translation_warning(source_language, query_language)` al inicio del system_prompt.
+
+**Cambios en config_models.py** — campos portal y umbrales de retrieval:
+```python
+    # En HubChatbot, añadir:
+    portal_chatbot_ids: Mapped[list[uuid.UUID] | None] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=True)
+    quality_threshold: Mapped[float] = mapped_column(default=0.6)
+    min_retrieval_results: Mapped[int] = mapped_column(Integer, default=2)
+    min_retrieval_score: Mapped[float] = mapped_column(default=0.25)
+```
+
+**Migración Alembic adicional** (se añade a la de 4B.2):
+```python
+    op.add_column("hub_chatbots", sa.Column("min_retrieval_results", sa.Integer(), nullable=False, server_default="2"))
+    op.add_column("hub_chatbots", sa.Column("min_retrieval_score", sa.Float(), nullable=False, server_default="0.25"))
+```
+
+---
+
+
+
+## FASE 10: Sistema de Plantillas y Temas (Chatbots, Panel Admin, Partners y UI Principal)
 
 **Objetivo de la Fase**: Crear un sistema de plantillas editables que permita personalizar la apariencia del chatbot sin modificar el código fuente. Los administradores podrán ajustar colores, fuentes, espaciados y componentes mediante archivos de configuración.
 
@@ -11080,7 +7594,9 @@ CRITERIOS DE ACEPTACIÓN:
 
 ---
 
-## FASE 12: Gestor de Expedientes — NUEVA
+## FASE 12: Gestor de Expedientes (Integración vía MCP)
+
+> **Arquitectura MCP**: La integración con el Gestor de Expedientes legacy se realizará exponiendo dicho sistema como un Servidor MCP (Model Context Protocol) que GovGenAI consumirá como cliente agnóstico. Esto aísla la plataforma de las especificidades del sistema antiguo.
 
 **Objetivo de la Fase**: Implementar el módulo de gestión de tramitaciones administrativas multi-fase,
 auditables y conformes con el Reglamento de IA de la UE (RIA).
@@ -11460,7 +7976,9 @@ TESTS REQUERIDOS:
 
 ---
 
-## FASE 19: Adaptadores UJI + Gestión 400 + Capa ENI/ENS
+## FASE 19: Adaptadores UJI + Gestión 400 + Capa ENI/ENS (Servidores MCP)
+
+> **Arquitectura MCP**: Se desarrollarán Servidores MCP para UJI, Gestión 400 y ENI/ENS, estandarizando la integración con la capa de inteligencia artificial.
 
 **Tipo**: Nuevo desarrollo  
 **Prerequisitos**: FASE 5 (MCP Client), FASE 12.E2 (motor LangGraph), FASE 14 (sandbox), FASE 18 (bridges)  
