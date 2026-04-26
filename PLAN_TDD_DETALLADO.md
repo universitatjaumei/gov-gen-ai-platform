@@ -6240,7 +6240,7 @@ npx shadcn@latest add card
 
 ---
 
-### Prompt 9.8.1 - Etiquetado de idioma en la ingestión
+### Prompt 9.8.1 - Etiquetado de idioma en la ingestión ✅ COMPLETADO (2026-04-26)
 
 **Objetivo**: Garantizar que todos los chunks almacenados tienen el campo `language` correcto,
 eliminando el `default="es"` que etiqueta erróneamente documentos en catalán o inglés.
