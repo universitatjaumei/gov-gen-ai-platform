@@ -69,36 +69,53 @@ para y consulta si pertenece al servidor o al frontend.
 
 ## Pruebas manuales después de cada prompt
 
-Al terminar la implementación de un prompt y **antes de marcarlo como COMPLETADO** en el plan, sugiere al usuario las pruebas manuales que debe realizar para validar el trabajo más allá de los tests automáticos.
+Al terminar la implementación de un prompt y **antes de marcarlo como COMPLETADO** en el plan, genera:
 
-### Qué debe incluir la sugerencia
+1. Un **archivo `.bat`** con los comandos a ejecutar.
+2. Un bloque de **instrucciones en texto** dirigidas a un usuario no programador.
 
-- **Verificación del build**: comando exacto para compilar sin errores.
-- **Test en el entorno real**: pasos para arrancar el servidor/frontend y probar el flujo completo en el navegador (URL, credenciales de demo, acciones a ejecutar).
-- **Casos límite**: escenarios que los tests automáticos no cubren fácilmente (timeouts, errores de red, recarga de página, sesión expirada, etc.).
-- **Verificación de integración**: comprobar que el nuevo código funciona con los componentes existentes (rutas, auth, i18n, edge/cloud split).
-- **Checks de regresión**: funcionalidades adyacentes que podrían haberse roto (listar cuáles y cómo verificarlas).
+### Archivo .bat
 
-### Formato de la sugerencia
+- **Nombre**: `pruebas_manuales_promptXX.bat` donde `XX` es el identificador del prompt (p. ej. `pruebas_manuales_prompt9_10.bat`).
+- **Ubicación**: en el directorio desde el que deben ejecutarse los comandos (normalmente la raíz del proyecto o el subdirectorio correspondiente).
+- **Contenido mínimo obligatorio**:
+  - Línea `@echo off` al inicio y `chcp 65001 > nul` para codificación UTF-8.
+  - Bloques `echo` que muestren por pantalla cada sección: requisitos previos, comandos a ejecutar, qué comprobar, cómo terminar.
+  - Los comandos reales del smoke test (builds, curl de verificación, etc.) con `pause` entre secciones para que el usuario pueda leer.
+  - Mensaje final con `echo PRUEBAS COMPLETADAS` y `pause`.
+- El `.bat` **no levanta** Docker ni el servidor automáticamente (son pasos previos manuales); sí puede comprobar con `curl` o comandos similares que los servicios estén respondiendo antes de continuar.
+
+### Instrucciones para el usuario
+
+Tras generar el `.bat`, muestra en la respuesta un bloque con instrucciones sencillas, sin jerga técnica, con este formato:
 
 ```
 ## Pruebas manuales — Prompt X.Y
 
-### Requisitos previos
-- [ ] `docker compose up -d` y servidor arriba
+### Antes de ejecutar el .bat
+1. Abre Docker Desktop y asegúrate de que está en marcha (icono verde en la barra de tareas).
+2. <paso concreto adicional, p. ej. "Abre una terminal y ejecuta: docker compose up -d">
+3. ...
 
-### Smoke tests
-1. <paso concreto con URL, clic o comando>
-2. ...
+### Ejecuta el archivo
+- Haz doble clic en `pruebas_manuales_promptXY.bat` (está en la carpeta <ruta relativa>).
+- El script irá mostrando los pasos; pulsa cualquier tecla para avanzar entre ellos.
 
-### Casos límite
+### Qué debes ver
+- <resultado esperado 1, p. ej. "La página http://localhost:5173/admin carga sin errores">
+- <resultado esperado 2>
+
+### Casos límite a revisar manualmente
 - [ ] <escenario + resultado esperado>
 
 ### Regresiones a verificar
 - [ ] <funcionalidad existente + cómo comprobarla>
+
+### Para terminar
+- <cómo detener los servicios si es necesario>
 ```
 
-La sugerencia debe ser **accionable y específica**: rutas reales, valores de ejemplo, resultados esperados. No sirve "comprobar que funciona".
+Las instrucciones deben ser **accionables y específicas**: rutas reales, valores de ejemplo, resultados esperados. No sirve "comprobar que funciona".
 
 ---
 
