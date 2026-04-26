@@ -1,9 +1,16 @@
-"""Tests E2E del flujo completo de chat (Prompt 6.1).
+"""Tests E2E del flujo completo de chat (Prompt 6.1, actualizado Prompt 9.8.2).
 
 Requieren PostgreSQL con pgvector corriendo.
 El LLM se mockea para evitar llamadas reales a la API.
 Usan httpx.AsyncClient + ASGITransport para ejecutar todo en el mismo
 event loop que los fixtures async de BD (evita conflictos de loop).
+
+Protocolo SSE (Prompt 9.8.2):
+  event: status   data: {"node": "...", "msg": "..."}
+  event: token    data: {"delta": "..."}
+  event: done     data: {"interaction_id": "...", "sources": [...],
+                          "language_fallback": bool, "translation_warning": str | null}
+  event: error    data: {"message": "..."}
 
 Rutas reales (monorepo):
   tests/e2e/test_chat_flow.py → server/tests/modules/agents_hub/e2e/test_chat_flow.py
@@ -18,24 +25,66 @@ from langchain_core.messages import AIMessage
 from sqlalchemy import select
 
 
+def _parse_sse_lines(lines: list[str]) -> list[tuple[str, dict]]:
+    """Parsea líneas SSE y devuelve lista de (event_name, payload)."""
+    events: list[tuple[str, dict]] = []
+    current_event = "message"
+    for line in lines:
+        if line.startswith("event:"):
+            current_event = line.removeprefix("event:").strip()
+        elif line.startswith("data:"):
+            payload = json.loads(line.removeprefix("data:").strip())
+            events.append((current_event, payload))
+            current_event = "message"
+    return events
+
+
+def _make_mock_graph_astream_events(events_to_yield: list[dict]):
+    """Crea un grafo mock cuyo compiled.astream_events devuelve los eventos dados."""
+    async def _mock_astream_events(state, config=None, version="v2"):
+        for ev in events_to_yield:
+            yield ev
+
+    mock_compiled = MagicMock()
+    mock_compiled.astream_events = _mock_astream_events
+    mock_graph = MagicMock()
+    mock_graph.compile = MagicMock(return_value=mock_compiled)
+    return mock_graph
+
+
 class TestChatFlowE2E:
 
     @pytest.mark.asyncio
     async def test_full_chat_flow(self, test_app, setup_chatbot, auth_headers) -> None:
-        """Flujo completo: petición → agente LangGraph → respuesta SSE."""
+        """Flujo completo: petición → agente LangGraph → respuesta SSE con evento done."""
         chatbot = setup_chatbot
 
-        async def _mock_astream(state):
-            yield {"generate_response": {"messages": [AIMessage(content="Python es muy versátil.")]}}
+        chunk = MagicMock()
+        chunk.content = "Python es muy versátil."
 
-        mock_compiled = MagicMock()
-        mock_compiled.astream = _mock_astream
-        mock_graph = MagicMock()
-        mock_graph.compile = MagicMock(return_value=mock_compiled)
+        raw_events = [
+            {
+                "event": "on_chat_model_stream",
+                "name": "ChatGoogleGenerativeAI",
+                "data": {"chunk": chunk},
+            },
+            {
+                "event": "on_chain_end",
+                "name": "generate_response",
+                "data": {
+                    "output": {
+                        "sources": [],
+                        "language_fallback_triggered": False,
+                        "language": "es",
+                    }
+                },
+            },
+        ]
+        mock_graph = _make_mock_graph_astream_events(raw_events)
 
         with (
             patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
-            patch("server.app.api.v1.hub_chat.GoogleEmbeddingService"),
+            patch("server.app.api.v1.hub_chat.get_embedding_service"),
         ):
             async with AsyncClient(
                 transport=ASGITransport(app=test_app), base_url="http://test"
@@ -48,12 +97,16 @@ class TestChatFlowE2E:
                 ) as response:
                     assert response.status_code == 200
                     assert "text/event-stream" in response.headers.get("content-type", "")
-                    lines = [l async for l in response.aiter_lines() if l.startswith("data:")]
+                    lines = [l async for l in response.aiter_lines()]
 
-        assert len(lines) >= 1
-        payload = json.loads(lines[0].removeprefix("data:").strip())
-        assert "content" in payload
-        assert payload["content"] == "Python es muy versátil."
+        events = _parse_sse_lines(lines)
+        token_events = [(e, p) for e, p in events if e == "token"]
+        done_events = [(e, p) for e, p in events if e == "done"]
+
+        assert len(token_events) >= 1
+        assert token_events[0][1]["delta"] == "Python es muy versátil."
+        assert len(done_events) == 1
+        assert done_events[0][1]["language_fallback"] is False
 
     @pytest.mark.asyncio
     async def test_chat_stores_interaction(
@@ -64,18 +117,32 @@ class TestChatFlowE2E:
 
         chatbot = setup_chatbot
 
-        async def _mock_astream(state):
-            yield {"generate_response": {"messages": [AIMessage(content="Respuesta guardada")]}}
+        chunk = MagicMock()
+        chunk.content = "Respuesta guardada"
 
-        mock_compiled = MagicMock()
-        mock_compiled.astream = _mock_astream
-        mock_graph = MagicMock()
-        mock_graph.compile = MagicMock(return_value=mock_compiled)
+        raw_events = [
+            {
+                "event": "on_chat_model_stream",
+                "name": "ChatGoogleGenerativeAI",
+                "data": {"chunk": chunk},
+            },
+            {
+                "event": "on_chain_end",
+                "name": "generate_response",
+                "data": {
+                    "output": {
+                        "sources": [],
+                        "language_fallback_triggered": False,
+                        "language": "es",
+                    }
+                },
+            },
+        ]
+        mock_graph = _make_mock_graph_astream_events(raw_events)
 
-        run_id = None
         with (
             patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
-            patch("server.app.api.v1.hub_chat.GoogleEmbeddingService"),
+            patch("server.app.api.v1.hub_chat.get_embedding_service"),
         ):
             async with AsyncClient(
                 transport=ASGITransport(app=test_app), base_url="http://test"
@@ -86,15 +153,16 @@ class TestChatFlowE2E:
                     json={"message": "Pregunta de prueba"},
                     headers=auth_headers,
                 ) as response:
-                    data_lines = [l async for l in response.aiter_lines() if l.startswith("data:")]
+                    lines = [l async for l in response.aiter_lines()]
 
-        last = json.loads(data_lines[-1].removeprefix("data:").strip())
-        assert last.get("done") is True
-        run_id = uuid.UUID(last["run_id"])
+        events = _parse_sse_lines(lines)
+        done_events = [(e, p) for e, p in events if e == "done"]
+        assert len(done_events) == 1
+        interaction_id = uuid.UUID(done_events[0][1]["interaction_id"])
 
         # Verificar persistencia en BD
         result = await db_session.execute(
-            select(HubInteraction).where(HubInteraction.run_id == run_id)
+            select(HubInteraction).where(HubInteraction.run_id == interaction_id)
         )
         interaction = result.scalar_one_or_none()
         assert interaction is not None
@@ -112,17 +180,32 @@ class TestExportFlowE2E:
         """El usuario puede exportar la interacción como Markdown tras el chat."""
         chatbot = setup_chatbot
 
-        async def _mock_astream(state):
-            yield {"generate_response": {"messages": [AIMessage(content="## Respuesta\n\nContenido exportable.")]}}
+        chunk = MagicMock()
+        chunk.content = "## Respuesta\n\nContenido exportable."
 
-        mock_compiled = MagicMock()
-        mock_compiled.astream = _mock_astream
-        mock_graph = MagicMock()
-        mock_graph.compile = MagicMock(return_value=mock_compiled)
+        raw_events = [
+            {
+                "event": "on_chat_model_stream",
+                "name": "ChatGoogleGenerativeAI",
+                "data": {"chunk": chunk},
+            },
+            {
+                "event": "on_chain_end",
+                "name": "generate_response",
+                "data": {
+                    "output": {
+                        "sources": [],
+                        "language_fallback_triggered": False,
+                        "language": "es",
+                    }
+                },
+            },
+        ]
+        mock_graph = _make_mock_graph_astream_events(raw_events)
 
         with (
             patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
-            patch("server.app.api.v1.hub_chat.GoogleEmbeddingService"),
+            patch("server.app.api.v1.hub_chat.get_embedding_service"),
         ):
             async with AsyncClient(
                 transport=ASGITransport(app=test_app), base_url="http://test"
@@ -133,13 +216,14 @@ class TestExportFlowE2E:
                     json={"message": "Genera un informe"},
                     headers=auth_headers,
                 ) as response:
-                    data_lines = [l async for l in response.aiter_lines() if l.startswith("data:")]
+                    lines = [l async for l in response.aiter_lines()]
 
-                last = json.loads(data_lines[-1].removeprefix("data:").strip())
-                run_id = last["run_id"]
+                events = _parse_sse_lines(lines)
+                done_events = [(e, p) for e, p in events if e == "done"]
+                interaction_id = done_events[0][1]["interaction_id"]
 
                 export_response = await client.get(
-                    f"/api/v1/hub/tasks/export/{run_id}",
+                    f"/api/v1/hub/tasks/export/{interaction_id}",
                     headers=auth_headers,
                 )
                 assert export_response.status_code == 200
@@ -155,13 +239,28 @@ class TestExportFlowE2E:
 
         chatbot = setup_chatbot
 
-        async def _mock_astream(state):
-            yield {"generate_response": {"messages": [AIMessage(content="Datos privados")]}}
+        chunk = MagicMock()
+        chunk.content = "Datos privados"
 
-        mock_compiled = MagicMock()
-        mock_compiled.astream = _mock_astream
-        mock_graph = MagicMock()
-        mock_graph.compile = MagicMock(return_value=mock_compiled)
+        raw_events = [
+            {
+                "event": "on_chat_model_stream",
+                "name": "ChatGoogleGenerativeAI",
+                "data": {"chunk": chunk},
+            },
+            {
+                "event": "on_chain_end",
+                "name": "generate_response",
+                "data": {
+                    "output": {
+                        "sources": [],
+                        "language_fallback_triggered": False,
+                        "language": "es",
+                    }
+                },
+            },
+        ]
+        mock_graph = _make_mock_graph_astream_events(raw_events)
 
         other_token = create_token(
             UserInfo(user_id="intruder-99", email="intruder@test.com", role="user")
@@ -170,7 +269,7 @@ class TestExportFlowE2E:
 
         with (
             patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
-            patch("server.app.api.v1.hub_chat.GoogleEmbeddingService"),
+            patch("server.app.api.v1.hub_chat.get_embedding_service"),
         ):
             async with AsyncClient(
                 transport=ASGITransport(app=test_app), base_url="http://test"
@@ -181,13 +280,14 @@ class TestExportFlowE2E:
                     json={"message": "Mensaje privado"},
                     headers=auth_headers,
                 ) as response:
-                    data_lines = [l async for l in response.aiter_lines() if l.startswith("data:")]
+                    lines = [l async for l in response.aiter_lines()]
 
-                last = json.loads(data_lines[-1].removeprefix("data:").strip())
-                run_id = last["run_id"]
+                events = _parse_sse_lines(lines)
+                done_events = [(e, p) for e, p in events if e == "done"]
+                interaction_id = done_events[0][1]["interaction_id"]
 
                 forbidden = await client.get(
-                    f"/api/v1/hub/tasks/export/{run_id}",
+                    f"/api/v1/hub/tasks/export/{interaction_id}",
                     headers=other_headers,
                 )
                 assert forbidden.status_code == 403

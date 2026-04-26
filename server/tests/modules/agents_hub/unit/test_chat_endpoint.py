@@ -1,4 +1,11 @@
-"""Tests TDD (RED) para el endpoint de chat con streaming SSE.
+"""Tests TDD para el endpoint de chat con streaming SSE (Prompt 9.8.2).
+
+Protocolo SSE testeado:
+  event: status   data: {"node": "...", "msg": "..."}
+  event: token    data: {"delta": "..."}
+  event: done     data: {"interaction_id": "...", "sources": [...],
+                          "language_fallback": bool, "translation_warning": str | null}
+  event: error    data: {"message": "..."}
 
 Rutas reales (monorepo):
   src/api/routers/chat.py → server/app/api/v1/hub_chat.py
@@ -53,6 +60,37 @@ def _build_test_app(chatbot_mock) -> FastAPI:
     return app
 
 
+def _parse_sse_lines(lines: list[str]) -> list[tuple[str, dict]]:
+    """Parsea líneas SSE y devuelve lista de (event_name, payload)."""
+    events: list[tuple[str, dict]] = []
+    current_event = "message"
+    for line in lines:
+        if line.startswith("event:"):
+            current_event = line.removeprefix("event:").strip()
+        elif line.startswith("data:"):
+            payload = json.loads(line.removeprefix("data:").strip())
+            events.append((current_event, payload))
+            current_event = "message"
+    return events
+
+
+def _make_mock_graph_astream_events(events_to_yield: list[dict]):
+    """Crea un grafo mock cuyo compiled.astream_events devuelve los eventos dados."""
+    async def _mock_astream_events(state, config=None, version="v2"):
+        for ev in events_to_yield:
+            yield ev
+
+    mock_compiled = MagicMock()
+    mock_compiled.astream_events = _mock_astream_events
+    mock_graph = MagicMock()
+    mock_graph.compile = MagicMock(return_value=mock_compiled)
+    return mock_graph
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Autenticación
+# ──────────────────────────────────────────────────────────────────────────────
+
 class TestChatEndpointAuthentication:
 
     def test_chat_requires_authentication(self) -> None:
@@ -85,6 +123,10 @@ class TestChatEndpointAuthentication:
         assert response.status_code == 422
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Chatbot
+# ──────────────────────────────────────────────────────────────────────────────
+
 class TestChatEndpointChatbot:
 
     @patch.dict("os.environ", _JWT_ENV)
@@ -102,25 +144,20 @@ class TestChatEndpointChatbot:
         assert response.status_code == 404
 
 
-class TestChatEndpointStreaming:
+# ──────────────────────────────────────────────────────────────────────────────
+# Streaming SSE (Prompt 9.8.2)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestChatEndpointSSE:
 
     @patch.dict("os.environ", _JWT_ENV)
-    def test_chat_returns_sse_stream(self) -> None:
-        """Petición válida → 200 con Content-Type text/event-stream."""
-        
-
+    def test_chat_endpoint_returns_streaming_response(self) -> None:
+        """Petición válida → 200 con Content-Type text/event-stream y cabeceras anti-buffering."""
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.id = uuid.uuid4()
         app = _build_test_app(chatbot)
 
-        async def _mock_astream(state, config=None):
-            yield {"generate_response": {"messages": [AIMessage(content="Hola! ¿En qué puedo ayudarte?")]}}
-
-        mock_compiled = MagicMock()
-        mock_compiled.astream = _mock_astream
-
-        mock_graph = MagicMock()
-        mock_graph.compile = MagicMock(return_value=mock_compiled)
+        mock_graph = _make_mock_graph_astream_events([])  # sin eventos, solo done
 
         token = _make_token()
         with (
@@ -131,32 +168,34 @@ class TestChatEndpointStreaming:
                 with client.stream(
                     "POST",
                     f"/api/v1/hub/chat/{chatbot.id}",
-                    json={"message": "¿Puedes ayudarme?"},
+                    json={"message": "Hola"},
                     headers={"Authorization": f"Bearer {token}"},
                 ) as response:
                     assert response.status_code == 200
-                    assert "text/event-stream" in response.headers.get("content-type", "")
-                    lines = [l for l in response.iter_lines() if l.startswith("data:")]
-                    assert len(lines) >= 1
+                    ct = response.headers.get("content-type", "")
+                    assert "text/event-stream" in ct
+                    # Cabeceras anti-buffering
+                    assert response.headers.get("cache-control") == "no-cache"
+                    assert response.headers.get("x-accel-buffering") == "no"
+                    # Consumir el stream
+                    list(response.iter_lines())
 
     @patch.dict("os.environ", _JWT_ENV)
-    def test_chat_stream_contains_content_and_run_id(self) -> None:
-        """El stream incluye 'content' y 'run_id' en cada chunk de respuesta."""
-        
-
+    def test_chat_endpoint_emits_status_events_per_node(self) -> None:
+        """Cada nodo LangGraph que comienza emite un evento SSE 'status'."""
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.id = uuid.uuid4()
         app = _build_test_app(chatbot)
 
-        async def _mock_astream(state, config=None):
-            yield {"generate_response": {"messages": [AIMessage(content="Respuesta de prueba")]}}
-
-        mock_compiled = MagicMock()
-        mock_compiled.astream = _mock_astream
-        mock_graph = MagicMock()
-        mock_graph.compile = MagicMock(return_value=mock_compiled)
+        # Simular on_chain_start para dos nodos conocidos
+        raw_events = [
+            {"event": "on_chain_start", "name": "detect_language", "data": {}},
+            {"event": "on_chain_start", "name": "generate_response", "data": {}},
+        ]
+        mock_graph = _make_mock_graph_astream_events(raw_events)
 
         token = _make_token()
+        all_lines: list[str] = []
         with (
             patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
@@ -168,32 +207,45 @@ class TestChatEndpointStreaming:
                     json={"message": "Test"},
                     headers={"Authorization": f"Bearer {token}"},
                 ) as response:
-                    data_lines = [l for l in response.iter_lines() if l.startswith("data:")]
+                    all_lines = list(response.iter_lines())
 
-        assert len(data_lines) >= 1
-        payload = json.loads(data_lines[0].removeprefix("data:").strip())
-        assert "content" in payload
-        assert "run_id" in payload
-        assert payload["content"] == "Respuesta de prueba"
+        events = _parse_sse_lines(all_lines)
+        status_events = [(e, p) for e, p in events if e == "status"]
+        assert len(status_events) >= 2
+
+        nodes_emitted = [p["node"] for _, p in status_events]
+        assert "detect_language" in nodes_emitted
+        assert "generate_response" in nodes_emitted
+
+        # Verificar que los mensajes de progreso son los esperados
+        for _, payload in status_events:
+            assert "node" in payload
+            assert "msg" in payload
+            assert len(payload["msg"]) > 0
 
     @patch.dict("os.environ", _JWT_ENV)
-    def test_chat_stream_ends_with_done_event(self) -> None:
-        """El stream termina con un evento {done: true, run_id: ...}."""
-        
-
+    def test_chat_endpoint_emits_token_events(self) -> None:
+        """Cada fragmento del LLM emite un evento SSE 'token' con campo 'delta'."""
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.id = uuid.uuid4()
         app = _build_test_app(chatbot)
 
-        async def _mock_astream(state, config=None):
-            yield {"generate_response": {"messages": [AIMessage(content="Ok")]}}
+        # Simular fragmentos del modelo
+        chunk1 = MagicMock()
+        chunk1.content = "Hola "
+        chunk2 = MagicMock()
+        chunk2.content = "mundo"
 
-        mock_compiled = MagicMock()
-        mock_compiled.astream = _mock_astream
-        mock_graph = MagicMock()
-        mock_graph.compile = MagicMock(return_value=mock_compiled)
+        raw_events = [
+            {"event": "on_chat_model_stream", "name": "ChatGoogleGenerativeAI",
+             "data": {"chunk": chunk1}},
+            {"event": "on_chat_model_stream", "name": "ChatGoogleGenerativeAI",
+             "data": {"chunk": chunk2}},
+        ]
+        mock_graph = _make_mock_graph_astream_events(raw_events)
 
         token = _make_token()
+        all_lines: list[str] = []
         with (
             patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
@@ -205,8 +257,150 @@ class TestChatEndpointStreaming:
                     json={"message": "Test"},
                     headers={"Authorization": f"Bearer {token}"},
                 ) as response:
-                    data_lines = [l for l in response.iter_lines() if l.startswith("data:")]
+                    all_lines = list(response.iter_lines())
 
-        last = json.loads(data_lines[-1].removeprefix("data:").strip())
-        assert last.get("done") is True
-        assert "run_id" in last
+        events = _parse_sse_lines(all_lines)
+        token_events = [(e, p) for e, p in events if e == "token"]
+        assert len(token_events) == 2
+
+        deltas = [p["delta"] for _, p in token_events]
+        assert "Hola " in deltas
+        assert "mundo" in deltas
+
+    @patch.dict("os.environ", _JWT_ENV)
+    def test_chat_endpoint_emits_done_event_with_sources(self) -> None:
+        """El evento 'done' incluye interaction_id, sources y language_fallback=False."""
+        chatbot = MagicMock(spec=HubChatbot)
+        chatbot.id = uuid.uuid4()
+        app = _build_test_app(chatbot)
+
+        # Simular fin del nodo generate_response con fuentes
+        sources = ["doc-uuid-1", "doc-uuid-2"]
+        raw_events = [
+            {
+                "event": "on_chain_end",
+                "name": "generate_response",
+                "data": {
+                    "output": {
+                        "sources": sources,
+                        "language_fallback_triggered": False,
+                        "language": "es",
+                    }
+                },
+            }
+        ]
+        mock_graph = _make_mock_graph_astream_events(raw_events)
+
+        token = _make_token()
+        all_lines: list[str] = []
+        with (
+            patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
+            patch("server.app.api.v1.hub_chat.get_embedding_service"),
+        ):
+            with TestClient(app) as client:
+                with client.stream(
+                    "POST",
+                    f"/api/v1/hub/chat/{chatbot.id}",
+                    json={"message": "Test"},
+                    headers={"Authorization": f"Bearer {token}"},
+                ) as response:
+                    all_lines = list(response.iter_lines())
+
+        events = _parse_sse_lines(all_lines)
+        done_events = [(e, p) for e, p in events if e == "done"]
+        assert len(done_events) == 1
+
+        _, done_payload = done_events[0]
+        assert "interaction_id" in done_payload
+        assert done_payload["sources"] == sources
+        assert done_payload["language_fallback"] is False
+        assert done_payload["translation_warning"] is None
+        # interaction_id debe ser un UUID válido
+        uuid.UUID(done_payload["interaction_id"])
+
+    @patch.dict("os.environ", _JWT_ENV)
+    def test_chat_endpoint_includes_translation_warning_when_language_fallback(self) -> None:
+        """Si language_fallback_triggered=True, done incluye translation_warning no nulo."""
+        chatbot = MagicMock(spec=HubChatbot)
+        chatbot.id = uuid.uuid4()
+        app = _build_test_app(chatbot)
+
+        raw_events = [
+            {
+                "event": "on_chain_end",
+                "name": "generate_response",
+                "data": {
+                    "output": {
+                        "sources": [],
+                        "language_fallback_triggered": True,
+                        "language": "ca",
+                    }
+                },
+            }
+        ]
+        mock_graph = _make_mock_graph_astream_events(raw_events)
+
+        token = _make_token()
+        all_lines: list[str] = []
+        with (
+            patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
+            patch("server.app.api.v1.hub_chat.get_embedding_service"),
+        ):
+            with TestClient(app) as client:
+                with client.stream(
+                    "POST",
+                    f"/api/v1/hub/chat/{chatbot.id}",
+                    json={"message": "Ajuda'm si us plau"},
+                    headers={"Authorization": f"Bearer {token}"},
+                ) as response:
+                    all_lines = list(response.iter_lines())
+
+        events = _parse_sse_lines(all_lines)
+        done_events = [(e, p) for e, p in events if e == "done"]
+        assert len(done_events) == 1
+
+        _, done_payload = done_events[0]
+        assert done_payload["language_fallback"] is True
+        assert done_payload["translation_warning"] is not None
+        assert "⚠️" in done_payload["translation_warning"]
+
+    @patch.dict("os.environ", _JWT_ENV)
+    def test_chat_endpoint_emits_error_event_on_graph_failure(self) -> None:
+        """Si el grafo lanza una excepción, el stream emite evento 'error' y termina."""
+        chatbot = MagicMock(spec=HubChatbot)
+        chatbot.id = uuid.uuid4()
+        app = _build_test_app(chatbot)
+
+        async def _failing_astream_events(state, config=None, version="v2"):
+            raise RuntimeError("LangGraph internal error")
+            yield  # make it a generator
+
+        mock_compiled = MagicMock()
+        mock_compiled.astream_events = _failing_astream_events
+        mock_graph = MagicMock()
+        mock_graph.compile = MagicMock(return_value=mock_compiled)
+
+        token = _make_token()
+        all_lines: list[str] = []
+        with (
+            patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
+            patch("server.app.api.v1.hub_chat.get_embedding_service"),
+        ):
+            with TestClient(app, raise_server_exceptions=False) as client:
+                with client.stream(
+                    "POST",
+                    f"/api/v1/hub/chat/{chatbot.id}",
+                    json={"message": "Test error"},
+                    headers={"Authorization": f"Bearer {token}"},
+                ) as response:
+                    all_lines = list(response.iter_lines())
+
+        events = _parse_sse_lines(all_lines)
+        error_events = [(e, p) for e, p in events if e == "error"]
+        assert len(error_events) == 1
+        _, error_payload = error_events[0]
+        assert "message" in error_payload
+        assert "LangGraph internal error" in error_payload["message"]
+        # No debe haber evento done tras el error
+        done_events = [(e, p) for e, p in events if e == "done"]
+        assert len(done_events) == 0
