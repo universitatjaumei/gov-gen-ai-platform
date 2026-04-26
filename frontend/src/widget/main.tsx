@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import i18n from '@/shared/i18n'
+import { ChatWidget } from './components/ChatWidget'
 
 export interface WidgetConfig {
   chatbotId: string
@@ -31,7 +32,11 @@ export function mountWidget(container: Element, config: WidgetConfig): () => voi
 
   createRoot(container).render(
     <StrictMode>
-      <div data-testid="widget-root" />
+      <ChatWidget
+        chatbotId={config.chatbotId}
+        apiUrl={config.apiUrl}
+        lang={config.lang}
+      />
     </StrictMode>,
   )
 

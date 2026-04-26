@@ -3,5 +3,10 @@
   "send": "Enviar",
   "thinking": "Pensant...",
   "feedback_prompt": "Va ser útil aquesta resposta?",
-  "feedback_sent": "Gràcies per la teva valoració"
+  "feedback_sent": "Gràcies per la teva valoració",
+  "widget_open": "Obre el xat",
+  "widget_close": "Tanca",
+  "widget_loading": "Carregant...",
+  "feedback_rate": "Valorar resposta",
+  "feedback_stars": "estrelles"
 }

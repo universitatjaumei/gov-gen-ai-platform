@@ -1,16 +1,18 @@
-import { describe, test, expect, vi, afterEach } from 'vitest'
+import { describe, test, expect, vi, beforeAll, afterEach } from 'vitest'
 import { act } from '@testing-library/react'
 import { readConfig, mountWidget } from '../main'
 import i18n from '@/shared/i18n'
 
-vi.mock('@/shared/i18n', () => ({
-  default: { changeLanguage: vi.fn() },
-}))
+beforeAll(async () => {
+  await i18n.changeLanguage('es')
+})
 
 describe('Widget main', () => {
+  let changeLanguageSpy: ReturnType<typeof vi.spyOn<typeof i18n, 'changeLanguage'>>
+
   afterEach(() => {
     document.body.innerHTML = ''
-    vi.clearAllMocks()
+    changeLanguageSpy?.mockRestore()
   })
 
   test('should_mount_widget_from_data_attributes', async () => {
@@ -27,10 +29,12 @@ describe('Widget main', () => {
       mountWidget(container, config!)
     })
 
-    expect(container.querySelector('[data-testid="widget-root"]')).not.toBeNull()
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull()
   })
 
   test('should_use_lang_from_data_attribute', async () => {
+    changeLanguageSpy = vi.spyOn(i18n, 'changeLanguage')
+
     const container = document.createElement('div')
     container.setAttribute('data-chatbot-id', 'abc-123')
     container.setAttribute('data-lang', 'ca')
@@ -42,10 +46,12 @@ describe('Widget main', () => {
       mountWidget(container, config!)
     })
 
-    expect(vi.mocked(i18n.changeLanguage)).toHaveBeenCalledWith('ca')
+    expect(changeLanguageSpy).toHaveBeenCalledWith('ca')
   })
 
   test('should_update_lang_on_postmessage_from_parent', async () => {
+    changeLanguageSpy = vi.spyOn(i18n, 'changeLanguage')
+
     const container = document.createElement('div')
     container.setAttribute('data-chatbot-id', 'abc-123')
     container.setAttribute('data-lang', 'es')
@@ -58,7 +64,7 @@ describe('Widget main', () => {
       cleanup = mountWidget(container, config!)
     })
 
-    vi.clearAllMocks()
+    changeLanguageSpy.mockClear()
 
     window.dispatchEvent(
       new MessageEvent('message', {
@@ -66,7 +72,7 @@ describe('Widget main', () => {
       }),
     )
 
-    expect(vi.mocked(i18n.changeLanguage)).toHaveBeenCalledWith('en')
+    expect(changeLanguageSpy).toHaveBeenCalledWith('en')
     cleanup?.()
   })
 

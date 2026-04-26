@@ -66,7 +66,7 @@
 | FASE 6 — Tests E2E y CI/CD | ✅ COMPLETADO | 2026-04-23 | 4 tests E2E (httpx+AsyncClient), 5 tests integración pipeline+auth, GitHub Actions CI/CD con pgvector |
 | FASE 7 — Docker multi-stage | ✅ COMPLETADO | 2026-04-23 | Imagen CPU-only (~2.96 GB), uv sync, docker-compose.prod.yml, LangFuse self-hosted, scripts/postgres/init.sql |
 | FASE 8 — LangFuse + FeedbackService | ✅ COMPLETADO | 2026-04-23 | observability.py, FeedbackService, hub_feedback router, migración feedback_text, 10 tests verdes |
-| FASE 9 — Frontend React | 🔄 EN PROGRESO | 2026-04-26 | Prompts 9.1–9.9 completados; 9.9 widget bundle IIFE (vite.config.widget.ts, readConfig/mountWidget, postMessage lang, 4 tests verdes) |
+| FASE 9 — Frontend React | 🔄 EN PROGRESO | 2026-04-26 | Prompts 9.1–9.10 completados; 9.10 ChatWidget SSE (useChat, StarRating, streaming/status/warning/feedback, 8 tests verdes) |
 | FASE 10 — Sistema de temas y panel de IA | ⏳ PENDIENTE | — | — |
 | FASE 11 — Autoinstalación | ⏳ PENDIENTE | — | — |
 | FASE 12 — Gestor de Expedientes | ⏳ PENDIENTE | — | Ampliada con Analista/Validador/Fábricas/UJI/G400/ENI/ENS |
@@ -2294,7 +2294,7 @@ export default defineConfig({
 
 ---
 
-### Prompt 9.10 - Widget: chat SSE y feedback
+### Prompt 9.10 - Widget: chat SSE y feedback ✅ COMPLETADO (2026-04-26)
 
 **Objetivo**: Componente de chat completo con streaming SSE, historial de mensajes, eventos de
 progreso de nodos del grafo y valoración por estrellas.

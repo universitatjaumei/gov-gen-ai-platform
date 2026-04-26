@@ -3,5 +3,10 @@
   "send": "Send",
   "thinking": "Thinking...",
   "feedback_prompt": "Was this response helpful?",
-  "feedback_sent": "Thank you for your feedback"
+  "feedback_sent": "Thank you for your feedback",
+  "widget_open": "Open chat",
+  "widget_close": "Close",
+  "widget_loading": "Loading...",
+  "feedback_rate": "Rate response",
+  "feedback_stars": "stars"
 }
