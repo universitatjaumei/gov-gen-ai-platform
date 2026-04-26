@@ -60,6 +60,7 @@
 | FASE 2.2–2.9 — ORM Hub, conexión, retriever, gobernanza | ✅ COMPLETADO | 2026-04-23 | 11 tests verdes; módulo agents_hub creado |
 | FASE 3 — Ingestión Docling | ✅ COMPLETADO | 2026-04-23 | DoclingProcessor, IngestionWatcher, chunker, hasher, user_upload endpoint; tests verdes |
 | FASE 4 — Agente LangGraph | ✅ COMPLETADO | 2026-04-23 | Grafo LangGraph, HybridRetriever, ModelFactory, RAGAS, HITL, TaskRunner, PromptService; tests verdes |
+| FASE 4B — Grafo Público Enriquecido | ⏳ PENDIENTE | — | QueryClassifier (portal), Reranker cross-encoder, QualityEvaluator inline, FallbackHandler |
 | FASE 5 — API Endpoints | ✅ COMPLETADO | 2026-04-23 | hub_chat (SSE), hub_tasks (export PDF/MD), embedding_service (GoogleEmbeddingService stub), bugfix deps.py 401; 13 tests verdes |
 | FASE 5B — LocalEmbeddingService BGE-M3 | ✅ COMPLETADO | 2026-04-25 | `LocalEmbeddingService` (BAAI/bge-m3, sentence-transformers, 1024 dims); singleton `get_embedding_service()`; cableado en hub_chat, hub_ingestion_router, ingestion; migración vector(1536→1024); todos los tests actualizados |
 | FASE 6 — Tests E2E y CI/CD | ✅ COMPLETADO | 2026-04-23 | 4 tests E2E (httpx+AsyncClient), 5 tests integración pipeline+auth, GitHub Actions CI/CD con pgvector |
@@ -199,6 +200,7 @@ uv run pytest tests/unit/test_config.py -v
 | **2** | Base de Datos | 2.1 - 2.9 | **MANTENIDA** (2.1 reducida: Alembic ya existe) | Fase 0 |
 | **3** | Ingestión | 3.1 - 3.9 | **MANTENIDA** | Fase 2 |
 | **4** | Agente LangGraph | 4.1 - 4.11 | **MANTENIDA** | Fases 1, 2, 3 |
+| **4B** | Grafo Público Enriquecido | 4B.1 - 4B.8 | **NUEVA** | Fase 4 |
 | **5** | API Endpoints | 5.1 - 5.4 | **MANTENIDA** (rutas nuevas en FastAPI existente) | Fases 1, 2, 4 |
 | **6** | Tests E2E | 6.1 - 6.3 | **MANTENIDA** (CI/CD: GitHub Actions) | Fases 1-5 |
 | **7** | Despliegue | 7.1 - 7.4 | **REDUCIDA** — extender docker-compose existente | Fases 1-6 |
@@ -3541,6 +3543,591 @@ TESTS REQUERIDOS (RED):
 
 ---
 
+
+## FASE 4B: Grafo Público Enriquecido (Clasificador, Reranker, Evaluador de Calidad)
+
+**Objetivo de la Fase**: Enriquecer el grafo LangGraph del modo público (chatbot) con nodos inteligentes: clasificación por dominio entre chatbots, reranking de chunks, evaluación de calidad inline y fallback honesto. Esto justifica plenamente el uso de LangGraph incluso sin usuario identificado.
+
+**Dependencias**: Fase 4 (grafo LangGraph operativo), Fase 5B (LocalEmbeddingService BGE-M3)
+
+**Decisiones de diseño**:
+- **Chatbot Portal**: en lugar de crear categorías de KB dentro de un chatbot, se introduce el concepto de "portal": un chatbot con un campo `portal_chatbot_ids` que clasifica consultas entre los chatbots hijos del mismo cliente. Si el chatbot no es portal, el clasificador es pass-through.
+- **Clasificador dual**: embeddings por defecto (comparación con centroides de los `system_prompt` de los chatbots hijos), LLM como fallback si la confianza es baja.
+- **Reranker configurable**: `ms-marco-MiniLM-L-6-v2` por defecto, modelo cambiable desde panel admin. `NoopReranker` si se desactiva.
+- **Umbral de calidad**: 0.6 por defecto, configurable por chatbot desde panel partner.
+
+**Flujo del grafo público enriquecido**:
+```
+[route_by_capability] → [detect_language] → [query_classifier]
+                                                    │
+                                          ¿portal con hijos?
+                                           /              \
+                                    [selecciona KB]    [pass-through]
+                                           \              /
+                                      [search_knowledge]
+                                              │
+                                        [reranker]
+                                              │
+                                    [generate_response]
+                                              │
+                                    [quality_evaluator]
+                                       /            \
+                                [score ≥ umbral]  [score < umbral]
+                                    │                │
+                            [log_interaction]  [fallback_response]
+                                    │                │
+                                  [END]            [END]
+```
+
+---
+
+### Prompt 4B.1 - Tests del Query Classifier (TDD - RED)
+
+**Objetivo**: Validar la clasificación de consultas por dominio para enrutar a la KB del chatbot temático correcto. El clasificador usa embeddings de los `system_prompt` de los chatbots hijos y LLM como fallback.
+
+**tests/modules/agents_hub/unit/test_query_classifier.py**:
+```python
+"""Tests para el clasificador de consultas por dominio — TDD RED."""
+import uuid
+import pytest
+from unittest.mock import AsyncMock, Mock
+from dataclasses import dataclass
+
+
+@dataclass
+class FakeChatbot:
+    id: uuid.UUID
+    name: str
+    system_prompt: str
+
+
+class TestQueryClassifier:
+
+    @pytest.fixture
+    def chatbots_hijos(self):
+        return [
+            FakeChatbot(id=uuid.uuid4(), name="RRHH", system_prompt="Resuelve dudas sobre nóminas, permisos y contratos laborales."),
+            FakeChatbot(id=uuid.uuid4(), name="Normativa", system_prompt="Consultas sobre normativa académica, reglamentos y BOE."),
+            FakeChatbot(id=uuid.uuid4(), name="Económico", system_prompt="Gestión económica, presupuestos y justificación de gastos."),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_classifies_rrhh_query(self, chatbots_hijos) -> None:
+        from server.app.modules.agents_hub.agent.query_classifier import QueryClassifier
+
+        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
+        classifier = QueryClassifier(embedding_service=embedding_service)
+        result = await classifier.classify(
+            query="¿Cuántos días de vacaciones me corresponden?",
+            candidate_chatbots=chatbots_hijos,
+        )
+        assert result.chatbot_id == chatbots_hijos[0].id
+        assert result.confidence > 0.0
+
+    @pytest.mark.asyncio
+    async def test_pass_through_single_chatbot(self, chatbots_hijos) -> None:
+        """Si solo hay un chatbot candidato, devuelve ese directamente."""
+        from server.app.modules.agents_hub.agent.query_classifier import QueryClassifier
+
+        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
+        classifier = QueryClassifier(embedding_service=embedding_service)
+        single = [chatbots_hijos[0]]
+        result = await classifier.classify(query="cualquier cosa", candidate_chatbots=single)
+        assert result.chatbot_id == single[0].id
+        assert result.confidence == 1.0
+
+    @pytest.mark.asyncio
+    async def test_pass_through_empty_list(self) -> None:
+        """Sin candidatos, devuelve None."""
+        from server.app.modules.agents_hub.agent.query_classifier import QueryClassifier
+
+        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
+        classifier = QueryClassifier(embedding_service=embedding_service)
+        result = await classifier.classify(query="hola", candidate_chatbots=[])
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_classification_result_with_confidence(self, chatbots_hijos) -> None:
+        from server.app.modules.agents_hub.agent.query_classifier import QueryClassifier, ClassificationResult
+
+        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
+        classifier = QueryClassifier(embedding_service=embedding_service)
+        result = await classifier.classify(
+            query="¿Cómo justifico los gastos del proyecto?",
+            candidate_chatbots=chatbots_hijos,
+        )
+        assert isinstance(result, ClassificationResult)
+        assert hasattr(result, "chatbot_id")
+        assert hasattr(result, "confidence")
+        assert 0.0 <= result.confidence <= 1.0
+```
+
+---
+
+### Prompt 4B.2 - Implementación del Query Classifier + Migración (TDD - GREEN)
+
+**Objetivo**: Implementar el clasificador de consultas y añadir el campo `portal_chatbot_ids` a `HubChatbot`.
+
+**Migración Alembic**: añadir a `hub_chatbots`:
+- `portal_chatbot_ids: ARRAY(UUID)` — lista de chatbot_ids a los que enrutar (NULL = no es portal)
+- `quality_threshold: Float` — umbral de calidad (default 0.6)
+
+**server/app/modules/agents_hub/agent/query_classifier.py**:
+```python
+"""Clasificador de consultas por dominio para enrutado entre chatbots."""
+import uuid
+from dataclasses import dataclass
+from typing import Protocol, Sequence
+
+import numpy as np
+
+
+class EmbeddingProtocol(Protocol):
+    async def embed(self, text: str) -> list[float]: ...
+
+
+@dataclass
+class ClassificationResult:
+    chatbot_id: uuid.UUID
+    chatbot_name: str
+    confidence: float
+
+
+@dataclass
+class ChatbotCandidate:
+    id: uuid.UUID
+    name: str
+    system_prompt: str
+
+
+class QueryClassifier:
+    """Clasifica consultas comparando embeddings de la query con los system_prompt de los chatbots candidatos."""
+
+    def __init__(self, embedding_service: EmbeddingProtocol):
+        self.embedding_service = embedding_service
+        self._centroid_cache: dict[uuid.UUID, list[float]] = {}
+
+    async def classify(
+        self,
+        query: str,
+        candidate_chatbots: Sequence[ChatbotCandidate],
+    ) -> ClassificationResult | None:
+        if not candidate_chatbots:
+            return None
+        if len(candidate_chatbots) == 1:
+            c = candidate_chatbots[0]
+            return ClassificationResult(chatbot_id=c.id, chatbot_name=c.name, confidence=1.0)
+
+        query_emb = await self.embedding_service.embed(query)
+        best, best_score = None, -1.0
+
+        for chatbot in candidate_chatbots:
+            if chatbot.id not in self._centroid_cache:
+                self._centroid_cache[chatbot.id] = await self.embedding_service.embed(chatbot.system_prompt)
+            centroid = self._centroid_cache[chatbot.id]
+            score = self._cosine_similarity(query_emb, centroid)
+            if score > best_score:
+                best, best_score = chatbot, score
+
+        return ClassificationResult(
+            chatbot_id=best.id, chatbot_name=best.name, confidence=max(0.0, min(1.0, best_score))
+        )
+
+    @staticmethod
+    def _cosine_similarity(a: list[float], b: list[float]) -> float:
+        va, vb = np.array(a), np.array(b)
+        denom = np.linalg.norm(va) * np.linalg.norm(vb)
+        return float(np.dot(va, vb) / denom) if denom > 0 else 0.0
+```
+
+---
+
+### Prompt 4B.3 - Tests del Reranker (TDD - RED)
+
+**Objetivo**: Validar que el reranker reordena chunks por relevancia real y que NoopReranker no altera el orden.
+
+**tests/modules/agents_hub/unit/test_reranker.py**:
+```python
+"""Tests para el reranker de chunks — TDD RED."""
+import pytest
+from dataclasses import dataclass
+
+
+@dataclass
+class FakeChunk:
+    content: str
+    score: float
+
+
+class TestCrossEncoderReranker:
+
+    @pytest.mark.asyncio
+    async def test_reranker_reorders_by_relevance(self) -> None:
+        from server.app.modules.agents_hub.agent.reranker import CrossEncoderReranker
+
+        reranker = CrossEncoderReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
+        chunks = [
+            FakeChunk(content="Python es un lenguaje de programación.", score=0.5),
+            FakeChunk(content="Las vacaciones son 22 días laborables al año.", score=0.9),
+        ]
+        result = await reranker.rerank(query="¿Cuántos días de vacaciones tengo?", documents=chunks, top_k=2)
+        assert result[0].content == chunks[1].content
+
+    @pytest.mark.asyncio
+    async def test_reranker_truncates_to_top_k(self) -> None:
+        from server.app.modules.agents_hub.agent.reranker import CrossEncoderReranker
+
+        reranker = CrossEncoderReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
+        chunks = [FakeChunk(content=f"Chunk {i}", score=0.5) for i in range(10)]
+        result = await reranker.rerank(query="test", documents=chunks, top_k=3)
+        assert len(result) == 3
+
+
+class TestNoopReranker:
+
+    @pytest.mark.asyncio
+    async def test_noop_preserves_order(self) -> None:
+        from server.app.modules.agents_hub.agent.reranker import NoopReranker
+
+        reranker = NoopReranker()
+        chunks = [FakeChunk(content=f"Chunk {i}", score=float(i)) for i in range(5)]
+        result = await reranker.rerank(query="test", documents=chunks, top_k=5)
+        assert [r.content for r in result] == [c.content for c in chunks]
+
+    @pytest.mark.asyncio
+    async def test_noop_truncates_to_top_k(self) -> None:
+        from server.app.modules.agents_hub.agent.reranker import NoopReranker
+
+        reranker = NoopReranker()
+        chunks = [FakeChunk(content=f"Chunk {i}", score=float(i)) for i in range(10)]
+        result = await reranker.rerank(query="test", documents=chunks, top_k=3)
+        assert len(result) == 3
+```
+
+---
+
+### Prompt 4B.4 - Implementación del Reranker (TDD - GREEN)
+
+**Objetivo**: Implementar reranker desacoplado con interfaz `RerankerProtocol`.
+
+**Dependencia**: añadir `sentence-transformers>=2.6.0` a `server/pyproject.toml` (si no está ya por BGE-M3).
+
+**server/app/modules/agents_hub/agent/reranker.py**:
+```python
+"""Reranker de chunks con interfaz desacoplada."""
+from dataclasses import dataclass
+from typing import Protocol, Sequence, TypeVar
+
+T = TypeVar("T")
+
+
+class HasContent(Protocol):
+    content: str
+
+
+@dataclass
+class RankedDocument:
+    content: str
+    score: float
+    original_index: int
+
+
+class RerankerProtocol(Protocol):
+    async def rerank(self, query: str, documents: Sequence[HasContent], top_k: int = 5) -> list[RankedDocument]: ...
+
+
+class NoopReranker:
+    """Reranker que no altera el orden — para desactivar sin cambiar el grafo."""
+
+    async def rerank(self, query: str, documents: Sequence[HasContent], top_k: int = 5) -> list[RankedDocument]:
+        return [
+            RankedDocument(content=d.content, score=getattr(d, "score", 0.0), original_index=i)
+            for i, d in enumerate(documents[:top_k])
+        ]
+
+
+class CrossEncoderReranker:
+    """Reranker basado en cross-encoder (sentence-transformers)."""
+
+    def __init__(self, model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"):
+        self._model_name = model_name
+        self._model = None
+
+    def _get_model(self):
+        if self._model is None:
+            from sentence_transformers import CrossEncoder
+            self._model = CrossEncoder(self._model_name)
+        return self._model
+
+    async def rerank(self, query: str, documents: Sequence[HasContent], top_k: int = 5) -> list[RankedDocument]:
+        if not documents:
+            return []
+        model = self._get_model()
+        pairs = [(query, d.content) for d in documents]
+        scores = model.predict(pairs)
+        indexed = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
+        return [
+            RankedDocument(content=documents[i].content, score=float(s), original_index=i)
+            for i, s in indexed[:top_k]
+        ]
+
+
+_reranker_instance: RerankerProtocol | None = None
+
+def get_reranker(model_name: str | None = None, enabled: bool = True) -> RerankerProtocol:
+    global _reranker_instance
+    if not enabled:
+        return NoopReranker()
+    if _reranker_instance is None:
+        _reranker_instance = CrossEncoderReranker(model_name or "cross-encoder/ms-marco-MiniLM-L-6-v2")
+    return _reranker_instance
+```
+
+---
+
+### Prompt 4B.5 - Tests del Quality Evaluator y Fallback (TDD - RED)
+
+**Objetivo**: Validar la evaluación inline de calidad y el mecanismo de fallback.
+
+**tests/modules/agents_hub/unit/test_quality_evaluator.py**:
+```python
+"""Tests para evaluador de calidad inline y fallback — TDD RED."""
+import pytest
+
+
+class TestQualityEvaluator:
+
+    @pytest.mark.asyncio
+    async def test_high_quality_passes(self) -> None:
+        from server.app.modules.agents_hub.agent.quality_evaluator import evaluate_response_quality
+
+        result = await evaluate_response_quality(
+            question="¿Qué es Python?",
+            answer="Python es un lenguaje de programación versátil.",
+            context="Python es un lenguaje de programación versátil y fácil de aprender.",
+        )
+        assert result.score >= 0.6
+        assert result.passed is True
+
+    @pytest.mark.asyncio
+    async def test_low_quality_fails(self) -> None:
+        from server.app.modules.agents_hub.agent.quality_evaluator import evaluate_response_quality
+
+        result = await evaluate_response_quality(
+            question="¿Cuántos días de vacaciones tengo?",
+            answer="La temperatura media en Marte es de -60 grados.",
+            context="Los empleados tienen 22 días laborables de vacaciones.",
+        )
+        assert result.passed is False
+
+    @pytest.mark.asyncio
+    async def test_custom_threshold(self) -> None:
+        from server.app.modules.agents_hub.agent.quality_evaluator import evaluate_response_quality
+
+        result = await evaluate_response_quality(
+            question="test", answer="test related", context="test context",
+            threshold=0.9,
+        )
+        assert isinstance(result.passed, bool)
+
+    @pytest.mark.asyncio
+    async def test_metrics_include_faithfulness_and_relevance(self) -> None:
+        from server.app.modules.agents_hub.agent.quality_evaluator import evaluate_response_quality
+
+        result = await evaluate_response_quality(
+            question="test", answer="test", context="test",
+        )
+        assert "faithfulness" in result.metrics
+        assert "relevance" in result.metrics
+
+
+class TestFallbackHandler:
+
+    @pytest.mark.asyncio
+    async def test_fallback_generates_honest_message(self) -> None:
+        from server.app.modules.agents_hub.agent.fallback_handler import generate_fallback_response
+
+        response = await generate_fallback_response(language="es")
+        assert "información suficiente" in response.lower() or "no dispongo" in response.lower()
+
+    @pytest.mark.asyncio
+    async def test_fallback_respects_language(self) -> None:
+        from server.app.modules.agents_hub.agent.fallback_handler import generate_fallback_response
+
+        response_ca = await generate_fallback_response(language="ca")
+        response_en = await generate_fallback_response(language="en")
+        assert response_ca != response_en
+```
+
+---
+
+### Prompt 4B.6 - Implementación del Quality Evaluator + Fallback (TDD - GREEN)
+
+**Objetivo**: Implementar evaluador de calidad reutilizando `rag_metrics.py` y handler de fallback i18n.
+
+**server/app/modules/agents_hub/agent/quality_evaluator.py**:
+```python
+"""Evaluador de calidad de respuestas inline (pre-envío)."""
+from dataclasses import dataclass, field
+
+from server.app.modules.agents_hub.evaluation.rag_metrics import (
+    calculate_answer_relevance,
+    calculate_faithfulness,
+)
+
+
+@dataclass
+class QualityResult:
+    score: float
+    passed: bool
+    metrics: dict = field(default_factory=dict)
+
+
+async def evaluate_response_quality(
+    question: str,
+    answer: str,
+    context: str,
+    threshold: float = 0.6,
+) -> QualityResult:
+    faithfulness = await calculate_faithfulness(answer=answer, context=context)
+    relevance = await calculate_answer_relevance(question=question, answer=answer)
+
+    combined = (faithfulness + relevance) / 2.0
+    return QualityResult(
+        score=combined,
+        passed=combined >= threshold,
+        metrics={"faithfulness": faithfulness, "relevance": relevance},
+    )
+```
+
+**server/app/modules/agents_hub/agent/fallback_handler.py**:
+```python
+"""Respuesta de fallback cuando la calidad es insuficiente."""
+
+_FALLBACK_MESSAGES = {
+    "es": "No dispongo de información suficiente para responder con confianza a esta consulta. Te recomiendo contactar directamente con el servicio correspondiente.",
+    "ca": "No dispose d'informació suficient per respondre amb confiança a aquesta consulta. Et recomane contactar directament amb el servei corresponent.",
+    "en": "I don't have enough information to answer this query with confidence. I recommend contacting the relevant service directly.",
+}
+
+
+async def generate_fallback_response(language: str = "es") -> str:
+    return _FALLBACK_MESSAGES.get(language, _FALLBACK_MESSAGES["es"])
+```
+
+---
+
+### Prompt 4B.7 - Tests del Grafo Público Integrado (TDD - RED)
+
+**Objetivo**: Validar el flujo completo del grafo enriquecido con aristas condicionales.
+
+**tests/modules/agents_hub/integration/test_enriched_graph.py**:
+```python
+"""Tests de integración del grafo público enriquecido — TDD RED."""
+import pytest
+from unittest.mock import AsyncMock, Mock, patch
+
+
+class TestEnrichedPublicGraph:
+
+    @pytest.mark.asyncio
+    async def test_graph_has_new_nodes(self) -> None:
+        from server.app.modules.agents_hub.agent.graph import create_agent_graph
+
+        with patch("server.app.modules.agents_hub.agent.graph.ChatGoogleGenerativeAI"):
+            graph = create_agent_graph(retriever=Mock(), embedding_service=Mock())
+            node_names = list(graph.nodes.keys())
+            assert "query_classifier" in node_names
+            assert "reranker" in node_names
+            assert "quality_evaluator" in node_names
+            assert "fallback_response" in node_names
+
+    @pytest.mark.asyncio
+    async def test_graph_has_conditional_edge_after_quality(self) -> None:
+        """El grafo debe tener una bifurcación tras quality_evaluator."""
+        from server.app.modules.agents_hub.agent.graph import create_agent_graph
+
+        with patch("server.app.modules.agents_hub.agent.graph.ChatGoogleGenerativeAI"):
+            graph = create_agent_graph(retriever=Mock(), embedding_service=Mock())
+            compiled = graph.compile()
+            assert compiled is not None
+
+    @pytest.mark.asyncio
+    async def test_new_state_fields_initialized(self) -> None:
+        from server.app.modules.agents_hub.agent.state import create_initial_state
+
+        state = create_initial_state(user_id=None, chatbot_id="test-123", initial_message="Hola")
+        assert state["classified_chatbot_id"] == ""
+        assert state["quality_score"] == 0.0
+        assert state["fallback_triggered"] is False
+```
+
+---
+
+### Prompt 4B.8 - Integración en graph.py y state.py (TDD - GREEN)
+
+**Objetivo**: Modificar `state.py` con los campos nuevos e integrar todos los nodos en `graph.py` con aristas condicionales.
+
+**Cambios en state.py** — añadir al `AgentState`:
+```python
+    # --- Fase 4B: Grafo Público Enriquecido ---
+    classified_chatbot_id: str      # ID del chatbot seleccionado por clasificador ("" = sin clasificar)
+    classifier_confidence: float    # Confianza del clasificador (0.0–1.0)
+    reranked_context: list[str]     # Contexto tras reranking
+    quality_score: float            # Score compuesto del evaluador (0.0–1.0)
+    quality_metrics: dict           # {faithfulness: float, relevance: float}
+    fallback_triggered: bool        # True si la respuesta fue sustituida por fallback
+```
+
+**Cambios en create_initial_state** — inicializar campos nuevos:
+```python
+    classified_chatbot_id="",
+    classifier_confidence=0.0,
+    reranked_context=[],
+    quality_score=0.0,
+    quality_metrics={},
+    fallback_triggered=False,
+```
+
+**Cambios en graph.py** — integrar nodos y arista condicional:
+```python
+    # Nuevos nodos (Fase 4B)
+    graph.add_node("query_classifier", query_classifier_node)
+    graph.add_node("reranker", reranker_node)
+    graph.add_node("quality_evaluator", quality_evaluator_node)
+    graph.add_node("fallback_response", fallback_response_node)
+    graph.add_node("log_interaction", log_interaction_node)
+
+    # Flujo actualizado
+    graph.set_entry_point("route_by_capability")
+    graph.add_edge("route_by_capability", "detect_language")
+    graph.add_edge("detect_language", "query_classifier")
+    graph.add_edge("query_classifier", "search_knowledge")
+    graph.add_edge("search_knowledge", "reranker")
+    graph.add_edge("reranker", "generate_response")
+    graph.add_edge("generate_response", "quality_evaluator")
+
+    # Arista condicional: quality_evaluator decide si la respuesta es suficiente
+    graph.add_conditional_edges(
+        "quality_evaluator",
+        lambda state: "ok" if state["quality_score"] >= quality_threshold else "fallback",
+        {"ok": "log_interaction", "fallback": "fallback_response"},
+    )
+    graph.add_edge("log_interaction", END)
+    graph.add_edge("fallback_response", END)
+```
+
+**Cambios en config_models.py** — campo portal:
+```python
+    # En HubChatbot, añadir:
+    portal_chatbot_ids: Mapped[list[uuid.UUID] | None] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=True)
+    quality_threshold: Mapped[float] = mapped_column(default=0.6)
+```
+
+---
+
+
+
 ## FASE 5: API Endpoints y Robustez
 
 ---
@@ -5458,7 +6045,7 @@ export interface IngestionSource {
 
 ---
 
-### Prompt 9.8 - Hub > Pantalla de Informes
+### Prompt 9.8 - Hub > Pantalla de Informes ✅ COMPLETADO (2026-04-26)
 
 **Objetivo**: Tabla de interacciones del chatbot con filtros, visualización de feedback y export CSV.
 
