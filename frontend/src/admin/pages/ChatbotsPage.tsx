@@ -30,6 +30,7 @@ export function ChatbotsPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Chatbot | null>(null)
   const [deleteError, setDeleteError] = useState('')
+  const [copied, setCopied] = useState(false)
 
   const { data: chatbots = [], isLoading } = useQuery({
     queryKey: ['chatbots'],
@@ -92,8 +93,27 @@ export function ChatbotsPage() {
 
   function openEdit(c: Chatbot) {
     setEditing(c)
+    setCopied(false)
     reset({ name: c.name, system_prompt: c.system_prompt, is_active: c.is_active })
     setDialogOpen(true)
+  }
+
+  function copyId() {
+    void navigator.clipboard.writeText(editing!.id)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  function installSnippet(id: string): string {
+    const base = import.meta.env.VITE_API_URL ?? 'https://tu-api.ejemplo.com'
+    return [
+      `<div id="govgenai-widget"`,
+      `     data-chatbot-id="${id}"`,
+      `     data-lang="es"`,
+      `     data-api-url="${base}/api/v1">`,
+      `</div>`,
+      `<script src="${base}/widget.iife.js"></script>`,
+    ].join('\n')
   }
 
   function closeDialog() {
@@ -183,6 +203,38 @@ export function ChatbotsPage() {
             <h2 className="text-lg font-semibold">
               {editing ? tc('edit') + ' — ' + editing.name : t('hub.new_chatbot')}
             </h2>
+
+            {editing && (
+              <div className="space-y-3 rounded-md border bg-muted/40 p-3 text-sm">
+                <div>
+                  <p className="font-medium text-muted-foreground mb-1">{t('hub.chatbot_id_label')}</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 truncate rounded bg-background px-2 py-1 font-mono text-xs border">
+                      {editing.id}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={copyId}
+                      className="shrink-0 px-2 py-1 text-xs border rounded-md hover:bg-accent transition-colors"
+                    >
+                      {copied ? t('hub.chatbot_id_copied') : t('hub.chatbot_id_copy')}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="font-medium text-muted-foreground mb-1">{t('hub.chatbot_install_title')}</p>
+                  <p className="text-muted-foreground text-xs mb-1">{t('hub.chatbot_install_desc')}</p>
+                  <pre
+                    data-testid="install-snippet"
+                    className="overflow-x-auto rounded bg-background border px-3 py-2 text-xs font-mono leading-relaxed"
+                  >
+                    {installSnippet(editing.id)}
+                  </pre>
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
               <div>
                 <label className="text-sm font-medium">{t('hub.chatbot_name')}</label>

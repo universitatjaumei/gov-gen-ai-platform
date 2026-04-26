@@ -38,7 +38,12 @@
     "reports_expand": "Expand",
     "reports_collapse": "Collapse",
     "reports_no_data": "No interactions for this chatbot",
-    "language_label": "Language"
+    "language_label": "Language",
+    "chatbot_id_label": "Chatbot ID",
+    "chatbot_id_copy": "Copy",
+    "chatbot_id_copied": "Copied!",
+    "chatbot_install_title": "Installation instructions",
+    "chatbot_install_desc": "Include this code in your web page:"
   },
   "login": {
     "title": "Sign in",

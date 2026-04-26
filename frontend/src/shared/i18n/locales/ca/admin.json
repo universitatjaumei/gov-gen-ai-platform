@@ -38,7 +38,12 @@
     "reports_expand": "Expandir",
     "reports_collapse": "Col·lapsar",
     "reports_no_data": "Sense interaccions per a aquest chatbot",
-    "language_label": "Idioma"
+    "language_label": "Idioma",
+    "chatbot_id_label": "ID del Chatbot",
+    "chatbot_id_copy": "Copiar",
+    "chatbot_id_copied": "Copiat!",
+    "chatbot_install_title": "Instruccions d'instal·lació",
+    "chatbot_install_desc": "Inclou aquest codi a la teva pàgina web:"
   },
   "login": {
     "title": "Iniciar sessió",
