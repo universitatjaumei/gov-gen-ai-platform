@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import (
     ARRAY,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
@@ -67,6 +68,16 @@ class HubChatbot(HubConfigBase):
     """Chatbot RAG asociado a un cliente."""
 
     __tablename__ = "hub_chatbots"
+    __table_args__ = (
+        CheckConstraint(
+            "retrieval_mode IN ('vector', 'long_context', 'agentic')",
+            name="ck_chatbot_retrieval_mode",
+        ),
+        CheckConstraint(
+            "kind IN ('atomic', 'router')",
+            name="ck_chatbot_kind",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -86,6 +97,14 @@ class HubChatbot(HubConfigBase):
     sources: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     theme_config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    retrieval_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="vector")
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default="atomic")
+    parent_chatbot_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_chatbots.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

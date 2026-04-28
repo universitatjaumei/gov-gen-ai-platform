@@ -19,6 +19,7 @@ def test_operational_base_contains_only_operational_models() -> None:
 
     tables = set(HubOperationalBase.metadata.tables.keys())
     assert tables == {
+        "hub_documents",
         "hub_document_chunks",
         "hub_interactions",
         "hub_ingestion_jobs",

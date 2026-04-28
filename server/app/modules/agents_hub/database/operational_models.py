@@ -11,11 +11,40 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from server.app.modules.agents_hub.database.base import HubOperationalBase
+
+
+class HubDocument(HubOperationalBase):
+    """Documento citable. Unidad atomica del corpus de un chatbot."""
+
+    __tablename__ = "hub_documents"
+    __table_args__ = (
+        UniqueConstraint("chatbot_id", "content_hash", name="uq_document_chatbot_hash"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    chatbot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    canonical_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    markdown_content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    language: Mapped[str] = mapped_column(String(10), nullable=False)
+    source_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    section_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 
 
 class HubDocumentChunk(HubOperationalBase):
@@ -27,6 +56,9 @@ class HubDocumentChunk(HubOperationalBase):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     chatbot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     source_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
