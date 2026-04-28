@@ -5773,7 +5773,7 @@ cd server && uv run pytest tests/modules/agents_hub/unit/test_long_context_strat
 
 ---
 
-### Prompt 9CBis.6 — `AgenticRetrievalStrategy` + tools `list_documents` / `read_document` (RED → GREEN)
+### Prompt 9CBis.6 — `AgenticRetrievalStrategy` + tools `list_documents` / `read_document` (RED → GREEN) ✅ COMPLETADO (2026-04-28)
 
 **Objetivo**: implementar la strategy `agentic` que NO pre-recupera. Devuelve un `RetrievalContext` vacío y expone dos tools al grafo LangGraph. El LLM razona sobre el índice y carga lo que necesita.
 
