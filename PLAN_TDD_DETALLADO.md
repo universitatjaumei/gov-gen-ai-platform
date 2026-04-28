@@ -6299,9 +6299,65 @@ uv run pytest tests/ -v   # regresión completa obligatoria
 
 ---
 
-### Prompt 9CBis.9 — Refactor UI Documentos: vista unificada de `HubDocument`
+### Prompt 9CBis.9 — Refactor UI Documentos: vista unificada de `HubDocument` + soporte multi-idioma
 
-**Objetivo**: la pestaña "Documentos subidos" del prompt 9.7 pasa a mostrar `HubDocument[]` (vista unificada de PDFs subidos + URLs del crawler), porque ahora ambos producen el mismo modelo. El concepto de "job" se conserva como histórico técnico (otra pestaña), pero el usuario gestiona "documentos".
+**Objetivo**: dos cosas en paralelo que se refuerzan mutuamente:
+
+1. La pestaña "Documentos subidos" pasa a mostrar `HubDocument[]` (vista unificada de PDFs + URLs del crawler).  
+2. El watcher soporta múltiples versiones lingüísticas del mismo documento: subir la versión ES y la CA de un mismo PDF crea dos `HubDocument` que coexisten en lugar de que la segunda reemplace a la primera.
+
+---
+
+#### Parte A — Backend: clave de idempotencia multi-idioma
+
+**Problema actual en `server/app/modules/agents_hub/ingestion/watcher.py`**:
+
+La lógica de "reemplazar doc antiguo por misma URL" usa solo `(chatbot_id, canonical_url)`. Si el admin sube `norma_es.pdf` y luego `norma_ca.pdf` con la misma `canonical_url`, la versión española desaparece.
+
+**Cambio mínimo**: añadir `language` a la clave de sustitución para que el par canónico sea `(chatbot_id, canonical_url, language)`.
+
+```python
+# watcher.py — en process_source, bloque "Si ya existia un doc con esta URL"
+old_result = await self._session.execute(
+    select(HubDocument).where(
+        HubDocument.chatbot_id == chatbot_id,
+        HubDocument.canonical_url == canonical,
+        HubDocument.language == language,   # ← añadido; idiomas distintos coexisten
+    )
+)
+```
+
+La query de idempotencia por hash (`content_hash`) ya funciona correctamente porque el hash del contenido en ES ≠ hash del contenido en CA.
+
+**Nuevo endpoint** (ya presente en 9CBis.8): `GET /{chatbot_id}/documents` acepta un query param opcional `?language=es` para filtrar. Añadir ese filtro.
+
+```python
+@router.get("/{chatbot_id}/documents")
+async def list_documents(
+    chatbot_id: uuid.UUID,
+    language: str | None = Query(None),
+    ...
+):
+    stmt = select(HubDocument).where(HubDocument.chatbot_id == chatbot_id)
+    if language:
+        stmt = stmt.where(HubDocument.language == language)
+    ...
+```
+
+**Tests** en `server/tests/modules/agents_hub/unit/test_ingestion_multilang.py`:
+
+```python
+# test_two_language_versions_of_same_url_coexist
+#   → subir ES y CA de la misma canonical_url → 2 HubDocuments en BD
+# test_reingest_same_url_same_language_replaces_doc
+#   → subir ES dos veces → sigue habiendo 1 HubDocument (reemplaza)
+# test_reingest_same_url_different_language_does_not_delete_other
+#   → subir ES → subir CA → el doc ES sigue existiendo
+```
+
+---
+
+#### Parte B — Frontend: `DocumentsPage` con columna de idioma y filtro
 
 **Cambios en `frontend/src/shared/api/ingestion.ts`**:
 
@@ -6313,29 +6369,31 @@ export interface HubDocument {
   canonical_url: string
   language: string
   source_kind: 'upload' | 'crawler' | 'manual'
-  section_path: string | null
   token_count: number
   created_at: string
   updated_at: string
 }
 
-// fetchDocuments(chatbotId): Promise<HubDocument[]>
+// fetchDocuments(chatbotId, language?: string): Promise<HubDocument[]>
 // deleteDocument(chatbotId, documentId): Promise<void>
 ```
 
 **Cambios en `frontend/src/admin/pages/DocumentsPage.tsx`**:
 
-- Renombrar internamente la tab existente "Documentos subidos" → "Documentos" y poblarla desde `fetchDocuments`.
-- Columnas: título, fuente (icono según `source_kind`), idioma, tokens (formato compacto), fecha, acciones.
-- Acciones por fila: **Ver** (modal con preview markdown renderizado), **Sustituir** (re-upload con la misma `canonical_url`), **Eliminar**.
-- Encima de la tabla, banner informativo: "Modo de retrieval del chatbot: **{mode}** ({recomendación según token total})". El banner enlaza a la página del chatbot donde se cambia el modo (UI del 9CBis.14).
-- Conservar tab "Fuentes web" del 9.7.1 (gestión de URLs monitorizadas) sin cambios funcionales.
-- Añadir tab nueva "Jobs (técnico)" oculta tras un `Disclosure`, que muestra el histórico actual de `HubIngestionJob` para depuración.
+- Renombrar la tab existente "Documentos subidos" → "Documentos" y poblarla desde `fetchDocuments`.
+- Columnas: título, fuente (icono según `source_kind`), **idioma** (badge de color), tokens (formato compacto `12 k`), fecha, acciones.
+- Filtro de idioma sobre la tabla: selector desplegable con los idiomas presentes (derivado de los documentos cargados, no hardcodeado).
+- Acciones por fila: **Ver** (modal con preview markdown renderizado), **Sustituir** (re-upload con la misma `canonical_url` y el mismo `language`), **Eliminar**.
+- Encima de la tabla, banner informativo: "Modo de retrieval: **{mode}** — {tokens total} tokens ({recomendación})". El banner enlaza a la config del chatbot (UI del 9CBis.14).
+- Conservar tab "Fuentes web" (gestión de URLs monitorizadas) sin cambios funcionales.
+- Añadir tab "Jobs (técnico)" oculta tras un `Disclosure` con el histórico de `HubIngestionJob`.
 
 **Tests** en `frontend/src/admin/pages/__tests__/DocumentsPage.test.tsx`:
 
 ```typescript
-// should_list_documents_grouped_by_chatbot
+// should_list_documents_with_language_badge
+// should_filter_table_by_language
+// should_show_two_versions_of_same_document_in_different_languages
 // should_show_source_kind_icon
 // should_show_total_tokens_summary_banner
 // should_open_preview_modal_on_view_action
@@ -6347,7 +6405,7 @@ export interface HubDocument {
 
 ```bash
 cd frontend && npm test -- DocumentsPage
-npm run build     # asegurar que el bundle del admin sigue construyendo
+npm run build
 ```
 
 ---
