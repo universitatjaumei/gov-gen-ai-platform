@@ -1,8 +1,10 @@
 """Orquestador de ingestión asíncrona."""
 
 import asyncio
+import tempfile
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Protocol
 
 from sqlalchemy import select
@@ -24,12 +26,24 @@ class EmbeddingService(Protocol):
     async def embed(self, text: str) -> list[float]: ...
 
 
+class StorageService(Protocol):
+    """Protocolo local para el servicio de storage (evita import circular)."""
+
+    async def get(self, key: str) -> bytes: ...
+
+
 class IngestionWatcher:
     """Orquesta la ingestión de documentos."""
 
-    def __init__(self, session: AsyncSession, embedding_service: EmbeddingService):
+    def __init__(
+        self,
+        session: AsyncSession,
+        embedding_service: EmbeddingService,
+        storage: StorageService | None = None,
+    ):
         self.session = session
         self.embedding_service = embedding_service
+        self._storage = storage
         self._processor: DoclingProcessor | None = None
         self.chunker = MarkdownChunker()
 
@@ -168,11 +182,27 @@ class IngestionWatcher:
         job.status = "running"
         await self.session.commit()
 
+        tmp_path: str | None = None
         try:
+            source_for_docling = job.source_url
+            citation_url = job.canonical_url
+
+            # Si source_url es una clave de storage (no una URL HTTP), descargar
+            # a un fichero temporal para que Docling lo procese como ruta local.
+            if self._storage and not job.source_url.startswith(("http://", "https://")):
+                pdf_bytes = await self._storage.get(job.source_url)
+                with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                    tmp.write(pdf_bytes)
+                    tmp_path = tmp.name
+                source_for_docling = tmp_path
+                # Usar la storage key como citation para que los chunks la referencien
+                if not citation_url:
+                    citation_url = job.source_url
+
             chunks = await self.process_source(
-                job.source_url,
+                source_for_docling,
                 job.chatbot_id,
-                citation_url=job.canonical_url,
+                citation_url=citation_url,
                 prefetched_content=prefetched_content,
                 language=job.language,
             )
@@ -181,6 +211,9 @@ class IngestionWatcher:
         except Exception as e:
             job.status = "failed"
             job.error_message = str(e)
+        finally:
+            if tmp_path:
+                Path(tmp_path).unlink(missing_ok=True)
 
         await self.session.commit()
 

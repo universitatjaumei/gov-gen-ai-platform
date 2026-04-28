@@ -3,9 +3,7 @@
 Deploy: cloud
 """
 
-import tempfile
 import uuid
-from pathlib import Path
 from typing import Literal
 
 from fastapi import (
@@ -24,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user
 from server.app.core.auth import UserInfo
+from server.app.core.storage import FsspecStorageService, get_storage_service
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.operational_models import (
     HubDocumentChunk,
@@ -83,6 +82,7 @@ async def upload_document(
     language: str | None = Form(None),
     session: AsyncSession = Depends(get_async_session),
     current_user: UserInfo = Depends(get_current_user),
+    storage: FsspecStorageService = Depends(get_storage_service),
 ):
     """Sube un documento y lanza su ingestión en background."""
     if file.content_type not in ("application/pdf",):
@@ -91,8 +91,7 @@ async def upload_document(
             detail="Solo se admiten archivos PDF.",
         )
 
-    # Validar tamaño del archivo (10 MB = 10 * 1024 * 1024 bytes)
-    # UploadFile no provee un content_length exacto sin leer, así que leemos y limitamos.
+    # Validar tamaño (10 MB). Leer todo de una vez para verificar antes de persistir.
     max_size = 10 * 1024 * 1024
     content = await file.read(max_size + 1)
     if len(content) > max_size:
@@ -101,36 +100,37 @@ async def upload_document(
             detail="El archivo supera el límite de 10 MB.",
         )
 
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
+    # Generar el UUID explícitamente para poder construir la storage key antes del commit
+    # (mapped_column default= es un default SQL, no Python; job.id sería None hasta el flush)
+    job_id = uuid.uuid4()
+    storage_key = f"ingestion/{chatbot_id}/{job_id}.pdf"
+    await storage.put(storage_key, content)
 
-    # Crear el Job
     job = HubIngestionJob(
+        id=job_id,
         chatbot_id=chatbot_id,
-        source_url=tmp_path,  # Local temporal, en produccion sería un S3 uri
+        source_url=storage_key,
         original_filename=file.filename,
         canonical_url=canonical_url or None,
         status="pending",
         language=language,
     )
+
     session.add(job)
     await session.commit()
     await session.refresh(job)
 
-    # Lanzar tarea en background
-    async def process_job(job_id: uuid.UUID, file_path: str):
+    # Lanzar tarea en background — el PDF queda en storage (no se borra)
+    async def process_job(job_id: uuid.UUID) -> None:
         async for bg_session in get_async_session():
-            try:
-                watcher = IngestionWatcher(
-                    session=bg_session,
-                    embedding_service=get_embedding_service(),
-                )
-                await watcher.run_job(job_id)
-            finally:
-                Path(file_path).unlink(missing_ok=True)
+            watcher = IngestionWatcher(
+                session=bg_session,
+                embedding_service=get_embedding_service(),
+                storage=get_storage_service(),
+            )
+            await watcher.run_job(job_id)
 
-    background_tasks.add_task(process_job, job.id, tmp_path)
+    background_tasks.add_task(process_job, job.id)
 
     return {"job": job, "message": "Documento subido y encolado."}
 
@@ -141,6 +141,7 @@ async def delete_ingestion_job(
     job_id: uuid.UUID,
     session: AsyncSession = Depends(get_async_session),
     current_user: UserInfo = Depends(get_current_user),
+    storage: FsspecStorageService = Depends(get_storage_service),
 ):
     """Elimina un job de ingestión y todos sus chunks asociados."""
     job = await session.get(HubIngestionJob, job_id)
@@ -162,7 +163,13 @@ async def delete_ingestion_job(
     for chunk in chunks:
         await session.delete(chunk)
 
-    Path(job.source_url).unlink(missing_ok=True)
+    # Borrar el PDF de storage solo si es una clave de storage (no una URL HTTP)
+    if not job.source_url.startswith(("http://", "https://")):
+        try:
+            await storage.delete(job.source_url)
+        except FileNotFoundError:
+            pass
+
     await session.delete(job)
     await session.commit()
 
@@ -285,9 +292,9 @@ async def clear_chatbot_collection(
     chatbot_id: uuid.UUID,
     session: AsyncSession = Depends(get_async_session),
     current_user: UserInfo = Depends(get_current_user),
+    storage: FsspecStorageService = Depends(get_storage_service),
 ):
     """Elimina todos los chunks y jobs de un chatbot."""
-    # Buscar chunks y eliminarlos
     chunks_stmt = select(HubDocumentChunk).where(
         HubDocumentChunk.chatbot_id == chatbot_id
     )
@@ -296,13 +303,15 @@ async def clear_chatbot_collection(
     for chunk in chunks:
         await session.delete(chunk)
 
-    # Buscar jobs y eliminarlos
     jobs_stmt = select(HubIngestionJob).where(HubIngestionJob.chatbot_id == chatbot_id)
     result = await session.execute(jobs_stmt)
     jobs = result.scalars().all()
     for job in jobs:
-        # Si el documento temporal aún existe, intentamos borrarlo
-        Path(job.source_url).unlink(missing_ok=True)
+        if not job.source_url.startswith(("http://", "https://")):
+            try:
+                await storage.delete(job.source_url)
+            except FileNotFoundError:
+                pass
         await session.delete(job)
 
     await session.commit()

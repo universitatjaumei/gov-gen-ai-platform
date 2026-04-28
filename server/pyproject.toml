@@ -36,6 +36,9 @@ dependencies = [
     "reportlab>=4.0.0",
     "sentence-transformers>=3.0.0",
     "apscheduler>=3.10.4",
+    "fsspec>=2024.6.0",
+    "gcsfs>=2024.6.0",
+    "s3fs>=2024.6.0",
 ]
 
 [dependency-groups]

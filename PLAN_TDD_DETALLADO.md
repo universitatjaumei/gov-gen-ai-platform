@@ -67,6 +67,7 @@
 | FASE 7 — Docker multi-stage | ✅ COMPLETADO | 2026-04-23 | Imagen CPU-only (~2.96 GB), uv sync, docker-compose.prod.yml, LangFuse self-hosted, scripts/postgres/init.sql |
 | FASE 8 — LangFuse + FeedbackService | ✅ COMPLETADO | 2026-04-23 | observability.py, FeedbackService, hub_feedback router, migración feedback_text, 10 tests verdes |
 | FASE 9 — Frontend React | 🔄 EN PROGRESO | 2026-04-26 | Prompts 9.1–9.10 completados; 9.10 ChatWidget SSE (useChat, StarRating, streaming/status/warning/feedback, 8 tests verdes) |
+| FASE 9C — StorageService (fsspec) | ✅ COMPLETADO | 2026-04-27 | `FsspecStorageService` (file/S3/GCS); inyección Depends; `/upload` persiste PDF con key `ingestion/{chatbot_id}/{job_id}.pdf`; `IngestionWatcher` descarga a tmp y limpia; `delete` y `clear` borran de storage; 19 tests verdes (11 unit + 8 integración) |
 | FASE 10 — Sistema de temas y panel de IA | ⏳ PENDIENTE | — | — |
 | FASE 11 — Autoinstalación | ⏳ PENDIENTE | — | — |
 | FASE 12 — Gestor de Expedientes | ⏳ PENDIENTE | — | Ampliada con Analista/Validador/Fábricas/UJI/G400/ENI/ENS |
@@ -79,6 +80,7 @@
 | FASE 19 — Adaptadores UJI + Gestión 400 + ENI/ENS | ⏳ PENDIENTE | — | Ver Fase 12 Prompt E5 (ya actualizado) |
 | FASE 20 — Accesibilidad WCAG 2.2 AA + admin conversacional | ⏳ PENDIENTE | — | Transversal sobre Fases 9-10 |
 | FASE 21 — RPA web (diferido a v2) | ⏳ FUERA ALCANCE v1 | — | Decisión documentada; worker Playwright en Edge si necesario |
+| FASE 22 — Microservicios Embedding + Docling | ⏳ DIFERIDO (post-cloud) | — | Extraer BGE-M3 y Docling a Cloud Run independientes; no iniciar hasta criterios de métricas (cold start >15s, RAM >2 GB) |
 
 ---
 
@@ -4668,6 +4670,2165 @@ async def search_knowledge_fallback_node(state: AgentState) -> dict:
 
 ---
 
+## FASE 9C: StorageService — Abstracción de almacenamiento de objetos (fsspec) ✅ COMPLETADO (2026-04-28)
+
+**Objetivo de la fase**: Eliminar los accesos directos al sistema de archivos del SO para persistir documentos de negocio. Todo fichero de negocio (PDFs subidos, fuentes de ingestión) pasa por `StorageService`, backed por `fsspec`. En local/dev el backend es el sistema de archivos local o MinIO; en producción GCP, es Google Cloud Storage.
+
+**Motivación**: Cloud Run no garantiza persistencia de `/tmp` entre peticiones ni entre instancias. El flujo actual guarda PDFs en `/tmp` y los borra tras procesar: el documento original no se conserva y la solución se rompe si Docling corre en una instancia diferente. Esta fase resuelve el gap crítico de portabilidad identificado el 2026-04-27 (ver sección "Infraestructura objetivo y portabilidad" en `CLAUDE.md`).
+
+**Dependencias**: ninguna (infraestructura transversal; no depende de otras fases pendientes).
+
+**Archivos afectados**:
+- `server/app/core/storage.py` — nuevo
+- `server/app/routers/hub_ingestion_router.py` — refactor (eliminar `tempfile` en el handler de upload)
+- `server/app/modules/agents_hub/ingestion/watcher.py` — refactor (leer de storage, no de ruta local)
+- `server/pyproject.toml` — añadir `fsspec`, `gcsfs`, `s3fs`
+- `.env.example` y `docker-compose.yml` — nuevas variables de entorno
+
+---
+
+### Prompt 9C.1 — TDD RED: contrato y tests de StorageService ✅ COMPLETADO (2026-04-28)
+
+**Objetivo**: Definir el contrato de `StorageService` mediante tests que deben fallar antes de implementar nada. El test cubre `put`, `get`, `exists`, `delete` y la fábrica `get_storage_service()`.
+
+**`server/tests/modules/agents_hub/unit/test_storage_service.py`**:
+```python
+"""Tests del protocolo StorageService — TDD RED."""
+import os
+import pytest
+
+os.environ.setdefault("STORAGE_BACKEND", "file")
+os.environ.setdefault("STORAGE_BUCKET", "/tmp/govgenai_test")
+
+
+class TestFsspecStorageService:
+
+    @pytest.fixture
+    def storage(self, tmp_path):
+        from server.app.core.storage import FsspecStorageService
+        return FsspecStorageService(backend="file", bucket=str(tmp_path))
+
+    @pytest.mark.asyncio
+    async def test_put_and_get_roundtrip(self, storage):
+        await storage.put("docs/test.pdf", b"PDF content")
+        result = await storage.get("docs/test.pdf")
+        assert result == b"PDF content"
+
+    @pytest.mark.asyncio
+    async def test_exists_returns_true_after_put(self, storage):
+        await storage.put("docs/test.pdf", b"data")
+        assert await storage.exists("docs/test.pdf") is True
+
+    @pytest.mark.asyncio
+    async def test_exists_returns_false_for_missing_key(self, storage):
+        assert await storage.exists("nonexistent/file.pdf") is False
+
+    @pytest.mark.asyncio
+    async def test_delete_removes_file(self, storage):
+        await storage.put("docs/to_delete.pdf", b"data")
+        await storage.delete("docs/to_delete.pdf")
+        assert await storage.exists("docs/to_delete.pdf") is False
+
+    @pytest.mark.asyncio
+    async def test_get_raises_on_missing_file(self, storage):
+        with pytest.raises(FileNotFoundError):
+            await storage.get("nonexistent/file.pdf")
+
+    @pytest.mark.asyncio
+    async def test_put_creates_intermediate_directories(self, storage):
+        await storage.put("nested/deep/dir/file.pdf", b"data")
+        assert await storage.exists("nested/deep/dir/file.pdf") is True
+
+
+class TestGetStorageService:
+
+    def test_returns_fsspec_service_with_env_vars(self, monkeypatch):
+        monkeypatch.setenv("STORAGE_BACKEND", "file")
+        monkeypatch.setenv("STORAGE_BUCKET", "/tmp/test")
+        from server.app.core import storage as storage_module
+        storage_module._build_storage_service.cache_clear()
+        service = storage_module.get_storage_service()
+        from server.app.core.storage import FsspecStorageService
+        assert isinstance(service, FsspecStorageService)
+```
+
+**Confirmar RED**:
+```bash
+cd server && uv run pytest tests/modules/agents_hub/unit/test_storage_service.py -v
+# Esperado: ImportError o ModuleNotFoundError (el módulo aún no existe)
+```
+
+---
+
+### Prompt 9C.2 — TDD GREEN: FsspecStorageService e inyección de dependencia ✅ COMPLETADO (2026-04-28)
+
+**Objetivo**: Implementar `server/app/core/storage.py` con `FsspecStorageService` y `get_storage_service()`. Los tests del Prompt 9C.1 deben pasar en verde.
+
+**Añadir a `server/pyproject.toml`** (bloque `dependencies`):
+```toml
+"fsspec>=2024.6.0",
+"gcsfs>=2024.6.0",
+"s3fs>=2024.6.0",
+```
+
+**`server/app/core/storage.py`**:
+```python
+from __future__ import annotations
+
+import asyncio
+import os
+from functools import lru_cache
+from typing import Protocol, runtime_checkable
+
+import fsspec
+
+
+@runtime_checkable
+class StorageService(Protocol):
+    async def put(self, key: str, data: bytes) -> None: ...
+    async def get(self, key: str) -> bytes: ...
+    async def delete(self, key: str) -> None: ...
+    async def exists(self, key: str) -> bool: ...
+
+
+class FsspecStorageService:
+    def __init__(self, backend: str, bucket: str, **kwargs):
+        self._bucket = bucket.rstrip("/")
+        self._fs = fsspec.filesystem(backend, **kwargs)
+
+    def _full_path(self, key: str) -> str:
+        return f"{self._bucket}/{key}"
+
+    async def put(self, key: str, data: bytes) -> None:
+        path = self._full_path(key)
+        await asyncio.to_thread(self._sync_put, path, data)
+
+    def _sync_put(self, path: str, data: bytes) -> None:
+        parent = "/".join(path.split("/")[:-1])
+        if parent:
+            self._fs.makedirs(parent, exist_ok=True)
+        with self._fs.open(path, "wb") as f:
+            f.write(data)
+
+    async def get(self, key: str) -> bytes:
+        if not await self.exists(key):
+            raise FileNotFoundError(f"Key not found in storage: {key}")
+        path = self._full_path(key)
+        return await asyncio.to_thread(self._sync_get, path)
+
+    def _sync_get(self, path: str) -> bytes:
+        with self._fs.open(path, "rb") as f:
+            return f.read()
+
+    async def delete(self, key: str) -> None:
+        path = self._full_path(key)
+        await asyncio.to_thread(self._fs.rm, path)
+
+    async def exists(self, key: str) -> bool:
+        path = self._full_path(key)
+        return await asyncio.to_thread(self._fs.exists, path)
+
+
+@lru_cache(maxsize=1)
+def _build_storage_service() -> FsspecStorageService:
+    backend = os.environ.get("STORAGE_BACKEND", "file")
+    bucket = os.environ.get("STORAGE_BUCKET", "/tmp/govgenai")
+    kwargs: dict = {}
+    if backend == "s3":
+        endpoint = os.environ.get("STORAGE_ENDPOINT")
+        if endpoint:
+            kwargs["endpoint_url"] = endpoint
+        kwargs["key"] = os.environ.get("STORAGE_ACCESS_KEY", "")
+        kwargs["secret"] = os.environ.get("STORAGE_SECRET_KEY", "")
+    return FsspecStorageService(backend=backend, bucket=bucket, **kwargs)
+
+
+def get_storage_service() -> FsspecStorageService:
+    return _build_storage_service()
+```
+
+**Añadir a `.env.example`**:
+```bash
+# ── Object storage (fsspec) ─────────────────────────────────────────────────
+# Desarrollo local (sistema de archivos del SO):
+STORAGE_BACKEND=file
+STORAGE_BUCKET=/tmp/govgenai_uploads
+
+# MinIO local (compatible S3) — activo en docker-compose.yml por defecto:
+# STORAGE_BACKEND=s3
+# STORAGE_BUCKET=govgenai
+# STORAGE_ENDPOINT=http://minio:9000
+# STORAGE_ACCESS_KEY=minioadmin
+# STORAGE_SECRET_KEY=minioadmin
+
+# Google Cloud Storage (producción Cloud Run):
+# STORAGE_BACKEND=gcs
+# STORAGE_BUCKET=govgenai-prod
+# (credenciales vía Application Default Credentials o GOOGLE_APPLICATION_CREDENTIALS)
+```
+
+**Añadir al servicio `app` en `docker-compose.yml`**:
+```yaml
+environment:
+  STORAGE_BACKEND: "s3"
+  STORAGE_BUCKET: "govgenai"
+  STORAGE_ENDPOINT: "http://minio:9000"
+  STORAGE_ACCESS_KEY: "minioadmin"
+  STORAGE_SECRET_KEY: "minioadmin"
+```
+
+**Confirmar GREEN**:
+```bash
+uv sync  # instala fsspec, gcsfs, s3fs
+cd server && uv run pytest tests/modules/agents_hub/unit/test_storage_service.py -v
+# Esperado: 8 tests PASSED
+```
+
+---
+
+### Prompt 9C.3 — Integración: reemplazar /tmp directo en el flujo de ingestión ✅ COMPLETADO (2026-04-28)
+
+**Objetivo**: Modificar `hub_ingestion_router.py` e `IngestionWatcher` para que el PDF subido se persista via `StorageService` en lugar de sólo en `/tmp`. El PDF queda disponible en storage tras el procesamiento; `source_url` en `HubIngestionJob` refleja la clave de storage, no una ruta efímera.
+
+**Flujo resultante**:
+```
+POST /upload → storage.put("ingestion/{chatbot_id}/{job_id}.pdf", bytes)
+                 └─ BackgroundTask:
+                    1. storage.get(key) → bytes → NamedTemporaryFile(delete=False)
+                    2. DoclingProcessor(tmp_path) → Markdown
+                    3. os.unlink(tmp_path)   # el tmp local desaparece
+                    4. chunks → PostgreSQL con source_url = storage key
+                    # El PDF permanece en storage (GCS/MinIO/local)
+```
+
+**Cambios en `server/app/routers/hub_ingestion_router.py`**:
+```python
+# Añadir imports
+from server.app.core.storage import get_storage_service, StorageService
+
+# Endpoint de upload — cambiar firma y cuerpo:
+async def upload_document(
+    ...,
+    storage: StorageService = Depends(get_storage_service),
+) -> ...:
+    pdf_bytes = await file.read()
+    storage_key = f"ingestion/{chatbot_id}/{job_id}.pdf"
+    await storage.put(storage_key, pdf_bytes)
+    # Pasar storage_key al background task (no ruta local)
+    background_tasks.add_task(process_job, session, job_id, storage_key, storage)
+    return ...
+```
+
+**Cambios en `server/app/modules/agents_hub/ingestion/watcher.py`**:
+```python
+import tempfile, os
+from server.app.core.storage import StorageService
+
+class IngestionWatcher:
+    def __init__(self, session, embedding_service, storage: StorageService):
+        self._storage = storage
+        ...
+
+    async def run_job(self, job_id: UUID, storage_key: str) -> None:
+        pdf_bytes = await self._storage.get(storage_key)
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(pdf_bytes)
+            tmp_path = tmp.name
+        try:
+            await self._process_from_local(job_id, tmp_path, storage_key)
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+```
+
+**Tests de integración** en `server/tests/modules/agents_hub/integration/test_ingestion_storage.py`:
+```python
+"""Tests de integración: flujo de ingestión con StorageService."""
+import pytest
+from unittest.mock import AsyncMock, patch, MagicMock
+
+
+class TestIngestionWithStorage:
+
+    @pytest.mark.asyncio
+    async def test_upload_persists_pdf_to_storage(self, async_client, auth_headers):
+        mock_storage = AsyncMock()
+        mock_storage.put = AsyncMock()
+        mock_storage.get = AsyncMock(return_value=b"%PDF-1.4 test content")
+
+        with patch("server.app.core.storage.get_storage_service", return_value=mock_storage):
+            response = await async_client.post(
+                "/api/v1/hub/ingestion/upload",
+                files={"file": ("test.pdf", b"%PDF-1.4 test content", "application/pdf")},
+                headers=auth_headers,
+            )
+        assert response.status_code == 202
+        mock_storage.put.assert_called_once()
+        key = mock_storage.put.call_args[0][0]
+        assert key.endswith(".pdf")
+        assert "ingestion/" in key
+
+    @pytest.mark.asyncio
+    async def test_pdf_remains_in_storage_after_processing(self, async_client, auth_headers):
+        """El PDF no debe borrarse de storage tras el procesamiento."""
+        mock_storage = AsyncMock()
+        mock_storage.put = AsyncMock()
+        mock_storage.get = AsyncMock(return_value=b"%PDF-1.4 test")
+        mock_storage.delete = AsyncMock()
+
+        with patch("server.app.core.storage.get_storage_service", return_value=mock_storage):
+            await async_client.post(
+                "/api/v1/hub/ingestion/upload",
+                files={"file": ("test.pdf", b"%PDF-1.4 test", "application/pdf")},
+                headers=auth_headers,
+            )
+        mock_storage.delete.assert_not_called()
+```
+
+**Confirmar**:
+```bash
+cd server && uv run pytest tests/modules/agents_hub/ -v -k "storage"
+uv run pytest tests/ -v  # regresión completa
+```
+
+---
+
+## BLOQUE 9CBis — Modos de retrieval, citas como contrato y router multi-materia
+
+**Contexto**: hasta este punto el sistema asume RAG vectorial (chunking + embeddings + búsqueda top-k) como única estrategia de retrieval. Para el primer despliegue (UJI ~100-150 normativas clasificadas por materias; ayuntamientos medios tipo Vall d'Uixó / Onda) este enfoque tiene limitaciones reales:
+
+- **Citas degradadas**: la cita apunta a un chunk, no a un documento citable (artículo, ordenanza, página web).
+- **Pérdida de estructura jerárquica**: la normativa universitaria/municipal está muy interconectada; el top-k recupera fragmentos sueltos y se pierde la jerarquía Título → Capítulo → Artículo.
+- **Errores de retrieval silenciosos**: si el top-k no trae el chunk correcto, el LLM responde con seguridad sobre información incompleta.
+- **Frescura cara**: cada cambio normativo obliga a re-chunkear/re-embeddar; con el crawler activo el coste operacional es alto.
+
+Este bloque introduce **tres modos de retrieval** (vectorial, long-context, agentic) seleccionables por chatbot, **citas como contrato del agente** (no como subproducto del retriever) y un **router multi-materia opcional** que clasifica la consulta a un sub-chatbot especializado (caso UJI: un chatbot por materia con un router padre).
+
+**Prerrequisitos**: Bloque 9A completado (frontend admin); FASE 9C completada (StorageService).
+
+**Compatibilidad**: refactoriza prompts ya completados (9.7.x ingesta, 9.8.2 chat SSE backend, 9.10 widget) sin romper el comportamiento observable. Cada refactor incluye su propio test de regresión.
+
+**Decisiones de diseño**:
+
+- **El admin elige el modo, no el sistema** — la decisión automática añade complejidad sin valor claro hoy. El panel admin **sugiere** un modo según el tamaño del corpus, pero el admin tiene la última palabra.
+- **El pipeline de ingesta es común a los tres modos**: siempre crea `HubDocument` (markdown + metadatos canónicos). El chunking + embedding solo se ejecuta cuando `retrieval_mode == "vector"`.
+- **`HubDocument` es la unidad citable**: en cualquier modo, la cita devuelve `(title, url)` del documento, no del chunk.
+- **`RetrievalStrategy` como Protocol**: los nodos del grafo no saben qué estrategia usan; se inyecta vía `Depends`. `VectorRetrievalStrategy` envuelve el `HybridRetriever` actual sin tocarlo.
+- **Router multi-materia como segundo nivel opcional**: un `HubChatbot` puede ser `kind="router"` (con hijos) o `kind="atomic"`. El router clasifica la consulta y delega al hijo apropiado. Cada hijo tiene su propio `retrieval_mode` y su propio corpus.
+- **Cita como contrato del agente**: el `system_prompt` exige cita en cada afirmación factual y un post-validador rechaza respuestas sin cita cuando hubo recuperación.
+
+**Heurística de recomendación** (mostrada en el panel al elegir modo, no aplicada de forma automática):
+
+| Tokens totales del corpus | Modo recomendado | Justificación |
+|---|---|---|
+| < 100 K | `long_context` | Cabe holgadamente en el contexto de Sonnet/Opus 4.x con caching; cero pérdida; citas perfectas. |
+| 100 K – 2 M | `agentic` | El LLM lee un índice de documentos y carga sólo los relevantes; balance coste/precisión; preserva estructura. |
+| > 2 M | `vector` | Único modo que escala económicamente; aceptas degradación de citas y errores de top-k. |
+
+Las cifras del primer cliente:
+
+- **UJI** (~150 normativas × 5-50 páginas): estimación 750 K – 3 M tokens. Modo recomendado: **`agentic`** combinado con **router multi-materia** (un chatbot por materia, cada uno con corpus 100-300 K → puede ir en `agentic` o incluso `long_context`).
+- **Ayuntamiento medio** (Vall d'Uixó / Onda, ordenanzas + sede electrónica): estimación 200-500 K tokens. Modo recomendado: **`agentic`** sin router (corpus único más reducido).
+
+**Flujo del bloque**:
+
+```
+Guía 9CBis.0 (conceptual, se lee antes de escribir código)
+  ├── 9CBis.1 RED   modelo HubDocument + retrieval_mode + kind/parent_id (tests)
+  ├── 9CBis.2 GREEN modelo + migración Alembic + refactor chunks
+  ├── 9CBis.3 RED   Protocol RetrievalStrategy + Source dataclass (tests)
+  ├── 9CBis.4 GREEN VectorRetrievalStrategy (envuelve HybridRetriever, agrupa por documento)
+  ├── 9CBis.5       LongContextRetrievalStrategy con prompt caching (RED + GREEN)
+  ├── 9CBis.6       AgenticRetrievalStrategy + tools list_documents/read_document (RED + GREEN)
+  ├── 9CBis.7       Citas como contrato: system prompt + post-validador (RED + GREEN)
+  ├── 9CBis.8       Refactor de 9.7.x — IngestionWatcher crea HubDocument; chunks solo si vector
+  ├── 9CBis.9       Refactor UI Documentos — vista unificada de HubDocument (PDF + crawler)
+  ├── 9CBis.10      Refactor de 9.8.2 — SSE emite Source[] estructurado (no string[])
+  ├── 9CBis.11      Refactor de 9.10 — Widget renderiza citas como pills clicables
+  ├── 9CBis.12 RED  router multi-materia: nodo route_to_subagent (tests)
+  ├── 9CBis.13 GREEN router + UI admin de jerarquía padre/hijo
+  └── 9CBis.14      UI admin: selector retrieval_mode con recomendación basada en tokens
+```
+
+**Cierre del bloque**: tras 9CBis.14, ejecutar la suite completa (`uv run pytest tests/ -v` en `server/` y `npm test` en `frontend/`) y verificar manualmente que (a) los chatbots existentes siguen respondiendo (modo `vector` por defecto), (b) un chatbot nuevo configurado en `long_context` o `agentic` responde con citas precisas a documento, (c) el router multi-materia delega correctamente entre hijos. Generar el `.bat` de pruebas manuales agregado para todo el bloque.
+
+---
+
+### Guía 9CBis.0 — Conceptos: tres modos de retrieval, cita como contrato y router multi-materia
+
+**Objetivo**: regla única y reutilizable para decidir, ante cualquier extensión futura del sistema RAG, cómo encaja en los tres modos y cómo se preserva el contrato de citas. Aplica a los prompts 9CBis.1–9CBis.14 y a cualquier nodo o tool RAG que se añada después.
+
+Esta guía **no produce código**: es el filtro conceptual que cada prompt aplica.
+
+#### Los tres modos de retrieval
+
+| Modo | Cuándo usarlo | Qué hace en runtime | Coste/Latencia |
+|---|---|---|---|
+| `vector` | Corpus > 2 M tokens; preguntas muy específicas; presupuesto ajustado | `HybridRetriever.hybrid_search` → top-k chunks → contexto al LLM | Bajo coste, latencia baja, retrieval imperfecto |
+| `long_context` | Corpus < 100 K tokens; máxima precisión de cita | Empaqueta todos los `HubDocument` activos como bloque cacheable en el system prompt | Coste alto sin cache; bajo con cache (TTL 5 min) |
+| `agentic` | Corpus 100 K – 2 M tokens; preguntas multi-documento | Expone tools `list_documents` y `read_document` al LLM; el LLM elige qué leer iterativamente | Coste medio; latencia mayor (varias iteraciones); preserva estructura |
+
+**Regla dura**: `RetrievalStrategy` es la única abstracción que el grafo conoce. Los nodos del grafo no importan `HybridRetriever` ni `HubDocumentChunk` directamente — se inyecta la strategy.
+
+#### Cita como contrato del agente
+
+La cita NO es responsabilidad del retriever. La cita es:
+
+1. **Un dato estructurado**: el retriever devuelve `Source` (`document_id`, `title`, `url`, `excerpt`, `score`), no strings.
+2. **Una obligación del system prompt**: el agente debe citar tras cada afirmación factual, formato `[título](url)`.
+3. **Un post-validador**: tras generar la respuesta, si hubo `Source[]` recuperados y el texto no contiene ninguna cita, se inyecta un fallback ("No tengo información suficiente para responder con citas verificables").
+
+Esta separación garantiza que cambiar de `vector` a `agentic` no rompa las citas — el contrato vive fuera del retriever.
+
+#### Router multi-materia (opcional)
+
+Un `HubChatbot` puede ser:
+
+- **`kind="atomic"`** (default): un chatbot con su propio corpus y `retrieval_mode`. Es el caso de un ayuntamiento pequeño.
+- **`kind="router"`**: un chatbot sin corpus propio que tiene hijos atómicos. La consulta entra al router, que clasifica por embeddings (con LLM como fallback) y delega al hijo. Es el caso de UJI: chatbot raíz "UJI" → hijos "Normativa académica", "RRHH", "Económico-financiero", "Investigación", etc.
+
+El router reutiliza el `QueryClassifier` de la **FASE 9B** (Grafo Público Enriquecido). Si la FASE 9B aún no está implementada cuando se aborde 9CBis, el clasificador se introduce aquí en su forma mínima (embeddings vs `system_prompt` de los hijos) y la FASE 9B lo enriquece después.
+
+#### Reglas de clasificación
+
+| Decisión | Regla |
+|---|---|
+| ¿Modelo nuevo de datos toca chunks? | NO — chunks son una derivación del documento. La verdad es `HubDocument`. |
+| ¿Un nodo del grafo necesita acceso al corpus? | Inyecta `RetrievalStrategy`, no `HybridRetriever`. |
+| ¿Una nueva tool del agente devuelve texto? | Devuelve `Source[]` estructurado, no string. |
+| ¿Quién decide el modo? | El admin en el panel; el sistema solo recomienda. |
+| ¿El router puede tener nietos? | NO en esta primera versión: jerarquía de exactamente dos niveles (router → atomic). |
+
+---
+
+### Prompt 9CBis.1 — TDD RED: modelo `HubDocument` + nuevos campos en `HubChatbot`
+
+**Objetivo**: definir los tests del nuevo modelo `HubDocument` (unidad citable, vive en `HubOperationalBase`) y de los nuevos campos de `HubChatbot` (`retrieval_mode`, `kind`, `parent_chatbot_id`). Tests deben fallar (RED).
+
+**Ámbito**: edge (`HubDocument` toca datos del cliente final).
+
+**Decisiones de modelado**:
+
+- `HubDocument.id`: UUID, generado en backend.
+- `HubDocument.chatbot_id`: FK lógica a `hub_chatbots.id` (sin `relationship` cross-base, según frontera 9.6.5).
+- `HubDocument.title`: string (extraído del primer `# H1` del markdown si no se proporciona; obligatorio).
+- `HubDocument.canonical_url`: URL pública para citar; obligatorio (si no hay URL real, se usa la storage key como fallback).
+- `HubDocument.markdown_content`: texto completo procesado por Docling.
+- `HubDocument.token_count`: int, calculado en ingesta con `tiktoken` o aproximación `len(content) // 4`.
+- `HubDocument.content_hash`: hash sha256 del markdown (para detectar cambios sin re-procesar).
+- `HubDocument.language`: detectado en ingesta.
+- `HubDocument.source_kind`: `"upload" | "crawler" | "manual"`.
+- `HubDocument.section_path`: opcional, ruta jerárquica `"Reglamento de Permanencia > Título II > Art. 23"` cuando la ingestión segmenta por secciones (extensión futura del crawler).
+- `HubDocument.created_at`, `updated_at`.
+
+Nuevos campos en `HubChatbot`:
+
+- `retrieval_mode`: `Literal["vector", "long_context", "agentic"]`, default `"vector"` (para no romper chatbots existentes).
+- `kind`: `Literal["atomic", "router"]`, default `"atomic"`.
+- `parent_chatbot_id`: UUID nullable; FK a `hub_chatbots.id` con `ondelete="SET NULL"`. Sólo se rellena si el chatbot es hijo de un router.
+
+**`server/tests/modules/agents_hub/unit/test_hub_document.py`**:
+
+```python
+"""Tests del modelo HubDocument — TDD RED."""
+import uuid
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
+class TestHubDocument:
+
+    @pytest.mark.asyncio
+    async def test_create_document_with_required_fields(self, db_session: AsyncSession):
+        from server.app.modules.agents_hub.database.operational_models import HubDocument
+        doc = HubDocument(
+            chatbot_id=uuid.uuid4(),
+            title="Reglamento de Permanencia",
+            canonical_url="https://uji.es/normativa/permanencia.pdf",
+            markdown_content="# Reglamento de Permanencia\n\nArt. 1...",
+            content_hash="a" * 64,
+            language="es",
+            source_kind="upload",
+            token_count=1234,
+        )
+        db_session.add(doc)
+        await db_session.commit()
+        assert doc.id is not None
+        assert doc.created_at is not None
+
+    @pytest.mark.asyncio
+    async def test_title_is_required(self, db_session):
+        from server.app.modules.agents_hub.database.operational_models import HubDocument
+        doc = HubDocument(
+            chatbot_id=uuid.uuid4(),
+            canonical_url="https://uji.es/x.pdf",
+            markdown_content="contenido",
+            content_hash="b" * 64,
+            language="es",
+            source_kind="upload",
+            token_count=10,
+        )
+        db_session.add(doc)
+        with pytest.raises(Exception):
+            await db_session.commit()
+
+    @pytest.mark.asyncio
+    async def test_content_hash_uniqueness_per_chatbot(self, db_session):
+        """Mismo hash + mismo chatbot → conflicto; mismo hash en otro chatbot → OK."""
+        from server.app.modules.agents_hub.database.operational_models import HubDocument
+        cb_a, cb_b = uuid.uuid4(), uuid.uuid4()
+        h = "c" * 64
+        d1 = HubDocument(chatbot_id=cb_a, title="X", canonical_url="u1", markdown_content="x",
+                         content_hash=h, language="es", source_kind="upload", token_count=1)
+        d2 = HubDocument(chatbot_id=cb_b, title="X", canonical_url="u2", markdown_content="x",
+                         content_hash=h, language="es", source_kind="upload", token_count=1)
+        db_session.add_all([d1, d2])
+        await db_session.commit()  # OK, distintos chatbots
+
+        d3 = HubDocument(chatbot_id=cb_a, title="X dup", canonical_url="u3", markdown_content="x",
+                         content_hash=h, language="es", source_kind="upload", token_count=1)
+        db_session.add(d3)
+        with pytest.raises(Exception):
+            await db_session.commit()
+
+    @pytest.mark.asyncio
+    async def test_chunk_has_optional_document_id_fk(self, db_session):
+        """HubDocumentChunk gana un campo document_id (nullable para retrocompatibilidad)."""
+        from server.app.modules.agents_hub.database.operational_models import (
+            HubDocument, HubDocumentChunk,
+        )
+        doc = HubDocument(
+            chatbot_id=uuid.uuid4(), title="X", canonical_url="u",
+            markdown_content="x", content_hash="d" * 64, language="es",
+            source_kind="upload", token_count=1,
+        )
+        db_session.add(doc); await db_session.commit()
+
+        chunk = HubDocumentChunk(
+            chatbot_id=doc.chatbot_id,
+            document_id=doc.id,
+            content="frag",
+            source_url="u",
+            content_hash="e" * 64,
+            language="es",
+        )
+        db_session.add(chunk); await db_session.commit()
+        assert chunk.document_id == doc.id
+```
+
+**`server/tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py`**:
+
+```python
+"""Tests de los nuevos campos de HubChatbot — TDD RED."""
+import uuid
+import pytest
+
+
+class TestHubChatbotRetrievalFields:
+
+    @pytest.mark.asyncio
+    async def test_default_retrieval_mode_is_vector(self, db_session):
+        from server.app.modules.agents_hub.database.config_models import HubChatbot
+        # ... crear cliente y llm_config previos ...
+        cb = HubChatbot(client_id=..., llm_config_id=..., name="cb1", system_prompt="...")
+        db_session.add(cb); await db_session.commit()
+        assert cb.retrieval_mode == "vector"
+        assert cb.kind == "atomic"
+        assert cb.parent_chatbot_id is None
+
+    @pytest.mark.asyncio
+    async def test_router_chatbot_has_no_corpus(self, db_session):
+        """Un chatbot router no debería tener documentos asociados (regla a nivel UI/servicio)."""
+        from server.app.modules.agents_hub.database.config_models import HubChatbot
+        cb = HubChatbot(client_id=..., llm_config_id=..., name="UJI",
+                        system_prompt="Router de la UJI", kind="router")
+        db_session.add(cb); await db_session.commit()
+        assert cb.kind == "router"
+
+    @pytest.mark.asyncio
+    async def test_child_chatbot_references_router(self, db_session):
+        from server.app.modules.agents_hub.database.config_models import HubChatbot
+        router = HubChatbot(client_id=..., llm_config_id=..., name="UJI",
+                            system_prompt="...", kind="router")
+        db_session.add(router); await db_session.commit()
+        child = HubChatbot(client_id=router.client_id, llm_config_id=router.llm_config_id,
+                           name="UJI / Normativa académica", system_prompt="...",
+                           kind="atomic", parent_chatbot_id=router.id,
+                           retrieval_mode="agentic")
+        db_session.add(child); await db_session.commit()
+        assert child.parent_chatbot_id == router.id
+
+    @pytest.mark.asyncio
+    async def test_invalid_retrieval_mode_rejected(self, db_session):
+        from server.app.modules.agents_hub.database.config_models import HubChatbot
+        cb = HubChatbot(client_id=..., llm_config_id=..., name="x", system_prompt="...",
+                        retrieval_mode="random")
+        db_session.add(cb)
+        with pytest.raises(Exception):
+            await db_session.commit()
+```
+
+**Confirmar RED**: `uv run pytest tests/modules/agents_hub/unit/test_hub_document.py tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py -v` → todos los tests deben fallar por `AttributeError` o `ImportError`.
+
+---
+
+### Prompt 9CBis.2 — TDD GREEN: modelo `HubDocument`, migración Alembic y refactor de `HubDocumentChunk`
+
+**Objetivo**: implementar el modelo `HubDocument`, los nuevos campos en `HubChatbot`, la FK opcional `document_id` en `HubDocumentChunk` y la migración Alembic. Los tests del 9CBis.1 deben pasar.
+
+**Cambios en `server/app/modules/agents_hub/database/operational_models.py`**:
+
+```python
+class HubDocument(HubOperationalBase):
+    """Documento citable. Unidad atómica del corpus de un chatbot."""
+
+    __tablename__ = "hub_documents"
+    __table_args__ = (
+        UniqueConstraint("chatbot_id", "content_hash", name="uq_document_chatbot_hash"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    chatbot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    canonical_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    markdown_content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    language: Mapped[str] = mapped_column(String(10), nullable=False)
+    source_kind: Mapped[str] = mapped_column(String(20), nullable=False)  # upload | crawler | manual
+    section_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+# En HubDocumentChunk, añadir:
+class HubDocumentChunk(HubOperationalBase):
+    # ... campos existentes ...
+    document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
+    # FK lógica a hub_documents.id; ondelete="CASCADE" se gestiona en la migración Alembic.
+```
+
+**Cambios en `server/app/modules/agents_hub/database/config_models.py`** (`HubChatbot`):
+
+```python
+from sqlalchemy import CheckConstraint
+
+class HubChatbot(HubConfigBase):
+    # ... campos existentes ...
+    retrieval_mode: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="vector",
+    )
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default="atomic")
+    parent_chatbot_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_chatbots.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "retrieval_mode IN ('vector', 'long_context', 'agentic')",
+            name="ck_chatbot_retrieval_mode",
+        ),
+        CheckConstraint(
+            "kind IN ('atomic', 'router')",
+            name="ck_chatbot_kind",
+        ),
+    )
+```
+
+**Migración Alembic** (`server/alembic/versions/<id>_hub_documents_and_retrieval_mode.py`):
+
+1. `CREATE TABLE hub_documents` con todos los campos y `UniqueConstraint(chatbot_id, content_hash)`.
+2. `ALTER TABLE hub_document_chunks ADD COLUMN document_id UUID NULL` + índice.
+3. `ALTER TABLE hub_chatbots ADD COLUMN retrieval_mode VARCHAR(20) NOT NULL DEFAULT 'vector'`.
+4. `ALTER TABLE hub_chatbots ADD COLUMN kind VARCHAR(20) NOT NULL DEFAULT 'atomic'`.
+5. `ALTER TABLE hub_chatbots ADD COLUMN parent_chatbot_id UUID NULL` + FK + índice.
+6. Añadir los dos `CHECK` constraints.
+7. Migración de datos: para cada `HubIngestionJob` ya existente con `status="completed"`, crear el `HubDocument` correspondiente y backfillear `HubDocumentChunk.document_id` agrupando por `source_url`.
+
+```python
+def upgrade() -> None:
+    # 1. Crear tabla hub_documents
+    op.create_table(
+        "hub_documents",
+        sa.Column("id", UUID(as_uuid=True), primary_key=True),
+        sa.Column("chatbot_id", UUID(as_uuid=True), nullable=False),
+        sa.Column("title", sa.String(500), nullable=False),
+        sa.Column("canonical_url", sa.String(2048), nullable=False),
+        sa.Column("markdown_content", sa.Text, nullable=False),
+        sa.Column("content_hash", sa.String(64), nullable=False),
+        sa.Column("language", sa.String(10), nullable=False),
+        sa.Column("source_kind", sa.String(20), nullable=False),
+        sa.Column("section_path", sa.String(1024), nullable=True),
+        sa.Column("token_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.UniqueConstraint("chatbot_id", "content_hash", name="uq_document_chatbot_hash"),
+    )
+    op.create_index("ix_hub_documents_chatbot_id", "hub_documents", ["chatbot_id"])
+    op.create_index("ix_hub_documents_content_hash", "hub_documents", ["content_hash"])
+
+    # 2. Añadir document_id a chunks
+    op.add_column("hub_document_chunks",
+                  sa.Column("document_id", UUID(as_uuid=True), nullable=True))
+    op.create_index("ix_hub_document_chunks_document_id",
+                    "hub_document_chunks", ["document_id"])
+
+    # 3. Nuevos campos en hub_chatbots
+    op.add_column("hub_chatbots",
+                  sa.Column("retrieval_mode", sa.String(20),
+                            nullable=False, server_default="vector"))
+    op.add_column("hub_chatbots",
+                  sa.Column("kind", sa.String(20),
+                            nullable=False, server_default="atomic"))
+    op.add_column("hub_chatbots",
+                  sa.Column("parent_chatbot_id", UUID(as_uuid=True), nullable=True))
+    op.create_foreign_key(
+        "fk_chatbot_parent", "hub_chatbots", "hub_chatbots",
+        ["parent_chatbot_id"], ["id"], ondelete="SET NULL",
+    )
+    op.create_index("ix_hub_chatbots_parent", "hub_chatbots", ["parent_chatbot_id"])
+    op.create_check_constraint(
+        "ck_chatbot_retrieval_mode", "hub_chatbots",
+        "retrieval_mode IN ('vector', 'long_context', 'agentic')",
+    )
+    op.create_check_constraint(
+        "ck_chatbot_kind", "hub_chatbots",
+        "kind IN ('atomic', 'router')",
+    )
+
+    # 4. Backfill: crear HubDocument por cada job completado con chunks
+    op.execute("""
+        INSERT INTO hub_documents
+            (id, chatbot_id, title, canonical_url, markdown_content,
+             content_hash, language, source_kind, token_count, created_at, updated_at)
+        SELECT
+            gen_random_uuid(),
+            j.chatbot_id,
+            COALESCE(j.original_filename, j.canonical_url, j.source_url),
+            COALESCE(j.canonical_url, j.source_url),
+            '',                                          -- markdown_content vacío en backfill
+            (SELECT MIN(c.content_hash) FROM hub_document_chunks c
+             WHERE c.chatbot_id = j.chatbot_id
+               AND c.source_url = COALESCE(j.canonical_url, j.source_url)),
+            COALESCE(j.language, 'es'),
+            CASE WHEN j.source_url LIKE 'http%' THEN 'crawler' ELSE 'upload' END,
+            COALESCE(j.chunks_processed * 250, 0),       -- aprox tokens
+            j.created_at,
+            j.created_at
+        FROM hub_ingestion_jobs j
+        WHERE j.status = 'completed'
+          AND EXISTS (SELECT 1 FROM hub_document_chunks c
+                      WHERE c.chatbot_id = j.chatbot_id
+                        AND c.source_url = COALESCE(j.canonical_url, j.source_url));
+    """)
+
+    # 5. Backfill: vincular chunks a su document por (chatbot_id, source_url)
+    op.execute("""
+        UPDATE hub_document_chunks c
+        SET document_id = d.id
+        FROM hub_documents d
+        WHERE d.chatbot_id = c.chatbot_id
+          AND d.canonical_url = c.source_url
+          AND c.document_id IS NULL;
+    """)
+
+
+def downgrade() -> None:
+    op.drop_constraint("ck_chatbot_kind", "hub_chatbots")
+    op.drop_constraint("ck_chatbot_retrieval_mode", "hub_chatbots")
+    op.drop_index("ix_hub_chatbots_parent", "hub_chatbots")
+    op.drop_constraint("fk_chatbot_parent", "hub_chatbots", type_="foreignkey")
+    op.drop_column("hub_chatbots", "parent_chatbot_id")
+    op.drop_column("hub_chatbots", "kind")
+    op.drop_column("hub_chatbots", "retrieval_mode")
+    op.drop_index("ix_hub_document_chunks_document_id", "hub_document_chunks")
+    op.drop_column("hub_document_chunks", "document_id")
+    op.drop_index("ix_hub_documents_content_hash", "hub_documents")
+    op.drop_index("ix_hub_documents_chatbot_id", "hub_documents")
+    op.drop_table("hub_documents")
+```
+
+**Confirmar GREEN**:
+
+```bash
+cd server && uv run alembic upgrade head
+uv run pytest tests/modules/agents_hub/unit/test_hub_document.py -v
+uv run pytest tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py -v
+uv run pytest tests/ -v   # regresión completa: nada debe romperse
+```
+
+---
+
+### Prompt 9CBis.3 — TDD RED: Protocol `RetrievalStrategy` + dataclass `Source`
+
+**Objetivo**: definir el contrato `RetrievalStrategy` que abstrae los tres modos, y la dataclass `Source` que sustituye al `string` actual de fuentes. Tests del Protocol y de la dataclass; los nodos del grafo aún no se tocan.
+
+**`server/app/modules/agents_hub/services/retrieval/__init__.py`** (módulo nuevo).
+
+**`server/app/modules/agents_hub/services/retrieval/types.py`**:
+
+```python
+"""Tipos compartidos entre las distintas RetrievalStrategy."""
+
+import uuid
+from dataclasses import dataclass, field
+from typing import Protocol
+
+
+@dataclass(frozen=True)
+class Source:
+    """Documento citable devuelto por una RetrievalStrategy."""
+    document_id: uuid.UUID
+    title: str
+    url: str
+    excerpt: str            # fragmento mostrado al LLM (puede ser el documento completo)
+    score: float            # relevancia [0, 1] (1.0 si la strategy no calcula score)
+    metadata: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class RetrievalContext:
+    """Contexto agregado que se pasa al nodo generate_response."""
+    sources: list[Source]
+    mode: str                       # "vector" | "long_context" | "agentic"
+    total_tokens: int               # suma estimada de tokens del excerpt agregado
+
+
+class RetrievalStrategy(Protocol):
+    """Contrato común a las tres estrategias.
+
+    Las strategies que pre-recuperan (vector, long_context) implementan get_context.
+    AgenticRetrievalStrategy devuelve un RetrievalContext vacío y expone tools al grafo.
+    """
+
+    mode: str  # "vector" | "long_context" | "agentic"
+
+    async def get_context(
+        self,
+        query: str,
+        chatbot_id: uuid.UUID,
+        language: str | None = None,
+    ) -> RetrievalContext: ...
+
+    def get_agent_tools(self) -> list:
+        """Devuelve lista de tools LangChain (vacía salvo en agentic)."""
+        ...
+```
+
+**`server/tests/modules/agents_hub/unit/test_retrieval_types.py`**:
+
+```python
+"""Tests de los tipos compartidos de retrieval — TDD RED."""
+import uuid
+import pytest
+
+
+class TestSource:
+
+    def test_source_is_frozen(self):
+        from server.app.modules.agents_hub.services.retrieval.types import Source
+        s = Source(document_id=uuid.uuid4(), title="X", url="u", excerpt="e", score=0.9)
+        with pytest.raises(Exception):
+            s.score = 0.5  # frozen dataclass
+
+    def test_source_default_metadata_empty(self):
+        from server.app.modules.agents_hub.services.retrieval.types import Source
+        s = Source(document_id=uuid.uuid4(), title="X", url="u", excerpt="e", score=1.0)
+        assert s.metadata == {}
+
+
+class TestRetrievalContext:
+
+    def test_empty_context(self):
+        from server.app.modules.agents_hub.services.retrieval.types import RetrievalContext
+        ctx = RetrievalContext(sources=[], mode="vector", total_tokens=0)
+        assert ctx.sources == []
+        assert ctx.mode == "vector"
+
+
+class TestRetrievalStrategyProtocol:
+
+    def test_protocol_requires_get_context_and_get_agent_tools(self):
+        from server.app.modules.agents_hub.services.retrieval.types import RetrievalStrategy
+
+        class IncompleteStrategy:
+            mode = "vector"
+        # Protocol no fuerza en runtime, pero un implementador real debería tener ambos métodos.
+        # Verificamos que el Protocol exista y exponga los nombres esperados.
+        assert hasattr(RetrievalStrategy, "get_context")
+        assert hasattr(RetrievalStrategy, "get_agent_tools")
+```
+
+**Confirmar RED**: `uv run pytest tests/modules/agents_hub/unit/test_retrieval_types.py -v` → falla por `ImportError`.
+
+---
+
+### Prompt 9CBis.4 — TDD GREEN: `VectorRetrievalStrategy` (envuelve `HybridRetriever`)
+
+**Objetivo**: implementar la primera strategy real, que envuelve el `HybridRetriever` existente sin tocarlo. Garantiza retrocompatibilidad: cualquier chatbot con `retrieval_mode="vector"` (default tras migración) sigue funcionando exactamente igual, **excepto** que ahora las fuentes vienen agrupadas por `document_id` (no chunks sueltos).
+
+**Cambio clave**: la strategy agrega los chunks recuperados por `document_id`, escoge el chunk con mayor score como `excerpt` representativo, y devuelve un `Source` por documento. Esto elimina el problema actual de citar 3 chunks del mismo PDF.
+
+**`server/app/modules/agents_hub/services/retrieval/vector_strategy.py`**:
+
+```python
+"""VectorRetrievalStrategy — envuelve HybridRetriever y agrupa por documento."""
+
+import uuid
+from collections import defaultdict
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from server.app.modules.agents_hub.database.operational_models import HubDocument
+from server.app.modules.agents_hub.services.retrieval.types import (
+    RetrievalContext, Source,
+)
+from server.app.modules.agents_hub.services.retriever import HybridRetriever
+
+
+class VectorRetrievalStrategy:
+    mode = "vector"
+
+    def __init__(
+        self,
+        session: AsyncSession,
+        embedding_service,
+        top_k: int = 8,
+    ):
+        self._session = session
+        self._embedding = embedding_service
+        self._retriever = HybridRetriever(session)
+        self._top_k = top_k
+
+    async def get_context(
+        self,
+        query: str,
+        chatbot_id: uuid.UUID,
+        language: str | None = None,
+    ) -> RetrievalContext:
+        query_embedding = await self._embedding.embed(query)
+        results = await self._retriever.hybrid_search(
+            query=query,
+            query_embedding=query_embedding,
+            chatbot_id=chatbot_id,
+            top_k=self._top_k,
+            language=language,
+        )
+        if not results:
+            return RetrievalContext(sources=[], mode=self.mode, total_tokens=0)
+
+        # Agrupar chunks por document_id
+        by_doc: dict[uuid.UUID | None, list] = defaultdict(list)
+        for r in results:
+            by_doc[r.metadata.get("document_id")].append(r)
+
+        # Cargar documentos en bloque
+        doc_ids = [d for d in by_doc.keys() if d is not None]
+        docs_map: dict[uuid.UUID, HubDocument] = {}
+        if doc_ids:
+            stmt = select(HubDocument).where(HubDocument.id.in_(doc_ids))
+            res = await self._session.execute(stmt)
+            docs_map = {d.id: d for d in res.scalars().all()}
+
+        sources: list[Source] = []
+        total_tokens = 0
+        for doc_id, chunks in by_doc.items():
+            best = max(chunks, key=lambda c: c.score)
+            doc = docs_map.get(doc_id) if doc_id else None
+            title = doc.title if doc else best.source_url.rsplit("/", 1)[-1]
+            url = doc.canonical_url if doc else best.source_url
+            excerpt = best.content
+            sources.append(Source(
+                document_id=doc.id if doc else uuid.uuid4(),
+                title=title, url=url, excerpt=excerpt, score=best.score,
+                metadata={"chunks_matched": len(chunks)},
+            ))
+            total_tokens += len(excerpt) // 4
+
+        sources.sort(key=lambda s: s.score, reverse=True)
+        return RetrievalContext(sources=sources, mode=self.mode, total_tokens=total_tokens)
+
+    def get_agent_tools(self) -> list:
+        return []  # vector pre-recupera; no expone tools al agente
+```
+
+**Tests** en `server/tests/modules/agents_hub/unit/test_vector_strategy.py`:
+
+```python
+# test_returns_empty_context_when_no_chunks
+# test_groups_multiple_chunks_into_one_source_per_document
+# test_uses_document_title_and_canonical_url_when_available
+# test_falls_back_to_filename_when_no_document_record
+# test_get_agent_tools_returns_empty_list
+# test_total_tokens_is_approximated_from_excerpt_length
+```
+
+**Confirmar GREEN**:
+
+```bash
+cd server && uv run pytest tests/modules/agents_hub/unit/test_vector_strategy.py -v
+uv run pytest tests/ -v -k "not slow"   # regresión: el chat sigue funcionando
+```
+
+---
+
+### Prompt 9CBis.5 — `LongContextRetrievalStrategy` con prompt caching (RED → GREEN)
+
+**Objetivo**: implementar la strategy `long_context` que carga todos los `HubDocument` activos del chatbot y los empaqueta como un único bloque marcado con cache breakpoint para que el LLM lo reutilice entre consultas (TTL 5 min). Solo aplicable cuando `sum(token_count) < LONG_CONTEXT_LIMIT` (configurable, default 150 K).
+
+**`server/app/modules/agents_hub/services/retrieval/long_context_strategy.py`**:
+
+```python
+"""LongContextRetrievalStrategy — empaqueta todo el corpus en el contexto del LLM."""
+
+import uuid
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from server.app.modules.agents_hub.database.operational_models import HubDocument
+from server.app.modules.agents_hub.services.retrieval.types import (
+    RetrievalContext, Source,
+)
+
+
+LONG_CONTEXT_TOKEN_LIMIT = 150_000
+
+
+class LongContextRetrievalStrategy:
+    mode = "long_context"
+
+    def __init__(self, session: AsyncSession, token_limit: int = LONG_CONTEXT_TOKEN_LIMIT):
+        self._session = session
+        self._token_limit = token_limit
+
+    async def get_context(
+        self,
+        query: str,
+        chatbot_id: uuid.UUID,
+        language: str | None = None,
+    ) -> RetrievalContext:
+        stmt = select(HubDocument).where(HubDocument.chatbot_id == chatbot_id)
+        if language:
+            stmt = stmt.where(HubDocument.language == language)
+        stmt = stmt.order_by(HubDocument.created_at)
+        result = await self._session.execute(stmt)
+        documents = list(result.scalars().all())
+
+        total = sum(d.token_count for d in documents)
+        if total > self._token_limit:
+            raise ValueError(
+                f"Long context mode no admite corpus de {total} tokens "
+                f"(límite {self._token_limit}). Cambia el modo a 'agentic' o 'vector'."
+            )
+
+        sources = [
+            Source(
+                document_id=d.id,
+                title=d.title,
+                url=d.canonical_url,
+                excerpt=d.markdown_content,
+                score=1.0,
+                metadata={
+                    "language": d.language,
+                    "section_path": d.section_path,
+                    "cacheable": True,    # marcador para que generate_response use cache_control
+                },
+            )
+            for d in documents
+        ]
+        return RetrievalContext(sources=sources, mode=self.mode, total_tokens=total)
+
+    def get_agent_tools(self) -> list:
+        return []
+```
+
+**Integración con prompt caching**: el nodo `generate_response` (modificado en 9CBis.7) detecta `metadata["cacheable"] == True` y al construir los mensajes Anthropic añade `"cache_control": {"type": "ephemeral"}` al bloque del corpus, antes del mensaje del usuario. Si el LLM activo no es Anthropic, el campo se ignora silenciosamente (Gemini/OpenAI tienen sus propios mecanismos; documentar como TODO para extensión futura).
+
+**Tests** en `server/tests/modules/agents_hub/unit/test_long_context_strategy.py`:
+
+```python
+# test_returns_all_documents_as_sources_when_under_limit
+# test_raises_when_corpus_exceeds_limit
+# test_filters_by_language_when_specified
+# test_marks_sources_as_cacheable
+# test_returns_empty_when_chatbot_has_no_documents
+```
+
+**Confirmar**:
+
+```bash
+cd server && uv run pytest tests/modules/agents_hub/unit/test_long_context_strategy.py -v
+```
+
+---
+
+### Prompt 9CBis.6 — `AgenticRetrievalStrategy` + tools `list_documents` / `read_document` (RED → GREEN)
+
+**Objetivo**: implementar la strategy `agentic` que NO pre-recupera. Devuelve un `RetrievalContext` vacío y expone dos tools al grafo LangGraph. El LLM razona sobre el índice y carga lo que necesita.
+
+**Tools nuevas** en `server/app/modules/agents_hub/agent/tools/`:
+
+#### `list_documents.py`
+
+```python
+"""Tool: lista el índice de documentos disponibles para el chatbot."""
+
+import uuid
+from typing import Protocol
+
+
+class DocumentIndexProtocol(Protocol):
+    async def list_index(self, chatbot_id: uuid.UUID, language: str | None) -> list[dict]: ...
+
+
+async def list_documents(
+    chatbot_id: str,
+    index: DocumentIndexProtocol,
+    language: str | None = None,
+) -> str:
+    """Devuelve un índice formateado de documentos disponibles.
+
+    Cada entrada: `[id] título — sección_path (idioma, ~tokens)`. El LLM lo lee y decide
+    qué cargar con `read_document(id=<uuid>)`.
+    """
+    items = await index.list_index(uuid.UUID(chatbot_id), language)
+    if not items:
+        return "No hay documentos disponibles para este chatbot."
+    lines = ["Documentos disponibles (usa read_document(id=<id>) para leer uno):"]
+    for it in items:
+        section = f" — {it['section_path']}" if it.get("section_path") else ""
+        lines.append(
+            f"[{it['id']}] {it['title']}{section} "
+            f"({it['language']}, ~{it['token_count']} tokens, {it['url']})"
+        )
+    return "\n".join(lines)
+```
+
+#### `read_document.py`
+
+```python
+"""Tool: devuelve el markdown completo de un documento."""
+
+import uuid
+from typing import Protocol
+
+
+class DocumentReaderProtocol(Protocol):
+    async def read(self, document_id: uuid.UUID) -> dict | None: ...
+
+
+async def read_document(
+    document_id: str,
+    reader: DocumentReaderProtocol,
+) -> str:
+    """Devuelve el markdown completo del documento solicitado para que el LLM lo cite.
+
+    El LLM debe citar como `[título](url)` tras cada afirmación factual basada en este
+    contenido. Si el documento no existe, devuelve un mensaje explícito.
+    """
+    doc = await reader.read(uuid.UUID(document_id))
+    if not doc:
+        return f"Documento {document_id} no encontrado."
+    return (
+        f"# {doc['title']}\n"
+        f"_Fuente: {doc['url']}_\n\n"
+        f"{doc['markdown_content']}"
+    )
+```
+
+#### `agentic_strategy.py`
+
+```python
+"""AgenticRetrievalStrategy — el LLM elige qué documentos leer."""
+
+import uuid
+
+from langchain_core.tools import tool
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from server.app.modules.agents_hub.agent.tools.list_documents import list_documents
+from server.app.modules.agents_hub.agent.tools.read_document import read_document
+from server.app.modules.agents_hub.database.operational_models import HubDocument
+from server.app.modules.agents_hub.services.retrieval.types import (
+    RetrievalContext,
+)
+
+
+class AgenticRetrievalStrategy:
+    mode = "agentic"
+
+    def __init__(self, session: AsyncSession):
+        self._session = session
+
+    async def list_index(self, chatbot_id: uuid.UUID, language: str | None) -> list[dict]:
+        stmt = select(HubDocument).where(HubDocument.chatbot_id == chatbot_id)
+        if language:
+            stmt = stmt.where(HubDocument.language == language)
+        stmt = stmt.order_by(HubDocument.title)
+        res = await self._session.execute(stmt)
+        return [
+            {"id": str(d.id), "title": d.title, "url": d.canonical_url,
+             "language": d.language, "section_path": d.section_path,
+             "token_count": d.token_count}
+            for d in res.scalars().all()
+        ]
+
+    async def read(self, document_id: uuid.UUID) -> dict | None:
+        doc = await self._session.get(HubDocument, document_id)
+        if not doc:
+            return None
+        return {"title": doc.title, "url": doc.canonical_url,
+                "markdown_content": doc.markdown_content}
+
+    async def get_context(self, query, chatbot_id, language=None) -> RetrievalContext:
+        # No pre-recuperación: el agente decide vía tools
+        return RetrievalContext(sources=[], mode=self.mode, total_tokens=0)
+
+    def get_agent_tools(self) -> list:
+        # Bind del chatbot_id se hace en el grafo (cierre sobre state["chatbot_id"])
+        return [list_documents, read_document]
+```
+
+**Sources retornados al final**: cuando el agente termina, el grafo recoge los `document_id` de cada llamada a `read_document` y los empaqueta como `Source[]` en el evento `done` del SSE. Esto se implementa en 9CBis.10.
+
+**Tests** en `server/tests/modules/agents_hub/unit/test_agentic_strategy.py`:
+
+```python
+# test_get_context_returns_empty_for_agentic
+# test_get_agent_tools_returns_list_and_read_tools
+# test_list_index_returns_all_documents_of_chatbot
+# test_list_index_filters_by_language
+# test_read_returns_full_markdown_with_metadata
+# test_read_returns_none_for_unknown_id
+# test_list_documents_tool_formats_index_with_token_estimates
+# test_read_document_tool_returns_not_found_message_for_unknown_id
+```
+
+**Confirmar**:
+
+```bash
+cd server && uv run pytest tests/modules/agents_hub/unit/test_agentic_strategy.py -v
+uv run pytest tests/modules/agents_hub/unit/ -v   # regresión retrieval
+```
+
+---
+
+### Prompt 9CBis.7 — Citas como contrato del agente: system prompt + post-validador (RED → GREEN)
+
+**Objetivo**: el contrato de citas vive en el agente, no en el retriever. Tras este prompt, cualquier chatbot — sea `vector`, `long_context` o `agentic` — devuelve respuestas con citas o un fallback honesto si no puede citar.
+
+**Componentes**:
+
+1. **Plantilla base de system prompt** con instrucción de cita, integrada en `generate_response_node`.
+2. **`citation_validator.py`** — función pura que detecta si la respuesta contiene al menos una cita en formato `[título](url)` cuando hubo `Source[]` recuperados.
+3. **Refactor del nodo `generate_response`** del grafo: usa `RetrievalStrategy` inyectada, monta el system prompt según el modo, llama al LLM, valida citas, y devuelve `{"messages": [...], "sources": [...]}`.
+
+**`server/app/modules/agents_hub/agent/prompts.py`** (módulo nuevo, prompts compartidos):
+
+```python
+"""Plantillas de system prompt para el grafo del agente."""
+
+CITATION_RULES = """\
+REGLAS DE CITA (obligatorias):
+1. Cada afirmación factual basada en los documentos debe ir seguida de una cita en formato
+   markdown `[título del documento](url)`. La cita va al final de la frase citada.
+2. Si una afirmación combina varios documentos, cita todos: `[doc1](url1) [doc2](url2)`.
+3. Si la pregunta no puede responderse con la información disponible, dilo explícitamente:
+   "No tengo información suficiente en los documentos disponibles para responder a esta
+   pregunta con citas verificables." NO inventes información ni cites documentos no
+   recuperados.
+4. NUNCA inventes URLs ni títulos. Usa SOLO los proporcionados en el contexto.
+"""
+
+
+def build_system_prompt(
+    base_prompt: str,
+    language: str,
+    sources_block: str,
+    mode: str,
+) -> str:
+    """Construye el system prompt final.
+
+    Args:
+        base_prompt: system_prompt definido por el admin para el chatbot.
+        language: idioma de respuesta detectado.
+        sources_block: bloque markdown con los documentos (vacío en agentic).
+        mode: vector | long_context | agentic.
+    """
+    parts = [base_prompt.strip(), "", f"Responde en {language}.", "", CITATION_RULES.strip()]
+    if mode == "agentic":
+        parts.append(
+            "\nUsa la tool `list_documents` para ver el índice y `read_document(id=...)` "
+            "para cargar el texto completo de cada documento que necesites antes de responder."
+        )
+    elif sources_block:
+        parts.extend(["", "DOCUMENTOS DISPONIBLES:", "", sources_block])
+    return "\n".join(parts)
+
+
+def format_sources_block(sources: list) -> str:
+    """Convierte Source[] en un bloque markdown que el LLM puede leer y citar."""
+    if not sources:
+        return ""
+    lines = []
+    for s in sources:
+        lines.append(f"## {s.title}")
+        lines.append(f"_URL: {s.url}_")
+        lines.append("")
+        lines.append(s.excerpt)
+        lines.append("")
+    return "\n".join(lines)
+```
+
+**`server/app/modules/agents_hub/agent/citation_validator.py`** (módulo nuevo):
+
+```python
+"""Validación post-generación: garantiza que la respuesta cite cuando debe."""
+
+import re
+
+# Patrón markdown link: [texto](url) — captura cualquier link, no solo URL externa
+_MD_LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+
+NO_CITATION_FALLBACK = (
+    "No tengo información suficiente en los documentos disponibles para responder a "
+    "esta pregunta con citas verificables. ¿Podrías reformular o proporcionar más contexto?"
+)
+
+
+def has_valid_citations(response_text: str, allowed_urls: set[str]) -> bool:
+    """True si la respuesta contiene al menos una cita cuyo URL esté en allowed_urls."""
+    for _title, url in _MD_LINK.findall(response_text):
+        if url.strip() in allowed_urls:
+            return True
+    return False
+
+
+def enforce_citation_contract(
+    response_text: str,
+    sources: list,
+    mode: str,
+) -> str:
+    """Si hubo sources y la respuesta no cita ninguno válido, devuelve el fallback.
+
+    En modo agentic, se relaja: el agente puede decidir no leer ningún documento (saludo,
+    charla); validamos solo si las tools fueron invocadas (señalado por sources no vacío).
+    """
+    if not sources:
+        return response_text
+    allowed = {s.url for s in sources}
+    if has_valid_citations(response_text, allowed):
+        return response_text
+    return NO_CITATION_FALLBACK
+```
+
+**Refactor del grafo** (`server/app/modules/agents_hub/agent/graph.py`):
+
+```python
+def create_agent_graph(
+    retrieval_strategy,         # RetrievalStrategy inyectada
+    llm,                        # BaseChatModel inyectado (no hardcodear ChatGoogleGenerativeAI)
+    base_system_prompt: str,    # del HubChatbot
+    user_id: str | None = None,
+):
+    async def search_or_skip_node(state):
+        if retrieval_strategy.mode == "agentic":
+            return {"retrieved_sources": [], "retrieval_mode": "agentic"}
+        ctx = await retrieval_strategy.get_context(
+            query=state["messages"][-1].content,
+            chatbot_id=uuid.UUID(state["chatbot_id"]),
+            language=state.get("language"),
+        )
+        return {
+            "retrieved_sources": ctx.sources,
+            "retrieval_mode": ctx.mode,
+            "total_tokens": ctx.total_tokens,
+        }
+
+    async def generate_response_node(state):
+        sources = state.get("retrieved_sources", [])
+        mode = state.get("retrieval_mode", "vector")
+        sources_block = format_sources_block(sources)
+        system = build_system_prompt(
+            base_system_prompt, state.get("language", "es"), sources_block, mode,
+        )
+
+        if mode == "agentic":
+            llm_with_tools = llm.bind_tools(retrieval_strategy.get_agent_tools())
+            response = await llm_with_tools.ainvoke([
+                {"role": "system", "content": system},
+                *_to_messages(state["messages"]),
+            ])
+            # Loop tool-calling: tras cada read_document, registrar el doc_id en sources
+            sources = await _run_agentic_loop(response, llm_with_tools, retrieval_strategy)
+            text = sources_text  # output final del loop
+        else:
+            response = await llm.ainvoke([
+                {"role": "system", "content": system},
+                *_to_messages(state["messages"]),
+            ])
+            text = response.content
+
+        validated = enforce_citation_contract(text, sources, mode)
+        return {"messages": [AIMessage(content=validated)], "sources": sources}
+```
+
+**Tests** en `server/tests/modules/agents_hub/unit/test_citation_validator.py`:
+
+```python
+# test_returns_text_unchanged_when_no_sources
+# test_returns_text_when_at_least_one_valid_citation_present
+# test_returns_fallback_when_sources_exist_but_no_citation
+# test_returns_fallback_when_citation_url_not_in_allowed
+# test_detects_multiple_citations_in_same_paragraph
+# test_agentic_mode_with_empty_sources_returns_text  # saludos no requieren cita
+```
+
+**Tests** en `server/tests/modules/agents_hub/unit/test_prompts.py`:
+
+```python
+# test_build_system_prompt_includes_citation_rules
+# test_build_system_prompt_includes_language_directive
+# test_build_system_prompt_for_agentic_mentions_tools
+# test_build_system_prompt_for_long_context_includes_sources_block
+# test_format_sources_block_renders_each_source_with_title_and_url
+```
+
+**Confirmar**:
+
+```bash
+cd server && uv run pytest tests/modules/agents_hub/unit/test_citation_validator.py -v
+uv run pytest tests/modules/agents_hub/unit/test_prompts.py -v
+uv run pytest tests/ -v -k "graph or agent"   # regresión grafo
+```
+
+---
+
+### Prompt 9CBis.8 — Refactor de 9.7.x: `IngestionWatcher` crea `HubDocument`; chunks solo si `vector`
+
+**Objetivo**: reescribir `IngestionWatcher` para que sea el productor canónico de `HubDocument`. El chunking + embedding ahora es **opcional** y se ejecuta solo cuando `chatbot.retrieval_mode == "vector"`. Los chatbots en `long_context` o `agentic` ingestan documentos sin generar chunks (ahorro de tiempo y storage).
+
+**Cambios en `server/app/modules/agents_hub/ingestion/watcher.py`**:
+
+```python
+class IngestionWatcher:
+    def __init__(self, session, embedding_service, storage=None,
+                 chatbot_provider=None):
+        # chatbot_provider: dependencia para leer HubChatbot.retrieval_mode
+        # (no se importa HubChatbot directamente: cumple frontera edge/cloud)
+        ...
+
+    async def process_source(
+        self,
+        source_url: str,
+        chatbot_id: uuid.UUID,
+        language: str | None = None,
+        citation_url: str | None = None,
+        prefetched_content: str | None = None,
+        title: str | None = None,
+    ) -> HubDocument:
+        """Crea/actualiza un HubDocument. Genera chunks SOLO si retrieval_mode == 'vector'.
+
+        Returns:
+            El HubDocument creado o actualizado (idempotente por content_hash).
+        """
+        # 1. Obtener markdown
+        if prefetched_content is not None:
+            content = prefetched_content
+        else:
+            processor = await self._get_processor()
+            content = await asyncio.to_thread(processor.process, source_url)
+
+        if language is None:
+            language = detect_language(content)
+        content_hash = hash_content(content)
+        canonical = citation_url or source_url
+        doc_title = title or _extract_title_from_markdown(content) or canonical
+        token_count = _estimate_tokens(content)
+
+        # 2. Idempotencia: ¿ya existe este documento (mismo chatbot, mismo hash)?
+        existing = await self._session.execute(
+            select(HubDocument).where(
+                HubDocument.chatbot_id == chatbot_id,
+                HubDocument.content_hash == content_hash,
+            ).limit(1)
+        )
+        doc = existing.scalar_one_or_none()
+        if doc:
+            doc.canonical_url = canonical
+            doc.title = doc_title
+            doc.updated_at = datetime.now(timezone.utc)
+        else:
+            # Si la URL ya estaba registrada con otro hash → reemplazar
+            old = await self._session.execute(
+                select(HubDocument).where(
+                    HubDocument.chatbot_id == chatbot_id,
+                    HubDocument.canonical_url == canonical,
+                )
+            )
+            for old_doc in old.scalars():
+                # Borrar chunks vinculados (CASCADE manual)
+                await self._session.execute(
+                    delete(HubDocumentChunk).where(
+                        HubDocumentChunk.document_id == old_doc.id
+                    )
+                )
+                await self._session.delete(old_doc)
+            doc = HubDocument(
+                chatbot_id=chatbot_id, title=doc_title, canonical_url=canonical,
+                markdown_content=content, content_hash=content_hash, language=language,
+                source_kind="crawler" if source_url.startswith(("http://", "https://")) else "upload",
+                token_count=token_count,
+            )
+            self._session.add(doc)
+            await self._session.flush()
+
+        # 3. Chunking + embedding solo si el chatbot está en modo vector
+        retrieval_mode = await self._chatbot_provider.get_retrieval_mode(chatbot_id) \
+            if self._chatbot_provider else "vector"
+        if retrieval_mode == "vector":
+            await self._regenerate_chunks_for_document(doc)
+        else:
+            # Asegurar que no quedan chunks de modos previos
+            await self._session.execute(
+                delete(HubDocumentChunk).where(HubDocumentChunk.document_id == doc.id)
+            )
+
+        await self._session.commit()
+        return doc
+
+    async def _regenerate_chunks_for_document(self, doc: HubDocument) -> None:
+        await self._session.execute(
+            delete(HubDocumentChunk).where(HubDocumentChunk.document_id == doc.id)
+        )
+        chunks = self.chunker.split(
+            doc.markdown_content,
+            metadata={"document_id": str(doc.id), "source_url": doc.canonical_url},
+        )
+        for ch in chunks:
+            embedding = await self._embedding.embed(ch.content)
+            self._session.add(HubDocumentChunk(
+                chatbot_id=doc.chatbot_id,
+                document_id=doc.id,
+                content=ch.content,
+                source_url=doc.canonical_url,
+                content_hash=hash_content(ch.content),
+                embedding=embedding,
+                chunk_metadata={**ch.metadata, "document_id": str(doc.id)},
+                language=doc.language,
+            ))
+```
+
+**`process_user_upload`** mantiene `is_temporary=True` y `owner_id`, pero ahora también crea un `HubDocument` con `source_kind="upload"` para que las citas en modo agente funcionen. El TTL de cleanup borra documento + chunks.
+
+**Helpers nuevos** en `server/app/modules/agents_hub/ingestion/markdown_utils.py`:
+
+```python
+import re
+
+_H1 = re.compile(r"^#\s+(.+)$", re.MULTILINE)
+
+
+def extract_title_from_markdown(content: str) -> str | None:
+    """Devuelve el primer H1 del documento, sin el #."""
+    m = _H1.search(content)
+    return m.group(1).strip() if m else None
+
+
+def estimate_tokens(content: str) -> int:
+    """Aproximación rápida (4 chars/token). Suficiente para la heurística del modo."""
+    return max(1, len(content) // 4)
+```
+
+**`ChatbotConfigProvider`** (nuevo, edge — vía `ConfigProvider` existente):
+
+```python
+# Extender el LocalConfigProvider del Prompt 9.6.5 con:
+async def get_retrieval_mode(self, chatbot_id: uuid.UUID) -> str: ...
+```
+
+**Cambios en `source_scheduler.py`**: el scheduler ahora pasa el `prefetched_content` al watcher pero el watcher decide si chunkea o no según el modo. No hay otros cambios.
+
+**Cambios en `hub_ingestion_router.py`**:
+
+- `POST /upload` sigue igual de cara al cliente; internamente la BackgroundTask llama a `watcher.process_user_upload` que crea `HubDocument`.
+- `DELETE /{chatbot_id}/jobs/{job_id}` cambia: borra el `HubDocument` correspondiente (matching por `canonical_url == job.canonical_url or job.source_url`) y CASCADE borra los chunks. Mantener compatibilidad de respuesta (mismo `{message, chunks_deleted}`).
+- `DELETE /{chatbot_id}/chunks` se renombra internamente pero conserva la ruta y semántica externa: borra documentos + chunks + jobs del chatbot.
+- **Nuevo endpoint**: `GET /api/v1/hub/ingestion/{chatbot_id}/documents` — lista `HubDocument[]` para la UI 9CBis.9.
+
+**Tests**:
+
+```python
+# server/tests/modules/agents_hub/integration/test_ingestion_creates_documents.py
+# test_upload_creates_hub_document_with_extracted_title
+# test_upload_in_vector_mode_creates_chunks
+# test_upload_in_long_context_mode_skips_chunks
+# test_upload_in_agentic_mode_skips_chunks
+# test_re_upload_same_content_is_idempotent
+# test_re_upload_different_content_replaces_document_and_chunks
+# test_changing_chatbot_mode_to_vector_regenerates_chunks_on_next_ingest
+```
+
+**Test de regresión** en `server/tests/modules/agents_hub/integration/test_ingestion_regression.py`:
+
+```python
+# test_existing_chat_flow_still_works_after_refactor   # chatbot vector responde igual
+# test_search_knowledge_returns_sources_grouped_by_document  # nueva forma de las fuentes
+```
+
+**Confirmar**:
+
+```bash
+cd server && uv run alembic upgrade head
+uv run pytest tests/modules/agents_hub/integration/test_ingestion_creates_documents.py -v
+uv run pytest tests/modules/agents_hub/integration/test_ingestion_regression.py -v
+uv run pytest tests/ -v   # regresión completa obligatoria
+```
+
+---
+
+### Prompt 9CBis.9 — Refactor UI Documentos: vista unificada de `HubDocument`
+
+**Objetivo**: la pestaña "Documentos subidos" del prompt 9.7 pasa a mostrar `HubDocument[]` (vista unificada de PDFs subidos + URLs del crawler), porque ahora ambos producen el mismo modelo. El concepto de "job" se conserva como histórico técnico (otra pestaña), pero el usuario gestiona "documentos".
+
+**Cambios en `frontend/src/shared/api/ingestion.ts`**:
+
+```typescript
+export interface HubDocument {
+  id: string
+  chatbot_id: string
+  title: string
+  canonical_url: string
+  language: string
+  source_kind: 'upload' | 'crawler' | 'manual'
+  section_path: string | null
+  token_count: number
+  created_at: string
+  updated_at: string
+}
+
+// fetchDocuments(chatbotId): Promise<HubDocument[]>
+// deleteDocument(chatbotId, documentId): Promise<void>
+```
+
+**Cambios en `frontend/src/admin/pages/DocumentsPage.tsx`**:
+
+- Renombrar internamente la tab existente "Documentos subidos" → "Documentos" y poblarla desde `fetchDocuments`.
+- Columnas: título, fuente (icono según `source_kind`), idioma, tokens (formato compacto), fecha, acciones.
+- Acciones por fila: **Ver** (modal con preview markdown renderizado), **Sustituir** (re-upload con la misma `canonical_url`), **Eliminar**.
+- Encima de la tabla, banner informativo: "Modo de retrieval del chatbot: **{mode}** ({recomendación según token total})". El banner enlaza a la página del chatbot donde se cambia el modo (UI del 9CBis.14).
+- Conservar tab "Fuentes web" del 9.7.1 (gestión de URLs monitorizadas) sin cambios funcionales.
+- Añadir tab nueva "Jobs (técnico)" oculta tras un `Disclosure`, que muestra el histórico actual de `HubIngestionJob` para depuración.
+
+**Tests** en `frontend/src/admin/pages/__tests__/DocumentsPage.test.tsx`:
+
+```typescript
+// should_list_documents_grouped_by_chatbot
+// should_show_source_kind_icon
+// should_show_total_tokens_summary_banner
+// should_open_preview_modal_on_view_action
+// should_delete_document_with_confirm
+// should_keep_sources_tab_unchanged
+```
+
+**Confirmar**:
+
+```bash
+cd frontend && npm test -- DocumentsPage
+npm run build     # asegurar que el bundle del admin sigue construyendo
+```
+
+---
+
+### Prompt 9CBis.10 — Refactor de 9.8.2: SSE emite `Source[]` estructurado
+
+**Objetivo**: el evento `done` del SSE pasa de `sources: string[]` a `sources: Source[]` con `(document_id, title, url, score)`. Esto corrige también el bug latente en `hub_chat.py:159` donde `final_sources = output.get("sources", [])` siempre devolvía `[]` porque el nodo no añadía `sources` al output.
+
+**Cambios en `server/app/api/v1/hub_chat.py`**:
+
+```python
+# 1. Inyectar la RetrievalStrategy según el chatbot.retrieval_mode
+async def _make_strategy(chatbot, session, embedding_service):
+    if chatbot.retrieval_mode == "long_context":
+        return LongContextRetrievalStrategy(session)
+    if chatbot.retrieval_mode == "agentic":
+        return AgenticRetrievalStrategy(session)
+    return VectorRetrievalStrategy(session, embedding_service)
+
+# 2. En chat_stream: leer chatbot.retrieval_mode + system_prompt y pasar al grafo
+strategy = await _make_strategy(chatbot, session, embedding_service)
+graph = create_agent_graph(
+    retrieval_strategy=strategy,
+    llm=await get_llm_for_chatbot(chatbot),     # usa model_factory
+    base_system_prompt=chatbot.system_prompt,
+    user_id=user.user_id,
+)
+
+# 3. En event_generator: recoger Source[] del state final, no string[]
+elif kind == "on_chain_end" and name == "generate_response":
+    output = event.get("data", {}).get("output", {})
+    raw_sources = output.get("sources", [])  # ahora List[Source]
+    final_sources = [
+        {"document_id": str(s.document_id), "title": s.title,
+         "url": s.url, "score": round(s.score, 3)}
+        for s in raw_sources
+    ]
+    detected_language = output.get("language", "es")
+
+# 4. Evento done con la nueva forma
+yield _sse("done", {
+    "interaction_id": str(interaction_id),
+    "sources": final_sources,           # ← ahora objetos, no strings
+    "language_fallback": language_fallback,
+    "translation_warning": translation_warning,
+})
+```
+
+**Compatibilidad**: el cliente del prompt 9.10 lee `sources as string[]`. Hasta que 9CBis.11 lo actualice, el front mostrará objetos en vez de strings (no rompe — solo afecta render). El test E2E debe ejecutarse después de 9CBis.11 para validar el flujo completo.
+
+**Tests actualizados** en `server/tests/modules/agents_hub/integration/test_hub_chat_sse.py`:
+
+```python
+# test_done_event_includes_structured_sources_with_document_id
+# test_done_event_sources_have_title_and_url
+# test_done_event_empty_sources_when_no_retrieval_happened
+# test_long_context_mode_sources_marked_with_canonical_urls
+# test_agentic_mode_sources_only_include_documents_actually_read
+# test_no_citation_fallback_emits_done_with_empty_sources
+```
+
+**Confirmar**:
+
+```bash
+cd server && uv run pytest tests/modules/agents_hub/integration/test_hub_chat_sse.py -v
+uv run pytest tests/ -v   # regresión completa
+```
+
+---
+
+### Prompt 9CBis.11 — Refactor de 9.10: Widget renderiza citas como pills clicables
+
+**Objetivo**: el widget pasa a tratar `sources` como objetos estructurados, los renderiza como pills clicables debajo del mensaje del asistente, y resalta inline las citas markdown del propio texto (parsea `[título](url)` y las convierte en enlaces accesibles).
+
+**Cambios en `frontend/src/widget/hooks/useChat.ts`**:
+
+```typescript
+export interface SourceRef {
+  document_id: string
+  title: string
+  url: string
+  score: number
+}
+
+export interface UseChatReturn {
+  // ...
+  sources: SourceRef[]    // antes string[]
+}
+
+// En el handler del evento done:
+setSources(payload.sources as SourceRef[])
+```
+
+**Cambios en `frontend/src/widget/components/ChatWidget.tsx`**:
+
+```typescript
+import ReactMarkdown from 'react-markdown'   // añadir dependencia
+
+// 1. Renderizar el mensaje del asistente con ReactMarkdown para que [título](url)
+//    aparezcan como enlaces (target="_blank", rel="noopener")
+// 2. Debajo del último mensaje del asistente, render de pills:
+//    <div role="list" aria-label={t('chat.sources')}>
+//      {sources.map(s => (
+//        <a key={s.document_id} href={s.url} target="_blank" rel="noopener"
+//           role="listitem" className="source-pill">
+//          {s.title}
+//        </a>
+//      ))}
+//    </div>
+// 3. Estilo de pill: borde redondeado, fondo gris claro, hover azul.
+//    Variables CSS: --source-pill-bg, --source-pill-fg, --source-pill-border.
+```
+
+**Añadir** a `frontend/src/widget/locales/<lang>/chat.json`:
+
+```json
+{
+  "sources": "Fuentes",
+  "no_sources": "Sin fuentes citadas"
+}
+```
+
+**Tests actualizados** en `frontend/src/widget/__tests__/ChatWidget.test.tsx`:
+
+```typescript
+// should_render_source_pills_when_done_event_has_sources
+// should_render_assistant_message_with_inline_markdown_links
+// should_open_source_links_in_new_tab
+// should_handle_empty_sources_array_gracefully
+// should_announce_sources_to_screen_readers   // role="list" + aria-label
+```
+
+**Documentar en `frontend/widget.html`** (la página de prueba): mostrar un ejemplo de respuesta con citas para que el integrador vea cómo se ven las pills.
+
+**Confirmar**:
+
+```bash
+cd frontend && npm install react-markdown
+npm test -- ChatWidget
+npm run build:widget   # bundle del widget sigue construyendo
+```
+
+---
+
+### Prompt 9CBis.12 — TDD RED: router multi-materia (`route_to_subagent`)
+
+**Objetivo**: introducir el nodo `route_to_subagent` en el grafo cuando `chatbot.kind == "router"`. El nodo clasifica la consulta entre los hijos atómicos (basado en embeddings de sus `system_prompt`) y delega.
+
+**Tests** en `server/tests/modules/agents_hub/unit/test_router_node.py`:
+
+```python
+"""Tests del router multi-materia — TDD RED."""
+import uuid
+import pytest
+from unittest.mock import AsyncMock
+
+
+class TestRouteToSubagent:
+
+    @pytest.fixture
+    def router_chatbot(self):
+        from dataclasses import dataclass
+        @dataclass
+        class FakeCB:
+            id: uuid.UUID
+            name: str
+            system_prompt: str
+            kind: str = "atomic"
+            parent_chatbot_id: uuid.UUID | None = None
+            retrieval_mode: str = "agentic"
+        router_id = uuid.uuid4()
+        return [
+            FakeCB(id=router_id, name="UJI", system_prompt="Asistente UJI", kind="router"),
+            FakeCB(id=uuid.uuid4(), name="Normativa académica",
+                   system_prompt="Reglamentos académicos, planes de estudio, permanencia",
+                   parent_chatbot_id=router_id),
+            FakeCB(id=uuid.uuid4(), name="RRHH",
+                   system_prompt="Personal docente e investigador, nóminas, permisos",
+                   parent_chatbot_id=router_id),
+            FakeCB(id=uuid.uuid4(), name="Económico",
+                   system_prompt="Presupuestos, justificación de gastos, contratos",
+                   parent_chatbot_id=router_id),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_router_classifies_to_correct_child(self, router_chatbot):
+        from server.app.modules.agents_hub.agent.router_node import build_route_to_subagent_node
+
+        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
+        chatbot_provider = AsyncMock()
+        chatbot_provider.get_children = AsyncMock(return_value=router_chatbot[1:])
+
+        node = build_route_to_subagent_node(
+            embedding_service=embedding_service,
+            chatbot_provider=chatbot_provider,
+        )
+        state = {
+            "messages": [type("M", (), {"content": "¿Cuántos días de permiso me corresponden?"})()],
+            "chatbot_id": str(router_chatbot[0].id),
+        }
+        result = await node(state)
+        assert result["selected_child_id"] in {str(c.id) for c in router_chatbot[1:]}
+        assert result["routing_confidence"] >= 0.0
+
+    @pytest.mark.asyncio
+    async def test_router_with_single_child_passes_through(self, router_chatbot):
+        from server.app.modules.agents_hub.agent.router_node import build_route_to_subagent_node
+        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
+        only_one = [router_chatbot[1]]
+        chatbot_provider = AsyncMock(get_children=AsyncMock(return_value=only_one))
+        node = build_route_to_subagent_node(embedding_service, chatbot_provider)
+        state = {"messages": [type("M", (), {"content": "x"})()],
+                 "chatbot_id": str(router_chatbot[0].id)}
+        result = await node(state)
+        assert result["selected_child_id"] == str(only_one[0].id)
+        assert result["routing_confidence"] == 1.0
+
+    @pytest.mark.asyncio
+    async def test_router_with_no_children_raises(self, router_chatbot):
+        from server.app.modules.agents_hub.agent.router_node import build_route_to_subagent_node
+        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
+        chatbot_provider = AsyncMock(get_children=AsyncMock(return_value=[]))
+        node = build_route_to_subagent_node(embedding_service, chatbot_provider)
+        state = {"messages": [type("M", (), {"content": "x"})()],
+                 "chatbot_id": str(router_chatbot[0].id)}
+        with pytest.raises(ValueError, match="sin hijos"):
+            await node(state)
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_falls_back_to_llm_classifier(self, router_chatbot):
+        """Si la confianza por embeddings < umbral, usa LLM como segundo intento."""
+        from server.app.modules.agents_hub.agent.router_node import build_route_to_subagent_node
+        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.0] * 1024))
+        # Embeddings idénticos → confianza ≈ 1.0 entre todos → tie-breaker por LLM
+        llm = AsyncMock()
+        llm.ainvoke = AsyncMock(return_value=type("R", (),
+                                                  {"content": str(router_chatbot[2].id)})())
+        chatbot_provider = AsyncMock(get_children=AsyncMock(return_value=router_chatbot[1:]))
+        node = build_route_to_subagent_node(embedding_service, chatbot_provider,
+                                            llm_fallback=llm,
+                                            confidence_threshold=0.95)
+        result = await node({
+            "messages": [type("M", (), {"content": "ambigua"})()],
+            "chatbot_id": str(router_chatbot[0].id),
+        })
+        assert result["selected_child_id"] == str(router_chatbot[2].id)
+```
+
+**Confirmar RED**: `uv run pytest tests/modules/agents_hub/unit/test_router_node.py -v` → falla por `ImportError`.
+
+---
+
+### Prompt 9CBis.13 — TDD GREEN: nodo router + endpoints + UI admin de jerarquía
+
+**Objetivo**: implementar el nodo `route_to_subagent` y delegar la ejecución al subgrafo del hijo elegido. Endpoints CRUD para gestionar la jerarquía. UI admin para crear router → hijos.
+
+**`server/app/modules/agents_hub/agent/router_node.py`**:
+
+```python
+"""Nodo router multi-materia: clasifica la consulta y delega a un sub-chatbot."""
+
+import uuid
+from typing import Protocol
+
+import numpy as np
+
+
+class ChatbotChildrenProvider(Protocol):
+    async def get_children(self, parent_id: uuid.UUID) -> list: ...
+
+
+def _cosine(a, b) -> float:
+    na, nb = np.linalg.norm(a), np.linalg.norm(b)
+    if na == 0 or nb == 0:
+        return 0.0
+    return float(np.dot(a, b) / (na * nb))
+
+
+def build_route_to_subagent_node(
+    embedding_service,
+    chatbot_provider: ChatbotChildrenProvider,
+    llm_fallback=None,
+    confidence_threshold: float = 0.65,
+):
+    async def node(state):
+        children = await chatbot_provider.get_children(uuid.UUID(state["chatbot_id"]))
+        if not children:
+            raise ValueError(f"Chatbot router {state['chatbot_id']} sin hijos atómicos.")
+        if len(children) == 1:
+            return {"selected_child_id": str(children[0].id), "routing_confidence": 1.0}
+
+        query = state["messages"][-1].content
+        q_emb = np.array(await embedding_service.embed(query))
+        scored = []
+        for c in children:
+            c_emb = np.array(await embedding_service.embed(c.system_prompt))
+            scored.append((c, _cosine(q_emb, c_emb)))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        best, conf = scored[0]
+
+        if llm_fallback is not None and conf < confidence_threshold:
+            options = "\n".join(f"- {c.id}: {c.name} ({c.system_prompt[:120]})"
+                                for c, _ in scored)
+            response = await llm_fallback.ainvoke([
+                {"role": "system", "content":
+                    "Devuelve SOLO el UUID del sub-chatbot que mejor responda. "
+                    "Sin explicaciones."},
+                {"role": "user", "content":
+                    f"Consulta: {query}\n\nOpciones:\n{options}"},
+            ])
+            picked_id = str(response.content).strip()
+            picked = next((c for c, _ in scored if str(c.id) == picked_id), best)
+            return {"selected_child_id": str(picked.id), "routing_confidence": conf}
+
+        return {"selected_child_id": str(best.id), "routing_confidence": conf}
+    return node
+```
+
+**Integración en el grafo**: en `chat_stream` (`hub_chat.py`):
+
+```python
+if chatbot.kind == "router":
+    # 1. Resolver al hijo
+    router_node = build_route_to_subagent_node(embedding_service, chatbot_provider,
+                                               llm_fallback=await get_llm_for_chatbot(chatbot))
+    routing = await router_node({"messages": [HumanMessage(content=request.message)],
+                                  "chatbot_id": str(chatbot_id)})
+    # 2. Recargar como si la petición hubiera ido directamente al hijo
+    child = await session.get(HubChatbot, uuid.UUID(routing["selected_child_id"]))
+    chatbot = child   # el resto del flujo es idéntico
+    # Emitir evento status informativo:
+    yield _sse("status", {"node": "route_to_subagent",
+                          "msg": f"Materia detectada: {child.name}"})
+```
+
+**Endpoints nuevos** en `hub_chatbots_router.py`:
+
+```python
+# GET    /api/v1/hub/chatbots/{id}/children          → lista hijos del router
+# POST   /api/v1/hub/chatbots/{id}/children          → asigna hijo existente al router
+#         body: { child_chatbot_id: uuid }
+# DELETE /api/v1/hub/chatbots/{id}/children/{child}  → desvincula hijo del router
+```
+
+**Tests** de los endpoints en `server/tests/modules/agents_hub/integration/test_chatbot_hierarchy.py`:
+
+```python
+# test_assign_child_to_router_succeeds
+# test_cannot_assign_child_with_kind_router
+# test_cannot_create_grandchild_hierarchy   # max 2 niveles
+# test_cannot_assign_child_from_different_client
+# test_list_children_returns_only_direct_children
+# test_unassign_child_clears_parent_chatbot_id
+```
+
+**UI admin** — `frontend/src/admin/pages/ChatbotsPage.tsx`:
+
+- Selector `kind`: `atomic` (default) | `router` al crear/editar.
+- Si `kind == "router"`: ocultar campos de `retrieval_mode`, `system_prompt` (el router no tiene corpus propio; el system_prompt se usa solo como descripción para clasificar). Mostrar sección "Sub-chatbots" con lista actual de hijos y botón "Asignar hijo" (modal con dropdown de chatbots atómicos del mismo cliente sin parent).
+- Si `kind == "atomic"`: comportamiento actual + (opcional) badge "Asignado al router X" si tiene parent.
+
+**Tests UI** en `frontend/src/admin/pages/__tests__/ChatbotsPage.hierarchy.test.tsx`:
+
+```typescript
+// should_show_kind_selector_in_form
+// should_hide_retrieval_mode_when_kind_is_router
+// should_show_children_section_for_router_chatbots
+// should_assign_child_via_modal
+// should_warn_when_router_has_no_children
+```
+
+**Confirmar**:
+
+```bash
+cd server && uv run pytest tests/modules/agents_hub/unit/test_router_node.py -v
+uv run pytest tests/modules/agents_hub/integration/test_chatbot_hierarchy.py -v
+cd ../frontend && npm test -- ChatbotsPage
+uv run pytest tests/ -v   # regresión completa obligatoria
+```
+
+---
+
+### Prompt 9CBis.14 — UI admin: selector `retrieval_mode` con recomendación basada en tokens
+
+**Objetivo**: en la pantalla de edición de chatbot, añadir el selector `retrieval_mode` con una recomendación visible y argumentada según el `total_tokens` del corpus actual del chatbot. El admin ve la sugerencia pero decide.
+
+**Endpoint nuevo** `GET /api/v1/hub/chatbots/{id}/corpus-stats`:
+
+```python
+{
+  "total_documents": 142,
+  "total_tokens": 487_321,
+  "by_language": {"es": 380_000, "ca": 107_321},
+  "recommended_mode": "agentic",
+  "recommendation_reason":
+    "El corpus supera 100K tokens y queda por debajo de 2M; el modo agentic ofrece "
+    "el mejor balance entre coste y precisión de citas."
+}
+```
+
+Lógica de recomendación (servicio `corpus_recommender.py`, edge):
+
+```python
+def recommend_retrieval_mode(total_tokens: int) -> tuple[str, str]:
+    if total_tokens < 100_000:
+        return ("long_context",
+                f"El corpus ({total_tokens:,} tokens) cabe completo en el contexto del LLM. "
+                f"Recomendado long_context: cero pérdida de información, citas precisas.")
+    if total_tokens < 2_000_000:
+        return ("agentic",
+                f"El corpus ({total_tokens:,} tokens) excede el long_context pero permite "
+                f"que el LLM seleccione qué documentos leer. Recomendado agentic.")
+    return ("vector",
+            f"El corpus ({total_tokens:,} tokens) requiere búsqueda vectorial para escalar "
+            f"económicamente. Recomendado vector; aceptas degradación de citas y posibles "
+            f"errores de recuperación top-k.")
+```
+
+**UI** — en `ChatbotsPage` form de edición:
+
+- Selector `retrieval_mode`: 3 opciones (`vector`, `long_context`, `agentic`) con descripción corta.
+- Banner con la recomendación actual ("Sugerido: **agentic**") y razón. Si el admin elige algo distinto del sugerido, mostrar advertencia naranja: "Has elegido un modo distinto del recomendado para este corpus. Asegúrate de entender las implicaciones de coste y precisión."
+- Si el modo elegido es `long_context` y `total_tokens > 150_000`, **bloquear el guardado** con error: "El corpus excede el límite del modo long_context (150K tokens). Reduce el corpus o cambia a agentic."
+- Si el chatbot cambia de modo, mostrar info: "Al cambiar el modo, la próxima ingestión regenerará/borrará chunks según corresponda. Los documentos existentes no se ven afectados."
+
+**Comando admin** `POST /api/v1/hub/chatbots/{id}/regenerate-chunks` (cloud → edge):
+
+- Solo válido si `retrieval_mode == "vector"`.
+- Recorre los `HubDocument[]` del chatbot, regenera chunks + embeddings (idempotente).
+- Útil cuando el admin cambia de `agentic` o `long_context` a `vector` y quiere chunkear el corpus existente sin re-subir cada documento.
+- Devuelve un `task_id` para seguimiento; el progreso se emite vía SSE en otro endpoint.
+
+**Tests** en `server/tests/modules/agents_hub/unit/test_corpus_recommender.py`:
+
+```python
+# test_recommends_long_context_for_small_corpus
+# test_recommends_agentic_for_medium_corpus
+# test_recommends_vector_for_huge_corpus
+# test_recommendation_reason_includes_token_count
+```
+
+**Tests** en `server/tests/modules/agents_hub/integration/test_corpus_stats_endpoint.py`:
+
+```python
+# test_corpus_stats_returns_total_tokens_and_recommendation
+# test_corpus_stats_groups_by_language
+# test_regenerate_chunks_blocked_for_non_vector_mode
+# test_regenerate_chunks_creates_chunks_for_existing_documents
+```
+
+**Tests UI** en `frontend/src/admin/pages/__tests__/ChatbotsPage.retrievalMode.test.tsx`:
+
+```typescript
+// should_show_recommendation_banner_with_reason
+// should_warn_when_user_picks_non_recommended_mode
+// should_block_save_when_long_context_exceeds_limit
+// should_show_chunk_regeneration_button_only_for_vector_mode
+```
+
+**Confirmar**:
+
+```bash
+cd server && uv run pytest tests/modules/agents_hub/unit/test_corpus_recommender.py -v
+uv run pytest tests/modules/agents_hub/integration/test_corpus_stats_endpoint.py -v
+cd ../frontend && npm test -- ChatbotsPage.retrievalMode
+uv run pytest tests/ -v   # regresión completa final del bloque
+npm test                  # regresión completa frontend
+npm run build && npm run build:widget   # bundles ok
+```
+
+**Smoke test manual del bloque completo (`pruebas_manuales_prompt9CBis.bat`)**:
+
+1. Verificar `docker compose up` con la migración aplicada.
+2. Crear chatbot atómico en modo `long_context`, subir 2 PDFs pequeños (<50K tokens total), preguntar y verificar que la respuesta cita ambos documentos como pills clicables.
+3. Cambiar el chatbot a `agentic`, repetir la pregunta y verificar que el LLM invoca `read_document` (visible en eventos `status` del SSE) y solo cita los documentos leídos.
+4. Cambiar a `vector`, ejecutar `POST /regenerate-chunks`, repetir y verificar que las citas siguen apuntando a los `HubDocument` correctos (no a chunks).
+5. Crear un chatbot router "UJI demo" con dos hijos atómicos ("Normativa", "RRHH") en `agentic`. Hacer una pregunta clara de cada materia y verificar que el evento `status` informa "Materia detectada: …" antes de la respuesta.
+6. Comprobar UI: banner de recomendación coherente con el tamaño del corpus, advertencia al elegir modo no recomendado, error al elegir long_context con corpus > 150K.
+
+---
+
 ## BLOQUE 9E — Panel de administración LLM y Prompts
 
 **Objetivo**: Dar a administradores y partners control total sobre qué modelo usa cada proceso y qué instrucciones recibe, sin tocar código ni reiniciar el servidor. El sistema de tiers unifica la configuración tanto para chatbots/agentes como para flujos de automatización.
@@ -8173,3 +10334,213 @@ TESTS REQUERIDOS:
 **Durante v1**: código legacy intacto en `client_app/` pero no incluido en el empaquetado del thin client. Si un flujo crítico del piloto requiere web RPA, se despliega un worker Playwright centralizado en el Edge node (Docker headless).
 
 **En v2**: decidir entre re-empaquetar Playwright en el thin client o mantener el worker centralizado en Edge, según la demanda real del piloto.
+
+---
+
+## FASE 22: Microservicios de computación pesada — Embedding Service y Docling Service
+
+**Tipo**: Diferido — se activa únicamente cuando los criterios de métricas se cumplan en producción.  
+**Estado**: ⏳ No iniciar hasta que los criterios de activación se verifiquen en Cloud Run.  
+**Prerrequisitos**: Despliegue en Cloud Run operativo (FASE 9C completa, Cloud SQL Auth Proxy, GCS).  
+**Corresponde a**: decisión de infraestructura documentada el 2026-04-27 (ver `CLAUDE.md` sección "Servicios de computación pesada").
+
+**Motivación**: BGE-M3 (~1.1 GB) y Docling (CPU-intensivo) corren actualmente in-process dentro del servidor FastAPI. Esto es correcto y suficiente mientras el despliegue sea pequeño, pero en Cloud Run implica cold start de 30-90 s y 3-4 GB de RAM por instancia. La abstracción `EmbeddingService` (protocolo ya existente) hace que la extracción sea un cambio de inyección de dependencia, sin tocar la lógica de negocio.
+
+**Criterios de activación** — no iniciar antes de que se cumplan los tres:
+1. Cold start del API supera **15 s** en Cloud Run (visible en métricas Cloud Run / Langfuse).
+2. RAM de la instancia FastAPI supera **2 GB** en uso normal (métrica Cloud Run).
+3. Se necesita escalar embedding/Docling de forma independiente al API.
+
+**Arquitectura objetivo**:
+```
+Cloud Run: govgenai-api (FastAPI, ~512 MB)
+    ├─ HTTP → Cloud Run: embedding-service  (min-instances=1, BGE-M3 siempre caliente)
+    └─ HTTP → Cloud Run: docling-service    (min-instances=0, escala a 0 entre ingestiones)
+    ├─ Cloud SQL (vía Auth Proxy)
+    └─ GCS (vía StorageService / fsspec)
+```
+
+---
+
+### Prompt 22.1 — Microservicio de embeddings (FastAPI standalone)
+
+**Objetivo**: Extraer `LocalEmbeddingService` a un microservicio FastAPI independiente con su propio Dockerfile y `pyproject.toml`. El servidor principal añade `HttpEmbeddingService` y la fábrica `get_embedding_service()` selecciona la implementación por variable de entorno.
+
+**Archivos nuevos**:
+- `services/embedding/main.py`
+- `services/embedding/Dockerfile`
+- `services/embedding/pyproject.toml`
+
+**`services/embedding/main.py`**:
+```python
+from fastapi import FastAPI
+from pydantic import BaseModel
+from sentence_transformers import SentenceTransformer
+
+app = FastAPI()
+_model = SentenceTransformer("BAAI/bge-m3")
+
+
+class EmbedRequest(BaseModel):
+    text: str
+
+
+class EmbedResponse(BaseModel):
+    embedding: list[float]
+    dimensions: int
+
+
+@app.post("/embed", response_model=EmbedResponse)
+def embed(req: EmbedRequest) -> EmbedResponse:
+    vec = _model.encode(req.text, normalize_embeddings=True)
+    return EmbedResponse(embedding=vec.tolist(), dimensions=len(vec))
+
+
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok"}
+```
+
+**Añadir `HttpEmbeddingService`** a `server/app/modules/agents_hub/services/embedding_service.py`:
+```python
+class HttpEmbeddingService:
+    """Delega la generación de embeddings al microservicio externo."""
+
+    def __init__(self, base_url: str) -> None:
+        self._base_url = base_url.rstrip("/")
+
+    async def embed(self, text: str) -> list[float]:
+        import httpx
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(f"{self._base_url}/embed", json={"text": text})
+            resp.raise_for_status()
+            return resp.json()["embedding"]
+```
+
+**Actualizar `get_embedding_service()`** — selector por env var:
+```python
+def get_embedding_service() -> EmbeddingService:
+    url = os.environ.get("EMBEDDING_SERVICE_URL")
+    if url:
+        return HttpEmbeddingService(url)
+    return _local_embedding_service_singleton()
+```
+
+**Tests requeridos**:
+```python
+# should_call_embed_endpoint_with_correct_payload
+# should_return_embedding_as_list_of_floats
+# should_raise_on_http_error_from_microservice
+# should_use_local_service_when_no_env_var
+# should_use_http_service_when_env_var_set
+```
+
+---
+
+### Prompt 22.2 — Microservicio Docling (worker de procesamiento de PDFs)
+
+**Objetivo**: Extraer `DoclingProcessor` a un microservicio FastAPI independiente. El servidor principal llama a `POST /process-pdf` (multipart) y recibe el Markdown resultante. Permite escalar el procesamiento de PDFs a cero instancias cuando no hay ingestión activa.
+
+**Archivos nuevos**:
+- `services/docling/main.py`
+- `services/docling/Dockerfile`
+- `services/docling/pyproject.toml`
+
+**`services/docling/main.py`**:
+```python
+import os
+import tempfile
+from fastapi import FastAPI, UploadFile
+from docling.document_converter import DocumentConverter
+
+app = FastAPI()
+_converter = DocumentConverter()
+
+
+@app.post("/process-pdf")
+async def process_pdf(file: UploadFile) -> dict:
+    pdf_bytes = await file.read()
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(pdf_bytes)
+        tmp_path = tmp.name
+    try:
+        result = _converter.convert(tmp_path)
+        markdown = result.document.export_to_markdown()
+    finally:
+        os.unlink(tmp_path)
+    return {"markdown": markdown, "pages": result.document.num_pages}
+
+
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok"}
+```
+
+**Añadir `HttpDoclingProcessor`** a `server/app/modules/agents_hub/ingestion/docling_processor.py`:
+```python
+class HttpDoclingProcessor:
+    def __init__(self, base_url: str) -> None:
+        self._base_url = base_url.rstrip("/")
+
+    async def process_pdf_bytes(self, pdf_bytes: bytes) -> str:
+        import httpx
+        async with httpx.AsyncClient(timeout=120) as client:
+            resp = await client.post(
+                f"{self._base_url}/process-pdf",
+                files={"file": ("doc.pdf", pdf_bytes, "application/pdf")},
+            )
+            resp.raise_for_status()
+            return resp.json()["markdown"]
+```
+
+**Tests requeridos**:
+```python
+# should_return_markdown_string_from_valid_pdf
+# should_raise_on_invalid_pdf_bytes
+# should_include_page_count_in_response
+# should_use_http_processor_when_env_var_set
+# should_fall_back_to_local_when_no_env_var
+```
+
+---
+
+### Prompt 22.3 — Integración: docker-compose y variables de entorno
+
+**Objetivo**: Conectar los dos microservicios al stack de desarrollo. Actualizar `docker-compose.yml` con los dos nuevos servicios. El API principal los usa automáticamente si las variables de entorno están definidas.
+
+**Añadir a `docker-compose.yml`**:
+```yaml
+  embedding-service:
+    build:
+      context: ./services/embedding
+    ports:
+      - "8001:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      start_period: 120s  # tiempo de carga del modelo BGE-M3
+
+  docling-service:
+    build:
+      context: ./services/docling
+    ports:
+      - "8002:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      start_period: 60s
+```
+
+**Añadir a `server/.env`**:
+```bash
+EMBEDDING_SERVICE_URL=http://embedding-service:8001
+DOCLING_SERVICE_URL=http://docling-service:8002
+```
+
+**Tests requeridos**:
+```python
+# should_use_http_embedding_service_when_url_env_var_set
+# should_use_http_docling_processor_when_url_env_var_set
+# should_fall_back_to_local_services_when_env_vars_absent
+# integration: should_process_pdf_end_to_end_with_http_docling_and_http_embedding
+```

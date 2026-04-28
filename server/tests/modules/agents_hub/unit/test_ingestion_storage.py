@@ -1,0 +1,326 @@
+"""Tests de integración del flujo de ingestión con StorageService.
+
+Verifica que:
+  - IngestionWatcher descarga de storage cuando source_url no es HTTP
+  - El endpoint /upload persiste el PDF vía StorageService (no en /tmp)
+  - El job.source_url apunta a la clave de storage
+  - El PDF permanece en storage tras el procesamiento (no se borra)
+  - El endpoint /delete borra de storage para claves de storage
+"""
+import uuid
+from unittest.mock import AsyncMock, MagicMock, patch, call
+
+import pytest
+
+
+# ── Helpers ─────────────────────────────────────────────────────────────────
+
+_JWT_ENV = {
+    "JWT_SECRET_KEY": "test-secret-key-that-is-at-least-32-characters-long",
+    "JWT_ALGORITHM": "HS256",
+    "JWT_EXPIRATION_MINUTES": "60",
+}
+
+
+def _make_token(role: str = "admin") -> str:
+    import os
+    os.environ.update(_JWT_ENV)
+    from server.app.core.auth import UserInfo, create_token
+    return create_token(UserInfo(user_id="admin-1", email="admin@test.com", role=role))
+
+
+def _make_job(source_url: str, status: str = "pending"):
+    job = MagicMock()
+    job.id = uuid.uuid4()
+    job.chatbot_id = uuid.uuid4()
+    job.source_url = source_url
+    job.canonical_url = None
+    job.language = None
+    job.status = status
+    job.chunks_processed = 0
+    job.error_message = None
+    return job
+
+
+def _build_upload_app(mock_session, mock_storage):
+    """App FastAPI aislada con sesión y storage mockeados."""
+    from fastapi import FastAPI
+    from server.app.routers.hub_ingestion_router import router
+    from server.app.modules.agents_hub.database.connection import get_async_session
+    from server.app.core.storage import get_storage_service
+
+    async def _mock_session():
+        yield mock_session
+
+    app = FastAPI()
+    app.dependency_overrides[get_async_session] = _mock_session
+    app.dependency_overrides[get_storage_service] = lambda: mock_storage
+    app.include_router(router, prefix="/api/v1")
+    return app
+
+
+# ── IngestionWatcher + StorageService ────────────────────────────────────────
+
+class TestWatcherStorageIntegration:
+
+    @pytest.mark.asyncio
+    async def test_run_job_downloads_pdf_from_storage_for_storage_key(self) -> None:
+        """run_job descarga desde storage cuando source_url es una clave (no HTTP)."""
+        from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+
+        storage_key = "ingestion/chatbot-1/job-1.pdf"
+        job = _make_job(source_url=storage_key)
+        pdf_bytes = b"%PDF-1.4 test content"
+
+        mock_storage = AsyncMock()
+        mock_storage.get = AsyncMock(return_value=pdf_bytes)
+
+        mock_session = AsyncMock()
+        mock_session.get = AsyncMock(return_value=job)
+
+        watcher = IngestionWatcher(
+            session=mock_session,
+            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
+            storage=mock_storage,
+        )
+
+        with patch.object(watcher, "process_source", new_callable=AsyncMock) as mock_process:
+            mock_process.return_value = []
+            await watcher.run_job(job.id)
+
+        mock_storage.get.assert_called_once_with(storage_key)
+
+    @pytest.mark.asyncio
+    async def test_run_job_passes_local_path_to_process_source_not_storage_key(self) -> None:
+        """El argumento source_url que llega a process_source es una ruta local, no la clave de storage."""
+        from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+
+        storage_key = "ingestion/chatbot-1/job-1.pdf"
+        job = _make_job(source_url=storage_key)
+
+        mock_storage = AsyncMock()
+        mock_storage.get = AsyncMock(return_value=b"%PDF-1.4 content")
+
+        mock_session = AsyncMock()
+        mock_session.get = AsyncMock(return_value=job)
+
+        watcher = IngestionWatcher(
+            session=mock_session,
+            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
+            storage=mock_storage,
+        )
+
+        captured_source_url = []
+
+        async def capture_source(*args, **kwargs):
+            captured_source_url.append(kwargs.get("source_url") or args[0])
+            return []
+
+        with patch.object(watcher, "process_source", side_effect=capture_source):
+            await watcher.run_job(job.id)
+
+        assert len(captured_source_url) == 1
+        # La ruta local no debe ser la storage key
+        assert captured_source_url[0] != storage_key
+        # Debe ser un path de fichero local (no HTTP, no storage key)
+        assert not captured_source_url[0].startswith("ingestion/")
+
+    @pytest.mark.asyncio
+    async def test_run_job_skips_storage_download_for_http_url(self) -> None:
+        """run_job NO llama storage.get cuando source_url es una URL HTTP."""
+        from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+
+        job = _make_job(source_url="https://example.com/doc.pdf")
+
+        mock_storage = AsyncMock()
+        mock_storage.get = AsyncMock()
+
+        mock_session = AsyncMock()
+        mock_session.get = AsyncMock(return_value=job)
+
+        watcher = IngestionWatcher(
+            session=mock_session,
+            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
+            storage=mock_storage,
+        )
+
+        with patch.object(watcher, "process_source", new_callable=AsyncMock) as mock_process:
+            mock_process.return_value = []
+            await watcher.run_job(job.id)
+
+        mock_storage.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_run_job_cleans_tempfile_even_when_process_source_raises(self) -> None:
+        """El fichero temporal se elimina aunque process_source lance una excepción."""
+        import os
+        from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+
+        storage_key = "ingestion/chatbot-1/job-1.pdf"
+        job = _make_job(source_url=storage_key)
+
+        mock_storage = AsyncMock()
+        mock_storage.get = AsyncMock(return_value=b"%PDF-1.4 content")
+
+        mock_session = AsyncMock()
+        mock_session.get = AsyncMock(return_value=job)
+
+        watcher = IngestionWatcher(
+            session=mock_session,
+            embedding_service=AsyncMock(),
+            storage=mock_storage,
+        )
+
+        created_tmp_paths = []
+
+        original_process = watcher.process_source
+
+        async def process_and_capture(source_url, *args, **kwargs):
+            created_tmp_paths.append(source_url)
+            raise RuntimeError("Fallo simulado en Docling")
+
+        with patch.object(watcher, "process_source", side_effect=process_and_capture):
+            await watcher.run_job(job.id)  # No debe propagar la excepción
+
+        # El job debe quedar en estado "failed"
+        assert job.status == "failed"
+        # El fichero temporal ya no debe existir
+        for tmp_path in created_tmp_paths:
+            assert not os.path.exists(tmp_path), f"Fichero temporal no limpiado: {tmp_path}"
+
+    @pytest.mark.asyncio
+    async def test_run_job_uses_storage_key_as_citation_when_no_canonical_url(self) -> None:
+        """Cuando no hay canonical_url, la storage key se pasa como citation_url a process_source."""
+        from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+
+        storage_key = "ingestion/chatbot-1/job-1.pdf"
+        job = _make_job(source_url=storage_key)  # canonical_url = None
+
+        mock_storage = AsyncMock()
+        mock_storage.get = AsyncMock(return_value=b"%PDF-1.4 content")
+
+        mock_session = AsyncMock()
+        mock_session.get = AsyncMock(return_value=job)
+
+        watcher = IngestionWatcher(
+            session=mock_session,
+            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
+            storage=mock_storage,
+        )
+
+        captured_kwargs = {}
+
+        async def capture(*args, **kwargs):
+            captured_kwargs.update(kwargs)
+            return []
+
+        with patch.object(watcher, "process_source", side_effect=capture):
+            await watcher.run_job(job.id)
+
+        assert captured_kwargs.get("citation_url") == storage_key
+
+
+# ── Upload endpoint + StorageService ─────────────────────────────────────────
+
+class TestUploadEndpointStorageIntegration:
+
+    def _make_mock_session(self, job_id=None):
+        mock_session = AsyncMock()
+        job_mock = MagicMock()
+        job_mock.id = job_id or uuid.uuid4()
+        job_mock.chatbot_id = uuid.uuid4()
+        job_mock.source_url = ""
+        job_mock.status = "pending"
+        mock_session.get = AsyncMock(return_value=job_mock)
+        mock_session.refresh = AsyncMock(side_effect=lambda obj: None)
+        return mock_session, job_mock
+
+    def test_upload_calls_storage_put_with_pdf_key(self) -> None:
+        """El endpoint /upload llama a storage.put con una clave que termina en .pdf."""
+        from fastapi.testclient import TestClient
+
+        mock_storage = AsyncMock()
+        mock_storage.put = AsyncMock()
+        mock_session, _ = self._make_mock_session()
+
+        app = _build_upload_app(mock_session, mock_storage)
+        # raise_server_exceptions=False: el background task llama get_async_session()
+        # sin override de DI e intenta conectar a PostgreSQL real (no disponible en CI).
+        # Las assertions son sobre el handler de la petición, que ocurre antes del task.
+        client = TestClient(app, raise_server_exceptions=False)
+        token = _make_token()
+        chatbot_id = uuid.uuid4()
+
+        response = client.post(
+            "/api/v1/hub/ingestion/upload",
+            data={"chatbot_id": str(chatbot_id)},
+            files={"file": ("test.pdf", b"%PDF-1.4 content", "application/pdf")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 202
+        mock_storage.put.assert_called_once()
+        storage_key = mock_storage.put.call_args[0][0]
+        assert storage_key.endswith(".pdf")
+        assert storage_key.startswith("ingestion/")
+
+    def test_upload_job_source_url_is_same_key_passed_to_storage(self) -> None:
+        """La clave pasada a storage.put es exactamente la que se usa como source_url del job.
+
+        El router llama storage.put(key, content) y luego job.source_url = key.
+        raise_server_exceptions=False porque el background task abre una conexión
+        asyncpg real (fuera del alcance del mock de sesión) y su GC puede lanzar
+        RuntimeError al cerrar el event loop del TestClient.
+        """
+        from fastapi.testclient import TestClient
+
+        mock_storage = AsyncMock()
+        mock_storage.put = AsyncMock()
+        mock_session, _ = self._make_mock_session()
+
+        app = _build_upload_app(mock_session, mock_storage)
+        # raise_server_exceptions=False: el background task usa get_async_session()
+        # directamente (no inyectado) y puede abrir una conexión real cuyo teardown
+        # choca con el event loop cerrado del TestClient.
+        client = TestClient(app, raise_server_exceptions=False)
+        token = _make_token()
+        chatbot_id = uuid.uuid4()
+
+        response = client.post(
+            "/api/v1/hub/ingestion/upload",
+            data={"chatbot_id": str(chatbot_id)},
+            files={"file": ("test.pdf", b"%PDF-1.4 content", "application/pdf")},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 202
+        # La clave con la que se persistió el PDF
+        storage_key = mock_storage.put.call_args[0][0]
+        # source_url del job en la respuesta debe coincidir con esa clave
+        job_data = response.json().get("job", {})
+        assert job_data.get("source_url") == storage_key
+
+    def test_upload_does_not_write_to_tmp_directly(self) -> None:
+        """El handler no crea ficheros en /tmp directamente (usa StorageService)."""
+        import tempfile
+        from fastapi.testclient import TestClient
+
+        mock_storage = AsyncMock()
+        mock_storage.put = AsyncMock()
+        mock_session, _ = self._make_mock_session()
+
+        app = _build_upload_app(mock_session, mock_storage)
+        # raise_server_exceptions=False por la misma razón que el test anterior.
+        client = TestClient(app, raise_server_exceptions=False)
+        token = _make_token()
+        chatbot_id = uuid.uuid4()
+
+        with patch("tempfile.NamedTemporaryFile") as mock_tmp:
+            client.post(
+                "/api/v1/hub/ingestion/upload",
+                data={"chatbot_id": str(chatbot_id)},
+                files={"file": ("test.pdf", b"%PDF-1.4 content", "application/pdf")},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            # El handler de upload no debe crear ficheros temporales en /tmp
+            mock_tmp.assert_not_called()
