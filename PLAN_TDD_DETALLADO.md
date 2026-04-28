@@ -5572,7 +5572,7 @@ class TestRetrievalStrategyProtocol:
 
 ---
 
-### Prompt 9CBis.4 — TDD GREEN: `VectorRetrievalStrategy` (envuelve `HybridRetriever`)
+### Prompt 9CBis.4 — TDD GREEN: `VectorRetrievalStrategy` (envuelve `HybridRetriever`) ✅ COMPLETADO (2026-04-28)
 
 **Objetivo**: implementar la primera strategy real, que envuelve el `HybridRetriever` existente sin tocarlo. Garantiza retrocompatibilidad: cualquier chatbot con `retrieval_mode="vector"` (default tras migración) sigue funcionando exactamente igual, **excepto** que ahora las fuentes vienen agrupadas por `document_id` (no chunks sueltos).
 
