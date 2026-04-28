@@ -5468,7 +5468,7 @@ uv run pytest tests/ -v   # regresión completa: nada debe romperse
 
 ---
 
-### Prompt 9CBis.3 — TDD RED: Protocol `RetrievalStrategy` + dataclass `Source`
+### Prompt 9CBis.3 — TDD RED: Protocol `RetrievalStrategy` + dataclass `Source` ✅ COMPLETADO (2026-04-28)
 
 **Objetivo**: definir el contrato `RetrievalStrategy` que abstrae los tres modos, y la dataclass `Source` que sustituye al `string` actual de fuentes. Tests del Protocol y de la dataclass; los nodos del grafo aún no se tocan.
 
