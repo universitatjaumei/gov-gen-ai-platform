@@ -1,60 +1,71 @@
-﻿"""Tests para el watcher de ingestiÃ³n."""
+"""Tests para el watcher de ingestión."""
 import uuid
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, MagicMock, patch
 
 
 class TestIngestionWatcher:
 
     @pytest.mark.asyncio
-    async def test_process_source_creates_chunks(self) -> None:
+    async def test_process_source_returns_document_and_chunk_count(self) -> None:
         from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+        from server.app.modules.agents_hub.database.operational_models import HubDocument
+
+        first_exec = Mock()
+        first_exec.scalar_one_or_none = Mock(return_value=None)
+        second_exec = Mock()
+        second_exec.scalars = Mock(return_value=iter([]))
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(side_effect=[first_exec, second_exec, Mock()])
+        mock_session.flush = AsyncMock()
+        mock_session.commit = AsyncMock()
+        mock_session.add = Mock()
 
         with patch('server.app.modules.agents_hub.ingestion.watcher.DoclingProcessor') as mock_docling:
             mock_docling.return_value.process.return_value = "# Test\n\nContent"
-
-            mock_session = AsyncMock()
-            mock_session.execute = AsyncMock(
-                return_value=Mock(
-                    scalar_one_or_none=Mock(return_value=None),
-                    scalars=Mock(return_value=[]),
-                )
-            )
 
             watcher = IngestionWatcher(
                 session=mock_session,
                 embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
             )
 
-            chunks = await watcher.process_source(
+            doc, n_chunks = await watcher.process_source(
                 source_url="https://example.com",
                 chatbot_id=uuid.uuid4(),
             )
 
-            assert len(chunks) >= 1
+        assert isinstance(doc, HubDocument)
+        assert n_chunks >= 1
 
     @pytest.mark.asyncio
-    async def test_process_skips_unchanged_content(self) -> None:
+    async def test_process_returns_existing_doc_for_same_content(self) -> None:
         from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
 
+        existing_doc = MagicMock()
+        existing_doc.id = uuid.uuid4()
+        existing_doc.chatbot_id = uuid.uuid4()
+        existing_doc.markdown_content = "# Test\n\nContent"
+        existing_doc.canonical_url = "https://example.com"
+        existing_doc.language = "es"
+
+        first_exec = Mock()
+        first_exec.scalar_one_or_none = Mock(return_value=existing_doc)
         mock_session = AsyncMock()
-        mock_session.execute.return_value.scalar_one_or_none.return_value = Mock(
-            content_hash="existing_hash"
-        )
+        mock_session.execute = AsyncMock(side_effect=[first_exec, Mock()])
+        mock_session.commit = AsyncMock()
+        mock_session.add = Mock()
 
-        watcher = IngestionWatcher(
-            session=mock_session,
-            embedding_service=AsyncMock(),
-        )
+        with patch('server.app.modules.agents_hub.ingestion.watcher.DoclingProcessor') as mock_docling:
+            mock_docling.return_value.process.return_value = "# Test\n\nContent"
 
-        # El hash del nuevo contenido coincide con el existente
-        with patch('server.app.modules.agents_hub.ingestion.watcher.hash_content', return_value="existing_hash"):
-            with patch('server.app.modules.agents_hub.ingestion.watcher.DoclingProcessor') as mock_docling:
-                mock_docling.return_value.process.return_value = "Content"
+            watcher = IngestionWatcher(
+                session=mock_session,
+                embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
+            )
 
-                result = await watcher.process_source(
-                    source_url="https://example.com",
-                    chatbot_id=uuid.uuid4(),
-                )
-                # Debe devolver lista vacÃ­a si no hay cambios
-                assert len(result) == 0
+            doc, _ = await watcher.process_source(
+                source_url="https://example.com",
+                chatbot_id=uuid.uuid4(),
+            )
+
+        assert doc is existing_doc

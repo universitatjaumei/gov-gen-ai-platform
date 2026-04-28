@@ -1,4 +1,4 @@
-"""Orquestador de ingestión asíncrona."""
+"""Orquestador de ingestión asincrona."""
 
 import asyncio
 import tempfile
@@ -7,45 +7,59 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.modules.agents_hub.agent.language_detector import detect_language
 from server.app.modules.agents_hub.database.operational_models import (
+    HubDocument,
     HubDocumentChunk,
     HubIngestionJob,
 )
 from server.app.modules.agents_hub.ingestion.chunker import MarkdownChunker
 from server.app.modules.agents_hub.ingestion.docling_processor import DoclingProcessor
 from server.app.modules.agents_hub.ingestion.hasher import hash_content
+from server.app.modules.agents_hub.ingestion.markdown_utils import (
+    estimate_tokens,
+    extract_title_from_markdown,
+)
 
 
 class EmbeddingService(Protocol):
-    """Protocolo para servicio de embeddings."""
-
     async def embed(self, text: str) -> list[float]: ...
 
 
 class StorageService(Protocol):
-    """Protocolo local para el servicio de storage (evita import circular)."""
-
     async def get(self, key: str) -> bytes: ...
 
 
+class ChatbotConfigProvider(Protocol):
+    async def get_retrieval_mode(self, chatbot_id: uuid.UUID) -> str: ...
+
+
 class IngestionWatcher:
-    """Orquesta la ingestión de documentos."""
+    """Orquesta la ingestión de documentos.
+
+    Crea/actualiza HubDocument como unidad citable canonica.
+    Genera chunks solo cuando retrieval_mode == 'vector'.
+    """
 
     def __init__(
         self,
         session: AsyncSession,
         embedding_service: EmbeddingService,
         storage: StorageService | None = None,
+        chatbot_provider: ChatbotConfigProvider | None = None,
     ):
-        self.session = session
-        self.embedding_service = embedding_service
+        self._session = session
+        self._embedding = embedding_service
         self._storage = storage
+        self._chatbot_provider = chatbot_provider
         self._processor: DoclingProcessor | None = None
         self.chunker = MarkdownChunker()
+        # Keep legacy attribute for backward compatibility
+        self.session = session
+        self.embedding_service = embedding_service
 
     async def _get_processor(self) -> DoclingProcessor:
         if self._processor is None:
@@ -59,66 +73,115 @@ class IngestionWatcher:
         language: str | None = None,
         citation_url: str | None = None,
         prefetched_content: str | None = None,
-    ) -> list[HubDocumentChunk]:
-        """Procesa una fuente y crea chunks.
+        title: str | None = None,
+    ) -> tuple[HubDocument, int]:
+        """Crea/actualiza un HubDocument. Genera chunks SOLO si retrieval_mode == 'vector'.
 
-        Args:
-            source_url: Ruta física o URL al documento (usado para leer el archivo)
-            chatbot_id: ID del chatbot
-            language: Idioma del documento
-            citation_url: URL pública canónica para citar la fuente en el chat.
-                Si se proporciona, se almacena en los chunks en lugar de source_url.
-                También se usa como clave de deduplicación.
-            prefetched_content: Contenido ya procesado a Markdown (evita un segundo
-                fetch cuando el llamador ya tiene el contenido, p.ej. el scheduler).
+        Returns:
+            (HubDocument, chunks_created_count) — idempotente por content_hash.
         """
         if prefetched_content is not None:
             content = prefetched_content
         else:
             processor = await self._get_processor()
             content = await asyncio.to_thread(processor.process, source_url)
+
         if language is None:
             language = detect_language(content)
         content_hash = hash_content(content)
-        chunk_source = citation_url or source_url
+        canonical = citation_url or source_url
+        doc_title = title or extract_title_from_markdown(content) or canonical
+        token_count = estimate_tokens(content)
 
-        # Verificar si ya existe con el mismo hash
-        existing = await self.session.execute(
-            select(HubDocumentChunk)
-            .where(HubDocumentChunk.source_url == chunk_source)
-            .where(HubDocumentChunk.content_hash == content_hash)
-            .limit(1)
+        # Idempotencia: mismo chatbot + mismo hash → actualizar sin rechunkear
+        existing = await self._session.execute(
+            select(HubDocument).where(
+                HubDocument.chatbot_id == chatbot_id,
+                HubDocument.content_hash == content_hash,
+            ).limit(1)
         )
-        if existing.scalar_one_or_none():
-            return []
-
-        # Eliminar chunks antiguos de esta fuente
-        old_chunks = await self.session.execute(
-            select(HubDocumentChunk).where(HubDocumentChunk.source_url == chunk_source)
-        )
-        for chunk in old_chunks.scalars():
-            await self.session.delete(chunk)
-
-        # Crear nuevos chunks
-        chunks = self.chunker.split(content, metadata={"source_url": chunk_source})
-        created_chunks = []
-
-        for chunk in chunks:
-            embedding = await self.embedding_service.embed(chunk.content)
-            db_chunk = HubDocumentChunk(
-                chatbot_id=chatbot_id,
-                content=chunk.content,
-                source_url=chunk_source,
-                content_hash=hash_content(chunk.content),
-                embedding=embedding,
-                chunk_metadata=chunk.metadata,
-                language=language,
+        doc = existing.scalar_one_or_none()
+        if doc:
+            doc.canonical_url = canonical
+            doc.title = doc_title
+            doc.updated_at = datetime.now(timezone.utc)
+        else:
+            # Si ya existia un documento con esta URL pero diferente hash → reemplazar
+            old_result = await self._session.execute(
+                select(HubDocument).where(
+                    HubDocument.chatbot_id == chatbot_id,
+                    HubDocument.canonical_url == canonical,
+                )
             )
-            self.session.add(db_chunk)
-            created_chunks.append(db_chunk)
+            for old_doc in old_result.scalars():
+                await self._session.execute(
+                    delete(HubDocumentChunk).where(
+                        HubDocumentChunk.document_id == old_doc.id
+                    )
+                )
+                await self._session.delete(old_doc)
 
-        await self.session.commit()
-        return created_chunks
+            source_kind = (
+                "crawler"
+                if source_url.startswith(("http://", "https://"))
+                else "upload"
+            )
+            doc = HubDocument(
+                chatbot_id=chatbot_id,
+                title=doc_title,
+                canonical_url=canonical,
+                markdown_content=content,
+                content_hash=content_hash,
+                language=language,
+                source_kind=source_kind,
+                token_count=token_count,
+            )
+            self._session.add(doc)
+            await self._session.flush()
+
+        # Chunking + embedding solo si el chatbot está en modo vector
+        retrieval_mode = (
+            await self._chatbot_provider.get_retrieval_mode(chatbot_id)
+            if self._chatbot_provider
+            else "vector"
+        )
+        n_chunks = 0
+        if retrieval_mode == "vector":
+            n_chunks = await self._regenerate_chunks_for_document(doc)
+        else:
+            # Limpiar chunks previos si el modo cambió
+            await self._session.execute(
+                delete(HubDocumentChunk).where(HubDocumentChunk.document_id == doc.id)
+            )
+
+        await self._session.commit()
+        return doc, n_chunks
+
+    async def _regenerate_chunks_for_document(self, doc: HubDocument) -> int:
+        """Borra los chunks del documento y los regenera. Devuelve el numero creado."""
+        await self._session.execute(
+            delete(HubDocumentChunk).where(HubDocumentChunk.document_id == doc.id)
+        )
+        chunks = self.chunker.split(
+            doc.markdown_content,
+            metadata={
+                "document_id": str(doc.id),
+                "source_url": doc.canonical_url,
+            },
+        )
+        for ch in chunks:
+            embedding = await self._embedding.embed(ch.content)
+            self._session.add(HubDocumentChunk(
+                chatbot_id=doc.chatbot_id,
+                document_id=doc.id,
+                content=ch.content,
+                source_url=doc.canonical_url,
+                content_hash=hash_content(ch.content),
+                embedding=embedding,
+                chunk_metadata={**ch.metadata, "document_id": str(doc.id)},
+                language=doc.language,
+            ))
+        return len(chunks)
 
     async def process_user_upload(
         self,
@@ -126,16 +189,7 @@ class IngestionWatcher:
         chatbot_id: uuid.UUID,
         owner_id: uuid.UUID,
     ) -> list[HubDocumentChunk]:
-        """Procesa un documento subido por un usuario (siempre re-procesa, marca como temporal).
-
-        Args:
-            source_url: URL o ruta al documento
-            chatbot_id: ID del chatbot
-            owner_id: ID del usuario propietario
-
-        Returns:
-            Lista de chunks creados
-        """
+        """Procesa un documento subido por un usuario (siempre re-procesa, marca como temporal)."""
         def _process() -> str:
             return DoclingProcessor().process(source_url)
 
@@ -145,7 +199,7 @@ class IngestionWatcher:
         created_chunks = []
 
         for chunk in chunks:
-            embedding = await self.embedding_service.embed(chunk.content)
+            embedding = await self._embedding.embed(chunk.content)
             db_chunk = HubDocumentChunk(
                 chatbot_id=chatbot_id,
                 content=chunk.content,
@@ -157,10 +211,10 @@ class IngestionWatcher:
                 is_temporary=True,
                 owner_id=owner_id,
             )
-            self.session.add(db_chunk)
+            self._session.add(db_chunk)
             created_chunks.append(db_chunk)
 
-        await self.session.commit()
+        await self._session.commit()
         return created_chunks
 
     async def run_job(
@@ -168,38 +222,29 @@ class IngestionWatcher:
         job_id: uuid.UUID,
         prefetched_content: str | None = None,
     ) -> None:
-        """Ejecuta un job de ingestión.
-
-        Args:
-            job_id: ID del job
-            prefetched_content: Contenido ya procesado (opcional; lo usa el scheduler
-                para evitar un segundo fetch cuando ya obtuvo el Markdown para comparar el hash).
-        """
-        job = await self.session.get(HubIngestionJob, job_id)
+        """Ejecuta un job de ingestión."""
+        job = await self._session.get(HubIngestionJob, job_id)
         if not job:
             return
 
         job.status = "running"
-        await self.session.commit()
+        await self._session.commit()
 
         tmp_path: str | None = None
         try:
             source_for_docling = job.source_url
             citation_url = job.canonical_url
 
-            # Si source_url es una clave de storage (no una URL HTTP), descargar
-            # a un fichero temporal para que Docling lo procese como ruta local.
             if self._storage and not job.source_url.startswith(("http://", "https://")):
                 pdf_bytes = await self._storage.get(job.source_url)
                 with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
                     tmp.write(pdf_bytes)
                     tmp_path = tmp.name
                 source_for_docling = tmp_path
-                # Usar la storage key como citation para que los chunks la referencien
                 if not citation_url:
                     citation_url = job.source_url
 
-            chunks = await self.process_source(
+            doc, n_chunks = await self.process_source(
                 source_for_docling,
                 job.chatbot_id,
                 citation_url=citation_url,
@@ -207,7 +252,7 @@ class IngestionWatcher:
                 language=job.language,
             )
             job.status = "completed"
-            job.chunks_processed = len(chunks)
+            job.chunks_processed = n_chunks
         except Exception as e:
             job.status = "failed"
             job.error_message = str(e)
@@ -215,19 +260,11 @@ class IngestionWatcher:
             if tmp_path:
                 Path(tmp_path).unlink(missing_ok=True)
 
-        await self.session.commit()
+        await self._session.commit()
 
 
 async def cleanup_temporary_chunks(session: AsyncSession, ttl_hours: int = 24) -> int:
-    """Elimina chunks temporales que han superado el TTL.
-
-    Args:
-        session: Sesión de base de datos
-        ttl_hours: Horas de vida de los chunks temporales
-
-    Returns:
-        Número de chunks eliminados
-    """
+    """Elimina chunks temporales que han superado el TTL."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=ttl_hours)
     result = await session.execute(
         select(HubDocumentChunk).where(HubDocumentChunk.is_temporary)

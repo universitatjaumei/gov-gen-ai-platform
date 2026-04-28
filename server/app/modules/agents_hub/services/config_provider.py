@@ -18,6 +18,7 @@ class ConfigProvider(Protocol):
     async def get_chatbot(self, chatbot_id: uuid.UUID) -> HubChatbot | None: ...
     async def get_llm_config(self, llm_config_id: uuid.UUID) -> HubLLMConfig | None: ...
     async def list_active_chatbots(self, client_id: uuid.UUID) -> list[HubChatbot]: ...
+    async def get_retrieval_mode(self, chatbot_id: uuid.UUID) -> str: ...
 
 
 class LocalConfigProvider:
@@ -48,3 +49,8 @@ class LocalConfigProvider:
             )
         )
         return list(result.scalars().all())
+
+    async def get_retrieval_mode(self, chatbot_id: uuid.UUID) -> str:
+        """Devuelve el retrieval_mode del chatbot (default 'vector' si no existe)."""
+        chatbot = await self.get_chatbot(chatbot_id)
+        return getattr(chatbot, "retrieval_mode", "vector") if chatbot else "vector"

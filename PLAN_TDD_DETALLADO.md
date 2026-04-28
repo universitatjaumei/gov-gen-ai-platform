@@ -5040,7 +5040,7 @@ Guía 9CBis.0 (conceptual, se lee antes de escribir código)
   ├── 9CBis.5       LongContextRetrievalStrategy con prompt caching (RED + GREEN)
   ├── 9CBis.6       AgenticRetrievalStrategy + tools list_documents/read_document (RED + GREEN)
   ├── 9CBis.7       Citas como contrato: system prompt + post-validador (RED + GREEN)
-  ├── 9CBis.8       Refactor de 9.7.x — IngestionWatcher crea HubDocument; chunks solo si vector
+  ├── 9CBis.8 ✅    Refactor de 9.7.x — IngestionWatcher crea HubDocument; chunks solo si vector
   ├── 9CBis.9       Refactor UI Documentos — vista unificada de HubDocument (PDF + crawler)
   ├── 9CBis.10      Refactor de 9.8.2 — SSE emite Source[] estructurado (no string[])
   ├── 9CBis.11      Refactor de 9.10 — Widget renderiza citas como pills clicables

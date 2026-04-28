@@ -85,7 +85,7 @@ class TestWatcherStorageIntegration:
         )
 
         with patch.object(watcher, "process_source", new_callable=AsyncMock) as mock_process:
-            mock_process.return_value = []
+            mock_process.return_value = (MagicMock(), 0)
             await watcher.run_job(job.id)
 
         mock_storage.get.assert_called_once_with(storage_key)
@@ -114,7 +114,7 @@ class TestWatcherStorageIntegration:
 
         async def capture_source(*args, **kwargs):
             captured_source_url.append(kwargs.get("source_url") or args[0])
-            return []
+            return (MagicMock(), 0)
 
         with patch.object(watcher, "process_source", side_effect=capture_source):
             await watcher.run_job(job.id)
@@ -145,7 +145,7 @@ class TestWatcherStorageIntegration:
         )
 
         with patch.object(watcher, "process_source", new_callable=AsyncMock) as mock_process:
-            mock_process.return_value = []
+            mock_process.return_value = (MagicMock(), 0)
             await watcher.run_job(job.id)
 
         mock_storage.get.assert_not_called()
@@ -212,7 +212,7 @@ class TestWatcherStorageIntegration:
 
         async def capture(*args, **kwargs):
             captured_kwargs.update(kwargs)
-            return []
+            return (MagicMock(), 0)
 
         with patch.object(watcher, "process_source", side_effect=capture):
             await watcher.run_job(job.id)

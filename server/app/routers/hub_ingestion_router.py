@@ -25,6 +25,7 @@ from server.app.core.auth import UserInfo
 from server.app.core.storage import FsspecStorageService, get_storage_service
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.operational_models import (
+    HubDocument,
     HubDocumentChunk,
     HubIngestionJob,
     HubIngestionSource,
@@ -71,6 +72,58 @@ async def get_ingestion_jobs(
     result = await session.execute(stmt)
     jobs = result.scalars().all()
     return {"jobs": jobs}
+
+
+@router.get("/{chatbot_id}/documents")
+async def list_documents(
+    chatbot_id: uuid.UUID,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: UserInfo = Depends(get_current_user),
+):
+    """Lista los documentos ingestados de un chatbot (unidades citables)."""
+    result = await session.execute(
+        select(HubDocument)
+        .where(HubDocument.chatbot_id == chatbot_id)
+        .order_by(HubDocument.created_at.desc())
+    )
+    docs = result.scalars().all()
+    return {
+        "documents": [
+            {
+                "id": str(d.id),
+                "title": d.title,
+                "canonical_url": d.canonical_url,
+                "language": d.language,
+                "source_kind": d.source_kind,
+                "token_count": d.token_count,
+                "created_at": d.created_at.isoformat() if d.created_at else None,
+                "updated_at": d.updated_at.isoformat() if d.updated_at else None,
+            }
+            for d in docs
+        ]
+    }
+
+
+@router.delete("/{chatbot_id}/documents/{document_id}", status_code=status.HTTP_200_OK)
+async def delete_document(
+    chatbot_id: uuid.UUID,
+    document_id: uuid.UUID,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: UserInfo = Depends(get_current_user),
+):
+    """Elimina un documento ingestado y todos sus chunks."""
+    from sqlalchemy import delete as sa_delete
+
+    doc = await session.get(HubDocument, document_id)
+    if not doc or doc.chatbot_id != chatbot_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado.")
+
+    await session.execute(
+        sa_delete(HubDocumentChunk).where(HubDocumentChunk.document_id == document_id)
+    )
+    await session.delete(doc)
+    await session.commit()
+    return {"message": "Documento eliminado."}
 
 
 @router.post("/upload", status_code=status.HTTP_202_ACCEPTED)
@@ -154,14 +207,24 @@ async def delete_ingestion_job(
             detail="No se puede eliminar un job en curso.",
         )
 
-    chunks_stmt = select(HubDocumentChunk).where(
-        HubDocumentChunk.chatbot_id == chatbot_id,
-        HubDocumentChunk.source_url == job.source_url,
+    canonical = job.canonical_url or job.source_url
+    doc_result = await session.execute(
+        select(HubDocument).where(
+            HubDocument.chatbot_id == chatbot_id,
+            HubDocument.canonical_url == canonical,
+        )
     )
-    result = await session.execute(chunks_stmt)
-    chunks = result.scalars().all()
-    for chunk in chunks:
-        await session.delete(chunk)
+    docs = doc_result.scalars().all()
+
+    from sqlalchemy import delete as sa_delete
+
+    chunks_deleted = 0
+    for doc in docs:
+        await session.execute(
+            sa_delete(HubDocumentChunk).where(HubDocumentChunk.document_id == doc.id)
+        )
+        chunks_deleted += 1
+        await session.delete(doc)
 
     # Borrar el PDF de storage solo si es una clave de storage (no una URL HTTP)
     if not job.source_url.startswith(("http://", "https://")):
@@ -173,7 +236,7 @@ async def delete_ingestion_job(
     await session.delete(job)
     await session.commit()
 
-    return {"message": "Documento eliminado.", "chunks_deleted": len(chunks)}
+    return {"message": "Documento eliminado.", "documents_deleted": len(docs)}
 
 
 # ── Fuentes web monitorizadas ──────────────────────────────────────────────────
@@ -294,14 +357,20 @@ async def clear_chatbot_collection(
     current_user: UserInfo = Depends(get_current_user),
     storage: FsspecStorageService = Depends(get_storage_service),
 ):
-    """Elimina todos los chunks y jobs de un chatbot."""
-    chunks_stmt = select(HubDocumentChunk).where(
-        HubDocumentChunk.chatbot_id == chatbot_id
+    """Elimina todos los documentos, chunks y jobs de un chatbot."""
+    from sqlalchemy import delete as sa_delete
+
+    await session.execute(
+        sa_delete(HubDocumentChunk).where(HubDocumentChunk.chatbot_id == chatbot_id)
     )
-    result = await session.execute(chunks_stmt)
-    chunks = result.scalars().all()
-    for chunk in chunks:
-        await session.delete(chunk)
+
+    docs_result = await session.execute(
+        select(HubDocument).where(HubDocument.chatbot_id == chatbot_id)
+    )
+    docs = docs_result.scalars().all()
+    docs_deleted = len(docs)
+    for doc in docs:
+        await session.delete(doc)
 
     jobs_stmt = select(HubIngestionJob).where(HubIngestionJob.chatbot_id == chatbot_id)
     result = await session.execute(jobs_stmt)
@@ -318,6 +387,6 @@ async def clear_chatbot_collection(
 
     return {
         "message": "Colección vaciada correctamente.",
-        "chunks_deleted": len(chunks),
+        "documents_deleted": docs_deleted,
         "jobs_deleted": len(jobs),
     }

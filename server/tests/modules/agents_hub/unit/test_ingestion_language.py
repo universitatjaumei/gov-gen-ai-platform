@@ -11,14 +11,19 @@ class TestProcessSourceLanguageDetection:
     @pytest.mark.asyncio
     async def test_process_source_auto_detects_catalan_content(self) -> None:
         from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+        from server.app.modules.agents_hub.database.operational_models import HubDocument
 
         catalan_content = "# Documentació\n\nAquest és un text en català sobre normativa universitària."
 
+        first_exec = MagicMock()
+        first_exec.scalar_one_or_none = MagicMock(return_value=None)
+        second_exec = MagicMock()
+        second_exec.scalars = MagicMock(return_value=iter([]))
         mock_session = AsyncMock()
-        mock_session.execute.return_value.scalar_one_or_none.return_value = None
-        mock_session.execute.return_value.scalars.return_value = MagicMock(
-            __iter__=lambda s: iter([])
-        )
+        mock_session.execute = AsyncMock(side_effect=[first_exec, second_exec, MagicMock()])
+        mock_session.flush = AsyncMock()
+        mock_session.commit = AsyncMock()
+        mock_session.add = MagicMock()
 
         watcher = IngestionWatcher(
             session=mock_session,
@@ -29,7 +34,7 @@ class TestProcessSourceLanguageDetection:
             "server.app.modules.agents_hub.ingestion.watcher.detect_language",
             return_value="ca",
         ) as mock_detect:
-            chunks = await watcher.process_source(
+            doc, _ = await watcher.process_source(
                 source_url="https://example.com/doc",
                 chatbot_id=uuid.uuid4(),
                 prefetched_content=catalan_content,
@@ -37,19 +42,25 @@ class TestProcessSourceLanguageDetection:
             )
 
         mock_detect.assert_called_once_with(catalan_content)
-        assert all(c.language == "ca" for c in chunks)
+        assert isinstance(doc, HubDocument)
+        assert doc.language == "ca"
 
     @pytest.mark.asyncio
     async def test_process_source_respects_explicit_language(self) -> None:
         from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+        from server.app.modules.agents_hub.database.operational_models import HubDocument
 
         content = "Some English content about regulations."
 
+        first_exec = MagicMock()
+        first_exec.scalar_one_or_none = MagicMock(return_value=None)
+        second_exec = MagicMock()
+        second_exec.scalars = MagicMock(return_value=iter([]))
         mock_session = AsyncMock()
-        mock_session.execute.return_value.scalar_one_or_none.return_value = None
-        mock_session.execute.return_value.scalars.return_value = MagicMock(
-            __iter__=lambda s: iter([])
-        )
+        mock_session.execute = AsyncMock(side_effect=[first_exec, second_exec, MagicMock()])
+        mock_session.flush = AsyncMock()
+        mock_session.commit = AsyncMock()
+        mock_session.add = MagicMock()
 
         watcher = IngestionWatcher(
             session=mock_session,
@@ -59,7 +70,7 @@ class TestProcessSourceLanguageDetection:
         with patch(
             "server.app.modules.agents_hub.ingestion.watcher.detect_language"
         ) as mock_detect:
-            chunks = await watcher.process_source(
+            doc, _ = await watcher.process_source(
                 source_url="https://example.com/doc",
                 chatbot_id=uuid.uuid4(),
                 prefetched_content=content,
@@ -67,7 +78,8 @@ class TestProcessSourceLanguageDetection:
             )
 
         mock_detect.assert_not_called()
-        assert all(c.language == "en" for c in chunks)
+        assert isinstance(doc, HubDocument)
+        assert doc.language == "en"
 
     @pytest.mark.asyncio
     async def test_process_user_upload_auto_detects_language(self) -> None:
@@ -127,7 +139,7 @@ class TestRunJobPropagatesLanguage:
             embedding_service=AsyncMock(),
         )
 
-        with patch.object(watcher, "process_source", new_callable=AsyncMock, return_value=[]) as mock_ps:
+        with patch.object(watcher, "process_source", new_callable=AsyncMock, return_value=(MagicMock(), 0)) as mock_ps:
             await watcher.run_job(job_id)
 
         mock_ps.assert_called_once_with(
@@ -158,7 +170,7 @@ class TestRunJobPropagatesLanguage:
 
         watcher = IngestionWatcher(session=mock_session, embedding_service=AsyncMock())
 
-        with patch.object(watcher, "process_source", new_callable=AsyncMock, return_value=[]) as mock_ps:
+        with patch.object(watcher, "process_source", new_callable=AsyncMock, return_value=(MagicMock(), 0)) as mock_ps:
             await watcher.run_job(job_id)
 
         _, kwargs = mock_ps.call_args
