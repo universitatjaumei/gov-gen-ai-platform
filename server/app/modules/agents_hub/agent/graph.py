@@ -1,113 +1,158 @@
 """Grafo de LangGraph para el agente.
 
-Soporta dos modos de operación:
-- Modo Público (Chatbot): user_id=None, solo herramientas RAG públicas.
-- Modo Agente (Identificado): user_id válido, desbloquea MCP y docs de usuario.
+Soporta tres modos de recuperacion:
+- vector: HybridRetriever + agrupacion por documento
+- long_context: corpus completo en el contexto (prompt caching Anthropic)
+- agentic: LLM decide que documentos leer con list_documents / read_document
+
+Deploy: edge
 """
 
-import os
+import uuid
 
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 
+from server.app.modules.agents_hub.agent.citation_validator import enforce_citation_contract
 from server.app.modules.agents_hub.agent.language_detector import detect_language
+from server.app.modules.agents_hub.agent.prompts import build_system_prompt, format_sources_block
 from server.app.modules.agents_hub.agent.state import AgentState
-from server.app.modules.agents_hub.agent.tools.search_knowledge import search_knowledge
+from server.app.modules.agents_hub.services.retrieval.types import Source
 
 
-def create_agent_graph(retriever, embedding_service, user_id: str | None = None):
+def create_agent_graph(
+    retrieval_strategy,
+    llm,
+    base_system_prompt: str,
+    user_id: str | None = None,
+):
     """Crea el grafo del agente.
 
     Args:
-        retriever: Servicio de recuperación
-        embedding_service: Servicio de embeddings
-        user_id: ID del usuario (None para modo público)
-
-    Returns:
-        StateGraph configurado
+        retrieval_strategy: RetrievalStrategy (vector / long_context / agentic)
+        llm: BaseChatModel inyectado
+        base_system_prompt: system_prompt del HubChatbot
+        user_id: ID del usuario (None para modo publico)
     """
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
-        google_api_key=os.getenv("GOOGLE_API_KEY", ""),
-    )
-
-    async def route_by_capability_node(state: AgentState) -> dict:
-        """Determina las capacidades disponibles según el rol del usuario."""
-        available_tools = ["search_knowledge"]
-        if user_id:
-            available_tools.extend(["query_oracle_mcp", "search_user_docs"])
-        return {"user_id": user_id, "available_tools": available_tools}
 
     async def detect_language_node(state: AgentState) -> dict:
-        """Detecta el idioma del último mensaje."""
         messages = state.get("messages", [])
         if messages:
-            last_message = messages[-1]
-            if isinstance(last_message, HumanMessage):
-                language = detect_language(last_message.content)
-                return {"language": language}
+            last = messages[-1]
+            if isinstance(last, HumanMessage):
+                return {"language": detect_language(last.content)}
         return {"language": state.get("language", "es")}
 
-    async def search_knowledge_node(state: AgentState) -> dict:
-        """Busca información relevante."""
+    async def search_or_skip_node(state: AgentState) -> dict:
+        if retrieval_strategy.mode == "agentic":
+            return {"retrieved_sources": [], "retrieval_mode": "agentic", "total_tokens": 0}
         messages = state.get("messages", [])
-        if not messages:
-            return {"retrieved_context": []}
-
-        last_message = messages[-1]
-        if not isinstance(last_message, HumanMessage):
-            return {"retrieved_context": []}
-
-        result = await search_knowledge(
-            query=last_message.content,
-            chatbot_id=state["chatbot_id"],
-            retriever=retriever,
-            embedding_service=embedding_service,
+        query = ""
+        for m in reversed(messages):
+            if isinstance(m, HumanMessage):
+                query = m.content
+                break
+        ctx = await retrieval_strategy.get_context(
+            query=query,
+            chatbot_id=uuid.UUID(state["chatbot_id"]),
             language=state.get("language"),
         )
-        return {"retrieved_context": [result]}
+        return {
+            "retrieved_sources": ctx.sources,
+            "retrieval_mode": ctx.mode,
+            "total_tokens": ctx.total_tokens,
+        }
 
     async def generate_response_node(state: AgentState) -> dict:
-        """Genera la respuesta final."""
-        messages = state.get("messages", [])
-        context = state.get("retrieved_context", [])
-
-        context_str = "\n".join(context) if context else "Sin información adicional."
-
-        system_prompt = f"""Eres un asistente útil. Responde en {state.get("language", "es")}.
-
-Información relevante:
-{context_str}
-
-Responde de forma concisa y útil."""
-
-        response = await llm.ainvoke(
-            [
-                {"role": "system", "content": system_prompt},
-                *[
-                    {
-                        "role": "user" if isinstance(m, HumanMessage) else "assistant",
-                        "content": m.content,
-                    }
-                    for m in messages
-                ],
-            ]
+        sources = list(state.get("retrieved_sources", []))
+        mode = state.get("retrieval_mode", "vector")
+        sources_block = format_sources_block(sources)
+        system = build_system_prompt(
+            base_system_prompt,
+            state.get("language", "es"),
+            sources_block,
+            mode,
         )
+        history = [
+            {
+                "role": "user" if isinstance(m, HumanMessage) else "assistant",
+                "content": m.content,
+            }
+            for m in state.get("messages", [])
+        ]
 
-        return {"messages": [AIMessage(content=response.content)]}
+        if mode == "agentic":
+            llm_with_tools = llm.bind_tools(retrieval_strategy.get_agent_tools())
+            sources, text = await _run_agentic_loop(
+                llm_with_tools, system, history, retrieval_strategy, state
+            )
+        else:
+            response = await llm.ainvoke([{"role": "system", "content": system}, *history])
+            text = response.content
+
+        validated = enforce_citation_contract(text, sources, mode)
+        return {"messages": [AIMessage(content=validated)], "sources": sources}
 
     graph = StateGraph(AgentState)
-
-    graph.add_node("route_by_capability", route_by_capability_node)
     graph.add_node("detect_language", detect_language_node)
-    graph.add_node("search_knowledge", search_knowledge_node)
+    graph.add_node("search_or_skip", search_or_skip_node)
     graph.add_node("generate_response", generate_response_node)
 
-    graph.set_entry_point("route_by_capability")
-    graph.add_edge("route_by_capability", "detect_language")
-    graph.add_edge("detect_language", "search_knowledge")
-    graph.add_edge("search_knowledge", "generate_response")
+    graph.set_entry_point("detect_language")
+    graph.add_edge("detect_language", "search_or_skip")
+    graph.add_edge("search_or_skip", "generate_response")
     graph.add_edge("generate_response", END)
 
     return graph
+
+
+async def _run_agentic_loop(
+    llm_with_tools,
+    system: str,
+    history: list[dict],
+    retrieval_strategy,
+    state: dict,
+    max_iterations: int = 10,
+) -> tuple[list[Source], str]:
+    """Ejecuta el loop tool-calling para el modo agentic.
+
+    Devuelve (sources_used, final_text).
+    """
+    messages = [{"role": "system", "content": system}, *history]
+    sources_used: list[Source] = []
+    chatbot_id = state.get("chatbot_id", "")
+    language = state.get("language")
+
+    for _ in range(max_iterations):
+        response = await llm_with_tools.ainvoke(messages)
+        if not getattr(response, "tool_calls", None):
+            return sources_used, response.content
+
+        messages.append({"role": "assistant", "content": response.content or ""})
+        for tc in response.tool_calls:
+            tool_name = tc["name"]
+            tool_args = tc.get("args", {})
+            if tool_name == "list_documents":
+                result = await retrieval_strategy.list_index(
+                    uuid.UUID(chatbot_id), language
+                )
+                from server.app.modules.agents_hub.agent.tools.list_documents import list_documents
+                tool_output = await list_documents(chatbot_id, retrieval_strategy, language)
+            elif tool_name == "read_document":
+                doc_id = tool_args.get("document_id", "")
+                doc = await retrieval_strategy.read(uuid.UUID(doc_id))
+                if doc:
+                    sources_used.append(Source(
+                        document_id=uuid.UUID(doc_id),
+                        title=doc["title"],
+                        url=doc["url"],
+                        excerpt=doc["markdown_content"][:500],
+                        score=1.0,
+                    ))
+                from server.app.modules.agents_hub.agent.tools.read_document import read_document
+                tool_output = await read_document(doc_id, retrieval_strategy)
+            else:
+                tool_output = f"Tool {tool_name} no reconocida."
+            messages.append(ToolMessage(content=tool_output, tool_call_id=tc["id"]))
+
+    return sources_used, ""

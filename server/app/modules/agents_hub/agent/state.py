@@ -14,7 +14,11 @@ class AgentState(TypedDict):
     language: str
     chatbot_id: str
     user_id: str | None
-    retrieved_context: list[str]
+    # Retrieval
+    retrieved_sources: list        # list[Source] tras search_or_skip
+    retrieval_mode: str            # vector | long_context | agentic
+    total_tokens: int
+    sources: list                  # Source[] final emitidas en done SSE
     available_tools: list[str]
 
 
@@ -38,6 +42,9 @@ def create_initial_state(
         language="es",
         chatbot_id=chatbot_id,
         user_id=user_id,
-        retrieved_context=[],
+        retrieved_sources=[],
+        retrieval_mode="vector",
+        total_tokens=0,
+        sources=[],
         available_tools=[],
     )

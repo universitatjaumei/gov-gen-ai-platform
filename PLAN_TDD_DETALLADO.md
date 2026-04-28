@@ -5925,7 +5925,7 @@ uv run pytest tests/modules/agents_hub/unit/ -v   # regresión retrieval
 
 ---
 
-### Prompt 9CBis.7 — Citas como contrato del agente: system prompt + post-validador (RED → GREEN)
+### Prompt 9CBis.7 — Citas como contrato del agente: system prompt + post-validador (RED → GREEN) ✅ COMPLETADO (2026-04-28)
 
 **Objetivo**: el contrato de citas vive en el agente, no en el retriever. Tras este prompt, cualquier chatbot — sea `vector`, `long_context` o `agentic` — devuelve respuestas con citas o un fallback honesto si no puede citar.
 

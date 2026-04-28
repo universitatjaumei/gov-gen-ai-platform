@@ -9,7 +9,7 @@ Protocolo SSE:
   event: token    data: {"delta": "<fragmento>"}
   event: done     data: {"interaction_id": "<uuid>", "sources": [...],
                           "language_fallback": bool, "translation_warning": str | null}
-  event: error    data: {"message": "<descripción>"}
+  event: error    data: {"message": "<descripcion>"}
 
 Deploy: edge
 """
@@ -31,29 +31,22 @@ from server.app.modules.agents_hub.agent.state import create_initial_state
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.config_models import HubChatbot
 from server.app.modules.agents_hub.database.operational_models import HubInteraction
+from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
 from server.app.modules.agents_hub.services.embedding_service import get_embedding_service
+from server.app.modules.agents_hub.services.model_factory import get_model
 from server.app.modules.agents_hub.services.observability import create_callback_handler
-from server.app.modules.agents_hub.services.retriever import HybridRetriever
+from server.app.modules.agents_hub.services.retrieval.agentic_strategy import AgenticRetrievalStrategy
+from server.app.modules.agents_hub.services.retrieval.long_context_strategy import LongContextRetrievalStrategy
+from server.app.modules.agents_hub.services.retrieval.vector_strategy import VectorRetrievalStrategy
 
 router = APIRouter(prefix="/hub/chat", tags=["hub-chat"])
 
-# ---------------------------------------------------------------------------
-# Mapeo de nodos LangGraph → mensajes de progreso para el cliente
-# ---------------------------------------------------------------------------
 NODE_STATUS_MESSAGES: dict[str, str] = {
-    "route_by_capability":       "Iniciando...",
-    "detect_language":           "Detectando idioma...",
-    "query_classifier":          "Clasificando consulta...",
-    "search_knowledge":          "Buscando en la base de conocimiento...",
-    "validate_retrieval":        "Validando resultados...",
-    "search_knowledge_fallback": "Buscando en otros idiomas...",
-    "reranker":                  "Reordenando resultados...",
-    "generate_response":         "Generando respuesta...",
-    "quality_evaluator":         "Evaluando calidad...",
-    "log_interaction":           "Guardando interacción...",
+    "detect_language":    "Detectando idioma...",
+    "search_or_skip":     "Buscando en la base de conocimiento...",
+    "generate_response":  "Generando respuesta...",
 }
 
-# Cabeceras necesarias para que proxies y nginx no almacenen en búfer el stream
 _SSE_HEADERS = {
     "Cache-Control": "no-cache",
     "X-Accel-Buffering": "no",
@@ -65,17 +58,24 @@ class ChatRequest(BaseModel):
 
 
 def _sse(event: str, payload: dict) -> str:
-    """Formatea un evento SSE con nombre explícito."""
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 def _build_translation_warning(language: str) -> str | None:
-    """Genera una advertencia si la respuesta puede estar en un idioma diferente."""
     if not language or language == "es":
         return None
-    lang_names = {"ca": "catalán", "en": "inglés", "fr": "francés"}
+    lang_names = {"ca": "catalan", "en": "ingles", "fr": "frances"}
     lang_display = lang_names.get(language, language)
-    return f"⚠️ La pregunta se detectó en {lang_display}. La respuesta puede estar en ese idioma."
+    return f"⚠️ La pregunta se detecto en {lang_display}. La respuesta puede estar en ese idioma."
+
+
+def _source_to_dict(source) -> dict:
+    return {
+        "document_id": str(source.document_id),
+        "title": source.title,
+        "url": source.url,
+        "score": source.score,
+    }
 
 
 @router.post("/{chatbot_id}", status_code=200)
@@ -85,14 +85,7 @@ async def chat_stream(
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> StreamingResponse:
-    """Chat con streaming SSE.
-
-    Emite eventos tipados mientras el grafo LangGraph procesa la petición:
-    - `status` por cada nodo que comienza a ejecutarse
-    - `token` con cada fragmento del LLM durante la generación
-    - `done` al finalizar (con fuentes y posible advertencia de idioma)
-    - `error` si se produce una excepción durante el streaming
-    """
+    """Chat con streaming SSE."""
     result = await session.execute(
         select(HubChatbot).where(HubChatbot.id == chatbot_id)
     )
@@ -103,15 +96,31 @@ async def chat_stream(
             detail=f"Chatbot {chatbot_id} not found",
         )
 
-    retriever = HybridRetriever(session)
     embedding_service = get_embedding_service()
+    retrieval_mode = getattr(chatbot, "retrieval_mode", "vector")
+
+    if retrieval_mode == "long_context":
+        strategy = LongContextRetrievalStrategy(session)
+    elif retrieval_mode == "agentic":
+        strategy = AgenticRetrievalStrategy(session)
+    else:
+        strategy = VectorRetrievalStrategy(session, embedding_service)
+
+    config_provider = LocalConfigProvider(session)
+    llm = await get_model(chatbot_id, config_provider)
+
     initial_state = create_initial_state(
         user_id=user.user_id,
         chatbot_id=str(chatbot_id),
         initial_message=request.message,
     )
     interaction_id = uuid.uuid4()
-    graph = create_agent_graph(retriever, embedding_service, user_id=user.user_id)
+    graph = create_agent_graph(
+        retrieval_strategy=strategy,
+        llm=llm,
+        base_system_prompt=chatbot.system_prompt,
+        user_id=user.user_id,
+    )
     compiled = graph.compile()
 
     langfuse_handler = create_callback_handler(
@@ -131,7 +140,7 @@ async def chat_stream(
 
     async def event_generator() -> AsyncIterator[str]:
         collected_tokens: list[str] = []
-        final_sources: list[str] = []
+        final_sources: list = []
         language_fallback = False
         detected_language = "es"
 
@@ -140,11 +149,9 @@ async def chat_stream(
                 kind = event["event"]
                 name = event.get("name", "")
 
-                # ── Nodo iniciando → evento status ──────────────────────────
                 if kind == "on_chain_start" and name in NODE_STATUS_MESSAGES:
                     yield _sse("status", {"node": name, "msg": NODE_STATUS_MESSAGES[name]})
 
-                # ── Fragmento del LLM → evento token ────────────────────────
                 elif kind == "on_chat_model_stream":
                     chunk = event.get("data", {}).get("chunk")
                     if chunk is not None:
@@ -153,10 +160,10 @@ async def chat_stream(
                             collected_tokens.append(delta)
                             yield _sse("token", {"delta": delta})
 
-                # ── Nodo generate_response finalizado → recoger fuentes ──────
                 elif kind == "on_chain_end" and name == "generate_response":
                     output = event.get("data", {}).get("output", {})
-                    final_sources = output.get("sources", [])
+                    raw_sources = output.get("sources", [])
+                    final_sources = [_source_to_dict(s) for s in raw_sources if hasattr(s, "url")]
                     language_fallback = output.get("language_fallback_triggered", False)
                     detected_language = output.get("language", "es")
 
@@ -164,7 +171,6 @@ async def chat_stream(
             yield _sse("error", {"message": str(exc)})
             return
 
-        # ── Guardar interacción en BD ────────────────────────────────────────
         assistant_message = "".join(collected_tokens)
         interaction = HubInteraction(
             id=interaction_id,
@@ -177,7 +183,6 @@ async def chat_stream(
         session.add(interaction)
         await session.commit()
 
-        # ── Evento final ─────────────────────────────────────────────────────
         translation_warning = (
             _build_translation_warning(detected_language) if language_fallback else None
         )

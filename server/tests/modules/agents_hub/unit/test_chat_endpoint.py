@@ -163,6 +163,7 @@ class TestChatEndpointSSE:
         with (
             patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
+            patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
         ):
             with TestClient(app) as client:
                 with client.stream(
@@ -199,6 +200,7 @@ class TestChatEndpointSSE:
         with (
             patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
+            patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
         ):
             with TestClient(app) as client:
                 with client.stream(
@@ -249,6 +251,7 @@ class TestChatEndpointSSE:
         with (
             patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
+            patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
         ):
             with TestClient(app) as client:
                 with client.stream(
@@ -269,13 +272,20 @@ class TestChatEndpointSSE:
 
     @patch.dict("os.environ", _JWT_ENV)
     def test_chat_endpoint_emits_done_event_with_sources(self) -> None:
-        """El evento 'done' incluye interaction_id, sources y language_fallback=False."""
+        """El evento 'done' incluye interaction_id, sources (lista de dicts) y language_fallback=False."""
+        import uuid as _uuid
+        from server.app.modules.agents_hub.services.retrieval.types import Source
+
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.id = uuid.uuid4()
         app = _build_test_app(chatbot)
 
-        # Simular fin del nodo generate_response con fuentes
-        sources = ["doc-uuid-1", "doc-uuid-2"]
+        # Simular fin del nodo generate_response con fuentes (Source objects)
+        doc_id = _uuid.uuid4()
+        sources = [
+            Source(document_id=doc_id, title="Norma A", url="https://ej.com/a.pdf",
+                   excerpt="texto", score=0.9),
+        ]
         raw_events = [
             {
                 "event": "on_chain_end",
@@ -296,6 +306,7 @@ class TestChatEndpointSSE:
         with (
             patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
+            patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
         ):
             with TestClient(app) as client:
                 with client.stream(
@@ -312,10 +323,11 @@ class TestChatEndpointSSE:
 
         _, done_payload = done_events[0]
         assert "interaction_id" in done_payload
-        assert done_payload["sources"] == sources
+        assert len(done_payload["sources"]) == 1
+        assert done_payload["sources"][0]["title"] == "Norma A"
+        assert done_payload["sources"][0]["url"] == "https://ej.com/a.pdf"
         assert done_payload["language_fallback"] is False
         assert done_payload["translation_warning"] is None
-        # interaction_id debe ser un UUID válido
         uuid.UUID(done_payload["interaction_id"])
 
     @patch.dict("os.environ", _JWT_ENV)
@@ -345,6 +357,7 @@ class TestChatEndpointSSE:
         with (
             patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
+            patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
         ):
             with TestClient(app) as client:
                 with client.stream(
@@ -385,6 +398,7 @@ class TestChatEndpointSSE:
         with (
             patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
+            patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
         ):
             with TestClient(app, raise_server_exceptions=False) as client:
                 with client.stream(
