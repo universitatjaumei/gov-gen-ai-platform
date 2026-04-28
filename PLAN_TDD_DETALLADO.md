@@ -5682,7 +5682,7 @@ uv run pytest tests/ -v -k "not slow"   # regresión: el chat sigue funcionando
 
 ---
 
-### Prompt 9CBis.5 — `LongContextRetrievalStrategy` con prompt caching (RED → GREEN)
+### Prompt 9CBis.5 — `LongContextRetrievalStrategy` con prompt caching (RED → GREEN) ✅ COMPLETADO (2026-04-28)
 
 **Objetivo**: implementar la strategy `long_context` que carga todos los `HubDocument` activos del chatbot y los empaqueta como un único bloque marcado con cache breakpoint para que el LLM lo reutilice entre consultas (TTL 5 min). Solo aplicable cuando `sum(token_count) < LONG_CONTEXT_LIMIT` (configurable, default 150 K).
 
