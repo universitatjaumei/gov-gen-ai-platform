@@ -207,3 +207,516 @@ Este listado resume las instrucciones clave enviadas al agente de programación 
 
 ---
 
+# Módulo AI Agents Hub — Integración en Gov Gen AI Platform
+
+*Fecha: 2026-03-30 | Versión: 2.0 — Arquitectura servidor-first; agente de ejecución local; NiceGUI deprecado*
+
+---
+
+## 1. Decisión Estratégica
+
+**AI Agents Hub no se desarrollará como proyecto independiente.** Se integrará como un módulo del servidor de Gov Gen AI / AutomatIA, compartiendo infraestructura, base de datos y servicios comunes.
+
+### Justificación
+
+El solapamiento técnico entre ambos proyectos es demasiado significativo para justificar una duplicación:
+
+| Componente | AutomatIA Server | AI Agents Hub | Decisión |
+|---|---|---|---|
+| LLM Gateway / Model Factory | Implementado (P0 BYOK) | §4.10 Model Factory | **Compartido** |
+| Dynamic Prompts desde BD | Implementado | §4.10 Dynamic Prompts | **Compartido** |
+| Multi-tenancy | Implementado | Necesario | **Compartido** |
+| MCP Client (Oracle/universidad) | Sprint 9 Q3 2026 | §4.4 MCP | **Implementación única** |
+| Auth OIDC/SAML | Q4 Enterprise | Fase 1 del Hub | **Implementación única** |
+| Base de datos PostgreSQL | Existente | PostgreSQL + pgvector | **Extender schema existente** |
+
+La plataforma unificada tiene mayor valor de propuesta para las instituciones: **AutomatIA automatiza procesos internos; el Hub informa y atiende usuarios**. Son dos caras del mismo sistema de IA institucional.
+
+---
+
+## 2. Modelo de Licenciamiento: Dual-License
+
+Se adopta el modelo **dual-license**, usado por MongoDB, Grafana, GitLab y Odoo.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    DUAL-LICENSE MODEL                           │
+├──────────────────────────────┬──────────────────────────────────┤
+│        AGPLv3 (libre)        │     Licencia Comercial           │
+├──────────────────────────────┼──────────────────────────────────┤
+│ Instituciones públicas       │ Partners comerciales             │
+│ Auto-hosted / on-premise     │ Soporte y SLA garantizados       │
+│ Sin soporte                  │ Integraciones premium            │
+│ Contribuciones obligatorias  │ Uso en productos privativos      │
+│ Cumple requisito subvención  │ Modelo de negocio para partners  │
+└──────────────────────────────┴──────────────────────────────────┘
+```
+
+### Cumplimiento de la subvención
+
+El requisito de "acceso amplio y abierto a resultados" queda satisfecho de forma óptima:
+- La licencia AGPLv3 garantiza que cualquier institución pública puede usar, modificar y redistribuir el software.
+- Las modificaciones de instituciones que lo usen en red deben publicarse (copyleft fuerte).
+- Los partners comerciales que quieran integrarlo en productos privativos contratan la licencia comercial.
+
+### Implicación para el repositorio cliente de AutomatIA
+
+El cliente NiceGUI (open source Apache 2.0) **no se ve afectado**. El cambio de licencia afecta al servidor, que pasa de "propietario" a "dual-license AGPLv3 + comercial". Esto es más restrictivo para los partners pero más abierto para la comunidad, y está alineado con los objetivos del Hub.
+
+---
+
+## 3. Arquitectura Unificada
+
+> **Actualización marzo 2026 — Arquitectura servidor-first**: El cliente NiceGUI queda reemplazado por el frontend React como interfaz principal para todos los usuarios. Para casos que requieren ejecución local (scripts generados, RPA), se introduce un **agente de ejecución local** ligero (sin UI), siguiendo el patrón GitLab Runner / GitHub Actions self-hosted.
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│               GOV GEN AI PLATFORM (servidor universidad)           │
+│          FastAPI + PostgreSQL (dual-license AGPLv3 / Comercial)    │
+├────────────────────────────────────────────────────────────────────┤
+│  ┌────────────────────────────────────────────────────────────┐    │
+│  │                   CORE SERVICES (ya existe)                 │    │
+│  │                                                             │    │
+│  │  LLM Gateway        |  Model Factory   |  Dynamic Prompts  │    │
+│  │  Auth OIDC/SAML     |  Multi-tenancy   |  MCP Client       │    │
+│  │  Audit / Logging    |  Config API      |  Job Queue        │    │
+│  └───────────────────────┬─────────────────────────────────────┘   │
+│                          │                                         │
+│          ┌───────────────┴────────────────┐                        │
+│          │                                │                        │
+│  ┌───────▼──────────────┐   ┌─────────────▼────────────────────┐   │
+│  │ MODULE: AUTOMATION   │   │     MODULE: AGENTS HUB           │   │
+│  │ (migrado a servidor) │   │     (nuevo)                      │   │
+│  │                      │   │                                  │   │
+│  │ · Flows y ETL        │   │  · pgvector + RAG híbrido        │   │
+│  │ · Processors (LLM,   │   │  · LangGraph (modo chatbot /     │   │
+│  │   Script, RPA...)    │   │    modo agente)                  │   │
+│  │ · Custom Scripts     │   │  · Docling (PDF + web)           │   │
+│  │ · Extracción docs    │   │  · Configuración de chatbots     │   │
+│  │ · Gestión de flujos  │   │  · RAGAS evaluation              │   │
+│  │ · Job Queue          │   │  · Widget embed (iframe)         │   │
+│  └──────────┬───────────┘   └──────────────┬───────────────────┘   │
+└─────────────┼──────────────────────────────┼────────────────────────┘
+              │                              │
+     ┌────────▼──────────────────────────────▼────────────────┐
+     │              Frontend React + Vite (MIT)               │
+     │                                                        │
+     │  · Widget chatbot público (iframe embed)               │
+     │  · Interfaz modo agente (Dropzone, live preview)       │
+     │  · Panel admin Hub (prompts, modelos, RAGAS)           │
+     │  · UI Automation (flujos, extracción, scripts)         │
+     │  · Panel admin plataforma                              │
+     └────────────────────────────────────────────────────────┘
+              │
+     ┌────────▼──────────────────────────────────────────┐
+     │    AGENTE DE EJECUCIÓN LOCAL (proceso ligero)     │
+     │    Sin UI — solo donde se necesite                │
+     │                                                   │
+     │  · Recibe jobs del servidor (websocket/polling)   │
+     │  · Ejecuta scripts Python generados localmente    │
+     │    (acceso a ficheros locales, red interna)       │
+     │  · Ejecuta RPA (Playwright) cuando necesario      │
+     │  · Reporta resultados al servidor                 │
+     │                                                   │
+     │  Patrón: GitLab Runner / GitHub Actions runner    │
+     └───────────────────────────────────────────────────┘
+```
+
+### Base de datos unificada
+
+PostgreSQL con el schema existente extendido:
+
+```
+Schema actual (AutomatIA)          Nuevas tablas (Hub)
+─────────────────────────          ───────────────────
+clients                            chatbots
+partners                           knowledge_bases
+users                              documents
+llm_configs           ──────────►  document_chunks + vector (pgvector)
+prompts                            conversations
+executions                         messages
+...                                feedback_ratings
+                                   ragas_evaluations
+```
+
+---
+
+## 4. Impacto en el Roadmap
+
+### AutomatIA: cambios necesarios
+
+El roadmap existente **no cambia en su orden de prioridades**. El BYOK (P0) sigue siendo el primer hito, ya que es la base que habilita ambos módulos. Los cambios son addictivos:
+
+#### Sprint nuevo tras Open Core (Q2 2026, ~Sprint 4):
+
+**"Infraestructura Hub" — preparar la plataforma para el módulo**
+
+| Tarea | Esfuerzo | Notas |
+|---|---|---|
+| Añadir extensión `pgvector` al PostgreSQL existente | 0.5 días | Alembic migration |
+| Diseñar y crear tablas Hub en schema compartido | 2 días | chatbots, knowledge_bases, documents, chunks |
+| Servicio `EmbeddingService` compartido (BGE-M3) | 2 días | Reutilizable en AutomatIA para extracción semántica futura |
+| Actualizar `docker-compose.yml` con dependencias Hub | 0.5 días | Ollama si no está, MinIO si aplica |
+
+**Duración estimada: 1 semana**
+
+#### Sprint nuevo en Q3 2026 (paralelo al MCP):
+
+**"Módulo Agents Hub" — implementar el cerebro del Hub**
+
+| Tarea | Esfuerzo | Equivale a fase Hub |
+|---|---|---|
+| Ingestor Docling (PDF + web con Playwright) | 1 semana | Fases 3.1-3.8 |
+| Ingesta prioritaria de usuario (PDFs temporales) | 2 días | Fase 3.9 |
+| Grafo LangGraph dual (chatbot / agente) | 1.5 semanas | Fases 4.6, 4.9, 4.11 |
+| RAGAS evaluation service | 3 días | Fases 4.7-4.8 |
+| API endpoints Hub (/chat, /admin-hub, /feedback) | 1 semana | Fases 5.1-5.4 |
+| Panel admin Hub (configuración chatbots, prompts) | 1 semana | Parte de Fase 10 |
+
+**Duración estimada: 5-6 semanas**
+
+El **MCP client** (ya planificado en Sprint 9 Q3 AutomatIA) se implementa una sola vez y sirve a ambos módulos.
+
+---
+
+### AI Agents Hub: fases que se eliminan o reducen
+
+| Fase original Hub | Nuevo estado | Razón |
+|---|---|---|
+| **Fase 0** — Docker, uv, PostgreSQL setup | **Eliminada** | Heredado de AutomatIA |
+| **Fase 1** — Autenticación OIDC/SAML | **Eliminada** | Heredado (Q4 enterprise AutomatIA) |
+| **Fase 2** — Schema BD (chatbots, prompts, modelos) | **Reducida** | Solo tablas específicas Hub; auth/tenancy/LLM ya existen |
+| **Fase 3-4** — Docling, LangGraph, RAGAS | **Mantenida** | Nuevo módulo en AutomatIA server |
+| **Fase 5** — API endpoints | **Reducida** | Nuevas rutas en FastAPI existente |
+| **Fases 6-8** — Tests E2E, CI/CD, observabilidad | **Integrada** | Usar CI/CD y testing framework de AutomatIA |
+| **Fase 9-10** — React frontend | **Mantenida íntegra** | Proyecto frontend separado |
+| **Fase 11** — Autoinstalación Docker Compose | **Fusionada** | El `docker-compose.yml` de AutomatIA se extiende |
+| **Fase 11.3** — Script inicialización | **Integrado** | El script de AutomatIA incluye datos de ejemplo Hub |
+
+**Ahorro estimado: 35-40% del esfuerzo total** al no duplicar infraestructura, auth, CI/CD ni base de datos.
+
+---
+
+## 5. Frontend React: desarrollo independiente y unificado
+
+El frontend React se desarrolla como **proyecto independiente** (`automatia-hub-frontend`) y cubre **todas** las interfaces web de la plataforma, incluyendo la UI del módulo Automation (que reemplaza el cliente NiceGUI).
+
+| Interfaz | Usuarios | Notas |
+|---|---|---|
+| Widget chatbot público (iframe embed) | Ciudadanos, usuarios anónimos | Build autónomo, licencia MIT |
+| Interfaz modo agente expandido | Personal identificado (OIDC/SAML) | Live preview, Dropzone |
+| Panel admin Hub | Admins institucionales | Prompts, modelos, RAGAS, temas |
+| **UI Automation** (flujos, extracción PDF, scripts, RPA) | Usuarios internos | Reemplaza cliente NiceGUI |
+| Panel admin plataforma | Admins internos | LLM configs, tenancy, auditoría |
+
+**El cliente NiceGUI queda completamente deprecado** al completar este frontend. La decisión es limpia: un solo frontend web (React) para todas las interfaces, y un agente de ejecución local ligero (sin UI) para los casos que requieren ejecución en la máquina del usuario.
+
+**Nota sobre la migración del cliente NiceGUI**: La lógica de negocio del módulo Automation (incluyendo el procesador de extracción PDF) se migrará al servidor FastAPI módulo a módulo con asistencia de agentes de programación (Claude Code) y cobertura TDD. La parte más valiosa (estrategias LLM, gateway, prompts) ya está en el servidor. Lo que se migra es la orquestación y la lectura de PDF (lectura server-side tras subida del fichero).
+
+Las fases 9-10 del plan TDD original del Hub se ejecutan tal cual, ampliadas con las pantallas de Automation.
+
+---
+
+## 6. Estructura de Repositorio Recomendada
+
+Se recomienda **monorepo** con separación clara de módulos, dado que el equipo de desarrollo es el mismo:
+
+```
+gov-gen-ai/  (o automatia/)
+├── server/                    # Backend FastAPI (dual-license AGPLv3/Comercial)
+│   ├── app/
+│   │   ├── modules/
+│   │   │   ├── automation/    # Módulo existente (flows, processors, RPA)
+│   │   │   └── agents_hub/    # Módulo nuevo (RAG, LangGraph, chatbots)
+│   │   ├── core/              # Servicios compartidos (LLM, auth, tenancy, MCP)
+│   │   └── api/               # Routers FastAPI
+│   └── migrations/
+├── client_app/                # Frontend NiceGUI (Apache 2.0)
+├── frontend-hub/              # Frontend React (MIT)
+│   ├── src/widget/            # Widget embed público
+│   └── src/admin/             # Panel administración Hub
+└── shared/                    # Tipos y contratos compartidos (si aplica)
+```
+
+---
+
+## 7. Hitos Actualizados
+
+| Fecha | Hito | Descripción |
+|---|---|---|
+| **Abril 2026** | Infraestructura Hub | pgvector, schema Hub, EmbeddingService operativos |
+| **Mayo-Junio 2026** | Módulo Hub backend | Docling, LangGraph, API endpoints Hub |
+| **Junio 2026** | Auth OIDC/SAML | SSO institucional activo |
+| **Julio-Agosto 2026** | Frontend React | Widget embed + UI Automation + panel admin (reemplaza NiceGUI) |
+| **Agosto-Septiembre 2026** | Automation servidor-first + Agente local | Extracción PDF y flujos en servidor; agente ejecución local |
+| **Agosto 2026** | Paper enviado | Cumplimiento difusión subvención |
+| **Septiembre 2026** | Repositorio público | Plataforma bajo AGPLv3 en GitHub |
+| **Octubre 2026** | Piloto institucional | Plataforma completa (Hub + Automation) en producción universitaria |
+| **TBD** | Fase comercial | BYOK, Open Core, partners — cuando el producto universitario esté maduro |
+
+---
+
+## 8. Decisiones Adoptadas y Pendientes
+
+### Decisiones adoptadas (marzo 2026)
+
+1. **Arquitectura servidor-first**: Todos los módulos en el servidor. NiceGUI reemplazado por React + agente de ejecución local ligero.
+2. **Auth OIDC/SAML**: Adelantado a Q2 2026 (antes era Q4). Necesario tanto para Hub como para la interfaz web de Automation.
+3. **Anonimización PII**: Diferida. No necesaria en contexto universitario con los contratos LLM actuales. Se re-habilita para fase comercial en sectores como sanidad o finanzas.
+4. **BYOK**: Diferido a fase comercial. La base técnica del LLM Gateway ya está operativa para un único tenant institucional.
+5. **pgvector**: Se introduce en el sprint de Infraestructura Hub (no esperar a necesitarlo en Automation).
+6. **Migración NiceGUI → React + agente local**: Se realiza módulo a módulo con Claude Code, cobertura TDD. El procesador de extracción PDF es el más complejo; la lógica LLM ya está en servidor.
+7. **Modelo de ejecución de triggers**: La *definición* de cualquier trigger (folder watcher, email watcher, webhook, cron) se realiza siempre desde la UI React en el servidor. La *ejecución* del trigger depende de dónde reside el recurso monitorizado:
+
+   | Trigger | Ejecutado por |
+   |---|---|
+   | Folder watcher (carpeta local del PC) | Agente de ejecución local |
+   | Email watcher sobre cliente local (Outlook, carpeta local) | Agente de ejecución local |
+   | Email watcher sobre servidor IMAP/Exchange | Servidor FastAPI |
+   | Webhook / HTTP entrante | Servidor FastAPI |
+   | Cron / scheduled | Servidor FastAPI |
+
+   Para que los triggers locales funcionen, el usuario debe tener el agente instalado y activo en su máquina. Sin agente local, los triggers configurados sobre recursos locales quedan en estado *pendiente de runner* (patrón GitLab Runner). Esto es un trade-off conocido y aceptado de la arquitectura servidor-first.
+
+### Decisiones pendientes
+
+1. **Nombre de la plataforma unificada**: ¿"Gov Gen AI Platform", "AutomatIA Platform" u otro? Afecta identidad de marca para instituciones y eventual comercialización.
+
+2. **Estructura de repositorios**: Confirmar monorepo vs. repos separados. El monorepo facilita el desarrollo coordinado; repos separados facilitan la distribución diferenciada del frontend Hub.
+
+---
+
+## 9. Módulo: Gestor de Expedientes
+
+*Añadido: 2026-03-31 | Evolución de la plataforma hacia gestión de tramitaciones administrativas*
+
+El Gestor de Expedientes es el tercer módulo de la plataforma. Aprovecha la infraestructura del Hub (LangGraph, Docling, pgvector) y el patrón de metaprogramación de Automation para orquestar tramitaciones administrativas multi-fase, auditables y conformes con el Reglamento de IA de la UE.
+
+```
+GOV GEN AI PLATFORM
+├── Core Services (LLM Gateway, Auth, Multi-tenancy, MCP)
+├── Module: automation/      ← flujos, scripts, RPA
+├── Module: agents_hub/      ← chatbots RAG, Docling, LangGraph conversacional
+└── Module: expedientes/     ← tramitaciones, human-in-the-loop, audit RIA
+```
+
+---
+
+### 9.1 Principios de diseño
+
+**API-first con gestores existentes**: El módulo puede actuar en dos modos no excluyentes:
+
+| Modo | Descripción | Caso de uso |
+|---|---|---|
+| **Integración** | Se conecta vía API/MCP al gestor existente (ej. Oracle) y añade capa de IA | Coexistencia con sistemas actuales sin reemplazarlos |
+| **Nativo** | Gestiona el expediente directamente en la plataforma | Tramitaciones nuevas sin sistema previo, o migración progresiva |
+
+**Función y responsable explícitos**: Cada fase y cada acción del expediente declara:
+- `función`: qué hace (descripción legible + tipo de acción)
+- `responsable`: rol o usuario que debe ejecutarla o aprobarla
+
+Esto garantiza trazabilidad y es la base del cumplimiento del RIA (artículo 13 — transparencia).
+
+---
+
+### 9.2 Modelo de datos
+
+Tablas nuevas en el schema PostgreSQL compartido:
+
+```
+tipos_expediente          → catálogo de tramitaciones (plantillas configurables)
+  id, nombre, descripción, versión, configuración JSON (fases + acciones)
+
+expedientes               → instancias de tramitación
+  id, tipo_id, estado, tenant_id, creado_por, fecha_inicio, metadata JSON
+
+fases_expediente          → estado de cada fase para un expediente concreto
+  id, expediente_id, nombre, estado [pendiente|en_curso|aprobada|rechazada],
+  orden, función (descripción), responsable_rol, responsable_usuario_id
+
+acciones_fase             → acciones configuradas en cada fase (definición)
+  id, fase_id, tipo [llm|script|human|rpa|api_externa], función (descripción),
+  responsable_rol, configuración JSON
+
+ejecuciones_accion        → historial de ejecuciones de cada acción
+  id, accion_id, expediente_id, timestamp, actor_id, resultado, codigo_ejecutado,
+  explicacion (por qué), estado [ok|error|pendiente_humano]
+
+documentos_expediente     → documentos vinculados (FK a chunks Hub si es PDF)
+  id, expediente_id, nombre, tipo, doc_chunk_id (nullable), ruta, metadata
+
+audit_expediente          → log inmutable de transiciones y decisiones
+  id, expediente_id, fase_id, accion_id (nullable), timestamp, actor,
+  acción_descripción, estado_anterior, estado_nuevo, hash_integridad
+```
+
+---
+
+### 9.3 Motor de procesos: LangGraph con checkpointing
+
+Cada tipo de expediente se representa como un grafo LangGraph con estado persistido en PostgreSQL (checkpointing nativo). Esto permite suspender y reanudar el expediente en cualquier punto.
+
+**Nodos estándar reutilizables:**
+
+| Nodo | Función | Responsable | Reutiliza |
+|---|---|---|---|
+| `NodoLLM` | Genera propuesta de resolución o análisis | Sistema (IA) | LLM Gateway existente |
+| `NodoScript` | Ejecuta script Python determinista generado por IA | Sistema | Metaprogramación de Automation |
+| `NodoHuman` | Punto de parada — espera aprobación/rechazo humano | Rol configurado | Breakpoint LangGraph |
+| `NodoRPA` | Ejecuta Playwright (navegación web, certificado digital) | Sistema (agente local) | Agente de ejecución local |
+| `NodoAPIExterna` | Llama a API de gestor externo (Oracle u otro) | Sistema | MCP Client |
+| `NodoNotificacion` | Envía notificación al responsable de la siguiente fase | Sistema | Job Queue |
+
+**Estado del expediente (`ExpedienteState`):**
+
+```python
+class ExpedienteState(TypedDict):
+    expediente_id: str
+    tipo: str
+    fase_actual: str
+    datos: dict                  # datos acumulados del expediente
+    documentos: list[str]        # IDs de documentos vinculados
+    historial_acciones: list     # ejecuciones completadas
+    pendiente_humano: bool       # True si hay breakpoint activo
+    responsable_actual: str      # rol o usuario responsable
+    explicacion_ia: str          # justificación de la última decisión IA
+```
+
+---
+
+### 9.4 API del módulo
+
+Nuevas rutas en el FastAPI existente bajo `/expedientes`:
+
+```
+# Catálogo de tipos
+GET    /expedientes/tipos/                     → lista tipos disponibles con descripción de fases y responsables
+GET    /expedientes/tipos/{tipo_id}            → detalle: fases, acciones, función y responsable de cada una
+
+# Gestión de expedientes
+POST   /expedientes/                           → crear expediente (tipo, datos iniciales, documentos)
+GET    /expedientes/                           → listado con filtros (estado, tipo, responsable, fecha)
+GET    /expedientes/{id}                       → estado completo + historial de fases
+DELETE /expedientes/{id}                       → anular (solo si está en estado inicial)
+
+# Tramitación
+POST   /expedientes/{id}/avanzar              → ejecutar siguiente acción automática
+POST   /expedientes/{id}/aprobar              → resolución humana positiva (NodoHuman)
+POST   /expedientes/{id}/rechazar             → resolución humana negativa + motivo
+GET    /expedientes/{id}/pendiente            → acción pendiente actual (función + responsable)
+
+# Integración con gestores externos
+POST   /expedientes/{id}/sincronizar          → pull del estado desde gestor externo (Oracle/otro)
+POST   /expedientes/{id}/publicar             → push de la resolución al gestor externo
+
+# Audit y trazabilidad
+GET    /expedientes/{id}/audit                → log completo (inmutable)
+GET    /expedientes/{id}/informe              → informe de trazabilidad (para RIA)
+
+# Bandeja de trabajo
+GET    /expedientes/pendientes/mios           → expedientes pendientes del usuario autenticado
+GET    /expedientes/pendientes/rol/{rol}      → expedientes pendientes por rol
+```
+
+---
+
+### 9.5 Integración con gestores externos
+
+El módulo se conecta a sistemas externos mediante el **MCP Client** (implementado en Sprint 9 Q3 AutomatIA). Cada integración define un adaptador:
+
+```python
+class AdaptadorGestorExterno(Protocol):
+    async def consultar_expediente(self, ref_externa: str) -> dict: ...
+    async def crear_tramitacion(self, tipo: str, datos: dict) -> str: ...
+    async def actualizar_estado(self, ref_externa: str, estado: dict) -> bool: ...
+    async def obtener_documentos(self, ref_externa: str) -> list[bytes]: ...
+```
+
+**Adaptadores planificados:**
+
+| Adaptador | Sistema | Mecanismo | Sprint |
+|---|---|---|---|
+| `AdaptadorOracle` | Oracle (universidad) | MCP Client | Sprint 9 Q3 |
+| `AdaptadorREST` | Cualquier API REST genérica | HTTP + configuración JSON | Sprint E2 |
+| `AdaptadorNativo` | Sin gestor externo | Directo en plataforma | Sprint E1 |
+
+El adaptador activo se configura por tipo de expediente, no globalmente, lo que permite que algunos tipos de tramitación sean nativos y otros se sincronicen con Oracle.
+
+---
+
+### 9.6 Cumplimiento del Reglamento de IA de la UE (RIA)
+
+| Requisito RIA | Implementación |
+|---|---|
+| **Transparencia** (Art. 13) | Cada `ejecuciones_accion` guarda `explicacion_ia`: el "por qué" de la decisión y el código exacto ejecutado |
+| **Supervisión humana** (Art. 14) | `NodoHuman` configurable en cualquier fase; el expediente no avanza sin aprobación explícita |
+| **Determinismo** | `NodoScript` separa la "lógica IA" (generación) de la "ejecución" (script determinista); el acto administrativo es reproducible |
+| **Trazabilidad** | `audit_expediente` es inmutable; endpoint `/informe` genera PDF de trazabilidad completa |
+| **Exactitud** (Art. 15) | RAGAS-style evaluation aplicable a las resoluciones LLM generadas |
+
+---
+
+### 9.7 Frontend React — Pantallas del Gestor
+
+Integradas en el proyecto `frontend-hub` (fases 9-10 del plan TDD):
+
+| Pantalla | Usuarios | Prioridad |
+|---|---|---|
+| Lista de expedientes (filtros por estado, tipo, responsable) | Todos los usuarios | Sprint E4 |
+| Detalle de expediente: timeline de fases, documentos, audit | Todos los usuarios | Sprint E4 |
+| Bandeja de aprobaciones (Human-in-the-loop pendiente) | Responsables funcionales | Sprint E4 |
+| Configurador de tipos (editor JSON/formulario de fases y responsables) | Admins | Sprint E4 |
+| Diseñador visual low-code (drag & drop nodos) | Admins | **Diferido a v2** |
+
+El diseñador visual se difiere hasta tener feedback de usuarios reales sobre qué necesitan configurar. La primera versión configura tipos de expediente mediante formulario estructurado.
+
+---
+
+### 9.8 Plan de sprints
+
+| Sprint | Contenido | Duración | Prerequisito |
+|---|---|---|---|
+| **E1** | Schema BD, CRUD expedientes, API base, AdaptadorNativo | 1 semana | Hub infrastructure (pgvector) |
+| **E2** | Motor LangGraph con checkpointing, nodos estándar, AdaptadorREST | 2 semanas | LangGraph Hub operativo |
+| **E3** | AuditService, ExplicabilidadService, endpoint `/informe`, tests RIA | 1 semana | Sprint E2 |
+| **E4** | Frontend React: lista, detalle, bandeja, configurador | 3 semanas | Auth OIDC/SAML, Sprint E2 |
+| **E5** | AdaptadorOracle vía MCP Client, sincronización bidireccional | 1 semana | MCP Client (Sprint 9 AutomatIA) |
+
+**Calendario:**
+
+| Fecha | Hito |
+|---|---|
+| **Julio 2026** | Sprint E1 + E2: motor de procesos operativo |
+| **Agosto 2026** | Sprint E3: Audit & RIA. Paper enviado. |
+| **Septiembre-Octubre 2026** | Sprint E4: Frontend expedientes |
+| **Octubre-Noviembre 2026** | Sprint E5: Oracle MCP. Piloto institucional. |
+
+---
+
+### 9.9 Decisiones técnicas adoptadas
+
+1. **Sin Celery/Redis**: Se reutiliza el Job Queue existente de AutomatIA para acciones asíncronas. Se evalúa Celery solo si el volumen en producción lo justifica.
+2. **Checkpointing en PostgreSQL**: El estado del grafo LangGraph se persiste en la misma BD que el resto de la plataforma, sin infraestructura adicional.
+3. **Modo coexistencia con Oracle**: El gestor no reemplaza Oracle en fase inicial — actúa como capa de IA sobre él. Reduce fricción de adopción institucional.
+4. **Diseñador visual diferido**: Primera versión con formulario estructurado. El low-code visual llega tras validación con usuarios.
+5. **Función y responsable obligatorios**: Todo tipo, fase y acción debe declarar `función` (descripción legible) y `responsable_rol`. Sin ellos, el tipo de expediente no se puede activar.
+
+---
+
+## 10. Documentos Relacionados
+
+| Documento | Descripción |
+|---|---|
+| `ROADMAP.md` | Roadmap de AutomatIA (actualizar con sprints Hub y Expedientes) |
+| `PLAN_OPEN_CORE_SERVER.md` | Estrategia licenciamiento (revisar para dual-license) |
+| `PLAN_LLM_MULTIPROVEEDOR.md` | Diseño técnico BYOK (base compartida con Hub) |
+| `ARCHITECTURE.md` | Arquitectura técnica AutomatIA |
+| `AI_agents_hub/Arquitectura.md` | Arquitectura original Hub (referencia) |
+| `AI_agents_hub/PLAN_TDD_DETALLADO.md` | Plan TDD Hub (usar como guía para fases 3-4 y 9-10) |
+| `gestor de expedientes.md` | Resumen ejecutivo del módulo Gestor de Expedientes |
+
+---
+
+*Este documento formaliza la decisión de integrar AI Agents Hub y el Gestor de Expedientes como módulos de Gov Gen AI Platform bajo un modelo dual-license AGPLv3 / Comercial.*
+
+

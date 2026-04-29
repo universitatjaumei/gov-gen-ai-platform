@@ -1,12 +1,50 @@
 <!doctype html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gov Gen AI — Widget</title>
-  </head>
-  <body>
-    <div id="widget-root"></div>
-    <script type="module" src="/src/widget/main.tsx"></script>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laboratorio Widget - Prompt 9.10</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: sans-serif; }
+        .test-card { max-width: 500px; margin: 2rem auto; padding: 2rem; border-radius: 1rem; background: white; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+    <div class="test-card mt-12 text-center">
+        <h1 class="text-2xl font-bold text-slate-800 mb-2">🚀 Modo Test: Prompt 9.10</h1>
+        <p class="text-slate-500 mb-6 text-sm">Probando streaming, feedback y traducción automática.</p>
+        
+        <div class="text-left bg-slate-100 p-4 rounded-lg text-xs font-mono text-slate-600">
+            <p><strong>Configuración activa:</strong></p>
+            <p class="mt-1 text-blue-600 italic">Chatbot: E2E Bot (9d6eed7d...)</p>
+            <p>Lang: Catalán (ca)</p>
+            <p>API: http://localhost:8000</p>
+        </div>
+    </div>
+
+    <div id="govgenai-widget"
+         data-chatbot-id="9d6eed7d-c667-4538-a240-ab1caf358153"
+         data-lang="ca"
+         data-api-url="http://localhost:8000/api/v1">
+    </div>
+
+    <script>
+        window.process = { 
+            env: { 
+                NODE_ENV: 'production' 
+            } 
+        };
+    </script>
+
+    <script src="/dist/widget/widget.iife.js"></script>
+
+    <div class="max-w-md mx-auto text-center mt-8 p-4 border-t border-slate-200">
+        <p class="text-xs text-slate-400">
+            Si el chat no aparece, revisa que la carpeta <strong>dist/widget/</strong> exista y tenga el archivo .js
+        </p>
+    </div>
+
+</body>
 </html>

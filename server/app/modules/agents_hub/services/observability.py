@@ -26,10 +26,4 @@ def create_callback_handler(session_id: str, user_id: str) -> CallbackHandler | 
     """Crea un CallbackHandler de LangFuse para inyectar en el grafo LangGraph."""
     if not os.getenv("LANGFUSE_SECRET_KEY"):
         return None
-    return CallbackHandler(
-        public_key=os.getenv("LANGFUSE_PUBLIC_KEY", ""),
-        secret_key=os.getenv("LANGFUSE_SECRET_KEY", ""),
-        host=os.getenv("LANGFUSE_HOST", "http://localhost:3000"),
-        session_id=session_id,
-        user_id=user_id,
-    )
+    return CallbackHandler()

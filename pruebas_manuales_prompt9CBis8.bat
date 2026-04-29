@@ -44,7 +44,7 @@ pause
 echo.
 echo [PASO 5] Subir un PDF via upload y verificar que se crea HubDocument...
 echo   1. Ve a http://localhost:5173/admin/chatbots
-echo   2. Entra en un chatbot y sube un PDF desde la pestaña Documentos
+echo   2. Entra en un chatbot y sube un PDF desde la pestana Documentos
 echo   3. Verifica que aparece en la lista de documentos con titulo extraido
 echo   4. Verifica que el modo Long Context NO genera chunks (0 en logs)
 echo.
@@ -55,13 +55,12 @@ echo ============================================================
 echo  QUE DEBES VER
 echo ============================================================
 echo   - GET /documents devuelve lista de HubDocument con id, title, canonical_url
-echo   - Modo "vector": se crean chunks (n_chunks >= 1 en logs)
+echo   - Modo "vector": se crean chunks (n_chunks ^>= 1 en logs)
 echo   - Modo "long_context" o "agentic": n_chunks = 0, sin embeddings
-echo   - Reingestión del mismo contenido: mismo document_id (idempotencia)
+echo   - Reingestion del mismo contenido: mismo document_id (idempotencia)
 echo   - DELETE job borra el HubDocument asociado
 echo   - DELETE chunks borra todos los HubDocuments del chatbot
 echo ============================================================
 echo.
-
 echo PRUEBAS COMPLETADAS
 pause

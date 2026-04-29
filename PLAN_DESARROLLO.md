@@ -39,6 +39,7 @@ Repositorio `gov-gen-ai-platform` en GitHub (ModestoFabra), monorepo con:
 | 19 | Adaptadores UJI + Gestión 400 + capa ENI/ENS | ⏳ Pendiente (Fase 7.E5 de este plan) |
 | 20 | Accesibilidad WCAG 2.2 AA + admin conversacional | ⏳ Pendiente (Fase 8 de este plan) |
 | 21 | RPA web (diferido a v2) | ⏳ Fuera del alcance v1 (Fase 9 de este plan) |
+| 22 | Microservicios Embedding + Docling (diferido post-cloud) | ⏳ Diferido — activar si cold start >15s o RAM >2 GB en Cloud Run (Fase 10 de este plan) |
 
 **Documentos de referencia:**
 - `Descripción y funcionalidades.md` — Visión funcional GovGenAI (malla agéntica, PMDS, zero-knowledge, RunManifest, IA frugal)
@@ -359,6 +360,21 @@ Esta fase sustituye la antigua Fase 6. Añade la **especialización agéntica** 
 
 ---
 
+### FASE 10 — Microservicios de computación pesada (diferido post-cloud)
+*Activar solo cuando los criterios de métricas se cumplan en Cloud Run*
+
+BGE-M3 (~1.1 GB) y Docling (CPU-intensivo) se ejecutan actualmente in-process. Esto es correcto hasta el primer despliegue. Si en Cloud Run el cold start supera 15 s o la RAM supera 2 GB, extraer a microservicios independientes.
+
+| Criterio de activación | Métrica |
+|---|---|
+| Cold start API > 15 s | Cloud Run request latency (p95 de arranque en frío) |
+| RAM > 2 GB por instancia | Cloud Run container memory usage |
+| Necesidad de escala independiente | — |
+
+**Implementación**: ver **FASE 22** del `PLAN_TDD_DETALLADO.md` (3 prompts atómicos: embedding service, docling service, integración docker-compose). La abstracción `EmbeddingService` (protocolo) ya existe en el servidor; solo hay que añadir `HttpEmbeddingService` y `HttpDoclingProcessor`.
+
+---
+
 ### FASE 9 — RPA web (diferido a v2)
 *Fuera del alcance del piloto v1*
 
@@ -452,5 +468,5 @@ Semana 2 (2026-05-01 → 2026-05-08):
 | Estilos | Tailwind CSS + CSS Custom Properties |
 | i18n | i18next (CA/ES/EN) |
 | Contenedores | Docker + Docker Compose |
-| Almacenamiento objetos | MinIO (compatible S3) |
+| Almacenamiento objetos | fsspec + gcsfs/s3fs — GCS en producción, MinIO en dev (misma interfaz) |
 | CI/CD | GitHub Actions / Bitbucket Pipelines |

@@ -15,6 +15,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect
 from sqlalchemy.dialects.postgresql import UUID
 
 revision: str = "e5f6a7b8c9d0"
@@ -23,96 +24,136 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-def upgrade() -> None:
-    # 1. Crear tabla hub_documents
-    op.create_table(
-        "hub_documents",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column("chatbot_id", UUID(as_uuid=True), nullable=False),
-        sa.Column("title", sa.String(500), nullable=False),
-        sa.Column("canonical_url", sa.String(2048), nullable=False),
-        sa.Column("markdown_content", sa.Text, nullable=False),
-        sa.Column("content_hash", sa.String(64), nullable=False),
-        sa.Column("language", sa.String(10), nullable=False),
-        sa.Column("source_kind", sa.String(20), nullable=False),
-        sa.Column("section_path", sa.String(1024), nullable=True),
-        sa.Column("token_count", sa.Integer, nullable=False, server_default="0"),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.text("now()"),
+def _table_exists(name: str) -> bool:
+    return inspect(op.get_bind()).has_table(name)
+
+
+def _column_exists(table: str, column: str) -> bool:
+    cols = [c["name"] for c in inspect(op.get_bind()).get_columns(table)]
+    return column in cols
+
+
+def _index_exists(table: str, index_name: str) -> bool:
+    indexes = inspect(op.get_bind()).get_indexes(table)
+    return any(i["name"] == index_name for i in indexes)
+
+
+def _constraint_exists(table: str, constraint_name: str) -> bool:
+    conn = op.get_bind()
+    result = conn.execute(
+        sa.text(
+            "SELECT 1 FROM pg_constraint c"
+            " JOIN pg_class r ON r.oid = c.conrelid"
+            " WHERE c.conname = :name AND r.relname = :tbl"
         ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.text("now()"),
-        ),
-        sa.UniqueConstraint(
-            "chatbot_id", "content_hash", name="uq_document_chatbot_hash"
-        ),
+        {"name": constraint_name, "tbl": table},
     )
-    op.create_index("ix_hub_documents_chatbot_id", "hub_documents", ["chatbot_id"])
-    op.create_index("ix_hub_documents_content_hash", "hub_documents", ["content_hash"])
+    return result.scalar() is not None
+
+
+def upgrade() -> None:
+    # 1. Crear tabla hub_documents (puede ya existir por create_all del ORM)
+    if not _table_exists("hub_documents"):
+        op.create_table(
+            "hub_documents",
+            sa.Column("id", UUID(as_uuid=True), primary_key=True),
+            sa.Column("chatbot_id", UUID(as_uuid=True), nullable=False),
+            sa.Column("title", sa.String(500), nullable=False),
+            sa.Column("canonical_url", sa.String(2048), nullable=False),
+            sa.Column("markdown_content", sa.Text, nullable=False),
+            sa.Column("content_hash", sa.String(64), nullable=False),
+            sa.Column("language", sa.String(10), nullable=False),
+            sa.Column("source_kind", sa.String(20), nullable=False),
+            sa.Column("section_path", sa.String(1024), nullable=True),
+            sa.Column("token_count", sa.Integer, nullable=False, server_default="0"),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                nullable=False,
+                server_default=sa.text("now()"),
+            ),
+            sa.Column(
+                "updated_at",
+                sa.DateTime(timezone=True),
+                nullable=False,
+                server_default=sa.text("now()"),
+            ),
+            sa.UniqueConstraint(
+                "chatbot_id", "content_hash", name="uq_document_chatbot_hash"
+            ),
+        )
+
+    if not _index_exists("hub_documents", "ix_hub_documents_chatbot_id"):
+        op.create_index("ix_hub_documents_chatbot_id", "hub_documents", ["chatbot_id"])
+    if not _index_exists("hub_documents", "ix_hub_documents_content_hash"):
+        op.create_index("ix_hub_documents_content_hash", "hub_documents", ["content_hash"])
 
     # 2. Anadir document_id a hub_document_chunks
-    op.add_column(
-        "hub_document_chunks",
-        sa.Column("document_id", UUID(as_uuid=True), nullable=True),
-    )
-    op.create_index(
-        "ix_hub_document_chunks_document_id",
-        "hub_document_chunks",
-        ["document_id"],
-    )
+    if not _column_exists("hub_document_chunks", "document_id"):
+        op.add_column(
+            "hub_document_chunks",
+            sa.Column("document_id", UUID(as_uuid=True), nullable=True),
+        )
+    if not _index_exists("hub_document_chunks", "ix_hub_document_chunks_document_id"):
+        op.create_index(
+            "ix_hub_document_chunks_document_id",
+            "hub_document_chunks",
+            ["document_id"],
+        )
 
     # 3. Anadir nuevos campos a hub_chatbots
-    op.add_column(
-        "hub_chatbots",
-        sa.Column(
-            "retrieval_mode",
-            sa.String(20),
-            nullable=False,
-            server_default="vector",
-        ),
-    )
-    op.add_column(
-        "hub_chatbots",
-        sa.Column(
-            "kind",
-            sa.String(20),
-            nullable=False,
-            server_default="atomic",
-        ),
-    )
-    op.add_column(
-        "hub_chatbots",
-        sa.Column("parent_chatbot_id", UUID(as_uuid=True), nullable=True),
-    )
-    op.create_foreign_key(
-        "fk_chatbot_parent",
-        "hub_chatbots",
-        "hub_chatbots",
-        ["parent_chatbot_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
-    op.create_index(
-        "ix_hub_chatbots_parent_chatbot_id",
-        "hub_chatbots",
-        ["parent_chatbot_id"],
-    )
-    op.create_check_constraint(
-        "ck_chatbot_retrieval_mode",
-        "hub_chatbots",
-        "retrieval_mode IN ('vector', 'long_context', 'agentic')",
-    )
-    op.create_check_constraint(
-        "ck_chatbot_kind",
-        "hub_chatbots",
-        "kind IN ('atomic', 'router')",
-    )
+    if not _column_exists("hub_chatbots", "retrieval_mode"):
+        op.add_column(
+            "hub_chatbots",
+            sa.Column(
+                "retrieval_mode",
+                sa.String(20),
+                nullable=False,
+                server_default="vector",
+            ),
+        )
+    if not _column_exists("hub_chatbots", "kind"):
+        op.add_column(
+            "hub_chatbots",
+            sa.Column(
+                "kind",
+                sa.String(20),
+                nullable=False,
+                server_default="atomic",
+            ),
+        )
+    if not _column_exists("hub_chatbots", "parent_chatbot_id"):
+        op.add_column(
+            "hub_chatbots",
+            sa.Column("parent_chatbot_id", UUID(as_uuid=True), nullable=True),
+        )
+    if not _constraint_exists("hub_chatbots", "fk_chatbot_parent"):
+        op.create_foreign_key(
+            "fk_chatbot_parent",
+            "hub_chatbots",
+            "hub_chatbots",
+            ["parent_chatbot_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
+    if not _index_exists("hub_chatbots", "ix_hub_chatbots_parent_chatbot_id"):
+        op.create_index(
+            "ix_hub_chatbots_parent_chatbot_id",
+            "hub_chatbots",
+            ["parent_chatbot_id"],
+        )
+    if not _constraint_exists("hub_chatbots", "ck_chatbot_retrieval_mode"):
+        op.create_check_constraint(
+            "ck_chatbot_retrieval_mode",
+            "hub_chatbots",
+            "retrieval_mode IN ('vector', 'long_context', 'agentic')",
+        )
+    if not _constraint_exists("hub_chatbots", "ck_chatbot_kind"):
+        op.create_check_constraint(
+            "ck_chatbot_kind",
+            "hub_chatbots",
+            "kind IN ('atomic', 'router')",
+        )
 
     # 4. Backfill: crear HubDocument por cada job completado con chunks
     op.execute(
@@ -164,17 +205,27 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint("ck_chatbot_kind", "hub_chatbots", type_="check")
-    op.drop_constraint("ck_chatbot_retrieval_mode", "hub_chatbots", type_="check")
-    op.drop_index("ix_hub_chatbots_parent_chatbot_id", table_name="hub_chatbots")
-    op.drop_constraint("fk_chatbot_parent", "hub_chatbots", type_="foreignkey")
-    op.drop_column("hub_chatbots", "parent_chatbot_id")
-    op.drop_column("hub_chatbots", "kind")
-    op.drop_column("hub_chatbots", "retrieval_mode")
-    op.drop_index(
-        "ix_hub_document_chunks_document_id", table_name="hub_document_chunks"
-    )
-    op.drop_column("hub_document_chunks", "document_id")
-    op.drop_index("ix_hub_documents_content_hash", table_name="hub_documents")
-    op.drop_index("ix_hub_documents_chatbot_id", table_name="hub_documents")
-    op.drop_table("hub_documents")
+    if _constraint_exists("hub_chatbots", "ck_chatbot_kind"):
+        op.drop_constraint("ck_chatbot_kind", "hub_chatbots", type_="check")
+    if _constraint_exists("hub_chatbots", "ck_chatbot_retrieval_mode"):
+        op.drop_constraint("ck_chatbot_retrieval_mode", "hub_chatbots", type_="check")
+    if _index_exists("hub_chatbots", "ix_hub_chatbots_parent_chatbot_id"):
+        op.drop_index("ix_hub_chatbots_parent_chatbot_id", table_name="hub_chatbots")
+    if _constraint_exists("hub_chatbots", "fk_chatbot_parent"):
+        op.drop_constraint("fk_chatbot_parent", "hub_chatbots", type_="foreignkey")
+    if _column_exists("hub_chatbots", "parent_chatbot_id"):
+        op.drop_column("hub_chatbots", "parent_chatbot_id")
+    if _column_exists("hub_chatbots", "kind"):
+        op.drop_column("hub_chatbots", "kind")
+    if _column_exists("hub_chatbots", "retrieval_mode"):
+        op.drop_column("hub_chatbots", "retrieval_mode")
+    if _index_exists("hub_document_chunks", "ix_hub_document_chunks_document_id"):
+        op.drop_index("ix_hub_document_chunks_document_id", table_name="hub_document_chunks")
+    if _column_exists("hub_document_chunks", "document_id"):
+        op.drop_column("hub_document_chunks", "document_id")
+    if _index_exists("hub_documents", "ix_hub_documents_content_hash"):
+        op.drop_index("ix_hub_documents_content_hash", table_name="hub_documents")
+    if _index_exists("hub_documents", "ix_hub_documents_chatbot_id"):
+        op.drop_index("ix_hub_documents_chatbot_id", table_name="hub_documents")
+    if _table_exists("hub_documents"):
+        op.drop_table("hub_documents")

@@ -74,6 +74,23 @@ Al terminar la implementación de un prompt y **antes de marcarlo como COMPLETAD
 1. Un **archivo `.bat`** con los comandos a ejecutar.
 2. Un bloque de **instrucciones en texto** dirigidas a un usuario no programador.
 
+### Qué entra en las pruebas manuales (y qué no)
+
+Las pruebas manuales cubren **solo lo que los tests automáticos no pueden verificar**:
+
+- Flujos de usuario en el frontend (navegación, formularios, visualización de datos).
+- Comportamiento visual: que algo aparece, desaparece, muestra el texto correcto.
+- Interacciones end-to-end que cruzan frontend + API + BD y no tienen test de integración.
+- Comprobaciones de migración de BD cuando el prompt incluye una migración nueva
+  (`alembic upgrade head` y verificar que el servidor arranca sin errores).
+- Smoke check de que el servidor responde (`curl /health`) cuando el prompt toca
+  arranque, configuración o infraestructura.
+
+**No incluyas** en las pruebas manuales:
+- Ejecutar la suite de tests unitarios o de integración — eso lo hacen los tests automáticos.
+- Repetir comprobaciones que ya cubre un test existente.
+- Pasos genéricos como "verifica que no hay errores en los logs" sin indicar qué buscar exactamente.
+
 ### Archivo .bat
 
 - **Nombre**: `pruebas_manuales_promptXX.bat` donde `XX` es el identificador del prompt (p. ej. `pruebas_manuales_prompt9_10.bat`).
@@ -81,9 +98,26 @@ Al terminar la implementación de un prompt y **antes de marcarlo como COMPLETAD
 - **Contenido mínimo obligatorio**:
   - Línea `@echo off` al inicio y `chcp 65001 > nul` para codificación UTF-8.
   - Bloques `echo` que muestren por pantalla cada sección: requisitos previos, comandos a ejecutar, qué comprobar, cómo terminar.
-  - Los comandos reales del smoke test (builds, curl de verificación, etc.) con `pause` entre secciones para que el usuario pueda leer.
+  - Solo los comandos que no pueden automatizarse: `curl` de smoke check, `alembic upgrade head` si hay migración, instrucciones de pasos en la UI.
   - Mensaje final con `echo PRUEBAS COMPLETADAS` y `pause`.
 - El `.bat` **no levanta** Docker ni el servidor automáticamente (son pasos previos manuales); sí puede comprobar con `curl` o comandos similares que los servicios estén respondiendo antes de continuar.
+
+> **IMPORTANTE — codificación del archivo `.bat`**
+> El tool `Write` guarda en UTF-8, pero CMD de Windows requiere ANSI sin BOM.
+> Un archivo `.bat` con BOM hace que CMD interprete los primeros bytes de cada comando
+> como el nombre del programa (`echo` → `ho`, `curl` → `rl`, `pause` → `ause`).
+> **Siempre** usa PowerShell para escribir los `.bat`:
+>
+> ```powershell
+> [System.IO.File]::WriteAllText(
+>     'ruta\absoluta\archivo.bat',
+>     $content,
+>     [System.Text.Encoding]::GetEncoding(1252)
+> )
+> ```
+>
+> Verifica que los primeros bytes son `0x40 0x65 0x63 0x68` (`@ech`) y no un BOM
+> (`0xEF 0xBB 0xBF` para UTF-8, `0xFF 0xFE` para UTF-16 LE).
 
 ### Instrucciones para el usuario
 
@@ -92,24 +126,24 @@ Tras generar el `.bat`, muestra en la respuesta un bloque con instrucciones senc
 ```
 ## Pruebas manuales — Prompt X.Y
 
-### Antes de ejecutar el .bat
+### Antes de empezar
 1. Abre Docker Desktop y asegúrate de que está en marcha (icono verde en la barra de tareas).
 2. <paso concreto adicional, p. ej. "Abre una terminal y ejecuta: docker compose up -d">
-3. ...
+3. <si el prompt incluye migración: "Ejecuta en una terminal: cd server && uv run alembic upgrade head">
 
 ### Ejecuta el archivo
 - Haz doble clic en `pruebas_manuales_promptXY.bat` (está en la carpeta <ruta relativa>).
 - El script irá mostrando los pasos; pulsa cualquier tecla para avanzar entre ellos.
 
+### Pasos en la interfaz
+1. <acción concreta en el frontend: URL exacta, qué hacer, qué debe pasar>
+2. <siguiente acción>
+
 ### Qué debes ver
-- <resultado esperado 1, p. ej. "La página http://localhost:5173/admin carga sin errores">
-- <resultado esperado 2>
+- <resultado visual o de comportamiento esperado, con URL, texto o dato concreto>
 
-### Casos límite a revisar manualmente
-- [ ] <escenario + resultado esperado>
-
-### Regresiones a verificar
-- [ ] <funcionalidad existente + cómo comprobarla>
+### Casos límite
+- [ ] <escenario edge case + resultado esperado>
 
 ### Para terminar
 - <cómo detener los servicios si es necesario>
@@ -208,3 +242,107 @@ Pregunta:
 
 Si violas estas reglas, bloqueas el despliegue edge. Para, reconsidera, o
 razona en el PR por qué es inevitable.
+
+---
+
+## Infraestructura objetivo y portabilidad
+
+El primer despliegue de producción usa **Google Cloud Platform**:
+
+- **Base de datos**: Cloud SQL (PostgreSQL 16 + pgvector). Conexión vía Cloud SQL Auth Proxy.
+- **Aplicación**: Cloud Run (FastAPI). Sin estado local: el contenedor puede destruirse en cualquier momento.
+- **Almacenamiento de documentos**: Google Cloud Storage (GCS).
+
+El codebase debe funcionar sin cambios en un segundo backend (MinIO + PostgreSQL local, AWS S3 + RDS,
+etc.) cambiando solo variables de entorno. **No acoples el código a ningún proveedor concreto.**
+
+### Reglas duras de portabilidad
+
+#### 1. Almacenamiento de ficheros: `fsspec` obligatorio
+
+**Prohibido** acceder directamente al sistema de archivos para guardar o leer documentos
+que pertenecen al negocio (PDFs subidos, resultados de procesamiento, adjuntos).
+**Usa siempre `StorageService`** (wrapper sobre `fsspec`) inyectado vía `Depends`.
+
+```python
+# CORRECTO
+async def upload_pdf(file: UploadFile, storage: StorageService = Depends(get_storage)):
+    await storage.put(f"ingestion/{job_id}.pdf", file)
+
+# PROHIBIDO — rompe Cloud Run (efímero) y acopla al SO local
+with open(f"/tmp/{job_id}.pdf", "wb") as f:
+    shutil.copyfileobj(file.file, f)
+```
+
+El backend se configura por variable de entorno:
+
+| Variable | Desarrollo (local/Docker) | Producción GCP |
+|---|---|---|
+| `STORAGE_BACKEND` | `file` o `s3` (MinIO) | `gcs` |
+| `STORAGE_BUCKET` | `/tmp/govgenai` o `govgenai-dev` | `govgenai-prod` |
+| `STORAGE_ENDPOINT` | `http://minio:9000` (solo S3) | — |
+
+El `StorageService` vive en `server/app/core/storage.py`. Si no existe aún, créalo antes de
+escribir cualquier código que necesite persistir ficheros.
+
+#### 2. Sin escrituras efímeras fuera del procesamiento en streaming
+
+Cloud Run no garantiza disco persistente entre peticiones. Las escrituras en `/tmp` solo están
+permitidas como buffer **temporal dentro de una misma petición/tarea** y deben borrarse
+explícitamente al finalizar. Nunca asumas que `/tmp` sobrevive entre llamadas.
+
+#### 3. Base de datos: DSN siempre por variable de entorno
+
+La URL de conexión a la base de datos se lee **únicamente** de `DATABASE_URL` (async) y
+`DATABASE_URL_SYNC` (Alembic). No hardcodees host, puerto, usuario ni contraseña en código.
+Cloud SQL usa el patrón de socket Unix vía Cloud SQL Auth Proxy:
+
+```
+postgresql+asyncpg:///govgenai?host=/cloudsql/PROJECT:REGION:INSTANCE
+```
+
+---
+
+## Servicios de computación pesada: microservicios separados
+
+BGE-M3 (~1.1 GB de modelo) y Docling (CPU-intensivo) **no deben ejecutarse in-process
+dentro del servidor FastAPI principal** cuando se despliegue en Cloud Run. Los motivos:
+
+- Cold start de 30–90 s al cargar el modelo → inaceptable para el chatbot.
+- 3–4 GB de RAM por instancia → coste 3–4× mayor en Cloud Run.
+- Escala conjunta: si el chat tiene picos, también se escalan las instancias con el modelo cargado.
+
+### Arquitectura objetivo
+
+```
+Cloud Run: govgenai-api   →  HTTP  →  Cloud Run: embedding-service  (min 1 instancia)
+(FastAPI, ~512 MB RAM)    →  HTTP  →  Cloud Run: docling-service    (escala a 0)
+          │
+          └──────────────────────────→  Cloud SQL
+          └──────────────────────────→  GCS (via StorageService / fsspec)
+```
+
+### Reglas de implementación
+
+- **`EmbeddingService`** ya es un protocolo con `LocalEmbeddingService` y `GoogleEmbeddingService`.
+  Cuando se implemente el microservicio, añade `HttpEmbeddingService` que llame a
+  `POST /embed` del servicio separado. El resto del código no cambia.
+- **`DoclingProcessor`** se extrae a su propio servicio con un endpoint
+  `POST /process-pdf` que devuelve Markdown. El cliente HTTP queda en `ingestion/`.
+- **Mientras tanto** (fase de desarrollo sin Cloud Run real): `LocalEmbeddingService` y
+  `DoclingProcessor` in-process siguen siendo válidos. La abstracción ya existe;
+  solo se cambia la implementación concreta que inyecta `Depends`.
+- **No mezcles**: si un servicio llama al embedding service via HTTP, no puede también
+  importar `LocalEmbeddingService` como fallback silencioso. El fallback se configura
+  en el `Depends`, no en la lógica de negocio.
+
+### Cuándo extraer a microservicio (criterio)
+
+Extrae a microservicio separado en el sprint en que cualquiera de estas condiciones se cumpla:
+
+1. El cold start del servidor API supera 15 s en Cloud Run.
+2. La memoria del contenedor principal supera 2 GB.
+3. Se necesita escalar embedding/Docling de forma independiente al API.
+
+Hasta entonces, la abstracción existente es suficiente. **No anticipes la extracción**
+antes de que el problema aparezca en métricas reales.

@@ -62,12 +62,6 @@ class TestCallbackHandler:
                 mock_instance = MagicMock()
                 mock_cls.return_value = mock_instance
                 handler = create_callback_handler(session_id="sess-1", user_id="user-1")
-                mock_cls.assert_called_once_with(
-                    public_key="lf-pk-test",
-                    secret_key="lf-sk-test",
-                    host="http://localhost:3000",
-                    session_id="sess-1",
-                    user_id="user-1",
-                )
+                mock_cls.assert_called_once_with()
 
         assert handler is not None

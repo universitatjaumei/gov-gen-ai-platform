@@ -1,9 +1,14 @@
 import os
 from logging.config import fileConfig
+from pathlib import Path
 
+from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 from sqlmodel import SQLModel
+
+# Load server/.env so DATABASE_URL_SYNC is available when running alembic from server/
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 # Import all models so Alembic can detect them
 import server.app.database.models  # noqa: F401
