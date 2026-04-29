@@ -8,6 +8,7 @@ export interface Chatbot {
   system_prompt: string
   sources: string[]
   is_active: boolean
+  retrieval_mode: 'vector' | 'long_context' | 'agentic'
   created_at: string
   updated_at: string
 }

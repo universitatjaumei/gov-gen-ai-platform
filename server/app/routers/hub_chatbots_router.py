@@ -28,6 +28,7 @@ class ChatbotOut(BaseModel):
     system_prompt: str
     sources: list[str]
     is_active: bool
+    retrieval_mode: str
     created_at: datetime
     updated_at: datetime
 

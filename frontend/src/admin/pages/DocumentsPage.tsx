@@ -5,13 +5,15 @@ import { useDropzone } from 'react-dropzone'
 import {
   UploadCloud, Trash2, FileText, AlertCircle, CheckCircle2,
   Clock, Loader2, Link, Globe, Play, Pause, RefreshCw,
+  Eye, FileUp, ChevronDown, ChevronUp, Upload,
 } from 'lucide-react'
 
 import { fetchChatbots } from '@/shared/api/chatbots'
 import {
   fetchIngestionJobs, uploadDocument, deleteJob, clearCollection,
   fetchSources, createSource, updateSource, deleteSource, triggerSourceCheck,
-  type IngestionJob, type IngestionSource,
+  fetchDocuments, fetchDocument, deleteDocument,
+  type IngestionSource, type HubDocument,
 } from '@/shared/api/ingestion'
 import { Progress } from '@/components/ui/progress'
 
@@ -30,6 +32,23 @@ const LANGUAGE_OPTIONS = [
   { value: 'en', label: 'English' },
 ]
 
+const LANG_BADGE: Record<string, string> = {
+  es: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  ca: 'bg-red-100 text-red-800 border-red-200',
+  en: 'bg-blue-100 text-blue-800 border-blue-200',
+}
+
+const RETRIEVAL_LABELS: Record<string, string> = {
+  vector:       'Vectorial (RAG)',
+  long_context: 'Contexto largo',
+  agentic:      'Agéntico',
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)} k`
+  return String(n)
+}
+
 export function DocumentsPage() {
   const { t } = useTranslation('admin')
   const { t: tc } = useTranslation('common')
@@ -37,10 +56,13 @@ export function DocumentsPage() {
 
   const [selectedChatbotId, setSelectedChatbotId] = useState<string>('')
   const [activeTab, setActiveTab] = useState<'documents' | 'sources'>('documents')
+  const [jobsOpen, setJobsOpen] = useState(false)
 
   // Documents tab state
-  const [clearTarget, setClearTarget] = useState<string | null>(null)
-  const [deleteJobTarget, setDeleteJobTarget] = useState<IngestionJob | null>(null)
+  const [langFilter, setLangFilter] = useState<string>('')
+  const [previewDoc, setPreviewDoc] = useState<string | null>(null)
+  const [deleteDocTarget, setDeleteDocTarget] = useState<HubDocument | null>(null)
+  const [substituteDoc, setSubstituteDoc] = useState<HubDocument | null>(null)
   const [uploadError, setUploadError] = useState<string>('')
   const [canonicalUrl, setCanonicalUrl] = useState<string>('')
   const canonicalUrlRef = useRef<string>('')
@@ -65,17 +87,55 @@ export function DocumentsPage() {
     setSelectedChatbotId(chatbots[0].id)
   }
 
-  // ── Jobs ────────────────────────────────────────────────────────────────────
+  const selectedChatbot = chatbots.find(c => c.id === selectedChatbotId)
+
+  // ── Documents ───────────────────────────────────────────────────────────────
+  const { data: documents = [], isLoading: isLoadingDocs } = useQuery({
+    queryKey: ['hub-documents', selectedChatbotId],
+    queryFn: () => fetchDocuments(selectedChatbotId),
+    enabled: !!selectedChatbotId,
+  })
+
+  const { data: previewDetail, isLoading: isLoadingPreview } = useQuery({
+    queryKey: ['hub-document-detail', selectedChatbotId, previewDoc],
+    queryFn: () => fetchDocument(selectedChatbotId, previewDoc!),
+    enabled: !!previewDoc,
+  })
+
+  const deleteDocMutation = useMutation({
+    mutationFn: (docId: string) => deleteDocument(selectedChatbotId, docId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hub-documents', selectedChatbotId] })
+      setDeleteDocTarget(null)
+    },
+  })
+
+  // Languages present in document list (for filter dropdown)
+  const presentLanguages = Array.from(new Set(documents.map(d => d.language))).sort()
+
+  const filteredDocs = langFilter
+    ? documents.filter(d => d.language === langFilter)
+    : documents
+
+  const totalTokens = documents.reduce((sum, d) => sum + d.token_count, 0)
+
+  // ── Jobs (técnico) ──────────────────────────────────────────────────────────
   const { data: jobs = [], isLoading: isLoadingJobs } = useQuery({
     queryKey: ['ingestion-jobs', selectedChatbotId],
     queryFn: () => fetchIngestionJobs(selectedChatbotId),
-    enabled: !!selectedChatbotId,
+    enabled: !!selectedChatbotId && jobsOpen,
     refetchInterval: (query) => {
       const hasActive = query.state.data?.some(j => j.status === 'pending' || j.status === 'running')
       return hasActive ? 3000 : false
     },
   })
 
+  const deleteJobMutation = useMutation({
+    mutationFn: (jobId: string) => deleteJob(selectedChatbotId, jobId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ingestion-jobs', selectedChatbotId] }),
+  })
+
+  // ── Upload ──────────────────────────────────────────────────────────────────
   const uploadMutation = useMutation({
     mutationFn: (file: File) => uploadDocument(
       selectedChatbotId,
@@ -83,18 +143,21 @@ export function DocumentsPage() {
       canonicalUrlRef.current || undefined,
       uploadLanguageRef.current || undefined,
     ),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ingestion-jobs', selectedChatbotId] }); setUploadError('') },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hub-documents', selectedChatbotId] })
+      qc.invalidateQueries({ queryKey: ['ingestion-jobs', selectedChatbotId] })
+      setUploadError('')
+      setSubstituteDoc(null)
+    },
     onError: (err: Error) => setUploadError(err.message),
-  })
-
-  const deleteJobMutation = useMutation({
-    mutationFn: (jobId: string) => deleteJob(selectedChatbotId, jobId),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ingestion-jobs', selectedChatbotId] }); setDeleteJobTarget(null) },
   })
 
   const clearMutation = useMutation({
     mutationFn: () => clearCollection(selectedChatbotId),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ingestion-jobs', selectedChatbotId] }); setClearTarget(null) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hub-documents', selectedChatbotId] })
+      qc.invalidateQueries({ queryKey: ['ingestion-jobs', selectedChatbotId] })
+    },
   })
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -112,6 +175,14 @@ export function DocumentsPage() {
     accept: { 'application/pdf': ['.pdf'] },
     multiple: true,
   })
+
+  const handleSubstitute = (doc: HubDocument) => {
+    setSubstituteDoc(doc)
+    setCanonicalUrl(doc.canonical_url)
+    setUploadLanguage(doc.language)
+    canonicalUrlRef.current = doc.canonical_url
+    uploadLanguageRef.current = doc.language
+  }
 
   // ── Sources ─────────────────────────────────────────────────────────────────
   const { data: sources = [], isLoading: isLoadingSources } = useQuery({
@@ -205,7 +276,7 @@ export function DocumentsPage() {
                 }`}
               >
                 {tab === 'documents'
-                  ? t('hub.tab_documents', 'Documentos subidos')
+                  ? t('hub.tab_documents', 'Documentos')
                   : t('hub.tab_sources', 'Fuentes web')}
               </button>
             ))}
@@ -214,7 +285,16 @@ export function DocumentsPage() {
           {/* ── Tab: Documentos ── */}
           {activeTab === 'documents' && (
             <div className="space-y-4">
-              {/* URL canónica y idioma */}
+              {/* Banner de modo retrieval */}
+              {selectedChatbot && (
+                <RetrievalBanner
+                  mode={selectedChatbot.retrieval_mode}
+                  totalTokens={totalTokens}
+                  t={t as (k: string, d?: string) => string}
+                />
+              )}
+
+              {/* Subida + controles */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                 <div className="flex flex-1 items-center gap-2">
                   <Link className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -222,7 +302,7 @@ export function DocumentsPage() {
                     type="url"
                     value={canonicalUrl}
                     onChange={e => setCanonicalUrl(e.target.value)}
-                    placeholder={t('hub.canonical_url_placeholder', 'URL pública del documento (opcional, para citar la fuente en el chat)')}
+                    placeholder={t('hub.canonical_url_placeholder', 'URL pública del documento (opcional)')}
                     className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </div>
@@ -238,7 +318,19 @@ export function DocumentsPage() {
                 </select>
               </div>
 
-              {/* Dropzone */}
+              {substituteDoc && (
+                <div className="flex items-center gap-2 p-3 text-sm bg-yellow-50 border border-yellow-200 rounded-md">
+                  <Upload className="w-4 h-4 text-yellow-600 shrink-0" />
+                  <span>{t('hub.substituting', 'Sustituyendo')}:</span>
+                  <strong className="truncate">{substituteDoc.title}</strong>
+                  <button
+                    type="button"
+                    onClick={() => { setSubstituteDoc(null); setCanonicalUrl(''); setUploadLanguage('') }}
+                    className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+                  >{tc('cancel')}</button>
+                </div>
+              )}
+
               <div
                 {...getRootProps()}
                 className={`p-10 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${
@@ -257,76 +349,118 @@ export function DocumentsPage() {
                 </div>
               )}
 
-              {/* Jobs table */}
+              {/* Tabla de documentos */}
               <div className="bg-card rounded-lg border overflow-hidden">
-                <div className="flex items-center justify-between p-4 border-b bg-muted/20">
-                  <h2 className="text-base font-medium">{t('hub.ingestion_history', 'Historial de Ingestión')}</h2>
-                  {jobs.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setClearTarget(selectedChatbotId)}
-                      className="flex items-center gap-2 text-xs px-3 py-1.5 text-destructive border border-destructive/30 rounded hover:bg-destructive/10 transition-colors"
-                    >
-                      <Trash2 className="w-3 h-3" />{t('hub.clear_collection', 'Limpiar colección')}
-                    </button>
-                  )}
+                <div className="flex items-center justify-between p-4 border-b bg-muted/20 gap-3 flex-wrap">
+                  <h2 className="text-base font-medium">{t('hub.documents_table_title', 'Documentos del corpus')}</h2>
+                  <div className="flex items-center gap-2 ml-auto">
+                    {presentLanguages.length > 1 && (
+                      <select
+                        value={langFilter}
+                        onChange={e => setLangFilter(e.target.value)}
+                        className="px-2 py-1 text-xs border rounded-md bg-background"
+                        aria-label={t('hub.filter_by_language', 'Filtrar por idioma')}
+                      >
+                        <option value="">{t('hub.all_languages', 'Todos los idiomas')}</option>
+                        {presentLanguages.map(l => (
+                          <option key={l} value={l}>{l.toUpperCase()}</option>
+                        ))}
+                      </select>
+                    )}
+                    {documents.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => clearMutation.mutate()}
+                        disabled={clearMutation.isPending}
+                        className="flex items-center gap-2 text-xs px-3 py-1.5 text-destructive border border-destructive/30 rounded hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                      >
+                        <Trash2 className="w-3 h-3" />{t('hub.clear_collection', 'Limpiar colección')}
+                      </button>
+                    )}
+                  </div>
                 </div>
-                {isLoadingJobs ? (
+
+                {isLoadingDocs ? (
                   <div className="p-8 text-center text-muted-foreground text-sm flex items-center justify-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin" />{tc('loading')}
                   </div>
-                ) : jobs.length === 0 ? (
+                ) : filteredDocs.length === 0 ? (
                   <div className="p-8 text-center text-muted-foreground text-sm">
-                    {t('hub.no_jobs', 'No hay documentos ingeridos para este chatbot.')}
+                    {t('hub.no_documents', 'No hay documentos ingestados para este chatbot.')}
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b bg-muted/10 text-left text-muted-foreground">
-                          <th className="px-4 py-3 font-medium">{t('hub.job_file', 'Archivo')}</th>
-                          <th className="px-4 py-3 font-medium">{t('hub.job_source', 'Fuente')}</th>
-                          <th className="px-4 py-3 font-medium">{t('hub.job_status', 'Estado')}</th>
-                          <th className="px-4 py-3 font-medium">{t('hub.job_chunks', 'Chunks')}</th>
-                          <th className="px-4 py-3 font-medium">{t('hub.job_date', 'Fecha')}</th>
+                          <th className="px-4 py-3 font-medium">{t('hub.doc_title', 'Título')}</th>
+                          <th className="px-4 py-3 font-medium">{t('hub.doc_source', 'Fuente')}</th>
+                          <th className="px-4 py-3 font-medium">{t('hub.doc_language', 'Idioma')}</th>
+                          <th className="px-4 py-3 font-medium">{t('hub.doc_tokens', 'Tokens')}</th>
+                          <th className="px-4 py-3 font-medium">{t('hub.doc_date', 'Fecha')}</th>
                           <th className="px-4 py-3" />
                         </tr>
                       </thead>
                       <tbody>
-                        {jobs.map(job => (
-                          <tr key={job.id} className="border-b last:border-0 hover:bg-accent/20">
-                            <td className="px-4 py-3 max-w-[180px] truncate" title={job.original_filename ?? job.source_url}>
+                        {filteredDocs.map(doc => (
+                          <tr key={doc.id} className="border-b last:border-0 hover:bg-accent/20">
+                            <td className="px-4 py-3 max-w-[220px]">
                               <div className="flex items-center gap-2">
-                                <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
-                                <span className="truncate">{job.original_filename ?? job.source_url.split('/').pop()?.split('\\').pop() ?? 'Documento'}</span>
+                                <SourceKindIcon kind={doc.source_kind} />
+                                <span className="truncate font-medium" title={doc.title}>{doc.title}</span>
                               </div>
-                            </td>
-                            <td className="px-4 py-3 max-w-[160px]">
-                              {job.canonical_url ? (
-                                <a href={job.canonical_url} target="_blank" rel="noopener noreferrer"
-                                  className="flex items-center gap-1 text-xs text-primary hover:underline truncate" title={job.canonical_url}>
+                              {doc.canonical_url && (
+                                <a
+                                  href={doc.canonical_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-xs text-primary hover:underline mt-0.5 ml-6 truncate"
+                                  title={doc.canonical_url}
+                                >
                                   <Link className="w-3 h-3 shrink-0" />
-                                  <span className="truncate">{new URL(job.canonical_url).hostname}</span>
+                                  {new URL(doc.canonical_url).hostname}
                                 </a>
-                              ) : <span className="text-xs text-muted-foreground">—</span>}
+                              )}
                             </td>
-                            <td className="px-4 py-3"><JobStatusBadge status={job.status} error={job.error_message} /></td>
                             <td className="px-4 py-3">
-                              {job.status === 'running'
-                                ? <div className="w-24"><Progress value={undefined} className="h-2" /></div>
-                                : job.chunks_processed}
+                              <SourceKindBadge kind={doc.source_kind} t={t} />
                             </td>
-                            <td className="px-4 py-3 text-muted-foreground">{new Date(job.created_at).toLocaleString()}</td>
                             <td className="px-4 py-3">
-                              <button
-                                type="button"
-                                onClick={() => setDeleteJobTarget(job)}
-                                disabled={job.status === 'pending' || job.status === 'running'}
-                                className="p-1 text-muted-foreground hover:text-destructive disabled:opacity-30 transition-colors"
-                                title={t('hub.delete_job', 'Eliminar documento')}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              <LanguageBadge language={doc.language} />
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground tabular-nums">
+                              {formatTokens(doc.token_count)}
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
+                              {new Date(doc.created_at).toLocaleString()}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewDoc(doc.id)}
+                                  title={t('hub.preview_doc', 'Ver contenido')}
+                                  className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSubstitute(doc)}
+                                  title={t('hub.substitute_doc', 'Sustituir documento')}
+                                  className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                                >
+                                  <FileUp className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteDocTarget(doc)}
+                                  title={t('hub.delete_doc', 'Eliminar documento')}
+                                  className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -335,13 +469,76 @@ export function DocumentsPage() {
                   </div>
                 )}
               </div>
+
+              {/* Jobs (técnico) — Disclosure */}
+              <div className="border rounded-lg overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setJobsOpen(v => !v)}
+                  className="w-full flex items-center justify-between p-4 bg-muted/10 text-sm font-medium hover:bg-muted/20 transition-colors"
+                >
+                  <span>{t('hub.jobs_technical', 'Jobs (técnico)')}</span>
+                  {jobsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+                {jobsOpen && (
+                  isLoadingJobs ? (
+                    <div className="p-6 text-center text-muted-foreground text-sm flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />{tc('loading')}
+                    </div>
+                  ) : jobs.length === 0 ? (
+                    <div className="p-6 text-center text-muted-foreground text-sm">
+                      {t('hub.no_jobs', 'No hay jobs de ingestión registrados.')}
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b bg-muted/10 text-left text-muted-foreground">
+                            <th className="px-4 py-3 font-medium">{t('hub.job_file', 'Archivo')}</th>
+                            <th className="px-4 py-3 font-medium">{t('hub.job_status', 'Estado')}</th>
+                            <th className="px-4 py-3 font-medium">{t('hub.job_chunks', 'Chunks')}</th>
+                            <th className="px-4 py-3 font-medium">{t('hub.job_date', 'Fecha')}</th>
+                            <th className="px-4 py-3" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {jobs.map(job => (
+                            <tr key={job.id} className="border-b last:border-0 hover:bg-accent/20">
+                              <td className="px-4 py-3 max-w-[200px] truncate text-xs" title={job.original_filename ?? job.source_url}>
+                                {job.original_filename ?? job.source_url.split('/').pop() ?? 'Documento'}
+                              </td>
+                              <td className="px-4 py-3"><JobStatusBadge status={job.status} error={job.error_message} /></td>
+                              <td className="px-4 py-3 text-xs text-muted-foreground">
+                                {job.status === 'running'
+                                  ? <div className="w-16"><Progress value={null} className="h-2" /></div>
+                                  : job.chunks_processed}
+                              </td>
+                              <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(job.created_at).toLocaleString()}</td>
+                              <td className="px-4 py-3">
+                                <button
+                                  type="button"
+                                  onClick={() => deleteJobMutation.mutate(job.id)}
+                                  disabled={job.status === 'pending' || job.status === 'running'}
+                                  className="p-1 text-muted-foreground hover:text-destructive disabled:opacity-30 transition-colors"
+                                  title={t('hub.delete_job', 'Eliminar job')}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                )}
+              </div>
             </div>
           )}
 
           {/* ── Tab: Fuentes web ── */}
           {activeTab === 'sources' && (
             <div className="space-y-4">
-              {/* Formulario nueva fuente */}
               <form onSubmit={handleCreateSource} className="bg-card border rounded-lg p-4 space-y-3">
                 <h2 className="text-sm font-medium">{t('hub.add_source', 'Añadir fuente web')}</h2>
                 <div className="flex flex-col sm:flex-row gap-2">
@@ -395,7 +592,6 @@ export function DocumentsPage() {
                 )}
               </form>
 
-              {/* Tabla de fuentes */}
               <div className="bg-card rounded-lg border overflow-hidden">
                 <div className="p-4 border-b bg-muted/20">
                   <h2 className="text-base font-medium">{t('hub.sources_title', 'Fuentes monitorizadas')}</h2>
@@ -492,37 +688,52 @@ export function DocumentsPage() {
         </>
       )}
 
-      {/* ── Diálogos de confirmación ── */}
-
-      {deleteJobTarget && (
-        <ConfirmDialog
-          title={t('hub.delete_job_title', '¿Eliminar documento?')}
-          description={<>{t('hub.delete_job_text', 'Se eliminarán el documento y todos sus fragmentos indexados.')}{' '}<strong>{deleteJobTarget.original_filename ?? 'Documento'}</strong></>}
-          confirmLabel={t('hub.delete_confirm', 'Sí, eliminar')}
-          isPending={deleteJobMutation.isPending}
-          onConfirm={() => deleteJobMutation.mutate(deleteJobTarget.id)}
-          onCancel={() => setDeleteJobTarget(null)}
-          tc={tc}
-        />
+      {/* ── Modal de preview ── */}
+      {previewDoc && (
+        <div role="dialog" aria-modal="true" className="fixed inset-0 flex items-center justify-center bg-black/40 z-50 p-4">
+          <div className="bg-card rounded-lg w-full max-w-3xl max-h-[80vh] flex flex-col shadow-xl">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-base font-semibold truncate">
+                {isLoadingPreview ? tc('loading') : previewDetail?.title}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setPreviewDoc(null)}
+                className="p-1 text-muted-foreground hover:text-foreground"
+              >✕</button>
+            </div>
+            <div className="overflow-y-auto p-4 flex-1">
+              {isLoadingPreview ? (
+                <div className="flex items-center justify-center gap-2 text-muted-foreground py-8">
+                  <Loader2 className="w-5 h-5 animate-spin" />{tc('loading')}
+                </div>
+              ) : (
+                <pre className="text-xs whitespace-pre-wrap font-mono text-foreground/80">
+                  {previewDetail?.markdown_content}
+                </pre>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
-      {clearTarget && (
+      {/* ── Diálogos de confirmación ── */}
+      {deleteDocTarget && (
         <ConfirmDialog
-          title={t('hub.clear_warning_title', '¿Vaciar base de conocimiento?')}
-          description={t('hub.clear_warning_text', 'Esta acción eliminará todos los documentos procesados y chunks de este chatbot. No se puede deshacer.')}
-          confirmLabel={t('hub.clear_confirm', 'Sí, vaciar')}
-          isPending={clearMutation.isPending}
-          onConfirm={() => clearMutation.mutate()}
-          onCancel={() => setClearTarget(null)}
+          title={t('hub.delete_doc_title', '¿Eliminar documento?')}
+          description={<>{t('hub.delete_doc_text', 'Se eliminarán el documento y todos sus chunks indexados.')}{' '}<strong>{deleteDocTarget.title}</strong></>}
+          confirmLabel={t('hub.delete_confirm', 'Sí, eliminar')}
+          isPending={deleteDocMutation.isPending}
+          onConfirm={() => deleteDocMutation.mutate(deleteDocTarget.id)}
+          onCancel={() => setDeleteDocTarget(null)}
           tc={tc}
-          destructive
         />
       )}
 
       {deleteSourceTarget && (
         <ConfirmDialog
           title={t('hub.delete_source_title', '¿Eliminar fuente?')}
-          description={<>{t('hub.delete_source_text', 'Se dejará de monitorizar esta URL. Los chunks ya ingestados se mantienen.')}{' '}<strong>{deleteSourceTarget.url}</strong></>}
+          description={<>{t('hub.delete_source_text', 'Se dejará de monitorizar esta URL. Los documentos ya ingestados se mantienen.')}{' '}<strong>{deleteSourceTarget.url}</strong></>}
           confirmLabel={t('hub.delete_confirm', 'Sí, eliminar')}
           isPending={deleteSourceMutation.isPending}
           onConfirm={() => deleteSourceMutation.mutate(deleteSourceTarget.id)}
@@ -531,6 +742,55 @@ export function DocumentsPage() {
         />
       )}
     </div>
+  )
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function RetrievalBanner({
+  mode, totalTokens, t,
+}: {
+  mode: string
+  totalTokens: number
+  t: (k: string, d?: string) => string
+}) {
+  const modeLabel = RETRIEVAL_LABELS[mode] ?? mode
+  const recommendation =
+    mode === 'vector'      ? t('hub.retrieval_rec_vector', 'Usa RAG para documentos extensos.')
+    : mode === 'long_context' ? t('hub.retrieval_rec_lc', 'El documento completo se envía al LLM en cada consulta.')
+    : t('hub.retrieval_rec_agentic', 'El agente decide qué fragmentos leer.')
+
+  return (
+    <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+      <div className="flex-1">
+        <span className="font-medium">{t('hub.retrieval_mode_label', 'Modo de retrieval')}: </span>
+        <strong>{modeLabel}</strong>
+        {totalTokens > 0 && (
+          <span className="text-muted-foreground"> — {formatTokens(totalTokens)} tokens totales</span>
+        )}
+        <p className="text-muted-foreground mt-0.5 text-xs">{recommendation}</p>
+      </div>
+    </div>
+  )
+}
+
+function SourceKindIcon({ kind }: { kind: string }) {
+  if (kind === 'crawler') return <Globe className="w-4 h-4 text-muted-foreground shrink-0" />
+  return <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+}
+
+function SourceKindBadge({ kind, t }: { kind: string; t: (k: string, d: string) => string }) {
+  if (kind === 'crawler')
+    return <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-purple-100 text-purple-700 border border-purple-200"><Globe className="w-3 h-3" />{t('hub.kind_crawler', 'Web')}</span>
+  return <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-gray-100 text-gray-700 border border-gray-200"><FileText className="w-3 h-3" />{t('hub.kind_upload', 'PDF')}</span>
+}
+
+function LanguageBadge({ language }: { language: string }) {
+  const cls = LANG_BADGE[language] ?? 'bg-gray-100 text-gray-700 border-gray-200'
+  return (
+    <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded border font-medium ${cls}`}>
+      {language.toUpperCase()}
+    </span>
   )
 }
 

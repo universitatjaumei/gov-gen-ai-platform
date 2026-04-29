@@ -106,11 +106,13 @@ class IngestionWatcher:
             doc.title = doc_title
             doc.updated_at = datetime.now(timezone.utc)
         else:
-            # Si ya existia un documento con esta URL pero diferente hash → reemplazar
+            # Si ya existia un documento con esta URL e idioma → reemplazar.
+            # Idiomas distintos de la misma URL coexisten sin borrarse mutuamente.
             old_result = await self._session.execute(
                 select(HubDocument).where(
                     HubDocument.chatbot_id == chatbot_id,
                     HubDocument.canonical_url == canonical,
+                    HubDocument.language == language,
                 )
             )
             for old_doc in old_result.scalars():

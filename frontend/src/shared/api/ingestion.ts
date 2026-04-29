@@ -135,3 +135,46 @@ export async function clearCollection(chatbotId: string): Promise<any> {
   if (!res.ok) throw new Error('Failed to clear collection')
   return res.json()
 }
+
+export interface HubDocument {
+  id: string
+  chatbot_id: string
+  title: string
+  canonical_url: string
+  language: string
+  source_kind: 'upload' | 'crawler' | 'manual'
+  token_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface HubDocumentDetail extends HubDocument {
+  markdown_content: string
+}
+
+export async function fetchDocuments(chatbotId: string, language?: string): Promise<HubDocument[]> {
+  const params = language ? `?language=${encodeURIComponent(language)}` : ''
+  const res = await fetch(
+    `${API_BASE}/api/v1/hub/ingestion/${chatbotId}/documents${params}`,
+    { headers: authHeaders() },
+  )
+  if (!res.ok) throw new Error('Failed to fetch documents')
+  return (await res.json()).documents
+}
+
+export async function fetchDocument(chatbotId: string, documentId: string): Promise<HubDocumentDetail> {
+  const res = await fetch(
+    `${API_BASE}/api/v1/hub/ingestion/${chatbotId}/documents/${documentId}`,
+    { headers: authHeaders() },
+  )
+  if (!res.ok) throw new Error('Failed to fetch document')
+  return res.json()
+}
+
+export async function deleteDocument(chatbotId: string, documentId: string): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/api/v1/hub/ingestion/${chatbotId}/documents/${documentId}`,
+    { method: 'DELETE', headers: authHeaders() },
+  )
+  if (!res.ok) throw new Error('Failed to delete document')
+}

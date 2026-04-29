@@ -13,6 +13,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Query,
     UploadFile,
     status,
 )
@@ -77,20 +78,28 @@ async def get_ingestion_jobs(
 @router.get("/{chatbot_id}/documents")
 async def list_documents(
     chatbot_id: uuid.UUID,
+    language: str | None = Query(None, description="Filtrar por idioma (es, ca, en…)"),
     session: AsyncSession = Depends(get_async_session),
     current_user: UserInfo = Depends(get_current_user),
 ):
-    """Lista los documentos ingestados de un chatbot (unidades citables)."""
-    result = await session.execute(
+    """Lista los documentos ingestados de un chatbot (unidades citables).
+
+    Acepta ?language=es para filtrar por idioma.
+    """
+    stmt = (
         select(HubDocument)
         .where(HubDocument.chatbot_id == chatbot_id)
         .order_by(HubDocument.created_at.desc())
     )
+    if language:
+        stmt = stmt.where(HubDocument.language == language)
+    result = await session.execute(stmt)
     docs = result.scalars().all()
     return {
         "documents": [
             {
                 "id": str(d.id),
+                "chatbot_id": str(d.chatbot_id),
                 "title": d.title,
                 "canonical_url": d.canonical_url,
                 "language": d.language,
@@ -101,6 +110,31 @@ async def list_documents(
             }
             for d in docs
         ]
+    }
+
+
+@router.get("/{chatbot_id}/documents/{document_id}")
+async def get_document(
+    chatbot_id: uuid.UUID,
+    document_id: uuid.UUID,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: UserInfo = Depends(get_current_user),
+):
+    """Devuelve un documento con su contenido markdown (para preview en la UI)."""
+    doc = await session.get(HubDocument, document_id)
+    if not doc or doc.chatbot_id != chatbot_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado.")
+    return {
+        "id": str(doc.id),
+        "chatbot_id": str(doc.chatbot_id),
+        "title": doc.title,
+        "canonical_url": doc.canonical_url,
+        "language": doc.language,
+        "source_kind": doc.source_kind,
+        "token_count": doc.token_count,
+        "markdown_content": doc.markdown_content,
+        "created_at": doc.created_at.isoformat() if doc.created_at else None,
+        "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,
     }
 
 
