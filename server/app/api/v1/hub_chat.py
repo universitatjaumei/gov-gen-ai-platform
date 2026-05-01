@@ -74,7 +74,7 @@ def _source_to_dict(source) -> dict:
         "document_id": str(source.document_id),
         "title": source.title,
         "url": source.url,
-        "score": source.score,
+        "score": round(source.score, 3),
     }
 
 
@@ -104,7 +104,7 @@ async def chat_stream(
     elif retrieval_mode == "agentic":
         strategy = AgenticRetrievalStrategy(session)
     else:
-        strategy = VectorRetrievalStrategy(session, embedding_service)
+        strategy = VectorRetrievalStrategy(session, embedding_service, top_k=chatbot.retrieval_top_k)
 
     config_provider = LocalConfigProvider(session)
     llm = await get_model(chatbot_id, config_provider)

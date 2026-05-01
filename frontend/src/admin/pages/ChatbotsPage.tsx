@@ -12,10 +12,18 @@ import {
   type Chatbot,
 } from '@/shared/api/chatbots'
 
+const RETRIEVAL_MODES = [
+  { value: 'vector',       label: 'Vectorial RAG',         hint: 'Recupera los fragmentos más relevantes por búsqueda semántica. Recomendado para bases de conocimiento grandes.' },
+  { value: 'long_context', label: 'Contexto largo',        hint: 'Mete todos los documentos enteros en el prompt (máx. 150k tokens). Útil para colecciones pequeñas donde importa la visión global.' },
+  { value: 'agentic',      label: 'Exploración agéntica',  hint: 'El LLM decide qué documentos leer durante la conversación usando herramientas. Sin límite de corpus, pero más lento.' },
+] as const
+
 const schema = z.object({
   name: z.string().min(1),
   system_prompt: z.string().min(1),
   is_active: z.boolean(),
+  retrieval_mode: z.enum(['vector', 'long_context', 'agentic']),
+  retrieval_top_k: z.number().int().min(1).max(50),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -43,6 +51,8 @@ export function ChatbotsPage() {
         name: values.name,
         system_prompt: values.system_prompt,
         is_active: values.is_active,
+        retrieval_mode: values.retrieval_mode,
+        retrieval_top_k: values.retrieval_top_k,
         client_id: DEV_CLIENT_ID,
         llm_config_id: DEV_LLM_ID,
       }),
@@ -58,6 +68,8 @@ export function ChatbotsPage() {
         name: values.name,
         system_prompt: values.system_prompt,
         is_active: values.is_active,
+        retrieval_mode: values.retrieval_mode,
+        retrieval_top_k: values.retrieval_top_k,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['chatbots'] })
@@ -80,21 +92,22 @@ export function ChatbotsPage() {
     onError: (err: Error) => setDeleteError(err.message),
   })
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: '', system_prompt: '', is_active: true },
+    defaultValues: { name: '', system_prompt: '', is_active: true, retrieval_mode: 'vector', retrieval_top_k: 8 },
   })
+  const retrievalHint = RETRIEVAL_MODES.find(m => m.value === watch('retrieval_mode'))?.hint
 
   function openCreate() {
     setEditing(null)
-    reset({ name: '', system_prompt: '', is_active: true })
+    reset({ name: '', system_prompt: '', is_active: true, retrieval_mode: 'vector', retrieval_top_k: 8 })
     setDialogOpen(true)
   }
 
   function openEdit(c: Chatbot) {
     setEditing(c)
     setCopied(false)
-    reset({ name: c.name, system_prompt: c.system_prompt, is_active: c.is_active })
+    reset({ name: c.name, system_prompt: c.system_prompt, is_active: c.is_active, retrieval_mode: c.retrieval_mode ?? 'vector', retrieval_top_k: c.retrieval_top_k ?? 8 })
     setDialogOpen(true)
   }
 
@@ -120,6 +133,13 @@ export function ChatbotsPage() {
     setDialogOpen(false)
     setEditing(null)
     reset()
+  }
+
+  function openDelete(c: Chatbot) {
+    closeDialog()
+    deleteMutation.reset()
+    setDeleteError('')
+    setDeleteTarget(c)
   }
 
   function onSubmit(values: FormValues) {
@@ -156,6 +176,7 @@ export function ChatbotsPage() {
           <thead>
             <tr className="border-b text-left text-muted-foreground">
               <th className="pb-2 font-medium">{t('hub.chatbot_name')}</th>
+              <th className="pb-2 font-medium">Retrieval</th>
               <th className="pb-2 font-medium">{t('hub.chatbot_active')}</th>
               <th className="pb-2" />
             </tr>
@@ -168,6 +189,11 @@ export function ChatbotsPage() {
                 onClick={() => openEdit(c)}
               >
                 <td className="py-3 pr-4">{c.name}</td>
+                <td className="py-3 pr-4">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground border">
+                    {RETRIEVAL_MODES.find(m => m.value === c.retrieval_mode)?.label ?? c.retrieval_mode}
+                  </span>
+                </td>
                 <td className="py-3 pr-4">
                   <button
                     type="button"
@@ -184,7 +210,7 @@ export function ChatbotsPage() {
                 <td className="py-3 text-right">
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(c) }}
+                    onClick={(e) => { e.stopPropagation(); openDelete(c) }}
                     className="text-destructive text-xs hover:underline px-2"
                   >
                     {tc('delete')}
@@ -271,6 +297,32 @@ export function ChatbotsPage() {
                   />
                   {errors.system_prompt && <p className="text-destructive text-xs mt-1">{errors.system_prompt.message}</p>}
                 </div>
+                <div>
+                  <label className="text-sm font-medium">Modo de retrieval</label>
+                  <select
+                    {...register('retrieval_mode')}
+                    className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                  >
+                    {RETRIEVAL_MODES.map(m => (
+                      <option key={m.value} value={m.value}>{m.label}</option>
+                    ))}
+                  </select>
+                  {retrievalHint && <p className="text-xs text-muted-foreground mt-1">{retrievalHint}</p>}
+                </div>
+                {watch('retrieval_mode') === 'vector' && (
+                  <div>
+                    <label className="text-sm font-medium">Resultados recuperados (top-k)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      {...register('retrieval_top_k', { valueAsNumber: true })}
+                      className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                    />
+                    {errors.retrieval_top_k && <p className="text-destructive text-xs mt-1">{errors.retrieval_top_k.message}</p>}
+                    <p className="text-xs text-muted-foreground mt-1">Número de fragmentos que se recuperan por consulta (1–50). Valor recomendado: 8.</p>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <input type="checkbox" id="is_active" {...register('is_active')} className="rounded" />
                   <label htmlFor="is_active" className="text-sm">{t('hub.chatbot_active')}</label>
@@ -303,7 +355,11 @@ export function ChatbotsPage() {
           <div className="bg-card rounded-lg p-6 w-full max-w-sm shadow-lg space-y-4">
             <p className="text-sm">{t('hub.delete_confirm')}</p>
             <p className="font-medium">{deleteTarget.name}</p>
-            {deleteError && <p className="text-destructive text-xs">{deleteError}</p>}
+            {deleteError && (
+              <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2">
+                <p className="text-destructive text-sm font-medium">{deleteError}</p>
+              </div>
+            )}
             <div className="flex gap-2 justify-end">
               <button
                 type="button"
@@ -316,9 +372,9 @@ export function ChatbotsPage() {
                 type="button"
                 onClick={() => deleteMutation.mutate(deleteTarget.id)}
                 disabled={deleteMutation.isPending}
-                className="px-3 py-2 bg-destructive text-destructive-foreground rounded-md text-sm disabled:opacity-50"
+                className="px-3 py-2 bg-destructive text-destructive-foreground rounded-md text-sm disabled:opacity-50 min-w-[80px]"
               >
-                {tc('delete')}
+                {deleteMutation.isPending ? '...' : tc('delete')}
               </button>
             </div>
           </div>

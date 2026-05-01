@@ -29,6 +29,7 @@ class ChatbotOut(BaseModel):
     sources: list[str]
     is_active: bool
     retrieval_mode: str
+    retrieval_top_k: int
     created_at: datetime
     updated_at: datetime
 
@@ -42,6 +43,8 @@ class ChatbotCreate(BaseModel):
     system_prompt: str
     sources: list[str] = []
     is_active: bool = True
+    retrieval_mode: str = "vector"
+    retrieval_top_k: int = 8
 
 
 class ChatbotUpdate(BaseModel):
@@ -49,6 +52,8 @@ class ChatbotUpdate(BaseModel):
     system_prompt: str | None = None
     sources: list[str] | None = None
     is_active: bool | None = None
+    retrieval_mode: str | None = None
+    retrieval_top_k: int | None = None
 
 
 @router.get("", response_model=list[ChatbotOut])
@@ -75,6 +80,8 @@ async def create_chatbot(
         system_prompt=body.system_prompt,
         sources=body.sources,
         is_active=body.is_active,
+        retrieval_mode=body.retrieval_mode,
+        retrieval_top_k=body.retrieval_top_k,
     )
     session.add(chatbot)
     await session.commit()

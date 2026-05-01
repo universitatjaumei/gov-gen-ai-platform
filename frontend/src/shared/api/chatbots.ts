@@ -9,6 +9,7 @@ export interface Chatbot {
   sources: string[]
   is_active: boolean
   retrieval_mode: 'vector' | 'long_context' | 'agentic'
+  retrieval_top_k: number
   created_at: string
   updated_at: string
 }
@@ -20,6 +21,8 @@ export interface ChatbotCreate {
   system_prompt: string
   sources?: string[]
   is_active?: boolean
+  retrieval_mode?: 'vector' | 'long_context' | 'agentic'
+  retrieval_top_k?: number
 }
 
 export interface ChatbotUpdate {
@@ -27,6 +30,8 @@ export interface ChatbotUpdate {
   system_prompt?: string
   sources?: string[]
   is_active?: boolean
+  retrieval_mode?: 'vector' | 'long_context' | 'agentic'
+  retrieval_top_k?: number
 }
 
 function authHeaders(): HeadersInit {

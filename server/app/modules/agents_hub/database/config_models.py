@@ -98,6 +98,7 @@ class HubChatbot(HubConfigBase):
     theme_config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     retrieval_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="vector")
+    retrieval_top_k: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
     kind: Mapped[str] = mapped_column(String(20), nullable=False, default="atomic")
     parent_chatbot_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
