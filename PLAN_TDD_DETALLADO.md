@@ -1255,7 +1255,7 @@ TESTS REQUERIDOS:
 
 ### Prompt 9.11d - Frontend: Interfaz No-Code y Workspaces (TDD RED/GREEN)
 
-**Objetivo**: Implementar las pantallas de creación de plantillas (HITL) y la vista de redacción (Workspace) para el usuario final.
+**Objetivo**: Implementar las pantallas de creación de plantillas (HITL) y la vista de redacción (Workspace) para el usuario final, integrando los átomos de automatización.
 
 **Instrucciones**:
 ```text
@@ -1263,18 +1263,22 @@ Actúa como experto en React y Tailwind. Implementa las vistas en frontend/src/a
 
 1. PANTALLA CREACIÓN PLANTILLAS (`AgentTemplatesPage.tsx`):
 - Editor visual (No-Code, estilo TipTap) para arrastrar "Bloques de Datos" y "Bloques IA".
-- Generador de Scripts: Input de texto natural -> botón "Generar" -> llama a `/generate-script`.
-- HITL: Si `is_safe` es true, muestra la razón de auditoría en verde. Exige que el usuario clique "Aprobar y Guardar" antes de poder persistir la plantilla.
+- Generador de Scripts e Integración de Átomos: 
+  - Permite añadir un "Bloque de Transformación de Datos": UI para seleccionar tipo de transformación (agrupar, filtrar, etc.) consumiendo el backend del átomo migrado.
+  - Permite añadir un "Bloque de Gráfico": UI para seleccionar tipo de gráfico (barras, líneas, pastel) consumiendo el backend del átomo de ploteo.
+  - Para lógicas a medida: Input de texto natural -> botón "Generar Script IA" -> llama a `/generate-script`.
+- HITL: Si `is_safe` es true, muestra la razón de auditoría en verde. Exige que el usuario clique "Aprobar y Guardar" antes de persistir la plantilla.
 
 2. PANTALLA WORKSPACE (`AgentWorkspacePanel.tsx`):
 - Split View:
   - Izquierda: Chat + Dropzone de archivos.
-  - Derecha: Live Preview del `final_document` (Markdown renderizado).
+  - Derecha: Live Preview del `final_document` (Markdown renderizado incluyendo los gráficos generados).
 - Botón "Exportar PDF/Word".
 
 TESTS REQUERIDOS (Vitest):
 - should_require_explicit_hitl_approval_before_saving_template
 - should_render_split_view_with_chat_and_preview
+- should_render_data_transformation_and_plot_config_ui
 ```
 
 ---
