@@ -43,7 +43,19 @@
     "chatbot_id_copy": "Copiar",
     "chatbot_id_copied": "¡Copiado!",
     "chatbot_install_title": "Instrucciones de instalación",
-    "chatbot_install_desc": "Incluye este código en tu página web:"
+    "chatbot_install_desc": "Incluye este código en tu página web:",
+    "llm_configs": "Modelos LLM",
+    "new_llm_config": "Nueva config",
+    "no_llm_configs": "No hay configuraciones LLM",
+    "llm_config_label": "Etiqueta",
+    "llm_config_provider": "Proveedor",
+    "llm_config_model": "Modelo",
+    "llm_config_tier": "Tier",
+    "llm_config_is_default": "Por defecto",
+    "llm_config_api_key": "Variable env API",
+    "llm_config_test": "Probar",
+    "llm_config_edit": "Editar config LLM",
+    "llm_config_delete_confirm": "¿Eliminar esta configuración LLM?"
   },
   "login": {
     "title": "Iniciar sesión",

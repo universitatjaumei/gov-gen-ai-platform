@@ -43,7 +43,19 @@
     "chatbot_id_copy": "Copy",
     "chatbot_id_copied": "Copied!",
     "chatbot_install_title": "Installation instructions",
-    "chatbot_install_desc": "Include this code in your web page:"
+    "chatbot_install_desc": "Include this code in your web page:",
+    "llm_configs": "LLM Models",
+    "new_llm_config": "New config",
+    "no_llm_configs": "No LLM configurations",
+    "llm_config_label": "Label",
+    "llm_config_provider": "Provider",
+    "llm_config_model": "Model",
+    "llm_config_tier": "Tier",
+    "llm_config_is_default": "Default",
+    "llm_config_api_key": "API env var",
+    "llm_config_test": "Test",
+    "llm_config_edit": "Edit LLM config",
+    "llm_config_delete_confirm": "Delete this LLM configuration?"
   },
   "login": {
     "title": "Sign in",

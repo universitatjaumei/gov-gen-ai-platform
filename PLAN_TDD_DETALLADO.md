@@ -4402,52 +4402,7 @@ Tier 1 → ollama / llama3.2           / —     (alternativa local, sin coste)
 
 ---
 
-### Prompt 9E.1 — Backend: tiers, CRUD de LLM configs y seeding
-
-**Objetivo**: Ampliar el modelo `HubLLMConfig` con el sistema de tiers, exponer endpoints CRUD completos para que la UI los gestione, y añadir un comando de seeding para poblar la BD al arrancar.
-
-**Ámbito**: cloud (la configuración es responsabilidad del admin/partner).
-
-**Migración Alembic** — añade `tier`, `label`, `is_default` a `hub_llm_configs` y `default_tier`, `override_tier` a `hub_prompt_templates`.
-
-**Endpoints nuevos** (router: `hub_llm_configs_router`, prefijo `/api/v1/hub/llm-configs`, Deploy: cloud):
-```
-GET    /api/v1/hub/llm-configs            → lista todas las configs
-POST   /api/v1/hub/llm-configs            → crear nueva config
-PATCH  /api/v1/hub/llm-configs/{id}      → editar (label, tier, model_name, api_key_secret_name, is_default)
-DELETE /api/v1/hub/llm-configs/{id}      → eliminar (guard: no borrar si hay chatbots asignados)
-POST   /api/v1/hub/llm-configs/{id}/test → probar conexión: envía prompt mínimo y devuelve latencia ms
-```
-
-**Endpoint ampliado** en `hub_prompt_templates`:
-```
-PATCH  /api/v1/hub/prompts/{id}  → ahora acepta default_tier y override_tier
-```
-
-**`model_factory.py`** — ampliar `get_model()` para aceptar `tier` opcional:
-```python
-async def get_model_for_tier(tier: int, config_provider: ConfigProvider) -> BaseChatModel:
-    """Devuelve el modelo marcado como is_default para ese tier."""
-```
-
-**Comando de seeding** — `server/app/scripts/seed_llm_configs.py`:
-- Idempotente: no duplica si ya existen configs
-- Lee variables de entorno para detectar qué proveedores están disponibles
-- Ejecutable como `uv run python -m server.app.scripts.seed_llm_configs`
-
-**Tests requeridos** (`server/tests/modules/agents_hub/unit/`):
-```python
-# test_llm_configs_router.py
-# should_list_llm_configs
-# should_create_llm_config_with_tier
-# should_reject_duplicate_default_for_same_tier
-# should_delete_config_not_in_use
-# should_block_delete_config_in_use
-# should_return_latency_on_test_connection   ← mockea el LLM
-# should_get_model_for_tier_returns_default
-```
-
----
+### Prompt 9E.1 — Backend: tiers, CRUD de LLM configs y seeding ✅ COMPLETADO
 
 ### Prompt 9E.2 — Frontend: pantalla "Modelos LLM"
 

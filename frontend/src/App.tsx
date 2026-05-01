@@ -9,6 +9,7 @@ import { ChatbotsPage } from '@/admin/pages/ChatbotsPage'
 import { ClientsPage } from '@/admin/pages/ClientsPage'
 import { DocumentsPage } from '@/admin/pages/DocumentsPage'
 import { ReportsPage } from '@/admin/pages/ReportsPage'
+import { LLMConfigsPage } from '@/admin/pages/LLMConfigsPage'
 import { PlaceholderPage } from '@/admin/pages/PlaceholderPage'
 import './index.css'
 import '@/shared/i18n'
@@ -32,6 +33,7 @@ function App() {
                     <Route path="clients" element={<ClientsPage />} />
                     <Route path="documents" element={<DocumentsPage />} />
                     <Route path="reports" element={<ReportsPage />} />
+                    <Route path="llm-configs" element={<LLMConfigsPage />} />
                   </Route>
                   <Route path="/automation" element={<PlaceholderPage section="Automatización" />} />
                   <Route path="/platform" element={<PlaceholderPage section="Plataforma" />} />
