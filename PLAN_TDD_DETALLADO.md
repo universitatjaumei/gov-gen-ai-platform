@@ -1168,27 +1168,113 @@ uv run pytest tests/unit/test_logging.py -v
 
 ### Prompt 9.10 - Widget: chat SSE y feedback ✅ COMPLETADO (2026-04-26)
 
-### Prompt 9.11 - Modo agente: panel expandido
+### Prompt 9.11a - Agentes Privados: Modelos y API Base (TDD RED/GREEN)
 
-**Objetivo**: Versión expandida del widget para usuarios identificados: añade Dropzone de PDFs temporales, preview de borrador y botón "Solicitar cambios".
+**Objetivo**: Crear la infraestructura de backend para plantillas de informes híbridas y workspaces privados, permitiendo tanto plantillas globales (admin) como privadas (usuario).
 
-**`src/widget/components/AgentPanel.tsx`**:
-```typescript
-// Solo visible si el usuario tiene token JWT válido (modo agente)
-// Dropzone: acepta PDFs, llama POST /api/v1/hub/ingestion/upload?temporary=true
-//   → muestra progreso con barra
-// LivePreview: panel derecho con el borrador generado (markdown renderizado)
-// Toolbar: "Solicitar cambios" (abre campo de comentario → regenera con instrucción adicional)
-// "Exportar" → llama GET /api/v1/hub/tasks/export/{run_id}?fmt=pdf|markdown
+**Instrucciones**:
+```text
+Actúa como experto en FastAPI y SQLAlchemy async. Implementa los modelos y endpoints base en server/app/modules/agents_hub/.
+
+TABLAS NUEVAS (crear migración Alembic):
+- `hub_agent_templates`: Plantillas (id, nombre, descripcion, system_prompt, config_hibrida JSON, is_global bool, owner_id nullable)
+- `hub_user_workspaces`: Sesiones de redacción (id, template_id, user_id, estado_documento JSON, created_at, updated_at)
+- `hub_workspace_documents`: Documentos subidos temporalmente a una sesión (id, workspace_id, filename, file_path)
+
+ENDPOINTS (en `hub_agents_router.py`):
+GET    /api/v1/hub/agents/templates (devuelve globales + las del user)
+POST   /api/v1/hub/agents/templates (crea nueva plantilla)
+POST   /api/v1/hub/agents/workspaces (instancia una sesión a partir de un template)
+GET    /api/v1/hub/agents/workspaces/me
+GET    /api/v1/hub/agents/workspaces/{workspace_id}
+POST   /api/v1/hub/agents/workspaces/{workspace_id}/upload
+
+TESTS REQUERIDOS:
+- test_user_can_read_global_templates_and_own_templates
+- test_create_workspace_from_template
+- test_unauthenticated_user_cannot_access_workspaces
 ```
 
-**Tests requeridos**:
-```typescript
-// should_show_dropzone_when_user_authenticated
-// should_upload_pdf_and_show_progress
-// should_render_draft_in_live_preview
-// should_send_change_request_and_regenerate
-// should_export_as_pdf_on_button_click
+---
+
+### Prompt 9.11b - Pipeline de Seguridad y Generación de Scripts (TDD RED/GREEN)
+
+**Objetivo**: Servicio determinista (código plano, sin LangGraph) para generar scripts extractores seguros, con validación AST y Auditoría IA, previo a la confirmación HITL del usuario.
+
+**Instrucciones**:
+```text
+Actúa como experto en Python y Seguridad. Implementa `ScriptSecurityAuditor` en server/app/modules/agents_hub/services/.
+
+FLUJO DEL SERVICIO (Código Plano, Síncrono/Stateless):
+1. Recibe el prompt natural del usuario.
+2. Llama al LLM (Tier 1) para generar el script Python.
+3. Validación AST: parsea con `ast.parse` y bloquea imports peligrosos (os, subprocess, sys, open). Solo permite pandas, json, math, etc.
+4. Auditoría IA: Llama a un LLM Tier Superior pasando el código. Pregunta si tiene efectos colaterales. Debe devolver un JSON `{ "safe": bool, "reason": "..." }`.
+
+ENDPOINT:
+POST /api/v1/hub/agents/generate-script
+Request: { "prompt": "..." }
+Response: { "code": "...", "is_safe": bool, "audit_reason": "..." }
+(El HITL se hará en el Frontend, el usuario decidirá si guardar este código en la plantilla).
+
+TESTS REQUERIDOS:
+- test_ast_validator_blocks_os_import
+- test_ast_validator_allows_pandas
+- test_security_auditor_flags_malicious_code
+```
+
+---
+
+### Prompt 9.11c - Ensamblador Híbrido LangGraph (TDD RED/GREEN)
+
+**Objetivo**: Implementar el grafo LangGraph para el agente redactor que combina extracción determinista con reflexión IA.
+
+**Instrucciones**:
+```text
+Actúa como experto en LangGraph y Python. Crea el pipeline híbrido de redacción en server/app/modules/agents_hub/agent/.
+
+ESTADO DEL GRAFO (`WorkspaceState`):
+- `workspace_id`: str
+- `chat_history`: list
+- `raw_data_blocks`: dict (ej. tablas extraídas determinísticamente)
+- `ai_draft_blocks`: dict (ej. reflexiones generadas por IA)
+- `final_document`: str (markdown ensamblado)
+
+NODOS A IMPLEMENTAR:
+1. `DataExtractorNode`: Ejecuta el script seguro (guardado en la plantilla) sobre los documentos del workspace. Guarda en `raw_data_blocks`. NO usa el LLM para parsear datos.
+2. `AIDrafterNode`: Llama al LLM pasando `raw_data_blocks` como contexto. Genera el texto reflexivo en `ai_draft_blocks`.
+3. `DocumentAssemblerNode`: Usa Jinja2 para combinar ambos bloques según el layout de la plantilla, actualizando `final_document`.
+
+TESTS REQUERIDOS:
+- test_data_extractor_executes_script_deterministically
+- test_ai_drafter_receives_data_as_context_only
+- test_document_assembler_combines_blocks_correctly
+```
+
+---
+
+### Prompt 9.11d - Frontend: Interfaz No-Code y Workspaces (TDD RED/GREEN)
+
+**Objetivo**: Implementar las pantallas de creación de plantillas (HITL) y la vista de redacción (Workspace) para el usuario final.
+
+**Instrucciones**:
+```text
+Actúa como experto en React y Tailwind. Implementa las vistas en frontend/src/agent/.
+
+1. PANTALLA CREACIÓN PLANTILLAS (`AgentTemplatesPage.tsx`):
+- Editor visual (No-Code, estilo TipTap) para arrastrar "Bloques de Datos" y "Bloques IA".
+- Generador de Scripts: Input de texto natural -> botón "Generar" -> llama a `/generate-script`.
+- HITL: Si `is_safe` es true, muestra la razón de auditoría en verde. Exige que el usuario clique "Aprobar y Guardar" antes de poder persistir la plantilla.
+
+2. PANTALLA WORKSPACE (`AgentWorkspacePanel.tsx`):
+- Split View:
+  - Izquierda: Chat + Dropzone de archivos.
+  - Derecha: Live Preview del `final_document` (Markdown renderizado).
+- Botón "Exportar PDF/Word".
+
+TESTS REQUERIDOS (Vitest):
+- should_require_explicit_hitl_approval_before_saving_template
+- should_render_split_view_with_chat_and_preview
 ```
 
 ---
