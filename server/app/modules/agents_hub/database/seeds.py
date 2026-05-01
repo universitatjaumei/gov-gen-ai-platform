@@ -46,6 +46,10 @@ async def _seed_llm_config(session: AsyncSession) -> None:
             model_name="gemini-2.0-flash",
             temperature=0.7,
             max_tokens=2048,
+            tier=1,
+            label="Gemini Flash 2.0",
+            is_default=True,
+            api_key_secret_name="GOOGLE_API_KEY",
         )
     )
     print("[SEED] HubLLMConfig de desarrollo creada.")

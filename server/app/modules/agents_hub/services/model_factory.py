@@ -45,22 +45,30 @@ async def get_model(chatbot_id: uuid.UUID, config_provider: ConfigProvider):
 
 def _build_model(config: HubLLMConfig):
     """Construye la instancia LLM a partir del config."""
-    api_key = os.getenv(config.api_key_secret_name or "", "")
+    # Leer la clave solo si api_key_secret_name está definido; si no, LangChain
+    # usará su propia variable de entorno estándar (GOOGLE_API_KEY, etc.)
+    api_key: str | None = None
+    if config.api_key_secret_name:
+        api_key = os.getenv(config.api_key_secret_name) or None
 
     if config.provider == "google":
-        return ChatGoogleGenerativeAI(
+        kwargs: dict = dict(
             model=config.model_name,
-            google_api_key=api_key,
             temperature=config.temperature,
             max_output_tokens=config.max_tokens,
         )
+        if api_key:
+            kwargs["google_api_key"] = api_key
+        return ChatGoogleGenerativeAI(**kwargs)
     elif config.provider == "openai":
-        return ChatOpenAI(
+        kwargs = dict(
             model=config.model_name,
-            api_key=api_key,
             temperature=config.temperature,
             max_tokens=config.max_tokens,
         )
+        if api_key:
+            kwargs["api_key"] = api_key
+        return ChatOpenAI(**kwargs)
     elif config.provider == "ollama":
         from langchain_community.chat_models import ChatOllama
 
