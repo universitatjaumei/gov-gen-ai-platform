@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
@@ -10,10 +10,11 @@ import {
   updateLLMConfig,
   deleteLLMConfig,
   testLLMConfig,
+  fetchAvailableModels,
   type LLMConfig,
 } from '@/shared/api/llmConfigs'
 
-const PROVIDERS = ['google', 'openai', 'ollama'] as const
+const PROVIDERS = ['google', 'openai', 'ollama', 'openrouter'] as const
 const TIERS = [1, 2, 3] as const
 
 const TIER_STYLES: Record<number, string> = {
@@ -68,9 +69,16 @@ export function LLMConfigsPage() {
 
   const isPending = createMutation.isPending || updateMutation.isPending
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, reset, control, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { provider: 'google', model_name: '', tier: 1, label: '', api_key_secret_name: '', is_default: false, temperature: 0.7, max_tokens: 2048 },
+  })
+
+  const currentProvider = useWatch({ control, name: 'provider' })
+  const { data: availableModels = [] } = useQuery({
+    queryKey: ['available-models', currentProvider],
+    queryFn: () => fetchAvailableModels(currentProvider),
+    enabled: dialogOpen,
   })
 
   function openCreate() {
@@ -226,7 +234,10 @@ export function LLMConfigsPage() {
                 </div>
                 <div>
                   <label className="text-sm font-medium">{t('hub.llm_config_model')}</label>
-                  <input {...register('model_name')} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" />
+                  <input list="available-models" {...register('model_name')} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" />
+                  <datalist id="available-models">
+                    {availableModels.map(m => <option key={m} value={m} />)}
+                  </datalist>
                   {errors.model_name && <p className="text-destructive text-xs mt-1">{errors.model_name.message}</p>}
                 </div>
                 <div>

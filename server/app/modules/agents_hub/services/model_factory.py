@@ -76,5 +76,15 @@ def _build_model(config: HubLLMConfig):
             model=config.model_name,
             temperature=config.temperature,
         )
+    elif config.provider == "openrouter":
+        kwargs = dict(
+            model=config.model_name,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+            base_url="https://openrouter.ai/api/v1",
+        )
+        if api_key:
+            kwargs["api_key"] = api_key
+        return ChatOpenAI(**kwargs)
     else:
         raise ValueError(f"Provider desconocido: {config.provider}")

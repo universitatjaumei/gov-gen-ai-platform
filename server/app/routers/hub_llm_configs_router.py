@@ -16,11 +16,31 @@ from server.app.core.auth.models import UserInfo
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.config_models import HubChatbot, HubLLMConfig
 from server.app.modules.agents_hub.services.model_factory import _build_model
+from server.app.services.model_fetcher import get_models_for_provider
 
 router = APIRouter(prefix="/hub/llm-configs", tags=["hub-llm-configs"])
 
 _require_admin = require_role("admin", "partner")
 
+
+@router.get("/available-models/{provider}")
+async def list_available_models(
+    provider: str,
+    _: UserInfo = Depends(_require_admin)
+):
+    """Obtiene la lista de modelos disponibles para un proveedor (usa caché)."""
+    models = await get_models_for_provider(provider)
+    if not models:
+        # Fallbacks just in case
+        if provider == "google":
+            models = ["gemini-1.5-flash", "gemini-2.5-flash", "gemini-1.5-pro"]
+        elif provider == "openai":
+            models = ["gpt-4o", "gpt-4o-mini"]
+        elif provider == "openrouter":
+            models = ["google/gemini-2.5-flash", "openai/gpt-4o-mini"]
+        elif provider == "ollama":
+            models = ["llama3.2"]
+    return {"ok": True, "models": models}
 
 class LLMConfigOut(BaseModel):
     id: uuid.UUID

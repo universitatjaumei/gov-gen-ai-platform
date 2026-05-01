@@ -16,11 +16,13 @@ from sqlalchemy import select
 
 _CONFIGS = [
     # (provider, model_name, tier, label, is_default, api_key_env)
-    ("google",  "gemini-2.0-flash",   1, "Gemini Flash",    True,  "GOOGLE_API_KEY"),
-    ("google",  "gemini-2.0-pro",     2, "Gemini Pro",      True,  "GOOGLE_API_KEY"),
-    ("openai",  "gpt-4o-mini",        1, "GPT-4o Mini",     False, "OPENAI_API_KEY"),
-    ("openai",  "gpt-4o",             2, "GPT-4o",          False, "OPENAI_API_KEY"),
-    ("ollama",  "llama3.2",           1, "Llama 3.2 Local", False, "OLLAMA_BASE_URL"),
+    ("google",      "gemini-2.5-flash",        1, "Gemini Flash 2.5", True,  "GOOGLE_API_KEY"),
+    ("google",      "gemini-2.5-pro",          2, "Gemini Pro 2.5",   True,  "GOOGLE_API_KEY"),
+    ("openai",      "gpt-4o-mini",             1, "GPT-4o Mini",      False, "OPENAI_API_KEY"),
+    ("openai",      "gpt-4o",                  2, "GPT-4o",           False, "OPENAI_API_KEY"),
+    ("ollama",      "llama3.2",                1, "Llama 3.2 Local",  False, "OLLAMA_BASE_URL"),
+    ("openrouter",  "google/gemini-2.5-flash", 1, "OR Gemini Flash",  False, "OPENROUTER_API_KEY"),
+    ("openrouter",  "anthropic/claude-3.5-sonnet", 2, "Claude 3.5 Sonnet", False, "OPENROUTER_API_KEY"),
 ]
 
 

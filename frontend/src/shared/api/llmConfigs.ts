@@ -95,3 +95,15 @@ export async function testLLMConfig(id: string): Promise<{ ok: boolean; latency_
   }
   return res.json()
 }
+
+export async function fetchAvailableModels(provider: string): Promise<string[]> {
+  const res = await fetch(`${API_BASE}/api/v1/hub/llm-configs/available-models/${provider}`, {
+    headers: authHeaders(),
+  })
+  if (!res.ok) {
+    console.warn(`Failed to fetch models for ${provider}`)
+    return []
+  }
+  const data = await res.json()
+  return data.models || []
+}
