@@ -7,6 +7,7 @@ const HUB_SUBNAV = [
   { key: 'documents', path: '/hub/documents' },
   { key: 'reports', path: '/hub/reports' },
   { key: 'llm_configs', path: '/hub/llm-configs' },
+  { key: 'prompt_templates', path: '/hub/prompts' },
 ] as const
 
 export function HubLayout() {

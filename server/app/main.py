@@ -23,6 +23,7 @@ from server.app.routers.hub_chatbots_router import router as hub_chatbots_router
 from server.app.routers.hub_clients_router import router as hub_clients_router
 from server.app.routers.hub_ingestion_router import router as hub_ingestion_router
 from server.app.routers.hub_llm_configs_router import router as hub_llm_configs_router
+from server.app.routers.hub_prompt_templates_router import router as hub_prompt_templates_router
 
 
 async def _init_hub_db() -> None:
@@ -101,6 +102,7 @@ def _register_cloud(app: FastAPI) -> None:
     app.include_router(hub_clients_router, prefix="/api/v1")
     app.include_router(hub_ingestion_router, prefix="/api/v1")
     app.include_router(hub_llm_configs_router, prefix="/api/v1")
+    app.include_router(hub_prompt_templates_router, prefix="/api/v1")
     app.include_router(edge_sync_router, prefix="/api/v1")  # servido por cloud
 
 

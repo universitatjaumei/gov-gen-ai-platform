@@ -55,7 +55,21 @@
     "llm_config_api_key": "API env var",
     "llm_config_test": "Test",
     "llm_config_edit": "Edit LLM config",
-    "llm_config_delete_confirm": "Delete this LLM configuration?"
+    "llm_config_delete_confirm": "Delete this LLM configuration?",
+    "prompt_templates": "System prompts",
+    "new_prompt_template": "New prompt",
+    "no_prompt_templates": "No prompts created",
+    "prompt_slug": "Identifier (slug)",
+    "prompt_text": "Prompt text",
+    "prompt_variables": "Detected variables",
+    "prompt_preview": "Preview",
+    "prompt_default_tier": "Default tier",
+    "prompt_override_tier": "Override tier",
+    "save_prompt_version": "Save version",
+    "select_prompt_template": "Select a prompt from the list",
+    "delete_prompt_template": "Delete",
+    "cancel": "Cancel",
+    "create": "Create"
   },
   "login": {
     "title": "Sign in",
