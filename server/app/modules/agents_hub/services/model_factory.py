@@ -11,6 +11,14 @@ from server.app.modules.agents_hub.database.config_models import HubLLMConfig
 from server.app.modules.agents_hub.services.config_provider import ConfigProvider
 
 
+async def get_model_for_tier(tier: int, config_provider: ConfigProvider):
+    """Devuelve el modelo marcado como is_default para el tier indicado."""
+    config = await config_provider.get_llm_config_for_tier(tier)
+    if config is None:
+        raise ValueError(f"No hay configuración LLM por defecto para tier {tier}")
+    return _build_model(config)
+
+
 async def get_model(chatbot_id: uuid.UUID, config_provider: ConfigProvider):
     """Devuelve la instancia LLM configurada para el chatbot.
 

@@ -36,6 +36,9 @@ class HubLLMConfig(HubConfigBase):
     temperature: Mapped[float] = mapped_column(default=0.7)
     max_tokens: Mapped[int] = mapped_column(Integer, default=2048)
     api_key_secret_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    tier: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    label: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     chatbots: Mapped[list["HubChatbot"]] = relationship(back_populates="llm_config")
 
@@ -142,5 +145,7 @@ class HubPromptTemplate(HubConfigBase):
     language: Mapped[str] = mapped_column(String(10), nullable=False)  # ca | es | en
     template_text: Mapped[str] = mapped_column(Text, nullable=False)
     version: Mapped[int] = mapped_column(Integer, default=1)
+    default_tier: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    override_tier: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     chatbot: Mapped["HubChatbot"] = relationship(back_populates="prompt_templates")

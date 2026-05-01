@@ -17,6 +17,7 @@ class ConfigProvider(Protocol):
 
     async def get_chatbot(self, chatbot_id: uuid.UUID) -> HubChatbot | None: ...
     async def get_llm_config(self, llm_config_id: uuid.UUID) -> HubLLMConfig | None: ...
+    async def get_llm_config_for_tier(self, tier: int) -> HubLLMConfig | None: ...
     async def list_active_chatbots(self, client_id: uuid.UUID) -> list[HubChatbot]: ...
     async def get_retrieval_mode(self, chatbot_id: uuid.UUID) -> str: ...
 
@@ -38,6 +39,16 @@ class LocalConfigProvider:
         """Obtiene una configuración LLM por su ID."""
         result = await self.session.execute(
             select(HubLLMConfig).where(HubLLMConfig.id == llm_config_id)
+        )
+        return result.scalars().first()
+
+    async def get_llm_config_for_tier(self, tier: int) -> HubLLMConfig | None:
+        """Obtiene la configuración LLM marcada como default para un tier."""
+        result = await self.session.execute(
+            select(HubLLMConfig).where(
+                HubLLMConfig.tier == tier,
+                HubLLMConfig.is_default.is_(True),
+            )
         )
         return result.scalars().first()
 

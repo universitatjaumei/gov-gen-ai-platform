@@ -1,0 +1,199 @@
+"""Tests TDD para el router de LLM configs (Prompt 9E.1).
+
+Deploy: cloud
+"""
+import time
+import uuid
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from server.app.modules.agents_hub.database.config_models import HubChatbot, HubLLMConfig
+from server.app.modules.agents_hub.database.connection import get_async_session
+
+_JWT_ENV = {
+    "JWT_SECRET_KEY": "test-secret-key-that-is-at-least-32-characters-long",
+    "JWT_ALGORITHM": "HS256",
+    "JWT_EXPIRATION_MINUTES": "60",
+}
+
+
+def _make_token(role: str = "admin") -> str:
+    import os
+    os.environ.update(_JWT_ENV)
+    from server.app.core.auth import UserInfo, create_token
+    return create_token(UserInfo(user_id="admin-1", email="admin@test.com", role=role))
+
+
+def _make_config(**kwargs) -> HubLLMConfig:
+    defaults = dict(
+        id=uuid.uuid4(),
+        provider="google",
+        model_name="gemini-2.0-flash",
+        temperature=0.7,
+        max_tokens=2048,
+        api_key_secret_name=None,
+        tier=1,
+        label="Flash",
+        is_default=True,
+    )
+    defaults.update(kwargs)
+    m = MagicMock(spec=HubLLMConfig)
+    for k, v in defaults.items():
+        setattr(m, k, v)
+    return m
+
+
+def _build_app(session_mock) -> FastAPI:
+    from server.app.routers.hub_llm_configs_router import router
+
+    async def _override():
+        yield session_mock
+
+    app = FastAPI()
+    app.dependency_overrides[get_async_session] = _override
+    app.include_router(router, prefix="/api/v1")
+    return app
+
+
+@pytest.mark.usefixtures()
+class TestLLMConfigsRouter:
+
+    def test_should_list_llm_configs(self):
+        cfg = _make_config()
+        session = AsyncMock()
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = [cfg]
+        session.execute = AsyncMock(return_value=result)
+
+        client = TestClient(_build_app(session))
+        resp = client.get(
+            "/api/v1/hub/llm-configs",
+            headers={"Authorization": f"Bearer {_make_token()}"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["label"] == "Flash"
+
+    def test_should_create_llm_config_with_tier(self):
+        session = AsyncMock()
+        # No existing default for tier 1
+        no_default = MagicMock()
+        no_default.scalar_one_or_none.return_value = None
+        session.execute = AsyncMock(return_value=no_default)
+        session.add = MagicMock()
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock(side_effect=lambda obj: setattr(obj, "id", uuid.uuid4()))
+
+        client = TestClient(_build_app(session))
+        resp = client.post(
+            "/api/v1/hub/llm-configs",
+            json={
+                "provider": "openai",
+                "model_name": "gpt-4o-mini",
+                "tier": 1,
+                "label": "Mini",
+                "is_default": True,
+            },
+            headers={"Authorization": f"Bearer {_make_token()}"},
+        )
+        assert resp.status_code == 201
+
+    def test_should_reject_duplicate_default_for_same_tier(self):
+        existing = _make_config(id=uuid.uuid4(), tier=1, is_default=True)
+        session = AsyncMock()
+        dup_result = MagicMock()
+        dup_result.scalar_one_or_none.return_value = existing
+        session.execute = AsyncMock(return_value=dup_result)
+
+        client = TestClient(_build_app(session))
+        resp = client.post(
+            "/api/v1/hub/llm-configs",
+            json={
+                "provider": "openai",
+                "model_name": "gpt-4o",
+                "tier": 1,
+                "label": "GPT",
+                "is_default": True,
+            },
+            headers={"Authorization": f"Bearer {_make_token()}"},
+        )
+        assert resp.status_code == 409
+
+    def test_should_delete_config_not_in_use(self):
+        cfg = _make_config()
+        session = AsyncMock()
+        session.get = AsyncMock(return_value=cfg)
+        # No chatbots use this config
+        no_chatbots = MagicMock()
+        no_chatbots.scalar_one_or_none.return_value = None
+        session.execute = AsyncMock(return_value=no_chatbots)
+        session.delete = AsyncMock()
+        session.commit = AsyncMock()
+
+        client = TestClient(_build_app(session))
+        resp = client.delete(
+            f"/api/v1/hub/llm-configs/{cfg.id}",
+            headers={"Authorization": f"Bearer {_make_token()}"},
+        )
+        assert resp.status_code == 204
+
+    def test_should_block_delete_config_in_use(self):
+        cfg = _make_config()
+        chatbot = MagicMock(spec=HubChatbot)
+        session = AsyncMock()
+        session.get = AsyncMock(return_value=cfg)
+        in_use = MagicMock()
+        in_use.scalar_one_or_none.return_value = chatbot
+        session.execute = AsyncMock(return_value=in_use)
+
+        client = TestClient(_build_app(session))
+        resp = client.delete(
+            f"/api/v1/hub/llm-configs/{cfg.id}",
+            headers={"Authorization": f"Bearer {_make_token()}"},
+        )
+        assert resp.status_code == 409
+
+    def test_should_return_latency_on_test_connection(self):
+        cfg = _make_config()
+        session = AsyncMock()
+        session.get = AsyncMock(return_value=cfg)
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content="ok"))
+
+        with patch(
+            "server.app.routers.hub_llm_configs_router._build_model",
+            return_value=mock_llm,
+        ):
+            client = TestClient(_build_app(session))
+            resp = client.post(
+                f"/api/v1/hub/llm-configs/{cfg.id}/test",
+                headers={"Authorization": f"Bearer {_make_token()}"},
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ok"] is True
+        assert "latency_ms" in body
+
+    def test_should_get_model_for_tier_returns_default(self):
+        import os
+        os.environ.update(_JWT_ENV)
+        from server.app.modules.agents_hub.services.model_factory import get_model_for_tier
+
+        cfg = _make_config(tier=1, is_default=True)
+        config_provider = AsyncMock()
+        config_provider.get_llm_config_for_tier = AsyncMock(return_value=cfg)
+
+        import asyncio
+        with patch(
+            "server.app.modules.agents_hub.services.model_factory._build_model",
+            return_value=MagicMock(),
+        ) as mock_build:
+            asyncio.get_event_loop().run_until_complete(
+                get_model_for_tier(1, config_provider)
+            )
+            mock_build.assert_called_once_with(cfg)
