@@ -1,6 +1,5 @@
 import asyncio
-import uuid
-from sqlalchemy import select, update
+from sqlalchemy import select
 from server.app.modules.agents_hub.database.connection import create_async_engine, create_session_factory
 from server.app.modules.agents_hub.database.config_models import HubLLMConfig
 

@@ -8,8 +8,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Protocol
 
-logger = logging.getLogger(__name__)
-
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +25,8 @@ from server.app.modules.agents_hub.ingestion.markdown_utils import (
     estimate_tokens,
     extract_title_from_markdown,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingService(Protocol):

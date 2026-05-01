@@ -133,9 +133,6 @@ async def _run_agentic_loop(
             tool_name = tc["name"]
             tool_args = tc.get("args", {})
             if tool_name == "list_documents":
-                result = await retrieval_strategy.list_index(
-                    uuid.UUID(chatbot_id), language
-                )
                 from server.app.modules.agents_hub.agent.tools.list_documents import list_documents
                 tool_output = await list_documents(chatbot_id, retrieval_strategy, language)
             elif tool_name == "read_document":
