@@ -21,6 +21,20 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from server.app.modules.agents_hub.database.base import HubConfigBase
 
 
+class HubProvider(HubConfigBase):
+    """Proveedor dinámico de LLMs (Google, OpenRouter, LMStudio, etc.)."""
+
+    __tablename__ = "hub_providers"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)  # e.g. google, openrouter, lmstudio
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    provider_type: Mapped[str] = mapped_column(String(50), nullable=False)  # openai_compatible, google_genai, etc
+    base_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    api_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    llm_configs: Mapped[list["HubLLMConfig"]] = relationship(back_populates="provider_rel")
+
+
 class HubLLMConfig(HubConfigBase):
     """Configuración de modelo LLM reutilizable por chatbot."""
 
@@ -30,8 +44,8 @@ class HubLLMConfig(HubConfigBase):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     provider: Mapped[str] = mapped_column(
-        String(50), nullable=False
-    )  # google | openai | ollama
+        String(50), ForeignKey("hub_providers.id"), nullable=False
+    )
     model_name: Mapped[str] = mapped_column(String(255), nullable=False)
     temperature: Mapped[float] = mapped_column(default=0.7)
     max_tokens: Mapped[int] = mapped_column(Integer, default=2048)
@@ -41,6 +55,7 @@ class HubLLMConfig(HubConfigBase):
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     chatbots: Mapped[list["HubChatbot"]] = relationship(back_populates="llm_config")
+    provider_rel: Mapped["HubProvider"] = relationship(back_populates="llm_configs")
 
 
 class HubClient(HubConfigBase):

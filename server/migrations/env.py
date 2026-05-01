@@ -12,6 +12,8 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 
 # Import all models so Alembic can detect them
 import server.app.database.models  # noqa: F401
+import server.app.modules.agents_hub.database.config_models
+import server.app.modules.agents_hub.database.operational_models
 
 
 config = context.config

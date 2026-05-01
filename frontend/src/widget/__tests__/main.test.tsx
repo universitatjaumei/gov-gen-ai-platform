@@ -8,7 +8,7 @@ beforeAll(async () => {
 })
 
 describe('Widget main', () => {
-  let changeLanguageSpy: ReturnType<typeof vi.spyOn<typeof i18n, 'changeLanguage'>>
+  let changeLanguageSpy: any
 
   afterEach(() => {
     document.body.innerHTML = ''

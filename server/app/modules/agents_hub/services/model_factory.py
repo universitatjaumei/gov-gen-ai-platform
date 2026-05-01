@@ -44,14 +44,19 @@ async def get_model(chatbot_id: uuid.UUID, config_provider: ConfigProvider):
 
 
 def _build_model(config: HubLLMConfig):
-    """Construye la instancia LLM a partir del config."""
-    # Leer la clave solo si api_key_secret_name está definido; si no, LangChain
-    # usará su propia variable de entorno estándar (GOOGLE_API_KEY, etc.)
-    api_key: str | None = None
-    if config.api_key_secret_name:
+    """Construye la instancia LLM a partir del config y su proveedor."""
+    provider = getattr(config, "provider_rel", None)
+    if not provider:
+        raise ValueError(f"Provider not loaded or missing for config {config.id}")
+
+    # api_key is primarily from the provider table now. We can still allow api_key_secret_name as fallback if needed.
+    api_key = provider.api_key
+    if not api_key and config.api_key_secret_name:
         api_key = os.getenv(config.api_key_secret_name) or None
 
-    if config.provider == "google":
+    ptype = provider.provider_type
+
+    if ptype == "google_genai":
         kwargs: dict = dict(
             model=config.model_name,
             temperature=config.temperature,
@@ -60,7 +65,8 @@ def _build_model(config: HubLLMConfig):
         if api_key:
             kwargs["google_api_key"] = api_key
         return ChatGoogleGenerativeAI(**kwargs)
-    elif config.provider == "openai":
+        
+    elif ptype == "openai_compatible":
         kwargs = dict(
             model=config.model_name,
             temperature=config.temperature,
@@ -68,23 +74,21 @@ def _build_model(config: HubLLMConfig):
         )
         if api_key:
             kwargs["api_key"] = api_key
+        # Use base_url from provider if available
+        if provider.base_url:
+            kwargs["base_url"] = provider.base_url
         return ChatOpenAI(**kwargs)
-    elif config.provider == "ollama":
+        
+    elif ptype == "ollama":
         from langchain_community.chat_models import ChatOllama
 
-        return ChatOllama(
-            model=config.model_name,
-            temperature=config.temperature,
-        )
-    elif config.provider == "openrouter":
         kwargs = dict(
             model=config.model_name,
             temperature=config.temperature,
-            max_tokens=config.max_tokens,
-            base_url="https://openrouter.ai/api/v1",
         )
-        if api_key:
-            kwargs["api_key"] = api_key
-        return ChatOpenAI(**kwargs)
+        if provider.base_url:
+            kwargs["base_url"] = provider.base_url
+        return ChatOllama(**kwargs)
+        
     else:
-        raise ValueError(f"Provider desconocido: {config.provider}")
+        raise ValueError(f"Provider type desconocido: {ptype}")

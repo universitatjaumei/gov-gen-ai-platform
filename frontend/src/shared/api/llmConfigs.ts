@@ -107,3 +107,69 @@ export async function fetchAvailableModels(provider: string): Promise<string[]> 
   const data = await res.json()
   return data.models || []
 }
+
+export interface HubProvider {
+  id: string
+  name: string
+  provider_type: string
+  base_url: string | null
+  api_key: string | null
+}
+
+export interface HubProviderCreate {
+  id: string
+  name: string
+  provider_type: string
+  base_url?: string | null
+  api_key?: string | null
+}
+
+export interface HubProviderUpdate {
+  name?: string
+  provider_type?: string
+  base_url?: string | null
+  api_key?: string | null
+}
+
+export async function fetchProviders(): Promise<HubProvider[]> {
+  const res = await fetch(`${API_BASE}/api/v1/hub/llm-configs/providers`, { headers: authHeaders() })
+  if (!res.ok) throw new Error('Failed to fetch providers')
+  return res.json()
+}
+
+export async function createProvider(data: HubProviderCreate): Promise<HubProvider> {
+  const res = await fetch(`${API_BASE}/api/v1/hub/llm-configs/providers`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail ?? 'Failed to create provider')
+  }
+  return res.json()
+}
+
+export async function updateProvider(id: string, data: HubProviderUpdate): Promise<HubProvider> {
+  const res = await fetch(`${API_BASE}/api/v1/hub/llm-configs/providers/${id}`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail ?? 'Failed to update provider')
+  }
+  return res.json()
+}
+
+export async function deleteProvider(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/v1/hub/llm-configs/providers/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail ?? 'Failed to delete provider')
+  }
+}

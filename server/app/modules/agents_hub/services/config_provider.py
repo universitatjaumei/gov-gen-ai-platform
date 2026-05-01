@@ -4,6 +4,7 @@ import uuid
 from typing import Protocol
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.modules.agents_hub.database.config_models import (
@@ -38,14 +39,18 @@ class LocalConfigProvider:
     async def get_llm_config(self, llm_config_id: uuid.UUID) -> HubLLMConfig | None:
         """Obtiene una configuración LLM por su ID."""
         result = await self.session.execute(
-            select(HubLLMConfig).where(HubLLMConfig.id == llm_config_id)
+            select(HubLLMConfig)
+            .options(selectinload(HubLLMConfig.provider_rel))
+            .where(HubLLMConfig.id == llm_config_id)
         )
         return result.scalars().first()
 
     async def get_llm_config_for_tier(self, tier: int) -> HubLLMConfig | None:
         """Obtiene la configuración LLM marcada como default para un tier."""
         result = await self.session.execute(
-            select(HubLLMConfig).where(
+            select(HubLLMConfig)
+            .options(selectinload(HubLLMConfig.provider_rel))
+            .where(
                 HubLLMConfig.tier == tier,
                 HubLLMConfig.is_default.is_(True),
             )

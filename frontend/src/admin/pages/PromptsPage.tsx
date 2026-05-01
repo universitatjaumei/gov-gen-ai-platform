@@ -5,13 +5,7 @@ import { fetchPromptTemplates, updatePromptTemplate, deletePromptTemplate, creat
 import type { PromptTemplate, PromptTemplateCreate } from '@/shared/api/promptTemplates'
 import { fetchChatbots } from '@/shared/api/chatbots'
 
-// Extract {variable} names from a template string
-function extractVariables(text: string): string[] {
-  const matches = text.matchAll(/\{(\w+)\}/g)
-  const seen = new Set<string>()
-  for (const m of matches) seen.add(m[1])
-  return Array.from(seen)
-}
+// Removed unused extractVariables
 
 // Render template text with {variable} spans highlighted (for the editor preview)
 function HighlightedText({ text }: { text: string }) {

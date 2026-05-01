@@ -15,7 +15,7 @@ import {
 const schema = z.object({
   name: z.string().min(1),
   partner_id: z.string().min(1),
-  theme_config: z.string().default('{}'),
+  theme_config: z.string(),
   is_active: z.boolean(),
 })
 type FormValues = z.infer<typeof schema>

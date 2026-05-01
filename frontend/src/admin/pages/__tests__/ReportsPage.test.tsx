@@ -58,7 +58,7 @@ const SAMPLE_INTERACTIONS: feedbackApi.Interaction[] = [
 ]
 
 const SAMPLE_CHATBOTS = [
-  { id: 'c-1', name: 'Test Bot', client_id: '', llm_config_id: '', system_prompt: '', sources: [], is_active: true, retrieval_mode: 'vector' as const, created_at: '', updated_at: '' },
+  { id: 'c-1', name: 'Test Bot', client_id: '', llm_config_id: '', system_prompt: '', sources: [], is_active: true, retrieval_mode: 'vector' as const, retrieval_top_k: 8, created_at: '', updated_at: '' },
 ]
 
 function renderPage() {

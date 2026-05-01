@@ -10,11 +10,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from server.app.api.deps import require_role
 from server.app.core.auth.models import UserInfo
 from server.app.modules.agents_hub.database.connection import get_async_session
-from server.app.modules.agents_hub.database.config_models import HubChatbot, HubLLMConfig
+from server.app.modules.agents_hub.database.config_models import HubChatbot, HubLLMConfig, HubProvider
 from server.app.modules.agents_hub.services.model_factory import _build_model
 from server.app.services.model_fetcher import get_models_for_provider
 
@@ -23,24 +24,124 @@ router = APIRouter(prefix="/hub/llm-configs", tags=["hub-llm-configs"])
 _require_admin = require_role("admin", "partner")
 
 
-@router.get("/available-models/{provider}")
+class HubProviderOut(BaseModel):
+    id: str
+    name: str
+    provider_type: str
+    base_url: str | None
+    api_key: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class HubProviderCreate(BaseModel):
+    id: str
+    name: str
+    provider_type: str
+    base_url: str | None = None
+    api_key: str | None = None
+
+
+class HubProviderUpdate(BaseModel):
+    name: str | None = None
+    provider_type: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+
+
+@router.get("/providers", response_model=list[HubProviderOut])
+async def list_providers(
+    _: UserInfo = Depends(_require_admin),
+    session=Depends(get_async_session),
+):
+    """Obtiene la lista de proveedores dinámicos."""
+    result = await session.execute(select(HubProvider).order_by(HubProvider.name))
+    return result.scalars().all()
+
+
+@router.post("/providers", response_model=HubProviderOut, status_code=status.HTTP_201_CREATED)
+async def create_provider(
+    body: HubProviderCreate,
+    _: UserInfo = Depends(_require_admin),
+    session=Depends(get_async_session),
+):
+    """Crea un nuevo proveedor."""
+    existing = await session.get(HubProvider, body.id)
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Ya existe un proveedor con este ID"
+        )
+    provider = HubProvider(**body.model_dump())
+    session.add(provider)
+    await session.commit()
+    await session.refresh(provider)
+    return provider
+
+
+@router.patch("/providers/{provider_id}", response_model=HubProviderOut)
+async def update_provider(
+    provider_id: str,
+    body: HubProviderUpdate,
+    _: UserInfo = Depends(_require_admin),
+    session=Depends(get_async_session),
+):
+    """Actualiza un proveedor existente."""
+    provider = await session.get(HubProvider, provider_id)
+    if not provider:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
+    
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(provider, field, value)
+        
+    await session.commit()
+    await session.refresh(provider)
+    return provider
+
+
+@router.delete("/providers/{provider_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_provider(
+    provider_id: str,
+    _: UserInfo = Depends(_require_admin),
+    session=Depends(get_async_session),
+):
+    """Elimina un proveedor si no está en uso."""
+    provider = await session.get(HubProvider, provider_id)
+    if not provider:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
+        
+    in_use = await session.execute(
+        select(HubLLMConfig).where(HubLLMConfig.provider == provider_id)
+    )
+    if in_use.scalars().first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No se puede eliminar: hay configuraciones usando este proveedor",
+        )
+        
+    await session.delete(provider)
+    await session.commit()
+
+
+@router.get("/available-models/{provider_id}")
 async def list_available_models(
-    provider: str,
-    _: UserInfo = Depends(_require_admin)
+    provider_id: str,
+    _: UserInfo = Depends(_require_admin),
+    session=Depends(get_async_session),
 ):
     """Obtiene la lista de modelos disponibles para un proveedor (usa caché)."""
-    models = await get_models_for_provider(provider)
+    provider = await session.get(HubProvider, provider_id)
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+        
+    models = await get_models_for_provider(provider_id) # Usamos provider_id que puede ser el tipo
     if not models:
         # Fallbacks just in case
-        if provider == "google":
+        if provider.provider_type == "google_genai":
             models = ["gemini-1.5-flash", "gemini-2.5-flash", "gemini-1.5-pro"]
-        elif provider == "openai":
-            models = ["gpt-4o", "gpt-4o-mini"]
-        elif provider == "openrouter":
-            models = ["google/gemini-2.5-flash", "openai/gpt-4o-mini"]
-        elif provider == "ollama":
-            models = ["llama3.2"]
+        elif provider.provider_type == "openai_compatible":
+            models = ["gpt-4o", "gpt-4o-mini", "llama3.2"]
     return {"ok": True, "models": models}
+
 
 class LLMConfigOut(BaseModel):
     id: uuid.UUID
@@ -177,7 +278,12 @@ async def test_llm_connection(
     _: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
-    config = await session.get(HubLLMConfig, config_id)
+    result = await session.execute(
+        select(HubLLMConfig)
+        .options(selectinload(HubLLMConfig.provider_rel))
+        .where(HubLLMConfig.id == config_id)
+    )
+    config = result.scalars().first()
     if not config:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found")
 
