@@ -8,5 +8,7 @@
   "widget_close": "Close",
   "widget_loading": "Loading...",
   "feedback_rate": "Rate response",
-  "feedback_stars": "stars"
+  "feedback_stars": "stars",
+  "sources": "Sources",
+  "no_sources": "No sources cited"
 }

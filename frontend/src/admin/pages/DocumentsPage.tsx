@@ -409,7 +409,7 @@ export function DocumentsPage() {
                                 <SourceKindIcon kind={doc.source_kind} />
                                 <span className="truncate font-medium" title={doc.title}>{doc.title}</span>
                               </div>
-                              {doc.canonical_url && (
+                              {doc.canonical_url?.startsWith('http') && (
                                 <a
                                   href={doc.canonical_url}
                                   target="_blank"
@@ -798,7 +798,12 @@ function JobStatusBadge({ status, error }: { status: string; error: string | nul
   switch (status) {
     case 'completed': return <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-green-100 text-green-700 border border-green-200"><CheckCircle2 className="w-3 h-3" /> Completado</span>
     case 'running':   return <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-blue-100 text-blue-700 border border-blue-200"><Loader2 className="w-3 h-3 animate-spin" /> Procesando</span>
-    case 'failed':    return <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-red-100 text-red-700 border border-red-200" title={error || ''}><AlertCircle className="w-3 h-3" /> Error</span>
+    case 'failed':    return (
+      <div>
+        <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-red-100 text-red-700 border border-red-200"><AlertCircle className="w-3 h-3" /> Error</span>
+        {error && <p className="text-xs text-red-600 mt-1 max-w-xs break-words">{error}</p>}
+      </div>
+    )
     default:          return <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-gray-100 text-gray-700 border border-gray-200"><Clock className="w-3 h-3" /> En cola</span>
   }
 }

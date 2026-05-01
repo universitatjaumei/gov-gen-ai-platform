@@ -1,13 +1,17 @@
 """Orquestador de ingestión asincrona."""
 
 import asyncio
+import logging
 import tempfile
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Protocol
 
+logger = logging.getLogger(__name__)
+
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.modules.agents_hub.agent.language_detector import detect_language
@@ -139,7 +143,26 @@ class IngestionWatcher:
                 token_count=token_count,
             )
             self._session.add(doc)
-            await self._session.flush()
+            try:
+                # Savepoint: si falla por clave duplicada solo se revierte el savepoint,
+                # no la transacción exterior (que mantiene el job válido).
+                async with self._session.begin_nested():
+                    await self._session.flush()
+            except IntegrityError:
+                # Dos jobs concurrentes procesaron el mismo contenido: usar el existente.
+                # Tras el rollback del savepoint, doc puede estar ya desvinculado.
+                try:
+                    self._session.expunge(doc)
+                except Exception:
+                    pass
+                existing_dup = await self._session.execute(
+                    select(HubDocument).where(
+                        HubDocument.chatbot_id == chatbot_id,
+                        HubDocument.content_hash == content_hash,
+                    ).limit(1)
+                )
+                doc = existing_dup.scalar_one()
+                return doc, 0
 
         # Chunking + embedding solo si el chatbot está en modo vector
         retrieval_mode = (
@@ -233,6 +256,7 @@ class IngestionWatcher:
         await self._session.commit()
 
         tmp_path: str | None = None
+        error: Exception | None = None
         try:
             source_for_docling = job.source_url
             citation_url = job.canonical_url
@@ -244,25 +268,38 @@ class IngestionWatcher:
                     tmp_path = tmp.name
                 source_for_docling = tmp_path
                 if not citation_url:
-                    citation_url = job.source_url
+                    citation_url = job.source_url  # storage key como identificador canónico
 
+            filename_hint = Path(job.original_filename).stem if job.original_filename else None
             doc, n_chunks = await self.process_source(
                 source_for_docling,
                 job.chatbot_id,
                 citation_url=citation_url,
                 prefetched_content=prefetched_content,
                 language=job.language,
+                title=filename_hint,
             )
             job.status = "completed"
             job.chunks_processed = n_chunks
         except Exception as e:
-            job.status = "failed"
-            job.error_message = str(e)
+            logger.error("Job %s falló: %s", job_id, e, exc_info=True)
+            error = e
         finally:
             if tmp_path:
                 Path(tmp_path).unlink(missing_ok=True)
 
-        await self._session.commit()
+        if error is not None:
+            try:
+                await self._session.rollback()
+                job = await self._session.get(HubIngestionJob, job_id)
+                if job:
+                    job.status = "failed"
+                    job.error_message = str(error)
+                    await self._session.commit()
+            except Exception as save_err:
+                logger.error("No se pudo guardar el estado 'failed' del job %s: %s", job_id, save_err, exc_info=True)
+        else:
+            await self._session.commit()
 
 
 async def cleanup_temporary_chunks(session: AsyncSession, ttl_hours: int = 24) -> int:

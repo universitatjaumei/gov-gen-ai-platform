@@ -8,5 +8,7 @@
   "widget_close": "Tanca",
   "widget_loading": "Carregant...",
   "feedback_rate": "Valorar resposta",
-  "feedback_stars": "estrelles"
+  "feedback_stars": "estrelles",
+  "sources": "Fonts",
+  "no_sources": "Sense fonts citades"
 }

@@ -3,31 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Laboratorio Widget - Prompt 9.10</title>
+    <title>Laboratorio Widget - Prompt 9CBis.11</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { font-family: sans-serif; }
         .test-card { max-width: 500px; margin: 2rem auto; padding: 2rem; border-radius: 1rem; background: white; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        /* Theming de pills: sobrescribibles por el partner */
+        #govgenai-widget {
+            --source-pill-bg: #e0f2fe;
+            --source-pill-fg: #0369a1;
+            --source-pill-border: #7dd3fc;
+        }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen">
 
     <div class="test-card mt-12 text-center">
-        <h1 class="text-2xl font-bold text-slate-800 mb-2">🚀 Modo Test: Prompt 9.10</h1>
-        <p class="text-slate-500 mb-6 text-sm">Probando streaming, feedback y traducción automática.</p>
-        
+        <h1 class="text-2xl font-bold text-slate-800 mb-2">Modo Test: Prompt 9CBis.11</h1>
+        <p class="text-slate-500 mb-6 text-sm">Probando citas como pills clicables y markdown en mensajes.</p>
+
         <div class="text-left bg-slate-100 p-4 rounded-lg text-xs font-mono text-slate-600">
             <p><strong>Configuración activa:</strong></p>
             <p class="mt-1 text-blue-600 italic">Chatbot: E2E Bot (9d6eed7d...)</p>
             <p>Lang: Catalán (ca)</p>
             <p>API: http://localhost:8000</p>
         </div>
+        <div class="mt-4 text-left bg-amber-50 p-3 rounded text-xs text-amber-800">
+            <strong>Que verificar:</strong>
+            <ul class="mt-1 list-disc pl-4 space-y-1">
+                <li>Las respuestas del asistente renderizan Markdown (negrita, listas...)</li>
+                <li>Aparecen pills azules con los títulos de los documentos citados</li>
+                <li>Cada pill abre el documento en una nueva pestaña</li>
+                <li>Si no hay fuentes, no aparece ninguna pill</li>
+            </ul>
+        </div>
     </div>
 
     <div id="govgenai-widget"
          data-chatbot-id="9d6eed7d-c667-4538-a240-ab1caf358153"
          data-lang="ca"
-         data-api-url="http://localhost:8000/api/v1">
+         data-api-url="http://localhost:8000/api/v1"
+         data-token="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZW1haWwiOiJmYWJyYUB1amkuZXMiLCJyb2xlIjoiYWRtaW4iLCJleHAiOjE3Nzc1NzEyNjcsImlhdCI6MTc3NzU2NzY2N30.mc1-IbpBWaCJOf8nb4q9JsmASgn8CBXjdbmUS3tyYC4">
     </div>
 
     <script>
@@ -38,7 +54,7 @@
         };
     </script>
 
-    <script src="/dist/widget/widget.iife.js"></script>
+    <script src="./dist/widget/widget.iife.js"></script>
 
     <div class="max-w-md mx-auto text-center mt-8 p-4 border-t border-slate-200">
         <p class="text-xs text-slate-400">

@@ -1,16 +1,51 @@
 import { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { useTranslation } from 'react-i18next'
-import { useChat } from '../hooks/useChat'
+import { useChat, type SourceRef } from '../hooks/useChat'
 
 interface Props {
   chatbotId: string
   apiUrl: string
   lang: string
+  token?: string
 }
 
 interface StarRatingProps {
   interactionId: string
   apiUrl: string
+}
+
+interface SourcePillsProps {
+  sources: SourceRef[]
+}
+
+function SourcePills({ sources }: SourcePillsProps) {
+  const { t } = useTranslation('chat')
+  if (sources.length === 0) return null
+  return (
+    <nav aria-label={t('sources')} style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', marginTop: '0.5rem' }}>
+      {sources.map(src => (
+        <a
+          key={src.document_id}
+          href={src.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            background: 'var(--source-pill-bg, #e0f2fe)',
+            color: 'var(--source-pill-fg, #0369a1)',
+            border: '1px solid var(--source-pill-border, #7dd3fc)',
+            borderRadius: '999px',
+            padding: '0.2rem 0.65rem',
+            fontSize: '0.8rem',
+            textDecoration: 'none',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {src.title}
+        </a>
+      ))}
+    </nav>
+  )
 }
 
 function StarRating({ interactionId, apiUrl }: StarRatingProps) {
@@ -44,7 +79,7 @@ function StarRating({ interactionId, apiUrl }: StarRatingProps) {
   )
 }
 
-export function ChatWidget({ chatbotId, apiUrl, lang }: Props) {
+export function ChatWidget({ chatbotId, apiUrl, lang, token }: Props) {
   const [open, setOpen] = useState(true)
   const [input, setInput] = useState('')
   const { t } = useTranslation('chat')
@@ -53,9 +88,10 @@ export function ChatWidget({ chatbotId, apiUrl, lang }: Props) {
     currentNodeStatus,
     isStreaming,
     translationWarning,
+    sources,
     interactionId,
     sendMessage,
-  } = useChat(chatbotId, apiUrl, lang)
+  } = useChat(chatbotId, apiUrl, lang, token)
 
   const lastAssistantIdx = [...messages].map((m, i) => ({ m, i })).reverse().find(({ m }) => m.role === 'assistant')?.i ?? -1
   const showRating = !isStreaming && interactionId !== null && lastAssistantIdx !== -1
@@ -107,7 +143,13 @@ export function ChatWidget({ chatbotId, apiUrl, lang }: Props) {
                 {translationWarning}
               </div>
             )}
-            <p>{msg.content}</p>
+            {msg.role === 'assistant'
+              ? <ReactMarkdown>{msg.content}</ReactMarkdown>
+              : <p>{msg.content}</p>
+            }
+            {msg.role === 'assistant' && i === lastAssistantIdx && !isStreaming && (
+              <SourcePills sources={sources} />
+            )}
           </div>
         ))}
       </div>

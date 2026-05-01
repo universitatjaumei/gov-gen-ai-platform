@@ -5,22 +5,29 @@ export interface Message {
   content: string
 }
 
+export interface SourceRef {
+  document_id: string
+  title: string
+  url: string
+  score: number
+}
+
 export interface UseChatReturn {
   messages: Message[]
   currentNodeStatus: string | null
   isStreaming: boolean
   translationWarning: string | null
-  sources: string[]
+  sources: SourceRef[]
   interactionId: string | null
   sendMessage: (text: string) => Promise<void>
 }
 
-export function useChat(chatbotId: string, apiUrl: string, lang: string): UseChatReturn {
+export function useChat(chatbotId: string, apiUrl: string, lang: string, token?: string): UseChatReturn {
   const [messages, setMessages] = useState<Message[]>([])
   const [currentNodeStatus, setCurrentNodeStatus] = useState<string | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
   const [translationWarning, setTranslationWarning] = useState<string | null>(null)
-  const [sources, setSources] = useState<string[]>([])
+  const [sources, setSources] = useState<SourceRef[]>([])
   const [interactionId, setInteractionId] = useState<string | null>(null)
   const isStreamingRef = useRef(false)
 
@@ -39,9 +46,11 @@ export function useChat(chatbotId: string, apiUrl: string, lang: string): UseCha
     ])
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
       const response = await fetch(`${apiUrl}/hub/chat/${chatbotId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ message: text, lang }),
       })
 
@@ -88,7 +97,7 @@ export function useChat(chatbotId: string, apiUrl: string, lang: string): UseCha
                 return prev
               })
             } else if (currentEvent === 'done') {
-              setSources((payload.sources as string[]) ?? [])
+              setSources((payload.sources as SourceRef[]) ?? [])
               setInteractionId(payload.interaction_id as string)
               if (payload.language_fallback) {
                 setTranslationWarning(payload.translation_warning as string | null)
@@ -109,7 +118,7 @@ export function useChat(chatbotId: string, apiUrl: string, lang: string): UseCha
       setIsStreaming(false)
       setCurrentNodeStatus(null)
     }
-  }, [chatbotId, apiUrl, lang])
+  }, [chatbotId, apiUrl, lang, token])
 
   return { messages, currentNodeStatus, isStreaming, translationWarning, sources, interactionId, sendMessage }
 }

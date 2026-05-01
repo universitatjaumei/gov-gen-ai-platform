@@ -66,7 +66,7 @@
 | FASE 6 — Tests E2E y CI/CD | ✅ COMPLETADO | 2026-04-23 | 4 tests E2E (httpx+AsyncClient), 5 tests integración pipeline+auth, GitHub Actions CI/CD con pgvector |
 | FASE 7 — Docker multi-stage | ✅ COMPLETADO | 2026-04-23 | Imagen CPU-only (~2.96 GB), uv sync, docker-compose.prod.yml, LangFuse self-hosted, scripts/postgres/init.sql |
 | FASE 8 — LangFuse + FeedbackService | ✅ COMPLETADO | 2026-04-23 | observability.py, FeedbackService, hub_feedback router, migración feedback_text, 10 tests verdes |
-| FASE 9 — Frontend React | 🔄 EN PROGRESO | 2026-04-26 | Prompts 9.1–9.10 completados; 9.10 ChatWidget SSE (useChat, StarRating, streaming/status/warning/feedback, 8 tests verdes) |
+| FASE 9 — Frontend React | 🔄 EN PROGRESO | 2026-04-26 | Prompts 9.1–9.10 completados; 9CBis.10 SSE emite Source[] estructurado (10 tests verdes nuevos + fix score round); 9.10 ChatWidget SSE (useChat, StarRating, streaming/status/warning/feedback, 8 tests verdes) |
 | FASE 9C — StorageService (fsspec) | ✅ COMPLETADO | 2026-04-27 | `FsspecStorageService` (file/S3/GCS); inyección Depends; `/upload` persiste PDF con key `ingestion/{chatbot_id}/{job_id}.pdf`; `IngestionWatcher` descarga a tmp y limpia; `delete` y `clear` borran de storage; 19 tests verdes (11 unit + 8 integración) |
 | FASE 10 — Sistema de temas y panel de IA | ⏳ PENDIENTE | — | — |
 | FASE 11 — Autoinstalación | ⏳ PENDIENTE | — | — |
@@ -81,6 +81,7 @@
 | FASE 20 — Accesibilidad WCAG 2.2 AA + admin conversacional | ⏳ PENDIENTE | — | Transversal sobre Fases 9-10 |
 | FASE 21 — RPA web (diferido a v2) | ⏳ FUERA ALCANCE v1 | — | Decisión documentada; worker Playwright en Edge si necesario |
 | FASE 22 — Microservicios Embedding + Docling | ⏳ DIFERIDO (post-cloud) | — | Extraer BGE-M3 y Docling a Cloud Run independientes; no iniciar hasta criterios de métricas (cold start >15s, RAM >2 GB) |
+| **FASE Deploy** — Paso a producción en GCP | ⏳ PENDIENTE | — | D.1 API key widget · D.2 Secret Manager · D.3 Cloud SQL + Alembic · D.4 Artifact Registry + Cloud Run · D.5 CI/CD GitHub Actions · D.6 Edge node híbrido |
 
 ---
 
@@ -207,7 +208,7 @@ uv run pytest tests/unit/test_config.py -v
 | **6** | Tests E2E | 6.1 - 6.3 | **MANTENIDA** (CI/CD: GitHub Actions) | Fases 1-5 |
 | **7** | Despliegue | 7.1 - 7.4 | **REDUCIDA** — extender docker-compose existente | Fases 1-6 |
 | **8** | Observabilidad | 8.1 - 8.3 | **MANTENIDA** | Fases 1-5 |
-| **9** | Frontend + i18n + Modo Agente | 9.1 - 9.18 (+ 9.7.1 crawler) | **MANTENIDA + AMPLIADA** (añadidos 9.7.1 crawler ✅, 9.14–9.18) | Fase 5 (API) |
+| **9** | Frontend + i18n + Modo Agente | 9.1 - 9.18 (+ 9.7.1 crawler, 9CBis.1-17) | **MANTENIDA + AMPLIADA** (añadidos 9.7.1 crawler ✅, 9.14–9.18, 9CBis.16 spider genérico, 9CBis.17 spider UJI normativa+procediments) | Fase 5 (API) |
 | **10** | Temas y Panel de IA | 10.1 - 10.11 | **MANTENIDA** | Fase 9 |
 | **11** | Autoinstalación | 11.1 - 11.3 | **ADAPTADA** — extender docker-compose unificado | Fases 1-10 |
 | **12** | Gestor de Expedientes | E1 - E5 | **NUEVA** | Fases 3, 4, Auth OIDC |
@@ -5042,11 +5043,14 @@ Guía 9CBis.0 (conceptual, se lee antes de escribir código)
   ├── 9CBis.7       Citas como contrato: system prompt + post-validador (RED + GREEN)
   ├── 9CBis.8 ✅    Refactor de 9.7.x — IngestionWatcher crea HubDocument; chunks solo si vector
   ├── 9CBis.9 ✅    Refactor UI Documentos — vista unificada de HubDocument (PDF + crawler)
-  ├── 9CBis.10      Refactor de 9.8.2 — SSE emite Source[] estructurado (no string[])
-  ├── 9CBis.11      Refactor de 9.10 — Widget renderiza citas como pills clicables
+  ├── 9CBis.10 ✅   Refactor de 9.8.2 — SSE emite Source[] estructurado (no string[])
+  ├── 9CBis.11 ✅   Refactor de 9.10 — Widget renderiza citas como pills clicables
   ├── 9CBis.12 RED  router multi-materia: nodo route_to_subagent (tests)
   ├── 9CBis.13 GREEN router + UI admin de jerarquía padre/hijo
-  └── 9CBis.14      UI admin: selector retrieval_mode con recomendación basada en tokens
+  ├── 9CBis.14      UI admin: selector retrieval_mode con recomendación basada en tokens
+  ├── 9CBis.15      Botón "Recalcular corpus" — re-ingestión completa ante cambio de modo o modelo
+  ├── 9CBis.16      Spider de fuentes web: crawl_depth + filtros para indexar jerarquías de normativa
+  └── 9CBis.17      Spider UJI: normativa (div.uji-editor + clasificador) y procediments (paginador GET + extracción estructurada)
 ```
 
 **Cierre del bloque**: tras 9CBis.14, ejecutar la suite completa (`uv run pytest tests/ -v` en `server/` y `npm test` en `frontend/`) y verificar manualmente que (a) los chatbots existentes siguen respondiendo (modo `vector` por defecto), (b) un chatbot nuevo configurado en `long_context` o `agentic` responde con citas precisas a documento, (c) el router multi-materia delega correctamente entre hijos. Generar el `.bat` de pruebas manuales agregado para todo el bloque.
@@ -6809,20 +6813,31 @@ uv run pytest tests/ -v   # regresión completa obligatoria
 Lógica de recomendación (servicio `corpus_recommender.py`, edge):
 
 ```python
-def recommend_retrieval_mode(total_tokens: int) -> tuple[str, str]:
-    if total_tokens < 100_000:
+def recommend_retrieval_mode(total_tokens: int, context_window: int = 128_000) -> tuple[str, str]:
+    """Los umbrales se adaptan a la ventana de contexto del LLM activo.
+    
+    - long_context: el corpus cabe al 60 % del contexto (margen para el prompt + respuesta).
+    - agentic: el corpus excede el long_context pero el LLM puede seleccionar documentos.
+    - vector: corpus demasiado grande incluso para agentic (>16× la ventana de contexto).
+    """
+    long_ctx_limit = int(context_window * 0.6)
+    agentic_limit  = context_window * 16
+    if total_tokens < long_ctx_limit:
         return ("long_context",
-                f"El corpus ({total_tokens:,} tokens) cabe completo en el contexto del LLM. "
-                f"Recomendado long_context: cero pérdida de información, citas precisas.")
-    if total_tokens < 2_000_000:
+                f"El corpus ({total_tokens:,} tokens) cabe al 60 % de la ventana del LLM "
+                f"({context_window:,} tokens). Recomendado long_context: cero pérdida de "
+                f"información, citas precisas.")
+    if total_tokens < agentic_limit:
         return ("agentic",
-                f"El corpus ({total_tokens:,} tokens) excede el long_context pero permite "
-                f"que el LLM seleccione qué documentos leer. Recomendado agentic.")
+                f"El corpus ({total_tokens:,} tokens) excede el long_context pero el LLM "
+                f"puede seleccionar qué documentos leer. Recomendado agentic.")
     return ("vector",
             f"El corpus ({total_tokens:,} tokens) requiere búsqueda vectorial para escalar "
             f"económicamente. Recomendado vector; aceptas degradación de citas y posibles "
             f"errores de recuperación top-k.")
 ```
+
+El endpoint `corpus-stats` lee `HubLLMConfig.context_window` del chatbot y pasa el valor a `recommend_retrieval_mode`. Así la recomendación cambia automáticamente si el admin cambia el LLM por uno con contexto mayor o menor.
 
 **UI** — en `ChatbotsPage` form de edición:
 
@@ -6884,6 +6899,484 @@ npm run build && npm run build:widget   # bundles ok
 4. Cambiar a `vector`, ejecutar `POST /regenerate-chunks`, repetir y verificar que las citas siguen apuntando a los `HubDocument` correctos (no a chunks).
 5. Crear un chatbot router "UJI demo" con dos hijos atómicos ("Normativa", "RRHH") en `agentic`. Hacer una pregunta clara de cada materia y verificar que el evento `status` informa "Materia detectada: …" antes de la respuesta.
 6. Comprobar UI: banner de recomendación coherente con el tamaño del corpus, advertencia al elegir modo no recomendado, error al elegir long_context con corpus > 150K.
+
+---
+
+### Prompt 9CBis.15 — Botón "Recalcular corpus": re-ingestión completa ante cambio de modo o modelo
+
+**Motivación**: durante la fase de experimentación es habitual cambiar el `retrieval_mode`, el LLM o el modelo de embeddings para comparar calidad de respuestas. Tras cada cambio, el corpus existente puede quedar en un estado inconsistente: chunks generados con otra estrategia o embeddings de dimensión incompatible. Este prompt añade un botón explícito que recalcula todo el corpus del chatbot sin obligar al admin a re-subir los PDFs.
+
+**Casos de uso cubiertos**:
+1. `vector` → `long_context` / `agentic`: los chunks ya no se usan → borrarlos (libera espacio en pgvector).
+2. `long_context` / `agentic` → `vector`: no hay chunks → generarlos a partir del markdown almacenado.
+3. `vector` → `vector` con diferente modelo de embeddings **y misma dimensión**: los embeddings son semánticamente incompatibles → re-embeddear todos los chunks.
+4. **Cambio de LLM**: si el nuevo LLM tiene una ventana de contexto diferente, la recomendación de modo puede cambiar (ver 9CBis.14). El botón permite aplicar el modo recomendado sin re-subir documentos.
+
+**Restricción crítica — cambio de dimensión de embeddings**:
+
+Los modelos de embeddings tienen dimensiones fijas e incompatibles entre sí (`text-embedding-3-small` = 1536, `BGE-M3` = 1024, `text-embedding-3-large` = 3072). La columna `embedding VECTOR(N)` en pgvector tiene `N` fijo en el esquema. Cambiar de modelo con dimensión diferente requiere una migración Alembic que altere la columna (`ALTER COLUMN embedding TYPE vector(nuevo_N)`), lo que implica borrar todos los índices vectoriales y reconstruirlos.
+
+El endpoint `recalculate-corpus` debe:
+- Leer `HubLLMConfig.embedding_dimensions` (campo a añadir en este prompt) para conocer la dimensión con la que se generaron los chunks actuales.
+- Comparar con la dimensión del `EmbeddingService` activo (`embedding_service.dimensions`).
+- Si difieren → devolver `409 Conflict`:
+  ```json
+  {
+    "detail": "La dimensión del modelo de embeddings configurado (1024) difiere de la usada al generar los chunks actuales (1536). Ejecuta 'alembic upgrade head' con la variable EMBEDDING_DIMENSIONS=1024 antes de recalcular."
+  }
+  ```
+- Si coinciden (o no hay chunks que comparar) → proceder al recálculo.
+
+**Endpoint nuevo** `POST /api/v1/hub/chatbots/{chatbot_id}/recalculate-corpus`:
+
+```python
+# Deploy: edge
+# Responde 202 Accepted + task_id para seguimiento vía SSE.
+# No bloquea la petición HTTP: lanza BackgroundTask.
+{
+  "task_id": "uuid",
+  "message": "Recálculo iniciado. {n} documentos en cola.",
+  "documents_queued": 42
+}
+```
+
+Lógica del background task (`corpus_recalculator.py`, edge):
+
+```python
+async def recalculate_corpus(chatbot_id: UUID, session: AsyncSession, embedding: EmbeddingService) -> None:
+    chatbot = await config_provider.get_chatbot(chatbot_id)
+    documents = await session.execute(select(HubDocument).where(HubDocument.chatbot_id == chatbot_id))
+
+    if chatbot.retrieval_mode == "vector":
+        # Re-generar chunks para cada documento (borra los existentes primero)
+        watcher = IngestionWatcher(session, embedding)
+        for doc in documents.scalars():
+            await watcher._regenerate_chunks_for_document(doc)
+    else:
+        # Borrar todos los chunks: en long_context/agentic no se usan
+        await session.execute(
+            delete(HubDocumentChunk).where(HubDocumentChunk.chatbot_id == chatbot_id)
+        )
+
+    await session.commit()
+```
+
+**Seguimiento de progreso** vía SSE en `GET /api/v1/hub/chatbots/{chatbot_id}/recalculate-corpus/progress/{task_id}`:
+
+```
+data: {"type": "progress", "processed": 5, "total": 42, "current_title": "Normativa 2024"}
+data: {"type": "done", "processed": 42, "chunks_created": 380, "chunks_deleted": 0}
+data: {"type": "error", "message": "..."}
+```
+
+**UI** — en `DocumentsPage`, junto al botón "Limpiar colección":
+
+- Botón "Recalcular corpus" (icono `RefreshCw`), visible siempre que haya al menos un documento.
+- Al pulsarlo, abre un modal de confirmación:
+  - Indica la operación que se realizará según el modo actual:
+    - `vector`: "Se re-generarán los embeddings de todos los documentos ({n} docs, ~{tokens}k tokens). Tiempo estimado: {t} min."
+    - `long_context`/`agentic`: "Se eliminarán todos los chunks vectoriales ({n} chunks). Los documentos markdown se mantienen."
+  - Advertencia si el modo es `vector` y hay muchos tokens: "Esta operación puede tardar varios minutos. El chatbot seguirá respondiendo durante el proceso con los embeddings actuales."
+- Durante el proceso: barra de progreso (`Progress`) con el título del documento que se está procesando.
+- Al completar: invalidar `['hub-documents', chatbotId]` y `['ingestion-jobs', chatbotId]`.
+
+**Tests** en `server/tests/modules/agents_hub/unit/test_corpus_recalculator.py`:
+
+```python
+# test_recalculate_vector_mode_regenerates_chunks_for_all_documents
+# test_recalculate_long_context_mode_deletes_all_chunks
+# test_recalculate_agentic_mode_deletes_all_chunks
+# test_recalculate_is_idempotent  # ejecutar dos veces → mismo resultado
+# test_recalculate_skips_chatbot_with_no_documents
+```
+
+**Tests** en `server/tests/modules/agents_hub/integration/test_recalculate_corpus_endpoint.py`:
+
+```python
+# test_recalculate_returns_202_with_task_id
+# test_recalculate_progress_sse_emits_events
+# test_recalculate_done_event_includes_chunk_counts
+```
+
+**Tests UI** en `frontend/src/admin/pages/__tests__/DocumentsPage.recalculate.test.tsx`:
+
+```typescript
+// should_show_recalculate_button_when_documents_exist
+// should_open_confirmation_modal_with_operation_description
+// should_show_progress_bar_while_recalculating
+// should_hide_button_when_no_documents
+// should_invalidate_documents_query_on_completion
+```
+
+**Confirmar**:
+
+```bash
+cd server && uv run pytest tests/modules/agents_hub/unit/test_corpus_recalculator.py -v
+uv run pytest tests/modules/agents_hub/integration/test_recalculate_corpus_endpoint.py -v
+cd ../frontend && npm test -- DocumentsPage.recalculate
+```
+
+**Pruebas manuales**:
+1. Chatbot en modo `vector` con 2+ documentos ingestados → pulsar "Recalcular corpus" → verificar barra de progreso y que al terminar el número de chunks coincide con la suma de chunks individuales.
+2. Cambiar chatbot a `long_context` → pulsar "Recalcular corpus" → verificar que los chunks desaparecen de la BD pero los documentos markdown permanecen.
+3. Volver a `vector` → pulsar "Recalcular corpus" → verificar que los chunks se re-generan correctamente.
+
+---
+
+### Prompt 9CBis.16 — Spider de fuentes web: `crawl_depth` + filtros para indexar jerarquías de normativa
+
+**Motivación**: el crawler actual procesa una única URL y crea un único `HubDocument`. Para sitios con estructura jerárquica (índice → sección → PDF), como `https://www.uji.es/transparencia/normativa/normpropia/`, es necesario un spider que siga enlaces hasta una profundidad configurable y genere un `HubDocument` por cada documento hoja encontrado.
+
+**Casos de uso objetivo**:
+- Índice de normativa → links a tipos → links a PDFs (depth = 2, filtro `\.pdf$`).
+- Portal de transparencia → links a páginas de detalle con PDF embebido (depth = 1, sin filtro de extensión).
+- URL directa a un PDF (depth = 0, comportamiento actual).
+
+**Cambios en el modelo `HubIngestionSource`** (migración Alembic):
+
+```python
+crawl_depth: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+# 0 = solo la URL raíz (comportamiento actual)
+# 1 = sigue enlaces de la raíz
+# 2 = sigue enlaces de nivel 1
+
+url_include_pattern: Mapped[str | None] = mapped_column(String(500), nullable=True)
+# Regex aplicada a cada URL descubierta. Solo se sigue/procesa si hace match.
+# Ejemplo: "\.pdf$"  |  "/normativa/"  |  ".*" (todo)
+
+restrict_to_domain: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+# Si True, solo se siguen URLs del mismo dominio que la URL raíz.
+```
+
+**Nuevo servicio `WebSpider`** (`server/app/modules/agents_hub/ingestion/spider.py`, edge):
+
+```python
+class WebSpider:
+    """Recorre una jerarquía web hasta `max_depth` niveles y devuelve las URLs hoja."""
+
+    def __init__(self, max_depth: int, include_pattern: str | None, restrict_domain: bool):
+        ...
+
+    async def crawl(self, root_url: str) -> list[str]:
+        """Devuelve lista de URLs únicas que superan los filtros, BFS hasta max_depth."""
+        ...
+
+    def _extract_links(self, html: str, base_url: str) -> list[str]:
+        """Extrae hrefs absolutos del HTML. Usa html.parser (stdlib, sin deps extra)."""
+        ...
+
+    def _passes_filters(self, url: str, root_domain: str) -> bool:
+        """Aplica restrict_domain e include_pattern."""
+        ...
+```
+
+- Descarga HTML con `httpx.AsyncClient` (ya en dependencias).
+- BFS: cola de `(url, depth)`. Marca visitadas para evitar ciclos.
+- Si la URL apunta a un PDF (content-type `application/pdf` o extensión `.pdf`), se añade directamente a las hojas sin intentar extraer links de ella.
+- Límite de seguridad: máximo 200 URLs por ejecución para evitar explosión de crawl.
+
+**Integración en `check_source`** (`source_scheduler.py`):
+
+```python
+async def check_source(source_id, session):
+    ...
+    if source.crawl_depth == 0:
+        # Comportamiento actual: procesa la URL directamente
+        leaf_urls = [source.url]
+    else:
+        spider = WebSpider(source.crawl_depth, source.url_include_pattern, source.restrict_to_domain)
+        leaf_urls = await spider.crawl(source.url)
+
+    for url in leaf_urls:
+        content = await asyncio.to_thread(DoclingProcessor().process, url)
+        new_hash = hash_content(content)
+        # Buscar si ya existe un HubDocument para esta URL + idioma
+        # Si el hash no cambió → skip
+        # Si cambió → crear job y ejecutar watcher.run_job con citation_url=url
+        ...
+```
+
+Cada URL hoja genera su propio `HubDocument` con `canonical_url = url` (la URL del PDF o página de detalle), no la URL raíz de la fuente. Así las citas apuntan al documento concreto.
+
+**Cambios en la UI** — formulario "Añadir fuente web" en `DocumentsPage`:
+
+- Selector `crawl_depth`: `0 – Solo esta URL`, `1 – Seguir enlaces (1 nivel)`, `2 – Seguir enlaces (2 niveles)`.
+- Input `url_include_pattern`: texto, placeholder `\.pdf$` (opcional). Tooltip: "Expresión regular. Solo se procesarán URLs que hagan match."
+- Checkbox `restrict_to_domain` (por defecto activado): "Limitar al mismo dominio".
+- Cuando `crawl_depth > 0`, mostrar aviso informativo: "Se descubrirán y procesarán hasta 200 URLs. El proceso puede tardar varios minutos."
+
+**Tests** en `server/tests/modules/agents_hub/unit/test_web_spider.py`:
+
+```python
+# test_depth_0_returns_only_root_url
+# test_depth_1_follows_links_from_root
+# test_depth_2_follows_links_two_levels
+# test_restricts_to_same_domain_when_enabled
+# test_include_pattern_filters_urls
+# test_pdf_urls_are_leaves_not_crawled_further
+# test_deduplicates_discovered_urls
+# test_respects_max_200_url_limit
+# test_marks_visited_to_avoid_cycles
+```
+
+**Tests** en `server/tests/modules/agents_hub/integration/test_spider_source_check.py`:
+
+```python
+# test_check_source_depth_0_creates_one_document  (comportamiento actual preservado)
+# test_check_source_depth_1_creates_document_per_leaf_url
+# test_check_source_skips_unchanged_leaf_by_hash
+# test_check_source_updates_document_when_leaf_content_changes
+```
+
+**Tests UI** en `frontend/src/admin/pages/__tests__/DocumentsPage.spider.test.tsx`:
+
+```typescript
+// should_show_depth_selector_in_add_source_form
+// should_show_pattern_input_when_depth_greater_than_zero
+// should_show_domain_restriction_checkbox
+// should_display_warning_when_depth_greater_than_zero
+// should_hide_advanced_options_when_depth_is_zero
+```
+
+**Confirmar**:
+
+```bash
+cd server && uv run pytest tests/modules/agents_hub/unit/test_web_spider.py -v
+uv run pytest tests/modules/agents_hub/integration/test_spider_source_check.py -v
+cd ../frontend && npm test -- DocumentsPage.spider
+```
+
+**Pruebas manuales**:
+1. Añadir fuente con URL de índice de normativa, `depth=2`, `include_pattern=\.pdf$`, dominio restringido → verificar que tras la primera comprobación aparecen N documentos en el corpus (uno por PDF descubierto).
+2. Modificar uno de los PDFs enlazados y forzar comprobación → verificar que solo ese documento se re-ingesta.
+3. Añadir fuente con `depth=0` → verificar que solo se crea un documento (comportamiento anterior sin romper).
+
+---
+
+### Prompt 9CBis.17 — Spider UJI: normativa y procediments administratius
+
+**Motivación**: el spider genérico de 9CBis.16 funciona con `url_include_pattern` y `crawl_depth`, pero la web de la UJI tiene dos estructuras concretas que requieren lógica adicional: (a) las páginas de normativa propia, donde el contenido útil vive en `div.uji-editor` y hay que clasificar cada enlace (documento hoja vs. sub-página a seguir vs. ruido), y (b) el catàleg de procediments, que es un formulario paginado con extracción de metadatos estructurados. Este prompt implementa esos dos extractores especializados como estrategias concretas de `WebSpider`.
+
+**Decisiones de diseño relevantes (tomadas en sesión 2026-04-30)**:
+
+- **Un único chatbot para toda la normativa** (no uno por categoría). El corpus total es ~150-300 documentos — manejable en un único vector store. Las categorías se preservan como metadatos (`category`), no como particiones. Esto permite consultas cross-categoría y elimina el coste del routing.
+- **Chatbot separado para procediments**. El dominio semántico es distinto (trámites vs. reglamentos): los usuarios saben si preguntan por normativa o por un trámite.
+- **Cada procediment = un único documento sin chunking**. Las páginas de procediment son pequeñas y densamente estructuradas; chunkarlas fragmenta el contexto sin beneficio. Se ingestarán con `retrieval_mode="agentic"` o `"long_context"`.
+
+---
+
+#### Parte A — `UJINormativaSpider` (especialización de `WebSpider`)
+
+**Archivo**: `server/app/modules/agents_hub/ingestion/spiders/uji_normativa.py`
+
+**Estructura HTML observada** (validada con páginas reales de `uji.es/transparencia/normativa/normpropia/`):
+
+- **Página índice de categorías**: los enlaces a las 14 categorías están en `div.gridTwoNews a`. No hay `div.uji-editor`.
+- **Página de categoría** (hoja de primer nivel): los documentos y sub-páginas están en `div.uji-editor a[href]`. Todo lo demás (nav, footer, redes sociales, sidebar) se ignora completamente.
+- **Sub-páginas** (p. ej. `/institucional/normativa/propia/reglacentres/`): misma estructura que la página de categoría.
+
+**Clasificación de cada enlace extraído de `div.uji-editor`**:
+
+```python
+import re
+
+DOCUMENT_PATTERNS = [
+    r"\.pdf(\?|$)",
+    r"/upo/rest/contenido/\d+/raw",
+    r"/ade/rest/storage/",
+    r"/alfresco/d/d/workspace/",
+    r"dogv\.gva\.es/.*\.pdf",
+]
+
+SKIP_PATTERNS = [
+    r"^#",                           # anclas internas (#1, #2…)
+    r"javascript:",
+    r"linkedin\.com|facebook\.com|instagram\.com|tiktok\.com|youtube\.com",
+    r"bsky\.app|mastodon|whatsapp|gmail\.com|googletagmanager",
+]
+
+UJI_SUBPAGE_PREFIXES = [
+    "/transparencia/normativa/",
+    "/institucional/normativa/",
+]
+
+def classify_link(href: str) -> Literal["document", "subpage", "skip"]:
+    if any(re.search(p, href) for p in SKIP_PATTERNS):
+        return "skip"
+    if any(re.search(p, href) for p in DOCUMENT_PATTERNS):
+        return "document"
+    if any(href.startswith(prefix) for prefix in UJI_SUBPAGE_PREFIXES):
+        return "subpage"
+    return "skip"  # cualquier cosa que no sea documento ni sub-página conocida
+```
+
+**Extracción de metadatos de categoría** desde la URL de la página padre:
+
+```python
+# /transparencia/normativa/normpropia/Institucional/ → category = "institucional"
+# /transparencia/normativa/normpropia/investigacio/  → category = "investigacio"
+def category_from_url(url: str) -> str:
+    parts = url.rstrip("/").split("/")
+    return parts[-1].lower() if parts else "unknown"
+```
+
+**`HubDocument` producido por cada documento hoja**:
+
+```python
+{
+    "title": "<texto del enlace en div.uji-editor>",
+    "canonical_url": "<URL absoluta del documento>",
+    "source_kind": "crawler",
+    "language": "ca",   # detectado por Docling o inferido del parámetro ?idioma=
+    "metadata": {
+        "category": "institucional",
+        "category_label": "Normes institucionals i organitzatives",
+        "source_page": "<URL de la página que contenía el enlace>",
+    }
+}
+```
+
+**Flujo del spider** (BFS acotado):
+
+```
+root_url (/transparencia/normativa/normpropia/)
+  → extraer links de div.gridTwoNews a        ← página índice de categorías
+  → para cada categoría_url:
+      → extraer links de div.uji-editor a     ← página de categoría
+      → classify_link(href):
+          "document" → añadir a hojas (para ingestar con Docling)
+          "subpage"  → encolar (max depth = 3)
+          "skip"     → ignorar
+  → para cada subpage_url encolada:
+      → mismo proceso (div.uji-editor)
+```
+
+Límite: máximo 500 URLs hoja por ejecución. Stop condition: cola vacía o límite alcanzado.
+
+**Tests** en `server/tests/modules/agents_hub/unit/test_uji_normativa_spider.py`:
+
+```python
+# test_extracts_only_from_uji_editor_not_nav_or_footer
+# test_classify_link_identifies_pdf_as_document
+# test_classify_link_identifies_raw_contenido_as_document
+# test_classify_link_identifies_alfresco_pdf_as_document
+# test_classify_link_identifies_normativa_subpath_as_subpage
+# test_classify_link_skips_anchor_links
+# test_classify_link_skips_social_media
+# test_category_extracted_from_url
+# test_bfs_respects_max_depth_3
+# test_deduplicates_urls_across_levels
+# test_stops_at_500_url_limit
+```
+
+---
+
+#### Parte B — `UJIProcedimentsCrawler` (paginador + extractor estructurado)
+
+**Archivo**: `server/app/modules/agents_hub/ingestion/spiders/uji_procediments.py`
+
+**Estructura HTML observada** (validada con páginas reales de `uji.es/seu/cataleg/`):
+
+- **Página índice paginada**: `ul.resultado-catalogo li a[href]` → URLs de procediments con patrón `/seu/cataleg/{servei}/{proc-N}/`.
+- **Paginación**: formulario GET, parámetro `pageSearch=N`. No requiere JavaScript ni navegador headless — petición HTTP directa.
+- **Página de procediment individual**: contenido en `div.tableStyle`, pares `p.metadatoTitulo` + `div` siguiente.
+
+**Campos extraíbles de `div.tableStyle`**:
+
+| `p.metadatoTitulo` (texto) | Nombre de metadato |
+|---|---|
+| Col·lectiu al qual afecta | `collectiu` |
+| Descripció del procediment | `descripcio` |
+| Normativa que regula el procediment | `normativa` |
+| Resolució del procediment | `resolucio` |
+| Matèria | `materia` |
+| Termini màxim de resolució | `termini` |
+| Silenci administratiu | `silenci` |
+| Servei o unitat responsable | `servei` |
+
+**Metadatos adicionales extraídos de la URL**:
+
+```python
+# /seu/cataleg/secgen/proc-1/ → servei_code="secgen", proc_id="1"
+def parse_procediment_url(url: str) -> dict:
+    parts = url.rstrip("/").split("/")
+    return {"servei_code": parts[-2], "proc_id": parts[-1].replace("proc-", "")}
+```
+
+**Paginación**:
+
+```python
+BASE_URL = "https://www.uji.es/seu/cataleg/"
+PARAMS = {
+    "$F:titulo_largo_sin_acentos:LIKE:A@...": "",  # sin filtro de texto
+    "$M:materia1:METADATO:B@$M:materia2:METADATO:B": "",
+    "$F:origen_informacion_id:IGUAL_CADENA": "",
+    "numResultados": "10",
+    "orderSearch": "trim(titulo) asc",
+}
+
+async def iter_catalogue_pages(client: httpx.AsyncClient) -> AsyncIterator[list[str]]:
+    page = 1
+    while True:
+        params = {**PARAMS, "pageSearch": str(page)}
+        r = await client.get(BASE_URL, params=params)
+        urls = parse_catalogue_page(r.text)  # extrae ul.resultado-catalogo li a[href]
+        if not urls:
+            break
+        yield deduplicate(urls)
+        page += 1
+```
+
+Stop condition: página devuelve lista vacía en `ul.resultado-catalogo`.
+
+**Documento producido por cada procediment** (un único documento denso, sin chunking):
+
+```python
+def build_procediment_document(url: str, fields: dict[str, str]) -> str:
+    """Construye texto estructurado para indexar como HubDocument completo."""
+    return "\n".join([
+        f"Procediment: {fields.get('title', '')}",
+        f"Servei: {fields.get('servei', '')}",
+        f"URL: {url}",
+        f"Col·lectiu: {fields.get('collectiu', '')}",
+        f"Descripció: {fields.get('descripcio', '')}",
+        f"Normativa aplicable: {fields.get('normativa', '')}",
+        f"Resolució: {fields.get('resolucio', '')}",
+        f"Matèria: {fields.get('materia', '')}",
+        f"Termini màxim: {fields.get('termini', '')}",
+        f"Silenci administratiu: {fields.get('silenci', '')}",
+    ])
+```
+
+El texto resultante se pasa directamente a `IngestionWatcher` como `markdown_content` sin pasar por Docling (el contenido ya es texto limpio extraído del HTML). Se crea un `HubDocument` con `source_kind="crawler"` y sin chunks si el chatbot usa `agentic` o `long_context`.
+
+**Nota sobre el AJAX de `e-ujier.uji.es`**: la página de cada procediment hace una llamada dinámica a `https://e-ujier.uji.es/pls/www/!gri_www.euji23384?pid={N}&pIdioma=ca`. El contenido retornado son formularios para iniciar trámites electrónicos, no información descriptiva del procediment. **No se incluye en la ingesta** (verificar antes de implementar que no contiene pasos del procediment útiles para RAG).
+
+**Tests** en `server/tests/modules/agents_hub/unit/test_uji_procediments_crawler.py`:
+
+```python
+# test_parses_catalogue_page_extracts_procediment_urls
+# test_deduplicates_urls_within_page (hay duplicados en la lista real)
+# test_pagination_stops_when_empty_results
+# test_parse_procediment_url_extracts_servei_and_proc_id
+# test_extracts_all_metadata_fields_from_tableStyle
+# test_build_procediment_document_formats_correctly
+# test_missing_fields_produce_empty_strings_not_errors
+```
+
+**Tests de integración** en `server/tests/modules/agents_hub/integration/test_procediments_ingest.py`:
+
+```python
+# test_full_catalogue_crawl_creates_one_document_per_procediment
+# test_unchanged_procediment_skipped_by_hash
+# test_updated_procediment_content_creates_new_version
+```
+
+**Pruebas manuales**:
+1. Añadir fuente web con URL `https://www.uji.es/seu/cataleg/` y tipo `procediments_uji` → verificar que tras la primera comprobación el chatbot "Procediments UJI" muestra N documentos (uno por procediment).
+2. Añadir fuente con URL `https://www.uji.es/transparencia/normativa/normpropia/` y tipo `normativa_uji` → verificar N documentos con categorías distintas en los metadatos.
+3. Consultar al chatbot "Procediments UJI": "Quina és la normativa que regula l'accés a la informació?" → verificar que la cita apunta a `/seu/cataleg/secgen/proc-1/`.
+4. Consultar al chatbot "Normativa UJI": "Quins són els reglaments sobre eleccions?" → verificar que la cita apunta a la URL del reglament electoral.
 
 ---
 
@@ -10602,3 +11095,414 @@ DOCLING_SERVICE_URL=http://docling-service:8002
 # should_fall_back_to_local_services_when_env_vars_absent
 # integration: should_process_pdf_end_to_end_with_http_docling_and_http_embedding
 ```
+
+---
+
+---
+
+## Fase Deploy — Paso a producción en GCP
+
+Esta fase no añade funcionalidad nueva: convierte la pila de desarrollo (Docker Compose local) en un sistema desplegado en Google Cloud Platform. El codebase ya está diseñado para ello (ver sección "Infraestructura objetivo" en CLAUDE.md); estos prompts completan la configuración y documentan el proceso operativo.
+
+**Requisito previo**: tener acceso a un proyecto GCP con facturación activa y los servicios habilitados: Cloud Run, Cloud SQL, Cloud Storage, Artifact Registry, Secret Manager, Cloud Build.
+
+```
+Fase Deploy
+  ├── D.1  Autenticación pública del widget — API key por chatbot
+  ├── D.2  Secrets y variables de entorno — migración a Secret Manager
+  ├── D.3  Base de datos en producción — Cloud SQL + migraciones Alembic
+  ├── D.4  Imágenes Docker — Artifact Registry + Cloud Run
+  ├── D.5  CI/CD — pipeline GitHub Actions → Cloud Build → Cloud Run
+  └── D.6  Edge node — despliegue híbrido cloud/edge en GCP
+```
+
+---
+
+### Prompt D.1 — Autenticación pública del widget: API key por chatbot
+
+**Objetivo**: el widget embebido en webs externas (UJI, ayuntamientos) no puede requerir login de usuario. Sustituir el mecanismo `data-token` JWT (solo válido para pruebas locales) por una **API key pública por chatbot** que identifica el bot sin exponer credenciales de usuario.
+
+**Contexto y decisiones de diseño**:
+
+- El widget se incrusta con un simple `<script>` en cualquier web. El usuario final es un ciudadano o alumno sin cuenta en la plataforma.
+- La autenticación no es de usuario sino de **despliegue**: "este widget está autorizado a hablar con el chatbot X".
+- La API key se genera al publicar un chatbot (campo `public_api_key` en `HubChatbot`), se muestra una sola vez en el panel admin y se puede revocar.
+- El endpoint de chat del widget **no usa JWT**; usa `X-Api-Key` header. El endpoint del panel admin sigue usando JWT.
+
+**Cambios en el modelo**:
+
+```python
+# HubChatbot — añadir campo
+public_api_key: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True, index=True)
+```
+
+Migración Alembic: `alter table hub_chatbot add column public_api_key varchar(64) unique`.
+
+**Nuevo endpoint público**:
+
+```
+POST /api/v1/widget/chat/{chatbot_id}
+  Header: X-Api-Key: <public_api_key>
+  Body: { "message": "...", "lang": "ca" }
+  → StreamingResponse SSE (mismo protocolo que hub_chat)
+
+Deploy: edge
+```
+
+El handler valida que `public_api_key` coincide con el `chatbot_id` en la tabla. No crea `HubInteraction` con `user_id` (usuario anónimo); genera un UUID de sesión efímero.
+
+**Cambios en el widget**:
+
+- `main.tsx`: leer `data-api-key` en lugar de `data-token`
+- `useChat.ts`: enviar `X-Api-Key` header en lugar de `Authorization: Bearer`
+- `widget.html` de producción: solo necesita `data-chatbot-id` y `data-api-key`
+
+```html
+<div id="govgenai-widget"
+     data-chatbot-id="<uuid>"
+     data-api-key="<public_api_key>"
+     data-lang="ca"
+     data-api-url="https://api.govgenai.com/api/v1">
+</div>
+```
+
+**UI admin** (panel de publicación del chatbot):
+- Botón "Publicar widget" → genera `public_api_key` aleatoria (32 bytes hex), la guarda hasheada en BD, la muestra en claro UNA sola vez.
+- Botón "Revocar" → pone `public_api_key = null`.
+- Snippet HTML copiable con el `data-api-key` ya relleno.
+
+**Tests requeridos**:
+```python
+# unit
+# should_reject_request_with_invalid_api_key → 401
+# should_reject_request_with_api_key_for_wrong_chatbot → 401
+# should_accept_request_with_valid_api_key → 200 SSE
+# should_not_require_jwt_on_widget_endpoint
+# should_create_anonymous_interaction_without_user_id
+
+# integration
+# should_generate_api_key_via_admin_endpoint
+# should_revoke_api_key_and_reject_subsequent_widget_requests
+```
+
+**CORS**: el endpoint `/api/v1/widget/*` debe permitir cualquier origen (`*`) ya que se llama desde webs externas. El endpoint `/api/v1/hub/*` (admin) solo permite el origen del panel admin.
+
+---
+
+### Prompt D.2 — Secrets y variables de entorno: migración a Secret Manager
+
+**Objetivo**: eliminar el fichero `server/.env` en producción. Todas las credenciales y configuración sensible viven en **GCP Secret Manager**; el contenedor las recibe como variables de entorno inyectadas por Cloud Run.
+
+**Inventario de secrets** (lo que hay en `server/.env` y su destino en GCP):
+
+| Variable local | Secret Manager name | Quién lo consume |
+|---|---|---|
+| `JWT_SECRET_KEY` | `govgenai-jwt-secret` | API principal |
+| `DATABASE_URL` | `govgenai-db-url-async` | API principal |
+| `DATABASE_URL_SYNC` | `govgenai-db-url-sync` | Alembic (Cloud Build step) |
+| `LANGFUSE_PUBLIC_KEY` | `govgenai-langfuse-pub` | API principal |
+| `LANGFUSE_SECRET_KEY` | `govgenai-langfuse-sec` | API principal |
+| `STORAGE_BUCKET` | variable de entorno pública (no secret) | API principal |
+
+**Variables de entorno no-secretas** (se definen directamente en la configuración de Cloud Run, no en Secret Manager):
+
+```
+ENVIRONMENT=production
+STORAGE_BACKEND=gcs
+STORAGE_BUCKET=govgenai-prod
+DEPLOY_MODE=all   # o edge / cloud según el nodo
+```
+
+**Configuración de Cloud Run** (extracto `cloudbuild.yaml` o CLI):
+
+```yaml
+- name: 'gcr.io/cloud-builders/gcloud'
+  args:
+    - run
+    - deploy
+    - govgenai-api
+    - --set-secrets=JWT_SECRET_KEY=govgenai-jwt-secret:latest
+    - --set-secrets=DATABASE_URL=govgenai-db-url-async:latest
+    - --set-secrets=LANGFUSE_PUBLIC_KEY=govgenai-langfuse-pub:latest
+    - --set-secrets=LANGFUSE_SECRET_KEY=govgenai-langfuse-sec:latest
+    - --set-env-vars=ENVIRONMENT=production,STORAGE_BACKEND=gcs,STORAGE_BUCKET=govgenai-prod
+```
+
+**Checklist de seguridad**:
+- [ ] `server/.env` añadido a `.gitignore` (ya debe estarlo)
+- [ ] `JWT_SECRET_KEY` en producción: mínimo 64 bytes aleatorios (`openssl rand -hex 64`)
+- [ ] `JWT_EXPIRATION_MINUTES` en producción: volver a 60 (el valor `10080` es solo para desarrollo local)
+- [ ] La cuenta de servicio de Cloud Run tiene rol `roles/secretmanager.secretAccessor` solo para los secrets que necesita
+
+**Tests requeridos**:
+```python
+# should_read_jwt_secret_from_environment_variable
+# should_fail_fast_if_jwt_secret_not_set
+# should_read_database_url_from_environment_variable
+```
+(La mayoría ya existen; este prompt verifica que no hay credenciales hardcodeadas en código.)
+
+---
+
+### Prompt D.3 — Base de datos en producción: Cloud SQL + migraciones Alembic
+
+**Objetivo**: documentar y automatizar el proceso de aprovisionamiento de Cloud SQL y la ejecución de migraciones Alembic como paso pre-deploy, garantizando que la BD nunca queda en un estado intermedio si el despliegue falla.
+
+**Configuración de Cloud SQL**:
+
+```bash
+# Crear instancia (una sola vez)
+gcloud sql instances create govgenai-prod \
+  --database-version=POSTGRES_16 \
+  --tier=db-g1-small \
+  --region=europe-southwest1 \
+  --enable-google-private-path
+
+# Crear BD y usuario
+gcloud sql databases create govgenai --instance=govgenai-prod
+gcloud sql users create govgenai --instance=govgenai-prod --password=<secret>
+
+# Habilitar extensión pgvector (ejecutar en psql conectado vía Cloud SQL Auth Proxy)
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+**Cloud SQL Auth Proxy en Cloud Run**: Cloud Run conecta a Cloud SQL vía socket Unix automáticamente si se especifica `--add-cloudsql-instances`. La `DATABASE_URL` usa el formato:
+
+```
+postgresql+asyncpg:///govgenai?host=/cloudsql/PROJECT_ID:REGION:INSTANCE_NAME
+```
+
+**Estrategia de migraciones** (sin downtime):
+
+1. Las migraciones se ejecutan como un **Cloud Build step** ANTES del despliegue del nuevo contenedor.
+2. Solo se permiten migraciones `ADD COLUMN ... DEFAULT NULL` o `CREATE TABLE` en el step automático.
+3. Migraciones con `ALTER COLUMN NOT NULL` o `DROP` requieren aprobación manual y ventana de mantenimiento.
+4. El comando:
+
+```yaml
+# En cloudbuild.yaml, antes del step de deploy
+- name: 'gcr.io/$PROJECT_ID/govgenai-api:$COMMIT_SHA'
+  entrypoint: 'uv'
+  args: ['run', 'alembic', 'upgrade', 'head']
+  env:
+    - 'DATABASE_URL_SYNC=$$DATABASE_URL_SYNC'
+  secretEnv: ['DATABASE_URL_SYNC']
+```
+
+**Backup antes de migrar**:
+
+```bash
+gcloud sql backups create --instance=govgenai-prod --async
+```
+
+**Tests requeridos**:
+```python
+# should_run_all_migrations_without_error_on_clean_database
+# should_be_idempotent_running_migrations_twice
+# should_not_lose_data_on_add_column_migration
+```
+
+---
+
+### Prompt D.4 — Imágenes Docker: Artifact Registry y Cloud Run
+
+**Objetivo**: construir imágenes Docker de producción (API principal, embedding-service, docling-service), publicarlas en Artifact Registry y desplegarlas en Cloud Run con la configuración de recursos adecuada.
+
+**Repositorio en Artifact Registry**:
+
+```bash
+gcloud artifacts repositories create govgenai \
+  --repository-format=docker \
+  --location=europe-southwest1
+
+# Configurar Docker para autenticar
+gcloud auth configure-docker europe-southwest1-docker.pkg.dev
+```
+
+**`Dockerfile` de producción para la API** (ubicación: raíz del proyecto):
+
+```dockerfile
+FROM python:3.12-slim
+
+WORKDIR /app
+COPY server/ server/
+COPY pyproject.toml uv.lock ./
+
+RUN pip install uv && uv sync --frozen --no-dev
+
+ENV PYTHONPATH=/app
+CMD ["uv", "run", "uvicorn", "server.app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+```
+
+**Configuración de Cloud Run por servicio**:
+
+| Servicio | CPU | RAM | Min instances | Max instances | Notas |
+|---|---|---|---|---|---|
+| `govgenai-api` | 2 | 1 GB | 1 | 10 | Chat + admin |
+| `embedding-service` | 4 | 4 GB | 1 | 3 | BGE-M3 cargado permanentemente |
+| `docling-service` | 2 | 2 GB | 0 | 5 | Escala a 0 entre ingestas |
+
+**Deploy**:
+
+```bash
+# Build y push
+docker build -t europe-southwest1-docker.pkg.dev/PROJECT/govgenai/api:SHA .
+docker push europe-southwest1-docker.pkg.dev/PROJECT/govgenai/api:SHA
+
+# Deploy Cloud Run
+gcloud run deploy govgenai-api \
+  --image=europe-southwest1-docker.pkg.dev/PROJECT/govgenai/api:SHA \
+  --region=europe-southwest1 \
+  --min-instances=1 \
+  --max-instances=10 \
+  --memory=1Gi \
+  --cpu=2 \
+  --add-cloudsql-instances=PROJECT:europe-southwest1:govgenai-prod \
+  --no-allow-unauthenticated  # el API no es público; el widget usa API key
+```
+
+**Frontend (widget + panel admin)**:
+
+El frontend React se construye con `npm run build` y se sirve desde **Cloud Storage + Cloud CDN** (sitio estático), no desde Cloud Run:
+
+```bash
+npm run build
+gsutil -m rsync -r dist/ gs://govgenai-static/
+gcloud compute backend-buckets update govgenai-cdn --enable-cdn
+```
+
+El `widget.iife.js` se publica en `https://cdn.govgenai.com/widget/widget.iife.js` — los partners lo referencian con una URL versionada para evitar breaking changes.
+
+**Checklist pre-deploy**:
+- [ ] `npm run build` y `npm run build:widget` sin errores
+- [ ] `docker build` sin errores en modo producción
+- [ ] `uv run pytest tests/ -v` con todas las suites verdes
+- [ ] Migración Alembic ejecutada y verificada en staging antes de prod
+
+---
+
+### Prompt D.5 — CI/CD: pipeline GitHub Actions → Cloud Run
+
+**Objetivo**: automatizar el ciclo completo (test → build → migrate → deploy) con GitHub Actions. Cada push a `main` despliega a producción; cada PR despliega a staging.
+
+**Estructura del pipeline** (`.github/workflows/deploy.yml`):
+
+```
+on: push (main) / pull_request
+
+jobs:
+  test:
+    - uv run pytest server/tests/ -v
+    - npm test (frontend)
+
+  build:
+    needs: test
+    - docker build API, embedding-service, docling-service
+    - docker push a Artifact Registry con tag=$COMMIT_SHA
+
+  migrate:
+    needs: build
+    - Cloud Build step: uv run alembic upgrade head (via Cloud SQL Auth Proxy)
+
+  deploy:
+    needs: migrate
+    - gcloud run deploy govgenai-api --image=...:$COMMIT_SHA
+    - gcloud run deploy embedding-service --image=...:$COMMIT_SHA
+    - gcloud run deploy docling-service --image=...:$COMMIT_SHA
+    - gsutil rsync frontend/dist/ → Cloud Storage (panel admin)
+    - gsutil rsync frontend/dist/widget/ → Cloud Storage CDN (widget público)
+```
+
+**Autenticación GCP desde GitHub Actions**:
+
+Usar **Workload Identity Federation** (no service account keys en secretos de GitHub):
+
+```yaml
+- uses: google-github-actions/auth@v2
+  with:
+    workload_identity_provider: 'projects/NUMBER/locations/global/workloadIdentityPools/github/providers/github'
+    service_account: 'github-deploy@PROJECT.iam.gserviceaccount.com'
+```
+
+**Entornos**:
+
+| Branch | Entorno | Cloud Run service | BD |
+|---|---|---|---|
+| `main` | production | `govgenai-api` | Cloud SQL prod |
+| `staging` | staging | `govgenai-api-staging` | Cloud SQL staging (misma instancia, BD distinta) |
+| PR | preview | no despliega (solo tests) | — |
+
+**Tests requeridos** (smoke tests post-deploy):
+
+```bash
+# Ejecutar tras cada deploy exitoso en CI
+curl -f https://api.govgenai.com/health → 200
+curl -f https://api.govgenai.com/api/v1/hub/chatbots \
+     -H "Authorization: Bearer $SMOKE_TEST_TOKEN" → 200
+```
+
+---
+
+### Prompt D.6 — Edge node: despliegue híbrido cloud/edge en GCP
+
+**Objetivo**: documentar cómo desplegar el modo `DEPLOY_MODE=edge` dentro de la nube privada de un cliente (requisito regulatorio para datos sensibles) mientras el cloud admin (`DEPLOY_MODE=cloud`) permanece en el proyecto GCP central.
+
+**Arquitectura**:
+
+```
+GCP central (partner/admin):
+  Cloud Run: govgenai-api (DEPLOY_MODE=cloud)
+    → Cloud SQL: solo tablas ConfigBase (HubChatbot, HubClient, HubLLMConfig...)
+    → Sirve: panel admin, gestión partners, config sync API
+
+GCP cliente (edge):
+  Cloud Run: govgenai-api (DEPLOY_MODE=edge)
+    → Cloud SQL del cliente: solo tablas OperationalBase (HubDocument, HubInteraction, chunks...)
+    → Sirve: widget chat, ingesta, retrieval — datos nunca salen del GCP del cliente
+
+Comunicación:
+  cloud → edge: POST /api/v1/edge/config  (push de configuración: chatbot, prompts, LLM keys)
+  edge → cloud: POST /api/v1/edge/telemetry (métricas anonimizadas: nº interacciones, latencia)
+```
+
+**Variables que cambian en el edge**:
+
+```bash
+DEPLOY_MODE=edge
+DATABASE_URL=postgresql+asyncpg://...@/govgenai_edge?host=/cloudsql/CLIENT_PROJECT:REGION:INSTANCE
+STORAGE_BUCKET=gs://govgenai-edge-CLIENT_NAME
+# No hay LANGFUSE en edge por defecto (datos de conversación no salen del cliente)
+```
+
+**Proceso de alta de un cliente nuevo**:
+
+1. Partner crea el cliente en el panel admin cloud → genera `edge_api_key` para autenticar la sync.
+2. Ops despliega el stack edge en el GCP del cliente (Terraform module, pendiente de crear).
+3. Edge llama a `GET /api/v1/edge/config` con su `edge_api_key` → recibe la configuración inicial.
+4. A partir de ahí, el edge opera de forma autónoma; la sync es incremental (solo cambios).
+
+**Tests requeridos**:
+
+```python
+# should_register_edge_node_with_api_key
+# should_push_config_to_edge_and_receive_ack
+# should_receive_anonymized_telemetry_from_edge
+# should_reject_edge_config_request_without_valid_api_key
+# should_not_expose_operational_routes_in_cloud_mode (DEPLOY_MODE=cloud)
+# should_not_expose_admin_routes_in_edge_mode (DEPLOY_MODE=edge)
+```
+
+**Pendiente** (no implementado, necesita sprint propio):
+- Terraform module para provisionar el stack edge en GCP del cliente (Cloud Run + Cloud SQL + GCS + Secret Manager).
+- UI de onboarding de cliente en el panel admin: formulario → genera Terraform vars → instrucciones de deploy.
+- Protocolo de sync incremental con retry y backoff (actualmente solo hay el endpoint, sin cliente).
+
+---
+
+**Notas transversales a toda la Fase Deploy**:
+
+- `JWT_EXPIRATION_MINUTES` debe volver a `60` en producción. El valor `10080` (7 días) es únicamente para comodidad en desarrollo local.
+- El widget en producción usa `data-api-key` (Prompt D.1), nunca `data-token` JWT.
+- El `widget.iife.js` se versiona por commit SHA en la CDN. Los partners que embeben el widget deben actualizar la URL cuando haya breaking changes (no usar `@latest` en producción).
+- Cloud Run escala a 0 instancias por defecto. El `embedding-service` debe tener `min-instances=1` para evitar cold starts de 90 s que bloquearían el chat.
+- Los backups de Cloud SQL se configuran como política de la instancia (retención 7 días), no como paso manual.

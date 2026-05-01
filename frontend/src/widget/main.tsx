@@ -7,6 +7,7 @@ export interface WidgetConfig {
   chatbotId: string
   lang: string
   apiUrl: string
+  token?: string
 }
 
 export function readConfig(container: Element): WidgetConfig | null {
@@ -16,6 +17,7 @@ export function readConfig(container: Element): WidgetConfig | null {
     chatbotId,
     lang: container.getAttribute('data-lang') ?? 'es',
     apiUrl: container.getAttribute('data-api-url') ?? '/api/v1',
+    token: container.getAttribute('data-token') ?? undefined,
   }
 }
 
@@ -36,6 +38,7 @@ export function mountWidget(container: Element, config: WidgetConfig): () => voi
         chatbotId={config.chatbotId}
         apiUrl={config.apiUrl}
         lang={config.lang}
+        token={config.token}
       />
     </StrictMode>,
   )

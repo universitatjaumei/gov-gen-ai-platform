@@ -46,6 +46,16 @@ const DONE_EVENT = {
   translation_warning: null,
 }
 
+const DONE_WITH_SOURCES = {
+  interaction_id: 'iact-1',
+  sources: [
+    { document_id: 'doc-1', title: 'Reglament del Consell de Govern', url: 'https://www.uji.es/reglament.pdf', score: 0.92 },
+    { document_id: 'doc-2', title: 'Estatuts UJI', url: 'https://dogv.gva.es/estatuts.pdf', score: 0.85 },
+  ],
+  language_fallback: false,
+  translation_warning: null,
+}
+
 const fetchMock = vi.fn()
 
 beforeAll(async () => {
@@ -223,6 +233,102 @@ describe('ChatWidget', () => {
         body: JSON.stringify({ score: 3 }),
       }),
     )
+  })
+
+  test('should_render_source_pills_after_last_assistant_message', async () => {
+    fetchMock.mockResolvedValueOnce(
+      makeSseResponse([
+        { event: 'token', data: { delta: 'Aquí tienes la respuesta.' } },
+        { event: 'done', data: DONE_WITH_SOURCES },
+      ]),
+    )
+
+    render(<ChatWidget {...DEFAULT_PROPS} />)
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: /Reglament del Consell de Govern/i })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /Estatuts UJI/i })).toBeInTheDocument()
+    })
+  })
+
+  test('should_open_source_pill_in_new_tab', async () => {
+    fetchMock.mockResolvedValueOnce(
+      makeSseResponse([
+        { event: 'token', data: { delta: 'Respuesta.' } },
+        { event: 'done', data: DONE_WITH_SOURCES },
+      ]),
+    )
+
+    render(<ChatWidget {...DEFAULT_PROPS} />)
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    await waitFor(() => {
+      const link = screen.getByRole('link', { name: /Reglament del Consell de Govern/i })
+      expect(link).toHaveAttribute('href', 'https://www.uji.es/reglament.pdf')
+      expect(link).toHaveAttribute('target', '_blank')
+      expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
+    })
+  })
+
+  test('should_render_no_pills_when_sources_empty', async () => {
+    fetchMock.mockResolvedValueOnce(
+      makeSseResponse([
+        { event: 'token', data: { delta: 'Respuesta sin fuentes.' } },
+        { event: 'done', data: DONE_EVENT },
+      ]),
+    )
+
+    render(<ChatWidget {...DEFAULT_PROPS} />)
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Respuesta sin fuentes.')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  test('should_have_sources_section_label_for_screen_readers', async () => {
+    fetchMock.mockResolvedValueOnce(
+      makeSseResponse([
+        { event: 'token', data: { delta: 'Respuesta.' } },
+        { event: 'done', data: DONE_WITH_SOURCES },
+      ]),
+    )
+
+    render(<ChatWidget {...DEFAULT_PROPS} />)
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('navigation', { name: /fuentes/i })).toBeInTheDocument()
+    })
+  })
+
+  test('should_render_assistant_message_as_markdown', async () => {
+    fetchMock.mockResolvedValueOnce(
+      makeSseResponse([
+        { event: 'token', data: { delta: '**Texto en negrita**' } },
+        { event: 'done', data: DONE_EVENT },
+      ]),
+    )
+
+    render(<ChatWidget {...DEFAULT_PROPS} />)
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('strong')).toBeInTheDocument()
+    })
   })
 
   test('should_show_loading_indicator_during_stream', async () => {

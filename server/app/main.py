@@ -38,10 +38,25 @@ async def _init_hub_db() -> None:
     await engine.dispose()
 
 
+async def _fail_zombie_jobs() -> None:
+    """Marca como fallidos los jobs que quedaron en running/pending al reiniciar el servidor."""
+    from sqlalchemy import update
+    from server.app.modules.agents_hub.database.connection import get_async_session
+    from server.app.modules.agents_hub.database.operational_models import HubIngestionJob
+    async for session in get_async_session():
+        await session.execute(
+            update(HubIngestionJob)
+            .where(HubIngestionJob.status.in_(["running", "pending"]))
+            .values(status="failed", error_message="Job interrumpido (servidor reiniciado)")
+        )
+        await session.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_server_db()
     await _init_hub_db()
+    await _fail_zombie_jobs()
     from server.app.database.seeds import seed_all
 
     await seed_all()

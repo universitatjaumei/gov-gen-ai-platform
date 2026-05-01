@@ -324,8 +324,11 @@ class TestChatEndpointSSE:
         _, done_payload = done_events[0]
         assert "interaction_id" in done_payload
         assert len(done_payload["sources"]) == 1
-        assert done_payload["sources"][0]["title"] == "Norma A"
-        assert done_payload["sources"][0]["url"] == "https://ej.com/a.pdf"
+        src = done_payload["sources"][0]
+        assert src["document_id"] == str(doc_id)
+        assert src["title"] == "Norma A"
+        assert src["url"] == "https://ej.com/a.pdf"
+        assert src["score"] == round(0.9, 3)
         assert done_payload["language_fallback"] is False
         assert done_payload["translation_warning"] is None
         uuid.UUID(done_payload["interaction_id"])
