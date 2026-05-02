@@ -52,6 +52,7 @@ vi.mock('@/shared/api/ingestion', () => ({
   uploadDocument: vi.fn(),
   deleteJob: vi.fn(),
   clearCollection: vi.fn(),
+  recalculateCorpus: vi.fn(),
   fetchSources: vi.fn(),
   createSource: vi.fn(),
   updateSource: vi.fn(),
@@ -114,6 +115,13 @@ describe('DocumentsPage', () => {
     ;(chatbotsApi.fetchChatbots as any).mockResolvedValue([CHATBOT])
     ;(ingestionApi.fetchDocuments as any).mockResolvedValue(DOCS_ES_CA)
     ;(ingestionApi.fetchIngestionJobs as any).mockResolvedValue([])
+    ;(ingestionApi.recalculateCorpus as any).mockResolvedValue({
+      task_id: 'task-1',
+      message: 'Recálculo completado.',
+      documents_queued: 2,
+      chunks_created: 10,
+      chunks_deleted: 0,
+    })
     ;(ingestionApi.fetchSources as any).mockResolvedValue([])
   })
 
@@ -237,5 +245,31 @@ describe('DocumentsPage', () => {
 
     expect(await screen.findByText('https://example.com/feed')).toBeInTheDocument()
     expect(screen.getByText('Añadir fuente web')).toBeInTheDocument()
+  })
+
+  it('should_show_recalculate_button_when_documents_exist', async () => {
+    render(<DocumentsPage />, { wrapper: createWrapper() })
+    await screen.findByText('Normativa Española')
+    expect(screen.getByRole('button', { name: /recalcular corpus/i })).toBeInTheDocument()
+  })
+
+  it('should_open_recalculate_confirmation_modal', async () => {
+    render(<DocumentsPage />, { wrapper: createWrapper() })
+    await screen.findByText('Normativa Española')
+
+    fireEvent.click(screen.getByRole('button', { name: /recalcular corpus/i }))
+    expect(await screen.findByText('¿Recalcular corpus?')).toBeInTheDocument()
+  })
+
+  it('should_call_recalculate_corpus_on_confirm', async () => {
+    render(<DocumentsPage />, { wrapper: createWrapper() })
+    await screen.findByText('Normativa Española')
+
+    fireEvent.click(screen.getByRole('button', { name: /recalcular corpus/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /sí, recalcular/i }))
+
+    await waitFor(() => {
+      expect(ingestionApi.recalculateCorpus).toHaveBeenCalledWith('bot-1')
+    })
   })
 })

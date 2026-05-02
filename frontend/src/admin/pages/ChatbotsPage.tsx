@@ -6,6 +6,10 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   fetchChatbots,
+  fetchChatbotChildren,
+  fetchChatbotCorpusStats,
+  regenerateChatbotChunks,
+  assignChatbotChild,
   createChatbot,
   updateChatbot,
   deleteChatbot,
@@ -20,6 +24,7 @@ const RETRIEVAL_MODES = [
 
 const schema = z.object({
   name: z.string().min(1),
+  kind: z.enum(['atomic', 'router']),
   system_prompt: z.string().min(1),
   is_active: z.boolean(),
   retrieval_mode: z.enum(['vector', 'long_context', 'agentic']),
@@ -39,6 +44,8 @@ export function ChatbotsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Chatbot | null>(null)
   const [deleteError, setDeleteError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [assignOpen, setAssignOpen] = useState(false)
+  const [selectedChildId, setSelectedChildId] = useState('')
 
   const { data: chatbots = [], isLoading } = useQuery({
     queryKey: ['chatbots'],
@@ -49,6 +56,7 @@ export function ChatbotsPage() {
     mutationFn: (values: FormValues) =>
       createChatbot({
         name: values.name,
+        kind: values.kind,
         system_prompt: values.system_prompt,
         is_active: values.is_active,
         retrieval_mode: values.retrieval_mode,
@@ -66,6 +74,7 @@ export function ChatbotsPage() {
     mutationFn: (values: FormValues) =>
       updateChatbot(editing!.id, {
         name: values.name,
+        kind: values.kind,
         system_prompt: values.system_prompt,
         is_active: values.is_active,
         retrieval_mode: values.retrieval_mode,
@@ -94,20 +103,62 @@ export function ChatbotsPage() {
 
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: '', system_prompt: '', is_active: true, retrieval_mode: 'vector', retrieval_top_k: 8 },
+    defaultValues: { name: '', kind: 'atomic', system_prompt: '', is_active: true, retrieval_mode: 'vector', retrieval_top_k: 8 },
   })
+  const selectedKind = watch('kind')
   const retrievalHint = RETRIEVAL_MODES.find(m => m.value === watch('retrieval_mode'))?.hint
+
+  const { data: children = [], isLoading: isLoadingChildren } = useQuery({
+    queryKey: ['chatbot-children', editing?.id],
+    queryFn: () => fetchChatbotChildren(editing!.id),
+    enabled: dialogOpen && !!editing && selectedKind === 'router',
+  })
+
+  const { data: corpusStats } = useQuery({
+    queryKey: ['chatbot-corpus-stats', editing?.id],
+    queryFn: () => fetchChatbotCorpusStats(editing!.id),
+    enabled: dialogOpen && !!editing,
+  })
+
+  const assignChildMutation = useMutation({
+    mutationFn: (payload: { routerId: string; childId: string }) =>
+      assignChatbotChild(payload.routerId, { child_chatbot_id: payload.childId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['chatbots'] })
+      qc.invalidateQueries({ queryKey: ['chatbot-children', editing?.id] })
+      setAssignOpen(false)
+      setSelectedChildId('')
+    },
+  })
+
+  const regenerateChunksMutation = useMutation({
+    mutationFn: () => regenerateChatbotChunks(editing!.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['chatbot-corpus-stats', editing?.id] })
+    },
+  })
 
   function openCreate() {
     setEditing(null)
-    reset({ name: '', system_prompt: '', is_active: true, retrieval_mode: 'vector', retrieval_top_k: 8 })
+    setAssignOpen(false)
+    setSelectedChildId('')
+    reset({ name: '', kind: 'atomic', system_prompt: '', is_active: true, retrieval_mode: 'vector', retrieval_top_k: 8 })
     setDialogOpen(true)
   }
 
   function openEdit(c: Chatbot) {
     setEditing(c)
     setCopied(false)
-    reset({ name: c.name, system_prompt: c.system_prompt, is_active: c.is_active, retrieval_mode: c.retrieval_mode ?? 'vector', retrieval_top_k: c.retrieval_top_k ?? 8 })
+    setAssignOpen(false)
+    setSelectedChildId('')
+    reset({
+      name: c.name,
+      kind: c.kind ?? 'atomic',
+      system_prompt: c.system_prompt,
+      is_active: c.is_active,
+      retrieval_mode: c.retrieval_mode ?? 'vector',
+      retrieval_top_k: c.retrieval_top_k ?? 8,
+    })
     setDialogOpen(true)
   }
 
@@ -132,6 +183,8 @@ export function ChatbotsPage() {
   function closeDialog() {
     setDialogOpen(false)
     setEditing(null)
+    setAssignOpen(false)
+    setSelectedChildId('')
     reset()
   }
 
@@ -143,6 +196,14 @@ export function ChatbotsPage() {
   }
 
   function onSubmit(values: FormValues) {
+    if (
+      values.kind === 'atomic' &&
+      values.retrieval_mode === 'long_context' &&
+      (corpusStats?.total_tokens ?? 0) > 150_000
+    ) {
+      return
+    }
+
     if (editing) {
       updateMutation.mutate(values)
     } else {
@@ -151,6 +212,18 @@ export function ChatbotsPage() {
   }
 
   const isPending = createMutation.isPending || updateMutation.isPending
+  const showLongContextHardError =
+    selectedKind === 'atomic' &&
+    watch('retrieval_mode') === 'long_context' &&
+    (corpusStats?.total_tokens ?? 0) > 150_000
+
+  const assignableChildren = chatbots.filter(
+    (cb) =>
+      cb.id !== editing?.id &&
+      cb.kind === 'atomic' &&
+      cb.client_id === (editing?.client_id ?? DEV_CLIENT_ID) &&
+      cb.parent_chatbot_id === null,
+  )
 
   return (
     <div className="space-y-4">
@@ -289,7 +362,17 @@ export function ChatbotsPage() {
                   {errors.name && <p className="text-destructive text-xs mt-1">{errors.name.message}</p>}
                 </div>
                 <div>
-                  <label className="text-sm font-medium">{t('hub.chatbot_prompt')}</label>
+                  <label className="text-sm font-medium">Tipo de chatbot</label>
+                  <select
+                    {...register('kind')}
+                    className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                  >
+                    <option value="atomic">Atómico</option>
+                    <option value="router">Router</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">{selectedKind === 'router' ? 'Descripción del router' : t('hub.chatbot_prompt')}</label>
                   <textarea
                     {...register('system_prompt')}
                     rows={8}
@@ -297,32 +380,137 @@ export function ChatbotsPage() {
                   />
                   {errors.system_prompt && <p className="text-destructive text-xs mt-1">{errors.system_prompt.message}</p>}
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Modo de retrieval</label>
-                  <select
-                    {...register('retrieval_mode')}
-                    className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
-                  >
-                    {RETRIEVAL_MODES.map(m => (
-                      <option key={m.value} value={m.value}>{m.label}</option>
-                    ))}
-                  </select>
-                  {retrievalHint && <p className="text-xs text-muted-foreground mt-1">{retrievalHint}</p>}
-                </div>
-                {watch('retrieval_mode') === 'vector' && (
-                  <div>
-                    <label className="text-sm font-medium">Resultados recuperados (top-k)</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={50}
-                      {...register('retrieval_top_k', { valueAsNumber: true })}
-                      className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
-                    />
-                    {errors.retrieval_top_k && <p className="text-destructive text-xs mt-1">{errors.retrieval_top_k.message}</p>}
-                    <p className="text-xs text-muted-foreground mt-1">Número de fragmentos que se recuperan por consulta (1–50). Valor recomendado: 8.</p>
+                {editing && corpusStats && (
+                  <div className="rounded-md border bg-blue-50 border-blue-200 p-3 space-y-1">
+                    <p className="text-sm">
+                      <span className="font-medium">Sugerido:</span>{' '}
+                      <strong>{corpusStats.recommended_mode}</strong>
+                      <span className="text-muted-foreground"> — {corpusStats.total_tokens.toLocaleString()} tokens</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">{corpusStats.recommendation_reason}</p>
+                    {selectedKind === 'atomic' && watch('retrieval_mode') !== corpusStats.recommended_mode && (
+                      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                        Has elegido un modo distinto del recomendado para este corpus.
+                      </p>
+                    )}
+                    {selectedKind === 'atomic' && watch('retrieval_mode') === 'vector' && (
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={() => regenerateChunksMutation.mutate()}
+                          disabled={regenerateChunksMutation.isPending}
+                          className="px-2 py-1 text-xs border rounded-md hover:bg-accent disabled:opacity-50"
+                        >
+                          {regenerateChunksMutation.isPending ? 'Regenerando...' : 'Recalcular chunks'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
+
+                {selectedKind === 'atomic' && (
+                  <>
+                    <div>
+                      <label className="text-sm font-medium">Modo de retrieval</label>
+                      <select
+                        {...register('retrieval_mode')}
+                        className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                      >
+                        {RETRIEVAL_MODES.map(m => (
+                          <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                      </select>
+                      {retrievalHint && <p className="text-xs text-muted-foreground mt-1">{retrievalHint}</p>}
+                    </div>
+                    {watch('retrieval_mode') === 'vector' && (
+                      <div>
+                        <label className="text-sm font-medium">Resultados recuperados (top-k)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          {...register('retrieval_top_k', { valueAsNumber: true })}
+                          className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                        />
+                        {errors.retrieval_top_k && <p className="text-destructive text-xs mt-1">{errors.retrieval_top_k.message}</p>}
+                        <p className="text-xs text-muted-foreground mt-1">Número de fragmentos que se recuperan por consulta (1–50). Valor recomendado: 8.</p>
+                      </div>
+                    )}
+                    {showLongContextHardError && (
+                      <p className="text-destructive text-xs mt-1">
+                        El corpus excede el límite del modo long_context (150K tokens). Reduce el corpus o cambia a agentic.
+                      </p>
+                    )}
+                  </>
+                )}
+                {editing && selectedKind === 'router' && (
+                  <div className="rounded-md border bg-muted/40 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium">Sub-chatbots</p>
+                      <button
+                        type="button"
+                        onClick={() => setAssignOpen(true)}
+                        className="px-2 py-1 text-xs border rounded-md hover:bg-accent"
+                      >
+                        Asignar hijo
+                      </button>
+                    </div>
+                    {isLoadingChildren && <p className="text-xs text-muted-foreground">Cargando sub-chatbots...</p>}
+                    {!isLoadingChildren && children.length === 0 && (
+                      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                        Este router no tiene sub-chatbots asignados
+                      </p>
+                    )}
+                    {!isLoadingChildren && children.length > 0 && (
+                      <ul className="space-y-1">
+                        {children.map((child) => (
+                          <li key={child.id} className="text-xs rounded border px-2 py-1 bg-background">
+                            {child.name}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                {assignOpen && editing && selectedKind === 'router' && (
+                  <div className="rounded-md border p-3 space-y-2 bg-background">
+                    <label className="text-xs font-medium">Selecciona chatbot atómico</label>
+                    <select
+                      value={selectedChildId}
+                      onChange={(e) => setSelectedChildId(e.target.value)}
+                      className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                    >
+                      <option value="">-- Seleccionar --</option>
+                      {assignableChildren.map((cb) => (
+                        <option key={cb.id} value={cb.id}>{cb.name}</option>
+                      ))}
+                    </select>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setAssignOpen(false); setSelectedChildId('') }}
+                        className="px-2 py-1 text-xs border rounded-md"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!selectedChildId || assignChildMutation.isPending}
+                        onClick={() =>
+                          assignChildMutation.mutate({
+                            routerId: editing.id,
+                            childId: selectedChildId,
+                          })
+                        }
+                        className="px-2 py-1 text-xs bg-primary text-primary-foreground rounded-md disabled:opacity-50"
+                      >
+                        Asignar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2">
                   <input type="checkbox" id="is_active" {...register('is_active')} className="rounded" />
                   <label htmlFor="is_active" className="text-sm">{t('hub.chatbot_active')}</label>
@@ -337,7 +525,7 @@ export function ChatbotsPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={isPending}
+                    disabled={isPending || showLongContextHardError}
                     className="px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm disabled:opacity-50"
                   >
                     {tc('save')}

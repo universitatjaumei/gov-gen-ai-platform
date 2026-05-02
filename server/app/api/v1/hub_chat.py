@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from server.app.api.deps import get_current_user
 from server.app.core.auth import UserInfo
 from server.app.modules.agents_hub.agent.graph import create_agent_graph
+from server.app.modules.agents_hub.agent.router_node import build_route_to_subagent_node
 from server.app.modules.agents_hub.agent.state import create_initial_state
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.config_models import HubChatbot
@@ -40,6 +41,17 @@ from server.app.modules.agents_hub.services.retrieval.long_context_strategy impo
 from server.app.modules.agents_hub.services.retrieval.vector_strategy import VectorRetrievalStrategy
 
 router = APIRouter(prefix="/hub/chat", tags=["hub-chat"])
+
+
+class _ChatbotChildrenProvider:
+    def __init__(self, db_session: AsyncSession):
+        self._session = db_session
+
+    async def get_children(self, parent_id: uuid.UUID):
+        result = await self._session.execute(
+            select(HubChatbot).where(HubChatbot.parent_chatbot_id == parent_id)
+        )
+        return list(result.scalars().all())
 
 NODE_STATUS_MESSAGES: dict[str, str] = {
     "detect_language":    "Detectando idioma...",
@@ -97,21 +109,58 @@ async def chat_stream(
         )
 
     embedding_service = get_embedding_service()
-    retrieval_mode = getattr(chatbot, "retrieval_mode", "vector")
+    config_provider = LocalConfigProvider(session)
 
+    router_status_message: str | None = None
+    selected_chatbot_id = chatbot_id
+    if getattr(chatbot, "kind", "atomic") == "router":
+        router_llm = await get_model(chatbot.id, config_provider)
+        router_node = build_route_to_subagent_node(
+            embedding_service=embedding_service,
+            chatbot_provider=_ChatbotChildrenProvider(session),
+            llm_fallback=router_llm,
+        )
+        try:
+            routing = await router_node(
+                {
+                    "messages": [type("M", (), {"content": request.message})()],
+                    "chatbot_id": str(chatbot.id),
+                }
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+
+        selected_chatbot_id = uuid.UUID(str(routing["selected_child_id"]))
+        child_result = await session.execute(
+            select(HubChatbot).where(HubChatbot.id == selected_chatbot_id)
+        )
+        child_chatbot = child_result.scalar_one_or_none()
+        if child_chatbot is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Child chatbot {selected_chatbot_id} not found",
+            )
+        chatbot = child_chatbot
+        router_status_message = f"Materia detectada: {chatbot.name}"
+
+    retrieval_mode = getattr(chatbot, "retrieval_mode", "vector")
     if retrieval_mode == "long_context":
         strategy = LongContextRetrievalStrategy(session)
     elif retrieval_mode == "agentic":
         strategy = AgenticRetrievalStrategy(session)
     else:
-        strategy = VectorRetrievalStrategy(session, embedding_service, top_k=chatbot.retrieval_top_k)
+        strategy = VectorRetrievalStrategy(
+            session, embedding_service, top_k=chatbot.retrieval_top_k
+        )
 
-    config_provider = LocalConfigProvider(session)
-    llm = await get_model(chatbot_id, config_provider)
+    llm = await get_model(selected_chatbot_id, config_provider)
 
     initial_state = create_initial_state(
         user_id=user.user_id,
-        chatbot_id=str(chatbot_id),
+        chatbot_id=str(selected_chatbot_id),
         initial_message=request.message,
     )
     interaction_id = uuid.uuid4()
@@ -145,6 +194,12 @@ async def chat_stream(
         detected_language = "es"
 
         try:
+            if router_status_message:
+                yield _sse(
+                    "status",
+                    {"node": "route_to_subagent", "msg": router_status_message},
+                )
+
             async for event in compiled.astream_events(initial_state, stream_config, version="v2"):
                 kind = event["event"]
                 name = event.get("name", "")
@@ -174,7 +229,7 @@ async def chat_stream(
         assistant_message = "".join(collected_tokens)
         interaction = HubInteraction(
             id=interaction_id,
-            chatbot_id=chatbot_id,
+            chatbot_id=selected_chatbot_id,
             user_id=user.user_id,
             user_message=request.message,
             assistant_message=assistant_message,

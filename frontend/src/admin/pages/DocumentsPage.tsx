@@ -10,10 +10,10 @@ import {
 
 import { fetchChatbots } from '@/shared/api/chatbots'
 import {
-  fetchIngestionJobs, uploadDocument, deleteJob, clearCollection,
+  fetchIngestionJobs, uploadDocument, deleteJob, clearCollection, recalculateCorpus,
   fetchSources, createSource, updateSource, deleteSource, triggerSourceCheck,
   fetchDocuments, fetchDocument, deleteDocument,
-  type IngestionSource, type HubDocument,
+  type IngestionSource, type HubDocument, type RecalculateCorpusResponse,
 } from '@/shared/api/ingestion'
 import { Progress } from '@/components/ui/progress'
 
@@ -64,6 +64,9 @@ export function DocumentsPage() {
   const [deleteDocTarget, setDeleteDocTarget] = useState<HubDocument | null>(null)
   const [substituteDoc, setSubstituteDoc] = useState<HubDocument | null>(null)
   const [uploadError, setUploadError] = useState<string>('')
+  const [recalculateConfirmOpen, setRecalculateConfirmOpen] = useState(false)
+  const [recalculateError, setRecalculateError] = useState('')
+  const [recalculateResult, setRecalculateResult] = useState<RecalculateCorpusResponse | null>(null)
   const [canonicalUrl, setCanonicalUrl] = useState<string>('')
   const canonicalUrlRef = useRef<string>('')
   const [uploadLanguage, setUploadLanguage] = useState<string>('')
@@ -118,6 +121,7 @@ export function DocumentsPage() {
     : documents
 
   const totalTokens = documents.reduce((sum, d) => sum + d.token_count, 0)
+  const estimatedMinutes = Math.max(1, Math.ceil(totalTokens / 120_000))
 
   // ── Jobs (técnico) ──────────────────────────────────────────────────────────
   const { data: jobs = [], isLoading: isLoadingJobs } = useQuery({
@@ -157,6 +161,20 @@ export function DocumentsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['hub-documents', selectedChatbotId] })
       qc.invalidateQueries({ queryKey: ['ingestion-jobs', selectedChatbotId] })
+    },
+  })
+
+  const recalculateMutation = useMutation({
+    mutationFn: () => recalculateCorpus(selectedChatbotId),
+    onSuccess: (data) => {
+      setRecalculateError('')
+      setRecalculateResult(data)
+      setRecalculateConfirmOpen(false)
+      qc.invalidateQueries({ queryKey: ['hub-documents', selectedChatbotId] })
+      qc.invalidateQueries({ queryKey: ['ingestion-jobs', selectedChatbotId] })
+    },
+    onError: (err: Error) => {
+      setRecalculateError(err.message)
     },
   })
 
@@ -349,6 +367,29 @@ export function DocumentsPage() {
                 </div>
               )}
 
+              {recalculateMutation.isPending && (
+                <div className="rounded-md border p-3 bg-muted/20">
+                  <p className="text-xs text-muted-foreground mb-2">
+                    {t('hub.recalculate_in_progress', 'Recalculando corpus...')}
+                  </p>
+                  <Progress value={null} className="h-2" />
+                </div>
+              )}
+
+              {recalculateResult && (
+                <div className="rounded-md border p-3 bg-green-50 border-green-200">
+                  <p className="text-xs text-green-800">
+                    {recalculateResult.message} · docs: {recalculateResult.documents_queued} · chunks +{recalculateResult.chunks_created} / -{recalculateResult.chunks_deleted}
+                  </p>
+                </div>
+              )}
+
+              {recalculateError && (
+                <div className="rounded-md border p-3 bg-destructive/10 border-destructive/30">
+                  <p className="text-xs text-destructive">{recalculateError}</p>
+                </div>
+              )}
+
               {/* Tabla de documentos */}
               <div className="bg-card rounded-lg border overflow-hidden">
                 <div className="flex items-center justify-between p-4 border-b bg-muted/20 gap-3 flex-wrap">
@@ -368,14 +409,27 @@ export function DocumentsPage() {
                       </select>
                     )}
                     {documents.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => clearMutation.mutate()}
-                        disabled={clearMutation.isPending}
-                        className="flex items-center gap-2 text-xs px-3 py-1.5 text-destructive border border-destructive/30 rounded hover:bg-destructive/10 transition-colors disabled:opacity-50"
-                      >
-                        <Trash2 className="w-3 h-3" />{t('hub.clear_collection', 'Limpiar colección')}
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRecalculateError('')
+                            setRecalculateConfirmOpen(true)
+                          }}
+                          disabled={recalculateMutation.isPending}
+                          className="flex items-center gap-2 text-xs px-3 py-1.5 border rounded hover:bg-accent transition-colors disabled:opacity-50"
+                        >
+                          <RefreshCw className="w-3 h-3" />{t('hub.recalculate_corpus', 'Recalcular corpus')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => clearMutation.mutate()}
+                          disabled={clearMutation.isPending}
+                          className="flex items-center gap-2 text-xs px-3 py-1.5 text-destructive border border-destructive/30 rounded hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                        >
+                          <Trash2 className="w-3 h-3" />{t('hub.clear_collection', 'Limpiar colección')}
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -738,6 +792,32 @@ export function DocumentsPage() {
           isPending={deleteSourceMutation.isPending}
           onConfirm={() => deleteSourceMutation.mutate(deleteSourceTarget.id)}
           onCancel={() => setDeleteSourceTarget(null)}
+          tc={tc}
+        />
+      )}
+
+      {recalculateConfirmOpen && (
+        <ConfirmDialog
+          title={t('hub.recalculate_title', '¿Recalcular corpus?')}
+          description={
+            selectedChatbot?.retrieval_mode === 'vector'
+              ? (
+                <>
+                  {t('hub.recalculate_vector_text', 'Se re-generarán embeddings para todos los documentos.')}{' '}
+                  <strong>{documents.length}</strong> docs · ~{formatTokens(totalTokens)} tokens · ~{estimatedMinutes} min.
+                </>
+              )
+              : (
+                <>
+                  {t('hub.recalculate_non_vector_text', 'Se eliminarán los chunks vectoriales; los documentos markdown se mantienen.')}{' '}
+                  <strong>{documents.length}</strong> docs.
+                </>
+              )
+          }
+          confirmLabel={t('hub.recalculate_confirm', 'Sí, recalcular')}
+          isPending={recalculateMutation.isPending}
+          onConfirm={() => recalculateMutation.mutate()}
+          onCancel={() => setRecalculateConfirmOpen(false)}
           tc={tc}
         />
       )}

@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,16 +19,27 @@ DEV_CHATBOT_ID = uuid.UUID("00000000-0000-0000-0000-000000000100")
 _ADMIN = UserInfo(user_id="admin-1", email="admin@test.com", role="admin")
 
 
-def _make_chatbot(name: str = "Demo", is_active: bool = True) -> SimpleNamespace:
+def _make_chatbot(
+    name: str = "Demo",
+    is_active: bool = True,
+    kind: str = "atomic",
+    parent_chatbot_id: uuid.UUID | None = None,
+    chatbot_id: uuid.UUID = DEV_CHATBOT_ID,
+    client_id: uuid.UUID = DEV_CLIENT_ID,
+) -> SimpleNamespace:
     return SimpleNamespace(
-        id=DEV_CHATBOT_ID,
+        id=chatbot_id,
         name=name,
-        client_id=DEV_CLIENT_ID,
+        client_id=client_id,
         llm_config_id=DEV_LLM_ID,
         system_prompt="Eres un asistente.",
         sources=[],
         theme_config={},
         is_active=is_active,
+        retrieval_mode="agentic",
+        retrieval_top_k=8,
+        kind=kind,
+        parent_chatbot_id=parent_chatbot_id,
         created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
         updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
     )
@@ -174,5 +185,332 @@ class TestDeleteChatbot:
         try:
             resp = client.delete(f"/api/v1/hub/chatbots/{uuid.uuid4()}")
             assert resp.status_code == 404
+        finally:
+            app.dependency_overrides.pop(get_async_session, None)
+
+
+class TestChatbotRetrievalMode:
+    def _mount_session_for_stats(self, chatbot, *, total_docs=2, total_tokens=120000, by_language=None):
+        if by_language is None:
+            by_language = [("es", 100000), ("ca", 20000)]
+
+        session = MagicMock()
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock()
+        session.add = MagicMock()
+        session.delete = AsyncMock()
+        session.get = AsyncMock(return_value=chatbot)
+
+        async def _execute(stmt):
+            text = str(stmt)
+            result = MagicMock()
+
+            if "count(hub_documents.id)" in text:
+                result.scalar_one.return_value = total_docs
+                return result
+
+            if "sum(hub_documents.token_count)" in text and "GROUP BY" not in text:
+                result.scalar_one.return_value = total_tokens
+                return result
+
+            if "GROUP BY hub_documents.language" in text:
+                result.all.return_value = by_language
+                return result
+
+            if "FROM hub_documents" in text:
+                result.scalars.return_value.all.return_value = by_language
+                return result
+
+            result.scalar_one.return_value = 0
+            result.scalars.return_value.all.return_value = []
+            result.all.return_value = []
+            return result
+
+        session.execute = AsyncMock(side_effect=_execute)
+        return session
+
+    def test_corpus_stats_returns_total_tokens_and_recommendation(self, client):
+        chatbot = _make_chatbot()
+        session = self._mount_session_for_stats(chatbot, total_docs=2, total_tokens=120000)
+        app.dependency_overrides[get_async_session] = _override_session(session)
+        try:
+            resp = client.get(f"/api/v1/hub/chatbots/{chatbot.id}/corpus-stats")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["total_documents"] == 2
+            assert data["total_tokens"] == 120000
+            assert data["recommended_mode"] == "agentic"
+            assert "Recomendado agentic" in data["recommendation_reason"]
+        finally:
+            app.dependency_overrides.pop(get_async_session, None)
+
+    def test_corpus_stats_groups_by_language(self, client):
+        chatbot = _make_chatbot()
+        session = self._mount_session_for_stats(
+            chatbot,
+            total_docs=3,
+            total_tokens=150000,
+            by_language=[("es", 120000), ("ca", 30000)],
+        )
+        app.dependency_overrides[get_async_session] = _override_session(session)
+        try:
+            resp = client.get(f"/api/v1/hub/chatbots/{chatbot.id}/corpus-stats")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["by_language"]["es"] == 120000
+            assert data["by_language"]["ca"] == 30000
+        finally:
+            app.dependency_overrides.pop(get_async_session, None)
+
+    def test_blocks_long_context_when_corpus_exceeds_limit(self, client):
+        chatbot = _make_chatbot()
+        session = self._mount_session_for_stats(chatbot, total_tokens=200001)
+        app.dependency_overrides[get_async_session] = _override_session(session)
+        try:
+            resp = client.patch(
+                f"/api/v1/hub/chatbots/{chatbot.id}",
+                json={"retrieval_mode": "long_context"},
+            )
+            assert resp.status_code == 400
+            assert "150K tokens" in resp.json()["detail"]
+        finally:
+            app.dependency_overrides.pop(get_async_session, None)
+
+    def test_regenerate_chunks_blocked_for_non_vector_mode(self, client):
+        chatbot = _make_chatbot()
+        chatbot.retrieval_mode = "agentic"
+        session = self._mount_session_for_stats(chatbot)
+        app.dependency_overrides[get_async_session] = _override_session(session)
+        try:
+            resp = client.post(f"/api/v1/hub/chatbots/{chatbot.id}/regenerate-chunks")
+            assert resp.status_code == 400
+            assert "retrieval_mode == 'vector'" in resp.json()["detail"]
+        finally:
+            app.dependency_overrides.pop(get_async_session, None)
+
+    def test_regenerate_chunks_creates_chunks_for_existing_documents(self, client):
+        chatbot = _make_chatbot()
+        chatbot.retrieval_mode = "vector"
+        doc1 = SimpleNamespace(id=uuid.uuid4())
+        doc2 = SimpleNamespace(id=uuid.uuid4())
+
+        session = self._mount_session_for_stats(chatbot, by_language=[doc1, doc2])
+        app.dependency_overrides[get_async_session] = _override_session(session)
+
+        with patch("server.app.routers.hub_chatbots_router.get_embedding_service", return_value=object()):
+            with patch("server.app.routers.hub_chatbots_router.IngestionWatcher") as watcher_cls:
+                watcher = watcher_cls.return_value
+                watcher._regenerate_chunks_for_document = AsyncMock(side_effect=[3, 5])
+
+                try:
+                    resp = client.post(f"/api/v1/hub/chatbots/{chatbot.id}/regenerate-chunks")
+                    assert resp.status_code == 200
+                    data = resp.json()
+                    assert data["documents_processed"] == 2
+                    assert data["chunks_created"] == 8
+                    assert isinstance(data["task_id"], str) and len(data["task_id"]) > 0
+                finally:
+                    app.dependency_overrides.pop(get_async_session, None)
+
+    def test_recalculate_corpus_returns_202_with_task_id(self, client):
+        chatbot = _make_chatbot()
+        chatbot.retrieval_mode = "vector"
+        session = self._mount_session_for_stats(chatbot)
+        app.dependency_overrides[get_async_session] = _override_session(session)
+
+        with patch(
+            "server.app.routers.hub_chatbots_router.recalculate_corpus",
+            new=AsyncMock(return_value=(4, 20, 0)),
+        ):
+            try:
+                resp = client.post(f"/api/v1/hub/chatbots/{chatbot.id}/recalculate-corpus")
+                assert resp.status_code == 202
+                data = resp.json()
+                assert isinstance(data["task_id"], str) and len(data["task_id"]) > 0
+                assert data["documents_queued"] == 4
+                assert data["chunks_created"] == 20
+                assert data["chunks_deleted"] == 0
+            finally:
+                app.dependency_overrides.pop(get_async_session, None)
+
+    def test_recalculate_corpus_rejects_dimension_mismatch(self, client):
+        chatbot = _make_chatbot()
+        chatbot.retrieval_mode = "vector"
+        chatbot.llm_config = SimpleNamespace(embedding_dimensions=1536)
+        session = self._mount_session_for_stats(chatbot)
+        app.dependency_overrides[get_async_session] = _override_session(session)
+
+        embedding_service = SimpleNamespace(dimensions=1024)
+        with patch(
+            "server.app.routers.hub_chatbots_router.get_embedding_service",
+            return_value=embedding_service,
+        ):
+            try:
+                resp = client.post(f"/api/v1/hub/chatbots/{chatbot.id}/recalculate-corpus")
+                assert resp.status_code == 409
+                assert "dimensión" in resp.json()["detail"]
+            finally:
+                app.dependency_overrides.pop(get_async_session, None)
+
+
+class TestChatbotHierarchy:
+    def _mount_session(self, router_cb, child_cb, *, children_list=None):
+        session = MagicMock()
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock()
+        session.add = MagicMock()
+
+        by_id = {
+            router_cb.id: router_cb,
+            child_cb.id: child_cb if child_cb is not None else None,
+        }
+
+        async def _get(model, chatbot_id):
+            return by_id.get(chatbot_id)
+
+        async def _execute(stmt):
+            text = str(stmt)
+            result = MagicMock()
+            if "parent_chatbot_id" in text:
+                result.scalars.return_value.all.return_value = children_list or []
+            else:
+                result.scalars.return_value.all.return_value = []
+            return result
+
+        session.get = AsyncMock(side_effect=_get)
+        session.execute = AsyncMock(side_effect=_execute)
+        return session
+
+    def test_assign_child_to_router_succeeds(self, client):
+        router_id = uuid.uuid4()
+        child_id = uuid.uuid4()
+        router_cb = _make_chatbot(name="UJI", kind="router", chatbot_id=router_id)
+        child_cb = _make_chatbot(name="RRHH", kind="atomic", chatbot_id=child_id)
+
+        session = self._mount_session(router_cb, child_cb)
+        app.dependency_overrides[get_async_session] = _override_session(session)
+        try:
+            resp = client.post(
+                f"/api/v1/hub/chatbots/{router_id}/children",
+                json={"child_chatbot_id": str(child_id)},
+            )
+            assert resp.status_code == 200
+            assert resp.json()["id"] == str(child_id)
+            assert child_cb.parent_chatbot_id == router_id
+        finally:
+            app.dependency_overrides.pop(get_async_session, None)
+
+    def test_cannot_assign_child_with_kind_router(self, client):
+        router_id = uuid.uuid4()
+        child_id = uuid.uuid4()
+        router_cb = _make_chatbot(name="Router A", kind="router", chatbot_id=router_id)
+        child_router = _make_chatbot(name="Router B", kind="router", chatbot_id=child_id)
+
+        session = self._mount_session(router_cb, child_router)
+        app.dependency_overrides[get_async_session] = _override_session(session)
+        try:
+            resp = client.post(
+                f"/api/v1/hub/chatbots/{router_id}/children",
+                json={"child_chatbot_id": str(child_id)},
+            )
+            assert resp.status_code == 400
+            assert "tipo router" in resp.json()["detail"]
+        finally:
+            app.dependency_overrides.pop(get_async_session, None)
+
+    def test_cannot_create_grandchild_hierarchy(self, client):
+        router_id = uuid.uuid4()
+        child_id = uuid.uuid4()
+        parent_router = uuid.uuid4()
+
+        router_cb = _make_chatbot(
+            name="Router Hijo",
+            kind="router",
+            chatbot_id=router_id,
+            parent_chatbot_id=parent_router,
+        )
+        child_cb = _make_chatbot(name="Atomic", kind="atomic", chatbot_id=child_id)
+
+        session = self._mount_session(router_cb, child_cb)
+        app.dependency_overrides[get_async_session] = _override_session(session)
+        try:
+            resp = client.post(
+                f"/api/v1/hub/chatbots/{router_id}/children",
+                json={"child_chatbot_id": str(child_id)},
+            )
+            assert resp.status_code == 400
+            assert "2 niveles" in resp.json()["detail"]
+        finally:
+            app.dependency_overrides.pop(get_async_session, None)
+
+    def test_cannot_assign_child_from_different_client(self, client):
+        router_id = uuid.uuid4()
+        child_id = uuid.uuid4()
+
+        router_cb = _make_chatbot(
+            name="UJI Router",
+            kind="router",
+            chatbot_id=router_id,
+            client_id=uuid.uuid4(),
+        )
+        child_cb = _make_chatbot(
+            name="Otro cliente",
+            kind="atomic",
+            chatbot_id=child_id,
+            client_id=uuid.uuid4(),
+        )
+
+        session = self._mount_session(router_cb, child_cb)
+        app.dependency_overrides[get_async_session] = _override_session(session)
+        try:
+            resp = client.post(
+                f"/api/v1/hub/chatbots/{router_id}/children",
+                json={"child_chatbot_id": str(child_id)},
+            )
+            assert resp.status_code == 400
+            assert "mismo cliente" in resp.json()["detail"]
+        finally:
+            app.dependency_overrides.pop(get_async_session, None)
+
+    def test_list_children_returns_only_direct_children(self, client):
+        router_id = uuid.uuid4()
+        child_id = uuid.uuid4()
+        router_cb = _make_chatbot(name="UJI", kind="router", chatbot_id=router_id)
+        child_cb = _make_chatbot(
+            name="Normativa",
+            kind="atomic",
+            chatbot_id=child_id,
+            parent_chatbot_id=router_id,
+        )
+
+        session = self._mount_session(router_cb, child_cb, children_list=[child_cb])
+        app.dependency_overrides[get_async_session] = _override_session(session)
+        try:
+            resp = client.get(f"/api/v1/hub/chatbots/{router_id}/children")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert len(data) == 1
+            assert data[0]["id"] == str(child_id)
+            assert data[0]["parent_chatbot_id"] == str(router_id)
+        finally:
+            app.dependency_overrides.pop(get_async_session, None)
+
+    def test_unassign_child_clears_parent_chatbot_id(self, client):
+        router_id = uuid.uuid4()
+        child_id = uuid.uuid4()
+        router_cb = _make_chatbot(name="UJI", kind="router", chatbot_id=router_id)
+        child_cb = _make_chatbot(
+            name="RRHH",
+            kind="atomic",
+            chatbot_id=child_id,
+            parent_chatbot_id=router_id,
+        )
+
+        session = self._mount_session(router_cb, child_cb)
+        app.dependency_overrides[get_async_session] = _override_session(session)
+        try:
+            resp = client.delete(f"/api/v1/hub/chatbots/{router_id}/children/{child_id}")
+            assert resp.status_code == 204
+            assert child_cb.parent_chatbot_id is None
         finally:
             app.dependency_overrides.pop(get_async_session, None)

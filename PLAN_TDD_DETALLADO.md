@@ -3618,7 +3618,7 @@ async def search_knowledge_fallback_node(state: AgentState) -> dict:
 
 ### Prompt 9CBis.11 — Refactor de 9.10: Widget renderiza citas como pills clicables ✅ COMPLETADO
 
-### Prompt 9CBis.12 — TDD RED: router multi-materia (`route_to_subagent`)
+### Prompt 9CBis.12 — TDD RED: router multi-materia (`route_to_subagent`) ✅ COMPLETADO (2026-05-02)
 
 **Objetivo**: introducir el nodo `route_to_subagent` en el grafo cuando `chatbot.kind == "router"`. El nodo clasifica la consulta entre los hijos atómicos (basado en embeddings de sus `system_prompt`) y delega.
 
@@ -3726,7 +3726,7 @@ class TestRouteToSubagent:
 
 ---
 
-### Prompt 9CBis.13 — TDD GREEN: nodo router + endpoints + UI admin de jerarquía
+### Prompt 9CBis.13 — TDD GREEN: nodo router + endpoints + UI admin de jerarquía ✅ COMPLETADO (2026-05-02)
 
 **Objetivo**: implementar el nodo `route_to_subagent` y delegar la ejecución al subgrafo del hijo elegido. Endpoints CRUD para gestionar la jerarquía. UI admin para crear router → hijos.
 
@@ -3856,7 +3856,7 @@ uv run pytest tests/ -v   # regresión completa obligatoria
 
 ---
 
-### Prompt 9CBis.14 — UI admin: selector `retrieval_mode` con recomendación basada en tokens
+### Prompt 9CBis.14 — UI admin: selector `retrieval_mode` con recomendación basada en tokens ✅ COMPLETADO (2026-05-02)
 
 **Objetivo**: en la pantalla de edición de chatbot, añadir el selector `retrieval_mode` con una recomendación visible y argumentada según el `total_tokens` del corpus actual del chatbot. El admin ve la sugerencia pero decide.
 
@@ -3966,7 +3966,7 @@ npm run build && npm run build:widget   # bundles ok
 
 ---
 
-### Prompt 9CBis.15 — Botón "Recalcular corpus": re-ingestión completa ante cambio de modo o modelo
+### Prompt 9CBis.15 — Botón "Recalcular corpus": re-ingestión completa ante cambio de modo o modelo ✅ COMPLETADO (2026-05-02)
 
 **Motivación**: durante la fase de experimentación es habitual cambiar el `retrieval_mode`, el LLM o el modelo de embeddings para comparar calidad de respuestas. Tras cada cambio, el corpus existente puede quedar en un estado inconsistente: chunks generados con otra estrategia o embeddings de dimensión incompatible. Este prompt añade un botón explícito que recalcula todo el corpus del chatbot sin obligar al admin a re-subir los PDFs.
 

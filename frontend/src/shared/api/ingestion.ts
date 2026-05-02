@@ -136,6 +136,26 @@ export async function clearCollection(chatbotId: string): Promise<any> {
   return res.json()
 }
 
+export interface RecalculateCorpusResponse {
+  task_id: string
+  message: string
+  documents_queued: number
+  chunks_created: number
+  chunks_deleted: number
+}
+
+export async function recalculateCorpus(chatbotId: string): Promise<RecalculateCorpusResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/hub/chatbots/${chatbotId}/recalculate-corpus`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => null)
+    throw new Error(err?.detail || 'Failed to recalculate corpus')
+  }
+  return res.json()
+}
+
 export interface HubDocument {
   id: string
   chatbot_id: string
