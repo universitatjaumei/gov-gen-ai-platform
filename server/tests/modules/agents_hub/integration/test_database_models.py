@@ -15,6 +15,9 @@ async def db_session():
     )
     from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
 
+    from server.app.modules.agents_hub.database.config_models import HubProvider, HubLLMConfig, HubChatbot, HubClient, HubPromptTemplate
+    from server.app.modules.agents_hub.database.operational_models import HubDocument, HubDocumentChunk, HubInteraction, HubIngestionSource, HubIngestionJob
+
     engine = create_async_engine(DB_URL)
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
@@ -23,11 +26,8 @@ async def db_session():
 
     session_factory = create_session_factory(engine)
     async with session_factory() as session:
-        from server.app.modules.agents_hub.database.config_models import HubProvider
-        session.add_all([
-            HubProvider(id="google", name="Google", provider_type="google_genai"),
-            HubProvider(id="openai", name="OpenAI", provider_type="openai_compatible"),
-        ])
+        await session.merge(HubProvider(id="google", name="Google", provider_type="google_genai"))
+        await session.merge(HubProvider(id="openai", name="OpenAI", provider_type="openai_compatible"))
         await session.commit()
         yield session
 

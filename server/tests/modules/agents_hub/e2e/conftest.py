@@ -82,9 +82,8 @@ async def setup_chatbot(db_session):
     from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
     from server.app.modules.agents_hub.ingestion.hasher import hash_content
 
-    provider = HubProvider(id="google", name="Google", provider_type="google_genai")
-    db_session.add(provider)
-    await db_session.flush()
+    await db_session.merge(HubProvider(id="google", name="Google", provider_type="google_genai"))
+    await db_session.commit()
 
     llm_config = HubLLMConfig(
         provider="google",

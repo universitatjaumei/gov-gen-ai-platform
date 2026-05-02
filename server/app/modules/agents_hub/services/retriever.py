@@ -37,7 +37,7 @@ class HybridRetriever:
             .where(HubDocumentChunk.chatbot_id == chatbot_id)
             .where(HubDocumentChunk.embedding.isnot(None))
             .where(
-                (not HubDocumentChunk.is_temporary)
+                (~HubDocumentChunk.is_temporary)
                 | (HubDocumentChunk.owner_id == owner_id)
             )
         )
@@ -68,7 +68,7 @@ class HybridRetriever:
     ) -> list[SearchResult]:
         filters = [
             HubDocumentChunk.chatbot_id == chatbot_id,
-            (not HubDocumentChunk.is_temporary)
+            (~HubDocumentChunk.is_temporary)
             | (HubDocumentChunk.owner_id == owner_id),
         ]
         for word in query.split():

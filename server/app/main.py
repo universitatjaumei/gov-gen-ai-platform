@@ -72,16 +72,24 @@ async def lifespan(app: FastAPI):
     )
     from server.app.modules.agents_hub.ingestion.source_scheduler import create_scheduler
     from server.app.services.model_fetcher import refresh_model_cache
+    from server.app.services.pricing_service import update_prices_from_openrouter
     import asyncio
 
     scheduler = create_scheduler(create_session_factory(get_engine()))
     scheduler.start()
 
-    # Initial refresh and background loop for 24h refresh
+    # Initial refresh at startup (legacy behavior)
+    print("[STARTUP] Refreshing AI model cache...")
+    await refresh_model_cache()
+    print("[STARTUP] Updating model prices...")
+    await update_prices_from_openrouter()
+
+    # Background loop for 24h refresh
     async def periodic_refresh():
         while True:
+            await asyncio.sleep(24 * 60 * 60)  # 24 hours
             await refresh_model_cache()
-            await asyncio.sleep(24 * 60 * 60) # 24 hours
+            await update_prices_from_openrouter()
 
     refresh_task = asyncio.create_task(periodic_refresh())
 

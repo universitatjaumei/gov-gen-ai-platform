@@ -7,7 +7,12 @@ los secretos de los proveedores de LLM.
 """
 
 import os
+from pathlib import Path
 from typing import Optional
+
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parents[2] / ".env")
 
 
 async def get_api_key(provider: str) -> Optional[str]:
