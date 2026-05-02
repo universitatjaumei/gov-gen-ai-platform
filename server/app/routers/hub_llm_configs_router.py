@@ -277,12 +277,11 @@ async def test_llm_connection(
     _: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
-    result = await session.execute(
+    config = await session.scalar(
         select(HubLLMConfig)
         .options(selectinload(HubLLMConfig.provider_rel))
         .where(HubLLMConfig.id == config_id)
     )
-    config = result.scalars().first()
     if not config:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found")
 

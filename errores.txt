@@ -1,0 +1,1365 @@
+================================= FAILURES ===================================
+_________________ test_config_base_contains_only_config_models _________________
+
+    def test_config_base_contains_only_config_models() -> None:
+        from server.app.modules.agents_hub.database.base import HubConfigBase
+        import server.app.modules.agents_hub.database.config_models  # noqa: F401
+    
+        # Verify that metadata has exactly the 4 expected tables
+        tables = set(HubConfigBase.metadata.tables.keys())
+>       assert tables == {
+            "hub_clients",
+            "hub_chatbots",
+            "hub_llm_configs",
+            "hub_prompt_templates",
+        }
+E       AssertionError: assert {'hub_chatbots', 'hub_clients', 'hub_prompt_templates', 'hub_providers', 'hub_llm_configs'} == {'hub_llm_configs', 'hub_prompt_templates', 'hub_chatbots', 'hub_clients'}
+E         
+E         Extra items in the left set:
+E         'hub_providers'
+E         
+E         Full diff:
+E           {
+E               'hub_chatbots',
+E               'hub_clients',
+E               'hub_llm_configs',
+E               'hub_prompt_templates',
+E         +     'hub_providers',
+E           }
+
+tests/modules/agents_hub/unit/test_edge_boundary.py:9: AssertionError
+_ TestProcessSourceLanguageDetection.test_process_source_auto_detects_catalan_content _
+
+self = <server.tests.modules.agents_hub.unit.test_ingestion_language.TestProcessSourceLanguageDetection object at 0x7f7ab306f9d0>
+
+    @pytest.mark.asyncio
+    async def test_process_source_auto_detects_catalan_content(self) -> None:
+        from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+        from server.app.modules.agents_hub.database.operational_models import HubDocument
+    
+        catalan_content = "# Documentació\n\nAquest és un text en català sobre normativa universitària."
+    
+        first_exec = MagicMock()
+        first_exec.scalar_one_or_none = MagicMock(return_value=None)
+        second_exec = MagicMock()
+        second_exec.scalars = MagicMock(return_value=iter([]))
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(side_effect=[first_exec, second_exec, MagicMock()])
+        mock_session.flush = AsyncMock()
+        mock_session.commit = AsyncMock()
+        mock_session.add = MagicMock()
+    
+        watcher = IngestionWatcher(
+            session=mock_session,
+            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
+        )
+    
+        with patch(
+            "server.app.modules.agents_hub.ingestion.watcher.detect_language",
+            return_value="ca",
+        ) as mock_detect:
+>           doc, _ = await watcher.process_source(
+                source_url="https://example.com/doc",
+                chatbot_id=uuid.uuid4(),
+                prefetched_content=catalan_content,
+                language=None,  # debe auto-detectar
+            )
+
+tests/modules/agents_hub/unit/test_ingestion_language.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <server.app.modules.agents_hub.ingestion.watcher.IngestionWatcher object at 0x7f7a2b1dbe00>
+source_url = 'https://example.com/doc'
+chatbot_id = UUID('c75e0b76-e88d-48b2-abf5-9981aa127f97'), language = 'ca'
+citation_url = None
+prefetched_content = '# Documentació\n\nAquest és un text en català sobre normativa universitària.'
+title = None
+
+    async def process_source(
+        self,
+        source_url: str,
+        chatbot_id: uuid.UUID,
+        language: str | None = None,
+        citation_url: str | None = None,
+        prefetched_content: str | None = None,
+        title: str | None = None,
+    ) -> tuple[HubDocument, int]:
+        """Crea/actualiza un HubDocument. Genera chunks SOLO si retrieval_mode == 'vector'.
+    
+        Returns:
+            (HubDocument, chunks_created_count) — idempotente por content_hash.
+        """
+        if prefetched_content is not None:
+            content = prefetched_content
+        else:
+            processor = await self._get_processor()
+            content = await asyncio.to_thread(processor.process, source_url)
+    
+        if language is None:
+            language = detect_language(content)
+        content_hash = hash_content(content)
+        canonical = citation_url or source_url
+        doc_title = title or extract_title_from_markdown(content) or canonical
+        token_count = estimate_tokens(content)
+    
+        # Idempotencia: mismo chatbot + mismo hash → actualizar sin rechunkear
+        existing = await self._session.execute(
+            select(HubDocument).where(
+                HubDocument.chatbot_id == chatbot_id,
+                HubDocument.content_hash == content_hash,
+            ).limit(1)
+        )
+        doc = existing.scalar_one_or_none()
+        if doc:
+            doc.canonical_url = canonical
+            doc.title = doc_title
+            doc.updated_at = datetime.now(timezone.utc)
+        else:
+            # Si ya existia un documento con esta URL e idioma → reemplazar.
+            # Idiomas distintos de la misma URL coexisten sin borrarse mutuamente.
+            old_result = await self._session.execute(
+                select(HubDocument).where(
+                    HubDocument.chatbot_id == chatbot_id,
+                    HubDocument.canonical_url == canonical,
+                    HubDocument.language == language,
+                )
+            )
+            for old_doc in old_result.scalars():
+                await self._session.execute(
+                    delete(HubDocumentChunk).where(
+                        HubDocumentChunk.document_id == old_doc.id
+                    )
+                )
+                await self._session.delete(old_doc)
+    
+            source_kind = (
+                "crawler"
+                if source_url.startswith(("http://", "https://"))
+                else "upload"
+            )
+            doc = HubDocument(
+                chatbot_id=chatbot_id,
+                title=doc_title,
+                canonical_url=canonical,
+                markdown_content=content,
+                content_hash=content_hash,
+                language=language,
+                source_kind=source_kind,
+                token_count=token_count,
+            )
+            self._session.add(doc)
+            try:
+                # Savepoint: si falla por clave duplicada solo se revierte el savepoint,
+                # no la transacción exterior (que mantiene el job válido).
+>               async with self._session.begin_nested():
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: 'coroutine' object does not support the asynchronous context manager protocol
+
+app/modules/agents_hub/ingestion/watcher.py:149: TypeError
+_ TestProcessSourceLanguageDetection.test_process_source_respects_explicit_language _
+
+self = <server.tests.modules.agents_hub.unit.test_ingestion_language.TestProcessSourceLanguageDetection object at 0x7f7ab306fb10>
+
+    @pytest.mark.asyncio
+    async def test_process_source_respects_explicit_language(self) -> None:
+        from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+        from server.app.modules.agents_hub.database.operational_models import HubDocument
+    
+        content = "Some English content about regulations."
+    
+        first_exec = MagicMock()
+        first_exec.scalar_one_or_none = MagicMock(return_value=None)
+        second_exec = MagicMock()
+        second_exec.scalars = MagicMock(return_value=iter([]))
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(side_effect=[first_exec, second_exec, MagicMock()])
+        mock_session.flush = AsyncMock()
+        mock_session.commit = AsyncMock()
+        mock_session.add = MagicMock()
+    
+        watcher = IngestionWatcher(
+            session=mock_session,
+            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
+        )
+    
+        with patch(
+            "server.app.modules.agents_hub.ingestion.watcher.detect_language"
+        ) as mock_detect:
+>           doc, _ = await watcher.process_source(
+                source_url="https://example.com/doc",
+                chatbot_id=uuid.uuid4(),
+                prefetched_content=content,
+                language="en",  # idioma explícito — NO debe llamar a detect_language
+            )
+
+tests/modules/agents_hub/unit/test_ingestion_language.py:73: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <server.app.modules.agents_hub.ingestion.watcher.IngestionWatcher object at 0x7f7a2b256ad0>
+source_url = 'https://example.com/doc'
+chatbot_id = UUID('b42a7ba6-322d-4ef0-835e-2879821e8a63'), language = 'en'
+citation_url = None
+prefetched_content = 'Some English content about regulations.', title = None
+
+    async def process_source(
+        self,
+        source_url: str,
+        chatbot_id: uuid.UUID,
+        language: str | None = None,
+        citation_url: str | None = None,
+        prefetched_content: str | None = None,
+        title: str | None = None,
+    ) -> tuple[HubDocument, int]:
+        """Crea/actualiza un HubDocument. Genera chunks SOLO si retrieval_mode == 'vector'.
+    
+        Returns:
+            (HubDocument, chunks_created_count) — idempotente por content_hash.
+        """
+        if prefetched_content is not None:
+            content = prefetched_content
+        else:
+            processor = await self._get_processor()
+            content = await asyncio.to_thread(processor.process, source_url)
+    
+        if language is None:
+            language = detect_language(content)
+        content_hash = hash_content(content)
+        canonical = citation_url or source_url
+        doc_title = title or extract_title_from_markdown(content) or canonical
+        token_count = estimate_tokens(content)
+    
+        # Idempotencia: mismo chatbot + mismo hash → actualizar sin rechunkear
+        existing = await self._session.execute(
+            select(HubDocument).where(
+                HubDocument.chatbot_id == chatbot_id,
+                HubDocument.content_hash == content_hash,
+            ).limit(1)
+        )
+        doc = existing.scalar_one_or_none()
+        if doc:
+            doc.canonical_url = canonical
+            doc.title = doc_title
+            doc.updated_at = datetime.now(timezone.utc)
+        else:
+            # Si ya existia un documento con esta URL e idioma → reemplazar.
+            # Idiomas distintos de la misma URL coexisten sin borrarse mutuamente.
+            old_result = await self._session.execute(
+                select(HubDocument).where(
+                    HubDocument.chatbot_id == chatbot_id,
+                    HubDocument.canonical_url == canonical,
+                    HubDocument.language == language,
+                )
+            )
+            for old_doc in old_result.scalars():
+                await self._session.execute(
+                    delete(HubDocumentChunk).where(
+                        HubDocumentChunk.document_id == old_doc.id
+                    )
+                )
+                await self._session.delete(old_doc)
+    
+            source_kind = (
+                "crawler"
+                if source_url.startswith(("http://", "https://"))
+                else "upload"
+            )
+            doc = HubDocument(
+                chatbot_id=chatbot_id,
+                title=doc_title,
+                canonical_url=canonical,
+                markdown_content=content,
+                content_hash=content_hash,
+                language=language,
+                source_kind=source_kind,
+                token_count=token_count,
+            )
+            self._session.add(doc)
+            try:
+                # Savepoint: si falla por clave duplicada solo se revierte el savepoint,
+                # no la transacción exterior (que mantiene el job válido).
+>               async with self._session.begin_nested():
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: 'coroutine' object does not support the asynchronous context manager protocol
+
+app/modules/agents_hub/ingestion/watcher.py:149: TypeError
+____ TestRunJobPropagatesLanguage.test_run_job_propagates_catalan_language _____
+
+self = <server.tests.modules.agents_hub.unit.test_ingestion_language.TestRunJobPropagatesLanguage object at 0x7f7ab306fc50>
+
+    @pytest.mark.asyncio
+    async def test_run_job_propagates_catalan_language(self) -> None:
+        from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+        from server.app.modules.agents_hub.database.operational_models import HubIngestionJob
+    
+        job_id = uuid.uuid4()
+        chatbot_id = uuid.uuid4()
+        job = HubIngestionJob(
+            id=job_id,
+            chatbot_id=chatbot_id,
+            source_url="https://example.com",
+            canonical_url="https://example.com",
+            status="pending",
+            language="ca",
+        )
+    
+        mock_session = AsyncMock()
+        mock_session.get.return_value = job
+    
+        watcher = IngestionWatcher(
+            session=mock_session,
+            embedding_service=AsyncMock(),
+        )
+    
+        with patch.object(watcher, "process_source", new_callable=AsyncMock, return_value=(MagicMock(), 0)) as mock_ps:
+            await watcher.run_job(job_id)
+    
+>       mock_ps.assert_called_once_with(
+            job.source_url,
+            job.chatbot_id,
+            citation_url=job.canonical_url,
+            prefetched_content=None,
+            language="ca",
+        )
+
+tests/modules/agents_hub/unit/test_ingestion_language.py:145: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.13.13/x64/lib/python3.13/unittest/mock.py:991: in assert_called_once_with
+    return self.assert_called_with(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <AsyncMock name='process_source' id='140162560924640'>
+args = ('https://example.com', UUID('728fcf29-c505-4d06-9616-5f0770a165fd'))
+kwargs = {'citation_url': 'https://example.com', 'language': 'ca', 'prefetched_content': None}
+expected = call('https://example.com', UUID('728fcf29-c505-4d06-9616-5f0770a165fd'), citation_url='https://example.com', prefetched_content=None, language='ca')
+actual = call('https://example.com', UUID('728fcf29-c505-4d06-9616-5f0770a165fd'), citation_url='https://example.com', prefetched_content=None, language='ca', title=None)
+_error_message = <function NonCallableMock.assert_called_with.<locals>._error_message at 0x7f7a23adcb80>
+cause = None
+
+    def assert_called_with(self, /, *args, **kwargs):
+        """assert that the last call was made with the specified arguments.
+    
+        Raises an AssertionError if the args and keyword args passed in are
+        different to the last call to the mock."""
+        if self.call_args is None:
+            expected = self._format_mock_call_signature(args, kwargs)
+            actual = 'not called.'
+            error_message = ('expected call not found.\nExpected: %s\n  Actual: %s'
+                    % (expected, actual))
+            raise AssertionError(error_message)
+    
+        def _error_message():
+            msg = self._format_mock_failure_message(args, kwargs)
+            return msg
+        expected = self._call_matcher(_Call((args, kwargs), two=True))
+        actual = self._call_matcher(self.call_args)
+        if actual != expected:
+            cause = expected if isinstance(expected, Exception) else None
+>           raise AssertionError(_error_message()) from cause
+E           AssertionError: expected call not found.
+E           Expected: process_source('https://example.com', UUID('728fcf29-c505-4d06-9616-5f0770a165fd'), citation_url='https://example.com', prefetched_content=None, language='ca')
+E             Actual: process_source('https://example.com', UUID('728fcf29-c505-4d06-9616-5f0770a165fd'), citation_url='https://example.com', prefetched_content=None, language='ca', title=None)
+
+/opt/hostedtoolcache/Python/3.13.13/x64/lib/python3.13/unittest/mock.py:979: AssertionError
+_ TestMultiLanguageDocumentCoexistence.test_two_language_versions_of_same_url_coexist _
+
+self = <server.tests.modules.agents_hub.unit.test_ingestion_multilang.TestMultiLanguageDocumentCoexistence object at 0x7f7ab31202d0>
+
+    @pytest.mark.asyncio
+    async def test_two_language_versions_of_same_url_coexist(self) -> None:
+        """Ingestar CA de la misma URL cuando ya existe ES → no borra la versión ES."""
+        from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+        from server.app.modules.agents_hub.database.operational_models import HubDocument
+    
+        session = self._make_session(hash_result=None, url_lang_result=[])
+    
+        watcher = IngestionWatcher(
+            session=session,
+            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 10)),
+        )
+    
+        with patch(
+            "server.app.modules.agents_hub.ingestion.watcher.MarkdownChunker"
+        ) as MockChunker:
+            MockChunker.return_value.split = MagicMock(return_value=[])
+>           doc, _ = await watcher.process_source(
+                source_url="https://example.com/normativa.pdf",
+                chatbot_id=uuid.uuid4(),
+                prefetched_content="Contingut en català.",
+                language="ca",
+            )
+
+tests/modules/agents_hub/unit/test_ingestion_multilang.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <server.app.modules.agents_hub.ingestion.watcher.IngestionWatcher object at 0x7f7a8f9ab0b0>
+source_url = 'https://example.com/normativa.pdf'
+chatbot_id = UUID('4af2e85f-08a2-41c4-8a71-0414860c345d'), language = 'ca'
+citation_url = None, prefetched_content = 'Contingut en català.', title = None
+
+    async def process_source(
+        self,
+        source_url: str,
+        chatbot_id: uuid.UUID,
+        language: str | None = None,
+        citation_url: str | None = None,
+        prefetched_content: str | None = None,
+        title: str | None = None,
+    ) -> tuple[HubDocument, int]:
+        """Crea/actualiza un HubDocument. Genera chunks SOLO si retrieval_mode == 'vector'.
+    
+        Returns:
+            (HubDocument, chunks_created_count) — idempotente por content_hash.
+        """
+        if prefetched_content is not None:
+            content = prefetched_content
+        else:
+            processor = await self._get_processor()
+            content = await asyncio.to_thread(processor.process, source_url)
+    
+        if language is None:
+            language = detect_language(content)
+        content_hash = hash_content(content)
+        canonical = citation_url or source_url
+        doc_title = title or extract_title_from_markdown(content) or canonical
+        token_count = estimate_tokens(content)
+    
+        # Idempotencia: mismo chatbot + mismo hash → actualizar sin rechunkear
+        existing = await self._session.execute(
+            select(HubDocument).where(
+                HubDocument.chatbot_id == chatbot_id,
+                HubDocument.content_hash == content_hash,
+            ).limit(1)
+        )
+        doc = existing.scalar_one_or_none()
+        if doc:
+            doc.canonical_url = canonical
+            doc.title = doc_title
+            doc.updated_at = datetime.now(timezone.utc)
+        else:
+            # Si ya existia un documento con esta URL e idioma → reemplazar.
+            # Idiomas distintos de la misma URL coexisten sin borrarse mutuamente.
+            old_result = await self._session.execute(
+                select(HubDocument).where(
+                    HubDocument.chatbot_id == chatbot_id,
+                    HubDocument.canonical_url == canonical,
+                    HubDocument.language == language,
+                )
+            )
+            for old_doc in old_result.scalars():
+                await self._session.execute(
+                    delete(HubDocumentChunk).where(
+                        HubDocumentChunk.document_id == old_doc.id
+                    )
+                )
+                await self._session.delete(old_doc)
+    
+            source_kind = (
+                "crawler"
+                if source_url.startswith(("http://", "https://"))
+                else "upload"
+            )
+            doc = HubDocument(
+                chatbot_id=chatbot_id,
+                title=doc_title,
+                canonical_url=canonical,
+                markdown_content=content,
+                content_hash=content_hash,
+                language=language,
+                source_kind=source_kind,
+                token_count=token_count,
+            )
+            self._session.add(doc)
+            try:
+                # Savepoint: si falla por clave duplicada solo se revierte el savepoint,
+                # no la transacción exterior (que mantiene el job válido).
+>               async with self._session.begin_nested():
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: 'coroutine' object does not support the asynchronous context manager protocol
+
+app/modules/agents_hub/ingestion/watcher.py:149: TypeError
+_ TestMultiLanguageDocumentCoexistence.test_reingest_same_url_same_language_replaces_doc _
+
+self = <server.tests.modules.agents_hub.unit.test_ingestion_multilang.TestMultiLanguageDocumentCoexistence object at 0x7f7ab3120410>
+
+    @pytest.mark.asyncio
+    async def test_reingest_same_url_same_language_replaces_doc(self) -> None:
+        """Re-ingestar ES de la misma URL → borra el doc ES antiguo, crea uno nuevo."""
+        from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+        from server.app.modules.agents_hub.database.operational_models import HubDocument
+    
+        existing_es = HubDocument(
+            id=uuid.uuid4(),
+            chatbot_id=uuid.uuid4(),
+            title="Normativa ES",
+            canonical_url="https://example.com/normativa.pdf",
+            markdown_content="Contenido antiguo.",
+            content_hash="old_hash_es",
+            language="es",
+            source_kind="upload",
+            token_count=10,
+        )
+    
+        hash_exec = MagicMock()
+        hash_exec.scalar_one_or_none = MagicMock(return_value=None)  # nuevo hash
+    
+        url_lang_exec = MagicMock()
+        url_lang_exec.scalars = MagicMock(return_value=iter([existing_es]))
+    
+        # delete chunks del doc antiguo + delete chunks del nuevo en regenerate
+        del_exec_1 = MagicMock()
+        del_exec_2 = MagicMock()
+    
+        session = AsyncMock()
+        session.execute = AsyncMock(
+            side_effect=[hash_exec, url_lang_exec, del_exec_1, del_exec_2]
+        )
+        session.flush = AsyncMock()
+        session.commit = AsyncMock()
+        session.add = MagicMock()
+        session.delete = AsyncMock()
+    
+        watcher = IngestionWatcher(
+            session=session,
+            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 10)),
+        )
+    
+        with patch(
+            "server.app.modules.agents_hub.ingestion.watcher.MarkdownChunker"
+        ) as MockChunker:
+            MockChunker.return_value.split = MagicMock(return_value=[])
+>           doc, _ = await watcher.process_source(
+                source_url="https://example.com/normativa.pdf",
+                chatbot_id=existing_es.chatbot_id,
+                prefetched_content="Contenido actualizado en español.",
+                language="es",
+            )
+
+tests/modules/agents_hub/unit/test_ingestion_multilang.py:107: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <server.app.modules.agents_hub.ingestion.watcher.IngestionWatcher object at 0x7f7a8f90aad0>
+source_url = 'https://example.com/normativa.pdf'
+chatbot_id = UUID('147801c2-85b8-4aae-993c-cca79856ce71'), language = 'es'
+citation_url = None, prefetched_content = 'Contenido actualizado en español.'
+title = None
+
+    async def process_source(
+        self,
+        source_url: str,
+        chatbot_id: uuid.UUID,
+        language: str | None = None,
+        citation_url: str | None = None,
+        prefetched_content: str | None = None,
+        title: str | None = None,
+    ) -> tuple[HubDocument, int]:
+        """Crea/actualiza un HubDocument. Genera chunks SOLO si retrieval_mode == 'vector'.
+    
+        Returns:
+            (HubDocument, chunks_created_count) — idempotente por content_hash.
+        """
+        if prefetched_content is not None:
+            content = prefetched_content
+        else:
+            processor = await self._get_processor()
+            content = await asyncio.to_thread(processor.process, source_url)
+    
+        if language is None:
+            language = detect_language(content)
+        content_hash = hash_content(content)
+        canonical = citation_url or source_url
+        doc_title = title or extract_title_from_markdown(content) or canonical
+        token_count = estimate_tokens(content)
+    
+        # Idempotencia: mismo chatbot + mismo hash → actualizar sin rechunkear
+        existing = await self._session.execute(
+            select(HubDocument).where(
+                HubDocument.chatbot_id == chatbot_id,
+                HubDocument.content_hash == content_hash,
+            ).limit(1)
+        )
+        doc = existing.scalar_one_or_none()
+        if doc:
+            doc.canonical_url = canonical
+            doc.title = doc_title
+            doc.updated_at = datetime.now(timezone.utc)
+        else:
+            # Si ya existia un documento con esta URL e idioma → reemplazar.
+            # Idiomas distintos de la misma URL coexisten sin borrarse mutuamente.
+            old_result = await self._session.execute(
+                select(HubDocument).where(
+                    HubDocument.chatbot_id == chatbot_id,
+                    HubDocument.canonical_url == canonical,
+                    HubDocument.language == language,
+                )
+            )
+            for old_doc in old_result.scalars():
+                await self._session.execute(
+                    delete(HubDocumentChunk).where(
+                        HubDocumentChunk.document_id == old_doc.id
+                    )
+                )
+                await self._session.delete(old_doc)
+    
+            source_kind = (
+                "crawler"
+                if source_url.startswith(("http://", "https://"))
+                else "upload"
+            )
+            doc = HubDocument(
+                chatbot_id=chatbot_id,
+                title=doc_title,
+                canonical_url=canonical,
+                markdown_content=content,
+                content_hash=content_hash,
+                language=language,
+                source_kind=source_kind,
+                token_count=token_count,
+            )
+            self._session.add(doc)
+            try:
+                # Savepoint: si falla por clave duplicada solo se revierte el savepoint,
+                # no la transacción exterior (que mantiene el job válido).
+>               async with self._session.begin_nested():
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: 'coroutine' object does not support the asynchronous context manager protocol
+
+app/modules/agents_hub/ingestion/watcher.py:149: TypeError
+_ TestMultiLanguageDocumentCoexistence.test_reingest_same_url_different_language_does_not_delete_other _
+
+self = <server.tests.modules.agents_hub.unit.test_ingestion_multilang.TestMultiLanguageDocumentCoexistence object at 0x7f7ab3140640>
+
+    @pytest.mark.asyncio
+    async def test_reingest_same_url_different_language_does_not_delete_other(self) -> None:
+        """Ingestar CA no borra el doc ES existente para la misma URL.
+    
+        Verifica que la query de reemplazo usa (chatbot_id, canonical_url, language)
+        y no (chatbot_id, canonical_url) sin idioma, porque si usara esta última
+        encontraría el doc ES y lo borraría.
+        """
+        from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+        from server.app.modules.agents_hub.database.operational_models import HubDocument
+    
+        chatbot_id = uuid.uuid4()
+    
+        # El mock de URL+language="ca" devuelve vacío (no hay doc CA)
+        # Si el watcher no incluyera language en la query, la lógica seguiría igual
+        # porque el mock no ejecuta SQL real — el test complementario de integración
+        # verifica el comportamiento real con BD.
+        session = self._make_session(hash_result=None, url_lang_result=[])
+    
+        watcher = IngestionWatcher(
+            session=session,
+            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 10)),
+        )
+    
+        with patch(
+            "server.app.modules.agents_hub.ingestion.watcher.MarkdownChunker"
+        ) as MockChunker:
+            MockChunker.return_value.split = MagicMock(return_value=[])
+>           doc, _ = await watcher.process_source(
+                source_url="https://example.com/normativa.pdf",
+                chatbot_id=chatbot_id,
+                prefetched_content="Contingut en català.",
+                language="ca",
+            )
+
+tests/modules/agents_hub/unit/test_ingestion_multilang.py:147: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <server.app.modules.agents_hub.ingestion.watcher.IngestionWatcher object at 0x7f7a2b24fac0>
+source_url = 'https://example.com/normativa.pdf'
+chatbot_id = UUID('178867a4-7713-4bd1-8888-3cb935e77b7a'), language = 'ca'
+citation_url = None, prefetched_content = 'Contingut en català.', title = None
+
+    async def process_source(
+        self,
+        source_url: str,
+        chatbot_id: uuid.UUID,
+        language: str | None = None,
+        citation_url: str | None = None,
+        prefetched_content: str | None = None,
+        title: str | None = None,
+    ) -> tuple[HubDocument, int]:
+        """Crea/actualiza un HubDocument. Genera chunks SOLO si retrieval_mode == 'vector'.
+    
+        Returns:
+            (HubDocument, chunks_created_count) — idempotente por content_hash.
+        """
+        if prefetched_content is not None:
+            content = prefetched_content
+        else:
+            processor = await self._get_processor()
+            content = await asyncio.to_thread(processor.process, source_url)
+    
+        if language is None:
+            language = detect_language(content)
+        content_hash = hash_content(content)
+        canonical = citation_url or source_url
+        doc_title = title or extract_title_from_markdown(content) or canonical
+        token_count = estimate_tokens(content)
+    
+        # Idempotencia: mismo chatbot + mismo hash → actualizar sin rechunkear
+        existing = await self._session.execute(
+            select(HubDocument).where(
+                HubDocument.chatbot_id == chatbot_id,
+                HubDocument.content_hash == content_hash,
+            ).limit(1)
+        )
+        doc = existing.scalar_one_or_none()
+        if doc:
+            doc.canonical_url = canonical
+            doc.title = doc_title
+            doc.updated_at = datetime.now(timezone.utc)
+        else:
+            # Si ya existia un documento con esta URL e idioma → reemplazar.
+            # Idiomas distintos de la misma URL coexisten sin borrarse mutuamente.
+            old_result = await self._session.execute(
+                select(HubDocument).where(
+                    HubDocument.chatbot_id == chatbot_id,
+                    HubDocument.canonical_url == canonical,
+                    HubDocument.language == language,
+                )
+            )
+            for old_doc in old_result.scalars():
+                await self._session.execute(
+                    delete(HubDocumentChunk).where(
+                        HubDocumentChunk.document_id == old_doc.id
+                    )
+                )
+                await self._session.delete(old_doc)
+    
+            source_kind = (
+                "crawler"
+                if source_url.startswith(("http://", "https://"))
+                else "upload"
+            )
+            doc = HubDocument(
+                chatbot_id=chatbot_id,
+                title=doc_title,
+                canonical_url=canonical,
+                markdown_content=content,
+                content_hash=content_hash,
+                language=language,
+                source_kind=source_kind,
+                token_count=token_count,
+            )
+            self._session.add(doc)
+            try:
+                # Savepoint: si falla por clave duplicada solo se revierte el savepoint,
+                # no la transacción exterior (que mantiene el job válido).
+>               async with self._session.begin_nested():
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: 'coroutine' object does not support the asynchronous context manager protocol
+
+app/modules/agents_hub/ingestion/watcher.py:149: TypeError
+______ TestLLMConfigsRouter.test_should_return_latency_on_test_connection ______
+
+self = <server.tests.modules.agents_hub.unit.test_llm_configs_router.TestLLMConfigsRouter object at 0x7f7ab3100e20>
+
+    def test_should_return_latency_on_test_connection(self):
+        cfg = _make_config()
+        session = AsyncMock()
+        session.get = AsyncMock(return_value=cfg)
+    
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content="ok"))
+    
+        with patch(
+            "server.app.routers.hub_llm_configs_router._build_model",
+            return_value=mock_llm,
+        ):
+            client = TestClient(_build_app(session))
+>           resp = client.post(
+                f"/api/v1/hub/llm-configs/{cfg.id}/test",
+                headers={"Authorization": f"***"},
+            )
+
+tests/modules/agents_hub/unit/test_llm_configs_router.py:173: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.13/site-packages/starlette/testclient.py:546: in post
+    return super().post(
+.venv/lib/python3.13/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+.venv/lib/python3.13/site-packages/starlette/testclient.py:445: in request
+    return super().request(
+.venv/lib/python3.13/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+.venv/lib/python3.13/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv/lib/python3.13/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/starlette/testclient.py:348: in handle_request
+    raise exc
+.venv/lib/python3.13/site-packages/starlette/testclient.py:345: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv/lib/python3.13/site-packages/anyio/from_thread.py:334: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.13.13/x64/lib/python3.13/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.13.13/x64/lib/python3.13/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+.venv/lib/python3.13/site-packages/anyio/from_thread.py:259: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/fastapi/applications.py:1159: in __call__
+    await super().__call__(scope, receive, send)
+.venv/lib/python3.13/site-packages/starlette/applications.py:107: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.13/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+.venv/lib/python3.13/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv/lib/python3.13/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv/lib/python3.13/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.13/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.13/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv/lib/python3.13/site-packages/starlette/routing.py:716: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.13/site-packages/starlette/routing.py:736: in app
+    await route.handle(scope, receive, send)
+.venv/lib/python3.13/site-packages/starlette/routing.py:290: in handle
+    await self.app(scope, receive, send)
+.venv/lib/python3.13/site-packages/fastapi/routing.py:134: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv/lib/python3.13/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.13/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.13/site-packages/fastapi/routing.py:120: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/fastapi/routing.py:674: in app
+    raw_response = await run_endpoint_function(
+.venv/lib/python3.13/site-packages/fastapi/routing.py:328: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config_id = UUID('dcf501cf-f4e6-4b33-9ec0-f7d450914e20')
+_ = UserInfo(user_id='admin-1', email='admin@test.com', role='admin')
+session = <AsyncMock id='140162686530096'>
+
+    @router.post("/{config_id}/test")
+    async def test_llm_connection(
+        config_id: uuid.UUID,
+        _: UserInfo = Depends(_require_admin),
+        session=Depends(get_async_session),
+    ):
+        result = await session.execute(
+            select(HubLLMConfig)
+            .options(selectinload(HubLLMConfig.provider_rel))
+            .where(HubLLMConfig.id == config_id)
+        )
+>       config = result.scalars().first()
+                 ^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'coroutine' object has no attribute 'first'
+
+app/routers/hub_llm_configs_router.py:285: AttributeError
+___________ TestModelFactory.test_model_factory_returns_google_model ___________
+
+self = <server.tests.modules.agents_hub.unit.test_model_factory.TestModelFactory object at 0x7f7ab31234d0>
+
+    @pytest.mark.asyncio
+    async def test_model_factory_returns_google_model(self) -> None:
+        from server.app.modules.agents_hub.services.model_factory import get_model
+    
+        mock_chatbot = Mock(llm_config_id=uuid.uuid4())
+        mock_config = Mock(
+            provider="google",
+            model_name="gemini-2.0-flash",
+            temperature=0.7,
+            max_tokens=2048,
+            api_key_secret_name="GOOGLE_API_KEY",
+        )
+    
+        mock_config_provider = AsyncMock()
+        mock_config_provider.get_chatbot.return_value = mock_chatbot
+        mock_config_provider.get_llm_config.return_value = mock_config
+    
+        with patch('server.app.modules.agents_hub.services.model_factory.ChatGoogleGenerativeAI') as mock_cls:
+            mock_cls.return_value = Mock()
+>           model = await get_model(uuid.uuid4(), mock_config_provider)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/modules/agents_hub/unit/test_model_factory.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+app/modules/agents_hub/services/model_factory.py:43: in get_model
+    return _build_model(config)
+           ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = <Mock name='mock.get_llm_config()' id='140164368786032'>
+
+    def _build_model(config: HubLLMConfig):
+        """Construye la instancia LLM a partir del config y su proveedor."""
+        provider = getattr(config, "provider_rel", None)
+        if not provider:
+            raise ValueError(f"Provider not loaded or missing for config {config.id}")
+    
+        # api_key is primarily from the provider table now. We can still allow api_key_secret_name as fallback if needed.
+        api_key = provider.api_key
+        if not api_key and config.api_key_secret_name:
+            api_key = os.getenv(config.api_key_secret_name) or None
+    
+        ptype = provider.provider_type
+    
+        if ptype == "google_genai":
+            kwargs: dict = dict(
+                model=config.model_name,
+                temperature=config.temperature,
+                max_output_tokens=config.max_tokens,
+            )
+            if api_key:
+                kwargs["google_api_key"] = api_key
+            return ChatGoogleGenerativeAI(**kwargs)
+    
+        elif ptype == "openai_compatible":
+            kwargs = dict(
+                model=config.model_name,
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+            )
+            if api_key:
+                kwargs["api_key"] = api_key
+            # Use base_url from provider if available
+            if provider.base_url:
+                kwargs["base_url"] = provider.base_url
+            return ChatOpenAI(**kwargs)
+    
+        elif ptype == "ollama":
+            from langchain_community.chat_models import ChatOllama
+    
+            kwargs = dict(
+                model=config.model_name,
+                temperature=config.temperature,
+            )
+            if provider.base_url:
+                kwargs["base_url"] = provider.base_url
+            return ChatOllama(**kwargs)
+    
+        else:
+>           raise ValueError(f"Provider type desconocido: {ptype}")
+E           ValueError: Provider type desconocido: <Mock name='mock.get_llm_config().provider_rel.provider_type' id='140164368780656'>
+
+app/modules/agents_hub/services/model_factory.py:94: ValueError
+___________ TestModelFactory.test_model_factory_returns_openai_model ___________
+
+self = <server.tests.modules.agents_hub.unit.test_model_factory.TestModelFactory object at 0x7f7ab3123390>
+
+    @pytest.mark.asyncio
+    async def test_model_factory_returns_openai_model(self) -> None:
+        from server.app.modules.agents_hub.services.model_factory import get_model
+    
+        mock_chatbot = Mock(llm_config_id=uuid.uuid4())
+        mock_config = Mock(
+            provider="openai",
+            model_name="gpt-4o",
+            temperature=0.5,
+            max_tokens=1024,
+            api_key_secret_name="OPENAI_API_KEY",
+        )
+    
+        mock_config_provider = AsyncMock()
+        mock_config_provider.get_chatbot.return_value = mock_chatbot
+        mock_config_provider.get_llm_config.return_value = mock_config
+    
+        with patch('server.app.modules.agents_hub.services.model_factory.ChatOpenAI') as mock_cls:
+            mock_cls.return_value = Mock()
+>           model = await get_model(uuid.uuid4(), mock_config_provider)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/modules/agents_hub/unit/test_model_factory.py:52: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+app/modules/agents_hub/services/model_factory.py:43: in get_model
+    return _build_model(config)
+           ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = <Mock name='mock.get_llm_config()' id='140162686531440'>
+
+    def _build_model(config: HubLLMConfig):
+        """Construye la instancia LLM a partir del config y su proveedor."""
+        provider = getattr(config, "provider_rel", None)
+        if not provider:
+            raise ValueError(f"Provider not loaded or missing for config {config.id}")
+    
+        # api_key is primarily from the provider table now. We can still allow api_key_secret_name as fallback if needed.
+        api_key = provider.api_key
+        if not api_key and config.api_key_secret_name:
+            api_key = os.getenv(config.api_key_secret_name) or None
+    
+        ptype = provider.provider_type
+    
+        if ptype == "google_genai":
+            kwargs: dict = dict(
+                model=config.model_name,
+                temperature=config.temperature,
+                max_output_tokens=config.max_tokens,
+            )
+            if api_key:
+                kwargs["google_api_key"] = api_key
+            return ChatGoogleGenerativeAI(**kwargs)
+    
+        elif ptype == "openai_compatible":
+            kwargs = dict(
+                model=config.model_name,
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+            )
+            if api_key:
+                kwargs["api_key"] = api_key
+            # Use base_url from provider if available
+            if provider.base_url:
+                kwargs["base_url"] = provider.base_url
+            return ChatOpenAI(**kwargs)
+    
+        elif ptype == "ollama":
+            from langchain_community.chat_models import ChatOllama
+    
+            kwargs = dict(
+                model=config.model_name,
+                temperature=config.temperature,
+            )
+            if provider.base_url:
+                kwargs["base_url"] = provider.base_url
+            return ChatOllama(**kwargs)
+    
+        else:
+>           raise ValueError(f"Provider type desconocido: {ptype}")
+E           ValueError: Provider type desconocido: <Mock name='mock.get_llm_config().provider_rel.provider_type' id='140164367189056'>
+
+app/modules/agents_hub/services/model_factory.py:94: ValueError
+________________ TestModelFactory.test_model_factory_switching _________________
+
+self = <server.tests.modules.agents_hub.unit.test_model_factory.TestModelFactory object at 0x7f7ab2fa8d60>
+
+    @pytest.mark.asyncio
+    async def test_model_factory_switching(self) -> None:
+        """Cambiar el provider en la config devuelve el tipo correcto sin reiniciar."""
+        from server.app.modules.agents_hub.services.model_factory import _build_model
+    
+        config_google = Mock(
+            provider="google",
+            model_name="gemini-2.0-flash",
+            temperature=0.7,
+            max_tokens=2048,
+            api_key_secret_name=None,
+        )
+        config_openai = Mock(
+            provider="openai",
+            model_name="gpt-4o",
+            temperature=0.7,
+            max_tokens=2048,
+            api_key_secret_name=None,
+        )
+    
+        with patch('server.app.modules.agents_hub.services.model_factory.ChatGoogleGenerativeAI') as g_cls, \
+             patch('server.app.modules.agents_hub.services.model_factory.ChatOpenAI') as o_cls:
+            g_cls.return_value = Mock(spec=["provider"])
+            o_cls.return_value = Mock(spec=["provider"])
+    
+>           model_g = _build_model(config_google)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/modules/agents_hub/unit/test_model_factory.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = <Mock id='140164367188048'>
+
+    def _build_model(config: HubLLMConfig):
+        """Construye la instancia LLM a partir del config y su proveedor."""
+        provider = getattr(config, "provider_rel", None)
+        if not provider:
+            raise ValueError(f"Provider not loaded or missing for config {config.id}")
+    
+        # api_key is primarily from the provider table now. We can still allow api_key_secret_name as fallback if needed.
+        api_key = provider.api_key
+        if not api_key and config.api_key_secret_name:
+            api_key = os.getenv(config.api_key_secret_name) or None
+    
+        ptype = provider.provider_type
+    
+        if ptype == "google_genai":
+            kwargs: dict = dict(
+                model=config.model_name,
+                temperature=config.temperature,
+                max_output_tokens=config.max_tokens,
+            )
+            if api_key:
+                kwargs["google_api_key"] = api_key
+            return ChatGoogleGenerativeAI(**kwargs)
+    
+        elif ptype == "openai_compatible":
+            kwargs = dict(
+                model=config.model_name,
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+            )
+            if api_key:
+                kwargs["api_key"] = api_key
+            # Use base_url from provider if available
+            if provider.base_url:
+                kwargs["base_url"] = provider.base_url
+            return ChatOpenAI(**kwargs)
+    
+        elif ptype == "ollama":
+            from langchain_community.chat_models import ChatOllama
+    
+            kwargs = dict(
+                model=config.model_name,
+                temperature=config.temperature,
+            )
+            if provider.base_url:
+                kwargs["base_url"] = provider.base_url
+            return ChatOllama(**kwargs)
+    
+        else:
+>           raise ValueError(f"Provider type desconocido: {ptype}")
+E           ValueError: Provider type desconocido: <Mock name='mock.provider_rel.provider_type' id='140164367194768'>
+
+app/modules/agents_hub/services/model_factory.py:94: ValueError
+__ TestIngestionWatcher.test_process_source_returns_document_and_chunk_count ___
+
+self = <server.tests.modules.agents_hub.unit.test_watcher.TestIngestionWatcher object at 0x7f7ab2a44f50>
+
+    @pytest.mark.asyncio
+    async def test_process_source_returns_document_and_chunk_count(self) -> None:
+        from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+        from server.app.modules.agents_hub.database.operational_models import HubDocument
+    
+        first_exec = Mock()
+        first_exec.scalar_one_or_none = Mock(return_value=None)
+        second_exec = Mock()
+        second_exec.scalars = Mock(return_value=iter([]))
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(side_effect=[first_exec, second_exec, Mock()])
+        mock_session.flush = AsyncMock()
+        mock_session.commit = AsyncMock()
+        mock_session.add = Mock()
+    
+        with patch('server.app.modules.agents_hub.ingestion.watcher.DoclingProcessor') as mock_docling:
+            mock_docling.return_value.process.return_value = "# Test\n\nContent"
+    
+            watcher = IngestionWatcher(
+                session=mock_session,
+                embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
+            )
+    
+>           doc, n_chunks = await watcher.process_source(
+                source_url="https://example.com",
+                chatbot_id=uuid.uuid4(),
+            )
+
+tests/modules/agents_hub/unit/test_watcher.py:32: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <server.app.modules.agents_hub.ingestion.watcher.IngestionWatcher object at 0x7f7a21ef62b0>
+source_url = 'https://example.com'
+chatbot_id = UUID('92f5afb5-dad8-49d1-a18d-5060b5e76d4d'), language = 'fr'
+citation_url = None, prefetched_content = None, title = None
+
+    async def process_source(
+        self,
+        source_url: str,
+        chatbot_id: uuid.UUID,
+        language: str | None = None,
+        citation_url: str | None = None,
+        prefetched_content: str | None = None,
+        title: str | None = None,
+    ) -> tuple[HubDocument, int]:
+        """Crea/actualiza un HubDocument. Genera chunks SOLO si retrieval_mode == 'vector'.
+    
+        Returns:
+            (HubDocument, chunks_created_count) — idempotente por content_hash.
+        """
+        if prefetched_content is not None:
+            content = prefetched_content
+        else:
+            processor = await self._get_processor()
+            content = await asyncio.to_thread(processor.process, source_url)
+    
+        if language is None:
+            language = detect_language(content)
+        content_hash = hash_content(content)
+        canonical = citation_url or source_url
+        doc_title = title or extract_title_from_markdown(content) or canonical
+        token_count = estimate_tokens(content)
+    
+        # Idempotencia: mismo chatbot + mismo hash → actualizar sin rechunkear
+        existing = await self._session.execute(
+            select(HubDocument).where(
+                HubDocument.chatbot_id == chatbot_id,
+                HubDocument.content_hash == content_hash,
+            ).limit(1)
+        )
+        doc = existing.scalar_one_or_none()
+        if doc:
+            doc.canonical_url = canonical
+            doc.title = doc_title
+            doc.updated_at = datetime.now(timezone.utc)
+        else:
+            # Si ya existia un documento con esta URL e idioma → reemplazar.
+            # Idiomas distintos de la misma URL coexisten sin borrarse mutuamente.
+            old_result = await self._session.execute(
+                select(HubDocument).where(
+                    HubDocument.chatbot_id == chatbot_id,
+                    HubDocument.canonical_url == canonical,
+                    HubDocument.language == language,
+                )
+            )
+            for old_doc in old_result.scalars():
+                await self._session.execute(
+                    delete(HubDocumentChunk).where(
+                        HubDocumentChunk.document_id == old_doc.id
+                    )
+                )
+                await self._session.delete(old_doc)
+    
+            source_kind = (
+                "crawler"
+                if source_url.startswith(("http://", "https://"))
+                else "upload"
+            )
+            doc = HubDocument(
+                chatbot_id=chatbot_id,
+                title=doc_title,
+                canonical_url=canonical,
+                markdown_content=content,
+                content_hash=content_hash,
+                language=language,
+                source_kind=source_kind,
+                token_count=token_count,
+            )
+            self._session.add(doc)
+            try:
+                # Savepoint: si falla por clave duplicada solo se revierte el savepoint,
+                # no la transacción exterior (que mantiene el job válido).
+>               async with self._session.begin_nested():
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: 'coroutine' object does not support the asynchronous context manager protocol
+
+app/modules/agents_hub/ingestion/watcher.py:149: TypeError
+=============================== warnings summary ===============================
+tests/modules/agents_hub/unit/test_llm_configs_router.py:61
+  /home/runner/work/gov-gen-ai-platform/gov-gen-ai-platform/server/tests/modules/agents_hub/unit/test_llm_configs_router.py:61: PytestWarning: usefixtures() in tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_list_llm_configs without arguments has no effect
+    @pytest.mark.usefixtures()
+
+tests/modules/agents_hub/unit/test_llm_configs_router.py:61
+  /home/runner/work/gov-gen-ai-platform/gov-gen-ai-platform/server/tests/modules/agents_hub/unit/test_llm_configs_router.py:61: PytestWarning: usefixtures() in tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_create_llm_config_with_tier without arguments has no effect
+    @pytest.mark.usefixtures()
+
+tests/modules/agents_hub/unit/test_llm_configs_router.py:61
+  /home/runner/work/gov-gen-ai-platform/gov-gen-ai-platform/server/tests/modules/agents_hub/unit/test_llm_configs_router.py:61: PytestWarning: usefixtures() in tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_reject_duplicate_default_for_same_tier without arguments has no effect
+    @pytest.mark.usefixtures()
+
+tests/modules/agents_hub/unit/test_llm_configs_router.py:61
+  /home/runner/work/gov-gen-ai-platform/gov-gen-ai-platform/server/tests/modules/agents_hub/unit/test_llm_configs_router.py:61: PytestWarning: usefixtures() in tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_delete_config_not_in_use without arguments has no effect
+    @pytest.mark.usefixtures()
+
+tests/modules/agents_hub/unit/test_llm_configs_router.py:61
+  /home/runner/work/gov-gen-ai-platform/gov-gen-ai-platform/server/tests/modules/agents_hub/unit/test_llm_configs_router.py:61: PytestWarning: usefixtures() in tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_block_delete_config_in_use without arguments has no effect
+    @pytest.mark.usefixtures()
+
+tests/modules/agents_hub/unit/test_llm_configs_router.py:61
+  /home/runner/work/gov-gen-ai-platform/gov-gen-ai-platform/server/tests/modules/agents_hub/unit/test_llm_configs_router.py:61: PytestWarning: usefixtures() in tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_return_latency_on_test_connection without arguments has no effect
+    @pytest.mark.usefixtures()
+
+tests/modules/agents_hub/unit/test_llm_configs_router.py:61
+  /home/runner/work/gov-gen-ai-platform/gov-gen-ai-platform/server/tests/modules/agents_hub/unit/test_llm_configs_router.py:61: PytestWarning: usefixtures() in tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_get_model_for_tier_returns_default without arguments has no effect
+    @pytest.mark.usefixtures()
+
+tests/modules/agents_hub/unit/test_ingestion_language.py::TestProcessSourceLanguageDetection::test_process_source_auto_detects_catalan_content
+tests/modules/agents_hub/unit/test_ingestion_language.py::TestProcessSourceLanguageDetection::test_process_source_respects_explicit_language
+tests/modules/agents_hub/unit/test_ingestion_multilang.py::TestMultiLanguageDocumentCoexistence::test_two_language_versions_of_same_url_coexist
+tests/modules/agents_hub/unit/test_ingestion_multilang.py::TestMultiLanguageDocumentCoexistence::test_reingest_same_url_same_language_replaces_doc
+tests/modules/agents_hub/unit/test_ingestion_multilang.py::TestMultiLanguageDocumentCoexistence::test_reingest_same_url_different_language_does_not_delete_other
+tests/modules/agents_hub/unit/test_watcher.py::TestIngestionWatcher::test_process_source_returns_document_and_chunk_count
+  /home/runner/work/gov-gen-ai-platform/gov-gen-ai-platform/server/app/modules/agents_hub/ingestion/watcher.py:149: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    async with self._session.begin_nested():
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/modules/agents_hub/unit/test_ingestion_language.py::TestProcessSourceLanguageDetection::test_process_user_upload_auto_detects_language
+tests/modules/agents_hub/unit/test_user_upload.py::TestUserUploadIngestion::test_user_upload_is_not_visible_to_other_users
+  /home/runner/work/gov-gen-ai-platform/gov-gen-ai-platform/server/app/modules/agents_hub/ingestion/watcher.py:239: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    self._session.add(db_chunk)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/modules/agents_hub/unit/test_ingestion_storage.py::TestUploadEndpointStorageIntegration::test_upload_calls_storage_put_with_pdf_key
+tests/modules/agents_hub/unit/test_ingestion_storage.py::TestUploadEndpointStorageIntegration::test_upload_job_source_url_is_same_key_passed_to_storage
+tests/modules/agents_hub/unit/test_ingestion_storage.py::TestUploadEndpointStorageIntegration::test_upload_does_not_write_to_tmp_directly
+  /home/runner/work/gov-gen-ai-platform/gov-gen-ai-platform/server/app/routers/hub_ingestion_router.py:206: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    session.add(job)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/modules/agents_hub/unit/test_ingestion_storage.py::TestUploadEndpointStorageIntegration::test_upload_does_not_write_to_tmp_directly
+  /opt/hostedtoolcache/Python/3.13.13/x64/lib/python3.13/unittest/mock.py:1151: RuntimeWarning: coroutine 'Connection._cancel' was never awaited
+    _safe_super(CallableMixin, self).__init__(
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/modules/agents_hub/unit/test_rag_quality.py::TestRAGQuality::test_rag_faithfulness
+tests/modules/agents_hub/unit/test_rag_quality.py::TestRAGQuality::test_rag_faithfulness
+  /home/runner/work/gov-gen-ai-platform/gov-gen-ai-platform/server/app/modules/agents_hub/evaluation/rag_metrics.py:6: DeprecationWarning: Importing answer_relevancy from 'ragas.metrics' is deprecated and will be removed in v1.0. Please use 'ragas.metrics.collections' instead. Example: from ragas.metrics.collections import answer_relevancy
+    from ragas.metrics import answer_relevancy, faithfulness
+
+tests/modules/agents_hub/unit/test_rag_quality.py::TestRAGQuality::test_rag_faithfulness
+tests/modules/agents_hub/unit/test_rag_quality.py::TestRAGQuality::test_rag_faithfulness
+  /home/runner/work/gov-gen-ai-platform/gov-gen-ai-platform/server/app/modules/agents_hub/evaluation/rag_metrics.py:6: DeprecationWarning: Importing faithfulness from 'ragas.metrics' is deprecated and will be removed in v1.0. Please use 'ragas.metrics.collections' instead. Example: from ragas.metrics.collections import faithfulness
+    from ragas.metrics import answer_relevancy, faithfulness
+
+tests/modules/agents_hub/unit/test_source_scheduler.py::TestCheckSource::test_creates_job_when_content_changed
+  /home/runner/work/gov-gen-ai-platform/gov-gen-ai-platform/server/app/modules/agents_hub/ingestion/source_scheduler.py:52: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    session.add(job)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/modules/agents_hub/unit/test_edge_boundary.py::test_config_base_contains_only_config_models - AssertionError: assert {'hub_chatbots', 'hub_clients', 'hub_prompt_templates', 'hub_providers', 'hub_llm_configs'} == {'hub_llm_configs', 'hub_prompt_templates', 'hub_chatbots', 'hub_clients'}
+  
+  Extra items in the left set:
+  'hub_providers'
+  
+  Full diff:
+    {
+        'hub_chatbots',
+        'hub_clients',
+        'hub_llm_configs',
+        'hub_prompt_templates',
+  +     'hub_providers',
+    }
+FAILED tests/modules/agents_hub/unit/test_ingestion_language.py::TestProcessSourceLanguageDetection::test_process_source_auto_detects_catalan_content - TypeError: 'coroutine' object does not support the asynchronous context manager protocol
+FAILED tests/modules/agents_hub/unit/test_ingestion_language.py::TestProcessSourceLanguageDetection::test_process_source_respects_explicit_language - TypeError: 'coroutine' object does not support the asynchronous context manager protocol
+FAILED tests/modules/agents_hub/unit/test_ingestion_language.py::TestRunJobPropagatesLanguage::test_run_job_propagates_catalan_language - AssertionError: expected call not found.
+Expected: process_source('https://example.com', UUID('728fcf29-c505-4d06-9616-5f0770a165fd'), citation_url='https://example.com', prefetched_content=None, language='ca')
+  Actual: process_source('https://example.com', UUID('728fcf29-c505-4d06-9616-5f0770a165fd'), citation_url='https://example.com', prefetched_content=None, language='ca', title=None)
+FAILED tests/modules/agents_hub/unit/test_ingestion_multilang.py::TestMultiLanguageDocumentCoexistence::test_two_language_versions_of_same_url_coexist - TypeError: 'coroutine' object does not support the asynchronous context manager protocol
+FAILED tests/modules/agents_hub/unit/test_ingestion_multilang.py::TestMultiLanguageDocumentCoexistence::test_reingest_same_url_same_language_replaces_doc - TypeError: 'coroutine' object does not support the asynchronous context manager protocol
+FAILED tests/modules/agents_hub/unit/test_ingestion_multilang.py::TestMultiLanguageDocumentCoexistence::test_reingest_same_url_different_language_does_not_delete_other - TypeError: 'coroutine' object does not support the asynchronous context manager protocol
+FAILED tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_return_latency_on_test_connection - AttributeError: 'coroutine' object has no attribute 'first'
+FAILED tests/modules/agents_hub/unit/test_model_factory.py::TestModelFactory::test_model_factory_returns_google_model - ValueError: Provider type desconocido: <Mock name='mock.get_llm_config().provider_rel.provider_type' id='140164368780656'>
+/home/runner/work/gov-gen-ai-platform/gov-gen-ai-platform/server/.venv/lib/python3.13/site-packages/_pytest/unraisableexception.py:33: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+  gc.collect()
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+FAILED tests/modules/agents_hub/unit/test_model_factory.py::TestModelFactory::test_model_factory_returns_openai_model - ValueError: Provider type desconocido: <Mock name='mock.get_llm_config().provider_rel.provider_type' id='140164367189056'>
+FAILED tests/modules/agents_hub/unit/test_model_factory.py::TestModelFactory::test_model_factory_switching - ValueError: Provider type desconocido: <Mock name='mock.provider_rel.provider_type' id='140164367194768'>
+FAILED tests/modules/agents_hub/unit/test_watcher.py::TestIngestionWatcher::test_process_source_returns_document_and_chunk_count - TypeError: 'coroutine' object does not support the asynchronous context manager protocol
+================= 12 failed, 198 passed, 24 warnings in 24.43s =================
+Error: Process completed with exit code 1.

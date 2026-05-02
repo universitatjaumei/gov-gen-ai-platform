@@ -20,6 +20,7 @@ class TestProcessSourceLanguageDetection:
         second_exec = MagicMock()
         second_exec.scalars = MagicMock(return_value=iter([]))
         mock_session = AsyncMock()
+        mock_session.begin_nested = MagicMock(return_value=AsyncMock())
         mock_session.execute = AsyncMock(side_effect=[first_exec, second_exec, MagicMock()])
         mock_session.flush = AsyncMock()
         mock_session.commit = AsyncMock()
@@ -57,6 +58,7 @@ class TestProcessSourceLanguageDetection:
         second_exec = MagicMock()
         second_exec.scalars = MagicMock(return_value=iter([]))
         mock_session = AsyncMock()
+        mock_session.begin_nested = MagicMock(return_value=AsyncMock())
         mock_session.execute = AsyncMock(side_effect=[first_exec, second_exec, MagicMock()])
         mock_session.flush = AsyncMock()
         mock_session.commit = AsyncMock()
@@ -88,6 +90,7 @@ class TestProcessSourceLanguageDetection:
         english_content = "# Report\n\nThis document describes the annual budget allocation."
 
         mock_session = AsyncMock()
+        mock_session.begin_nested = MagicMock(return_value=AsyncMock())
 
         watcher = IngestionWatcher(
             session=mock_session,
@@ -148,6 +151,7 @@ class TestRunJobPropagatesLanguage:
             citation_url=job.canonical_url,
             prefetched_content=None,
             language="ca",
+            title=None,
         )
 
     @pytest.mark.asyncio

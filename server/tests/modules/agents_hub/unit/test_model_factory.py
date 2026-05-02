@@ -17,6 +17,7 @@ class TestModelFactory:
             temperature=0.7,
             max_tokens=2048,
             api_key_secret_name="GOOGLE_API_KEY",
+            provider_rel=Mock(provider_type="google_genai", api_key="test-key"),
         )
 
         mock_config_provider = AsyncMock()
@@ -41,6 +42,7 @@ class TestModelFactory:
             temperature=0.5,
             max_tokens=1024,
             api_key_secret_name="OPENAI_API_KEY",
+            provider_rel=Mock(provider_type="openai_compatible", api_key="test-key", base_url=None),
         )
 
         mock_config_provider = AsyncMock()
@@ -64,6 +66,7 @@ class TestModelFactory:
             temperature=0.7,
             max_tokens=2048,
             api_key_secret_name=None,
+            provider_rel=Mock(provider_type="google_genai", api_key="test-key"),
         )
         config_openai = Mock(
             provider="openai",
@@ -71,6 +74,7 @@ class TestModelFactory:
             temperature=0.7,
             max_tokens=2048,
             api_key_secret_name=None,
+            provider_rel=Mock(provider_type="openai_compatible", api_key="test-key", base_url=None),
         )
 
         with patch('server.app.modules.agents_hub.services.model_factory.ChatGoogleGenerativeAI') as g_cls, \

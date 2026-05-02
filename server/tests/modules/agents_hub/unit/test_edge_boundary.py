@@ -11,6 +11,7 @@ def test_config_base_contains_only_config_models() -> None:
         "hub_chatbots",
         "hub_llm_configs",
         "hub_prompt_templates",
+        "hub_providers",
     }
 
 def test_operational_base_contains_only_operational_models() -> None:

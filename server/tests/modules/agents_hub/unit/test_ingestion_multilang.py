@@ -22,6 +22,7 @@ class TestMultiLanguageDocumentCoexistence:
         chunk_exec = MagicMock()
 
         session = AsyncMock()
+        session.begin_nested = MagicMock(return_value=AsyncMock())
         session.execute = AsyncMock(side_effect=[hash_exec, url_lang_exec, chunk_exec])
         session.flush = AsyncMock()
         session.commit = AsyncMock()
@@ -87,6 +88,7 @@ class TestMultiLanguageDocumentCoexistence:
         del_exec_2 = MagicMock()
 
         session = AsyncMock()
+        session.begin_nested = MagicMock(return_value=AsyncMock())
         session.execute = AsyncMock(
             side_effect=[hash_exec, url_lang_exec, del_exec_1, del_exec_2]
         )

@@ -160,7 +160,7 @@ class TestLLMConfigsRouter:
     def test_should_return_latency_on_test_connection(self):
         cfg = _make_config()
         session = AsyncMock()
-        session.get = AsyncMock(return_value=cfg)
+        session.scalar = AsyncMock(return_value=cfg)
 
         mock_llm = AsyncMock()
         mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content="ok"))

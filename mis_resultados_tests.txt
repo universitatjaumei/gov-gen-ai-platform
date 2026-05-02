@@ -1,0 +1,396 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.13.13, pytest-9.0.2, pluggy-1.6.0 -- C:\Users\fabra\Documents\AI_agents_hub\server\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\fabra\Documents\AI_agents_hub\server
+configfile: pyproject.toml
+plugins: anyio-4.12.1, Faker-40.15.0, langsmith-0.6.4, asyncio-1.3.0, cov-7.0.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 197 items
+
+tests/modules/agents_hub/unit/test_agentic_strategy.py::TestAgenticStrategyCore::test_get_context_returns_empty_for_agentic PASSED [  0%]
+tests/modules/agents_hub/unit/test_agentic_strategy.py::TestAgenticStrategyCore::test_get_agent_tools_returns_list_and_read_tools PASSED [  1%]
+tests/modules/agents_hub/unit/test_agentic_strategy.py::TestAgenticStrategyCore::test_list_index_returns_all_documents_of_chatbot PASSED [  1%]
+tests/modules/agents_hub/unit/test_agentic_strategy.py::TestAgenticStrategyCore::test_list_index_filters_by_language PASSED [  2%]
+tests/modules/agents_hub/unit/test_agentic_strategy.py::TestAgenticStrategyCore::test_read_returns_full_markdown_with_metadata PASSED [  2%]
+tests/modules/agents_hub/unit/test_agentic_strategy.py::TestAgenticStrategyCore::test_read_returns_none_for_unknown_id PASSED [  3%]
+tests/modules/agents_hub/unit/test_agentic_strategy.py::TestListDocumentsTool::test_list_documents_tool_formats_index_with_token_estimates PASSED [  3%]
+tests/modules/agents_hub/unit/test_agentic_strategy.py::TestListDocumentsTool::test_list_documents_tool_empty_returns_no_documents_message PASSED [  4%]
+tests/modules/agents_hub/unit/test_agentic_strategy.py::TestReadDocumentTool::test_read_document_tool_returns_markdown_content PASSED [  4%]
+tests/modules/agents_hub/unit/test_agentic_strategy.py::TestReadDocumentTool::test_read_document_tool_returns_not_found_message_for_unknown_id PASSED [  5%]
+tests/modules/agents_hub/unit/test_chat_endpoint.py::TestChatEndpointAuthentication::test_chat_requires_authentication PASSED [  5%]
+tests/modules/agents_hub/unit/test_chat_endpoint.py::TestChatEndpointAuthentication::test_chat_rejects_empty_message PASSED [  6%]
+tests/modules/agents_hub/unit/test_chat_endpoint.py::TestChatEndpointChatbot::test_chat_chatbot_not_found_returns_404 PASSED [  6%]
+tests/modules/agents_hub/unit/test_chat_endpoint.py::TestChatEndpointSSE::test_chat_endpoint_returns_streaming_response PASSED [  7%]
+tests/modules/agents_hub/unit/test_chat_endpoint.py::TestChatEndpointSSE::test_chat_endpoint_emits_status_events_per_node PASSED [  7%]
+tests/modules/agents_hub/unit/test_chat_endpoint.py::TestChatEndpointSSE::test_chat_endpoint_emits_token_events PASSED [  8%]
+tests/modules/agents_hub/unit/test_chat_endpoint.py::TestChatEndpointSSE::test_chat_endpoint_emits_done_event_with_sources PASSED [  8%]
+tests/modules/agents_hub/unit/test_chat_endpoint.py::TestChatEndpointSSE::test_chat_endpoint_includes_translation_warning_when_language_fallback PASSED [  9%]
+tests/modules/agents_hub/unit/test_chat_endpoint.py::TestChatEndpointSSE::test_chat_endpoint_emits_error_event_on_graph_failure PASSED [  9%]
+tests/modules/agents_hub/unit/test_chunker.py::TestMarkdownChunker::test_split_by_headers PASSED [ 10%]
+tests/modules/agents_hub/unit/test_chunker.py::TestMarkdownChunker::test_preserves_metadata PASSED [ 10%]
+tests/modules/agents_hub/unit/test_chunker.py::TestMarkdownChunker::test_respects_chunk_size PASSED [ 11%]
+tests/modules/agents_hub/unit/test_citation_validator.py::TestHasValidCitations::test_returns_true_when_at_least_one_valid_citation_present PASSED [ 11%]
+tests/modules/agents_hub/unit/test_citation_validator.py::TestHasValidCitations::test_returns_false_when_no_markdown_links PASSED [ 12%]
+tests/modules/agents_hub/unit/test_citation_validator.py::TestHasValidCitations::test_returns_false_when_citation_url_not_in_allowed PASSED [ 12%]
+tests/modules/agents_hub/unit/test_citation_validator.py::TestHasValidCitations::test_detects_multiple_citations_in_same_paragraph PASSED [ 13%]
+tests/modules/agents_hub/unit/test_citation_validator.py::TestEnforceCitationContract::test_returns_text_unchanged_when_no_sources PASSED [ 13%]
+tests/modules/agents_hub/unit/test_citation_validator.py::TestEnforceCitationContract::test_returns_text_when_at_least_one_valid_citation_present PASSED [ 14%]
+tests/modules/agents_hub/unit/test_citation_validator.py::TestEnforceCitationContract::test_returns_fallback_when_sources_exist_but_no_citation PASSED [ 14%]
+tests/modules/agents_hub/unit/test_citation_validator.py::TestEnforceCitationContract::test_agentic_mode_with_empty_sources_returns_text_unchanged PASSED [ 15%]
+tests/modules/agents_hub/unit/test_corpus_recommender.py::test_recommends_long_context_for_small_corpus PASSED [ 15%]
+tests/modules/agents_hub/unit/test_corpus_recommender.py::test_recommends_agentic_for_medium_corpus PASSED [ 16%]
+tests/modules/agents_hub/unit/test_corpus_recommender.py::test_recommends_vector_for_huge_corpus PASSED [ 16%]
+tests/modules/agents_hub/unit/test_corpus_recommender.py::test_recommendation_reason_includes_token_count PASSED [ 17%]
+tests/modules/agents_hub/unit/test_deploy_mode.py::test_deploy_mode_invalid_raises PASSED [ 17%]
+tests/modules/agents_hub/unit/test_deploy_mode.py::test_deploy_mode_cloud_excludes_edge_routers PASSED [ 18%]
+tests/modules/agents_hub/unit/test_deploy_mode.py::test_deploy_mode_edge_excludes_cloud_routers PASSED [ 18%]
+tests/modules/agents_hub/unit/test_deploy_mode.py::test_default_deploy_mode_registers_all_routers PASSED [ 19%]
+tests/modules/agents_hub/unit/test_docling_processor.py::TestDoclingProcessor::test_process_pdf_returns_markdown PASSED [ 19%]
+tests/modules/agents_hub/unit/test_docling_processor.py::TestDoclingProcessor::test_process_url_returns_markdown PASSED [ 20%]
+tests/modules/agents_hub/unit/test_edge_boundary.py::test_config_base_contains_only_config_models PASSED [ 20%]
+tests/modules/agents_hub/unit/test_edge_boundary.py::test_operational_base_contains_only_operational_models PASSED [ 21%]
+tests/modules/agents_hub/unit/test_edge_boundary.py::test_no_cross_base_relationships PASSED [ 21%]
+tests/modules/agents_hub/unit/test_edge_boundary.py::test_edge_sync_config_endpoint_exists_returns_501 PASSED [ 22%]
+tests/modules/agents_hub/unit/test_edge_boundary.py::test_edge_sync_telemetry_endpoint_exists_returns_501 PASSED [ 22%]
+tests/modules/agents_hub/unit/test_export_endpoint.py::TestExportEndpointAuthentication::test_export_requires_authentication PASSED [ 23%]
+tests/modules/agents_hub/unit/test_export_endpoint.py::TestExportEndpointNotFound::test_export_unknown_run_id_returns_404 PASSED [ 23%]
+tests/modules/agents_hub/unit/test_export_endpoint.py::TestExportEndpointSecurity::test_export_forbidden_for_other_user PASSED [ 24%]
+tests/modules/agents_hub/unit/test_export_endpoint.py::TestExportEndpointSecurity::test_export_allowed_for_admin PASSED [ 24%]
+tests/modules/agents_hub/unit/test_export_endpoint.py::TestExportEndpointContent::test_export_markdown_contains_interaction_text PASSED [ 25%]
+tests/modules/agents_hub/unit/test_export_endpoint.py::TestExportEndpointContent::test_export_pdf_returns_pdf_content_type PASSED [ 25%]
+tests/modules/agents_hub/unit/test_export_endpoint.py::TestExportEndpointContent::test_pdf_generation_content_matches_interaction PASSED [ 26%]
+tests/modules/agents_hub/unit/test_feedback_service.py::TestSubmitFeedback::test_updates_score_and_commits PASSED [ 26%]
+tests/modules/agents_hub/unit/test_feedback_service.py::TestSubmitFeedback::test_accepts_score_without_comment PASSED [ 27%]
+tests/modules/agents_hub/unit/test_feedback_service.py::TestSubmitFeedback::test_sends_score_to_langfuse_when_run_id_present PASSED [ 27%]
+tests/modules/agents_hub/unit/test_feedback_service.py::TestSubmitFeedback::test_skips_langfuse_when_client_unavailable PASSED [ 28%]
+tests/modules/agents_hub/unit/test_feedback_service.py::TestGetInteractionsForReview::test_returns_list PASSED [ 28%]
+tests/modules/agents_hub/unit/test_feedback_service.py::TestGetInteractionsForReview::test_filters_low_scores PASSED [ 29%]
+tests/modules/agents_hub/unit/test_graph.py::TestAgentGraph::test_graph_has_required_nodes PASSED [ 29%]
+tests/modules/agents_hub/unit/test_graph.py::TestAgentGraph::test_graph_processes_message PASSED [ 30%]
+tests/modules/agents_hub/unit/test_graph.py::TestAgentGraph::test_graph_applies_citation_fallback_when_no_sources_cited PASSED [ 30%]
+tests/modules/agents_hub/unit/test_hasher.py::TestDocumentHasher::test_hash_content_returns_sha256 PASSED [ 31%]
+tests/modules/agents_hub/unit/test_hasher.py::TestDocumentHasher::test_same_content_same_hash PASSED [ 31%]
+tests/modules/agents_hub/unit/test_hasher.py::TestDocumentHasher::test_different_content_different_hash PASSED [ 32%]
+tests/modules/agents_hub/unit/test_hasher.py::TestDocumentHasher::test_hash_file_returns_hash PASSED [ 32%]
+tests/modules/agents_hub/unit/test_hitl.py::TestHumanInTheLoop::test_draft_revision_loop PASSED [ 33%]
+tests/modules/agents_hub/unit/test_hitl.py::TestHumanInTheLoop::test_finalize_signal_triggers_export PASSED [ 34%]
+tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py::TestHubChatbotRetrievalMode::test_retrieval_mode_field_exists PASSED [ 34%]
+tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py::TestHubChatbotRetrievalMode::test_retrieval_mode_defaults_to_vector PASSED [ 35%]
+tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py::TestHubChatbotRetrievalMode::test_retrieval_mode_accepts_long_context PASSED [ 35%]
+tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py::TestHubChatbotRetrievalMode::test_retrieval_mode_accepts_agentic PASSED [ 36%]
+tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py::TestHubChatbotRetrievalMode::test_retrieval_mode_column_is_in_table PASSED [ 36%]
+tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py::TestHubChatbotKind::test_kind_field_exists PASSED [ 37%]
+tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py::TestHubChatbotKind::test_kind_defaults_to_atomic PASSED [ 37%]
+tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py::TestHubChatbotKind::test_kind_accepts_router PASSED [ 38%]
+tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py::TestHubChatbotKind::test_kind_column_is_in_table PASSED [ 38%]
+tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py::TestHubChatbotParentId::test_parent_chatbot_id_field_exists PASSED [ 39%]
+tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py::TestHubChatbotParentId::test_parent_chatbot_id_defaults_to_none PASSED [ 39%]
+tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py::TestHubChatbotParentId::test_parent_chatbot_id_accepts_uuid PASSED [ 40%]
+tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py::TestHubChatbotParentId::test_parent_chatbot_id_column_is_nullable PASSED [ 40%]
+tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py::TestHubChatbotParentId::test_parent_chatbot_id_column_is_in_table PASSED [ 41%]
+tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py::TestHubChatbotFieldCombinations::test_atomic_chatbot_with_agentic_mode PASSED [ 41%]
+tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py::TestHubChatbotFieldCombinations::test_router_chatbot_has_no_retrieval_mode_enforced PASSED [ 42%]
+tests/modules/agents_hub/unit/test_hub_chatbot_retrieval_fields.py::TestHubChatbotFieldCombinations::test_child_chatbot_references_parent_id PASSED [ 42%]
+tests/modules/agents_hub/unit/test_hub_document.py::TestHubDocumentModel::test_hub_document_class_exists PASSED [ 43%]
+tests/modules/agents_hub/unit/test_hub_document.py::TestHubDocumentModel::test_hub_document_has_required_fields PASSED [ 43%]
+tests/modules/agents_hub/unit/test_hub_document.py::TestHubDocumentModel::test_hub_document_optional_fields PASSED [ 44%]
+tests/modules/agents_hub/unit/test_hub_document.py::TestHubDocumentModel::test_hub_document_lives_in_operational_base PASSED [ 44%]
+tests/modules/agents_hub/unit/test_hub_document.py::TestHubDocumentModel::test_hub_document_tablename PASSED [ 45%]
+tests/modules/agents_hub/unit/test_hub_document.py::TestHubDocumentModel::test_hub_document_source_kind_values PASSED [ 45%]
+tests/modules/agents_hub/unit/test_hub_document.py::TestHubDocumentModel::test_hub_document_instantiation PASSED [ 46%]
+tests/modules/agents_hub/unit/test_hub_document.py::TestHubDocumentChunkDocumentId::test_hub_document_chunk_has_document_id_field PASSED [ 46%]
+tests/modules/agents_hub/unit/test_hub_document.py::TestHubDocumentChunkDocumentId::test_hub_document_chunk_document_id_is_nullable PASSED [ 47%]
+tests/modules/agents_hub/unit/test_hub_document.py::TestHubDocumentChunkDocumentId::test_hub_document_chunk_can_set_document_id PASSED [ 47%]
+tests/modules/agents_hub/unit/test_hub_document.py::TestHubDocumentChunkDocumentId::test_hub_document_chunk_document_id_defaults_to_none PASSED [ 48%]
+tests/modules/agents_hub/unit/test_ingestion_language.py::TestProcessSourceLanguageDetection::test_process_source_auto_detects_catalan_content PASSED [ 48%]
+tests/modules/agents_hub/unit/test_ingestion_language.py::TestProcessSourceLanguageDetection::test_process_source_respects_explicit_language PASSED [ 49%]
+tests/modules/agents_hub/unit/test_ingestion_language.py::TestProcessSourceLanguageDetection::test_process_user_upload_auto_detects_language PASSED [ 49%]
+tests/modules/agents_hub/unit/test_ingestion_language.py::TestRunJobPropagatesLanguage::test_run_job_propagates_catalan_language PASSED [ 50%]
+tests/modules/agents_hub/unit/test_ingestion_language.py::TestRunJobPropagatesLanguage::test_run_job_propagates_none_language_for_auto_detect PASSED [ 50%]
+tests/modules/agents_hub/unit/test_ingestion_language.py::TestSchedulerPropagatesLanguage::test_check_source_propagates_english_language_to_job PASSED [ 51%]
+tests/modules/agents_hub/unit/test_ingestion_language.py::TestSchedulerPropagatesLanguage::test_check_source_propagates_none_language PASSED [ 51%]
+tests/modules/agents_hub/unit/test_ingestion_multilang.py::TestMultiLanguageDocumentCoexistence::test_two_language_versions_of_same_url_coexist PASSED [ 52%]
+tests/modules/agents_hub/unit/test_ingestion_multilang.py::TestMultiLanguageDocumentCoexistence::test_reingest_same_url_same_language_replaces_doc PASSED [ 52%]
+tests/modules/agents_hub/unit/test_ingestion_multilang.py::TestMultiLanguageDocumentCoexistence::test_reingest_same_url_different_language_does_not_delete_other PASSED [ 53%]
+tests/modules/agents_hub/unit/test_ingestion_storage.py::TestWatcherStorageIntegration::test_run_job_downloads_pdf_from_storage_for_storage_key PASSED [ 53%]
+tests/modules/agents_hub/unit/test_ingestion_storage.py::TestWatcherStorageIntegration::test_run_job_passes_local_path_to_process_source_not_storage_key PASSED [ 54%]
+tests/modules/agents_hub/unit/test_ingestion_storage.py::TestWatcherStorageIntegration::test_run_job_skips_storage_download_for_http_url PASSED [ 54%]
+tests/modules/agents_hub/unit/test_ingestion_storage.py::TestWatcherStorageIntegration::test_run_job_cleans_tempfile_even_when_process_source_raises PASSED [ 55%]
+tests/modules/agents_hub/unit/test_ingestion_storage.py::TestWatcherStorageIntegration::test_run_job_uses_storage_key_as_citation_when_no_canonical_url PASSED [ 55%]
+tests/modules/agents_hub/unit/test_ingestion_storage.py::TestUploadEndpointStorageIntegration::test_upload_calls_storage_put_with_pdf_key PASSED [ 56%]
+tests/modules/agents_hub/unit/test_ingestion_storage.py::TestUploadEndpointStorageIntegration::test_upload_job_source_url_is_same_key_passed_to_storage PASSED [ 56%]
+tests/modules/agents_hub/unit/test_ingestion_storage.py::TestUploadEndpointStorageIntegration::test_upload_does_not_write_to_tmp_directly PASSED [ 57%]
+tests/modules/agents_hub/unit/test_language_detector.py::TestLanguageDetector::test_detects_spanish PASSED [ 57%]
+tests/modules/agents_hub/unit/test_language_detector.py::TestLanguageDetector::test_detects_english PASSED [ 58%]
+tests/modules/agents_hub/unit/test_language_detector.py::TestLanguageDetector::test_defaults_to_spanish_on_short_text PASSED [ 58%]
+tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_list_llm_configs PASSED [ 59%]
+tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_create_llm_config_with_tier PASSED [ 59%]
+tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_reject_duplicate_default_for_same_tier PASSED [ 60%]
+tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_delete_config_not_in_use PASSED [ 60%]
+tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_block_delete_config_in_use PASSED [ 61%]
+tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_return_latency_on_test_connection PASSED [ 61%]
+tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_get_model_for_tier_returns_default PASSED [ 62%]
+tests/modules/agents_hub/unit/test_long_context_strategy.py::TestLongContextRetrievalStrategy::test_returns_all_documents_as_sources_when_under_limit PASSED [ 62%]
+tests/modules/agents_hub/unit/test_long_context_strategy.py::TestLongContextRetrievalStrategy::test_raises_when_corpus_exceeds_limit PASSED [ 63%]
+tests/modules/agents_hub/unit/test_long_context_strategy.py::TestLongContextRetrievalStrategy::test_filters_by_language_when_specified PASSED [ 63%]
+tests/modules/agents_hub/unit/test_long_context_strategy.py::TestLongContextRetrievalStrategy::test_marks_sources_as_cacheable PASSED [ 64%]
+tests/modules/agents_hub/unit/test_long_context_strategy.py::TestLongContextRetrievalStrategy::test_returns_empty_when_chatbot_has_no_documents PASSED [ 64%]
+tests/modules/agents_hub/unit/test_long_context_strategy.py::TestLongContextRetrievalStrategy::test_get_agent_tools_returns_empty_list PASSED [ 65%]
+tests/modules/agents_hub/unit/test_model_factory.py::TestModelFactory::test_model_factory_returns_google_model PASSED [ 65%]
+tests/modules/agents_hub/unit/test_model_factory.py::TestModelFactory::test_model_factory_returns_openai_model PASSED [ 66%]
+tests/modules/agents_hub/unit/test_model_factory.py::TestModelFactory::test_model_factory_switching PASSED [ 67%]
+tests/modules/agents_hub/unit/test_model_factory.py::TestPromptService::test_prompt_formats_variables PASSED [ 67%]
+tests/modules/agents_hub/unit/test_model_factory.py::TestPromptService::test_prompt_injection_safety PASSED [ 68%]
+tests/modules/agents_hub/unit/test_observability.py::TestObservabilityClient::test_returns_none_when_secret_key_missing PASSED [ 68%]
+tests/modules/agents_hub/unit/test_observability.py::TestObservabilityClient::test_returns_client_when_configured PASSED [ 69%]
+tests/modules/agents_hub/unit/test_observability.py::TestCallbackHandler::test_returns_none_when_not_configured PASSED [ 69%]
+tests/modules/agents_hub/unit/test_observability.py::TestCallbackHandler::test_returns_handler_when_configured PASSED [ 70%]
+tests/modules/agents_hub/unit/test_prompt_templates_router.py::TestPromptTemplatesRouter::test_should_list_prompt_templates PASSED [ 70%]
+tests/modules/agents_hub/unit/test_prompt_templates_router.py::TestPromptTemplatesRouter::test_should_create_prompt_template_with_version_1 PASSED [ 71%]
+tests/modules/agents_hub/unit/test_prompt_templates_router.py::TestPromptTemplatesRouter::test_should_increment_version_on_save PASSED [ 71%]
+tests/modules/agents_hub/unit/test_prompt_templates_router.py::TestPromptTemplatesRouter::test_should_not_increment_version_without_text_change PASSED [ 72%]
+tests/modules/agents_hub/unit/test_prompt_templates_router.py::TestPromptTemplatesRouter::test_should_delete_prompt_template PASSED [ 72%]
+tests/modules/agents_hub/unit/test_prompt_templates_router.py::TestPromptTemplatesRouter::test_should_return_404_for_missing_template PASSED [ 73%]
+tests/modules/agents_hub/unit/test_prompts.py::TestBuildSystemPrompt::test_build_system_prompt_includes_citation_rules PASSED [ 73%]
+tests/modules/agents_hub/unit/test_prompts.py::TestBuildSystemPrompt::test_build_system_prompt_includes_language_directive PASSED [ 74%]
+tests/modules/agents_hub/unit/test_prompts.py::TestBuildSystemPrompt::test_build_system_prompt_for_agentic_mentions_tools PASSED [ 74%]
+tests/modules/agents_hub/unit/test_prompts.py::TestBuildSystemPrompt::test_build_system_prompt_for_long_context_includes_sources_block PASSED [ 75%]
+tests/modules/agents_hub/unit/test_prompts.py::TestBuildSystemPrompt::test_build_system_prompt_does_not_include_docs_for_empty_sources_block PASSED [ 75%]
+tests/modules/agents_hub/unit/test_prompts.py::TestFormatSourcesBlock::test_format_sources_block_renders_each_source_with_title_and_url PASSED [ 76%]
+tests/modules/agents_hub/unit/test_prompts.py::TestFormatSourcesBlock::test_format_sources_block_returns_empty_for_no_sources PASSED [ 76%]
+tests/modules/agents_hub/unit/test_rag_quality.py::TestRAGQuality::test_rag_faithfulness PASSED [ 77%]
+tests/modules/agents_hub/unit/test_rag_quality.py::TestRAGQuality::test_rag_answer_relevance PASSED [ 77%]
+tests/modules/agents_hub/unit/test_retrieval_types.py::TestSource::test_source_is_frozen PASSED [ 78%]
+tests/modules/agents_hub/unit/test_retrieval_types.py::TestSource::test_source_default_metadata_empty PASSED [ 78%]
+tests/modules/agents_hub/unit/test_retrieval_types.py::TestRetrievalContext::test_empty_context PASSED [ 79%]
+tests/modules/agents_hub/unit/test_retrieval_types.py::TestRetrievalStrategyProtocol::test_protocol_requires_get_context_and_get_agent_tools PASSED [ 79%]
+tests/modules/agents_hub/unit/test_router_node.py::TestRouteToSubagent::test_router_classifies_to_correct_child PASSED [ 80%]
+tests/modules/agents_hub/unit/test_router_node.py::TestRouteToSubagent::test_router_with_single_child_passes_through PASSED [ 80%]
+tests/modules/agents_hub/unit/test_router_node.py::TestRouteToSubagent::test_router_with_no_children_raises PASSED [ 81%]
+tests/modules/agents_hub/unit/test_router_node.py::TestRouteToSubagent::test_low_confidence_falls_back_to_llm_classifier PASSED [ 81%]
+tests/modules/agents_hub/unit/test_source_scheduler.py::TestCheckAllSources::test_skips_paused_sources PASSED [ 82%]
+tests/modules/agents_hub/unit/test_source_scheduler.py::TestCheckAllSources::test_skips_recently_checked_sources PASSED [ 82%]
+tests/modules/agents_hub/unit/test_source_scheduler.py::TestCheckAllSources::test_checks_overdue_source PASSED [ 83%]
+tests/modules/agents_hub/unit/test_source_scheduler.py::TestCheckAllSources::test_checks_never_checked_source PASSED [ 83%]
+tests/modules/agents_hub/unit/test_source_scheduler.py::TestCheckSource::test_skips_when_source_not_found PASSED [ 84%]
+tests/modules/agents_hub/unit/test_source_scheduler.py::TestCheckSource::test_skips_paused_source PASSED [ 84%]
+tests/modules/agents_hub/unit/test_source_scheduler.py::TestCheckSource::test_creates_job_when_content_changed PASSED [ 85%]
+tests/modules/agents_hub/unit/test_source_scheduler.py::TestCheckSource::test_skips_job_when_content_unchanged PASSED [ 85%]
+tests/modules/agents_hub/unit/test_source_scheduler.py::TestCheckSource::test_marks_error_on_fetch_failure PASSED [ 86%]
+tests/modules/agents_hub/unit/test_source_scheduler.py::TestCheckSource::test_updates_last_checked_at PASSED [ 86%]
+tests/modules/agents_hub/unit/test_source_scheduler.py::TestCreateScheduler::test_scheduler_has_source_checker_job PASSED [ 87%]
+tests/modules/agents_hub/unit/test_storage_service.py::TestFsspecStorageService::test_put_and_get_roundtrip PASSED [ 87%]
+tests/modules/agents_hub/unit/test_storage_service.py::TestFsspecStorageService::test_exists_returns_true_after_put PASSED [ 88%]
+tests/modules/agents_hub/unit/test_storage_service.py::TestFsspecStorageService::test_exists_returns_false_for_missing_key PASSED [ 88%]
+tests/modules/agents_hub/unit/test_storage_service.py::TestFsspecStorageService::test_delete_removes_file PASSED [ 89%]
+tests/modules/agents_hub/unit/test_storage_service.py::TestFsspecStorageService::test_get_raises_on_missing_file PASSED [ 89%]
+tests/modules/agents_hub/unit/test_storage_service.py::TestFsspecStorageService::test_put_overwrites_existing_file PASSED [ 90%]
+tests/modules/agents_hub/unit/test_storage_service.py::TestFsspecStorageService::test_put_creates_intermediate_directories PASSED [ 90%]
+tests/modules/agents_hub/unit/test_storage_service.py::TestFsspecStorageService::test_put_and_get_binary_content PASSED [ 91%]
+tests/modules/agents_hub/unit/test_storage_service.py::TestGetStorageService::test_returns_fsspec_service_with_env_vars PASSED [ 91%]
+tests/modules/agents_hub/unit/test_storage_service.py::TestGetStorageService::test_same_instance_returned_on_repeated_calls PASSED [ 92%]
+tests/modules/agents_hub/unit/test_storage_service.py::TestGetStorageService::test_protocol_satisfied PASSED [ 92%]
+tests/modules/agents_hub/unit/test_task_runner.py::TestTaskRunner::test_task_data_integration PASSED [ 93%]
+tests/modules/agents_hub/unit/test_task_runner.py::TestTaskRunner::test_gap_detection PASSED [ 93%]
+tests/modules/agents_hub/unit/test_tools.py::TestSearchKnowledgeTool::test_search_returns_formatted_results PASSED [ 94%]
+tests/modules/agents_hub/unit/test_tools.py::TestSearchKnowledgeTool::test_search_handles_no_results PASSED [ 94%]
+tests/modules/agents_hub/unit/test_user_upload.py::TestUserUploadIngestion::test_user_upload_is_not_visible_to_other_users PASSED [ 95%]
+tests/modules/agents_hub/unit/test_user_upload.py::TestUserUploadIngestion::test_temporary_chunks_cleanup PASSED [ 95%]
+tests/modules/agents_hub/unit/test_vector_strategy.py::TestVectorRetrievalStrategy::test_returns_empty_context_when_no_chunks PASSED [ 96%]
+tests/modules/agents_hub/unit/test_vector_strategy.py::TestVectorRetrievalStrategy::test_groups_multiple_chunks_into_one_source_per_document PASSED [ 96%]
+tests/modules/agents_hub/unit/test_vector_strategy.py::TestVectorRetrievalStrategy::test_uses_document_title_and_canonical_url_when_available PASSED [ 97%]
+tests/modules/agents_hub/unit/test_vector_strategy.py::TestVectorRetrievalStrategy::test_falls_back_to_filename_when_no_document_record PASSED [ 97%]
+tests/modules/agents_hub/unit/test_vector_strategy.py::TestVectorRetrievalStrategy::test_get_agent_tools_returns_empty_list PASSED [ 98%]
+tests/modules/agents_hub/unit/test_vector_strategy.py::TestVectorRetrievalStrategy::test_total_tokens_is_approximated_from_excerpt_length PASSED [ 98%]
+tests/modules/agents_hub/unit/test_watcher.py::TestIngestionWatcher::test_process_source_returns_document_and_chunk_count PASSED [ 99%]
+tests/modules/agents_hub/unit/test_watcher.py::TestIngestionWatcher::test_process_returns_existing_doc_for_same_content PASSED [100%]
+
+============================== warnings summary ===============================
+tests\modules\agents_hub\unit\test_llm_configs_router.py:61
+  C:\Users\fabra\Documents\AI_agents_hub\server\tests\modules\agents_hub\unit\test_llm_configs_router.py:61: PytestWarning: usefixtures() in tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_list_llm_configs without arguments has no effect
+    @pytest.mark.usefixtures()
+
+tests\modules\agents_hub\unit\test_llm_configs_router.py:61
+  C:\Users\fabra\Documents\AI_agents_hub\server\tests\modules\agents_hub\unit\test_llm_configs_router.py:61: PytestWarning: usefixtures() in tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_create_llm_config_with_tier without arguments has no effect
+    @pytest.mark.usefixtures()
+
+tests\modules\agents_hub\unit\test_llm_configs_router.py:61
+  C:\Users\fabra\Documents\AI_agents_hub\server\tests\modules\agents_hub\unit\test_llm_configs_router.py:61: PytestWarning: usefixtures() in tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_reject_duplicate_default_for_same_tier without arguments has no effect
+    @pytest.mark.usefixtures()
+
+tests\modules\agents_hub\unit\test_llm_configs_router.py:61
+  C:\Users\fabra\Documents\AI_agents_hub\server\tests\modules\agents_hub\unit\test_llm_configs_router.py:61: PytestWarning: usefixtures() in tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_delete_config_not_in_use without arguments has no effect
+    @pytest.mark.usefixtures()
+
+tests\modules\agents_hub\unit\test_llm_configs_router.py:61
+  C:\Users\fabra\Documents\AI_agents_hub\server\tests\modules\agents_hub\unit\test_llm_configs_router.py:61: PytestWarning: usefixtures() in tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_block_delete_config_in_use without arguments has no effect
+    @pytest.mark.usefixtures()
+
+tests\modules\agents_hub\unit\test_llm_configs_router.py:61
+  C:\Users\fabra\Documents\AI_agents_hub\server\tests\modules\agents_hub\unit\test_llm_configs_router.py:61: PytestWarning: usefixtures() in tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_return_latency_on_test_connection without arguments has no effect
+    @pytest.mark.usefixtures()
+
+tests\modules\agents_hub\unit\test_llm_configs_router.py:61
+  C:\Users\fabra\Documents\AI_agents_hub\server\tests\modules\agents_hub\unit\test_llm_configs_router.py:61: PytestWarning: usefixtures() in tests/modules/agents_hub/unit/test_llm_configs_router.py::TestLLMConfigsRouter::test_should_get_model_for_tier_returns_default without arguments has no effect
+    @pytest.mark.usefixtures()
+
+tests/modules/agents_hub/unit/test_ingestion_language.py::TestProcessSourceLanguageDetection::test_process_user_upload_auto_detects_language
+tests/modules/agents_hub/unit/test_user_upload.py::TestUserUploadIngestion::test_user_upload_is_not_visible_to_other_users
+  C:\Users\fabra\Documents\AI_agents_hub\server\app\modules\agents_hub\ingestion\watcher.py:239: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    self._session.add(db_chunk)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/modules/agents_hub/unit/test_ingestion_storage.py::TestUploadEndpointStorageIntegration::test_upload_calls_storage_put_with_pdf_key
+tests/modules/agents_hub/unit/test_ingestion_storage.py::TestUploadEndpointStorageIntegration::test_upload_job_source_url_is_same_key_passed_to_storage
+tests/modules/agents_hub/unit/test_ingestion_storage.py::TestUploadEndpointStorageIntegration::test_upload_does_not_write_to_tmp_directly
+  C:\Users\fabra\Documents\AI_agents_hub\server\app\routers\hub_ingestion_router.py:206: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    session.add(job)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/modules/agents_hub/unit/test_rag_quality.py::TestRAGQuality::test_rag_faithfulness
+tests/modules/agents_hub/unit/test_rag_quality.py::TestRAGQuality::test_rag_faithfulness
+  C:\Users\fabra\Documents\AI_agents_hub\server\app\modules\agents_hub\evaluation\rag_metrics.py:6: DeprecationWarning: Importing answer_relevancy from 'ragas.metrics' is deprecated and will be removed in v1.0. Please use 'ragas.metrics.collections' instead. Example: from ragas.metrics.collections import answer_relevancy
+    from ragas.metrics import answer_relevancy, faithfulness
+
+tests/modules/agents_hub/unit/test_rag_quality.py::TestRAGQuality::test_rag_faithfulness
+tests/modules/agents_hub/unit/test_rag_quality.py::TestRAGQuality::test_rag_faithfulness
+  C:\Users\fabra\Documents\AI_agents_hub\server\app\modules\agents_hub\evaluation\rag_metrics.py:6: DeprecationWarning: Importing faithfulness from 'ragas.metrics' is deprecated and will be removed in v1.0. Please use 'ragas.metrics.collections' instead. Example: from ragas.metrics.collections import faithfulness
+    from ragas.metrics import answer_relevancy, faithfulness
+
+tests/modules/agents_hub/unit/test_source_scheduler.py::TestCheckSource::test_creates_job_when_content_changed
+  C:\Users\fabra\Documents\AI_agents_hub\server\app\modules\agents_hub\ingestion\source_scheduler.py:52: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    session.add(job)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=============================== tests coverage ================================
+______________ coverage: platform win32, python 3.13.13-final-0 _______________
+
+Name                                                                 Stmts   Miss  Cover   Missing
+--------------------------------------------------------------------------------------------------
+app\__init__.py                                                          0      0   100%
+app\api\deps.py                                                         24      6    75%   12-13, 27, 37-38, 50
+app\api\v1\edge_sync.py                                                 44      2    95%   63, 69
+app\api\v1\hub_chat.py                                                 117     20    83%   48, 51-54, 78, 117-147, 151, 153, 198
+app\api\v1\hub_feedback.py                                              23      7    70%   40-41, 56-67
+app\api\v1\hub_tasks.py                                                 49      1    98%   121
+app\api\v1\ingestion.py                                                 24     13    46%   31-58
+app\core\auth\__init__.py                                                4      0   100%
+app\core\auth\exceptions.py                                              8      4    50%   6-7, 12-13
+app\core\auth\jwt_handler.py                                            31     10    68%   40, 48-55, 59
+app\core\auth\models.py                                                 31      5    84%   26, 47, 51, 55, 59
+app\core\config.py                                                      19      2    89%   22, 28
+app\core\security.py                                                    13     10    23%   9-12, 19-24
+app\core\storage.py                                                     54      7    87%   49-50, 79-83
+app\database\__init__.py                                                 0      0   100%
+app\database\db.py                                                      30     18    40%   27-28, 36-37, 42-76
+app\database\models.py                                                 217     26    88%   95-100, 104-109, 197-199, 204-206, 262, 266-272
+app\database\seeds.py                                                   73     73     0%   17-220
+app\database\seeds_prompts.py                                           57     57     0%   6-580
+app\main.py                                                             83     37    55%   31-40, 45-54, 59-91, 135
+app\modules\__init__.py                                                  0      0   100%
+app\modules\agents_hub\__init__.py                                       0      0   100%
+app\modules\agents_hub\agent\__init__.py                                 0      0   100%
+app\modules\agents_hub\agent\citation_validator.py                      15      0   100%
+app\modules\agents_hub\agent\graph.py                                   75     29    61%   44, 48, 85-86, 121-155
+app\modules\agents_hub\agent\hitl.py                                     8      1    88%   34
+app\modules\agents_hub\agent\language_detector.py                        8      2    75%   21-22
+app\modules\agents_hub\agent\prompts.py                                 19      0   100%
+app\modules\agents_hub\agent\router_node.py                             36      0   100%
+app\modules\agents_hub\agent\state.py                                   16      0   100%
+app\modules\agents_hub\agent\task_runner.py                             18      2    89%   60-62
+app\modules\agents_hub\agent\tools\__init__.py                           0      0   100%
+app\modules\agents_hub\agent\tools\list_documents.py                    12      0   100%
+app\modules\agents_hub\agent\tools\read_document.py                      8      0   100%
+app\modules\agents_hub\agent\tools\search_knowledge.py                  17      1    94%   61
+app\modules\agents_hub\database\__init__.py                              0      0   100%
+app\modules\agents_hub\database\base.py                                  8      0   100%
+app\modules\agents_hub\database\config_models.py                        70      0   100%
+app\modules\agents_hub\database\connection.py                           24      3    88%   43, 45-46
+app\modules\agents_hub\database\operational_models.py                   74      0   100%
+app\modules\agents_hub\database\seeds.py                                36     36     0%   3-89
+app\modules\agents_hub\evaluation\__init__.py                            0      0   100%
+app\modules\agents_hub\evaluation\rag_metrics.py                        36      5    86%   9-11, 33, 65
+app\modules\agents_hub\ingestion\__init__.py                             0      0   100%
+app\modules\agents_hub\ingestion\chunker.py                             27      0   100%
+app\modules\agents_hub\ingestion\docling_processor.py                   15      3    80%   47-49
+app\modules\agents_hub\ingestion\hasher.py                              10      0   100%
+app\modules\agents_hub\ingestion\markdown_utils.py                       7      0   100%
+app\modules\agents_hub\ingestion\source_scheduler.py                    52      0   100%
+app\modules\agents_hub\ingestion\watcher.py                            146     12    92%   151-165, 178, 253, 299-300
+app\modules\agents_hub\services\__init__.py                              0      0   100%
+app\modules\agents_hub\services\config_provider.py                      25     10    60%   34-37, 41-46, 50-58, 62-67, 71-72
+app\modules\agents_hub\services\corpus_recalculator.py                  17     11    35%   27-46
+app\modules\agents_hub\services\corpus_recommender.py                    9      0   100%
+app\modules\agents_hub\services\embedding_service.py                    26     10    62%   21-24, 27-30, 41-43, 49
+app\modules\agents_hub\services\feedback_service.py                     22      0   100%
+app\modules\agents_hub\services\model_factory.py                        46     13    72%   18, 37, 41, 50, 55, 79, 82-94
+app\modules\agents_hub\services\observability.py                        13      0   100%
+app\modules\agents_hub\services\prompt_service.py                       13      1    92%   44
+app\modules\agents_hub\services\retrieval\__init__.py                    0      0   100%
+app\modules\agents_hub\services\retrieval\agentic_strategy.py           27      0   100%
+app\modules\agents_hub\services\retrieval\long_context_strategy.py      25      0   100%
+app\modules\agents_hub\services\retrieval\types.py                      19      0   100%
+app\modules\agents_hub\services\retrieval\vector_strategy.py            44      0   100%
+app\modules\agents_hub\services\retriever.py                            47     28    40%   34-49, 69-81, 103-122
+app\modules\automation\__init__.py                                       0      0   100%
+app\modules\automation\billing_engine.py                                63     63     0%   9-170
+app\modules\automation\cortex.py                                       117    117     0%   10-382
+app\modules\automation\extraction_strategies.py                        261    261     0%   11-767
+app\modules\automation\infrastructure\__init__.py                        2      2     0%   3-9
+app\modules\automation\infrastructure\llm_gateway.py                   118    118     0%   11-236
+app\routers\auth_router.py                                              35     13    63%   35-56, 65-82, 88
+app\routers\hub_chatbots_router.py                                     184     92    50%   98-103, 111-114, 123-137, 147-174, 183-185, 194-222, 237-258, 275-302, 317-327, 337-379, 389-405
+app\routers\hub_clients_router.py                                       60     21    65%   61-68, 89-98, 117-129, 147-153
+app\routers\hub_ingestion_router.py                                    170    102    40%   47-49, 68-75, 89-98, 124-127, 149-160, 185, 234-273, 285-290, 301-322, 334-341, 352-357, 369-384, 395-422
+app\routers\hub_llm_configs_router.py                                  157     51    68%   57-58, 68-77, 88-97, 107-121, 131-142, 224-248, 259, 286
+app\routers\hub_prompt_templates_router.py                              71      3    96%   62, 109, 127
+app\routers\library_router.py                                           86     62    28%   24-25, 29, 39-62, 74-95, 122-157, 177-214
+app\scripts\__init__.py                                                  0      0   100%
+app\scripts\migrate_gemini_models.py                                    24     24     0%   1-34
+app\scripts\seed_llm_configs.py                                         29     29     0%   6-79
+app\services\__init__.py                                                 0      0   100%
+app\services\agent_service.py                                           61     61     0%   8-163
+app\services\ai_brain.py                                               271    271     0%   12-1079
+app\services\api_key_service.py                                         14     14     0%   9-46
+app\services\consumption_query_service.py                               88     88     0%   9-341
+app\services\knowledge_orchestrator_service.py                          68     68     0%   9-220
+app\services\library_service.py                                         60     50    17%   17, 42-86, 89, 97-112, 122-132
+app\services\manifest_signature_service.py                              61     38    38%   50-52, 61-69, 77-78, 98-150, 167-186, 204-216
+app\services\model_fetcher.py                                           86     75    13%   22-72, 77-123, 133-157, 162-199
+app\services\partner_billing_service.py                                 79     79     0%   1-271
+app\services\partner_client_service.py                                 121    121     0%   8-291
+app\services\partner_license_service.py                                 85     85     0%   8-217
+app\services\partner_scripts_service.py                                 29     29     0%   1-78
+app\services\partner_service.py                                         35     35     0%   9-103
+app\services\pricing_service.py                                         55     55     0%   3-129
+app\services\scheduler_service.py                                      100    100     0%   9-204
+app\services\security_policy_service.py                                148    148     0%   6-394
+app\services\token_service.py                                           80     80     0%   9-195
+app\ui\__init__.py                                                       0      0   100%
+app\ui\admin_ai.py                                                     150    150     0%   9-342
+app\ui\admin_analytics.py                                               83     83     0%   9-277
+app\ui\admin_clients.py                                                249    249     0%   9-670
+app\ui\admin_dashboard.py                                               96     96     0%   9-235
+app\ui\admin_layout.py                                                  56     56     0%   9-179
+app\ui\admin_library.py                                                 95     95     0%   9-173
+app\ui\admin_licenses.py                                               122    122     0%   9-320
+app\ui\admin_partners.py                                               189    189     0%   9-539
+app\ui\admin_prompts.py                                                158    158     0%   9-529
+app\ui\admin_scheduler.py                                               65     65     0%   9-147
+app\ui\admin_security.py                                               357    357     0%   9-1035
+app\ui\partner_billing.py                                               58     58     0%   9-176
+app\ui\partner_clients.py                                              254    254     0%   9-530
+app\ui\partner_dashboard.py                                             98     98     0%   9-229
+app\ui\partner_layout.py                                                74     74     0%   9-235
+app\ui\partner_library.py                                              141    141     0%   8-274
+app\ui\partner_licenses.py                                             238    238     0%   9-479
+app\ui\partner_login.py                                                 46     46     0%   9-93
+app\ui\partner_scripts.py                                              108    108     0%   9-233
+app\ui\partner_security.py                                             258    258     0%   9-716
+--------------------------------------------------------------------------------------------------
+TOTAL                                                                 7684   5715    26%
+================ 197 passed, 17 warnings in 335.49s (0:05:35) =================
