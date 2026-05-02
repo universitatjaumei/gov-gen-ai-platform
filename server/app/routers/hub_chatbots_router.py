@@ -191,7 +191,7 @@ async def get_corpus_stats(
     _: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
-    chatbot = await _get_chatbot_or_404(session, chatbot_id)
+    await _get_chatbot_or_404(session, chatbot_id)
 
     total_docs_row = await session.execute(
         select(func.count(HubDocument.id)).where(HubDocument.chatbot_id == chatbot_id)
