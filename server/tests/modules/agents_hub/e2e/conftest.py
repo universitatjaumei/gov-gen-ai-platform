@@ -16,6 +16,8 @@ _JWT_ENV = {
     "JWT_SECRET_KEY": "test-secret-key-that-is-at-least-32-characters-long",
     "JWT_ALGORITHM": "HS256",
     "JWT_EXPIRATION_MINUTES": "60",
+    "GOOGLE_API_KEY": "test-key",
+    "GEMINI_API_KEY": "test-key",
 }
 
 _TEST_DB_URL = os.getenv(

@@ -51,6 +51,7 @@ async def populated_session():
                 source_url="url1",
                 content_hash="h1",
                 embedding=[0.1] * 1024,
+                language="es",
             ),
             HubDocumentChunk(
                 chatbot_id=chatbot.id,
@@ -58,6 +59,7 @@ async def populated_session():
                 source_url="url2",
                 content_hash="h2",
                 embedding=[0.9] * 1024,
+                language="es",
             ),
         ]
         session.add_all(chunks)

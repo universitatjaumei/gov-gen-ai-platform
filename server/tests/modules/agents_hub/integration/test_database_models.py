@@ -194,6 +194,7 @@ class TestHubDocumentChunkModel:
             source_url="https://example.com",
             content_hash="abc123",
             embedding=[0.1] * 1024,
+            language="es",
         )
         db_session.add(chunk)
         await db_session.commit()
