@@ -1,4 +1,4 @@
-﻿"""Tests de integraciÃ³n del pipeline completo (Prompt 6.2).
+"""Tests de integraciÃ³n del pipeline completo (Prompt 6.2).
 
 Validan la integraciÃ³n entre BD, componentes RAG y autenticaciÃ³n JWT
 en flujos reales de extremo a extremo.
@@ -37,7 +37,7 @@ class TestRAGPipeline:
             create_session_factory,
         )
         from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
-        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig
+        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig, HubProvider
         from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
         from server.app.modules.agents_hub.ingestion.chunker import MarkdownChunker
         from server.app.modules.agents_hub.ingestion.hasher import hash_content
@@ -51,6 +51,11 @@ class TestRAGPipeline:
 
         factory = create_session_factory(engine)
         async with factory() as session:
+            # 0. Crear proveedor
+            provider = HubProvider(id="google", name="Google", provider_type="google_genai")
+            session.add(provider)
+            await session.flush()
+
             # 1. Crear dependencias requeridas por HubChatbot
             llm_config = HubLLMConfig(
                 provider="google",

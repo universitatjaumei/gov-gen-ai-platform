@@ -23,6 +23,12 @@ async def db_session():
 
     session_factory = create_session_factory(engine)
     async with session_factory() as session:
+        from server.app.modules.agents_hub.database.config_models import HubProvider
+        session.add_all([
+            HubProvider(id="google", name="Google", provider_type="google_genai"),
+            HubProvider(id="openai", name="OpenAI", provider_type="openai_compatible"),
+        ])
+        await session.commit()
         yield session
 
     async with engine.begin() as conn:

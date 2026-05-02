@@ -78,9 +78,13 @@ def admin_headers():
 @pytest.fixture
 async def setup_chatbot(db_session):
     """Crea un chatbot de prueba con cliente, config LLM y chunk de conocimiento."""
-    from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig
+    from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig, HubProvider
     from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
     from server.app.modules.agents_hub.ingestion.hasher import hash_content
+
+    provider = HubProvider(id="google", name="Google", provider_type="google_genai")
+    db_session.add(provider)
+    await db_session.flush()
 
     llm_config = HubLLMConfig(
         provider="google",

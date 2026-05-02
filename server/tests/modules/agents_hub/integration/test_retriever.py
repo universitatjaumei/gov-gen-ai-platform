@@ -1,4 +1,4 @@
-﻿"""Prompt 2.6 â€” Tests del retriever hÃ­brido (TDD - RED â†’ GREEN)."""
+"""Prompt 2.6 â€” Tests del retriever hÃ­brido (TDD - RED â†’ GREEN)."""
 import uuid
 import pytest
 from sqlalchemy import text
@@ -14,7 +14,7 @@ async def populated_session():
         create_session_factory,
     )
     from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
-    from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig
+    from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig, HubProvider
     from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
 
     engine = create_async_engine(DB_URL)
@@ -25,6 +25,10 @@ async def populated_session():
 
     session_factory = create_session_factory(engine)
     async with session_factory() as session:
+        provider = HubProvider(id="google", name="Google", provider_type="google_genai")
+        session.add(provider)
+        await session.flush()
+
         llm = HubLLMConfig(provider="google", model_name="gemini-flash")
         session.add(llm)
         client = HubClient(name="Retriever Test", partner_id="partner_dev")

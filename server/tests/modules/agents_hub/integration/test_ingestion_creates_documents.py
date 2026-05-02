@@ -26,6 +26,7 @@ def _make_session_for_new_doc() -> AsyncMock:
     second_exec.scalars = MagicMock(return_value=iter([]))
     third_exec = MagicMock()  # DELETE chunks
     fourth_exec = MagicMock()  # DELETE old chunks
+    session.begin_nested = MagicMock(return_value=AsyncMock())
     session.execute = AsyncMock(side_effect=[first_exec, second_exec, third_exec])
     session.flush = AsyncMock()
     session.commit = AsyncMock()
@@ -40,6 +41,7 @@ def _make_session_for_existing_doc(existing_doc) -> AsyncMock:
     first_exec.scalar_one_or_none = MagicMock(return_value=existing_doc)
     second_exec = MagicMock()  # DELETE chunks for vector
     session.execute = AsyncMock(side_effect=[first_exec, second_exec])
+    session.begin_nested = MagicMock(return_value=AsyncMock())
     session.flush = AsyncMock()
     session.commit = AsyncMock()
     session.add = MagicMock()
