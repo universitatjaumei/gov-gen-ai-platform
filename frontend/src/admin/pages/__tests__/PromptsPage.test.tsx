@@ -45,7 +45,17 @@ const DEMO_TEMPLATE_OVERRIDE = {
 const DEMO_CHATBOT = {
   id: CHATBOT_ID,
   name: 'Bot Demo',
-  active: true,
+  client_id: 'client-1',
+  llm_config_id: 'llm-1',
+  system_prompt: 'Eres útil.',
+  sources: [],
+  is_active: true,
+  retrieval_mode: 'vector',
+  retrieval_top_k: 8,
+  kind: 'atomic',
+  parent_chatbot_id: null,
+  created_at: '',
+  updated_at: '',
 }
 
 function mockFetch(templates: object[], chatbots: object[] = [DEMO_CHATBOT]) {
@@ -170,6 +180,15 @@ describe('PromptsPage', () => {
       const preview = screen.getByTestId('prompt-preview')
       expect(preview.textContent).toContain('empresa')
       expect(preview.textContent).not.toContain('{empresa}')
+    })
+  })
+
+  it('should_list_chatbot_base_prompts', async () => {
+    renderPage([DEMO_TEMPLATE])
+    await waitFor(() => {
+      expect(screen.getByText('Prompts base de chatbot')).toBeDefined()
+      expect(screen.getAllByText('Bot Demo').length).toBeGreaterThan(0)
+      expect(screen.getByText('Eres útil.')).toBeDefined()
     })
   })
 })

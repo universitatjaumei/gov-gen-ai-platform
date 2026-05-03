@@ -1,11 +1,14 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { fetchPromptTemplates, updatePromptTemplate, deletePromptTemplate, createPromptTemplate } from '@/shared/api/promptTemplates'
+import { fetchChatbots, updateChatbot, type Chatbot } from '@/shared/api/chatbots'
+import {
+  createPromptTemplate,
+  deletePromptTemplate,
+  fetchPromptTemplates,
+  updatePromptTemplate,
+} from '@/shared/api/promptTemplates'
 import type { PromptTemplate, PromptTemplateCreate } from '@/shared/api/promptTemplates'
-import { fetchChatbots } from '@/shared/api/chatbots'
-
-// Removed unused extractVariables
 
 // Render template text with {variable} spans highlighted (for the editor preview)
 function HighlightedText({ text }: { text: string }) {
@@ -48,19 +51,35 @@ function TierChip({ tier, label }: { tier: number; label?: string }) {
   )
 }
 
+type PromptUsageFilter = 'all' | 'chatbot_system' | 'template'
+
 export function PromptsPage() {
   const { t } = useTranslation('admin')
   const qc = useQueryClient()
+
+  const [usageFilter, setUsageFilter] = useState<PromptUsageFilter>('all')
+  const [chatbotFilter, setChatbotFilter] = useState<string>('all')
+  const [search, setSearch] = useState('')
+
+  const [selectedType, setSelectedType] = useState<'chatbot' | 'template' | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+
   const [editText, setEditText] = useState('')
   const [editDefaultTier, setEditDefaultTier] = useState<number | null>(null)
   const [editOverrideTier, setEditOverrideTier] = useState<number | null>(null)
+
+  const [editChatbotPrompt, setEditChatbotPrompt] = useState('')
+
   const [showCreate, setShowCreate] = useState(false)
-  const [newForm, setNewForm] = useState<Partial<PromptTemplateCreate>>({})
+  const [newForm, setNewForm] = useState<Partial<Omit<PromptTemplateCreate, 'chatbot_id'>>>({
+    language: 'es',
+  })
+
+  const selectedChatbotId = chatbotFilter !== 'all' ? chatbotFilter : undefined
 
   const { data: templates = [] } = useQuery({
-    queryKey: ['prompt-templates'],
-    queryFn: () => fetchPromptTemplates(),
+    queryKey: ['prompt-templates', selectedChatbotId ?? 'all'],
+    queryFn: () => fetchPromptTemplates(selectedChatbotId),
   })
 
   const { data: chatbots = [] } = useQuery({
@@ -68,33 +87,52 @@ export function PromptsPage() {
     queryFn: fetchChatbots,
   })
 
-  const chatbotName = (chatbot_id: string) =>
-    chatbots.find((c) => c.id === chatbot_id)?.name ?? chatbot_id.slice(0, 8)
+  const selectedTemplate = selectedType === 'template'
+    ? templates.find((tmpl) => tmpl.id === selectedId) ?? null
+    : null
 
-  const selected = templates.find((t) => t.id === selectedId) ?? null
+  const selectedChatbot = selectedType === 'chatbot'
+    ? chatbots.find((cb) => cb.id === selectedId) ?? null
+    : null
 
   const effectiveTier = (tmpl: PromptTemplate) => tmpl.override_tier ?? tmpl.default_tier
 
-  function handleSelect(tmpl: PromptTemplate) {
+  function handleSelectTemplate(tmpl: PromptTemplate) {
+    setSelectedType('template')
     setSelectedId(tmpl.id)
     setEditText(tmpl.template_text)
     setEditDefaultTier(tmpl.default_tier)
     setEditOverrideTier(tmpl.override_tier)
   }
 
-  const saveMutation = useMutation({
+  function handleSelectChatbot(cb: Chatbot) {
+    setSelectedType('chatbot')
+    setSelectedId(cb.id)
+    setEditChatbotPrompt(cb.system_prompt)
+  }
+
+  const saveTemplateMutation = useMutation({
     mutationFn: ({ id, text, defaultTier, overrideTier }: { id: string; text: string; defaultTier: number | null; overrideTier: number | null }) =>
       updatePromptTemplate(id, {
         template_text: text,
-        ...(defaultTier !== null ? { default_tier: defaultTier } : {}),
-        ...(overrideTier !== null ? { override_tier: overrideTier } : {}),
+        default_tier: defaultTier,
+        override_tier: overrideTier,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['prompt-templates'] }),
+  })
+
+  const saveChatbotPromptMutation = useMutation({
+    mutationFn: ({ id, systemPrompt }: { id: string; systemPrompt: string }) =>
+      updateChatbot(id, { system_prompt: systemPrompt }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['chatbots'] })
+    },
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deletePromptTemplate(id),
     onSuccess: () => {
+      setSelectedType(null)
       setSelectedId(null)
       qc.invalidateQueries({ queryKey: ['prompt-templates'] })
     },
@@ -104,41 +142,141 @@ export function PromptsPage() {
     mutationFn: (data: PromptTemplateCreate) => createPromptTemplate(data),
     onSuccess: () => {
       setShowCreate(false)
-      setNewForm({})
+      setNewForm({ language: 'es' })
       qc.invalidateQueries({ queryKey: ['prompt-templates'] })
     },
   })
 
-  function handleSave() {
-    if (!selectedId) return
-    saveMutation.mutate({ id: selectedId, text: editText, defaultTier: editDefaultTier, overrideTier: editOverrideTier })
+  const filteredChatbots = useMemo(() => {
+    if (usageFilter === 'template') return []
+    const q = search.trim().toLowerCase()
+    return chatbots.filter((cb) => {
+      if (chatbotFilter !== 'all' && cb.id !== chatbotFilter) return false
+      if (!q) return true
+      return cb.name.toLowerCase().includes(q) || cb.system_prompt.toLowerCase().includes(q)
+    })
+  }, [chatbots, chatbotFilter, usageFilter, search])
+
+  const filteredTemplates = useMemo(() => {
+    if (usageFilter === 'chatbot_system') return []
+    const q = search.trim().toLowerCase()
+    return templates.filter((tmpl) => {
+      if (chatbotFilter !== 'all' && tmpl.chatbot_id !== chatbotFilter) return false
+      if (!q) return true
+      return (
+        tmpl.slug.toLowerCase().includes(q) ||
+        tmpl.template_text.toLowerCase().includes(q) ||
+        tmpl.language.toLowerCase().includes(q)
+      )
+    })
+  }, [chatbotFilter, templates, usageFilter, search])
+
+  const canCreateTemplate = chatbotFilter !== 'all'
+
+  function handleSaveTemplate() {
+    if (!selectedTemplate) return
+    saveTemplateMutation.mutate({
+      id: selectedTemplate.id,
+      text: editText,
+      defaultTier: editDefaultTier,
+      overrideTier: editOverrideTier,
+    })
+  }
+
+  function handleSaveChatbotPrompt() {
+    if (!selectedChatbot) return
+    saveChatbotPromptMutation.mutate({
+      id: selectedChatbot.id,
+      systemPrompt: editChatbotPrompt,
+    })
   }
 
   return (
     <div className="flex gap-4 h-[calc(100vh-160px)]">
-      {/* Left panel — template list */}
-      <aside className="w-72 shrink-0 border rounded-lg overflow-y-auto flex flex-col">
-        <div className="p-3 border-b flex items-center justify-between">
+      <aside className="w-80 shrink-0 border rounded-lg overflow-y-auto flex flex-col">
+        <div className="p-3 border-b flex flex-col gap-2">
           <span className="font-medium text-sm">{t('hub.prompt_templates')}</span>
+
+          <select
+            value={usageFilter}
+            onChange={(e) => setUsageFilter(e.target.value as PromptUsageFilter)}
+            className="border rounded px-2 py-1.5 text-xs bg-background"
+          >
+            <option value="all">Uso: todos</option>
+            <option value="chatbot_system">Uso: chatbot (prompt base)</option>
+            <option value="template">Uso: plantillas</option>
+          </select>
+
+          <select
+            value={chatbotFilter}
+            onChange={(e) => setChatbotFilter(e.target.value)}
+            className="border rounded px-2 py-1.5 text-xs bg-background"
+          >
+            <option value="all">Servicio: todos</option>
+            {chatbots.map((cb) => (
+              <option key={cb.id} value={cb.id}>
+                {cb.name}
+              </option>
+            ))}
+          </select>
+
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar prompt..."
+            className="border rounded px-2 py-1.5 text-xs bg-background"
+          />
+
           <button
             onClick={() => setShowCreate(true)}
-            className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90"
+            disabled={!canCreateTemplate}
+            className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             + {t('hub.new_prompt_template')}
           </button>
+          {!canCreateTemplate && (
+            <p className="text-[11px] text-muted-foreground">
+              Selecciona un servicio/chatbot para crear una plantilla asociada.
+            </p>
+          )}
         </div>
 
-        {templates.length === 0 && (
+        <div className="px-3 pt-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+          Prompts base de chatbot
+        </div>
+        {filteredChatbots.map((cb) => (
+          <button
+            key={`cb-${cb.id}`}
+            onClick={() => handleSelectChatbot(cb)}
+            className={`w-full text-left px-3 py-2 border-b text-sm hover:bg-accent/50 transition-colors ${
+              selectedType === 'chatbot' && selectedId === cb.id ? 'bg-accent' : ''
+            }`}
+          >
+            <div className="flex items-center justify-between gap-1">
+              <span className="font-medium truncate">{cb.name}</span>
+              <span className="shrink-0 text-xs bg-purple-100 text-purple-700 rounded px-1.5">
+                base
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground truncate mt-0.5">{cb.system_prompt}</p>
+          </button>
+        ))}
+
+        <div className="px-3 pt-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+          Plantillas por actividad/fase
+        </div>
+        {filteredTemplates.length === 0 && usageFilter !== 'chatbot_system' && (
           <p className="p-4 text-sm text-muted-foreground">{t('hub.no_prompt_templates')}</p>
         )}
-
-        {templates.map((tmpl) => {
+        {filteredTemplates.map((tmpl) => {
           const tier = effectiveTier(tmpl)
           return (
             <button
               key={tmpl.id}
-              onClick={() => handleSelect(tmpl)}
-              className={`w-full text-left px-3 py-2 border-b text-sm hover:bg-accent/50 transition-colors ${selectedId === tmpl.id ? 'bg-accent' : ''}`}
+              onClick={() => handleSelectTemplate(tmpl)}
+              className={`w-full text-left px-3 py-2 border-b text-sm hover:bg-accent/50 transition-colors ${
+                selectedType === 'template' && selectedId === tmpl.id ? 'bg-accent' : ''
+              }`}
             >
               <div className="flex items-center justify-between gap-1">
                 <span className="font-medium truncate">{tmpl.slug}</span>
@@ -147,7 +285,9 @@ export function PromptsPage() {
                 </span>
               </div>
               <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                <span className="text-xs text-muted-foreground">{chatbotName(tmpl.chatbot_id)}</span>
+                <span className="text-xs text-muted-foreground">
+                  {chatbots.find((c) => c.id === tmpl.chatbot_id)?.name ?? tmpl.chatbot_id.slice(0, 8)}
+                </span>
                 <span className="text-xs bg-blue-100 text-blue-700 rounded px-1">{tmpl.language}</span>
                 {tier !== null && <TierChip tier={tier} />}
               </div>
@@ -156,35 +296,84 @@ export function PromptsPage() {
         })}
       </aside>
 
-      {/* Right panel — editor */}
-      {selected ? (
+      {selectedChatbot ? (
         <div className="flex-1 border rounded-lg overflow-y-auto flex flex-col gap-4 p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h2 className="font-semibold text-base">{selected.slug}</h2>
-              <span className="text-xs bg-muted text-muted-foreground rounded px-1.5">
-                v{selected.version}
+              <h2 className="font-semibold text-base">{selectedChatbot.name}</h2>
+              <span className="text-xs bg-purple-100 text-purple-700 rounded px-1.5">
+                Prompt base del chatbot
               </span>
-              {selected.override_tier !== null && (
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">{t('hub.prompt_text')}</p>
+            <textarea
+              value={editChatbotPrompt}
+              onChange={(e) => setEditChatbotPrompt(e.target.value)}
+              rows={12}
+              className="w-full rounded border px-3 py-2 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">{t('hub.prompt_variables')}</p>
+            <div className="rounded border px-3 py-2 text-sm font-mono bg-muted/30 whitespace-pre-wrap break-words">
+              <HighlightedText text={editChatbotPrompt} />
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">{t('hub.prompt_preview')}</p>
+            <div
+              data-testid="prompt-preview"
+              className="rounded border px-3 py-2 text-sm bg-muted/20 whitespace-pre-wrap break-words"
+            >
+              {buildPreview(editChatbotPrompt)}
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              onClick={handleSaveChatbotPrompt}
+              disabled={saveChatbotPromptMutation.isPending}
+              className="px-4 py-2 rounded bg-primary text-primary-foreground text-sm hover:bg-primary/90 disabled:opacity-50"
+            >
+              Guardar prompt base
+            </button>
+          </div>
+        </div>
+      ) : selectedTemplate ? (
+        <div className="flex-1 border rounded-lg overflow-y-auto flex flex-col gap-4 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h2 className="font-semibold text-base">{selectedTemplate.slug}</h2>
+              <span className="text-xs bg-muted text-muted-foreground rounded px-1.5">
+                v{selectedTemplate.version}
+              </span>
+              {selectedTemplate.override_tier !== null && (
                 <span data-testid="effective-tier">
-                  <TierChip tier={selected.override_tier} label={`Tier ${selected.override_tier} (override)`} />
+                  <TierChip
+                    tier={selectedTemplate.override_tier}
+                    label={`Tier ${selectedTemplate.override_tier} (override)`}
+                  />
                 </span>
               )}
-              {selected.override_tier === null && selected.default_tier !== null && (
+              {selectedTemplate.override_tier === null && selectedTemplate.default_tier !== null && (
                 <span data-testid="effective-tier">
-                  <TierChip tier={selected.default_tier} />
+                  <TierChip tier={selectedTemplate.default_tier} />
                 </span>
               )}
             </div>
             <button
-              onClick={() => deleteMutation.mutate(selected.id)}
+              onClick={() => deleteMutation.mutate(selectedTemplate.id)}
               className="text-xs text-destructive hover:underline"
             >
               {t('hub.delete_prompt_template')}
             </button>
           </div>
 
-          {/* Tier controls */}
           <div className="flex flex-wrap gap-4 text-sm">
             <div>
               <p className="text-xs text-muted-foreground mb-1">{t('hub.prompt_default_tier')}</p>
@@ -216,18 +405,16 @@ export function PromptsPage() {
             </div>
           </div>
 
-          {/* Textarea editor */}
           <div>
             <p className="text-xs text-muted-foreground mb-1">{t('hub.prompt_text')}</p>
             <textarea
               value={editText}
               onChange={(e) => setEditText(e.target.value)}
-              rows={8}
+              rows={10}
               className="w-full rounded border px-3 py-2 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
 
-          {/* Variable highlighting */}
           <div>
             <p className="text-xs text-muted-foreground mb-1">{t('hub.prompt_variables')}</p>
             <div className="rounded border px-3 py-2 text-sm font-mono bg-muted/30 whitespace-pre-wrap break-words">
@@ -235,7 +422,6 @@ export function PromptsPage() {
             </div>
           </div>
 
-          {/* Preview with filled variables */}
           <div>
             <p className="text-xs text-muted-foreground mb-1">{t('hub.prompt_preview')}</p>
             <div
@@ -248,8 +434,8 @@ export function PromptsPage() {
 
           <div className="flex justify-end">
             <button
-              onClick={handleSave}
-              disabled={saveMutation.isPending}
+              onClick={handleSaveTemplate}
+              disabled={saveTemplateMutation.isPending}
               className="px-4 py-2 rounded bg-primary text-primary-foreground text-sm hover:bg-primary/90 disabled:opacity-50"
             >
               {t('hub.save_prompt_version')}
@@ -258,28 +444,22 @@ export function PromptsPage() {
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-          {t('hub.select_prompt_template')}
+          Selecciona un prompt base o una plantilla para editar.
         </div>
       )}
 
-      {/* Create dialog */}
       {showCreate && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" role="dialog">
           <div className="bg-background rounded-lg p-6 w-full max-w-md flex flex-col gap-4">
             <h3 className="font-semibold text-base">{t('hub.new_prompt_template')}</h3>
             <div className="flex flex-col gap-3 text-sm">
               <label className="flex flex-col gap-1">
-                <span className="text-xs text-muted-foreground">Chatbot</span>
-                <select
-                  className="border rounded px-2 py-1.5"
-                  value={newForm.chatbot_id ?? ''}
-                  onChange={(e) => setNewForm((f) => ({ ...f, chatbot_id: e.target.value }))}
-                >
-                  <option value="">—</option>
-                  {chatbots.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                <span className="text-xs text-muted-foreground">Servicio/chatbot</span>
+                <input
+                  disabled
+                  className="border rounded px-2 py-1.5 bg-muted text-muted-foreground"
+                  value={chatbots.find((c) => c.id === chatbotFilter)?.name ?? ''}
+                />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-muted-foreground">{t('hub.prompt_slug')}</span>
@@ -313,18 +493,23 @@ export function PromptsPage() {
             </div>
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => { setShowCreate(false); setNewForm({}) }}
+                onClick={() => { setShowCreate(false); setNewForm({ language: 'es' }) }}
                 className="px-3 py-1.5 rounded border text-sm"
               >
                 {t('hub.cancel')}
               </button>
               <button
                 onClick={() => {
-                  if (newForm.chatbot_id && newForm.slug && newForm.language && newForm.template_text) {
-                    createMutation.mutate(newForm as PromptTemplateCreate)
+                  if (chatbotFilter !== 'all' && newForm.slug && newForm.language && newForm.template_text) {
+                    createMutation.mutate({
+                      chatbot_id: chatbotFilter,
+                      slug: newForm.slug,
+                      language: newForm.language,
+                      template_text: newForm.template_text,
+                    })
                   }
                 }}
-                disabled={createMutation.isPending}
+                disabled={createMutation.isPending || chatbotFilter === 'all'}
                 className="px-3 py-1.5 rounded bg-primary text-primary-foreground text-sm hover:bg-primary/90 disabled:opacity-50"
               >
                 {t('hub.create')}
