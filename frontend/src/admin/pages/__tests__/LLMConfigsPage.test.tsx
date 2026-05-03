@@ -109,8 +109,13 @@ describe('LLMConfigsPage', () => {
       </QueryClientProvider>
     )
 
-    await waitFor(() => screen.getByRole('button', { name: /eliminar/i }))
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /eliminar/i })) })
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /eliminar/i }).length).toBeGreaterThan(0)
+    })
+    await act(async () => {
+      const deleteButtons = screen.getAllByRole('button', { name: /eliminar/i })
+      fireEvent.click(deleteButtons[deleteButtons.length - 1])
+    })
     await waitFor(() => screen.getByRole('dialog'))
     await act(async () => {
       const btns = screen.getAllByRole('button', { name: /eliminar/i })

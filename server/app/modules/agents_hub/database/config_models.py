@@ -47,8 +47,9 @@ class HubLLMConfig(HubConfigBase):
         String(50), ForeignKey("hub_providers.id"), nullable=False
     )
     model_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    temperature: Mapped[float] = mapped_column(default=0.7)
-    max_tokens: Mapped[int] = mapped_column(Integer, default=2048)
+    temperature: Mapped[float] = mapped_column(default=0.1)
+    top_p: Mapped[float] = mapped_column(default=1.0)
+    max_tokens: Mapped[int] = mapped_column(Integer, default=12000)
     api_key_secret_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     tier: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     label: Mapped[str] = mapped_column(String(255), nullable=False, default="")
@@ -117,6 +118,8 @@ class HubChatbot(HubConfigBase):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     retrieval_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="vector")
     retrieval_top_k: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
+    use_prompt_caching: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    cache_ttl: Mapped[int] = mapped_column(Integer, nullable=False, default=3600)
     kind: Mapped[str] = mapped_column(String(20), nullable=False, default="atomic")
     parent_chatbot_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

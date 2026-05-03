@@ -39,6 +39,8 @@ const DEMO_CHATBOT: Chatbot = {
   is_active: true,
   retrieval_mode: 'vector',
   retrieval_top_k: 8,
+  use_prompt_caching: false,
+  cache_ttl: 3600,
   kind: 'atomic',
   parent_chatbot_id: null,
   created_at: '2024-01-01T00:00:00Z',

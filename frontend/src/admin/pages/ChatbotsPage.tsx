@@ -18,7 +18,7 @@ import {
 
 const RETRIEVAL_MODES = [
   { value: 'vector',       label: 'Vectorial RAG',         hint: 'Recupera los fragmentos más relevantes por búsqueda semántica. Recomendado para bases de conocimiento grandes.' },
-  { value: 'long_context', label: 'Contexto largo',        hint: 'Mete todos los documentos enteros en el prompt (máx. 150k tokens). Útil para colecciones pequeñas donde importa la visión global.' },
+  { value: 'long_context', label: 'Contexto largo',        hint: 'Mete todos los documentos enteros en el prompt (máx. 128k tokens de contexto). Útil para colecciones pequeñas donde importa la visión global.' },
   { value: 'agentic',      label: 'Exploración agéntica',  hint: 'El LLM decide qué documentos leer durante la conversación usando herramientas. Sin límite de corpus, pero más lento.' },
 ] as const
 
@@ -29,6 +29,8 @@ const schema = z.object({
   is_active: z.boolean(),
   retrieval_mode: z.enum(['vector', 'long_context', 'agentic']),
   retrieval_top_k: z.number().int().min(1).max(50),
+  use_prompt_caching: z.boolean(),
+  cache_ttl: z.number().int().min(60).max(86_400),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -61,6 +63,8 @@ export function ChatbotsPage() {
         is_active: values.is_active,
         retrieval_mode: values.retrieval_mode,
         retrieval_top_k: values.retrieval_top_k,
+        use_prompt_caching: values.use_prompt_caching,
+        cache_ttl: values.cache_ttl,
         client_id: DEV_CLIENT_ID,
         llm_config_id: DEV_LLM_ID,
       }),
@@ -79,6 +83,8 @@ export function ChatbotsPage() {
         is_active: values.is_active,
         retrieval_mode: values.retrieval_mode,
         retrieval_top_k: values.retrieval_top_k,
+        use_prompt_caching: values.use_prompt_caching,
+        cache_ttl: values.cache_ttl,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['chatbots'] })
@@ -103,7 +109,16 @@ export function ChatbotsPage() {
 
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: '', kind: 'atomic', system_prompt: '', is_active: true, retrieval_mode: 'vector', retrieval_top_k: 8 },
+    defaultValues: {
+      name: '',
+      kind: 'atomic',
+      system_prompt: '',
+      is_active: true,
+      retrieval_mode: 'vector',
+      retrieval_top_k: 8,
+      use_prompt_caching: false,
+      cache_ttl: 3600,
+    },
   })
   const selectedKind = watch('kind')
   const retrievalHint = RETRIEVAL_MODES.find(m => m.value === watch('retrieval_mode'))?.hint
@@ -142,7 +157,16 @@ export function ChatbotsPage() {
     setEditing(null)
     setAssignOpen(false)
     setSelectedChildId('')
-    reset({ name: '', kind: 'atomic', system_prompt: '', is_active: true, retrieval_mode: 'vector', retrieval_top_k: 8 })
+    reset({
+      name: '',
+      kind: 'atomic',
+      system_prompt: '',
+      is_active: true,
+      retrieval_mode: 'vector',
+      retrieval_top_k: 8,
+      use_prompt_caching: false,
+      cache_ttl: 3600,
+    })
     setDialogOpen(true)
   }
 
@@ -158,6 +182,8 @@ export function ChatbotsPage() {
       is_active: c.is_active,
       retrieval_mode: c.retrieval_mode ?? 'vector',
       retrieval_top_k: c.retrieval_top_k ?? 8,
+      use_prompt_caching: c.use_prompt_caching ?? false,
+      cache_ttl: c.cache_ttl ?? 3600,
     })
     setDialogOpen(true)
   }
@@ -199,7 +225,7 @@ export function ChatbotsPage() {
     if (
       values.kind === 'atomic' &&
       values.retrieval_mode === 'long_context' &&
-      (corpusStats?.total_tokens ?? 0) > 150_000
+      (corpusStats?.total_tokens ?? 0) > 128_000
     ) {
       return
     }
@@ -215,7 +241,7 @@ export function ChatbotsPage() {
   const showLongContextHardError =
     selectedKind === 'atomic' &&
     watch('retrieval_mode') === 'long_context' &&
-    (corpusStats?.total_tokens ?? 0) > 150_000
+    (corpusStats?.total_tokens ?? 0) > 128_000
 
   const assignableChildren = chatbots.filter(
     (cb) =>
@@ -436,9 +462,37 @@ export function ChatbotsPage() {
                         <p className="text-xs text-muted-foreground mt-1">Número de fragmentos que se recuperan por consulta (1–50). Valor recomendado: 8.</p>
                       </div>
                     )}
+                    {watch('retrieval_mode') === 'long_context' && (
+                      <div className="rounded-md border bg-muted/40 p-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="use_prompt_caching"
+                            {...register('use_prompt_caching')}
+                            className="rounded"
+                          />
+                          <label htmlFor="use_prompt_caching" className="text-sm">
+                            Activar Prompt Caching
+                          </label>
+                        </div>
+                        {watch('use_prompt_caching') && (
+                          <div>
+                            <label className="text-sm font-medium">TTL de caché (segundos)</label>
+                            <input
+                              type="number"
+                              min={60}
+                              max={86400}
+                              {...register('cache_ttl', { valueAsNumber: true })}
+                              className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                            />
+                            {errors.cache_ttl && <p className="text-destructive text-xs mt-1">{errors.cache_ttl.message}</p>}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {showLongContextHardError && (
                       <p className="text-destructive text-xs mt-1">
-                        El corpus excede el límite del modo long_context (150K tokens). Reduce el corpus o cambia a agentic.
+                        El corpus excede el límite del modo long_context (128K tokens). Reduce el corpus o cambia a agentic.
                       </p>
                     )}
                   </>

@@ -10,7 +10,7 @@ class TestModelFactory:
     async def test_model_factory_returns_google_model(self) -> None:
         from server.app.modules.agents_hub.services.model_factory import get_model
 
-        mock_chatbot = Mock(llm_config_id=uuid.uuid4())
+        mock_chatbot = Mock(llm_config_id=uuid.uuid4(), use_prompt_caching=True, cache_ttl=7200)
         mock_config = Mock(
             provider="google",
             model_name="gemini-2.0-flash",
@@ -25,17 +25,20 @@ class TestModelFactory:
         mock_config_provider.get_llm_config.return_value = mock_config
 
         with patch('server.app.modules.agents_hub.services.model_factory.ChatGoogleGenerativeAI') as mock_cls:
-            mock_cls.return_value = Mock()
+            model_instance = Mock()
+            mock_cls.return_value = model_instance
             model = await get_model(uuid.uuid4(), mock_config_provider)
 
         mock_cls.assert_called_once()
         assert model is not None
+        assert getattr(model, "_prompt_caching_enabled") is True
+        assert getattr(model, "_prompt_cache_ttl") == 7200
 
     @pytest.mark.asyncio
     async def test_model_factory_returns_openai_model(self) -> None:
         from server.app.modules.agents_hub.services.model_factory import get_model
 
-        mock_chatbot = Mock(llm_config_id=uuid.uuid4())
+        mock_chatbot = Mock(llm_config_id=uuid.uuid4(), use_prompt_caching=False, cache_ttl=3600)
         mock_config = Mock(
             provider="openai",
             model_name="gpt-4o",
@@ -50,10 +53,13 @@ class TestModelFactory:
         mock_config_provider.get_llm_config.return_value = mock_config
 
         with patch('server.app.modules.agents_hub.services.model_factory.ChatOpenAI') as mock_cls:
-            mock_cls.return_value = Mock()
+            model_instance = Mock()
+            mock_cls.return_value = model_instance
             model = await get_model(uuid.uuid4(), mock_config_provider)
 
         mock_cls.assert_called_once()
+        assert getattr(model, "_prompt_caching_enabled") is False
+        assert getattr(model, "_prompt_cache_ttl") == 3600
 
     @pytest.mark.asyncio
     async def test_model_factory_switching(self) -> None:

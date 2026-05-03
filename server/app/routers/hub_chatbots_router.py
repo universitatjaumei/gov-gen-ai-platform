@@ -37,6 +37,8 @@ class ChatbotOut(BaseModel):
     is_active: bool
     retrieval_mode: str
     retrieval_top_k: int
+    use_prompt_caching: bool
+    cache_ttl: int
     kind: str
     parent_chatbot_id: uuid.UUID | None
     created_at: datetime
@@ -54,6 +56,8 @@ class ChatbotCreate(BaseModel):
     is_active: bool = True
     retrieval_mode: str = "vector"
     retrieval_top_k: int = 8
+    use_prompt_caching: bool = False
+    cache_ttl: int = 3600
     kind: str = "atomic"
 
 
@@ -64,6 +68,8 @@ class ChatbotUpdate(BaseModel):
     is_active: bool | None = None
     retrieval_mode: str | None = None
     retrieval_top_k: int | None = None
+    use_prompt_caching: bool | None = None
+    cache_ttl: int | None = None
     kind: str | None = None
     parent_chatbot_id: uuid.UUID | None = None
 
@@ -129,6 +135,8 @@ async def create_chatbot(
         is_active=body.is_active,
         retrieval_mode=body.retrieval_mode,
         retrieval_top_k=body.retrieval_top_k,
+        use_prompt_caching=body.use_prompt_caching,
+        cache_ttl=body.cache_ttl,
         kind=body.kind,
     )
     session.add(chatbot)
@@ -156,11 +164,11 @@ async def update_chatbot(
             )
         )
         total_tokens = int(total_tokens_row.scalar_one() or 0)
-        if total_tokens > 150_000:
+        if total_tokens > 128_000:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
-                    "El corpus excede el límite del modo long_context (150K tokens). "
+                    "El corpus excede el límite del modo long_context (128K tokens). "
                     "Reduce el corpus o cambia a agentic."
                 ),
             )

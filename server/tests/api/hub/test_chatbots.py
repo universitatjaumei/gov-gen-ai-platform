@@ -38,6 +38,8 @@ def _make_chatbot(
         is_active=is_active,
         retrieval_mode="agentic",
         retrieval_top_k=8,
+        use_prompt_caching=False,
+        cache_ttl=3600,
         kind=kind,
         parent_chatbot_id=parent_chatbot_id,
         created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
@@ -272,7 +274,7 @@ class TestChatbotRetrievalMode:
                 json={"retrieval_mode": "long_context"},
             )
             assert resp.status_code == 400
-            assert "150K tokens" in resp.json()["detail"]
+            assert "128K tokens" in resp.json()["detail"]
         finally:
             app.dependency_overrides.pop(get_async_session, None)
 

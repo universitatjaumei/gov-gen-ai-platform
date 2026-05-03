@@ -5,11 +5,13 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from server.app.modules.agents_hub.database.config_models import HubChatbot
 from server.app.modules.agents_hub.database.operational_models import HubDocument
 from server.app.modules.agents_hub.services.retrieval.types import RetrievalContext, Source
 
 
-LONG_CONTEXT_TOKEN_LIMIT = 150_000
+LONG_CONTEXT_TOKEN_LIMIT = 128_000
+PROMPT_CACHE_BLOCK_MIN_TOKENS = 32_000
 
 
 class LongContextRetrievalStrategy:
@@ -25,6 +27,10 @@ class LongContextRetrievalStrategy:
         chatbot_id: uuid.UUID,
         language: str | None = None,
     ) -> RetrievalContext:
+        chatbot = await self._session.get(HubChatbot, chatbot_id)
+        use_prompt_caching = bool(getattr(chatbot, "use_prompt_caching", False))
+        cache_ttl = int(getattr(chatbot, "cache_ttl", 3600) or 3600)
+
         stmt = select(HubDocument).where(HubDocument.chatbot_id == chatbot_id)
         if language:
             stmt = stmt.where(HubDocument.language == language)
@@ -39,21 +45,29 @@ class LongContextRetrievalStrategy:
                 f"(limite {self._token_limit}). Cambia el modo a 'agentic' o 'vector'."
             )
 
-        sources = [
-            Source(
-                document_id=d.id,
-                title=d.title,
-                url=d.canonical_url,
-                excerpt=d.markdown_content,
-                score=1.0,
-                metadata={
-                    "language": d.language,
-                    "section_path": d.section_path,
-                    "cacheable": True,
-                },
+        sources = []
+        for d in documents:
+            is_cache_block = use_prompt_caching and int(d.token_count or 0) > PROMPT_CACHE_BLOCK_MIN_TOKENS
+            excerpt = d.markdown_content
+            if is_cache_block:
+                excerpt = f"[CACHE_BLOCK ttl={cache_ttl}s]\n{excerpt}"
+
+            sources.append(
+                Source(
+                    document_id=d.id,
+                    title=d.title,
+                    url=d.canonical_url,
+                    excerpt=excerpt,
+                    score=1.0,
+                    metadata={
+                        "language": d.language,
+                        "section_path": d.section_path,
+                        "cacheable": True,
+                        "cache_block": is_cache_block,
+                        "cache_ttl": cache_ttl if is_cache_block else None,
+                    },
+                )
             )
-            for d in documents
-        ]
         return RetrievalContext(sources=sources, mode=self.mode, total_tokens=total)
 
     def get_agent_tools(self) -> list:

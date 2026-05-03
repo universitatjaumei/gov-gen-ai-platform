@@ -5,6 +5,7 @@ export interface LLMConfig {
   provider: string
   model_name: string
   temperature: number
+  top_p: number
   max_tokens: number
   api_key_secret_name: string | null
   tier: number
@@ -16,6 +17,7 @@ export interface LLMConfigCreate {
   provider: string
   model_name: string
   temperature?: number
+  top_p?: number
   max_tokens?: number
   api_key_secret_name?: string | null
   tier?: number
@@ -30,6 +32,7 @@ export interface LLMConfigUpdate {
   api_key_secret_name?: string | null
   is_default?: boolean
   temperature?: number
+  top_p?: number
   max_tokens?: number
 }
 

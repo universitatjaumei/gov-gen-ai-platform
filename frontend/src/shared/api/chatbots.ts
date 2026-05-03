@@ -10,6 +10,8 @@ export interface Chatbot {
   is_active: boolean
   retrieval_mode: 'vector' | 'long_context' | 'agentic'
   retrieval_top_k: number
+  use_prompt_caching: boolean
+  cache_ttl: number
   kind: 'atomic' | 'router'
   parent_chatbot_id: string | null
   created_at: string
@@ -25,6 +27,8 @@ export interface ChatbotCreate {
   is_active?: boolean
   retrieval_mode?: 'vector' | 'long_context' | 'agentic'
   retrieval_top_k?: number
+  use_prompt_caching?: boolean
+  cache_ttl?: number
   kind?: 'atomic' | 'router'
 }
 
@@ -35,6 +39,8 @@ export interface ChatbotUpdate {
   is_active?: boolean
   retrieval_mode?: 'vector' | 'long_context' | 'agentic'
   retrieval_top_k?: number
+  use_prompt_caching?: boolean
+  cache_ttl?: number
   kind?: 'atomic' | 'router'
   parent_chatbot_id?: string | null
 }

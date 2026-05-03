@@ -20,6 +20,18 @@ import {
 } from '@/shared/api/llmConfigs'
 
 const TIERS = [1, 2, 3] as const
+const DEFAULT_MAX_TOKENS = 12000
+const DEFAULT_TEMPERATURE_BY_TIER: Record<number, number> = {
+  1: 0.1,
+  2: 0.0,
+  3: 0.0,
+}
+
+const DEFAULT_API_KEY_BY_PROVIDER: Record<string, string> = {
+  google: 'GOOGLE_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
+  openai: 'OPENAI_API_KEY',
+}
 
 const TIER_STYLES: Record<number, string> = {
   1: 'bg-green-100 text-green-700',
@@ -35,9 +47,18 @@ const schema = z.object({
   api_key_secret_name: z.string().optional(),
   is_default: z.boolean(),
   temperature: z.number().min(0).max(2),
+  top_p: z.number().min(0).max(1),
   max_tokens: z.number().int().min(1),
 })
 type FormValues = z.infer<typeof schema>
+
+function getDefaultApiKeySecret(providerId: string): string {
+  return DEFAULT_API_KEY_BY_PROVIDER[providerId] ?? ''
+}
+
+function getDefaultTemperatureForTier(tier: number): number {
+  return DEFAULT_TEMPERATURE_BY_TIER[tier] ?? 0.1
+}
 
 export function LLMConfigsPage() {
   const { t } = useTranslation('admin')
@@ -79,9 +100,19 @@ export function LLMConfigsPage() {
 
   const isPending = createMutation.isPending || updateMutation.isPending
 
-  const { register, handleSubmit, reset, control, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, reset, control, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { provider: '', model_name: '', tier: 1, label: '', api_key_secret_name: '', is_default: false, temperature: 0.7, max_tokens: 2048 },
+    defaultValues: {
+      provider: '',
+      model_name: '',
+      tier: 1,
+      label: '',
+      api_key_secret_name: '',
+      is_default: false,
+      temperature: getDefaultTemperatureForTier(1),
+      top_p: 1,
+      max_tokens: DEFAULT_MAX_TOKENS,
+    },
   })
 
   const currentProvider = useWatch({ control, name: 'provider' })
@@ -94,14 +125,35 @@ export function LLMConfigsPage() {
   function openCreate() {
     setEditing(null)
     setIsCustomModel(false)
-    reset({ provider: providers[0]?.id ?? '', model_name: '', tier: 1, label: '', api_key_secret_name: '', is_default: false, temperature: 0.7, max_tokens: 2048 })
+    const defaultProvider = providers[0]?.id ?? ''
+    reset({
+      provider: defaultProvider,
+      model_name: '',
+      tier: 1,
+      label: '',
+      api_key_secret_name: getDefaultApiKeySecret(defaultProvider),
+      is_default: false,
+      temperature: getDefaultTemperatureForTier(1),
+      top_p: 1,
+      max_tokens: DEFAULT_MAX_TOKENS,
+    })
     setDialogOpen(true)
   }
 
   function openEdit(c: LLMConfig) {
     setEditing(c)
     setIsCustomModel(false)
-    reset({ provider: c.provider, model_name: c.model_name, tier: c.tier, label: c.label, api_key_secret_name: c.api_key_secret_name ?? '', is_default: c.is_default, temperature: c.temperature, max_tokens: c.max_tokens })
+    reset({
+      provider: c.provider,
+      model_name: c.model_name,
+      tier: c.tier,
+      label: c.label,
+      api_key_secret_name: c.api_key_secret_name ?? getDefaultApiKeySecret(c.provider),
+      is_default: c.is_default,
+      temperature: c.temperature,
+      top_p: c.top_p ?? 1,
+      max_tokens: c.max_tokens,
+    })
     setDialogOpen(true)
   }
 
@@ -123,6 +175,8 @@ export function LLMConfigsPage() {
       setTestingId(null)
     }
   }
+
+  const tierField = register('tier', { valueAsNumber: true })
 
   return (
     <div className="space-y-8">
@@ -153,7 +207,7 @@ export function LLMConfigsPage() {
                   <th className="text-left px-4 py-3 font-medium">{t('hub.llm_config_tier')}</th>
                   <th className="text-left px-4 py-3 font-medium">{t('hub.llm_config_is_default')}</th>
                   <th className="text-left px-4 py-3 font-medium">{t('hub.llm_config_api_key')}</th>
-                  <th className="px-4 py-3" />
+                  <th className="text-right px-4 py-3 font-medium">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -193,6 +247,12 @@ export function LLMConfigsPage() {
                               </span>
                             )
                           )}
+                          <button
+                            onClick={() => openEdit(c)}
+                            className="px-2 py-1 border rounded text-xs hover:bg-accent"
+                          >
+                            {tc('edit')}
+                          </button>
                           <button
                             onClick={() => { setDeleteTarget(c); setDeleteError('') }}
                             className="px-2 py-1 border rounded text-xs text-destructive hover:bg-destructive/10"
@@ -248,7 +308,16 @@ export function LLMConfigsPage() {
                   </div>
                   <div>
                     <label className="text-sm font-medium">{t('hub.llm_config_provider')}</label>
-                    <select {...register('provider')} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background">
+                    <select
+                      {...register('provider')}
+                      className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                      onChange={(e) => {
+                        register('provider').onChange(e)
+                        if (!editing) {
+                          setValue('api_key_secret_name', getDefaultApiKeySecret(e.target.value))
+                        }
+                      }}
+                    >
                       <option value="" disabled>-- {t('hub.llm_config_provider')} --</option>
                       {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
@@ -297,23 +366,37 @@ export function LLMConfigsPage() {
                   </div>
                   <div>
                     <label className="text-sm font-medium">{t('hub.llm_config_tier')}</label>
-                    <select {...register('tier', { valueAsNumber: true })} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background">
+                    <select
+                      {...tierField}
+                      className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                      onChange={(e) => {
+                        tierField.onChange(e)
+                        if (!editing) {
+                          setValue('temperature', getDefaultTemperatureForTier(Number(e.target.value)))
+                        }
+                      }}
+                    >
                       {TIERS.map(n => <option key={n} value={n}>Tier {n}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="text-sm font-medium">{t('hub.llm_config_api_key')}</label>
-                    <input {...register('api_key_secret_name')} placeholder="GOOGLE_API_KEY" className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background font-mono" />
+                    <input {...register('api_key_secret_name')} placeholder="GOOGLE_API_KEY / OPENROUTER_API_KEY" className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background font-mono" />
                     <p className="text-xs text-muted-foreground mt-1">Nombre de la variable de entorno que contiene la clave (opcional si el proveedor ya la tiene).</p>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="text-sm font-medium">Temperature</label>
                       <input type="number" step="0.1" {...register('temperature', { valueAsNumber: true })} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" />
                     </div>
                     <div>
-                      <label className="text-sm font-medium">Max tokens</label>
+                      <label className="text-sm font-medium">Top P</label>
+                      <input type="number" step="0.1" min="0" max="1" {...register('top_p', { valueAsNumber: true })} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Max tokens (salida)</label>
                       <input type="number" {...register('max_tokens', { valueAsNumber: true })} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" />
+                      <p className="text-xs text-muted-foreground mt-1">Por defecto: 12000 (salida). La ventana de contexto para long context se controla aparte (128K).</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">

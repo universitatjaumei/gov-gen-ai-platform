@@ -147,6 +147,7 @@ class LLMConfigOut(BaseModel):
     provider: str
     model_name: str
     temperature: float
+    top_p: float
     max_tokens: int
     api_key_secret_name: str | None
     tier: int
@@ -159,8 +160,9 @@ class LLMConfigOut(BaseModel):
 class LLMConfigCreate(BaseModel):
     provider: str
     model_name: str
-    temperature: float = 0.7
-    max_tokens: int = 2048
+    temperature: float = 0.1
+    top_p: float = 1.0
+    max_tokens: int = 12000
     api_key_secret_name: str | None = None
     tier: int = 1
     label: str = ""
@@ -174,6 +176,7 @@ class LLMConfigUpdate(BaseModel):
     api_key_secret_name: str | None = None
     is_default: bool | None = None
     temperature: float | None = None
+    top_p: float | None = None
     max_tokens: int | None = None
 
 
@@ -207,7 +210,12 @@ async def create_llm_config(
                 detail=f"Ya existe una configuración por defecto para el tier {body.tier}",
             )
 
-    config = HubLLMConfig(**body.model_dump())
+    payload = body.model_dump()
+    # Defaults operativos para precisión: Tier 1 => 0.1, Tier 2/3 => 0.0
+    if "temperature" not in body.model_fields_set:
+        payload["temperature"] = 0.1 if body.tier == 1 else 0.0
+
+    config = HubLLMConfig(**payload)
     session.add(config)
     await session.commit()
     await session.refresh(config)

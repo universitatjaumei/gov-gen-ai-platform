@@ -10,6 +10,12 @@ from server.app.modules.agents_hub.database.config_models import HubLLMConfig
 
 from server.app.modules.agents_hub.services.config_provider import ConfigProvider
 
+DEFAULT_API_KEY_ENV_BY_PROVIDER_ID: dict[str, str] = {
+    "google": "GOOGLE_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "openai": "OPENAI_API_KEY",
+}
+
 
 async def get_model_for_tier(tier: int, config_provider: ConfigProvider):
     """Devuelve el modelo marcado como is_default para el tier indicado."""
@@ -40,19 +46,33 @@ async def get_model(chatbot_id: uuid.UUID, config_provider: ConfigProvider):
     if config is None:
         raise ValueError(f"LLM config not found for chatbot {chatbot_id}")
 
-    return _build_model(config)
+    return _build_model(config, chatbot=chatbot)
 
 
-def _build_model(config: HubLLMConfig):
+def _apply_prompt_caching(model, chatbot) -> None:
+    if not chatbot:
+        return
+    enabled = bool(getattr(chatbot, "use_prompt_caching", False))
+    ttl = int(getattr(chatbot, "cache_ttl", 3600) or 3600)
+    setattr(model, "_prompt_caching_enabled", enabled)
+    setattr(model, "_prompt_cache_ttl", ttl)
+
+def _build_model(config: HubLLMConfig, chatbot=None):
     """Construye la instancia LLM a partir del config y su proveedor."""
     provider = getattr(config, "provider_rel", None)
     if not provider:
         raise ValueError(f"Provider not loaded or missing for config {config.id}")
 
-    # api_key is primarily from the provider table now. We can still allow api_key_secret_name as fallback if needed.
+    provider_id = (getattr(provider, "id", None) or getattr(config, "provider", "") or "").lower()
+    configured_secret_name = (config.api_key_secret_name or "").strip()
+    fallback_secret_name = DEFAULT_API_KEY_ENV_BY_PROVIDER_ID.get(provider_id)
+
+    # Prioridad: api_key explícita del proveedor -> variable configurada en la config -> fallback por proveedor.
     api_key = provider.api_key
-    if not api_key and config.api_key_secret_name:
-        api_key = os.getenv(config.api_key_secret_name) or None
+    if not api_key and configured_secret_name:
+        api_key = os.getenv(configured_secret_name) or None
+    if not api_key and fallback_secret_name:
+        api_key = os.getenv(fallback_secret_name) or None
 
     ptype = provider.provider_type
 
@@ -60,16 +80,20 @@ def _build_model(config: HubLLMConfig):
         kwargs: dict = dict(
             model=config.model_name,
             temperature=config.temperature,
+            top_p=getattr(config, "top_p", 1.0),
             max_output_tokens=config.max_tokens,
         )
         if api_key:
             kwargs["google_api_key"] = api_key
-        return ChatGoogleGenerativeAI(**kwargs)
+        model = ChatGoogleGenerativeAI(**kwargs)
+        _apply_prompt_caching(model, chatbot)
+        return model
         
     elif ptype == "openai_compatible":
         kwargs = dict(
             model=config.model_name,
             temperature=config.temperature,
+            top_p=getattr(config, "top_p", 1.0),
             max_tokens=config.max_tokens,
         )
         if api_key:
@@ -77,7 +101,9 @@ def _build_model(config: HubLLMConfig):
         # Use base_url from provider if available
         if provider.base_url:
             kwargs["base_url"] = provider.base_url
-        return ChatOpenAI(**kwargs)
+        model = ChatOpenAI(**kwargs)
+        _apply_prompt_caching(model, chatbot)
+        return model
         
     elif ptype == "ollama":
         from langchain_community.chat_models import ChatOllama
@@ -85,10 +111,13 @@ def _build_model(config: HubLLMConfig):
         kwargs = dict(
             model=config.model_name,
             temperature=config.temperature,
+            top_p=getattr(config, "top_p", 1.0),
         )
         if provider.base_url:
             kwargs["base_url"] = provider.base_url
-        return ChatOllama(**kwargs)
+        model = ChatOllama(**kwargs)
+        _apply_prompt_caching(model, chatbot)
+        return model
         
     else:
         raise ValueError(f"Provider type desconocido: {ptype}")
