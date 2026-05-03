@@ -293,9 +293,19 @@ async def test_llm_connection(
     if not config:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found")
 
-    model = _build_model(config)
-    t0 = time.monotonic()
-    await model.ainvoke([HumanMessage(content="test")])
-    latency_ms = int((time.monotonic() - t0) * 1000)
-
-    return {"ok": True, "latency_ms": latency_ms}
+    try:
+        model = _build_model(config)
+        t0 = time.monotonic()
+        await model.ainvoke([HumanMessage(content="test")])
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        return {"ok": True, "latency_ms": latency_ms}
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Error al probar conexión LLM: {exc}",
+        ) from exc

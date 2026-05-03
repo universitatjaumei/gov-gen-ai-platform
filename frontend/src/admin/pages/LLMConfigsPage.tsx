@@ -52,8 +52,30 @@ const schema = z.object({
 })
 type FormValues = z.infer<typeof schema>
 
-function getDefaultApiKeySecret(providerId: string): string {
-  return DEFAULT_API_KEY_BY_PROVIDER[providerId] ?? ''
+function getDefaultApiKeySecret(
+  providerId: string,
+  providers: HubProvider[] = [],
+): string {
+  const byId = DEFAULT_API_KEY_BY_PROVIDER[providerId]
+  if (byId) return byId
+
+  const provider = providers.find((p) => p.id === providerId)
+  if (!provider) return ''
+
+  const pid = (provider.id || '').toLowerCase()
+  const pname = (provider.name || '').toLowerCase()
+  const pbase = (provider.base_url || '').toLowerCase()
+
+  if (pid.includes('openrouter') || pname.includes('openrouter') || pbase.includes('openrouter.ai')) {
+    return 'OPENROUTER_API_KEY'
+  }
+  if (pid.includes('openai') || pname.includes('openai')) {
+    return 'OPENAI_API_KEY'
+  }
+  if (pid.includes('google') || pname.includes('google')) {
+    return 'GOOGLE_API_KEY'
+  }
+  return ''
 }
 
 function getDefaultTemperatureForTier(tier: number): number {
@@ -131,7 +153,7 @@ export function LLMConfigsPage() {
       model_name: '',
       tier: 1,
       label: '',
-      api_key_secret_name: getDefaultApiKeySecret(defaultProvider),
+      api_key_secret_name: getDefaultApiKeySecret(defaultProvider, providers),
       is_default: false,
       temperature: getDefaultTemperatureForTier(1),
       top_p: 1,
@@ -148,7 +170,7 @@ export function LLMConfigsPage() {
       model_name: c.model_name,
       tier: c.tier,
       label: c.label,
-      api_key_secret_name: c.api_key_secret_name ?? getDefaultApiKeySecret(c.provider),
+      api_key_secret_name: c.api_key_secret_name ?? getDefaultApiKeySecret(c.provider, providers),
       is_default: c.is_default,
       temperature: c.temperature,
       top_p: c.top_p ?? 1,
@@ -314,7 +336,7 @@ export function LLMConfigsPage() {
                       onChange={(e) => {
                         register('provider').onChange(e)
                         if (!editing) {
-                          setValue('api_key_secret_name', getDefaultApiKeySecret(e.target.value))
+                          setValue('api_key_secret_name', getDefaultApiKeySecret(e.target.value, providers))
                         }
                       }}
                     >

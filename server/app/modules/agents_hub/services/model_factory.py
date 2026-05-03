@@ -63,9 +63,20 @@ def _build_model(config: HubLLMConfig, chatbot=None):
     if not provider:
         raise ValueError(f"Provider not loaded or missing for config {config.id}")
 
-    provider_id = (getattr(provider, "id", None) or getattr(config, "provider", "") or "").lower()
+    provider_id = str(getattr(provider, "id", None) or getattr(config, "provider", "") or "").lower()
+    provider_name = str(getattr(provider, "name", None) or "").lower()
+    provider_base_url = str(getattr(provider, "base_url", None) or "").lower()
     configured_secret_name = (config.api_key_secret_name or "").strip()
     fallback_secret_name = DEFAULT_API_KEY_ENV_BY_PROVIDER_ID.get(provider_id)
+
+    # Detección robusta de OpenRouter aunque el id no sea exactamente "openrouter".
+    is_openrouter = (
+        "openrouter" in provider_id
+        or "openrouter" in provider_name
+        or "openrouter.ai" in provider_base_url
+    )
+    if not fallback_secret_name and is_openrouter:
+        fallback_secret_name = "OPENROUTER_API_KEY"
 
     # Prioridad: api_key explícita del proveedor -> variable configurada en la config -> fallback por proveedor.
     api_key = provider.api_key
@@ -101,6 +112,14 @@ def _build_model(config: HubLLMConfig, chatbot=None):
         # Use base_url from provider if available
         if provider.base_url:
             kwargs["base_url"] = provider.base_url
+
+        if not kwargs.get("api_key"):
+            raise ValueError(
+                "Falta API key para provider openai_compatible. "
+                "Configura `api_key` en el proveedor o `api_key_secret_name` "
+                "(por ejemplo OPENROUTER_API_KEY / OPENAI_API_KEY)."
+            )
+
         model = ChatOpenAI(**kwargs)
         _apply_prompt_caching(model, chatbot)
         return model
