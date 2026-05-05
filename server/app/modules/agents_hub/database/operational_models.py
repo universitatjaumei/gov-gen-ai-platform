@@ -114,6 +114,8 @@ class HubIngestionSource(HubOperationalBase):
     )
     last_content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     language: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    spider_type: Mapped[str | None] = mapped_column(String(50), nullable=True, default="generic")
+    config_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(20), default="active")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

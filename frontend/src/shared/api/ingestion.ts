@@ -81,7 +81,7 @@ export async function fetchSources(chatbotId: string): Promise<IngestionSource[]
 
 export async function createSource(
   chatbotId: string,
-  body: { url: string; label?: string; check_interval_hours?: number; language?: string },
+  body: { url: string; label?: string; check_interval_hours?: number; language?: string; config_json?: Record<string, unknown> },
 ): Promise<IngestionSource> {
   const res = await fetch(`${API_BASE}/api/v1/hub/ingestion/${chatbotId}/sources`, {
     method: 'POST',
@@ -197,4 +197,23 @@ export async function deleteDocument(chatbotId: string, documentId: string): Pro
     { method: 'DELETE', headers: authHeaders() },
   )
   if (!res.ok) throw new Error('Failed to delete document')
+}
+
+export interface AnalysisResult {
+  proposed_selectors: Record<string, string | null>
+  confidence: number
+  sample_extraction: Record<string, string>
+}
+
+export async function analyzeHtml(html: string, urlHint: string): Promise<AnalysisResult> {
+  const res = await fetch(`${API_BASE}/api/v1/hub/ingestion/analyze-html`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ html, url_hint: urlHint }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => null)
+    throw new Error(err?.detail || `Error al analizar HTML (${res.status})`)
+  }
+  return res.json()
 }

@@ -69,27 +69,21 @@ para y consulta si pertenece al servidor o al frontend.
 
 ## Pruebas manuales después de cada prompt
 
-Al terminar la implementación de un prompt y **antes de marcarlo como COMPLETADO** en el plan, genera:
+Genera pruebas manuales **únicamente cuando el prompt incluye cambios que exigen interacción humana con la interfaz de usuario** (navegador). Si el prompt es exclusivamente backend — tests, servicios, modelos, migraciones, infraestructura, endpoints de API — no generes ningún archivo `.bat` ni bloque de instrucciones.
 
-1. Un **archivo `.bat`** con los comandos a ejecutar.
-2. Un bloque de **instrucciones en texto** dirigidas a un usuario no programador.
+### Qué exige pruebas manuales
 
-### Qué entra en las pruebas manuales (y qué no)
-
-Las pruebas manuales cubren **solo lo que los tests automáticos no pueden verificar**:
+Solo estas situaciones justifican un archivo `.bat` e instrucciones:
 
 - Flujos de usuario en el frontend (navegación, formularios, visualización de datos).
 - Comportamiento visual: que algo aparece, desaparece, muestra el texto correcto.
 - Interacciones end-to-end que cruzan frontend + API + BD y no tienen test de integración.
-- Comprobaciones de migración de BD cuando el prompt incluye una migración nueva
-  (`alembic upgrade head` y verificar que el servidor arranca sin errores).
-- Smoke check de que el servidor responde (`curl /health`) cuando el prompt toca
-  arranque, configuración o infraestructura.
 
-**No incluyas** en las pruebas manuales:
-- Ejecutar la suite de tests unitarios o de integración — eso lo hacen los tests automáticos.
-- Repetir comprobaciones que ya cubre un test existente.
-- Pasos genéricos como "verifica que no hay errores en los logs" sin indicar qué buscar exactamente.
+### Qué NO necesita pruebas manuales
+
+- Código exclusivamente backend: tests unitarios, tests de integración, servicios, modelos ORM, workers, migraciones de BD, endpoints de API sin UI asociada.
+- Comprobaciones que ya cubren los tests automáticos.
+- Infraestructura, configuración o scripts sin impacto visual.
 
 ### Archivo .bat
 
@@ -150,6 +144,28 @@ Tras generar el `.bat`, muestra en la respuesta un bloque con instrucciones senc
 ```
 
 Las instrucciones deben ser **accionables y específicas**: rutas reales, valores de ejemplo, resultados esperados. No sirve "comprobar que funciona".
+
+---
+
+## Migraciones Alembic: aplicar automáticamente
+
+Cuando un prompt cree o modifique ficheros en `server/migrations/versions/`, **aplica la migración
+al terminar** ejecutando desde `server/`:
+
+```
+uv run alembic upgrade <revision_id>
+```
+
+donde `<revision_id>` es el ID de la última migración creada en ese prompt.
+
+**Si la BD no está arrancada** (error de conexión), detente y pide al usuario que la encienda
+antes de continuar:
+
+> "La base de datos no responde. Arranca Docker Desktop y ejecuta `docker compose up -d db`
+> (o el servicio equivalente), y dime cuando esté lista para aplicar la migración."
+
+Una vez la BD responda, aplica la migración y muestra el resultado de `alembic current`
+para confirmar que la revisión ha quedado registrada.
 
 ---
 

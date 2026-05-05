@@ -40,6 +40,7 @@ class IngestionSourceCreate(BaseModel):
     label: str | None = None
     check_interval_hours: int = Field(24, ge=1, le=168)
     language: str | None = None
+    config_json: dict = Field(default_factory=dict)
 
     @field_validator("url")
     @classmethod
@@ -54,7 +55,53 @@ class IngestionSourceUpdate(BaseModel):
     check_interval_hours: int | None = Field(None, ge=1, le=168)
     status: Literal["active", "paused"] | None = None
 
+
+class AnalyzeHtmlRequest(BaseModel):
+    html: str
+    url_hint: str = ""
+
+
 router = APIRouter(prefix="/hub/ingestion", tags=["hub-ingestion"])
+
+
+async def _get_llm_service(session: AsyncSession = Depends(get_async_session)):
+    from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
+    from server.app.modules.agents_hub.services.model_factory import get_model_for_tier
+    from server.app.modules.agents_hub.services.html_analyzer_service import LangChainLLMAdapter
+
+    provider = LocalConfigProvider(session)
+    model = await get_model_for_tier(1, provider)
+    return LangChainLLMAdapter(model)
+
+
+@router.post("/analyze-html", status_code=status.HTTP_200_OK)
+async def analyze_html(
+    body: AnalyzeHtmlRequest,
+    current_user: UserInfo = Depends(get_current_user),
+    llm_service=Depends(_get_llm_service),
+):
+    """Propone selectores CSS para el contenido principal de un HTML institucional.
+
+    Deploy: cloud
+    """
+    from server.app.modules.agents_hub.services.html_analyzer_service import (
+        HtmlAnalyzerService,
+        EmptyHtmlError,
+    )
+
+    service = HtmlAnalyzerService(llm_service=llm_service)
+    try:
+        result = await service.analyze(html=body.html, url_hint=body.url_hint)
+    except EmptyHtmlError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El HTML no puede estar vacío.",
+        )
+    return {
+        "proposed_selectors": result.proposed_selectors,
+        "confidence": result.confidence,
+        "sample_extraction": result.sample_extraction,
+    }
 
 
 @router.get("/{chatbot_id}/jobs")
@@ -315,6 +362,7 @@ async def create_source(
         label=body.label,
         check_interval_hours=body.check_interval_hours,
         language=body.language,
+        config_json=body.config_json,
     )
     session.add(source)
     await session.commit()
