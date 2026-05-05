@@ -37,12 +37,19 @@ const DEMO_CHATBOT: Chatbot = {
   system_prompt: 'Eres útil.',
   sources: [],
   is_active: true,
-  retrieval_mode: 'vector',
+  retrieval_mode: 'RAG',
   retrieval_top_k: 8,
   use_prompt_caching: false,
   cache_ttl: 3600,
   kind: 'atomic',
   parent_chatbot_id: null,
+  public_graph_profile: 'PUBLIC_KB_RICH',
+  language_mode: 'prefer',
+  quality_threshold: 0.6,
+  min_retrieval_results: 2,
+  min_retrieval_score: 0.25,
+  reranker_enabled: true,
+  answer_template: 'generic',
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
 }
@@ -84,8 +91,8 @@ function renderPage(chatbots: object[] = [], children: object[] = []) {
           total_documents: 2,
           total_tokens: 120000,
           by_language: { es: 100000, ca: 20000 },
-          recommended_mode: 'agentic',
-          recommendation_reason: 'Recomendado agentic para este tamaño de corpus.',
+          recommended_mode: 'MD_AGENT_SELECTOR',
+          recommendation_reason: 'Recomendado MD_AGENT_SELECTOR para este tamaño de corpus.',
         }),
       }
     }
@@ -245,7 +252,7 @@ describe('ChatbotsPage', () => {
     await openEditDialog(DEMO_CHATBOT, [DEMO_CHATBOT], [])
     await waitFor(() => {
       expect(screen.getByText(/sugerido:/i)).toBeInTheDocument()
-      expect(screen.getByText(/recomendado agentic/i)).toBeInTheDocument()
+      expect(screen.getByText(/recomendado md_agent_selector/i)).toBeInTheDocument()
     })
   })
 
@@ -255,7 +262,7 @@ describe('ChatbotsPage', () => {
 
     const retrievalSelect = screen.getAllByRole('combobox')[1]
     await act(async () => {
-      fireEvent.change(retrievalSelect, { target: { value: 'vector' } })
+      fireEvent.change(retrievalSelect, { target: { value: 'RAG' } })
     })
 
     expect(screen.getByText(/modo distinto del recomendado/i)).toBeInTheDocument()
@@ -269,7 +276,7 @@ describe('ChatbotsPage', () => {
 
     const retrievalSelect = screen.getAllByRole('combobox')[1]
     await act(async () => {
-      fireEvent.change(retrievalSelect, { target: { value: 'agentic' } })
+      fireEvent.change(retrievalSelect, { target: { value: 'MD_AGENT_SELECTOR' } })
     })
 
     expect(screen.queryByRole('button', { name: /recalcular chunks/i })).not.toBeInTheDocument()

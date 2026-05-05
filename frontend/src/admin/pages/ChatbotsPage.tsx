@@ -17,9 +17,9 @@ import {
 } from '@/shared/api/chatbots'
 
 const RETRIEVAL_MODES = [
-  { value: 'vector',       label: 'Vectorial RAG',         hint: 'Recupera los fragmentos más relevantes por búsqueda semántica. Recomendado para bases de conocimiento grandes.' },
-  { value: 'long_context', label: 'Contexto largo',        hint: 'Mete todos los documentos enteros en el prompt (máx. 128k tokens de contexto). Útil para colecciones pequeñas donde importa la visión global.' },
-  { value: 'agentic',      label: 'Exploración agéntica',  hint: 'El LLM decide qué documentos leer durante la conversación usando herramientas. Sin límite de corpus, pero más lento.' },
+  { value: 'RAG',               label: 'Vectorial RAG',         hint: 'Recupera los fragmentos más relevantes por búsqueda semántica. Recomendado para bases de conocimiento grandes.' },
+  { value: 'MD_LONG_CONTEXT',   label: 'Contexto largo',        hint: 'Mete todos los documentos enteros en el prompt (máx. 128k tokens de contexto). Útil para colecciones pequeñas donde importa la visión global.' },
+  { value: 'MD_AGENT_SELECTOR', label: 'Exploración agéntica',  hint: 'El LLM decide qué documentos leer durante la conversación usando herramientas. Sin límite de corpus, pero más lento.' },
 ] as const
 
 const schema = z.object({
@@ -27,10 +27,17 @@ const schema = z.object({
   kind: z.enum(['atomic', 'router']),
   system_prompt: z.string().min(1),
   is_active: z.boolean(),
-  retrieval_mode: z.enum(['vector', 'long_context', 'agentic']),
+  retrieval_mode: z.enum(['RAG', 'MD_LONG_CONTEXT', 'MD_AGENT_SELECTOR']),
   retrieval_top_k: z.number().int().min(1).max(50),
   use_prompt_caching: z.boolean(),
   cache_ttl: z.number().int().min(60).max(86_400),
+  public_graph_profile: z.string(),
+  language_mode: z.string(),
+  quality_threshold: z.number().min(0).max(1),
+  min_retrieval_results: z.number().int().min(1).max(20),
+  min_retrieval_score: z.number().min(0).max(1),
+  reranker_enabled: z.boolean(),
+  answer_template: z.string(),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -67,6 +74,13 @@ export function ChatbotsPage() {
         cache_ttl: values.cache_ttl,
         client_id: DEV_CLIENT_ID,
         llm_config_id: DEV_LLM_ID,
+        public_graph_profile: values.public_graph_profile,
+        language_mode: values.language_mode,
+        quality_threshold: values.quality_threshold,
+        min_retrieval_results: values.min_retrieval_results,
+        min_retrieval_score: values.min_retrieval_score,
+        reranker_enabled: values.reranker_enabled,
+        answer_template: values.answer_template,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['chatbots'] })
@@ -85,6 +99,13 @@ export function ChatbotsPage() {
         retrieval_top_k: values.retrieval_top_k,
         use_prompt_caching: values.use_prompt_caching,
         cache_ttl: values.cache_ttl,
+        public_graph_profile: values.public_graph_profile,
+        language_mode: values.language_mode,
+        quality_threshold: values.quality_threshold,
+        min_retrieval_results: values.min_retrieval_results,
+        min_retrieval_score: values.min_retrieval_score,
+        reranker_enabled: values.reranker_enabled,
+        answer_template: values.answer_template,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['chatbots'] })
@@ -114,10 +135,17 @@ export function ChatbotsPage() {
       kind: 'atomic',
       system_prompt: '',
       is_active: true,
-      retrieval_mode: 'vector',
+      retrieval_mode: 'RAG',
       retrieval_top_k: 8,
       use_prompt_caching: false,
       cache_ttl: 3600,
+      public_graph_profile: 'PUBLIC_KB_RICH',
+      language_mode: 'prefer',
+      quality_threshold: 0.6,
+      min_retrieval_results: 2,
+      min_retrieval_score: 0.25,
+      reranker_enabled: true,
+      answer_template: 'generic',
     },
   })
   const selectedKind = watch('kind')
@@ -162,10 +190,17 @@ export function ChatbotsPage() {
       kind: 'atomic',
       system_prompt: '',
       is_active: true,
-      retrieval_mode: 'vector',
+      retrieval_mode: 'RAG',
       retrieval_top_k: 8,
       use_prompt_caching: false,
       cache_ttl: 3600,
+      public_graph_profile: 'PUBLIC_KB_RICH',
+      language_mode: 'prefer',
+      quality_threshold: 0.6,
+      min_retrieval_results: 2,
+      min_retrieval_score: 0.25,
+      reranker_enabled: true,
+      answer_template: 'generic',
     })
     setDialogOpen(true)
   }
@@ -180,10 +215,17 @@ export function ChatbotsPage() {
       kind: c.kind ?? 'atomic',
       system_prompt: c.system_prompt,
       is_active: c.is_active,
-      retrieval_mode: c.retrieval_mode ?? 'vector',
+      retrieval_mode: c.retrieval_mode ?? 'RAG',
       retrieval_top_k: c.retrieval_top_k ?? 8,
       use_prompt_caching: c.use_prompt_caching ?? false,
       cache_ttl: c.cache_ttl ?? 3600,
+      public_graph_profile: c.public_graph_profile ?? 'PUBLIC_KB_RICH',
+      language_mode: c.language_mode ?? 'prefer',
+      quality_threshold: c.quality_threshold ?? 0.6,
+      min_retrieval_results: c.min_retrieval_results ?? 2,
+      min_retrieval_score: c.min_retrieval_score ?? 0.25,
+      reranker_enabled: c.reranker_enabled ?? true,
+      answer_template: c.answer_template ?? 'generic',
     })
     setDialogOpen(true)
   }
@@ -224,7 +266,7 @@ export function ChatbotsPage() {
   function onSubmit(values: FormValues) {
     if (
       values.kind === 'atomic' &&
-      values.retrieval_mode === 'long_context' &&
+      values.retrieval_mode === 'MD_LONG_CONTEXT' &&
       (corpusStats?.total_tokens ?? 0) > 128_000
     ) {
       return
@@ -240,7 +282,7 @@ export function ChatbotsPage() {
   const isPending = createMutation.isPending || updateMutation.isPending
   const showLongContextHardError =
     selectedKind === 'atomic' &&
-    watch('retrieval_mode') === 'long_context' &&
+    watch('retrieval_mode') === 'MD_LONG_CONTEXT' &&
     (corpusStats?.total_tokens ?? 0) > 128_000
 
   const assignableChildren = chatbots.filter(
@@ -419,7 +461,7 @@ export function ChatbotsPage() {
                         Has elegido un modo distinto del recomendado para este corpus.
                       </p>
                     )}
-                    {selectedKind === 'atomic' && watch('retrieval_mode') === 'vector' && (
+                    {selectedKind === 'atomic' && watch('retrieval_mode') === 'RAG' && (
                       <div className="pt-1">
                         <button
                           type="button"
@@ -462,7 +504,7 @@ export function ChatbotsPage() {
                         <p className="text-xs text-muted-foreground mt-1">Número de fragmentos que se recuperan por consulta (1–50). Valor recomendado: 8.</p>
                       </div>
                     )}
-                    {watch('retrieval_mode') === 'long_context' && (
+                    {watch('retrieval_mode') === 'MD_LONG_CONTEXT' && (
                       <div className="rounded-md border bg-muted/40 p-3 space-y-2">
                         <div className="flex items-center gap-2">
                           <input
@@ -492,9 +534,86 @@ export function ChatbotsPage() {
                     )}
                     {showLongContextHardError && (
                       <p className="text-destructive text-xs mt-1">
-                        El corpus excede el límite del modo long_context (128K tokens). Reduce el corpus o cambia a agentic.
+                        {t('hub.chatbot_long_context_error')}
                       </p>
                     )}
+                    <div className="pt-2">
+                      <p className="text-sm font-medium text-muted-foreground mb-2">{t('hub.chatbot_graph_section')}</p>
+                      <div className="space-y-3 rounded-md border bg-muted/40 p-3">
+                        <div>
+                          <label className="text-sm font-medium">{t('hub.chatbot_graph_profile')}</label>
+                          <select
+                            {...register('public_graph_profile')}
+                            className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                          >
+                            <option value="PUBLIC_KB_RICH">{t('hub.chatbot_graph_profile_rich')}</option>
+                            <option value="PUBLIC_PORTAL_AGGREGATOR">{t('hub.chatbot_graph_profile_aggregator')}</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">{t('hub.chatbot_language_mode')}</label>
+                          <select
+                            {...register('language_mode')}
+                            className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                          >
+                            <option value="prefer">{t('hub.chatbot_language_prefer')}</option>
+                            <option value="strict">{t('hub.chatbot_language_strict')}</option>
+                            <option value="none">{t('hub.chatbot_language_none')}</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">{t('hub.chatbot_quality_threshold')}</label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            {...register('quality_threshold', { valueAsNumber: true })}
+                            className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">{t('hub.chatbot_min_results')}</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={20}
+                            {...register('min_retrieval_results', { valueAsNumber: true })}
+                            className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">{t('hub.chatbot_min_score')}</label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            {...register('min_retrieval_score', { valueAsNumber: true })}
+                            className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="reranker_enabled"
+                            {...register('reranker_enabled')}
+                            className="rounded"
+                          />
+                          <label htmlFor="reranker_enabled" className="text-sm">{t('hub.chatbot_reranker_enabled')}</label>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">{t('hub.chatbot_answer_template')}</label>
+                          <select
+                            {...register('answer_template')}
+                            className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                          >
+                            <option value="generic">{t('hub.chatbot_answer_template_generic')}</option>
+                            <option value="institutional">{t('hub.chatbot_answer_template_institutional')}</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
                   </>
                 )}
                 {editing && selectedKind === 'router' && (

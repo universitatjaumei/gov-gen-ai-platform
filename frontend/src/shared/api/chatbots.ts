@@ -32,11 +32,18 @@ export interface ChatbotCreate {
   system_prompt: string
   sources?: string[]
   is_active?: boolean
-  retrieval_mode?: 'vector' | 'long_context' | 'agentic'
+  retrieval_mode?: 'RAG' | 'MD_LONG_CONTEXT' | 'MD_AGENT_SELECTOR'
   retrieval_top_k?: number
   use_prompt_caching?: boolean
   cache_ttl?: number
   kind?: 'atomic' | 'router'
+  public_graph_profile?: string
+  language_mode?: string
+  quality_threshold?: number
+  min_retrieval_results?: number
+  min_retrieval_score?: number
+  reranker_enabled?: boolean
+  answer_template?: string
 }
 
 export interface ChatbotUpdate {
@@ -44,12 +51,19 @@ export interface ChatbotUpdate {
   system_prompt?: string
   sources?: string[]
   is_active?: boolean
-  retrieval_mode?: 'vector' | 'long_context' | 'agentic'
+  retrieval_mode?: 'RAG' | 'MD_LONG_CONTEXT' | 'MD_AGENT_SELECTOR'
   retrieval_top_k?: number
   use_prompt_caching?: boolean
   cache_ttl?: number
   kind?: 'atomic' | 'router'
   parent_chatbot_id?: string | null
+  public_graph_profile?: string
+  language_mode?: string
+  quality_threshold?: number
+  min_retrieval_results?: number
+  min_retrieval_score?: number
+  reranker_enabled?: boolean
+  answer_template?: string
 }
 
 function authHeaders(): HeadersInit {
@@ -94,7 +108,7 @@ export interface CorpusStats {
   total_documents: number
   total_tokens: number
   by_language: Record<string, number>
-  recommended_mode: 'vector' | 'long_context' | 'agentic'
+  recommended_mode: 'RAG' | 'MD_LONG_CONTEXT' | 'MD_AGENT_SELECTOR'
   recommendation_reason: string
 }
 

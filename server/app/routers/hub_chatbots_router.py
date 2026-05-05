@@ -66,6 +66,13 @@ class ChatbotCreate(BaseModel):
     use_prompt_caching: bool = False
     cache_ttl: int = 3600
     kind: str = "atomic"
+    public_graph_profile: str = "PUBLIC_KB_RICH"
+    language_mode: str = "prefer"
+    quality_threshold: float = 0.6
+    min_retrieval_results: int = 2
+    min_retrieval_score: float = 0.25
+    reranker_enabled: bool = True
+    answer_template: str = "generic"
 
 
 class ChatbotUpdate(BaseModel):
@@ -79,6 +86,13 @@ class ChatbotUpdate(BaseModel):
     cache_ttl: int | None = None
     kind: str | None = None
     parent_chatbot_id: uuid.UUID | None = None
+    public_graph_profile: str | None = None
+    language_mode: str | None = None
+    quality_threshold: float | None = None
+    min_retrieval_results: int | None = None
+    min_retrieval_score: float | None = None
+    reranker_enabled: bool | None = None
+    answer_template: str | None = None
 
 
 class AssignChildIn(BaseModel):
@@ -145,6 +159,13 @@ async def create_chatbot(
         use_prompt_caching=body.use_prompt_caching,
         cache_ttl=body.cache_ttl,
         kind=body.kind,
+        public_graph_profile=body.public_graph_profile,
+        language_mode=body.language_mode,
+        quality_threshold=body.quality_threshold,
+        min_retrieval_results=body.min_retrieval_results,
+        min_retrieval_score=body.min_retrieval_score,
+        reranker_enabled=body.reranker_enabled,
+        answer_template=body.answer_template,
     )
     session.add(chatbot)
     await session.commit()
@@ -175,8 +196,8 @@ async def update_chatbot(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
-                    "El corpus excede el límite del modo long_context (128K tokens). "
-                    "Reduce el corpus o cambia a agentic."
+                    "El corpus excede el límite del modo MD_LONG_CONTEXT (128K tokens). "
+                    "Reduce el corpus o cambia a MD_AGENT_SELECTOR."
                 ),
             )
 
