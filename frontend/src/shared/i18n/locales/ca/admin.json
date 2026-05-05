@@ -85,7 +85,22 @@
     "chatbot_reranker_enabled": "Activar reranker",
     "chatbot_answer_template": "Plantilla de resposta",
     "chatbot_answer_template_generic": "Genèrica",
-    "chatbot_answer_template_institutional": "Institucional"
+    "chatbot_answer_template_institutional": "Institucional",
+    "client_graph_defaults": "Configuració per defecte del graf",
+    "client_default_graph_profile": "Perfil de graf per defecte",
+    "client_default_retrieval_mode": "Mode de recuperació per defecte",
+    "client_default_language_mode": "Mode d'idioma per defecte",
+    "client_default_quality_threshold": "Llindar de qualitat per defecte",
+    "client_default_min_results": "Resultats mínims per defecte",
+    "client_default_min_score": "Puntuació mínima per defecte",
+    "client_default_reranker_enabled": "Reranker activat per defecte",
+    "client_default_answer_template": "Plantilla de resposta per defecte",
+    "source_spider_type": "Tipus de spider",
+    "source_crawler_params": "Paràmetres BFS",
+    "source_crawl_depth": "Profunditat",
+    "source_max_pages": "Màx. pàgines",
+    "source_url_regex": "Filtre regex URL",
+    "tab_assistant": "Assistent"
   },
   "login": {
     "title": "Iniciar sessió",

@@ -40,6 +40,7 @@ class IngestionSourceCreate(BaseModel):
     label: str | None = None
     check_interval_hours: int = Field(24, ge=1, le=168)
     language: str | None = None
+    spider_type: str | None = "generic"
     config_json: dict = Field(default_factory=dict)
 
     @field_validator("url")
@@ -362,6 +363,7 @@ async def create_source(
         label=body.label,
         check_interval_hours=body.check_interval_hours,
         language=body.language,
+        spider_type=body.spider_type,
         config_json=body.config_json,
     )
     session.add(source)

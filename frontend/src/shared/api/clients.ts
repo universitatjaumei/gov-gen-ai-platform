@@ -7,6 +7,14 @@ export interface Client {
   theme_config: Record<string, unknown>
   is_active: boolean
   chatbot_count: number
+  default_public_graph_profile: string
+  default_retrieval_mode: string
+  default_language_mode: string
+  default_quality_threshold: number
+  default_min_retrieval_results: number
+  default_min_retrieval_score: number
+  default_reranker_enabled: boolean
+  default_answer_template: string
   created_at: string
   updated_at: string
 }
@@ -16,6 +24,14 @@ export interface ClientCreate {
   partner_id: string
   theme_config?: Record<string, unknown>
   is_active?: boolean
+  default_public_graph_profile?: string
+  default_retrieval_mode?: string
+  default_language_mode?: string
+  default_quality_threshold?: number
+  default_min_retrieval_results?: number
+  default_min_retrieval_score?: number
+  default_reranker_enabled?: boolean
+  default_answer_template?: string
 }
 
 export interface ClientUpdate {
@@ -23,6 +39,14 @@ export interface ClientUpdate {
   partner_id?: string
   theme_config?: Record<string, unknown>
   is_active?: boolean
+  default_public_graph_profile?: string
+  default_retrieval_mode?: string
+  default_language_mode?: string
+  default_quality_threshold?: number
+  default_min_retrieval_results?: number
+  default_min_retrieval_score?: number
+  default_reranker_enabled?: boolean
+  default_answer_template?: string
 }
 
 function authHeaders(): HeadersInit {

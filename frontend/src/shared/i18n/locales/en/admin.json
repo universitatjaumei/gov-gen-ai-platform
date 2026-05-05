@@ -85,7 +85,22 @@
     "chatbot_reranker_enabled": "Enable reranker",
     "chatbot_answer_template": "Answer template",
     "chatbot_answer_template_generic": "Generic",
-    "chatbot_answer_template_institutional": "Institutional"
+    "chatbot_answer_template_institutional": "Institutional",
+    "client_graph_defaults": "Default graph configuration",
+    "client_default_graph_profile": "Default graph profile",
+    "client_default_retrieval_mode": "Default retrieval mode",
+    "client_default_language_mode": "Default language mode",
+    "client_default_quality_threshold": "Default quality threshold",
+    "client_default_min_results": "Default minimum results",
+    "client_default_min_score": "Default minimum score",
+    "client_default_reranker_enabled": "Reranker enabled by default",
+    "client_default_answer_template": "Default answer template",
+    "source_spider_type": "Spider type",
+    "source_crawler_params": "BFS parameters",
+    "source_crawl_depth": "Depth",
+    "source_max_pages": "Max pages",
+    "source_url_regex": "URL regex filter",
+    "tab_assistant": "Assistant"
   },
   "login": {
     "title": "Sign in",

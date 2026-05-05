@@ -27,8 +27,18 @@ class ClientOut(BaseModel):
     theme_config: dict
     is_active: bool
     chatbot_count: int = 0
+    default_public_graph_profile: str
+    default_retrieval_mode: str
+    default_language_mode: str
+    default_quality_threshold: float
+    default_min_retrieval_results: int
+    default_min_retrieval_score: float
+    default_reranker_enabled: bool
+    default_answer_template: str
     created_at: datetime
     updated_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class ClientCreate(BaseModel):
@@ -36,6 +46,14 @@ class ClientCreate(BaseModel):
     partner_id: str
     theme_config: dict = {}
     is_active: bool = True
+    default_public_graph_profile: str = "PUBLIC_KB_RICH"
+    default_retrieval_mode: str = "RAG"
+    default_language_mode: str = "prefer"
+    default_quality_threshold: float = 0.6
+    default_min_retrieval_results: int = 2
+    default_min_retrieval_score: float = 0.25
+    default_reranker_enabled: bool = True
+    default_answer_template: str = "generic"
 
 
 class ClientUpdate(BaseModel):
@@ -43,6 +61,14 @@ class ClientUpdate(BaseModel):
     partner_id: str | None = None
     theme_config: dict | None = None
     is_active: bool | None = None
+    default_public_graph_profile: str | None = None
+    default_retrieval_mode: str | None = None
+    default_language_mode: str | None = None
+    default_quality_threshold: float | None = None
+    default_min_retrieval_results: int | None = None
+    default_min_retrieval_score: float | None = None
+    default_reranker_enabled: bool | None = None
+    default_answer_template: str | None = None
 
 
 _count_sq = (
@@ -66,16 +92,7 @@ async def list_clients(
         )
     ).all()
     return [
-        ClientOut(
-            id=c.id,
-            name=c.name,
-            partner_id=c.partner_id,
-            theme_config=c.theme_config,
-            is_active=c.is_active,
-            chatbot_count=count,
-            created_at=c.created_at,
-            updated_at=c.updated_at,
-        )
+        ClientOut.model_validate(c, update={"chatbot_count": count})
         for c, count in rows
     ]
 
@@ -91,20 +108,19 @@ async def create_client(
         partner_id=body.partner_id,
         theme_config=body.theme_config,
         is_active=body.is_active,
+        default_public_graph_profile=body.default_public_graph_profile,
+        default_retrieval_mode=body.default_retrieval_mode,
+        default_language_mode=body.default_language_mode,
+        default_quality_threshold=body.default_quality_threshold,
+        default_min_retrieval_results=body.default_min_retrieval_results,
+        default_min_retrieval_score=body.default_min_retrieval_score,
+        default_reranker_enabled=body.default_reranker_enabled,
+        default_answer_template=body.default_answer_template,
     )
     session.add(client)
     await session.commit()
     await session.refresh(client)
-    return ClientOut(
-        id=client.id,
-        name=client.name,
-        partner_id=client.partner_id,
-        theme_config=client.theme_config,
-        is_active=client.is_active,
-        chatbot_count=0,
-        created_at=client.created_at,
-        updated_at=client.updated_at,
-    )
+    return ClientOut.model_validate(client, update={"chatbot_count": 0})
 
 
 @router.patch("/{client_id}", response_model=ClientOut)
@@ -126,16 +142,7 @@ async def update_client(
 
     await session.commit()
     await session.refresh(client)
-    return ClientOut(
-        id=client.id,
-        name=client.name,
-        partner_id=client.partner_id,
-        theme_config=client.theme_config,
-        is_active=client.is_active,
-        chatbot_count=0,
-        created_at=client.created_at,
-        updated_at=client.updated_at,
-    )
+    return ClientOut.model_validate(client, update={"chatbot_count": 0})
 
 
 @router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)

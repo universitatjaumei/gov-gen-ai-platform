@@ -17,6 +17,14 @@ const schema = z.object({
   partner_id: z.string().min(1),
   theme_config: z.string(),
   is_active: z.boolean(),
+  default_public_graph_profile: z.string(),
+  default_retrieval_mode: z.enum(['RAG', 'MD_LONG_CONTEXT', 'MD_AGENT_SELECTOR']),
+  default_language_mode: z.string(),
+  default_quality_threshold: z.number().min(0).max(1),
+  default_min_retrieval_results: z.number().int().min(1).max(20),
+  default_min_retrieval_score: z.number().min(0).max(1),
+  default_reranker_enabled: z.boolean(),
+  default_answer_template: z.string(),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -29,6 +37,7 @@ export function ClientsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null)
   const [deleteError, setDeleteError] = useState('')
   const [filter, setFilter] = useState('')
+  const [defaultsOpen, setDefaultsOpen] = useState(false)
 
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ['clients'],
@@ -42,6 +51,14 @@ export function ClientsPage() {
         partner_id: values.partner_id,
         theme_config: parseJson(values.theme_config),
         is_active: values.is_active,
+        default_public_graph_profile: values.default_public_graph_profile,
+        default_retrieval_mode: values.default_retrieval_mode,
+        default_language_mode: values.default_language_mode,
+        default_quality_threshold: values.default_quality_threshold,
+        default_min_retrieval_results: values.default_min_retrieval_results,
+        default_min_retrieval_score: values.default_min_retrieval_score,
+        default_reranker_enabled: values.default_reranker_enabled,
+        default_answer_template: values.default_answer_template,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['clients'] })
@@ -56,6 +73,14 @@ export function ClientsPage() {
         partner_id: values.partner_id,
         theme_config: parseJson(values.theme_config),
         is_active: values.is_active,
+        default_public_graph_profile: values.default_public_graph_profile,
+        default_retrieval_mode: values.default_retrieval_mode,
+        default_language_mode: values.default_language_mode,
+        default_quality_threshold: values.default_quality_threshold,
+        default_min_retrieval_results: values.default_min_retrieval_results,
+        default_min_retrieval_score: values.default_min_retrieval_score,
+        default_reranker_enabled: values.default_reranker_enabled,
+        default_answer_template: values.default_answer_template,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['clients'] })
@@ -78,24 +103,45 @@ export function ClientsPage() {
     onError: (err: Error) => setDeleteError(err.message),
   })
 
+  const DEFAULT_GRAPH_VALUES = {
+    default_public_graph_profile: 'PUBLIC_KB_RICH',
+    default_retrieval_mode: 'RAG' as const,
+    default_language_mode: 'prefer',
+    default_quality_threshold: 0.6,
+    default_min_retrieval_results: 2,
+    default_min_retrieval_score: 0.25,
+    default_reranker_enabled: true,
+    default_answer_template: 'generic',
+  }
+
   const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: '', partner_id: '', theme_config: '{}', is_active: true },
+    defaultValues: { name: '', partner_id: '', theme_config: '{}', is_active: true, ...DEFAULT_GRAPH_VALUES },
   })
 
   function openCreate() {
     setEditing(null)
-    reset({ name: '', partner_id: '', theme_config: '{}', is_active: true })
+    setDefaultsOpen(false)
+    reset({ name: '', partner_id: '', theme_config: '{}', is_active: true, ...DEFAULT_GRAPH_VALUES })
     setDialogOpen(true)
   }
 
   function openEdit(c: Client) {
     setEditing(c)
+    setDefaultsOpen(false)
     reset({
       name: c.name,
       partner_id: c.partner_id,
       theme_config: JSON.stringify(c.theme_config, null, 2),
       is_active: c.is_active,
+      default_public_graph_profile: c.default_public_graph_profile ?? 'PUBLIC_KB_RICH',
+      default_retrieval_mode: (c.default_retrieval_mode as 'RAG' | 'MD_LONG_CONTEXT' | 'MD_AGENT_SELECTOR') ?? 'RAG',
+      default_language_mode: c.default_language_mode ?? 'prefer',
+      default_quality_threshold: c.default_quality_threshold ?? 0.6,
+      default_min_retrieval_results: c.default_min_retrieval_results ?? 2,
+      default_min_retrieval_score: c.default_min_retrieval_score ?? 0.25,
+      default_reranker_enabled: c.default_reranker_enabled ?? true,
+      default_answer_template: c.default_answer_template ?? 'generic',
     })
     setDialogOpen(true)
   }
@@ -235,6 +281,68 @@ export function ClientsPage() {
                   rows={4}
                   className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background font-mono resize-y"
                 />
+              </div>
+              <div className="border rounded-md overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setDefaultsOpen(v => !v)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium bg-muted/30 hover:bg-muted/50 transition-colors"
+                >
+                  <span>{t('hub.client_graph_defaults')}</span>
+                  <span className="text-muted-foreground">{defaultsOpen ? '▾' : '▸'}</span>
+                </button>
+                {defaultsOpen && (
+                  <div className="p-3 space-y-3 border-t">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">{t('hub.client_default_graph_profile')}</label>
+                      <select {...register('default_public_graph_profile')} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background">
+                        <option value="PUBLIC_KB_RICH">{t('hub.chatbot_graph_profile_rich')}</option>
+                        <option value="PUBLIC_PORTAL_AGGREGATOR">{t('hub.chatbot_graph_profile_aggregator')}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">{t('hub.client_default_retrieval_mode')}</label>
+                      <select {...register('default_retrieval_mode')} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background">
+                        <option value="RAG">Vectorial RAG</option>
+                        <option value="MD_LONG_CONTEXT">Contexto largo</option>
+                        <option value="MD_AGENT_SELECTOR">Exploración agéntica</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">{t('hub.client_default_language_mode')}</label>
+                      <select {...register('default_language_mode')} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background">
+                        <option value="prefer">{t('hub.chatbot_language_prefer')}</option>
+                        <option value="strict">{t('hub.chatbot_language_strict')}</option>
+                        <option value="none">{t('hub.chatbot_language_none')}</option>
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">{t('hub.client_default_quality_threshold')}</label>
+                        <input type="number" min={0} max={1} step={0.05} {...register('default_quality_threshold', { valueAsNumber: true })} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">{t('hub.client_default_min_results')}</label>
+                        <input type="number" min={1} max={20} {...register('default_min_retrieval_results', { valueAsNumber: true })} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">{t('hub.client_default_min_score')}</label>
+                        <input type="number" min={0} max={1} step={0.05} {...register('default_min_retrieval_score', { valueAsNumber: true })} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">{t('hub.client_default_answer_template')}</label>
+                        <select {...register('default_answer_template')} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background">
+                          <option value="generic">{t('hub.chatbot_answer_template_generic')}</option>
+                          <option value="institutional">{t('hub.chatbot_answer_template_institutional')}</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" id="default_reranker_enabled" {...register('default_reranker_enabled')} className="rounded" />
+                      <label htmlFor="default_reranker_enabled" className="text-xs">{t('hub.client_default_reranker_enabled')}</label>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="is_active" {...register('is_active')} className="rounded" />

@@ -70,6 +70,8 @@ export interface IngestionSource {
   last_content_hash: string | null
   status: 'active' | 'paused' | 'error'
   error_message: string | null
+  spider_type: string | null
+  config_json: Record<string, unknown>
   created_at: string
 }
 
@@ -81,7 +83,7 @@ export async function fetchSources(chatbotId: string): Promise<IngestionSource[]
 
 export async function createSource(
   chatbotId: string,
-  body: { url: string; label?: string; check_interval_hours?: number; language?: string; config_json?: Record<string, unknown> },
+  body: { url: string; label?: string; check_interval_hours?: number; language?: string; spider_type?: string; config_json?: Record<string, unknown> },
 ): Promise<IngestionSource> {
   const res = await fetch(`${API_BASE}/api/v1/hub/ingestion/${chatbotId}/sources`, {
     method: 'POST',

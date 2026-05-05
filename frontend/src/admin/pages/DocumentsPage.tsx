@@ -16,6 +16,7 @@ import {
   type IngestionSource, type HubDocument, type RecalculateCorpusResponse,
 } from '@/shared/api/ingestion'
 import { Progress } from '@/components/ui/progress'
+import { AdminIngestionAssistant } from './AdminIngestionAssistant'
 
 const INTERVAL_OPTIONS = [
   { value: 6,   label: 'Cada 6 h' },
@@ -39,10 +40,18 @@ const LANG_BADGE: Record<string, string> = {
 }
 
 const RETRIEVAL_LABELS: Record<string, string> = {
-  vector:       'Vectorial (RAG)',
-  long_context: 'Contexto largo',
-  agentic:      'Agéntico',
+  RAG:               'Vectorial (RAG)',
+  MD_LONG_CONTEXT:   'Contexto largo',
+  MD_AGENT_SELECTOR: 'Agéntico',
 }
+
+const SPIDER_TYPES = [
+  { value: 'generic',        label: 'Genérico (BFS)' },
+  { value: 'boe',            label: 'BOE' },
+  { value: 'dogv',           label: 'DOGV' },
+  { value: 'uji',            label: 'UJI' },
+  { value: 'procedimientos', label: 'Procedimientos' },
+] as const
 
 function formatTokens(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)} k`
@@ -55,7 +64,7 @@ export function DocumentsPage() {
   const qc = useQueryClient()
 
   const [selectedChatbotId, setSelectedChatbotId] = useState<string>('')
-  const [activeTab, setActiveTab] = useState<'documents' | 'sources'>('documents')
+  const [activeTab, setActiveTab] = useState<'documents' | 'sources' | 'assistant'>('documents')
   const [jobsOpen, setJobsOpen] = useState(false)
 
   // Documents tab state
@@ -77,6 +86,11 @@ export function DocumentsPage() {
   const [newLabel, setNewLabel] = useState('')
   const [newInterval, setNewInterval] = useState(24)
   const [newSourceLanguage, setNewSourceLanguage] = useState('')
+  const [newSpiderType, setNewSpiderType] = useState('generic')
+  const [crawlDepth, setCrawlDepth] = useState(1)
+  const [urlRegexFilter, setUrlRegexFilter] = useState('')
+  const [maxPages, setMaxPages] = useState(50)
+  const [crawlerParamsOpen, setCrawlerParamsOpen] = useState(false)
   const [sourceError, setSourceError] = useState('')
   const [deleteSourceTarget, setDeleteSourceTarget] = useState<IngestionSource | null>(null)
 
@@ -210,15 +224,25 @@ export function DocumentsPage() {
   })
 
   const createSourceMutation = useMutation({
-    mutationFn: () => createSource(selectedChatbotId, {
-      url: newUrl,
-      label: newLabel || undefined,
-      check_interval_hours: newInterval,
-      language: newSourceLanguage || undefined,
-    }),
+    mutationFn: () => {
+      const config: Record<string, unknown> = {}
+      if (crawlDepth !== 1) config.crawl_depth = crawlDepth
+      if (urlRegexFilter) config.url_regex_filter = urlRegexFilter
+      if (maxPages !== 50) config.max_pages = maxPages
+      return createSource(selectedChatbotId, {
+        url: newUrl,
+        label: newLabel || undefined,
+        check_interval_hours: newInterval,
+        language: newSourceLanguage || undefined,
+        spider_type: newSpiderType,
+        config_json: Object.keys(config).length ? config : undefined,
+      })
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ingestion-sources', selectedChatbotId] })
-      setNewUrl(''); setNewLabel(''); setNewInterval(24); setNewSourceLanguage(''); setSourceError('')
+      setNewUrl(''); setNewLabel(''); setNewInterval(24); setNewSourceLanguage('')
+      setNewSpiderType('generic'); setCrawlDepth(1); setUrlRegexFilter(''); setMaxPages(50)
+      setSourceError('')
     },
     onError: (err: Error) => setSourceError(err.message),
   })
@@ -282,7 +306,7 @@ export function DocumentsPage() {
         <>
           {/* Tabs */}
           <div className="flex border-b">
-            {(['documents', 'sources'] as const).map(tab => (
+            {(['documents', 'sources', 'assistant'] as const).map(tab => (
               <button
                 key={tab}
                 type="button"
@@ -295,7 +319,9 @@ export function DocumentsPage() {
               >
                 {tab === 'documents'
                   ? t('hub.tab_documents', 'Documentos')
-                  : t('hub.tab_sources', 'Fuentes web')}
+                  : tab === 'sources'
+                  ? t('hub.tab_sources', 'Fuentes web')
+                  : t('hub.tab_assistant', 'Asistente')}
               </button>
             ))}
           </div>
@@ -590,6 +616,11 @@ export function DocumentsPage() {
             </div>
           )}
 
+          {/* ── Tab: Asistente ── */}
+          {activeTab === 'assistant' && (
+            <AdminIngestionAssistant chatbotId={selectedChatbotId} />
+          )}
+
           {/* ── Tab: Fuentes web ── */}
           {activeTab === 'sources' && (
             <div className="space-y-4">
@@ -639,6 +670,63 @@ export function DocumentsPage() {
                     {t('hub.add_source_btn', 'Añadir')}
                   </button>
                 </div>
+                <div className="flex flex-col sm:flex-row gap-2 items-center">
+                  <label className="text-xs text-muted-foreground w-full sm:w-auto shrink-0">
+                    {t('hub.source_spider_type', 'Tipo de spider')}:
+                  </label>
+                  <select
+                    value={newSpiderType}
+                    onChange={e => setNewSpiderType(e.target.value)}
+                    className="flex-1 px-3 py-2 text-sm border rounded-md bg-background"
+                  >
+                    {SPIDER_TYPES.map(s => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setCrawlerParamsOpen(v => !v)}
+                    className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 border rounded-md shrink-0"
+                  >
+                    {crawlerParamsOpen ? '▾' : '▸'} {t('hub.source_crawler_params', 'Parámetros BFS')}
+                  </button>
+                </div>
+                {crawlerParamsOpen && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 bg-muted/30 rounded-md border">
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">{t('hub.source_crawl_depth', 'Profundidad')}</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={crawlDepth}
+                        onChange={e => setCrawlDepth(Number(e.target.value))}
+                        className="w-full px-2 py-1 text-sm border rounded-md bg-background"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">{t('hub.source_max_pages', 'Máx. páginas')}</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={1000}
+                        value={maxPages}
+                        onChange={e => setMaxPages(Number(e.target.value))}
+                        className="w-full px-2 py-1 text-sm border rounded-md bg-background"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">{t('hub.source_url_regex', 'Filtro regex URL')}</label>
+                      <input
+                        type="text"
+                        value={urlRegexFilter}
+                        onChange={e => setUrlRegexFilter(e.target.value)}
+                        placeholder="/normativa/.*"
+                        className="w-full px-2 py-1 text-sm border rounded-md bg-background font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
                 {sourceError && (
                   <div className="flex items-center gap-2 text-sm text-destructive">
                     <AlertCircle className="w-4 h-4" />{sourceError}
@@ -800,7 +888,7 @@ export function DocumentsPage() {
         <ConfirmDialog
           title={t('hub.recalculate_title', '¿Recalcular corpus?')}
           description={
-            selectedChatbot?.retrieval_mode === 'vector'
+            selectedChatbot?.retrieval_mode === 'RAG'
               ? (
                 <>
                   {t('hub.recalculate_vector_text', 'Se re-generarán embeddings para todos los documentos.')}{' '}
@@ -836,8 +924,8 @@ function RetrievalBanner({
 }) {
   const modeLabel = RETRIEVAL_LABELS[mode] ?? mode
   const recommendation =
-    mode === 'vector'      ? t('hub.retrieval_rec_vector', 'Usa RAG para documentos extensos.')
-    : mode === 'long_context' ? t('hub.retrieval_rec_lc', 'El documento completo se envía al LLM en cada consulta.')
+    mode === 'RAG'             ? t('hub.retrieval_rec_vector', 'Usa RAG para documentos extensos.')
+    : mode === 'MD_LONG_CONTEXT' ? t('hub.retrieval_rec_lc', 'El documento completo se envía al LLM en cada consulta.')
     : t('hub.retrieval_rec_agentic', 'El agente decide qué fragmentos leer.')
 
   return (
