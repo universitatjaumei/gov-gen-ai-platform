@@ -36,20 +36,20 @@ class TestHubChatbotRetrievalMode:
         from server.app.modules.agents_hub.database.config_models import HubChatbot
         assert hasattr(HubChatbot, "retrieval_mode")
 
-    def test_retrieval_mode_defaults_to_vector(self):
-        """La columna ORM tiene default 'vector' para chatbots existentes."""
+    def test_retrieval_mode_defaults_to_rag(self):
+        """La columna ORM tiene default 'RAG' para chatbots existentes."""
         from server.app.modules.agents_hub.database.config_models import HubChatbot
         col = HubChatbot.__table__.c["retrieval_mode"]
         assert col.default is not None
-        assert col.default.arg == "vector"
+        assert col.default.arg == "RAG"
 
     def test_retrieval_mode_accepts_long_context(self):
-        cb = _make_chatbot(retrieval_mode="long_context")
-        assert cb.retrieval_mode == "long_context"
+        cb = _make_chatbot(retrieval_mode="MD_LONG_CONTEXT")
+        assert cb.retrieval_mode == "MD_LONG_CONTEXT"
 
     def test_retrieval_mode_accepts_agentic(self):
-        cb = _make_chatbot(retrieval_mode="agentic")
-        assert cb.retrieval_mode == "agentic"
+        cb = _make_chatbot(retrieval_mode="MD_AGENT_SELECTOR")
+        assert cb.retrieval_mode == "MD_AGENT_SELECTOR"
 
     def test_retrieval_mode_column_is_in_table(self):
         from server.app.modules.agents_hub.database.config_models import HubChatbot
@@ -118,21 +118,21 @@ class TestHubChatbotParentId:
 class TestHubChatbotFieldCombinations:
 
     def test_atomic_chatbot_with_agentic_mode(self):
-        cb = _make_chatbot(kind="atomic", retrieval_mode="agentic")
+        cb = _make_chatbot(kind="atomic", retrieval_mode="MD_AGENT_SELECTOR")
         assert cb.kind == "atomic"
-        assert cb.retrieval_mode == "agentic"
+        assert cb.retrieval_mode == "MD_AGENT_SELECTOR"
 
     def test_router_chatbot_has_no_retrieval_mode_enforced(self):
         """Un router puede tener cualquier retrieval_mode en Python
         (la restriccion de no-corpus es semantica, no de BD)."""
-        cb = _make_chatbot(kind="router", retrieval_mode="vector")
+        cb = _make_chatbot(kind="router", retrieval_mode="RAG")
         assert cb.kind == "router"
 
     def test_child_chatbot_references_parent_id(self):
         parent_id = uuid.uuid4()
         child = _make_chatbot(
             kind="atomic",
-            retrieval_mode="agentic",
+            retrieval_mode="MD_AGENT_SELECTOR",
             parent_chatbot_id=parent_id,
         )
         assert child.parent_chatbot_id == parent_id
