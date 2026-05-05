@@ -88,3 +88,7 @@ copia/
 *.jpg
 *.jpeg
 *.png
+
+# Contrato OpenAPI — generado por server/export_openapi.py, no editar manualmente
+server/openapi.json
+frontend/openapi.json

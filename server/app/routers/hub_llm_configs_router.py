@@ -142,7 +142,7 @@ async def list_available_models(
     return {"ok": True, "models": models}
 
 
-class LLMConfigOut(BaseModel):
+class LLMConfigRead(BaseModel):
     id: uuid.UUID
     provider: str
     model_name: str
@@ -180,7 +180,7 @@ class LLMConfigUpdate(BaseModel):
     max_tokens: int | None = None
 
 
-@router.get("", response_model=list[LLMConfigOut])
+@router.get("", response_model=list[LLMConfigRead])
 async def list_llm_configs(
     _: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
@@ -191,7 +191,7 @@ async def list_llm_configs(
     return result.scalars().all()
 
 
-@router.post("", response_model=LLMConfigOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=LLMConfigRead, status_code=status.HTTP_201_CREATED)
 async def create_llm_config(
     body: LLMConfigCreate,
     _: UserInfo = Depends(_require_admin),
@@ -222,7 +222,7 @@ async def create_llm_config(
     return config
 
 
-@router.patch("/{config_id}", response_model=LLMConfigOut)
+@router.patch("/{config_id}", response_model=LLMConfigRead)
 async def update_llm_config(
     config_id: uuid.UUID,
     body: LLMConfigUpdate,

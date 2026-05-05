@@ -20,7 +20,7 @@ router = APIRouter(prefix="/hub/clients", tags=["hub-clients"])
 _require_admin = require_role("admin", "partner")
 
 
-class ClientOut(BaseModel):
+class ClientRead(BaseModel):
     id: uuid.UUID
     name: str
     partner_id: str
@@ -79,7 +79,7 @@ _count_sq = (
 )
 
 
-@router.get("", response_model=list[ClientOut])
+@router.get("", response_model=list[ClientRead])
 async def list_clients(
     _: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
@@ -92,12 +92,12 @@ async def list_clients(
         )
     ).all()
     return [
-        ClientOut.model_validate(c, update={"chatbot_count": count})
+        ClientRead.model_validate(c, update={"chatbot_count": count})
         for c, count in rows
     ]
 
 
-@router.post("", response_model=ClientOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ClientRead, status_code=status.HTTP_201_CREATED)
 async def create_client(
     body: ClientCreate,
     _: UserInfo = Depends(_require_admin),
@@ -120,10 +120,10 @@ async def create_client(
     session.add(client)
     await session.commit()
     await session.refresh(client)
-    return ClientOut.model_validate(client, update={"chatbot_count": 0})
+    return ClientRead.model_validate(client, update={"chatbot_count": 0})
 
 
-@router.patch("/{client_id}", response_model=ClientOut)
+@router.patch("/{client_id}", response_model=ClientRead)
 async def update_client(
     client_id: uuid.UUID,
     body: ClientUpdate,
@@ -142,7 +142,7 @@ async def update_client(
 
     await session.commit()
     await session.refresh(client)
-    return ClientOut.model_validate(client, update={"chatbot_count": 0})
+    return ClientRead.model_validate(client, update={"chatbot_count": 0})
 
 
 @router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -12,14 +12,14 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/edge", tags=["edge-sync"])
 
 
-class ClientOut(BaseModel):
+class EdgeClientOut(BaseModel):
     id: UUID
     name: str
     partner_id: str
     is_active: bool
 
 
-class ChatbotOut(BaseModel):
+class EdgeChatbotOut(BaseModel):
     id: UUID
     client_id: UUID
     llm_config_id: UUID
@@ -27,14 +27,14 @@ class ChatbotOut(BaseModel):
     is_active: bool
 
 
-class LLMConfigOut(BaseModel):
+class EdgeLLMConfigOut(BaseModel):
     id: UUID
     provider: str
     model_name: str
     temperature: float
 
 
-class PromptTemplateOut(BaseModel):
+class EdgePromptTemplateOut(BaseModel):
     id: UUID
     chatbot_id: UUID
     slug: str
@@ -42,10 +42,10 @@ class PromptTemplateOut(BaseModel):
 
 
 class EdgeConfigSnapshot(BaseModel):
-    clients: list[ClientOut]
-    chatbots: list[ChatbotOut]
-    llm_configs: list[LLMConfigOut]
-    prompt_templates: list[PromptTemplateOut]
+    clients: list[EdgeClientOut]
+    chatbots: list[EdgeChatbotOut]
+    llm_configs: list[EdgeLLMConfigOut]
+    prompt_templates: list[EdgePromptTemplateOut]
     generated_at: datetime
 
 

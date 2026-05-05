@@ -21,7 +21,7 @@ router = APIRouter(prefix="/hub/prompt-templates", tags=["hub-prompt-templates"]
 _require_admin = require_role("admin", "partner")
 
 
-class PromptTemplateOut(BaseModel):
+class PromptTemplateRead(BaseModel):
     model_config = {"from_attributes": True}
 
     id: UUID
@@ -49,7 +49,7 @@ class PromptTemplateUpdate(BaseModel):
     override_tier: int | None = None
 
 
-@router.get("/", response_model=list[PromptTemplateOut])
+@router.get("/", response_model=list[PromptTemplateRead])
 async def list_prompt_templates(
     chatbot_id: UUID | None = None,
     session: AsyncSession = Depends(get_async_session),
@@ -64,7 +64,7 @@ async def list_prompt_templates(
     return list(result.scalars().all())
 
 
-@router.post("/", response_model=PromptTemplateOut, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=PromptTemplateRead, status_code=status.HTTP_201_CREATED)
 async def create_prompt_template(
     body: PromptTemplateCreate,
     session: AsyncSession = Depends(get_async_session),
@@ -86,7 +86,7 @@ async def create_prompt_template(
     return template
 
 
-@router.patch("/{template_id}", response_model=PromptTemplateOut)
+@router.patch("/{template_id}", response_model=PromptTemplateRead)
 async def update_prompt_template(
     template_id: UUID,
     body: PromptTemplateUpdate,

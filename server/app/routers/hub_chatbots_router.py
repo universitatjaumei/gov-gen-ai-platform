@@ -5,6 +5,7 @@ Deploy: cloud
 
 import uuid
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -27,7 +28,7 @@ router = APIRouter(prefix="/hub/chatbots", tags=["hub-chatbots"])
 _require_admin = require_role("admin", "partner")
 
 
-class ChatbotOut(BaseModel):
+class ChatbotRead(BaseModel):
     id: uuid.UUID
     name: str
     client_id: uuid.UUID
@@ -35,7 +36,7 @@ class ChatbotOut(BaseModel):
     system_prompt: str
     sources: list[str]
     is_active: bool
-    retrieval_mode: str
+    retrieval_mode: Literal["RAG", "MD_LONG_CONTEXT", "MD_AGENT_SELECTOR"]
     retrieval_top_k: int
     use_prompt_caching: bool
     cache_ttl: int
@@ -61,7 +62,7 @@ class ChatbotCreate(BaseModel):
     system_prompt: str
     sources: list[str] = []
     is_active: bool = True
-    retrieval_mode: str = "RAG"
+    retrieval_mode: Literal["RAG", "MD_LONG_CONTEXT", "MD_AGENT_SELECTOR"] = "RAG"
     retrieval_top_k: int = 8
     use_prompt_caching: bool = False
     cache_ttl: int = 3600
@@ -80,7 +81,7 @@ class ChatbotUpdate(BaseModel):
     system_prompt: str | None = None
     sources: list[str] | None = None
     is_active: bool | None = None
-    retrieval_mode: str | None = None
+    retrieval_mode: Literal["RAG", "MD_LONG_CONTEXT", "MD_AGENT_SELECTOR"] | None = None
     retrieval_top_k: int | None = None
     use_prompt_caching: bool | None = None
     cache_ttl: int | None = None
@@ -130,7 +131,7 @@ async def _get_chatbot_or_404(session, chatbot_id: uuid.UUID) -> HubChatbot:
     return chatbot
 
 
-@router.get("", response_model=list[ChatbotOut])
+@router.get("", response_model=list[ChatbotRead])
 async def list_chatbots(
     _: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
@@ -141,7 +142,7 @@ async def list_chatbots(
     return result.scalars().all()
 
 
-@router.post("", response_model=ChatbotOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ChatbotRead, status_code=status.HTTP_201_CREATED)
 async def create_chatbot(
     body: ChatbotCreate,
     _: UserInfo = Depends(_require_admin),
@@ -173,7 +174,7 @@ async def create_chatbot(
     return chatbot
 
 
-@router.patch("/{chatbot_id}", response_model=ChatbotOut)
+@router.patch("/{chatbot_id}", response_model=ChatbotRead)
 async def update_chatbot(
     chatbot_id: uuid.UUID,
     body: ChatbotUpdate,
@@ -344,7 +345,7 @@ async def recalculate_corpus_endpoint(
     )
 
 
-@router.get("/{chatbot_id}/children", response_model=list[ChatbotOut])
+@router.get("/{chatbot_id}/children", response_model=list[ChatbotRead])
 async def list_children(
     chatbot_id: uuid.UUID,
     _: UserInfo = Depends(_require_admin),
@@ -363,7 +364,7 @@ async def list_children(
     return result.scalars().all()
 
 
-@router.post("/{chatbot_id}/children", response_model=ChatbotOut)
+@router.post("/{chatbot_id}/children", response_model=ChatbotRead)
 async def assign_child(
     chatbot_id: uuid.UUID,
     body: AssignChildIn,
