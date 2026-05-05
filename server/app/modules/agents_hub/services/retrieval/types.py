@@ -20,7 +20,7 @@ class Source:
 class RetrievalContext:
     """Contexto agregado que se pasa al nodo generate_response."""
     sources: list[Source]
-    mode: str                       # "vector" | "long_context" | "agentic"
+    mode: str                       # "RAG" | "MD_LONG_CONTEXT" | "MD_AGENT_SELECTOR"
     total_tokens: int               # suma estimada de tokens del excerpt agregado
 
 
@@ -31,7 +31,7 @@ class RetrievalStrategy(Protocol):
     AgenticRetrievalStrategy devuelve un RetrievalContext vacio y expone tools al grafo.
     """
 
-    mode: str  # "vector" | "long_context" | "agentic"
+    mode: str  # "RAG" | "MD_LONG_CONTEXT" | "MD_AGENT_SELECTOR"
 
     async def get_context(
         self,

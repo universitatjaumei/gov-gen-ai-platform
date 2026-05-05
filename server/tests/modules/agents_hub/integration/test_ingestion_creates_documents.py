@@ -48,7 +48,7 @@ def _make_session_for_existing_doc(existing_doc) -> AsyncMock:
     return session
 
 
-def _make_chatbot_provider(retrieval_mode: str = "vector") -> AsyncMock:
+def _make_chatbot_provider(retrieval_mode: str = "RAG") -> AsyncMock:
     provider = AsyncMock()
     provider.get_retrieval_mode = AsyncMock(return_value=retrieval_mode)
     return provider
@@ -64,7 +64,7 @@ class TestIngestionCreatesDocuments:
         from server.app.modules.agents_hub.database.operational_models import HubDocument
 
         session = _make_session_for_new_doc()
-        chatbot_provider = _make_chatbot_provider("vector")
+        chatbot_provider = _make_chatbot_provider("RAG")
         embedding_svc = AsyncMock()
         embedding_svc.embed = AsyncMock(return_value=[0.1] * 1024)
 
@@ -87,7 +87,7 @@ class TestIngestionCreatesDocuments:
         from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
 
         session = _make_session_for_new_doc()
-        chatbot_provider = _make_chatbot_provider("vector")
+        chatbot_provider = _make_chatbot_provider("RAG")
         embedding_svc = AsyncMock()
         embedding_svc.embed = AsyncMock(return_value=[0.1] * 1024)
 
@@ -110,7 +110,7 @@ class TestIngestionCreatesDocuments:
         from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
 
         session = _make_session_for_new_doc()
-        chatbot_provider = _make_chatbot_provider("long_context")
+        chatbot_provider = _make_chatbot_provider("MD_LONG_CONTEXT")
         embedding_svc = AsyncMock()
 
         watcher = IngestionWatcher(
@@ -132,7 +132,7 @@ class TestIngestionCreatesDocuments:
         from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
 
         session = _make_session_for_new_doc()
-        chatbot_provider = _make_chatbot_provider("agentic")
+        chatbot_provider = _make_chatbot_provider("MD_AGENT_SELECTOR")
         embedding_svc = AsyncMock()
 
         watcher = IngestionWatcher(
@@ -162,7 +162,7 @@ class TestIngestionCreatesDocuments:
         existing_doc.language = "es"
 
         session = _make_session_for_existing_doc(existing_doc)
-        chatbot_provider = _make_chatbot_provider("vector")
+        chatbot_provider = _make_chatbot_provider("RAG")
         embedding_svc = AsyncMock()
         embedding_svc.embed = AsyncMock(return_value=[0.1] * 1024)
 
@@ -198,7 +198,7 @@ class TestIngestionCreatesDocuments:
         doc, n_chunks = result
         assert isinstance(doc, HubDocument)
 
-    async def test_process_source_without_provider_defaults_to_vector(self):
+    async def test_process_source_without_provider_defaults_to_rag(self):
         from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
 
         session = _make_session_for_new_doc()

@@ -39,7 +39,7 @@ class TestAgenticStrategyCore:
         ctx = await strategy.get_context("consulta", uuid.uuid4())
 
         assert ctx.sources == []
-        assert ctx.mode == "agentic"
+        assert ctx.mode == "MD_AGENT_SELECTOR"
         assert ctx.total_tokens == 0
 
     async def test_get_agent_tools_returns_list_and_read_tools(self):

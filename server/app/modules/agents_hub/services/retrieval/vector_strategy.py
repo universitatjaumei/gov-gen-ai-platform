@@ -12,7 +12,7 @@ from server.app.modules.agents_hub.services.retriever import HybridRetriever
 
 
 class VectorRetrievalStrategy:
-    mode = "vector"
+    mode = "RAG"
 
     def __init__(
         self,

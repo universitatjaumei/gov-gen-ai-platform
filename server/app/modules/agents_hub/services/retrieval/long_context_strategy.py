@@ -15,7 +15,7 @@ PROMPT_CACHE_BLOCK_MIN_TOKENS = 32_000
 
 
 class LongContextRetrievalStrategy:
-    mode = "long_context"
+    mode = "MD_LONG_CONTEXT"
 
     def __init__(self, session: AsyncSession, token_limit: int = LONG_CONTEXT_TOKEN_LIMIT):
         self._session = session
@@ -42,7 +42,7 @@ class LongContextRetrievalStrategy:
         if total > self._token_limit:
             raise ValueError(
                 f"long context mode no admite corpus de {total} tokens "
-                f"(limite {self._token_limit}). Cambia el modo a 'agentic' o 'vector'."
+                f"(limite {self._token_limit}). Cambia el modo a 'MD_AGENT_SELECTOR' o 'RAG'."
             )
 
         sources = []

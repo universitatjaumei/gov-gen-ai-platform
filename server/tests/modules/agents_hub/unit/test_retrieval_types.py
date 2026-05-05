@@ -21,9 +21,9 @@ class TestRetrievalContext:
 
     def test_empty_context(self):
         from server.app.modules.agents_hub.services.retrieval.types import RetrievalContext
-        ctx = RetrievalContext(sources=[], mode="vector", total_tokens=0)
+        ctx = RetrievalContext(sources=[], mode="RAG", total_tokens=0)
         assert ctx.sources == []
-        assert ctx.mode == "vector"
+        assert ctx.mode == "RAG"
 
 
 class TestRetrievalStrategyProtocol:

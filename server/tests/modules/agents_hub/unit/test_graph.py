@@ -9,8 +9,8 @@ from server.app.modules.agents_hub.services.retrieval.types import RetrievalCont
 
 def _make_vector_strategy(sources=None):
     strategy = AsyncMock()
-    strategy.mode = "vector"
-    ctx = RetrievalContext(sources=sources or [], mode="vector", total_tokens=0)
+    strategy.mode = "RAG"
+    ctx = RetrievalContext(sources=sources or [], mode="RAG", total_tokens=0)
     strategy.get_context = AsyncMock(return_value=ctx)
     strategy.get_agent_tools = Mock(return_value=[])
     return strategy

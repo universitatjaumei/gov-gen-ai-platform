@@ -1,0 +1,583 @@
+# PROMPT 0 — Contexto de Plataforma y Objetivo del Rediseño del Grafo Público
+
+Actúa como **agente de programación senior** (Python + FastAPI + SQLAlchemy async + LangGraph + RAG).
+Tu misión es diseñar e implementar una **arquitectura de grafo público extensible** para una **plataforma multi‑organización**
+(universidades, ayuntamientos u otras instituciones), manteniendo un enfoque **determinista‑first**, TDD (RED/GREEN),
+y reutilización máxima de componentes.
+
+El objetivo NO es implementar un único chatbot, sino una **plataforma** capaz de soportar **múltiples chatbots públicos**
+con **hipótesis de uso distintas**, **estrategias de retrieval distintas**, y **configuración en cascada**,
+sin acoplar la topología del grafo a un único dominio.
+
+---
+
+## 0.1 Visión de Plataforma (principios no negociables)
+
+1) **Multi‑organización, multi‑chatbot**
+- Habrá múltiples organizaciones (tenants).
+- Cada organización podrá tener uno o más **chatbots o portales públicos**.
+- Cada chatbot representa un **caso de uso concreto** (no un “estilo” de organización).
+
+2) **Casos de uso heterogéneos**
+Ejemplos no exhaustivos:
+- Normativa y procedimientos administrativos.
+- Grupos de investigación (directorios, líneas, proyectos, contacto).
+- Oferta académica (grados, másteres, doctorado, requisitos, calendarios).
+- FAQs institucionales o municipales, servicios ciudadanos, portales temáticos.
+
+3) **No grafo monolítico**
+- No se debe implementar un único grafo “gigante” con condicionales por dominio.
+- Se debe diseñar:
+  - un **CoreGraph** reutilizable (orquestación común),
+  - un **contrato de perfiles de grafo** (Graph Profiles) seleccionables por chatbot/portal,
+  - un **contrato de estrategias** (Strategy Pattern) enchufables.
+
+4) **Separación clara de responsabilidades**
+- El **CoreGraph** define el flujo común (idioma, retrieval, generación, calidad, fallback, logging).
+- El **GraphProfile** define la topología lógica y el UX (agregación, router, plantilla de respuesta, etc.).
+- El **retrieval_mode** define **cómo se recupera la evidencia**, sin cambiar el grafo.
+
+---
+
+## 0.2 Estrategias de Retrieval (eje independiente)
+
+La plataforma debe soportar **tres estrategias de retrieval**, seleccionables por chatbot/portal:
+
+- `RAG`  
+  Retrieval vectorial clásico (chunks, scoring, reranking opcional).
+
+- `MD_LONG_CONTEXT`  
+  Documentos Markdown + construcción de contexto largo (document packs).
+
+- `MD_AGENT_SELECTOR`  
+  Documentos Markdown + agente que selecciona qué documentos/secciones usar.
+
+Principios:
+- **No se deben crear grafos distintos solo por la estrategia de retrieval**.
+- Todas las estrategias deben implementar un **contrato común de evidencia**
+  (fuentes, contenido usado, idioma dominante, trazabilidad).
+- El CoreGraph debe ser **agnóstico** a cómo se obtuvo la evidencia.
+- La selección de la estrategia se hace mediante `retrieval_mode`
+  y una `RetrievalPipelineFactory`.
+
+---
+
+## 0.3 Configuración en Cascada (defaults, no restricciones)
+
+La plataforma aplica **cascada de configuración**, pero **no restringe perfiles ni modos**:
+
+1) **Plataforma**: defaults globales.
+2) **Organización**: defaults del tenant (idioma, thresholds, retrieval_mode por defecto, etc.).
+3) **Chatbot/Portal**: overrides específicos.
+
+Importante:
+- **No existe** lista de “perfiles permitidos” por organización.
+- El perfil y el retrieval_mode se eligen **por chatbot/uso**, no por organización.
+
+---
+
+## 0.4 Caso piloto inicial (Normativa + Procedimientos, estilo UJI)
+
+Este es **un perfil concreto**, no “el grafo de la plataforma”.
+
+Características del caso:
+- Un **único widget público**.
+- Dos dominios relacionados:
+  - Normativa (base jurídica).
+  - Procedimientos (operativa: pasos, plazos, formularios).
+- El comportamiento deseado es **agregar**:
+  - procedimiento + normativa aplicable cuando exista,
+  - normativa sola cuando no haya procedimiento.
+
+Idioma:
+- Usuarios preguntan mayoritariamente en castellano.
+- Evidencias frecuentemente en valenciano; algunas traducidas.
+- La URL no identifica el idioma del contenido.
+- Se requiere:
+  - **preferencia de idioma**, no filtro estricto por defecto,
+  - aviso de traducción solo si el idioma real de la evidencia difiere del idioma del usuario.
+
+Este caso se implementará como un **GraphProfile específico**
+(p. ej. `PUBLIC_PORTAL_AGGREGATOR`).
+
+---
+
+## 0.5 Objetivo arquitectónico
+
+Diseñar e implementar:
+
+### CoreGraph (siempre igual)
+- detect_language
+- retrieve (delegado a RetrievalStrategy + RetrievalPipeline)
+- merge (según perfil)
+- rerank (opcional)
+- generate_answer (plantilla según perfil)
+- quality_gate (faithfulness + relevance)
+- fallback_response honesto
+- log_interaction
+
+### GraphProfiles (por chatbot/portal)
+Ejemplos iniciales:
+- `PUBLIC_KB_RICH`  
+  Perfil genérico RAG para la mayoría de casos (grupos, oferta académica inicial, FAQs).
+- `PUBLIC_PORTAL_AGGREGATOR`  
+  Perfil específico que agrega múltiples fuentes (normativa + procedimientos).
+
+### RetrievalPipelineFactory
+- Selecciona pipeline según `retrieval_mode`.
+- Garantiza contrato común de salida para todas las estrategias.
+
+---
+
+## 0.6 Restricciones y control de alcance
+
+- No introducir thin client, ejecución local, expedientes ni automatización avanzada.
+- No exigir que el usuario conozca identificadores internos (p. ej. códigos de procedimiento).
+- No acoplar el CoreGraph a ningún dominio concreto.
+- La lógica transversal (idioma, calidad, fallback, logging) vive en el CoreGraph.
+- La lógica específica vive en perfiles y estrategias.
+
+---
+
+## 0.7 Entregables esperados
+
+1) Librería de grafos públicos con:
+   - CoreGraph
+   - GraphProfiles
+   - Estrategias enchufables
+   - RetrievalPipelineFactory
+
+2) Modelo de configuración con:
+   - `public_graph_profile`
+   - `retrieval_mode`
+   - políticas (idioma, thresholds, reranker, plantillas)
+
+3) Tests:
+   - tests de contrato de retrieval pipelines,
+   - tests de contrato de perfiles,
+   - tests de integración del CoreGraph.
+
+---
+
+A partir de este Prompt 0, ejecuta la secuencia de prompts TDD (RED/GREEN)
+para construir primero la infraestructura de plataforma (CoreGraph + perfiles + pipelines)
+y después el perfil concreto del caso piloto.
+
+***
+
+## PROMPT 1 (RED) — Estructura de librería de grafos públicos + registry
+
+```markdown
+# PROMPT 1 (RED) — Crear estructura de librería de grafos públicos + registry
+
+Objetivo: crear una librería extensible para grafos públicos:
+- CoreGraph (nodos comunes)
+- Perfiles (Graph Profiles)
+- Estrategias enchufables
+- Registry (catálogo de perfiles)
+
+Tareas:
+1) Crear carpetas:
+   server/app/modules/agents_hub/agent/public_graphs/
+     core/
+     profiles/
+     strategies/
+     registry.py
+     types.py
+
+2) Definir en types.py:
+   - Enum PublicGraphProfile con valores iniciales:
+     PUBLIC_KB_RICH
+     PUBLIC_PORTAL_ROUTER (opcional, preparado)
+     PUBLIC_PORTAL_AGGREGATOR (UJI)
+
+3) Implementar registry.py:
+   - register_profile(profile_name, profile_factory)
+   - get_profile(profile_name) -> profile_factory o error
+   - list_profiles() -> list[str]
+
+Tests (RED):
+- test_registry_lists_profiles
+- test_registry_raises_on_unknown_profile
+- test_registry_can_register_and_get_profile
+
+Criterio de aceptación:
+- La estructura existe y los tests del registry pasan.
+```
+
+***
+
+## PROMPT 2 (RED) — Modelo de datos: `public_graph_profile` + `retrieval_mode` + defaults de organización
+
+> Aquí es donde incorporamos `retrieval_mode` y su cascada de defaults (sin restricciones).  [\[ujies-my.s...epoint.com\]](https://ujies-my.sharepoint.com/personal/fabra_uji_es/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/Plan_TDD_Fase1.md)
+
+```markdown
+# PROMPT 2 (RED) — Modelo de datos para selección de perfil + retrieval_mode + cascada de defaults
+
+Objetivo: permitir múltiples perfiles y múltiples estrategias de retrieval por chatbot/portal (por uso),
+sin restricciones por organización. La organización aporta defaults, el chatbot puede sobrescribir.
+
+Tareas:
+1) Añadir campos a la entidad de chatbot (HubChatbot o equivalente):
+   - public_graph_profile: str (default "PUBLIC_KB_RICH")
+   - retrieval_mode: str (default "RAG")  # RAG | MD_LONG_CONTEXT | MD_AGENT_SELECTOR
+   - language_mode: str (default "prefer")  # strict | prefer | none
+   - quality_threshold: float (default 0.6)
+   - min_retrieval_results: int (default 2)
+   - min_retrieval_score: float (default 0.25)
+   - reranker_enabled: bool (default true)
+   - answer_template: str (default "generic")
+
+2) Añadir defaults a la entidad Organización:
+   - default_public_graph_profile: str (default "PUBLIC_KB_RICH")
+   - default_retrieval_mode: str (default "RAG")
+   - default_language_mode: str (default "prefer")
+   - default_quality_threshold, default_min_retrieval_results, default_min_retrieval_score
+   - default_reranker_enabled, default_answer_template
+
+3) Migraciones Alembic para ambos.
+
+Tests (RED):
+- test_chatbot_has_retrieval_mode_default
+- test_org_has_default_retrieval_mode
+- test_migration_applies_defaults_without_breaking_existing_rows
+
+Criterio de aceptación:
+- Dos chatbots de la misma organización pueden tener retrieval_mode distinto.
+- No existe campo de “allowed profiles/modes” por organización (sin restricciones).
+```
+
+***
+
+## PROMPT 3 (RED/GREEN) — ConfigResolver efectivo (cascada) incluye `retrieval_mode`
+
+```markdown
+# PROMPT 3 (RED/GREEN) — ConfigResolver: Platform -> Organization -> Chatbot (incluye retrieval_mode)
+
+Objetivo: resolver configuración efectiva del grafo público por chatbot:
+PlatformDefaults -> OrgDefaults -> ChatbotOverrides
+
+Tareas:
+1) Crear core/config_resolver.py:
+   - PublicGraphConfig (dataclass/pydantic) con:
+     profile, retrieval_mode, language_mode, thresholds, reranker_enabled, answer_template, etc.
+   - async get_effective_public_graph_config(chatbot_id, session) -> PublicGraphConfig
+
+2) PlatformDefaults: valores hardcoded o ConfigProvider global.
+
+Tests (RED):
+- test_effective_config_uses_platform_defaults
+- test_effective_config_org_overrides_platform
+- test_effective_config_chatbot_overrides_org
+- test_effective_config_includes_retrieval_mode
+
+GREEN:
+- Implementación mínima para pasar tests.
+```
+
+***
+
+## PROMPT 4 (RED) — Contrato de evidencias + contrato de pipelines (tests de contrato)
+
+> Este prompt es nuevo: crea **el contrato común** que deben cumplir las tres estrategias de retrieval.  
+> Es lo que evita necesitar “un grafo por retriever”.
+
+```markdown
+# PROMPT 4 (RED) — Contrato de Evidencia + Protocolos de RetrievalPipeline (con tests de contrato)
+
+Objetivo: definir un contrato uniforme de salida del retrieval, independiente de si se usa:
+- RAG vectorial
+- MD long context (pack)
+- MD agente selector
+
+Tareas:
+1) Crear strategies/retrieval_contract.py (o types.py):
+   - EvidenceItem:
+       - source_id: str (doc_id o equivalente)
+       - source_url: str | None
+       - title: str | None
+       - content: str  # fragmento o sección usada
+       - language: str | None
+       - score: float | None  # opcional para no-RAG
+       - metadata: dict
+   - RetrievalResult:
+       - items: list[EvidenceItem]
+       - context_source_language: str | None  # idioma predominante
+       - debug: dict  # info trazable (p.ej. tokens_used, docs_selected, etc.)
+
+2) Crear strategies/retrieval_pipeline_protocol.py:
+   - class RetrievalPipeline(Protocol):
+       async def run(query: str, chatbot_id: str, cfg: PublicGraphConfig, deps: GraphDeps) -> RetrievalResult
+
+3) Crear tests de contrato (RED) en tests/public_graphs/test_retrieval_contract.py:
+   - test_pipeline_result_has_items_and_debug
+   - test_evidence_item_has_required_fields
+   - test_context_source_language_is_set_when_items_present
+   - test_contract_is_serializable_or_repr_safe
+
+Criterio de aceptación:
+- Existe un “contrato” estable de retrieval que todos los pipelines deben cumplir.
+```
+
+***
+
+## PROMPT 5 (RED/GREEN) — RetrievalPipelineFactory + pipelines “stub” + tests de contrato por modo
+
+> Este prompt crea el **factory** y las 3 implementaciones mínimas.  
+> En esta fase pueden ser “stub” (para pasar contrato) y luego se conectan a los servicios reales.
+
+```markdown
+# PROMPT 5 (RED/GREEN) — RetrievalPipelineFactory + 3 pipelines (RAG / MD_LONG_CONTEXT / MD_AGENT_SELECTOR)
+
+Objetivo: implementar una fábrica que devuelva un pipeline según retrieval_mode, y asegurar por tests
+que cada pipeline cumple el contrato.
+
+Tareas:
+1) Crear strategies/retrieval_pipeline_factory.py:
+   - def get_pipeline(mode: str) -> RetrievalPipeline
+   - lanzar ValueError si mode desconocido
+
+2) Implementar pipelines mínimos:
+   - RagVectorPipeline: llama al retriever vectorial existente y devuelve EvidenceItem por chunk
+   - MdLongContextPipeline: selecciona (por ahora) un subconjunto de docs MD y construye un “pack” en items
+   - MdAgentSelectorPipeline: (mínimo) simula selección de docs (sin LLM al inicio) y devuelve items
+
+3) Tests (RED) en tests/public_graphs/test_retrieval_pipeline_factory.py:
+   - test_factory_returns_pipeline_for_each_mode
+   - test_factory_raises_for_unknown_mode
+
+4) Tests de contrato por pipeline (RED) en tests/public_graphs/test_retrieval_pipelines_contract.py:
+   - test_rag_pipeline_conforms_to_contract
+   - test_md_long_context_pipeline_conforms_to_contract
+   - test_md_agent_selector_pipeline_conforms_to_contract
+
+GREEN:
+- Implementación mínima para pasar tests.
+```
+
+***
+
+## PROMPT 6 (RED) — Contratos de estrategias (profile bundle) actualizados para usar pipelines
+
+> Ajusta el contrato de `RetrievalStrategy` para que use el pipeline seleccionado por `retrieval_mode`.
+
+```markdown
+# PROMPT 6 (RED) — Protocolos/Interfaces de estrategias (actualizados para RetrievalPipeline)
+
+Objetivo: los perfiles siguen definiendo RetrievalStrategy/Merge/Template/LanguagePolicy,
+pero RetrievalStrategy debe usar el pipeline devuelto por RetrievalPipelineFactory según cfg.retrieval_mode.
+
+Tareas:
+1) En strategies/protocols.py:
+   - RetrievalStrategy.retrieve(...) devuelve RetrievalOutput
+   - RetrievalOutput puede contener uno o varios RetrievalResult (p.ej. buckets)
+   - RetrievalStrategy invoca internamente get_pipeline(cfg.retrieval_mode).run(...)
+
+2) Tests (RED):
+- test_retrieval_strategy_uses_pipeline_factory
+- test_retrieval_output_can_hold_multiple_buckets
+
+Criterio:
+- retrieval_mode se aplica sin cambiar CoreGraph.
+```
+
+***
+
+## PROMPT 7 (RED/GREEN) — CoreGraph (orquestación común) **no cambia** (solo adapta tipos)
+
+> El CoreGraph sigue con el flujo común y reutiliza reranker/quality/fallback/log.
+
+```markdown
+# PROMPT 7 (RED/GREEN) — CoreGraph: orquestación común (intacta) usando RetrievalStrategy
+
+Objetivo: CoreGraph ejecuta:
+detect_language -> retrieve -> merge -> (optional) rerank -> generate_answer -> quality_gate -> (log or fallback)
+
+Tareas:
+- Implementar/ajustar core/core_graph.py para trabajar con RetrievalOutput/RetrievalResult.
+- No introducir lógica específica de UJI ni de ningún modo de retrieval.
+
+Tests (RED):
+- test_core_graph_compiles_with_mock_strategies
+- test_core_graph_branches_to_fallback_when_quality_low
+- test_core_graph_runs_with_each_retrieval_mode_using_generic_profile
+
+GREEN:
+- Implementación mínima.
+```
+
+***
+
+## PROMPT 8 (RED/GREEN) — Perfil genérico PUBLIC\_KB\_RICH (usa `retrieval_mode`)
+
+> Este perfil será el “default” para futuros chatbots (grupos, oferta académica inicial, FAQs municipales), y debe funcionar con cualquiera de los 3 modos de retrieval. [\[ujies-my.s...epoint.com\]](https://ujies-my.sharepoint.com/personal/fabra_uji_es/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/Plan_TDD_Fase1.md)
+
+```markdown
+# PROMPT 8 (RED/GREEN) — PUBLIC_KB_RICH compatible con 3 retrieval_mode
+
+Objetivo:
+- Recuperar evidencia según retrieval_mode (pipeline)
+- Rerank opcional
+- Responder con citas
+- Quality gate + fallback honesto
+
+Tareas:
+1) profiles/public_kb_rich.py:
+   - SingleSourceRetrievalStrategy: usa pipeline(cfg.retrieval_mode)
+   - PassthroughMergeStrategy
+   - GenericAnswerTemplateStrategy
+   - DefaultLanguagePolicy
+
+2) Tests (RED):
+- test_public_kb_rich_runs_in_rag_mode
+- test_public_kb_rich_runs_in_md_long_context_mode
+- test_public_kb_rich_runs_in_md_agent_selector_mode
+
+GREEN:
+- Implementación.
+
+Criterio:
+- Un chatbot público genérico funciona con los 3 modos sin cambiar de grafo.
+```
+
+***
+
+## PROMPT 9 (RED/GREEN) — Perfil portal router (opcional) también compatible con retrieval\_mode
+
+```markdown
+# PROMPT 9 (RED/GREEN) — PUBLIC_PORTAL_ROUTER (opcional) compatible con retrieval_mode
+
+Objetivo: portal que enruta entre chatbots hijos si los dominios son disjuntos.
+El retrieval dentro del hijo respeta su cfg.retrieval_mode.
+
+Tareas:
+- Implementar profiles/public_portal_router.py:
+   - decide chatbot hijo
+   - carga effective config del hijo
+   - ejecuta CoreGraph con el perfil del hijo (o fuerza PUBLIC_KB_RICH si procede)
+
+Tests (RED):
+- test_portal_router_selects_child_chatbot_and_uses_child_retrieval_mode
+
+GREEN:
+- Implementación.
+```
+
+***
+
+## PROMPT 10 (RED) — Perfil UJI agregador (tests) **independiente de retrieval\_mode**
+
+> En UJI agregas dos fuentes (procedimientos + normativa).  
+> El mismo perfil debe poder operar con `retrieval_mode=RAG` (lo normal) y, si en el futuro quisieras, con `MD_LONG_CONTEXT` o `MD_AGENT_SELECTOR` sin duplicar el grafo.
+
+```markdown
+# PROMPT 10 (RED) — Tests UJI Aggregator: combina procedimientos + normativa en cualquier retrieval_mode
+
+Tests:
+- test_uji_aggregator_rag_mode_combines_procedure_and_normativa
+- test_uji_aggregator_md_long_context_mode_combines_procedure_and_normativa
+- test_uji_aggregator_md_agent_selector_mode_combines_procedure_and_normativa
+- test_uji_normativa_only_when_no_procedure_candidate
+- test_uji_answer_template_sections_present
+- test_uji_translation_warning_only_when_context_language_differs
+```
+
+***
+
+## PROMPT 11 (GREEN) — Implementación UJI agregador: usa pipelines por bucket
+
+```markdown
+# PROMPT 11 (GREEN) — Implementar PUBLIC_PORTAL_AGGREGATOR (UJI) usando pipelines según cfg.retrieval_mode
+
+Objetivo: RetrievalStrategy dual:
+- bucket procedimientos: pipeline(cfg.retrieval_mode).run(...) sobre fuente procedimientos
+- bucket normativa: pipeline(cfg.retrieval_mode).run(...) sobre fuente normativa
+Luego merge:
+- si hay procedimiento candidato:
+    - incluir procedimiento top
+    - recuperar normativa enlazada por URL/canonical_id si existe
+    - añadir normativa general como respaldo
+- si no:
+    - solo normativa
+
+Notas:
+- Deduplicación no puede basarse solo en URL si el contenido varía por idioma; usar doc_id o (canonical_url, language).
+
+Criterio:
+- Pasa los tests del Prompt 10 sin cambiar CoreGraph.
+```
+
+***
+
+## PROMPT 12 (RED/GREEN) — LanguagePolicy (prefer/strict/none) + warning por idioma real del contexto
+
+> Mantiene lo que ya discutimos para UJI y hace que sea transversal.
+
+```markdown
+# PROMPT 12 (RED/GREEN) — LanguagePolicy y warning de traducción
+
+Objetivo:
+- prefer: evita doble búsqueda constante; prioriza idioma del usuario si existe evidencia
+- strict: permite comportamiento anterior si se necesita
+- none: neutral
+
+Warning:
+- se muestra si context_source_language != query_language (no por “fallback_triggered”)
+
+Tests:
+- test_language_policy_prefer_avoids_double_search
+- test_language_policy_strict_can_trigger_fallback
+- test_warning_only_when_context_language_differs
+```
+
+***
+
+## PROMPT 13 (RED/GREEN) — GraphFactory runtime: selección de perfil + selección de pipeline (por chatbot)
+
+> Punto de integración final: el endpoint público obtiene `PublicGraphConfig` efectivo y ejecuta el CoreGraph con el perfil seleccionado; el perfil usa `retrieval_mode` vía pipeline factory.  [\[ujies-my.s...epoint.com\]](https://ujies-my.sharepoint.com/personal/fabra_uji_es/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/Plan_TDD_Fase1.md)
+
+```markdown
+# PROMPT 13 (RED/GREEN) — GraphFactory runtime: perfil + retrieval_mode por chatbot
+
+Objetivo: el endpoint público debe:
+- resolver config efectiva (incluye public_graph_profile y retrieval_mode)
+- seleccionar perfil en registry
+- crear CoreGraph con el bundle de estrategias del perfil
+- ejecutar
+
+Tests:
+- test_graph_factory_uses_chatbot_override_profile_and_retrieval_mode
+- test_graph_factory_uses_org_defaults_when_chatbot_missing
+- test_graph_factory_uses_platform_defaults_when_org_missing
+```
+
+***
+
+## PROMPT 14 — “Kit de ampliación” (documentación + tests de contrato por perfil y pipeline)
+
+> Deja la plataforma lista para crecer sin reabrir arquitectura cada vez. [\[ujies-my.s...epoint.com\]](https://ujies-my.sharepoint.com/personal/fabra_uji_es/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/Plan_TDD_Fase1.md)
+
+```markdown
+# PROMPT 14 — Kit para añadir perfiles y pipelines (docs + tests de contrato)
+
+Tareas:
+1) docs/GRAPH_PROFILES.md:
+   - qué es CoreGraph
+   - qué es un GraphProfile
+   - qué es retrieval_mode
+   - cómo añadir un perfil nuevo (ej. oferta académica estructurada)
+   - cómo añadir un pipeline nuevo (si apareciera uno futuro)
+
+2) tests/public_graphs/test_profile_contract.py:
+   - todo perfil registrado debe:
+     - compilar grafo
+     - tener strategies no nulas
+     - poder ejecutarse con cada retrieval_mode (smoke)
+
+3) tests/public_graphs/test_pipeline_contract_suite.py:
+   - todo pipeline en factory debe pasar el contrato común
+```
+
+***
+
+

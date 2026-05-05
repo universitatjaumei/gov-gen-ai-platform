@@ -43,7 +43,7 @@ def create_initial_state(
         chatbot_id=chatbot_id,
         user_id=user_id,
         retrieved_sources=[],
-        retrieval_mode="vector",
+        retrieval_mode="RAG",
         total_tokens=0,
         sources=[],
         available_tools=[],

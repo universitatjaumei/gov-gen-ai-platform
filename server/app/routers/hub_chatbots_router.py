@@ -41,6 +41,13 @@ class ChatbotOut(BaseModel):
     cache_ttl: int
     kind: str
     parent_chatbot_id: uuid.UUID | None
+    public_graph_profile: str
+    language_mode: str
+    quality_threshold: float
+    min_retrieval_results: int
+    min_retrieval_score: float
+    reranker_enabled: bool
+    answer_template: str
     created_at: datetime
     updated_at: datetime
 
@@ -54,7 +61,7 @@ class ChatbotCreate(BaseModel):
     system_prompt: str
     sources: list[str] = []
     is_active: bool = True
-    retrieval_mode: str = "vector"
+    retrieval_mode: str = "RAG"
     retrieval_top_k: int = 8
     use_prompt_caching: bool = False
     cache_ttl: int = 3600
@@ -157,7 +164,7 @@ async def update_chatbot(
     payload = body.model_dump(exclude_none=True)
     next_mode = payload.get("retrieval_mode", chatbot.retrieval_mode)
 
-    if next_mode == "long_context":
+    if next_mode == "MD_LONG_CONTEXT":
         total_tokens_row = await session.execute(
             select(func.coalesce(func.sum(HubDocument.token_count), 0)).where(
                 HubDocument.chatbot_id == chatbot_id
@@ -243,10 +250,10 @@ async def regenerate_chunks(
     session=Depends(get_async_session),
 ):
     chatbot = await _get_chatbot_or_404(session, chatbot_id)
-    if chatbot.retrieval_mode != "vector":
+    if chatbot.retrieval_mode != "RAG":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Solo se puede regenerar chunks cuando retrieval_mode == 'vector'.",
+            detail="Solo se puede regenerar chunks cuando retrieval_mode == 'RAG'.",
         )
 
     docs_result = await session.execute(

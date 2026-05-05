@@ -41,7 +41,7 @@ class TestLongContextRetrievalStrategy:
         ctx = await strategy.get_context("consulta", uuid.uuid4())
 
         assert len(ctx.sources) == 2
-        assert ctx.mode == "long_context"
+        assert ctx.mode == "MD_LONG_CONTEXT"
         assert ctx.total_tokens == 3000
 
     async def test_raises_when_corpus_exceeds_limit(self):

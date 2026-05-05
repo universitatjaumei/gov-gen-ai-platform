@@ -45,7 +45,7 @@ class TestVectorRetrievalStrategy:
             ctx = await strategy.get_context("consulta", uuid.uuid4())
 
         assert ctx.sources == []
-        assert ctx.mode == "vector"
+        assert ctx.mode == "RAG"
         assert ctx.total_tokens == 0
 
     async def test_groups_multiple_chunks_into_one_source_per_document(self):

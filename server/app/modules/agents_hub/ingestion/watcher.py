@@ -45,7 +45,7 @@ class IngestionWatcher:
     """Orquesta la ingestión de documentos.
 
     Crea/actualiza HubDocument como unidad citable canonica.
-    Genera chunks solo cuando retrieval_mode == 'vector'.
+    Genera chunks solo cuando retrieval_mode == 'RAG'.
     """
 
     def __init__(
@@ -79,7 +79,7 @@ class IngestionWatcher:
         prefetched_content: str | None = None,
         title: str | None = None,
     ) -> tuple[HubDocument, int]:
-        """Crea/actualiza un HubDocument. Genera chunks SOLO si retrieval_mode == 'vector'.
+        """Crea/actualiza un HubDocument. Genera chunks SOLO si retrieval_mode == 'RAG'.
 
         Returns:
             (HubDocument, chunks_created_count) — idempotente por content_hash.
@@ -168,10 +168,10 @@ class IngestionWatcher:
         retrieval_mode = (
             await self._chatbot_provider.get_retrieval_mode(chatbot_id)
             if self._chatbot_provider
-            else "vector"
+            else "RAG"
         )
         n_chunks = 0
-        if retrieval_mode == "vector":
+        if retrieval_mode == "RAG":
             n_chunks = await self._regenerate_chunks_for_document(doc)
         else:
             # Limpiar chunks previos si el modo cambió

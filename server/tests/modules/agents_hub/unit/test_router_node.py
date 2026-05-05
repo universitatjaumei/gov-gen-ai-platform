@@ -16,7 +16,7 @@ class TestRouteToSubagent:
             system_prompt: str
             kind: str = "atomic"
             parent_chatbot_id: uuid.UUID | None = None
-            retrieval_mode: str = "agentic"
+            retrieval_mode: str = "MD_AGENT_SELECTOR"
         router_id = uuid.uuid4()
         return [
             FakeCB(id=router_id, name="UJI", system_prompt="Asistente UJI", kind="router"),

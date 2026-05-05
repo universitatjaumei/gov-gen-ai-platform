@@ -1,9 +1,9 @@
 """Grafo de LangGraph para el agente.
 
 Soporta tres modos de recuperacion:
-- vector: HybridRetriever + agrupacion por documento
-- long_context: corpus completo en el contexto (prompt caching Anthropic)
-- agentic: LLM decide que documentos leer con list_documents / read_document
+- RAG: HybridRetriever + agrupacion por documento
+- MD_LONG_CONTEXT: corpus completo en el contexto (prompt caching Anthropic)
+- MD_AGENT_SELECTOR: LLM decide que documentos leer con list_documents / read_document
 
 Deploy: edge
 """
@@ -29,7 +29,7 @@ def create_agent_graph(
     """Crea el grafo del agente.
 
     Args:
-        retrieval_strategy: RetrievalStrategy (vector / long_context / agentic)
+        retrieval_strategy: RetrievalStrategy (RAG / MD_LONG_CONTEXT / MD_AGENT_SELECTOR)
         llm: BaseChatModel inyectado
         base_system_prompt: system_prompt del HubChatbot
         user_id: ID del usuario (None para modo publico)
@@ -44,8 +44,8 @@ def create_agent_graph(
         return {"language": state.get("language", "es")}
 
     async def search_or_skip_node(state: AgentState) -> dict:
-        if retrieval_strategy.mode == "agentic":
-            return {"retrieved_sources": [], "retrieval_mode": "agentic", "total_tokens": 0}
+        if retrieval_strategy.mode == "MD_AGENT_SELECTOR":
+            return {"retrieved_sources": [], "retrieval_mode": "MD_AGENT_SELECTOR", "total_tokens": 0}
         messages = state.get("messages", [])
         query = ""
         for m in reversed(messages):
@@ -65,8 +65,11 @@ def create_agent_graph(
 
     async def generate_response_node(state: AgentState) -> dict:
         sources = list(state.get("retrieved_sources", []))
-        mode = state.get("retrieval_mode", "vector")
-        sources_block = format_sources_block(sources)
+        mode = state.get("retrieval_mode", "RAG")
+        if mode == "MD_AGENT_SELECTOR":
+            sources_block = ""
+        else:
+            sources_block = format_sources_block(sources)
         system = build_system_prompt(
             base_system_prompt,
             state.get("language", "es"),
@@ -81,7 +84,7 @@ def create_agent_graph(
             for m in state.get("messages", [])
         ]
 
-        if mode == "agentic":
+        if mode == "MD_AGENT_SELECTOR":
             llm_with_tools = llm.bind_tools(retrieval_strategy.get_agent_tools())
             sources, text = await _run_agentic_loop(
                 llm_with_tools, system, history, retrieval_strategy, state

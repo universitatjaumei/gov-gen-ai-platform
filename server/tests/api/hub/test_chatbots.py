@@ -36,7 +36,7 @@ def _make_chatbot(
         sources=[],
         theme_config={},
         is_active=is_active,
-        retrieval_mode="agentic",
+        retrieval_mode="MD_AGENT_SELECTOR",
         retrieval_top_k=8,
         use_prompt_caching=False,
         cache_ttl=3600,
@@ -241,8 +241,8 @@ class TestChatbotRetrievalMode:
             data = resp.json()
             assert data["total_documents"] == 2
             assert data["total_tokens"] == 120000
-            assert data["recommended_mode"] == "agentic"
-            assert "Recomendado agentic" in data["recommendation_reason"]
+            assert data["recommended_mode"] == "MD_AGENT_SELECTOR"
+            assert "Recomendado MD_AGENT_SELECTOR" in data["recommendation_reason"]
         finally:
             app.dependency_overrides.pop(get_async_session, None)
 
@@ -271,7 +271,7 @@ class TestChatbotRetrievalMode:
         try:
             resp = client.patch(
                 f"/api/v1/hub/chatbots/{chatbot.id}",
-                json={"retrieval_mode": "long_context"},
+                json={"retrieval_mode": "MD_LONG_CONTEXT"},
             )
             assert resp.status_code == 400
             assert "128K tokens" in resp.json()["detail"]
@@ -280,19 +280,19 @@ class TestChatbotRetrievalMode:
 
     def test_regenerate_chunks_blocked_for_non_vector_mode(self, client):
         chatbot = _make_chatbot()
-        chatbot.retrieval_mode = "agentic"
+        chatbot.retrieval_mode = "MD_AGENT_SELECTOR"
         session = self._mount_session_for_stats(chatbot)
         app.dependency_overrides[get_async_session] = _override_session(session)
         try:
             resp = client.post(f"/api/v1/hub/chatbots/{chatbot.id}/regenerate-chunks")
             assert resp.status_code == 400
-            assert "retrieval_mode == 'vector'" in resp.json()["detail"]
+            assert "retrieval_mode == 'RAG'" in resp.json()["detail"]
         finally:
             app.dependency_overrides.pop(get_async_session, None)
 
     def test_regenerate_chunks_creates_chunks_for_existing_documents(self, client):
         chatbot = _make_chatbot()
-        chatbot.retrieval_mode = "vector"
+        chatbot.retrieval_mode = "RAG"
         doc1 = SimpleNamespace(id=uuid.uuid4())
         doc2 = SimpleNamespace(id=uuid.uuid4())
 
@@ -316,7 +316,7 @@ class TestChatbotRetrievalMode:
 
     def test_recalculate_corpus_returns_202_with_task_id(self, client):
         chatbot = _make_chatbot()
-        chatbot.retrieval_mode = "vector"
+        chatbot.retrieval_mode = "RAG"
         session = self._mount_session_for_stats(chatbot)
         app.dependency_overrides[get_async_session] = _override_session(session)
 
@@ -337,7 +337,7 @@ class TestChatbotRetrievalMode:
 
     def test_recalculate_corpus_rejects_dimension_mismatch(self, client):
         chatbot = _make_chatbot()
-        chatbot.retrieval_mode = "vector"
+        chatbot.retrieval_mode = "RAG"
         chatbot.llm_config = SimpleNamespace(embedding_dimensions=1536)
         session = self._mount_session_for_stats(chatbot)
         app.dependency_overrides[get_async_session] = _override_session(session)

@@ -12,7 +12,7 @@ from server.app.modules.agents_hub.services.retrieval.types import RetrievalCont
 
 
 class AgenticRetrievalStrategy:
-    mode = "agentic"
+    mode = "MD_AGENT_SELECTOR"
 
     def __init__(self, session: AsyncSession):
         self._session = session

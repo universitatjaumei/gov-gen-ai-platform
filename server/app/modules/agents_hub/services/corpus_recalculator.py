@@ -29,7 +29,7 @@ async def recalculate_corpus(
     )
     docs = list(docs_result.scalars().all())
 
-    if retrieval_mode == "vector":
+    if retrieval_mode == "RAG":
         watcher = IngestionWatcher(
             session=session,
             embedding_service=embedding_service,

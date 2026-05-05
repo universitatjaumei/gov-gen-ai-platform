@@ -67,6 +67,6 @@ class LocalConfigProvider:
         return list(result.scalars().all())
 
     async def get_retrieval_mode(self, chatbot_id: uuid.UUID) -> str:
-        """Devuelve el retrieval_mode del chatbot (default 'vector' si no existe)."""
+        """Devuelve el retrieval_mode del chatbot (default 'RAG' si no existe)."""
         chatbot = await self.get_chatbot(chatbot_id)
-        return getattr(chatbot, "retrieval_mode", "vector") if chatbot else "vector"
+        return getattr(chatbot, "retrieval_mode", "RAG") if chatbot else "RAG"

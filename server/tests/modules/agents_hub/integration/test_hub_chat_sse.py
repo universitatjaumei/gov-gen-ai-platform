@@ -207,10 +207,10 @@ class TestRetrievalModeDispatch:
 
     @patch.dict("os.environ", _JWT_ENV)
     def test_long_context_strategy_instantiated_for_long_context_mode(self) -> None:
-        """Cuando retrieval_mode='long_context', se instancia LongContextRetrievalStrategy."""
+        """Cuando retrieval_mode='MD_LONG_CONTEXT', se instancia LongContextRetrievalStrategy."""
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.id = uuid.uuid4()
-        chatbot.retrieval_mode = "long_context"
+        chatbot.retrieval_mode = "MD_LONG_CONTEXT"
         graph = _make_mock_graph_with_sources([])
 
         app = _build_test_app(chatbot)
@@ -233,10 +233,10 @@ class TestRetrievalModeDispatch:
 
     @patch.dict("os.environ", _JWT_ENV)
     def test_agentic_strategy_instantiated_for_agentic_mode(self) -> None:
-        """Cuando retrieval_mode='agentic', se instancia AgenticRetrievalStrategy."""
+        """Cuando retrieval_mode='MD_AGENT_SELECTOR', se instancia AgenticRetrievalStrategy."""
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.id = uuid.uuid4()
-        chatbot.retrieval_mode = "agentic"
+        chatbot.retrieval_mode = "MD_AGENT_SELECTOR"
         graph = _make_mock_graph_with_sources([])
 
         app = _build_test_app(chatbot)
@@ -259,10 +259,10 @@ class TestRetrievalModeDispatch:
 
     @patch.dict("os.environ", _JWT_ENV)
     def test_vector_strategy_used_as_default(self) -> None:
-        """Cuando retrieval_mode='vector' (default), se instancia VectorRetrievalStrategy."""
+        """Cuando retrieval_mode='RAG' (default), se instancia VectorRetrievalStrategy."""
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.id = uuid.uuid4()
-        chatbot.retrieval_mode = "vector"
+        chatbot.retrieval_mode = "RAG"
         graph = _make_mock_graph_with_sources([])
 
         app = _build_test_app(chatbot)
@@ -298,7 +298,7 @@ class TestRetrievalModeDispatch:
         ]
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.id = uuid.uuid4()
-        chatbot.retrieval_mode = "long_context"
+        chatbot.retrieval_mode = "MD_LONG_CONTEXT"
 
         done = _run_chat_and_get_done(chatbot, _make_mock_graph_with_sources(sources), _make_token())
 
@@ -323,7 +323,7 @@ class TestRetrievalModeDispatch:
         ]
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.id = uuid.uuid4()
-        chatbot.retrieval_mode = "agentic"
+        chatbot.retrieval_mode = "MD_AGENT_SELECTOR"
 
         done = _run_chat_and_get_done(
             chatbot, _make_mock_graph_with_sources(sources_read), _make_token()

@@ -137,7 +137,9 @@
       "PowerShell(Get-ChildItem \"C:\\\\Users\\\\fabra\\\\Documents\\\\AI_agents_hub\\\\data\\\\uploads\\\\ingestion\" -Recurse -Force | ForEach-Object { Write-Host $_.FullName })",
       "PowerShell(netstat *)",
       "Bash(netstat -ano)",
-      "Bash(awk -F: '$1 > 6900 {print; exit}')"
+      "Bash(awk -F: '$1 > 6900 {print; exit}')",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\fabra\\\\Documents\\\\AI_agents_hub\" -Directory)",
+      "Bash(Select-Object Name)"
     ]
   }
 }

@@ -16,27 +16,27 @@ def recommend_retrieval_mode(total_tokens: int, context_window: int = 128_000) -
 
     if total_tokens < long_ctx_limit:
         return (
-            "long_context",
+            "MD_LONG_CONTEXT",
             (
                 f"El corpus ({total_tokens:,} tokens) cabe al 60 % de la ventana del LLM "
-                f"({context_window:,} tokens). Recomendado long_context: cero pérdida de "
+                f"({context_window:,} tokens). Recomendado MD_LONG_CONTEXT: cero pérdida de "
                 f"información y citas más precisas."
             ),
         )
 
     if total_tokens < agentic_limit:
         return (
-            "agentic",
+            "MD_AGENT_SELECTOR",
             (
-                f"El corpus ({total_tokens:,} tokens) excede long_context, pero el LLM "
-                f"puede seleccionar qué documentos leer. Recomendado agentic."
+                f"El corpus ({total_tokens:,} tokens) excede MD_LONG_CONTEXT, pero el LLM "
+                f"puede seleccionar qué documentos leer. Recomendado MD_AGENT_SELECTOR."
             ),
         )
 
     return (
-        "vector",
+        "RAG",
         (
             f"El corpus ({total_tokens:,} tokens) requiere búsqueda vectorial para escalar "
-            f"en coste y latencia. Recomendado vector."
+            f"en coste y latencia. Recomendado RAG."
         ),
     )

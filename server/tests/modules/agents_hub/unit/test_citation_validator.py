@@ -43,14 +43,14 @@ class TestEnforceCitationContract:
     def test_returns_text_unchanged_when_no_sources(self):
         from server.app.modules.agents_hub.agent.citation_validator import enforce_citation_contract
         text = "Hola! En que te puedo ayudar?"
-        result = enforce_citation_contract(text, [], "vector")
+        result = enforce_citation_contract(text, [], "RAG")
         assert result == text
 
     def test_returns_text_when_at_least_one_valid_citation_present(self):
         from server.app.modules.agents_hub.agent.citation_validator import enforce_citation_contract
         sources = [_make_source("https://ej.com/norma.pdf")]
         text = "Segun [Norma](https://ej.com/norma.pdf) el plazo es 30 dias."
-        result = enforce_citation_contract(text, sources, "vector")
+        result = enforce_citation_contract(text, sources, "RAG")
         assert result == text
 
     def test_returns_fallback_when_sources_exist_but_no_citation(self):
@@ -59,11 +59,11 @@ class TestEnforceCitationContract:
         )
         sources = [_make_source("https://ej.com/norma.pdf")]
         text = "El plazo es 30 dias."
-        result = enforce_citation_contract(text, sources, "vector")
+        result = enforce_citation_contract(text, sources, "RAG")
         assert result == NO_CITATION_FALLBACK
 
     def test_agentic_mode_with_empty_sources_returns_text_unchanged(self):
         from server.app.modules.agents_hub.agent.citation_validator import enforce_citation_contract
         text = "Buenos dias! Como puedo ayudarte?"
-        result = enforce_citation_contract(text, [], "agentic")
+        result = enforce_citation_contract(text, [], "MD_AGENT_SELECTOR")
         assert result == text

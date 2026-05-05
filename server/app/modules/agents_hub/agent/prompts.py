@@ -27,7 +27,7 @@ def build_system_prompt(
         mode: vector | long_context | agentic.
     """
     parts = [base_prompt.strip(), "", f"Responde en {language}.", "", CITATION_RULES.strip()]
-    if mode == "agentic":
+    if mode == "MD_AGENT_SELECTOR":
         parts.append(
             "\nUsa la tool `list_documents` para ver el indice y `read_document(id=...)` "
             "para cargar el texto completo de cada documento que necesites antes de responder."

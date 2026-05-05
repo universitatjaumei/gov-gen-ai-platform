@@ -22,7 +22,7 @@ class TestBuildSystemPrompt:
             base_prompt="Eres un asistente.",
             language="es",
             sources_block="",
-            mode="vector",
+            mode="RAG",
         )
         assert "REGLAS DE CITA" in result
 
@@ -32,7 +32,7 @@ class TestBuildSystemPrompt:
             base_prompt="Eres un asistente.",
             language="ca",
             sources_block="",
-            mode="vector",
+            mode="RAG",
         )
         assert "ca" in result
 
@@ -42,7 +42,7 @@ class TestBuildSystemPrompt:
             base_prompt="Eres un asistente.",
             language="es",
             sources_block="",
-            mode="agentic",
+            mode="MD_AGENT_SELECTOR",
         )
         assert "list_documents" in result
         assert "read_document" in result
@@ -53,7 +53,7 @@ class TestBuildSystemPrompt:
             base_prompt="Eres un asistente.",
             language="es",
             sources_block="## Norma A\n_URL: https://ej.com_\n\nTexto.",
-            mode="long_context",
+            mode="MD_LONG_CONTEXT",
         )
         assert "DOCUMENTOS DISPONIBLES" in result
         assert "Norma A" in result
@@ -64,7 +64,7 @@ class TestBuildSystemPrompt:
             base_prompt="Eres un asistente.",
             language="es",
             sources_block="",
-            mode="vector",
+            mode="RAG",
         )
         assert "DOCUMENTOS DISPONIBLES" not in result
 
