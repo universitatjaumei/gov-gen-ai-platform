@@ -5,7 +5,7 @@ Deploy: edge
 
 import re
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Awaitable, Callable, Protocol
 from urllib.parse import urljoin, urlparse
