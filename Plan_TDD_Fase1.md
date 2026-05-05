@@ -11,11 +11,11 @@ El objetivo al finalizar esta fase es disponer de un **MVP desplegado con URL p�
 capaz de servir chatbots informativos y de redacción para al menos una organización piloto (UJI).
 
 ## Alcance
-- **Subfase 1.A — Chatbots Públicos con Datos Reales (Prioridad máxima):**
-  - Spider genérico (1A.1): `crawl_depth`, filtros regex, límite de páginas.
-  - Spiders especializados UJI (1A.2): normativa BOE/DOGV/UJI + catálogo de procedimientos.
-  - Asistente HITL de ingestión (1A.3): propuesta automática de selectores CSS, validación antes de guardar.
-  - Grafo público enriquecido (BLOQUE 9B): clasificador, reranker, evaluador de calidad, fallback honesto.
+- **~~Subfase 1.A — Chatbots Públicos con Datos Reales~~ — COMPLETADA ✅:**
+  - ~~Spider genérico (1A.1): `crawl_depth`, filtros regex, límite de páginas.~~
+  - ~~Spiders especializados UJI (1A.2): normativa BOE/DOGV/UJI + catálogo de procedimientos.~~
+  - ~~Asistente HITL de ingestión (1A.3): propuesta automática de selectores CSS, validación antes de guardar.~~
+  - Grafo público multi-perfil (BLOQUE 9B): CoreGraph + GraphProfiles + RetrievalPipelineFactory (RAG / MD_LONG_CONTEXT / MD_AGENT_SELECTOR); perfiles PUBLIC_KB_RICH y PUBLIC_PORTAL_AGGREGATOR (UJI).
   - Workspaces y agentes de redacción (9.11a–9.11d): modelos, pipeline de seguridad, grafo LangGraph, UI.
 - **Subfase 1.B — Identidad y Despliegue Cloud:**
   - Sistema de temas institucionales (FASE 10): variables CSS, presets, editor visual.
@@ -901,7 +901,7 @@ uv run pytest tests/unit/test_logging.py -v
 ---
 
 
-## Subfase 1.A — Spider Skills y Asistente HITL de Ingestión (PENDIENTE)
+## ~~Subfase 1.A — Spider Skills y Asistente HITL de Ingestión~~ — COMPLETADA ✅
 
 **Objetivo**: Implementar las capacidades de indexación web necesarias para que el chatbot informativo sirva respuestas con datos reales de webs institucionales. Esta subfase es **prerrequisito para la puesta en marcha del chatbot UJI** con datos actualizados.
 
@@ -1428,750 +1428,434 @@ class TestHtmlAnalyzerService:
 ---
 
 
-## BLOQUE 9B — Grafo Público Enriquecido (Subfase 1.A, PENDIENTE)
+## BLOQUE 9B — Grafo Público: Plataforma Multi-organización (Subfase 1.A, PENDIENTE)
 
-## FASE 9B: Grafo Público Enriquecido (Clasificador, Reranker, Evaluador de Calidad)
+## FASE 9B: Grafo Público Extensible (CoreGraph + GraphProfiles + RetrievalPipelineFactory)
 
-**Objetivo de la Fase**: Enriquecer el grafo LangGraph del modo público (chatbot) con nodos inteligentes: clasificación por dominio entre chatbots, reranking de chunks, evaluación de calidad inline y fallback honesto. Esto justifica plenamente el uso de LangGraph incluso sin usuario identificado.
+**Objetivo de la Fase**: Diseñar e implementar una arquitectura de grafo público extensible para una plataforma multi-organización, manteniendo un enfoque determinista-first, TDD (RED/GREEN) y reutilización máxima de componentes.
+
+El objetivo NO es implementar un único chatbot, sino una **plataforma** capaz de soportar **múltiples chatbots públicos** con **hipótesis de uso distintas**, **estrategias de retrieval distintas**, y **configuración en cascada**, sin acoplar la topología del grafo a un único dominio.
 
 **Dependencias**: Fase 4 (grafo LangGraph operativo), Fase 5B (LocalEmbeddingService BGE-M3)
 
 **Decisiones de diseño**:
-- **Chatbot Portal**: en lugar de crear categorías de KB dentro de un chatbot, se introduce el concepto de "portal": un chatbot con un campo `portal_chatbot_ids` que clasifica consultas entre los chatbots hijos del mismo cliente. Si el chatbot no es portal, el clasificador es pass-through.
-- **Clasificador dual**: embeddings por defecto (comparación con centroides de los `system_prompt` de los chatbots hijos), LLM como fallback si la confianza es baja.
-- **Reranker configurable**: `ms-marco-MiniLM-L-6-v2` por defecto, modelo cambiable desde panel admin. `NoopReranker` si se desactiva.
-- **Umbral de calidad**: 0.6 por defecto, configurable por chatbot desde panel partner.
 
-**Flujo del grafo público enriquecido**:
+- **No grafo monolítico**: no se implementa un único grafo "gigante" con condicionales por dominio. En su lugar: un `CoreGraph` reutilizable, un contrato de `GraphProfiles` seleccionables por chatbot, y un contrato de `RetrievalPipeline` enchufables.
+- **CoreGraph**: define el flujo común (idioma, retrieval, merge, rerank, generate, quality_gate, fallback, log). No contiene lógica específica de ningún dominio ni modo de retrieval.
+- **GraphProfiles**: definen la topología lógica y el UX por tipo de chatbot (agregación, routing, plantilla de respuesta). Ejemplos: `PUBLIC_KB_RICH` (genérico) y `PUBLIC_PORTAL_AGGREGATOR` (UJI: normativa + procedimientos).
+- **RetrievalPipelineFactory**: selecciona pipeline según `retrieval_mode` (`RAG` / `MD_LONG_CONTEXT` / `MD_AGENT_SELECTOR`). Garantiza un contrato común de salida (`RetrievalResult`) para todas las estrategias. El CoreGraph es agnóstico a cómo se obtuvo la evidencia.
+- **Configuración en cascada**: Plataforma → Organización → Chatbot. La organización aporta defaults; el chatbot puede sobrescribir cualquier parámetro. No existe lista de "perfiles permitidos" por organización.
+- **Caso piloto UJI** (`PUBLIC_PORTAL_AGGREGATOR`): dos dominios relacionados (normativa + procedimientos), comportamiento de agregación, preferencia de idioma (prefer, no strict), aviso de traducción si el idioma de la evidencia difiere del idioma del usuario.
+
+**Arquitectura objetivo**:
 ```
-[route_by_capability] → [detect_language] → [query_classifier]
-                                                    │
-                                          ¿portal con hijos?
-                                           /              \
-                                    [selecciona KB]    [pass-through]
-                                           \              /
-                                      [search_knowledge]
-                                              │
-                                        [reranker]
-                                              │
-                                    [generate_response]
-                                              │
-                                    [quality_evaluator]
-                                       /            \
-                                [score ≥ umbral]  [score < umbral]
-                                    │                │
-                            [log_interaction]  [fallback_response]
-                                    │                │
-                                  [END]            [END]
+CoreGraph (flujo común)
+  detect_language → retrieve (delegado a RetrievalStrategy + Pipeline) → merge (por perfil)
+  → rerank (opcional) → generate_answer (plantilla por perfil)
+  → quality_gate (faithfulness + relevance) → fallback honesto / log_interaction
+
+GraphProfiles
+  PUBLIC_KB_RICH            ← genérico: grupos, oferta académica, FAQs municipales
+  PUBLIC_PORTAL_AGGREGATOR  ← UJI: normativa + procedimientos, merge dual
+
+RetrievalPipelineFactory
+  RAG              ← retrieval vectorial clásico
+  MD_LONG_CONTEXT  ← document packs Markdown
+  MD_AGENT_SELECTOR ← agente selecciona documentos/secciones
 ```
 
 ---
 
-### Prompt 4B.1 - Tests del Query Classifier (TDD - RED)
+### Prompt 9B.1 (RED) — Estructura de librería de grafos públicos + registry
 
-**Objetivo**: Validar la clasificación de consultas por dominio para enrutar a la KB del chatbot temático correcto. El clasificador usa embeddings de los `system_prompt` de los chatbots hijos y LLM como fallback.
+```markdown
+# PROMPT 9B.1 (RED) — Crear estructura de librería de grafos públicos + registry
 
-**tests/modules/agents_hub/unit/test_query_classifier.py**:
-```python
-"""Tests para el clasificador de consultas por dominio — TDD RED."""
-import uuid
-import pytest
-from unittest.mock import AsyncMock, Mock
-from dataclasses import dataclass
+Objetivo: crear una librería extensible para grafos públicos:
+- CoreGraph (nodos comunes)
+- Perfiles (Graph Profiles)
+- Estrategias enchufables
+- Registry (catálogo de perfiles)
 
+Tareas:
+1) Crear carpetas:
+   server/app/modules/agents_hub/agent/public_graphs/
+     core/
+     profiles/
+     strategies/
+     registry.py
+     types.py
 
-@dataclass
-class FakeChatbot:
-    id: uuid.UUID
-    name: str
-    system_prompt: str
+2) Definir en types.py:
+   - Enum PublicGraphProfile con valores iniciales:
+     PUBLIC_KB_RICH
+     PUBLIC_PORTAL_ROUTER (opcional, preparado)
+     PUBLIC_PORTAL_AGGREGATOR (UJI)
 
+3) Implementar registry.py:
+   - register_profile(profile_name, profile_factory)
+   - get_profile(profile_name) -> profile_factory o error
+   - list_profiles() -> list[str]
 
-class TestQueryClassifier:
+Tests (RED) en tests/public_graphs/test_registry.py:
+- test_registry_lists_profiles
+- test_registry_raises_on_unknown_profile
+- test_registry_can_register_and_get_profile
 
-    @pytest.fixture
-    def chatbots_hijos(self):
-        return [
-            FakeChatbot(id=uuid.uuid4(), name="RRHH", system_prompt="Resuelve dudas sobre nóminas, permisos y contratos laborales."),
-            FakeChatbot(id=uuid.uuid4(), name="Normativa", system_prompt="Consultas sobre normativa académica, reglamentos y BOE."),
-            FakeChatbot(id=uuid.uuid4(), name="Económico", system_prompt="Gestión económica, presupuestos y justificación de gastos."),
-        ]
-
-    @pytest.mark.asyncio
-    async def test_classifies_rrhh_query(self, chatbots_hijos) -> None:
-        from server.app.modules.agents_hub.agent.query_classifier import QueryClassifier
-
-        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
-        classifier = QueryClassifier(embedding_service=embedding_service)
-        result = await classifier.classify(
-            query="¿Cuántos días de vacaciones me corresponden?",
-            candidate_chatbots=chatbots_hijos,
-        )
-        assert result.chatbot_id == chatbots_hijos[0].id
-        assert result.confidence > 0.0
-
-    @pytest.mark.asyncio
-    async def test_pass_through_single_chatbot(self, chatbots_hijos) -> None:
-        """Si solo hay un chatbot candidato, devuelve ese directamente."""
-        from server.app.modules.agents_hub.agent.query_classifier import QueryClassifier
-
-        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
-        classifier = QueryClassifier(embedding_service=embedding_service)
-        single = [chatbots_hijos[0]]
-        result = await classifier.classify(query="cualquier cosa", candidate_chatbots=single)
-        assert result.chatbot_id == single[0].id
-        assert result.confidence == 1.0
-
-    @pytest.mark.asyncio
-    async def test_pass_through_empty_list(self) -> None:
-        """Sin candidatos, devuelve None."""
-        from server.app.modules.agents_hub.agent.query_classifier import QueryClassifier
-
-        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
-        classifier = QueryClassifier(embedding_service=embedding_service)
-        result = await classifier.classify(query="hola", candidate_chatbots=[])
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_returns_classification_result_with_confidence(self, chatbots_hijos) -> None:
-        from server.app.modules.agents_hub.agent.query_classifier import QueryClassifier, ClassificationResult
-
-        embedding_service = AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024))
-        classifier = QueryClassifier(embedding_service=embedding_service)
-        result = await classifier.classify(
-            query="¿Cómo justifico los gastos del proyecto?",
-            candidate_chatbots=chatbots_hijos,
-        )
-        assert isinstance(result, ClassificationResult)
-        assert hasattr(result, "chatbot_id")
-        assert hasattr(result, "confidence")
-        assert 0.0 <= result.confidence <= 1.0
+Criterio de aceptación:
+- La estructura existe y los tests del registry pasan.
 ```
 
 ---
 
-### Prompt 4B.2 - Implementación del Query Classifier + Migración (TDD - GREEN)
+### Prompt 9B.2 (RED) — Modelo de datos: `public_graph_profile` + `retrieval_mode` + defaults de organización
 
-**Objetivo**: Implementar el clasificador de consultas y añadir el campo `portal_chatbot_ids` a `HubChatbot`.
+```markdown
+# PROMPT 9B.2 (RED) — Modelo de datos para selección de perfil + retrieval_mode + cascada de defaults
 
-**Migración Alembic**: añadir a `hub_chatbots`:
-- `portal_chatbot_ids: ARRAY(UUID)` — lista de chatbot_ids a los que enrutar (NULL = no es portal)
-- `quality_threshold: Float` — umbral de calidad (default 0.6)
+Objetivo: permitir múltiples perfiles y múltiples estrategias de retrieval por chatbot/portal (por uso),
+sin restricciones por organización. La organización aporta defaults; el chatbot puede sobrescribir.
 
-**server/app/modules/agents_hub/agent/query_classifier.py**:
-```python
-"""Clasificador de consultas por dominio para enrutado entre chatbots."""
-import uuid
-from dataclasses import dataclass
-from typing import Protocol, Sequence
+Tareas:
+1) Añadir campos a HubChatbot:
+   - public_graph_profile: str (default "PUBLIC_KB_RICH")
+   - retrieval_mode: str (default "RAG")  # RAG | MD_LONG_CONTEXT | MD_AGENT_SELECTOR
+   - language_mode: str (default "prefer")  # strict | prefer | none
+   - quality_threshold: float (default 0.6)
+   - min_retrieval_results: int (default 2)
+   - min_retrieval_score: float (default 0.25)
+   - reranker_enabled: bool (default true)
+   - answer_template: str (default "generic")
 
-import numpy as np
+2) Añadir defaults a la entidad Organización:
+   - default_public_graph_profile: str (default "PUBLIC_KB_RICH")
+   - default_retrieval_mode: str (default "RAG")
+   - default_language_mode: str (default "prefer")
+   - default_quality_threshold, default_min_retrieval_results, default_min_retrieval_score
+   - default_reranker_enabled, default_answer_template
 
+3) Migraciones Alembic para ambas tablas.
 
-class EmbeddingProtocol(Protocol):
-    async def embed(self, text: str) -> list[float]: ...
+Tests (RED):
+- test_chatbot_has_retrieval_mode_default
+- test_org_has_default_retrieval_mode
+- test_migration_applies_defaults_without_breaking_existing_rows
 
-
-@dataclass
-class ClassificationResult:
-    chatbot_id: uuid.UUID
-    chatbot_name: str
-    confidence: float
-
-
-@dataclass
-class ChatbotCandidate:
-    id: uuid.UUID
-    name: str
-    system_prompt: str
-
-
-class QueryClassifier:
-    """Clasifica consultas comparando embeddings de la query con los system_prompt de los chatbots candidatos."""
-
-    def __init__(self, embedding_service: EmbeddingProtocol):
-        self.embedding_service = embedding_service
-        self._centroid_cache: dict[uuid.UUID, list[float]] = {}
-
-    async def classify(
-        self,
-        query: str,
-        candidate_chatbots: Sequence[ChatbotCandidate],
-    ) -> ClassificationResult | None:
-        if not candidate_chatbots:
-            return None
-        if len(candidate_chatbots) == 1:
-            c = candidate_chatbots[0]
-            return ClassificationResult(chatbot_id=c.id, chatbot_name=c.name, confidence=1.0)
-
-        query_emb = await self.embedding_service.embed(query)
-        best, best_score = None, -1.0
-
-        for chatbot in candidate_chatbots:
-            if chatbot.id not in self._centroid_cache:
-                self._centroid_cache[chatbot.id] = await self.embedding_service.embed(chatbot.system_prompt)
-            centroid = self._centroid_cache[chatbot.id]
-            score = self._cosine_similarity(query_emb, centroid)
-            if score > best_score:
-                best, best_score = chatbot, score
-
-        return ClassificationResult(
-            chatbot_id=best.id, chatbot_name=best.name, confidence=max(0.0, min(1.0, best_score))
-        )
-
-    @staticmethod
-    def _cosine_similarity(a: list[float], b: list[float]) -> float:
-        va, vb = np.array(a), np.array(b)
-        denom = np.linalg.norm(va) * np.linalg.norm(vb)
-        return float(np.dot(va, vb) / denom) if denom > 0 else 0.0
+Criterio de aceptación:
+- Dos chatbots de la misma organización pueden tener retrieval_mode distinto.
+- No existe campo de "allowed profiles/modes" por organización (sin restricciones).
 ```
 
 ---
 
-### Prompt 4B.3 - Tests del Reranker (TDD - RED)
+### Prompt 9B.3 (RED/GREEN) — ConfigResolver efectivo (cascada) incluye `retrieval_mode`
 
-**Objetivo**: Validar que el reranker reordena chunks por relevancia real y que NoopReranker no altera el orden.
+```markdown
+# PROMPT 9B.3 (RED/GREEN) — ConfigResolver: Platform → Organization → Chatbot (incluye retrieval_mode)
 
-**tests/modules/agents_hub/unit/test_reranker.py**:
-```python
-"""Tests para el reranker de chunks — TDD RED."""
-import pytest
-from dataclasses import dataclass
+Objetivo: resolver configuración efectiva del grafo público por chatbot.
 
+Tareas:
+1) Crear core/config_resolver.py:
+   - PublicGraphConfig (dataclass/pydantic) con:
+     profile, retrieval_mode, language_mode, thresholds, reranker_enabled, answer_template, etc.
+   - async get_effective_public_graph_config(chatbot_id, session) -> PublicGraphConfig
 
-@dataclass
-class FakeChunk:
-    content: str
-    score: float
+2) PlatformDefaults: valores hardcoded o ConfigProvider global.
 
+Tests (RED):
+- test_effective_config_uses_platform_defaults
+- test_effective_config_org_overrides_platform
+- test_effective_config_chatbot_overrides_org
+- test_effective_config_includes_retrieval_mode
 
-class TestCrossEncoderReranker:
-
-    @pytest.mark.asyncio
-    async def test_reranker_reorders_by_relevance(self) -> None:
-        from server.app.modules.agents_hub.agent.reranker import CrossEncoderReranker
-
-        reranker = CrossEncoderReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
-        chunks = [
-            FakeChunk(content="Python es un lenguaje de programación.", score=0.5),
-            FakeChunk(content="Las vacaciones son 22 días laborables al año.", score=0.9),
-        ]
-        result = await reranker.rerank(query="¿Cuántos días de vacaciones tengo?", documents=chunks, top_k=2)
-        assert result[0].content == chunks[1].content
-
-    @pytest.mark.asyncio
-    async def test_reranker_truncates_to_top_k(self) -> None:
-        from server.app.modules.agents_hub.agent.reranker import CrossEncoderReranker
-
-        reranker = CrossEncoderReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
-        chunks = [FakeChunk(content=f"Chunk {i}", score=0.5) for i in range(10)]
-        result = await reranker.rerank(query="test", documents=chunks, top_k=3)
-        assert len(result) == 3
-
-
-class TestNoopReranker:
-
-    @pytest.mark.asyncio
-    async def test_noop_preserves_order(self) -> None:
-        from server.app.modules.agents_hub.agent.reranker import NoopReranker
-
-        reranker = NoopReranker()
-        chunks = [FakeChunk(content=f"Chunk {i}", score=float(i)) for i in range(5)]
-        result = await reranker.rerank(query="test", documents=chunks, top_k=5)
-        assert [r.content for r in result] == [c.content for c in chunks]
-
-    @pytest.mark.asyncio
-    async def test_noop_truncates_to_top_k(self) -> None:
-        from server.app.modules.agents_hub.agent.reranker import NoopReranker
-
-        reranker = NoopReranker()
-        chunks = [FakeChunk(content=f"Chunk {i}", score=float(i)) for i in range(10)]
-        result = await reranker.rerank(query="test", documents=chunks, top_k=3)
-        assert len(result) == 3
+GREEN:
+- Implementación mínima para pasar tests.
 ```
 
 ---
 
-### Prompt 4B.4 - Implementación del Reranker (TDD - GREEN)
+### Prompt 9B.4 (RED) — Contrato de evidencias + contrato de pipelines (tests de contrato)
 
-**Objetivo**: Implementar reranker desacoplado con interfaz `RerankerProtocol`.
+```markdown
+# PROMPT 9B.4 (RED) — Contrato de Evidencia + Protocolos de RetrievalPipeline (con tests de contrato)
 
-**Dependencia**: añadir `sentence-transformers>=2.6.0` a `server/pyproject.toml` (si no está ya por BGE-M3).
+Objetivo: definir un contrato uniforme de salida del retrieval, independiente de la estrategia usada.
+Es lo que evita necesitar "un grafo por retriever".
 
-**server/app/modules/agents_hub/agent/reranker.py**:
-```python
-"""Reranker de chunks con interfaz desacoplada."""
-from dataclasses import dataclass
-from typing import Protocol, Sequence, TypeVar
+Tareas:
+1) Crear strategies/retrieval_contract.py:
+   - EvidenceItem:
+       source_id: str
+       source_url: str | None
+       title: str | None
+       content: str
+       language: str | None
+       score: float | None
+       metadata: dict
+   - RetrievalResult:
+       items: list[EvidenceItem]
+       context_source_language: str | None
+       debug: dict
 
-T = TypeVar("T")
+2) Crear strategies/retrieval_pipeline_protocol.py:
+   - class RetrievalPipeline(Protocol):
+       async def run(query: str, chatbot_id: str, cfg: PublicGraphConfig, deps: GraphDeps) -> RetrievalResult
 
+3) Tests de contrato (RED) en tests/public_graphs/test_retrieval_contract.py:
+   - test_pipeline_result_has_items_and_debug
+   - test_evidence_item_has_required_fields
+   - test_context_source_language_is_set_when_items_present
+   - test_contract_is_serializable_or_repr_safe
 
-class HasContent(Protocol):
-    content: str
-
-
-@dataclass
-class RankedDocument:
-    content: str
-    score: float
-    original_index: int
-
-
-class RerankerProtocol(Protocol):
-    async def rerank(self, query: str, documents: Sequence[HasContent], top_k: int = 5) -> list[RankedDocument]: ...
-
-
-class NoopReranker:
-    """Reranker que no altera el orden — para desactivar sin cambiar el grafo."""
-
-    async def rerank(self, query: str, documents: Sequence[HasContent], top_k: int = 5) -> list[RankedDocument]:
-        return [
-            RankedDocument(content=d.content, score=getattr(d, "score", 0.0), original_index=i)
-            for i, d in enumerate(documents[:top_k])
-        ]
-
-
-class CrossEncoderReranker:
-    """Reranker basado en cross-encoder (sentence-transformers)."""
-
-    def __init__(self, model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"):
-        self._model_name = model_name
-        self._model = None
-
-    def _get_model(self):
-        if self._model is None:
-            from sentence_transformers import CrossEncoder
-            self._model = CrossEncoder(self._model_name)
-        return self._model
-
-    async def rerank(self, query: str, documents: Sequence[HasContent], top_k: int = 5) -> list[RankedDocument]:
-        if not documents:
-            return []
-        model = self._get_model()
-        pairs = [(query, d.content) for d in documents]
-        scores = model.predict(pairs)
-        indexed = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
-        return [
-            RankedDocument(content=documents[i].content, score=float(s), original_index=i)
-            for i, s in indexed[:top_k]
-        ]
-
-
-_reranker_instance: RerankerProtocol | None = None
-
-def get_reranker(model_name: str | None = None, enabled: bool = True) -> RerankerProtocol:
-    global _reranker_instance
-    if not enabled:
-        return NoopReranker()
-    if _reranker_instance is None:
-        _reranker_instance = CrossEncoderReranker(model_name or "cross-encoder/ms-marco-MiniLM-L-6-v2")
-    return _reranker_instance
+Criterio de aceptación:
+- Existe un contrato estable de retrieval que todos los pipelines deben cumplir.
 ```
 
 ---
 
-### Prompt 4B.5 - Tests del Quality Evaluator y Fallback (TDD - RED)
+### Prompt 9B.5 (RED/GREEN) — RetrievalPipelineFactory + pipelines stub + tests de contrato por modo
 
-**Objetivo**: Validar la evaluación inline de calidad y el mecanismo de fallback.
+```markdown
+# PROMPT 9B.5 (RED/GREEN) — RetrievalPipelineFactory + 3 pipelines (RAG / MD_LONG_CONTEXT / MD_AGENT_SELECTOR)
 
-**tests/modules/agents_hub/unit/test_quality_evaluator.py**:
-```python
-"""Tests para evaluador de calidad inline y fallback — TDD RED."""
-import pytest
+Objetivo: implementar una fábrica que devuelva un pipeline según retrieval_mode, y verificar por tests
+que cada pipeline cumple el contrato.
 
+Tareas:
+1) Crear strategies/retrieval_pipeline_factory.py:
+   - def get_pipeline(mode: str) -> RetrievalPipeline
+   - lanzar ValueError si mode desconocido
 
-class TestQualityEvaluator:
+2) Implementar pipelines mínimos:
+   - RagVectorPipeline: llama al retriever vectorial existente y devuelve EvidenceItem por chunk
+   - MdLongContextPipeline: selecciona un subconjunto de docs MD y construye un "pack" en items
+   - MdAgentSelectorPipeline: (mínimo) simula selección de docs sin LLM y devuelve items
 
-    @pytest.mark.asyncio
-    async def test_high_quality_passes(self) -> None:
-        from server.app.modules.agents_hub.agent.quality_evaluator import evaluate_response_quality
+3) Tests (RED) en tests/public_graphs/test_retrieval_pipeline_factory.py:
+   - test_factory_returns_pipeline_for_each_mode
+   - test_factory_raises_for_unknown_mode
 
-        result = await evaluate_response_quality(
-            question="¿Qué es Python?",
-            answer="Python es un lenguaje de programación versátil.",
-            context="Python es un lenguaje de programación versátil y fácil de aprender.",
-        )
-        assert result.score >= 0.6
-        assert result.passed is True
+4) Tests de contrato por pipeline (RED) en tests/public_graphs/test_retrieval_pipelines_contract.py:
+   - test_rag_pipeline_conforms_to_contract
+   - test_md_long_context_pipeline_conforms_to_contract
+   - test_md_agent_selector_pipeline_conforms_to_contract
 
-    @pytest.mark.asyncio
-    async def test_low_quality_fails(self) -> None:
-        from server.app.modules.agents_hub.agent.quality_evaluator import evaluate_response_quality
-
-        result = await evaluate_response_quality(
-            question="¿Cuántos días de vacaciones tengo?",
-            answer="La temperatura media en Marte es de -60 grados.",
-            context="Los empleados tienen 22 días laborables de vacaciones.",
-        )
-        assert result.passed is False
-
-    @pytest.mark.asyncio
-    async def test_custom_threshold(self) -> None:
-        from server.app.modules.agents_hub.agent.quality_evaluator import evaluate_response_quality
-
-        result = await evaluate_response_quality(
-            question="test", answer="test related", context="test context",
-            threshold=0.9,
-        )
-        assert isinstance(result.passed, bool)
-
-    @pytest.mark.asyncio
-    async def test_metrics_include_faithfulness_and_relevance(self) -> None:
-        from server.app.modules.agents_hub.agent.quality_evaluator import evaluate_response_quality
-
-        result = await evaluate_response_quality(
-            question="test", answer="test", context="test",
-        )
-        assert "faithfulness" in result.metrics
-        assert "relevance" in result.metrics
-
-
-class TestFallbackHandler:
-
-    @pytest.mark.asyncio
-    async def test_fallback_generates_honest_message(self) -> None:
-        from server.app.modules.agents_hub.agent.fallback_handler import generate_fallback_response
-
-        response = await generate_fallback_response(language="es")
-        assert "información suficiente" in response.lower() or "no dispongo" in response.lower()
-
-    @pytest.mark.asyncio
-    async def test_fallback_respects_language(self) -> None:
-        from server.app.modules.agents_hub.agent.fallback_handler import generate_fallback_response
-
-        response_ca = await generate_fallback_response(language="ca")
-        response_en = await generate_fallback_response(language="en")
-        assert response_ca != response_en
-
-
-class TestRetrievalValidator:
-    """Valida el nodo que decide si el contexto recuperado es suficiente
-    para generar respuesta directamente o si hay que hacer fallback
-    de idioma (re-búsqueda sin filtro de idioma + advertencia de traducción)."""
-
-    @pytest.mark.asyncio
-    async def test_sufficient_results_pass(self) -> None:
-        from server.app.modules.agents_hub.agent.retrieval_validator import validate_retrieval
-        from server.app.modules.agents_hub.services.retriever import SearchResult
-        import uuid
-
-        results = [
-            SearchResult(id=uuid.uuid4(), content="x", source_url="u", language="ca", score=0.8),
-            SearchResult(id=uuid.uuid4(), content="y", source_url="u", language="ca", score=0.75),
-        ]
-        decision = validate_retrieval(results, min_results=2, min_score=0.25)
-        assert decision == "ok"
-
-    @pytest.mark.asyncio
-    async def test_zero_results_triggers_language_fallback(self) -> None:
-        from server.app.modules.agents_hub.agent.retrieval_validator import validate_retrieval
-
-        decision = validate_retrieval([], min_results=2, min_score=0.25)
-        assert decision == "language_fallback"
-
-    @pytest.mark.asyncio
-    async def test_low_score_triggers_language_fallback(self) -> None:
-        from server.app.modules.agents_hub.agent.retrieval_validator import validate_retrieval
-        from server.app.modules.agents_hub.services.retriever import SearchResult
-        import uuid
-
-        results = [
-            SearchResult(id=uuid.uuid4(), content="x", source_url="u", language="ca", score=0.1),
-        ]
-        decision = validate_retrieval(results, min_results=2, min_score=0.25)
-        assert decision == "language_fallback"
-
-    @pytest.mark.asyncio
-    async def test_language_fallback_warning_in_context(self) -> None:
-        from server.app.modules.agents_hub.agent.fallback_handler import build_translation_warning
-
-        warning = build_translation_warning(source_language="es", query_language="ca")
-        assert "ca" in warning.lower() or "català" in warning.lower() or "idioma" in warning.lower()
+GREEN:
+- Implementación mínima para pasar tests.
 ```
 
 ---
 
-### Prompt 4B.6 - Implementación del Quality Evaluator + Fallback (TDD - GREEN)
+### Prompt 9B.6 (RED) — Protocolos/Interfaces de estrategias actualizados para usar pipelines
 
-**Objetivo**: Implementar evaluador de calidad reutilizando `rag_metrics.py` y handler de fallback i18n.
+```markdown
+# PROMPT 9B.6 (RED) — Protocolos de estrategias (actualizados para RetrievalPipeline)
 
-**server/app/modules/agents_hub/agent/quality_evaluator.py**:
-```python
-"""Evaluador de calidad de respuestas inline (pre-envío)."""
-from dataclasses import dataclass, field
+Objetivo: los perfiles siguen definiendo RetrievalStrategy/Merge/Template/LanguagePolicy,
+pero RetrievalStrategy debe usar el pipeline devuelto por RetrievalPipelineFactory según cfg.retrieval_mode.
 
-from server.app.modules.agents_hub.evaluation.rag_metrics import (
-    calculate_answer_relevance,
-    calculate_faithfulness,
-)
+Tareas:
+1) En strategies/protocols.py:
+   - RetrievalStrategy.retrieve(...) devuelve RetrievalOutput
+   - RetrievalOutput puede contener uno o varios RetrievalResult (p.ej. buckets)
+   - RetrievalStrategy invoca internamente get_pipeline(cfg.retrieval_mode).run(...)
 
+2) Tests (RED):
+   - test_retrieval_strategy_uses_pipeline_factory
+   - test_retrieval_output_can_hold_multiple_buckets
 
-@dataclass
-class QualityResult:
-    score: float
-    passed: bool
-    metrics: dict = field(default_factory=dict)
-
-
-async def evaluate_response_quality(
-    question: str,
-    answer: str,
-    context: str,
-    threshold: float = 0.6,
-) -> QualityResult:
-    faithfulness = await calculate_faithfulness(answer=answer, context=context)
-    relevance = await calculate_answer_relevance(question=question, answer=answer)
-
-    combined = (faithfulness + relevance) / 2.0
-    return QualityResult(
-        score=combined,
-        passed=combined >= threshold,
-        metrics={"faithfulness": faithfulness, "relevance": relevance},
-    )
-```
-
-**server/app/modules/agents_hub/agent/fallback_handler.py**:
-```python
-"""Respuesta de fallback cuando la calidad es insuficiente."""
-
-_FALLBACK_MESSAGES = {
-    "es": "No dispongo de información suficiente para responder con confianza a esta consulta. Te recomiendo contactar directamente con el servicio correspondiente.",
-    "ca": "No dispose d'informació suficient per respondre amb confiança a aquesta consulta. Et recomane contactar directament amb el servei corresponent.",
-    "en": "I don't have enough information to answer this query with confidence. I recommend contacting the relevant service directly.",
-}
-
-
-async def generate_fallback_response(language: str = "es") -> str:
-    return _FALLBACK_MESSAGES.get(language, _FALLBACK_MESSAGES["es"])
-
-
-_TRANSLATION_WARNINGS = {
-    "es": "⚠️ No se ha encontrado información en el idioma de tu consulta. La respuesta se ha generado a partir de fuentes en otro idioma y puede contener adaptaciones.",
-    "ca": "⚠️ No s'ha trobat informació en l'idioma de la consulta. La resposta s'ha generat a partir de fonts en un altre idioma i pot contenir adaptacions.",
-    "en": "⚠️ No information was found in your query language. The response was generated from sources in another language and may contain adaptations.",
-}
-
-
-def build_translation_warning(source_language: str, query_language: str) -> str:
-    return _TRANSLATION_WARNINGS.get(query_language, _TRANSLATION_WARNINGS["es"])
-```
-
-**server/app/modules/agents_hub/agent/retrieval_validator.py**:
-```python
-"""Decide si el contexto recuperado es suficiente o se necesita fallback de idioma."""
-from server.app.modules.agents_hub.services.retriever import SearchResult
-
-
-def validate_retrieval(
-    results: list[SearchResult],
-    min_results: int = 2,
-    min_score: float = 0.25,
-) -> str:
-    """Evalúa si los resultados de búsqueda son suficientes.
-
-    Returns:
-        "ok" — context suficiente, continuar con generate_response
-        "language_fallback" — re-buscar sin filtro de idioma y añadir advertencia
-    """
-    if not results:
-        return "language_fallback"
-    if len(results) < min_results or max(r.score for r in results) < min_score:
-        return "language_fallback"
-    return "ok"
-```
-
-**Nota de diseño**: `min_results` y `min_score` se leen de `HubChatbot.min_retrieval_results` y
-`HubChatbot.min_retrieval_score` vía `ConfigProvider` en el nodo del grafo. Los defaults (2 y 0.25)
-son los valores de columna en la migración Alembic (ver Prompt 4B.2).
-
----
-
-### Prompt 4B.7 - Tests del Grafo Público Integrado (TDD - RED)
-
-**Objetivo**: Validar el flujo completo del grafo enriquecido con aristas condicionales.
-
-**tests/modules/agents_hub/integration/test_enriched_graph.py**:
-```python
-"""Tests de integración del grafo público enriquecido — TDD RED."""
-import pytest
-from unittest.mock import AsyncMock, Mock, patch
-
-
-class TestEnrichedPublicGraph:
-
-    @pytest.mark.asyncio
-    async def test_graph_has_new_nodes(self) -> None:
-        from server.app.modules.agents_hub.agent.graph import create_agent_graph
-
-        with patch("server.app.modules.agents_hub.agent.graph.ChatGoogleGenerativeAI"):
-            graph = create_agent_graph(retriever=Mock(), embedding_service=Mock())
-            node_names = list(graph.nodes.keys())
-            assert "query_classifier" in node_names
-            assert "reranker" in node_names
-            assert "quality_evaluator" in node_names
-            assert "fallback_response" in node_names
-
-    @pytest.mark.asyncio
-    async def test_graph_has_conditional_edge_after_quality(self) -> None:
-        """El grafo debe tener una bifurcación tras quality_evaluator."""
-        from server.app.modules.agents_hub.agent.graph import create_agent_graph
-
-        with patch("server.app.modules.agents_hub.agent.graph.ChatGoogleGenerativeAI"):
-            graph = create_agent_graph(retriever=Mock(), embedding_service=Mock())
-            compiled = graph.compile()
-            assert compiled is not None
-
-    @pytest.mark.asyncio
-    async def test_new_state_fields_initialized(self) -> None:
-        from server.app.modules.agents_hub.agent.state import create_initial_state
-
-        state = create_initial_state(user_id=None, chatbot_id="test-123", initial_message="Hola")
-        assert state["classified_chatbot_id"] == ""
-        assert state["quality_score"] == 0.0
-        assert state["fallback_triggered"] is False
+Criterio:
+- retrieval_mode se aplica sin cambiar CoreGraph.
 ```
 
 ---
 
-### Prompt 4B.8 - Integración en graph.py y state.py (TDD - GREEN)
+### Prompt 9B.7 (RED/GREEN) — CoreGraph (orquestación común)
 
-**Objetivo**: Modificar `state.py` con los campos nuevos e integrar todos los nodos en `graph.py` con aristas condicionales.
+```markdown
+# PROMPT 9B.7 (RED/GREEN) — CoreGraph: orquestación común usando RetrievalStrategy
 
-**Cambios en state.py** — añadir al `AgentState`:
-```python
-    # --- Fase 4B: Grafo Público Enriquecido ---
-    classified_chatbot_id: str      # ID del chatbot seleccionado por clasificador ("" = sin clasificar)
-    classifier_confidence: float    # Confianza del clasificador (0.0–1.0)
-    reranked_context: list[str]     # Contexto tras reranking
-    quality_score: float            # Score compuesto del evaluador (0.0–1.0)
-    quality_metrics: dict           # {faithfulness: float, relevance: float}
-    fallback_triggered: bool        # True si la respuesta fue sustituida por fallback honesto
-    language_fallback_triggered: bool  # True si se re-buscó sin filtro de idioma
-    context_source_language: str | None  # Idioma predominante de los chunks usados (None si no aplica)
+Objetivo: CoreGraph ejecuta el flujo común sin lógica específica de dominio ni retrieval_mode:
+detect_language → retrieve → merge → (optional) rerank → generate_answer → quality_gate → (log | fallback)
+
+Tareas:
+- Implementar/ajustar core/core_graph.py para trabajar con RetrievalOutput/RetrievalResult.
+- No introducir lógica específica de UJI ni de ningún modo de retrieval.
+
+Tests (RED):
+- test_core_graph_compiles_with_mock_strategies
+- test_core_graph_branches_to_fallback_when_quality_low
+- test_core_graph_runs_with_each_retrieval_mode_using_generic_profile
+
+GREEN:
+- Implementación mínima.
 ```
 
-**Cambios en create_initial_state** — inicializar campos nuevos:
-```python
-    classified_chatbot_id="",
-    classifier_confidence=0.0,
-    reranked_context=[],
-    quality_score=0.0,
-    quality_metrics={},
-    fallback_triggered=False,
-    language_fallback_triggered=False,
-    context_source_language=None,
+---
+
+### Prompt 9B.8 (RED/GREEN) — Perfil genérico PUBLIC_KB_RICH (compatible con los 3 retrieval_mode)
+
+```markdown
+# PROMPT 9B.8 (RED/GREEN) — PUBLIC_KB_RICH compatible con 3 retrieval_mode
+
+Objetivo: perfil "default" para futuros chatbots (grupos, oferta académica, FAQs municipales).
+Debe funcionar con cualquiera de los 3 modos de retrieval.
+
+Tareas:
+1) profiles/public_kb_rich.py:
+   - SingleSourceRetrievalStrategy: usa pipeline(cfg.retrieval_mode)
+   - PassthroughMergeStrategy
+   - GenericAnswerTemplateStrategy
+   - DefaultLanguagePolicy
+
+2) Tests (RED):
+   - test_public_kb_rich_runs_in_rag_mode
+   - test_public_kb_rich_runs_in_md_long_context_mode
+   - test_public_kb_rich_runs_in_md_agent_selector_mode
+
+GREEN:
+- Implementación.
+
+Criterio:
+- Un chatbot público genérico funciona con los 3 modos sin cambiar de grafo.
 ```
 
-**Cambios en graph.py** — flujo completo con validación de retrieval y language fallback:
+---
 
-```
-[route_by_capability] → [detect_language] → [query_classifier]
-                                                    │
-                                      [search_knowledge]  ← búsqueda con filtro de idioma
-                                              │
-                                   [validate_retrieval]
-                                     /               \
-                               "ok"               "language_fallback"
-                                 │                       │
-                           [reranker]        [search_knowledge_fallback]  ← sin filtro idioma
-                                 │                       │
-                           [generate_response] ←─────────┘  (con advertencia de traducción si fallback)
-                                 │
-                        [quality_evaluator]
-                           /            \
-                    [score ≥ umbral]  [score < umbral]
-                           │                │
-                  [log_interaction]  [fallback_response]  ← respuesta honesta "no tengo info"
-                           │                │
-                         [END]            [END]
-```
+### Prompt 9B.9 (RED/GREEN) — Perfil PUBLIC_PORTAL_ROUTER (opcional, compatible con retrieval_mode)
 
-```python
-    # Nuevos nodos (Fase 4B)
-    graph.add_node("query_classifier", query_classifier_node)
-    graph.add_node("validate_retrieval", validate_retrieval_node)
-    graph.add_node("search_knowledge_fallback", search_knowledge_fallback_node)
-    graph.add_node("reranker", reranker_node)
-    graph.add_node("quality_evaluator", quality_evaluator_node)
-    graph.add_node("fallback_response", fallback_response_node)
-    graph.add_node("log_interaction", log_interaction_node)
+```markdown
+# PROMPT 9B.9 (RED/GREEN) — PUBLIC_PORTAL_ROUTER (opcional) compatible con retrieval_mode
 
-    # Flujo actualizado
-    graph.set_entry_point("route_by_capability")
-    graph.add_edge("route_by_capability", "detect_language")
-    graph.add_edge("detect_language", "query_classifier")
-    graph.add_edge("query_classifier", "search_knowledge")
+Objetivo: portal que enruta entre chatbots hijos si los dominios son disjuntos.
+El retrieval dentro del hijo respeta su cfg.retrieval_mode.
 
-    # Arista condicional: validate_retrieval decide si hay suficiente contexto en el idioma detectado
-    graph.add_edge("search_knowledge", "validate_retrieval")
-    graph.add_conditional_edges(
-        "validate_retrieval",
-        lambda state: state.get("retrieval_decision", "ok"),
-        {"ok": "reranker", "language_fallback": "search_knowledge_fallback"},
-    )
-    graph.add_edge("search_knowledge_fallback", "reranker")
-    graph.add_edge("reranker", "generate_response")
-    graph.add_edge("generate_response", "quality_evaluator")
+Tareas:
+- Implementar profiles/public_portal_router.py:
+   - decide chatbot hijo
+   - carga effective config del hijo
+   - ejecuta CoreGraph con el perfil del hijo (o fuerza PUBLIC_KB_RICH si procede)
 
-    # Arista condicional: quality_evaluator decide si la respuesta es suficientemente buena
-    graph.add_conditional_edges(
-        "quality_evaluator",
-        lambda state: "ok" if state["quality_score"] >= quality_threshold else "fallback",
-        {"ok": "log_interaction", "fallback": "fallback_response"},
-    )
-    graph.add_edge("log_interaction", END)
-    graph.add_edge("fallback_response", END)
+Tests (RED):
+- test_portal_router_selects_child_chatbot_and_uses_child_retrieval_mode
+
+GREEN:
+- Implementación.
 ```
 
-**Lógica de `validate_retrieval_node`**:
-```python
-async def validate_retrieval_node(state: AgentState) -> dict:
-    results = state.get("raw_search_results", [])
-    config = await config_provider.get_chatbot_config(state["chatbot_id"])
-    decision = validate_retrieval(
-        results,
-        min_results=config.min_retrieval_results,   # default 2
-        min_score=config.min_retrieval_score,        # default 0.25
-    )
-    return {"retrieval_decision": decision}
+---
+
+### Prompt 9B.10 (RED) — Tests del perfil UJI agregador (independiente de retrieval_mode)
+
+```markdown
+# PROMPT 9B.10 (RED) — Tests UJI Aggregator: combina procedimientos + normativa en cualquier retrieval_mode
+
+El perfil UJI agrega dos fuentes (procedimientos + normativa). El mismo perfil debe operar con
+retrieval_mode=RAG (lo normal) y, en el futuro, con MD_LONG_CONTEXT o MD_AGENT_SELECTOR sin duplicar el grafo.
+
+Tests:
+- test_uji_aggregator_rag_mode_combines_procedure_and_normativa
+- test_uji_aggregator_md_long_context_mode_combines_procedure_and_normativa
+- test_uji_aggregator_md_agent_selector_mode_combines_procedure_and_normativa
+- test_uji_normativa_only_when_no_procedure_candidate
+- test_uji_answer_template_sections_present
+- test_uji_translation_warning_only_when_context_language_differs
 ```
 
-**Lógica de `search_knowledge_fallback_node`** (re-búsqueda sin filtro de idioma):
-```python
-async def search_knowledge_fallback_node(state: AgentState) -> dict:
-    result = await search_knowledge(
-        query=state["messages"][-1].content,
-        chatbot_id=state["chatbot_id"],
-        retriever=retriever,
-        embedding_service=embedding_service,
-        language=None,   # sin filtro — busca en todos los idiomas
-    )
-    # Detectar idioma predominante de los resultados para la advertencia
-    source_lang = detect_source_language(result)
-    return {
-        "retrieved_context": [result],
-        "language_fallback_triggered": True,
-        "context_source_language": source_lang,
-    }
+---
+
+### Prompt 9B.11 (GREEN) — Implementación del perfil UJI agregador usando pipelines por bucket
+
+```markdown
+# PROMPT 9B.11 (GREEN) — Implementar PUBLIC_PORTAL_AGGREGATOR (UJI) usando pipelines según cfg.retrieval_mode
+
+Objetivo: RetrievalStrategy dual:
+- bucket procedimientos: pipeline(cfg.retrieval_mode).run(...) sobre fuente procedimientos
+- bucket normativa: pipeline(cfg.retrieval_mode).run(...) sobre fuente normativa
+
+Merge:
+- si hay procedimiento candidato:
+    - incluir procedimiento top
+    - recuperar normativa enlazada por URL/canonical_id si existe
+    - añadir normativa general como respaldo
+- si no:
+    - solo normativa
+
+Notas:
+- Deduplicación no puede basarse solo en URL si el contenido varía por idioma;
+  usar doc_id o (canonical_url, language).
+
+Criterio:
+- Pasa los tests del Prompt 9B.10 sin cambiar CoreGraph.
 ```
 
-**El nodo `generate_response` lee `language_fallback_triggered`** y, si es True, añade
-`build_translation_warning(source_language, query_language)` al inicio del system_prompt.
+---
 
-**Cambios en config_models.py** — campos portal y umbrales de retrieval:
-```python
-    # En HubChatbot, añadir:
-    portal_chatbot_ids: Mapped[list[uuid.UUID] | None] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=True)
-    quality_threshold: Mapped[float] = mapped_column(default=0.6)
-    min_retrieval_results: Mapped[int] = mapped_column(Integer, default=2)
-    min_retrieval_score: Mapped[float] = mapped_column(default=0.25)
+### Prompt 9B.12 (RED/GREEN) — LanguagePolicy (prefer/strict/none) + warning por idioma real del contexto
+
+```markdown
+# PROMPT 9B.12 (RED/GREEN) — LanguagePolicy y warning de traducción
+
+Objetivo:
+- prefer: prioriza idioma del usuario si existe evidencia; evita doble búsqueda innecesaria.
+- strict: permite comportamiento de filtro estricto si se necesita.
+- none: neutral.
+
+Warning de traducción:
+- Se muestra si context_source_language != query_language.
+- No se dispara por "fallback_triggered" de calidad (son señales distintas).
+
+Tests:
+- test_language_policy_prefer_avoids_double_search
+- test_language_policy_strict_can_trigger_fallback
+- test_warning_only_when_context_language_differs
 ```
 
-**Migración Alembic adicional** (se añade a la de 4B.2):
-```python
-    op.add_column("hub_chatbots", sa.Column("min_retrieval_results", sa.Integer(), nullable=False, server_default="2"))
-    op.add_column("hub_chatbots", sa.Column("min_retrieval_score", sa.Float(), nullable=False, server_default="0.25"))
+---
+
+### Prompt 9B.13 (RED/GREEN) — GraphFactory runtime: selección de perfil + pipeline por chatbot
+
+```markdown
+# PROMPT 9B.13 (RED/GREEN) — GraphFactory runtime: perfil + retrieval_mode por chatbot
+
+Objetivo: punto de integración final. El endpoint público debe:
+- resolver config efectiva (incluye public_graph_profile y retrieval_mode)
+- seleccionar perfil en registry
+- crear CoreGraph con el bundle de estrategias del perfil
+- ejecutar
+
+Tests:
+- test_graph_factory_uses_chatbot_override_profile_and_retrieval_mode
+- test_graph_factory_uses_org_defaults_when_chatbot_missing
+- test_graph_factory_uses_platform_defaults_when_org_missing
+```
+
+---
+
+### Prompt 9B.14 — Kit de ampliación (docs + tests de contrato por perfil y pipeline)
+
+```markdown
+# PROMPT 9B.14 — Kit para añadir perfiles y pipelines (docs + tests de contrato)
+
+Objetivo: dejar la plataforma lista para crecer sin reabrir arquitectura.
+
+Tareas:
+1) docs/GRAPH_PROFILES.md:
+   - qué es CoreGraph
+   - qué es un GraphProfile
+   - qué es retrieval_mode
+   - cómo añadir un perfil nuevo (ej. oferta académica estructurada)
+   - cómo añadir un pipeline nuevo (si apareciera un modo futuro)
+
+2) tests/public_graphs/test_profile_contract.py:
+   - todo perfil registrado debe:
+     - compilar grafo
+     - tener strategies no nulas
+     - poder ejecutarse con cada retrieval_mode (smoke)
+
+3) tests/public_graphs/test_pipeline_contract_suite.py:
+   - todo pipeline en factory debe pasar el contrato común (EvidenceItem, RetrievalResult)
 ```
 
 ---
