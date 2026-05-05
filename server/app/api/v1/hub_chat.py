@@ -146,10 +146,10 @@ async def chat_stream(
         chatbot = child_chatbot
         router_status_message = f"Materia detectada: {chatbot.name}"
 
-    retrieval_mode = getattr(chatbot, "retrieval_mode", "vector")
-    if retrieval_mode == "long_context":
+    retrieval_mode = getattr(chatbot, "retrieval_mode", "RAG")
+    if retrieval_mode == "MD_LONG_CONTEXT":
         strategy = LongContextRetrievalStrategy(session)
-    elif retrieval_mode == "agentic":
+    elif retrieval_mode == "MD_AGENT_SELECTOR":
         strategy = AgenticRetrievalStrategy(session)
     else:
         strategy = VectorRetrievalStrategy(

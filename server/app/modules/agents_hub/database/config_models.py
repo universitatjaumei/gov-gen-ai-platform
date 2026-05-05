@@ -9,6 +9,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -71,6 +72,15 @@ class HubClient(HubConfigBase):
     partner_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     theme_config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # --- Defaults del grafo público (cascada hacia chatbots) ---
+    default_public_graph_profile: Mapped[str] = mapped_column(String(50), nullable=False, default="PUBLIC_KB_RICH")
+    default_retrieval_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="RAG")
+    default_language_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="prefer")
+    default_quality_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.6)
+    default_min_retrieval_results: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    default_min_retrieval_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.25)
+    default_reranker_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    default_answer_template: Mapped[str] = mapped_column(String(50), nullable=False, default="generic")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -89,7 +99,7 @@ class HubChatbot(HubConfigBase):
     __tablename__ = "hub_chatbots"
     __table_args__ = (
         CheckConstraint(
-            "retrieval_mode IN ('vector', 'long_context', 'agentic')",
+            "retrieval_mode IN ('RAG', 'MD_LONG_CONTEXT', 'MD_AGENT_SELECTOR')",
             name="ck_chatbot_retrieval_mode",
         ),
         CheckConstraint(
@@ -116,11 +126,19 @@ class HubChatbot(HubConfigBase):
     sources: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     theme_config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    retrieval_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="vector")
+    retrieval_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="RAG")
     retrieval_top_k: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
     use_prompt_caching: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     cache_ttl: Mapped[int] = mapped_column(Integer, nullable=False, default=3600)
     kind: Mapped[str] = mapped_column(String(20), nullable=False, default="atomic")
+    # --- Campos del grafo público (9B.2) ---
+    public_graph_profile: Mapped[str] = mapped_column(String(50), nullable=False, default="PUBLIC_KB_RICH")
+    language_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="prefer")
+    quality_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.6)
+    min_retrieval_results: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    min_retrieval_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.25)
+    reranker_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    answer_template: Mapped[str] = mapped_column(String(50), nullable=False, default="generic")
     parent_chatbot_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("hub_chatbots.id", ondelete="SET NULL"),
