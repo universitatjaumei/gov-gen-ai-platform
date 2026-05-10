@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { fetchChatbots, updateChatbot, type Chatbot } from '@/shared/api/chatbots'
+import { fetchChatbots, updateChatbot } from '@/shared/api/chatbots'
 import {
   createPromptTemplate,
   deletePromptTemplate,
   fetchPromptTemplates,
   updatePromptTemplate,
 } from '@/shared/api/promptTemplates'
-import type { PromptTemplate, PromptTemplateCreate } from '@/shared/api/promptTemplates'
+import type { ChatbotRead, PromptTemplateRead, PromptTemplateCreate } from '@/shared/api/generated/model'
 
 // Render template text with {variable} spans highlighted (for the editor preview)
 function HighlightedText({ text }: { text: string }) {
@@ -95,9 +95,9 @@ export function PromptsPage() {
     ? chatbots.find((cb) => cb.id === selectedId) ?? null
     : null
 
-  const effectiveTier = (tmpl: PromptTemplate) => tmpl.override_tier ?? tmpl.default_tier
+  const effectiveTier = (tmpl: PromptTemplateRead) => tmpl.override_tier ?? tmpl.default_tier
 
-  function handleSelectTemplate(tmpl: PromptTemplate) {
+  function handleSelectTemplate(tmpl: PromptTemplateRead) {
     setSelectedType('template')
     setSelectedId(tmpl.id)
     setEditText(tmpl.template_text)
@@ -105,7 +105,7 @@ export function PromptsPage() {
     setEditOverrideTier(tmpl.override_tier)
   }
 
-  function handleSelectChatbot(cb: Chatbot) {
+  function handleSelectChatbot(cb: ChatbotRead) {
     setSelectedType('chatbot')
     setSelectedId(cb.id)
     setEditChatbotPrompt(cb.system_prompt)

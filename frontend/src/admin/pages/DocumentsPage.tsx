@@ -13,8 +13,9 @@ import {
   fetchIngestionJobs, uploadDocument, deleteJob, clearCollection, recalculateCorpus,
   fetchSources, createSource, updateSource, deleteSource, triggerSourceCheck,
   fetchDocuments, fetchDocument, deleteDocument,
-  type IngestionSource, type HubDocument, type RecalculateCorpusResponse,
+  type IngestionSource, type HubDocument,
 } from '@/shared/api/ingestion'
+import type { RecalculateCorpusOut } from '@/shared/api/generated/model'
 import { Progress } from '@/components/ui/progress'
 import { AdminIngestionAssistant } from './AdminIngestionAssistant'
 
@@ -75,7 +76,7 @@ export function DocumentsPage() {
   const [uploadError, setUploadError] = useState<string>('')
   const [recalculateConfirmOpen, setRecalculateConfirmOpen] = useState(false)
   const [recalculateError, setRecalculateError] = useState('')
-  const [recalculateResult, setRecalculateResult] = useState<RecalculateCorpusResponse | null>(null)
+  const [recalculateResult, setRecalculateResult] = useState<RecalculateCorpusOut | null>(null)
   const [canonicalUrl, setCanonicalUrl] = useState<string>('')
   const canonicalUrlRef = useRef<string>('')
   const [uploadLanguage, setUploadLanguage] = useState<string>('')

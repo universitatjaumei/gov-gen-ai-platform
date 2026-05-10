@@ -92,3 +92,6 @@ copia/
 # Contrato OpenAPI — generado por server/export_openapi.py, no editar manualmente
 server/openapi.json
 frontend/openapi.json
+
+# Generado por Orval — no editar manualmente. Regenerar: npm run generate:api
+frontend/src/shared/api/generated/

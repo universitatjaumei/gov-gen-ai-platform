@@ -19,6 +19,28 @@ Reglamento de IA (RIA) y los adaptadores de integración con los sistemas instit
 - **Al finalizar F3:** Despliegue Edge node híbrido GCP (Prompt D.6).
 - **Diferido post-cloud:** Microservicios Embedding + Docling (FASE 22).
 
+"Directrices para detallar el TDD de la Fase 3 (Expedientes, HATEOAS y LangGraph)"
+
+Para la orquestación de expedientes y su interfaz, debes imponer un diseño HATEOAS estricto para la UI y contratos rígidos para LangGraph.
+
+Para el Motor Backend (Prompt E2):
+
+El DTO de respuesta de un expediente (ExpedienteResponse) DEBE incluir un campo calculado en el servidor llamado acciones_permitidas: list[str] (ej. ["avanzar", "rechazar"]).
+
+El backend calcula este array evaluando la fase_actual, el estado del expediente, y cruzándolo con el responsable_rol definido en acciones_fase frente al usuario que hace la petición.
+
+En el TDD (RED): Escribe tests de backend que aseguren que si un usuario sin rol consulta el expediente, acciones_permitidas llega vacío, sin importar la fase.
+
+Para el Frontend (Prompt E4):
+
+En ExpedienteDetailPage.tsx y AprobacionesBandejaPage.tsx, los botones de acción se renderizan iterando EXCLUSIVAMENTE sobre el array acciones_permitidas.
+
+En el TDD (RED): Escribe un test que verifique que el frontend no contiene lógica de negocio del tipo if (fase === 'revision') showButton().
+
+Para los Nodos LangGraph:
+
+El ExpedienteState es sagrado. Al redactar los tests de los nodos (NodoLLM, NodoAnalista), exige que el test falle si el nodo intenta mutar el estado fuera de los campos tipados o si intenta devolver datos en un formato distinto al esperado por el contrato del nodo siguiente.
+
 ## Prompts con TDD por detallar antes de ejecutar
 
 ### Prompts ya descritos en este documento (arquitectura definida, TDD pendiente)

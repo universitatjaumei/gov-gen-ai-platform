@@ -9,8 +9,8 @@ import {
   createClient,
   updateClient,
   deleteClient,
-  type Client,
 } from '@/shared/api/clients'
+import type { ClientRead } from '@/shared/api/generated/model'
 
 const schema = z.object({
   name: z.string().min(1),
@@ -32,9 +32,9 @@ export function ClientsPage() {
   const { t } = useTranslation('admin')
   const { t: tc } = useTranslation('common')
   const qc = useQueryClient()
-  const [editing, setEditing] = useState<Client | null>(null)
+  const [editing, setEditing] = useState<ClientRead | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<Client | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ClientRead | null>(null)
   const [deleteError, setDeleteError] = useState('')
   const [filter, setFilter] = useState('')
   const [defaultsOpen, setDefaultsOpen] = useState(false)
@@ -89,7 +89,7 @@ export function ClientsPage() {
   })
 
   const toggleMutation = useMutation({
-    mutationFn: (c: Client) => updateClient(c.id, { is_active: !c.is_active }),
+    mutationFn: (c: ClientRead) => updateClient(c.id, { is_active: !c.is_active }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['clients'] }),
   })
 
@@ -126,7 +126,7 @@ export function ClientsPage() {
     setDialogOpen(true)
   }
 
-  function openEdit(c: Client) {
+  function openEdit(c: ClientRead) {
     setEditing(c)
     setDefaultsOpen(false)
     reset({

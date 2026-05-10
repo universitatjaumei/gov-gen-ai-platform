@@ -1,4 +1,7 @@
+// TODO CF.4: migrar funciones fetch a hooks de Orval
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+
+import type { RecalculateCorpusOut } from './generated/model'
 
 function authHeaders(): HeadersInit {
   const token = localStorage.getItem('access_token')
@@ -138,15 +141,7 @@ export async function clearCollection(chatbotId: string): Promise<any> {
   return res.json()
 }
 
-export interface RecalculateCorpusResponse {
-  task_id: string
-  message: string
-  documents_queued: number
-  chunks_created: number
-  chunks_deleted: number
-}
-
-export async function recalculateCorpus(chatbotId: string): Promise<RecalculateCorpusResponse> {
+export async function recalculateCorpus(chatbotId: string): Promise<RecalculateCorpusOut> {
   const res = await fetch(`${API_BASE}/api/v1/hub/chatbots/${chatbotId}/recalculate-corpus`, {
     method: 'POST',
     headers: authHeaders(),

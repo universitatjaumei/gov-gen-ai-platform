@@ -1,40 +1,14 @@
+// TODO CF.4: migrar funciones fetch a hooks de Orval
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
-export interface LLMConfig {
-  id: string
-  provider: string
-  model_name: string
-  temperature: number
-  top_p: number
-  max_tokens: number
-  api_key_secret_name: string | null
-  tier: number
-  label: string
-  is_default: boolean
-}
-
-export interface LLMConfigCreate {
-  provider: string
-  model_name: string
-  temperature?: number
-  top_p?: number
-  max_tokens?: number
-  api_key_secret_name?: string | null
-  tier?: number
-  label?: string
-  is_default?: boolean
-}
-
-export interface LLMConfigUpdate {
-  label?: string
-  tier?: number
-  model_name?: string
-  api_key_secret_name?: string | null
-  is_default?: boolean
-  temperature?: number
-  top_p?: number
-  max_tokens?: number
-}
+import type {
+  LLMConfigRead,
+  LLMConfigCreate,
+  LLMConfigUpdate,
+  HubProviderOut,
+  HubProviderCreate,
+  HubProviderUpdate,
+} from './generated/model'
 
 function authHeaders(): HeadersInit {
   const token = localStorage.getItem('access_token')
@@ -44,13 +18,13 @@ function authHeaders(): HeadersInit {
   }
 }
 
-export async function fetchLLMConfigs(): Promise<LLMConfig[]> {
+export async function fetchLLMConfigs(): Promise<LLMConfigRead[]> {
   const res = await fetch(`${API_BASE}/api/v1/hub/llm-configs`, { headers: authHeaders() })
   if (!res.ok) throw new Error('Failed to fetch LLM configs')
   return res.json()
 }
 
-export async function createLLMConfig(data: LLMConfigCreate): Promise<LLMConfig> {
+export async function createLLMConfig(data: LLMConfigCreate): Promise<LLMConfigRead> {
   const res = await fetch(`${API_BASE}/api/v1/hub/llm-configs`, {
     method: 'POST',
     headers: authHeaders(),
@@ -63,7 +37,7 @@ export async function createLLMConfig(data: LLMConfigCreate): Promise<LLMConfig>
   return res.json()
 }
 
-export async function updateLLMConfig(id: string, data: LLMConfigUpdate): Promise<LLMConfig> {
+export async function updateLLMConfig(id: string, data: LLMConfigUpdate): Promise<LLMConfigRead> {
   const res = await fetch(`${API_BASE}/api/v1/hub/llm-configs/${id}`, {
     method: 'PATCH',
     headers: authHeaders(),
@@ -111,36 +85,13 @@ export async function fetchAvailableModels(provider: string): Promise<string[]> 
   return data.models || []
 }
 
-export interface HubProvider {
-  id: string
-  name: string
-  provider_type: string
-  base_url: string | null
-  api_key: string | null
-}
-
-export interface HubProviderCreate {
-  id: string
-  name: string
-  provider_type: string
-  base_url?: string | null
-  api_key?: string | null
-}
-
-export interface HubProviderUpdate {
-  name?: string
-  provider_type?: string
-  base_url?: string | null
-  api_key?: string | null
-}
-
-export async function fetchProviders(): Promise<HubProvider[]> {
+export async function fetchProviders(): Promise<HubProviderOut[]> {
   const res = await fetch(`${API_BASE}/api/v1/hub/llm-configs/providers`, { headers: authHeaders() })
   if (!res.ok) throw new Error('Failed to fetch providers')
   return res.json()
 }
 
-export async function createProvider(data: HubProviderCreate): Promise<HubProvider> {
+export async function createProvider(data: HubProviderCreate): Promise<HubProviderOut> {
   const res = await fetch(`${API_BASE}/api/v1/hub/llm-configs/providers`, {
     method: 'POST',
     headers: authHeaders(),
@@ -153,7 +104,7 @@ export async function createProvider(data: HubProviderCreate): Promise<HubProvid
   return res.json()
 }
 
-export async function updateProvider(id: string, data: HubProviderUpdate): Promise<HubProvider> {
+export async function updateProvider(id: string, data: HubProviderUpdate): Promise<HubProviderOut> {
   const res = await fetch(`${API_BASE}/api/v1/hub/llm-configs/providers/${id}`, {
     method: 'PATCH',
     headers: authHeaders(),

@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import i18n from '@/shared/i18n'
 import { AuthProvider } from '@/shared/auth'
-import type { Chatbot } from '@/shared/api/chatbots'
+import type { ChatbotRead } from '@/shared/api/generated/model'
 import { ChatbotsPage } from '../pages/ChatbotsPage'
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
@@ -29,7 +29,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const DEMO_CHATBOT: Chatbot = {
+const DEMO_CHATBOT: ChatbotRead = {
   id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
   name: 'Bot Demo',
   client_id: '00000000-0000-0000-0000-000000000010',
@@ -54,14 +54,14 @@ const DEMO_CHATBOT: Chatbot = {
   updated_at: '2024-01-01T00:00:00Z',
 }
 
-const ROUTER_CHATBOT: Chatbot = {
+const ROUTER_CHATBOT: ChatbotRead = {
   ...DEMO_CHATBOT,
   id: 'bbbbbbbb-bbbb-cccc-dddd-eeeeeeeeeeee',
   name: 'Router UJI',
   kind: 'router',
 }
 
-const CHILD_CHATBOT: Chatbot = {
+const CHILD_CHATBOT: ChatbotRead = {
   ...DEMO_CHATBOT,
   id: 'cccccccc-bbbb-cccc-dddd-eeeeeeeeeeee',
   name: 'RRHH',

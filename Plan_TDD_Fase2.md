@@ -628,6 +628,9 @@ grep -rn "extraction_page\|ExtractionState\|DesignState\|ExecutionState" client_
 
 **Objetivo**: Catálogo y ejecución de scripts. Reemplaza la vista NiceGUI equivalente.
 
+
+
+
 **`src/admin/pages/ScriptsPage.tsx`** — estructura clave:
 ```typescript
 // Tabs por categoría: trigger / input / processor / output
@@ -644,6 +647,25 @@ grep -rn "extraction_page\|ExtractionState\|DesignState\|ExecutionState" client_
 ```
 
 **Traslado NiceGUI a _legacy_nicegui** en el mismo commit.
+
+"Directrices para detallar el TDD de la Fase 2 (Scripts y UI Dinámica)"
+
+Para el desarrollo de la ejecución de scripts y su UI en ScriptsPage.tsx, redacta los tests (fase RED) y la implementación (fase GREEN) exigiendo un contrato Server-Driven UI (SDUI).
+
+Requisitos para el DTO del Backend:
+
+El endpoint que devuelve el detalle de un script debe incluir un ui_contract (un JSON Schema o estructura equivalente). Este contrato debe definir los inputs necesarios (tipo, nombre, label, regex de validación, si es requerido).
+
+Requisitos para los tests TDD del Frontend:
+
+Escribe un test que VERIFIQUE que ScriptsPage.tsx falla o no renderiza nada si el backend no envía el ui_contract.
+
+Escribe un test que VERIFIQUE que el frontend renderiza dinámicamente un <input type="text">, <select> o <input type="file"> basado ÚNICAMENTE en iterar sobre el JSON del ui_contract.
+
+PROHIBIDO: El frontend no puede tener interfaces manuales TypeScript que definan los campos específicos de un script particular (ej. interface ScriptPadrón).
+
+La validación en el cliente (Zod) debe generarse dinámicamente en tiempo de ejecución leyendo el ui_contract.
+
 
 ---
 

@@ -15,9 +15,8 @@ import {
   createProvider,
   updateProvider,
   deleteProvider,
-  type LLMConfig,
-  type HubProvider,
 } from '@/shared/api/llmConfigs'
+import type { LLMConfigRead, HubProviderOut } from '@/shared/api/generated/model'
 
 const TIERS = [1, 2, 3] as const
 const DEFAULT_MAX_TOKENS = 12000
@@ -54,7 +53,7 @@ type FormValues = z.infer<typeof schema>
 
 function getDefaultApiKeySecret(
   providerId: string,
-  providers: HubProvider[] = [],
+  providers: HubProviderOut[] = [],
 ): string {
   const byId = DEFAULT_API_KEY_BY_PROVIDER[providerId]
   if (byId) return byId
@@ -86,9 +85,9 @@ export function LLMConfigsPage() {
   const { t } = useTranslation('admin')
   const { t: tc } = useTranslation('common')
   const qc = useQueryClient()
-  const [editing, setEditing] = useState<LLMConfig | null>(null)
+  const [editing, setEditing] = useState<LLMConfigRead | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<LLMConfig | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<LLMConfigRead | null>(null)
   const [deleteError, setDeleteError] = useState('')
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; latency_ms: number } | { error: string }>>({})
   const [testingId, setTestingId] = useState<string | null>(null)
@@ -162,7 +161,7 @@ export function LLMConfigsPage() {
     setDialogOpen(true)
   }
 
-  function openEdit(c: LLMConfig) {
+  function openEdit(c: LLMConfigRead) {
     setEditing(c)
     setIsCustomModel(false)
     reset({
@@ -450,12 +449,12 @@ const providerSchema = z.object({
 })
 type ProviderFormValues = z.infer<typeof providerSchema>
 
-function ProvidersSection({ providers, isLoading }: { providers: HubProvider[], isLoading: boolean }) {
+function ProvidersSection({ providers, isLoading }: { providers: HubProviderOut[], isLoading: boolean }) {
   const { t: tc } = useTranslation('common')
   const qc = useQueryClient()
-  const [editing, setEditing] = useState<HubProvider | null>(null)
+  const [editing, setEditing] = useState<HubProviderOut | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<HubProvider | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<HubProviderOut | null>(null)
   const [deleteError, setDeleteError] = useState('')
 
   const createMutation = useMutation({
@@ -487,7 +486,7 @@ function ProvidersSection({ providers, isLoading }: { providers: HubProvider[], 
     setDialogOpen(true)
   }
 
-  function openEdit(p: HubProvider) {
+  function openEdit(p: HubProviderOut) {
     setEditing(p)
     reset({ id: p.id, name: p.name, provider_type: p.provider_type, base_url: p.base_url || '', api_key: p.api_key || '' })
     setDialogOpen(true)

@@ -1,70 +1,14 @@
+// TODO CF.4: migrar funciones fetch a hooks de Orval
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
-export interface Chatbot {
-  id: string
-  name: string
-  client_id: string
-  llm_config_id: string
-  system_prompt: string
-  sources: string[]
-  is_active: boolean
-  retrieval_mode: 'RAG' | 'MD_LONG_CONTEXT' | 'MD_AGENT_SELECTOR'
-  retrieval_top_k: number
-  use_prompt_caching: boolean
-  cache_ttl: number
-  kind: 'atomic' | 'router'
-  parent_chatbot_id: string | null
-  public_graph_profile: string
-  language_mode: string
-  quality_threshold: number
-  min_retrieval_results: number
-  min_retrieval_score: number
-  reranker_enabled: boolean
-  answer_template: string
-  created_at: string
-  updated_at: string
-}
-
-export interface ChatbotCreate {
-  name: string
-  client_id: string
-  llm_config_id: string
-  system_prompt: string
-  sources?: string[]
-  is_active?: boolean
-  retrieval_mode?: 'RAG' | 'MD_LONG_CONTEXT' | 'MD_AGENT_SELECTOR'
-  retrieval_top_k?: number
-  use_prompt_caching?: boolean
-  cache_ttl?: number
-  kind?: 'atomic' | 'router'
-  public_graph_profile?: string
-  language_mode?: string
-  quality_threshold?: number
-  min_retrieval_results?: number
-  min_retrieval_score?: number
-  reranker_enabled?: boolean
-  answer_template?: string
-}
-
-export interface ChatbotUpdate {
-  name?: string
-  system_prompt?: string
-  sources?: string[]
-  is_active?: boolean
-  retrieval_mode?: 'RAG' | 'MD_LONG_CONTEXT' | 'MD_AGENT_SELECTOR'
-  retrieval_top_k?: number
-  use_prompt_caching?: boolean
-  cache_ttl?: number
-  kind?: 'atomic' | 'router'
-  parent_chatbot_id?: string | null
-  public_graph_profile?: string
-  language_mode?: string
-  quality_threshold?: number
-  min_retrieval_results?: number
-  min_retrieval_score?: number
-  reranker_enabled?: boolean
-  answer_template?: string
-}
+import type {
+  ChatbotRead,
+  ChatbotCreate,
+  ChatbotUpdate,
+  AssignChildIn,
+  CorpusStatsOut,
+  RegenerateChunksOut,
+} from './generated/model'
 
 function authHeaders(): HeadersInit {
   const token = localStorage.getItem('access_token')
@@ -74,13 +18,13 @@ function authHeaders(): HeadersInit {
   }
 }
 
-export async function fetchChatbots(): Promise<Chatbot[]> {
+export async function fetchChatbots(): Promise<ChatbotRead[]> {
   const res = await fetch(`${API_BASE}/api/v1/hub/chatbots`, { headers: authHeaders() })
   if (!res.ok) throw new Error('Failed to fetch chatbots')
   return res.json()
 }
 
-export async function createChatbot(data: ChatbotCreate): Promise<Chatbot> {
+export async function createChatbot(data: ChatbotCreate): Promise<ChatbotRead> {
   const res = await fetch(`${API_BASE}/api/v1/hub/chatbots`, {
     method: 'POST',
     headers: authHeaders(),
@@ -90,7 +34,7 @@ export async function createChatbot(data: ChatbotCreate): Promise<Chatbot> {
   return res.json()
 }
 
-export async function updateChatbot(id: string, data: ChatbotUpdate): Promise<Chatbot> {
+export async function updateChatbot(id: string, data: ChatbotUpdate): Promise<ChatbotRead> {
   const res = await fetch(`${API_BASE}/api/v1/hub/chatbots/${id}`, {
     method: 'PATCH',
     headers: authHeaders(),
@@ -100,26 +44,7 @@ export async function updateChatbot(id: string, data: ChatbotUpdate): Promise<Ch
   return res.json()
 }
 
-export interface AssignChildPayload {
-  child_chatbot_id: string
-}
-
-export interface CorpusStats {
-  total_documents: number
-  total_tokens: number
-  by_language: Record<string, number>
-  recommended_mode: 'RAG' | 'MD_LONG_CONTEXT' | 'MD_AGENT_SELECTOR'
-  recommendation_reason: string
-}
-
-export interface RegenerateChunksResponse {
-  task_id: string
-  message: string
-  documents_processed: number
-  chunks_created: number
-}
-
-export async function fetchChatbotCorpusStats(id: string): Promise<CorpusStats> {
+export async function fetchChatbotCorpusStats(id: string): Promise<CorpusStatsOut> {
   const res = await fetch(`${API_BASE}/api/v1/hub/chatbots/${id}/corpus-stats`, {
     headers: authHeaders(),
   })
@@ -127,9 +52,7 @@ export async function fetchChatbotCorpusStats(id: string): Promise<CorpusStats> 
   return res.json()
 }
 
-export async function regenerateChatbotChunks(
-  id: string,
-): Promise<RegenerateChunksResponse> {
+export async function regenerateChatbotChunks(id: string): Promise<RegenerateChunksOut> {
   const res = await fetch(`${API_BASE}/api/v1/hub/chatbots/${id}/regenerate-chunks`, {
     method: 'POST',
     headers: authHeaders(),
@@ -138,7 +61,7 @@ export async function regenerateChatbotChunks(
   return res.json()
 }
 
-export async function fetchChatbotChildren(id: string): Promise<Chatbot[]> {
+export async function fetchChatbotChildren(id: string): Promise<ChatbotRead[]> {
   const res = await fetch(`${API_BASE}/api/v1/hub/chatbots/${id}/children`, {
     headers: authHeaders(),
   })
@@ -148,8 +71,8 @@ export async function fetchChatbotChildren(id: string): Promise<Chatbot[]> {
 
 export async function assignChatbotChild(
   id: string,
-  payload: AssignChildPayload,
-): Promise<Chatbot> {
+  payload: AssignChildIn,
+): Promise<ChatbotRead> {
   const res = await fetch(`${API_BASE}/api/v1/hub/chatbots/${id}/children`, {
     method: 'POST',
     headers: authHeaders(),

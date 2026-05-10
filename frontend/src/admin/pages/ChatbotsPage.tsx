@@ -13,8 +13,8 @@ import {
   createChatbot,
   updateChatbot,
   deleteChatbot,
-  type Chatbot,
 } from '@/shared/api/chatbots'
+import type { ChatbotRead } from '@/shared/api/generated/model'
 
 const RETRIEVAL_MODES = [
   { value: 'RAG',               label: 'Vectorial RAG',         hint: 'Recupera los fragmentos más relevantes por búsqueda semántica. Recomendado para bases de conocimiento grandes.' },
@@ -48,9 +48,9 @@ export function ChatbotsPage() {
   const { t } = useTranslation('admin')
   const { t: tc } = useTranslation('common')
   const qc = useQueryClient()
-  const [editing, setEditing] = useState<Chatbot | null>(null)
+  const [editing, setEditing] = useState<ChatbotRead | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<Chatbot | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ChatbotRead | null>(null)
   const [deleteError, setDeleteError] = useState('')
   const [copied, setCopied] = useState(false)
   const [assignOpen, setAssignOpen] = useState(false)
@@ -114,7 +114,7 @@ export function ChatbotsPage() {
   })
 
   const toggleMutation = useMutation({
-    mutationFn: (c: Chatbot) => updateChatbot(c.id, { is_active: !c.is_active }),
+    mutationFn: (c: ChatbotRead) => updateChatbot(c.id, { is_active: !c.is_active }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['chatbots'] }),
   })
 
@@ -205,7 +205,7 @@ export function ChatbotsPage() {
     setDialogOpen(true)
   }
 
-  function openEdit(c: Chatbot) {
+  function openEdit(c: ChatbotRead) {
     setEditing(c)
     setCopied(false)
     setAssignOpen(false)
@@ -256,7 +256,7 @@ export function ChatbotsPage() {
     reset()
   }
 
-  function openDelete(c: Chatbot) {
+  function openDelete(c: ChatbotRead) {
     closeDialog()
     deleteMutation.reset()
     setDeleteError('')

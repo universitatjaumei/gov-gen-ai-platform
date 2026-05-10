@@ -1,0 +1,824 @@
+En este caso **no conviene tratarlo como una migración “normal” de pantalla**, sino como una **migración funcional de producto** con cuatro ejes simultáneos:
+
+1.  **Cambio de arquitectura UI**: NiceGUI mezclaba UI + lógica; React/FastAPI exige separación estricta.
+2.  **Cambio de motor documental**: `pdfplumber + fitz` desaparecen y entra `docling`.
+3.  **Cambio de contrato**: la UI ya no debe consumir texto plano dual, sino `ExtractedDocument`.
+4.  **Cambio de interacción**: el wizard/focus mode no será 100% “form automatizable”; hay que modelarlo como **máquina de estados + contratos de fase**.
+
+Mi conclusión principal es esta:
+
+> **La automatización del frontend será alta para formularios, hooks, tipos, mutaciones y polling; pero parcial para el wizard/focus mode, que debe diseñarse como una experiencia React específica sobre contratos estables.**
+
+***
+
+# 1. Diagnóstico de la situación actual
+
+En el legacy, `extraction_page.py` ya apunta a una arquitectura de tres modos: `library`, `design` y `execution`, con estados como `ExtractionState`, `DesignState` y `ExecutionState`. También conserva lógica de progreso por fases mediante `PHASE_RANGES`, con rangos como preparación, generación, ejecución, validación, refinamiento y finalización. 
+Además, la capa de servicio legacy contiene todavía acoplamientos importantes: acceso a BD, sandbox, auditoría, cliente Brain, lectura dual de PDF mediante `extraer_texto_dual` y `PdfReaderDual`, generación de contratos UI y lógica de validación/extracción en el mismo módulo. [\[ujies-my.s...epoint.com\]](https://ujies-my.sharepoint.com/personal/fabra_uji_es/Documents/Archivos%20de%20chat%20de%20Microsoft%C2%A0Copilot/extraction_service.py)
+
+El plan de Fase 2 ya identifica correctamente que la migración NiceGUI→React/FastAPI debe aplicar una regla de separación: BD, LLM, lectura/escritura de ficheros, máquinas de estado persistidas, servicios de automatización y validaciones estructurales deben ir a FastAPI; mientras que layout, pestañas, drawer, selección actual y estado visual deben quedar en React.
+
+Por tanto, la migración del extractor PDF no debe hacerse copiando la pantalla legacy, sino **redefiniendo el dominio de extracción como API de backend y dejando React como orquestador visual**.
+
+***
+
+# 2. Riesgos principales
+
+## Riesgo 1 — Intentar automatizar demasiado el wizard
+
+Los formularios simples sí son muy automatizables con OpenAPI + Orval + Zod. Pero un wizard con focus mode, fases, previsualizaciones, polling, feedback humano, generación de script y refinamiento no es simplemente un formulario.
+
+La parte automatizable será:
+
+*   tipos de request/response,
+*   hooks de subida,
+*   hooks de polling,
+*   mutaciones por fase,
+*   validación básica de formularios,
+*   contratos de errores,
+*   componentes de campos dinámicos.
+
+La parte que requiere diseño manual será:
+
+*   navegación entre fases,
+*   UX de focus mode,
+*   stepper,
+*   paneles contextuales,
+*   preview de markdown/tablas,
+*   interacción Copilot/Data Pills,
+*   decisiones de habilitar/deshabilitar fases.
+
+Esto encaja con el propio plan 9.13, que define una UI React con `PdfExtractPage`, `PdfExtractRun`, `PdfDropzone`, `ExtractionPhaseStepper`, `FieldSelector`, `ExtractedDataTable`, `RefineFeedbackPanel`, `GeneratedScriptViewer` y `useExtractionRun`. 
+
+***
+
+## Riesgo 2 — Migrar la UI antes de estabilizar Docling
+
+Este sería el error más caro.
+
+El plan ya advierte que **9.12b debe ejecutarse antes de 9.13**, porque el contrato cambia radicalmente: antes se usaban `texto_fitz` y `texto_plumber`; después la UI debe consumir `ExtractedDocument` con markdown, páginas y tablas estructuradas.
+
+Por tanto:
+
+> No debe empezarse la UI del extractor hasta que el backend Docling esté verde, con contrato OpenAPI estable y cliente frontend generado.
+
+***
+
+## Riesgo 3 — Prompts LLM obsoletos
+
+El servicio legacy construía documentos para el LLM desde dos lecturas de PDF. Ahora el prompt debe cambiar de enfoque: ya no hay dos textos alternativos, sino:
+
+*   `document.markdown`,
+*   `pages[].markdown`,
+*   `pages[].plain_text`,
+*   `tables[]`,
+*   metadatos de página,
+*   posible estrategia `text_linear` o `complex_tables`.
+
+El plan 9.12b ya especifica que los prompts deben pasar de `{texto_fitz}` y `{texto_plumber}` a `{markdown}` y `{tables_json}`. 
+Esto implica que la migración no es solo técnica: hay que hacer una **batería TDD de prompts** con snapshots o fixtures de documentos.
+
+***
+
+# 3. Estrategia recomendada
+
+Yo dividiría la migración en **siete microfases TDD**, algunas ya alineadas con 9.12b y 9.13.
+
+***
+
+## Microfase 0 — Congelar comportamiento legacy útil
+
+Antes de tocar nada, extraería del legacy una descripción funcional mínima:
+
+```text
+Qué hace el wizard
+Qué estados tiene
+Qué entradas pide
+Qué salidas produce
+Qué errores muestra
+Qué prompts genera
+Qué scripts produce
+Qué validaciones aplica
+```
+
+No intentaría conservar cada detalle visual de NiceGUI. Conservaría el **comportamiento funcional verificable**.
+
+### Resultado esperado
+
+Un documento corto:
+
+```text
+Legacy Extraction Behaviour Spec
+- Modos: library/design/execution
+- Fases
+- Inputs
+- Outputs
+- Validaciones
+- Prompts legacy
+- Casos críticos
+```
+
+***
+
+## Microfase 1 — Backend Docling primero
+
+Esta fase corresponde a 9.12b.
+
+Crear en backend:
+
+```text
+server/app/modules/automation/pdf_extractor/
+├── docling_extractor.py
+├── schemas.py
+├── extraction_service.py
+├── prompts.py
+└── storage.py
+```
+
+El contrato `ExtractedDocument` debe sustituir completamente al modelo anterior basado en `texto_fitz` y `texto_plumber`. El plan propone expresamente `ExtractedCell`, `ExtractedTable`, `ExtractedPage` y `ExtractedDocument`, con `markdown`, `pages`, `tables`, `extraction_strategy` y `docling_version`. 
+
+### Criterio clave
+
+No pasar a frontend hasta que esto esté verde:
+
+```bash
+pytest server/tests/modules/automation/pdf_extractor/
+pytest server/tests/api/v1/test_extraction_uploads.py
+python export_openapi.py
+```
+
+***
+
+## Microfase 2 — Rediseño de prompts sobre Docling
+
+Aquí no migraría los prompts literalmente.
+
+Crearía una nueva capa:
+
+```text
+prompts.py
+├── build_analyze_structure_prompt(document)
+├── build_extract_precision_prompt(document, fields, user_definition)
+├── build_refine_prompt(document, previous_data, feedback)
+└── build_generate_script_prompt(documents, field_schema)
+```
+
+La clave es que los prompts deben recibir una representación explícita y testeable:
+
+```text
+DOCUMENT_MARKDOWN
+TABLES_JSON
+PAGE_SUMMARIES
+FIELD_SCHEMA
+USER_INSTRUCTIONS
+OUTPUT_FORMAT
+```
+
+### TDD recomendado
+
+Usar fixtures pequeñas:
+
+```text
+tests/fixtures/pdf/simple_text.pdf
+tests/fixtures/pdf/table_invoice.pdf
+tests/fixtures/pdf/multipage_report.pdf
+tests/fixtures/pdf/corrupted.pdf
+```
+
+Y snapshots de prompt:
+
+```text
+test_analyze_prompt_contains_markdown_and_tables
+test_extract_prompt_does_not_reference_fitz_or_pdfplumber
+test_generate_script_prompt_requires_extracted_document_runtime
+```
+
+El plan ya incluye un test importante: `test_generate_script_no_longer_uses_fitz_or_pdfplumber`, mediante aserción/grep sobre el script generado. 
+***
+
+## Microfase 3 — API de runs, no API de texto
+
+La UI no debe enviar texto extraído ni construir documentos para el LLM.
+
+Debe hacer esto:
+
+```text
+POST /extraction/uploads
+→ devuelve run_id
+
+GET /extraction/uploads/{run_id}
+→ devuelve status, progress, documents
+
+POST /extraction/{run_id}/analyze_structure
+POST /extraction/{run_id}/extract
+POST /extraction/{run_id}/refine
+POST /extraction/{run_id}/generate_script
+```
+
+Estos endpoints están ya previstos en 9.12b y son la base correcta. 
+### Implicación
+
+React solo conoce:
+
+```text
+run_id
+status
+progress
+documents
+available_fields
+extracted_data
+generated_script
+```
+
+No conoce Docling, ni PDFs internos, ni rutas de ficheros, ni prompts completos salvo que se quiera mostrar una vista de depuración.
+
+***
+
+## Microfase 4 — Generación de contratos frontend
+
+Una vez exportado OpenAPI:
+
+```bash
+python export_openapi.py
+cp openapi.json frontend/openapi.json
+cd frontend
+npm run generate:api
+npx tsc --noEmit
+```
+
+Aquí sí entra la estrategia Contract-first.
+
+Los hooks generados por Orval deberían cubrir:
+
+```text
+usePostExtractionUploads
+useGetExtractionUploadsRunId
+usePostExtractionRunIdAnalyzeStructure
+usePostExtractionRunIdExtract
+usePostExtractionRunIdRefine
+usePostExtractionRunIdGenerateScript
+```
+
+El frontend específico del wizard se construirá manualmente, pero sobre hooks y tipos generados.
+
+***
+
+## Microfase 5 — UI React con focus mode, pero no “autogenerada”
+
+La pantalla debe dividirse así:
+
+```text
+PdfExtractPage
+└── listado de runs
+└── botón nueva extracción
+└── PdfDropzone
+
+PdfExtractRun
+└── Focus Mode
+└── ExtractionPhaseStepper
+└── panel principal por fase
+└── DrawerHub
+```
+
+Esto coincide con el diseño del Prompt 9.13. 
+La automatización del formulario puede aplicarse en:
+
+*   configuración de extracción,
+*   definición de campos,
+*   feedback de refinamiento,
+*   opciones de generación de script.
+
+Pero el wizard como tal debe ser una composición React específica.
+
+***
+
+## Microfase 6 — Migración de lógica legacy a backend
+
+Desde `extraction_service.py`, movería al backend:
+
+*   `FieldDef`,
+*   validación de resultados,
+*   normalización de valores,
+*   generación de README/contrato si sigue siendo necesaria,
+*   construcción de prompts,
+*   ejecución sandbox,
+*   auditoría,
+*   generación de script.
+
+El legacy contiene `FieldDef`, mapeos de tipos, generación de README, validación de valores y lógica de `ExtractionService` que orquesta IA generativa, sandbox y batch. 
+En React no debería quedar nada de esto salvo tipos generados y estado visual.
+
+***
+
+## Microfase 7 — Retirada controlada de NiceGUI
+
+Solo cuando backend Docling + UI React estén verdes:
+
+```bash
+rm client_app/app/ui/extraction_page.py
+rm client_app/app/ui/extraction_page_refactored.py
+rm client_app/app/ui/extraction_translations.json
+```
+
+El plan 9.13 ya prevé este borrado en el commit GREEN, con grep posterior de residuos. ***
+
+# 4. Decisión sobre wizard/focus mode
+
+Mi propuesta es:
+
+## Mantener el concepto de wizard
+
+Sí, porque la extracción tiene fases naturales:
+
+```text
+1. Subir PDF
+2. Descubrir estructura
+3. Seleccionar campos
+4. Extraer
+5. Refinar
+6. Generar script
+7. Guardar/publicar extractor
+```
+
+## Pero implementarlo como state machine ligera
+
+No lo implementaría como “formulario gigante”.
+
+Usaría algo parecido a:
+
+```ts
+type ExtractionPhase =
+  | 'uploading'
+  | 'discover'
+  | 'select_fields'
+  | 'extract'
+  | 'refine'
+  | 'generate_script'
+  | 'done'
+  | 'error'
+```
+
+La fuente de verdad de progreso debe ser el backend; React solo deriva qué panel mostrar.
+
+## Focus mode sí, pero como patrón reutilizable
+
+El extractor debe reutilizar el Focus Mode de 9.12a: sidebar colapsado, drawer contextual y tabs `Configuración`, `Data Pills`, `Copilot`. El plan ya indica que el extractor original tenía un wizard en pantalla completa similar al focus mode de flujos y que en React se replica al entrar al detalle del run. 
+
+***
+
+# 5. Propuesta de prompts para el agente
+
+Te propongo esta secuencia. Está pensada para TDD y para evitar que el agente mezcle UI, dominio y Docling.
+
+***
+
+## Prompt 1 — Auditoría legacy del extractor
+
+```text
+Actúa como arquitecto de migración NiceGUI→React/FastAPI.
+
+Analiza los ficheros legacy:
+- client_app/app/ui/extraction_page.py
+- client_app/app/services/extraction_service.py
+
+Objetivo:
+Crear una especificación funcional del extractor PDF legacy sin escribir código nuevo.
+
+Tareas:
+1. Identifica los modos de la pantalla: library, design, execution.
+2. Identifica las fases del wizard y sus transiciones.
+3. Separa lógica UI, lógica de dominio, lógica de infraestructura y lógica LLM.
+4. Lista qué elementos deben migrar a FastAPI.
+5. Lista qué elementos deben quedar en React.
+6. Identifica dependencias a eliminar: pdfplumber, fitz, PdfReaderDual, extracción local.
+7. Identifica contratos actuales implícitos: inputs, outputs, errores, campos, scripts generados.
+8. Devuelve una matriz:
+   - Bloque legacy
+   - Responsabilidad
+   - Destino nuevo
+   - Riesgo
+   - Test TDD recomendado
+
+No implementes código. Solo produce el análisis.
+```
+
+***
+
+## Prompt 2 — Tests RED para Docling ExtractedDocument
+
+```text
+Actúa como experto en FastAPI, Pydantic, Docling y TDD.
+
+Vamos a iniciar el refactor backend del extractor PDF de pdfplumber+fitz a Docling.
+
+Antes de implementar, crea los tests RED.
+
+Crea tests en:
+server/tests/modules/automation/pdf_extractor/test_docling_extractor.py
+
+Tests requeridos:
+1. test_extracts_markdown_from_text_pdf
+2. test_extracts_tables_from_tabular_pdf
+3. test_returns_page_numbers_1_based
+4. test_handles_multi_page_document
+5. test_raises_clear_error_on_corrupted_pdf
+6. test_extracted_document_schema_validates
+
+Asume que existirá:
+- server/app/modules/automation/pdf_extractor/docling_extractor.py
+- server/app/modules/automation/pdf_extractor/schemas.py
+
+No implementes todavía el extractor salvo stubs mínimos si son necesarios para que los tests fallen por comportamiento pendiente, no por imports inexistentes.
+```
+
+***
+
+## Prompt 3 — GREEN mínimo de Docling Extractor
+
+```text
+Actúa como experto en Docling y Pydantic.
+
+Implementa lo mínimo para hacer pasar los tests RED de Docling.
+
+Crea:
+server/app/modules/automation/pdf_extractor/schemas.py
+server/app/modules/automation/pdf_extractor/docling_extractor.py
+
+Requisitos:
+1. Usar Docling como único motor de lectura.
+2. No usar pdfplumber, fitz, pymupdf ni PdfReaderDual.
+3. Devolver ExtractedDocument con:
+   - source_id
+   - filename
+   - num_pages
+   - markdown
+   - pages
+   - tables
+   - extraction_strategy
+   - docling_version
+4. Las páginas deben ser 1-based.
+5. La conversión Docling debe ejecutarse con asyncio.to_thread si la API es síncrona.
+6. Los errores de PDF corrupto deben convertirse en excepción clara de dominio.
+
+Ejecuta los tests y deja el módulo en verde.
+```
+
+***
+
+## Prompt 4 — Refactor de prompts LLM a markdown + tables\_json
+
+```text
+Actúa como experto en prompt engineering aplicado a extracción documental y TDD.
+
+Vamos a sustituir los prompts basados en texto_fitz/texto_plumber por prompts basados en Docling.
+
+Crea tests RED en:
+server/tests/modules/automation/pdf_extractor/test_prompts.py
+
+Tests:
+1. test_analyze_prompt_contains_document_markdown
+2. test_analyze_prompt_contains_tables_json_when_tables_exist
+3. test_extract_prompt_contains_selected_field_schema
+4. test_refine_prompt_preserves_previous_data_shape
+5. test_generate_script_prompt_does_not_reference_fitz_or_pdfplumber
+6. test_prompts_have_strict_json_output_instruction
+
+Después implementa:
+server/app/modules/automation/pdf_extractor/prompts.py
+
+Funciones esperadas:
+- build_analyze_structure_prompt(document, language_hint, config)
+- build_extract_precision_prompt(document, selected_fields, user_definition, config)
+- build_refine_prompt(document, previous_data, user_feedback, config)
+- build_generate_script_prompt(documents, field_schema, config)
+
+Prohibido:
+- texto_fitz
+- texto_plumber
+- fitz
+- pdfplumber
+- PdfReaderDual
+```
+
+***
+
+## Prompt 5 — API de upload y polling por run\_id
+
+```text
+Actúa como experto en FastAPI, BackgroundTasks, Pydantic y TDD.
+
+Implementa la API de runs para extracción PDF.
+
+Primero crea tests RED en:
+server/tests/api/v1/test_extraction_uploads.py
+
+Tests:
+1. test_upload_returns_run_id_immediately
+2. test_upload_accepts_multiple_pdf_files
+3. test_upload_rejects_non_pdf_files
+4. test_get_status_reports_progress
+5. test_get_status_returns_extracted_documents_on_done
+6. test_get_status_returns_error_on_failed_run
+7. test_old_endpoint_with_texto_fitz_returns_410_gone
+
+Después implementa los endpoints:
+
+POST /api/v1/automation/extraction/uploads
+GET /api/v1/automation/extraction/uploads/{run_id}
+
+Requisitos:
+1. El upload devuelve run_id rápidamente.
+2. La extracción se ejecuta en background.
+3. El estado del run incluye status, progress, documents y error.
+4. La UI no recibe rutas internas de ficheros.
+5. El contrato debe aparecer correctamente en OpenAPI.
+```
+
+***
+
+## Prompt 6 — API de fases: analyze, extract, refine, generate\_script
+
+```text
+Actúa como experto en diseño de APIs contract-first.
+
+Crea primero tests RED para las fases del extractor:
+
+server/tests/api/v1/test_extraction_phases.py
+
+Tests:
+1. test_analyze_structure_requires_done_upload_run
+2. test_analyze_structure_returns_detected_fields
+3. test_extract_requires_selected_fields
+4. test_extract_returns_structured_data
+5. test_refine_accepts_user_feedback_and_previous_data
+6. test_generate_script_returns_script_metadata
+7. test_phase_endpoint_returns_404_for_unknown_run
+8. test_phase_endpoint_returns_409_if_run_not_ready
+
+Implementa endpoints:
+POST /api/v1/automation/extraction/{run_id}/analyze_structure
+POST /api/v1/automation/extraction/{run_id}/extract
+POST /api/v1/automation/extraction/{run_id}/refine
+POST /api/v1/automation/extraction/{run_id}/generate_script
+
+Requisitos:
+1. Todos operan sobre run_id, no sobre texto plano enviado por el cliente.
+2. Todos usan ExtractedDocument persistido en el run.
+3. Todos tienen modelos Pydantic explícitos de request/response.
+4. Todos quedan reflejados en OpenAPI.
+```
+
+***
+
+## Prompt 7 — Limpieza de dependencias PDF legacy
+
+```text
+Actúa como experto en refactor seguro.
+
+El objetivo es eliminar completamente la estrategia dual pdfplumber+fitz.
+
+Tareas:
+1. Busca referencias a:
+   - pdfplumber
+   - fitz
+   - pymupdf
+   - PdfReaderDual
+   - extraer_texto_dual
+   - texto_fitz
+   - texto_plumber
+2. Elimina o migra cada referencia.
+3. Borra los módulos obsoletos si ya no se usan.
+4. Elimina dependencias de pyproject.toml si procede.
+5. Regenera lockfile.
+6. Ejecuta tests.
+
+Criterio de cierre:
+grep -rn "pdfplumber\|import fitz\|pymupdf\|PdfReaderDual\|texto_fitz\|texto_plumber" server/ shared/ client_app/ no debe devolver coincidencias relevantes.
+```
+
+***
+
+## Prompt 8 — Generación OpenAPI y cliente frontend
+
+```text
+Actúa como experto en Contract-first, FastAPI, Orval y TypeScript.
+
+Con el backend del extractor ya verde:
+
+1. Ejecuta el exportador OpenAPI.
+2. Copia openapi.json al frontend.
+3. Ejecuta npm run generate:api.
+4. Verifica que se han generado hooks y tipos para:
+   - upload de PDFs
+   - polling de run
+   - analyze_structure
+   - extract
+   - refine
+   - generate_script
+5. Ejecuta npx tsc --noEmit.
+
+No escribas todavía la UI del wizard.
+Solo valida que el contrato frontend se genera correctamente.
+```
+
+***
+
+## Prompt 9 — Hook `useExtractionRun`
+
+```text
+Actúa como experto en React Query, TypeScript y TDD.
+
+Crea primero tests RED para:
+src/automation/hooks/__tests__/useExtractionRun.test.ts
+
+Tests:
+1. should_poll_every_second_while_pending
+2. should_stop_polling_when_status_done
+3. should_stop_polling_on_error
+4. should_expose_analyze_mutation
+5. should_expose_extract_mutation
+6. should_expose_refine_mutation
+7. should_expose_generate_script_mutation
+8. should_invalidate_run_query_after_each_mutation
+
+Implementa:
+src/automation/hooks/useExtractionRun.ts
+
+Requisitos:
+1. Usar únicamente hooks/cliente generado por Orval.
+2. No usar fetch ni axios manual.
+3. No duplicar tipos de API.
+4. Exponer una API cómoda:
+   - run
+   - status
+   - progress
+   - documents
+   - analyze()
+   - extract(fields)
+   - refine(feedback)
+   - generateScript()
+```
+
+***
+
+## Prompt 10 — UI base del extractor con Focus Mode
+
+```text
+Actúa como experto en React, Focus Mode, Zustand, shadcn/ui y Testing Library.
+
+Implementa la UI base del extractor PDF.
+
+Primero crea tests RED:
+src/admin/pages/__tests__/PdfExtractPage.test.tsx
+src/automation/pages/__tests__/PdfExtractRun.test.tsx
+
+Tests PdfExtractPage:
+1. should_list_runs_on_mount
+2. should_open_dropzone_on_new_extraction_click
+3. should_accept_pdf_files_only
+4. should_navigate_to_run_detail_after_upload
+
+Tests PdfExtractRun:
+1. should_enter_focus_mode_on_mount
+2. should_exit_focus_mode_on_unmount
+3. should_show_discover_phase_when_progress_below_25
+4. should_show_extract_phase_when_progress_25_to_55
+5. should_display_extracted_document_markdown_preview
+6. should_trigger_analyze_mutation_on_button_click
+
+Implementa:
+- PdfExtractPage.tsx
+- PdfExtractRun.tsx
+- PdfDropzone.tsx
+- ExtractionPhaseStepper.tsx
+
+Requisitos:
+1. Reutilizar Focus Mode existente.
+2. Usar useExtractionRun.
+3. No incluir lógica de dominio en React.
+4. No conocer Docling internamente; solo consumir ExtractedDocument.
+```
+
+***
+
+## Prompt 11 — Formularios dinámicos de campos y refinamiento
+
+```text
+Actúa como experto en react-hook-form, zod, Orval y UX de extracción documental.
+
+Implementa los componentes de interacción del wizard:
+
+- FieldSelector.tsx
+- ExtractedDataTable.tsx
+- RefineFeedbackPanel.tsx
+- GeneratedScriptViewer.tsx
+
+TDD:
+1. FieldSelector debe permitir seleccionar campos detectados.
+2. FieldSelector debe validar que al menos un campo esté seleccionado.
+3. ExtractedDataTable debe mostrar datos estructurados por campo.
+4. RefineFeedbackPanel debe enviar feedback textual.
+5. GeneratedScriptViewer debe mostrar script y metadatos.
+6. Ningún componente debe definir manualmente DTOs ya existentes en OpenAPI.
+
+Usa react-hook-form + zodResolver donde haya formularios.
+Usa tipos generados por Orval.
+```
+
+***
+
+## Prompt 12 — Migración final NiceGUI a legacy
+
+```text
+Actúa como experto en migración controlada.
+
+Con backend Docling, contratos, cliente generado y UI React en verde:
+
+1. Mueve o elimina la pantalla NiceGUI legacy del extractor:
+   - client_app/app/ui/extraction_page.py
+   - client_app/app/ui/extraction_page_refactored.py
+   - client_app/app/ui/extraction_translations.json
+2. Elimina imports residuales.
+3. Ejecuta grep para:
+   - extraction_page
+   - ExtractionState
+   - DesignState
+   - ExecutionState
+   - pdfplumber
+   - fitz
+   - PdfReaderDual
+4. Ejecuta:
+   - pytest
+   - npm test
+   - npx tsc --noEmit
+   - docker compose up si aplica
+
+No cierres la tarea si quedan referencias rotas o dependencias legacy.
+```
+
+***
+
+# 6. Secuencia recomendada de ejecución
+
+La secuencia que yo aplicaría sería:
+
+```text
+0. Auditoría legacy funcional
+1. Tests RED de Docling Extractor
+2. GREEN de ExtractedDocument
+3. Tests y refactor de prompts sobre markdown/tables_json
+4. API de upload + polling
+5. API de fases analyze/extract/refine/generate_script
+6. Limpieza de pdfplumber/fitz
+7. Export OpenAPI
+8. Orval generate
+9. Hook useExtractionRun
+10. UI Focus Mode básica
+11. Componentes del wizard
+12. Retirada NiceGUI
+```
+
+Y bloquearía esta regla:
+
+> **No empezar Prompt 9.13/UI hasta que 9.12b/backend Docling esté completamente verde.**
+
+Esto ya está alineado con el plan, que declara 9.12b como prerequisito obligatorio de 9.13. 
+
+***
+
+# 7. Decisión final sobre automatización frontend
+
+Mi valoración sería:
+
+| Parte                    | Automatización posible | Estrategia                         |
+| ------------------------ | ---------------------: | ---------------------------------- |
+| Tipos API                |                   Alta | OpenAPI + Orval                    |
+| Hooks de datos           |                   Alta | Orval + React Query                |
+| Formularios simples      |                   Alta | react-hook-form + Zod              |
+| Upload/polling           |             Media-alta | Hook manual sobre cliente generado |
+| Wizard                   |                  Media | State machine + componentes React  |
+| Focus mode               |                  Media | Reutilizar patrón 9.12a            |
+| Preview markdown/tablas  |                  Media | Componentes manuales               |
+| Prompts LLM              |             Baja-media | Backend + snapshots TDD            |
+| Generación de script     |             Baja-media | Backend + tests de seguridad       |
+| UI completa autogenerada |                   Baja | No recomendable                    |
+
+***
+
+# 8. Recomendación práctica
+
+Yo no intentaría “automatizar el wizard”. Intentaría **automatizar todo lo que rodea al wizard**:
+
+*   contratos,
+*   tipos,
+*   hooks,
+*   mutaciones,
+*   validaciones,
+*   errores,
+*   polling,
+*   tests,
+*   CI.
+
+Y diseñaría manualmente una buena experiencia React para el flujo.
+
+La migración debe empezar por el backend Docling porque cambia la forma misma del documento que consume el LLM. Si se construye primero la UI sobre la API vieja, se duplicará trabajo. El propio plan ya lo expresa: Docling cambia radicalmente el contrato y debe preceder a la UI. 

@@ -178,6 +178,32 @@ para confirmar que la revisión ha quedado registrada.
 - **Sin features no pedidas**: no añadas manejo de errores, validaciones, flags ni abstracciones
   para escenarios que no están en la tarea actual.
 
+# 🏛️ REGLAS MAESTRAS DE ARQUITECTURA Y TDD
+
+Este proyecto (Gov Gen AI Platform) sigue una arquitectura estrictamente "Contract-First". La ÚNICA fuente de verdad es el backend. El frontend es completamente "tonto" y reactivo. 
+
+Bajo NINGUNA circunstancia generarás código en React que contenga lógica de negocio, reglas de estado, o interfaces de datos *hardcodeadas* que no provengan del contrato del servidor.
+
+Al implementar tests (TDD) o escribir código, DEBES aplicar las siguientes restricciones por módulo:
+
+## 1. AutomatIA (Scripts y Flujos) - Contrato SDUI (Server-Driven UI)
+* **Regla:** El frontend NO conoce los campos de un script a priori. 
+* **Implementación:** El backend debe devolver un `ui_contract` (JSON Schema o similar). El frontend debe construir los formularios dinámicamente iterando sobre ese contrato.
+* **TDD:** Los tests de React deben fallar si intentan buscar un campo hardcodeado (ej. `input name="email"`). Deben probar que el componente se renderiza basándose en el JSON recibido.
+
+## 2. Gestor de Expedientes - Contrato de Estado (HATEOAS)
+* **Regla:** El frontend NUNCA calcula qué acciones están permitidas (ej. no debe existir código como `if (fase === 'revision') mostrarBoton()`).
+* **Implementación:** El backend es la máquina de estado. El DTO de respuesta del expediente debe incluir un array `acciones_permitidas: list[str]`, calculado en el servidor evaluando fase, estado y rol del usuario.
+* **TDD:** Los tests de backend deben verificar que los usuarios sin permisos reciben un array de acciones vacío. Los tests de frontend deben verificar que los botones se generan iterando sobre `acciones_permitidas`.
+
+## 3. LangGraph y Malla Agéntica
+* **Regla de Estado:** El `ExpedienteState` o `WorkspaceState` es inmutable fuera de los contratos tipados. Los nodos solo leen y escriben sobre los campos explícitamente definidos en el `TypedDict` o Pydantic.
+* **Regla de Ejecución (Invariante):** Cualquier ejecución determinista (extracción, scripts) orquestada por el grafo en el cloud DEBE delegarse al Edge Node vía WebSocket. El cloud orquesta, el Edge ejecuta.
+
+## 4. Frontend y OpenAPI
+* Usa siempre los tipos y hooks generados por Orval a partir de `openapi.json`. 
+* Usa `react-hook-form` y `zodResolver`. La validación del cliente debe derivarse o estar estrictamente alineada con el contrato del backend.
+
 ---
 
 ## Frontera Edge-Cloud (preparación del despliegue híbrido)
@@ -362,3 +388,29 @@ Extrae a microservicio separado en el sprint en que cualquiera de estas condicio
 
 Hasta entonces, la abstracción existente es suficiente. **No anticipes la extracción**
 antes de que el problema aparezca en métricas reales.
+
+---
+
+## Seguimiento del estado del proyecto
+
+El archivo `PROJECT_STATE.md` es la fuente de verdad del progreso de los planes de desarrollo.
+
+### Regla obligatoria: actualizar PROJECT_STATE.md al terminar cada prompt
+
+**Al finalizar cualquier prompt que implemente o avance un paso de un plan de desarrollo**
+(`Plan_TDD_Fase1.md`, `Plan_Contrato_OpenAPI.md`, `Plan_TDD_Fase2.md`, `Plan_TDD_Fase3.md`
+o cualquier plan futuro), actualiza `PROJECT_STATE.md` antes de cerrar la respuesta:
+
+1. **Marca el paso completado** con ✅ y mueve el cursor al siguiente.
+2. **Si el paso es parcial** (p. ej. RED escrito pero GREEN pendiente), márcalo con ▶ y anota qué falta.
+3. **Añade una fila al historial reciente** con la fecha de hoy, el identificador del prompt y una descripción de una línea.
+4. **Si un bloque entero queda completo**, actualiza la columna Estado del bloque a ✅ Completo.
+
+Esta actualización es **obligatoria** incluso en prompts pequeños o de corrección.
+No omitirla aunque el cambio sea un fix puntual que avanza el cursor.
+
+### Cuándo NO actualizar PROJECT_STATE.md
+
+- Prompts de configuración de herramientas (permisos, settings, hooks).
+- Prompts de consulta o explicación sin cambios de código.
+- Refactors internos sin relación con un paso numerado de un plan.

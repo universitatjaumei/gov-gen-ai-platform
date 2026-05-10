@@ -1,53 +1,11 @@
+// TODO CF.4: migrar funciones fetch a hooks de Orval
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
-export interface Client {
-  id: string
-  name: string
-  partner_id: string
-  theme_config: Record<string, unknown>
-  is_active: boolean
-  chatbot_count: number
-  default_public_graph_profile: string
-  default_retrieval_mode: string
-  default_language_mode: string
-  default_quality_threshold: number
-  default_min_retrieval_results: number
-  default_min_retrieval_score: number
-  default_reranker_enabled: boolean
-  default_answer_template: string
-  created_at: string
-  updated_at: string
-}
-
-export interface ClientCreate {
-  name: string
-  partner_id: string
-  theme_config?: Record<string, unknown>
-  is_active?: boolean
-  default_public_graph_profile?: string
-  default_retrieval_mode?: string
-  default_language_mode?: string
-  default_quality_threshold?: number
-  default_min_retrieval_results?: number
-  default_min_retrieval_score?: number
-  default_reranker_enabled?: boolean
-  default_answer_template?: string
-}
-
-export interface ClientUpdate {
-  name?: string
-  partner_id?: string
-  theme_config?: Record<string, unknown>
-  is_active?: boolean
-  default_public_graph_profile?: string
-  default_retrieval_mode?: string
-  default_language_mode?: string
-  default_quality_threshold?: number
-  default_min_retrieval_results?: number
-  default_min_retrieval_score?: number
-  default_reranker_enabled?: boolean
-  default_answer_template?: string
-}
+import type {
+  ClientRead,
+  ClientCreate,
+  ClientUpdate,
+} from './generated/model'
 
 function authHeaders(): HeadersInit {
   const token = localStorage.getItem('access_token')
@@ -57,13 +15,13 @@ function authHeaders(): HeadersInit {
   }
 }
 
-export async function fetchClients(): Promise<Client[]> {
+export async function fetchClients(): Promise<ClientRead[]> {
   const res = await fetch(`${API_BASE}/api/v1/hub/clients`, { headers: authHeaders() })
   if (!res.ok) throw new Error('Failed to fetch clients')
   return res.json()
 }
 
-export async function createClient(data: ClientCreate): Promise<Client> {
+export async function createClient(data: ClientCreate): Promise<ClientRead> {
   const res = await fetch(`${API_BASE}/api/v1/hub/clients`, {
     method: 'POST',
     headers: authHeaders(),
@@ -73,7 +31,7 @@ export async function createClient(data: ClientCreate): Promise<Client> {
   return res.json()
 }
 
-export async function updateClient(id: string, data: ClientUpdate): Promise<Client> {
+export async function updateClient(id: string, data: ClientUpdate): Promise<ClientRead> {
   const res = await fetch(`${API_BASE}/api/v1/hub/clients/${id}`, {
     method: 'PATCH',
     headers: authHeaders(),
