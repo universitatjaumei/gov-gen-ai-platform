@@ -6,6 +6,14 @@ import i18n from '@/shared/i18n'
 import { AuthProvider } from '@/shared/auth'
 import { PromptsPage } from '../PromptsPage'
 
+const mockChatbotsData = vi.hoisted(() => ({ list: [] as object[] }))
+
+vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
+  useListChatbotsApiV1HubChatbotsGet: vi.fn(() => ({ data: mockChatbotsData.list, isLoading: false })),
+  useUpdateChatbotApiV1HubChatbotsChatbotIdPatch: vi.fn(() => ({ mutate: vi.fn(), isPending: false, reset: vi.fn() })),
+  getListChatbotsApiV1HubChatbotsGetQueryKey: vi.fn(() => ['/api/v1/hub/chatbots']),
+}))
+
 const TOKEN =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
   btoa(JSON.stringify({ sub: '1', email: 'admin@test.com', role: 'admin', exp: 9999999999 }))
@@ -21,6 +29,7 @@ beforeAll(async () => {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  mockChatbotsData.list = []
 })
 
 const CHATBOT_ID = 'cbot-0001-0000-0000-000000000001'
@@ -74,6 +83,7 @@ function mockFetch(templates: object[], chatbots: object[] = [DEMO_CHATBOT]) {
 }
 
 function renderPage(templates: object[] = [], chatbots: object[] = [DEMO_CHATBOT]) {
+  mockChatbotsData.list = chatbots
   mockFetch(templates, chatbots)
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -122,6 +132,7 @@ describe('PromptsPage', () => {
   })
 
   it('should_increment_version_on_save', async () => {
+    mockChatbotsData.list = [DEMO_CHATBOT]
     const patchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ ...DEMO_TEMPLATE, version: 4 }),
@@ -129,9 +140,6 @@ describe('PromptsPage', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation(async (url: string, opts?: RequestInit) => {
-        if (typeof url === 'string' && url.includes('/hub/chatbots')) {
-          return { ok: true, json: async () => [DEMO_CHATBOT] }
-        }
         if (
           typeof url === 'string' &&
           url.includes('/hub/prompt-templates/') &&

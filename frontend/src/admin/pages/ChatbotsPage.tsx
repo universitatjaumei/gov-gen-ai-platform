@@ -1,45 +1,30 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
+import type { ChatbotRead, CorpusStatsOut } from '@/shared/api/generated/model'
 import {
-  fetchChatbots,
-  fetchChatbotChildren,
-  fetchChatbotCorpusStats,
-  regenerateChatbotChunks,
-  assignChatbotChild,
-  createChatbot,
-  updateChatbot,
-  deleteChatbot,
-} from '@/shared/api/chatbots'
-import type { ChatbotRead } from '@/shared/api/generated/model'
+  useCreateChatbotApiV1HubChatbotsPost,
+  useUpdateChatbotApiV1HubChatbotsChatbotIdPatch,
+  useDeleteChatbotApiV1HubChatbotsChatbotIdDelete,
+  useListChatbotsApiV1HubChatbotsGet,
+  useGetCorpusStatsApiV1HubChatbotsChatbotIdCorpusStatsGet,
+  useListChildrenApiV1HubChatbotsChatbotIdChildrenGet,
+  useRegenerateChunksApiV1HubChatbotsChatbotIdRegenerateChunksPost,
+  useAssignChildApiV1HubChatbotsChatbotIdChildrenPost,
+  getListChatbotsApiV1HubChatbotsGetQueryKey,
+  getListChildrenApiV1HubChatbotsChatbotIdChildrenGetQueryKey,
+  getGetCorpusStatsApiV1HubChatbotsChatbotIdCorpusStatsGetQueryKey,
+} from '@/shared/api/generated/hub-chatbots/hub-chatbots'
+import { chatbotCreateSchema, type FormValues } from '../chatbots/schemas/chatbotSchemas'
+import { mapApiErrorsToFormErrors } from '@/shared/utils/formErrors'
 
 const RETRIEVAL_MODES = [
   { value: 'RAG',               label: 'Vectorial RAG',         hint: 'Recupera los fragmentos más relevantes por búsqueda semántica. Recomendado para bases de conocimiento grandes.' },
   { value: 'MD_LONG_CONTEXT',   label: 'Contexto largo',        hint: 'Mete todos los documentos enteros en el prompt (máx. 128k tokens de contexto). Útil para colecciones pequeñas donde importa la visión global.' },
   { value: 'MD_AGENT_SELECTOR', label: 'Exploración agéntica',  hint: 'El LLM decide qué documentos leer durante la conversación usando herramientas. Sin límite de corpus, pero más lento.' },
 ] as const
-
-const schema = z.object({
-  name: z.string().min(1),
-  kind: z.enum(['atomic', 'router']),
-  system_prompt: z.string().min(1),
-  is_active: z.boolean(),
-  retrieval_mode: z.enum(['RAG', 'MD_LONG_CONTEXT', 'MD_AGENT_SELECTOR']),
-  retrieval_top_k: z.number().int().min(1).max(50),
-  use_prompt_caching: z.boolean(),
-  cache_ttl: z.number().int().min(60).max(86_400),
-  public_graph_profile: z.string(),
-  language_mode: z.string(),
-  quality_threshold: z.number().min(0).max(1),
-  min_retrieval_results: z.number().int().min(1).max(20),
-  min_retrieval_score: z.number().min(0).max(1),
-  reranker_enabled: z.boolean(),
-  answer_template: z.string(),
-})
-type FormValues = z.infer<typeof schema>
 
 const DEV_CLIENT_ID = '00000000-0000-0000-0000-000000000010'
 const DEV_LLM_ID = '00000000-0000-0000-0000-000000000001'
@@ -56,80 +41,52 @@ export function ChatbotsPage() {
   const [assignOpen, setAssignOpen] = useState(false)
   const [selectedChildId, setSelectedChildId] = useState('')
 
-  const { data: chatbots = [], isLoading } = useQuery({
-    queryKey: ['chatbots'],
-    queryFn: fetchChatbots,
-  })
+  const { data: chatbotsRaw, isLoading } = useListChatbotsApiV1HubChatbotsGet()
+  const chatbots: ChatbotRead[] = (chatbotsRaw as unknown as ChatbotRead[] | undefined) ?? []
 
-  const createMutation = useMutation({
-    mutationFn: (values: FormValues) =>
-      createChatbot({
-        name: values.name,
-        kind: values.kind,
-        system_prompt: values.system_prompt,
-        is_active: values.is_active,
-        retrieval_mode: values.retrieval_mode,
-        retrieval_top_k: values.retrieval_top_k,
-        use_prompt_caching: values.use_prompt_caching,
-        cache_ttl: values.cache_ttl,
-        client_id: DEV_CLIENT_ID,
-        llm_config_id: DEV_LLM_ID,
-        public_graph_profile: values.public_graph_profile,
-        language_mode: values.language_mode,
-        quality_threshold: values.quality_threshold,
-        min_retrieval_results: values.min_retrieval_results,
-        min_retrieval_score: values.min_retrieval_score,
-        reranker_enabled: values.reranker_enabled,
-        answer_template: values.answer_template,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['chatbots'] })
-      closeDialog()
+  const createMutation = useCreateChatbotApiV1HubChatbotsPost({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListChatbotsApiV1HubChatbotsGetQueryKey() })
+        closeDialog()
+      },
+      onError: (error) => {
+        mapApiErrorsToFormErrors(error, setError)
+      },
     },
   })
 
-  const updateMutation = useMutation({
-    mutationFn: (values: FormValues) =>
-      updateChatbot(editing!.id, {
-        name: values.name,
-        kind: values.kind,
-        system_prompt: values.system_prompt,
-        is_active: values.is_active,
-        retrieval_mode: values.retrieval_mode,
-        retrieval_top_k: values.retrieval_top_k,
-        use_prompt_caching: values.use_prompt_caching,
-        cache_ttl: values.cache_ttl,
-        public_graph_profile: values.public_graph_profile,
-        language_mode: values.language_mode,
-        quality_threshold: values.quality_threshold,
-        min_retrieval_results: values.min_retrieval_results,
-        min_retrieval_score: values.min_retrieval_score,
-        reranker_enabled: values.reranker_enabled,
-        answer_template: values.answer_template,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['chatbots'] })
-      closeDialog()
+  const updateMutation = useUpdateChatbotApiV1HubChatbotsChatbotIdPatch({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListChatbotsApiV1HubChatbotsGetQueryKey() })
+        closeDialog()
+      },
+      onError: (error) => {
+        mapApiErrorsToFormErrors(error, setError)
+      },
     },
   })
 
-  const toggleMutation = useMutation({
-    mutationFn: (c: ChatbotRead) => updateChatbot(c.id, { is_active: !c.is_active }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['chatbots'] }),
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteChatbot(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['chatbots'] })
-      setDeleteTarget(null)
-      setDeleteError('')
+  const toggleMutation = useUpdateChatbotApiV1HubChatbotsChatbotIdPatch({
+    mutation: {
+      onSuccess: () => qc.invalidateQueries({ queryKey: getListChatbotsApiV1HubChatbotsGetQueryKey() }),
     },
-    onError: (err: Error) => setDeleteError(err.message),
   })
 
-  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+  const deleteMutation = useDeleteChatbotApiV1HubChatbotsChatbotIdDelete({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListChatbotsApiV1HubChatbotsGetQueryKey() })
+        setDeleteTarget(null)
+        setDeleteError('')
+      },
+      onError: (err: unknown) => setDeleteError(err instanceof Error ? err.message : 'Error al eliminar'),
+    },
+  })
+
+  const { register, handleSubmit, reset, watch, setError, formState: { errors } } = useForm<FormValues>({
+    resolver: zodResolver(chatbotCreateSchema),
     defaultValues: {
       name: '',
       kind: 'atomic',
@@ -151,33 +108,34 @@ export function ChatbotsPage() {
   const selectedKind = watch('kind')
   const retrievalHint = RETRIEVAL_MODES.find(m => m.value === watch('retrieval_mode'))?.hint
 
-  const { data: children = [], isLoading: isLoadingChildren } = useQuery({
-    queryKey: ['chatbot-children', editing?.id],
-    queryFn: () => fetchChatbotChildren(editing!.id),
-    enabled: dialogOpen && !!editing && selectedKind === 'router',
-  })
+  const { data: childrenRaw, isLoading: isLoadingChildren } = useListChildrenApiV1HubChatbotsChatbotIdChildrenGet(
+    editing?.id ?? '',
+    { query: { enabled: dialogOpen && !!editing && selectedKind === 'router' } },
+  )
+  const children: ChatbotRead[] = (childrenRaw as unknown as ChatbotRead[] | undefined) ?? []
 
-  const { data: corpusStats } = useQuery({
-    queryKey: ['chatbot-corpus-stats', editing?.id],
-    queryFn: () => fetchChatbotCorpusStats(editing!.id),
-    enabled: dialogOpen && !!editing,
-  })
+  const { data: corpusStatsRaw } = useGetCorpusStatsApiV1HubChatbotsChatbotIdCorpusStatsGet(
+    editing?.id ?? '',
+    { query: { enabled: dialogOpen && !!editing } },
+  )
+  const corpusStats = corpusStatsRaw as unknown as CorpusStatsOut | undefined
 
-  const assignChildMutation = useMutation({
-    mutationFn: (payload: { routerId: string; childId: string }) =>
-      assignChatbotChild(payload.routerId, { child_chatbot_id: payload.childId }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['chatbots'] })
-      qc.invalidateQueries({ queryKey: ['chatbot-children', editing?.id] })
-      setAssignOpen(false)
-      setSelectedChildId('')
+  const assignChildMutation = useAssignChildApiV1HubChatbotsChatbotIdChildrenPost({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListChatbotsApiV1HubChatbotsGetQueryKey() })
+        qc.invalidateQueries({ queryKey: getListChildrenApiV1HubChatbotsChatbotIdChildrenGetQueryKey(editing?.id ?? '') })
+        setAssignOpen(false)
+        setSelectedChildId('')
+      },
     },
   })
 
-  const regenerateChunksMutation = useMutation({
-    mutationFn: () => regenerateChatbotChunks(editing!.id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['chatbot-corpus-stats', editing?.id] })
+  const regenerateChunksMutation = useRegenerateChunksApiV1HubChatbotsChatbotIdRegenerateChunksPost({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetCorpusStatsApiV1HubChatbotsChatbotIdCorpusStatsGetQueryKey(editing?.id ?? '') })
+      },
     },
   })
 
@@ -273,9 +231,48 @@ export function ChatbotsPage() {
     }
 
     if (editing) {
-      updateMutation.mutate(values)
+      updateMutation.mutate({
+        chatbotId: editing.id,
+        data: {
+          name: values.name,
+          kind: values.kind,
+          system_prompt: values.system_prompt,
+          is_active: values.is_active,
+          retrieval_mode: values.retrieval_mode,
+          retrieval_top_k: values.retrieval_top_k,
+          use_prompt_caching: values.use_prompt_caching,
+          cache_ttl: values.cache_ttl,
+          public_graph_profile: values.public_graph_profile,
+          language_mode: values.language_mode,
+          quality_threshold: values.quality_threshold,
+          min_retrieval_results: values.min_retrieval_results,
+          min_retrieval_score: values.min_retrieval_score,
+          reranker_enabled: values.reranker_enabled,
+          answer_template: values.answer_template,
+        },
+      })
     } else {
-      createMutation.mutate(values)
+      createMutation.mutate({
+        data: {
+          name: values.name,
+          kind: values.kind,
+          system_prompt: values.system_prompt,
+          is_active: values.is_active,
+          retrieval_mode: values.retrieval_mode,
+          retrieval_top_k: values.retrieval_top_k,
+          use_prompt_caching: values.use_prompt_caching,
+          cache_ttl: values.cache_ttl,
+          client_id: DEV_CLIENT_ID,
+          llm_config_id: DEV_LLM_ID,
+          public_graph_profile: values.public_graph_profile,
+          language_mode: values.language_mode,
+          quality_threshold: values.quality_threshold,
+          min_retrieval_results: values.min_retrieval_results,
+          min_retrieval_score: values.min_retrieval_score,
+          reranker_enabled: values.reranker_enabled,
+          answer_template: values.answer_template,
+        },
+      })
     }
   }
 
@@ -338,7 +335,10 @@ export function ChatbotsPage() {
                 <td className="py-3 pr-4">
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); toggleMutation.mutate(c) }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleMutation.mutate({ chatbotId: c.id, data: { is_active: !c.is_active } })
+                    }}
                     className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
                       c.is_active
                         ? 'bg-green-100 text-green-700 border-green-200 hover:bg-green-200'
@@ -465,7 +465,7 @@ export function ChatbotsPage() {
                       <div className="pt-1">
                         <button
                           type="button"
-                          onClick={() => regenerateChunksMutation.mutate()}
+                          onClick={() => regenerateChunksMutation.mutate({ chatbotId: editing!.id })}
                           disabled={regenerateChunksMutation.isPending}
                           className="px-2 py-1 text-xs border rounded-md hover:bg-accent disabled:opacity-50"
                         >
@@ -672,8 +672,8 @@ export function ChatbotsPage() {
                         disabled={!selectedChildId || assignChildMutation.isPending}
                         onClick={() =>
                           assignChildMutation.mutate({
-                            routerId: editing.id,
-                            childId: selectedChildId,
+                            chatbotId: editing.id,
+                            data: { child_chatbot_id: selectedChildId },
                           })
                         }
                         className="px-2 py-1 text-xs bg-primary text-primary-foreground rounded-md disabled:opacity-50"
@@ -731,7 +731,7 @@ export function ChatbotsPage() {
               </button>
               <button
                 type="button"
-                onClick={() => deleteMutation.mutate(deleteTarget.id)}
+                onClick={() => deleteMutation.mutate({ chatbotId: deleteTarget.id })}
                 disabled={deleteMutation.isPending}
                 className="px-3 py-2 bg-destructive text-destructive-foreground rounded-md text-sm disabled:opacity-50 min-w-[80px]"
               >

@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { DocumentsPage } from '../DocumentsPage'
 import * as ingestionApi from '@/shared/api/ingestion'
-import * as chatbotsApi from '@/shared/api/chatbots'
+import { useListChatbotsApiV1HubChatbotsGet } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -40,8 +40,9 @@ vi.mock('react-dropzone', () => ({
   }),
 }))
 
-vi.mock('@/shared/api/chatbots', () => ({
-  fetchChatbots: vi.fn(),
+vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
+  useListChatbotsApiV1HubChatbotsGet: vi.fn(),
+  getListChatbotsApiV1HubChatbotsGetQueryKey: vi.fn(() => ['/api/v1/hub/chatbots']),
 }))
 
 vi.mock('@/shared/api/ingestion', () => ({
@@ -112,7 +113,7 @@ const createWrapper = () => {
 describe('DocumentsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(chatbotsApi.fetchChatbots as any).mockResolvedValue([CHATBOT])
+    vi.mocked(useListChatbotsApiV1HubChatbotsGet).mockReturnValue({ data: [CHATBOT] } as any)
     ;(ingestionApi.fetchDocuments as any).mockResolvedValue(DOCS_ES_CA)
     ;(ingestionApi.fetchIngestionJobs as any).mockResolvedValue([])
     ;(ingestionApi.recalculateCorpus as any).mockResolvedValue({

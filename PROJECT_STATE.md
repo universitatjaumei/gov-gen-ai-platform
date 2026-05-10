@@ -14,10 +14,10 @@
 | CF.1 — Exportación OpenAPI | CF.1.2 ✅ | — | ✅ Completo |
 | CF.2 — Orval + generación | CF.2.3 ✅ | — | ✅ Completo |
 | CF.3 — Compilación TypeScript | CF.3.3 ✅ | — | ✅ Completo |
-| CF.4 — Formulario piloto Chatbot | CF.3.3 ✅ | **CF.4.1 (RED)** | ▶ En progreso |
+| CF.4 — Formulario piloto Chatbot | CF.4.4 ✅ | — | ✅ Completo |
 | CF.5 — CI | — | CF.5.1 | ⏳ Pendiente |
 
-**Cursor actual: CF.4.1 (RED) — Tests de formulario Chatbot Create/Edit antes de refactorizar**
+**Cursor actual: CF.5.1 — Configurar CI (GitHub Actions)**
 
 ---
 
@@ -51,3 +51,6 @@
 | 2026-05-05 | CF.2 completo | Orval instalado, orval.config.ts, carpeta generated/ |
 | 2026-05-05 | CF.3 completo | Compilación TypeScript limpia con tipos generados |
 | 2026-05-10 | — | Configuración de permisos Claude Code + regla de estado |
+| 2026-05-10 | CF.4.2 | Refactor ChatbotsPage: Orval hooks + zodResolver + mapApiErrorsToFormErrors |
+| 2026-05-10 | CF.4.3 | Extraer mapApiErrorsToFormErrors a shared/utils/formErrors.ts + tests + test (e) verde |
+| 2026-05-10 | CF.4.4 | Eliminar chatbots.ts: migrar todas las llamadas fetch de 4 páginas a hooks Orval; 96/97 tests verdes |

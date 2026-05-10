@@ -55,15 +55,20 @@
       "Bash(python client_app/app/database/migrations/migration_webwatcher_diff.py:*)",
       "Bash(python:*)",
       "Bash(sqlite3:*)",
-      "Bash(cd:*)",
-      "Bash(echo:*)",
+      "Bash(cd C:/Users/fabra/Documents/AI_agents_hub*)",
+      "Bash(cd /c/Users/fabra/Documents/AI_agents_hub*)",
+      "Bash(cd frontend*)",
+      "Bash(cd server*)",
+      "Bash(cd shared*)",
+      "Bash(cd client_app*)",
+      "Bash(echo *)",
       "Bash(pip show:*)",
       "Bash(py -m pip install:*)",
       "Bash(py -m pip show:*)",
       "Bash(test:*)",
       "Bash(PYTHONPATH=. python -m pytest:*)",
       "Bash(xargs cat:*)",
-      "Bash(ls:*)",
+      "Bash(ls *)",
       "Bash(py -3 -m py_compile:*)",
       "Bash(.venv/Scripts/python -c \"from server.app.database.db import init_server_db, seed_server_db; print\\(''OK''\\)\")",
       "Bash(C:/Users/fabra/Documents/AI_agents_hub/.venv/Scripts/python.exe -c \"import sys; print\\(sys.executable\\)\" C:/Users/fabra/Documents/AI_agents_hub/.venv/Scripts/python.exe -m pip show asyncpg)",
@@ -125,7 +130,13 @@
       "Bash(Select-Object Name)",
       "Bash(Start-Sleep -Seconds 25)",
       "Bash(Get-Content \"C:\\\\Users\\\\fabra\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-fabra-Documents-AI-agents-hub\\\\6707f5da-686b-48c2-8a00-e63a1c1bf32b\\\\tasks\\\\bzkbueinw.output\" -Raw)",
-      "Bash(Select-String -Pattern \"gitignore\")"
+      "Bash(Select-String -Pattern \"gitignore\")",
+      "Bash(Get-ChildItem -Path \"frontend/src/admin\" -Recurse -Name)",
+      "Bash(rtk tsc *)",
+      "Bash(rtk grep *)",
+      "Bash(rtk git *)",
+      "Bash(npm --prefix frontend test -- --run src/admin/pages/__tests__/DocumentsPage.test.tsx)",
+      "Bash(npm --prefix frontend test -- --run src/admin/pages/__tests__/PromptsPage.test.tsx)"
     ]
   }
 }

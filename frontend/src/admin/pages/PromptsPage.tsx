@@ -1,14 +1,18 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { fetchChatbots, updateChatbot } from '@/shared/api/chatbots'
+import {
+  useListChatbotsApiV1HubChatbotsGet,
+  useUpdateChatbotApiV1HubChatbotsChatbotIdPatch,
+  getListChatbotsApiV1HubChatbotsGetQueryKey,
+} from '@/shared/api/generated/hub-chatbots/hub-chatbots'
 import {
   createPromptTemplate,
   deletePromptTemplate,
   fetchPromptTemplates,
   updatePromptTemplate,
 } from '@/shared/api/promptTemplates'
-import type { ChatbotRead, PromptTemplateRead, PromptTemplateCreate } from '@/shared/api/generated/model'
+import type { ChatbotRead, PromptTemplateRead, PromptTemplateCreate, ChatbotUpdate } from '@/shared/api/generated/model'
 
 // Render template text with {variable} spans highlighted (for the editor preview)
 function HighlightedText({ text }: { text: string }) {
@@ -82,10 +86,8 @@ export function PromptsPage() {
     queryFn: () => fetchPromptTemplates(selectedChatbotId),
   })
 
-  const { data: chatbots = [] } = useQuery({
-    queryKey: ['chatbots'],
-    queryFn: fetchChatbots,
-  })
+  const { data: chatbotsRaw } = useListChatbotsApiV1HubChatbotsGet()
+  const chatbots: ChatbotRead[] = (chatbotsRaw as unknown as ChatbotRead[] | undefined) ?? []
 
   const selectedTemplate = selectedType === 'template'
     ? templates.find((tmpl) => tmpl.id === selectedId) ?? null
@@ -121,11 +123,11 @@ export function PromptsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['prompt-templates'] }),
   })
 
-  const saveChatbotPromptMutation = useMutation({
-    mutationFn: ({ id, systemPrompt }: { id: string; systemPrompt: string }) =>
-      updateChatbot(id, { system_prompt: systemPrompt }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['chatbots'] })
+  const saveChatbotPromptMutation = useUpdateChatbotApiV1HubChatbotsChatbotIdPatch({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListChatbotsApiV1HubChatbotsGetQueryKey() })
+      },
     },
   })
 
@@ -186,8 +188,8 @@ export function PromptsPage() {
   function handleSaveChatbotPrompt() {
     if (!selectedChatbot) return
     saveChatbotPromptMutation.mutate({
-      id: selectedChatbot.id,
-      systemPrompt: editChatbotPrompt,
+      chatbotId: selectedChatbot.id,
+      data: { system_prompt: editChatbotPrompt } as ChatbotUpdate,
     })
   }
 

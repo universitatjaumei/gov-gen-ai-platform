@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReportsPage } from '../ReportsPage'
 import * as feedbackApi from '@/shared/api/feedback'
-import * as chatbotsApi from '@/shared/api/chatbots'
+import { useListChatbotsApiV1HubChatbotsGet } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -33,7 +33,10 @@ vi.mock('recharts', () => ({
   Cell: () => null,
 }))
 
-vi.mock('@/shared/api/chatbots', () => ({ fetchChatbots: vi.fn() }))
+vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
+  useListChatbotsApiV1HubChatbotsGet: vi.fn(),
+  getListChatbotsApiV1HubChatbotsGetQueryKey: vi.fn(() => ['/api/v1/hub/chatbots']),
+}))
 vi.mock('@/shared/api/feedback', () => ({ fetchInteractions: vi.fn() }))
 
 const SAMPLE_INTERACTIONS: feedbackApi.Interaction[] = [
@@ -73,7 +76,7 @@ function renderPage() {
 describe('ReportsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(chatbotsApi.fetchChatbots).mockResolvedValue(SAMPLE_CHATBOTS)
+    vi.mocked(useListChatbotsApiV1HubChatbotsGet).mockReturnValue({ data: SAMPLE_CHATBOTS } as any)
     vi.mocked(feedbackApi.fetchInteractions).mockResolvedValue(SAMPLE_INTERACTIONS)
   })
 

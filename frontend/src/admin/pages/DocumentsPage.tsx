@@ -8,14 +8,14 @@ import {
   Eye, FileUp, ChevronDown, ChevronUp, Upload,
 } from 'lucide-react'
 
-import { fetchChatbots } from '@/shared/api/chatbots'
+import { useListChatbotsApiV1HubChatbotsGet } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
 import {
   fetchIngestionJobs, uploadDocument, deleteJob, clearCollection, recalculateCorpus,
   fetchSources, createSource, updateSource, deleteSource, triggerSourceCheck,
   fetchDocuments, fetchDocument, deleteDocument,
   type IngestionSource, type HubDocument,
 } from '@/shared/api/ingestion'
-import type { RecalculateCorpusOut } from '@/shared/api/generated/model'
+import type { ChatbotRead, RecalculateCorpusOut } from '@/shared/api/generated/model'
 import { Progress } from '@/components/ui/progress'
 import { AdminIngestionAssistant } from './AdminIngestionAssistant'
 
@@ -96,10 +96,8 @@ export function DocumentsPage() {
   const [deleteSourceTarget, setDeleteSourceTarget] = useState<IngestionSource | null>(null)
 
   // ── Chatbots ────────────────────────────────────────────────────────────────
-  const { data: chatbots = [], isLoading: isLoadingChatbots } = useQuery({
-    queryKey: ['chatbots'],
-    queryFn: fetchChatbots,
-  })
+  const { data: chatbotsRaw, isLoading: isLoadingChatbots } = useListChatbotsApiV1HubChatbotsGet()
+  const chatbots: ChatbotRead[] = (chatbotsRaw as unknown as ChatbotRead[] | undefined) ?? []
 
   if (!selectedChatbotId && chatbots.length > 0) {
     setSelectedChatbotId(chatbots[0].id)

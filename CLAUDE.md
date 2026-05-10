@@ -414,3 +414,32 @@ No omitirla aunque el cambio sea un fix puntual que avanza el cursor.
 - Prompts de configuración de herramientas (permisos, settings, hooks).
 - Prompts de consulta o explicación sin cambios de código.
 - Refactors internos sin relación con un paso numerado de un plan.
+
+---
+
+## Reglas de comandos de shell
+
+El entorno de ejecución es **Windows con PowerShell 5.1**. El operador `&&` no existe en PowerShell y provoca un error de parseo.
+
+### Prohibido: `&&` en cualquier comando
+
+**Nunca** uses `&&` para encadenar comandos, ni en la herramienta Bash ni en PowerShell.
+
+```powershell
+# PROHIBIDO — falla en PowerShell
+cd frontend && npm test
+
+# CORRECTO — encadenamiento incondicional
+cd C:/Users/fabra/Documents/AI_agents_hub/frontend; npm test
+
+# CORRECTO — encadenamiento condicional (ejecuta B solo si A tiene éxito)
+cd C:/Users/fabra/Documents/AI_agents_hub/frontend; if ($?) { npm test }
+```
+
+Si necesitas encadenar comandos en la herramienta Bash, usa también `;` en lugar de `&&` para mantener consistencia y evitar errores si el contexto cambia a PowerShell.
+
+### Navegación de directorios
+
+- Usa siempre **rutas absolutas** al cambiar de directorio: `cd C:/Users/fabra/Documents/AI_agents_hub/frontend`
+- No uses `cd` para salir del directorio raíz del proyecto (`C:/Users/fabra/Documents/AI_agents_hub`).
+- Para inspeccionar estructura de carpetas, prefiere las herramientas `Glob` y `Read` antes que `ls` o `dir`.

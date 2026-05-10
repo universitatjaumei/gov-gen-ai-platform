@@ -4,8 +4,31 @@ import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import i18n from '@/shared/i18n'
 import { AuthProvider } from '@/shared/auth'
-import type { ChatbotRead } from '@/shared/api/generated/model'
+import type { ChatbotRead, CorpusStatsOut } from '@/shared/api/generated/model'
 import { ChatbotsPage } from '../pages/ChatbotsPage'
+
+const { mockAssignMutate, mockData } = vi.hoisted(() => ({
+  mockAssignMutate: vi.fn(),
+  mockData: {
+    chatbots: [] as ChatbotRead[],
+    children: [] as ChatbotRead[],
+    corpusStats: undefined as CorpusStatsOut | undefined,
+  },
+}))
+
+vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
+  useListChatbotsApiV1HubChatbotsGet: vi.fn(() => ({ data: mockData.chatbots, isLoading: false })),
+  useListChildrenApiV1HubChatbotsChatbotIdChildrenGet: vi.fn(() => ({ data: mockData.children, isLoading: false })),
+  useGetCorpusStatsApiV1HubChatbotsChatbotIdCorpusStatsGet: vi.fn(() => ({ data: mockData.corpusStats })),
+  useCreateChatbotApiV1HubChatbotsPost: vi.fn(() => ({ mutate: vi.fn(), isPending: false, reset: vi.fn() })),
+  useUpdateChatbotApiV1HubChatbotsChatbotIdPatch: vi.fn(() => ({ mutate: vi.fn(), isPending: false, reset: vi.fn() })),
+  useDeleteChatbotApiV1HubChatbotsChatbotIdDelete: vi.fn(() => ({ mutate: vi.fn(), isPending: false, reset: vi.fn() })),
+  useAssignChildApiV1HubChatbotsChatbotIdChildrenPost: vi.fn(() => ({ mutate: mockAssignMutate, isPending: false })),
+  useRegenerateChunksApiV1HubChatbotsChatbotIdRegenerateChunksPost: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  getListChatbotsApiV1HubChatbotsGetQueryKey: vi.fn(() => ['/api/v1/hub/chatbots']),
+  getListChildrenApiV1HubChatbotsChatbotIdChildrenGetQueryKey: vi.fn((id: string) => [`/api/v1/hub/chatbots/${id}/children`]),
+  getGetCorpusStatsApiV1HubChatbotsChatbotIdCorpusStatsGetQueryKey: vi.fn((id: string) => [`/api/v1/hub/chatbots/${id}/corpus-stats`]),
+}))
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
   btoa(JSON.stringify({ sub: '1', email: 'admin@test.com', role: 'admin', exp: 9999999999 }))
@@ -25,8 +48,10 @@ beforeAll(async () => {
 })
 
 afterEach(() => {
-  writeTextMock.mockClear()
-  vi.unstubAllGlobals()
+  vi.clearAllMocks()
+  mockData.chatbots = []
+  mockData.children = []
+  mockData.corpusStats = undefined
 })
 
 const DEMO_CHATBOT: ChatbotRead = {
@@ -67,53 +92,18 @@ const CHILD_CHATBOT: ChatbotRead = {
   name: 'RRHH',
 }
 
-function renderPage(chatbots: object[] = [], children: object[] = []) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input)
-    const method = init?.method ?? 'GET'
+const DEMO_CORPUS_STATS: CorpusStatsOut = {
+  total_documents: 2,
+  total_tokens: 120000,
+  by_language: { es: 100000, ca: 20000 },
+  recommended_mode: 'MD_AGENT_SELECTOR',
+  recommendation_reason: 'Recomendado MD_AGENT_SELECTOR para este tamaño de corpus.',
+}
 
-    if (url.includes('/api/v1/hub/chatbots/') && url.includes('/children') && method === 'GET') {
-      return { ok: true, json: async () => children }
-    }
-
-    if (url.endsWith('/api/v1/hub/chatbots') && method === 'GET') {
-      return { ok: true, json: async () => chatbots }
-    }
-
-    if (url.includes('/children') && method === 'POST') {
-      return { ok: true, json: async () => CHILD_CHATBOT }
-    }
-
-    if (url.includes('/corpus-stats') && method === 'GET') {
-      return {
-        ok: true,
-        json: async () => ({
-          total_documents: 2,
-          total_tokens: 120000,
-          by_language: { es: 100000, ca: 20000 },
-          recommended_mode: 'MD_AGENT_SELECTOR',
-          recommendation_reason: 'Recomendado MD_AGENT_SELECTOR para este tamaño de corpus.',
-        }),
-      }
-    }
-
-    if (url.includes('/regenerate-chunks') && method === 'POST') {
-      return {
-        ok: true,
-        json: async () => ({
-          task_id: 'task-1',
-          message: 'ok',
-          documents_processed: 2,
-          chunks_created: 20,
-        }),
-      }
-    }
-
-    return { ok: true, json: async () => ({}) }
-  })
-
-  vi.stubGlobal('fetch', fetchMock)
-
+function renderPage(chatbots: ChatbotRead[] = [], children: ChatbotRead[] = [], corpusStats?: CorpusStatsOut) {
+  mockData.chatbots = chatbots
+  mockData.children = children
+  mockData.corpusStats = corpusStats
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
@@ -126,8 +116,8 @@ function renderPage(chatbots: object[] = [], children: object[] = []) {
   )
 }
 
-async function openEditDialog(chatbot = DEMO_CHATBOT, allChatbots: object[] = [chatbot], children: object[] = []) {
-  renderPage(allChatbots, children)
+async function openEditDialog(chatbot = DEMO_CHATBOT, allChatbots: ChatbotRead[] = [chatbot], children: ChatbotRead[] = [], corpusStats?: CorpusStatsOut) {
+  renderPage(allChatbots, children, corpusStats)
   await waitFor(() => screen.getByText(chatbot.name))
   await act(async () => {
     fireEvent.click(screen.getByText(chatbot.name))
@@ -242,22 +232,22 @@ describe('ChatbotsPage', () => {
       fireEvent.click(assignButtons[assignButtons.length - 1])
     })
 
-    await waitFor(() => {
-      const calls = (globalThis.fetch as any).mock.calls as any[]
-      expect(calls.some((c) => String(c[0]).includes(`/children`) && c[1]?.method === 'POST')).toBe(true)
-    })
+    expect(mockAssignMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chatbotId: ROUTER_CHATBOT.id,
+        data: expect.objectContaining({ child_chatbot_id: CHILD_CHATBOT.id }),
+      })
+    )
   })
 
   it('should_show_recommendation_banner_with_reason', async () => {
-    await openEditDialog(DEMO_CHATBOT, [DEMO_CHATBOT], [])
-    await waitFor(() => {
-      expect(screen.getByText(/sugerido:/i)).toBeInTheDocument()
-      expect(screen.getByText(/recomendado md_agent_selector/i)).toBeInTheDocument()
-    })
+    await openEditDialog(DEMO_CHATBOT, [DEMO_CHATBOT], [], DEMO_CORPUS_STATS)
+    expect(screen.getByText(/sugerido:/i)).toBeInTheDocument()
+    expect(screen.getByText(/recomendado md_agent_selector/i)).toBeInTheDocument()
   })
 
   it('should_warn_when_user_picks_non_recommended_mode', async () => {
-    await openEditDialog(DEMO_CHATBOT, [DEMO_CHATBOT], [])
+    await openEditDialog(DEMO_CHATBOT, [DEMO_CHATBOT], [], DEMO_CORPUS_STATS)
     await waitFor(() => screen.getByText(/sugerido:/i))
 
     const retrievalSelect = screen.getAllByRole('combobox')[1]
@@ -269,10 +259,8 @@ describe('ChatbotsPage', () => {
   })
 
   it('should_show_chunk_regeneration_button_only_for_vector_mode', async () => {
-    await openEditDialog(DEMO_CHATBOT, [DEMO_CHATBOT], [])
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /recalcular chunks/i })).toBeInTheDocument()
-    })
+    await openEditDialog(DEMO_CHATBOT, [DEMO_CHATBOT], [], DEMO_CORPUS_STATS)
+    expect(screen.getByRole('button', { name: /recalcular chunks/i })).toBeInTheDocument()
 
     const retrievalSelect = screen.getAllByRole('combobox')[1]
     await act(async () => {

@@ -19,21 +19,24 @@ import type { ChatbotCreate } from '@/shared/api/generated/model'
 import { ChatbotsPage } from '@/admin/pages/ChatbotsPage'
 
 // vi.hoisted garantiza que los mocks se crean antes del hoisting de vi.mock()
-const { mockCreateMutate, mockUpdateMutate } = vi.hoisted(() => ({
+const { mockCreateMutate, mockUpdateMutate, capturedCreateOptions, mockChatbotsList } = vi.hoisted(() => ({
   mockCreateMutate: vi.fn(),
   mockUpdateMutate: vi.fn(),
+  capturedCreateOptions: { onError: undefined as ((e: unknown) => void) | undefined },
+  mockChatbotsList: { value: [] as object[] },
 }))
 
-// Mock de los hooks generados por Orval para hub-chatbots.
-// ChatbotsPage NO importa desde este módulo (usa fetch manual), así que estos
-// mocks no son llamados. Los tests que los afirman FALLAN → RED.
 vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
-  useListChatbotsApiV1HubChatbotsGet: vi.fn(() => ({ data: undefined, isLoading: false })),
-  useCreateChatbotApiV1HubChatbotsPost: vi.fn(() => ({
-    mutate: mockCreateMutate,
-    isPending: false,
-    reset: vi.fn(),
-  })),
+  useListChatbotsApiV1HubChatbotsGet: vi.fn(() => ({ data: mockChatbotsList.value, isLoading: false })),
+  useCreateChatbotApiV1HubChatbotsPost: vi.fn((opts?: { mutation?: { onSuccess?: () => void; onError?: (e: unknown) => void } }) => {
+    // Capture the latest onError on every render so test (e) can trigger it manually
+    capturedCreateOptions.onError = opts?.mutation?.onError
+    return {
+      mutate: mockCreateMutate,
+      isPending: false,
+      reset: vi.fn(),
+    }
+  }),
   useUpdateChatbotApiV1HubChatbotsChatbotIdPatch: vi.fn(() => ({
     mutate: mockUpdateMutate,
     isPending: false,
@@ -42,7 +45,15 @@ vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
   useDeleteChatbotApiV1HubChatbotsChatbotIdDelete: vi.fn(() => ({
     mutate: vi.fn(),
     isPending: false,
+    reset: vi.fn(),
   })),
+  useListChildrenApiV1HubChatbotsChatbotIdChildrenGet: vi.fn(() => ({ data: undefined, isLoading: false })),
+  useGetCorpusStatsApiV1HubChatbotsChatbotIdCorpusStatsGet: vi.fn(() => ({ data: undefined })),
+  useAssignChildApiV1HubChatbotsChatbotIdChildrenPost: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useRegenerateChunksApiV1HubChatbotsChatbotIdRegenerateChunksPost: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  getListChatbotsApiV1HubChatbotsGetQueryKey: vi.fn(() => ['/api/v1/hub/chatbots']),
+  getListChildrenApiV1HubChatbotsChatbotIdChildrenGetQueryKey: vi.fn((id: string) => [`/api/v1/hub/chatbots/${id}/children`]),
+  getGetCorpusStatsApiV1HubChatbotsChatbotIdCorpusStatsGetQueryKey: vi.fn((id: string) => [`/api/v1/hub/chatbots/${id}/corpus-stats`]),
 }))
 
 // (f) Verificación de contrato en tiempo de compilación.
@@ -96,6 +107,8 @@ beforeAll(async () => {
 afterEach(() => {
   vi.clearAllMocks()
   vi.unstubAllGlobals()
+  capturedCreateOptions.onError = undefined
+  mockChatbotsList.value = []
 })
 
 type FetchResponse = { ok: boolean; status?: number; json: () => Promise<unknown> }
@@ -165,7 +178,8 @@ async function openCreateDialog() {
 }
 
 async function openEditDialog() {
-  renderPage([DEMO_CHATBOT])
+  mockChatbotsList.value = [DEMO_CHATBOT]
+  renderPage([])
   await waitFor(() => screen.getByText('Bot Demo'))
   await act(async () => {
     fireEvent.click(screen.getByText('Bot Demo'))
@@ -244,11 +258,12 @@ describe('ChatbotForm — CF.4.1 (RED)', () => {
 
   // (e) — error 422 del backend se mapea al campo "name" del formulario
   //
-  // FALLA en RED: ChatbotsPage no tiene onError en createMutation que llame a setError().
-  // El error llega como Error('Failed to create chatbot') pero no se muestra en el campo.
-  // PASARÁ en CF.4.2 + CF.4.3 cuando se implemente mapApiErrorsToFormErrors.
+  // El hook de Orval está mockeado, por lo que no hay llamada HTTP real.
+  // El test captura el onError registrado por el componente al montar y lo
+  // invoca manualmente con un error 422 simulado. Esto ejercita mapApiErrorsToFormErrors
+  // de @/shared/utils/formErrors y verifica que el mensaje aparece en el campo.
   it('backend_422_maps_field_error_to_name_input', async () => {
-    renderPage([], 422)
+    renderPage([])
 
     await waitFor(() => screen.getByRole('button', { name: /nuevo chatbot/i }))
     await act(async () => {
@@ -264,8 +279,17 @@ describe('ChatbotForm — CF.4.1 (RED)', () => {
       fireEvent.click(screen.getByRole('button', { name: /guardar/i }))
     })
 
-    // El contrato: si el backend devuelve 422 con detail[{loc:["body","name"], msg:"..."}],
-    // el campo "name" debe mostrar ese mensaje de error.
+    // Simula la respuesta 422 del servidor llamando al onError capturado del hook.
+    await act(async () => {
+      capturedCreateOptions.onError?.({
+        response: {
+          data: {
+            detail: [{ loc: ['body', 'name'], msg: 'Name already in use', type: 'value_error' }],
+          },
+        },
+      })
+    })
+
     await waitFor(() => {
       expect(screen.getByText('Name already in use')).toBeInTheDocument()
     })

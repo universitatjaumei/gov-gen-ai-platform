@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Download, Star, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { fetchChatbots } from '@/shared/api/chatbots'
+import { useListChatbotsApiV1HubChatbotsGet } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
+import type { ChatbotRead } from '@/shared/api/generated/model'
 import { fetchInteractions, type Interaction } from '@/shared/api/feedback'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 
@@ -48,10 +49,8 @@ export function ReportsPage() {
   const [onlyLowScores, setOnlyLowScores] = useState(false)
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
 
-  const { data: chatbots = [] } = useQuery({
-    queryKey: ['chatbots'],
-    queryFn: fetchChatbots,
-  })
+  const { data: chatbotsRaw } = useListChatbotsApiV1HubChatbotsGet()
+  const chatbots: ChatbotRead[] = (chatbotsRaw as unknown as ChatbotRead[] | undefined) ?? []
 
   if (!selectedChatbotId && chatbots.length > 0) {
     setSelectedChatbotId(chatbots[0].id)
