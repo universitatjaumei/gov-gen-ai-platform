@@ -26,12 +26,12 @@
 | Bloque | Último completado | Siguiente | Estado |
 |--------|-------------------|-----------|--------|
 | Fase 0 — Infraestructura | — | — | ✅ Eliminada (heredada) |
-| Subfase 1.A — Chatbots Públicos (9B) | 9B.5 ✅ | **9B.6 (RED)** | ▶ En progreso |
+| Subfase 1.A — Chatbots Públicos (9B) | 9B.14 ✅ | — | ✅ Completo |
 | Subfase 1.A → 1.C — Redacción Contract-First (9R) | — | 9R.0 (DOC) | ⏳ Pendiente |
 | Subfase 1.B — Identidad y Despliegue | — | Fase 10 / D.1 | ⏳ Pendiente |
 | Subfase 1.C — Privacidad y Exportación | — | 1C.0 | ⏳ Pendiente |
 
-**Cursor actual: 9B.6 (RED) — Protocolos de estrategias actualizados para RetrievalPipeline**
+**Cursor actual: 9R.0 (DOC) — Bloque 9R Redacción Contract-First (siguiente subfase)**
 
 > Nota: el bloque **9R** (Redacción Contract-First) se incorporó el 2026-05-11 a partir de `Rediseño_informes.md`.
 > Sustituye los antiguos prompts 9.11a–9.11d. Es paralelo a 9B y bloquea la subfase 1.C (1C.4 requiere `DraftingRunManifest` de 9R.9).
@@ -42,8 +42,23 @@
 
 | Plan | Estado |
 |------|--------|
-| Fase 2 — Migración NiceGUI + Agente local | ⏳ No iniciada |
+| Fase 2 — Migración NiceGUI + Agente local | ⏳ No iniciada — plan listo para ejecutar |
 | Fase 3 — Gestor de Expedientes | ⏳ No iniciada |
+
+**Subfase 2.B — Estado del plan para el extractor PDF (9.12b / 9.13)**
+
+Plan enriquecido el 2026-05-11 con el análisis de `Migración_extracción_pdf.txt`:
+
+| Prompt | Descripción | Estado |
+|--------|-------------|--------|
+| 9.12b.0 | Auditoría funcional legacy (`legacy_extraction_spec.md`) | ⏳ Pendiente |
+| 9.12b | Refactor backend PDF extractor a Docling | ⏳ Pendiente |
+| 9.13 | UI React del extractor PDF (Focus Mode + wizard) | ⏳ Pendiente — bloqueado por 9.12b |
+
+Secuencia de implementación: 12 pasos atómicos documentados en **Guía 9C.1** del plan.
+Prompts verbatim para el agente: `Migración_extracción_pdf.txt` §5.
+
+> **Prerequisito de Fase 2**: Subfase 1.A completada ✅ (9B.14 verde, 2026-05-11).
 
 ---
 
@@ -63,3 +78,14 @@
 | 2026-05-11 | 9R (planificación) | Incorporado el bloque 9R Redacción Contract-First en Plan_TDD_Fase1.md (29 prompts atómicos TDD: contratos, GENERIC_REPORT, bloques, LLMSpecService, ExtractionPipelineFactory, DraftingCoreGraph, UI por contrato, HITL, RunManifest, vertical slice MVP). 9.11a–9.11d marcados superseded. |
 | 2026-05-11 | 9B.4 | Contrato de evidencias: EvidenceItem + RetrievalResult + RetrievalPipeline Protocol + GraphDeps. 12 tests verdes en tests/public_graphs/test_retrieval_contract.py. |
 | 2026-05-11 | 9B.5 | RetrievalPipelineFactory + 3 pipelines (RagVectorPipeline, MdLongContextPipeline, MdAgentSelectorPipeline stub). 29 tests verdes en tests/public_graphs/. |
+| 2026-05-11 | 9B.6 | protocols.py: RetrievalOutput + RetrievalStrategy Protocol + PipelineRetrievalStrategy. 5 tests verdes en test_retrieval_strategy_protocols.py. |
+| 2026-05-11 | 9B.7 | MergeStrategy/TemplateStrategy/LanguagePolicy en protocols.py + core/core_graph.py (CoreGraph + CoreGraphState). 3 tests verdes en test_core_graph.py. |
+| 2026-05-11 | 9B.8 | profiles/public_kb_rich.py: SingleSourceRetrievalStrategy + PassthroughMergeStrategy + GenericAnswerTemplateStrategy + DefaultLanguagePolicy. 3 tests verdes en test_public_kb_rich.py. |
+| 2026-05-11 | 9B.9 | profiles/public_portal_router.py: PortalRouterRetrievalStrategy (selección stub → primer hijo, carga config efectiva, usa retrieval_mode del hijo). 2 tests verdes en test_public_portal_router.py. |
+| 2026-05-11 | 9B.10 | 7 tests RED en test_uji_aggregator.py + stub public_portal_aggregator.py. Fallan por comportamiento (stub vacío), no por imports. Contrato: 2 buckets por fuente, merge condicional, secciones template, warning traducción. |
+| 2026-05-11 | 9B.11 | UjiDualSourceRetrievalStrategy + UjiMergeStrategy + UjiAnswerTemplateStrategy implementados. 7 tests verdes en test_uji_aggregator.py. |
+| 2026-05-11 | 9B.12 | PreferLanguagePolicy + StrictLanguagePolicy + NeutralLanguagePolicy en protocols.py. CoreGraph extiende estado con translation_warning + llama filter_items/should_warn_translation en merge_node. DefaultLanguagePolicy hereda PreferLanguagePolicy. 59 tests verdes (10 nuevos en test_language_policy.py). |
+| 2026-05-11 | 9B.13 | GraphFactory en core/graph_factory.py: resuelve config → selecciona perfil en registry → crea CoreGraph. Registro de los 3 perfiles (PUBLIC_KB_RICH, PUBLIC_PORTAL_AGGREGATOR, PUBLIC_PORTAL_ROUTER) con stubs. 62 tests verdes (3 nuevos en test_graph_factory.py). |
+| 2026-05-11 | 9B.14 | docs/GRAPH_PROFILES.md (guía CoreGraph, perfiles, retrieval_mode, cómo extender). test_profile_contract.py: 12 tests parametrizados (3 perfiles × compile+non-null + 3 perfiles × 3 modos smoke). test_pipeline_contract_suite.py: 6 tests parametrizados (3 pipelines × 2 contratos). 80 tests verdes en total. Subfase 9B completada. |
+| 2026-05-11 | (planificación Fase 2) | Plan_TDD_Fase2.md enriquecido con análisis de migración PDF: nuevo prompt 9.12b.0 (auditoría funcional legacy + spec), Guía 9C.1 (tabla de 12 pasos atómicos con artefactos verificables), riesgos explícitos en 9.12b, firmas de `prompts.py`, `ExtractionPhase` state machine en 9.13, tabla de niveles de automatización, tests de `useExtractionRun` ampliados de 3 a 8 + 8 tests nuevos de componentes wizard. |
+| 2026-05-11 | (config) | CLAUDE.md: regla de retirada legacy actualizada a dos pasos — Caso A (NiceGUI en migración activa) → mover a `_legacy_nicegui/` al cerrar el prompt GREEN, borrar al cerrar el prompt de verificación de subfase; Caso B (código huérfano) → borrar directamente. |

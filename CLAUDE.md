@@ -10,10 +10,25 @@ El cliente NiceGUI (`client_app/`) está siendo migrado progresivamente al servi
 
 ---
 
-## Regla crítica: migración = código nuevo + borrado del legacy
+## Regla crítica: migración = código nuevo + retirada del legacy
 
-Una tarea de migración **no está completa** hasta que se elimine el código original.
+Una tarea de migración **no está completa** hasta que el código original quede retirado.
 No dejes código muerto, imports sin usar, archivos vacíos ni comentarios `# TODO: migrate`.
+
+La retirada sigue un proceso de **dos pasos** según el tipo de código:
+
+### Caso A — Código NiceGUI con migración activa en curso
+
+El código NiceGUI se retira en dos pasos para disponer de referencia mientras la migración no está verificada:
+
+1. **Al cerrar el prompt de implementación** (GREEN): mover el fichero a `_legacy_nicegui/` manteniendo la ruta relativa. No borrarlo aún.
+2. **Al cerrar el prompt de subfase** (verificación E2E): borrar `_legacy_nicegui/` una vez que `pytest` + `npm test` + pruebas E2E estén en verde.
+
+`_legacy_nicegui/` es una **zona de cuarentena temporal**, no un archivo permanente. Ningún fichero puede permanecer ahí más allá del prompt de cierre de su subfase.
+
+### Caso B — Código huérfano sin migración activa
+
+Código que ya no se usa y no tiene una migración en curso asociada: **borrar directamente**, sin pasar por `_legacy_nicegui/`. El historial de git es la fuente de verdad del pasado.
 
 ### Definición de "migración completa" (checklist obligatorio)
 
@@ -21,10 +36,10 @@ Antes de cerrar cualquier tarea de migración, verifica y ejecuta cada punto:
 
 - [ ] La nueva implementación tiene tests que pasan (`pytest` o equivalente)
 - [ ] El endpoint o servicio nuevo está integrado y verificado end-to-end
-- [ ] El archivo o módulo legacy correspondiente está **eliminado** (no comentado, no archivado)
+- [ ] El archivo o módulo legacy está en `_legacy_nicegui/` (Caso A) o **eliminado** (Caso B)
 - [ ] Los imports del legacy han sido eliminados de todos los ficheros que los referenciaban
 - [ ] No quedan referencias al código eliminado en ningún fichero del proyecto (`grep -r` antes de cerrar)
-- [ ] El `docker compose up` + suite de tests completa sigue pasando tras el borrado
+- [ ] El `docker compose up` + suite de tests completa sigue pasando tras la retirada
 
 ---
 
@@ -34,8 +49,9 @@ Antes de cerrar cualquier tarea de migración, verifica y ejecuta cada punto:
 Si el código ya no se usa, elimínalo. Los comentarios `# deprecated`, `# old version` o `# legacy`
 son deuda técnica disfrazada. El historial de git es la fuente de verdad del pasado.
 
-**Borra, no archives.**
+**`_legacy_archive/` no recibe nada nuevo.**
 El directorio `_legacy_archive/` existe por razones históricas. No añadas nada nuevo ahí.
+El único directorio de cuarentena válido durante migraciones activas es `_legacy_nicegui/`.
 Si hay algo en `_legacy_archive/` que ya esté migrado, bórralo también.
 
 **Sin backwards-compatibility shims.**
