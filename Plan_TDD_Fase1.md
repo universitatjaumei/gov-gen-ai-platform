@@ -1863,7 +1863,1340 @@ Tareas:
 
 ---
 
-## Prompts 9.11a–9.11d — Agentes de Redacción / Workspaces (Subfase 1.A / 1.C, PENDIENTE)
+## BLOQUE 9R — Redacción Contract-First: ReportProfiles, UI Contracts y DraftingCoreGraph (Subfase 1.A → 1.C, PENDIENTE)
+
+> Creado: 2026-05-11. Sustituye y amplía los prompts 9.11a–9.11d (conservados como referencia histórica tras el bloque).
+> Referencia estratégica: `Rediseño_informes.md`.
+
+### Propósito del bloque 9R
+
+Reformular la subfase de Agentes de Redacción / Workspaces para que **no** sea un grafo monolítico con extracción, redacción IA y ensamblado, sino una **arquitectura contract-first extensible** análoga al bloque 9B (CoreGraph + Profiles + Factory + Contracts):
+
+- `DraftingCoreGraph` común para todos los tipos de informe.
+- `ReportProfiles` para especializar tipos de informe (incluye `GENERIC_REPORT` obligatorio para informes no predefinidos).
+- `ReportTemplateContract`, `BlockContract`, `ReportUIContract` versionados y exportados por OpenAPI.
+- `ExtractionPipelineFactory` para Excel/PDF/manual/scripts seguros (extracción determinista, no IA).
+- `LLM-assisted Report Specification`: el LLM propone un `ReportTemplateDraft`, el humano valida y aprueba antes de persistir.
+- `HITL por bloque` con máquina de estados explícita (`draft → extracted → ai_generated → needs_review → approved | rejected → locked`).
+- `DraftingRunManifest` obligatorio para trazabilidad de cada ejecución.
+
+### Decisiones de diseño
+
+1. **No grafo monolítico**. El `DraftingCoreGraph` es común. La variación entre tipos de informe se resuelve por `ReportProfile`, no por `if/else` dentro del core.
+2. **Contratos versionados**. El antiguo `config_hibrida JSON` desaparece. Se sustituye por `ReportTemplateContract` con `version_id`, schema validable y serialización OpenAPI.
+3. **UI por contrato**. El frontend no tiene pantallas hardcoded por tipo de informe. Renderiza `ReportUIContract` con `react-hook-form` + `zodResolver` + tipos generados por Orval.
+4. **LLM propone, humano aprueba**. El asistente LLM genera `ReportTemplateDraft` → validador estructural → vista previa editable → aprobación HITL → persistencia como plantilla o workspace ad hoc.
+5. **Extracción determinista primero**. Excel/PDF se parsean con código (`pandas`, `pdfplumber`, `camelot`), nunca con LLM como mecanismo principal. Los scripts generados por IA son una extensión controlada (refactor de 9.11b con HITL + AST + auditoría IA).
+6. **Estados de bloque explícitos**. Cada bloque tiene un estado en `{draft, missing_input, extracted, ai_generated, needs_review, approved, rejected, locked}`. Un bloque IA sin `approved` no entra en el documento final. Un bloque requerido sin datos bloquea el ensamblado.
+7. **RunManifest obligatorio**. Ninguna exportación procede sin un `DraftingRunManifest` con `workspace_id`, `template_version_id`, `report_profile`, `uploaded_documents`, `input_validation`, `extracted_blocks`, `ai_blocks`, `model_used`, `prompt_versions`, `citations`, `warnings`, `user_approvals` y `final_document_hash`.
+8. **Edge/Cloud**. Los módulos 9R son **edge** (procesan documentos/expedientes del cliente). Los routers se etiquetan `Deploy: edge` y no importan módulos cloud directamente.
+
+### Diagrama del DraftingCoreGraph
+
+```
+LoadTemplateNode
+  → ValidateInputContractNode
+    → FileNormalizationNode
+      → DeterministicExtractionNode    [Excel / PDFText / PDFTable / Manual / AdminScript]
+        → DataQualityCheckNode
+          → MissingDataQuestionNode    [HITL: solicita inputs faltantes]
+            → AIAssistDraftNode         [LLM: solo con datos validados como contexto]
+              → CitationAndTraceabilityNode
+                → UserReviewGateNode    [HITL: aprueba/rechaza/regenera por bloque]
+                  → ApplyUserEditsNode
+                    → FinalAssemblerNode
+                      → AuditLogNode    [emite DraftingRunManifest]
+```
+
+### Mapa de ejecución del bloque 9R
+
+```
+9R.0   (DOC)        Decisiones de arquitectura + nota en el plan
+
+9R.1.1 (RED/GREEN)  ReportTemplateContract + ReportTemplateVersion (Pydantic + OpenAPI)
+9R.1.2 (RED/GREEN)  InputContract + BlockContract + ReportUIContract
+9R.1.3 (RED/GREEN)  WorkspaceState + BlockState + ReportTemplateDraft (runtime)
+9R.1.4 (RED/GREEN)  Migración Alembic: hub_report_templates / hub_workspaces / hub_workspace_blocks / hub_run_manifests
+
+9R.2.1 (RED/GREEN)  ReportProfile registry + GENERIC_REPORT como perfil obligatorio
+9R.2.2 (RED/GREEN)  Estructura inicial de GENERIC_REPORT (secciones, bloques mínimos, inputs aceptados)
+
+9R.3.1 (RED/GREEN)  Tipos de bloque (STATIC_TEXT, USER_INPUT, DETERMINISTIC_DATA, TABLE, CHART, AI_ASSISTED_TEXT, AI_SUMMARY, AI_REWRITE, CITATION_BLOCK, REVIEW_GATE)
+9R.3.2 (RED/GREEN)  BlockState machine + reglas de transición + invariantes (AI sin approved no ensambla)
+
+9R.4.1 (RED/GREEN)  LLMSpecService: NL → ReportTemplateDraft
+9R.4.2 (RED/GREEN)  Validador estructural + rechazo de drafts con tipos no permitidos
+9R.4.3 (RED/GREEN)  Endpoints preview/approve + HITL (admin: plantilla; user: workspace ad hoc)
+
+9R.5.1 (RED/GREEN)  Protocolo ExtractionPipeline + contratos (Input/Result/Provenance/Warning)
+9R.5.2 (RED/GREEN)  ExcelExtractionPipeline + PDFTextExtractionPipeline
+9R.5.3 (RED/GREEN)  PDFTableExtractionPipeline + ManualInputPipeline
+9R.5.4 (RED/GREEN)  ExtractionPipelineFactory + AdminScriptExtractionPipeline (refactor de 9.11b)
+
+9R.6.1 (RED/GREEN)  CoreGraph: LoadTemplate / ValidateInputContract / FileNormalization
+9R.6.2 (RED/GREEN)  CoreGraph: DeterministicExtraction / DataQualityCheck / MissingDataQuestion
+9R.6.3 (RED/GREEN)  CoreGraph: AIAssistDraft / CitationAndTraceability
+9R.6.4 (RED/GREEN)  CoreGraph: UserReviewGate / ApplyUserEdits / FinalAssembler
+9R.6.5 (RED/GREEN)  CoreGraph: AuditLog + emisión de DraftingRunManifest
+
+9R.7.1 (RED/GREEN)  ReportUIContractRenderer + DynamicUploadSlots + DynamicFieldRenderer
+9R.7.2 (RED/GREEN)  BlockEditor + AIBlockReviewPanel + DataQualityPanel + WorkspaceStatusBar
+9R.7.3 (RED/GREEN)  ReportTemplateBuilderPage (admin) + GenericReportWizard (user)
+9R.7.4 (RED/GREEN)  LLMDraftPreviewPage + flujo de aprobación
+
+9R.8.1 (RED/GREEN)  HITL endpoints + servicios de transición de bloques
+9R.8.2 (RED/GREEN)  Tests E2E de edición/rechazo/regeneración por bloque
+
+9R.9.1 (RED/GREEN)  DraftingRunManifest modelo Pydantic + repo + endpoint
+9R.9.2 (RED/GREEN)  Integración con ExportService (1C.4) + final_document_hash
+
+9R.10.1 (RED)       Vertical slice E2E: tests de aceptación
+9R.10.2 (GREEN)     Wire-up integral del slice
+```
+
+### Reglas duras del bloque 9R
+
+1. **No existe `config_hibrida JSON` libre**. Cualquier dato de configuración va en un `ReportTemplateContract` versionado.
+2. **Los routers HTTP devuelven Pydantic ResponseModel específicos**. Nunca devolver modelos ORM directamente.
+3. **El frontend usa exclusivamente tipos generados por Orval**. Está prohibido crear interfaces TypeScript manuales para DTOs de redacción.
+4. **El LLM no puede crear plantillas persistentes sin aprobación HITL**. Solo genera `ReportTemplateDraft`.
+5. **Ningún bloque IA entra al documento final sin estado `approved`**. El `UserReviewGateNode` bloquea el ensamblado.
+6. **Toda ejecución del agente emite `DraftingRunManifest`**, incluso si falla. La exportación a DOCX/ODT (1C.4) requiere manifest válido.
+7. **Módulos 9R son edge**. Routers etiquetados `Deploy: edge` (ver CLAUDE.md), no importan módulos cloud.
+8. **TDD obligatorio**. RED antes que GREEN; ningún PR del bloque se acepta sin tests del nuevo contrato/comportamiento.
+
+---
+
+### 9R.0 — Decisiones de arquitectura (DOC, sin TDD)
+
+```markdown
+# 9R.0 — Documento de decisiones de arquitectura
+
+Objetivo: dejar registrada en el repositorio la arquitectura objetivo del bloque 9R antes de empezar TDD.
+
+Tareas:
+1) Crear `docs/REDACCION_CONTRACT_FIRST.md` con:
+   - Propósito del bloque.
+   - Decisiones de diseño (1-8 listadas arriba).
+   - Diagrama del DraftingCoreGraph (versión textual).
+   - Mapa de ejecución 9R.1 → 9R.10.
+   - Reglas duras del bloque.
+   - Glosario: ReportProfile, ReportTemplateContract, BlockContract, ReportUIContract, BlockState, DraftingRunManifest, ReportTemplateDraft, ExtractionPipeline.
+
+2) Añadir en `CLAUDE.md` un párrafo breve en la sección de Edge/Cloud aclarando que los nuevos módulos `modules/redaccion/` son edge.
+
+3) Crear el esqueleto de carpetas (vacías) para que la estructura sea visible:
+   - `server/app/modules/redaccion/`
+   - `server/app/modules/redaccion/contracts/`
+   - `server/app/modules/redaccion/profiles/`
+   - `server/app/modules/redaccion/pipelines/`
+   - `server/app/modules/redaccion/graph/`
+   - `server/app/modules/redaccion/services/`
+   - `frontend/src/redaccion/`
+
+Criterio de done:
+- El documento es legible y autosuficiente.
+- Cualquier dev nuevo entiende qué hace el bloque 9R sin leer el plan completo.
+```
+
+---
+
+### Prompt 9R.1.1 (RED/GREEN) — ReportTemplateContract + ReportTemplateVersion
+
+```markdown
+# PROMPT 9R.1.1 (RED/GREEN) — Contratos Pydantic de plantilla y versión
+
+Objetivo: definir los contratos serializables de plantilla y versión, exportables por OpenAPI y consumibles por Orval.
+
+Estructura (en server/app/modules/redaccion/contracts/):
+- template.py        # ReportTemplateContract, ReportTemplateVersion
+- __init__.py
+
+ReportTemplateContract (mínimo):
+- id: UUID
+- name: str
+- description: str | None
+- report_profile: ReportProfileId   # Enum/Literal
+- owner_kind: Literal["platform","organization","user"]
+- owner_id: UUID | None
+- is_global: bool
+- current_version_id: UUID
+- created_at: datetime
+- updated_at: datetime
+
+ReportTemplateVersion (mínimo):
+- id: UUID
+- template_id: UUID
+- version: int
+- spec: ReportTemplateSpec   # contiene sections, blocks, inputs, ui_contract
+- created_at: datetime
+- created_by: UUID
+
+ReportTemplateSpec (mínimo):
+- sections: list[SectionContract]
+- blocks: list[BlockContract]   # referencia adelantada (9R.1.2)
+- input_contract: InputContract # referencia adelantada (9R.1.2)
+- ui_contract: ReportUIContract # referencia adelantada (9R.1.2)
+- ai_block_policy: AIBlockPolicy
+- review_policy: ReviewPolicy
+- export_policy: ExportPolicy
+
+Tests (RED → GREEN):
+- test_report_template_contract_is_serializable_to_openapi
+- test_report_template_version_requires_template_id
+- test_report_template_spec_rejects_unknown_owner_kind
+- test_report_template_version_is_immutable_once_persisted   # contrato: solo se versiona, nunca se edita
+- test_report_template_exports_stable_schema_names           # ChatbotRead-style naming
+- test_only_admin_can_create_global_template_contract
+
+Criterio de done:
+- `uv run python export_openapi.py` muestra los schemas ReportTemplateContract, ReportTemplateVersion, ReportTemplateSpec, SectionContract.
+- Los nombres de schema son estables (no `ReportTemplateRead_v1__abc`).
+- Tests verdes; sin código en routers todavía.
+```
+
+---
+
+### Prompt 9R.1.2 (RED/GREEN) — InputContract + BlockContract + ReportUIContract
+
+```markdown
+# PROMPT 9R.1.2 (RED/GREEN) — Contratos de inputs, bloques y UI adaptativa
+
+Objetivo: definir los contratos discriminados de bloque, los inputs aceptados por la plantilla y el contrato UI que el frontend renderizará dinámicamente.
+
+Estructura (en server/app/modules/redaccion/contracts/):
+- inputs.py     # InputContract, InputSlot
+- blocks.py     # BlockContract (discriminated union), BlockKind enum
+- ui.py         # ReportUIContract, UISection, UIFieldDescriptor, UIDropzoneDescriptor
+
+InputContract (mínimo):
+- required_slots: list[InputSlot]
+- optional_slots: list[InputSlot]
+
+InputSlot:
+- slot_id: str
+- kind: Literal["pdf","excel","csv","text","number","date","selector"]
+- label: dict[str, str]      # i18n {es,ca,en}
+- required: bool
+- multiple: bool
+- max_size_mb: int | None
+- validation: dict | None    # regex, min/max, schema columnas Excel, etc.
+
+BlockContract (discriminated union por `kind`):
+- STATIC_TEXT, USER_INPUT, DETERMINISTIC_DATA, TABLE, CHART,
+  AI_ASSISTED_TEXT, AI_SUMMARY, AI_REWRITE, CITATION_BLOCK, REVIEW_GATE
+- Campos comunes: id, kind, title, required, depends_on (list[str]), order
+- Campos específicos por kind: source_pipeline (para DETERMINISTIC_DATA),
+  ai_prompt_template_id (para AI_*), data_block_ref (para CHART/TABLE),
+  review_policy_id (para REVIEW_GATE)
+
+ReportUIContract:
+- wizard_steps: list[UISection]
+- dropzones: list[UIDropzoneDescriptor]
+- manual_fields: list[UIFieldDescriptor]
+- block_editor_enabled: bool
+- ai_review_panel_enabled: bool
+- preview_layout: Literal["markdown","docx-like","split"]
+
+Tests (RED → GREEN):
+- test_block_contract_discriminator_by_kind
+- test_ai_block_requires_review_policy_reference
+- test_data_block_requires_source_pipeline
+- test_chart_block_requires_data_block_ref
+- test_table_block_requires_data_block_ref
+- test_review_gate_block_requires_review_policy_id
+- test_input_slot_excel_validates_required_columns_schema
+- test_input_slot_pdf_accepts_max_size_mb
+- test_ui_contract_renders_wizard_steps_in_order
+- test_block_contract_is_serializable_and_appears_in_openapi
+- test_unknown_block_kind_is_rejected
+
+Criterio de done:
+- Discriminated union de BlockContract aparece en openapi.json con `oneOf` y `discriminator: kind`.
+- `npm run generate:api` produce tipos TypeScript discriminados (no `Block` genérico con `any`).
+- Tests verdes.
+```
+
+---
+
+### Prompt 9R.1.3 (RED/GREEN) — WorkspaceState + BlockState + ReportTemplateDraft
+
+```markdown
+# PROMPT 9R.1.3 (RED/GREEN) — Contratos de runtime: estado del workspace y draft LLM
+
+Objetivo: definir el estado de runtime que circula por el DraftingCoreGraph y el contrato del draft propuesto por el asistente LLM.
+
+Estructura (en server/app/modules/redaccion/contracts/):
+- runtime.py    # WorkspaceState, BlockState, BlockStatus, WorkspaceStatus
+- drafts.py     # ReportTemplateDraft, ReportTemplateDraftValidationResult
+
+BlockStatus (Literal):
+- "draft" | "missing_input" | "extracted" | "ai_generated" | "needs_review" | "approved" | "rejected" | "locked"
+
+BlockState:
+- block_id: str
+- kind: BlockKind
+- status: BlockStatus
+- content: dict | None         # extracted data o ai text
+- citations: list[Citation] | None
+- last_updated_by: Literal["system","user","ai"]
+- updated_at: datetime
+- approval: ApprovalRecord | None
+
+WorkspaceStatus (Literal):
+- "draft" | "ingesting" | "extracting" | "drafting" | "in_review" | "assembled" | "exported" | "error"
+
+WorkspaceState:
+- workspace_id: UUID
+- template_version_id: UUID
+- report_profile: ReportProfileId
+- inputs: dict[str, InputArtifact]    # por slot_id
+- blocks: dict[str, BlockState]
+- status: WorkspaceStatus
+- warnings: list[ExtractionWarning]
+- run_manifest_id: UUID | None
+
+ReportTemplateDraft (lo que devuelve el LLM):
+- proposed_profile: ReportProfileId
+- proposed_sections: list[SectionContract]
+- proposed_blocks: list[BlockContract]
+- proposed_inputs: InputContract
+- rationale: str            # explicación del LLM
+- model_used: str
+- prompt_version: str
+
+ReportTemplateDraftValidationResult:
+- ok: bool
+- normalized_draft: ReportTemplateDraft | None
+- errors: list[ValidationError]
+
+Tests (RED → GREEN):
+- test_workspace_state_serializes_with_block_status
+- test_block_state_status_transition_valid_paths
+- test_block_state_rejects_invalid_status_transition     # draft → approved (sin pasar por needs_review) → rechazar
+- test_report_template_draft_includes_model_and_prompt_version
+- test_invalid_draft_returns_normalized_errors
+
+Criterio de done:
+- BlockStatus expuesto en OpenAPI como enum.
+- Las transiciones inválidas levantan `InvalidBlockTransitionError`.
+- Tests verdes.
+```
+
+---
+
+### Prompt 9R.1.4 (RED/GREEN) — Migración Alembic + repos
+
+```markdown
+# PROMPT 9R.1.4 (RED/GREEN) — Tablas hub_report_templates / hub_workspaces / hub_workspace_blocks / hub_run_manifests
+
+Objetivo: crear la capa de persistencia. Los contratos Pydantic son la fuente de verdad — los modelos ORM no se exponen al exterior.
+
+Tablas (HubOperationalBase — edge, ver CLAUDE.md):
+- hub_report_templates (id, name, description, report_profile, owner_kind, owner_id, is_global, current_version_id, created_at, updated_at)
+- hub_report_template_versions (id, template_id FK, version, spec_json JSONB, created_at, created_by)
+- hub_workspaces (id, template_version_id FK, owner_id, status, inputs_json JSONB, warnings_json JSONB, run_manifest_id FK nullable, created_at, updated_at)
+- hub_workspace_blocks (id, workspace_id FK, block_id, kind, status, content_json JSONB, citations_json JSONB, approval_json JSONB, updated_at)
+- hub_run_manifests (id, workspace_id FK, template_version_id FK, report_profile, payload_json JSONB, final_document_hash str, created_at)
+
+Reglas:
+- `hub_report_template_versions` es append-only. No hay UPDATE — solo nuevas versiones.
+- `hub_workspace_blocks` tiene constraint UNIQUE(workspace_id, block_id).
+- `hub_run_manifests.final_document_hash` se completa solo al ensamblar.
+- Sin `relationship()` cross-base (HubConfigBase ↔ HubOperationalBase prohibido).
+
+Tests (RED → GREEN):
+- test_alembic_upgrade_head_creates_new_tables
+- test_alembic_downgrade_removes_new_tables_cleanly
+- test_template_version_insert_only_no_update
+- test_workspace_block_unique_per_workspace
+- test_run_manifest_links_to_workspace_and_template_version
+
+Aplicar:
+- cd server && uv run alembic upgrade head
+- alembic current confirma la nueva revisión
+
+Criterio de done:
+- Migración aplicada en BD local.
+- Tests verdes.
+- Repos `ReportTemplateRepo`, `WorkspaceRepo`, `WorkspaceBlockRepo`, `RunManifestRepo` exponen métodos `get`, `list`, `save`, `update_status`, sin lógica de negocio.
+```
+
+---
+
+### Prompt 9R.2.1 (RED/GREEN) — ReportProfile registry + GENERIC_REPORT
+
+```markdown
+# PROMPT 9R.2.1 (RED/GREEN) — Registry de perfiles + perfil obligatorio GENERIC_REPORT
+
+Objetivo: implementar el registry de perfiles análogo al de 9B (GraphProfileRegistry), con GENERIC_REPORT como perfil obligatorio.
+
+Estructura (en server/app/modules/redaccion/profiles/):
+- registry.py        # ReportProfileRegistry, ReportProfileId enum/Literal
+- generic_report.py  # GenericReportProfile (perfil base)
+- __init__.py        # registro automático
+
+ReportProfileId (Literal):
+- "GENERIC_REPORT" | "ANNUAL_REPORT" | "DOCTORATE_PROGRAM_REPORT" | "CONTRACT_REPORT" | "FREEFORM_MEMO"
+
+ReportProfile (Protocol):
+- profile_id: ReportProfileId
+- def default_spec() -> ReportTemplateSpec
+- def applicable_pipelines() -> list[ExtractionPipelineId]
+- def review_policy() -> ReviewPolicy
+- def ai_block_policy() -> AIBlockPolicy
+
+ReportProfileRegistry:
+- register(profile: ReportProfile)
+- get(profile_id: ReportProfileId) -> ReportProfile
+- list() -> list[ReportProfileId]
+- contiene una entrada obligatoria GENERIC_REPORT al importarse el módulo (auto-register en __init__).
+
+Tests (RED → GREEN):
+- test_registry_contains_generic_report_after_import
+- test_registry_rejects_duplicate_profile_id
+- test_get_unknown_profile_raises
+- test_generic_report_default_spec_is_valid_report_template_spec
+- test_generic_report_applicable_pipelines_includes_excel_pdf_manual
+
+Criterio de done:
+- `from server.app.modules.redaccion.profiles import registry; registry.get("GENERIC_REPORT")` funciona sin error.
+- GENERIC_REPORT no puede desregistrarse (constante de bloque).
+- Tests verdes.
+```
+
+---
+
+### Prompt 9R.2.2 (RED/GREEN) — Estructura inicial de GENERIC_REPORT
+
+```markdown
+# PROMPT 9R.2.2 (RED/GREEN) — Spec por defecto del perfil genérico
+
+Objetivo: que GENERIC_REPORT proponga una estructura útil para informes no predefinidos.
+
+Spec por defecto (`generic_report.default_spec()`):
+- sections (orden y nombre):
+  1. Título y datos de contexto       → STATIC_TEXT + USER_INPUT
+  2. Objetivo del informe              → USER_INPUT
+  3. Contexto                          → USER_INPUT + AI_REWRITE (asistido, opcional)
+  4. Fuentes aportadas                 → DETERMINISTIC_DATA (referencia a inputs)
+  5. Datos extraídos                   → DETERMINISTIC_DATA + TABLE/CHART
+  6. Análisis asistido                 → AI_ASSISTED_TEXT (sobre datos validados, requiere REVIEW_GATE)
+  7. Conclusiones                      → AI_SUMMARY (requiere REVIEW_GATE)
+  8. Recomendaciones                   → USER_INPUT + AI_REWRITE (asistido, opcional)
+  9. Anexos / fuentes                  → CITATION_BLOCK
+
+- input_contract:
+  - opcional Excel (slot_id="datos_excel", validation: cualquier hoja)
+  - opcional PDF (slot_id="memoria_pdf")
+  - opcional texto libre (slot_id="notas")
+
+- ai_block_policy: requiere `needs_review` antes de `approved`; modelo Tier-1 con prompt versionado.
+
+Tests (RED → GREEN):
+- test_generic_report_profile_exists
+- test_generic_report_default_spec_contains_nine_sections_in_order
+- test_generic_report_accepts_manual_blocks
+- test_generic_report_accepts_excel_and_pdf_inputs
+- test_generic_report_requires_human_approval_for_ai_blocks
+- test_generic_report_can_be_created_from_llm_draft   # placeholder, full test en 9R.4
+- test_generic_report_generates_run_manifest_field    # placeholder, full test en 9R.9
+
+Criterio de done:
+- Crear workspace con `profile=GENERIC_REPORT` y plantilla por defecto genera 9 secciones esperadas.
+- Todos los bloques AI están marcados `requires_review=True`.
+- Tests verdes.
+```
+
+---
+
+### Prompt 9R.3.1 (RED/GREEN) — Tipos de bloque y comportamiento por kind
+
+```markdown
+# PROMPT 9R.3.1 (RED/GREEN) — Implementar el comportamiento por tipo de bloque
+
+Objetivo: para cada tipo de bloque, codificar inputs/outputs/dependencias/política IA/política HITL/render UI/trazabilidad.
+
+Para cada kind en BlockKind, implementar en server/app/modules/redaccion/blocks/handlers/:
+- propósito (docstring de clase)
+- inputs aceptados (qué bloques o slots leen)
+- outputs (estructura del content)
+- puede ser required: bool
+- puede depender de otros bloques: list[BlockKind]
+- usa IA: bool
+- requiere aprobación: bool
+- render UI: dict[str, Any]  → consumido por ReportUIContract
+- registro en RunManifest: dict (qué se serializa)
+
+Handlers mínimos:
+- StaticTextHandler
+- UserInputHandler
+- DeterministicDataHandler  (delega en ExtractionPipeline)
+- TableHandler              (consume DETERMINISTIC_DATA)
+- ChartHandler              (consume DETERMINISTIC_DATA o TABLE)
+- AIAssistedTextHandler
+- AISummaryHandler
+- AIRewriteHandler
+- CitationBlockHandler
+- ReviewGateHandler
+
+Tests (RED → GREEN):
+- test_block_contract_has_required_fields
+- test_ai_block_requires_review_policy
+- test_data_block_requires_extraction_source
+- test_chart_block_depends_on_data_block
+- test_review_gate_blocks_final_assembly_until_approved
+- test_block_contract_is_serializable
+- test_chart_handler_rejects_missing_data_block_ref
+- test_ai_handler_records_model_and_prompt_version_to_manifest
+
+Criterio de done:
+- Cada handler implementa `validate(block)`, `execute(block, state)`, `to_manifest(block)`.
+- Tests verdes (10/10).
+- Documentación por handler (docstring estructurado).
+```
+
+---
+
+### Prompt 9R.3.2 (RED/GREEN) — BlockState machine + invariantes
+
+```markdown
+# PROMPT 9R.3.2 (RED/GREEN) — Máquina de estados de bloque y reglas de transición
+
+Objetivo: implementar una máquina de estados explícita para BlockStatus con transiciones permitidas y rechazo determinista de las prohibidas.
+
+Estructura (en server/app/modules/redaccion/services/block_state_machine.py):
+- BlockStateMachine.transition(block: BlockState, event: BlockTransitionEvent) -> BlockState
+- Eventos: REQUEST_INPUT, EXTRACT, AI_GENERATE, REQUEST_REVIEW, APPROVE, REJECT, REGENERATE, LOCK
+
+Tabla de transiciones (resumen):
+- draft ─REQUEST_INPUT→ missing_input
+- missing_input ─EXTRACT→ extracted
+- draft ─EXTRACT→ extracted
+- extracted ─AI_GENERATE→ ai_generated
+- ai_generated ─REQUEST_REVIEW→ needs_review
+- needs_review ─APPROVE→ approved
+- needs_review ─REJECT→ rejected
+- rejected ─REGENERATE→ ai_generated
+- approved ─LOCK→ locked
+
+Invariantes:
+- Un bloque AI nunca pasa de `ai_generated` directo a `approved` sin `needs_review`.
+- Un bloque `locked` no admite más transiciones.
+- Un bloque `required` sin estado `approved`/`locked` bloquea el ensamblado.
+
+Tests (RED → GREEN):
+- test_block_state_machine_allows_extract_from_draft
+- test_block_state_machine_blocks_direct_ai_to_approved
+- test_block_state_machine_locked_block_is_terminal
+- test_block_state_machine_rejected_block_can_regenerate
+- test_final_assembler_blocks_when_required_block_not_approved
+- test_block_transition_emits_audit_event
+
+Criterio de done:
+- Toda transición ilegal levanta `InvalidBlockTransitionError` con mensaje claro.
+- Cada transición emite un evento auditable (`block_transition_audit`).
+- Tests verdes (6/6).
+```
+
+---
+
+### Prompt 9R.4.1 (RED/GREEN) — LLMSpecService: NL → ReportTemplateDraft
+
+```markdown
+# PROMPT 9R.4.1 (RED/GREEN) — Asistente LLM de especificación de informes
+
+Objetivo: dado un texto en lenguaje natural, devolver un `ReportTemplateDraft` estructurado. El LLM NO ejecuta, NO persiste, NO escribe código.
+
+Estructura (en server/app/modules/redaccion/services/llm_spec_service.py):
+- LLMSpecService.propose_template(prompt_nl: str, owner_kind: Literal["admin","user"]) -> ReportTemplateDraft
+- Internamente:
+  1) Construir prompt con system message que liste los tipos de bloque permitidos.
+  2) Llamar al LLM (Tier 1, model_factory).
+  3) Parsear salida JSON (json_mode si el provider lo soporta, fallback con `pydantic.TypeAdapter`).
+  4) Adjuntar `model_used`, `prompt_version`.
+
+Reglas:
+- El system prompt declara explícitamente los `BlockKind` válidos y rechaza `BlockKind` desconocidos en la respuesta.
+- El servicio NO crea registros en BD. Solo devuelve el draft.
+- El owner_kind se propaga al draft (afecta a quién verá el preview).
+
+Tests (RED → GREEN):
+- test_llm_spec_service_returns_report_template_draft   (mock LLM)
+- test_llm_spec_service_records_model_used_and_prompt_version
+- test_llm_spec_service_does_not_persist_anything
+- test_llm_spec_service_respects_owner_kind            (admin → puede sugerir is_global=True)
+
+Criterio de done:
+- Servicio aislado, sin acceso a repos.
+- Mock LLM en tests; el test real con LLM va en integración (`tests/integration/test_llm_spec_real.py`, opcional).
+- Tests verdes.
+```
+
+---
+
+### Prompt 9R.4.2 (RED/GREEN) — Validador estructural de ReportTemplateDraft
+
+```markdown
+# PROMPT 9R.4.2 (RED/GREEN) — Validador estructural y normalizador
+
+Objetivo: validar que un `ReportTemplateDraft` propuesto por el LLM cumpla el contrato (BlockKind permitidos, dependencias resueltas, secciones bien formadas) y normalizarlo (orden de bloques, ids únicos).
+
+Estructura (en server/app/modules/redaccion/services/draft_validator.py):
+- DraftValidator.validate(draft: ReportTemplateDraft) -> ReportTemplateDraftValidationResult
+- Comprueba:
+  - profile_id pertenece al registry
+  - todos los BlockKind son válidos
+  - dependencias (`depends_on`) referencian bloques existentes
+  - CHART/TABLE referencian un DETERMINISTIC_DATA presente
+  - AI_* tienen ai_prompt_template_id resoluble (o usa default policy)
+  - REVIEW_GATE existe si hay bloques AI
+  - input_contract es coherente (slots referenciados por DETERMINISTIC_DATA existen)
+- Normaliza:
+  - asigna ids únicos a bloques que no los tengan
+  - ordena bloques por section/order
+  - devuelve `normalized_draft`
+
+Tests (RED → GREEN):
+- test_invalid_llm_draft_is_rejected
+- test_unknown_block_type_is_rejected
+- test_chart_without_data_block_is_rejected
+- test_ai_block_without_review_gate_is_rejected
+- test_draft_normalizer_assigns_unique_block_ids
+- test_draft_normalizer_orders_blocks_by_section
+
+Criterio de done:
+- Validador determinista (mismo input → mismo output).
+- Errors devueltos con `loc`, `msg`, `type` (compatible con FastAPI 422).
+- Tests verdes.
+```
+
+---
+
+### Prompt 9R.4.3 (RED/GREEN) — Endpoints preview/approve + HITL
+
+```markdown
+# PROMPT 9R.4.3 (RED/GREEN) — Endpoints HTTP para asistente LLM
+
+Objetivo: exponer la generación de drafts, su preview y su aprobación (creando plantilla persistente o workspace ad hoc).
+
+Endpoints (en server/app/routers/redaccion/llm_drafts_router.py — Deploy: edge):
+- POST /api/v1/redaccion/llm-drafts/propose
+  Request: { "prompt_nl": str, "mode": "admin_template" | "user_workspace" }
+  Response: ReportTemplateDraft (sin persistir)
+- POST /api/v1/redaccion/llm-drafts/validate
+  Request: ReportTemplateDraft
+  Response: ReportTemplateDraftValidationResult
+- POST /api/v1/redaccion/llm-drafts/approve-as-template
+  Request: { "draft": ReportTemplateDraft, "name": str, "is_global": bool }
+  Solo rol admin/partner. Solo si is_global=True requiere admin.
+  Response: ReportTemplateContract
+- POST /api/v1/redaccion/llm-drafts/approve-as-workspace
+  Request: { "draft": ReportTemplateDraft, "name": str }
+  Cualquier usuario autenticado.
+  Response: WorkspaceState
+
+Reglas:
+- approve-as-template solo crea plantillas. No crea workspace.
+- approve-as-workspace crea plantilla privada (owner_kind=user) + workspace en estado `draft`.
+- Ambos endpoints invocan DraftValidator antes de persistir; rechazan con 422 si invalid.
+
+Tests (RED → GREEN):
+- test_llm_draft_requires_human_approval_before_persisting
+- test_admin_can_save_llm_draft_as_template
+- test_non_admin_cannot_save_global_template
+- test_user_can_use_llm_draft_as_private_workspace
+- test_llm_draft_preview_contains_sections_blocks_and_inputs
+- test_approve_endpoint_rejects_invalid_draft_with_422
+
+Criterio de done:
+- 4 endpoints registrados y documentados en OpenAPI.
+- Tests verdes.
+- Frontend (9R.7.4) podrá consumirlos vía Orval.
+```
+
+---
+
+### Prompt 9R.5.1 (RED/GREEN) — Protocolo ExtractionPipeline + contratos
+
+```markdown
+# PROMPT 9R.5.1 (RED/GREEN) — Protocolos y contratos comunes de extracción
+
+Objetivo: definir el contrato común que todo pipeline de extracción debe respetar, análogo al `RetrievalPipeline` de 9B.
+
+Estructura (en server/app/modules/redaccion/pipelines/):
+- contracts.py     # ExtractionPipeline (Protocol), ExtractionInput, ExtractionResult, ExtractedTable, ExtractedMetric, ExtractionWarning, ExtractionProvenance
+- __init__.py
+
+ExtractionInput:
+- source_kind: Literal["excel","pdf_text","pdf_table","manual","admin_script"]
+- file_ref: StorageRef | None     # ruta fsspec
+- raw_text: str | None            # para manual
+- options: dict                   # ej. {sheet: 0, header_row: 1}
+
+ExtractionResult:
+- tables: list[ExtractedTable]
+- metrics: list[ExtractedMetric]
+- free_text: str | None
+- warnings: list[ExtractionWarning]
+- provenance: ExtractionProvenance
+
+ExtractionProvenance:
+- pipeline_id: str
+- source_ref: str            # storage key
+- extracted_at: datetime
+- column_mapping: dict | None
+- pages: list[int] | None
+
+ExtractionPipeline (Protocol):
+- pipeline_id: ExtractionPipelineId
+- def extract(input: ExtractionInput) -> ExtractionResult
+- def supports(source_kind: str) -> bool
+
+Tests (RED → GREEN):
+- test_extraction_result_contains_provenance
+- test_extraction_warning_has_severity_and_code
+- test_extraction_pipeline_protocol_is_typing_protocol
+- test_extraction_result_serializable_to_openapi
+
+Criterio de done:
+- Contratos en OpenAPI.
+- Tests verdes.
+- Sin implementación de pipelines concretos todavía (eso es 9R.5.2 / 9R.5.3 / 9R.5.4).
+```
+
+---
+
+### Prompt 9R.5.2 (RED/GREEN) — ExcelExtractionPipeline + PDFTextExtractionPipeline
+
+```markdown
+# PROMPT 9R.5.2 (RED/GREEN) — Pipelines deterministas Excel y PDF-texto
+
+Objetivo: implementar dos pipelines deterministas reales con datos de prueba.
+
+Estructura (en server/app/modules/redaccion/pipelines/):
+- excel_pipeline.py    # ExcelExtractionPipeline (pandas)
+- pdf_text_pipeline.py # PDFTextExtractionPipeline (pdfplumber)
+
+ExcelExtractionPipeline:
+- Lee con pandas (openpyxl backend).
+- Soporta `sheet` y `header_row` en options.
+- Valida columnas requeridas (si vienen en options.required_columns); emite ExtractionWarning si faltan.
+- Devuelve ExtractedTable con `columns`, `rows`, `dtypes`.
+
+PDFTextExtractionPipeline:
+- Usa pdfplumber.
+- Extrae texto plano de todas las páginas.
+- Detecta PDFs no extractables (imagen) → ExtractionWarning severity=error, code=NON_EXTRACTABLE_PDF.
+
+Tests (RED → GREEN):
+- test_excel_pipeline_reads_basic_table   (fixture: tests/fixtures/redaccion/sample.xlsx)
+- test_excel_pipeline_reports_missing_required_columns
+- test_excel_pipeline_handles_multiple_sheets
+- test_pdf_text_pipeline_extracts_paragraphs
+- test_pdf_pipeline_reports_non_extractable_pdf  (fixture: imagen-only PDF)
+- test_excel_provenance_records_sheet_and_header_row
+
+Criterio de done:
+- Fixtures mínimas en tests/fixtures/redaccion/.
+- pandas, pdfplumber añadidos a pyproject.toml.
+- Tests verdes.
+```
+
+---
+
+### Prompt 9R.5.3 (RED/GREEN) — PDFTableExtractionPipeline + ManualInputPipeline
+
+```markdown
+# PROMPT 9R.5.3 (RED/GREEN) — Tablas en PDF y entrada manual
+
+Objetivo: añadir extracción de tablas PDF y normalización de entrada manual del usuario.
+
+Estructura:
+- pdf_table_pipeline.py # PDFTableExtractionPipeline (camelot o pdfplumber tables)
+- manual_pipeline.py    # ManualInputPipeline
+
+PDFTableExtractionPipeline:
+- Intenta camelot lattice → fallback stream.
+- Devuelve ExtractedTable por tabla detectada (con `page`).
+- Si no detecta tablas → ExtractionWarning severity=warn, code=NO_TABLES_FOUND.
+
+ManualInputPipeline:
+- Convierte texto/números introducidos por el usuario en ExtractionResult mínima.
+- No usa LLM. Solo normaliza tipos (parse_number, parse_date) y valida contra el InputSlot.
+
+Tests (RED → GREEN):
+- test_pdf_table_pipeline_detects_tables_with_camelot
+- test_pdf_table_pipeline_warns_when_no_tables_found
+- test_manual_pipeline_parses_numbers
+- test_manual_pipeline_validates_required_slots
+- test_manual_pipeline_rejects_wrong_type
+
+Criterio de done:
+- camelot-py añadido a deps (opcional: ghostscript en docker).
+- Tests verdes.
+```
+
+---
+
+### Prompt 9R.5.4 (RED/GREEN) — Factory + AdminScriptExtractionPipeline
+
+```markdown
+# PROMPT 9R.5.4 (RED/GREEN) — Factory y refactor del pipeline de scripts seguros
+
+Objetivo: agrupar todos los pipelines en una factory selectiva por `source_kind`, y refactorizar el pipeline de scripts generados por IA del antiguo 9.11b para que sea uno más entre los pipelines.
+
+Estructura:
+- factory.py                # ExtractionPipelineFactory
+- admin_script_pipeline.py  # AdminScriptExtractionPipeline (reusa ScriptSecurityAuditor)
+
+ExtractionPipelineFactory:
+- register(pipeline)
+- get(source_kind) -> ExtractionPipeline
+- list() -> list[ExtractionPipelineId]
+- Auto-registra todos los pipelines al importar el paquete.
+
+AdminScriptExtractionPipeline:
+- Solo invocable por owner admin/partner del template.
+- Recupera código aprobado (ya pasó AST + auditoría IA + aprobación HITL).
+- Ejecuta el script en sandbox restringido (subproc con tiempo límite, pandas/json/math permitidos).
+- Devuelve ExtractionResult.
+
+Tests (RED → GREEN):
+- test_factory_returns_pipeline_for_excel
+- test_factory_returns_pipeline_for_pdf_text
+- test_factory_returns_pipeline_for_pdf_table
+- test_factory_returns_pipeline_for_manual
+- test_factory_returns_pipeline_for_admin_script
+- test_factory_rejects_unknown_source_type
+- test_admin_script_pipeline_only_runs_approved_code
+- test_admin_script_pipeline_blocks_unsafe_imports   (reusa tests de AST de 9.11b)
+
+Criterio de done:
+- ScriptSecurityAuditor de 9.11b migrado a `modules/redaccion/services/script_auditor.py` y reutilizado por AdminScriptExtractionPipeline.
+- El endpoint `/agents/generate-script` queda dentro del flujo de creación de plantilla (no externo).
+- Tests verdes (8/8).
+```
+
+---
+
+### Prompt 9R.6.1 (RED/GREEN) — CoreGraph: nodos de carga y normalización
+
+```markdown
+# PROMPT 9R.6.1 (RED/GREEN) — LoadTemplateNode / ValidateInputContractNode / FileNormalizationNode
+
+Objetivo: implementar los tres primeros nodos del DraftingCoreGraph.
+
+Estructura (en server/app/modules/redaccion/graph/):
+- state.py           # WorkspaceState reutiliza el contrato de runtime de 9R.1.3
+- core_graph.py      # build_core_graph() devuelve compiled graph
+- nodes/load_template.py
+- nodes/validate_inputs.py
+- nodes/file_normalization.py
+
+LoadTemplateNode:
+- Lee `template_version_id` del state.
+- Carga ReportTemplateVersion desde repo.
+- Hidrata `state.spec`.
+
+ValidateInputContractNode:
+- Comprueba slots requeridos del InputContract contra `state.inputs`.
+- Marca bloques USER_INPUT pendientes como `missing_input`.
+- Si falta input requerido → status="ingesting" (pide al usuario) o "error" según política.
+
+FileNormalizationNode:
+- Para cada InputArtifact PDF/Excel: descarga vía StorageService, calcula hash, registra en `state.artifacts_normalized`.
+- No parsea; solo prepara para el siguiente nodo.
+
+Tests (RED → GREEN):
+- test_load_template_node_hydrates_state_spec
+- test_load_template_node_raises_if_version_not_found
+- test_validate_input_contract_marks_missing_required_inputs
+- test_file_normalization_records_hashes
+- test_core_graph_compiles_with_generic_report_profile
+
+Criterio de done:
+- `build_core_graph()` retorna un graph compilable.
+- Tests verdes.
+```
+
+---
+
+### Prompt 9R.6.2 (RED/GREEN) — CoreGraph: extracción determinista
+
+```markdown
+# PROMPT 9R.6.2 (RED/GREEN) — DeterministicExtractionNode / DataQualityCheckNode / MissingDataQuestionNode
+
+Objetivo: ejecutar la extracción determinista antes de cualquier nodo IA.
+
+Nodos:
+- DeterministicExtractionNode
+  - Para cada DETERMINISTIC_DATA block: invoca ExtractionPipelineFactory según `source_kind`.
+  - Guarda ExtractionResult en `state.blocks[block_id].content`.
+  - Transición de estado: missing_input → extracted.
+- DataQualityCheckNode
+  - Inspecciona warnings (NO_TABLES_FOUND, MISSING_REQUIRED_COLUMNS, NON_EXTRACTABLE_PDF).
+  - Si severity=error → pasa al MissingDataQuestionNode.
+- MissingDataQuestionNode
+  - Formula preguntas concretas al usuario (HITL): "Falta columna 'fecha' en datos_excel — ¿puedes subir versión corregida?"
+  - Estado del workspace = "in_review", devuelve grafo en pausa.
+
+Tests (RED → GREEN):
+- test_core_graph_blocks_when_required_input_missing
+- test_core_graph_runs_deterministic_extraction_before_ai
+- test_data_quality_check_pauses_graph_on_critical_warning
+- test_missing_data_question_emits_actionable_message
+- test_deterministic_extraction_writes_to_block_content
+
+Criterio de done:
+- Confirmar invariante: ningún nodo IA se ejecuta si data quality tiene errores críticos.
+- Tests verdes.
+```
+
+---
+
+### Prompt 9R.6.3 (RED/GREEN) — CoreGraph: nodos IA
+
+```markdown
+# PROMPT 9R.6.3 (RED/GREEN) — AIAssistDraftNode / CitationAndTraceabilityNode
+
+Objetivo: generar texto asistido por IA usando solo datos ya validados como contexto, y registrar provenance.
+
+Nodos:
+- AIAssistDraftNode
+  - Para cada bloque AI_ASSISTED_TEXT / AI_SUMMARY / AI_REWRITE:
+    - Construye contexto solo con `state.blocks[*]` en estado `extracted` o `approved`.
+    - Llama al LLM con prompt_template versionado.
+    - Guarda salida + model_used + prompt_version en `state.blocks[block_id]`.
+    - Transición: extracted → ai_generated.
+- CitationAndTraceabilityNode
+  - Adjunta citaciones a cada bloque AI (referenciando data blocks origen).
+  - Si AI_ASSISTED_TEXT referencia un Excel: cita `[fila X, hoja "Y", input slot "datos_excel"]`.
+
+Tests (RED → GREEN):
+- test_ai_node_receives_only_validated_data_context
+- test_ai_node_records_model_and_prompt_version
+- test_ai_node_skipped_if_block_already_approved_or_locked
+- test_citation_node_attaches_provenance_to_ai_block
+- test_ai_node_handles_llm_error_gracefully   (state="error", no contamina state.blocks)
+
+Criterio de done:
+- Tests verdes (5/5).
+- No hay AIDrafterNode legacy del 9.11c: ese paso queda absorbido aquí.
+```
+
+---
+
+### Prompt 9R.6.4 (RED/GREEN) — CoreGraph: HITL y ensamblado
+
+```markdown
+# PROMPT 9R.6.4 (RED/GREEN) — UserReviewGateNode / ApplyUserEditsNode / FinalAssemblerNode
+
+Objetivo: bloquear el ensamblado hasta que todos los bloques AI tengan estado `approved`, aplicar ediciones del usuario y ensamblar el documento final.
+
+Nodos:
+- UserReviewGateNode
+  - Para cada bloque AI en `ai_generated` → transición a `needs_review`.
+  - Si quedan bloques en `needs_review` → status="in_review", grafo pausa.
+  - Si todos los AI están `approved` → continúa al ensamblado.
+- ApplyUserEditsNode
+  - Aplica ediciones manuales del usuario sobre el contenido (override del texto AI).
+  - Mantiene el original en `state.blocks[block_id].original_ai_content` para auditoría.
+- FinalAssemblerNode
+  - Renderiza Markdown ensamblado según orden de secciones.
+  - Solo incluye bloques en estado `approved` o `locked`.
+  - Calcula `final_document_hash` (SHA-256 del Markdown).
+  - Transición workspace: "in_review" → "assembled".
+
+Tests (RED → GREEN):
+- test_review_gate_prevents_unapproved_ai_blocks_in_final_document
+- test_review_gate_pauses_graph_until_all_ai_blocks_approved
+- test_apply_user_edits_preserves_original_ai_content
+- test_final_assembler_only_includes_approved_blocks
+- test_final_assembler_computes_document_hash
+
+Criterio de done:
+- Tests verdes (5/5).
+- `state.final_document` poblado solo si todos los bloques requeridos están `approved`.
+```
+
+---
+
+### Prompt 9R.6.5 (RED/GREEN) — CoreGraph: AuditLog + RunManifest emission
+
+```markdown
+# PROMPT 9R.6.5 (RED/GREEN) — AuditLogNode + emisión de DraftingRunManifest
+
+Objetivo: cerrar el grafo emitiendo un DraftingRunManifest con trazabilidad completa.
+
+Nodo:
+- AuditLogNode
+  - Construye DraftingRunManifest con todo el contenido necesario (ver 9R.9.1).
+  - Persiste vía RunManifestRepo.
+  - Actualiza `workspace.run_manifest_id`.
+  - Transición workspace: "assembled" → "assembled" (el manifest no cambia estado, solo registra).
+
+Tests (RED → GREEN):
+- test_core_graph_generates_run_manifest
+- test_core_graph_generates_manifest_even_on_error
+- test_core_graph_supports_admin_template_and_ad_hoc_workspace
+- test_run_manifest_persisted_after_audit_log_node
+- test_workspace_run_manifest_id_updated
+
+Criterio de done:
+- Cualquier ejecución del DraftingCoreGraph (éxito o fallo controlado) deja un manifest persistido.
+- Tests verdes.
+- Documentar en docs/REDACCION_CONTRACT_FIRST.md el diagrama final.
+```
+
+---
+
+### Prompt 9R.7.1 (RED/GREEN) — UI: Renderer base + slots dinámicos
+
+```markdown
+# PROMPT 9R.7.1 (RED/GREEN) — ReportUIContractRenderer + DynamicUploadSlots + DynamicFieldRenderer
+
+Objetivo: componente raíz que renderiza una UI completa solo a partir de un `ReportUIContract` consumido por Orval.
+
+Estructura (en frontend/src/redaccion/components/):
+- ReportUIContractRenderer.tsx
+- DynamicUploadSlots.tsx
+- DynamicFieldRenderer.tsx
+
+Reglas:
+- 0 interfaces TypeScript manuales. Usar tipos de @/shared/api/generated/model.
+- react-hook-form + zodResolver para validación.
+- Soporta i18n por dict[str,str] en labels.
+
+Tests Vitest RED → GREEN:
+- should_render_upload_slots_from_ui_contract
+- should_render_dynamic_fields_from_ui_contract
+- should_block_continue_when_required_input_missing
+- should_show_validation_error_on_invalid_field
+- should_render_localized_labels_from_dict
+
+Criterio de done:
+- 5/5 tests verdes.
+- `npx tsc -p tsconfig.app.json --noEmit` limpio.
+```
+
+---
+
+### Prompt 9R.7.2 (RED/GREEN) — UI: BlockEditor + paneles de revisión
+
+```markdown
+# PROMPT 9R.7.2 (RED/GREEN) — BlockEditor + AIBlockReviewPanel + DataQualityPanel + WorkspaceStatusBar
+
+Objetivo: editor visual de bloques + paneles de revisión y estado.
+
+Componentes:
+- BlockEditor.tsx           → drag & drop de bloques (no-code, estilo TipTap)
+- AIBlockReviewPanel.tsx    → muestra bloques en `needs_review` con botones Approve/Reject/Regenerate
+- DataQualityPanel.tsx      → lista de ExtractionWarning con severity y código
+- WorkspaceStatusBar.tsx    → estado del workspace + progreso (ingesting/extracting/drafting/in_review/assembled)
+
+Hooks consumidos (Orval):
+- useGetWorkspaceById
+- usePatchWorkspaceBlock      (approve/reject/regenerate)
+- useGetWorkspaceWarnings
+
+Tests Vitest RED → GREEN:
+- should_show_ai_blocks_as_pending_review
+- should_require_explicit_approval_before_final_assembly
+- should_show_extraction_warnings_with_severity
+- should_show_workspace_status_progress
+- should_allow_regenerate_ai_block
+
+Criterio de done:
+- Tests verdes (5/5).
+- Sin fetch manual: todo vía hooks generados.
+```
+
+---
+
+### Prompt 9R.7.3 (RED/GREEN) — UI: páginas admin y usuario
+
+```markdown
+# PROMPT 9R.7.3 (RED/GREEN) — ReportTemplateBuilderPage + GenericReportWizard
+
+Objetivo: dos páginas con responsabilidades claras.
+
+ReportTemplateBuilderPage (admin):
+- Listado de plantillas (globales + organización).
+- Crear/editar plantilla: configura secciones, bloques, inputs, ui_contract.
+- Guardar como nueva versión (append-only).
+- Restringido a rol admin/partner.
+
+GenericReportWizard (user):
+- Selección de plantilla (globales + propias) o GENERIC_REPORT.
+- Wizard de inputs (upload slots, manual fields).
+- Acceso al BlockEditor del workspace.
+- Acceso al AIBlockReviewPanel.
+
+Hooks (Orval): useListTemplates, useCreateTemplate, useCreateWorkspace, useGetWorkspaceById.
+
+Tests Vitest RED → GREEN:
+- should_allow_admin_to_save_template_version
+- should_allow_user_to_create_ad_hoc_workspace_from_generic_report
+- should_list_only_user_visible_templates
+- should_redirect_non_admin_away_from_builder_page
+
+Criterio de done:
+- Tests verdes.
+- Páginas registradas en el router del frontend.
+```
+
+---
+
+### Prompt 9R.7.4 (RED/GREEN) — UI: LLM draft preview + aprobación
+
+```markdown
+# PROMPT 9R.7.4 (RED/GREEN) — LLMDraftPreviewPage
+
+Objetivo: pantalla que pide al usuario un prompt en lenguaje natural, recibe `ReportTemplateDraft`, lo muestra editable, y permite aprobar como plantilla o workspace.
+
+Pantalla (en frontend/src/redaccion/pages/LLMDraftPreviewPage.tsx):
+- Input de texto natural + botón "Generar propuesta".
+- Vista previa editable del draft (mismo BlockEditor de 9R.7.2).
+- Toggle "Modo": Crear plantilla (admin) | Crear workspace (cualquiera).
+- Botón "Aprobar y crear".
+- Muestra validación estructural en línea (errors de DraftValidator).
+
+Hooks (Orval): useProposeLlmDraft, useValidateLlmDraft, useApproveAsTemplate, useApproveAsWorkspace.
+
+Tests Vitest RED → GREEN:
+- should_render_llm_generated_draft_preview_before_persisting
+- should_block_approve_button_when_draft_invalid
+- should_call_approve_as_template_when_admin_mode
+- should_call_approve_as_workspace_when_user_mode
+- should_show_validation_errors_inline
+
+Criterio de done:
+- Tests verdes (5/5).
+- Cero llamadas manuales a fetch.
+```
+
+---
+
+### Prompt 9R.8.1 (RED/GREEN) — Endpoints HITL por bloque
+
+```markdown
+# PROMPT 9R.8.1 (RED/GREEN) — Endpoints de transición de bloques
+
+Objetivo: exponer las transiciones de BlockStatus como endpoints HTTP, delegando en BlockStateMachine.
+
+Endpoints (en server/app/routers/redaccion/workspaces_router.py — Deploy: edge):
+- PATCH /api/v1/redaccion/workspaces/{workspace_id}/blocks/{block_id}/approve
+- PATCH /api/v1/redaccion/workspaces/{workspace_id}/blocks/{block_id}/reject
+- PATCH /api/v1/redaccion/workspaces/{workspace_id}/blocks/{block_id}/regenerate
+- PATCH /api/v1/redaccion/workspaces/{workspace_id}/blocks/{block_id}/edit  (override de content por usuario)
+- POST  /api/v1/redaccion/workspaces/{workspace_id}/resume                 (reanuda DraftingCoreGraph)
+
+Reglas:
+- Solo el owner del workspace o admin/partner pueden transicionar.
+- Cada transición registra audit event en la tabla `hub_workspace_audit_events`.
+- regenerate dispara un nuevo AIAssistDraftNode para ese bloque solamente.
+
+Tests (RED → GREEN):
+- test_approve_block_transitions_to_approved
+- test_reject_block_transitions_to_rejected
+- test_regenerate_calls_ai_node_only_for_that_block
+- test_edit_block_overrides_content_and_records_original
+- test_resume_workspace_continues_graph_from_review_gate
+- test_non_owner_cannot_transition_blocks
+
+Criterio de done:
+- Tests verdes (6/6).
+- Endpoints en OpenAPI.
+```
+
+---
+
+### Prompt 9R.8.2 (RED/GREEN) — Tests E2E de transiciones
+
+```markdown
+# PROMPT 9R.8.2 (RED/GREEN) — Tests E2E de edición/rechazo/regeneración
+
+Objetivo: cubrir el flujo completo de HITL con tests de integración usando DB real.
+
+Escenarios E2E (en server/tests/modules/redaccion/e2e/):
+1. test_e2e_user_approves_all_blocks_and_assembles
+2. test_e2e_user_rejects_ai_block_then_regenerates_then_approves
+3. test_e2e_user_edits_ai_block_content_and_original_preserved
+4. test_e2e_user_with_missing_input_resumes_after_upload
+5. test_e2e_admin_locks_block_to_prevent_further_changes
+
+Cada test:
+- Crea template + workspace.
+- Sube fixtures.
+- Recorre los endpoints de 9R.8.1.
+- Verifica estado final del workspace, los blocks y el RunManifest.
+
+Criterio de done:
+- 5/5 tests E2E verdes.
+- DB se limpia entre tests.
+- Tiempo total < 30s.
+```
+
+---
+
+### Prompt 9R.9.1 (RED/GREEN) — DraftingRunManifest modelo + repo + endpoint
+
+```markdown
+# PROMPT 9R.9.1 (RED/GREEN) — DraftingRunManifest
+
+Objetivo: implementar el modelo Pydantic, el repo y el endpoint de consulta del manifest.
+
+DraftingRunManifest (en server/app/modules/redaccion/contracts/manifest.py):
+- workspace_id: UUID
+- template_id: UUID
+- template_version_id: UUID
+- report_profile: ReportProfileId
+- uploaded_documents: list[UploadedDocumentInfo]
+- input_contract_validation: InputContractValidationResult
+- extracted_blocks: list[ExtractedBlockSummary]
+- ai_blocks: list[AIBlockSummary]    # incluye model_used, prompt_version
+- model_used: str | None             # último modelo usado
+- prompt_versions: list[str]
+- citations: list[Citation]
+- warnings: list[ExtractionWarning]
+- user_approvals: list[ApprovalRecord]
+- final_document_hash: str | None
+- created_at: datetime
+
+Endpoints:
+- GET /api/v1/redaccion/workspaces/{workspace_id}/manifest
+- GET /api/v1/redaccion/manifests/{manifest_id}
+
+Tests (RED → GREEN):
+- test_run_manifest_created_for_each_drafting_run
+- test_run_manifest_records_uploaded_documents
+- test_run_manifest_records_extracted_blocks
+- test_run_manifest_records_ai_blocks_and_model
+- test_run_manifest_records_user_approvals
+- test_run_manifest_endpoint_returns_full_payload
+- test_run_manifest_is_immutable
+
+Criterio de done:
+- Tests verdes (7/7).
+- Manifest expuesto en OpenAPI.
+- Endpoint GET disponible para frontend de 1C.4.
+```
+
+---
+
+### Prompt 9R.9.2 (RED/GREEN) — Integración con ExportService (1C.4)
+
+```markdown
+# PROMPT 9R.9.2 (RED/GREEN) — Conexión con exportación DOCX/ODT
+
+Objetivo: garantizar que la exportación a DOCX/ODT (prompt 1C.4) consume el manifest y lo incluye en el anexo de auditoría.
+
+Cambios:
+- En 1C.4 (export_service): leer el manifest del workspace antes de exportar.
+- Si manifest.final_document_hash es None → ExportService rechaza la exportación.
+- Adjuntar como anexo: tabla con uploaded_documents, ai_blocks (model + prompt_version), user_approvals, warnings.
+
+Tests (RED → GREEN):
+- test_export_service_reads_run_manifest_before_export
+- test_export_service_rejects_export_without_final_hash
+- test_export_appendix_includes_ai_blocks_with_model
+- test_export_appendix_includes_user_approvals
+- test_final_document_hash_in_export_metadata_matches_manifest
+
+Criterio de done:
+- Tests verdes (5/5).
+- Documentar en 1C.4 que requiere manifest válido.
+- Marcar dependencia bidireccional: 1C.4 ↔ 9R.9.
+```
+
+---
+
+### Prompt 9R.10.1 (RED) — Vertical slice E2E: tests de aceptación
+
+```markdown
+# PROMPT 9R.10.1 (RED) — Tests E2E del slice MVP
+
+Objetivo: escribir los tests de aceptación end-to-end del flujo completo de GENERIC_REPORT. Deben fallar inicialmente (cubren el wire-up que aún no existe).
+
+Escenario E2E (test_generic_report_slice_mvp.py):
+1. Usuario describe el informe en NL.
+2. Sistema propone draft.
+3. Usuario aprueba draft → crea workspace.
+4. Usuario sube Excel + PDF.
+5. Sistema valida inputs.
+6. Sistema ejecuta DeterministicExtractionNode (Excel → tabla, PDF → texto).
+7. Sistema ejecuta AIAssistDraftNode (genera análisis + summary).
+8. Sistema entra en in_review.
+9. Usuario aprueba ambos bloques AI.
+10. Sistema ensambla documento Markdown.
+11. Sistema emite DraftingRunManifest.
+
+Tests:
+- test_user_can_create_generic_report_from_natural_language
+- test_user_can_upload_excel_and_pdf_to_workspace
+- test_required_inputs_are_validated
+- test_excel_data_is_extracted_before_ai_drafting
+- test_ai_block_requires_review
+- test_final_document_contains_only_approved_blocks
+- test_run_manifest_is_generated_at_end_of_slice
+
+Criterio de RED correcto:
+- Todos los tests existen y describen el comportamiento esperado.
+- Fallan por ImportError, endpoint no encontrado, o estados incoherentes — no por error de sintaxis.
+- Documentar qué wire-up falta en `tests/modules/redaccion/e2e/slice_mvp_status.md`.
+```
+
+---
+
+### Prompt 9R.10.2 (GREEN) — Wire-up integral del slice
+
+```markdown
+# PROMPT 9R.10.2 (GREEN) — Hacer pasar el slice MVP
+
+Objetivo: conectar todas las piezas (9R.1 a 9R.9) para que los tests de 9R.10.1 pasen.
+
+Tareas (no implementar nuevas funcionalidades — solo wire-up):
+1. Registrar todos los routers en server/app/main.py con etiqueta Deploy: edge.
+2. Conectar LLMSpecService → DraftValidator → approve-as-workspace → DraftingCoreGraph.
+3. Conectar endpoints de 9R.8.1 al BlockStateMachine real (no stub).
+4. Asegurar que AuditLogNode persiste el manifest al final.
+5. Configurar fixtures de Excel/PDF en tests/fixtures/redaccion/.
+6. Wire del frontend: ReportTemplateBuilderPage, GenericReportWizard, LLMDraftPreviewPage en el router del frontend.
+
+Tests:
+- Todos los tests de 9R.10.1 deben pasar.
+- Suite completa de redaccion (unit + integration + e2e) verde.
+
+Criterio de done:
+- E2E del slice MVP verde (7/7).
+- No hay regresiones en otros módulos.
+- `uv run pytest server/tests/modules/redaccion/ -v` pasa.
+- `npm test` del frontend pasa.
+
+Aviso: tras este prompt, los antiguos endpoints `/agents/templates`, `/agents/workspaces` y `/agents/generate-script` del 9.11a–9.11d deben eliminarse o quedar como aliases que devuelven 301 a los nuevos `/redaccion/*`. Si se eliminan, dejar tests de regresión que aseguren que no hay clientes activos usándolos.
+```
+
+---
+
+### Continuación tras el bloque 9R
+
+Una vez completado 9R.10.2:
+
+- Eliminar definitivamente las tablas legacy `hub_agent_templates`, `hub_user_workspaces`, `hub_workspace_documents` del 9.11a (migración de borrado tras verificar que no quedan datos).
+- Eliminar el código de `modules/agents_hub/agent/` que correspondía al pipeline antiguo de redacción (DataExtractorNode/AIDrafterNode/DocumentAssemblerNode) si todavía existe — el DraftingCoreGraph del 9R lo reemplaza.
+- Reanudar la subfase 1.C: el prompt 1C.0 (Focus Mode) y 1C.4 (exportación DOCX/ODT) ya pueden apoyarse en el manifest de 9R.9.
+
+---
+
+
+---
+
+## ~~Prompts 9.11a–9.11d~~ — REEMPLAZADOS por el bloque 9R (referencia histórica, NO ejecutar)
+
+> Los prompts 9.11a–9.11d se mantienen aquí como contexto histórico de cómo se planteó inicialmente la redacción.
+> A partir del 2026-05-11 quedan **superseded** por el BLOQUE 9R (ver arriba), que aplica el patrón contract-first del bloque 9B.
+> No ejecutar estos prompts directamente. La capa de scripts seguros (9.11b) se reabsorbe en `AdminScriptExtractionPipeline` del prompt 9R.5.4.
 
 ### Prompt 9.11a - Agentes Privados: Modelos y API Base (TDD RED/GREEN)
 
@@ -1986,7 +3319,7 @@ TESTS REQUERIDOS (Vitest):
 
 **Objetivo**: Completar la cadena de valor de los informes: infraestructura de diseño transversal (Focus Mode), exportación a formatos editables (DOCX/ODT) y entrega a flujos humanos externos (Google Drive).
 
-**Dependencias**: Prompts 9.11a–9.11d (workspaces y grafo LangGraph de redacción ✅ completados en subfase anterior).
+**Dependencias**: BLOQUE 9R — Redacción Contract-First (DraftingCoreGraph + ReportProfiles + DraftingRunManifest). 1C.4 requiere especialmente el manifest emitido por 9R.9 para el anexo de auditoría. (Los antiguos 9.11a–9.11d quedan superseded por 9R.)
 
 **Entregable**: Editor de informes en Focus Mode con exportación a DOCX/ODT con citas trazables y opción de guardar directamente en Google Drive institucional.
 

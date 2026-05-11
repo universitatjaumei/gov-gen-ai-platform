@@ -136,7 +136,27 @@
       "Bash(rtk grep *)",
       "Bash(rtk git *)",
       "Bash(npm --prefix frontend test -- --run src/admin/pages/__tests__/DocumentsPage.test.tsx)",
-      "Bash(npm --prefix frontend test -- --run src/admin/pages/__tests__/PromptsPage.test.tsx)"
+      "Bash(npm --prefix frontend test -- --run src/admin/pages/__tests__/PromptsPage.test.tsx)",
+      "PowerShell($s = Get-Content \"C:\\\\Users\\\\fabra\\\\Documents\\\\AI_agents_hub\\\\.claude\\\\settings.local.json\" -Raw | ConvertFrom-Json; Write-Host \"JSON válido\"; Write-Host \"Hooks: $\\($s.hooks.PermissionRequest.Count\\) entrada\\(s\\)\"; Write-Host \"Comando: $\\($s.hooks.PermissionRequest[0].hooks[0].command\\)\")",
+      "PowerShell($payload = '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd C:/Users/fabra/Documents/AI_agents_hub/server; uv run python export_openapi.py\"}}'; $result = $payload | powershell -NoProfile -NonInteractive -Command { $j=[Console]::In.ReadToEnd\\(\\)|ConvertFrom-Json;$c=$j.tool_input.command;if\\($c-and\\($c-match'cd.+AI_agents_hub'\\)\\){Write-Output '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"allow\"}}'} }; Write-Host \"Output del hook: $result\")",
+      "PowerShell(Set-Content *)",
+      "Bash(rtk wc *)",
+      "Bash(LANGFUSE_SECRET_KEY=\"\" .venv/Scripts/python.exe -m pytest tests/public_graphs/test_retrieval_contract.py -v --no-cov --no-header)",
+      "Bash(LANGFUSE_SECRET_KEY=\"\" .venv/Scripts/python.exe -m pytest tests/public_graphs/ -v --no-cov --no-header)"
+    ]
+  },
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$j=[Console]::In.ReadToEnd()|ConvertFrom-Json;$c=$j.tool_input.command;if($c-and($c-match'cd.+AI_agents_hub')){Write-Output '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"allow\"}}'}",
+            "shell": "powershell"
+          }
+        ]
+      }
     ]
   }
 }
