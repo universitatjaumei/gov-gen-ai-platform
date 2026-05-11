@@ -170,7 +170,7 @@ export function ChatbotsPage() {
     setSelectedChildId('')
     reset({
       name: c.name,
-      kind: c.kind ?? 'atomic',
+      kind: (c.kind as 'atomic' | 'router') ?? 'atomic',
       system_prompt: c.system_prompt,
       is_active: c.is_active,
       retrieval_mode: c.retrieval_mode ?? 'RAG',
@@ -490,7 +490,7 @@ export function ChatbotsPage() {
                       </select>
                       {retrievalHint && <p className="text-xs text-muted-foreground mt-1">{retrievalHint}</p>}
                     </div>
-                    {watch('retrieval_mode') === 'vector' && (
+                    {watch('retrieval_mode') === 'RAG' && (
                       <div>
                         <label className="text-sm font-medium">Resultados recuperados (top-k)</label>
                         <input

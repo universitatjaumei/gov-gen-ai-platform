@@ -15,9 +15,9 @@
 | CF.2 — Orval + generación | CF.2.3 ✅ | — | ✅ Completo |
 | CF.3 — Compilación TypeScript | CF.3.3 ✅ | — | ✅ Completo |
 | CF.4 — Formulario piloto Chatbot | CF.4.4 ✅ | — | ✅ Completo |
-| CF.5 — CI | — | CF.5.1 | ⏳ Pendiente |
+| CF.5 — CI | CF.5.2 ✅ | — | ✅ Completo |
 
-**Cursor actual: CF.5.1 — Configurar CI (GitHub Actions)**
+**Cursor actual: 9B.4 (RED) — Contrato de evidencias + contrato de pipelines (Plan_TDD_Fase1.md)**
 
 ---
 
@@ -54,3 +54,5 @@
 | 2026-05-10 | CF.4.2 | Refactor ChatbotsPage: Orval hooks + zodResolver + mapApiErrorsToFormErrors |
 | 2026-05-10 | CF.4.3 | Extraer mapApiErrorsToFormErrors a shared/utils/formErrors.ts + tests + test (e) verde |
 | 2026-05-10 | CF.4.4 | Eliminar chatbots.ts: migrar todas las llamadas fetch de 4 páginas a hooks Orval; 96/97 tests verdes |
+| 2026-05-11 | CF.5.1 | Añadir job "contract" al CI: exportar OpenAPI → Orval → tsc --noEmit → vitest run |
+| 2026-05-11 | CF.5.2 | Prueba de fuego del contrato: name→display_name genera 17 errores TS2339; corregidos 5 errores preexistentes (customInstance firma, _ContractCheck, kind cast, comparación 'vector', variable sin usar) |

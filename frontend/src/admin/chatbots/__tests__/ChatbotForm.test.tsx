@@ -65,6 +65,7 @@ const _contractCheck: ChatbotCreate = {
   llm_config_id: '00000000-0000-0000-0000-000000000001',
   system_prompt: 'You are a helpful assistant.',
 }
+void _contractCheck
 
 const TOKEN =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +

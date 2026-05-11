@@ -21,14 +21,8 @@ export const chatbotCreateSchema = z.object({
 
 export type FormValues = z.infer<typeof chatbotCreateSchema>
 
-// Type-level contract: if ChatbotCreate renames or removes any of these fields,
+// Type-level contract: if ChatbotCreate renames or removes any field used in the form,
 // tsc --noEmit will fail here before any test runs.
-type _ContractCheck = Pick<ChatbotCreate,
-  | 'name' | 'system_prompt' | 'is_active' | 'retrieval_mode'
-  | 'retrieval_top_k' | 'use_prompt_caching' | 'cache_ttl'
-  | 'public_graph_profile' | 'language_mode' | 'quality_threshold'
-  | 'min_retrieval_results' | 'min_retrieval_score' | 'reranker_enabled'
-  | 'answer_template'
-> extends Omit<FormValues, 'kind'> ? true : false
+type _ContractCheck = keyof Omit<FormValues, 'kind'> extends keyof ChatbotCreate ? true : false
 const _: _ContractCheck = true
 void _
