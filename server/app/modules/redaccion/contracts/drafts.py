@@ -10,10 +10,7 @@ from pydantic import BaseModel
 
 from server.app.modules.redaccion.contracts.blocks import BlockContract
 from server.app.modules.redaccion.contracts.inputs import InputContract
-from server.app.modules.redaccion.contracts.template import (
-    ReportProfileId,
-    SectionContract,
-)
+from server.app.modules.redaccion.contracts.template import SectionContract
 
 
 class ReportTemplateDraft(BaseModel):

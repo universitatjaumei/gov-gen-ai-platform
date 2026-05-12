@@ -25,8 +25,6 @@ from server.app.modules.redaccion.contracts.template import (
     ReportTemplateSpec,
     ReviewPolicy,
     SectionContract,
-    ReportUIContract,
-    UISection,
 )
 from server.app.modules.redaccion.contracts.ui import ReportUIContract, UISection
 from server.app.modules.redaccion.profiles.registry import ExtractionPipelineId
