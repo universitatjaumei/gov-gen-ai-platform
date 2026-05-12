@@ -41,6 +41,7 @@ const LANG_BADGE: Record<string, string> = {
 }
 
 const RETRIEVAL_LABELS: Record<string, string> = {
+  vector:            'Vectorial',
   RAG:               'Vectorial (RAG)',
   MD_LONG_CONTEXT:   'Contexto largo',
   MD_AGENT_SELECTOR: 'Agéntico',
