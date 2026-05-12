@@ -17,6 +17,7 @@ def test_config_base_contains_only_config_models() -> None:
 def test_operational_base_contains_only_operational_models() -> None:
     from server.app.modules.agents_hub.database.base import HubOperationalBase
     import server.app.modules.agents_hub.database.operational_models  # noqa: F401
+    import server.app.modules.redaccion.database.models  # noqa: F401 — tablas redaccion (edge)
 
     tables = set(HubOperationalBase.metadata.tables.keys())
     assert tables == {
@@ -25,6 +26,12 @@ def test_operational_base_contains_only_operational_models() -> None:
         "hub_interactions",
         "hub_ingestion_jobs",
         "hub_ingestion_sources",
+        # Módulo redacción (edge, 9R) — procesan expedientes del cliente
+        "hub_report_templates",
+        "hub_report_template_versions",
+        "hub_workspaces",
+        "hub_workspace_blocks",
+        "hub_run_manifests",
     }
 
 def test_no_cross_base_relationships() -> None:
