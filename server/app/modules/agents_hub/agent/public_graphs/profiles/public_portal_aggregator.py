@@ -23,9 +23,6 @@ if TYPE_CHECKING:
     from server.app.modules.agents_hub.agent.public_graphs.core.config_resolver import (
         PublicGraphConfig,
     )
-    from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_contract import (
-        EvidenceItem,
-    )
     from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_pipeline_protocol import (
         GraphDeps,
     )
