@@ -1923,10 +1923,12 @@ LoadTemplateNode
 
 9R.3.1 (RED/GREEN)  Tipos de bloque (STATIC_TEXT, USER_INPUT, DETERMINISTIC_DATA, TABLE, CHART, AI_ASSISTED_TEXT, AI_SUMMARY, AI_REWRITE, CITATION_BLOCK, REVIEW_GATE)
 9R.3.2 (RED/GREEN)  BlockState machine + reglas de transición + invariantes (AI sin approved no ensambla)
+9R.3.3 (RED/GREEN)  Propagación de outputs entre bloques (BlockReference + projection) + orden topológico + detección de ciclos
 
 9R.4.1 (RED/GREEN)  LLMSpecService: NL → ReportTemplateDraft
 9R.4.2 (RED/GREEN)  Validador estructural + rechazo de drafts con tipos no permitidos
 9R.4.3 (RED/GREEN)  Endpoints preview/approve + HITL (admin: plantilla; user: workspace ad hoc)
+9R.4.4 (RED/GREEN)  Versionado de plantillas: política de anclaje y endpoints de migración de workspaces
 
 9R.5.1 (RED/GREEN)  Protocolo ExtractionPipeline + contratos (Input/Result/Provenance/Warning)
 9R.5.2 (RED/GREEN)  ExcelExtractionPipeline + PDFTextExtractionPipeline
@@ -1937,7 +1939,8 @@ LoadTemplateNode
 9R.6.2 (RED/GREEN)  CoreGraph: DeterministicExtraction / DataQualityCheck / MissingDataQuestion
 9R.6.3 (RED/GREEN)  CoreGraph: AIAssistDraft / CitationAndTraceability
 9R.6.4 (RED/GREEN)  CoreGraph: UserReviewGate / ApplyUserEdits / FinalAssembler
-9R.6.5 (RED/GREEN)  CoreGraph: AuditLog + emisión de DraftingRunManifest
+9R.6.5 (RED/GREEN)  CoreGraph: AuditLog + emisión de DraftingRunManifest + instrumentación Langfuse
+9R.6.6 (RED/GREEN)  CoreGraph: fallback paths + BlockState=failed + política de retry
 
 9R.7.1 (RED/GREEN)  ReportUIContractRenderer + DynamicUploadSlots + DynamicFieldRenderer
 9R.7.2 (RED/GREEN)  BlockEditor + AIBlockReviewPanel + DataQualityPanel + WorkspaceStatusBar
@@ -2401,6 +2404,65 @@ Criterio de done:
 
 ---
 
+### Prompt 9R.3.3 (RED/GREEN) — Propagación de outputs entre bloques + orden topológico
+
+```markdown
+# PROMPT 9R.3.3 (RED/GREEN) — BlockReference, projection y topología de ejecución
+
+Objetivo: definir cómo el output de un bloque se convierte en input contextual de otro y garantizar que el CoreGraph ejecuta los bloques en orden topológico, rechazando ciclos en `depends_on`.
+
+Refinamiento del contrato (en server/app/modules/redaccion/contracts/block_io.py):
+- BlockReference (Pydantic):
+    block_id: UUID
+    projection: Literal["raw", "summary", "field"]
+    field_path: str | None       # solo si projection="field"; dot+index notation tipo "rows[0].total"
+- BlockContract.depends_on (refinado): list[BlockReference]    # antes era list[str]
+- WorkspaceState.block_outputs: dict[UUID, dict]               # output serializable por block_id
+
+Servicio (en server/app/modules/redaccion/services/block_topology.py):
+- BlockTopology.sort(blocks: list[BlockContract]) -> list[BlockContract]
+- BlockTopology.detect_cycles(blocks: list[BlockContract]) -> list[UUID]   # vacío si OK
+- BlockTopology.resolve_inputs(state: WorkspaceState, block: BlockContract) -> dict[block_id, Any]
+  - Aplica projection sobre cada `depends_on` para producir un dict listo para inyectar
+  - "raw" → output completo
+  - "summary" → output["summary"] si existe; si no, str(output)[:1000]
+  - "field" → resuelve field_path con helper seguro (rechaza eval, accesos no atómicos)
+
+Integración:
+- 9R.4.2 (DraftValidator): rechazar ciclos en `depends_on` (404 con `loc` apuntando al bloque ofensor).
+- 9R.6.2 (DeterministicExtractionNode): tras éxito escribe `state.block_outputs[block.id] = result.dict()`.
+- 9R.6.3 (AIAssistDraftNode): antes de invocar el LLM construye contexto vía `BlockTopology.resolve_inputs`. NO accede directo a `state.raw_data_blocks`/`state.ai_draft_blocks`.
+- 9R.3.2 (BlockState machine): un bloque no entra en `EXTRACT`/`AI_GENERATE` hasta que todos sus `depends_on` están en estado `approved` o `locked`. Para DETERMINISTIC consumido solo por otros DETERMINISTIC, también vale `extracted`.
+
+Reglas duras:
+- block_outputs es parte del estado del grafo y se persiste en `hub_workspaces.state_json` para reanudación.
+- La projection "field" usa una helper estricta (`safe_field_resolver`) que solo acepta tokens dot y `[<int>]`. Cualquier otra cosa levanta `UnsafeFieldPathError`.
+- Ningún nodo escribe block_outputs si su bloque no terminó en éxito.
+
+Tests (RED → GREEN):
+- test_block_reference_serializable_in_openapi_with_discriminator
+- test_topology_sort_orders_blocks_by_dependencies
+- test_topology_detect_cycle_returns_offending_block_ids
+- test_draft_validator_rejects_cyclic_depends_on_with_422
+- test_projection_raw_returns_full_output
+- test_projection_summary_returns_summary_field_when_present
+- test_projection_summary_falls_back_to_truncated_string_when_no_summary
+- test_projection_field_resolves_dot_path
+- test_projection_field_resolves_index_path
+- test_projection_field_rejects_unsafe_expressions
+- test_ai_node_reads_dependencies_via_projection_not_state
+- test_block_blocked_until_dependencies_approved_or_locked
+- test_block_outputs_persisted_to_workspace_state
+
+Criterio de done:
+- BlockReference aparece en openapi.json y Orval genera tipos.
+- safe_field_resolver tiene cobertura ≥ 95 % de líneas (parsing crítico de seguridad).
+- 13 tests verdes.
+- Documentar en docs/REDACCION_CONTRACT_FIRST.md la sección "Propagación de outputs y topología".
+```
+
+---
+
 ### Prompt 9R.4.1 (RED/GREEN) — LLMSpecService: NL → ReportTemplateDraft
 
 ```markdown
@@ -2513,6 +2575,67 @@ Criterio de done:
 - 4 endpoints registrados y documentados en OpenAPI.
 - Tests verdes.
 - Frontend (9R.7.4) podrá consumirlos vía Orval.
+```
+
+---
+
+### Prompt 9R.4.4 (RED/GREEN) — Versionado de plantillas: política y migración de workspaces
+
+```markdown
+# PROMPT 9R.4.4 (RED/GREEN) — Política de anclaje y endpoints de migración
+
+Objetivo: definir el comportamiento del sistema cuando se publica una nueva versión de un `ReportTemplate` que ya tiene workspaces vivos contra la versión anterior.
+
+Política de producto (no negociable salvo cambio explícito):
+- Un Workspace queda anclado a su `template_version_id` para siempre.
+- Publicar vN+1 NO migra automáticamente workspaces existentes.
+- El propietario del workspace ve un aviso "Plantilla actualizada — versión vN+1 disponible" en `WorkspaceStatusBar` (9R.7.2).
+- La migración es un acto explícito del propietario: crea un workspace nuevo clonado contra vN+1, conservando solo los inputs originales (sin bloques approved). El workspace antiguo queda `archived` y permanece accesible para auditoría.
+
+Servicio (en server/app/modules/redaccion/services/template_migration_service.py):
+- TemplateMigrationService.detect_new_version(workspace_id) -> NewVersionNotice | None
+    NewVersionNotice = { current_version_id, latest_version_id, changes_summary, breaking_changes }
+- TemplateMigrationService.migrate_workspace(workspace_id, target_version_id, user_id) -> Workspace
+    - Verifica compatibilidad de InputContract (mismos slots required obligatorios)
+    - Crea workspace nuevo contra target_version_id, copia `inputs_json`, NO copia outputs ni approvals
+    - Marca workspace antiguo: status="archived", archived_reason=f"migrated_to_{new_id}"
+    - Setea workspace nuevo: parent_workspace_id apunta al antiguo
+    - Devuelve nuevo workspace
+
+Endpoints (Deploy: edge, hub_redaccion_router.py):
+- GET  /api/v1/hub/redaccion/workspaces/{id}/template-update-notice
+    Response 200: NewVersionNotice | 204 si workspace ya alineado
+- POST /api/v1/hub/redaccion/workspaces/{id}/migrate
+    Request: { "target_version_id": UUID }
+    Response 201: { "new_workspace_id": UUID } | 409 con `compatibility_errors` si InputContract incompatible | 403 si no es owner
+
+Migración Alembic:
+- hub_workspaces.parent_workspace_id (UUID, FK a hub_workspaces.id, nullable)
+- hub_workspaces.archived_reason (str, nullable)
+- hub_workspaces.status: extender enum con "archived"
+
+Reglas duras:
+- Migrar NO borra el workspace antiguo (auditoría + RunManifest preservado).
+- Solo `owner_id` puede invocar migrate. Misma policy que autosave 1C.1.
+- Si target_version_id introduce un breaking change en InputContract (campo required nuevo), devolver 409 con `compatibility_errors: list[{ slot_id, reason }]`. El usuario debe rellenar los nuevos slots manualmente tras crear el workspace nuevo.
+
+Tests (RED → GREEN):
+- test_detect_new_version_returns_notice_when_template_has_newer_version
+- test_detect_new_version_returns_none_when_workspace_aligned_to_latest
+- test_migrate_creates_new_workspace_against_target_version
+- test_migrate_preserves_inputs_json_verbatim
+- test_migrate_does_not_copy_block_outputs_or_approvals
+- test_migrate_archives_old_workspace_with_reason
+- test_migrate_links_parent_workspace_id_in_new_workspace
+- test_migrate_returns_409_when_input_contract_breaking_change
+- test_migrate_requires_workspace_ownership
+- test_migration_preserves_old_workspace_run_manifest
+
+Criterio de done:
+- Migración Alembic aplicada (3 columnas).
+- 2 endpoints documentados en OpenAPI.
+- 10 tests verdes.
+- Documentar en docs/REDACCION_CONTRACT_FIRST.md la sección "Versionado de plantillas y migración de workspaces".
 ```
 
 ---
@@ -2822,12 +2945,12 @@ Criterio de done:
 
 ---
 
-### Prompt 9R.6.5 (RED/GREEN) — CoreGraph: AuditLog + RunManifest emission
+### Prompt 9R.6.5 (RED/GREEN) — CoreGraph: AuditLog + RunManifest emission + tracing Langfuse
 
 ```markdown
-# PROMPT 9R.6.5 (RED/GREEN) — AuditLogNode + emisión de DraftingRunManifest
+# PROMPT 9R.6.5 (RED/GREEN) — AuditLogNode + emisión de DraftingRunManifest + instrumentación Langfuse
 
-Objetivo: cerrar el grafo emitiendo un DraftingRunManifest con trazabilidad completa.
+Objetivo: cerrar el grafo emitiendo un DraftingRunManifest con trazabilidad completa e instrumentar todos los nodos del DraftingCoreGraph con Langfuse para observabilidad runtime (consistente con el grafo público de 9B).
 
 Nodo:
 - AuditLogNode
@@ -2836,17 +2959,105 @@ Nodo:
   - Actualiza `workspace.run_manifest_id`.
   - Transición workspace: "assembled" → "assembled" (el manifest no cambia estado, solo registra).
 
+Instrumentación Langfuse (transversal a todos los nodos del CoreGraph):
+- Reusar `server/app/core/observability/langfuse.py` (existente desde Fase 8). NO crear cliente nuevo.
+- Cada invocación del CoreGraph abre un span raíz `redaccion.run` con atributos: `workspace_id`, `template_version_id`, `run_manifest_id` (asignado tras AuditLogNode).
+- Cada nodo abre un span hijo `redaccion.{node_name}` con atributos: `node_name`, `block_id` (si aplica), `block_kind` (si aplica).
+- Nodos IA (AIAssistDraftNode, CitationAndTraceabilityNode) añaden atributos extra al span: `model_used`, `prompt_version`, `tokens_in`, `tokens_out`, `latency_ms`.
+- Fallos (capturados por la política de retry de 9R.6.6) se emiten como `span.event("error", { type, message, retry_attempt })` antes de marcar el bloque como `failed`.
+- El `run_manifest_id` final se escribe como atributo del span raíz para enlazar tracing ↔ manifest.
+
 Tests (RED → GREEN):
 - test_core_graph_generates_run_manifest
 - test_core_graph_generates_manifest_even_on_error
 - test_core_graph_supports_admin_template_and_ad_hoc_workspace
 - test_run_manifest_persisted_after_audit_log_node
 - test_workspace_run_manifest_id_updated
+- test_core_graph_opens_root_langfuse_span_with_workspace_id
+- test_each_node_opens_child_span_under_root
+- test_ai_node_records_model_and_token_attributes_on_span
+- test_failed_node_emits_error_event_on_span
+- test_root_span_attribute_run_manifest_id_set_after_audit_log
 
 Criterio de done:
 - Cualquier ejecución del DraftingCoreGraph (éxito o fallo controlado) deja un manifest persistido.
-- Tests verdes.
-- Documentar en docs/REDACCION_CONTRACT_FIRST.md el diagrama final.
+- Cada nodo aparece como span hijo del span raíz en Langfuse.
+- Span raíz contiene `workspace_id`, `template_version_id` y `run_manifest_id` final.
+- 10 tests verdes.
+- Documentar en docs/REDACCION_CONTRACT_FIRST.md el diagrama final + sección "Observabilidad".
+```
+
+---
+
+### Prompt 9R.6.6 (RED/GREEN) — CoreGraph: fallback paths + BlockState=failed
+
+```markdown
+# PROMPT 9R.6.6 (RED/GREEN) — Fallos controlados, BlockState=failed y política de retry
+
+Objetivo: definir el comportamiento del DraftingCoreGraph cuando un nodo falla por causa controlada (timeout LLM, extracción imposible, AdminScript con excepción runtime), sin abortar el workspace ni perder el progreso ya logrado en otros bloques.
+
+Extensión de BlockState (modifica 9R.3.2):
+- Nuevo estado `failed` con sub-tipo obligatorio en `failure_kind`:
+    failure_kind: Literal["extraction_failed", "ai_failed", "script_failed", "validation_failed"]
+- Nuevas transiciones:
+    draft           ─EXTRACT_FAIL→ failed(extraction_failed)
+    extracted       ─AI_FAIL→      failed(ai_failed)
+    extracted       ─SCRIPT_FAIL→  failed(script_failed)
+    needs_review    ─APPROVE→      approved      (sin cambio)
+    failed          ─REGENERATE→   draft|extracted|ai_generated (según failure_kind)
+    failed          ─REJECT→       rejected      (saltar bloque si no es required)
+    *(dependencia)  ─DEP_FAIL→     failed(validation_failed) si una dependencia está failed
+
+Servicio BlockExecutor (nuevo, en server/app/modules/redaccion/services/block_executor.py):
+- Encapsula la política de retry para todos los nodos del CoreGraph.
+- async def execute(node_fn: Callable, block: BlockContract, state: WorkspaceState) -> NodeResult
+    - Llama node_fn(block, state).
+    - LLM timeouts y errores de red: 1 retry automático con backoff de 2s.
+    - AST validation errors y script runtime exceptions: NO retry (probablemente bug determinista).
+    - Captura excepción y devuelve `NodeResult(status="failed", failure_kind=..., last_error=...)`.
+    - Cada intento emite span Langfuse `error` (ver 9R.6.5).
+
+Comportamiento del CoreGraph ante fallo (ver 9R.3.3 para topología):
+- El nodo afectado marca su bloque `failed(<failure_kind>)` y persiste outputs parciales si existen en `state.block_outputs[block.id]["partial"] = ...`.
+- El CoreGraph NO aborta: continúa con los bloques cuya topología no dependa del fallido.
+- Los bloques que dependen del fallido (vía `depends_on` de 9R.3.3) pasan automáticamente a `failed(validation_failed)` con `last_error="dependency_failed:<block_id>"`.
+- AuditLogNode (9R.6.5) recoge la lista de bloques fallidos en `manifest.failed_blocks: list[{block_id, failure_kind, last_error_message, retry_attempts}]`.
+
+Integración con UserReviewGateNode (9R.6.4):
+- El gate también acepta bloques `failed`: la UI muestra `failure_kind`, último error y dos acciones:
+    1) "Regenerar" → REGENERATE event, vuelve al estado origen y re-ejecuta.
+    2) "Saltar bloque" → solo si `required=False`; emite REJECT.
+
+Migración Alembic:
+- hub_workspace_blocks: extender enum `state` con valor `failed`
+- hub_workspace_blocks.failure_kind (str, nullable)
+- hub_workspace_blocks.last_error_message (text, nullable)
+- hub_workspace_blocks.retry_attempts (int, default 0, not null)
+
+Reglas duras:
+- BlockExecutor es la ÚNICA superficie con la política de retry. Los nodos no implementan su propio retry.
+- Un bloque `required=True` cuya dependencia está `failed(validation_failed)` impide el ensamblado final (regla heredada de 9R.3.2 + 9R.6.4): FinalAssemblerNode rechaza el workspace con un `WorkspaceBlockedByFailedBlocksError`.
+
+Tests (RED → GREEN):
+- test_block_state_machine_supports_failed_state_with_subtypes
+- test_block_state_machine_failed_to_regenerate_returns_to_correct_origin_state
+- test_block_executor_retries_once_on_llm_timeout
+- test_block_executor_no_retry_on_script_runtime_exception
+- test_block_executor_no_retry_on_ast_validation_error
+- test_block_executor_emits_error_span_on_each_attempt
+- test_core_graph_continues_with_independent_blocks_when_one_fails
+- test_core_graph_marks_dependent_blocks_as_validation_failed
+- test_partial_outputs_preserved_under_block_outputs_partial
+- test_audit_log_node_records_failed_blocks_in_manifest_with_attempts
+- test_user_review_gate_allows_regenerate_on_failed_block
+- test_user_review_gate_allows_skip_only_if_block_not_required
+- test_final_assembler_rejects_when_required_block_failed_validation
+
+Criterio de done:
+- Migración Alembic aplicada (1 enum value + 3 columnas).
+- BlockExecutor centraliza el retry; sin duplicación en los nodos.
+- 13 tests verdes.
+- Documentar en docs/REDACCION_CONTRACT_FIRST.md la sección "Fallos controlados y política de retry".
 ```
 
 ---
@@ -3470,6 +3681,670 @@ describe('useFocusStore', () => {
 - El sidebar colapsa (clase `sidebar-collapsed`) cuando `viewMode='focus'`.
 - `AgentWorkspacePanel` (9.11d) se envuelve con `<FocusLayout>` sin modificar su lógica interna.
 - Los 5 tests pasan en verde.
+
+---
+
+### Prompt 1C.1 — Autosave y resiliencia del Workspace (TDD RED/GREEN)
+
+**Objetivo**: Persistir automáticamente el estado del Workspace en backend tras cada cambio de bloque, con concurrencia optimista y detección de conflictos. Permite que el usuario pueda cerrar la pestaña o perder conexión sin perder trabajo, y evita pisar cambios de otra sesión abierta del mismo workspace.
+
+**Contexto**: 9R.1.4 crea las tablas `hub_workspaces` y `hub_workspace_blocks`. El editor del 9R.7 emite cambios por bloque (`BlockState`, contenido editado por el usuario, edición de `ai_generated`). Sin autosave, un fallo de red o un cierre accidental pierde el trabajo. Sin versión optimista, dos pestañas abiertas se pisan silenciosamente.
+
+**Dependencias**: 9R.1.4 (tablas), 9R.3.2 (BlockState machine), 1C.0 (Focus Mode).
+
+**Instrucciones al agente**:
+```text
+Actúa como experto en FastAPI async y React Query. Implementa autosave con concurrencia optimista.
+
+BACKEND — server/app/modules/redaccion/
+
+1. Migración Alembic: añadir `version` (int, default 1, not null) a `hub_workspaces`.
+   Cada UPDATE incrementa `version` en 1.
+
+2. Schemas Pydantic en `redaccion/contracts/state_update.py`:
+   class BlockUpdate(BaseModel):
+       block_id: UUID
+       state: BlockState | None          # opcional: transición de estado
+       content: dict | None              # opcional: contenido editado del bloque
+       expected_block_version: int       # versión esperada del bloque (optimistic lock por bloque)
+
+   class WorkspaceStatePatch(BaseModel):
+       expected_workspace_version: int   # versión esperada del workspace
+       block_updates: list[BlockUpdate]
+
+   class WorkspaceStatePatchResponse(BaseModel):
+       workspace_version: int            # nueva versión tras el patch
+       updated_block_versions: dict[UUID, int]
+       saved_at: datetime
+
+3. Endpoint en `hub_redaccion_router.py` (Deploy: edge):
+   PATCH /api/v1/hub/redaccion/workspaces/{workspace_id}/state
+   - 200: aplicado, devuelve nueva versión
+   - 409 Conflict: `expected_workspace_version` o `expected_block_version` desactualizada
+       Response body: { "current_workspace_version": int, "conflicting_block_ids": [UUID] }
+   - 422: BlockState transition inválida (rechaza por la state machine de 9R.3.2)
+   - 404: workspace no existe o no pertenece al usuario
+
+4. Servicio `WorkspaceAutosaveService` con método `apply_patch(workspace_id, user_id, patch)`:
+   - Lock pesimista de la fila del workspace (SELECT ... FOR UPDATE) durante el patch
+   - Verifica `expected_workspace_version` y cada `expected_block_version`
+   - Valida transiciones contra `BlockState` machine (9R.3.2)
+   - Incrementa versiones, persiste, devuelve nuevo manifest de versiones
+
+FRONTEND — frontend/src/redaccion/hooks/
+
+1. `useAutosave(workspaceId, getState)`:
+   - Debounce 1500ms tras el último cambio
+   - useEffect con cleanup que cancela debounce al desmontar
+   - Mutation que invoca PATCH; on success actualiza la versión en el store local
+   - on 409: emite evento `workspace:conflict` con `conflicting_block_ids`
+   - on error de red: reintenta con backoff exponencial (3 intentos máx), luego marca el workspace como "offline"
+
+2. Componente `ConflictModal` (frontend/src/redaccion/components/):
+   - Se abre al recibir `workspace:conflict`
+   - Texto: "Otra sesión ha modificado este workspace. Recarga para ver los cambios; los tuyos no guardados se perderán."
+   - Botón único "Recargar workspace" → invalida la query, refetch.
+
+3. Indicador visual en `WorkspaceStatusBar` (9R.7.2):
+   - "Guardado hace Ns" / "Guardando..." / "Sin conexión" / "Conflicto sin resolver"
+
+TESTS REQUERIDOS:
+
+Backend (pytest):
+- test_patch_with_correct_versions_updates_workspace_and_blocks
+- test_patch_with_stale_workspace_version_returns_409
+- test_patch_with_stale_block_version_returns_409_with_conflicting_ids
+- test_patch_with_invalid_block_state_transition_returns_422
+- test_patch_increments_workspace_and_block_versions
+- test_patch_is_atomic_on_partial_failure
+- test_patch_requires_workspace_ownership
+
+Frontend (Vitest):
+- should_debounce_autosave_calls_to_at_most_one_per_1500ms
+- should_open_conflict_modal_on_409_response
+- should_retry_save_with_backoff_on_network_error
+- should_mark_workspace_offline_after_3_failed_retries
+- should_update_local_version_after_successful_save
+```
+
+**Tests RED — tests/modules/redaccion/unit/test_autosave_service.py**:
+```python
+"""Tests para WorkspaceAutosaveService — TDD RED."""
+import pytest
+from uuid import uuid4
+from datetime import datetime
+
+from server.app.modules.redaccion.services.autosave_service import (
+    WorkspaceAutosaveService, ConflictError, InvalidTransitionError,
+)
+from server.app.modules.redaccion.contracts.state_update import (
+    WorkspaceStatePatch, BlockUpdate,
+)
+
+
+class TestWorkspaceAutosaveService:
+
+    @pytest.mark.asyncio
+    async def test_patch_with_correct_versions_updates_workspace_and_blocks(
+        self, autosave_service, seeded_workspace_v3_with_blocks
+    ) -> None:
+        ws, blocks = seeded_workspace_v3_with_blocks
+        patch = WorkspaceStatePatch(
+            expected_workspace_version=3,
+            block_updates=[
+                BlockUpdate(
+                    block_id=blocks[0].id,
+                    state="approved",
+                    content={"text": "edited"},
+                    expected_block_version=blocks[0].version,
+                ),
+            ],
+        )
+        result = await autosave_service.apply_patch(ws.id, ws.owner_id, patch)
+        assert result.workspace_version == 4
+        assert result.updated_block_versions[blocks[0].id] == blocks[0].version + 1
+
+    @pytest.mark.asyncio
+    async def test_patch_with_stale_workspace_version_raises_conflict(
+        self, autosave_service, seeded_workspace_v3_with_blocks
+    ) -> None:
+        ws, _ = seeded_workspace_v3_with_blocks
+        patch = WorkspaceStatePatch(expected_workspace_version=1, block_updates=[])
+        with pytest.raises(ConflictError) as exc:
+            await autosave_service.apply_patch(ws.id, ws.owner_id, patch)
+        assert exc.value.current_workspace_version == 3
+
+    @pytest.mark.asyncio
+    async def test_patch_with_stale_block_version_raises_conflict_with_ids(
+        self, autosave_service, seeded_workspace_v3_with_blocks
+    ) -> None:
+        ws, blocks = seeded_workspace_v3_with_blocks
+        patch = WorkspaceStatePatch(
+            expected_workspace_version=3,
+            block_updates=[
+                BlockUpdate(
+                    block_id=blocks[0].id,
+                    content={"text": "x"},
+                    expected_block_version=blocks[0].version - 1,  # stale
+                ),
+            ],
+        )
+        with pytest.raises(ConflictError) as exc:
+            await autosave_service.apply_patch(ws.id, ws.owner_id, patch)
+        assert blocks[0].id in exc.value.conflicting_block_ids
+
+    @pytest.mark.asyncio
+    async def test_patch_with_invalid_state_transition_raises(
+        self, autosave_service, seeded_workspace_v3_with_blocks
+    ) -> None:
+        ws, blocks = seeded_workspace_v3_with_blocks
+        # blocks[0] está en 'draft'; no se puede pasar directamente a 'locked'
+        patch = WorkspaceStatePatch(
+            expected_workspace_version=3,
+            block_updates=[
+                BlockUpdate(
+                    block_id=blocks[0].id,
+                    state="locked",
+                    expected_block_version=blocks[0].version,
+                ),
+            ],
+        )
+        with pytest.raises(InvalidTransitionError):
+            await autosave_service.apply_patch(ws.id, ws.owner_id, patch)
+
+    @pytest.mark.asyncio
+    async def test_patch_is_atomic_on_partial_failure(
+        self, autosave_service, seeded_workspace_v3_with_blocks, session
+    ) -> None:
+        ws, blocks = seeded_workspace_v3_with_blocks
+        # Un update válido + uno inválido → toda la transacción se revierte
+        patch = WorkspaceStatePatch(
+            expected_workspace_version=3,
+            block_updates=[
+                BlockUpdate(
+                    block_id=blocks[0].id, content={"x": 1},
+                    expected_block_version=blocks[0].version,
+                ),
+                BlockUpdate(
+                    block_id=blocks[1].id, state="locked",  # inválido
+                    expected_block_version=blocks[1].version,
+                ),
+            ],
+        )
+        with pytest.raises(InvalidTransitionError):
+            await autosave_service.apply_patch(ws.id, ws.owner_id, patch)
+        # versión del workspace y bloques sin cambios
+        await session.refresh(ws)
+        assert ws.version == 3
+```
+
+**Tests RED — frontend/src/redaccion/hooks/\_\_tests\_\_/useAutosave.test.tsx**:
+```typescript
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { renderHook, act, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useAutosave } from '../useAutosave';
+
+const PATCH_URL = /\/api\/v1\/hub\/redaccion\/workspaces\/.+\/state/;
+
+const wrapper = ({ children }: { children: React.ReactNode }) => {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+};
+
+describe('useAutosave', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+
+  it('should_debounce_autosave_calls_to_at_most_one_per_1500ms', async () => {
+    const patchMock = vi.fn().mockResolvedValue({ workspace_version: 2 });
+    const { result } = renderHook(
+      () => useAutosave('ws-1', () => ({ blockUpdates: [], version: 1 }), patchMock),
+      { wrapper },
+    );
+    act(() => { result.current.markDirty(); });
+    act(() => { result.current.markDirty(); });
+    act(() => { result.current.markDirty(); });
+    vi.advanceTimersByTime(1499);
+    expect(patchMock).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(2);
+    await waitFor(() => expect(patchMock).toHaveBeenCalledTimes(1));
+  });
+
+  it('should_open_conflict_modal_on_409_response', async () => {
+    const patchMock = vi.fn().mockRejectedValue({
+      status: 409, body: { current_workspace_version: 5, conflicting_block_ids: ['b1'] },
+    });
+    const onConflict = vi.fn();
+    const { result } = renderHook(
+      () => useAutosave('ws-1', () => ({ blockUpdates: [], version: 1 }), patchMock, { onConflict }),
+      { wrapper },
+    );
+    act(() => { result.current.markDirty(); });
+    vi.advanceTimersByTime(1600);
+    await waitFor(() => expect(onConflict).toHaveBeenCalledWith({
+      current_workspace_version: 5, conflicting_block_ids: ['b1'],
+    }));
+  });
+
+  it('should_retry_save_with_backoff_on_network_error', async () => {
+    const patchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('network'))
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValue({ workspace_version: 2 });
+    const { result } = renderHook(
+      () => useAutosave('ws-1', () => ({ blockUpdates: [], version: 1 }), patchMock),
+      { wrapper },
+    );
+    act(() => { result.current.markDirty(); });
+    vi.advanceTimersByTime(1600);
+    await vi.runAllTimersAsync();
+    expect(patchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('should_mark_workspace_offline_after_3_failed_retries', async () => {
+    const patchMock = vi.fn().mockRejectedValue(new Error('network'));
+    const { result } = renderHook(
+      () => useAutosave('ws-1', () => ({ blockUpdates: [], version: 1 }), patchMock),
+      { wrapper },
+    );
+    act(() => { result.current.markDirty(); });
+    vi.advanceTimersByTime(1600);
+    await vi.runAllTimersAsync();
+    expect(result.current.status).toBe('offline');
+  });
+});
+```
+
+**Criterios de aceptación**:
+- Migración Alembic añade `version` a `hub_workspaces` y `hub_workspace_blocks`.
+- `PATCH /api/v1/hub/redaccion/workspaces/{id}/state` devuelve 200/409/422 según contrato.
+- `WorkspaceAutosaveService` es atómico: si un `BlockUpdate` falla, ningún cambio se persiste.
+- `useAutosave` debounceá 1500ms, reintenta con backoff y emite `onConflict` ante 409.
+- `WorkspaceStatusBar` muestra estado (`saved`/`saving`/`offline`/`conflict`).
+- 7 tests backend + 4 tests frontend en verde.
+
+---
+
+### Prompt 1C.2 — Editor accesible: shortcuts, focus trap y WCAG 2.2 AA (TDD RED/GREEN)
+
+**Objetivo**: Cumplir WCAG 2.2 AA en el editor de Workspaces e implementar los atajos de teclado y comportamientos de focus management que un usuario de teclado o lector de pantalla espera de un editor profesional.
+
+**Contexto**: El editor 9R.7 + Focus Mode 1C.0 + Autosave 1C.1 conforman una superficie compleja con drawer modal, bloques interactivos, transiciones de estado y autosave. Sin focus trap el usuario de teclado se "escapa" del modal; sin atajos los usuarios productivos pierden tiempo; sin anuncios `aria-live` un usuario de lector de pantalla no percibe las transiciones de bloque. WCAG 2.2 AA es el criterio de aceptación de la plataforma (ver Fase 20).
+
+**Dependencias**: 1C.0 (DrawerHub), 1C.1 (autosave), 9R.7 (renderer).
+
+**Instrucciones al agente**:
+```text
+Actúa como experto en accesibilidad web (WCAG 2.2 AA) y React. Implementa accesibilidad y atajos
+en el editor de Workspaces.
+
+1. KEYBOARD SHORTCUTS — hook `useEditorShortcuts(handlers)` en frontend/src/redaccion/hooks/:
+   - `Escape`: si drawer abierto → cierra drawer; si no → ejecuta `handlers.onLeaveFocusMode()`.
+   - `Cmd+S` (o `Ctrl+S` en Windows): preventDefault + `handlers.onForceSave()`.
+   - `Cmd+Enter` / `Ctrl+Enter`: si hay bloque activo en estado `needs_review`
+     → `handlers.onApproveActiveBlock()`.
+   - `Cmd+Z` / `Ctrl+Z`: si hay edit history en el bloque activo
+     → `handlers.onUndo()` (mínimo: revertir última edición de contenido).
+   - Los handlers son inyectados; el hook solo ata los listeners y los limpia al desmontar.
+
+2. FOCUS TRAP — DrawerHub (1C.0) debe atrapar el foco cuando `drawerVisible=true`:
+   - Usar `react-focus-lock` (añadir a dependencias del frontend).
+   - El primer elemento enfocable del drawer recibe foco al abrir.
+   - Tab/Shift+Tab cicla solo entre elementos del drawer.
+   - Al cerrar (Escape o botón), foco vuelve al elemento que abrió el drawer.
+
+3. ARIA-LIVE para transiciones de estado de bloque:
+   - Componente `BlockStateAnnouncer` (frontend/src/redaccion/components/) con `role="status"`
+     y `aria-live="polite"`.
+   - Suscrito al BlockState machine: cada transición emite texto a anunciar:
+     `extracted`: "Bloque {label}: datos extraídos."
+     `ai_generated`: "Bloque {label}: borrador IA listo, requiere revisión."
+     `approved`: "Bloque {label}: aprobado."
+     `rejected`: "Bloque {label}: rechazado, se regenerará."
+
+4. AXE-CORE — añadir `@axe-core/react` como devDependency.
+   En `frontend/src/test-utils/axe.ts`: exportar `expectNoAxeViolations(container)` que ejecuta
+   `axe.run` y filtra reglas críticas + serias.
+
+5. ETIQUETADO ARIA del renderer (9R.7):
+   - Todo botón con icono solo debe tener `aria-label`.
+   - El `BlockEditor` tiene `role="region"` y `aria-label="Bloque {tipo}: {label}"`.
+   - El estado actual del bloque se anuncia con `aria-describedby` apuntando a un `<span class="sr-only">`.
+   - Los inputs dinámicos de `DynamicFieldRenderer` propagan `aria-required`, `aria-invalid`,
+     `aria-describedby` cuando hay errores de validación.
+
+TESTS REQUERIDOS (Vitest + @axe-core/react):
+
+- should_close_drawer_on_escape_when_drawer_is_open
+- should_leave_focus_mode_on_escape_when_drawer_closed
+- should_call_force_save_on_cmd_s_and_prevent_default
+- should_approve_active_block_on_cmd_enter_when_state_is_needs_review
+- should_not_approve_block_on_cmd_enter_when_state_is_draft
+- should_trap_focus_within_drawer_when_open
+- should_restore_focus_to_trigger_on_drawer_close
+- should_announce_block_state_change_via_aria_live
+- should_pass_axe_audit_on_workspace_with_mixed_block_states
+- should_pass_axe_audit_on_drawer_open_state
+```
+
+**Tests RED — frontend/src/redaccion/hooks/\_\_tests\_\_/useEditorShortcuts.test.tsx**:
+```typescript
+import { describe, it, expect, vi } from 'vitest';
+import { render, fireEvent } from '@testing-library/react';
+import { useEditorShortcuts } from '../useEditorShortcuts';
+
+function Harness({ handlers }: { handlers: Parameters<typeof useEditorShortcuts>[0] }) {
+  useEditorShortcuts(handlers);
+  return <div data-testid="harness" />;
+}
+
+describe('useEditorShortcuts', () => {
+  it('should_close_drawer_on_escape_when_drawer_is_open', () => {
+    const handlers = {
+      isDrawerOpen: true,
+      hasActiveBlock: false,
+      activeBlockState: null,
+      onCloseDrawer: vi.fn(),
+      onLeaveFocusMode: vi.fn(),
+      onForceSave: vi.fn(),
+      onApproveActiveBlock: vi.fn(),
+      onUndo: vi.fn(),
+    };
+    render(<Harness handlers={handlers} />);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(handlers.onCloseDrawer).toHaveBeenCalled();
+    expect(handlers.onLeaveFocusMode).not.toHaveBeenCalled();
+  });
+
+  it('should_leave_focus_mode_on_escape_when_drawer_closed', () => {
+    const handlers = {
+      isDrawerOpen: false, hasActiveBlock: false, activeBlockState: null,
+      onCloseDrawer: vi.fn(), onLeaveFocusMode: vi.fn(),
+      onForceSave: vi.fn(), onApproveActiveBlock: vi.fn(), onUndo: vi.fn(),
+    };
+    render(<Harness handlers={handlers} />);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(handlers.onLeaveFocusMode).toHaveBeenCalled();
+  });
+
+  it('should_call_force_save_on_cmd_s_and_prevent_default', () => {
+    const handlers = {
+      isDrawerOpen: false, hasActiveBlock: false, activeBlockState: null,
+      onCloseDrawer: vi.fn(), onLeaveFocusMode: vi.fn(),
+      onForceSave: vi.fn(), onApproveActiveBlock: vi.fn(), onUndo: vi.fn(),
+    };
+    render(<Harness handlers={handlers} />);
+    const ev = new KeyboardEvent('keydown', { key: 's', metaKey: true, cancelable: true });
+    const prevented = !window.dispatchEvent(ev);
+    expect(handlers.onForceSave).toHaveBeenCalled();
+    expect(prevented).toBe(true);
+  });
+
+  it('should_approve_active_block_on_cmd_enter_when_state_is_needs_review', () => {
+    const handlers = {
+      isDrawerOpen: false, hasActiveBlock: true, activeBlockState: 'needs_review' as const,
+      onCloseDrawer: vi.fn(), onLeaveFocusMode: vi.fn(),
+      onForceSave: vi.fn(), onApproveActiveBlock: vi.fn(), onUndo: vi.fn(),
+    };
+    render(<Harness handlers={handlers} />);
+    fireEvent.keyDown(window, { key: 'Enter', metaKey: true });
+    expect(handlers.onApproveActiveBlock).toHaveBeenCalled();
+  });
+
+  it('should_not_approve_block_on_cmd_enter_when_state_is_draft', () => {
+    const handlers = {
+      isDrawerOpen: false, hasActiveBlock: true, activeBlockState: 'draft' as const,
+      onCloseDrawer: vi.fn(), onLeaveFocusMode: vi.fn(),
+      onForceSave: vi.fn(), onApproveActiveBlock: vi.fn(), onUndo: vi.fn(),
+    };
+    render(<Harness handlers={handlers} />);
+    fireEvent.keyDown(window, { key: 'Enter', metaKey: true });
+    expect(handlers.onApproveActiveBlock).not.toHaveBeenCalled();
+  });
+});
+```
+
+**Tests RED — frontend/src/redaccion/components/\_\_tests\_\_/A11y.test.tsx**:
+```typescript
+import { describe, it, expect } from 'vitest';
+import { render } from '@testing-library/react';
+import { expectNoAxeViolations } from '@/test-utils/axe';
+import { WorkspaceEditor } from '../WorkspaceEditor';
+import { mockWorkspaceWithMixedBlocks } from '@/test-utils/fixtures';
+
+describe('Editor accessibility (WCAG 2.2 AA)', () => {
+  it('should_pass_axe_audit_on_workspace_with_mixed_block_states', async () => {
+    const { container } = render(
+      <WorkspaceEditor workspace={mockWorkspaceWithMixedBlocks()} />,
+    );
+    await expectNoAxeViolations(container);
+  });
+
+  it('should_announce_block_state_change_via_aria_live', async () => {
+    const { container, rerender } = render(
+      <WorkspaceEditor workspace={mockWorkspaceWithMixedBlocks({ block1State: 'draft' })} />,
+    );
+    rerender(
+      <WorkspaceEditor workspace={mockWorkspaceWithMixedBlocks({ block1State: 'ai_generated' })} />,
+    );
+    const live = container.querySelector('[aria-live="polite"]');
+    expect(live?.textContent).toMatch(/borrador IA listo/i);
+  });
+
+  it('should_trap_focus_within_drawer_when_open', () => {
+    // Render con drawer abierto; comprobar que document.activeElement está dentro del drawer.
+  });
+
+  it('should_restore_focus_to_trigger_on_drawer_close', () => {
+    // Render con botón trigger; abre drawer; cierra; comprobar activeElement = trigger.
+  });
+});
+```
+
+**Criterios de aceptación**:
+- `useEditorShortcuts` ata `Escape`, `Cmd/Ctrl+S`, `Cmd/Ctrl+Enter`, `Cmd/Ctrl+Z` y los limpia al desmontar.
+- `DrawerHub` atrapa el foco (react-focus-lock) y lo restaura al cerrar.
+- `BlockStateAnnouncer` anuncia transiciones por `aria-live="polite"`.
+- `expectNoAxeViolations` pasa en el editor con bloques en todos los estados de la state machine.
+- Cero violaciones críticas o serias en axe-core para los snapshots clave.
+- 10 tests en verde.
+
+---
+
+### Prompt 1C.3 — Vista previa imprimible y anexo de auditoría (TDD RED/GREEN)
+
+**Objetivo**: Antes de exportar, el usuario ve una vista previa de página completa (`WorkspacePreview`) que coincide visualmente con el DOCX/ODT final, incluido el anexo de auditoría con el `DraftingRunManifest`. La preview y el ExportService consumen la misma estructura serializada para garantizar que lo que el usuario ve es exactamente lo que se exporta.
+
+**Contexto**: 9R.9.1 produce `DraftingRunManifest`. 1C.4 lo escribe en DOCX/ODT como notas al pie + anexo. Sin preview compartida, divergen: la pantalla puede mostrar algo, el export otra cosa. Este prompt extrae la estructura a un contrato compartido (`PreviewPayload`) que ambos consumen.
+
+**Dependencias**: 9R.9.1 (DraftingRunManifest), 9R.6.4 (FinalAssemblerNode).
+
+**Instrucciones al agente**:
+```text
+Actúa como experto en arquitectura contract-first. Implementa el contrato Preview y la pantalla
+de vista previa.
+
+BACKEND — server/app/modules/redaccion/
+
+1. Contrato `PreviewPayload` en `contracts/preview.py` (Pydantic, exportado por OpenAPI):
+   class PreviewSection(BaseModel):
+       level: int                     # 1 = portada, 2 = H1, 3 = H2, etc.
+       title: str
+       blocks: list[PreviewBlock]
+
+   class PreviewBlock(BaseModel):
+       block_id: UUID
+       kind: BlockKind                # STATIC_TEXT | DETERMINISTIC_DATA | TABLE | CHART
+                                      #  | AI_ASSISTED_TEXT | AI_SUMMARY | CITATION_BLOCK
+       state: BlockState              # solo `approved` o `locked` aparecen en export
+       html: str                      # contenido renderizado a HTML semántico
+       citations: list[UUID]          # IDs de chunks referenciados
+
+   class PreviewAuditEntry(BaseModel):
+       chunk_id: UUID
+       source_url: str | None
+       source_filename: str | None
+       page: int | None
+       model_used: str | None
+       prompt_version: str | None
+       approvals: list[UUID]          # block_ids que aprobó este chunk
+
+   class PreviewPayload(BaseModel):
+       workspace_id: UUID
+       template_version_id: UUID
+       cover: PreviewSection          # portada (título, organización, fecha)
+       toc: list[tuple[int, str]]     # (level, title) para índice
+       body: list[PreviewSection]
+       audit_annex: list[PreviewAuditEntry]
+       manifest_id: UUID              # referencia al DraftingRunManifest
+       generated_at: datetime
+
+2. Endpoint:
+   GET /api/v1/hub/redaccion/workspaces/{workspace_id}/preview
+   Returns: PreviewPayload
+   Deploy: edge
+
+3. Servicio `PreviewBuilderService` (consumido por endpoint y por ExportService de 1C.4):
+   - Carga workspace + bloques aprobados + manifest activo
+   - Construye `PreviewPayload` con el mismo orden y secciones que el export
+   - Rechaza con 409 si hay bloques en estado distinto a `approved`/`locked`/`static`
+     (un export no procede si hay AI sin aprobar — regla 5 de 9R)
+
+4. ExportService de 1C.4 SE REFACTORIZA para consumir `PreviewBuilderService.build_payload()`
+   en lugar de procesar Markdown crudo: garantiza que preview ≡ export.
+
+FRONTEND — frontend/src/redaccion/preview/
+
+1. Pantalla `WorkspacePreview` (ruta `/redaccion/workspaces/:id/preview`):
+   - Llama `GET .../preview` y renderiza `PreviewPayload` como página A4.
+   - Estilos `@media print` y `@page` para que `Cmd+P` genere PDF con la misma maqueta.
+   - Sección "Anexo de auditoría" al final: tabla con `chunk_id`, fuente, página, modelo,
+     prompt_version, aprobaciones.
+   - Botón "Exportar a DOCX/ODT" al pie → invoca el endpoint de 1C.4.
+
+2. Componente compartido `PreviewRenderer({ payload }: { payload: PreviewPayload })`:
+   - Mapea cada `PreviewBlock.kind` a su componente de presentación.
+   - El `html` se sanitiza con DOMPurify antes de inyectar.
+   - `CITATION_BLOCK` renderiza superíndices `[1]`, `[2]`... linkados al anexo.
+
+TESTS REQUERIDOS:
+
+Backend (pytest):
+- test_preview_payload_contains_only_approved_or_locked_blocks
+- test_preview_endpoint_returns_409_when_blocks_pending_review
+- test_preview_builder_orders_blocks_by_template_section
+- test_export_service_uses_same_payload_as_preview_endpoint
+- test_audit_annex_lists_all_chunks_used_by_approved_blocks
+
+Frontend (Vitest):
+- should_render_cover_index_body_and_audit_annex_in_order
+- should_sanitize_block_html_before_rendering
+- should_link_citation_superscripts_to_audit_annex
+- should_match_export_structure_snapshot
+- should_show_print_only_stylesheet_for_page_size_a4
+```
+
+**Tests RED — tests/modules/redaccion/unit/test_preview_builder.py**:
+```python
+"""Tests para PreviewBuilderService — TDD RED."""
+import pytest
+from uuid import uuid4
+
+from server.app.modules.redaccion.services.preview_builder import (
+    PreviewBuilderService, PendingBlocksError,
+)
+
+
+class TestPreviewBuilder:
+
+    @pytest.mark.asyncio
+    async def test_payload_contains_only_approved_or_locked_blocks(
+        self, builder: PreviewBuilderService, workspace_all_approved
+    ) -> None:
+        payload = await builder.build_payload(workspace_all_approved.id)
+        for section in payload.body:
+            for block in section.blocks:
+                assert block.state in ("approved", "locked")
+
+    @pytest.mark.asyncio
+    async def test_returns_409_when_blocks_pending_review(
+        self, builder: PreviewBuilderService, workspace_with_needs_review
+    ) -> None:
+        with pytest.raises(PendingBlocksError) as exc:
+            await builder.build_payload(workspace_with_needs_review.id)
+        assert len(exc.value.pending_block_ids) >= 1
+
+    @pytest.mark.asyncio
+    async def test_orders_blocks_by_template_section(
+        self, builder: PreviewBuilderService, workspace_with_3_sections
+    ) -> None:
+        payload = await builder.build_payload(workspace_with_3_sections.id)
+        titles = [s.title for s in payload.body]
+        assert titles == ["Introducción", "Marco Legal", "Conclusiones"]
+
+    @pytest.mark.asyncio
+    async def test_export_service_uses_same_payload(
+        self, builder: PreviewBuilderService, export_service, workspace_all_approved, storage_mock
+    ) -> None:
+        preview_payload = await builder.build_payload(workspace_all_approved.id)
+        await export_service.export(workspace_all_approved.id, format="docx")
+        # ExportService delega en builder.build_payload; verificamos misma referencia
+        export_payload = export_service.last_payload_used
+        assert export_payload.workspace_id == preview_payload.workspace_id
+        assert [b.block_id for s in export_payload.body for b in s.blocks] == \
+               [b.block_id for s in preview_payload.body for b in s.blocks]
+
+    @pytest.mark.asyncio
+    async def test_audit_annex_lists_all_chunks_used_by_approved_blocks(
+        self, builder: PreviewBuilderService, workspace_with_citations
+    ) -> None:
+        payload = await builder.build_payload(workspace_with_citations.id)
+        cited_ids = {c for s in payload.body for b in s.blocks for c in b.citations}
+        annex_ids = {entry.chunk_id for entry in payload.audit_annex}
+        assert cited_ids.issubset(annex_ids)
+```
+
+**Tests RED — frontend/src/redaccion/preview/\_\_tests\_\_/PreviewRenderer.test.tsx**:
+```typescript
+import { describe, it, expect } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { PreviewRenderer } from '../PreviewRenderer';
+import { samplePreviewPayload } from '@/test-utils/fixtures';
+
+describe('PreviewRenderer', () => {
+  it('should_render_cover_index_body_and_audit_annex_in_order', () => {
+    const { container } = render(<PreviewRenderer payload={samplePreviewPayload()} />);
+    const sections = container.querySelectorAll('[data-preview-section]');
+    const kinds = Array.from(sections).map(s => s.getAttribute('data-preview-section'));
+    expect(kinds).toEqual(['cover', 'toc', 'body', 'audit-annex']);
+  });
+
+  it('should_sanitize_block_html_before_rendering', () => {
+    const payload = samplePreviewPayload({
+      bodyBlockHtml: '<script>alert(1)</script><p>seguro</p>',
+    });
+    const { container } = render(<PreviewRenderer payload={payload} />);
+    expect(container.querySelector('script')).toBeNull();
+    expect(screen.getByText('seguro')).toBeInTheDocument();
+  });
+
+  it('should_link_citation_superscripts_to_audit_annex', () => {
+    const payload = samplePreviewPayload({ withCitations: true });
+    const { container } = render(<PreviewRenderer payload={payload} />);
+    const sup = container.querySelector('sup a[href^="#audit-"]');
+    expect(sup).not.toBeNull();
+  });
+});
+```
+
+**Criterios de aceptación**:
+- `PreviewPayload` exportado por OpenAPI; Orval lo genera en el frontend.
+- `GET /api/v1/hub/redaccion/workspaces/{id}/preview` devuelve 200 con payload completo o 409 con `pending_block_ids` si hay bloques sin revisar.
+- `PreviewBuilderService` es la única fuente de la estructura del documento; `ExportService` (1C.4) lo consume.
+- `WorkspacePreview` renderiza cover + toc + body + audit-annex con CSS `@media print` para A4.
+- Las citas `[1]`, `[2]`... linkan al anexo (`#audit-{chunk_id}`).
+- HTML de los bloques saneado con DOMPurify antes de renderizar.
+- 5 tests backend + 3 tests frontend en verde.
 
 ---
 

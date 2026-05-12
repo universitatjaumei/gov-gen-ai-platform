@@ -27,9 +27,9 @@
 |--------|-------------------|-----------|--------|
 | Fase 0 — Infraestructura | — | — | ✅ Eliminada (heredada) |
 | Subfase 1.A — Chatbots Públicos (9B) | 9B.14 ✅ | — | ✅ Completo |
-| Subfase 1.A → 1.C — Redacción Contract-First (9R) | — | 9R.0 (DOC) | ⏳ Pendiente |
-| Subfase 1.B — Identidad y Despliegue | — | Fase 10 / D.1 | ⏳ Pendiente |
-| Subfase 1.C — Privacidad y Exportación | — | 1C.0 | ⏳ Pendiente |
+| Subfase 1.A → 1.C — Redacción Contract-First (9R) | — | 9R.0 (DOC) | ⏳ Pendiente — 33 prompts (incluye 9R.3.3, 9R.4.4, 9R.6.6 añadidos 2026-05-12) |
+| Subfase 1.B — Identidad y Despliegue (Fase 10 + Fase Deploy GCP) | — | 10.1 | ⏳ Pendiente — Fase 10 (temas/plantillas) + D.1-D.5 |
+| Subfase 1.C — Infraestructura de Diseño y Exportación Avanzada | — | 1C.0 | ⏳ Pendiente — 6 prompts (1C.0, 1C.1, 1C.2, 1C.3, 1C.4, 1C.5) |
 
 **Cursor actual: 9R.0 (DOC) — Bloque 9R Redacción Contract-First (siguiente subfase)**
 
@@ -89,3 +89,5 @@ Prompts verbatim para el agente: `Migración_extracción_pdf.txt` §5.
 | 2026-05-11 | 9B.14 | docs/GRAPH_PROFILES.md (guía CoreGraph, perfiles, retrieval_mode, cómo extender). test_profile_contract.py: 12 tests parametrizados (3 perfiles × compile+non-null + 3 perfiles × 3 modos smoke). test_pipeline_contract_suite.py: 6 tests parametrizados (3 pipelines × 2 contratos). 80 tests verdes en total. Subfase 9B completada. |
 | 2026-05-11 | (planificación Fase 2) | Plan_TDD_Fase2.md enriquecido con análisis de migración PDF: nuevo prompt 9.12b.0 (auditoría funcional legacy + spec), Guía 9C.1 (tabla de 12 pasos atómicos con artefactos verificables), riesgos explícitos en 9.12b, firmas de `prompts.py`, `ExtractionPhase` state machine en 9.13, tabla de niveles de automatización, tests de `useExtractionRun` ampliados de 3 a 8 + 8 tests nuevos de componentes wizard. |
 | 2026-05-11 | (config) | CLAUDE.md: regla de retirada legacy actualizada a dos pasos — Caso A (NiceGUI en migración activa) → mover a `_legacy_nicegui/` al cerrar el prompt GREEN, borrar al cerrar el prompt de verificación de subfase; Caso B (código huérfano) → borrar directamente. |
+| 2026-05-12 | (planificación 1.C) | Plan_TDD_Fase1.md: añadidos 3 prompts en Subfase 1.C — 1C.1 (Autosave con concurrencia optimista), 1C.2 (Editor accesible: shortcuts + focus trap + WCAG 2.2 AA), 1C.3 (Preview imprimible + anexo de auditoría compartido con ExportService). PROJECT_STATE.md: corregido nombre de Subfase 1.C ("Privacidad y Exportación" → "Infraestructura de Diseño y Exportación Avanzada"). |
+| 2026-05-12 | (planificación 9R + 1.B) | Plan_TDD_Fase1.md: añadidos 3 prompts en bloque 9R — 9R.3.3 (BlockReference + projection + orden topológico + detección de ciclos), 9R.4.4 (versionado de plantillas: política de anclaje y endpoints de migración de workspaces), 9R.6.6 (BlockState=failed + BlockExecutor con retry + propagación de fallos por topología). 9R.6.5 ampliado con instrumentación Langfuse (span raíz + spans por nodo + atributos de modelo/tokens). PROJECT_STATE.md: restaurada Fase 10 (Plantillas y Temas) dentro de Subfase 1.B. |
