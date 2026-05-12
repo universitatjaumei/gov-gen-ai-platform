@@ -24,6 +24,8 @@ from server.app.routers.hub_clients_router import router as hub_clients_router
 from server.app.routers.hub_ingestion_router import router as hub_ingestion_router
 from server.app.routers.hub_llm_configs_router import router as hub_llm_configs_router
 from server.app.routers.hub_prompt_templates_router import router as hub_prompt_templates_router
+from server.app.routers.redaccion.llm_drafts_router import router as llm_drafts_router
+from server.app.routers.redaccion.hub_redaccion_router import router as hub_redaccion_router
 
 
 async def _init_hub_db() -> None:
@@ -130,6 +132,8 @@ def _register_edge(app: FastAPI) -> None:
     app.include_router(hub_feedback_router, prefix="/api/v1")
     app.include_router(hub_tasks_router, prefix="/api/v1")
     app.include_router(ingestion_router, prefix="/api/v1")
+    app.include_router(llm_drafts_router, prefix="/api/v1")  # Deploy: edge
+    app.include_router(hub_redaccion_router, prefix="/api/v1")  # Deploy: edge
 
 
 if DEPLOY_MODE in ("cloud", "all"):
