@@ -13,5 +13,6 @@
   "logout": "Tancar sessió",
   "language": "Idioma",
   "confirm_delete": "Confirmar eliminació?",
-  "no_results": "Sense resultats"
+  "no_results": "Sense resultats",
+  "continue": "Continuar"
 }

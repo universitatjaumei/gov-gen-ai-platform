@@ -13,5 +13,6 @@
   "logout": "Cerrar sesión",
   "language": "Idioma",
   "confirm_delete": "¿Confirmar eliminación?",
-  "no_results": "Sin resultados"
+  "no_results": "Sin resultados",
+  "continue": "Continuar"
 }

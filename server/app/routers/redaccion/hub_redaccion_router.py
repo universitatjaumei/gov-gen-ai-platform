@@ -13,6 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, get_session
 from server.app.core.auth.models import UserInfo
+from server.app.modules.redaccion.contracts.template import ReportTemplateSpec
+from server.app.modules.redaccion.contracts.ui import ReportUIContract
+from server.app.modules.redaccion.database.repos import ReportTemplateVersionRepo
 from server.app.modules.redaccion.services.template_migration_service import (
     CompatibilityConflictError,
     NewVersionNotice,
@@ -30,6 +33,23 @@ class MigrateRequest(BaseModel):
 
 class MigrateResponse(BaseModel):
     new_workspace_id: uuid.UUID
+
+
+@router.get(
+    "/template-versions/{version_id}/ui-contract",
+    response_model=ReportUIContract,
+)
+async def get_template_ui_contract(
+    version_id: uuid.UUID,
+    _user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ReportUIContract:
+    """Devuelve el ReportUIContract de una versión de plantilla."""
+    version = await ReportTemplateVersionRepo(session).get(version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail="Template version not found")
+    spec = ReportTemplateSpec.model_validate(version.spec_json)
+    return spec.ui_contract
 
 
 @router.get(
