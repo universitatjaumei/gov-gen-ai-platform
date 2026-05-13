@@ -4836,6 +4836,316 @@ describe('useAutosave', () => {
 
 ---
 
+## Fase 13 — NER reversible en el flujo de redacción (Subfase 1.C, PENDIENTE)
+
+> Posición en orden de ejecución: entre 1C.1 y 1C.2 (ver `PROJECT_STATE.md` → orden de ejecución acordado).
+>
+> Objetivo del bloque: garantizar que ningún dato PII real sale del edge hacia el LLM en el flujo de redacción, pero el output final preserva los datos originales para el usuario. Cumplimiento RGPD + LOPDGDD. Reutiliza el `PiiDetector` y `FakerGenerator` migrados en 9R.5.5 (no se reinventa nada).
+
+---
+
+### Prompt 13.1 (RED/GREEN) — Hooks NER pre/post-LLM con `RunAnonymizationContext` reversible
+
+**Modelo sugerido**: **Opus** — la reversibilidad tiene casos finos (orden de sustituciones para evitar matches parciales, citas que deben preservar originales tras revertir, modo LOPDGDD Disposición 7ª con formato específico, PII cruzando fronteras de bloque). Sonnet sale adelante pero con varias iteraciones.
+
+```markdown
+# PROMPT 13.1 (RED/GREEN) — NER reversible en el DraftingCoreGraph
+
+Objetivo: insertar hooks NER pre/post-LLM en el grafo para que ningún PII real llegue al LLM (RGPD), pero el output final preserve originales para el usuario. La reversibilidad se basa en un `RunAnonymizationContext` que mantiene el mapeo bidireccional original↔sintético durante toda la ejecución del workspace.
+
+Deploy: edge
+
+Dependencias:
+- 9R.5.5 (PiiDetector + FakerGenerator ya migrados desde legacy).
+- 9R.6.3 (AIAssistDraftNode) y 9R.6.4 (UserReviewGateNode/ApplyUserEditsNode) — los hooks se enganchan aquí.
+- 9R.1.4 (HubWorkspace).
+
+## Parte 1 — Contrato `RunAnonymizationContext`
+
+Estructura en `server/app/modules/redaccion/services/anonymization/run_context.py`:
+
+```python
+class PiiSpan(BaseModel):
+    type: Literal['PERSON', 'ORG', 'LOC', 'EMAIL', 'PHONE', 'DNI', 'NIE',
+                  'IBAN', 'CREDIT_CARD', 'POSTAL_CODE', 'DATE', 'NSS']
+    original: str
+    synthetic: str
+    confidence: float
+    source_block_id: str | None = None
+
+class AnonymizationMode(str, Enum):
+    OFF = "off"                                    # PII real al LLM (solo dev/test)
+    DETECT_ONLY = "detect_only"                    # detecta y audita, no sustituye
+    REPLACE = "replace"                            # sustituye y revierte (default)
+    REPLACE_WITH_DISPOSITION_7 = "replace_with_disposition_7"  # LOPDGDD para DNI/NIE/Passport
+
+class RunAnonymizationContext(BaseModel):
+    workspace_id: UUID
+    run_manifest_id: UUID | None = None
+    mode: AnonymizationMode
+    spans: list[PiiSpan]
+    forward_map: dict[str, str]    # original → synthetic
+    reverse_map: dict[str, str]    # synthetic → original
+    created_at: datetime
+
+    def substitute(self, text: str) -> str:
+        """Sustituye originales por sintéticos. Aplica matches por longitud descendente para evitar matches parciales."""
+        ...
+
+    def reverse(self, text: str) -> str:
+        """Sustituye sintéticos por originales. Solo revierte cadenas presentes en reverse_map (no falsos positivos)."""
+        ...
+```
+
+**Reglas duras**:
+- `substitute()` ordena `forward_map` por `len(key) desc` antes de sustituir para evitar que "Juan García" se rompa por sustituir "Juan" primero.
+- `reverse()` solo revierte cadenas EXACTAS presentes en `reverse_map`. Si el LLM "alucina" un nombre tipo Faker que no estaba en nuestro mapping, queda tal cual (cero falsos positivos).
+- Las cadenas sintéticas deben ser únicas en el texto antes de la sustitución (Faker con seed determinista por workspace+span_index garantiza unicidad razonable; si se detecta colisión durante substitute(), regenerar el sintético).
+- Modo LOPDGDD: para DNI/NIE/Passport NO se usa Faker; se aplica máscara `***1234X` (oculta primeros caracteres, preserva letra de control). Esta transformación NO es reversible para esos tipos — el output queda enmascarado también.
+
+## Parte 2 — Nuevo nodo `InitAnonymizationNode`
+
+Ubicación en el grafo: **entre DataQualityCheckNode (9R.6.2) y AIAssistDraftNode (9R.6.3)**. Es decir, después de la extracción determinista y antes de cualquier nodo que toque LLM.
+
+```python
+class InitAnonymizationNode:
+    def __init__(self, pii_detector: PiiDetector, faker_gen: FakerGenerator):
+        self._detector = pii_detector
+        self._faker = faker_gen
+
+    async def __call__(self, state: WorkspaceState) -> dict:
+        # 1. Leer modo del workspace
+        mode = state.anonymization_mode
+
+        if mode == AnonymizationMode.OFF:
+            return {"anonymization_context": RunAnonymizationContext(
+                workspace_id=state.workspace_id, mode=mode,
+                spans=[], forward_map={}, reverse_map={},
+                created_at=datetime.utcnow(),
+            )}
+
+        # 2. Detectar PII en todos los inputs y extracted blocks
+        text_corpus = self._gather_text(state)
+        spans = self._detector.detect_all(text_corpus)
+
+        # 3. Generar sintéticos (Faker con seed determinista por workspace+type+order)
+        forward_map = {}
+        reverse_map = {}
+        for i, span in enumerate(spans):
+            synth = self._faker.generate(
+                span.type, span.original,
+                seed=f"{state.workspace_id}-{i}",
+                mode=mode,
+            )
+            forward_map[span.original] = synth
+            reverse_map[synth] = span.original
+            span.synthetic = synth
+
+        return {"anonymization_context": RunAnonymizationContext(
+            workspace_id=state.workspace_id, mode=mode,
+            spans=spans, forward_map=forward_map, reverse_map=reverse_map,
+            created_at=datetime.utcnow(),
+        )}
+```
+
+## Parte 3 — Pre/post hooks en nodos AI
+
+Modificar `AIAssistDraftNode` (9R.6.3) sin tocar su lógica core:
+
+```python
+async def __call__(self, state: WorkspaceState) -> dict:
+    ctx = state.anonymization_context
+
+    # PRE-HOOK
+    if ctx and ctx.mode != AnonymizationMode.OFF:
+        block_context = ctx.substitute(block_context)
+
+    # ... llamada LLM existente ...
+    result_text = await self._llm.complete(prompt)
+
+    # POST-HOOK
+    if ctx and ctx.mode in (AnonymizationMode.REPLACE, AnonymizationMode.REPLACE_WITH_DISPOSITION_7):
+        result_text = ctx.reverse(result_text)
+
+    # ... construcción de BlockState con citas ...
+```
+
+Aplicar el mismo patrón en cualquier otro nodo del grafo que invoque LLM (ETLFactory NL→ops en 9R.5.8, ChartFactory NL→script en 9R.5.7, ScriptProposalService en 9R.5.5 ya tiene su propia anonimización para test data — no se duplica).
+
+## Parte 4 — Citation preservation
+
+Cuando `CitationAndTraceabilityNode` (9R.6.3) extrae citas del output del LLM:
+- El texto ya viene revertido (post-hook hizo `reverse()`).
+- Las citas `Citation.excerpt` contienen originales.
+- `Citation.source_document` y `page` permanecen estables (son metadata, no PII).
+
+Test crítico: una cita generada por el LLM sobre "Juan García" debe aparecer en el output final como "Juan García" (no "Carlos Pérez sintético") y debe enlazar al documento real (no a uno anonimizado).
+
+## Parte 5 — Persistencia segura en el manifest
+
+`RunAnonymizationContext` se persiste en `DraftingRunManifest` (9R.9.1) **sin originales**:
+
+```python
+class AnonymizationSummary(BaseModel):
+    """Solo metadata, sin originales ni sintéticos. Para auditoría."""
+    mode: AnonymizationMode
+    counts_by_type: dict[str, int]  # {PERSON: 5, IBAN: 2, ...}
+    total_spans: int
+    detected_at: datetime
+```
+
+`DraftingRunManifest.anonymization_summary` se rellena al final del grafo. Los mapas forward/reverse NUNCA se persisten en BD ni se loguean. Viven solo en memoria durante la ejecución del workspace.
+
+## Parte 6 — Configuración por workspace
+
+`HubWorkspace` añade columna `anonymization_mode: str` (default `'replace'`).
+
+Migración Alembic en `server/migrations/versions/`:
+```python
+op.add_column("hub_workspaces",
+    sa.Column("anonymization_mode", sa.String(40),
+              nullable=False, server_default="replace"))
+```
+
+## Tests (RED → GREEN)
+
+Unit tests del context:
+- test_substitute_orders_by_length_descending_to_avoid_partial_matches
+- test_reverse_only_replaces_exact_matches_no_false_positives
+- test_substitute_handles_pii_appearing_in_json_or_quoted_string
+- test_disposition_7_masks_dni_with_check_letter_preserved
+- test_disposition_7_is_not_reversible_for_dni
+
+Nodo init:
+- test_init_anonymization_node_detects_all_pii_in_inputs_and_extracted_blocks
+- test_init_anonymization_node_generates_unique_synthetics_per_span
+- test_init_anonymization_node_off_mode_returns_empty_context
+
+Integración hooks en grafo:
+- test_ai_node_receives_anonymized_context_when_mode_replace
+- test_ai_node_output_is_reversed_after_llm_response
+- test_detect_only_mode_does_not_substitute_in_prompt
+- test_off_mode_passes_real_pii_to_llm
+
+Citas:
+- test_citations_preserve_original_pii_after_reversal
+- test_citations_keep_source_document_metadata
+
+Persistencia:
+- test_run_manifest_records_summary_without_originals
+- test_anonymization_context_never_persists_forward_or_reverse_map_to_db
+
+## Criterio de done
+
+- ≥16 tests verdes.
+- `WorkspaceState.anonymization_context` añadido en `contracts/runtime.py`.
+- `HubWorkspace.anonymization_mode` con migración Alembic aplicada.
+- `InitAnonymizationNode` integrado en `build_core_graph()` (modificación pequeña a `core_graph.py`).
+- Hooks aplicados en `AIAssistDraftNode`, `ETLFactory.generate_operations_from_nl` (9R.5.8) y `ChartFactory.generate_script` (9R.5.7).
+- Documentación en `docs/REDACCION_CONTRACT_FIRST.md`: sección "NER reversible (Fase 13)".
+
+## Verificación manual obligatoria
+
+1. Crear workspace con mode='replace', subir Excel con columna `nombre_persona` real.
+2. Verificar en Langfuse trace que el prompt enviado al LLM no contiene los nombres originales.
+3. Verificar que el output final del workspace SÍ contiene los nombres originales.
+4. Verificar que el RunManifest contiene `anonymization_summary.counts_by_type` con los conteos.
+5. Verificar que la BD no contiene en ningún campo los originales en forma sintética ni los mapas.
+```
+
+---
+
+### Prompt 13.2 (RED/GREEN) — Panel admin de auditoría NER + toggle per-workspace
+
+**Modelo sugerido**: **Sonnet** — endpoints REST + componente React leyendo summary. Sin lógica LLM ni decisiones de diseño abiertas.
+
+```markdown
+# PROMPT 13.2 (RED/GREEN) — UI de auditoría NER y configuración por workspace
+
+Objetivo: dar visibilidad al admin sobre qué PII se detectó y anonimizó en cada workspace, y permitir al owner cambiar el modo de anonimización antes de ejecutar el grafo.
+
+Deploy: edge (endpoints) + frontend.
+
+Dependencias:
+- 13.1 (RunAnonymizationContext + HubWorkspace.anonymization_mode persistidos).
+- 9R.7.6 (BlockDebugPanel como contenedor).
+
+## Parte 1 — Endpoints
+
+`server/app/routers/redaccion/anonymization_router.py`:
+
+- `GET /api/v1/redaccion/workspaces/{workspace_id}/anonymization-summary`
+  - Devuelve `AnonymizationSummary` del último run (sin originales, sin sintéticos):
+    ```json
+    {
+      "mode": "replace",
+      "counts_by_type": {"PERSON": 5, "IBAN": 2, "EMAIL": 1},
+      "total_spans": 8,
+      "last_run_at": "2026-05-13T...",
+      "current_workspace_mode": "replace"
+    }
+    ```
+  - 404 si no hay run ejecutado todavía.
+  - Permisos: owner del workspace o admin/partner.
+
+- `PATCH /api/v1/redaccion/workspaces/{workspace_id}/anonymization-mode`
+  - Body: `{"mode": "off" | "detect_only" | "replace" | "replace_with_disposition_7"}`
+  - 422 si `workspace.status IN ('drafting', 'in_review', 'assembled', 'exported')` con detalle `MODE_LOCKED_DURING_EXECUTION`.
+  - Solo owner. Audit event en `hub_workspace_audit_events` (event="anonymization_mode_changed").
+
+- `POST /api/v1/redaccion/workspaces/{workspace_id}/re-analyze`
+  - Dispara solo `InitAnonymizationNode` sin llegar al LLM. Útil para previsualizar conteos antes de ejecutar.
+  - Permisos: owner.
+
+## Parte 2 — UI
+
+Componente `WorkspaceAnonymizationPanel.tsx` en `frontend/src/redaccion/components/`:
+
+- **Sección 1 — Modo actual** (selector deshabilitado si workspace en ejecución):
+  - Radio buttons: Off / Detect only / Replace / Replace con LOPDGDD
+  - Descripción debajo de cada opción
+  - Badge LOPDGDD si modo = `replace_with_disposition_7`
+
+- **Sección 2 — Detección actual** (tabla de conteos):
+  - Columnas: Tipo PII | Cantidad detectada
+  - Total al pie
+  - Vacío si no se ha ejecutado análisis
+
+- **Sección 3 — Acciones**:
+  - Botón "Re-analizar ahora" (POST re-analyze)
+  - Botón "Cambiar modo" (PATCH, solo si workspace no en ejecución)
+
+Integración: se monta dentro de `BlockDebugPanel` (9R.7.6) como pestaña adicional "Anonimización", visible para admin/partner siempre y para el owner cuando `workspace.status NOT IN ('drafting','in_review')`.
+
+Hooks Orval: `useGetAnonymizationSummary`, `usePatchAnonymizationMode`, `useReAnalyzeAnonymization`.
+
+## Tests
+
+Backend pytest:
+- test_summary_returns_metadata_without_originals
+- test_summary_returns_404_when_no_run_executed
+- test_summary_forbidden_for_non_owner_non_admin
+- test_patch_mode_rejects_during_drafting_status
+- test_patch_mode_records_audit_event
+- test_re_analyze_triggers_init_node_without_llm
+
+Frontend Vitest:
+- test_panel_renders_counts_by_type
+- test_panel_disables_mode_selector_when_workspace_drafting
+- test_panel_shows_lopdgdd_badge_in_disposition_7_mode
+- test_re_analyze_button_dispatches_mutation
+
+## Criterio de done
+
+- 10 tests verdes (6 backend + 4 frontend).
+- Endpoints en OpenAPI, hooks Orval regenerados.
+- i18n en ES/EN/CA para todas las etiquetas.
+- TypeScript limpio.
+- Sin strings hardcoded.
+```
+
+---
+
 ### Prompt 1C.2 — Editor accesible: shortcuts, focus trap y WCAG 2.2 AA (TDD RED/GREEN)
 
 **Modelo sugerido**: **Sonnet** — patrones WCAG 2.2 AA bien establecidos; alcance cerrado (shortcuts + focus trap + aria-live).
@@ -5619,6 +5929,262 @@ class TestExportEndpointWithDrive:
 - Migración Alembic: `drive_credentials_json` y `drive_folder_id` en `hub_clients`.
 - `ExportDropdown` en el frontend oculta la opción Drive si la Organización no tiene credenciales configuradas.
 - Los 4 tests pasan en verde.
+
+---
+
+## Fase 20 reducida — WCAG 2.2 AA transversal (PENDIENTE)
+
+> Posición en orden de ejecución: entre 1C.4 (exportación) y Fase 11 (autoinstalación). Ver `PROJECT_STATE.md` → orden de ejecución acordado.
+>
+> Objetivo del bloque: garantizar WCAG 2.2 AA en todas las rutas del MVP — widget público, redacción, admin hub, auth — con auditoría automatizada en CI. Excluido: consola conversacional admin (diferida a Fase 2). Se beneficia de los patrones ya aplicados en 1C.2 (editor accesible) y los extiende al resto de la app.
+
+---
+
+### Prompt 20.1 (RED/GREEN) — Infraestructura de auditoría WCAG con axe-core + CI gate
+
+**Modelo sugerido**: **Sonnet** — setup de jest-axe/axe-core en Vitest + workflow CI. Patrón estándar.
+
+```markdown
+# PROMPT 20.1 (RED/GREEN) — Auditoría a11y automatizada en suite de tests + CI
+
+Objetivo: añadir auditoría automatizada de accesibilidad WCAG 2.2 AA a la suite de tests del frontend y como gate de CI. Garantiza que cualquier regresión es detectada antes de merge.
+
+Deploy: frontend + CI.
+
+Dependencias:
+- 1C.2 ya establece los patrones WCAG en el editor de Workspace. Este prompt extiende la cobertura a toda la app.
+- 10.x (sistema de temas) ya debería estar verde para que los contrastes de color sean estables.
+
+## Parte 1 — Dependencias y configuración
+
+Añadir a `frontend/package.json`:
+```json
+{
+  "devDependencies": {
+    "jest-axe": "^9.0.0",
+    "@axe-core/react": "^4.x"
+  }
+}
+```
+
+## Parte 2 — Helper reutilizable
+
+`frontend/src/test/a11y.ts`:
+```typescript
+import { axe, toHaveNoViolations } from 'jest-axe';
+import { configureAxe } from 'jest-axe';
+
+expect.extend(toHaveNoViolations);
+
+const axeConfig = configureAxe({
+  rules: {
+    // WCAG 2.2 AA — lista explícita activada
+    'color-contrast': { enabled: true },
+    'aria-required-attr': { enabled: true },
+    'aria-required-children': { enabled: true },
+    'aria-required-parent': { enabled: true },
+    'aria-valid-attr': { enabled: true },
+    'aria-valid-attr-value': { enabled: true },
+    'button-name': { enabled: true },
+    'document-title': { enabled: true },
+    'duplicate-id': { enabled: true },
+    'form-field-multiple-labels': { enabled: true },
+    'frame-title': { enabled: true },
+    'html-has-lang': { enabled: true },
+    'html-lang-valid': { enabled: true },
+    'image-alt': { enabled: true },
+    'input-button-name': { enabled: true },
+    'input-image-alt': { enabled: true },
+    'label': { enabled: true },
+    'link-name': { enabled: true },
+    'list': { enabled: true },
+    'listitem': { enabled: true },
+    'meta-viewport': { enabled: true },
+    'select-name': { enabled: true },
+    'svg-img-alt': { enabled: true },
+    'tabindex': { enabled: true },
+    'focus-order-semantics': { enabled: true },
+    'landmark-one-main': { enabled: true },
+    'region': { enabled: true },
+  },
+});
+
+export async function expectNoA11yViolations(container: HTMLElement) {
+  const results = await axeConfig(container);
+  expect(results).toHaveNoViolations();
+}
+```
+
+## Parte 3 — Tests baseline obligatorios
+
+`frontend/src/__tests__/a11y/` (nuevo directorio):
+
+- `widget.a11y.test.tsx` — renderiza el widget público completo, ejecuta `expectNoA11yViolations`.
+- `redaccion-workspace.a11y.test.tsx` — renderiza un workspace con bloques de cada tipo + drawer abierto.
+- `redaccion-llm-draft-preview.a11y.test.tsx` — pantalla LLMDraftPreviewPage (9R.7.4) con draft mockeado.
+- `redaccion-script-wizard.a11y.test.tsx` — ScriptProposalWizardPage (9R.7.5) en cada uno de los 7 pasos.
+- `admin-chatbots.a11y.test.tsx` — ChatbotsPage con listado mockeado.
+- `admin-clients.a11y.test.tsx` — ClientsPage con listado mockeado.
+- `admin-llm-configs.a11y.test.tsx` — LLMConfigsPage.
+- `admin-prompts.a11y.test.tsx` — PromptsPage.
+- `auth-login.a11y.test.tsx` — LoginPage.
+
+Mínimo 9 tests baseline (uno por pantalla principal del MVP).
+
+## Parte 4 — CI gate
+
+Modificar `.github/workflows/contract.yml` (o el workflow equivalente):
+
+```yaml
+jobs:
+  a11y:
+    runs-on: ubuntu-latest
+    needs: contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+      - run: cd frontend && npm ci
+      - run: cd frontend && npm run test:a11y
+```
+
+Añadir script en `frontend/package.json`:
+```json
+"scripts": {
+  "test:a11y": "vitest run src/__tests__/a11y"
+}
+```
+
+## Parte 5 — Documentación
+
+`docs/A11Y_GUIDELINES.md` (nuevo):
+- Cómo añadir un test a11y a una nueva pantalla
+- Reglas WCAG 2.2 AA cubiertas automáticamente vs. las que requieren revisión manual (Lighthouse, lector de pantalla)
+- Cómo interpretar y arreglar las violaciones más comunes (label, contrast, focus-order)
+
+## Tests (RED → GREEN)
+
+- 9 tests `*.a11y.test.tsx` deben **fallar** inicialmente con violaciones reales (RED). Documentar las violaciones detectadas en un archivo `a11y-baseline.md` temporal para que 20.2 las pueda atacar.
+- Una vez 20.2 corrija las violaciones, este conjunto se vuelve verde.
+
+> **Importante para 20.1**: este prompt entrega la INFRAESTRUCTURA. No se espera que los 9 tests pasen en verde tras 20.1. La validación de done para 20.1 es:
+> - jest-axe/axe-core instalado correctamente y funcionando.
+> - Helper a11y disponible.
+> - 9 tests escritos y ejecutables (aunque fallen por violaciones reales).
+> - Workflow CI configurado (puede quedar como `continue-on-error: true` temporalmente hasta cerrar 20.2).
+> - `a11y-baseline.md` generado con el listado de violaciones detectadas.
+
+## Criterio de done
+
+- jest-axe y axe-core instalados.
+- Helper `expectNoA11yViolations` disponible y testeado contra un componente "perfecto" sintético.
+- 9 archivos de test a11y creados, ejecutables vía `npm run test:a11y`.
+- Workflow CI añadido (puede ser `continue-on-error: true` temporal).
+- `a11y-baseline.md` con violaciones documentadas por pantalla → entrada para 20.2.
+- `docs/A11Y_GUIDELINES.md` creado.
+```
+
+---
+
+### Prompt 20.2 (RED/GREEN) — Sweep de remediación de violaciones WCAG en pantallas MVP
+
+**Modelo sugerido**: **Sonnet** — corrección sistemática por categorías de violación con patrones conocidos (labels, contrast, focus). Si alguna pantalla requiere reestructuración importante, escalar a Opus puntualmente.
+
+```markdown
+# PROMPT 20.2 (RED/GREEN) — Corrección sistemática de violaciones WCAG detectadas en 20.1
+
+Objetivo: corregir todas las violaciones WCAG 2.2 AA detectadas por la auditoría automatizada de 20.1, hasta que los 9 tests baseline pasen en verde y el CI gate pueda quitar el `continue-on-error: true`.
+
+Deploy: frontend.
+
+Dependencias:
+- 20.1 GREEN con `a11y-baseline.md` poblado.
+- 1C.2 (patrones de focus trap + aria-live en redacción) como referencia.
+- 10.x (sistema de temas con tokens de contraste estables).
+
+## Alcance — pantallas a corregir
+
+Mismo conjunto que los 9 tests de 20.1:
+- Widget público chatbot (9B).
+- Redacción: Workspace + LLMDraftPreviewPage + ScriptProposalWizardPage + ReportTemplateBuilderPage + GenericReportWizard + AdminScriptReviewQueuePage.
+- Admin Hub: ChatbotsPage, ClientsPage, LLMConfigsPage, PromptsPage, DocumentsPage, ReportsPage.
+- Auth: LoginPage.
+
+Excluido (diferido a Fase 2):
+- Consola conversacional admin.
+- Componentes que aún no existen al cierre de 20.2.
+
+## Categorías de violación a corregir (en orden de prioridad)
+
+### Categoría 1 — Labels y nombres accesibles
+
+- Cada `<input>`, `<select>`, `<textarea>` debe tener `<label>` asociado por `htmlFor` o `aria-label`.
+- Cada `<button>` con solo icono debe tener `aria-label`.
+- Cada link con solo icono debe tener `aria-label` o texto sr-only.
+
+### Categoría 2 — Color contrast
+
+- Auditar tokens de tema (10.6) y ajustar ratios:
+  - Texto normal: ≥4.5:1
+  - Texto grande (≥18pt o ≥14pt bold): ≥3:1
+  - UI components y graphical objects: ≥3:1
+- Modificar los presets de tema (10.5) si el preset Default no cumple.
+
+### Categoría 3 — Heading order y landmarks
+
+- Cada página tiene exactamente un `<h1>`.
+- La jerarquía h1→h2→h3 no salta niveles.
+- Cada página tiene `<main>` y los landmarks pertinentes (`<nav>`, `<aside>`, `<footer>`).
+
+### Categoría 4 — Focus management
+
+- Todos los elementos interactivos tienen focus visible (no `outline: none` sin reemplazo).
+- Tab order es lógico (top→bottom, left→right culturalmente).
+- Modals y drawers (DrawerHub de 1C.0) atrapan foco (ya cubierto en 1C.2; verificar replicación).
+- Al cerrar un modal/drawer, el foco vuelve al trigger.
+
+### Categoría 5 — ARIA
+
+- Roles ARIA solo cuando el HTML semántico no basta. Preferir `<button>` sobre `<div role="button">`.
+- `aria-live="polite"` para notificaciones, `aria-live="assertive"` solo para errores críticos.
+- `aria-current="page"` en navegación.
+- `aria-expanded`, `aria-controls` en dropdowns/accordions.
+
+### Categoría 6 — Imágenes y media
+
+- Cada `<img>` con contenido informativo tiene `alt`.
+- Imágenes decorativas: `alt=""`.
+- SVG icons inline: `aria-hidden="true"` si decorativos; `role="img"` + `<title>` si informativos.
+
+### Categoría 7 — Forms y errores
+
+- Mensajes de error asociados al input por `aria-describedby`.
+- Indicación de campos requeridos no solo por color (asterisco textual o `aria-required="true"`).
+- Validación en vivo anunciada por `aria-live` en formularios largos.
+
+## Workflow de remediación
+
+Para cada categoría:
+1. Ejecutar `npm run test:a11y` → ver qué pantallas violan esa regla.
+2. Aplicar corrección sistemática (un commit por categoría facilita revisión).
+3. Re-ejecutar los tests → verificar reducción de violaciones.
+4. Iterar hasta verde.
+
+## Tests
+
+Los 9 tests de 20.1 deben pasar todos en verde tras este prompt.
+
+Tests adicionales puntuales si emerge una corrección no trivial:
+- Si se introduce un focus-trap nuevo: `test_*_focus_trap_returns_focus_to_trigger`.
+- Si se cambia el theme default por contraste: `test_default_theme_meets_4_5_1_ratio`.
+
+## Criterio de done
+
+- 9 tests baseline `*.a11y.test.tsx` en verde.
+- `continue-on-error: true` removido del job CI de a11y.
+- `a11y-baseline.md` eliminado (su propósito termina aquí).
+- `docs/A11Y_CHECKLIST.md` (manual) creado con plan de auditoría adicional vía Lighthouse + NVDA/VoiceOver para validar lo que axe no cubre.
+- PR documenta las correcciones aplicadas por categoría (al menos un párrafo por cada una de las 7 categorías arriba).
+```
 
 ---
 
