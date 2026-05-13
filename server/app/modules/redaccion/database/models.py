@@ -175,3 +175,28 @@ class HubWorkspaceBlock(HubOperationalBase):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now, onupdate=_now
     )
+
+
+class HubWorkspaceAuditEvent(HubOperationalBase):
+    """Registro de auditoría de transiciones de bloque y eventos de workspace."""
+
+    __tablename__ = "hub_workspace_audit_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    block_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    event: Mapped[str] = mapped_column(String(50), nullable=False)
+    from_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    to_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    actor: Mapped[str] = mapped_column(String(255), nullable=False, default="system")
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )

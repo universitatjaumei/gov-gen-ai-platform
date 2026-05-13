@@ -15,6 +15,7 @@ from server.app.modules.redaccion.database.models import (
     HubReportTemplateVersion,
     HubRunManifest,
     HubWorkspace,
+    HubWorkspaceAuditEvent,
     HubWorkspaceBlock,
 )
 
@@ -141,3 +142,22 @@ class RunManifestRepo:
         self._session.add(manifest)
         await self._session.flush()
         return manifest
+
+
+class WorkspaceAuditEventRepo:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def save(self, event: HubWorkspaceAuditEvent) -> HubWorkspaceAuditEvent:
+        self._session.add(event)
+        await self._session.flush()
+        return event
+
+    async def list(self, workspace_id: uuid.UUID) -> list[HubWorkspaceAuditEvent]:
+        stmt = (
+            select(HubWorkspaceAuditEvent)
+            .where(HubWorkspaceAuditEvent.workspace_id == workspace_id)
+            .order_by(HubWorkspaceAuditEvent.created_at)
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
