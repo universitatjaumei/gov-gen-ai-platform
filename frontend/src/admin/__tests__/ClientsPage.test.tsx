@@ -96,14 +96,14 @@ describe('ClientsPage', () => {
       </QueryClientProvider>
     )
 
-    await waitFor(() => screen.getByRole('button', { name: /nuevo cliente/i }))
+    await waitFor(() => screen.getByRole('button', { name: /nueva organización/i }))
     await act(async () => {
-      screen.getByRole('button', { name: /nuevo cliente/i }).click()
+      screen.getByRole('button', { name: /nueva organización/i }).click()
     })
 
     expect(screen.getByRole('dialog')).toBeDefined()
 
-    const nameInput = screen.getByLabelText(/nombre del cliente/i)
+    const nameInput = screen.getByLabelText(/nombre de la organización/i)
     const partnerInput = screen.getByLabelText(/partner id/i)
     fireEvent.change(nameInput, { target: { value: 'Nou Client' } })
     fireEvent.change(partnerInput, { target: { value: 'partner-3' } })
