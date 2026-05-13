@@ -1939,7 +1939,7 @@ LoadTemplateNode
 9R.5.2 (RED/GREEN)  ExcelExtractionPipeline + PDFTextExtractionPipeline
 9R.5.3 (RED/GREEN)  PDFTableExtractionPipeline + ManualInputPipeline
 9R.5.4 (RED/GREEN)  ExtractionPipelineFactory + AdminScriptExtractionPipeline (motor de ejecución)
-9R.5.5 (RED/GREEN)  ScriptProposalService + TestDataAnonymizerService (Faker) + endpoints propose/anonymize/test/validate
+9R.5.5 (RED/GREEN)  ScriptProposalService + migración módulo anonimización (spaCy NER + Faker + regex + anclajes, desde client_app legacy) + endpoints propose/describe/anonymize/test/validate
 9R.5.6 (RED/GREEN)  Workflow de aprobación scripts: self-service usuario / cola admin para plantillas globales
 
 9R.6.1 (RED/GREEN)  CoreGraph: LoadTemplate / ValidateInputContract / FileNormalization
@@ -2814,40 +2814,92 @@ Nota (2026-05-13): este prompt entrega solo el **motor de ejecución** (audit + 
 
 ---
 
-### Prompt 9R.5.5 (RED/GREEN) — ScriptProposalService + anonimización Faker + endpoints propose/test
+### Prompt 9R.5.5 (RED/GREEN) — ScriptProposalService + migración del módulo de anonimización (spaCy + Faker, desde legacy)
 
 ```markdown
-# PROMPT 9R.5.5 (RED/GREEN) — Workflow de proposición de scripts: motor backend
+# PROMPT 9R.5.5 (RED/GREEN) — Workflow de proposición de scripts: motor backend con anonimización híbrida
 
-Objetivo: permitir que cualquier usuario solicite a un LLM la generación de un script Python de extracción para su plantilla, validarlo automáticamente (AST audit + sandbox test obligatorio sobre datos reales o sintéticos) y dejarlo listo para persistir/promocionar. Este prompt entrega solo el motor backend; los endpoints de aprobación/persistencia llegan en 9R.5.6.
+Objetivo: permitir que cualquier usuario solicite a un LLM la generación de un script Python de extracción para su plantilla, validarlo automáticamente (AST audit + sandbox test obligatorio sobre datos reales o sintéticos) y dejarlo listo para persistir/promocionar. Este prompt entrega el motor backend completo, incluyendo la migración del módulo de anonimización legacy (spaCy NER + Faker + regex + anclajes de formulario), que ya estaba desarrollado y probado en client_app. Los endpoints de aprobación/persistencia llegan en 9R.5.6.
+
+> **Avance respecto al plan original**: este prompt absorbe parte del trabajo previsto inicialmente para Fase 13 (NER). Se aprovecha el módulo legacy ya probado de `client_app/app/modules/privacy/` en lugar de reinventarlo. Fase 13 se reducirá a los hooks pre/post-LLM dentro del DraftingCoreGraph, reutilizando el `PiiDetector` que se construye aquí.
 
 Deploy: edge
 
-Estructura nueva:
-- server/app/modules/redaccion/services/script_proposal_service.py
-- server/app/modules/redaccion/services/test_data_anonymizer.py
-- server/app/modules/redaccion/database/models.py  → añade HubScriptProposal
-- server/app/modules/redaccion/database/repos.py   → añade ScriptProposalRepo
-- server/app/routers/redaccion/scripts_router.py   → endpoints propose/anonymize/test/validate
+## Parte 1 — Migración del módulo de anonimización desde legacy
 
-ScriptProposalService:
-- Constructor recibe LLMService + ScriptSecurityAuditor (reusar 9R.5.4).
-- propose(prompt_nl, sample_schema, owner_kind) → { code, audit_result }
-- System prompt acotado:
-  - Lista blanca de imports (la misma que ScriptSecurityAuditor.WHITELIST_MODULES).
-  - Contrato de salida: el script debe asignar `result: dict` con claves `tables: list[dict]`, `metrics: list[dict]`, `free_text: str | None`.
-  - Variables disponibles en el sandbox: file_path, raw_text, options.
-  - Ejemplos few-shot de scripts válidos (al menos uno para Excel, uno para PDF text).
-- Ejecuta `ScriptSecurityAuditor.audit(code)` antes de devolver. Si falla, devuelve `audit_result` con findings pero no levanta excepción (el cliente decide si re-prompttear).
+Fuente legacy (a migrar):
+- `client_app/app/modules/privacy/anonymizer.py` (1011 líneas, motor core)
+- `client_app/app/modules/privacy/anonymizer_service.py` (204 líneas, alto nivel xlsx/csv)
+- `client_app/app/utils/pii_detector.py` (wrapper)
+- `client_app/app/services/anonymization_service.py` (async wrapper + auditoría)
+- Tests asociados en `client_app/tests/`: test_ner_anonymizer.py, test_anonymizer_patterns.py, test_anonymizer.py, test_anonymizer_extended.py, test_anonymizer_service.py, test_extraction_anonymization.py, test_etl_anonymization.py, test_custom_script_anonymization.py (los UI tests no se migran — los reemplaza 9R.7.5).
 
-TestDataAnonymizerService (Faker manual, sin NER — Fase 13 ampliará con detección automática):
-- describe_columns(file_ref: StorageRef) → list[ColumnInfo(name, sample_values, inferred_type)]
-- anonymize(file_ref, substitutions: list[ColumnSubstitution]) → StorageRef (nueva versión sintética)
-- ColumnSubstitution: { column_name, faker_provider: "name"|"email"|"phone"|"iban"|"address"|"date"|"integer"|"keep" }
-- Mantiene tipo y cardinalidad (la longitud del archivo no cambia); los valores se reemplazan determinísticamente con Faker(seed=hash(file_path)).
-- Solo soporta CSV/XLSX en este prompt (PDFs van con keep o requieren admin manual).
+Destino:
+- `server/app/modules/redaccion/services/anonymization/`
+  - `__init__.py`
+  - `pii_detector.py`            # PiiDetector (regex + spaCy NER + anclajes)
+  - `faker_generator.py`         # FakerGenerator con contexto (firstname/lastname/fullname)
+  - `anonymizer.py`              # AnonymizationContext (motor)
+  - `service.py`                 # AnonymizerService (alto nivel async)
+  - `policies.py`                # Strategies predefinidas (NER_PERSON→FAKE_NAME, EMAIL→TOKEN, DNI→CODE, AEPD/LOPDGDD)
+- `server/tests/modules/redaccion/anonymization/` (tests migrados, adaptados a async)
 
-HubScriptProposal (ORM):
+Adaptaciones obligatorias durante la migración:
+1. **Reemplazar `file_path: str` por `file_ref: StorageRef`** en todas las firmas públicas. Internamente usar StorageService para descargar antes de procesar.
+2. **Hacer async** los puntos de E/S (descarga, subida). El motor de detección/sustitución puede seguir síncrono (CPU-bound).
+3. **Eliminar dependencia de `EncryptionService`** para persistencia cifrada en disco — no se necesita en MVP de scripts (la determinismo se obtiene con `Faker(seed=hash(file_path))` por proposal). Mantener la API `save_state/load_state` pero como no-op opcional, marcada `# TODO post-MVP: persistencia de auditoría`.
+4. **Quitar la integración con `enterprise_audit_service`** del legacy — se reemplaza por el audit log nativo del módulo redacción (HubWorkspaceAuditEvent existente desde 9R.8.1).
+5. **Mantener Disposición 7ª LOPDGDD** (`anonymize_document_id`) — útil para despliegues en sector público español.
+6. **Mantener fallback sin spaCy** — si el modelo no carga, degrada a solo regex con warning explícito en el audit_result devuelto al usuario.
+
+Dependencias nuevas en pyproject.toml:
+- `spacy>=3.7`
+- `faker>=22.0` (probablemente ya esté)
+- En Dockerfile (server): `RUN python -m spacy download es_core_news_md && python -m spacy download en_core_web_md` durante el build.
+
+## Parte 2 — TestDataAnonymizerService (envoltura sobre el módulo migrado)
+
+`server/app/modules/redaccion/services/test_data_anonymizer.py`:
+
+Métodos públicos:
+- `describe_columns(file_ref: StorageRef) -> ColumnInfo[]`
+  - Solo aplica a XLSX/CSV.
+  - Para cada columna: ejecuta `PiiDetector` sobre los primeros 50 valores no nulos.
+  - Combina con heurística por nombre de columna ("nombre", "apellido", "email", "iban", "dni"…).
+  - Devuelve `ColumnInfo(name, sample_values, inferred_faker_provider, confidence)`.
+- `anonymize_tabular(file_ref, substitutions: list[ColumnSubstitution]) -> StorageRef`
+  - Aplica el FakerGenerator del módulo migrado, fila a fila.
+  - Devuelve referencia al archivo sintético en storage.
+- `anonymize_pdf_to_text(file_ref: StorageRef) -> StorageRef`
+  - Pipeline: Docling → markdown → `AnonymizationContext.anonymize()` sobre el texto completo → guarda `.md` sintético en storage.
+  - **Opción 1 confirmada**: no regenera PDF. El admin lo verá como markdown plano. Justificación: el pipeline de scripts trabaja sobre `raw_text` extraído por Docling, regenerar el PDF añadiría coste sin valor.
+- `preview_pdf_spans(file_ref: StorageRef) -> PiiSpan[]`
+  - Para la UI: devuelve los spans detectados con `{start, end, type, original_text, suggested_fake}` para que el usuario revise antes de aplicar.
+
+ColumnSubstitution:
+```python
+class ColumnSubstitution(BaseModel):
+    column_name: str
+    faker_provider: Literal[
+        "keep", "name", "first_name", "last_name", "email", "phone",
+        "iban", "dni", "nie", "address", "city", "company", "date", "integer"
+    ]
+```
+
+## Parte 3 — ScriptProposalService
+
+`server/app/modules/redaccion/services/script_proposal_service.py`:
+
+- Constructor: `(llm_service, script_auditor: ScriptSecurityAuditor)` — reutiliza el auditor de 9R.5.4.
+- `propose(prompt_nl, sample_schema, owner_kind) -> ProposalResult`:
+  - System prompt acotado (lista blanca de imports = WHITELIST_MODULES de 9R.5.4; contrato de salida `result: dict`; variables disponibles `file_path/raw_text/options`).
+  - Few-shot: al menos 1 ejemplo Excel + 1 ejemplo PDF text + 1 ejemplo de agregación con pandas.
+  - Ejecuta `script_auditor.audit(code)` y devuelve `{code, audit_result}`.
+  - **No persiste** — el guardado lo hace el endpoint.
+
+## Parte 4 — Persistencia
+
+`HubScriptProposal` (ORM, sobre HubOperationalBase):
 - id: UUID PK
 - proposer_user_id: UUID
 - target_owner_kind: str  # 'user' | 'platform'
@@ -2855,50 +2907,93 @@ HubScriptProposal (ORM):
 - prompt_nl: text
 - code: text
 - audit_result_json: JSONB
-- test_data_ref: JSONB | null   # StorageRef serializado (null hasta el primer /test)
+- test_data_ref: JSONB | null         # StorageRef serializado, null hasta el primer /test
 - test_data_is_anonymized: bool
-- test_data_anonymization_map: JSONB | null
+- test_data_anonymization_map: JSONB | null    # {columns: [...], spans: [...]} según tipo
+- test_data_kind: str | null          # 'xlsx' | 'csv' | 'pdf_text'
 - test_result_json: JSONB | null
-- test_result_hash: str | None (sha256 hex)
+- test_result_hash: str | null        # sha256 hex
 - test_validated_by_proposer_at: timestamp | null
-- status: str  # proposed | tested | rejected (los estados de aprobación llegan en 9R.5.6)
+- status: str   # proposed | tested | rejected (los de aprobación llegan en 9R.5.6)
 - created_at, updated_at
 
-Endpoints (POST /api/v1/redaccion/scripts/...):
-- POST /propose
-  - Body: { prompt_nl, target_owner_kind, target_template_id?, sample_schema? }
-  - Crea HubScriptProposal con status='proposed', audit_result_json relleno, sin test_data ni result.
-  - Devuelve { proposal_id, code, audit_result }
-- POST /{proposal_id}/anonymize-test-data
-  - Body: multipart con el archivo de test + JSON con substitutions
-  - Sube archivo original a storage (privado al proposer), genera sintético, devuelve { synthetic_ref, anonymization_map }
-- POST /{proposal_id}/test
-  - Body: { test_data_ref, use_real_data: bool }
-  - Reglas: si target_owner_kind='platform' → use_real_data DEBE ser false (422 si true).
-  - Ejecuta exactamente el mismo sandbox que AdminScriptExtractionPipeline._execute_in_sandbox.
-  - Captura ExtractionResult, calcula hash, guarda en BD, transiciona status proposed→tested.
-  - Devuelve { result, hash }.
-- POST /{proposal_id}/validate-test-result
-  - Cualquier usuario que sea el proposer pulsa "este resultado es correcto".
-  - Marca test_validated_by_proposer_at=now.
-  - 422 si no hay test_result_json todavía.
+Migración Alembic: tabla `hub_script_proposals` + FKs a hub_users.
 
-Tests (RED → GREEN):
+## Parte 5 — Endpoints
+
+Router: `server/app/routers/redaccion/scripts_router.py` (Deploy: edge, registrado en `_register_edge`).
+
+- `POST /api/v1/redaccion/scripts/propose`
+  - Body: `{prompt_nl, target_owner_kind, target_template_id?, sample_schema?}`
+  - Crea HubScriptProposal status='proposed', devuelve `{proposal_id, code, audit_result}`.
+
+- `POST /api/v1/redaccion/scripts/{proposal_id}/describe-test-data`
+  - Body: multipart con archivo XLSX/CSV.
+  - Sube a storage. Llama `describe_columns()`. Devuelve sugerencias de Faker provider por columna.
+
+- `POST /api/v1/redaccion/scripts/{proposal_id}/preview-pdf-spans`
+  - Body: multipart con PDF.
+  - Sube a storage. Llama `preview_pdf_spans()`. Devuelve los PiiSpan detectados.
+
+- `POST /api/v1/redaccion/scripts/{proposal_id}/anonymize-test-data`
+  - Body: `{file_ref, kind: 'xlsx'|'csv'|'pdf_text', substitutions?, span_overrides?}`
+  - Tabular: aplica `anonymize_tabular`. PDF: aplica `anonymize_pdf_to_text` (con overrides del usuario sobre los spans detectados).
+  - Devuelve `{synthetic_ref, anonymization_map}`.
+
+- `POST /api/v1/redaccion/scripts/{proposal_id}/test`
+  - Body: `{test_data_ref, use_real_data: bool}`.
+  - Si `target_owner_kind='platform'` → `use_real_data` DEBE ser false (422 si true: `REAL_DATA_NOT_ALLOWED_FOR_PLATFORM_TARGET`).
+  - Ejecuta exactamente el mismo `_execute_in_sandbox` de `AdminScriptExtractionPipeline` (no duplicar lógica).
+  - Captura ExtractionResult, calcula sha256 del JSON, guarda en BD, status proposed→tested.
+  - Devuelve `{result, hash}`.
+
+- `POST /api/v1/redaccion/scripts/{proposal_id}/validate-test-result`
+  - Solo el proposer. Marca `test_validated_by_proposer_at=now`. 422 si no hay test_result_json todavía.
+
+## Tests (RED → GREEN)
+
+Anonimización (migrados/adaptados del legacy):
+- test_pii_detector_identifies_persons_with_ner
+- test_pii_detector_identifies_dni_nif_with_regex
+- test_pii_detector_identifies_iban_with_regex
+- test_pii_detector_uses_form_anchors_for_field_context
+- test_pii_detector_degrades_to_regex_only_without_spacy
+- test_faker_generator_is_deterministic_per_value
+- test_faker_generator_uses_lastname_after_firstname_anchor
+- test_anonymizer_handles_aepd_disposicion_septima_for_dni
+- test_anonymize_tabular_preserves_row_count
+- test_anonymize_pdf_to_text_returns_markdown_with_substituted_spans
+- test_anonymize_pdf_to_text_preserves_non_pii_content_verbatim
+
+Workflow (nuevos):
 - test_propose_generates_code_and_audit_result
 - test_propose_rejects_when_llm_outputs_forbidden_import (mocked LLM)
-- test_anonymize_substitutes_columns_with_faker
-- test_anonymize_preserves_row_count_and_column_types
+- test_describe_test_data_suggests_iban_provider_for_iban_column
 - test_test_endpoint_requires_anonymized_data_for_platform_target
 - test_test_endpoint_executes_in_same_sandbox_as_admin_pipeline
 - test_test_endpoint_stores_result_hash
 - test_validate_test_result_requires_prior_test
 - test_validate_test_result_marks_proposer_validation_timestamp
 
-Criterio de done:
-- 9 tests verdes.
-- Migración Alembic aplicada (hub_script_proposals).
-- Endpoints registrados en main.py bajo _register_edge.
-- TestDataAnonymizerService es módulo independiente (lo reutilizará Fase 13 NER).
+## Criterio de done
+
+- ≥19 tests verdes (11 anonimización + 8 workflow).
+- Migración Alembic aplicada (`hub_script_proposals`).
+- Endpoints registrados en main.py bajo `_register_edge`.
+- `PiiDetector` queda como módulo independiente (lo reutilizará Fase 13 NER para los hooks pre/post-LLM).
+- spaCy `es_core_news_md` y `en_core_web_md` descargados en el build de Docker.
+- Documentación: añadir sección "Módulo de anonimización" a `docs/REDACCION_CONTRACT_FIRST.md` explicando origen legacy + adaptaciones.
+
+## Retirada legacy (CLAUDE.md regla Caso A, paso 1 de 2)
+
+Al cerrar este prompt en GREEN:
+- Mover a `_legacy_nicegui/` (manteniendo ruta relativa):
+  - `client_app/app/modules/privacy/`
+  - `client_app/app/services/anonymization_service.py`
+  - `client_app/app/utils/pii_detector.py`
+  - Tests legacy (excepto los de UI NiceGUI que sí se borran directamente, ya que son código huérfano — Caso B).
+- Verificar con grep que no quedan referencias activas desde código de producción.
+- Borrado definitivo de `_legacy_nicegui/` se hace al cerrar 9R.10.2 (prompt de verificación de subfase).
 ```
 
 ---
