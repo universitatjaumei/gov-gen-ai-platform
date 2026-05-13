@@ -17,15 +17,18 @@ capaz de servir chatbots informativos y de redacción para al menos una organiza
   - ~~Asistente HITL de ingestión (1A.3): propuesta automática de selectores CSS, validación antes de guardar.~~
   - Grafo público multi-perfil (BLOQUE 9B): CoreGraph + GraphProfiles + RetrievalPipelineFactory (RAG / MD_LONG_CONTEXT / MD_AGENT_SELECTOR); perfiles PUBLIC_KB_RICH y PUBLIC_PORTAL_AGGREGATOR (UJI).
   - Workspaces y agentes de redacción (9.11a–9.11d): modelos, pipeline de seguridad, grafo LangGraph, UI.
-- **Subfase 1.B — Identidad y Despliegue Cloud:**
+- **Subfase 1.B — Identidad Visual:**
   - Sistema de temas institucionales (FASE 10): variables CSS, presets, editor visual.
-  - Despliegue staging GCP (Prompts D.1–D.5): Secret Manager, Cloud SQL, Cloud Run, CI/CD.
 - **Subfase 1.C — Privacidad, Diseño y Exportación de Informes:**
-  - Focus Mode como infraestructura de diseño transversal (1C.0): Zustand + DrawerHub reutilizable.
-  - Exportación DOCX/ODT con citas trazables (1C.4): plantillas Jinja2, índice automático, RunManifest.
-  - Integración Google Drive opcional (1C.5): destino configurable por Organización.
-  - Privacidad NER reversible (FASE 13): anonimización PII antes de enviar al LLM.
-- **Transversal F1:** Accesibilidad WCAG 2.2 AA + Admin conversacional (FASE 20).
+  *(orden de ejecución dentro de 1.C)*
+  1. Focus Mode como infraestructura de diseño transversal (1C.0): Zustand + DrawerHub reutilizable.
+  2. Autosave y resiliencia del Workspace (1C.1): versioning optimista, backoff exponencial.
+  3. Privacidad NER reversible (FASE 13): hook pre/post-LLM en DraftingCoreGraph; vault cifrado en edge. *(Alcance Fase 1: solo redacción. Integración con expedientes → Fase 3.)*
+  4. Editor accesible WCAG 2.2 AA — editor de redacción (1C.2): shortcuts, focus trap, axe-core.
+  5. Exportación DOCX/ODT con citas trazables (1C.3): plantillas Jinja2, índice automático, RunManifest.
+  6. Integración Google Drive opcional (1C.4): destino configurable por Organización.
+- **Transversal F1 — Accesibilidad WCAG 2.2 AA (FASE 20 reducida):** WCAG transversal en todas las rutas del frontend + axe-core en Vitest + Lighthouse CI. Sin consola conversacional admin (diferida a Fase 2).
+- **Deploy GCP (Prompts D.1–D.5):** último paso — cuando el producto esté completo y probado localmente.
 - **Al finalizar F1:** Autoinstalación (FASE 11) para distribución como software libre.
 
 ## Qué NO se ejecuta en esta fase
@@ -33,6 +36,8 @@ capaz de servir chatbots informativos y de redacción para al menos una organiza
 - Agente local (Thin Client, Prompt 9.16) → Fase 2.
 - Sandbox distribuido, RunManifest, Script Registry → Fase 2.
 - Gestor de Expedientes → Fase 3.
+- Integración NER con expedientes (FASE 13 parcial) → Fase 3 (requiere FASE 12.E2).
+- Admin conversacional (FASE 20 parcial) → Fase 2 (requiere grafo agéntico estable).
 - Microservicios de computación pesada (FASE 22) → Diferido post-cloud (ver PLAN_DESARROLLO.md).
 - RPA Web (FASE 21) → Diferido v2.
 

@@ -27,14 +27,19 @@
 |--------|-------------------|-----------|--------|
 | Fase 0 — Infraestructura | — | — | ✅ Eliminada (heredada) |
 | Subfase 1.A — Chatbots Públicos (9B) | 9B.14 ✅ | — | ✅ Completo |
-| Subfase 1.A → 1.C — Redacción Contract-First (9R) | 9R.6.6 ✅ | 9R.7.1 | ⏳ En curso — 9 prompts restantes |
-| Subfase 1.B — Identidad y Despliegue (Fase 10 + Fase Deploy GCP) | — | 10.1 | ⏳ Pendiente — Fase 10 (temas/plantillas) + D.1-D.5 |
-| Subfase 1.C — Infraestructura de Diseño y Exportación Avanzada | — | 1C.0 | ⏳ Pendiente — 6 prompts (1C.0, 1C.1, 1C.2, 1C.3, 1C.4, 1C.5) |
+| Redacción Contract-First (9R) | 9R.6.6 ✅ | 9R.7.1 | ⏳ En curso — 9 prompts restantes |
+| Subfase 1.B — Identidad Visual | — | 10.1 | ⏳ Pendiente — Fase 10 (temas/plantillas) |
+| Subfase 1.C — Privacidad, Diseño y Exportación | — | 1C.0 | ⏳ Pendiente — 1C.0, 1C.1, Fase 13 (NER), 1C.2, 1C.3, 1C.4 |
+| Fase 20 reducida — WCAG transversal | — | 20.1 | ⏳ Pendiente — WCAG todas las rutas, sin consola conversacional |
+| Deploy GCP | — | D.1 | ⏳ Pendiente — D.1-D.5 (último paso) |
 
 **Cursor actual: 9R.7.1 — UI: Renderer base + slots dinámicos**
 
-> Nota: el bloque **9R** (Redacción Contract-First) se incorporó el 2026-05-11 a partir de `Rediseño_informes.md`.
-> Sustituye los antiguos prompts 9.11a–9.11d. Es paralelo a 9B y bloquea la subfase 1.C (1C.4 requiere `DraftingRunManifest` de 9R.9).
+**Orden de ejecución acordado (2026-05-13):**
+`9R.7.1→9R.10` → `Fase 10` → `1C.0→1C.1` → `Fase 13 (NER redacción)` → `1C.2→1C.4` → `Fase 20 reducida` → `Deploy GCP`
+
+> Nota: el bloque **9R** se incorporó el 2026-05-11 a partir de `Rediseño_informes.md`.
+> Sustituye los antiguos prompts 9.11a–9.11d. **Fase 13** en Fase 1 cubre únicamente el hook NER pre/post-LLM en DraftingCoreGraph; la integración con expedientes es Fase 3. **Fase 20** se ejecuta sin la consola conversacional admin (diferida a Fase 2).
 
 ---
 
@@ -112,4 +117,5 @@ Prompts verbatim para el agente: `Migración_extracción_pdf.txt` §5.
 | 2026-05-13 | 9R.6.3 | graph/nodes/ai_assist_draft.py: AIAssistDraftNode (LLMService Protocol, contexto solo de extracted/approved, content={text,model_used,prompt_version}, salta approved/locked, status=error en fallo sin contaminar blocks). graph/nodes/citation_traceability.py: CitationAndTraceabilityNode (Citation desde depends_on, proyecciones raw/summary/field). core_graph.py: data_quality_router redirige ok→ai_assist_draft; missing_data→__end__; citations→finish. 5 tests verdes en test_core_graph_nodes_ai.py. |
 | 2026-05-13 | 9R.6.4 | contracts/runtime.py: BlockState+original_ai_content, WorkspaceState+user_edits+final_document+final_document_hash. graph/nodes/review_gate.py: UserReviewGateNode (ai_generated→needs_review, status=in_review si pending) + review_gate_router. graph/nodes/apply_user_edits.py: ApplyUserEditsNode (override contenido, preserva original_ai_content). graph/nodes/final_assembler.py: FinalAssemblerNode (solo approved/locked, SHA-256, status=assembled). core_graph.py: flujo completo con arista condicional review_gate. 6 tests verdes en test_core_graph_nodes_assembly.py. |
 | 2026-05-13 | 9R.6.5 | contracts/manifest.py: DraftingRunManifest (id, workspace_id, template_version_id, report_profile, warnings, user_approvals, final_document_hash, status_at_close). graph/tracing.py: SpanHandle+TracingService Protocol, NoOpTracingService, traced_node wrapper (node_span, AI attrs, error event). graph/nodes/audit_log.py: AuditLogNode (open_trace con workspace_id, HubRunManifest ORM, run_manifest_id en span). core_graph.py: todos los nodos envueltos con traced_node, audit_log como nodo final. 10 tests verdes en test_core_graph_audit_tracing.py. |
+| 2026-05-13 | (planificación orden F1) | Reordenación de subfases 1.B/1.C/Deploy: Fase 10 → 1C.0+1C.1 → Fase 13 NER (solo redacción) → 1C.2-1C.4 → Fase 20 reducida (sin consola conversacional) → Deploy GCP. Admin conversacional diferido a Fase 2; integración NER+expedientes a Fase 3. Plan_TDD_Fase1.md alcance y "Qué NO" actualizados. |
 | 2026-05-13 | 9R.6.6 | runtime.py: FailureKind Literal + WorkspaceBlockedByFailedBlocksError + BlockState(failure_kind, last_error_message, retry_attempts) + WorkspaceState(regenerate_blocks, skip_blocks). services/block_executor.py: LLMTimeoutError/ScriptRuntimeError/ASTValidationError + BlockExecutor(retry 1×, span events, failure_kind map) + NodeResult + propagate_dependency_failures(cascada). ai_assist_draft.py: per-block failed(ai_failed), continúa. review_gate.py: REGENERATE (reset por failure_kind) + SKIP (solo no-required). final_assembler.py: lanza WorkspaceBlockedByFailedBlocksError para required fallidos fuera de skip_blocks. manifest.py: FailedBlockInfo + failed_blocks. audit_log.py: recoge failed_blocks. ORM: +failure_kind+last_error_message+retry_attempts en hub_workspace_blocks. Migración o6d7e8f9a0b1 (pendiente de BD). 79 tests verdes (14 nuevos en test_core_graph_failed_blocks.py). |
