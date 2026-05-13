@@ -1938,7 +1938,9 @@ LoadTemplateNode
 9R.5.1 (RED/GREEN)  Protocolo ExtractionPipeline + contratos (Input/Result/Provenance/Warning)
 9R.5.2 (RED/GREEN)  ExcelExtractionPipeline + PDFTextExtractionPipeline
 9R.5.3 (RED/GREEN)  PDFTableExtractionPipeline + ManualInputPipeline
-9R.5.4 (RED/GREEN)  ExtractionPipelineFactory + AdminScriptExtractionPipeline (refactor de 9.11b)
+9R.5.4 (RED/GREEN)  ExtractionPipelineFactory + AdminScriptExtractionPipeline (motor de ejecución)
+9R.5.5 (RED/GREEN)  ScriptProposalService + TestDataAnonymizerService (Faker) + endpoints propose/anonymize/test/validate
+9R.5.6 (RED/GREEN)  Workflow de aprobación scripts: self-service usuario / cola admin para plantillas globales
 
 9R.6.1 (RED/GREEN)  CoreGraph: LoadTemplate / ValidateInputContract / FileNormalization
 9R.6.2 (RED/GREEN)  CoreGraph: DeterministicExtraction / DataQualityCheck / MissingDataQuestion
@@ -1951,12 +1953,14 @@ LoadTemplateNode
 9R.7.2 (RED/GREEN)  BlockEditor + AIBlockReviewPanel + DataQualityPanel + WorkspaceStatusBar
 9R.7.3 (RED/GREEN)  ReportTemplateBuilderPage (admin) + GenericReportWizard (user)
 9R.7.4 (RED/GREEN)  LLMDraftPreviewPage + flujo de aprobación
+9R.7.5 (RED/GREEN)  UI scripts: ScriptProposalWizardPage + AdminScriptReviewQueuePage
+9R.7.6 (RED/GREEN)  Simplificación de etiquetas de estado para usuario final + panel debug admin
 
 9R.8.1 (RED/GREEN)  HITL endpoints + servicios de transición de bloques
 9R.8.2 (RED/GREEN)  Tests E2E de edición/rechazo/regeneración por bloque
 
 9R.9.1 (RED/GREEN)  DraftingRunManifest modelo Pydantic + repo + endpoint
-9R.9.2 (RED/GREEN)  Integración con ExportService (1C.4) + final_document_hash
+9R.9.2 (RED/GREEN)  Integración con ExportService (1C.4) — DOCX-only en MVP
 
 9R.10.1 (RED)       Vertical slice E2E: tests de aceptación
 9R.10.2 (GREEN)     Wire-up integral del slice
@@ -1969,7 +1973,7 @@ LoadTemplateNode
 3. **El frontend usa exclusivamente tipos generados por Orval**. Está prohibido crear interfaces TypeScript manuales para DTOs de redacción.
 4. **El LLM no puede crear plantillas persistentes sin aprobación HITL**. Solo genera `ReportTemplateDraft`.
 5. **Ningún bloque IA entra al documento final sin estado `approved`**. El `UserReviewGateNode` bloquea el ensamblado.
-6. **Toda ejecución del agente emite `DraftingRunManifest`**, incluso si falla. La exportación a DOCX/ODT (1C.4) requiere manifest válido.
+6. **Toda ejecución del agente emite `DraftingRunManifest`**, incluso si falla. La exportación a DOCX (1C.4) requiere manifest válido. ODT queda fuera del MVP (backlog post-MVP, mantener abstracción `Exporter` para no rework).
 7. **Módulos 9R son edge**. Routers etiquetados `Deploy: edge` (ver CLAUDE.md), no importan módulos cloud.
 8. **TDD obligatorio**. RED antes que GREEN; ningún PR del bloque se acepta sin tests del nuevo contrato/comportamiento.
 
@@ -2804,6 +2808,166 @@ Criterio de done:
 - ScriptSecurityAuditor de 9.11b migrado a `modules/redaccion/services/script_auditor.py` y reutilizado por AdminScriptExtractionPipeline.
 - El endpoint `/agents/generate-script` queda dentro del flujo de creación de plantilla (no externo).
 - Tests verdes (8/8).
+
+Nota (2026-05-13): este prompt entrega solo el **motor de ejecución** (audit + sandbox). El **workflow de proposición LLM-asistido** (cualquier usuario propone, AST audit + sandbox test obligatorio, admin aprueba para plantillas globales) se cubre en 9R.5.5 + 9R.5.6 + 9R.7.5.
+```
+
+---
+
+### Prompt 9R.5.5 (RED/GREEN) — ScriptProposalService + anonimización Faker + endpoints propose/test
+
+```markdown
+# PROMPT 9R.5.5 (RED/GREEN) — Workflow de proposición de scripts: motor backend
+
+Objetivo: permitir que cualquier usuario solicite a un LLM la generación de un script Python de extracción para su plantilla, validarlo automáticamente (AST audit + sandbox test obligatorio sobre datos reales o sintéticos) y dejarlo listo para persistir/promocionar. Este prompt entrega solo el motor backend; los endpoints de aprobación/persistencia llegan en 9R.5.6.
+
+Deploy: edge
+
+Estructura nueva:
+- server/app/modules/redaccion/services/script_proposal_service.py
+- server/app/modules/redaccion/services/test_data_anonymizer.py
+- server/app/modules/redaccion/database/models.py  → añade HubScriptProposal
+- server/app/modules/redaccion/database/repos.py   → añade ScriptProposalRepo
+- server/app/routers/redaccion/scripts_router.py   → endpoints propose/anonymize/test/validate
+
+ScriptProposalService:
+- Constructor recibe LLMService + ScriptSecurityAuditor (reusar 9R.5.4).
+- propose(prompt_nl, sample_schema, owner_kind) → { code, audit_result }
+- System prompt acotado:
+  - Lista blanca de imports (la misma que ScriptSecurityAuditor.WHITELIST_MODULES).
+  - Contrato de salida: el script debe asignar `result: dict` con claves `tables: list[dict]`, `metrics: list[dict]`, `free_text: str | None`.
+  - Variables disponibles en el sandbox: file_path, raw_text, options.
+  - Ejemplos few-shot de scripts válidos (al menos uno para Excel, uno para PDF text).
+- Ejecuta `ScriptSecurityAuditor.audit(code)` antes de devolver. Si falla, devuelve `audit_result` con findings pero no levanta excepción (el cliente decide si re-prompttear).
+
+TestDataAnonymizerService (Faker manual, sin NER — Fase 13 ampliará con detección automática):
+- describe_columns(file_ref: StorageRef) → list[ColumnInfo(name, sample_values, inferred_type)]
+- anonymize(file_ref, substitutions: list[ColumnSubstitution]) → StorageRef (nueva versión sintética)
+- ColumnSubstitution: { column_name, faker_provider: "name"|"email"|"phone"|"iban"|"address"|"date"|"integer"|"keep" }
+- Mantiene tipo y cardinalidad (la longitud del archivo no cambia); los valores se reemplazan determinísticamente con Faker(seed=hash(file_path)).
+- Solo soporta CSV/XLSX en este prompt (PDFs van con keep o requieren admin manual).
+
+HubScriptProposal (ORM):
+- id: UUID PK
+- proposer_user_id: UUID
+- target_owner_kind: str  # 'user' | 'platform'
+- target_template_id: UUID | None
+- prompt_nl: text
+- code: text
+- audit_result_json: JSONB
+- test_data_ref: JSONB | null   # StorageRef serializado (null hasta el primer /test)
+- test_data_is_anonymized: bool
+- test_data_anonymization_map: JSONB | null
+- test_result_json: JSONB | null
+- test_result_hash: str | None (sha256 hex)
+- test_validated_by_proposer_at: timestamp | null
+- status: str  # proposed | tested | rejected (los estados de aprobación llegan en 9R.5.6)
+- created_at, updated_at
+
+Endpoints (POST /api/v1/redaccion/scripts/...):
+- POST /propose
+  - Body: { prompt_nl, target_owner_kind, target_template_id?, sample_schema? }
+  - Crea HubScriptProposal con status='proposed', audit_result_json relleno, sin test_data ni result.
+  - Devuelve { proposal_id, code, audit_result }
+- POST /{proposal_id}/anonymize-test-data
+  - Body: multipart con el archivo de test + JSON con substitutions
+  - Sube archivo original a storage (privado al proposer), genera sintético, devuelve { synthetic_ref, anonymization_map }
+- POST /{proposal_id}/test
+  - Body: { test_data_ref, use_real_data: bool }
+  - Reglas: si target_owner_kind='platform' → use_real_data DEBE ser false (422 si true).
+  - Ejecuta exactamente el mismo sandbox que AdminScriptExtractionPipeline._execute_in_sandbox.
+  - Captura ExtractionResult, calcula hash, guarda en BD, transiciona status proposed→tested.
+  - Devuelve { result, hash }.
+- POST /{proposal_id}/validate-test-result
+  - Cualquier usuario que sea el proposer pulsa "este resultado es correcto".
+  - Marca test_validated_by_proposer_at=now.
+  - 422 si no hay test_result_json todavía.
+
+Tests (RED → GREEN):
+- test_propose_generates_code_and_audit_result
+- test_propose_rejects_when_llm_outputs_forbidden_import (mocked LLM)
+- test_anonymize_substitutes_columns_with_faker
+- test_anonymize_preserves_row_count_and_column_types
+- test_test_endpoint_requires_anonymized_data_for_platform_target
+- test_test_endpoint_executes_in_same_sandbox_as_admin_pipeline
+- test_test_endpoint_stores_result_hash
+- test_validate_test_result_requires_prior_test
+- test_validate_test_result_marks_proposer_validation_timestamp
+
+Criterio de done:
+- 9 tests verdes.
+- Migración Alembic aplicada (hub_script_proposals).
+- Endpoints registrados en main.py bajo _register_edge.
+- TestDataAnonymizerService es módulo independiente (lo reutilizará Fase 13 NER).
+```
+
+---
+
+### Prompt 9R.5.6 (RED/GREEN) — Aprobación con gate de validación obligatoria
+
+```markdown
+# PROMPT 9R.5.6 (RED/GREEN) — Endpoints de aprobación + cola admin + incrustación en plantilla
+
+Objetivo: cerrar el workflow de scripts: persistencia self-service en plantillas privadas, promoción con cola admin para plantillas globales. Toda persistencia exige test_validated_by_proposer_at NOT NULL.
+
+Deploy: edge
+
+Endpoints nuevos en server/app/routers/redaccion/scripts_router.py:
+
+- POST /api/v1/redaccion/scripts/{proposal_id}/save-to-private-template
+  - Requiere que el proposer sea el dueño de target_template_id y target_owner_kind='user'.
+  - Reglas duras:
+    - audit_result.approved must be True (422: AUDIT_FAILED)
+    - test_validated_by_proposer_at IS NOT NULL (422: TEST_NOT_VALIDATED)
+  - Crea nueva HubReportTemplateVersion del template con el script incrustado en spec_json (un nuevo BlockContract de tipo DETERMINISTIC_DATA con source_kind='admin_script' y options={code, approved:True}).
+  - Actualiza HubReportTemplate.current_version_id.
+  - Transiciona HubScriptProposal a status='approved', reviewer_user_id=proposer_user_id, reviewed_at=now.
+
+- POST /api/v1/redaccion/scripts/{proposal_id}/submit-for-review
+  - Requiere target_owner_kind='platform'.
+  - Reglas duras: audit_result.approved + test_validated_by_proposer_at + test_data_is_anonymized=True (422 cualquiera de las tres).
+  - Transiciona status='tested' → 'pending_review'. No persiste todavía en plantilla.
+
+- GET /api/v1/redaccion/scripts/pending
+  - Solo admin/partner. Devuelve lista de HubScriptProposal con status='pending_review'.
+  - Cada item: proposal_id, proposer, prompt_nl, code (head 500 chars), audit_result, test_result_hash, test_data_ref (firmado para descarga temporal).
+
+- POST /api/v1/redaccion/scripts/{proposal_id}/admin-retest
+  - Solo admin/partner. Permite que el admin re-ejecute el script contra el mismo test_data_ref.
+  - Compara nuevo hash con test_result_hash original.
+  - Devuelve { result, hash, hash_matches: bool }.
+
+- POST /api/v1/redaccion/scripts/{proposal_id}/approve
+  - Solo admin/partner sobre proposal con status='pending_review'.
+  - Body: { target_global_template_id, review_note? }
+  - Reglas duras: hash_matches en el último admin-retest debe ser true (422: HASH_MISMATCH) — o haber sido revisado <10 min antes.
+  - Crea nueva versión de target_global_template_id con script incrustado.
+  - status='approved', reviewer_user_id=admin_id.
+
+- POST /api/v1/redaccion/scripts/{proposal_id}/reject
+  - Solo admin/partner. Body: { review_note }.
+  - status='rejected'. Audit event en hub_workspace_audit_events.
+
+Cambios en ORM:
+- HubScriptProposal.status enum ampliado: proposed | tested | pending_review | approved | rejected.
+
+Tests (RED → GREEN):
+- test_save_to_private_template_requires_audit_pass
+- test_save_to_private_template_requires_validated_test
+- test_save_to_private_template_creates_new_version
+- test_save_to_private_template_rejects_if_not_owner
+- test_submit_for_review_requires_anonymized_test_data
+- test_get_pending_returns_only_pending_review_status
+- test_get_pending_forbidden_for_regular_user
+- test_admin_retest_returns_hash_match_flag
+- test_approve_requires_recent_hash_match
+- test_approve_creates_new_global_template_version
+- test_reject_records_note_and_blocks_further_changes
+
+Criterio de done:
+- 11 tests verdes.
+- Migración Alembic con la ampliación del enum (si la columna es String(20), no necesita migración).
+- README en docs/REDACCION_CONTRACT_FIRST.md: nueva sección "Workflow de scripts metaprogramados".
 ```
 
 ---
@@ -3194,6 +3358,119 @@ Criterio de done:
 
 ---
 
+### Prompt 9R.7.5 (RED/GREEN) — UI metaprogramación: wizard de propuesta de scripts + cola admin
+
+```markdown
+# PROMPT 9R.7.5 (RED/GREEN) — UI completa del workflow de scripts
+
+Objetivo: dar al usuario un wizard guiado para proponer un script vía LLM, probarlo obligatoriamente sobre datos reales o sintéticos antes de poder persistirlo, y al admin una cola de revisión para promociones a plantilla global.
+
+Estructura nueva (en frontend/src/redaccion/):
+- pages/ScriptProposalWizardPage.tsx     # wizard de 7 pasos para cualquier usuario
+- pages/AdminScriptReviewQueuePage.tsx   # cola para admin/partner
+- components/ScriptCodePreview.tsx       # syntax highlight + AST findings
+- components/TestDataAnonymizerForm.tsx  # tabla columnas + dropdown Faker provider
+- components/SandboxTestResultViewer.tsx # muestra ExtractionResult + hash
+
+ScriptProposalWizardPage (data-testids: wizard-step-{n}):
+1. Prompt NL — textarea "¿Qué cálculo o extracción necesitas?" + botón "Generar".
+2. Preview código + auditoría — muestra código resaltado + lista de findings AST. Si audit.approved=false, botón "Reintentar" vuelve al paso 1 (con feedback del audit).
+3. Subir datos de test — dropzone para CSV/XLSX.
+4. Anonimización — tabla de columnas con dropdown por columna (keep / name / email / phone / iban / address / date / integer). Si target_owner_kind='platform', "keep" está deshabilitado para columnas con sample_values no numéricos (heurística simple).
+5. Ejecutar sandbox — botón "Probar"; muestra ExtractionResult + hash. Si error, vuelve al paso 1 o 4.
+6. Validar resultado — checkbox "Confirmo que esta salida es correcta para mi caso de uso" + botón "Confirmar".
+7. Guardar / enviar — botones condicionales:
+   - Si target_owner_kind='user': "Guardar en mi plantilla" (POST save-to-private-template).
+   - Si target_owner_kind='platform': "Enviar al admin para revisión" (POST submit-for-review).
+
+Cada paso bloquea el siguiente hasta que la condición se cumple (visible vía atributo aria-disabled). No hay back-skip silencioso: si cambias el código, los pasos 3-7 se invalidan y hay que rehacerlos.
+
+AdminScriptReviewQueuePage:
+- Tabla con propuestas pending_review: proposer, fecha, target_template, hash test.
+- Click → vista detalle: código + audit + descarga test_data anonimizado + último ExtractionResult.
+- Botón "Re-ejecutar test" (POST admin-retest) → muestra hash_matches.
+- Botones "Aprobar" (deshabilitado si último retest hace >10 min o hash_matches=false) y "Rechazar con nota".
+
+Hooks (Orval): useProposeScript, useAnonymizeTestData, useTestScript, useValidateTestResult, useSaveToPrivateTemplate, useSubmitForReview, useGetPendingScripts, useAdminRetest, useApproveScript, useRejectScript.
+
+Tests Vitest RED → GREEN:
+- should_block_next_step_until_audit_passes
+- should_block_save_button_until_test_validated
+- should_require_anonymization_for_platform_target
+- should_invalidate_later_steps_when_code_regenerated
+- should_disable_approve_when_admin_retest_stale
+- should_show_hash_match_indicator_in_review_queue
+- should_redirect_non_admin_away_from_review_queue
+- should_call_save_to_private_template_for_user_target
+- should_call_submit_for_review_for_platform_target
+
+Criterio de done:
+- 9 tests verdes.
+- Rutas registradas en App.tsx: /redaccion/scripts/wizard y /redaccion/scripts/review (admin-only).
+- i18n: todas las etiquetas vía i18next (es/en/ca).
+- Cero hardcoded strings en UI.
+- TypeScript limpio (`npx tsc -p tsconfig.app.json --noEmit`).
+```
+
+---
+
+### Prompt 9R.7.6 (RED/GREEN) — Simplificación de etiquetas de estado y mensajes al usuario final
+
+```markdown
+# PROMPT 9R.7.6 (RED/GREEN) — Mensajes amigables para el usuario; detalle técnico solo para admin
+
+Objetivo: la máquina de estados interna del backend tiene 9+ estados (draft, missing_input, extracted, ai_generated, needs_review, approved, rejected, locked, failed) más failure_kind. La UI debe traducir esto a un vocabulario reducido y comprensible para el usuario final, manteniendo el detalle técnico accesible solo en un panel debug visible a admin/partner.
+
+Estructura nueva:
+- frontend/src/redaccion/utils/statusLabels.ts
+- frontend/src/redaccion/components/BlockDebugPanel.tsx
+- frontend/src/shared/i18n/locales/{es,en,ca}/redaccion.json (nuevo namespace)
+
+statusLabels.ts:
+- mapBlockStatusToUserLabel(status: string, failure_kind?: string): { label: string, tone: 'neutral'|'info'|'warning'|'success'|'error' }
+  - draft, missing_input    → { label: t('redaccion.status.missing_data'), tone: 'warning' }
+  - extracted               → { label: t('redaccion.status.data_loaded'), tone: 'info' }
+  - ai_generated, needs_review → { label: t('redaccion.status.needs_review'), tone: 'info' }
+  - approved, locked        → { label: t('redaccion.status.approved'), tone: 'success' }
+  - failed                  → { label: t('redaccion.status.error_recoverable'), tone: 'error' }
+  - rejected                → { label: t('redaccion.status.rejected_retry'), tone: 'warning' }
+- mapWorkspaceStatusToUserLabel(status): análogo para workspace (assembled → "Listo para exportar", etc.).
+
+Modificaciones obligatorias en componentes existentes:
+- BlockEditor.tsx, AIBlockReviewPanel.tsx, WorkspaceStatusBar.tsx, DataQualityPanel.tsx: SUSTITUIR la renderización cruda del status string por <StatusBadge label={...} tone={...} />.
+- Crear StatusBadge en frontend/src/shared/components/StatusBadge.tsx (componente genérico reutilizable).
+
+BlockDebugPanel.tsx:
+- Solo se monta si useAuth().user.role in ('admin','partner').
+- Toggle "Detalles técnicos" (off por defecto).
+- Cuando se activa, muestra: status interno, failure_kind, last_error_message, retry_attempts, updated_at, audit events más recientes.
+- Aparece como sección colapsable al final de BlockEditor.
+
+Mensajes de error:
+- last_error_message del backend NO se muestra al usuario final tal cual. Se reemplaza por traducción del failure_kind:
+  - ai_failed         → "La IA no pudo generar este bloque. Puedes reintentarlo."
+  - extraction_failed → "No se pudieron extraer datos del documento. Revisa el archivo y reintenta."
+  - script_failed     → "El cálculo automático falló. Contacta con el administrador."
+  - validation_failed → "Los datos no cumplen el formato esperado."
+- El last_error_message original queda accesible solo desde BlockDebugPanel.
+
+Tests Vitest RED → GREEN:
+- should_render_user_label_not_internal_status
+- should_map_failed_to_recoverable_error_tone
+- should_not_show_last_error_message_to_regular_user
+- should_show_last_error_message_in_debug_panel_for_admin
+- should_hide_debug_panel_for_user_role
+- should_translate_failure_kind_to_friendly_message
+
+Criterio de done:
+- 6 tests verdes.
+- Ningún componente de redacción muestra el string crudo de status (grep negativo: `\{block\.status\}` no aparece en JSX).
+- i18n en 3 idiomas.
+- TypeScript limpio.
+```
+
+---
+
 ### Prompt 9R.8.1 (RED/GREEN) — Endpoints HITL por bloque
 
 ```markdown
@@ -3301,17 +3578,21 @@ Criterio de done:
 
 ---
 
-### Prompt 9R.9.2 (RED/GREEN) — Integración con ExportService (1C.4)
+### Prompt 9R.9.2 (RED/GREEN) — Integración con ExportService (1C.4) — DOCX-only en MVP
 
 ```markdown
-# PROMPT 9R.9.2 (RED/GREEN) — Conexión con exportación DOCX/ODT
+# PROMPT 9R.9.2 (RED/GREEN) — Conexión con exportación DOCX
 
-Objetivo: garantizar que la exportación a DOCX/ODT (prompt 1C.4) consume el manifest y lo incluye en el anexo de auditoría.
+Objetivo: garantizar que la exportación a DOCX (prompt 1C.4) consume el manifest y lo incluye en el anexo de auditoría.
+
+Alcance MVP: SOLO DOCX. ODT queda fuera del MVP — la abstracción `Exporter` se mantiene para que ODT entre como segunda implementación post-MVP sin rework.
 
 Cambios:
 - En 1C.4 (export_service): leer el manifest del workspace antes de exportar.
 - Si manifest.final_document_hash es None → ExportService rechaza la exportación.
 - Adjuntar como anexo: tabla con uploaded_documents, ai_blocks (model + prompt_version), user_approvals, warnings.
+- Smoke test que abra el DOCX generado con python-docx para validar estructura básica.
+- Si se detecta `libreoffice` en PATH, smoke test adicional convirtiéndolo a PDF para verificar compatibilidad.
 
 Tests (RED → GREEN):
 - test_export_service_reads_run_manifest_before_export
@@ -3319,11 +3600,14 @@ Tests (RED → GREEN):
 - test_export_appendix_includes_ai_blocks_with_model
 - test_export_appendix_includes_user_approvals
 - test_final_document_hash_in_export_metadata_matches_manifest
+- test_docx_opens_without_errors_with_python_docx
+- test_docx_renders_in_libreoffice_when_available  (skip si no hay libreoffice)
 
 Criterio de done:
-- Tests verdes (5/5).
-- Documentar en 1C.4 que requiere manifest válido.
+- Tests verdes (7/7, con skip condicional para libreoffice).
+- Documentar en 1C.4 que requiere manifest válido y produce únicamente DOCX en esta fase.
 - Marcar dependencia bidireccional: 1C.4 ↔ 9R.9.
+- Documentar en `docs/REDACCION_CONTRACT_FIRST.md` que ODT está en backlog post-MVP y por qué (riesgo de incompatibilidad de estilos en LibreOffice vs Word).
 ```
 
 ---

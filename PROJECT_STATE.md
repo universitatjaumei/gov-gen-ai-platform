@@ -27,14 +27,16 @@
 |--------|-------------------|-----------|--------|
 | Fase 0 — Infraestructura | — | — | ✅ Eliminada (heredada) |
 | Subfase 1.A — Chatbots Públicos (9B) | 9B.14 ✅ | — | ✅ Completo |
-| Redacción Contract-First (9R) | 9R.8.1 ✅ | 9R.8.2 | ⏳ En curso — 4 prompts restantes |
+| Redacción Contract-First (9R) | 9R.8.1 ✅ | 9R.5.5 | ⏳ En curso — 9 prompts restantes (workflow scripts insertado tras 9R.5.4) |
 | Subfase 1.B — Identidad Visual | — | 10.1 | ⏳ Pendiente — Fase 10 (temas/plantillas) |
 | Subfase 1.C — Privacidad, Diseño y Exportación | — | 1C.0 | ⏳ Pendiente — 1C.0, 1C.1, Fase 13 (NER), 1C.2, 1C.3, 1C.4 |
 | Fase 20 reducida — WCAG transversal | — | 20.1 | ⏳ Pendiente — WCAG todas las rutas, sin consola conversacional |
 | Fase 11 — Autoinstalación y Distribución | — | 11.1 | ⏳ Pendiente — .env generator, docker-compose.prod.yml, init script |
 | Deploy GCP | — | D.1 | ⏳ Pendiente — D.1-D.5 (último paso) |
 
-**Cursor actual: 9R.8.2**
+**Cursor actual: 9R.5.5 — ScriptProposalService + Faker anonymizer + endpoints propose/test**
+
+> El cursor se reposiciona en 9R.5.5 (anterior a 9R.8.1 ya implementado) porque el workflow de scripts metaprogramados es prerrequisito conceptual del slice MVP completo (9R.10). Tras 9R.5.5 → 9R.5.6 → 9R.7.5 → 9R.7.6 se retomará 9R.8.2 → 9R.9.x → 9R.10.x.
 
 **Orden de ejecución acordado (2026-05-13, actualizado 2026-05-13):**
 `9R.7.1→9R.10` → `Fase 10` → `1C.0→1C.1` → `Fase 13 (NER redacción)` → `1C.2→1C.4` → `Fase 20 reducida` → `Fase 11 (11.1→11.3)` → `Deploy GCP`
@@ -120,6 +122,7 @@ Prompts verbatim para el agente: `Migración_extracción_pdf.txt` §5.
 | 2026-05-13 | 9R.6.5 | contracts/manifest.py: DraftingRunManifest (id, workspace_id, template_version_id, report_profile, warnings, user_approvals, final_document_hash, status_at_close). graph/tracing.py: SpanHandle+TracingService Protocol, NoOpTracingService, traced_node wrapper (node_span, AI attrs, error event). graph/nodes/audit_log.py: AuditLogNode (open_trace con workspace_id, HubRunManifest ORM, run_manifest_id en span). core_graph.py: todos los nodos envueltos con traced_node, audit_log como nodo final. 10 tests verdes en test_core_graph_audit_tracing.py. |
 | 2026-05-13 | (planificación orden F1) | Reordenación de subfases 1.B/1.C/Deploy: Fase 10 → 1C.0+1C.1 → Fase 13 NER (solo redacción) → 1C.2-1C.4 → Fase 20 reducida (sin consola conversacional) → Deploy GCP. Admin conversacional diferido a Fase 2; integración NER+expedientes a Fase 3. Plan_TDD_Fase1.md alcance y "Qué NO" actualizados. |
 | 2026-05-13 | (planificación F1) | Fase 11 (Autoinstalación y Distribución Software Libre, prompts 11.1–11.3) recuperada en el orden de ejecución: antes de Deploy GCP. Estaba en Plan_TDD_Fase1.md pero omitida del orden acordado en PROJECT_STATE.md. |
+| 2026-05-13 | (planificación 9R scripts + DOCX-only) | Plan_TDD_Fase1.md: insertados 4 prompts nuevos en bloque 9R — **9R.5.5** (ScriptProposalService + TestDataAnonymizerService Faker + endpoints propose/anonymize/test/validate-test-result), **9R.5.6** (workflow aprobación scripts: save-to-private-template self-service + submit-for-review + cola admin + admin-retest con hash match + approve/reject), **9R.7.5** (UI wizard 7 pasos para usuario + AdminScriptReviewQueuePage), **9R.7.6** (statusLabels.ts + StatusBadge + BlockDebugPanel admin-only). Modificado **9R.9.2** a DOCX-only (ODT a backlog post-MVP, mantener abstracción Exporter). Sandbox test obligatorio antes de persistir (test_validated_by_proposer_at). Anonimización obligatoria si target_owner_kind='platform'. |
 | 2026-05-13 | 9R.8.1 | workspaces_router.py (Deploy: edge): 5 endpoints PATCH approve/reject/regenerate/edit + POST resume. HubWorkspaceAuditEvent ORM model + WorkspaceAuditEventRepo. Migración 6dc2c440f15e aplicada. 6/6 tests verdes en test_block_transitions.py. |
 | 2026-05-13 | 9R.7.4 | llm_drafts_router: operation_id añadidos (proposeLlmDraft/validateLlmDraft/approveAsTemplate/approveAsWorkspace). Orval regenerado. LLMDraftPreviewPage: prompt textarea → propose → draft preview editable → auto-validate (useEffect) → modo template/workspace (admin) → approve. Ruta /redaccion/draft registrada. 5/5 tests verdes. TypeScript limpio. |
 | 2026-05-13 | 9R.7.3 | hub_redaccion_router: DTOs TemplateOut/TemplateCreateIn/WorkspaceCreateIn/WorkspaceCreatedOut + endpoints listTemplates/createTemplate/createWorkspace (operation_id explícito). Orval: 54 paths, 78 schemas; hooks useListTemplates/useCreateTemplate/useCreateWorkspace. frontend: ReportTemplateBuilderPage (admin, access-denied para no-admin) + GenericReportWizard (user). Rutas /redaccion/builder y /redaccion/wizard registradas en App.tsx. 4/4 tests verdes. TypeScript limpio. |
