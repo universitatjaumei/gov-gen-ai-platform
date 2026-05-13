@@ -2821,6 +2821,8 @@ Nota (2026-05-13): este prompt entrega solo el **motor de ejecución** (audit + 
 
 ### Prompt 9R.5.5 (RED/GREEN) — ScriptProposalService + migración del módulo de anonimización (spaCy + Faker, desde legacy)
 
+**Modelo sugerido**: **Opus** — migración masiva de 1011 LOC legacy + 14 tests con decisiones de diseño embebidas (qué preservar/descartar, adaptaciones async, contratos StorageRef).
+
 ```markdown
 # PROMPT 9R.5.5 (RED/GREEN) — Workflow de proposición de scripts: motor backend con anonimización híbrida
 
@@ -3005,6 +3007,8 @@ Al cerrar este prompt en GREEN:
 
 ### Prompt 9R.5.6 (RED/GREEN) — Aprobación con gate de validación obligatoria
 
+**Modelo sugerido**: **Sonnet** — alcance acotado (state machine con 5 endpoints, gates de validación explícitos en el prompt). Opus solo si se quiere reducir iteraciones.
+
 ```markdown
 # PROMPT 9R.5.6 (RED/GREEN) — Endpoints de aprobación + cola admin + incrustación en plantilla
 
@@ -3073,6 +3077,8 @@ Criterio de done:
 ---
 
 ### Prompt 9R.5.7 (RED/GREEN) — Bloque CHART: migración del módulo de gráficos legacy
+
+**Modelo sugerido**: **Sonnet** — migración con patrón establecido (mismo formato que 9R.5.4); sandbox compartido reduce decisiones. Opus si la auditoría AST con plotly/matplotlib produce falsos positivos sutiles.
 
 ```markdown
 # PROMPT 9R.5.7 (RED/GREEN) — Implementación del block kind CHART vía migración del legacy
@@ -3172,6 +3178,8 @@ Verificar con `grep -r` que no quedan referencias activas. Borrado definitivo ma
 ---
 
 ### Prompt 9R.5.8 (RED/GREEN) — Bloque DATA_TRANSFORM: migración del módulo ETL legacy
+
+**Modelo sugerido**: **Opus** — el prompt más denso del bloque: migración ~1200 LOC + discriminated unions de operaciones + NL→ops con refinamiento iterativo + fallback a script + integración como nodo nuevo en el grafo. Concentra decisiones de diseño.
 
 ```markdown
 # PROMPT 9R.5.8 (RED/GREEN) — Nuevo block kind DATA_TRANSFORM con motor ETL determinista + modo IA
@@ -3273,6 +3281,8 @@ Verificar con `grep -r` que no quedan referencias activas. Borrado definitivo ma
 ---
 
 ### Prompt 9R.5.9 (RED/GREEN) — Extractor Docling rico (ExtractedDocument) — adelantado parcial de Fase 2
+
+**Modelo sugerido**: **Sonnet** — cambio de contrato bien definido + 2 ajustes localizados en nodos del grafo. La heurística text_linear/complex_tables es simple. Pasa a Opus si la API de Docling resulta más opaca de lo esperado.
 
 ```markdown
 # PROMPT 9R.5.9 (RED/GREEN) — PDFTextExtractionPipeline rico: markdown + tablas estructuradas + páginas
@@ -3842,6 +3852,8 @@ Criterio de done:
 
 ### Prompt 9R.7.5 (RED/GREEN) — UI metaprogramación: wizard de propuesta de scripts + cola admin
 
+**Modelo sugerido**: **Sonnet** — UI con muchos pasos pero patrones React conocidos (wizard + invalidación + hooks Orval). Decisiones de diseño ya tomadas en el prompt. Opus solo si la lógica de invalidación entre pasos se complica.
+
 ```markdown
 # PROMPT 9R.7.5 (RED/GREEN) — UI completa del workflow de scripts
 
@@ -3897,6 +3909,8 @@ Criterio de done:
 ---
 
 ### Prompt 9R.7.6 (RED/GREEN) — Simplificación de etiquetas de estado y mensajes al usuario final
+
+**Modelo sugerido**: **Sonnet** — alcance pequeño y bien definido (mapper de status + componente StatusBadge + BlockDebugPanel admin-only). Sin decisiones abiertas.
 
 ```markdown
 # PROMPT 9R.7.6 (RED/GREEN) — Mensajes amigables para el usuario; detalle técnico solo para admin
@@ -3989,6 +4003,8 @@ Criterio de done:
 
 ### Prompt 9R.8.2 (RED/GREEN) — Tests E2E de transiciones
 
+**Modelo sugerido**: **Sonnet** — escenarios E2E explícitos, fixtures DB. Trabajo metódico, sin decisiones abiertas.
+
 ```markdown
 # PROMPT 9R.8.2 (RED/GREEN) — Tests E2E de edición/rechazo/regeneración
 
@@ -4016,6 +4032,8 @@ Criterio de done:
 ---
 
 ### Prompt 9R.9.1 (RED/GREEN) — DraftingRunManifest modelo + repo + endpoint
+
+**Modelo sugerido**: **Sonnet** — contrato Pydantic + repo + 2 endpoints GET. Patrón conocido sin sorpresas.
 
 ```markdown
 # PROMPT 9R.9.1 (RED/GREEN) — DraftingRunManifest
@@ -4062,6 +4080,8 @@ Criterio de done:
 
 ### Prompt 9R.9.2 (RED/GREEN) — Integración con ExportService (1C.4) — DOCX-only en MVP
 
+**Modelo sugerido**: **Sonnet** — generación DOCX con python-docx + smoke tests + chequeo opcional LibreOffice. Sin decisiones abiertas.
+
 ```markdown
 # PROMPT 9R.9.2 (RED/GREEN) — Conexión con exportación DOCX
 
@@ -4095,6 +4115,8 @@ Criterio de done:
 ---
 
 ### Prompt 9R.10.1 (RED) — Vertical slice E2E: tests de aceptación
+
+**Modelo sugerido**: **Sonnet** — escritura de tests sobre comportamiento ya especificado. Si los tests fallan por motivos triviales (imports, fixtures), Sonnet basta; el wire-up complejo va en 9R.10.2.
 
 ```markdown
 # PROMPT 9R.10.1 (RED) — Tests E2E del slice MVP
@@ -4132,6 +4154,8 @@ Criterio de RED correcto:
 ---
 
 ### Prompt 9R.10.2 (GREEN) — Wire-up integral del slice
+
+**Modelo sugerido**: **Opus** — prompt crítico del bloque: integración cruzada de 9R.1 a 9R.9, debugging multi-módulo, decisiones de wire-up dispersas. Aquí Sonnet suele pegarse en bugs sutiles; Opus reduce iteraciones de forma notable.
 
 ```markdown
 # PROMPT 9R.10.2 (GREEN) — Hacer pasar el slice MVP
@@ -4309,6 +4333,8 @@ TESTS REQUERIDOS (Vitest):
 
 ### Prompt 1C.0 — Focus Mode como Infraestructura de Diseño Transversal (TDD RED/GREEN)
 
+**Modelo sugerido**: **Sonnet** — React + Zustand + componentes shadcn/ui con tests explícitos. Sin lógica LLM. Patrón conocido.
+
 **Objetivo**: Implementar el sistema de Focus Mode y DrawerHub como infraestructura de diseño reutilizable en `frontend/src/shared/layout/`. Sirve tanto al workspace de informes (Subfase 1.C) como, en Fase 2, al editor de flujos de automatización.
 
 **Contexto**: En los workspaces de informes (9.11d), el botón "Exportar" abre un panel lateral. En los flujos de automatización (Fase 2), el mismo panel mostrará las Data Pills y el Copilot. El mismo componente `DrawerHub` sirve a ambos contextos gracias al campo `context` del store.
@@ -4456,6 +4482,8 @@ describe('useFocusStore', () => {
 ---
 
 ### Prompt 1C.0.bis — Copilot Drawer: RAG sobre docs de módulo + NL→config (TDD RED/GREEN)
+
+**Modelo sugerido**: **Opus** — tuning de comportamiento LLM (RAG sobre docs + traductor NL→config estructurada para tres targets distintos). Los prompts del sistema y la validación discriminated-union son finos: Opus reduce iteraciones notablemente sobre Sonnet.
 
 **Objetivo**: añadir al `DrawerHub` (1C.0) un asistente conversacional (`CopilotPanel`) que cumple dos funciones, migradas conceptualmente del legacy `copilot_chat.py` (986 LOC NiceGUI):
 1. **RAG sobre la documentación del módulo activo**: el usuario hace preguntas en lenguaje natural ("¿cómo creo un bloque de tabla?", "¿qué pasa si rechazo un bloque IA?") y recibe respuestas basadas en `docs/REDACCION_CONTRACT_FIRST.md` y similares, contextualizadas al módulo donde está navegando.

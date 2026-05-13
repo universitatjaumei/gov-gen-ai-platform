@@ -416,6 +416,33 @@ antes de que el problema aparezca en métricas reales.
 
 ---
 
+## Modelo por prompt
+
+Cada prompt activo en `Plan_TDD_Fase1.md` (y subsiguientes) lleva una etiqueta `**Modelo sugerido**: Opus | Sonnet — <razón corta>` justo bajo el título. La etiqueta es **una recomendación informada**, no un requisito: el usuario decide al abrir sesión qué modelo usar con `/model opus` o `/model sonnet`.
+
+Heurística usada para etiquetar:
+
+- **Opus** se sugiere cuando el prompt concentra **decisiones de diseño embebidas** (qué preservar de un legacy masivo, cómo discriminar uniones, cómo afinar prompts del sistema LLM), **migra >800 LOC ajeno**, o requiere **debugging cruzado multi-módulo** donde Sonnet suele pegarse.
+- **Sonnet** se sugiere cuando el alcance está **explícitamente cerrado en el prompt** (endpoints concretos, tests enumerados, fixtures dadas) y las **decisiones abiertas son pocas**.
+
+Una segunda referencia rápida vive en `PROJECT_STATE.md`:
+- Columna **Modelo sugerido siguiente** en la tabla de bloques activos.
+- Línea **"Modelo sugerido para el próximo prompt: ..."** junto al "Cursor actual".
+
+Cómo actúa un agente al abrir una sesión:
+
+1. Lee `PROJECT_STATE.md` y localiza el cursor + el modelo sugerido para el próximo prompt.
+2. Si el modelo de la sesión actual coincide con el sugerido → procede.
+3. Si NO coincide → menciona la discrepancia en una sola línea al inicio de la respuesta ("El cursor sugiere Opus para este prompt; estoy en Sonnet. ¿Continúo o prefieres cambiar con `/model opus`?") y espera decisión del usuario antes de ejecutar.
+4. No intentes auto-cambiar de modelo. La elección es del usuario por motivos de coste/disponibilidad.
+
+Cuándo delegar a un sub-agente con modelo distinto:
+
+- Tareas **autocontenidas** dentro de un prompt mayor (auditoría de un diff, búsqueda compleja, revisión de seguridad sobre código generado): se pueden delegar via tool `Agent` con `model: "opus"` aunque la sesión esté en Sonnet.
+- **No** delegar un prompt entero de implementación a un sub-agente: pierde el historial conversacional y no puede pedirte clarificaciones.
+
+---
+
 ## Seguimiento del estado del proyecto
 
 El archivo `PROJECT_STATE.md` es la fuente de verdad del progreso de los planes de desarrollo.
