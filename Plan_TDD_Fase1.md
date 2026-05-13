@@ -4555,6 +4555,8 @@ Borrado definitivo manual al cierre de Fase 1.
 
 ### Prompt 1C.1 — Autosave y resiliencia del Workspace (TDD RED/GREEN)
 
+**Modelo sugerido**: **Sonnet** — concurrencia optimista con contrato explícito (version por workspace + bloque). Patrón conocido, alcance acotado.
+
 **Objetivo**: Persistir automáticamente el estado del Workspace en backend tras cada cambio de bloque, con concurrencia optimista y detección de conflictos. Permite que el usuario pueda cerrar la pestaña o perder conexión sin perder trabajo, y evita pisar cambios de otra sesión abierta del mismo workspace.
 
 **Contexto**: 9R.1.4 crea las tablas `hub_workspaces` y `hub_workspace_blocks`. El editor del 9R.7 emite cambios por bloque (`BlockState`, contenido editado por el usuario, edición de `ai_generated`). Sin autosave, un fallo de red o un cierre accidental pierde el trabajo. Sin versión optimista, dos pestañas abiertas se pisan silenciosamente.
@@ -4836,6 +4838,8 @@ describe('useAutosave', () => {
 
 ### Prompt 1C.2 — Editor accesible: shortcuts, focus trap y WCAG 2.2 AA (TDD RED/GREEN)
 
+**Modelo sugerido**: **Sonnet** — patrones WCAG 2.2 AA bien establecidos; alcance cerrado (shortcuts + focus trap + aria-live).
+
 **Objetivo**: Cumplir WCAG 2.2 AA en el editor de Workspaces e implementar los atajos de teclado y comportamientos de focus management que un usuario de teclado o lector de pantalla espera de un editor profesional.
 
 **Contexto**: El editor 9R.7 + Focus Mode 1C.0 + Autosave 1C.1 conforman una superficie compleja con drawer modal, bloques interactivos, transiciones de estado y autosave. Sin focus trap el usuario de teclado se "escapa" del modal; sin atajos los usuarios productivos pierden tiempo; sin anuncios `aria-live` un usuario de lector de pantalla no percibe las transiciones de bloque. WCAG 2.2 AA es el criterio de aceptación de la plataforma (ver Fase 20).
@@ -5021,6 +5025,8 @@ describe('Editor accessibility (WCAG 2.2 AA)', () => {
 ---
 
 ### Prompt 1C.3 — Vista previa imprimible y anexo de auditoría (TDD RED/GREEN)
+
+**Modelo sugerido**: **Sonnet** — CSS print + estructura DOM compartida con ExportService. Sin decisiones abiertas.
 
 **Objetivo**: Antes de exportar, el usuario ve una vista previa de página completa (`WorkspacePreview`) que coincide visualmente con el DOCX/ODT final, incluido el anexo de auditoría con el `DraftingRunManifest`. La preview y el ExportService consumen la misma estructura serializada para garantizar que lo que el usuario ve es exactamente lo que se exporta.
 
@@ -5218,6 +5224,8 @@ describe('PreviewRenderer', () => {
 ---
 
 ### Prompt 1C.4 — Exportación Avanzada DOCX/ODT con Plantillas y Citas (TDD RED/GREEN)
+
+**Modelo sugerido**: **Sonnet** — DOCX-only en MVP (decidido 2026-05-13); generación con python-docx + anexo de auditoría. Base ya esbozada en 9R.9.2.
 
 **Objetivo**: Implementar la exportación del `final_document` de un workspace a `.docx` y `.odt` con maquetación profesional: índice automático, citas a pie de página extraídas del `RunManifest` y estilos institucionales.
 
@@ -5631,6 +5639,8 @@ class TestExportEndpointWithDrive:
 
 ### Prompt 10.1 - Definición del Sistema de Temas (TDD RED)
 
+**Modelo sugerido**: **Sonnet** — escritura de tests sobre tipos TypeScript. Patrón estándar.
+
 **Objetivo**: Definir la estructura TypeScript para los temas y validar su configuración.
 
 **frontend/src/themes/__tests__/theme.test.ts** (RED):
@@ -5811,6 +5821,8 @@ describe('Theme Types and Validation', () => {
 ---
 
 ### Prompt 10.2 - Implementación de Tipos de Tema (TDD GREEN)
+
+**Modelo sugerido**: **Sonnet** — tipos TS + funciones de merge/validación. Alcance cerrado.
 
 **Objetivo**: Implementar los tipos TypeScript, interfaces de validación y funciones de merge/fusión del sistema de temas que permiten la personalización visual dinámica.
 
@@ -6290,6 +6302,8 @@ function deepMerge<T extends object>(target: T, source: DeepPartial<T>): T {
 
 ### Prompt 10.3 - Theme Provider y Context (TDD RED)
 
+**Modelo sugerido**: **Sonnet** — tests de React Context con patrones conocidos.
+
 **Objetivo**: Validar el comportamiento del `ThemeProvider` React: carga de tema por defecto, cambio dinámico de tema, inyección de variables CSS en el DOM y exposición del contexto a componentes hijos.
 
 **frontend/src/themes/__tests__/ThemeProvider.test.tsx** (RED):
@@ -6501,6 +6515,8 @@ describe('ThemeProvider', () => {
 ---
 
 ### Prompt 10.4 - Implementación del Theme Provider (TDD GREEN)
+
+**Modelo sugerido**: **Sonnet** — React Context con inyección de CSS vars. Patrón estándar.
 
 **Objetivo**: Implementar el `ThemeProvider` como Context React que inyecta las variables CSS del tema activo en el DOM, gestiona el estado del tema y expone las funciones de cambio.
 
@@ -6849,6 +6865,8 @@ export function withTheme<P extends object>(
 
 ### Prompt 10.5 - Temas Predefinidos (Presets)
 
+**Modelo sugerido**: **Sonnet** — configuración estática de presets (Default, Dark, University, High Contrast).
+
 **Objetivo**: Definir los temas visuales predefinidos del sistema (Default, Dark, University, High Contrast) como objetos de configuración reutilizables y exportables.
 
 **frontend/src/themes/presets.ts**:
@@ -7067,6 +7085,8 @@ export type ThemePresetName = keyof typeof THEME_PRESETS;
 ---
 
 ### Prompt 10.6 - CSS Base con Variables (Template)
+
+**Modelo sugerido**: **Sonnet** — CSS Custom Properties. Trabajo declarativo sin decisiones abiertas.
 
 **Objetivo**: Crear el archivo CSS base con todas las Custom Properties (variables CSS) que el ThemeProvider sobreescribe dinámicamente para controlar colores, tipografía y espaciados.
 
@@ -7432,6 +7452,8 @@ export type ThemePresetName = keyof typeof THEME_PRESETS;
 ---
 
 ### Prompt 10.7 - Editor de Tema en Tiempo Real (Componente de Administración)
+
+**Modelo sugerido**: **Sonnet** — UI interactiva con state local y exportación JSON. Patrones React conocidos.
 
 **Objetivo**: Implementar el componente React `ThemeEditor` que permite al administrador modificar colores, tipografía y espaciados del chatbot en tiempo real, con previsualización inmediata y capacidad de exportar/importar el tema como JSON.
 
@@ -7848,6 +7870,8 @@ export default ThemeEditor;
 
 ### Prompt 10.8 - Backend: API de Temas
 
+**Modelo sugerido**: **Sonnet** — CRUD FastAPI estándar.
+
 **Objetivo**: Implementar los endpoints REST FastAPI para el CRUD completo de temas personalizados, incluyendo almacenamiento en base de datos y servicio de temas por URL pública.
 
 **src/api/routers/themes.py**:
@@ -8157,6 +8181,8 @@ async def apply_theme_to_chatbot(
 
 ### Prompt 10.9 - Tests del Sistema de Temas
 
+**Modelo sugerido**: **Sonnet** — tests de integración tipos + Provider + API + editor. Trabajo metódico.
+
 **Objetivo**: Validar el sistema completo de temas: tipos TypeScript, ThemeProvider, API REST y editor visual, asegurando que los cambios se aplican y persisten correctamente.
 
 **tests/test_themes.py**:
@@ -8331,6 +8357,8 @@ class TestThemeStorage:
 
 ### Prompt 10.10 - Actualización del App.tsx con ThemeProvider
 
+**Modelo sugerido**: **Sonnet** — wire-up puntual del Provider en la raíz de la app.
+
 **Objetivo**: Integrar el `ThemeProvider` y el sistema de temas en la aplicación principal, permitiendo cargar temas personalizados desde URL y sincronizarlos con el chatbot configurado.
 
 **frontend/src/App.tsx** (versión actualizada):
@@ -8434,6 +8462,8 @@ setTheme({
 
 ### Prompt 10.11 - Panel de Control del "Cerebro" de la IA (React Admin)
 
+**Modelo sugerido**: **Sonnet** — editor de prompts + selector de modelo + sandbox de prueba. React+Orval estándar.
+
 **Objetivo**: Crear en el Panel de Administración de React una sección para editar prompts y cambiar el modelo de IA en caliente, sin tocar el código ni reiniciar el servidor.
 
 **Instrucciones**:
@@ -8478,6 +8508,8 @@ Fase Deploy
 ---
 
 ### Prompt D.1 — Autenticación pública del widget: API key por chatbot
+
+**Modelo sugerido**: **Sonnet** — auth con X-Api-Key header; decisiones de diseño documentadas en el prompt.
 
 **Objetivo**: el widget embebido en webs externas (UJI, ayuntamientos) no puede requerir login de usuario. Sustituir el mecanismo `data-token` JWT (solo válido para pruebas locales) por una **API key pública por chatbot** que identifica el bot sin exponer credenciales de usuario.
 
@@ -8550,6 +8582,8 @@ El handler valida que `public_api_key` coincide con el `chatbot_id` en la tabla.
 
 ### Prompt D.2 — Secrets y variables de entorno: migración a Secret Manager
 
+**Modelo sugerido**: **Sonnet** — migración de .env a GCP Secret Manager. Comandos gcloud + wiring en Cloud Run.
+
 **Objetivo**: eliminar el fichero `server/.env` en producción. Todas las credenciales y configuración sensible viven en **GCP Secret Manager**; el contenedor las recibe como variables de entorno inyectadas por Cloud Run.
 
 **Inventario de secrets** (lo que hay en `server/.env` y su destino en GCP):
@@ -8604,6 +8638,8 @@ DEPLOY_MODE=all   # o edge / cloud según el nodo
 ---
 
 ### Prompt D.3 — Base de datos en producción: Cloud SQL + migraciones Alembic
+
+**Modelo sugerido**: **Sonnet** — provisioning Cloud SQL + estrategia de migración Alembic. Comandos documentados.
 
 **Objetivo**: documentar y automatizar el proceso de aprovisionamiento de Cloud SQL y la ejecución de migraciones Alembic como paso pre-deploy, garantizando que la BD nunca queda en un estado intermedio si el despliegue falla.
 
@@ -8664,6 +8700,8 @@ gcloud sql backups create --instance=govgenai-prod --async
 ---
 
 ### Prompt D.4 — Imágenes Docker: Artifact Registry y Cloud Run
+
+**Modelo sugerido**: **Sonnet** — Dockerfiles multi-stage + Artifact Registry + Cloud Run config (3 servicios).
 
 **Objetivo**: construir imágenes Docker de producción (API principal, embedding-service, docling-service), publicarlas en Artifact Registry y desplegarlas en Cloud Run con la configuración de recursos adecuada.
 
@@ -8741,6 +8779,8 @@ El `widget.iife.js` se publica en `https://cdn.govgenai.com/widget/widget.iife.j
 ---
 
 ### Prompt D.5 — CI/CD: pipeline GitHub Actions → Cloud Run
+
+**Modelo sugerido**: **Sonnet** — GitHub Actions workflow + secrets + deploy steps. Patrón conocido.
 
 **Objetivo**: automatizar el ciclo completo (test → build → migrate → deploy) con GitHub Actions. Cada push a `main` despliega a producción; cada PR despliega a staging.
 
@@ -8874,6 +8914,8 @@ curl -f https://api.govgenai.com/api/v1/hub/chatbots \
 
 ### Prompt 11.1 - Generador de Configuración (.env.example)
 
+**Modelo sugerido**: **Sonnet** — generador de plantillas .env con comentarios didácticos.
+
 **Objetivo**: Crear un script de configuración inicial que genere un archivo `.env` completo y autodocumentado.
 
 **Instrucciones**:
@@ -8897,6 +8939,8 @@ SECCIONES DEL .env:
 ---
 
 ### Prompt 11.2 - Docker Compose de Producción "One-Click"
+
+**Modelo sugerido**: **Sonnet** — YAML de Compose + perfiles dev/prod. Trabajo declarativo.
 
 **Objetivo**: Diseñar un archivo `docker-compose.prod.yml` que levante todo el stack con un solo comando.
 
@@ -8924,6 +8968,8 @@ Todo debe estar conectado en una red interna segura. Añadir healthchecks para c
 ---
 
 ### Prompt 11.3 - Script de Inicialización y Semillas
+
+**Modelo sugerido**: **Sonnet** — script de bootstrap + seed data. Patrón script + ORM.
 
 **Objetivo**: Automatizar completamente la primera instalación del sistema.
 
