@@ -57,6 +57,8 @@
       "Bash(sqlite3:*)",
       "Bash(cd C:/Users/fabra/Documents/AI_agents_hub*)",
       "Bash(cd /c/Users/fabra/Documents/AI_agents_hub*)",
+      "PowerShell(cd C:/Users/fabra/Documents/AI_agents_hub*)",
+      "PowerShell(cd C:\\Users\\fabra\\Documents\\AI_agents_hub*)",
       "Bash(cd frontend*)",
       "Bash(cd server*)",
       "Bash(cd shared*)",
@@ -166,7 +168,13 @@
       "Bash(rtk uv *)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\fabra\\\\Documents\\\\AI_agents_hub\\\\server\\\\app\\\\modules\\\\automation\" -Recurse -ErrorAction SilentlyContinue)",
       "Bash(Select-Object FullName)",
-      "Bash(Get-ChildItem *)"
+      "Bash(Get-ChildItem *)",
+      "Bash(rtk vitest *)",
+      "Bash(uv --project server run python -c \"import sys; sys.path.insert\\(0, '.'\\); from server.app.main import app; import json; from fastapi.openapi.utils import get_openapi; schema = get_openapi\\(title=app.title, version=app.version, routes=app.routes\\); keys = list\\(schema.get\\('components',{}\\).get\\('schemas',{}\\).keys\\(\\)\\); print\\([k for k in keys if 'redac' in k.lower\\(\\) or 'ui' in k.lower\\(\\) or 'draft' in k.lower\\(\\) or 'report' in k.lower\\(\\)]\\)\")",
+      "Bash(Get-Item \"C:/Users/fabra/Documents/AI_agents_hub/server/openapi.json\")",
+      "Bash(Select-Object LastWriteTime)",
+      "Bash(rtk npm *)",
+      "Bash(Get-Content *)"
     ]
   },
   "hooks": {
@@ -176,7 +184,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$j=[Console]::In.ReadToEnd()|ConvertFrom-Json;$c=$j.tool_input.command;if($c-and($c-match'cd.+AI_agents_hub')){Write-Output '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"allow\"}}'}",
+            "command": "$j=[Console]::In.ReadToEnd()|ConvertFrom-Json;$c=$j.tool_input.command;if($c-and($c-match'AI_agents_hub')){Write-Output '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"allow\"}}'}",
+            "shell": "powershell"
+          }
+        ]
+      },
+      {
+        "matcher": "PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$j=[Console]::In.ReadToEnd()|ConvertFrom-Json;$c=$j.tool_input.command;if($c-and($c-match'AI_agents_hub')){Write-Output '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"allow\"}}'}",
             "shell": "powershell"
           }
         ]

@@ -14,6 +14,7 @@ import { PromptsPage } from '@/admin/pages/PromptsPage'
 import { PlaceholderPage } from '@/admin/pages/PlaceholderPage'
 import { ReportTemplateBuilderPage } from '@/redaccion/pages/ReportTemplateBuilderPage'
 import { GenericReportWizard } from '@/redaccion/pages/GenericReportWizard'
+import { LLMDraftPreviewPage } from '@/redaccion/pages/LLMDraftPreviewPage'
 import './index.css'
 import '@/shared/i18n'
 
@@ -41,6 +42,7 @@ function App() {
                   </Route>
                   <Route path="/redaccion/builder" element={<ReportTemplateBuilderPage />} />
                   <Route path="/redaccion/wizard" element={<GenericReportWizard />} />
+                  <Route path="/redaccion/draft" element={<LLMDraftPreviewPage />} />
                   <Route path="/automation" element={<PlaceholderPage section="Automatización" />} />
                   <Route path="/platform" element={<PlaceholderPage section="Plataforma" />} />
                 </Route>

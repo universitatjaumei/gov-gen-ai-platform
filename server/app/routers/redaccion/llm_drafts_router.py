@@ -94,7 +94,7 @@ async def get_llm_spec_service() -> LLMSpecService:
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/propose", response_model=ReportTemplateDraft)
+@router.post("/propose", response_model=ReportTemplateDraft, operation_id="proposeLlmDraft")
 async def propose(
     body: ProposeRequest,
     user: UserInfo = Depends(get_current_user),
@@ -107,7 +107,7 @@ async def propose(
     return await service.propose_template(body.prompt_nl, owner_kind)
 
 
-@router.post("/validate", response_model=ReportTemplateDraftValidationResult)
+@router.post("/validate", response_model=ReportTemplateDraftValidationResult, operation_id="validateLlmDraft")
 async def validate_draft(
     draft: ReportTemplateDraft,
     _: UserInfo = Depends(get_current_user),
@@ -116,7 +116,7 @@ async def validate_draft(
     return DraftValidator().validate(draft)
 
 
-@router.post("/approve-as-template", response_model=ApproveAsTemplateResponse)
+@router.post("/approve-as-template", response_model=ApproveAsTemplateResponse, operation_id="approveAsTemplate")
 async def approve_as_template(
     body: ApproveAsTemplateRequest,
     user: UserInfo = Depends(_require_admin_or_partner),
@@ -170,7 +170,7 @@ async def approve_as_template(
     )
 
 
-@router.post("/approve-as-workspace", response_model=ApproveAsWorkspaceResponse)
+@router.post("/approve-as-workspace", response_model=ApproveAsWorkspaceResponse, operation_id="approveAsWorkspace")
 async def approve_as_workspace(
     body: ApproveAsWorkspaceRequest,
     user: UserInfo = Depends(get_current_user),

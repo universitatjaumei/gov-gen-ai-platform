@@ -3,11 +3,13 @@
     "allow": [
       "Read(*)",
       "Edit(*)",
+      "Write(*)",
       "Bash(git *)",
       "Bash(uv run pytest *)",
       "Bash(uv run python *)",
       "Skill(update-config)",
-      "Write(*)"
+      "PowerShell(cd C:/Users/fabra/Documents/AI_agents_hub*)",
+      "PowerShell(cd C:\\Users\\fabra\\Documents\\AI_agents_hub*)"
     ]
   }
 }
