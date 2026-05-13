@@ -31,15 +31,16 @@
 | Subfase 1.B — Identidad Visual | — | 10.1 | ⏳ Pendiente — Fase 10 (temas/plantillas) |
 | Subfase 1.C — Privacidad, Diseño y Exportación | — | 1C.0 | ⏳ Pendiente — 1C.0, 1C.1, Fase 13 (NER), 1C.2, 1C.3, 1C.4 |
 | Fase 20 reducida — WCAG transversal | — | 20.1 | ⏳ Pendiente — WCAG todas las rutas, sin consola conversacional |
+| Fase 11 — Autoinstalación y Distribución | — | 11.1 | ⏳ Pendiente — .env generator, docker-compose.prod.yml, init script |
 | Deploy GCP | — | D.1 | ⏳ Pendiente — D.1-D.5 (último paso) |
 
 **Cursor actual: 9R.7.1 — UI: Renderer base + slots dinámicos**
 
-**Orden de ejecución acordado (2026-05-13):**
-`9R.7.1→9R.10` → `Fase 10` → `1C.0→1C.1` → `Fase 13 (NER redacción)` → `1C.2→1C.4` → `Fase 20 reducida` → `Deploy GCP`
+**Orden de ejecución acordado (2026-05-13, actualizado 2026-05-13):**
+`9R.7.1→9R.10` → `Fase 10` → `1C.0→1C.1` → `Fase 13 (NER redacción)` → `1C.2→1C.4` → `Fase 20 reducida` → `Fase 11 (11.1→11.3)` → `Deploy GCP`
 
 > Nota: el bloque **9R** se incorporó el 2026-05-11 a partir de `Rediseño_informes.md`.
-> Sustituye los antiguos prompts 9.11a–9.11d. **Fase 13** en Fase 1 cubre únicamente el hook NER pre/post-LLM en DraftingCoreGraph; la integración con expedientes es Fase 3. **Fase 20** se ejecuta sin la consola conversacional admin (diferida a Fase 2).
+> Sustituye los antiguos prompts 9.11a–9.11d. **Fase 13** en Fase 1 cubre únicamente el hook NER pre/post-LLM en DraftingCoreGraph; la integración con expedientes es Fase 3. **Fase 20** se ejecuta sin la consola conversacional admin (diferida a Fase 2). **Fase 11** precede a Deploy GCP como prerrequisito de distribución como software libre.
 
 ---
 
@@ -118,4 +119,5 @@ Prompts verbatim para el agente: `Migración_extracción_pdf.txt` §5.
 | 2026-05-13 | 9R.6.4 | contracts/runtime.py: BlockState+original_ai_content, WorkspaceState+user_edits+final_document+final_document_hash. graph/nodes/review_gate.py: UserReviewGateNode (ai_generated→needs_review, status=in_review si pending) + review_gate_router. graph/nodes/apply_user_edits.py: ApplyUserEditsNode (override contenido, preserva original_ai_content). graph/nodes/final_assembler.py: FinalAssemblerNode (solo approved/locked, SHA-256, status=assembled). core_graph.py: flujo completo con arista condicional review_gate. 6 tests verdes en test_core_graph_nodes_assembly.py. |
 | 2026-05-13 | 9R.6.5 | contracts/manifest.py: DraftingRunManifest (id, workspace_id, template_version_id, report_profile, warnings, user_approvals, final_document_hash, status_at_close). graph/tracing.py: SpanHandle+TracingService Protocol, NoOpTracingService, traced_node wrapper (node_span, AI attrs, error event). graph/nodes/audit_log.py: AuditLogNode (open_trace con workspace_id, HubRunManifest ORM, run_manifest_id en span). core_graph.py: todos los nodos envueltos con traced_node, audit_log como nodo final. 10 tests verdes en test_core_graph_audit_tracing.py. |
 | 2026-05-13 | (planificación orden F1) | Reordenación de subfases 1.B/1.C/Deploy: Fase 10 → 1C.0+1C.1 → Fase 13 NER (solo redacción) → 1C.2-1C.4 → Fase 20 reducida (sin consola conversacional) → Deploy GCP. Admin conversacional diferido a Fase 2; integración NER+expedientes a Fase 3. Plan_TDD_Fase1.md alcance y "Qué NO" actualizados. |
+| 2026-05-13 | (planificación F1) | Fase 11 (Autoinstalación y Distribución Software Libre, prompts 11.1–11.3) recuperada en el orden de ejecución: antes de Deploy GCP. Estaba en Plan_TDD_Fase1.md pero omitida del orden acordado en PROJECT_STATE.md. |
 | 2026-05-13 | 9R.6.6 | runtime.py: FailureKind Literal + WorkspaceBlockedByFailedBlocksError + BlockState(failure_kind, last_error_message, retry_attempts) + WorkspaceState(regenerate_blocks, skip_blocks). services/block_executor.py: LLMTimeoutError/ScriptRuntimeError/ASTValidationError + BlockExecutor(retry 1×, span events, failure_kind map) + NodeResult + propagate_dependency_failures(cascada). ai_assist_draft.py: per-block failed(ai_failed), continúa. review_gate.py: REGENERATE (reset por failure_kind) + SKIP (solo no-required). final_assembler.py: lanza WorkspaceBlockedByFailedBlocksError para required fallidos fuera de skip_blocks. manifest.py: FailedBlockInfo + failed_blocks. audit_log.py: recoge failed_blocks. ORM: +failure_kind+last_error_message+retry_attempts en hub_workspace_blocks. Migración o6d7e8f9a0b1 (pendiente de BD). 79 tests verdes (14 nuevos en test_core_graph_failed_blocks.py). |
