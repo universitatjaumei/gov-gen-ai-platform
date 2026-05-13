@@ -1941,6 +1941,8 @@ LoadTemplateNode
 9R.5.4 (RED/GREEN)  ExtractionPipelineFactory + AdminScriptExtractionPipeline (motor de ejecución)
 9R.5.5 (RED/GREEN)  ScriptProposalService + migración módulo anonimización (spaCy NER + Faker + regex + anclajes, desde client_app legacy) + endpoints propose/describe/anonymize/test/validate
 9R.5.6 (RED/GREEN)  Workflow de aprobación scripts: self-service usuario / cola admin para plantillas globales
+9R.5.7 (RED/GREEN)  Bloque CHART (modo determinista + IA) — migración de graphics_factory + deterministic_graphics_service legacy
+9R.5.8 (RED/GREEN)  Bloque DATA_TRANSFORM (filter/aggregate/join/pivot/groupby) — migración de etl_service + deterministic_etl + etl_factory legacy
 
 9R.6.1 (RED/GREEN)  CoreGraph: LoadTemplate / ValidateInputContract / FileNormalization
 9R.6.2 (RED/GREEN)  CoreGraph: DeterministicExtraction / DataQualityCheck / MissingDataQuestion
@@ -3067,6 +3069,206 @@ Criterio de done:
 
 ---
 
+### Prompt 9R.5.7 (RED/GREEN) — Bloque CHART: migración del módulo de gráficos legacy
+
+```markdown
+# PROMPT 9R.5.7 (RED/GREEN) — Implementación del block kind CHART vía migración del legacy
+
+Objetivo: implementar la ejecución del block kind `CHART` (definido en 9R.3.1 pero sin handler real) migrando el módulo de gráficos legacy de `client_app/`. Patrón dual confirmado: modo determinista (UI configura tipo + ejes + filtros) y modo IA (NL → script Python que genera el gráfico). Determinista first: si el usuario lo configura, no se invoca al LLM.
+
+> Avance respecto al plan original: 9R.3.1 dejó `CHART` definido como contrato sin implementación. Este prompt cierra esa deuda reutilizando el trabajo ya probado del legacy en lugar de reinventar.
+
+Deploy: edge
+
+## Parte 1 — Migración desde legacy
+
+Fuente legacy:
+- `client_app/app/modules/factory/graphics_factory.py` (342 LOC — modo IA, generación de script)
+- `client_app/app/services/deterministic_graphics_service.py` (modo asistido)
+- `client_app/app/services/graphics_service.py` (62 LOC — wrapper headless)
+- Tests: `client_app/tests/unit/test_graphics_factory.py`, `test_graphics_page_modes.py`, `client_app/tests/security/test_sandbox_graphics.py`.
+
+Destino:
+- `server/app/modules/redaccion/services/charts/`
+  - `__init__.py`
+  - `chart_configuration.py`           # ChartConfiguration Pydantic (migrado del dataclass legacy)
+  - `deterministic_chart_service.py`   # DeterministicChartService (modo configurador)
+  - `chart_factory.py`                 # ChartFactory (modo IA, NL → script)
+  - `chart_renderer.py`                # render_chart(config_or_script, data) → bytes (PNG/SVG)
+- `server/tests/modules/redaccion/charts/`
+
+Adaptaciones obligatorias:
+1. **Eliminar acoplamiento NiceGUI**: el legacy mezcla UI con lógica dentro de `graphics_page.py` (líneas 771-816, `handle_ai_generation`). Esa lógica se extrae a `ChartFactory.generate_script()` y `chart_renderer.render_chart()`. La página NiceGUI se descarta — la UI nueva llega en 9R.7.x.
+2. **StorageRef en lugar de file paths**: input (datos) y output (imagen del gráfico) referenciados por StorageRef.
+3. **Sandbox compartido con scripts**: cuando se ejecuta el script generado en modo IA, usar el mismo `_execute_in_sandbox` de `AdminScriptExtractionPipeline` (9R.5.4). No duplicar.
+4. **Auditoría AST igual que scripts**: el código generado por LLM pasa por `ScriptSecurityAuditor` (9R.5.4) antes de ejecutar. Lista blanca ampliada a `plotly`, `matplotlib`, `seaborn` solo para este pipeline.
+5. **Output serializable para el manifest**: además del PNG/SVG, persistir el `ChartConfiguration` JSON (qué tipo, qué columnas) en `block.content_json` para reproducibilidad.
+
+## Parte 2 — Integración con el block kind CHART
+
+`server/app/modules/redaccion/blocks/handlers.py` — actualizar `ChartBlockHandler`:
+- `execute(block: BlockContract, ctx: ExecutionContext) -> BlockOutput`:
+  - Si `block.config.mode == 'deterministic'`: invoca `DeterministicChartService.render(config, data)`.
+  - Si `block.config.mode == 'ai'`: invoca `ChartFactory.generate_script(nl_prompt, schema)` → audit → sandbox → `chart_renderer.render_chart(script, data)`.
+  - Output: `{image_ref: StorageRef, configuration: ChartConfiguration, model_used: str | None}`.
+- `to_manifest(block) -> dict`: incluye `chart_type`, `data_source_block_id` (BlockReference), `model_used`, `prompt_version` si modo IA.
+
+Ampliación de `BlockContract` para CHART (en `contracts/blocks.py`):
+```python
+class ChartBlockConfig(BaseModel):
+    mode: Literal['deterministic', 'ai']
+    chart_type: Literal['bar', 'line', 'pie', 'scatter', 'histogram'] | None  # solo deterministic
+    x_axis: str | None
+    y_axis: str | list[str] | None
+    color_by: str | None
+    nl_prompt: str | None  # solo ai
+    palette: str = 'default'
+```
+
+## Parte 3 — Endpoints
+
+No se añaden endpoints HTTP nuevos: el render se invoca desde el grafo (`AIAssistDraftNode` siguiente al CHART consume el `image_ref`). Sí se añade:
+- `GET /api/v1/redaccion/charts/preview` — solo en el wizard de UI, permite previsualizar un chart sin persistir (datos sintéticos del usuario).
+
+## Tests (RED → GREEN)
+
+Migrados/adaptados del legacy:
+- test_deterministic_chart_service_renders_bar_chart
+- test_deterministic_chart_service_renders_line_chart
+- test_deterministic_chart_service_renders_pie_chart
+- test_chart_factory_generates_script_from_nl
+- test_chart_factory_rejects_unsafe_imports_in_generated_script
+- test_chart_renderer_outputs_png_bytes
+- test_chart_renderer_outputs_svg_when_requested
+
+Nuevos:
+- test_chart_block_handler_routes_to_deterministic_when_mode_deterministic
+- test_chart_block_handler_routes_to_ai_when_mode_ai
+- test_chart_block_handler_audits_generated_script_before_execution
+- test_chart_block_handler_persists_configuration_in_manifest
+- test_chart_block_handler_resolves_data_via_block_reference
+
+## Criterio de done
+
+- ≥12 tests verdes.
+- `ChartBlockHandler.execute()` funcional para ambos modos.
+- Sandbox compartido con AdminScriptExtractionPipeline (verificable: una sola implementación de `_execute_in_sandbox`).
+- Tests del slice (9R.10) preparados para incluir un bloque CHART.
+
+## Retirada legacy (CLAUDE.md regla Caso A)
+
+Al cerrar este prompt en GREEN, mover a `_legacy_nicegui/`:
+- `client_app/app/modules/factory/graphics_factory.py`
+- `client_app/app/services/graphics_service.py`
+- `client_app/app/services/deterministic_graphics_service.py`
+- `client_app/app/ui/graphics_page.py`
+- Tests legacy asociados.
+Verificar con `grep -r` que no quedan referencias activas. Borrado definitivo manual por el usuario al cierre de Fase 1.
+```
+
+---
+
+### Prompt 9R.5.8 (RED/GREEN) — Bloque DATA_TRANSFORM: migración del módulo ETL legacy
+
+```markdown
+# PROMPT 9R.5.8 (RED/GREEN) — Nuevo block kind DATA_TRANSFORM con motor ETL determinista + modo IA
+
+Objetivo: introducir el block kind `DATA_TRANSFORM` que ejecuta transformaciones tabulares (filter, aggregate, join, pivot, normalize, groupby) entre la extracción determinista y los bloques IA. Migrado del módulo ETL legacy, que es el módulo mejor factorizado del client_app (separación lógica/UI razonable, sandbox + anonimización + refinamiento iterativo).
+
+> Avance respecto al plan original: el BlockContract de 9R.1.2 cubría 10 tipos de bloque pero no incluía transformación tabular. Este prompt añade el 11º tipo y resuelve el eslabón ausente entre `DeterministicExtractionNode` y `AIAssistDraftNode` para informes que necesitan agregar/filtrar antes de redactar.
+
+Deploy: edge
+
+## Parte 1 — Migración desde legacy
+
+Fuente legacy:
+- `client_app/app/services/etl_service.py` (425 LOC, orquestador maduro)
+- `client_app/app/services/deterministic_etl_service.py` (motor de operaciones)
+- `client_app/app/modules/factory/etl_factory.py` (369 LOC, modo IA)
+- Tests: `client_app/tests/unit/test_etl_service.py`, `test_deterministic_etl.py`, `client_app/tests/integration/test_etl_e2e.py` + tests de modos, clarificación, anonimización.
+
+Destino:
+- `server/app/modules/redaccion/services/transformation/`
+  - `__init__.py`
+  - `operations.py`                # Operation Pydantic discriminated union (FilterOp, AggregateOp, JoinOp, PivotOp, NormalizeOp, GroupByOp)
+  - `deterministic_etl.py`         # DeterministicETLService.execute(df, operations) → df
+  - `etl_factory.py`               # ETLFactory.generate_operations_from_nl(nl, schema) → list[Operation]
+  - `etl_service.py`               # ETLService (orquestador: lee → transforma → valida → devuelve)
+- `server/tests/modules/redaccion/transformation/`
+
+Adaptaciones obligatorias:
+1. **Reemplazar generación de script Python por generación de `list[Operation]` JSON**: en el legacy, el modo IA generaba código Python ejecutable. Aquí preferimos que la IA produzca operaciones declarativas (más auditable, más fácil de mostrar al usuario antes de aplicar). Si una operación requerida no encaja en el catálogo, fallback a script Python via ScriptSecurityAuditor (igual que 9R.5.5).
+2. **StorageRef + DataFrame async**: el legacy trabajaba sobre `pd.DataFrame` in-memory. Mantener pandas pero envolver la lectura/escritura en async (`StorageService.get_bytes` + `pd.read_excel`/`read_csv`).
+3. **Refinamiento iterativo conservado**: el legacy tenía `MAX_REFINEMENT_ITERATIONS = 3` (la IA podía corregir su output si la validación fallaba). Mantener.
+4. **Anonimización integrada en el flujo de tests**: cuando el bloque DATA_TRANSFORM se usa como test data para un script (9R.5.5), el anonymizer (también 9R.5.5) se aplica antes.
+5. **Tipos de operación cubiertos**: filter (col, op, value), aggregate (col, function), join (other_block_ref, on, how), pivot (index, columns, values), normalize (cols, method), groupby (cols, agg_dict). Validación estricta en cada operación.
+
+## Parte 2 — Integración con el block kind DATA_TRANSFORM
+
+Añadir `DATA_TRANSFORM` al `BlockKind` enum en `contracts/blocks.py`:
+
+```python
+class DataTransformBlockConfig(BaseModel):
+    mode: Literal['deterministic', 'ai']
+    source_block_ref: BlockReference  # de qué bloque toma el DataFrame
+    operations: list[Operation] | None  # solo deterministic
+    nl_instruction: str | None         # solo ai (se traduce a operations)
+```
+
+`DataTransformBlockHandler.execute(block, ctx)`:
+- Resuelve DataFrame desde `source_block_ref` (reusa BlockReference + projection de 9R.3.3).
+- Si `mode == 'deterministic'`: `DeterministicETLService.execute(df, operations)`.
+- Si `mode == 'ai'`: `ETLFactory.generate_operations_from_nl(nl, schema)` → validate → execute. Si genera operations inválidas tras 3 intentos, fallback a script Python (sandbox + audit).
+- Output: `{transformed_data_ref: StorageRef, operations_applied: list[Operation], model_used: str | None}`.
+- `to_manifest`: incluye lista de operaciones aplicadas y fuente (deterministic vs ai).
+
+## Parte 3 — Integración en el grafo
+
+Modificar `DraftingCoreGraph` (9R.6.x):
+- Nuevo nodo `DataTransformationNode` (servidor entre `DeterministicExtractionNode` y `AIAssistDraftNode`).
+- Itera sobre bloques `DATA_TRANSFORM` en orden topológico (reusar 9R.3.3).
+- Transición de estado: `draft → ai_generated` o `draft → extracted` según mode (el resultado es determinista en ambos casos — la IA solo elige las operaciones, no las ejecuta).
+
+## Tests (RED → GREEN)
+
+Migrados/adaptados del legacy:
+- test_deterministic_etl_filter
+- test_deterministic_etl_aggregate
+- test_deterministic_etl_join
+- test_deterministic_etl_pivot
+- test_deterministic_etl_groupby_with_multiple_aggs
+- test_deterministic_etl_normalize_min_max
+- test_etl_factory_generates_operations_from_nl (mocked LLM)
+- test_etl_factory_refines_when_validation_fails
+- test_etl_factory_falls_back_to_script_when_operations_unsupported
+- test_etl_service_runs_pipeline_end_to_end
+
+Nuevos:
+- test_data_transform_block_handler_resolves_source_via_block_ref
+- test_data_transform_block_persists_operations_in_manifest
+- test_data_transform_node_runs_between_extraction_and_ai
+- test_data_transform_block_chains_with_chart_block_consuming_output
+
+## Criterio de done
+
+- ≥14 tests verdes.
+- DATA_TRANSFORM funcional en ambos modos.
+- `DataTransformationNode` integrado en core_graph.py (9R.6.x ya completado).
+- Documentación actualizada en `docs/REDACCION_CONTRACT_FIRST.md`: sección "Bloques de transformación".
+
+## Retirada legacy (CLAUDE.md regla Caso A)
+
+Al cerrar este prompt en GREEN, mover a `_legacy_nicegui/`:
+- `client_app/app/services/etl_service.py`
+- `client_app/app/services/deterministic_etl_service.py`
+- `client_app/app/modules/factory/etl_factory.py`
+- `client_app/app/ui/etl_page.py`
+- Tests legacy asociados.
+Verificar con `grep -r` que no quedan referencias activas. Borrado definitivo manual por el usuario al cierre de Fase 1.
+```
+
+---
+
 ### Prompt 9R.6.1 (RED/GREEN) — CoreGraph: nodos de carga y normalización
 
 ```markdown
@@ -4065,6 +4267,76 @@ describe('useFocusStore', () => {
 - El sidebar colapsa (clase `sidebar-collapsed`) cuando `viewMode='focus'`.
 - `AgentWorkspacePanel` (9.11d) se envuelve con `<FocusLayout>` sin modificar su lógica interna.
 - Los 5 tests pasan en verde.
+
+---
+
+### Prompt 1C.0.bis — Copilot Drawer: RAG sobre docs de módulo + NL→config (TDD RED/GREEN)
+
+**Objetivo**: añadir al `DrawerHub` (1C.0) un asistente conversacional (`CopilotPanel`) que cumple dos funciones, migradas conceptualmente del legacy `copilot_chat.py` (986 LOC NiceGUI):
+1. **RAG sobre la documentación del módulo activo**: el usuario hace preguntas en lenguaje natural ("¿cómo creo un bloque de tabla?", "¿qué pasa si rechazo un bloque IA?") y recibe respuestas basadas en `docs/REDACCION_CONTRACT_FIRST.md` y similares, contextualizadas al módulo donde está navegando.
+2. **NL → instrucciones deterministas**: el usuario dicta lo que quiere ("agrupa por mes y suma el importe", "haz un gráfico de barras del total por región") y el copilot produce **configuración estructurada** que las páginas wizard consumen (operaciones ETL del 9R.5.8, configuración de chart del 9R.5.7, propuesta de script del 9R.5.5).
+
+**Dependencias**: 1C.0 (FocusLayout + DrawerHub + useFocusStore), 9R.5.5 (ScriptProposalService — copilot lo invoca para scripts), 9R.5.7 (ChartFactory — copilot lo invoca para gráficos), 9R.5.8 (ETLFactory — copilot lo invoca para transformaciones).
+
+**Origen legacy** (a migrar conceptualmente, no portar literalmente NiceGUI):
+- `client_app/app/ui/components/copilot_chat.py` (986 LOC) — patrones reutilizables:
+  - Parseo de tags `[PROMPT_PROPOSAL]`, `[ETL_AI_PROMPT]`, `[CHART_AI_PROMPT]` para distinguir "respuesta textual" de "configuración estructurada".
+  - `STEP_TYPE_MAP` que mapea contexto del módulo (GRAPHICS/ETL/EXTRACTION) al tipo de instrucción esperada — equivalente a nuestro `BlockKind`.
+  - **Pills contextuales**: sugerencias rápidas según el módulo donde está el usuario.
+- `client_app/app/ui/focus_manager.py` (183 LOC) — `apply_fix()` con acciones tipadas (CREATE_STEP, ANONYMIZE_VAR…) — patrón a replicar con dispatch via `useFocusStore`.
+
+**Instrucciones al agente**:
+```text
+Actúa como experto en React + Zustand + RAG. Implementa el CopilotPanel en
+frontend/src/shared/layout/copilot/.
+
+1. SERVICIO BACKEND (server/app/modules/redaccion/services/copilot/):
+   - DocsRetriever: indexa docs/REDACCION_CONTRACT_FIRST.md + docs/CHATBOTS_PUBLICOS.md
+     usando BGE-M3 (el embedding_service ya existente). Filtro por módulo activo.
+   - CopilotService.answer(question, context): {answer: str, source_refs: list[str]}
+   - CopilotService.translate_nl_to_config(instruction, target_kind): devuelve un
+     discriminated union ChartConfig | list[Operation] | ProposalRequest según target_kind.
+     Internamente invoca ChartFactory / ETLFactory / ScriptProposalService.
+   - Endpoint: POST /api/v1/redaccion/copilot/ask
+                POST /api/v1/redaccion/copilot/translate
+
+2. UI (frontend/src/shared/layout/copilot/CopilotPanel.tsx):
+   - Input de chat + botón enviar.
+   - Pills contextuales (3-5 sugerencias rápidas según useFocusStore.context.type).
+   - Distingue dos tipos de respuesta:
+     - Textual con citas → renderiza como markdown + lista de referencias.
+     - Configuración estructurada → muestra preview + botón "Aplicar" que despacha
+       una acción al store de la página activa (ChartConfig al builder de chart,
+       Operations al wizard ETL, ProposalRequest al wizard de script).
+
+3. STORE (extiende useFocusStore):
+   pendingAction: { kind: 'chart_config' | 'etl_ops' | 'script_proposal'; payload: any } | null
+   Acción dispatchCopilotAction(action) que las páginas wizard consumen vía hook
+   useCopilotAction(targetKind).
+
+Tests Vitest:
+- should_index_docs_and_retrieve_by_module
+- should_answer_question_with_source_refs
+- should_translate_nl_to_chart_config_when_target_is_chart
+- should_translate_nl_to_etl_operations_when_target_is_data_transform
+- should_translate_nl_to_script_proposal_when_target_is_admin_script
+- should_render_pills_contextual_to_active_module
+- should_dispatch_action_to_active_wizard_when_apply_clicked
+```
+
+**Criterios de aceptación**:
+- 7 tests verdes.
+- CopilotPanel integrado como pestaña en DrawerHub (tab "Copilot" tanto en 'informe' como en 'flujo').
+- Cero llamadas manuales a fetch — solo hooks Orval.
+- i18n en ES/EN/CA.
+
+**Retirada legacy (CLAUDE.md regla Caso A)**:
+Al cerrar este prompt en GREEN, mover a `_legacy_nicegui/`:
+- `client_app/app/ui/components/copilot_chat.py`
+- `client_app/app/ui/components/side_drawer.py`
+- `client_app/app/ui/focus_manager.py`
+- Tests asociados.
+Borrado definitivo manual al cierre de Fase 1.
 
 ---
 
