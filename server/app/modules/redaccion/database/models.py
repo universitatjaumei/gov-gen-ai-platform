@@ -169,6 +169,9 @@ class HubWorkspaceBlock(HubOperationalBase):
     content_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     citations_json: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     approval_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    failure_kind: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    last_error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retry_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now, onupdate=_now
     )

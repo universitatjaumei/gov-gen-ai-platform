@@ -281,6 +281,10 @@ Clasificación, regulada en runtime por `DEPLOY_MODE=cloud|edge|all` (default
 - **El módulo `modules/automation/` es edge**: factories, flows, ETL, PDF y
   scripts procesan documentos/expedientes del cliente. No importa routers
   cloud ni gestión admin.
+- **El módulo `modules/redaccion/` es edge**: contratos de plantilla, pipelines de
+  extracción, DraftingCoreGraph, LLMSpecService y RunManifest procesan documentos y
+  expedientes del cliente. Los routers se etiquetan `Deploy: edge` y no importan
+  módulos cloud. Ver `docs/REDACCION_CONTRACT_FIRST.md`.
 - **Al registrar un router nuevo** en `main.py`, **etiquétalo** en su docstring
   (`Deploy: cloud|edge|shared`) y regístralo en la función `_register_cloud`,
   `_register_edge` o ambas.

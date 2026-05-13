@@ -13,6 +13,7 @@ from server.app.modules.agents_hub.database.config_models import (
     HubChatbot,
     HubClient,
     HubLLMConfig,
+    HubProvider,
 )
 
 _DEV_LLM_CONFIG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
@@ -26,6 +27,7 @@ async def seed_hub_defaults() -> None:
     factory = create_session_factory(engine)
 
     async with factory() as session:
+        await _seed_providers(session)
         await _seed_llm_config(session)
         await _seed_client(session)
         await _seed_chatbot(session)
@@ -33,6 +35,21 @@ async def seed_hub_defaults() -> None:
 
     await engine.dispose()
     print("[SEED] Hub defaults verificados/creados.")
+
+
+_DEFAULT_PROVIDERS = [
+    HubProvider(id="google", name="Google AI (Gemini)", provider_type="google_genai"),
+    HubProvider(id="openrouter", name="OpenRouter", provider_type="openai_compatible"),
+    HubProvider(id="ollama", name="Ollama (Local)", provider_type="openai_compatible"),
+]
+
+
+async def _seed_providers(session: AsyncSession) -> None:
+    for provider in _DEFAULT_PROVIDERS:
+        existing = await session.get(HubProvider, provider.id)
+        if not existing:
+            session.add(provider)
+    print("[SEED] HubProviders verificados/creados.")
 
 
 async def _seed_llm_config(session: AsyncSession) -> None:

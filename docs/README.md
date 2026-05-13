@@ -4,7 +4,7 @@ Bienvenido a la documentación completa de AutomatIA. Esta guía te ayudará a e
 
 ## 🎯 Navegación por Rol
 
-### 👤 Usuario Final (Cliente)
+### 👤 Usuario Final
 Si eres usuario final de AutomatIA en tu organización:
 
 1. **Primeros pasos**: [Guía de Inicio Rápido](quick_start.md)
@@ -41,7 +41,7 @@ Si estás desarrollando o extendiendo AutomatIA:
 | [Manual de Usuario - Client Node](functional/user_manual_client.md) | Guía completa de uso diario de la aplicación cliente | Usuario Final |
 | [Guía de Usuario ETL](ETL_USER_GUIDE.md) | Transformación de datos con lenguaje natural | Usuario Final |
 | [Configuración de Flujos](functional/flows_configuration.md) | Creación y gestión de workflows automatizados | Usuario Final |
-| [Guía de Administración para Partners](functional/partner_admin_guide.md) | Gestión de clientes y licencias | Partner |
+| [Guía de Administración para Partners](functional/partner_admin_guide.md) | Gestión de organizaciones y licencias | Partner |
 | [Manual de Administración](MANUAL_ADMIN.md) | Panel de administración del servidor | Partner/Admin |
 
 ### Documentación Técnica

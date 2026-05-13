@@ -1,0 +1,107 @@
+"""DraftingCoreGraph bootstrap — 9R.6.1–9R.6.5.
+
+build_core_graph() devuelve el StateGraph compilado listo para invocar.
+El grafo usa WorkspaceState (Pydantic BaseModel) como tipo de estado.
+Todos los nodos se envuelven con el helper traced_node para observabilidad Langfuse.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+from langgraph.graph import StateGraph
+
+from server.app.modules.redaccion.contracts.runtime import WorkspaceState
+from server.app.modules.redaccion.graph.nodes.ai_assist_draft import AIAssistDraftNode
+from server.app.modules.redaccion.graph.nodes.apply_user_edits import ApplyUserEditsNode
+from server.app.modules.redaccion.graph.nodes.audit_log import AuditLogNode
+from server.app.modules.redaccion.graph.nodes.citation_traceability import CitationAndTraceabilityNode
+from server.app.modules.redaccion.graph.nodes.data_quality_check import (
+    DataQualityCheckNode,
+    data_quality_router,
+)
+from server.app.modules.redaccion.graph.nodes.deterministic_extraction import DeterministicExtractionNode
+from server.app.modules.redaccion.graph.nodes.file_normalization import FileNormalizationNode
+from server.app.modules.redaccion.graph.nodes.final_assembler import FinalAssemblerNode
+from server.app.modules.redaccion.graph.nodes.load_template import LoadTemplateNode
+from server.app.modules.redaccion.graph.nodes.missing_data_question import MissingDataQuestionNode
+from server.app.modules.redaccion.graph.nodes.review_gate import UserReviewGateNode, review_gate_router
+from server.app.modules.redaccion.graph.nodes.validate_inputs import ValidateInputContractNode
+from server.app.modules.redaccion.graph.tracing import NoOpTracingService, traced_node
+
+
+def build_core_graph(
+    template_version_repo: Any,
+    storage_service: Any,
+    extraction_factory: Any,
+    llm_service: Any,
+    manifest_repo: Any = None,
+    tracing_service: Any = None,
+):
+    """Construye y compila el DraftingCoreGraph.
+
+    Args:
+        template_version_repo: instancia compatible con ReportTemplateVersionRepo.
+        storage_service: instancia compatible con StorageService.
+        extraction_factory: instancia compatible con ExtractionPipelineFactory.
+        llm_service: instancia compatible con LLMService Protocol.
+        manifest_repo: instancia compatible con RunManifestRepo (opcional; no persiste sin él).
+        tracing_service: instancia compatible con TracingService (por defecto: NoOp).
+
+    Returns:
+        Grafo compilado listo para invocar con `await graph.ainvoke(state)`.
+    """
+    tracing = tracing_service or NoOpTracingService()
+
+    load_node = LoadTemplateNode(template_version_repo)
+    validate_node = ValidateInputContractNode()
+    normalize_node = FileNormalizationNode(storage_service)
+    extract_node = DeterministicExtractionNode(extraction_factory)
+    quality_node = DataQualityCheckNode()
+    missing_node = MissingDataQuestionNode()
+    ai_node = AIAssistDraftNode(llm_service)
+    citation_node = CitationAndTraceabilityNode()
+    review_node = UserReviewGateNode()
+    edits_node = ApplyUserEditsNode()
+    assembler_node = FinalAssemblerNode()
+    audit_node = AuditLogNode(manifest_repo, tracing)
+
+    def _t(node, name: str):
+        return traced_node(node, tracing, name)
+
+    graph = StateGraph(WorkspaceState)
+    graph.add_node("load_template",           _t(load_node,      "load_template"))
+    graph.add_node("validate_inputs",         _t(validate_node,  "validate_inputs"))
+    graph.add_node("file_normalization",      _t(normalize_node, "file_normalization"))
+    graph.add_node("deterministic_extraction",_t(extract_node,   "deterministic_extraction"))
+    graph.add_node("data_quality_check",      _t(quality_node,   "data_quality_check"))
+    graph.add_node("missing_data_question",   _t(missing_node,   "missing_data_question"))
+    graph.add_node("ai_assist_draft",         _t(ai_node,        "ai_assist_draft"))
+    graph.add_node("citation_traceability",   _t(citation_node,  "citation_traceability"))
+    graph.add_node("review_gate",             _t(review_node,    "review_gate"))
+    graph.add_node("apply_user_edits",        _t(edits_node,     "apply_user_edits"))
+    graph.add_node("final_assembler",         _t(assembler_node, "final_assembler"))
+    graph.add_node("audit_log",               _t(audit_node,     "audit_log"))
+
+    graph.set_entry_point("load_template")
+    graph.add_edge("load_template", "validate_inputs")
+    graph.add_edge("validate_inputs", "file_normalization")
+    graph.add_edge("file_normalization", "deterministic_extraction")
+    graph.add_edge("deterministic_extraction", "data_quality_check")
+    graph.add_conditional_edges(
+        "data_quality_check",
+        data_quality_router,
+        {"ask_user": "missing_data_question", "ok": "ai_assist_draft"},
+    )
+    graph.add_edge("missing_data_question", "audit_log")
+    graph.add_edge("ai_assist_draft", "citation_traceability")
+    graph.add_edge("citation_traceability", "review_gate")
+    graph.add_conditional_edges(
+        "review_gate",
+        review_gate_router,
+        {"pause": "audit_log", "continue": "apply_user_edits"},
+    )
+    graph.add_edge("apply_user_edits", "final_assembler")
+    graph.add_edge("final_assembler", "audit_log")
+    graph.set_finish_point("audit_log")
+
+    return graph.compile()

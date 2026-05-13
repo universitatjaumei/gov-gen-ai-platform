@@ -13,7 +13,7 @@ Permite que cualquier institución (universidad, ayuntamiento, entidad pública)
 - Generación de respuestas con un LLM sobre las evidencias recuperadas.
 - Widget embebible con streaming en tiempo real, fuentes citadas y valoración.
 - Arquitectura de perfiles intercambiables (sin tocar el motor central).
-- Cascada de configuración plataforma → organización → chatbot.
+- Cascada de configuración plataforma → organización → chatbot (ver sección Arquitectura).
 
 ---
 
@@ -77,7 +77,7 @@ PublicGraphConfig efectiva → GraphFactory → CoreGraph
 ### 1. Gestión de chatbots (panel admin)
 
 - **CRUD completo** vía `/api/v1/hub/chatbots`.
-- Cada chatbot pertenece a un `HubClient` (organización).
+- Cada chatbot pertenece a una organización (modelo interno: `HubClient`).
 - Campos de configuración del grafo que se pueden fijar por chatbot:
   - `retrieval_mode` — RAG / MD_LONG_CONTEXT / MD_AGENT_SELECTOR
   - `public_graph_profile` — perfil de grafo
@@ -172,7 +172,7 @@ El widget se construye como bundle JavaScript autocontenido que puede embeberse 
 | `/api/v1/hub/chatbots/{id}` | PATCH/DELETE | Panel admin |
 | `/api/v1/hub/chatbots/{id}/corpus-stats` | GET | Panel admin |
 | `/api/v1/hub/chatbots/{id}/regenerate-chunks` | POST | Panel admin |
-| `/api/v1/hub/clients` | GET/POST/PATCH | Panel admin/partner |
+| `/api/v1/hub/clients` | GET/POST/PATCH | Panel admin/partner (organizaciones) |
 | `/api/v1/hub/ingestion/{chatbot_id}/documents` | POST | Panel admin |
 
 ---

@@ -39,6 +39,9 @@ dependencies = [
     "fsspec>=2024.6.0",
     "gcsfs>=2024.6.0",
     "s3fs>=2024.6.0",
+    "pandas>=2.0.0",
+    "camelot-py>=0.11.0",
+    "pdfplumber>=0.11.0",
 ]
 
 [dependency-groups]

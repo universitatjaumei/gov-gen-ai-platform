@@ -3,5 +3,13 @@
     "hub": "Hub",
     "automation": "Automatització",
     "platform": "Plataforma"
+  },
+  "hub": {
+    "clients": "Organitzacions",
+    "chatbot_client": "Organització",
+    "new_client": "Nova organització",
+    "client_name": "Nom de l'organització",
+    "no_clients": "No hi ha organitzacions creades",
+    "delete_client_confirm": "Eliminar aquesta organització?"
   }
 }

@@ -14,6 +14,7 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 import server.app.database.models  # noqa: F401
 import server.app.modules.agents_hub.database.config_models
 import server.app.modules.agents_hub.database.operational_models
+import server.app.modules.redaccion.database.models  # noqa: F401
 
 
 config = context.config

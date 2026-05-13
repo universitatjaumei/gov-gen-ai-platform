@@ -92,7 +92,7 @@ async def list_clients(
         )
     ).all()
     return [
-        ClientRead.model_validate(c, update={"chatbot_count": count})
+        ClientRead.model_validate(c).model_copy(update={"chatbot_count": count})
         for c, count in rows
     ]
 
@@ -120,7 +120,7 @@ async def create_client(
     session.add(client)
     await session.commit()
     await session.refresh(client)
-    return ClientRead.model_validate(client, update={"chatbot_count": 0})
+    return ClientRead.model_validate(client).model_copy(update={"chatbot_count": 0})
 
 
 @router.patch("/{client_id}", response_model=ClientRead)
@@ -142,7 +142,7 @@ async def update_client(
 
     await session.commit()
     await session.refresh(client)
-    return ClientRead.model_validate(client, update={"chatbot_count": 0})
+    return ClientRead.model_validate(client).model_copy(update={"chatbot_count": 0})
 
 
 @router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)

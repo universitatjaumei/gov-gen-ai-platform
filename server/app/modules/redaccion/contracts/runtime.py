@@ -1,4 +1,4 @@
-"""Contratos de runtime del DraftingCoreGraph — 9R.1.3.
+"""Contratos de runtime del DraftingCoreGraph — 9R.1.3 / 9R.6.6.
 
 WorkspaceState es el estado que fluye por el grafo durante una ejecución.
 BlockState tiene una máquina de estados explícita; las transiciones inválidas
@@ -10,9 +10,12 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from server.app.modules.redaccion.contracts.template import ReportProfileId
+from server.app.modules.redaccion.contracts.template import (
+    ReportProfileId,
+    ReportTemplateSpec,
+)
 
 # ---------------------------------------------------------------------------
 # Estados
@@ -27,6 +30,14 @@ BlockStatus = Literal[
     "approved",
     "rejected",
     "locked",
+    "failed",
+]
+
+FailureKind = Literal[
+    "extraction_failed",
+    "ai_failed",
+    "script_failed",
+    "validation_failed",
 ]
 
 WorkspaceStatus = Literal[
@@ -42,19 +53,20 @@ WorkspaceStatus = Literal[
 
 # Transiciones válidas por estado origen
 _VALID_TRANSITIONS: dict[str, set[str]] = {
-    "draft":         {"missing_input", "extracted", "ai_generated"},
-    "missing_input": {"extracted"},
-    "extracted":     {"ai_generated", "needs_review"},
-    "ai_generated":  {"needs_review"},
+    "draft":         {"missing_input", "extracted", "ai_generated", "failed"},
+    "missing_input": {"extracted", "failed"},
+    "extracted":     {"ai_generated", "needs_review", "failed"},
+    "ai_generated":  {"needs_review", "failed"},
     "needs_review":  {"approved", "rejected"},
     "rejected":      {"ai_generated", "draft"},
     "approved":      {"locked"},
     "locked":        set(),
+    "failed":        {"draft", "extracted", "ai_generated", "rejected"},
 }
 
 
 # ---------------------------------------------------------------------------
-# Excepción de transición inválida
+# Excepciones
 # ---------------------------------------------------------------------------
 
 class InvalidBlockTransitionError(Exception):
@@ -64,6 +76,16 @@ class InvalidBlockTransitionError(Exception):
         )
         self.from_status = from_status
         self.to_status = to_status
+
+
+class WorkspaceBlockedByFailedBlocksError(Exception):
+    """Raised by FinalAssemblerNode when a required block has status=failed."""
+
+    def __init__(self, failed_block_ids: list[str]) -> None:
+        super().__init__(
+            f"Workspace blocked: required blocks failed — {failed_block_ids}"
+        )
+        self.failed_block_ids = failed_block_ids
 
 
 # ---------------------------------------------------------------------------
@@ -106,10 +128,14 @@ class BlockState(BaseModel):
     kind: str
     status: BlockStatus
     content: dict | None = None
+    original_ai_content: dict | None = None
     citations: list[Citation] | None = None
     last_updated_by: Literal["system", "user", "ai"]
     updated_at: datetime
     approval: ApprovalRecord | None = None
+    failure_kind: FailureKind | None = None
+    last_error_message: str | None = None
+    retry_attempts: int = 0
 
     def validate_transition(self, new_status: BlockStatus) -> None:
         allowed = _VALID_TRANSITIONS.get(self.status, set())
@@ -131,3 +157,10 @@ class WorkspaceState(BaseModel):
     status: WorkspaceStatus
     warnings: list[ExtractionWarning]
     run_manifest_id: UUID | None = None
+    spec: ReportTemplateSpec | None = None
+    artifacts_normalized: dict[str, str] = Field(default_factory=dict)
+    user_edits: dict[str, dict] = Field(default_factory=dict)
+    final_document: str | None = None
+    final_document_hash: str | None = None
+    regenerate_blocks: set[str] = Field(default_factory=set)
+    skip_blocks: set[str] = Field(default_factory=set)
