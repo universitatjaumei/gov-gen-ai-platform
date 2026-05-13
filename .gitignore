@@ -84,6 +84,11 @@ copia/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 
+# Tooling local — no subir al repo
+.agents/
+rtk_bin/
+scripts/clickhouse/
+
 # Capturas y assets temporales
 *.jpg
 *.jpeg
