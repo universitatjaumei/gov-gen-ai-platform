@@ -2984,7 +2984,7 @@ Workflow (nuevos):
 - spaCy `es_core_news_md` y `en_core_web_md` descargados en el build de Docker.
 - Documentación: añadir sección "Módulo de anonimización" a `docs/REDACCION_CONTRACT_FIRST.md` explicando origen legacy + adaptaciones.
 
-## Retirada legacy (CLAUDE.md regla Caso A, paso 1 de 2)
+## Retirada legacy (CLAUDE.md regla Caso A)
 
 Al cerrar este prompt en GREEN:
 - Mover a `_legacy_nicegui/` (manteniendo ruta relativa):
@@ -2992,8 +2992,8 @@ Al cerrar este prompt en GREEN:
   - `client_app/app/services/anonymization_service.py`
   - `client_app/app/utils/pii_detector.py`
   - Tests legacy (excepto los de UI NiceGUI que sí se borran directamente, ya que son código huérfano — Caso B).
-- Verificar con grep que no quedan referencias activas desde código de producción.
-- Borrado definitivo de `_legacy_nicegui/` se hace al cerrar 9R.10.2 (prompt de verificación de subfase).
+- Verificar con `grep -r` que no quedan referencias activas desde código de producción a las rutas movidas.
+- **No borres `_legacy_nicegui/` ni en este prompt ni al cerrar la subfase**. El borrado definitivo lo hará el usuario manualmente al cierre de la Fase 1 completa (regla actualizada en CLAUDE.md).
 ```
 
 ---

@@ -19,12 +19,17 @@ La retirada sigue un proceso de **dos pasos** según el tipo de código:
 
 ### Caso A — Código NiceGUI con migración activa en curso
 
-El código NiceGUI se retira en dos pasos para disponer de referencia mientras la migración no está verificada:
+El código NiceGUI se mueve a `_legacy_nicegui/` cuando se completa su migración, manteniendo la ruta relativa. Sirve como referencia durante el resto de la Fase 1, mientras el código nuevo se va estabilizando contra escenarios reales.
 
-1. **Al cerrar el prompt de implementación** (GREEN): mover el fichero a `_legacy_nicegui/` manteniendo la ruta relativa. No borrarlo aún.
-2. **Al cerrar el prompt de subfase** (verificación E2E): borrar `_legacy_nicegui/` una vez que `pytest` + `npm test` + pruebas E2E estén en verde.
+1. **Al cerrar el prompt de implementación** (GREEN): mover el fichero a `_legacy_nicegui/` manteniendo la ruta relativa.
+2. **No borres `_legacy_nicegui/` automáticamente al cerrar una subfase**. El borrado definitivo lo hace **el usuario manualmente** al cierre de la **Fase 1 completa**, una vez verificado que todo lo migrado funciona en producción.
 
-`_legacy_nicegui/` es una **zona de cuarentena temporal**, no un archivo permanente. Ningún fichero puede permanecer ahí más allá del prompt de cierre de su subfase.
+`_legacy_nicegui/` acumula ficheros a lo largo de Fase 1. No la consideres "zona temporal corta": es cuarentena de larga duración hasta el cierre de Fase 1.
+
+Lo que sí debes hacer al mover algo a `_legacy_nicegui/`:
+- Asegurarte de que ningún import activo apunta ya al fichero migrado (`grep -r` antes de cerrar el prompt).
+- No volver a importar desde `_legacy_nicegui/` en código nuevo. Ese directorio es **solo lectura** para los agentes; queda como referencia documental.
+- No reintroducir código desde ahí. Si el código migrado tiene un bug, se arregla en la nueva ubicación; el fichero en `_legacy_nicegui/` no se toca.
 
 ### Caso B — Código huérfano sin migración activa
 
