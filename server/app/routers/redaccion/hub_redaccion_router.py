@@ -10,16 +10,22 @@ from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
-from sqlalchemy import and_, select
+from pydantic import BaseModel, Field
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, get_session
 from server.app.core.auth.models import UserInfo
 from server.app.modules.redaccion.contracts.template import ReportTemplateSpec
 from server.app.modules.redaccion.contracts.ui import ReportUIContract
-from server.app.modules.redaccion.database.models import HubWorkspaceBlock
+from server.app.modules.redaccion.database.models import (
+    HubReportTemplate,
+    HubReportTemplateVersion,
+    HubWorkspace,
+    HubWorkspaceBlock,
+)
 from server.app.modules.redaccion.database.repos import (
+    ReportTemplateRepo,
     ReportTemplateVersionRepo,
     WorkspaceBlockRepo,
     WorkspaceRepo,
@@ -84,6 +90,37 @@ _ACTION_TO_STATUS: dict[str, str] = {
 }
 
 # ---------------------------------------------------------------------------
+# DTOs — templates / workspaces (9R.7.3)
+# ---------------------------------------------------------------------------
+
+class TemplateOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    description: str | None = None
+    report_profile: str
+    owner_kind: str
+    is_global: bool
+    current_version_id: uuid.UUID | None = None
+    created_at: datetime
+
+
+class TemplateCreateIn(BaseModel):
+    name: str
+    description: str | None = None
+    report_profile: str = "GENERIC_REPORT"
+    owner_kind: str = "platform"
+    spec_json: dict = Field(default_factory=dict)
+
+
+class WorkspaceCreateIn(BaseModel):
+    template_version_id: uuid.UUID
+
+
+class WorkspaceCreatedOut(BaseModel):
+    workspace_id: uuid.UUID
+
+
+# ---------------------------------------------------------------------------
 # DTOs — migrate (9R.4.4)
 # ---------------------------------------------------------------------------
 
@@ -93,6 +130,118 @@ class MigrateRequest(BaseModel):
 
 class MigrateResponse(BaseModel):
     new_workspace_id: uuid.UUID
+
+
+@router.get(
+    "/templates",
+    response_model=list[TemplateOut],
+    operation_id="listTemplates",
+)
+async def list_templates(
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[TemplateOut]:
+    """Lista plantillas globales + propias del usuario."""
+    stmt = select(HubReportTemplate).where(
+        or_(
+            HubReportTemplate.is_global.is_(True),
+            HubReportTemplate.owner_id == uuid.UUID(user.user_id),
+        )
+    )
+    result = await session.execute(stmt)
+    templates = list(result.scalars().all())
+    return [
+        TemplateOut(
+            id=t.id,
+            name=t.name,
+            description=t.description,
+            report_profile=t.report_profile,
+            owner_kind=t.owner_kind,
+            is_global=t.is_global,
+            current_version_id=t.current_version_id,
+            created_at=t.created_at,
+        )
+        for t in templates
+    ]
+
+
+@router.post(
+    "/templates",
+    response_model=TemplateOut,
+    status_code=201,
+    operation_id="createTemplate",
+)
+async def create_template(
+    body: TemplateCreateIn,
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> TemplateOut:
+    """Crea plantilla + versión 1. Solo admin/partner."""
+    if user.role not in ("admin", "partner"):
+        raise HTTPException(status_code=403, detail="Only admin/partner can create templates")
+
+    template = HubReportTemplate(
+        name=body.name,
+        description=body.description,
+        report_profile=body.report_profile,
+        owner_kind=body.owner_kind,
+        owner_id=uuid.UUID(user.user_id),
+        is_global=(body.owner_kind == "platform"),
+    )
+    template_repo = ReportTemplateRepo(session)
+    template = await template_repo.save(template)
+
+    version = HubReportTemplateVersion(
+        template_id=template.id,
+        version=1,
+        spec_json=body.spec_json,
+        created_by=uuid.UUID(user.user_id),
+    )
+    version_repo = ReportTemplateVersionRepo(session)
+    version = await version_repo.save(version)
+
+    await template_repo.update_status(template.id, version.id)
+    await session.commit()
+    await session.refresh(template)
+
+    return TemplateOut(
+        id=template.id,
+        name=template.name,
+        description=template.description,
+        report_profile=template.report_profile,
+        owner_kind=template.owner_kind,
+        is_global=template.is_global,
+        current_version_id=version.id,
+        created_at=template.created_at,
+    )
+
+
+@router.post(
+    "/workspaces",
+    response_model=WorkspaceCreatedOut,
+    status_code=201,
+    operation_id="createWorkspace",
+)
+async def create_workspace_endpoint(
+    body: WorkspaceCreateIn,
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> WorkspaceCreatedOut:
+    """Crea workspace en estado draft para una versión de plantilla."""
+    version = await ReportTemplateVersionRepo(session).get(body.template_version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail="Template version not found")
+
+    workspace = HubWorkspace(
+        template_version_id=body.template_version_id,
+        owner_id=uuid.UUID(user.user_id),
+        status="draft",
+    )
+    workspace = await WorkspaceRepo(session).save(workspace)
+    await session.commit()
+    await session.refresh(workspace)
+
+    return WorkspaceCreatedOut(workspace_id=workspace.id)
 
 
 @router.get(

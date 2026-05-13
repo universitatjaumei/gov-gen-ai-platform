@@ -1,0 +1,162 @@
+/**
+ * Tests 9R.7.3 (RED → GREEN)
+ * ReportTemplateBuilderPage + GenericReportWizard
+ */
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import i18n from '@/shared/i18n'
+
+import { ReportTemplateBuilderPage } from '../pages/ReportTemplateBuilderPage'
+import { GenericReportWizard } from '../pages/GenericReportWizard'
+
+// --------------------------------------------------------------------------
+// Mock Orval hooks
+// --------------------------------------------------------------------------
+
+const mockCreateTemplate = vi.fn()
+const mockCreateWorkspace = vi.fn()
+
+vi.mock('@/shared/api/generated/hub-redaccion/hub-redaccion', () => ({
+  useListTemplates: vi.fn(),
+  useCreateTemplate: vi.fn(),
+  useCreateWorkspace: vi.fn(),
+}))
+
+vi.mock('@/shared/auth', async () => {
+  const actual = await vi.importActual<typeof import('@/shared/auth')>('@/shared/auth')
+  return {
+    ...actual,
+    useAuth: vi.fn(),
+  }
+})
+
+import {
+  useListTemplates,
+  useCreateTemplate,
+  useCreateWorkspace,
+} from '@/shared/api/generated/hub-redaccion/hub-redaccion'
+import { useAuth } from '@/shared/auth'
+
+// --------------------------------------------------------------------------
+// Helpers
+// --------------------------------------------------------------------------
+
+function makeTemplate(id: string, name: string, profile = 'GENERIC_REPORT') {
+  return {
+    id,
+    name,
+    description: null,
+    report_profile: profile,
+    owner_kind: 'platform',
+    is_global: true,
+    current_version_id: `ver-${id}`,
+    created_at: '2026-01-01T00:00:00Z',
+  }
+}
+
+function wrap(ui: React.ReactElement) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>)
+}
+
+beforeAll(async () => {
+  await i18n.changeLanguage('es')
+})
+
+beforeEach(() => {
+  mockCreateTemplate.mockClear()
+  mockCreateWorkspace.mockClear()
+
+  vi.mocked(useCreateTemplate).mockReturnValue({
+    mutate: mockCreateTemplate,
+    isPending: false,
+    isError: false,
+    isSuccess: false,
+  } as unknown as ReturnType<typeof useCreateTemplate>)
+
+  vi.mocked(useCreateWorkspace).mockReturnValue({
+    mutate: mockCreateWorkspace,
+    isPending: false,
+    isError: false,
+    isSuccess: false,
+  } as unknown as ReturnType<typeof useCreateWorkspace>)
+
+  vi.mocked(useAuth).mockReturnValue({
+    user: { user_id: 'u1', email: 'admin@test.com', role: 'admin' },
+    isAuthenticated: true,
+    login: vi.fn(),
+    logout: vi.fn(),
+  })
+})
+
+// --------------------------------------------------------------------------
+// ReportTemplateBuilderPage
+// --------------------------------------------------------------------------
+
+describe('ReportTemplateBuilderPage', () => {
+  it('should_allow_admin_to_save_template_version', () => {
+    vi.mocked(useListTemplates).mockReturnValue({
+      data: [],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useListTemplates>)
+
+    wrap(<ReportTemplateBuilderPage />)
+
+    fireEvent.change(screen.getByTestId('input-template-name'), {
+      target: { value: 'Test Template' },
+    })
+    fireEvent.click(screen.getByTestId('btn-save-template'))
+
+    expect(mockCreateTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ name: 'Test Template' }) }),
+    )
+  })
+
+  it('should_redirect_non_admin_away_from_builder_page', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: { user_id: 'u2', email: 'user@test.com', role: 'user' },
+      isAuthenticated: true,
+      login: vi.fn(),
+      logout: vi.fn(),
+    })
+
+    wrap(<ReportTemplateBuilderPage />)
+
+    expect(screen.getByTestId('access-denied')).toBeDefined()
+    expect(screen.queryByTestId('btn-save-template')).toBeNull()
+  })
+})
+
+// --------------------------------------------------------------------------
+// GenericReportWizard
+// --------------------------------------------------------------------------
+
+describe('GenericReportWizard', () => {
+  it('should_list_only_user_visible_templates', () => {
+    vi.mocked(useListTemplates).mockReturnValue({
+      data: [makeTemplate('t1', 'Plantilla A'), makeTemplate('t2', 'Plantilla B')],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useListTemplates>)
+
+    wrap(<GenericReportWizard />)
+
+    expect(screen.getByText('Plantilla A')).toBeDefined()
+    expect(screen.getByText('Plantilla B')).toBeDefined()
+  })
+
+  it('should_allow_user_to_create_ad_hoc_workspace_from_generic_report', () => {
+    vi.mocked(useListTemplates).mockReturnValue({
+      data: [makeTemplate('t1', 'Informe Genérico')],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useListTemplates>)
+
+    wrap(<GenericReportWizard />)
+
+    fireEvent.click(screen.getByTestId('btn-create-workspace-t1'))
+
+    expect(mockCreateWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ template_version_id: 'ver-t1' }) }),
+    )
+  })
+})
