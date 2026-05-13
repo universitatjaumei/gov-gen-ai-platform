@@ -1943,6 +1943,7 @@ LoadTemplateNode
 9R.5.6 (RED/GREEN)  Workflow de aprobación scripts: self-service usuario / cola admin para plantillas globales
 9R.5.7 (RED/GREEN)  Bloque CHART (modo determinista + IA) — migración de graphics_factory + deterministic_graphics_service legacy
 9R.5.8 (RED/GREEN)  Bloque DATA_TRANSFORM (filter/aggregate/join/pivot/groupby) — migración de etl_service + deterministic_etl + etl_factory legacy
+9R.5.9 (RED/GREEN)  Extractor Docling rico (ExtractedDocument: markdown + tables_json + páginas con bbox) — adelantado parcial de Fase 2 prompt 9.12b
 
 9R.6.1 (RED/GREEN)  CoreGraph: LoadTemplate / ValidateInputContract / FileNormalization
 9R.6.2 (RED/GREEN)  CoreGraph: DeterministicExtraction / DataQualityCheck / MissingDataQuestion
@@ -2710,7 +2711,7 @@ Objetivo: implementar dos pipelines deterministas reales con datos de prueba.
 
 Estructura (en server/app/modules/redaccion/pipelines/):
 - excel_pipeline.py    # ExcelExtractionPipeline (pandas)
-- pdf_text_pipeline.py # PDFTextExtractionPipeline (pdfplumber)
+- pdf_text_pipeline.py # PDFTextExtractionPipeline (Docling, sin OCR, sin tablas)
 
 ExcelExtractionPipeline:
 - Lee con pandas (openpyxl backend).
@@ -2718,10 +2719,12 @@ ExcelExtractionPipeline:
 - Valida columnas requeridas (si vienen en options.required_columns); emite ExtractionWarning si faltan.
 - Devuelve ExtractedTable con `columns`, `rows`, `dtypes`.
 
-PDFTextExtractionPipeline:
-- Usa pdfplumber.
-- Extrae texto plano de todas las páginas.
-- Detecta PDFs no extractables (imagen) → ExtractionWarning severity=error, code=NON_EXTRACTABLE_PDF.
+PDFTextExtractionPipeline (versión MVP ligera):
+- Usa Docling con `do_ocr=False`, `do_table_structure=False`, `do_picture_classification=False`.
+- Extrae solo texto plano vía `export_to_text()`.
+- Detecta PDFs no extractables (imagen sin capa de texto) → ExtractionWarning severity=error, code=NON_EXTRACTABLE_PDF.
+
+> Nota (2026-05-13): la versión "rica" de este pipeline (markdown + tablas estructuradas + páginas) se entrega en **9R.5.9**, que amplía este pipeline aprovechando las capacidades completas de Docling. Esta versión queda como modo ligero/rápido para casos en que solo se necesita el texto.
 
 Tests (RED → GREEN):
 - test_excel_pipeline_reads_basic_table   (fixture: tests/fixtures/redaccion/sample.xlsx)
@@ -2733,7 +2736,7 @@ Tests (RED → GREEN):
 
 Criterio de done:
 - Fixtures mínimas en tests/fixtures/redaccion/.
-- pandas, pdfplumber añadidos a pyproject.toml.
+- pandas, docling añadidos a pyproject.toml (docling ya está, instalado para RAG).
 - Tests verdes.
 ```
 
@@ -3265,6 +3268,188 @@ Al cerrar este prompt en GREEN, mover a `_legacy_nicegui/`:
 - `client_app/app/ui/etl_page.py`
 - Tests legacy asociados.
 Verificar con `grep -r` que no quedan referencias activas. Borrado definitivo manual por el usuario al cierre de Fase 1.
+```
+
+---
+
+### Prompt 9R.5.9 (RED/GREEN) — Extractor Docling rico (ExtractedDocument) — adelantado parcial de Fase 2
+
+```markdown
+# PROMPT 9R.5.9 (RED/GREEN) — PDFTextExtractionPipeline rico: markdown + tablas estructuradas + páginas
+
+Objetivo: amplificar el `PDFTextExtractionPipeline` actual (que ya usa Docling pero solo extrae texto plano via `export_to_text()`) para que produzca el contrato rico `ExtractedDocument` previsto inicialmente en Fase 2 prompt 9.12b. Aprovecha Docling al máximo: markdown por documento + markdown por página + tablas estructuradas con bbox, todo en una sola ejecución. Adelantado de Fase 2 a Fase 1 porque informes habituales agregan varios PDFs en un mismo informe — sin esta riqueza, el AIAssistDraftNode trabaja sobre texto plano linealizado y pierde estructura (encabezados, listas, tablas).
+
+> Opción B confirmada (2026-05-13): adelantar **solo el extractor Docling rico**, no el wizard interactivo de extracción (analyze→extract→refine→generate_script) que sigue en Fase 2 prompt 9.13 con UI propia. El wizard se beneficia de RPA-like batch processing y encaja mejor con el módulo de automatización.
+
+Deploy: edge
+
+## Parte 1 — Contrato ExtractedDocument en redaccion
+
+Origen del contrato: Fase 2 prompt 9.12b (`Plan_TDD_Fase2.md:436-455`). Se traslada literalmente, con ubicación nueva en redaccion.
+
+Estructura en `server/app/modules/redaccion/pipelines/contracts.py`:
+```python
+class ExtractedCell(BaseModel):
+    text: str
+    row: int
+    col: int
+    row_span: int = 1
+    col_span: int = 1
+
+class ExtractedTableRich(BaseModel):
+    """Tabla con coordenadas y celdas — extensión de ExtractedTable existente."""
+    page: int                     # 1-based
+    caption: str | None = None
+    headers: list[str]
+    cells: list[ExtractedCell]
+    bbox: tuple[float, float, float, float] | None = None
+
+class ExtractedPage(BaseModel):
+    page: int                     # 1-based
+    markdown: str                 # render markdown de esta página (Docling)
+    plain_text: str               # texto lineal por si el consumidor prefiere
+    tables: list[ExtractedTableRich]
+
+class ExtractedDocument(BaseModel):
+    """Salida rica de Docling. Se anexa a ExtractionResult.provenance.extras."""
+    filename: str
+    num_pages: int
+    markdown: str                 # documento completo
+    pages: list[ExtractedPage]
+    tables: list[ExtractedTableRich]  # vista plana
+    extraction_strategy: Literal["text_linear", "complex_tables"]
+    docling_version: str
+```
+
+Para mantener retrocompatibilidad con el `ExtractionResult` simple (consumido por Excel, Manual, AdminScript), `ExtractedDocument` se entrega como **campo adicional** opcional:
+
+```python
+class ExtractionResult(BaseModel):
+    tables: list[ExtractedTable] = Field(default_factory=list)
+    metrics: list[ExtractedMetric] = Field(default_factory=list)
+    free_text: str | None = None
+    document: ExtractedDocument | None = None   # ← NUEVO. Solo PDFs ricos.
+    warnings: list[ExtractionWarning] = Field(default_factory=list)
+    provenance: ExtractionProvenance
+```
+
+Ventaja: los nodos del grafo que ya consumen `free_text` o `tables` siguen funcionando. Los nodos nuevos (AIAssistDraftNode, citation tracking) pueden preferir `document.markdown` y `document.tables[*]` cuando estén presentes.
+
+## Parte 2 — Upgrade del PDFTextExtractionPipeline
+
+Modificar `server/app/modules/redaccion/pipelines/pdf_text_pipeline.py`:
+
+```python
+def __init__(self) -> None:
+    opts = PdfPipelineOptions()
+    opts.do_ocr = False
+    opts.do_table_structure = True        # ← cambio (antes False)
+    opts.do_picture_classification = False
+    opts.generate_page_images = False
+    self._converter = DocumentConverter(...)
+
+def extract(self, inp: ExtractionInput) -> ExtractionResult:
+    conv = self._converter.convert(str(file_path))
+    doc = conv.document
+
+    # Construir ExtractedDocument rico
+    pages = [
+        ExtractedPage(
+            page=p.page_no,
+            markdown=p.export_to_markdown(),
+            plain_text=p.export_to_text(),
+            tables=[_to_rich_table(t) for t in p.tables],
+        )
+        for p in doc.pages
+    ]
+    rich = ExtractedDocument(
+        filename=inp.file_ref.key,
+        num_pages=len(pages),
+        markdown=doc.export_to_markdown(),
+        pages=pages,
+        tables=[_to_rich_table(t) for t in doc.tables],
+        extraction_strategy=_choose_strategy(doc),
+        docling_version=docling.__version__,
+    )
+
+    # Mantener compatibilidad con consumers simples
+    return ExtractionResult(
+        free_text=doc.export_to_text() or None,
+        tables=[ExtractedTable(  # vista simple para retro-compat
+            name=f"page_{t.page}_table_{i}",
+            headers=t.headers,
+            rows=[[c.text for c in row_cells] for row_cells in _group_by_row(t.cells)],
+            source_page=t.page,
+        ) for i, t in enumerate(rich.tables)],
+        document=rich,
+        warnings=[...] if not doc.export_to_text() else [],
+        provenance=...,
+    )
+```
+
+Async wrapper: Docling es síncrono y CPU-bound. Envolver con `asyncio.to_thread(self._converter.convert, ...)` en el nodo `DeterministicExtractionNode` (cambio menor en 9R.6.2 ya verde).
+
+## Parte 3 — Estrategia de extracción
+
+Heurística mínima para `extraction_strategy`:
+- Si `len(doc.tables) >= 3` o el ratio tables/pages > 0.5 → `complex_tables`.
+- Si no → `text_linear`.
+
+Útil para que `AIAssistDraftNode` adapte su prompt: ante `complex_tables` prioriza `tables_json` en el contexto; ante `text_linear` prioriza `markdown`.
+
+## Parte 4 — Integración con AIAssistDraftNode (9R.6.3 ya verde — micro-ajuste)
+
+Cambio en `server/app/modules/redaccion/graph/nodes/ai_assist_draft.py`:
+- Cuando el bloque depende de un input PDF cuyo `ExtractionResult.document is not None`:
+  - Pasar al LLM `document.markdown[:30000]` en lugar de `free_text`.
+  - Si `extraction_strategy == "complex_tables"`: anexar `json.dumps([t.model_dump() for t in document.tables[:20]])`.
+- Si el bloque depende de varios PDFs: concatenar markdown con encabezados `## [filename]` para que el LLM mantenga atribución.
+
+## Parte 5 — Citation traceability (9R.6.3 ya verde — micro-ajuste)
+
+`CitationAndTraceabilityNode`: cuando el contenido AI cite un dato extraído de un PDF rico, la cita puede incluir:
+- `source_document` (filename)
+- `page` (número de página del bbox)
+- `cell_ref` si proviene de una tabla específica
+- `excerpt` (primeros 200 chars del párrafo donde aparece el dato)
+
+El modelo `Citation` de `contracts/runtime.py` ya soporta estos campos. Solo hay que poblarlos.
+
+## Tests (RED → GREEN)
+
+Nuevos (en `server/tests/modules/redaccion/test_docling_rich_extraction.py`):
+- test_pipeline_produces_extracted_document_with_markdown
+- test_pipeline_produces_per_page_markdown_and_tables
+- test_pipeline_chooses_complex_tables_strategy_when_many_tables
+- test_pipeline_chooses_text_linear_when_few_tables
+- test_pipeline_preserves_table_bbox_when_available
+- test_pipeline_extracted_document_serializes_to_openapi_schema
+- test_retro_compat_free_text_still_populated
+- test_retro_compat_simple_tables_view_still_populated
+
+Adaptaciones a tests existentes (smoke tests, no rehacer):
+- Tests de `AIAssistDraftNode` ahora reciben `document.markdown` cuando el input es PDF — verificar que el prompt construido lo incluye.
+- Tests de `CitationAndTraceabilityNode` verifican que las citas con bbox/page se persisten.
+
+## Criterio de done
+
+- ≥8 tests nuevos verdes.
+- Tests existentes de pdf_text_pipeline siguen verdes (retro-compatibilidad).
+- `ExtractedDocument` aparece en OpenAPI exportado.
+- AIAssistDraftNode prefiere markdown sobre plain_text cuando está disponible.
+- Documentación actualizada en `docs/REDACCION_CONTRACT_FIRST.md`: sección "Extracción rica de PDFs con Docling".
+
+## Lo que NO se hace aquí (queda en Fase 2)
+
+- **Wizard de extracción con fases interactivas** (analyze_structure / extract_precision / refine / generate_script): sigue en Fase 2 prompt 9.13. El usuario interactivo con muchos PDFs similares (caso RPA) lo usa allí.
+- **API de runs con polling por run_id**: no es necesaria en MVP. La extracción se hace síncrona dentro del DraftingCoreGraph (con `asyncio.to_thread`). Si emerge problema de latencia con PDFs grandes, se mueve a background task post-MVP.
+- **UI específica del extractor PDF**: en MVP, el usuario sube PDFs vía el `GenericReportWizard` existente; no hay pantalla dedicada al extractor.
+
+## Implicaciones para el plan de Fase 2
+
+- Prompt 9.12b queda **reducido a deuda residual**: actualizar fixtures de tests, limpiar imports obsoletos. La mayor parte del trabajo (motor Docling, contratos `ExtractedDocument`, prompts adaptados a markdown) ya está hecha aquí.
+- Prompt 9.13 (UI wizard) sigue íntegro pero ahora consume el contrato `ExtractedDocument` ya estable desde Fase 1.
+- Fase 2 actualizará `Plan_TDD_Fase2.md` y `PROJECT_STATE.md` cuando se aborde, no es responsabilidad de este prompt.
 ```
 
 ---

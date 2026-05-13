@@ -385,7 +385,19 @@ client_app/app/services/extraction_service.py
 
 ### Prompt 9.12b - Refactor backend PDF extractor a Docling
 
-**Objetivo**: Sustituir el motor dual `pdfplumber` + `fitz` (actualmente en `shared/automatia_shared/core/pdf_reader.py::PdfReaderDual` y consumido por `server/app/modules/automation/extraction_strategies.py`) por **Docling** (ya instalado para el módulo RAG). El cliente deja de extraer texto localmente: ahora sube el PDF y el servidor hace toda la extracción + prompting. Prerequisito obligatorio de 9.13 (UI del extractor).
+> **AVISO (2026-05-13): este prompt queda casi vacío tras 9R.5.9 (Fase 1)**.
+>
+> El motor Docling, el contrato `ExtractedDocument` y los prompts adaptados a markdown + tables_json ya se entregan en **9R.5.9** del Plan_TDD_Fase1. Lo que queda aquí cuando se aborde es deuda residual:
+> - Limpiar imports obsoletos de `pdfplumber` / `fitz` / `PdfReaderDual` en `shared/automatia_shared/core/pdf_reader.py` y en `server/app/modules/automation/extraction_strategies.py` (si todavía existen).
+> - Actualizar fixtures de tests del módulo `automation` que aún esperen `texto_fitz` / `texto_plumber`.
+> - Verificar con `grep -r` que no quedan referencias activas y eliminar `pdfplumber`/`pymupdf` de `pyproject.toml`.
+> - Mover los ficheros NiceGUI legacy del extractor (`client_app/app/ui/extraction_page*.py`) a `_legacy_nicegui/`.
+>
+> El contenido original del prompt se conserva abajo como referencia histórica de cómo se pensó la migración antes del adelanto.
+
+---
+
+**Objetivo (original — superseded)**: Sustituir el motor dual `pdfplumber` + `fitz` (actualmente en `shared/automatia_shared/core/pdf_reader.py::PdfReaderDual` y consumido por `server/app/modules/automation/extraction_strategies.py`) por **Docling** (ya instalado para el módulo RAG). El cliente deja de extraer texto localmente: ahora sube el PDF y el servidor hace toda la extracción + prompting. Prerequisito obligatorio de 9.13 (UI del extractor).
 
 **Por qué ahora y no después de la UI**: el contrato de datos que consumen los endpoints de extracción (`texto_fitz` + `texto_plumber`) cambia radicalmente tras el refactor. Diseñar la UI React sobre la API actual y luego rehacerla es trabajo duplicado. Ver PLAN_DESARROLLO.md §Bloque 4C para la decisión.
 
