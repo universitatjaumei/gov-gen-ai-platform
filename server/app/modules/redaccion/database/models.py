@@ -177,6 +177,56 @@ class HubWorkspaceBlock(HubOperationalBase):
     )
 
 
+class HubScriptProposal(HubOperationalBase):
+    """Propuesta de script de extracción generada por LLM y auditada.
+
+    Estados (9R.5.5 cubre proposed/tested/rejected; los demás llegan en 9R.5.6):
+      proposed | tested | pending_review | approved | rejected
+    """
+
+    __tablename__ = "hub_script_proposals"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    proposer_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    target_owner_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    target_template_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
+    prompt_nl: Mapped[str] = mapped_column(Text, nullable=False)
+    code: Mapped[str] = mapped_column(Text, nullable=False)
+    audit_result_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    test_data_ref: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    test_data_is_anonymized: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    test_data_anonymization_map: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+    test_data_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    test_result_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    test_result_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    test_validated_by_proposer_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="proposed", index=True)
+    reviewer_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    admin_retest_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    model_used: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now, onupdate=_now
+    )
+
+
 class HubWorkspaceAuditEvent(HubOperationalBase):
     """Registro de auditoría de transiciones de bloque y eventos de workspace."""
 

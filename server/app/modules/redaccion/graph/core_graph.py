@@ -19,6 +19,7 @@ from server.app.modules.redaccion.graph.nodes.data_quality_check import (
     DataQualityCheckNode,
     data_quality_router,
 )
+from server.app.modules.redaccion.graph.nodes.data_transformation import DataTransformationNode
 from server.app.modules.redaccion.graph.nodes.deterministic_extraction import DeterministicExtractionNode
 from server.app.modules.redaccion.graph.nodes.file_normalization import FileNormalizationNode
 from server.app.modules.redaccion.graph.nodes.final_assembler import FinalAssemblerNode
@@ -36,6 +37,8 @@ def build_core_graph(
     llm_service: Any,
     manifest_repo: Any = None,
     tracing_service: Any = None,
+    etl_llm: Any = None,
+    etl_model_name: str = "",
 ):
     """Construye y compila el DraftingCoreGraph.
 
@@ -56,6 +59,7 @@ def build_core_graph(
     validate_node = ValidateInputContractNode()
     normalize_node = FileNormalizationNode(storage_service)
     extract_node = DeterministicExtractionNode(extraction_factory)
+    transform_node = DataTransformationNode(llm_service=etl_llm, model_name=etl_model_name)
     quality_node = DataQualityCheckNode()
     missing_node = MissingDataQuestionNode()
     ai_node = AIAssistDraftNode(llm_service)
@@ -72,7 +76,8 @@ def build_core_graph(
     graph.add_node("load_template",           _t(load_node,      "load_template"))
     graph.add_node("validate_inputs",         _t(validate_node,  "validate_inputs"))
     graph.add_node("file_normalization",      _t(normalize_node, "file_normalization"))
-    graph.add_node("deterministic_extraction",_t(extract_node,   "deterministic_extraction"))
+    graph.add_node("deterministic_extraction",_t(extract_node,     "deterministic_extraction"))
+    graph.add_node("data_transformation",     _t(transform_node,  "data_transformation"))
     graph.add_node("data_quality_check",      _t(quality_node,   "data_quality_check"))
     graph.add_node("missing_data_question",   _t(missing_node,   "missing_data_question"))
     graph.add_node("ai_assist_draft",         _t(ai_node,        "ai_assist_draft"))
@@ -86,7 +91,8 @@ def build_core_graph(
     graph.add_edge("load_template", "validate_inputs")
     graph.add_edge("validate_inputs", "file_normalization")
     graph.add_edge("file_normalization", "deterministic_extraction")
-    graph.add_edge("deterministic_extraction", "data_quality_check")
+    graph.add_edge("deterministic_extraction", "data_transformation")
+    graph.add_edge("data_transformation", "data_quality_check")
     graph.add_conditional_edges(
         "data_quality_check",
         data_quality_router,

@@ -1,0 +1,191 @@
+"""Tests para el módulo charts (9R.5.7).
+
+Cubre:
+  - DeterministicChartService (5 tipos de gráfico + agregación)
+  - ChartBlockConfig / ChartBlock (contratos)
+  - render_chart_from_script (sandbox subprocess)
+  - ChartFactory._extract_code (extracción de bloques markdown)
+  - ChartHandler.to_manifest
+"""
+from __future__ import annotations
+
+import pytest
+import pandas as pd
+
+from server.app.modules.redaccion.services.charts.chart_configuration import ChartConfiguration
+from server.app.modules.redaccion.services.charts.deterministic_chart_service import DeterministicChartService
+from server.app.modules.redaccion.services.charts.chart_renderer import render_chart_from_script, ChartRenderError
+from server.app.modules.redaccion.services.charts.chart_factory import ChartFactory
+from server.app.modules.redaccion.contracts.blocks import ChartBlock, ChartBlockConfig
+from server.app.modules.redaccion.blocks.handlers import ChartHandler
+from server.app.modules.redaccion.contracts.runtime import WorkspaceState, BlockState
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _sample_df() -> pd.DataFrame:
+    return pd.DataFrame({
+        "category": ["A", "B", "C"],
+        "value": [10, 20, 30],
+        "group": ["X", "X", "Y"],
+    })
+
+
+def _numeric_df() -> pd.DataFrame:
+    return pd.DataFrame({"x": [1.0, 2.0, 3.0, 4.0], "y": [4.0, 3.0, 2.0, 1.0]})
+
+
+# ---------------------------------------------------------------------------
+# DeterministicChartService
+# ---------------------------------------------------------------------------
+
+class TestDeterministicChartService:
+
+    def test_bar_chart_returns_png_bytes(self):
+        df = _sample_df()
+        config = ChartConfiguration(chart_type="bar", x_column="category", y_column="value")
+        svc = DeterministicChartService()
+        result = svc.render(df, config)
+        assert isinstance(result, bytes)
+        assert result[:4] == b"\x89PNG"  # PNG magic bytes
+
+    def test_line_chart_returns_png_bytes(self):
+        df = _numeric_df()
+        config = ChartConfiguration(chart_type="line", x_column="x", y_column="y")
+        svc = DeterministicChartService()
+        result = svc.render(df, config)
+        assert isinstance(result, bytes)
+        assert len(result) > 0
+
+    def test_pie_chart_returns_png_bytes(self):
+        df = _sample_df()
+        config = ChartConfiguration(
+            chart_type="pie", label_column="category", value_column="value"
+        )
+        svc = DeterministicChartService()
+        result = svc.render(df, config)
+        assert isinstance(result, bytes)
+        assert len(result) > 0
+
+    def test_scatter_chart_returns_png_bytes(self):
+        df = _numeric_df()
+        config = ChartConfiguration(chart_type="scatter", x_column="x", y_column="y")
+        svc = DeterministicChartService()
+        result = svc.render(df, config)
+        assert isinstance(result, bytes)
+        assert len(result) > 0
+
+    def test_histogram_returns_png_bytes(self):
+        df = _numeric_df()
+        config = ChartConfiguration(chart_type="histogram", x_column="x")
+        svc = DeterministicChartService()
+        result = svc.render(df, config)
+        assert isinstance(result, bytes)
+        assert len(result) > 0
+
+    def test_aggregation_sum_reduces_rows(self):
+        df = pd.DataFrame({
+            "category": ["A", "A", "B"],
+            "value": [5, 10, 20],
+        })
+        config = ChartConfiguration(
+            chart_type="bar",
+            x_column="category",
+            y_column="value",
+            aggregation="sum",
+        )
+        svc = DeterministicChartService()
+        aggregated = svc._prepare_data(df, config)
+        assert len(aggregated) == 2
+        assert aggregated[aggregated["category"] == "A"]["value"].values[0] == 15
+
+
+# ---------------------------------------------------------------------------
+# ChartBlockConfig / ChartBlock contracts
+# ---------------------------------------------------------------------------
+
+class TestChartContracts:
+
+    def test_chart_block_config_defaults(self):
+        cfg = ChartBlockConfig()
+        assert cfg.mode == "deterministic"
+        assert cfg.chart_type == "bar"
+        assert cfg.nl_prompt is None
+
+    def test_chart_block_includes_config_field(self):
+        block = ChartBlock(id="ch1", title="Mi gráfico", data_block_ref="data1")
+        assert block.config is None  # optional, defaults to None
+
+    def test_chart_block_with_config(self):
+        cfg = ChartBlockConfig(mode="ai", nl_prompt="Muestra ventas por mes")
+        block = ChartBlock(id="ch1", title="Mi gráfico", data_block_ref="data1", config=cfg)
+        assert block.config.mode == "ai"
+        assert block.config.nl_prompt == "Muestra ventas por mes"
+
+
+# ---------------------------------------------------------------------------
+# render_chart_from_script
+# ---------------------------------------------------------------------------
+
+class TestRenderChartFromScript:
+
+    def test_valid_script_returns_bytes(self):
+        df = _numeric_df()
+        code = "fig, ax = plt.subplots()\nax.plot(df['x'], df['y'])"
+        result = render_chart_from_script(code, df)
+        assert isinstance(result, bytes)
+        assert result[:4] == b"\x89PNG"
+
+    def test_dangerous_code_raises_chart_render_error(self):
+        df = _numeric_df()
+        code = "import os\nos.system('echo hacked')"
+        with pytest.raises(ChartRenderError, match="Auditoría"):
+            render_chart_from_script(code, df)
+
+    def test_syntax_error_raises_chart_render_error(self):
+        df = _numeric_df()
+        code = "this is not python !!!"
+        with pytest.raises(ChartRenderError):
+            render_chart_from_script(code, df)
+
+
+# ---------------------------------------------------------------------------
+# ChartFactory._extract_code
+# ---------------------------------------------------------------------------
+
+class TestChartFactoryExtractCode:
+
+    def test_extracts_from_markdown_fence(self):
+        raw = "```python\nfig, ax = plt.subplots()\n```"
+        code = ChartFactory._extract_code(raw)
+        assert code == "fig, ax = plt.subplots()"
+
+    def test_returns_raw_when_no_fence(self):
+        raw = "fig, ax = plt.subplots()"
+        code = ChartFactory._extract_code(raw)
+        assert code == raw.strip()
+
+
+# ---------------------------------------------------------------------------
+# ChartHandler.to_manifest
+# ---------------------------------------------------------------------------
+
+class TestChartHandler:
+
+    def test_to_manifest_includes_chart_type_and_mode(self):
+        cfg = ChartBlockConfig(mode="deterministic", chart_type="line")
+        block = ChartBlock(id="ch1", title="Grafico", data_block_ref="d1", config=cfg)
+        handler = ChartHandler()
+        manifest = handler.to_manifest(block)
+        assert manifest["kind"] == "CHART"
+        assert manifest["chart_type"] == "line"
+        assert manifest["mode"] == "deterministic"
+
+    def test_to_manifest_uses_defaults_when_no_config(self):
+        block = ChartBlock(id="ch1", title="Grafico", data_block_ref="d1")
+        handler = ChartHandler()
+        manifest = handler.to_manifest(block)
+        assert manifest["chart_type"] == "bar"
+        assert manifest["mode"] == "deterministic"

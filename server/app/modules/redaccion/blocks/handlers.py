@@ -10,12 +10,16 @@ from __future__ import annotations
 
 from typing import Any
 
+import pandas as pd
+
 from server.app.modules.redaccion.contracts.blocks import (
     AIAssistedTextBlock,
     AIRewriteBlock,
     AISummaryBlock,
     ChartBlock,
+    ChartBlockConfig,
     CitationBlock,
+    DataTransformBlock,
     DeterministicDataBlock,
     ReviewGateBlock,
     StaticTextBlock,
@@ -23,6 +27,10 @@ from server.app.modules.redaccion.contracts.blocks import (
     UserInputBlock,
 )
 from server.app.modules.redaccion.contracts.runtime import WorkspaceState
+from server.app.modules.redaccion.services.charts.chart_configuration import ChartConfiguration
+from server.app.modules.redaccion.services.charts.deterministic_chart_service import DeterministicChartService
+from server.app.modules.redaccion.services.charts.chart_renderer import render_chart_from_script, ChartRenderError
+from server.app.modules.redaccion.services.transformation.etl_service import ETLService
 
 
 class BlockHandlerValidationError(Exception):
@@ -132,10 +140,14 @@ class TableHandler:
 
 
 class ChartHandler:
-    """Bloque de gráfico. Consume DETERMINISTIC_DATA o TABLE."""
+    """Bloque de gráfico. Modo determinista (DeterministicChartService) o IA (ChartFactory)."""
 
     uses_ai: bool = False
     requires_approval: bool = False
+
+    def __init__(self, llm: Any = None, model_name: str = "") -> None:
+        self._llm = llm
+        self._model_name = model_name
 
     def validate(self, block: ChartBlock) -> None:
         if not block.data_block_ref:
@@ -150,11 +162,166 @@ class ChartHandler:
                 f"ChartBlock {block.id!r}: data_block_ref={block.data_block_ref!r} not found in workspace"
             )
 
-    def execute(self, block: ChartBlock, state: WorkspaceState) -> dict:
-        return {"source_block_id": block.data_block_ref, "chart_type": "bar"}
+    async def execute(self, block: ChartBlock, state: WorkspaceState) -> dict:  # type: ignore[override]
+        cfg = block.config or ChartBlockConfig()
+        df = self._resolve_data(block, state)
+
+        if cfg.mode == "deterministic":
+            chart_config = self._to_chart_config(cfg)
+            svc = DeterministicChartService()
+            image_bytes = svc.render(df, chart_config)
+            return {
+                "source_block_id": block.data_block_ref,
+                "chart_type": cfg.chart_type,
+                "mode": "deterministic",
+                "image_bytes": image_bytes,
+            }
+
+        # AI mode
+        from server.app.modules.redaccion.services.charts.chart_factory import ChartFactory
+        factory = ChartFactory(self._llm, self._model_name)
+        schema = {"columns": list(df.columns), "dtypes": {c: str(t) for c, t in df.dtypes.items()}}
+        chart_script = await factory.generate_script(cfg.nl_prompt or "", schema)
+        if not chart_script.audit_result.approved:
+            raise ChartRenderError(
+                f"Script IA rechazado por auditoría: {chart_script.audit_result.findings}"
+            )
+        image_bytes = render_chart_from_script(
+            chart_script.code, df, output_format=cfg.output_format
+        )
+        return {
+            "source_block_id": block.data_block_ref,
+            "chart_type": cfg.chart_type,
+            "mode": "ai",
+            "image_bytes": image_bytes,
+        }
 
     def to_manifest(self, block: ChartBlock) -> dict:
-        return {**_base_manifest(block.id, block.kind), "data_block_ref": block.data_block_ref}
+        cfg = block.config or ChartBlockConfig()
+        return {
+            **_base_manifest(block.id, block.kind),
+            "data_block_ref": block.data_block_ref,
+            "chart_type": cfg.chart_type,
+            "mode": cfg.mode,
+        }
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _resolve_data(self, block: ChartBlock, state: WorkspaceState) -> pd.DataFrame:
+        source = state.blocks.get(block.data_block_ref)
+        if source is None:
+            return pd.DataFrame()
+        rows = source.content.get("rows", []) if source.content else []
+        if isinstance(rows, list) and rows:
+            return pd.DataFrame(rows)
+        return pd.DataFrame()
+
+    @staticmethod
+    def _to_chart_config(cfg: ChartBlockConfig) -> ChartConfiguration:
+        return ChartConfiguration(
+            chart_type=cfg.chart_type,
+            x_column=cfg.x_axis,
+            y_column=cfg.y_axis,
+            color_column=cfg.color_by,
+            label_column=cfg.label_column,
+            value_column=cfg.value_column,
+            aggregation=cfg.aggregation,
+            palette=cfg.palette,
+            output_format=cfg.output_format,
+        )
+
+
+class DataTransformHandler:
+    """Bloque de transformación tabular. Modo determinista o IA (ETLFactory).
+
+    Lee el DataFrame del bloque referenciado por `config.source_block_ref`,
+    aplica las operaciones (o las deriva del NL si mode='ai') y devuelve
+    las filas transformadas en `content["rows"]` para que ChartHandler u
+    otros consumidores puedan encadenar.
+    """
+
+    uses_ai: bool = False
+    requires_approval: bool = False
+
+    def __init__(self, llm: Any = None, model_name: str = "") -> None:
+        self._llm = llm
+        self._model_name = model_name
+
+    def validate(self, block: DataTransformBlock) -> None:
+        if block.config is None:
+            raise BlockHandlerValidationError(
+                f"DataTransformBlock {block.id!r} requires config"
+            )
+
+    def validate_in_context(self, block: DataTransformBlock, state: WorkspaceState) -> None:
+        self.validate(block)
+        src_id = block.config.source_block_ref.block_id
+        if src_id not in state.blocks:
+            raise BlockHandlerValidationError(
+                f"DataTransformBlock {block.id!r}: source_block_ref={src_id!r} not found"
+            )
+
+    async def execute(self, block: DataTransformBlock, state: WorkspaceState) -> dict:
+        cfg = block.config
+        source_df = self._resolve_source_df(cfg.source_block_ref.block_id, state)
+        resolver = self._make_joinable_resolver(state)
+
+        svc = ETLService(llm=self._llm, model_name=self._model_name)
+        if cfg.mode == "deterministic":
+            result = await svc.run(
+                df=source_df, mode="deterministic",
+                operations=list(cfg.operations or []),
+                joinable_resolver=resolver,
+            )
+        else:
+            result = await svc.run(
+                df=source_df, mode="ai",
+                nl_instruction=cfg.nl_instruction,
+                joinable_resolver=resolver,
+            )
+
+        return {
+            "source_block_id": cfg.source_block_ref.block_id,
+            "rows": result.dataframe.to_dict(orient="records"),
+            "operations_applied": [op.model_dump() for op in result.operations_applied],
+            "model_used": result.model_used,
+            "mode": cfg.mode,
+        }
+
+    def to_manifest(self, block: DataTransformBlock) -> dict:
+        cfg = block.config
+        ops = list(cfg.operations or [])
+        return {
+            **_base_manifest(block.id, block.kind),
+            "mode": cfg.mode,
+            "source_block_id": cfg.source_block_ref.block_id,
+            "operations_applied": [op.model_dump() for op in ops],
+        }
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_source_df(source_block_id: str, state: WorkspaceState) -> pd.DataFrame:
+        block_state = state.blocks.get(source_block_id)
+        if block_state and block_state.content:
+            rows = block_state.content.get("rows")
+            if isinstance(rows, list) and rows:
+                return pd.DataFrame(rows)
+        # Fallback: block_outputs (poblado por nodos previos del grafo).
+        output = state.block_outputs.get(source_block_id) or {}
+        rows = output.get("rows") if isinstance(output, dict) else None
+        if isinstance(rows, list) and rows:
+            return pd.DataFrame(rows)
+        return pd.DataFrame()
+
+    def _make_joinable_resolver(self, state: WorkspaceState):
+        def _resolve(block_id: str) -> pd.DataFrame:
+            return self._resolve_source_df(block_id, state)
+        return _resolve
 
 
 class AIAssistedTextHandler:

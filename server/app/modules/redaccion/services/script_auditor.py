@@ -26,6 +26,8 @@ WHITELIST_MODULES: frozenset[str] = frozenset({
     "pandas", "json", "re", "math", "datetime", "collections",
     "typing", "io", "openpyxl", "pdfplumber", "unicodedata",
     "fitz",
+    # Charts (9R.5.7)
+    "matplotlib", "seaborn", "numpy", "base64",
 })
 
 

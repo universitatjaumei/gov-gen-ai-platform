@@ -14,6 +14,7 @@ from server.app.modules.redaccion.database.models import (
     HubReportTemplate,
     HubReportTemplateVersion,
     HubRunManifest,
+    HubScriptProposal,
     HubWorkspace,
     HubWorkspaceAuditEvent,
     HubWorkspaceBlock,
@@ -142,6 +143,39 @@ class RunManifestRepo:
         self._session.add(manifest)
         await self._session.flush()
         return manifest
+
+
+class ScriptProposalRepo:
+    """Repositorio para HubScriptProposal — solo I/O, sin lógica de negocio."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get(self, proposal_id: uuid.UUID) -> HubScriptProposal | None:
+        return await self._session.get(HubScriptProposal, proposal_id)
+
+    async def save(self, proposal: HubScriptProposal) -> HubScriptProposal:
+        self._session.add(proposal)
+        await self._session.flush()
+        return proposal
+
+    async def list_by_proposer(self, user_id: uuid.UUID) -> list[HubScriptProposal]:
+        stmt = (
+            select(HubScriptProposal)
+            .where(HubScriptProposal.proposer_user_id == user_id)
+            .order_by(HubScriptProposal.created_at.desc())
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_by_status(self, status: str) -> list[HubScriptProposal]:
+        stmt = (
+            select(HubScriptProposal)
+            .where(HubScriptProposal.status == status)
+            .order_by(HubScriptProposal.created_at.desc())
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
 
 
 class WorkspaceAuditEventRepo:

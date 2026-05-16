@@ -7,9 +7,10 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from server.app.modules.redaccion.contracts.block_io import BlockReference
+from server.app.modules.redaccion.services.transformation.operations import Operation
 
 
 class _BlockBase(BaseModel):
@@ -40,9 +41,54 @@ class TableBlock(_BlockBase):
     data_block_ref: str
 
 
+class ChartBlockConfig(BaseModel):
+    """Configuración de visualización para un ChartBlock."""
+
+    mode: Literal["deterministic", "ai"] = "deterministic"
+    chart_type: Literal["bar", "line", "pie", "scatter", "histogram"] = "bar"
+    x_axis: str | None = None
+    y_axis: str | None = None
+    color_by: str | None = None
+    label_column: str | None = None
+    value_column: str | None = None
+    nl_prompt: str | None = None
+    palette: str = "viridis"
+    aggregation: Literal["sum", "mean", "count", "min", "max", "none"] = "none"
+    output_format: Literal["png", "svg"] = "png"
+
+
 class ChartBlock(_BlockBase):
     kind: Literal["CHART"] = "CHART"
     data_block_ref: str
+    config: ChartBlockConfig | None = None
+
+
+class DataTransformBlockConfig(BaseModel):
+    """Configuración de un bloque DATA_TRANSFORM.
+
+    `mode='deterministic'` aplica directamente `operations` sobre los datos
+    referenciados por `source_block_ref`. `mode='ai'` traduce
+    `nl_instruction` a operaciones declarativas (o, en última instancia, a
+    un script Python auditado) usando el ETLFactory.
+    """
+
+    mode: Literal["deterministic", "ai"] = "deterministic"
+    source_block_ref: BlockReference
+    operations: list[Operation] | None = None
+    nl_instruction: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_mode_fields(self) -> "DataTransformBlockConfig":
+        if self.mode == "deterministic" and not self.operations:
+            raise ValueError("operations is required when mode='deterministic'")
+        if self.mode == "ai" and not self.nl_instruction:
+            raise ValueError("nl_instruction is required when mode='ai'")
+        return self
+
+
+class DataTransformBlock(_BlockBase):
+    kind: Literal["DATA_TRANSFORM"] = "DATA_TRANSFORM"
+    config: DataTransformBlockConfig
 
 
 class AIAssistedTextBlock(_BlockBase):
@@ -80,6 +126,7 @@ BlockContract = Annotated[
         DeterministicDataBlock,
         TableBlock,
         ChartBlock,
+        DataTransformBlock,
         AIAssistedTextBlock,
         AISummaryBlock,
         AIRewriteBlock,

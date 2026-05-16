@@ -174,7 +174,14 @@
       "Bash(Get-Item \"C:/Users/fabra/Documents/AI_agents_hub/server/openapi.json\")",
       "Bash(Select-Object LastWriteTime)",
       "Bash(rtk npm *)",
-      "Bash(Get-Content *)"
+      "Bash(Get-Content *)",
+      "Bash(rtk pip *)",
+      "Bash(Select-String -Pattern \"spacy|faker\")",
+      "PowerShell(python -c \"import spacy; nlp=spacy.load\\('es_core_news_md'\\); print\\('ok'\\)\" 2>&1)",
+      "PowerShell(uv pip *)",
+      "PowerShell(Get-ChildItem -Recurse C:\\\\Users\\\\fabra\\\\Documents\\\\AI_agents_hub\\\\_legacy_nicegui -File | ForEach-Object { $_.FullName })",
+      "Bash(mkdir -p C:/Users/fabra/Documents/AI_agents_hub/server/app/modules/redaccion/services/charts)",
+      "Bash(mkdir -p C:/Users/fabra/Documents/AI_agents_hub/server/tests/modules/redaccion/charts)"
     ]
   },
   "hooks": {

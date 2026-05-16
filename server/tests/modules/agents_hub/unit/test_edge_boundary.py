@@ -32,6 +32,8 @@ def test_operational_base_contains_only_operational_models() -> None:
         "hub_workspaces",
         "hub_workspace_blocks",
         "hub_run_manifests",
+        "hub_script_proposals",       # 9R.5.5 — scripts metaprogramados
+        "hub_workspace_audit_events",  # 9R.5.x — auditoría de workspace
     }
 
 def test_no_cross_base_relationships() -> None:

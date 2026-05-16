@@ -150,8 +150,8 @@ AuditLogNode
 
 ── Bloques ──
 9R.3.1 (RED/GREEN)  Tipos de bloque (STATIC_TEXT, USER_INPUT, DETERMINISTIC_DATA,
-                                     TABLE, CHART, AI_ASSISTED_TEXT, AI_SUMMARY,
-                                     AI_REWRITE, CITATION_BLOCK, REVIEW_GATE)
+                                     TABLE, CHART, DATA_TRANSFORM, AI_ASSISTED_TEXT,
+                                     AI_SUMMARY, AI_REWRITE, CITATION_BLOCK, REVIEW_GATE)
 9R.3.2 (RED/GREEN)  BlockState machine + reglas de transición + invariantes
 9R.3.3 (RED/GREEN)  BlockReference + projection + orden topológico + detección de ciclos
 
@@ -280,6 +280,165 @@ POST /api/v1/hub/redaccion/workspaces/{id}/migrate
 
 ---
 
+## Módulo de anonimización (9R.5.5)
+
+El módulo `server/app/modules/redaccion/services/anonymization/` proporciona
+detección y sustitución determinista de PII (regex + spaCy NER + anclajes
+de formulario), reutilizado por dos flujos:
+
+1. **TestDataAnonymizerService** (`services/test_data_anonymizer.py`) —
+   anonimiza datos de prueba sintéticos para el workflow de scripts
+   (`/api/v1/redaccion/scripts/{id}/anonymize-test-data`). Obligatorio
+   cuando `target_owner_kind = 'platform'`.
+2. **Fase 13 (NER reversible)** — hooks `pre_llm` / `post_llm` dentro de
+   `DraftingCoreGraph` que reutilizan `PiiDetector` para anonimizar texto
+   antes de enviarlo al LLM y recomponerlo a la salida (próximo prompt 13.1).
+
+### Origen y migración
+
+Migrado de `client_app/app/modules/privacy/` (1011 LOC). Adaptaciones duras:
+
+- **`StorageRef` en lugar de `Path`**: todas las firmas públicas reciben
+  referencias de storage y leen/escriben vía `StorageService` (fsspec).
+- **Async**: las operaciones de I/O son `async`; la detección/sustitución
+  CPU-bound sigue síncrona.
+- **Sin `EncryptionService`**: el determinismo se obtiene por instancia
+  (`FakerGenerator(seed=...)`). La persistencia cifrada del mapa es TODO
+  post-MVP (`save_state` / `load_state` son no-op explícitos).
+- **Sin `enterprise_audit_service`**: la auditoría la delega el llamador a
+  `hub_workspace_audit_events` (existente desde 9R.8.1).
+- **Fallback explícito sin spaCy**: si el modelo no carga, degrada a
+  `regex + anclajes` y emite warning en logs. Los flujos siguen funcionando.
+- **Mantenida Disposición Adicional Séptima LOPDGDD** (`anonymize_document_id(mode='AEPD')`).
+
+### Componentes
+
+| Archivo | Responsabilidad |
+|---------|-----------------|
+| `anonymizer.py` | `AnonymizationContext` — motor híbrido regex + NER + anclajes. |
+| `faker_generator.py` | Generación determinista de valores sintéticos con cache. |
+| `pii_detector.py` | Wrapper ligero: `scan_dataframe()`, `detect_spans()`, `ColumnInfo`, `PiiSpan`. |
+| `policies.py` | `AnonymizerPolicy` + lista de `Strategy` predefinidas. |
+| `service.py` | `AnonymizerService` — alto nivel async sobre archivos en storage. |
+
+### Tipos PII reconocidos
+
+DNI, NIE, IBAN, EMAIL, PHONE, PASSPORT, CREDIT_CARD, NSS, DATE, POSTAL_CODE,
+PERSON_NAME (via NER + anclajes), ADDRESS, ORGANIZATION (via NER).
+
+### Anclajes de formulario
+
+`PiiDetector` detecta etiquetas de campo (`Nombre:`, `Apellidos:`,
+`Representante Legal:`) y las marca con prioridad sobre el NER. La estructura
+del formulario está disponible vía `get_form_structure_hint()` para inyectar
+como contexto al LLM en tiempo de redacción.
+
+### PDF → markdown sintético
+
+Para PDFs, el flujo no regenera el PDF: extrae markdown con Docling, lo
+anonimiza y persiste un `.md`. Justificación: el pipeline de scripts trabaja
+sobre `raw_text`, y regenerar el PDF añade coste sin valor en el MVP.
+
+### Modelos spaCy
+
+- `es_core_news_md` (español, ~40 MiB) — se instala via
+  `python -m spacy download es_core_news_md` (Dockerfile durante el build).
+- `en_core_web_md` (inglés) — instalable de la misma forma cuando se
+  amplíe la cobertura.
+
+---
+
+## Workflow de scripts metaprogramados (9R.5.5 – 9R.5.6)
+
+Los scripts de extracción generados por LLM siguen un ciclo de vida con estados
+explícitos y tres gates obligatorios antes de incrustarse en una plantilla.
+
+### Estados de `HubScriptProposal`
+
+```
+proposed → tested → pending_review → approved
+                                   → rejected
+```
+
+| Estado | Descripción |
+|--------|-------------|
+| `proposed` | LLM propuso código; auditado con AST. |
+| `tested` | Proposer ejecutó en sandbox y validó con `validate-test-result`. |
+| `pending_review` | Enviado a la cola de revisión admin (solo `target_owner_kind='platform'`). |
+| `approved` | Script incrustado en plantilla (privada o global). |
+| `rejected` | Rechazado por admin con nota de revisión; no permite nuevas transiciones. |
+
+### Gates obligatorios
+
+| Gate | Cuándo | Qué verifica |
+|------|--------|--------------|
+| **Auditoría AST** | Al proponer | `ScriptSecurityAuditor` — imports prohibidos, builtins peligrosos. |
+| **Test sandbox** | Antes de persistir | El proposer ejecuta contra datos de prueba y valida el resultado. |
+| **Anonimización** | Solo para `platform` | `test_data_is_anonymized=True` exigido en `submit-for-review`. |
+| **Admin retest** | Antes de `approve` | Hash del re-test admin debe coincidir y ser reciente (<10 min). |
+
+### Flujo self-service (plantilla privada)
+
+```
+POST /propose
+  → POST /{id}/anonymize-test-data   (si necesita datos sintéticos)
+  → POST /{id}/test
+  → POST /{id}/validate-test-result
+  → POST /{id}/save-to-private-template
+```
+
+### Flujo de revisión (plantilla global)
+
+```
+POST /propose
+  → POST /{id}/anonymize-test-data   (OBLIGATORIO)
+  → POST /{id}/test
+  → POST /{id}/validate-test-result
+  → POST /{id}/submit-for-review
+  ↓
+  GET  /pending                       (admin/partner)
+  → POST /{id}/admin-retest
+  → POST /{id}/approve  |  POST /{id}/reject
+```
+
+### Incrustación del script en la plantilla
+
+Al aprobar, se crea una nueva `HubReportTemplateVersion` con el script embebido
+como un bloque `DETERMINISTIC_DATA` con `source_kind='admin_script'`:
+
+```json
+{
+  "id": "<uuid>",
+  "kind": "DETERMINISTIC_DATA",
+  "label": "Script de extracción",
+  "source_kind": "admin_script",
+  "options": { "code": "...", "approved": true },
+  "depends_on": []
+}
+```
+
+La versión anterior sigue existente (append-only); los workspaces existentes no
+migran automáticamente (ver sección "Versionado de plantillas").
+
+### Endpoints (Deploy: edge)
+
+| Método | Ruta | Actor | Descripción |
+|--------|------|-------|-------------|
+| `POST` | `/redaccion/scripts/propose` | User | Genera y persiste propuesta. |
+| `POST` | `/redaccion/scripts/{id}/describe-test-data` | Proposer | Sugiere providers Faker por columna. |
+| `POST` | `/redaccion/scripts/{id}/preview-pdf-spans` | Proposer | Detecta spans PII en PDF. |
+| `POST` | `/redaccion/scripts/{id}/anonymize-test-data` | Proposer | Genera datos sintéticos. |
+| `POST` | `/redaccion/scripts/{id}/test` | Proposer | Ejecuta en sandbox, persiste hash. |
+| `POST` | `/redaccion/scripts/{id}/validate-test-result` | Proposer | Marca test validado. |
+| `POST` | `/redaccion/scripts/{id}/save-to-private-template` | Proposer | Incrusta en plantilla propia. |
+| `POST` | `/redaccion/scripts/{id}/submit-for-review` | Proposer | Envía a cola admin (solo `platform`). |
+| `GET` | `/redaccion/scripts/pending` | Admin/Partner | Lista cola de revisión. |
+| `POST` | `/redaccion/scripts/{id}/admin-retest` | Admin/Partner | Re-ejecuta y compara hash. |
+| `POST` | `/redaccion/scripts/{id}/approve` | Admin/Partner | Aprueba e incrusta en plantilla global. |
+| `POST` | `/redaccion/scripts/{id}/reject` | Admin/Partner | Rechaza con nota. |
+
+---
+
 ## Glosario
 
 | Término | Definición |
@@ -293,3 +452,42 @@ POST /api/v1/hub/redaccion/workspaces/{id}/migrate
 | **ReportTemplateDraft** | Propuesta temporal generada por `LLMSpecService` a partir de lenguaje natural. No es persistente; requiere validación estructural + aprobación HITL antes de convertirse en `ReportTemplateContract`. |
 | **ExtractionPipeline** | Protocolo que encapsula la lógica de extracción de datos desde un tipo de fuente (Excel, PDFText, PDFTable, Manual, AdminScript). Devuelve `ExtractionResult` con datos, provenance y warnings. |
 | **NewVersionNotice** | DTO devuelto por `TemplateMigrationService.detect_new_version()`. Informa al propietario de que hay una versión más reciente disponible e indica si hay `breaking_changes` en el `InputContract`. |
+| **Operation** | Transformación tabular declarativa (discriminated union por `op`): `FilterOp`, `AggregateOp`, `JoinOp`, `PivotOp`, `NormalizeOp`, `GroupByOp`. Ejecutada por `DeterministicETLService` o generada por `ETLFactory`. |
+| **DataTransformBlock** | Block kind que aplica transformaciones tabulares (modo determinista o IA) entre la extracción y los nodos IA. La IA produce una `list[Operation]` auditable; si no encaja en el catálogo, fallback a script Python auditado. |
+
+---
+
+## Bloques de transformación (9R.5.8)
+
+`DATA_TRANSFORM` es el 11º block kind. Se ejecuta **entre** `DeterministicExtractionNode` y `DataQualityCheckNode` en el `DraftingCoreGraph`.
+
+### Módulo
+
+```
+server/app/modules/redaccion/services/transformation/
+  operations.py          # Discriminated union: FilterOp | AggregateOp | JoinOp | PivotOp | NormalizeOp | GroupByOp
+  deterministic_etl.py   # DeterministicETLService.execute(df, ops, joinable_resolver?)
+  etl_factory.py         # ETLFactory.generate_operations_from_nl(nl, schema) → ETLPlan
+  etl_service.py         # ETLService.run(df, mode, ...) → ETLServiceResult
+```
+
+### Modos
+
+| Modo | Flujo |
+|------|-------|
+| `deterministic` | `config.operations` → `DeterministicETLService.execute(df, ops)` |
+| `ai` | `nl_instruction` → `ETLFactory` → `list[Operation]` → `DeterministicETLService` (con refinamiento iterativo, max 3 intentos) |
+
+Si el LLM no consigue producir operaciones válidas tras 3 intentos, `ETLFactory` genera un script Python con `def transform(df)` y lo audita con `ScriptSecurityAuditor`. El `ETLService` ejecuta el script solo si la auditoría lo aprueba.
+
+### JoinOp y resolución de bloques
+
+`JoinOp.other_block_ref` contiene el `block_id` del bloque fuente del otro DataFrame. `DataTransformationNode` inyecta un `joinable_resolver` que resuelve ese `block_id` desde `state.blocks` / `state.block_outputs`.
+
+### Cadena típica
+
+```
+DETERMINISTIC_DATA (Excel) → DATA_TRANSFORM (GroupBy región) → CHART (barras por región)
+```
+
+El `DataTransformBlock` escribe `{"rows": [...], "operations_applied": [...]}` en `state.block_outputs[block_id]`, que `ChartHandler._resolve_data()` consume directamente.
