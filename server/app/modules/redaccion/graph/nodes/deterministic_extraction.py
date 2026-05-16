@@ -1,6 +1,7 @@
-"""DeterministicExtractionNode — ejecuta pipelines de extracción para bloques DETERMINISTIC_DATA (9R.6.2/9R.6.6)."""
+"""DeterministicExtractionNode — ejecuta pipelines de extracción para bloques DETERMINISTIC_DATA (9R.6.2/9R.6.6/9R.5.9)."""
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -70,7 +71,7 @@ class DeterministicExtractionNode:
 
             try:
                 pipeline = self._factory.get(source_kind)
-                result = pipeline.extract(inp)
+                result = await asyncio.to_thread(pipeline.extract, inp)
             except Exception as exc:
                 new_warnings.append(ExtractionWarning(
                     block_id=block_id, message=str(exc), kind="extraction_error",
@@ -89,6 +90,7 @@ class DeterministicExtractionNode:
                 "tables": [t.model_dump() for t in result.tables],
                 "metrics": [m.model_dump() for m in result.metrics],
                 "free_text": result.free_text,
+                "document": result.document.model_dump() if result.document else None,
             }
             for pw in result.warnings:
                 new_warnings.append(ExtractionWarning(

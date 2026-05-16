@@ -1,9 +1,20 @@
-"""CitationAndTraceabilityNode — adjunta citaciones a bloques IA referenciando datos origen (9R.6.3)."""
+"""CitationAndTraceabilityNode — adjunta citaciones a bloques IA referenciando datos origen (9R.6.3/9R.5.9)."""
 from __future__ import annotations
 
 from server.app.modules.redaccion.contracts.runtime import Citation, WorkspaceState
 
 _AI_BLOCK_KINDS = frozenset({"AI_ASSISTED_TEXT", "AI_SUMMARY", "AI_REWRITE"})
+
+
+def _page_from_content(content: dict) -> int | None:
+    """Extrae el número de la primera página del documento enriquecido (9R.5.9)."""
+    doc = content.get("document")
+    if not isinstance(doc, dict):
+        return None
+    pages = doc.get("pages") or []
+    if pages and isinstance(pages[0], dict):
+        return pages[0].get("page_num")
+    return None
 
 
 class CitationAndTraceabilityNode:
@@ -38,8 +49,11 @@ class CitationAndTraceabilityNode:
                 else:
                     excerpt = str(source_state.content)[:300]
 
+                page = _page_from_content(source_state.content) if source_state.content else None
+
                 citations.append(Citation(
                     source_document=ref.block_id,
+                    page=page,
                     excerpt=excerpt or None,
                 ))
 

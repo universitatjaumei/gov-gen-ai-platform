@@ -1,6 +1,7 @@
-"""AIAssistDraftNode — genera texto IA para bloques AI_ASSISTED_TEXT / AI_SUMMARY / AI_REWRITE (9R.6.3/9R.6.6)."""
+"""AIAssistDraftNode — genera texto IA para bloques AI_ASSISTED_TEXT / AI_SUMMARY / AI_REWRITE (9R.6.3/9R.6.6/9R.5.9)."""
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
@@ -8,6 +9,7 @@ from server.app.modules.redaccion.contracts.runtime import ExtractionWarning, Wo
 
 _AI_BLOCK_KINDS = frozenset({"AI_ASSISTED_TEXT", "AI_SUMMARY", "AI_REWRITE"})
 _SKIP_STATUSES = frozenset({"approved", "locked"})
+_MARKDOWN_LIMIT = 30_000
 
 
 class LLMService(Protocol):
@@ -16,12 +18,32 @@ class LLMService(Protocol):
     async def generate(self, prompt: str, context: str) -> str: ...
 
 
+def _block_text(content: dict) -> str:
+    """Extrae el texto más rico disponible del contenido de un bloque.
+
+    Preferencia (9R.5.9): document.markdown > free_text > repr(content).
+    Si el documento es complex_tables, añade un volcado JSON de las tablas.
+    """
+    doc = content.get("document")
+    if isinstance(doc, dict) and doc.get("markdown"):
+        text = doc["markdown"][:_MARKDOWN_LIMIT]
+        if doc.get("extraction_strategy") == "complex_tables":
+            pages = doc.get("pages") or []
+            tables = [tbl for p in pages for tbl in (p.get("tables") or [])]
+            if tables:
+                text += f"\n\ntables_json:\n{json.dumps(tables, ensure_ascii=False)[:10_000]}"
+        return text
+    if content.get("free_text"):
+        return str(content["free_text"])
+    return str(content)
+
+
 def _build_context(blocks: dict) -> str:
     """Solo incluye bloques en estado `extracted` o `approved`."""
     parts = []
     for bid, bstate in sorted(blocks.items()):
         if bstate.status in ("extracted", "approved") and bstate.content:
-            parts.append(f"[{bid}]\n{bstate.content}")
+            parts.append(f"[{bid}]\n{_block_text(bstate.content)}")
     return "\n\n".join(parts)
 
 
