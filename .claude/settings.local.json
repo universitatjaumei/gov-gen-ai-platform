@@ -181,7 +181,8 @@
       "PowerShell(uv pip *)",
       "PowerShell(Get-ChildItem -Recurse C:\\\\Users\\\\fabra\\\\Documents\\\\AI_agents_hub\\\\_legacy_nicegui -File | ForEach-Object { $_.FullName })",
       "Bash(mkdir -p C:/Users/fabra/Documents/AI_agents_hub/server/app/modules/redaccion/services/charts)",
-      "Bash(mkdir -p C:/Users/fabra/Documents/AI_agents_hub/server/tests/modules/redaccion/charts)"
+      "Bash(mkdir -p C:/Users/fabra/Documents/AI_agents_hub/server/tests/modules/redaccion/charts)",
+      "Bash(Set-Location \"C:\\\\Users\\\\fabra\\\\Documents\\\\AI_agents_hub\\\\server\")"
     ]
   },
   "hooks": {

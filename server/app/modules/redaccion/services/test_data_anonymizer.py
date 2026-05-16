@@ -6,11 +6,7 @@ por Docling (opción 1 confirmada en el prompt 9R.5.5): no se regenera el PDF.
 """
 from __future__ import annotations
 
-import io
 import uuid
-from typing import Literal
-
-import pandas as pd
 from pydantic import BaseModel, Field
 
 from server.app.core.storage import StorageService

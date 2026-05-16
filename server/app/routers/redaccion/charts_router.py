@@ -4,11 +4,10 @@ Deploy: edge
 """
 from __future__ import annotations
 
-import io
 from typing import Any, Literal
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import Response
 from pydantic import BaseModel
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from server.app.modules.redaccion.services.script_auditor import (
     AuditResult,

@@ -7,13 +7,12 @@ from __future__ import annotations
 
 import copy
 import hashlib
-import io
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,8 +25,6 @@ from server.app.modules.redaccion.database.models import (
     HubScriptProposal,
 )
 from server.app.modules.redaccion.database.repos import (
-    ReportTemplateRepo,
-    ReportTemplateVersionRepo,
     ScriptProposalRepo,
 )
 from server.app.modules.redaccion.pipelines.admin_script_pipeline import (
