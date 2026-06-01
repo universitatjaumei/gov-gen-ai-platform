@@ -8,13 +8,14 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, get_session
 from server.app.core.auth.models import UserInfo
+from server.app.core.storage import StorageService, get_storage_service
 from server.app.modules.redaccion.contracts.runtime import BlockState, InvalidBlockTransitionError
 from server.app.modules.redaccion.database.models import (
     HubWorkspace,
@@ -24,6 +25,32 @@ from server.app.modules.redaccion.database.models import (
 from server.app.modules.redaccion.services.block_state_machine import (
     BlockStateMachine,
     BlockTransitionEvent,
+)
+from server.app.modules.redaccion.contracts.state_update import (
+    WorkspaceStatePatch,
+    WorkspaceStatePatchResponse,
+    WorkspaceStateConflictResponse,
+)
+from server.app.modules.redaccion.services.autosave_service import (
+    ConflictError,
+    InvalidTransitionError as AutosaveInvalidTransitionError,
+    WorkspaceAutosaveService,
+    WorkspaceNotFoundError,
+)
+from server.app.modules.redaccion.services.workspace_run_service import (
+    InputsNotReadyError,
+    WorkspaceRunService,
+)
+from server.app.modules.redaccion.contracts.preview import PreviewPayload
+from server.app.modules.redaccion.services.preview_builder import (
+    PendingBlocksError,
+    PreviewBuilderService,
+)
+from server.app.modules.redaccion.database.repos import (
+    RunManifestRepo,
+    ReportTemplateVersionRepo,
+    WorkspaceBlockRepo,
+    WorkspaceRepo,
 )
 
 router = APIRouter(prefix="/redaccion/workspaces", tags=["redaccion-workspaces"])
@@ -50,6 +77,20 @@ class EditBlockRequest(BaseModel):
 class ResumeOut(BaseModel):
     workspace_id: uuid.UUID
     status: str
+
+
+class InputUploadOut(BaseModel):
+    slot_id: str
+    filename: str
+    storage_path: str
+    size_bytes: int
+    uploaded_at: datetime
+
+
+class RunStartedOut(BaseModel):
+    run_id: uuid.UUID
+    workspace_id: uuid.UUID
+    status: str  # queued | running | completed
 
 
 # ---------------------------------------------------------------------------
@@ -262,3 +303,201 @@ async def resume_workspace(
     await session.commit()
 
     return ResumeOut(workspace_id=workspace_id, status="drafting")
+
+
+# ---------------------------------------------------------------------------
+# 9R.10.2 — Upload de inputs y arranque de ejecución
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/{workspace_id}/inputs/{slot_id}",
+    response_model=InputUploadOut,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="uploadWorkspaceInput",
+)
+async def upload_workspace_input(
+    workspace_id: uuid.UUID,
+    slot_id: str,
+    file: UploadFile = File(...),
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> InputUploadOut:
+    """Sube un archivo a un slot de inputs del workspace.
+
+    El archivo se persiste en StorageService con clave
+    `redaccion/{workspace_id}/inputs/{slot_id}/{filename}` y se registra una
+    entrada en `HubWorkspace.inputs_json[slot_id]`. Si el slot ya tenía un
+    archivo, se sobreescribe (los archivos previos quedan en storage como
+    huérfanos hasta la limpieza periódica).
+    """
+    workspace = await _get_workspace(workspace_id, user, session)
+
+    content = await file.read()
+    filename = file.filename or f"{slot_id}.bin"
+    storage_path = f"redaccion/{workspace_id}/inputs/{slot_id}/{filename}"
+    await storage.put(storage_path, content)
+
+    uploaded_at = datetime.now(timezone.utc)
+    entry = {
+        "slot_id": slot_id,
+        "filename": filename,
+        "storage_path": storage_path,
+        "size_bytes": len(content),
+        "uploaded_at": uploaded_at.isoformat(),
+    }
+
+    inputs = workspace.inputs_json
+    if not isinstance(inputs, dict):
+        inputs = {}
+    inputs[slot_id] = entry
+    workspace.inputs_json = inputs
+
+    audit_event = HubWorkspaceAuditEvent(
+        workspace_id=workspace_id,
+        block_id=None,
+        event="input_uploaded",
+        from_status=workspace.status,
+        to_status=workspace.status,
+        actor=user.user_id,
+        metadata_json={"slot_id": slot_id, "filename": filename, "size_bytes": len(content)},
+    )
+    session.add(audit_event)
+    await session.commit()
+
+    return InputUploadOut(
+        slot_id=slot_id,
+        filename=filename,
+        storage_path=storage_path,
+        size_bytes=len(content),
+        uploaded_at=uploaded_at,
+    )
+
+
+@router.post(
+    "/{workspace_id}/run",
+    response_model=RunStartedOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    operation_id="runWorkspace",
+)
+async def run_workspace(
+    workspace_id: uuid.UUID,
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> RunStartedOut:
+    """Encola la ejecución del DraftingCoreGraph para el workspace.
+
+    Transiciona `workspace.status` de `draft|ingesting` a `drafting`. La
+    ejecución real del grafo se enchufa a un background task en follow-ups; el
+    endpoint devuelve un `run_id` inmediato con `status='queued'` para que el
+    frontend pueda consultar el manifest cuando esté disponible.
+    """
+    workspace = await _get_workspace(workspace_id, user, session)
+
+    svc = WorkspaceRunService(session=session)
+    try:
+        # session.get ya está hecho por _get_workspace; start_run lo repite a
+        # través del repo. En MVP es aceptable: el coste de un get adicional
+        # es despreciable frente a la simplicidad del wire-up.
+        result = await svc.start_run(workspace_id, validate=False)
+    except InputsNotReadyError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    audit_event = HubWorkspaceAuditEvent(
+        workspace_id=workspace_id,
+        block_id=None,
+        event="run_started",
+        from_status=workspace.status,
+        to_status="drafting",
+        actor=user.user_id,
+        metadata_json={"run_id": str(result.run_id)},
+    )
+    session.add(audit_event)
+    await session.commit()
+
+    return RunStartedOut(
+        run_id=result.run_id,
+        workspace_id=workspace_id,
+        status=result.status,
+    )
+
+
+@router.patch(
+    "/{workspace_id}/state",
+    response_model=WorkspaceStatePatchResponse,
+    operation_id="patchWorkspaceState",
+    responses={
+        409: {"model": WorkspaceStateConflictResponse, "description": "Optimistic conflict"},
+        422: {"description": "Invalid BlockState transition"},
+        404: {"description": "Workspace not found or not owned by user"},
+    },
+)
+async def patch_workspace_state(
+    workspace_id: uuid.UUID,
+    patch: WorkspaceStatePatch,
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> WorkspaceStatePatchResponse:
+    """Autosave atómico (1C.1) con concurrencia optimista.
+
+    - 200: aplicado, devuelve nuevas versiones.
+    - 409: workspace_version o block_version desactualizada (con `current_workspace_version`
+      y `conflicting_block_ids`).
+    - 422: transición de BlockState inválida.
+    - 404: workspace inexistente o no pertenece al usuario.
+    """
+    service = WorkspaceAutosaveService(session=session)
+    try:
+        return await service.apply_patch(workspace_id, user.user_id, patch)
+    except WorkspaceNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Workspace not found") from exc
+    except ConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "current_workspace_version": exc.current_workspace_version,
+                "conflicting_block_ids": [str(b) for b in exc.conflicting_block_ids],
+            },
+        ) from exc
+    except AutosaveInvalidTransitionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+# ---------------------------------------------------------------------------
+# 1C.3 — Vista previa imprimible
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/{workspace_id}/preview",
+    response_model=PreviewPayload,
+    operation_id="getWorkspacePreview",
+    responses={
+        409: {"description": "Blocks pending review"},
+        404: {"description": "Workspace not found"},
+    },
+)
+async def get_workspace_preview(
+    workspace_id: uuid.UUID,
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> PreviewPayload:
+    """Devuelve el PreviewPayload para vista previa e impresión.
+
+    Deploy: edge
+    Retorna 409 si hay bloques en estado distinto a approved/locked.
+    """
+    await _get_workspace(workspace_id, user, session)
+
+    builder = PreviewBuilderService(
+        workspace_repo=WorkspaceRepo(session),
+        block_repo=WorkspaceBlockRepo(session),
+        template_version_repo=ReportTemplateVersionRepo(session),
+        manifest_repo=RunManifestRepo(session),
+    )
+    try:
+        return await builder.build_payload(workspace_id)
+    except PendingBlocksError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"pending_block_ids": exc.pending_block_ids},
+        ) from exc

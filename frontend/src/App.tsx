@@ -15,14 +15,33 @@ import { PlaceholderPage } from '@/admin/pages/PlaceholderPage'
 import { ReportTemplateBuilderPage } from '@/redaccion/pages/ReportTemplateBuilderPage'
 import { GenericReportWizard } from '@/redaccion/pages/GenericReportWizard'
 import { LLMDraftPreviewPage } from '@/redaccion/pages/LLMDraftPreviewPage'
+import { ScriptProposalWizardPage } from '@/redaccion/pages/ScriptProposalWizardPage'
+import { AdminScriptReviewQueuePage } from '@/redaccion/pages/AdminScriptReviewQueuePage'
+import { WorkspacePreview } from '@/redaccion/preview/WorkspacePreview'
+import { AIBrainPage } from '@/admin/pages/AIBrainPage'
+import { ThemeProvider } from './themes/ThemeProvider'
 import './index.css'
+import './themes/base.css'
 import '@/shared/i18n'
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 2,
+      staleTime: 1000 * 60 * 5,
+    },
+  },
+})
+
+const getThemeUrl = (): string | undefined => {
+  const params = new URLSearchParams(window.location.search)
+  return params.get('theme') ?? undefined
+}
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeProvider themeUrl={getThemeUrl()}>
       <BrowserRouter>
         <AuthProvider>
           <Suspense fallback={null}>
@@ -39,10 +58,14 @@ function App() {
                     <Route path="reports" element={<ReportsPage />} />
                     <Route path="llm-configs" element={<LLMConfigsPage />} />
                     <Route path="prompts" element={<PromptsPage />} />
+                    <Route path="brain" element={<AIBrainPage />} />
                   </Route>
                   <Route path="/redaccion/builder" element={<ReportTemplateBuilderPage />} />
                   <Route path="/redaccion/wizard" element={<GenericReportWizard />} />
                   <Route path="/redaccion/draft" element={<LLMDraftPreviewPage />} />
+                  <Route path="/redaccion/scripts/wizard" element={<ScriptProposalWizardPage />} />
+                  <Route path="/redaccion/scripts/review" element={<AdminScriptReviewQueuePage />} />
+                  <Route path="/redaccion/workspaces/:id/preview" element={<WorkspacePreview />} />
                   <Route path="/automation" element={<PlaceholderPage section="Automatización" />} />
                   <Route path="/platform" element={<PlaceholderPage section="Plataforma" />} />
                 </Route>
@@ -52,6 +75,7 @@ function App() {
           </Suspense>
         </AuthProvider>
       </BrowserRouter>
+      </ThemeProvider>
     </QueryClientProvider>
   )
 }
