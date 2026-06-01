@@ -200,6 +200,7 @@ export function PromptsPage() {
           <span className="font-medium text-sm">{t('hub.prompt_templates')}</span>
 
           <select
+            aria-label={t('hub.filter_usage_aria')}
             value={usageFilter}
             onChange={(e) => setUsageFilter(e.target.value as PromptUsageFilter)}
             className="border rounded px-2 py-1.5 text-xs bg-background"
@@ -210,6 +211,7 @@ export function PromptsPage() {
           </select>
 
           <select
+            aria-label={t('hub.filter_chatbot_aria')}
             value={chatbotFilter}
             onChange={(e) => setChatbotFilter(e.target.value)}
             className="border rounded px-2 py-1.5 text-xs bg-background"
@@ -223,6 +225,7 @@ export function PromptsPage() {
           </select>
 
           <input
+            aria-label={t('hub.search_prompts_aria')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar prompt..."
@@ -451,9 +454,14 @@ export function PromptsPage() {
       )}
 
       {showCreate && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" role="dialog">
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-template-dialog-title"
+        >
           <div className="bg-background rounded-lg p-6 w-full max-w-md flex flex-col gap-4">
-            <h3 className="font-semibold text-base">{t('hub.new_prompt_template')}</h3>
+            <h3 id="create-template-dialog-title" className="font-semibold text-base">{t('hub.new_prompt_template')}</h3>
             <div className="flex flex-col gap-3 text-sm">
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-muted-foreground">Servicio/chatbot</span>

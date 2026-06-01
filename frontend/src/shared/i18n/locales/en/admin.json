@@ -2,7 +2,8 @@
   "nav": {
     "hub": "Hub",
     "automation": "Automation",
-    "platform": "Platform"
+    "platform": "Platform",
+    "main": "Main navigation"
   },
   "hub": {
     "chatbots": "Chatbots",
@@ -100,7 +101,25 @@
     "source_crawl_depth": "Depth",
     "source_max_pages": "Max pages",
     "source_url_regex": "URL regex filter",
-    "tab_assistant": "Assistant"
+    "tab_assistant": "Assistant",
+    "ai_brain": "AI Brain",
+    "brain_select_chatbot": "— Select a chatbot —",
+    "brain_prompt_editor": "System Prompt Editor",
+    "brain_prompt_version": "Saved version:",
+    "brain_save_prompt": "Save new version",
+    "brain_model_selector": "AI Model",
+    "brain_model_select_label": "— Select model —",
+    "brain_set_default": "Set as default",
+    "brain_sandbox": "Live test",
+    "brain_sandbox_test": "Test model",
+    "brain_sandbox_testing": "Testing…",
+    "brain_sandbox_ok": "OK — {{ms}}ms",
+    "brain_sandbox_fail": "Error testing the model",
+    "brain_no_templates": "No system prompts for this chatbot",
+    "subnav_aria": "Hub navigation",
+    "filter_usage_aria": "Filter by usage type",
+    "filter_chatbot_aria": "Filter by chatbot",
+    "search_prompts_aria": "Search prompts"
   },
   "login": {
     "title": "Sign in",

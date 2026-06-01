@@ -2,7 +2,8 @@
   "nav": {
     "hub": "Hub",
     "automation": "Automatización",
-    "platform": "Plataforma"
+    "platform": "Plataforma",
+    "main": "Navegación principal"
   },
   "hub": {
     "chatbots": "Chatbots",
@@ -100,7 +101,25 @@
     "source_crawl_depth": "Profundidad",
     "source_max_pages": "Máx. páginas",
     "source_url_regex": "Filtro regex URL",
-    "tab_assistant": "Asistente"
+    "tab_assistant": "Asistente",
+    "ai_brain": "Cerebro IA",
+    "brain_select_chatbot": "— Selecciona un chatbot —",
+    "brain_prompt_editor": "Editor de Prompt del Sistema",
+    "brain_prompt_version": "Versión guardada:",
+    "brain_save_prompt": "Guardar nueva versión",
+    "brain_model_selector": "Modelo IA",
+    "brain_model_select_label": "— Selecciona modelo —",
+    "brain_set_default": "Establecer por defecto",
+    "brain_sandbox": "Prueba en vivo",
+    "brain_sandbox_test": "Probar modelo",
+    "brain_sandbox_testing": "Probando…",
+    "brain_sandbox_ok": "OK — {{ms}}ms",
+    "brain_sandbox_fail": "Error al probar el modelo",
+    "brain_no_templates": "No hay prompts de sistema para este chatbot",
+    "subnav_aria": "Navegación del Hub",
+    "filter_usage_aria": "Filtrar por tipo de uso",
+    "filter_chatbot_aria": "Filtrar por chatbot",
+    "search_prompts_aria": "Buscar prompts"
   },
   "login": {
     "title": "Iniciar sesión",

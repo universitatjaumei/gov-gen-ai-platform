@@ -15,7 +15,7 @@ export function AppLayout() {
 
   return (
     <div className="flex h-screen">
-      <nav className="flex flex-col w-56 shrink-0 border-r bg-card p-4 gap-1">
+      <nav aria-label={t('nav.main')} className="flex flex-col w-56 shrink-0 border-r bg-card p-4 gap-1">
         {NAV_SECTIONS.map(({ key, path }) => (
           <NavLink
             key={key}

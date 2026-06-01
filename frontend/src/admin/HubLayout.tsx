@@ -8,6 +8,7 @@ const HUB_SUBNAV = [
   { key: 'reports', path: '/hub/reports' },
   { key: 'llm_configs', path: '/hub/llm-configs' },
   { key: 'prompt_templates', path: '/hub/prompts' },
+  { key: 'ai_brain', path: '/hub/brain' },
 ] as const
 
 export function HubLayout() {
@@ -15,7 +16,7 @@ export function HubLayout() {
 
   return (
     <div className="space-y-4">
-      <nav className="flex gap-1 border-b pb-2">
+      <nav aria-label={t('hub.subnav_aria')} className="flex gap-1 border-b pb-2">
         {HUB_SUBNAV.map(({ key, path }) => (
           <NavLink
             key={key}
