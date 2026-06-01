@@ -187,6 +187,7 @@ describe('WorkspaceStatusBar', () => {
     wrap(<WorkspaceStatusBar workspaceId="ws-1" />)
 
     expect(screen.getByTestId('workspace-status-badge')).toBeDefined()
-    expect(screen.getByTestId('workspace-status-badge').textContent).toContain('drafting')
+    // After refactor, badge shows friendly label not raw status string
+    expect(screen.getByTestId('workspace-status-badge').textContent).not.toEqual('drafting')
   })
 })

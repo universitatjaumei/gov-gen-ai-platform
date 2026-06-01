@@ -1,17 +1,9 @@
 import { useTranslation } from 'react-i18next'
 import { useGetWorkspaceById } from '@/shared/api/generated/hub-redaccion/hub-redaccion'
 import type { WorkspaceOut } from '@/shared/api/generated/model'
-
-const STATUS_BADGE: Record<string, string> = {
-  draft: 'bg-gray-100 text-gray-600',
-  extracted: 'bg-blue-100 text-blue-700',
-  ai_generated: 'bg-purple-100 text-purple-700',
-  needs_review: 'bg-yellow-100 text-yellow-700',
-  approved: 'bg-green-100 text-green-700',
-  rejected: 'bg-red-100 text-red-700',
-  failed: 'bg-destructive/10 text-destructive',
-  locked: 'bg-gray-100 text-gray-500',
-}
+import { StatusBadge } from '@/shared/components/StatusBadge'
+import { mapBlockStatusToUserLabel, mapFailureKindToKey } from '../utils/statusLabels'
+import { BlockDebugPanel } from './BlockDebugPanel'
 
 interface Props {
   workspaceId: string
@@ -19,6 +11,7 @@ interface Props {
 
 export function BlockEditor({ workspaceId }: Props) {
   const { t } = useTranslation('common')
+  const { t: tR } = useTranslation('redaccion')
   const { data: workspaceRaw, isLoading } = useGetWorkspaceById(workspaceId)
   const workspace = workspaceRaw as unknown as WorkspaceOut | undefined
 
@@ -27,23 +20,47 @@ export function BlockEditor({ workspaceId }: Props) {
 
   return (
     <div className="space-y-2">
-      {workspace.blocks.map(block => (
-        <div
-          key={block.block_id}
-          data-testid={`block-${block.block_id}`}
-          className="flex items-center justify-between px-4 py-3 border rounded-md bg-card hover:bg-accent/20 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-medium">{block.block_id}</span>
-            <span className="text-xs text-muted-foreground">{block.kind}</span>
-          </div>
-          <span
-            className={`text-xs px-2 py-0.5 rounded-full ${STATUS_BADGE[block.status] ?? 'bg-gray-100 text-gray-600'}`}
+      {workspace.blocks.map(block => {
+        const { labelKey, tone } = mapBlockStatusToUserLabel(
+          block.status,
+          block.failure_kind,
+        )
+        const statusDescId = `block-status-desc-${block.block_id}`
+        return (
+          <div
+            key={block.block_id}
+            role="region"
+            aria-label={tR('editor.block_region', { type: block.kind, id: block.block_id })}
+            aria-describedby={statusDescId}
+            data-testid={`block-${block.block_id}`}
+            className="flex flex-col px-4 py-3 border rounded-md bg-card hover:bg-accent/20 transition-colors gap-2"
           >
-            {block.status}
-          </span>
-        </div>
-      ))}
+            <span id={statusDescId} className="sr-only">{tR(labelKey)}</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium">{block.block_id}</span>
+                <span className="text-xs text-muted-foreground">{block.kind}</span>
+              </div>
+              <StatusBadge
+                label={tR(labelKey)}
+                tone={tone}
+                data-testid={`status-badge-${block.block_id}`}
+              />
+            </div>
+
+            {block.status === 'failed' && block.failure_kind && (
+              <p
+                data-testid={`failure-friendly-message-${block.block_id}`}
+                className="text-xs text-destructive"
+              >
+                {tR(mapFailureKindToKey(block.failure_kind))}
+              </p>
+            )}
+
+            <BlockDebugPanel block={block} />
+          </div>
+        )
+      })}
     </div>
   )
 }
