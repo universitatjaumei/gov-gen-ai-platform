@@ -1,0 +1,61 @@
+{
+  "wizard": {
+    "title": "Proposta d'script",
+    "step1": "Descripció",
+    "step2": "Revisió del codi",
+    "step3": "Dades de prova",
+    "step4": "Anonimització",
+    "step5": "Previsualització PDF",
+    "step6": "Executar prova",
+    "step7": "Validar i desar"
+  },
+  "target": {
+    "label": "Destinació de l'script",
+    "user": "Plantilla privada (el meu compte)",
+    "platform": "Plataforma (revisió admin)"
+  },
+  "audit": {
+    "approved": "Auditoria superada",
+    "rejected": "Auditoria fallida",
+    "risk_level": "Nivell de risc",
+    "findings": "Troballes",
+    "confidence": "Confiança"
+  },
+  "btn": {
+    "propose": "Generar script",
+    "next": "Següent",
+    "regenerate": "Regenerar",
+    "test": "Executar prova",
+    "validate": "Validar resultat",
+    "skip_anonymization": "Ometre anonimització",
+    "save": "Desar a plantilla privada",
+    "submit_for_review": "Enviar per a revisió",
+    "approve": "Aprovar",
+    "reject": "Rebutjar",
+    "retest": "Tornar a provar"
+  },
+  "code_preview": {
+    "title": "Codi generat",
+    "audit_findings": "Troballes d'auditoria"
+  },
+  "test_result": {
+    "title": "Resultat de la prova",
+    "hash": "Hash del resultat",
+    "hash_match": "El hash coincideix",
+    "hash_mismatch": "El hash no coincideix"
+  },
+  "admin": {
+    "queue_title": "Cua de revisió d'scripts",
+    "no_proposals": "No hi ha propostes pendents",
+    "proposer": "Proposer",
+    "prompt": "Descripció",
+    "hash_match": "Hash verificat"
+  },
+  "anonymize": {
+    "title": "Configurar anonimització",
+    "column": "Columna",
+    "faker_provider": "Proveïdor Faker",
+    "no_columns": "Sense columnes detectades"
+  },
+  "access_denied": "Accés denegat"
+}

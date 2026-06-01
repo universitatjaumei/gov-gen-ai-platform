@@ -1,0 +1,61 @@
+{
+  "wizard": {
+    "title": "Propuesta de script",
+    "step1": "Descripción",
+    "step2": "Revisión de código",
+    "step3": "Datos de prueba",
+    "step4": "Anonimización",
+    "step5": "Vista previa PDF",
+    "step6": "Ejecutar prueba",
+    "step7": "Validar y guardar"
+  },
+  "target": {
+    "label": "Destino del script",
+    "user": "Plantilla privada (mi cuenta)",
+    "platform": "Plataforma (revisión admin)"
+  },
+  "audit": {
+    "approved": "Auditoría superada",
+    "rejected": "Auditoría fallida",
+    "risk_level": "Nivel de riesgo",
+    "findings": "Hallazgos",
+    "confidence": "Confianza"
+  },
+  "btn": {
+    "propose": "Generar script",
+    "next": "Siguiente",
+    "regenerate": "Regenerar",
+    "test": "Ejecutar prueba",
+    "validate": "Validar resultado",
+    "skip_anonymization": "Omitir anonimización",
+    "save": "Guardar en plantilla privada",
+    "submit_for_review": "Enviar para revisión",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "retest": "Volver a probar"
+  },
+  "code_preview": {
+    "title": "Código generado",
+    "audit_findings": "Hallazgos de auditoría"
+  },
+  "test_result": {
+    "title": "Resultado de la prueba",
+    "hash": "Hash del resultado",
+    "hash_match": "El hash coincide",
+    "hash_mismatch": "El hash no coincide"
+  },
+  "admin": {
+    "queue_title": "Cola de revisión de scripts",
+    "no_proposals": "No hay propuestas pendientes",
+    "proposer": "Proposer",
+    "prompt": "Descripción",
+    "hash_match": "Hash verificado"
+  },
+  "anonymize": {
+    "title": "Configurar anonimización",
+    "column": "Columna",
+    "faker_provider": "Proveedor Faker",
+    "no_columns": "Sin columnas detectadas"
+  },
+  "access_denied": "Acceso denegado"
+}

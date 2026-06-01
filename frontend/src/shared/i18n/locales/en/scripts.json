@@ -1,0 +1,61 @@
+{
+  "wizard": {
+    "title": "Script proposal",
+    "step1": "Description",
+    "step2": "Code review",
+    "step3": "Test data",
+    "step4": "Anonymization",
+    "step5": "PDF preview",
+    "step6": "Run test",
+    "step7": "Validate and save"
+  },
+  "target": {
+    "label": "Script destination",
+    "user": "Private template (my account)",
+    "platform": "Platform (admin review)"
+  },
+  "audit": {
+    "approved": "Audit passed",
+    "rejected": "Audit failed",
+    "risk_level": "Risk level",
+    "findings": "Findings",
+    "confidence": "Confidence"
+  },
+  "btn": {
+    "propose": "Generate script",
+    "next": "Next",
+    "regenerate": "Regenerate",
+    "test": "Run test",
+    "validate": "Validate result",
+    "skip_anonymization": "Skip anonymization",
+    "save": "Save to private template",
+    "submit_for_review": "Submit for review",
+    "approve": "Approve",
+    "reject": "Reject",
+    "retest": "Retest"
+  },
+  "code_preview": {
+    "title": "Generated code",
+    "audit_findings": "Audit findings"
+  },
+  "test_result": {
+    "title": "Test result",
+    "hash": "Result hash",
+    "hash_match": "Hash matches",
+    "hash_mismatch": "Hash mismatch"
+  },
+  "admin": {
+    "queue_title": "Script review queue",
+    "no_proposals": "No pending proposals",
+    "proposer": "Proposer",
+    "prompt": "Description",
+    "hash_match": "Hash verified"
+  },
+  "anonymize": {
+    "title": "Configure anonymization",
+    "column": "Column",
+    "faker_provider": "Faker provider",
+    "no_columns": "No columns detected"
+  },
+  "access_denied": "Access denied"
+}
