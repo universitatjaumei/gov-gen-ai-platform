@@ -10,7 +10,7 @@ _NORMATIVA_SOURCE_TYPES = frozenset({"boe", "dogv", "uji"})
 
 
 class SpiderFactory:
-    """Devuelve el spider correcto según spider_type de HubIngestionSource."""
+    """Devuelve el spider correcto según `spider_type` (campo de HubWebSite)."""
 
     def get_spider(
         self, source_type: str

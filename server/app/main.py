@@ -29,6 +29,11 @@ from server.app.routers.redaccion.hub_redaccion_router import router as hub_reda
 from server.app.routers.redaccion.workspaces_router import router as redaccion_workspaces_router
 from server.app.routers.redaccion.scripts_router import router as redaccion_scripts_router
 from server.app.routers.redaccion.charts_router import router as redaccion_charts_router
+from server.app.routers.redaccion.manifests_router import router as redaccion_manifests_router
+from server.app.routers.redaccion.copilot_router import router as redaccion_copilot_router
+from server.app.routers.redaccion.anonymization_router import router as redaccion_anonymization_router
+from server.app.routers.hub_themes_router import router as hub_themes_router
+from server.app.routers.hub_agents_router import router as hub_agents_router
 
 
 async def _init_hub_db() -> None:
@@ -71,17 +76,9 @@ async def lifespan(app: FastAPI):
 
     await seed_hub_defaults()
 
-    from server.app.modules.agents_hub.database.connection import (
-        create_session_factory,
-        get_engine,
-    )
-    from server.app.modules.agents_hub.ingestion.source_scheduler import create_scheduler
     from server.app.services.model_fetcher import refresh_model_cache
     from server.app.services.pricing_service import update_prices_from_openrouter
     import asyncio
-
-    scheduler = create_scheduler(create_session_factory(get_engine()))
-    scheduler.start()
 
     # Initial refresh at startup (legacy behavior)
     print("[STARTUP] Refreshing AI model cache...")
@@ -100,7 +97,6 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    scheduler.shutdown(wait=False)
     refresh_task.cancel()
 
 
@@ -127,6 +123,7 @@ def _register_cloud(app: FastAPI) -> None:
     app.include_router(hub_ingestion_router, prefix="/api/v1")
     app.include_router(hub_llm_configs_router, prefix="/api/v1")
     app.include_router(hub_prompt_templates_router, prefix="/api/v1")
+    app.include_router(hub_themes_router, prefix="/api/v1")  # Deploy: cloud
     app.include_router(edge_sync_router, prefix="/api/v1")  # servido por cloud
 
 
@@ -140,6 +137,10 @@ def _register_edge(app: FastAPI) -> None:
     app.include_router(redaccion_workspaces_router, prefix="/api/v1")  # Deploy: edge
     app.include_router(redaccion_scripts_router, prefix="/api/v1")  # Deploy: edge
     app.include_router(redaccion_charts_router, prefix="/api/v1")  # Deploy: edge
+    app.include_router(redaccion_manifests_router, prefix="/api/v1")  # Deploy: edge
+    app.include_router(redaccion_copilot_router, prefix="/api/v1")  # Deploy: edge
+    app.include_router(redaccion_anonymization_router, prefix="/api/v1")  # Deploy: edge
+    app.include_router(hub_agents_router, prefix="/api/v1")  # Deploy: edge
 
 
 if DEPLOY_MODE in ("cloud", "all"):

@@ -1,0 +1,231 @@
+"""Repositorios CRUD de sitio/página/selección (9Q.0).
+
+Deploy: edge.
+
+Sin `relationship()` cross-base: las FK están al nivel del DDL pero la navegación
+ORM se hace por consultas explícitas. Las reglas de la capa de selección viven
+aquí porque no requieren BD.
+"""
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timezone
+from typing import Any
+from urllib.parse import urlparse
+
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from server.app.modules.agents_hub.database.operational_models import (
+    HubCorpusSelection,
+    HubCrawledPage,
+    HubWebSite,
+)
+
+
+class WebSiteRepo:
+    """CRUD del sitio rastreado."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def create(
+        self,
+        *,
+        client_id: uuid.UUID | None,
+        name: str,
+        root_url: str,
+        sitemap_url: str | None = None,
+        spider_type: str = "generic",
+        config_json: dict[str, Any] | None = None,
+        crawl_interval_hours: int = 24,
+        audit_semantic_scope: str = "ingested",
+    ) -> HubWebSite:
+        site = HubWebSite(
+            client_id=client_id,
+            name=name,
+            root_url=root_url,
+            sitemap_url=sitemap_url,
+            spider_type=spider_type,
+            config_json=config_json or {},
+            crawl_interval_hours=crawl_interval_hours,
+            audit_semantic_scope=audit_semantic_scope,
+        )
+        self.session.add(site)
+        await self.session.flush()
+        await self.session.refresh(site)
+        return site
+
+    async def get(self, site_id: uuid.UUID) -> HubWebSite | None:
+        return await self.session.get(HubWebSite, site_id)
+
+    async def list_by_client(self, client_id: uuid.UUID) -> list[HubWebSite]:
+        stmt = (
+            select(HubWebSite)
+            .where(HubWebSite.client_id == client_id)
+            .order_by(HubWebSite.created_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def update(self, site_id: uuid.UUID, **fields: Any) -> HubWebSite | None:
+        site = await self.get(site_id)
+        if site is None:
+            return None
+        for key, value in fields.items():
+            setattr(site, key, value)
+        await self.session.flush()
+        await self.session.refresh(site)
+        return site
+
+    async def delete(self, site_id: uuid.UUID) -> None:
+        site = await self.get(site_id)
+        if site is None:
+            return
+        await self.session.delete(site)
+        await self.session.flush()
+
+
+class CrawledPageRepo:
+    """CRUD + upsert de páginas rastreadas."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def upsert(
+        self,
+        *,
+        site_id: uuid.UUID,
+        url: str,
+        **fields: Any,
+    ) -> HubCrawledPage:
+        existing = (
+            await self.session.execute(
+                select(HubCrawledPage).where(
+                    HubCrawledPage.site_id == site_id,
+                    HubCrawledPage.url == url,
+                )
+            )
+        ).scalar_one_or_none()
+
+        now = datetime.now(timezone.utc)
+        if existing is not None:
+            for key, value in fields.items():
+                setattr(existing, key, value)
+            existing.last_seen_at = now
+            await self.session.flush()
+            await self.session.refresh(existing)
+            return existing
+
+        page = HubCrawledPage(site_id=site_id, url=url, **fields)
+        page.first_seen_at = now
+        page.last_seen_at = now
+        self.session.add(page)
+        await self.session.flush()
+        await self.session.refresh(page)
+        return page
+
+    async def get(self, page_id: uuid.UUID) -> HubCrawledPage | None:
+        return await self.session.get(HubCrawledPage, page_id)
+
+    async def list_by_site(
+        self,
+        site_id: uuid.UUID,
+        status: str | None = None,
+    ) -> list[HubCrawledPage]:
+        stmt = select(HubCrawledPage).where(HubCrawledPage.site_id == site_id)
+        if status is not None:
+            stmt = stmt.where(HubCrawledPage.status == status)
+        stmt = stmt.order_by(HubCrawledPage.url)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def mark_gone(self, page_ids: list[uuid.UUID]) -> int:
+        if not page_ids:
+            return 0
+        stmt = (
+            update(HubCrawledPage)
+            .where(HubCrawledPage.id.in_(page_ids))
+            .values(status="gone")
+        )
+        result = await self.session.execute(stmt)
+        await self.session.flush()
+        return result.rowcount or 0
+
+    async def get_by_canonical(
+        self, site_id: uuid.UUID, canonical_url: str
+    ) -> HubCrawledPage | None:
+        stmt = select(HubCrawledPage).where(
+            HubCrawledPage.site_id == site_id,
+            HubCrawledPage.canonical_url == canonical_url,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+
+class CorpusSelectionRepo:
+    """CRUD de selecciones N:M chatbot→sitio + evaluación de reglas."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def create(
+        self,
+        *,
+        chatbot_id: uuid.UUID,
+        site_id: uuid.UUID,
+        rule_type: str,
+        rule_value: str | None = None,
+        auto_ingest_new: bool = True,
+    ) -> HubCorpusSelection:
+        selection = HubCorpusSelection(
+            chatbot_id=chatbot_id,
+            site_id=site_id,
+            rule_type=rule_type,
+            rule_value=rule_value,
+            auto_ingest_new=auto_ingest_new,
+        )
+        self.session.add(selection)
+        await self.session.flush()
+        await self.session.refresh(selection)
+        return selection
+
+    async def list_by_chatbot(self, chatbot_id: uuid.UUID) -> list[HubCorpusSelection]:
+        stmt = (
+            select(HubCorpusSelection)
+            .where(HubCorpusSelection.chatbot_id == chatbot_id)
+            .order_by(HubCorpusSelection.created_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_by_site(self, site_id: uuid.UUID) -> list[HubCorpusSelection]:
+        stmt = (
+            select(HubCorpusSelection)
+            .where(HubCorpusSelection.site_id == site_id)
+            .order_by(HubCorpusSelection.created_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def delete(self, selection_id: uuid.UUID) -> None:
+        selection = await self.session.get(HubCorpusSelection, selection_id)
+        if selection is None:
+            return
+        await self.session.delete(selection)
+        await self.session.flush()
+
+    def matches(self, selection: HubCorpusSelection, page_url: str) -> bool:
+        """Evalúa una regla de selección contra una URL de página.
+
+        - path_prefix: el path de la URL empieza por rule_value.
+        - sitemap_section: marcador semántico — la asignación efectiva
+          se materializa por crawl en 9Q.2 y aquí siempre devuelve False.
+        - manual: selección explícita; la asociación efectiva se gestiona
+          fuera de la regla, por lo que aquí siempre devuelve False.
+        """
+        if selection.rule_type == "path_prefix":
+            if not selection.rule_value:
+                return False
+            return urlparse(page_url).path.startswith(selection.rule_value)
+        return False

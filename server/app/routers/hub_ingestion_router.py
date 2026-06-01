@@ -4,7 +4,6 @@ Deploy: cloud
 """
 
 import uuid
-from typing import Literal
 
 from fastapi import (
     APIRouter,
@@ -17,7 +16,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,32 +28,9 @@ from server.app.modules.agents_hub.database.operational_models import (
     HubDocument,
     HubDocumentChunk,
     HubIngestionJob,
-    HubIngestionSource,
 )
 from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
 from server.app.modules.agents_hub.services.embedding_service import get_embedding_service
-
-
-class IngestionSourceCreate(BaseModel):
-    url: str
-    label: str | None = None
-    check_interval_hours: int = Field(24, ge=1, le=168)
-    language: str | None = None
-    spider_type: str | None = "generic"
-    config_json: dict = Field(default_factory=dict)
-
-    @field_validator("url")
-    @classmethod
-    def validate_url(cls, v: str) -> str:
-        if not v.startswith(("http://", "https://")):
-            raise ValueError("La URL debe empezar por http:// o https://")
-        return v
-
-
-class IngestionSourceUpdate(BaseModel):
-    label: str | None = None
-    check_interval_hours: int | None = Field(None, ge=1, le=168)
-    status: Literal["active", "paused"] | None = None
 
 
 class AnalyzeHtmlRequest(BaseModel):
@@ -319,119 +295,6 @@ async def delete_ingestion_job(
     await session.commit()
 
     return {"message": "Documento eliminado.", "documents_deleted": len(docs)}
-
-
-# ── Fuentes web monitorizadas ──────────────────────────────────────────────────
-
-@router.get("/{chatbot_id}/sources", status_code=status.HTTP_200_OK)
-async def list_sources(
-    chatbot_id: uuid.UUID,
-    session: AsyncSession = Depends(get_async_session),
-    current_user: UserInfo = Depends(get_current_user),
-):
-    """Lista las fuentes web monitorizadas de un chatbot."""
-    result = await session.execute(
-        select(HubIngestionSource)
-        .where(HubIngestionSource.chatbot_id == chatbot_id)
-        .order_by(HubIngestionSource.created_at.desc())
-    )
-    return {"sources": result.scalars().all()}
-
-
-@router.post("/{chatbot_id}/sources", status_code=status.HTTP_201_CREATED)
-async def create_source(
-    chatbot_id: uuid.UUID,
-    body: IngestionSourceCreate,
-    session: AsyncSession = Depends(get_async_session),
-    current_user: UserInfo = Depends(get_current_user),
-):
-    """Añade una URL a monitorizar para un chatbot."""
-    existing = await session.execute(
-        select(HubIngestionSource).where(
-            HubIngestionSource.chatbot_id == chatbot_id,
-            HubIngestionSource.url == body.url,
-        )
-    )
-    if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Esta URL ya está registrada para este chatbot.",
-        )
-    source = HubIngestionSource(
-        chatbot_id=chatbot_id,
-        url=body.url,
-        label=body.label,
-        check_interval_hours=body.check_interval_hours,
-        language=body.language,
-        spider_type=body.spider_type,
-        config_json=body.config_json,
-    )
-    session.add(source)
-    await session.commit()
-    await session.refresh(source)
-    return {"source": source}
-
-
-@router.patch("/{chatbot_id}/sources/{source_id}", status_code=status.HTTP_200_OK)
-async def update_source(
-    chatbot_id: uuid.UUID,
-    source_id: uuid.UUID,
-    body: IngestionSourceUpdate,
-    session: AsyncSession = Depends(get_async_session),
-    current_user: UserInfo = Depends(get_current_user),
-):
-    """Actualiza etiqueta, intervalo o estado (active/paused) de una fuente."""
-    source = await session.get(HubIngestionSource, source_id)
-    if not source or source.chatbot_id != chatbot_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fuente no encontrada.")
-    for key, value in body.model_dump(exclude_unset=True).items():
-        setattr(source, key, value)
-    await session.commit()
-    await session.refresh(source)
-    return {"source": source}
-
-
-@router.delete("/{chatbot_id}/sources/{source_id}", status_code=status.HTTP_200_OK)
-async def delete_source(
-    chatbot_id: uuid.UUID,
-    source_id: uuid.UUID,
-    session: AsyncSession = Depends(get_async_session),
-    current_user: UserInfo = Depends(get_current_user),
-):
-    """Elimina una fuente monitorizada (no borra los chunks ya ingestados)."""
-    source = await session.get(HubIngestionSource, source_id)
-    if not source or source.chatbot_id != chatbot_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fuente no encontrada.")
-    await session.delete(source)
-    await session.commit()
-    return {"message": "Fuente eliminada."}
-
-
-@router.post("/{chatbot_id}/sources/{source_id}/check", status_code=status.HTTP_202_ACCEPTED)
-async def trigger_source_check(
-    chatbot_id: uuid.UUID,
-    source_id: uuid.UUID,
-    background_tasks: BackgroundTasks,
-    session: AsyncSession = Depends(get_async_session),
-    current_user: UserInfo = Depends(get_current_user),
-):
-    """Fuerza una comprobación inmediata de una fuente en background."""
-    source = await session.get(HubIngestionSource, source_id)
-    if not source or source.chatbot_id != chatbot_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fuente no encontrada.")
-    if source.status == "paused":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="La fuente está pausada. Reactívala antes de comprobar.",
-        )
-
-    async def do_check() -> None:
-        from server.app.modules.agents_hub.ingestion.source_scheduler import check_source
-        async for bg_session in get_async_session():
-            await check_source(source_id, bg_session)
-
-    background_tasks.add_task(do_check)
-    return {"message": "Comprobación iniciada."}
 
 
 @router.delete("/{chatbot_id}/chunks", status_code=status.HTTP_200_OK)

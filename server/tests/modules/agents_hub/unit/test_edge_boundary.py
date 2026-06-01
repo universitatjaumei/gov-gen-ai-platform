@@ -25,7 +25,10 @@ def test_operational_base_contains_only_operational_models() -> None:
         "hub_document_chunks",
         "hub_interactions",
         "hub_ingestion_jobs",
-        "hub_ingestion_sources",
+        # Bloque 9Q (Calidad de contenido web) — entidades sitio/página/selección
+        "hub_web_sites",
+        "hub_crawled_pages",
+        "hub_corpus_selections",
         # Módulo redacción (edge, 9R) — procesan expedientes del cliente
         "hub_report_templates",
         "hub_report_template_versions",

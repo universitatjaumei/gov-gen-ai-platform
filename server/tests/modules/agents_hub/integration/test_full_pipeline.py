@@ -38,7 +38,7 @@ class TestRAGPipeline:
         )
         from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
         from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig, HubProvider, HubPromptTemplate
-        from server.app.modules.agents_hub.database.operational_models import HubDocument, HubDocumentChunk, HubInteraction, HubIngestionSource, HubIngestionJob
+        from server.app.modules.agents_hub.database.operational_models import HubDocument, HubDocumentChunk, HubInteraction, HubIngestionJob
         from server.app.modules.agents_hub.ingestion.chunker import MarkdownChunker
         from server.app.modules.agents_hub.ingestion.hasher import hash_content
         from server.app.modules.agents_hub.services.retriever import HybridRetriever
