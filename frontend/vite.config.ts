@@ -28,5 +28,11 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.{idea,git,cache,output,temp}/**',
+      'src/__tests__/a11y/**',
+    ],
   },
 })
