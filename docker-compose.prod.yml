@@ -15,6 +15,7 @@ services:
       MINIO_ENDPOINT: minio:9000
       ENVIRONMENT: production
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SANDBOX_BASE_URL: http://script-sandbox:5000
     ports:
       - "8000:8000"
     depends_on:
@@ -22,6 +23,37 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      script-sandbox:
+        condition: service_healthy
+    networks:
+      - default
+      - sandbox-net
+    restart: unless-stopped
+
+  script-sandbox:
+    build:
+      context: ./services/script_sandbox
+      dockerfile: Dockerfile
+    container_name: govgenai_script_sandbox
+    networks:
+      - sandbox-net
+    read_only: true
+    tmpfs:
+      - /tmp/sandbox:size=128M,mode=0700,uid=65534,gid=65534
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    user: "65534:65534"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
     restart: unless-stopped
 
   migrate:
@@ -100,6 +132,11 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+
+networks:
+  sandbox-net:
+    driver: bridge
+    internal: true   # PROD: sin egress a internet, solo intercomunicación entre containers conectados
 
 volumes:
   postgres_data_prod:

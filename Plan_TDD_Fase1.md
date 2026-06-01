@@ -28,6 +28,7 @@ capaz de servir chatbots informativos y de redacción para al menos una organiza
   5. Exportación DOCX/ODT con citas trazables (1C.3): plantillas Jinja2, índice automático, RunManifest.
   6. Integración Google Drive opcional (1C.4): destino configurable por Organización.
 - **Transversal F1 — Accesibilidad WCAG 2.2 AA (FASE 20 reducida):** WCAG transversal en todas las rutas del frontend + axe-core en Vitest + Lighthouse CI. Sin consola conversacional admin (diferida a Fase 2).
+- **Bloque 9Q — Calidad de Contenido Web Ingestado:** introduce la entidad **sitio** (`HubWebSite`) como unidad de crawl + auditoría, **desacoplada** del corpus del chatbot. Un crawl único por sitio puebla `HubCrawledPage`; una **capa de selección** (`HubCorpusSelection`, N:M) decide qué páginas se ingieren en qué chatbots. El motor de detección (superseded, duplicados, contradicciones, vacías, stale, errores de crawl) corre **a nivel sitio** y emite dos salidas: higiene del RAG (`superseded`/`quality_score` en `HubCrawledPage`; el retriever excluye documentos de páginas superseded) e informe de auditoría web **por sitio** (JSON + visor admin + export DOCX/PDF). Recrawl periódico con **diff de sitemap** (nuevas/cambiadas/desaparecidas). Reemplaza `HubIngestionSource` (monitor de URL suelta). La ingesta de PDF subido es independiente y se mantiene. Edge. Se ejecuta tras el bloque SBX y antes de Fase 11. **Sin accesibilidad del sitio rastreado** (backlog v2; la accesibilidad del propio frontend ya está en Fase 20).
 - **Deploy GCP (Prompts D.1–D.5):** último paso — cuando el producto esté completo y probado localmente.
 - **Al finalizar F1:** Autoinstalación (FASE 11) para distribución como software libre.
 
@@ -9465,7 +9466,1318 @@ curl -f https://api.govgenai.com/api/v1/hub/chatbots \
 
 ---
 
-## FASE 11: Autoinstalación y Distribución como Software Libre
+## Bloque SBX — Seguridad de la Información: Sandbox aislado de ejecución de scripts (Subfase 1.B → 1.C, PENDIENTE)
+
+**Objetivo del bloque**: introducir una **frontera de aislamiento por contenedor** para todo código que el sistema ejecuta como resultado de propuestas LLM o de scripts metaprogramados (extracción admin, charts matplotlib, fallback ETL). La auditoría AST (`ScriptSecurityAuditor`, 9R.5.4) y los límites de recursos en proceso son **una primera capa, no la última**: la dinamicidad de Python (getattr, manipulación de `__builtins__`, decoradores, bytecode) deja huecos que la auditoría estática no cubre. Este bloque añade una capa que el script no puede saltar aunque escape del intérprete: un **microservicio evaluador** independiente (`script-sandbox`) en red dedicada sin acceso a base de datos, almacenamiento ni internet, con cgroups/seccomp del propio Docker. El patrón es defensible ante una comisión de seguridad pública porque encaja con el estándar de microservicios (no requiere acceso al socket de Docker del host) y se traduce 1:1 a Cloud Run en GCP.
+
+**Justificación de la ubicación (antes de Fase 11)**:
+- Fase 11.2 reescribe `docker-compose.prod.yml` para distribución como software libre. SBX debe haber dejado allí el servicio `script-sandbox` antes de que 11.2 fije el formato.
+- Es prerrequisito de auditoría pre-despliegue por la comisión de Seguridad de la Información.
+- No bloquea el resto de Fase 1: los tests existentes pasan con la implementación in-process actual; SBX los reorienta a la frontera de red sin cambiar los contratos de los pipelines.
+
+**Decisión Arquitectónica (2026-05-17)**: opción "Microservicio Evaluador" frente a "Docker-out-of-Docker (DooD)". Razones:
+1. No requiere montar `/var/run/docker.sock` en el contenedor de la API — eliminamos el principal punto de fricción con infosec en entornos gubernamentales.
+2. Funciona en Cloud Run (la opción DooD no — Cloud Run no expone socket de Docker).
+3. Encaja con el modelo edge: en despliegues on-premise del cliente, dos contenedores en red privada se auditan trivialmente.
+4. Cloud Run corre sobre gVisor por defecto: el sandbox hereda aislamiento de kernel sin configurar nada.
+
+**Capas de defensa resultantes (defensa en profundidad)**:
+
+1. `ScriptSecurityAuditor` (AST) — primera barrera en la API.
+2. Re-auditoría defensiva dentro del propio sandbox (segunda barrera, antes de exec).
+3. Red dedicada `sandbox-net` — sin DNS hacia `postgres`, `minio`, ni salida a internet.
+4. Contenedor sin privilegios: `read_only: true`, `cap_drop: ALL`, `no-new-privileges`, usuario `65534:65534`.
+5. Subproceso efímero por petición dentro del sandbox — sin contaminación de memoria entre ejecuciones, `kill` explícito en `finally`.
+6. Límites de recursos del propio Docker (`cpus`, `memory`, `tmpfs` con tamaño máximo).
+7. En GCP: gVisor (heredado automáticamente).
+
+**Lo que NO incluye este bloque**:
+- Migración del sandbox a gVisor explícito on-premise (queda en backlog post-MVP, solo se documenta cómo aplicar `runsc` si el cliente lo requiere).
+- Auditoría dinámica del comportamiento del script en tiempo de ejecución (tracing de syscalls). El aislamiento por contenedor + sin red + sin privilegios cubre el modelo de amenazas del MVP.
+- Ejecución distribuida o paralelización del sandbox (un único contenedor con un worker pool basta para el volumen previsto).
+
+**Reglas duras del bloque SBX**:
+- El microservicio `script-sandbox` **es edge** (vive en el cliente, ejecuta sobre datos del cliente).
+- El sandbox **no importa nada** del módulo `redaccion` ni de `agents_hub`. Es un servicio autocontenido con su propio `Dockerfile` y `pyproject.toml` mínimo. Solo comparte el contrato HTTP.
+- El cliente HTTP (`SandboxClient`) vive en `server/app/core/sandbox_client.py` (compartido, no edge ni cloud — capa de infraestructura). Análogo a `StorageService`.
+- La auditoría AST se duplica intencionalmente: la API audita antes de enviar, el sandbox audita antes de ejecutar. **No** es deuda técnica; es defensa en profundidad. Si el contenedor recibe código no auditado (por bug en la API), no lo ejecuta.
+- El sandbox **no persiste** nada entre peticiones. Cada `/execute` arranca un subproceso hijo limpio que muere al terminar.
+
+---
+
+### Prompt SBX.1 (RED/GREEN) — Microservicio `script-sandbox`: FastAPI + subprocess efímero
+
+**Modelo sugerido**: **Opus** — el prompt concentra decisiones de diseño embebidas: contrato HTTP (3 endpoints con semánticas distintas: extracción JSON vs. chart bytes vs. ETL CSV), estrategia de aislamiento del subproceso hijo (fork + kill explícito en `finally`, no confiar en `subprocess.run(timeout=)`), serialización de `options` complejas, re-auditoría AST defensiva sin importar del módulo `redaccion`.
+
+```markdown
+# PROMPT SBX.1 (RED/GREEN) — Microservicio script-sandbox
+
+Objetivo: crear un servicio FastAPI autocontenido `services/script_sandbox/` que ejecuta scripts Python aprobados en un subproceso efímero, devolviendo resultados estructurados. Este servicio sustituye los `subprocess.run([sys.executable, ...])` que hoy viven dentro del proceso del API (admin_script_pipeline, chart_renderer, etl_service).
+
+Deploy: edge (forma parte del despliegue del cliente).
+
+## Estructura del nuevo paquete
+
+```
+services/script_sandbox/
+├── pyproject.toml          # uv-managed; deps mínimas (fastapi, pydantic, pandas, matplotlib, seaborn, numpy, openpyxl, pdfplumber)
+├── Dockerfile              # python:3.12-slim, usuario no-root, sin pip-cache
+├── sandbox/
+│   ├── __init__.py
+│   ├── main.py             # FastAPI app
+│   ├── auditor.py          # COPIA SIMPLIFICADA de ScriptSecurityAuditor — re-auditoría defensiva
+│   ├── runner.py           # ejecuta subproceso hijo + kill explícito
+│   ├── wrappers.py         # build_extraction_wrapper, build_chart_wrapper, build_etl_wrapper
+│   └── contracts.py        # Pydantic: ExecuteExtractionRequest/Response, ExecuteChartRequest, ExecuteETLRequest
+└── tests/
+    ├── test_health.py
+    ├── test_execute_extraction.py
+    ├── test_execute_chart.py
+    ├── test_execute_etl.py
+    ├── test_auditor_defense.py
+    └── test_runner_kills_runaway.py
+```
+
+## Contrato HTTP
+
+### `GET /health` → `{"status":"healthy"}`
+
+### `POST /execute-extraction`
+Request:
+```json
+{
+  "code": "<script Python>",
+  "file_path": "/tmp/sandbox/abc.xlsx",   # ruta dentro del tmpfs del sandbox; el caller debe haberlo escrito antes
+  "raw_text": "...",
+  "options": {"sheet": "Hoja1"},
+  "timeout_seconds": 30
+}
+```
+Response 200:
+```json
+{
+  "result": {
+    "tables": [...],
+    "metrics": [...],
+    "free_text": null
+  },
+  "stdout_truncated": false
+}
+```
+Response 4xx/5xx:
+- 422 SCRIPT_AUDIT_FAILED (`{"code":"SCRIPT_AUDIT_FAILED","findings":[...]}`)
+- 422 SCRIPT_EMPTY
+- 504 SCRIPT_TIMEOUT
+- 500 SCRIPT_EXECUTION_ERROR (con `stderr_truncated` en el body, capado a 500 chars)
+
+### `POST /execute-chart`
+Request:
+```json
+{
+  "code": "<script matplotlib>",
+  "data_csv": "<contenido CSV completo>",
+  "output_format": "png",
+  "timeout_seconds": 30
+}
+```
+Response 200: `Content-Type: image/png` (o image/svg+xml) con los bytes.
+Response 4xx/5xx: mismos códigos que extraction (audit, empty, timeout, execution).
+
+### `POST /execute-etl`
+Request:
+```json
+{
+  "code": "<script con def transform(df)>",
+  "data_csv": "<CSV de entrada>",
+  "timeout_seconds": 30
+}
+```
+Response 200: `Content-Type: text/csv` con el CSV transformado.
+Response 4xx/5xx: idéntico patrón.
+
+## Estrategia de subproceso (runner.py)
+
+REGLA DURA: **no usar `subprocess.run(timeout=)` solo**. Implementar `Popen` + timeout manual con `kill` explícito en `finally`:
+
+```python
+def run_subprocess(args: list[str], timeout: int) -> SubprocessResult:
+    proc = subprocess.Popen(args, stdout=PIPE, stderr=PIPE, text=True)
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+        return SubprocessResult(returncode=proc.returncode, stdout=stdout, stderr=stderr)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        try:
+            proc.communicate(timeout=2)  # drena los pipes tras kill para evitar zombies
+        except subprocess.TimeoutExpired:
+            pass
+        raise TimeoutError()
+```
+
+Cada `/execute-*` escribe el wrapper a un fichero temporal en `/tmp/sandbox/`, ejecuta `python` con ese fichero, captura stdout y borra el fichero en `finally`. NUNCA reutiliza el intérprete: cada petición arranca un proceso hijo nuevo. Esto garantiza que ninguna variable, módulo cargado o estado global persiste entre ejecuciones, sin necesidad de reciclar el contenedor.
+
+## Wrappers (wrappers.py)
+
+- `build_extraction_wrapper(code, file_path, raw_text, options)` — análogo al actual `_build_wrapper` de `admin_script_pipeline.py`, imprime `json.dumps(result, default=str)` al stdout.
+- `build_chart_wrapper(code, csv_path, out_path, output_format)` — análogo al actual `_WRAPPER_TEMPLATE` de `chart_renderer.py`, llama `plt.savefig(out_path)`.
+- `build_etl_wrapper(code, in_csv_path, out_csv_path)` — exec del código (que define `transform(df)`), `transform(df).to_csv(out_csv_path, index=False)`.
+
+Todos los wrappers usan `repr()` para serializar valores en lugar de embebed JSON, para evitar problemas con `True/False/None`.
+
+## Auditor.py — copia defensiva
+
+CRÍTICO: NO importar `ScriptSecurityAuditor` desde `server.app.modules.redaccion`. El sandbox es autocontenido. Copiar la implementación en `sandbox/auditor.py` con su propia `WHITELIST_MODULES`. Si la lista blanca diverge con el tiempo, es porque el sandbox necesita ser MÁS estricto que la API (es la segunda barrera). Documentar esta duplicación en `docs/SANDBOX_SECURITY.md` (creado en SBX.4).
+
+Todos los endpoints invocan `auditor.audit(code)` antes de construir el wrapper. Si `not audit.approved` → 422 SCRIPT_AUDIT_FAILED.
+
+## Tests (RED → GREEN)
+
+Tests in-process con `fastapi.testclient.TestClient` (sin necesidad de levantar Docker en CI):
+
+- test_health_returns_ok
+- test_execute_extraction_runs_pandas_script
+- test_execute_extraction_returns_422_for_eval_call
+- test_execute_extraction_returns_504_on_timeout
+- test_execute_extraction_returns_500_with_stderr_truncated_on_runtime_error
+- test_execute_extraction_empty_code_returns_422
+- test_execute_chart_returns_png_bytes_for_valid_script
+- test_execute_chart_returns_422_for_subprocess_import
+- test_execute_etl_returns_csv_for_valid_transform
+- test_execute_etl_returns_422_when_transform_undefined
+- test_auditor_blocks_forbidden_import_even_if_caller_pre_audited (defensa en profundidad: el cliente puede haberse equivocado y el sandbox NO debe ejecutar)
+- test_runner_kills_runaway_subprocess_after_timeout (lanza un script con `while True: pass` con timeout=1; verifica que el proceso hijo está muerto tras la excepción — usar `proc.poll() is not None`)
+- test_each_execute_starts_fresh_subprocess (ejecuta 2 scripts que escriben a variables globales con el mismo nombre; el segundo no ve el estado del primero)
+
+Mínimo 13 tests RED → GREEN.
+
+## Dockerfile (parte de este prompt; el wiring del compose llega en SBX.4)
+
+```dockerfile
+FROM python:3.12-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --uid 65534 --no-create-home --shell /usr/sbin/nologin sandboxuser \
+    || true  # nobody puede existir ya
+
+WORKDIR /srv/sandbox
+COPY pyproject.toml ./
+COPY uv.lock* ./
+RUN pip install --no-cache-dir uv && uv sync --frozen --no-dev
+
+COPY sandbox/ ./sandbox/
+
+USER 65534:65534
+EXPOSE 5000
+CMD ["uv", "run", "uvicorn", "sandbox.main:app", "--host", "0.0.0.0", "--port", "5000"]
+```
+
+## Criterio de done
+
+- 13 tests verdes en `services/script_sandbox/tests/`.
+- `docker build -f services/script_sandbox/Dockerfile services/script_sandbox` produce imagen sin warnings.
+- El `health` endpoint responde 200.
+- El runner mata efectivamente subprocesos colgados (test_runner_kills_runaway lo verifica).
+- El auditor del sandbox bloquea código que la API podría haber dejado pasar por error (test_auditor_blocks_forbidden_import_even_if_caller_pre_audited).
+
+## Lo que NO se hace aquí
+
+- No se modifica todavía ningún código de `server/app/`. Los pipelines del API siguen ejecutando in-process. Eso llega en SBX.3.
+- No se añade el servicio al `docker-compose.yml`. Eso llega en SBX.4.
+- No hay autenticación entre la API y el sandbox: el aislamiento es por red dedicada (sandbox-net). Si en el futuro se necesitase mTLS, se añadirá como capa extra; queda fuera del MVP.
+```
+
+---
+
+### Prompt SBX.2 (RED/GREEN) — `SandboxClient`: cliente HTTP en el API
+
+**Modelo sugerido**: **Sonnet** — patrón cliente HTTP estándar con httpx; el contrato ya está fijado en SBX.1; las decisiones abiertas son pocas (retry policy, timeouts, manejo de excepciones).
+
+```markdown
+# PROMPT SBX.2 (RED/GREEN) — SandboxClient (httpx)
+
+Objetivo: introducir un cliente HTTP en el API que hable con el microservicio `script-sandbox` definido en SBX.1. Este cliente sustituirá las llamadas `subprocess.run([sys.executable, ...])` que hoy viven dentro de `admin_script_pipeline.py`, `chart_renderer.py` y `etl_service.py`. En SBX.2 SOLO se crea el cliente y sus tests; la sustitución real llega en SBX.3.
+
+Deploy: shared (el cliente vive en `server/app/core/`, lo usan módulos edge — análogo a `StorageService`).
+
+## Estructura
+
+```
+server/app/core/sandbox_client.py
+server/tests/core/test_sandbox_client.py
+```
+
+## Settings
+
+Añadir a `server/app/core/settings.py`:
+- `SANDBOX_BASE_URL: str = "http://script-sandbox:5000"` (override `SANDBOX_BASE_URL` en env).
+- `SANDBOX_TIMEOUT_SECONDS_DEFAULT: int = 30`.
+- `SANDBOX_CONNECT_TIMEOUT_SECONDS: float = 5.0` (timeout de conexión, distinto del timeout de ejecución del script).
+- `SANDBOX_MAX_RETRIES_ON_CONNECT_ERROR: int = 1` (no se reintenta en error funcional del script).
+
+## Contrato (Protocol)
+
+```python
+from typing import Protocol
+
+class SandboxClient(Protocol):
+    async def execute_extraction_script(
+        self,
+        *,
+        code: str,
+        file_path: str | None,
+        raw_text: str | None,
+        options: dict[str, Any],
+        timeout_seconds: int | None = None,
+    ) -> ExtractionResult:
+        """Devuelve ExtractionResult (mismo tipo que pipelines/contracts.py).
+        Si el sandbox responde 422 SCRIPT_AUDIT_FAILED → ExtractionResult con warning SCRIPT_SECURITY_VIOLATION.
+        Si responde 504 → warning SCRIPT_TIMEOUT.
+        Si responde 500 → warning SCRIPT_EXECUTION_ERROR con stderr truncado.
+        Si error de red tras los reintentos → SandboxUnavailableError (excepción, NO warning — el caller decide).
+        """
+
+    async def execute_chart_script(
+        self,
+        *,
+        code: str,
+        dataframe_csv: str,
+        output_format: Literal["png", "svg"] = "png",
+        timeout_seconds: int | None = None,
+    ) -> bytes:
+        """Devuelve bytes de la imagen. Si el sandbox falla → ChartRenderError (la excepción existente en chart_renderer.py)."""
+
+    async def execute_etl_script(
+        self,
+        *,
+        code: str,
+        dataframe_csv: str,
+        timeout_seconds: int | None = None,
+    ) -> str:
+        """Devuelve el CSV transformado como string. Si el sandbox falla → ValueError con mensaje del sandbox."""
+```
+
+## Implementaciones
+
+- `HttpSandboxClient` — usa `httpx.AsyncClient` con timeouts diferenciados (connect/read), `retry` solo en `httpx.ConnectError` y `httpx.ReadTimeout` a nivel de conexión (NO sobre `ReadTimeout` que ocurra después de empezar a recibir — eso indica timeout funcional del script).
+- `LocalSandboxClient` — ejecuta in-process el mismo wrapper que el sandbox HTTP. Útil para tests E2E del API sin levantar el contenedor sandbox. Implementación: importa los wrappers desde una versión local (puede copiar minimamente del código de SBX.1 o invocar a `subprocess.run` como hacían los pipelines antes). Marcar `LocalSandboxClient` con docstring que aclare que es SOLO para tests y desarrollo sin Docker.
+
+`get_sandbox_client()` como FastAPI dependency (factory que decide según `settings.SANDBOX_MODE` con valores `http` (default en producción) y `local` (default en tests si la env var `TESTING=1`)).
+
+## Tests (RED → GREEN)
+
+Usar `respx` (mock de httpx) o `httpx.MockTransport`:
+
+- test_http_client_execute_extraction_serializes_and_parses_response
+- test_http_client_execute_extraction_returns_warning_when_sandbox_returns_422_audit
+- test_http_client_execute_extraction_returns_warning_when_sandbox_returns_504
+- test_http_client_execute_extraction_returns_warning_when_sandbox_returns_500
+- test_http_client_execute_extraction_raises_SandboxUnavailableError_on_connect_error
+- test_http_client_execute_extraction_retries_once_on_connect_error
+- test_http_client_execute_chart_returns_bytes
+- test_http_client_execute_chart_raises_ChartRenderError_on_422
+- test_http_client_execute_etl_returns_csv_string
+- test_local_client_execute_extraction_matches_http_client_behavior (mismo input → mismo `ExtractionResult` que con sandbox HTTP mockeado)
+- test_get_sandbox_client_returns_http_in_production
+- test_get_sandbox_client_returns_local_when_testing_env_set
+
+Mínimo 12 tests RED → GREEN.
+
+## Criterio de done
+
+- 12 tests verdes en `server/tests/core/test_sandbox_client.py`.
+- `httpx` y `respx` añadidos a `server/pyproject.toml` (si no están).
+- `SANDBOX_*` settings documentados en `server/app/core/settings.py` y `.env.example`.
+- Ningún código de `pipelines/`, `services/charts/` ni `services/transformation/` toca al cliente todavía: ese refactor llega en SBX.3.
+
+## Lo que NO se hace aquí
+
+- No se cablea el cliente en los pipelines existentes (SBX.3).
+- No se modifica el `docker-compose.yml` (SBX.4).
+```
+
+---
+
+### Prompt SBX.3 (RED/GREEN) — Refactor de pipelines existentes a `SandboxClient`
+
+**Modelo sugerido**: **Sonnet** — refactor mecánico guiado por tests existentes; el contrato del `SandboxClient` está fijado en SBX.2 y el comportamiento esperado en cada caller no cambia.
+
+```markdown
+# PROMPT SBX.3 (RED/GREEN) — Cablear SandboxClient en pipelines, charts y ETL
+
+Objetivo: sustituir las 4 ejecuciones de subprocess in-process existentes por llamadas al `SandboxClient` de SBX.2. Ningún test funcional preexistente debe romperse (los warnings y bytes generados siguen siendo equivalentes). El comportamiento observable del API se mantiene; lo que cambia es la frontera donde se ejecuta el código.
+
+Deploy: edge (los 4 ficheros tocados ya estaban en módulos edge).
+
+## Ficheros a modificar
+
+### 1. `server/app/modules/redaccion/pipelines/admin_script_pipeline.py`
+
+- Eliminar la importación de `subprocess`, `sys`, `tempfile`, `os`.
+- `extract()` pasa a `async def extract_async()` (la versión síncrona se elimina — el único caller es `scripts_router.test_proposal`, ya async).
+- `_execute_in_sandbox()` se reemplaza por:
+  ```python
+  return await self._client.execute_extraction_script(
+      code=code,
+      file_path=file_path_or_None,
+      raw_text=raw_text,
+      options=inp.options,
+      timeout_seconds=timeout,
+  )
+  ```
+- El re-audit AST defensivo en `extract_async` SE MANTIENE en la API (defensa en profundidad: el sandbox también lo hace).
+- Constructor pasa a recibir `SandboxClient` (inyección obligatoria).
+- Borrar las funciones `_build_wrapper` y `_dict_to_result` (ahora las hace el sandbox).
+- Sustituir `_AUDITOR = ScriptSecurityAuditor()` por inyección del auditor también (o mantenerlo como singleton de módulo, está bien por ahora).
+
+### 2. `server/app/modules/redaccion/services/charts/chart_renderer.py`
+
+- `render_chart_from_script()` pasa a `async def`.
+- Sustituye `subprocess.run` + tempdir por:
+  ```python
+  csv_bytes = io.StringIO(); df.to_csv(csv_bytes, index=False)
+  return await sandbox_client.execute_chart_script(
+      code=code,
+      dataframe_csv=csv_bytes.getvalue(),
+      output_format=output_format,
+      timeout_seconds=timeout,
+  )
+  ```
+- Si el cliente lanza `ChartRenderError`, propagar (ya es el mismo tipo de excepción).
+- Constructor o función receive `sandbox_client` (Depends o explícito).
+
+### 3. `server/app/modules/redaccion/services/transformation/etl_service.py`
+
+- `_execute_fallback_script()` deja de ser staticmethod, recibe el cliente.
+- En lugar de `exec(...)`:
+  ```python
+  csv_in = df.to_csv(index=False)
+  csv_out = await self._sandbox_client.execute_etl_script(
+      code=code,
+      dataframe_csv=csv_in,
+  )
+  return pd.read_csv(io.StringIO(csv_out))
+  ```
+- El comentario `# si emergen requisitos de aislamiento más fuertes, migrar a un subprocess sandbox análogo al ChartRenderer` se elimina (resuelto).
+- Cuando se llama a `_execute_fallback_script` desde `run()`, pasa a `await`.
+
+### 4. `server/app/routers/redaccion/scripts_router.py`
+
+- `_SANDBOX = AdminScriptExtractionPipeline()` desaparece.
+- En `test_proposal`:
+  ```python
+  pipeline = AdminScriptExtractionPipeline(client=Depends(get_sandbox_client))
+  extraction = await pipeline.extract_async(inp)
+  ```
+  o equivalente con inyección por endpoint.
+
+### 5. `server/app/modules/redaccion/blocks/handlers.py`
+
+- Los handlers que invocaban a `ChartRenderer` o ETL fallback ahora hacen `await`. Si alguno era síncrono, propagar a async.
+
+### 6. `server/app/modules/redaccion/graph/nodes/data_transformation_node.py`
+
+- Si invoca `etl_service.run()`, ya era async; no cambia. Verificar que sigue cuadrando.
+
+## Tests a adaptar
+
+Tests existentes que mockeaban `subprocess.run` o tocaban el wrapper interno deben mockear ahora el `SandboxClient`:
+
+- `tests/modules/redaccion/test_admin_script_pipeline*.py` — usar `LocalSandboxClient` o mock de `SandboxClient`. Eliminar referencias a `subprocess`, `tempfile`.
+- `tests/modules/redaccion/test_chart_renderer*.py` — idem.
+- `tests/modules/redaccion/test_etl_service*.py` — idem en los tests del fallback.
+- `tests/routers/redaccion/test_scripts_router*.py` — `_SANDBOX` desaparece; mockear `get_sandbox_client` con `app.dependency_overrides`.
+
+Tests nuevos:
+- test_admin_script_pipeline_uses_sandbox_client_and_propagates_warnings (verifica que cuando el cliente devuelve un `ExtractionResult` con `SCRIPT_TIMEOUT`, el pipeline lo devuelve idéntico)
+- test_admin_script_pipeline_re_audits_before_calling_client (verifica que un script con `eval()` NUNCA llega al cliente)
+- test_chart_renderer_uses_sandbox_client_and_returns_bytes
+- test_etl_service_fallback_uses_sandbox_client
+- test_scripts_router_test_proposal_uses_async_pipeline (smoke: hace `app.dependency_overrides` para inyectar `LocalSandboxClient`)
+
+## Criterio de done
+
+- 0 ocurrencias de `subprocess.run` ni `subprocess.Popen` en `server/app/modules/redaccion/`. (`grep -r "subprocess" server/app/modules/redaccion/` debe estar limpio).
+- 0 ocurrencias de `exec(` en `server/app/modules/redaccion/`. (la auditoría busca exactamente esto en otros sitios; aquí debe quedar SOLO en `script_auditor.py` como string a detectar).
+- Toda la suite de redacción pasa (425+/425+ tests verdes, sin regresiones respecto al estado pre-SBX).
+- Los tests nuevos (5) verdes.
+
+## Lo que NO se hace aquí
+
+- No se levanta el sandbox real: los tests usan `LocalSandboxClient`. El levantado HTTP se prueba manualmente al cerrar SBX.4 con `docker compose up script-sandbox`.
+- No se cambia el `docker-compose.yml` (SBX.4).
+```
+
+---
+
+### Prompt SBX.4 (RED/GREEN) — Hardening Docker + documentación de seguridad
+
+**Modelo sugerido**: **Sonnet** — configuración Docker + docs; las decisiones técnicas ya están en SBX.1-3, este prompt aterriza el wiring y el modelo de amenazas.
+
+```markdown
+# PROMPT SBX.4 (RED/GREEN) — docker-compose con red aislada + docs de seguridad
+
+Objetivo: incorporar el servicio `script-sandbox` a los dos docker-compose (dev y prod) con hardening completo, dejar la red `sandbox-net` aislada de los datos del cliente (postgres, minio) e internet, y documentar el modelo de amenazas en `docs/SANDBOX_SECURITY.md`.
+
+Deploy: edge (afecta a la topología de despliegue cliente).
+
+## Cambios en docker-compose.yml (dev)
+
+Añadir el servicio:
+```yaml
+  script-sandbox:
+    build:
+      context: ./services/script_sandbox
+      dockerfile: Dockerfile
+    container_name: govgenai_script_sandbox
+    networks:
+      - sandbox-net
+    read_only: true
+    tmpfs:
+      - /tmp/sandbox:size=128M,mode=0700,uid=65534,gid=65534
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    user: "65534:65534"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    restart: unless-stopped
+```
+
+Si el servicio `app` (FastAPI principal) ya existe en el compose dev, conectarlo también a `sandbox-net` (manteniendo su red default existente). Si NO existe (el dev hoy sólo levanta dependencias y el API se ejecuta con `uv run uvicorn` en host), añadir un comentario:
+```yaml
+# El API ejecutándose en host accede al sandbox via http://localhost:5001 si se mapea el puerto;
+# alternativamente, ejecutar el API también en contenedor y conectarlo a sandbox-net.
+```
+Y exponer el puerto 5000 del sandbox como 5001 en host para desarrollo local sin contenedor del API:
+```yaml
+    ports:
+      - "127.0.0.1:5001:5000"   # SOLO en dev; en prod NO se publica
+```
+
+Definir la red:
+```yaml
+networks:
+  sandbox-net:
+    driver: bridge
+    internal: false  # en dev, false para permitir build/pull; ver nota en prod
+```
+
+## Cambios en docker-compose.prod.yml (prod)
+
+Añadir el servicio sin `ports:` (no se expone fuera del host):
+```yaml
+  script-sandbox:
+    # ... mismas opciones que en dev ...
+    networks:
+      - sandbox-net
+    # NO ports — solo accesible desde la red sandbox-net
+```
+
+Conectar `app` a las dos redes:
+```yaml
+  app:
+    # ... existente ...
+    networks:
+      - default
+      - sandbox-net
+    environment:
+      # ... existente ...
+      SANDBOX_BASE_URL: http://script-sandbox:5000
+```
+
+Definir la red como `internal: true` en prod (sin egress fuera del bridge):
+```yaml
+networks:
+  sandbox-net:
+    driver: bridge
+    internal: true   # PROD: sin egress a internet, solo intercomunicación entre containers conectados
+```
+
+## Verificación manual de aislamiento (parte del criterio de done)
+
+Tras `docker compose -f docker-compose.prod.yml up -d script-sandbox app`, ejecutar:
+```bash
+# 1. El sandbox NO debe poder resolver postgres
+docker compose exec script-sandbox python -c "import socket; print(socket.gethostbyname('postgres'))"
+# Debe fallar con: socket.gaierror
+
+# 2. El sandbox NO debe poder salir a internet
+docker compose exec script-sandbox python -c "import urllib.request; urllib.request.urlopen('https://www.google.com', timeout=3).read()"
+# Debe fallar con: URLError / timeout
+
+# 3. El API SÍ debe poder hablar con el sandbox
+docker compose exec app curl -s http://script-sandbox:5000/health
+# Debe responder: {"status":"healthy"}
+
+# 4. El sandbox NO debe poder hablar al API (no necesita iniciar conexiones salientes)
+docker compose exec script-sandbox python -c "import urllib.request; urllib.request.urlopen('http://app:8000/health', timeout=3).read()"
+# Debe fallar (network unreachable o connection refused, depende del driver)
+```
+
+Estos 4 checks se documentan como pasos manuales en `pruebas_manuales_promptSBX_4.bat` (requiere UI/interacción con Docker, justifica .bat según CLAUDE.md sección "Pruebas manuales").
+
+## `docs/SANDBOX_SECURITY.md`
+
+Crear con secciones:
+
+1. **Modelo de amenazas**
+   - Adversario: usuario autenticado de la plataforma (proposer) que intenta exfiltrar datos del cliente, escalar privilegios o denegar servicio.
+   - Activos protegidos: base de datos del cliente (postgres), almacenamiento (minio/gcs), red interna del cliente, otros tenants.
+   - Asunciones: el atacante puede escribir cualquier código Python; la auditoría AST puede ser bypassable.
+
+2. **Capas de defensa**
+   - Capa 1: `ScriptSecurityAuditor` (AST) en la API antes de aceptar la propuesta.
+   - Capa 2: Workflow HITL para promoción a plantilla global (9R.5.6).
+   - Capa 3: Red `sandbox-net` aislada (sin DNS hacia postgres/minio, sin egress en prod).
+   - Capa 4: Contenedor sin privilegios (cap_drop ALL, no-new-privileges, usuario 65534, read_only fs).
+   - Capa 5: Re-auditoría AST defensiva dentro del sandbox.
+   - Capa 6: Subproceso efímero por petición (sin contaminación entre ejecuciones).
+   - Capa 7: Límites de recursos del propio Docker (cpus, memory, tmpfs size).
+   - Capa 8: En GCP, gVisor (heredado automáticamente por Cloud Run).
+
+3. **Lo que NO mitiga este diseño**
+   - Bugs del kernel del host (mitigado parcialmente por gVisor en GCP).
+   - Side-channel attacks entre tenants (fuera de alcance MVP).
+   - Inyección de prompts maliciosos al LLM que generan código bypass — mitigado por capas 1, 2, 5.
+
+4. **Cómo auditar el aislamiento**
+   - Los 4 checks de la sección "Verificación manual" anterior.
+   - Comandos para inspeccionar capacidades del contenedor: `docker inspect govgenai_script_sandbox --format '{{json .HostConfig.CapDrop}}'`.
+
+5. **Migración futura a gVisor explícito (on-premise)**
+   - Pasos para configurar `runtime: runsc` si el cliente despliega sobre containerd + gVisor.
+   - Queda fuera del MVP; documentado por si infosec del cliente lo requiere.
+
+6. **Diferencias dev vs. prod**
+   - Dev: `sandbox-net` no es internal; el sandbox expone 5001 en host para `uv run` local.
+   - Prod: `sandbox-net` internal=true, sin ports expuestos, sandbox solo accesible desde `app`.
+
+## Tests (RED → GREEN)
+
+Tests automáticos:
+- test_compose_dev_defines_sandbox_service (parsea YAML y verifica claves obligatorias: cap_drop, read_only, security_opt, user, network)
+- test_compose_prod_sandbox_has_no_ports (sandbox sin sección `ports`)
+- test_compose_prod_sandbox_net_is_internal (network internal=true)
+- test_compose_prod_app_connected_to_sandbox_net
+- test_sandbox_dockerfile_runs_as_non_root_user (parsea Dockerfile, verifica `USER 65534`)
+
+5 tests verdes en `tests/infra/test_compose_sandbox.py` (nuevo).
+
+Verificación manual (vía `.bat`):
+- `pruebas_manuales_promptSBX_4.bat` cubre los 4 checks de aislamiento de red, plus el smoke E2E de `/api/v1/redaccion/scripts/{id}/test` apuntando al sandbox real.
+
+## Criterio de done
+
+- 5 tests automáticos verdes.
+- Los 4 checks manuales de aislamiento pasan (documentados en el .bat con texto explícito de qué esperar).
+- `docs/SANDBOX_SECURITY.md` existe y cubre las 6 secciones.
+- `docker compose -f docker-compose.prod.yml up -d` levanta los 4 servicios (postgres, app, sandbox, minio) y el endpoint `/api/v1/redaccion/scripts/{id}/test` ejecuta scripts en el sandbox (verificable en logs).
+- `.env.example` actualizado con `SANDBOX_BASE_URL=http://script-sandbox:5000` y `SANDBOX_TIMEOUT_SECONDS_DEFAULT=30`.
+
+## Pruebas manuales — Prompt SBX.4
+
+### Antes de empezar
+1. Abre Docker Desktop.
+2. En una terminal: `docker compose -f docker-compose.prod.yml build script-sandbox app`.
+3. Levanta: `docker compose -f docker-compose.prod.yml up -d`.
+
+### Ejecuta el archivo
+- Doble clic en `pruebas_manuales_promptSBX_4.bat` (raíz del proyecto).
+
+### Qué debes ver
+- 4 checks de aislamiento (los 3 que deben fallar fallan; el que debe pasar pasa).
+- 1 smoke E2E: crear un proposal con `POST /api/v1/redaccion/scripts/propose`, ejecutar `/test`, ver en `docker logs script-sandbox` la entrada de ejecución.
+
+### Para terminar
+- `docker compose -f docker-compose.prod.yml down`.
+```
+
+---
+
+### Continuación tras el bloque SBX
+
+Con SBX cerrado, el siguiente bloque del orden de ejecución es **Bloque 9Q** (Calidad de Contenido Web Ingestado). Tras 9Q viene **Fase 11** (Autoinstalación y Distribución), que reescribirá `docker-compose.prod.yml` para distribución pública. Fase 11.2 debe preservar el servicio `script-sandbox` y su red aislada — añadirlo al template público con comentarios claros.
+
+---
+
+## Bloque 9Q — Calidad de Contenido Web Ingestado (Subfase 1.A → 1.C, PENDIENTE)
+
+**Objetivo del bloque**: separar dos conceptos que hoy el modelo funde, y construir sobre esa separación un **motor de detección de calidad a nivel de sitio**. Hoy todo cuelga de `chatbot_id` y no existe ninguna entidad "sitio"; `HubIngestionSource` es solo un monitor de **una URL suelta por chatbot**. Eso impide (a) escanear todo un sitio para auditar calidad mientras se ingiere solo una parte, (b) que una misma página alimente varios chatbots, y (c) un único crawl por sitio (hoy N chatbots = N crawls del mismo servidor público).
+
+El bloque introduce tres entidades y dos salidas:
+
+**Entidades nuevas** (operacionales, edge, en `operational_models.py`):
+- **`HubWebSite`** — propiedad del cliente/administración, **no** del chatbot. URL raíz, sitemap, config de crawl, cadencia, `audit_semantic_scope`. Unidad de **crawl + auditoría**.
+- **`HubCrawledPage`** — propiedad del sitio. Cada URL descubierta en el crawl, con sus señales (Last-Modified/ETag/sitemap lastmod/canonical/año) y flags de calidad (`superseded`, `quality_score`, `superseded_by_page_id`). Los `HubContentFinding` referencian **páginas**, no chatbots.
+- **`HubCorpusSelection`** — propiedad del chatbot, referencia un sitio + regla de selección (prefijo de path / sección de sitemap / manual). Realiza el mapeo **N:M** página→chatbot: promociona páginas rastreadas a `HubDocument` del/los chatbots.
+- `HubDocument` gana `crawled_page_id` (FK opcional a `HubCrawledPage`, `ondelete=SET NULL`, sin `relationship()`). Los PDFs subidos siguen con `crawled_page_id=None`.
+
+**Dos salidas independientes** sobre el mismo análisis:
+1. **Higiene del RAG** — flags `superseded`/`quality_score` sobre `HubCrawledPage`; el retriever excluye por defecto los `HubDocument` cuya página de origen esté superseded, en **todos** los chatbots que la ingirieron.
+2. **Informe de auditoría web por sitio** — documento estructurado (JSON + visor admin + export DOCX/PDF) dirigido al **equipo web de la administración** para que mejore su propio sitio público.
+
+**Justificación de la ubicación (antes de Fase 11)**:
+- Es una mejora de **correctitud del producto central** (calidad de las respuestas del chatbot), de mayor prioridad que la distribución (Fase 11) o el deploy (D.1–D.5).
+- Reutiliza crawler, embeddings y retriever ya completados en Subfases 1.A/9B.
+- Introduce nuevos servicios y un scheduler; Fase 11.2 debe poder incluirlos en el `docker-compose.prod.yml` público; por eso se cierra antes.
+
+**Decisión arquitectónica (2026-05-27, revisada)**: **split sitio/corpus con motor de detección a nivel sitio**, frente al diseño anterior per-chatbot. Razones:
+1. **No rastrear dos veces.** Son webs de administración pública: varios crawlers golpeando los mismos servidores es impolite, dispara rate limits y parece abuso. Un único crawl por sitio que emite hallazgos estructurados es lo correcto técnica y éticamente. El modelo per-chatbot anterior **no cumplía esto** en cuanto dos chatbots bebían del mismo sitio.
+2. **El alcance del crawl ≠ el alcance de la ingesta.** La administración quiere auditar **todo** su sitio pero ingerir solo **partes** seleccionadas, posiblemente repartidas entre **varios** chatbots. Eso exige una entidad sitio por encima del chatbot y una capa de selección N:M.
+3. **El informe es otro consumidor** de la misma tabla de hallazgos (no otro motor): reutiliza `HybridRetriever` (similitud pgvector) para clustering y el patrón de `source_scheduler` para la cadencia.
+
+**Reemplazo de `HubIngestionSource` (decisión 2026-05-27)**: `HubWebSite` + `HubCorpusSelection` **sustituyen** al monitor de URL suelta. Las fuentes existentes se migran a (sitio + selección) y `HubIngestionSource`, su scheduler (`source_scheduler.py`) y sus endpoints se **eliminan** (CLAUDE.md: sin mecanismos paralelos ni shims). **La ingesta de PDF subido (`POST /hub/ingestion/upload` → `HubIngestionJob` → `HubDocument`) es un flujo independiente y se mantiene intacta**: un chatbot se alimenta de PDFs subidos (`crawled_page_id=None`) **+** páginas seleccionadas del sitio (`crawled_page_id` poblado).
+
+**Actualización periódica**: el recrawl programado hace **diff de sitemap** — páginas **nuevas** → candidatas a ingesta (auto-encoladas si casan con una `HubCorpusSelection`, si no afloran en el informe como "nuevas sin clasificar"); **cambiadas** → re-embed; **desaparecidas** → finding + retirada del corpus.
+
+**Cobertura de la auditoría semántica (`audit_semantic_scope`, por sitio)**: las páginas rastreadas pero no ingeridas no tienen embeddings.
+- `ingested` (default, híbrido): el detector determinista corre sobre **todo** el sitio (gratis); el semántico (juez LLM) solo sobre páginas ya ingeridas. Para sitios grandes.
+- `full`: se embeben todas las páginas rastreadas y el semántico cubre el sitio completo. Para sitios pequeños donde interesa cobertura total. El administrador lo elige por sitio.
+
+**Frontera edge-cloud**: todo el bloque **es edge**. El motor procesa documentos/chunks/páginas del cliente; el informe es inherentemente sobre el contenido concreto del cliente y **no se puede anonimizar de forma útil**, por lo que se sirve desde el edge node. El cloud, como mucho, vería métricas agregadas anonimizadas vía la sync API — backlog post-MVP, **no entra en 9Q**.
+
+**Lo que NO incluye este bloque**:
+- **Accesibilidad / WCAG** del sitio público (backlog v2; la del propio frontend ya está en Fase 20).
+- Reescritura/corrección automática del contenido del sitio (el informe es de **diagnóstico**; la acción correctiva la realiza el equipo web humano).
+- Sync de métricas agregadas hacia el cloud (backlog post-MVP de la sync API).
+- Validación exhaustiva de enlaces rotos mediante recrawl dedicado (el MVP detecta huérfanos/errores a partir de las señales del crawl y del diff de sitemap, no lanza un recrawl de validación de enlaces).
+
+**Reglas duras del bloque 9Q**:
+- Todo el módulo de calidad vive en `server/app/modules/agents_hub/ingestion/quality/` y **es edge**. Las entidades nuevas (`HubWebSite`, `HubCrawledPage`, `HubCorpusSelection`) viven en `operational_models.py` sobre `HubOperationalBase`.
+- Los routers nuevos se etiquetan `Deploy: edge` y se registran en `_register_edge` de `main.py`.
+- **El análisis nunca bloquea el crawl ni la ingesta.** La detección corre como job asíncrono post-crawl o bajo demanda; el crawl/indexado sigue su curso aunque el análisis falle.
+- **El LLM solo se invoca sobre clusters ya filtrados por similitud de embeddings** (control de coste). Jamás se llama al LLM por cada par de páginas.
+- El motor **lee** modelos operacionales (`HubWebSite`, `HubCrawledPage`, `HubDocument`, `HubDocumentChunk`) y **escribe** `HubContentFinding` + los flags `superseded`/`quality_score` en `HubCrawledPage`. No toca modelos de configuración. **Sin `relationship()` cross-base**; las FK a chatbot/documento se resuelven por id con query explícito.
+- **La anonimización previa al LLM es responsabilidad del módulo edge** (reutiliza el `AnonymizerService`/hooks de 9R.5.5/Fase 13 si el contenido a juzgar puede contener PII antes de enviarse al juez LLM).
+
+---
+
+### Prompt 9Q.0 (RED/GREEN) — Modelo sitio/página/selección + reemplazo de `HubIngestionSource`
+
+**Modelo sugerido**: **Opus** — define todo el modelo de datos nuevo y la relación página↔documento↔chatbot, decide la migración que retira `HubIngestionSource` sin romper la ingesta de PDF, y establece las invariantes cross-base. Decisiones de diseño embebidas y refactor de código ya en verde.
+
+**Objetivo**: crear las tres entidades que separan crawl/auditoría (sitio) de ingesta (corpus de chatbot), sus repos, la FK `crawled_page_id` en `HubDocument`, y **retirar `HubIngestionSource`** migrando las fuentes existentes a (sitio + selección). No incluye crawl ni detección todavía (eso es 9Q.2+).
+
+**Contexto**: `operational_models.py` (sobre `HubOperationalBase`). Hoy `HubIngestionSource` (monitor de 1 URL/chatbot) se usa en `hub_ingestion_router.py`, `source_scheduler.py`, `spider_factory.py` y tests de integración. El upload de PDF (`POST /hub/ingestion/upload` → `HubIngestionJob` → `IngestionWatcher`) **no** usa `HubIngestionSource` y no se toca. Sin `relationship()` cross-base (regla edge-cloud de CLAUDE.md).
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT 9Q.0 (RED/GREEN) — Entidades sitio/página/selección
+
+Deploy: edge.
+
+## ORM — operational_models.py (HubOperationalBase)
+
+class HubWebSite:
+  __tablename__ = "hub_web_sites"
+  id, client_id UUID (index, dueño = administración, NO chatbot), name str(255),
+  root_url str(2048), sitemap_url str(2048)|None, spider_type str(50) default "generic",
+  config_json JSONB default dict, crawl_interval_hours int default 24,
+  audit_semantic_scope str(20) default "ingested"  # "ingested" | "full"
+  last_crawled_at datetime|None, status str(20) default "active", error_message Text|None,
+  created_at.
+
+class HubCrawledPage:
+  __tablename__ = "hub_crawled_pages"
+  id, site_id UUID (index, FK hub_web_sites.id ondelete=CASCADE — NO relationship()),
+  url str(2048), canonical_url str(2048)|None, content_hash str(64)|None,
+  title str(512)|None, token_count int|None, language str(10)|None,
+  markdown_content Text|None,   # texto rastreado de la página; necesario para empty/thin (9Q.3)
+                                # y para embeber páginas no ingeridas en modo full (9Q.4)
+  # señales de actualidad (las pobla 9Q.2):
+  http_last_modified datetime|None, http_etag str(255)|None, sitemap_lastmod datetime|None,
+  declared_canonical_url str(2048)|None, content_year int|None,
+  # flags de higiene (los consolida 9Q.5):
+  superseded bool default False (index), quality_score Float|None,
+  superseded_by_page_id UUID|None,
+  first_seen_at, last_seen_at, last_crawled_at datetime|None,
+  status str(20) default "active"  # "active" | "gone" (fuera del sitemap) | "error" (fetch falló)
+  error_message Text|None,         # mensaje del fallo de fetch de ESTA página (si status=="error")
+  UniqueConstraint(site_id, url) name="uq_page_site_url".
+
+class HubCorpusSelection:
+  __tablename__ = "hub_corpus_selections"
+  id, chatbot_id UUID (index), site_id UUID (index, FK hub_web_sites.id ondelete=CASCADE),
+  rule_type str(20)  # "path_prefix" | "sitemap_section" | "manual"
+  rule_value str(2048)|None  # p.ej. "/tramites/" para path_prefix; None para manual
+  auto_ingest_new bool default True  # encolar automáticamente páginas nuevas que casen
+  created_at.
+  # El mapeo N:M efectivo página→documento se materializa en HubDocument.crawled_page_id;
+  # una selección manual puede tener su propia tabla de enlaces si 9Q.7 lo necesita.
+
+## FK nueva en HubDocument (mismo fichero)
+  crawled_page_id UUID|None (index, FK hub_crawled_pages.id ondelete=SET NULL — NO relationship())
+  # PDFs subidos => None. Documentos de crawl => apuntan a su página de origen.
+
+## Repos — ingestion/quality/site_repo.py
+WebSiteRepo(session): create, get, list_by_client, update, delete (cascade páginas).
+CrawledPageRepo(session): upsert(site_id, url, ...) (respeta uq_page_site_url),
+  list_by_site(site_id, status?), get, mark_gone(page_ids), get_by_canonical(site_id, canonical).
+CorpusSelectionRepo(session): create, list_by_chatbot, list_by_site, delete,
+  matches(selection, page_url) -> bool  # evalúa la regla contra una URL.
+
+## Migración Alembic — retirada de HubIngestionSource
+1. Crea hub_web_sites, hub_crawled_pages, hub_corpus_selections; añade crawled_page_id a hub_documents.
+2. DATA MIGRATION: por cada HubIngestionSource existente, crea un HubWebSite (root_url=url,
+   client_id derivado del chatbot) + un HubCorpusSelection(chatbot_id, site_id, rule_type="manual").
+   (Si no hay forma de derivar client_id en datos de dev, documenta el fallback y créalo nullable.)
+3. DROP table hub_ingestion_sources.
+Aplica con `uv run alembic upgrade <rev>`. Si la BD no responde, detente y pide arrancarla.
+
+## Retirada de código (CLAUDE.md — borra, no comentes)
+- Elimina la clase HubIngestionSource de operational_models.py.
+- Elimina source_scheduler.py (check_source/check_all_sources/create_scheduler) y su arranque
+  en main.py/lifespan. El scheduler nuevo lo crea 9Q.5.
+- Elimina del hub_ingestion_router.py los endpoints de "Fuentes web monitorizadas"
+  (list/create/update/delete/check sources). Los endpoints de sitio los crea 9Q.7.
+- Ajusta spider_factory.py y los tests de integración que referencian HubIngestionSource.
+- grep -r "HubIngestionSource" debe quedar a 0 antes de cerrar.
+
+## Tests (mínimo 12) — tests/modules/agents_hub/integration/test_site_model.py
+- CRUD de HubWebSite/HubCrawledPage/HubCorpusSelection vía repos.
+- upsert de página respeta uq_page_site_url (2ª llamada actualiza).
+- CorpusSelectionRepo.matches: path_prefix casa/no casa; manual siempre False salvo enlace explícito.
+- HubDocument.crawled_page_id default None; FK SET NULL al borrar página.
+- Borrar sitio cascada páginas (y selecciones).
+- audit_semantic_scope default "ingested"; HubCrawledPage default status "active", markdown_content/error_message None.
+- Tras la migración: no queda HubIngestionSource importable (import error esperado en test).
+```
+
+**Verificación**: `uv run pytest tests/modules/agents_hub/` verde (incluidos los tests de ingestión adaptados a la retirada de `HubIngestionSource`); migración aplicada (`alembic current`); `grep -r HubIngestionSource` a 0.
+
+---
+
+### Prompt 9Q.1 (RED/GREEN) — Contratos de hallazgos + `HubContentFinding` (clave sitio/página) + repo
+
+**Modelo sugerido**: **Sonnet** — alcance cerrado: contratos Pydantic enumerados, un modelo ORM, un repo CRUD, una migración. Sin decisiones de diseño abiertas (el modelo base ya lo fijó 9Q.0).
+
+**Objetivo**: la taxonomía de hallazgos y el modelo ORM `HubContentFinding`, ahora **rekeyed a sitio/página** (no a chatbot), con su repo. Los flags de higiene ya viven en `HubCrawledPage` (9Q.0).
+
+**Contexto**: usa las entidades de 9Q.0. Un hallazgo es un hecho sobre el **sitio** (páginas), independiente de qué chatbots ingirieron esas páginas.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT 9Q.1 (RED/GREEN) — Contratos y modelo de hallazgos de calidad
+
+Deploy: edge.
+
+## Contratos Pydantic — ingestion/quality/contracts.py
+
+- FindingType: Literal[
+    "superseded",      # versión más antigua de un proceso con versión nueva detectada
+    "duplicate",       # mismo contenido en >1 URL
+    "contradiction",   # mismo proceso, datos divergentes
+    "empty",           # sin contenido útil (markdown vacío / token_count 0)
+    "thin",            # contenido por debajo de umbral mínimo
+    "stale",           # no revisada/actualizada en > umbral de días
+    "crawl_error",     # la página falló al rastrearse (HubCrawledPage.status/error)
+    "orphan_page",     # página marcada gone que aún tiene documentos ingeridos
+  ]
+- FindingSeverity: Literal["info", "warning", "critical"]
+- FindingStatus: Literal["new", "confirmed", "dismissed", "resolved"]
+- ContentFinding (Pydantic, frozen=True): id, site_id: UUID, finding_type, severity,
+  confidence: float (0..1), page_id: UUID|None, related_page_id: UUID|None,
+  source_url: str|None, signal: dict (evidencia: fechas comparadas, score de similitud,
+  longitudes, etc.), status, detected_at, reviewed_at: datetime|None, reviewed_by: UUID|None,
+  resolution_note: str|None
+- _VALID_FINDING_TRANSITIONS + InvalidFindingTransitionError (new→confirmed/dismissed,
+  confirmed→resolved/dismissed, dismissed→new; resolved es terminal).
+
+## ORM — operational_models.py (HubOperationalBase)
+
+class HubContentFinding:
+  __tablename__ = "hub_content_findings"
+  id, site_id UUID (index, FK hub_web_sites.id ondelete=CASCADE — NO relationship()),
+  finding_type str(40), severity str(20), confidence Float,
+  page_id UUID|None (index, FK hub_crawled_pages.id ondelete=SET NULL — NO relationship()),
+  related_page_id UUID|None, source_url str(2048)|None, signal_json JSONB,
+  status str(20) default "new" (index), detected_at, reviewed_at|None, reviewed_by|None,
+  resolution_note Text|None, created_at.
+  UniqueConstraint(site_id, finding_type, page_id, related_page_id) name="uq_finding_dedup".
+
+## Repo — ingestion/quality/findings_repo.py
+
+ContentFindingRepo(session):
+  async upsert(finding) -> HubContentFinding   # respeta uq_finding_dedup (ON CONFLICT update)
+  async list_by_site(site_id, status?, finding_type?) -> list[HubContentFinding]
+  async transition(finding_id, new_status, reviewed_by, resolution_note?) -> HubContentFinding
+        # valida contra _VALID_FINDING_TRANSITIONS, lanza InvalidFindingTransitionError
+  async get(finding_id) -> HubContentFinding|None
+
+## Migración Alembic
+Crea hub_content_findings. Aplica con `uv run alembic upgrade <rev>`. Si la BD no responde,
+detente y pide arrancarla.
+
+## Tests (mínimo 12) — tests/modules/agents_hub/unit/test_content_findings.py
+- ContentFinding congelado, validación de rangos de confidence.
+- Transiciones válidas e inválidas (cada arista + terminal resolved).
+- Repo.upsert idempotente bajo uq_finding_dedup (2ª llamada actualiza, no duplica).
+- Repo.list_by_site filtra por status y finding_type.
+- Repo.transition aplica reviewed_at/reviewed_by y rechaza transición inválida.
+- FK page_id SET NULL al borrar la página; site_id CASCADE al borrar el sitio.
+```
+
+**Verificación**: `uv run pytest tests/modules/agents_hub/unit/test_content_findings.py` verde; migración aplicada (`alembic current`).
+
+---
+
+### Prompt 9Q.2 (RED/GREEN) — Crawl a nivel sitio + señales en páginas + diff de sitemap
+
+**Modelo sugerido**: **Opus** — desacopla el crawl del modelo per-chatbot al modelo de sitio (refactor de `IngestionWatcher`/spider ya en verde), diseña el diff de sitemap (alta/cambio/baja de páginas) y la captura de señales sobre `HubCrawledPage`. Decisiones de diseño embebidas.
+
+**Objetivo**: rastrear un **sitio completo** una sola vez poblando `HubCrawledPage`, capturar las **señales gratuitas** de actualidad sobre cada página, y producir el **diff de sitemap** que detecta páginas nuevas, cambiadas y desaparecidas. No ingiere todavía en chatbots (eso lo dispara la selección de 9Q.7); aquí solo se materializa el mapa del sitio.
+
+**Contexto**: el crawler vive en `ingestion/spider.py` (`GenericSpider._fetch`, `_extract_links`); el indexado en `ingestion/watcher.py`. 9Q.0 retiró `HubIngestionSource`. Las páginas y sus señales viven en `HubCrawledPage` (9Q.0). El crawl debe recorrer el sitemap/enlaces del sitio, no una URL suelta.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT 9Q.2 (RED/GREEN) — Crawl de sitio + señales + diff de sitemap
+
+Deploy: edge.
+
+## Servicio de señales — ingestion/quality/signal_extractor.py
+class CrawlSignalExtractor:
+  extract_from_headers(headers: dict) -> {http_last_modified, http_etag}  # RFC 7231; tolera ausencia
+  extract_canonical(html: str) -> str|None        # <link rel="canonical" href="...">
+  extract_content_year(url: str, text: str) -> int|None
+        # prioridad: año en path (/2024/) > año más reciente plausible en texto (1990..año+1)
+  async fetch_sitemap(base_url|sitemap_url, fetch_fn) -> dict[str,datetime|None]
+        # descarga el sitemap.xml una vez, parsea <url><loc><lastmod>; mapea url->lastmod.
+        # Soporta sitemap index (múltiples <sitemap>). Falla en silencio ({}) si no hay/no parsea.
+
+## Servicio de crawl de sitio — ingestion/quality/site_crawler.py
+class SiteCrawler(session, spider, signal_extractor, page_repo):
+  async def crawl_site(site_id) -> SiteCrawlSummary:
+    1. Lee HubWebSite. Obtiene el conjunto de URLs objetivo:
+       union(sitemap urls, enlaces descubiertos por el spider dentro del dominio raíz).
+    2. Por cada URL: _fetch (body + headers), extrae señales, upsert HubCrawledPage
+       (markdown_content, content_hash, title, token_count, language + las 5 señales).
+       last_crawled_at/last_seen_at=now, status "active".
+       Si el fetch de ESA URL falla: upsert la página con status "error" + error_message
+       (no aborta el resto del crawl).
+    3. DIFF DE SITEMAP:
+       - nuevas: URL en el crawl que no existía como HubCrawledPage → status "active", first_seen_at=now.
+       - cambiadas: content_hash distinto al previo → marca para re-embed (signal en summary).
+       - desaparecidas: páginas activas en BD que ya NO aparecen en este crawl → status "gone".
+    4. Actualiza HubWebSite.last_crawled_at; HubWebSite.status "error"+error_message si el crawl
+       falla globalmente (los fallos de página concreta van en la página, no en el sitio).
+  SiteCrawlSummary: pages_new, pages_changed, pages_gone, pages_error, pages_total, errors.
+
+## Refactor del spider (sin HubIngestionSource)
+- GenericSpider._fetch devuelve body + headers (adapta tipo de retorno y call-sites/tests).
+- El recorrido del sitio se acota al dominio de root_url; respeta robots si ya se respetaba.
+- El sitemap se consulta una vez por sitio, no por página.
+
+## Tests (mínimo 12) — test_site_crawler.py + test_crawl_signals.py
+- Parseo Last-Modified válido / ausente / malformado; canonical con/sin tag (primero gana).
+- extract_content_year: año en path gana al texto; sin año → None; descarta años absurdos.
+- fetch_sitemap parsea XML (fixture) y sitemap index; ausente → {}.
+- crawl_site upsert páginas con markdown_content + las 5 señales; segundo crawl idempotente sobre uq_page_site_url.
+- diff: URL nueva → page nueva; content_hash cambiado → pages_changed; URL ausente → status "gone".
+- fallo de fetch de una URL → esa página status="error"+error_message, el resto del crawl continúa.
+- crawl con fallo global deja HubWebSite.status="error" sin crashear.
+```
+
+**Verificación**: `uv run pytest tests/modules/agents_hub/` verde (incluidos los tests de spider adaptados a la nueva firma de `_fetch` y a la retirada de `HubIngestionSource`).
+
+---
+
+### Prompt 9Q.3 (RED/GREEN) — Detector determinista: vacías, finas, stale, errores y supersesión por URL+fecha
+
+**Modelo sugerido**: **Sonnet** — reglas deterministas enumerables; sin LLM. La normalización de URL y la precedencia de fechas se especifican explícitamente en el prompt.
+
+**Objetivo**: primera pasada del motor —sin coste de LLM, sobre **todo el sitio**— que emite hallazgos a partir de las señales de `HubCrawledPage`: páginas vacías/finas, stale, con error de crawl, huérfanas, y **supersesión temporal por patrón de URL + fecha**.
+
+**Contexto**: usa los contratos de 9Q.1 (`HubContentFinding`, claves sitio/página) y las señales de 9Q.2 sobre `HubCrawledPage`. Lee `HubCrawledPage` (y `HubDocument` solo para detectar páginas `gone` con documentos aún ingeridos). Escribe hallazgos vía `ContentFindingRepo`.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT 9Q.3 (RED/GREEN) — Detector determinista de calidad
+
+Deploy: edge.
+
+## Servicio — ingestion/quality/deterministic_detector.py
+class DeterministicQualityDetector(session, *, thin_token_threshold=120, stale_days=365):
+  async def analyze(site_id) -> list[ContentFinding]:
+    Sobre las HubCrawledPage del sitio, emite (vía ContentFindingRepo.upsert):
+      - empty: página con markdown_content vacío/None o token_count==0 → severity critical.
+      - thin: token_count < thin_token_threshold (y > 0)            → severity warning.
+      - stale: página cuya frescura de CONTENIDO
+               max(sitemap_lastmod, http_last_modified, content_year-as-date) sea anterior a
+               now-stale_days → severity info. NO incluir last_crawled_at (es siempre ≈ahora tras
+               el crawl y anularía la regla). Si las tres señales son None, no se evalúa stale.
+               signal incluye la fecha que disparó la regla.
+      - crawl_error: HubCrawledPage.status=="error" (error_message poblado) → critical.
+      - orphan_page: página status=="gone" que aún tiene HubDocument con crawled_page_id apuntándola
+               (query explícito por id, sin relationship)            → warning.
+      - superseded (determinista): ver algoritmo abajo.
+
+## Algoritmo de supersesión determinista
+  1. Agrupar páginas del sitio por "clave de proceso" = path normalizado de canonical_url
+     SIN el segmento de año (quita /2023/, /2024/, query string, fragmentos, trailing slash).
+  2. Dentro de cada grupo con >1 página, ordenar por fecha efectiva =
+     max(sitemap_lastmod, http_last_modified, content_year-as-date, first_seen_at).
+  3. La más reciente es la vigente; las demás → finding superseded con
+     related_page_id = id de la vigente, signal = {fechas comparadas, clave de proceso}.
+     NO muta todavía HubCrawledPage.superseded (eso lo hace el job 9Q.5 al consolidar);
+     aquí solo se emite el hallazgo.
+  El detector es idempotente: re-ejecutar no duplica (uq_finding_dedup).
+
+## Tests (mínimo 11) — test_deterministic_detector.py
+- empty (markdown_content None/vacío) / thin (justo por encima y por debajo del umbral) / token_count 0.
+- stale por señal de contenido antigua; página con señal reciente no marca stale; página con las
+  tres señales None NO marca stale (aunque last_crawled_at sea viejo).
+- crawl_error desde status=="error" de página.
+- orphan_page: página gone con documento aún ingerido.
+- supersesión: 3 versiones mismo proceso distinto año → 2 superseded apuntando a la vigente.
+- normalización de URL: /proc/2023/x y /proc/2024/x agrupan; /proc/x y /otro/x no.
+- idempotencia: segunda pasada no crea hallazgos nuevos.
+```
+
+**Verificación**: `uv run pytest tests/modules/agents_hub/unit/test_deterministic_detector.py` verde.
+
+---
+
+### Prompt 9Q.4 (RED/GREEN) — Detector semántico site-scoped: clustering pgvector + juez LLM + `audit_semantic_scope`
+
+**Modelo sugerido**: **Opus** — decisiones de diseño embebidas: estrategia de clustering por similitud, umbral, control de coste, la lógica de cobertura `ingested`/`full` (qué páginas tienen embedding y cuáles se embeben on-demand), diseño del prompt del juez LLM y discriminación duplicado-vs-contradicción con confianza calibrada.
+
+**Objetivo**: segunda pasada, **selectiva y con LLM, a nivel sitio**, que detecta duplicados y contradicciones semánticas entre páginas. Respeta `HubWebSite.audit_semantic_scope`: `ingested` (solo páginas ya ingeridas en algún chatbot, que ya tienen embeddings) o `full` (embebe todas las páginas rastreadas).
+
+**Contexto**: la similitud pgvector y los embeddings de chunks viven en `ingestion/retriever.py` / `HubDocumentChunk`. Una página ingerida tiene embeddings vía su `HubDocument`→chunks (`crawled_page_id`). Una página no ingerida no los tiene. El juez LLM se inyecta como `LLMService` (Protocol, igual que 9R.6.3); el `EmbeddingService` también se inyecta. La anonimización pre-LLM reutiliza los hooks de Fase 13.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT 9Q.4 (RED/GREEN) — Detector semántico con juez LLM (site-scoped)
+
+Deploy: edge.
+
+## Migración — embedding de página para modo full
+Añade a HubCrawledPage: page_embedding Vector(D)|None (pgvector, None = sin embedding), donde D
+es la MISMA dimensión que usa HubDocumentChunk.embedding (BGE-M3 = 1024); si no coinciden, la
+similitud coseno no cruza. Aplica con `uv run alembic upgrade <rev>`.
+
+## Servicio — ingestion/quality/semantic_detector.py
+class SemanticContradictionDetector(session, llm: LLMService, embedding_service, *,
+        similarity_threshold=0.92, max_pairs_per_run=200, anonymizer=None):
+  async def analyze(site_id) -> list[ContentFinding]:
+    0. COBERTURA según HubWebSite.audit_semantic_scope:
+       - "ingested": conjunto = páginas del sitio con al menos un HubDocument ingerido. Reusa el
+         embedding del chunk representativo (mayor token_count). Si la página está ingerida en
+         varios chatbots (varios HubDocument), el contenido es idéntico → toma cualquiera (p.ej. el
+         primer document_id) sin recomputar.
+       - "full": conjunto = todas las páginas activas. Para las que no tengan page_embedding,
+         embeber HubCrawledPage.markdown_content vía embedding_service y persistir page_embedding
+         (idempotente: no re-embeber si content_hash no cambió).
+    1. CLUSTERING (sin LLM): por cada página del conjunto, vecinos por coseno >= similarity_threshold.
+       Forma pares candidatos (page_a, page_b) DISTINTO id dentro del MISMO sitio.
+    2. CONTROL DE COSTE: descarta pares de la MISMA canonical (eso es 9Q.3 superseded).
+       Limita a max_pairs_per_run, priorizando mayor similitud. 0 pares → return [] sin LLM.
+    3. ANONIMIZACIÓN: si anonymizer no es None, anonimiza ambos textos antes del LLM.
+    4. JUEZ LLM: por par, JSON estricto
+       {"relation":"duplicate"|"contradiction"|"unrelated","confidence":0..1,"explanation":"..."}.
+       - duplicate → finding duplicate (warning); contradiction → critical; unrelated → nada.
+       confidence del finding = confidence del juez. signal = {similarity, explanation, textos truncados}.
+    El prompt del juez es robusto a fences markdown (reutiliza _extract_json de 9R.4.1).
+
+## Reglas
+- NUNCA llamar al LLM por cada par del producto cartesiano: solo pares filtrados por umbral y dedup.
+- En modo "ingested" jamás se embebe de más (coste 0 de embedding).
+- LLM y embedding_service inyectados; tests con fakes deterministas (no red).
+
+## Tests (mínimo 11) — test_semantic_detector.py
+- Cobertura "ingested": solo páginas con documento; las no ingeridas se ignoran (0 embeds).
+- Cobertura "full": páginas sin embedding se embeben y persisten; segundo run no re-embebe.
+- Clustering: solo pares >= umbral; por debajo no.
+- Control de coste: 0 pares → 0 llamadas al LLM (spy).
+- Pares de la misma canonical se descartan.
+- Juez contradiction → critical con confidence propagada; duplicate → warning; unrelated → nada.
+- max_pairs_per_run respetado; anonimizador invocado cuando se inyecta; JSON con fences.
+```
+
+**Verificación**: `uv run pytest tests/modules/agents_hub/unit/test_semantic_detector.py` verde; cero llamadas al LLM cuando no hay clusters; cero embeddings en modo `ingested`; migración aplicada.
+
+---
+
+### Prompt 9Q.5 (RED/GREEN) — Job asíncrono por sitio + scheduler + consolidación + auto-ingesta de candidatas
+
+**Modelo sugerido**: **Sonnet** — orquestación con patrón de scheduler conocido; alcance cerrado (crawl + detectores + consolidación + auto-ingest ya están especificados por 9Q.2–9Q.4 y la selección de 9Q.7).
+
+**Objetivo**: orquestar **por sitio** el crawl (9Q.2) + ambas pasadas de detección (9Q.3/9Q.4) en un job asíncrono que **nunca bloquea**, consolidar los `superseded` en `HubCrawledPage` y propagarlos a los `HubDocument` ingeridos, **auto-ingerir las páginas nuevas** que casen con una `HubCorpusSelection(auto_ingest_new=True)`, y programar la cadencia con un scheduler propio.
+
+**Contexto**: reutiliza el patrón APScheduler del difunto `source_scheduler.py` (eliminado en 9Q.0; entre 9Q.0 y este prompt no hay scheduler de crawl). Los detectores son 9Q.3/9Q.4; el crawler 9Q.2; la ingesta de una página la realiza `IngestionWatcher`; las selecciones las resuelve `CorpusSelectionRepo` (9Q.0/9Q.7).
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT 9Q.5 (RED/GREEN) — SiteQualityJob + scheduler
+
+Deploy: edge.
+
+## Servicio — ingestion/quality/quality_job.py
+class SiteQualityAnalysisJob(session_factory, site_crawler, detectors, watcher, selection_repo,
+        *, run_semantic=True):
+  async def run_for_site(site_id) -> SiteQualitySummary:
+    1. CRAWL: site_crawler.crawl_site(site_id) → diff (nuevas/cambiadas/desaparecidas).
+    2. DETECCIÓN: DeterministicQualityDetector.analyze(site_id) SIEMPRE;
+       SemanticContradictionDetector.analyze(site_id) si run_semantic y hay LLM.
+       Cada detector en try/except aislado: si uno falla, el otro y el crawl siguen (summary.errors).
+    3. CONSOLIDACIÓN: por cada finding superseded en new|confirmed, fija
+       HubCrawledPage.superseded=True + superseded_by_page_id. PROPAGACIÓN: los HubDocument con
+       crawled_page_id de esa página NO se borran; el flag de página basta (el retriever de 9Q.6
+       filtra por la página). quality_score por página = heurística documentada
+       (1.0 menos penalizaciones por findings críticos/warning sobre esa página).
+    4. AUTO-INGESTA: por cada página NUEVA del diff, para cada HubCorpusSelection del sitio con
+       auto_ingest_new=True cuya regla case (selection_repo.matches), encola IngestionWatcher
+       para crear el HubDocument(crawled_page_id=page.id) en ese chatbot. Páginas CAMBIADAS ya
+       ingeridas → re-ingesta (re-embed). Páginas GONE → marca sus documentos para retirada
+       (finding orphan_page; la retirada efectiva la decide el equipo vía 9Q.7).
+    El job NUNCA propaga excepción que tumbe el scheduler.
+  SiteQualitySummary: diff counts, counts por finding_type, páginas marcadas superseded,
+    documentos auto-ingeridos, errores.
+
+## Scheduler — ingestion/quality/quality_scheduler.py (patrón APScheduler)
+  create_quality_scheduler(session_factory) -> AsyncIOScheduler
+    - Job maestro check_all_sites cada N horas (default 24, UTC) que selecciona los HubWebSite
+      activos cuyo crawl_interval_hours haya vencido y lanza run_for_site.
+  Arranque en main.py / lifespan (sustituye al arranque del antiguo source_scheduler).
+
+## Settings (core/config.py)
+  CONTENT_QUALITY_ENABLED: bool = True
+  CONTENT_QUALITY_INTERVAL_HOURS: int = 24
+  CONTENT_QUALITY_SEMANTIC_ENABLED: bool = True   # apaga el juez LLM si se quiere coste 0
+
+## Tests (mínimo 10) — test_quality_job.py
+- run_for_site encadena crawl + ambos detectores y agrega summary.
+- Fallo del detector semántico NO impide consolidación determinista (summary.errors).
+- Consolidación fija superseded=True + superseded_by_page_id en la página antigua.
+- Auto-ingesta: página nueva que casa una selección auto → watcher invocado con crawled_page_id.
+- Página nueva sin selección que case → NO se ingiere (queda candidata para 9Q.7).
+- quality_score baja con findings críticos; run_semantic=False salta el LLM.
+- Scheduler filtra sitios por crawl_interval_hours vencido (mock de tiempo).
+- Idempotencia: segunda ejecución no duplica findings ni re-ingiere sin cambios.
+```
+
+**Verificación**: `uv run pytest tests/modules/agents_hub/` verde; un fallo simulado del detector semántico deja la suite verde y la consolidación + auto-ingesta intactas.
+
+---
+
+### Prompt 9Q.6 (RED/GREEN) — RAG consciente de calidad: el retriever excluye páginas `superseded`
+
+**Modelo sugerido**: **Sonnet** — modificación acotada del retriever con filtro por flag de página; tests de regresión claros.
+
+**Objetivo**: cerrar el primer canal de salida (higiene RAG): el retriever deja de servir chunks cuyos documentos provengan de una **página** marcada `superseded`, con opción explícita de incluirlos para auditoría. Como el flag vive en la página, el filtrado afecta a **todos** los chatbots que ingirieron esa página.
+
+**Contexto**: `ingestion/retriever.py` (`HybridRetriever.vector_search`/`keyword_search`/`hybrid_search`) y `retrieval/vector_strategy.py`. El flag de supersesión está en `HubCrawledPage` (9Q.0); `HubDocument.crawled_page_id` enlaza chunk→documento→página. El filtro se aplica por defecto sin romper los contratos existentes.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT 9Q.6 (RED/GREEN) — Retrieval que excluye páginas superseded
+
+Deploy: edge.
+
+## Cambios en HybridRetriever (retriever.py)
+- vector_search / keyword_search / hybrid_search aceptan include_superseded: bool = False.
+- Por defecto (False), las queries excluyen chunks cuyo document_id apunte a un HubDocument
+  cuyo crawled_page_id apunte a una HubCrawledPage con superseded=True.
+  Implementar con JOIN/subquery hub_document_chunks → hub_documents → hub_crawled_pages.
+- include_superseded=True restaura el comportamiento anterior (para el visor de auditoría).
+- Chunks cuyo HubDocument tenga crawled_page_id=None (PDFs subidos, legacy) NO se excluyen
+  (no hay página de origen, no hay info de supersesión).
+
+## VectorRetrievalStrategy
+- Propaga el filtro por defecto (las respuestas del chatbot nunca usan páginas superseded).
+
+## Tests (mínimo 8) — test_retrieval_quality_filter.py
+- Página superseded → los chunks de sus documentos NO aparecen en vector/keyword/hybrid_search.
+- include_superseded=True → reaparecen.
+- Página no superseded → sin cambios (regresión de los tests de retriever existentes).
+- HubDocument con crawled_page_id None (PDF subido) → nunca filtrado.
+- Misma página ingerida por 2 chatbots → ambos la excluyen al marcarse superseded.
+- hybrid_search mantiene el orden RRF tras excluir superseded.
+```
+
+**Verificación**: `uv run pytest tests/modules/agents_hub/` verde, incluidos los tests de retriever previos sin regresión.
+
+---
+
+### Prompt 9Q.7 (RED/GREEN) — Capa de selección: gestión de sitios + mapeo sitio→chatbots + candidatas
+
+**Modelo sugerido**: **Sonnet** — servicio de selección + endpoints con alcance cerrado (las entidades y reglas ya las fijó 9Q.0). Sustituye la superficie de "fuentes" que retiró 9Q.0.
+
+**Objetivo**: dar la superficie HTTP que materializa el split: gestionar **sitios** (CRUD + disparo de crawl), definir **selecciones** que mapean secciones del sitio a chatbots (N:M), y revisar/ejecutar la **ingesta de páginas candidatas** (nuevas o seleccionadas aún no ingeridas).
+
+**Contexto**: repos de 9Q.0 (`WebSiteRepo`, `CrawledPageRepo`, `CorpusSelectionRepo`). La ingesta de una página la realiza `IngestionWatcher` creando `HubDocument(crawled_page_id=...)`. El job de calidad es 9Q.5. Router nuevo `Deploy: edge`, en `_register_edge`.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT 9Q.7 (RED/GREEN) — Selección y gestión de sitios
+
+Deploy: edge.
+
+## Servicio — ingestion/quality/selection_service.py
+class CorpusSelectionService(session, page_repo, selection_repo, watcher):
+  async def candidates(site_id, chatbot_id) -> list[CandidatePageView]:
+    # páginas activas del sitio que (casan alguna selección del chatbot O son nuevas) y
+    # NO tienen aún HubDocument(crawled_page_id) para ese chatbot.
+  async def ingest_page(chatbot_id, page_id) -> HubDocument
+    # ingesta manual de una página concreta en un chatbot (idempotente: no duplica).
+  async def retire_page(chatbot_id, page_id) -> int
+    # retira los HubDocument(crawled_page_id) de esa página para ese chatbot (borra chunks).
+
+## Contratos — ingestion/quality/selection_contracts.py
+SiteView, SiteCreate (name, root_url, sitemap_url?, audit_semantic_scope?, crawl_interval_hours?),
+  # SiteCreate NO incluye client_id: el servidor lo deriva del usuario autenticado (current_user)
+  # al crear el HubWebSite. El cliente nunca lo envía.
+SelectionView, SelectionCreate (site_id, rule_type, rule_value?, auto_ingest_new?),
+CandidatePageView (page_id, url, title, matched_rule?, is_new: bool).
+
+## Router — routers/hub_sites_router.py (Deploy: edge)
+- POST/GET/PATCH/DELETE /api/v1/hub/sites                         → CRUD de HubWebSite (por client)
+- POST /api/v1/hub/sites/{site_id}/crawl                          → 202, dispara SiteQualityAnalysisJob.run_for_site
+- GET  /api/v1/hub/sites/{site_id}/pages?status=                  → páginas rastreadas
+- POST/GET/DELETE /api/v1/hub/chatbots/{chatbot_id}/selections    → CRUD de HubCorpusSelection
+- GET  /api/v1/hub/sites/{site_id}/candidates?chatbot_id=         → CorpusSelectionService.candidates
+- POST /api/v1/hub/chatbots/{chatbot_id}/pages/{page_id}/ingest   → 202, ingest_page (manual)
+- DELETE /api/v1/hub/chatbots/{chatbot_id}/pages/{page_id}        → retire_page
+Permisos: 403 si el usuario no es owner del chatbot/admin del client. operation_id explícito (Orval).
+Registrar en _register_edge (main.py) con docstring `Deploy: edge`.
+
+## Tests (mínimo 10) — test_selection_service.py + test_hub_sites_router.py
+- candidates devuelve páginas que casan una selección path_prefix y no están ingeridas; excluye ya ingeridas.
+- ingest_page crea HubDocument(crawled_page_id) y es idempotente (2ª llamada no duplica).
+- retire_page borra documentos+chunks de esa página para el chatbot y devuelve el count.
+- CRUD de sitio y de selección; POST crawl responde 202 y encola run_for_site (spy).
+- 403 para usuario no autorizado; edge boundary (router no importa módulos cloud).
+```
+
+**Verificación**: `uv run pytest tests/modules/agents_hub/` verde; OpenAPI regenerado; `_register_edge` incluye el router.
+
+---
+
+### Prompt 9Q.8 (RED/GREEN) — Informe de auditoría web por sitio: builder + export DOCX/PDF + endpoints
+
+**Modelo sugerido**: **Sonnet** — agregación de datos + reutilización de `ExportService`; endpoints con alcance cerrado.
+
+**Objetivo**: cerrar el segundo canal de salida (informe humano): un builder que agrega los hallazgos de un **sitio** en un informe estructurado por tipo con recomendaciones, su exportación a DOCX/PDF descargable, y los endpoints HTTP (cola de revisión, informe, disparo de análisis) **keyed por sitio**.
+
+**Contexto**: el patrón de export DOCX existe en `modules/agents_hub/services/export_service.py` (python-docx). Para PDF, reutilizar el mismo patrón o conversión documentada (sin añadir dependencias pesadas nuevas sin justificar). Router nuevo `Deploy: edge`, en `_register_edge`. Los hallazgos los provee `ContentFindingRepo.list_by_site` (9Q.1).
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT 9Q.8 (RED/GREEN) — WebQualityReport builder + export + endpoints
+
+Deploy: edge.
+
+## Contrato del informe — ingestion/quality/report_contracts.py
+WebQualityReport (Pydantic): site_id, site_name, generated_at, totals_by_type: dict[FindingType,int],
+  totals_by_severity, sections: list[FindingTypeSection].
+FindingTypeSection: finding_type, findings: list[ContentFindingView],
+  recommendation: str  # texto accionable para el equipo web (p.ej. "3 páginas obsoletas:
+  considere despublicar /proc/2022/x sustituida por /proc/2024/x").
+ContentFindingView: tipo, severidad, urls implicadas (page/related), fechas, explicación.
+
+## Builder — ingestion/quality/report_builder.py
+class WebQualityReportBuilder(findings_repo, site_repo):
+  async def build(site_id, *, status_filter=("new","confirmed")) -> WebQualityReport
+    - list_by_site → agrupa por finding_type, genera recommendation por sección
+      (plantillas i18n-izables; texto base en español, claves para traducir en UI).
+    - Caso vacío: informe con totals a 0 y sections=[].
+
+## Export — ingestion/quality/report_exporter.py
+class WebQualityReportExporter(storage):
+  async def to_docx(report) -> bytes      # reutiliza patrón de ExportService (python-docx)
+  async def to_pdf(report) -> bytes       # conversión ya disponible; si requiere LibreOffice/headless,
+                                          # degradar con skip condicional como en 9R.9.2.
+
+## Router — routers/hub_content_quality_router.py (Deploy: edge)
+- GET   /api/v1/hub/sites/{site_id}/findings?status=&type=        → lista (cola de revisión)
+- PATCH /api/v1/hub/sites/{site_id}/findings/{finding_id}         → transición de estado
+         (confirm/dismiss/resolve; 422 transición inválida; 403 si no autorizado)
+- GET   /api/v1/hub/sites/{site_id}/report                        → WebQualityReport JSON
+- GET   /api/v1/hub/sites/{site_id}/report/export?format=docx|pdf → descarga binaria
+- POST  /api/v1/hub/sites/{site_id}/analyze                       → 202, dispara
+          SiteQualityAnalysisJob.run_for_site en background.
+Registrar en _register_edge (main.py) con docstring `Deploy: edge`. operation_id explícito (Orval).
+
+## Tests (mínimo 10) — test_content_quality_report.py + test_content_quality_router.py
+- build agrupa por finding_type y genera recommendation; caso vacío → totals 0.
+- Exporter DOCX produce bytes no vacíos con secciones; PDF con skip condicional documentado.
+- GET findings filtra por status/type; PATCH aplica transición y 422 en inválida; 403 no-autorizado.
+- GET report devuelve el contrato; export?format=docx devuelve content-type correcto.
+- POST analyze responde 202 y encola el job (spy).
+- Edge boundary: el router no importa módulos cloud (test_edge_boundary actualizado).
+```
+
+**Verificación**: `uv run pytest tests/modules/agents_hub/` verde; OpenAPI regenerado; `_register_edge` incluye el router.
+
+---
+
+### Prompt 9Q.9 (RED/GREEN) — Frontend: sitios + mapeo de selección + candidatas + auditoría + pruebas manuales
+
+**Modelo sugerido**: **Sonnet** — UI React con hooks Orval generados, i18n, patrones ya establecidos en el admin hub.
+
+**Objetivo**: cerrar el bloque con la interfaz admin organizada **en torno al sitio**: gestión de sitios y disparo de crawl, mapeo de secciones del sitio a chatbots (selecciones), revisión de páginas candidatas a ingesta, cola de hallazgos del sitio, visor del informe de auditoría y descarga DOCX/PDF. Todo i18n y derivado del contrato OpenAPI.
+
+**Contexto**: frontend admin en `frontend/src/admin/`; hooks generados por Orval desde `openapi.json` (endpoints de 9Q.7 sitios/selecciones/candidatas y de 9Q.8 hallazgos/informe). i18n con i18next (es/ca/en). Este prompt **sí requiere pruebas manuales** (navegador) según CLAUDE.md → genera el `.bat`.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT 9Q.9 (RED/GREEN) — UI de calidad de contenido web (centrada en sitio)
+
+## Regenerar Orval
+Tras 9Q.7/9Q.8, regenerar hooks (useListSites / useCreateSite / useCrawlSite /
+useListSelections / useCreateSelection / useListCandidates / useIngestPage /
+useListSiteFindings / usePatchFinding / useGetWebQualityReport / useAnalyzeSite).
+Verificar tsc --noEmit limpio.
+
+## Páginas (frontend/src/admin/pages/)
+- SitesPage.tsx: lista de sitios (alta con root_url/sitemap/audit_semantic_scope),
+  botón "Rastrear ahora" → useCrawlSite (toast de encolado), estado last_crawled_at.
+- SiteMappingPanel.tsx: dado un sitio, gestiona selecciones (regla path_prefix/section/manual,
+  toggle auto_ingest_new) y muestra páginas candidatas (useListCandidates) con acción
+  "Ingerir en chatbot X" (useIngestPage). Selector de chatbot destino.
+- ContentQualityPage.tsx: selector de sitio; "Analizar ahora" → useAnalyzeSite; tabla de
+  hallazgos (badge por severidad, URLs, fecha, explicación, Confirmar/Descartar/Resolver via
+  usePatchFinding); filtros por status y finding_type.
+- WebQualityReportViewer.tsx: useGetWebQualityReport → totales por tipo/severidad + secciones
+  por finding_type con recomendación; "Descargar DOCX"/"Descargar PDF" → GET export?format=.
+- Rutas /hub/sites y /hub/content-quality en App.tsx + entradas en la navegación de HubLayout.
+
+## i18n (namespace nuevo `contentQuality`, es/en/ca)
+  Etiquetas de finding_type, severidad, estados, acciones, reglas de selección, recomendaciones,
+  títulos de tabla, botones. NINGÚN string hardcodeado.
+
+## Tests Vitest (mínimo 7) — SitesPage / SiteMappingPanel / ContentQualityPage / WebQualityReportViewer
+- SitesPage: alta de sitio invoca useCreateSite; "Rastrear ahora" invoca useCrawlSite.
+- SiteMappingPanel: crear selección invoca useCreateSelection; candidatas se listan; "Ingerir" invoca useIngestPage.
+- Tabla de hallazgos renderiza con badge de severidad correcto; Confirmar invoca usePatchFinding.
+- Filtro por finding_type re-consulta con el parámetro; "Analizar ahora" invoca useAnalyzeSite.
+- Visor muestra totales y secciones; caso vacío → mensaje "sin hallazgos".
+- Accesibilidad: expectNoA11yViolations sobre las páginas nuevas (helper de 20.1).
+
+## Pruebas manuales (CLAUDE.md — requiere navegador)
+Genera `pruebas_manuales_prompt9Q_9.bat` (encoding ANSI 1252, sin BOM, vía PowerShell
+[System.IO.File]::WriteAllText con Encoding 1252; primeros bytes @ech) con: arranque Docker,
+migración si aplica, smoke `curl` a /hub/sites/{id}/analyze, y pasos en la UI: dar de alta un
+sitio, rastrearlo, crear una selección por prefijo, ingerir una candidata en un chatbot,
+analizar el sitio, ver hallazgos (duplicados/obsoletas), confirmar uno, abrir el informe,
+descargar el DOCX. Casos límite: sitio sin hallazgos; página candidata sin selección que case.
+Acompaña la respuesta con el bloque de instrucciones para el usuario (formato CLAUDE.md).
+```
+
+**Verificación**: `npm test` (Vitest) verde; `tsc --noEmit` limpio; `.bat` con bytes correctos; bloque de instrucciones manuales en la respuesta. **Cierra el bloque 9Q.**
+
+---
 
 **Objetivo de la Fase**: Empaquetar el sistema completo para que cualquier institución pública pueda desplegarlo con un solo comando, sin depender de servicios de pago ni de conocimientos avanzados de infraestructura.
 

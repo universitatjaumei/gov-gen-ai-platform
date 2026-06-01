@@ -182,7 +182,19 @@
       "PowerShell(Get-ChildItem -Recurse C:\\\\Users\\\\fabra\\\\Documents\\\\AI_agents_hub\\\\_legacy_nicegui -File | ForEach-Object { $_.FullName })",
       "Bash(mkdir -p C:/Users/fabra/Documents/AI_agents_hub/server/app/modules/redaccion/services/charts)",
       "Bash(mkdir -p C:/Users/fabra/Documents/AI_agents_hub/server/tests/modules/redaccion/charts)",
-      "Bash(Set-Location \"C:\\\\Users\\\\fabra\\\\Documents\\\\AI_agents_hub\\\\server\")"
+      "Bash(Set-Location \"C:\\\\Users\\\\fabra\\\\Documents\\\\AI_agents_hub\\\\server\")",
+      "Bash(Select-String \"export_openapi\\\\|openapi\")",
+      "Bash(rtk npx *)",
+      "Bash(Select-Object -Last 40)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\fabra\\\\Documents\\\\AI_agents_hub\" -Recurse -Directory | Where-Object { $_.Name -eq \"server\" } | Select-Object -ExpandProperty FullName)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\fabra\\\\Documents\\\\AI_agents_hub\\\\server\\\\migrations\\\\versions\" -File | Where-Object { $_.Name -match \"workspace|redaccion\" } | Select-Object -Last 10)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\fabra\\\\Documents\\\\AI_agents_hub\\\\frontend\\\\src\\\\shared\" -Recurse -Directory | Where-Object { $_.Name -match \"hooks|i18n\" } | Select-Object -ExpandProperty FullName | Select-Object -First 10)",
+      "PowerShell(ls -Recurse \"C:\\\\Users\\\\fabra\\\\Documents\\\\AI_agents_hub\\\\server\\\\app\\\\modules\\\\redaccion\\\\\" | Where-Object { -not $_.PSIsContainer })",
+      "PowerShell(New-Item *)",
+      "Bash(Remove-Item *)",
+      "Bash(where uv *)",
+      "Bash(uv --version)",
+      "Bash(wait)"
     ]
   },
   "hooks": {

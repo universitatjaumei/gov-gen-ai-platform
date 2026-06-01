@@ -123,6 +123,42 @@ services:
       LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
       LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
 
+  script-sandbox:
+    build:
+      context: ./services/script_sandbox
+      dockerfile: Dockerfile
+    container_name: govgenai_script_sandbox
+    networks:
+      - sandbox-net
+    read_only: true
+    tmpfs:
+      - /tmp/sandbox:size=128M,mode=0700,uid=65534,gid=65534
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    user: "65534:65534"
+    ports:
+      - "127.0.0.1:5001:5000"   # SOLO en dev; en prod NO se publica
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    restart: unless-stopped
+
+# El API ejecutándose en host accede al sandbox via http://localhost:5001 (puerto mapeado arriba).
+# Para ejecutar el API también en contenedor, conectarlo a sandbox-net y usar SANDBOX_BASE_URL=http://script-sandbox:5000.
+
+networks:
+  sandbox-net:
+    driver: bridge
+    internal: false  # en dev, false para permitir build/pull; en prod usar internal: true
+
 volumes:
   postgres_data:
   minio_data:
