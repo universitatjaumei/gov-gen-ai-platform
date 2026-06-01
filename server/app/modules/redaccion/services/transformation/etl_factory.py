@@ -18,6 +18,10 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from server.app.modules.redaccion.services.anonymization.hooks import (
+    apply_post_llm,
+    apply_pre_llm,
+)
 from server.app.modules.redaccion.services.script_auditor import (
     AuditResult,
     ScriptSecurityAuditor,
@@ -98,13 +102,22 @@ class ETLFactory:
         self,
         nl_prompt: str,
         schema: dict[str, Any],
+        anonymization_context: Any = None,
     ) -> ETLPlan:
+        """Si se pasa `anonymization_context` (Fase 13), el prompt se sustituye
+        antes del LLM y el raw output se revierte antes de parsearlo, para que
+        las operaciones y/o el script resultantes operen sobre valores originales.
+        """
+        # PRE-HOOK Fase 13.
+        nl_prompt_for_llm = apply_pre_llm(nl_prompt, anonymization_context)
         last_error: str | None = None
         iterations = 0
 
         while iterations < MAX_REFINEMENT_ITERATIONS:
-            messages = self._build_messages(nl_prompt, schema, last_error)
+            messages = self._build_messages(nl_prompt_for_llm, schema, last_error)
             raw = await self._invoke(messages)
+            # POST-HOOK Fase 13 sobre el raw text antes de parsear JSON.
+            raw = apply_post_llm(raw, anonymization_context)
             try:
                 ops = self._parse_operations_payload(raw)
                 return ETLPlan(
@@ -124,13 +137,15 @@ class ETLFactory:
                 "role": "user",
                 "content": (
                     f"ESQUEMA: {json.dumps(schema, ensure_ascii=False)}\n"
-                    f"INSTRUCCIÓN: {nl_prompt}\n"
+                    f"INSTRUCCIÓN: {nl_prompt_for_llm}\n"
                     f"FALLO PREVIO: {last_error or 'plan inválido'}"
                 ),
             },
         ]
         raw_script = await self._invoke(script_messages)
         code = self._extract_python_code(raw_script)
+        # POST-HOOK Fase 13 en el código generado.
+        code = apply_post_llm(code, anonymization_context)
         audit = self._auditor.audit(code)
         return ETLPlan(
             mode="script",

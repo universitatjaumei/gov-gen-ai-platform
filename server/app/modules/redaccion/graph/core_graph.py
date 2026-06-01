@@ -23,6 +23,7 @@ from server.app.modules.redaccion.graph.nodes.data_transformation import DataTra
 from server.app.modules.redaccion.graph.nodes.deterministic_extraction import DeterministicExtractionNode
 from server.app.modules.redaccion.graph.nodes.file_normalization import FileNormalizationNode
 from server.app.modules.redaccion.graph.nodes.final_assembler import FinalAssemblerNode
+from server.app.modules.redaccion.graph.nodes.init_anonymization import InitAnonymizationNode
 from server.app.modules.redaccion.graph.nodes.load_template import LoadTemplateNode
 from server.app.modules.redaccion.graph.nodes.missing_data_question import MissingDataQuestionNode
 from server.app.modules.redaccion.graph.nodes.review_gate import UserReviewGateNode, review_gate_router
@@ -39,6 +40,8 @@ def build_core_graph(
     tracing_service: Any = None,
     etl_llm: Any = None,
     etl_model_name: str = "",
+    pii_detector: Any = None,
+    faker_generator: Any = None,
 ):
     """Construye y compila el DraftingCoreGraph.
 
@@ -62,6 +65,7 @@ def build_core_graph(
     transform_node = DataTransformationNode(llm_service=etl_llm, model_name=etl_model_name)
     quality_node = DataQualityCheckNode()
     missing_node = MissingDataQuestionNode()
+    init_anon_node = _build_init_anonymization_node(pii_detector, faker_generator)
     ai_node = AIAssistDraftNode(llm_service)
     citation_node = CitationAndTraceabilityNode()
     review_node = UserReviewGateNode()
@@ -80,6 +84,7 @@ def build_core_graph(
     graph.add_node("data_transformation",     _t(transform_node,  "data_transformation"))
     graph.add_node("data_quality_check",      _t(quality_node,   "data_quality_check"))
     graph.add_node("missing_data_question",   _t(missing_node,   "missing_data_question"))
+    graph.add_node("init_anonymization",      _t(init_anon_node, "init_anonymization"))
     graph.add_node("ai_assist_draft",         _t(ai_node,        "ai_assist_draft"))
     graph.add_node("citation_traceability",   _t(citation_node,  "citation_traceability"))
     graph.add_node("review_gate",             _t(review_node,    "review_gate"))
@@ -96,8 +101,9 @@ def build_core_graph(
     graph.add_conditional_edges(
         "data_quality_check",
         data_quality_router,
-        {"ask_user": "missing_data_question", "ok": "ai_assist_draft"},
+        {"ask_user": "missing_data_question", "ok": "init_anonymization"},
     )
+    graph.add_edge("init_anonymization", "ai_assist_draft")
     graph.add_edge("missing_data_question", "audit_log")
     graph.add_edge("ai_assist_draft", "citation_traceability")
     graph.add_edge("citation_traceability", "review_gate")
@@ -111,3 +117,19 @@ def build_core_graph(
     graph.set_finish_point("audit_log")
 
     return graph.compile()
+
+
+def _build_init_anonymization_node(
+    pii_detector: Any, faker_generator: Any
+) -> Any:
+    """Si no se inyectan dependencias, devuelve un nodo no-op (modo OFF efectivo).
+
+    Permite que tests existentes que construyen el grafo sin servicios NER
+    sigan funcionando: el nodo no detecta nada y deja `anonymization_context=None`,
+    los hooks pre/post-LLM no operan, comportamiento idéntico al previo a 13.1.
+    """
+    if pii_detector is None or faker_generator is None:
+        async def _noop(state: WorkspaceState) -> dict:
+            return {}
+        return _noop
+    return InitAnonymizationNode(pii_detector, faker_generator)

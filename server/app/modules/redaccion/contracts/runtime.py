@@ -7,10 +7,15 @@ levantan InvalidBlockTransitionError.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from server.app.modules.redaccion.services.anonymization.run_context import (
+        RunAnonymizationContext,
+    )
 
 from server.app.modules.redaccion.contracts.template import (
     ReportProfileId,
@@ -164,3 +169,8 @@ class WorkspaceState(BaseModel):
     final_document_hash: str | None = None
     regenerate_blocks: set[str] = Field(default_factory=set)
     skip_blocks: set[str] = Field(default_factory=set)
+    # Fase 13 — NER reversible. `anonymization_mode` se carga del workspace en
+    # load_template; `anonymization_context` lo establece InitAnonymizationNode.
+    # Tipado vía TYPE_CHECKING para evitar ciclo contracts↔services.
+    anonymization_mode: str = "replace"
+    anonymization_context: Any = None

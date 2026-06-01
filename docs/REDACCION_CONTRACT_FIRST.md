@@ -491,3 +491,163 @@ DETERMINISTIC_DATA (Excel) → DATA_TRANSFORM (GroupBy región) → CHART (barra
 ```
 
 El `DataTransformBlock` escribe `{"rows": [...], "operations_applied": [...]}` en `state.block_outputs[block_id]`, que `ChartHandler._resolve_data()` consume directamente.
+
+---
+
+## Exportación DOCX (9R.9.2 / 1C.4)
+
+`ExportService` genera el documento final en formato DOCX a partir del contenido ensamblado
+y el `DraftingRunManifest`. Es la única implementación de exportación del MVP.
+
+### Prerrequisito
+
+`manifest.final_document_hash` **debe ser no nulo**. Si es `None`, el documento no está
+ensamblado y `ExportService.export_to_docx()` lanza `ExportNotReadyError`. No hay forma de
+exportar un workspace que no ha completado `FinalAssemblerNode`.
+
+### Estructura del DOCX generado
+
+```
+[Título: "Informe Generado"]
+  └─ Contenido del documento (párrafos del assembled text)
+
+[Página nueva]
+[Anexo de Auditoría]
+  ├─ Hash del documento: sha256:…
+  ├─ Perfil | Estado al cierre | Fecha de generación
+  ├─ Tabla: Documentos subidos (slot_id, filename, tamaño)
+  ├─ Tabla: Bloques IA (block_id, kind, modelo, versión prompt)
+  ├─ Tabla: Aprobaciones (aprobado_por, fecha, nota)
+  └─ Tabla: Advertencias de extracción (bloque, tipo, mensaje)
+```
+
+### ODT — backlog post-MVP
+
+ODT **no está implementado** en esta fase. Las razones:
+
+1. Las tablas de estilo en LibreOffice Writer y Microsoft Word no comparten el mismo mapa de
+   estilos integrados (p.ej. `"Table Grid"` no existe en ODT nativo).
+2. Las diferencias de sangría y espaciado entre ambos procesadores generan documentos
+   visualmente inconsistentes sin rework de estilos.
+3. El riesgo de incompatibilidad supera el beneficio en MVP donde Word/Google Docs son el
+   destino dominante.
+
+La abstracción `ExportService.export_to_docx()` no genera un protocolo `Exporter` aún, pero
+el nombre del método es suficientemente específico para que ODT entre como
+`export_to_odt()` en post-MVP sin romper los consumidores actuales.
+
+### Módulo
+
+```
+server/app/modules/redaccion/services/export_service.py
+  ExportNotReadyError   # final_document_hash is None
+  ExportService
+    .export_to_docx(manifest, document_content) → bytes
+```
+
+### Dependencia bidireccional 1C.4 ↔ 9R.9
+
+- **9R.9** define `DraftingRunManifest` (contrato de datos) y lo expone via endpoint REST.
+- **1C.4** (este prompt) produce el DOCX consumiendo ese manifest.
+- El `ExportService` no accede a la base de datos directamente; recibe el manifest ya
+  deserializado, lo que facilita el testing sin mock de sesión.
+
+---
+
+## NER reversible (Fase 13)
+
+> Objetivo: **ningún PII real sale del edge hacia el LLM** (RGPD), pero el output final
+> preserva los originales para el usuario. La reversibilidad vive en memoria durante la
+> ejecución del workspace; nunca se persiste en BD ni se loguea.
+
+### Contrato — `RunAnonymizationContext`
+
+Ubicación: `server/app/modules/redaccion/services/anonymization/run_context.py`.
+
+```python
+class AnonymizationMode(str, Enum):
+    OFF = "off"                              # PII real al LLM (solo dev/test)
+    DETECT_ONLY = "detect_only"              # detecta y audita, no sustituye
+    REPLACE = "replace"                      # sustituye Faker + revierte (default)
+    REPLACE_WITH_DISPOSITION_7 = "replace_with_disposition_7"  # LOPDGDD para DNI/NIE/Passport
+
+class RunAnonymizationContext(BaseModel):
+    workspace_id: UUID
+    mode: AnonymizationMode
+    spans: list[PiiSpan]
+    forward_map: dict[str, str]   # original → synthetic (NUNCA persistir)
+    reverse_map: dict[str, str]   # synthetic → original (NUNCA persistir)
+
+    def substitute(self, text: str) -> str: ...
+    def reverse(self, text: str) -> str: ...
+```
+
+### Reglas duras
+
+- `substitute()` ordena las claves por **longitud descendente** antes de reemplazar
+  para evitar que "Juan García" se rompa por sustituir "Juan" primero.
+- `reverse()` SÓLO sustituye cadenas **exactas** del `reverse_map`. Si el LLM "alucina"
+  un nombre tipo Faker que no estaba en el mapping, queda tal cual (cero falsos positivos).
+- Modo **Disposición 7 (LOPDGDD)**: DNI/NIE/Pasaporte se enmascaran con
+  `****1234X` (oculta primeros caracteres, preserva los últimos 4 chars y la letra de
+  control). La transformación **NO es reversible** para esos tipos — el output final
+  queda enmascarado. Para el resto de tipos PII, el modo se comporta como `REPLACE`.
+- Los mapas `forward_map` / `reverse_map` viven sólo en memoria. `AnonymizationSummary`
+  (persistido en el manifest) expone únicamente `mode + counts_by_type + total_spans +
+  detected_at`.
+
+### Topología del grafo
+
+```
+… → data_quality_check ──(ok)──► init_anonymization ──► ai_assist_draft ──► citation_traceability → …
+                       └(ask_user)──► missing_data_question
+```
+
+- `InitAnonymizationNode` corre después de la extracción determinista y antes de
+  cualquier nodo que invoque el LLM. Detecta PII en `artifacts_normalized` +
+  `blocks[*].content`, genera sintéticos con `FakerGenerator` (semilla determinista
+  por workspace + idx) y construye el `RunAnonymizationContext` en
+  `state.anonymization_context`.
+- `AIAssistDraftNode` aplica `apply_pre_llm(context, ctx)` antes de llamar al LLM y
+  `apply_post_llm(text, ctx)` al output. Ambos helpers son no-op en modos OFF y
+  DETECT_ONLY.
+- `ChartFactory.generate_script` y `ETLFactory.generate_operations_from_nl` aceptan
+  un parámetro opcional `anonymization_context`: cuando se invocan desde el grafo
+  con un contexto activo, sustituyen el prompt NL antes del LLM y revierten el
+  código/JSON generado antes de devolverlo al llamador.
+
+### Citas y trazabilidad
+
+`CitationAndTraceabilityNode` construye `Citation.excerpt` a partir de
+`source_block.content` (datos deterministas), nunca del output del LLM. Por tanto las
+citas **siempre** contienen originales mientras el bloque fuente sea determinista —
+el sintético que circula por el LLM no toca el path de citas. `source_document` y
+`page` son metadata estable (no PII).
+
+### Persistencia segura
+
+```python
+class AnonymizationSummary(BaseModel):
+    mode: AnonymizationMode
+    counts_by_type: dict[str, int]   # {PERSON: 5, IBAN: 2, …}
+    total_spans: int
+    detected_at: datetime
+```
+
+`DraftingRunManifest.anonymization_summary` se rellena al cerrar el grafo. El test
+`test_anonymization_context_never_persists_forward_or_reverse_map_to_db` bloquea
+estructuralmente cualquier intento futuro de añadir originales / sintéticos / mapas
+al summary.
+
+### Configuración por workspace
+
+`HubWorkspace.anonymization_mode` (columna `String(40)`, default `replace`). La UI de
+configuración (13.2) permite al owner cambiarlo antes de ejecutar el grafo; durante
+la ejecución el modo queda fijado en `state.anonymization_mode`.
+
+### Out-of-scope en Fase 1
+
+- La integración con el módulo de expedientes (re-uso del context entre runs) llega
+  en Fase 3, no aquí. En Fase 1 cada ejecución de workspace genera un context nuevo.
+- La UI de auditoría (panel admin con counts_by_type + selector de modo) es la
+  13.2 — el contrato del summary y los endpoints quedan listos para consumirla.

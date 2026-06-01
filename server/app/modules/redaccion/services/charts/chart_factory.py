@@ -11,6 +11,10 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from server.app.modules.redaccion.services.anonymization.hooks import (
+    apply_post_llm,
+    apply_pre_llm,
+)
 from server.app.modules.redaccion.services.script_auditor import AuditResult, ScriptSecurityAuditor
 
 _PROMPT_VERSION = "chart_proposal_v1"
@@ -42,13 +46,24 @@ class ChartFactory:
         self._model_name = model_name
         self._auditor = ScriptSecurityAuditor()
 
-    async def generate_script(self, nl_prompt: str, schema: dict[str, Any]) -> ChartScript:
-        """Genera y audita un script matplotlib para el prompt y esquema dados."""
+    async def generate_script(
+        self,
+        nl_prompt: str,
+        schema: dict[str, Any],
+        anonymization_context: Any = None,
+    ) -> ChartScript:
+        """Genera y audita un script matplotlib para el prompt y esquema dados.
+
+        Si se pasa `anonymization_context` (Fase 13), el prompt NL se sustituye
+        antes del LLM y el código generado se revierte después.
+        """
+        # PRE-HOOK Fase 13.
+        nl_prompt_for_llm = apply_pre_llm(nl_prompt, anonymization_context)
         user_msg = (
             f"ESQUEMA DE DATOS:\n"
             f"  Columnas: {schema.get('columns', [])}\n"
             f"  Tipos:    {schema.get('dtypes', {})}\n\n"
-            f"PETICIÓN: {nl_prompt}"
+            f"PETICIÓN: {nl_prompt_for_llm}"
         )
         messages = [
             {"role": "system", "content": _SYSTEM_PROMPT},
@@ -57,6 +72,8 @@ class ChartFactory:
         response = await self._llm.ainvoke(messages)
         raw = response.content if hasattr(response, "content") else str(response)
         code = self._extract_code(raw)
+        # POST-HOOK Fase 13.
+        code = apply_post_llm(code, anonymization_context)
         audit = self._auditor.audit(code)
         return ChartScript(
             code=code,
