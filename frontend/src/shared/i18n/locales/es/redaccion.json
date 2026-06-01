@@ -1,0 +1,106 @@
+{
+  "autosave": {
+    "status": {
+      "saved": "Guardado",
+      "saving": "Guardando…",
+      "offline": "Sin conexión",
+      "conflict": "Conflicto sin resolver"
+    },
+    "conflict_title": "Conflicto al guardar",
+    "conflict_body": "Otra sesión ha modificado este workspace. Recarga para ver los cambios; los tuyos no guardados se perderán.",
+    "reload_workspace": "Recargar workspace"
+  },
+  "copilot": {
+    "placeholder": "Escribe tu pregunta o instrucción…",
+    "send": "Enviar",
+    "sending": "Enviando…",
+    "apply": "Aplicar",
+    "mode": {
+      "ask": "Pregunta",
+      "chart": "Gráfico",
+      "etl": "Transformar",
+      "script": "Script"
+    },
+    "pills": {
+      "informe": {
+        "create_block": "¿Cómo creo un bloque IA?",
+        "reject_block": "¿Qué pasa si rechazo un bloque?",
+        "group_sum": "Agrupa por mes y suma el importe",
+        "bar_chart": "Gráfico de barras del total por región"
+      },
+      "flujo": {
+        "add_trigger": "¿Cómo añado un trigger?",
+        "data_pills": "¿Qué son las Data Pills?",
+        "connect_slack": "Conecta este flujo con Slack",
+        "suggest_transform": "Sugiere una transformación de datos"
+      }
+    }
+  },
+  "status": {
+    "missing_data": "Datos pendientes",
+    "data_loaded": "Datos cargados",
+    "needs_review": "Pendiente de revisión",
+    "approved": "Aprobado",
+    "error_recoverable": "Error (recuperable)",
+    "rejected": "Rechazado — reintentar"
+  },
+  "workspace_status": {
+    "preparing": "Preparando",
+    "extracting": "Extrayendo datos",
+    "drafting": "En redacción",
+    "in_review": "En revisión",
+    "ready_to_export": "Listo para exportar",
+    "exported": "Exportado"
+  },
+  "failure": {
+    "ai_failed": "La IA no pudo generar este bloque. Puedes reintentarlo.",
+    "extraction_failed": "No se pudieron extraer datos del documento. Revisa el archivo y reintenta.",
+    "script_failed": "El cálculo automático falló. Contacta con el administrador.",
+    "validation_failed": "Los datos no cumplen el formato esperado.",
+    "unknown": "Se ha producido un error inesperado."
+  },
+  "debug": {
+    "title": "Detalles técnicos",
+    "status": "Estado interno",
+    "failure_kind": "Tipo de fallo",
+    "last_error": "Último error",
+    "retry_attempts": "Reintentos",
+    "updated_at": "Actualizado"
+  },
+  "anonymization": {
+    "tab": "Anonimización",
+    "mode_label": "Modo de anonimización",
+    "modes": {
+      "off": "Desactivado",
+      "detect_only": "Solo detectar",
+      "replace": "Reemplazar (Faker)",
+      "replace_with_disposition_7": "Reemplazar + LOPDGDD"
+    },
+    "mode_descriptions": {
+      "off": "PII real llega al LLM. Solo para desarrollo.",
+      "detect_only": "Detecta PII pero no sustituye en el prompt.",
+      "replace": "Sustituye PII con datos sintéticos antes del LLM.",
+      "replace_with_disposition_7": "Reemplaza con Faker y enmascara DNI/NIE/Pasaporte (LOPDGDD Disp. 7ª)."
+    },
+    "badge_lopdgdd": "LOPDGDD",
+    "table_title": "Detección actual de PII",
+    "col_type": "Tipo",
+    "col_count": "Cantidad",
+    "total": "Total",
+    "no_run": "No se ha ejecutado ningún análisis todavía.",
+    "btn_reanalyze": "Re-analizar ahora",
+    "btn_change_mode": "Cambiar modo",
+    "reanalyzing": "Analizando…",
+    "mode_locked": "El modo no se puede cambiar durante la ejecución.",
+    "loading": "Cargando…"
+  },
+  "announcer": {
+    "extracted": "Bloque {{label}}: datos extraídos.",
+    "ai_generated": "Bloque {{label}}: borrador IA listo, requiere revisión.",
+    "approved": "Bloque {{label}}: aprobado.",
+    "rejected": "Bloque {{label}}: rechazado, se regenerará."
+  },
+  "editor": {
+    "block_region": "Bloque {{type}}: {{id}}"
+  }
+}

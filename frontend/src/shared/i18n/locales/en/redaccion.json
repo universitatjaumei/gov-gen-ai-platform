@@ -1,0 +1,106 @@
+{
+  "autosave": {
+    "status": {
+      "saved": "Saved",
+      "saving": "Saving…",
+      "offline": "Offline",
+      "conflict": "Unresolved conflict"
+    },
+    "conflict_title": "Save conflict",
+    "conflict_body": "Another session has modified this workspace. Reload to see the changes; any unsaved local edits will be lost.",
+    "reload_workspace": "Reload workspace"
+  },
+  "copilot": {
+    "placeholder": "Type a question or instruction…",
+    "send": "Send",
+    "sending": "Sending…",
+    "apply": "Apply",
+    "mode": {
+      "ask": "Ask",
+      "chart": "Chart",
+      "etl": "Transform",
+      "script": "Script"
+    },
+    "pills": {
+      "informe": {
+        "create_block": "How do I create an AI block?",
+        "reject_block": "What happens if I reject a block?",
+        "group_sum": "Group by month and sum the amount",
+        "bar_chart": "Bar chart of total by region"
+      },
+      "flujo": {
+        "add_trigger": "How do I add a trigger?",
+        "data_pills": "What are Data Pills?",
+        "connect_slack": "Connect this flow to Slack",
+        "suggest_transform": "Suggest a data transformation"
+      }
+    }
+  },
+  "status": {
+    "missing_data": "Data pending",
+    "data_loaded": "Data loaded",
+    "needs_review": "Pending review",
+    "approved": "Approved",
+    "error_recoverable": "Error (recoverable)",
+    "rejected": "Rejected — retry"
+  },
+  "workspace_status": {
+    "preparing": "Preparing",
+    "extracting": "Extracting data",
+    "drafting": "Drafting",
+    "in_review": "Under review",
+    "ready_to_export": "Ready to export",
+    "exported": "Exported"
+  },
+  "failure": {
+    "ai_failed": "AI could not generate this block. You can retry.",
+    "extraction_failed": "Data could not be extracted from the document. Check the file and retry.",
+    "script_failed": "Automatic calculation failed. Contact an administrator.",
+    "validation_failed": "Data does not meet the expected format.",
+    "unknown": "An unexpected error occurred."
+  },
+  "debug": {
+    "title": "Technical details",
+    "status": "Internal status",
+    "failure_kind": "Failure kind",
+    "last_error": "Last error",
+    "retry_attempts": "Retry attempts",
+    "updated_at": "Updated at"
+  },
+  "anonymization": {
+    "tab": "Anonymization",
+    "mode_label": "Anonymization mode",
+    "modes": {
+      "off": "Off",
+      "detect_only": "Detect only",
+      "replace": "Replace (Faker)",
+      "replace_with_disposition_7": "Replace + LOPDGDD"
+    },
+    "mode_descriptions": {
+      "off": "Real PII reaches the LLM. Development only.",
+      "detect_only": "Detects PII but does not substitute in the prompt.",
+      "replace": "Substitutes PII with synthetic data before the LLM.",
+      "replace_with_disposition_7": "Replaces with Faker and masks DNI/NIE/Passport (LOPDGDD Disp. 7th)."
+    },
+    "badge_lopdgdd": "LOPDGDD",
+    "table_title": "Current PII detection",
+    "col_type": "Type",
+    "col_count": "Count",
+    "total": "Total",
+    "no_run": "No analysis has been run yet.",
+    "btn_reanalyze": "Re-analyze now",
+    "btn_change_mode": "Change mode",
+    "reanalyzing": "Analyzing…",
+    "mode_locked": "Mode cannot be changed while execution is in progress.",
+    "loading": "Loading…"
+  },
+  "announcer": {
+    "extracted": "Block {{label}}: data extracted.",
+    "ai_generated": "Block {{label}}: AI draft ready, requires review.",
+    "approved": "Block {{label}}: approved.",
+    "rejected": "Block {{label}}: rejected, will regenerate."
+  },
+  "editor": {
+    "block_region": "Block {{type}}: {{id}}"
+  }
+}

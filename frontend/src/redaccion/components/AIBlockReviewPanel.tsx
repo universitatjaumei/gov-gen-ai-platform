@@ -4,6 +4,8 @@ import {
   usePatchWorkspaceBlock,
 } from '@/shared/api/generated/hub-redaccion/hub-redaccion'
 import type { WorkspaceOut } from '@/shared/api/generated/model'
+import { StatusBadge } from '@/shared/components/StatusBadge'
+import { mapBlockStatusToUserLabel } from '../utils/statusLabels'
 
 interface Props {
   workspaceId: string
@@ -11,6 +13,7 @@ interface Props {
 
 export function AIBlockReviewPanel({ workspaceId }: Props) {
   const { t } = useTranslation('common')
+  const { t: tR } = useTranslation('redaccion')
   const { data: workspaceRaw, isLoading } = useGetWorkspaceById(workspaceId)
   const workspace = workspaceRaw as unknown as WorkspaceOut | undefined
   const { mutate: patchBlock, isPending } = usePatchWorkspaceBlock()
@@ -53,7 +56,13 @@ export function AIBlockReviewPanel({ workspaceId }: Props) {
         >
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">{block.block_id}</span>
-            <span className="text-xs text-muted-foreground">{block.kind}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">{block.kind}</span>
+              <StatusBadge
+                label={tR(mapBlockStatusToUserLabel(block.status).labelKey)}
+                tone={mapBlockStatusToUserLabel(block.status).tone}
+              />
+            </div>
           </div>
 
           {typeof block.content?.text === 'string' && (
