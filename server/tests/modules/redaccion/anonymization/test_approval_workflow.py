@@ -106,6 +106,7 @@ def approval_app(tmp_path):
 
     from server.app.api.deps import get_current_user, get_session
     from server.app.core.auth.models import UserInfo
+    from server.app.core.sandbox_client import LocalSandboxClient, get_sandbox_client
     from server.app.core.storage import FsspecStorageService, get_storage_service
     from server.app.modules.redaccion.services.test_data_anonymizer import (
         TestDataAnonymizerService,
@@ -152,6 +153,7 @@ def approval_app(tmp_path):
     app.dependency_overrides[get_test_data_anonymizer] = lambda: TestDataAnonymizerService(
         storage=storage
     )
+    app.dependency_overrides[get_sandbox_client] = lambda: LocalSandboxClient()
     app.include_router(router, prefix="/api/v1")
 
     client = TestClient(app)

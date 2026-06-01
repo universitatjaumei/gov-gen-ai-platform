@@ -7,10 +7,11 @@ from __future__ import annotations
 from typing import Any, Literal
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from server.app.core.sandbox_client import SandboxClient, get_sandbox_client
 from server.app.modules.redaccion.services.charts.chart_configuration import ChartConfiguration
 from server.app.modules.redaccion.services.charts.deterministic_chart_service import DeterministicChartService
 from server.app.modules.redaccion.services.charts.chart_renderer import render_chart_from_script, ChartRenderError
@@ -62,6 +63,7 @@ async def preview_script(
     code: str,
     rows: list[dict[str, Any]],
     output_format: Literal["png", "svg"] = "png",
+    sandbox: SandboxClient = Depends(get_sandbox_client),
 ) -> Response:
     """Audita y ejecuta un script matplotlib; devuelve bytes de imagen.
 
@@ -72,7 +74,9 @@ async def preview_script(
 
     df = pd.DataFrame(rows)
     try:
-        image_bytes = render_chart_from_script(code, df, output_format=output_format)
+        image_bytes = await render_chart_from_script(
+            code, df, output_format=output_format, sandbox_client=sandbox
+        )
     except ChartRenderError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 

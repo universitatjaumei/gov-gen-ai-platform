@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, get_session
 from server.app.core.auth.models import UserInfo
+from server.app.core.sandbox_client import SandboxClient, get_sandbox_client
 from server.app.core.storage import StorageService, get_storage_service
 from server.app.modules.redaccion.database.models import (
     HubReportTemplate,
@@ -362,13 +363,6 @@ async def anonymize_test_data(
 
 
 # ---------------------------------------------------------------------------
-# /test  (sandbox)
-# ---------------------------------------------------------------------------
-
-_SANDBOX = AdminScriptExtractionPipeline()
-
-
-# ---------------------------------------------------------------------------
 # Helpers 9R.5.6
 # ---------------------------------------------------------------------------
 
@@ -450,6 +444,7 @@ async def test_proposal(
     body: TestProposalRequest,
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
+    sandbox: SandboxClient = Depends(get_sandbox_client),
 ) -> TestProposalResponse:
     """Ejecuta el script en el mismo sandbox que AdminScriptExtractionPipeline."""
     proposal = await _load_proposal(proposal_id, session)
@@ -472,7 +467,8 @@ async def test_proposal(
         file_ref=body.test_data_ref,
         options={"code": proposal.code, "approved": True},
     )
-    extraction = _SANDBOX.extract(inp)
+    pipeline = AdminScriptExtractionPipeline(client=sandbox)
+    extraction = await pipeline.extract_async(inp)
     result_payload = extraction.model_dump(mode="json")
     result_hash = _hash_dict(result_payload)
 
@@ -672,6 +668,7 @@ async def admin_retest(
     proposal_id: uuid.UUID,
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
+    sandbox: SandboxClient = Depends(get_sandbox_client),
 ) -> AdminRetestResponse:
     """El admin re-ejecuta el script contra el mismo test_data_ref y verifica el hash."""
     _require_admin_or_partner(user)
@@ -687,7 +684,8 @@ async def admin_retest(
         file_ref=file_ref,
         options={"code": proposal.code, "approved": True},
     )
-    extraction = _SANDBOX.extract(inp)
+    pipeline = AdminScriptExtractionPipeline(client=sandbox)
+    extraction = await pipeline.extract_async(inp)
     result_payload = extraction.model_dump(mode="json")
     result_hash = _hash_dict(result_payload)
 

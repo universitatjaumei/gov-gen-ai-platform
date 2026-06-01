@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 import pandas as pd
 
+from server.app.core.sandbox_client import LocalSandboxClient, SandboxClient
 from server.app.modules.redaccion.services.transformation.deterministic_etl import (
     DeterministicETLService,
     JoinableResolver,
@@ -33,9 +34,15 @@ class ETLServiceResult:
 class ETLService:
     """Aplica transformaciones (deterministic o ai) sobre un DataFrame."""
 
-    def __init__(self, llm: Any = None, model_name: str = "") -> None:
+    def __init__(
+        self,
+        llm: Any = None,
+        model_name: str = "",
+        sandbox_client: SandboxClient | None = None,
+    ) -> None:
         self._llm = llm
         self._model_name = model_name
+        self._sandbox_client: SandboxClient = sandbox_client or LocalSandboxClient()
 
     async def run(
         self,
@@ -83,7 +90,7 @@ class ETLService:
                 "Script de fallback rechazado por la auditoría: "
                 f"{plan.script_audit.findings if plan.script_audit else 'sin auditoría'}"
             )
-        transformed = self._execute_fallback_script(plan.script_code or "", df)
+        transformed = await self._execute_fallback_script(plan.script_code or "", df)
         return ETLServiceResult(
             dataframe=transformed,
             operations_applied=[],
@@ -102,19 +109,12 @@ class ETLService:
             "dtypes": {c: str(t) for c, t in df.dtypes.items()},
         }
 
-    @staticmethod
-    def _execute_fallback_script(code: str, df: pd.DataFrame) -> pd.DataFrame:
-        """Ejecuta el script en un namespace local controlado.
-
-        El AST ya ha sido auditado por `ScriptSecurityAuditor` antes de
-        llegar aquí (sin acceso a builtins peligrosos ni a módulos fuera
-        de la lista blanca). Para el MVP basta `exec` directo;
-        si emergen requisitos de aislamiento más fuertes, migrar a un
-        subprocess sandbox análogo al ChartRenderer.
-        """
-        namespace: dict[str, Any] = {"pd": pd, "df": df.copy()}
-        exec(compile(code, "<etl-fallback>", "exec"), namespace)
-        transform = namespace.get("transform")
-        if not callable(transform):
-            raise ValueError("Fallback script must define a `transform(df)` function")
-        return transform(df.copy())
+    async def _execute_fallback_script(self, code: str, df: pd.DataFrame) -> pd.DataFrame:
+        """Ejecuta el script ETL vía SandboxClient (aislamiento real desde SBX.3)."""
+        import io
+        csv_in = df.to_csv(index=False)
+        csv_out = await self._sandbox_client.execute_etl_script(
+            code=code,
+            dataframe_csv=csv_in,
+        )
+        return pd.read_csv(io.StringIO(csv_out))

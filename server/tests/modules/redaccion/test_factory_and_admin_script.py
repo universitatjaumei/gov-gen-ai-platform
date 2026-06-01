@@ -88,7 +88,7 @@ class TestExtractionPipelineFactory:
 
 class TestAdminScriptExtractionPipeline:
 
-    def test_admin_script_pipeline_only_runs_approved_code(self) -> None:
+    async def test_admin_script_pipeline_only_runs_approved_code(self) -> None:
         from server.app.modules.redaccion.pipelines.admin_script_pipeline import (
             AdminScriptExtractionPipeline,
         )
@@ -102,7 +102,7 @@ class TestAdminScriptExtractionPipeline:
             raw_text="",
             options={"approved": False, "code": "result = {'metrics': []}"},
         )
-        result = pipeline.extract(inp_not_approved)
+        result = await pipeline.extract_async(inp_not_approved)
         warning_codes = [w.code for w in result.warnings]
         assert "SCRIPT_NOT_APPROVED" in warning_codes
         assert result.warnings[0].severity == "error"
@@ -114,13 +114,13 @@ class TestAdminScriptExtractionPipeline:
             raw_text="",
             options={"approved": True, "code": safe_code},
         )
-        result_ok = pipeline.extract(inp_approved)
+        result_ok = await pipeline.extract_async(inp_approved)
         assert not result_ok.warnings
         assert len(result_ok.metrics) == 1
         assert result_ok.metrics[0].name == "total"
         assert float(result_ok.metrics[0].value) == pytest.approx(42.0)
 
-    def test_admin_script_pipeline_blocks_unsafe_imports(self) -> None:
+    async def test_admin_script_pipeline_blocks_unsafe_imports(self) -> None:
         from server.app.modules.redaccion.pipelines.admin_script_pipeline import (
             AdminScriptExtractionPipeline,
         )
@@ -135,7 +135,7 @@ class TestAdminScriptExtractionPipeline:
             options={"approved": True, "code": unsafe_code},
         )
 
-        result = pipeline.extract(inp)
+        result = await pipeline.extract_async(inp)
 
         warning_codes = [w.code for w in result.warnings]
         assert "SCRIPT_SECURITY_VIOLATION" in warning_codes

@@ -145,9 +145,10 @@ class ChartHandler:
     uses_ai: bool = False
     requires_approval: bool = False
 
-    def __init__(self, llm: Any = None, model_name: str = "") -> None:
+    def __init__(self, llm: Any = None, model_name: str = "", sandbox_client: Any = None) -> None:
         self._llm = llm
         self._model_name = model_name
+        self._sandbox_client = sandbox_client  # None → render_chart_from_script uses LocalSandboxClient
 
     def validate(self, block: ChartBlock) -> None:
         if not block.data_block_ref:
@@ -186,8 +187,10 @@ class ChartHandler:
             raise ChartRenderError(
                 f"Script IA rechazado por auditoría: {chart_script.audit_result.findings}"
             )
-        image_bytes = render_chart_from_script(
-            chart_script.code, df, output_format=cfg.output_format
+        image_bytes = await render_chart_from_script(
+            chart_script.code, df,
+            output_format=cfg.output_format,
+            sandbox_client=self._sandbox_client,
         )
         return {
             "source_block_id": block.data_block_ref,

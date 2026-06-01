@@ -131,24 +131,24 @@ class TestChartContracts:
 
 class TestRenderChartFromScript:
 
-    def test_valid_script_returns_bytes(self):
+    async def test_valid_script_returns_bytes(self):
         df = _numeric_df()
         code = "fig, ax = plt.subplots()\nax.plot(df['x'], df['y'])"
-        result = render_chart_from_script(code, df)
+        result = await render_chart_from_script(code, df)
         assert isinstance(result, bytes)
         assert result[:4] == b"\x89PNG"
 
-    def test_dangerous_code_raises_chart_render_error(self):
+    async def test_dangerous_code_raises_chart_render_error(self):
         df = _numeric_df()
         code = "import os\nos.system('echo hacked')"
         with pytest.raises(ChartRenderError, match="Auditoría"):
-            render_chart_from_script(code, df)
+            await render_chart_from_script(code, df)
 
-    def test_syntax_error_raises_chart_render_error(self):
+    async def test_syntax_error_raises_chart_render_error(self):
         df = _numeric_df()
         code = "this is not python !!!"
         with pytest.raises(ChartRenderError):
-            render_chart_from_script(code, df)
+            await render_chart_from_script(code, df)
 
 
 # ---------------------------------------------------------------------------
