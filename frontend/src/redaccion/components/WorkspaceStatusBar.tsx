@@ -1,6 +1,9 @@
 import { useTranslation } from 'react-i18next'
 import { useGetWorkspaceById } from '@/shared/api/generated/hub-redaccion/hub-redaccion'
 import type { WorkspaceOut } from '@/shared/api/generated/model'
+import { StatusBadge } from '@/shared/components/StatusBadge'
+import { mapWorkspaceStatusToUserLabel } from '../utils/statusLabels'
+import type { AutosaveStatus } from '../hooks/useAutosave'
 
 const STATUS_ORDER = [
   'draft', 'ingesting', 'extracting', 'drafting',
@@ -9,26 +12,35 @@ const STATUS_ORDER = [
 
 interface Props {
   workspaceId: string
+  autosaveStatus?: AutosaveStatus
 }
 
-export function WorkspaceStatusBar({ workspaceId }: Props) {
+const AUTOSAVE_TONE: Record<AutosaveStatus, 'success' | 'info' | 'warning' | 'error'> = {
+  saved: 'success',
+  saving: 'info',
+  offline: 'warning',
+  conflict: 'error',
+}
+
+export function WorkspaceStatusBar({ workspaceId, autosaveStatus }: Props) {
   const { t } = useTranslation('common')
+  const { t: tR } = useTranslation('redaccion')
   const { data: workspaceRaw, isLoading } = useGetWorkspaceById(workspaceId)
   const workspace = workspaceRaw as unknown as WorkspaceOut | undefined
 
   if (isLoading) return <div>{t('loading')}</div>
   if (!workspace) return null
 
+  const { labelKey, tone } = mapWorkspaceStatusToUserLabel(workspace.status)
   const statusIndex = STATUS_ORDER.indexOf(workspace.status)
 
   return (
     <div className="flex items-center gap-3 px-4 py-2 bg-muted/30 border-b text-sm">
-      <span
+      <StatusBadge
+        label={tR(labelKey)}
+        tone={tone}
         data-testid="workspace-status-badge"
-        className="px-2 py-0.5 rounded-full border text-xs font-medium bg-secondary"
-      >
-        {workspace.status}
-      </span>
+      />
 
       <div className="flex items-center gap-1">
         {STATUS_ORDER.map((s, i) => (
@@ -40,6 +52,14 @@ export function WorkspaceStatusBar({ workspaceId }: Props) {
           />
         ))}
       </div>
+
+      {autosaveStatus && (
+        <StatusBadge
+          label={tR(`autosave.status.${autosaveStatus}`)}
+          tone={AUTOSAVE_TONE[autosaveStatus]}
+          data-testid="autosave-status-badge"
+        />
+      )}
     </div>
   )
 }
