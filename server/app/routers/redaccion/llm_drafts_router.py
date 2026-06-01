@@ -209,11 +209,14 @@ async def approve_as_workspace(
         spec_json=normalized.model_dump(mode="json"),
         created_by=owner_uuid,
     )
+    # 9R.10.2: arrancamos en `ingesting` para que la UI sepa que el workspace
+    # está listo para subir inputs. Cuando el usuario invoca POST /run el
+    # estado pasa a `drafting`.
     workspace = HubWorkspace(
         id=workspace_id,
         template_version_id=version_id,
         owner_id=owner_uuid,
-        status="draft",
+        status="ingesting",
     )
 
     await ReportTemplateRepo(session).save(template)
@@ -226,5 +229,5 @@ async def approve_as_workspace(
         template_id=template_id,
         template_version_id=version_id,
         name=body.name,
-        status="draft",
+        status="ingesting",
     )
