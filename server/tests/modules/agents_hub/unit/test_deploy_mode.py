@@ -28,10 +28,12 @@ def test_deploy_mode_edge_excludes_cloud_routers():
         import importlib
         import server.app.main
         importlib.reload(server.app.main)
-        
+
         routes = [r.path for r in server.app.main.app.routes]
         assert any(p.startswith("/api/v1/hub/chat") for p in routes)
-        assert not any(p.startswith("/api/v1/hub/chatbots") for p in routes)
+        # El endpoint raíz /api/v1/hub/chatbots (CRUD admin de chatbots) es cloud-only.
+        # Los endpoints /api/v1/hub/chatbots/{id}/selections etc. son edge y sí aparecen.
+        assert not any(p == "/api/v1/hub/chatbots" for p in routes)
 
 def test_default_deploy_mode_registers_all_routers():
     with patch.dict(os.environ, clear=True):

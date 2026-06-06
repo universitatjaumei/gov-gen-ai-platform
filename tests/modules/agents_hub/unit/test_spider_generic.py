@@ -18,9 +18,9 @@ class TestGenericSpider:
 
         fetched_urls: list[str] = []
 
-        async def fake_fetch(url: str) -> str:
+        async def fake_fetch(url: str) -> tuple[str, dict]:
             fetched_urls.append(url)
-            return '<html><body><a href="/pagina2">enlace</a></body></html>'
+            return '<html><body><a href="/pagina2">enlace</a></body></html>', {}
 
         spider = GenericSpider(fetch_fn=fake_fetch)
         source = FakeWebSource(
@@ -43,8 +43,8 @@ class TestGenericSpider:
             "https://ejemplo.uji.es/b": "<html>contenido b</html>",
         }
 
-        async def fake_fetch(url: str) -> str:
-            return pages.get(url, "<html></html>")
+        async def fake_fetch(url: str) -> tuple[str, dict]:
+            return pages.get(url, "<html></html>"), {}
 
         spider = GenericSpider(fetch_fn=fake_fetch)
         source = FakeWebSource(
@@ -73,8 +73,8 @@ class TestGenericSpider:
             "https://ejemplo.uji.es/noticias/nota": "<html>noticia</html>",
         }
 
-        async def fake_fetch(url: str) -> str:
-            return pages.get(url, "<html></html>")
+        async def fake_fetch(url: str) -> tuple[str, dict]:
+            return pages.get(url, "<html></html>"), {}
 
         spider = GenericSpider(fetch_fn=fake_fetch)
         source = FakeWebSource(
@@ -91,9 +91,9 @@ class TestGenericSpider:
         """Al alcanzar max_pages, el resultado se marca COMPLETED_PARTIAL."""
         from server.app.modules.agents_hub.ingestion.spider import GenericSpider, CrawlStatus
 
-        async def fake_fetch(url: str) -> str:
+        async def fake_fetch(url: str) -> tuple[str, dict]:
             links = "".join(f'<a href="/p{i}">p{i}</a>' for i in range(20))
-            return f"<html>{links}</html>"
+            return f"<html>{links}</html>", {}
 
         spider = GenericSpider(fetch_fn=fake_fetch)
         source = FakeWebSource(
@@ -113,9 +113,9 @@ class TestGenericSpider:
 
         call_counts: dict[str, int] = {}
 
-        async def fake_fetch(url: str) -> str:
+        async def fake_fetch(url: str) -> tuple[str, dict]:
             call_counts[url] = call_counts.get(url, 0) + 1
-            return '<html><a href="https://ejemplo.uji.es">inicio</a></html>'
+            return '<html><a href="https://ejemplo.uji.es">inicio</a></html>', {}
 
         spider = GenericSpider(fetch_fn=fake_fetch)
         source = FakeWebSource(

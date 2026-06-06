@@ -78,6 +78,7 @@ class IngestionWatcher:
         citation_url: str | None = None,
         prefetched_content: str | None = None,
         title: str | None = None,
+        crawled_page_id: uuid.UUID | None = None,
     ) -> tuple[HubDocument, int]:
         """Crea/actualiza un HubDocument. Genera chunks SOLO si retrieval_mode == 'RAG'.
 
@@ -109,6 +110,8 @@ class IngestionWatcher:
             doc.canonical_url = canonical
             doc.title = doc_title
             doc.updated_at = datetime.now(timezone.utc)
+            if crawled_page_id is not None:
+                doc.crawled_page_id = crawled_page_id
         else:
             # Si ya existia un documento con esta URL e idioma → reemplazar.
             # Idiomas distintos de la misma URL coexisten sin borrarse mutuamente.
@@ -141,6 +144,7 @@ class IngestionWatcher:
                 language=language,
                 source_kind=source_kind,
                 token_count=token_count,
+                crawled_page_id=crawled_page_id,
             )
             self._session.add(doc)
             try:

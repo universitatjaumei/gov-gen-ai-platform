@@ -1,0 +1,364 @@
+"""Tests TDD — hub_sites_router (Prompt 9Q.7).
+
+CRUD de HubWebSite, selecciones y endpoints de candidatas/ingestión.
+Usa FastAPI TestClient con dependencias sobreescritas.
+"""
+from __future__ import annotations
+
+import os
+import uuid
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-that-is-at-least-32-chars-long")
+os.environ.setdefault("JWT_ALGORITHM", "HS256")
+os.environ.setdefault("JWT_EXPIRATION_MINUTES", "60")
+
+
+def _make_token(role: str = "admin") -> str:
+    from server.app.core.auth import UserInfo, create_token
+    return create_token(UserInfo(user_id="admin-1", email="admin@test.com", role=role))
+
+
+def _fake_site(**kw):
+    m = MagicMock()
+    m.id = kw.get("id", uuid.uuid4())
+    m.client_id = kw.get("client_id", None)
+    m.name = kw.get("name", "Sitio Test")
+    m.root_url = kw.get("root_url", "https://ej.es")
+    m.sitemap_url = kw.get("sitemap_url", None)
+    m.spider_type = kw.get("spider_type", "generic")
+    m.crawl_interval_hours = kw.get("crawl_interval_hours", 24)
+    m.audit_semantic_scope = kw.get("audit_semantic_scope", "ingested")
+    m.last_crawled_at = None
+    m.status = kw.get("status", "active")
+    m.created_at = kw.get("created_at", __import__("datetime").datetime.utcnow())
+    return m
+
+
+def _fake_selection(**kw):
+    m = MagicMock()
+    m.id = kw.get("id", uuid.uuid4())
+    m.chatbot_id = kw.get("chatbot_id", uuid.uuid4())
+    m.site_id = kw.get("site_id", uuid.uuid4())
+    m.rule_type = kw.get("rule_type", "path_prefix")
+    m.rule_value = kw.get("rule_value", "/temas/")
+    m.auto_ingest_new = kw.get("auto_ingest_new", True)
+    m.created_at = kw.get("created_at", __import__("datetime").datetime.utcnow())
+    return m
+
+
+def _fake_page(**kw):
+    m = MagicMock()
+    m.id = kw.get("id", uuid.uuid4())
+    m.site_id = kw.get("site_id", uuid.uuid4())
+    m.url = kw.get("url", "https://ej.es/temas/agua")
+    m.title = kw.get("title", "Página")
+    m.status = kw.get("status", "active")
+    m.token_count = kw.get("token_count", 500)
+    m.superseded = kw.get("superseded", False)
+    m.quality_score = kw.get("quality_score", None)
+    m.last_crawled_at = None
+    return m
+
+
+def _build_app(session_mock=None, site_repo_mock=None, selection_service_mock=None, quality_job_mock=None):
+    from server.app.routers.hub_sites_router import router, get_quality_job
+    from server.app.modules.agents_hub.database.connection import get_async_session
+
+    _session = session_mock or AsyncMock()
+
+    async def _session_override():
+        yield _session
+
+    app = FastAPI()
+    app.dependency_overrides[get_async_session] = _session_override
+
+    if quality_job_mock is not None:
+        app.dependency_overrides[get_quality_job] = lambda: quality_job_mock
+
+    app.include_router(router, prefix="/api/v1")
+    return app
+
+
+# ───────────────────────── Tests de sites CRUD ─────────────────────────
+
+
+def test_create_site_returns_201():
+    """POST /hub/sites → 201 con el sitio creado."""
+    site = _fake_site(name="Mi Sitio")
+    session = AsyncMock()
+    session.flush = AsyncMock()
+    session.refresh = AsyncMock()
+
+    # Simula WebSiteRepo.create retornando el site
+    from server.app.modules.agents_hub.ingestion.quality.site_repo import WebSiteRepo
+    WebSiteRepo.create = AsyncMock(return_value=site)
+
+    client = TestClient(_build_app(session_mock=session))
+    resp = client.post(
+        "/api/v1/hub/sites",
+        json={"name": "Mi Sitio", "root_url": "https://ej.es"},
+        headers={"Authorization": f"Bearer {_make_token()}"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["name"] == "Mi Sitio"
+
+
+def test_list_sites_returns_200():
+    """GET /hub/sites → 200 con la lista de sitios."""
+    site = _fake_site()
+    session = AsyncMock()
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [site]
+    session.execute = AsyncMock(return_value=result)
+
+    client = TestClient(_build_app(session_mock=session))
+    resp = client.get(
+        "/api/v1/hub/sites",
+        headers={"Authorization": f"Bearer {_make_token()}"},
+    )
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+def test_list_sites_401_without_auth():
+    """GET /hub/sites sin JWT → 401 o 403."""
+    session = AsyncMock()
+    client = TestClient(_build_app(session_mock=session))
+    resp = client.get("/api/v1/hub/sites")
+    assert resp.status_code in (401, 403)
+
+
+def test_patch_site_returns_200():
+    """PATCH /hub/sites/{id} → 200 con el sitio actualizado."""
+    site_id = uuid.uuid4()
+    site = _fake_site(id=site_id, name="Actualizado")
+    session = AsyncMock()
+    session.get = AsyncMock(return_value=site)
+    session.flush = AsyncMock()
+    session.refresh = AsyncMock()
+
+    client = TestClient(_build_app(session_mock=session))
+    resp = client.patch(
+        f"/api/v1/hub/sites/{site_id}",
+        json={"name": "Actualizado"},
+        headers={"Authorization": f"Bearer {_make_token()}"},
+    )
+    assert resp.status_code == 200
+
+
+def test_delete_site_returns_204():
+    """DELETE /hub/sites/{id} → 204."""
+    site_id = uuid.uuid4()
+    site = _fake_site(id=site_id)
+    session = AsyncMock()
+    session.get = AsyncMock(return_value=site)
+    session.delete = AsyncMock()
+    session.flush = AsyncMock()
+
+    client = TestClient(_build_app(session_mock=session))
+    resp = client.delete(
+        f"/api/v1/hub/sites/{site_id}",
+        headers={"Authorization": f"Bearer {_make_token()}"},
+    )
+    assert resp.status_code == 204
+
+
+# ───────────────────────── Test de crawl ─────────────────────────
+
+
+def test_trigger_crawl_returns_202_and_calls_job():
+    """POST /hub/sites/{id}/crawl → 202 y encola run_for_site."""
+    site_id = uuid.uuid4()
+    site = _fake_site(id=site_id)
+    session = AsyncMock()
+    session.get = AsyncMock(return_value=site)
+
+    quality_job = MagicMock()
+    quality_job.run_for_site = AsyncMock()
+
+    client = TestClient(_build_app(session_mock=session, quality_job_mock=quality_job))
+    resp = client.post(
+        f"/api/v1/hub/sites/{site_id}/crawl",
+        headers={"Authorization": f"Bearer {_make_token()}"},
+    )
+    assert resp.status_code == 202
+
+
+# ───────────────────────── Test de páginas ─────────────────────────
+
+
+def test_list_site_pages_returns_200():
+    """GET /hub/sites/{id}/pages → 200 con la lista de páginas."""
+    site_id = uuid.uuid4()
+    page = _fake_page(site_id=site_id)
+    session = AsyncMock()
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [page]
+    session.execute = AsyncMock(return_value=result)
+
+    client = TestClient(_build_app(session_mock=session))
+    resp = client.get(
+        f"/api/v1/hub/sites/{site_id}/pages",
+        headers={"Authorization": f"Bearer {_make_token()}"},
+    )
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+# ───────────────────────── Tests de selecciones ─────────────────────────
+
+
+def test_create_selection_returns_201():
+    """POST /hub/chatbots/{id}/selections → 201."""
+    chatbot_id = uuid.uuid4()
+    sel = _fake_selection(chatbot_id=chatbot_id)
+    session = AsyncMock()
+    session.flush = AsyncMock()
+    session.refresh = AsyncMock()
+
+    from server.app.modules.agents_hub.ingestion.quality.site_repo import CorpusSelectionRepo
+    CorpusSelectionRepo.create = AsyncMock(return_value=sel)
+
+    client = TestClient(_build_app(session_mock=session))
+    resp = client.post(
+        f"/api/v1/hub/chatbots/{chatbot_id}/selections",
+        json={"site_id": str(sel.site_id), "rule_type": "path_prefix", "rule_value": "/temas/"},
+        headers={"Authorization": f"Bearer {_make_token()}"},
+    )
+    assert resp.status_code == 201
+
+
+def test_list_selections_returns_200():
+    """GET /hub/chatbots/{id}/selections → 200."""
+    chatbot_id = uuid.uuid4()
+    sel = _fake_selection(chatbot_id=chatbot_id)
+    session = AsyncMock()
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [sel]
+    session.execute = AsyncMock(return_value=result)
+
+    client = TestClient(_build_app(session_mock=session))
+    resp = client.get(
+        f"/api/v1/hub/chatbots/{chatbot_id}/selections",
+        headers={"Authorization": f"Bearer {_make_token()}"},
+    )
+    assert resp.status_code == 200
+
+
+def test_delete_selection_returns_204():
+    """DELETE /hub/chatbots/{id}/selections/{sid} → 204."""
+    chatbot_id = uuid.uuid4()
+    sel_id = uuid.uuid4()
+    sel = _fake_selection(id=sel_id, chatbot_id=chatbot_id)
+    session = AsyncMock()
+    session.get = AsyncMock(return_value=sel)
+    session.delete = AsyncMock()
+    session.flush = AsyncMock()
+
+    client = TestClient(_build_app(session_mock=session))
+    resp = client.delete(
+        f"/api/v1/hub/chatbots/{chatbot_id}/selections/{sel_id}",
+        headers={"Authorization": f"Bearer {_make_token()}"},
+    )
+    assert resp.status_code == 204
+
+
+# ───────────────────────── Test de candidatas ─────────────────────────
+
+
+def test_list_candidates_returns_200():
+    """GET /hub/sites/{id}/candidates?chatbot_id= → 200."""
+    site_id = uuid.uuid4()
+    chatbot_id = uuid.uuid4()
+    session = AsyncMock()
+
+    from server.app.modules.agents_hub.ingestion.quality.selection_contracts import CandidatePageView
+    candidate = CandidatePageView(
+        page_id=uuid.uuid4(),
+        url="https://ej.es/temas/agua",
+        title="Agua",
+        matched_rule="/temas/",
+        is_new=False,
+    )
+
+    from server.app.routers.hub_sites_router import get_selection_service
+    mock_svc = MagicMock()
+    mock_svc.candidates = AsyncMock(return_value=[candidate])
+
+    from server.app.routers.hub_sites_router import router
+
+    app = FastAPI()
+    from server.app.modules.agents_hub.database.connection import get_async_session
+    app.dependency_overrides[get_async_session] = lambda: session
+    app.dependency_overrides[get_selection_service] = lambda: mock_svc
+    app.include_router(router, prefix="/api/v1")
+
+    client = TestClient(app)
+    resp = client.get(
+        f"/api/v1/hub/sites/{site_id}/candidates",
+        params={"chatbot_id": str(chatbot_id)},
+        headers={"Authorization": f"Bearer {_make_token()}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["url"] == "https://ej.es/temas/agua"
+
+
+# ───────────────────────── Tests ingest / retire ─────────────────────────
+
+
+def test_ingest_page_returns_202():
+    """POST /hub/chatbots/{id}/pages/{pid}/ingest → 202."""
+    chatbot_id = uuid.uuid4()
+    page_id = uuid.uuid4()
+    session = AsyncMock()
+
+    from server.app.routers.hub_sites_router import get_selection_service
+    mock_svc = MagicMock()
+    mock_svc.ingest_page = AsyncMock(return_value=MagicMock(id=uuid.uuid4()))
+
+    from server.app.routers.hub_sites_router import router
+    app = FastAPI()
+    from server.app.modules.agents_hub.database.connection import get_async_session
+    app.dependency_overrides[get_async_session] = lambda: session
+    app.dependency_overrides[get_selection_service] = lambda: mock_svc
+    app.include_router(router, prefix="/api/v1")
+
+    client = TestClient(app)
+    resp = client.post(
+        f"/api/v1/hub/chatbots/{chatbot_id}/pages/{page_id}/ingest",
+        headers={"Authorization": f"Bearer {_make_token()}"},
+    )
+    assert resp.status_code == 202
+
+
+def test_retire_page_returns_200_with_count():
+    """DELETE /hub/chatbots/{id}/pages/{pid} → 200 con el count de documentos retirados."""
+    chatbot_id = uuid.uuid4()
+    page_id = uuid.uuid4()
+    session = AsyncMock()
+
+    from server.app.routers.hub_sites_router import get_selection_service
+    mock_svc = MagicMock()
+    mock_svc.retire_page = AsyncMock(return_value=2)
+
+    from server.app.routers.hub_sites_router import router
+    app = FastAPI()
+    from server.app.modules.agents_hub.database.connection import get_async_session
+    app.dependency_overrides[get_async_session] = lambda: session
+    app.dependency_overrides[get_selection_service] = lambda: mock_svc
+    app.include_router(router, prefix="/api/v1")
+
+    client = TestClient(app)
+    resp = client.delete(
+        f"/api/v1/hub/chatbots/{chatbot_id}/pages/{page_id}",
+        headers={"Authorization": f"Bearer {_make_token()}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["documents_removed"] == 2

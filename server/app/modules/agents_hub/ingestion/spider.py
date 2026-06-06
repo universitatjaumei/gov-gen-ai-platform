@@ -32,17 +32,20 @@ class _WebSource(Protocol):
 class GenericSpider:
     """Spider BFS que respeta crawl_depth, url_regex_filter y max_pages leídos de config_json."""
 
-    def __init__(self, fetch_fn: Callable[[str], Awaitable[str]] | None = None) -> None:
+    def __init__(
+        self, fetch_fn: Callable[[str], Awaitable[tuple[str, dict]]] | None = None
+    ) -> None:
         self._fetch_fn = fetch_fn
 
-    async def _fetch(self, url: str) -> str:
+    async def _fetch(self, url: str) -> tuple[str, dict]:
+        """Descarga una URL y devuelve (cuerpo, cabeceras HTTP)."""
         if self._fetch_fn is not None:
             return await self._fetch_fn(url)
         import httpx
         async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
             resp = await client.get(url)
             resp.raise_for_status()
-            return resp.text
+            return resp.text, dict(resp.headers)
 
     def _extract_links(self, html: str, base_url: str) -> list[str]:
         links: list[str] = []
@@ -77,7 +80,7 @@ class GenericSpider:
                 break
 
             url, depth = queue.popleft()
-            html = await self._fetch(url)
+            html, _headers = await self._fetch(url)
             crawled_urls.append(url)
 
             # No encolar hijos si hemos alcanzado la profundidad máxima

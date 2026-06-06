@@ -38,6 +38,7 @@ class VectorRetrievalStrategy:
             chatbot_id=chatbot_id,
             top_k=self._top_k,
             language=language,
+            include_superseded=False,  # el chatbot nunca sirve páginas superseded (9Q.6)
         )
         if not results:
             return RetrievalContext(sources=[], mode=self.mode, total_tokens=0)

@@ -34,6 +34,8 @@ from server.app.routers.redaccion.copilot_router import router as redaccion_copi
 from server.app.routers.redaccion.anonymization_router import router as redaccion_anonymization_router
 from server.app.routers.hub_themes_router import router as hub_themes_router
 from server.app.routers.hub_agents_router import router as hub_agents_router
+from server.app.routers.hub_sites_router import router as hub_sites_router
+from server.app.routers.hub_content_quality_router import router as hub_content_quality_router
 
 
 async def _init_hub_db() -> None:
@@ -48,6 +50,82 @@ async def _init_hub_db() -> None:
         await conn.run_sync(HubConfigBase.metadata.create_all)
         await conn.run_sync(HubOperationalBase.metadata.create_all)
     await engine.dispose()
+
+
+def _start_quality_scheduler():
+    """Crea e inicia el scheduler de calidad de contenido web (9Q.5).
+
+    Deploy: edge. Retorna el scheduler o None si está deshabilitado.
+    """
+    try:
+        from server.app.core.config import get_settings
+        settings = get_settings()
+
+        if not settings.content_quality_enabled:
+            return None
+
+        from server.app.modules.agents_hub.database.connection import (
+            create_async_engine,
+            create_session_factory,
+        )
+        from server.app.modules.agents_hub.ingestion.quality.quality_job import (
+            SiteQualityAnalysisJob,
+        )
+        from server.app.modules.agents_hub.ingestion.quality.quality_scheduler import (
+            create_quality_scheduler,
+        )
+
+        engine = create_async_engine()
+        hub_session_factory = create_session_factory(engine)
+
+        # El job se construye con listas vacías de detectores y sin watcher para el
+        # arranque inicial: los detectores completos (con LLM y embedding) se inyectan
+        # en producción a través de la configuración de cada entorno. En este arranque
+        # básico el scheduler solo realiza crawls y consolidaciones deterministas.
+        job = SiteQualityAnalysisJob(
+            session_factory=hub_session_factory,
+            site_crawler=_NullCrawler(),
+            detectors=[],
+            watcher=None,
+            selection_repo=_NullSelectionRepo(),
+            run_semantic=settings.content_quality_semantic_enabled,
+        )
+
+        scheduler = create_quality_scheduler(
+            hub_session_factory,
+            job,
+            interval_hours=settings.content_quality_interval_hours,
+            enabled=settings.content_quality_enabled,
+        )
+        scheduler.start()
+        # Registrar el job en el router de sitios para el endpoint /crawl
+        from server.app.routers.hub_sites_router import set_quality_job
+        set_quality_job(job)
+        from server.app.routers.hub_content_quality_router import set_quality_job as set_cq_job
+        set_cq_job(job)
+        print(f"[STARTUP] Content quality scheduler started (every {settings.content_quality_interval_hours}h)")
+        return scheduler
+    except Exception as exc:
+        print(f"[STARTUP] Content quality scheduler failed to start: {exc}")
+        return None
+
+
+class _NullCrawler:
+    """Crawl stub para el arranque sin configuración completa."""
+
+    async def crawl_site(self, site_id):  # noqa: ANN001
+        from server.app.modules.agents_hub.ingestion.quality.site_crawler import SiteCrawlSummary
+        return SiteCrawlSummary(errors=["no spider configured"])
+
+
+class _NullSelectionRepo:
+    """Selection repo stub para el arranque sin configuración completa."""
+
+    async def list_by_site(self, site_id):  # noqa: ANN001
+        return []
+
+    def matches(self, selection, page_url: str) -> bool:
+        return False
 
 
 async def _fail_zombie_jobs() -> None:
@@ -95,9 +173,14 @@ async def lifespan(app: FastAPI):
 
     refresh_task = asyncio.create_task(periodic_refresh())
 
+    # Content quality scheduler (9Q.5) — Deploy: edge
+    quality_scheduler = _start_quality_scheduler()
+
     yield
 
     refresh_task.cancel()
+    if quality_scheduler is not None:
+        quality_scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="Gov Gen AI Platform", version="1.0.0", lifespan=lifespan)
@@ -141,6 +224,8 @@ def _register_edge(app: FastAPI) -> None:
     app.include_router(redaccion_copilot_router, prefix="/api/v1")  # Deploy: edge
     app.include_router(redaccion_anonymization_router, prefix="/api/v1")  # Deploy: edge
     app.include_router(hub_agents_router, prefix="/api/v1")  # Deploy: edge
+    app.include_router(hub_sites_router, prefix="/api/v1")  # Deploy: edge
+    app.include_router(hub_content_quality_router, prefix="/api/v1")  # Deploy: edge
 
 
 if DEPLOY_MODE in ("cloud", "all"):

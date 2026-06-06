@@ -22,6 +22,10 @@ class Settings:
     sandbox_connect_timeout_seconds: float = 5.0
     sandbox_max_retries_on_connect_error: int = 1
     sandbox_mode: str = "http"
+    # Content quality scheduler (9Q.5)
+    content_quality_enabled: bool = True
+    content_quality_interval_hours: int = 24
+    content_quality_semantic_enabled: bool = True
 
     @property
     def is_dev_mode(self) -> bool:
@@ -46,4 +50,7 @@ def get_settings() -> Settings:
             os.getenv("SANDBOX_MAX_RETRIES_ON_CONNECT_ERROR", "1")
         ),
         sandbox_mode=os.getenv("SANDBOX_MODE", default_sandbox_mode),
+        content_quality_enabled=os.getenv("CONTENT_QUALITY_ENABLED", "true").lower() != "false",
+        content_quality_interval_hours=int(os.getenv("CONTENT_QUALITY_INTERVAL_HOURS", "24")),
+        content_quality_semantic_enabled=os.getenv("CONTENT_QUALITY_SEMANTIC_ENABLED", "true").lower() != "false",
     )

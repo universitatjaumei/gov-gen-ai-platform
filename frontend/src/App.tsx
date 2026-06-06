@@ -19,6 +19,8 @@ import { ScriptProposalWizardPage } from '@/redaccion/pages/ScriptProposalWizard
 import { AdminScriptReviewQueuePage } from '@/redaccion/pages/AdminScriptReviewQueuePage'
 import { WorkspacePreview } from '@/redaccion/preview/WorkspacePreview'
 import { AIBrainPage } from '@/admin/pages/AIBrainPage'
+import { SitesPage } from '@/admin/pages/SitesPage'
+import { ContentQualityPage } from '@/admin/pages/ContentQualityPage'
 import { ThemeProvider } from './themes/ThemeProvider'
 import './index.css'
 import './themes/base.css'
@@ -59,6 +61,8 @@ function App() {
                     <Route path="llm-configs" element={<LLMConfigsPage />} />
                     <Route path="prompts" element={<PromptsPage />} />
                     <Route path="brain" element={<AIBrainPage />} />
+                    <Route path="sites" element={<SitesPage />} />
+                    <Route path="content-quality" element={<ContentQualityPage />} />
                   </Route>
                   <Route path="/redaccion/builder" element={<ReportTemplateBuilderPage />} />
                   <Route path="/redaccion/wizard" element={<GenericReportWizard />} />

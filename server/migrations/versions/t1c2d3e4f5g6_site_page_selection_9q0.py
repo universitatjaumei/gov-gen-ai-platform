@@ -163,25 +163,30 @@ def upgrade() -> None:
     )
 
     # ── 2. crawled_page_id en hub_documents ──────────────────────────────
-    op.add_column(
-        "hub_documents",
-        sa.Column(
-            "crawled_page_id", postgresql.UUID(as_uuid=True), nullable=True
-        ),
-    )
-    op.create_index(
-        "ix_hub_documents_crawled_page_id",
-        "hub_documents",
-        ["crawled_page_id"],
-    )
-    op.create_foreign_key(
-        "fk_hub_documents_crawled_page_id",
-        "hub_documents",
-        "hub_crawled_pages",
-        ["crawled_page_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    conn2 = op.get_bind()
+    inspector2 = sa.inspect(conn2)
+    if "hub_documents" in inspector2.get_table_names():
+        doc_cols = {c["name"] for c in inspector2.get_columns("hub_documents")}
+        if "crawled_page_id" not in doc_cols:
+            op.add_column(
+                "hub_documents",
+                sa.Column(
+                    "crawled_page_id", postgresql.UUID(as_uuid=True), nullable=True
+                ),
+            )
+            op.create_index(
+                "ix_hub_documents_crawled_page_id",
+                "hub_documents",
+                ["crawled_page_id"],
+            )
+            op.create_foreign_key(
+                "fk_hub_documents_crawled_page_id",
+                "hub_documents",
+                "hub_crawled_pages",
+                ["crawled_page_id"],
+                ["id"],
+                ondelete="SET NULL",
+            )
 
     # ── 3. DATA MIGRATION: HubIngestionSource → (site + selection) ───────
     conn = op.get_bind()

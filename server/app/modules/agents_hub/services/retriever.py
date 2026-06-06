@@ -1,4 +1,9 @@
-"""Prompt 2.7 — Retriever híbrido (vector + keyword, Reciprocal Rank Fusion)."""
+"""Prompt 2.7 — Retriever híbrido (vector + keyword, Reciprocal Rank Fusion).
+
+9Q.6: vector_search / keyword_search / hybrid_search aceptan include_superseded=False
+para excluir chunks cuyo documento proviene de una HubCrawledPage con superseded=True.
+Chunks sin crawled_page_id (PDFs subidos, legado) nunca se excluyen.
+"""
 
 import uuid
 from dataclasses import dataclass, field
@@ -23,6 +28,26 @@ class HybridRetriever:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
+    async def _get_superseded_doc_ids(self, chatbot_id: uuid.UUID) -> set[str]:
+        """IDs (str) de documentos del chatbot cuya página está marcada superseded=True.
+
+        Solo incluye documentos con crawled_page_id != None (PDFs subidos → nunca excluidos).
+        """
+        from server.app.modules.agents_hub.database.operational_models import (
+            HubCrawledPage,
+            HubDocument,
+        )
+
+        stmt = (
+            select(HubDocument.id)
+            .join(HubCrawledPage, HubDocument.crawled_page_id == HubCrawledPage.id)
+            .where(HubDocument.chatbot_id == chatbot_id)
+            .where(HubDocument.crawled_page_id.isnot(None))
+            .where(HubCrawledPage.superseded.is_(True))
+        )
+        result = await self.session.execute(stmt)
+        return {str(row[0]) for row in result.all()}
+
     async def vector_search(
         self,
         query_embedding: list[float],
@@ -30,6 +55,7 @@ class HybridRetriever:
         top_k: int = 5,
         language: str | None = None,
         owner_id: uuid.UUID | None = None,
+        include_superseded: bool = False,
     ) -> list[SearchResult]:
         similarity = 1 - HubDocumentChunk.embedding.cosine_distance(query_embedding)
         query = (
@@ -46,7 +72,7 @@ class HybridRetriever:
         query = query.order_by(similarity.desc()).limit(top_k)
 
         result = await self.session.execute(query)
-        return [
+        results = [
             SearchResult(
                 id=row.HubDocumentChunk.id,
                 content=row.HubDocumentChunk.content,
@@ -57,6 +83,14 @@ class HybridRetriever:
             )
             for row in result.all()
         ]
+        if not include_superseded:
+            excluded = await self._get_superseded_doc_ids(chatbot_id)
+            if excluded:
+                results = [
+                    r for r in results
+                    if r.metadata.get("document_id") not in excluded
+                ]
+        return results
 
     async def keyword_search(
         self,
@@ -65,6 +99,7 @@ class HybridRetriever:
         top_k: int = 5,
         language: str | None = None,
         owner_id: uuid.UUID | None = None,
+        include_superseded: bool = False,
     ) -> list[SearchResult]:
         filters = [
             HubDocumentChunk.chatbot_id == chatbot_id,
@@ -78,7 +113,7 @@ class HybridRetriever:
 
         stmt = select(HubDocumentChunk).where(*filters).limit(top_k)
         result = await self.session.execute(stmt)
-        return [
+        results = [
             SearchResult(
                 id=c.id,
                 content=c.content,
@@ -89,6 +124,14 @@ class HybridRetriever:
             )
             for c in result.scalars().all()
         ]
+        if not include_superseded:
+            excluded = await self._get_superseded_doc_ids(chatbot_id)
+            if excluded:
+                results = [
+                    r for r in results
+                    if r.metadata.get("document_id") not in excluded
+                ]
+        return results
 
     async def hybrid_search(
         self,
@@ -99,12 +142,15 @@ class HybridRetriever:
         language: str | None = None,
         vector_weight: float = 0.7,
         owner_id: uuid.UUID | None = None,
+        include_superseded: bool = False,
     ) -> list[SearchResult]:
         vector_results = await self.vector_search(
-            query_embedding, chatbot_id, top_k * 2, language, owner_id
+            query_embedding, chatbot_id, top_k * 2, language, owner_id,
+            include_superseded=include_superseded,
         )
         keyword_results = await self.keyword_search(
-            query, chatbot_id, top_k * 2, language, owner_id
+            query, chatbot_id, top_k * 2, language, owner_id,
+            include_superseded=include_superseded,
         )
 
         k = 60

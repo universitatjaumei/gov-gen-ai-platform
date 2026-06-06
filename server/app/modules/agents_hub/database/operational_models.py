@@ -76,6 +76,11 @@ class HubCrawledPage(HubOperationalBase):
     language: Mapped[str | None] = mapped_column(String(10), nullable=True)
     markdown_content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # embedding de página para auditoría semántica en modo "full" (9Q.4).
+    # Misma dimensión que HubDocumentChunk.embedding (BGE-M3 = 1024) para que cruce coseno.
+    # None = sin embedding (no auditada en modo full todavía).
+    page_embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
+
     # señales de actualidad (las pobla 9Q.2)
     http_last_modified: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -237,3 +242,49 @@ class HubIngestionJob(HubOperationalBase):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class HubContentFinding(HubOperationalBase):
+    """Hallazgo de calidad sobre una página o sitio web. Keyed a sitio/página, no a chatbot."""
+
+    __tablename__ = "hub_content_findings"
+    __table_args__ = (
+        UniqueConstraint(
+            "site_id", "finding_type", "page_id", "related_page_id",
+            name="uq_finding_dedup",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    site_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_web_sites.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    finding_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    page_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_crawled_pages.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    related_page_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    signal_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="new", index=True)
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("status", "new")
+        super().__init__(**kwargs)
