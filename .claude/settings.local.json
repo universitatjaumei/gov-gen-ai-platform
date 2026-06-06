@@ -194,7 +194,9 @@
       "Bash(Remove-Item *)",
       "Bash(where uv *)",
       "Bash(uv --version)",
-      "Bash(wait)"
+      "Bash(wait)",
+      "PowerShell(git fetch *)",
+      "PowerShell(git add *)"
     ]
   },
   "hooks": {
