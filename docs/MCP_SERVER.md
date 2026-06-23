@@ -1,0 +1,170 @@
+# Servidor MCP de Gov Gen AI Platform
+
+Servidor **MCP (Model Context Protocol) stdio** que permite a un cliente como
+**Claude Code** autorar plantillas de informe, configurar chatbots y probarlos,
+hablando con la API de la plataforma. Cierra el bucle **configurar → probar →
+ajustar** desde una conversación, sin construir UI a medida.
+
+> Bloque MCP (MCP.1–MCP.4) del `Plan_TDD_Fase1.md`. Diseño = **opción A** de
+> [`docs/mcp.md`](mcp.md): un cliente HTTP local, no una superficie nueva en el server.
+
+---
+
+## 1. Propósito y arquitectura
+
+```
+Claude Code  ──stdio──►  mcp_server/ (FastMCP)  ──HTTPS + PAT──►  API Gov Gen AI
+                          (cliente, sin estado)                   (FastAPI)
+```
+
+- El servidor MCP es **un cliente HTTP más** de la API (como el frontend): no
+  importa nada de `server/app` ni cruza la frontera edge/cloud. Vive en
+  [`mcp_server/`](../mcp_server/) como proyecto `uv` autocontenido.
+- Transporte **stdio**: Claude Code lo arranca como subproceso y habla por
+  stdin/stdout. No expone ningún puerto.
+- Toda la autenticación es por **PAT** (Personal Access Token) revocable.
+
+### Nota dev/prod (edge vs cloud)
+
+En desarrollo (`DEPLOY_MODE=all`) el chat (**edge**) y la configuración de
+plantillas/chatbots (**cloud**/edge) conviven en el mismo servidor, así que un único
+`GOVGENAI_API_BASE_URL` cubre todas las tools. En despliegue real son **superficies
+distintas**: `test_chat` apunta al **edge** (cliente), mientras que las tools de
+chatbots son **cloud** (admin/partner) y las de plantillas, **edge**. Si edge y cloud
+tienen URLs distintas, hoy se registran dos instancias del servidor MCP con
+`GOVGENAI_API_BASE_URL` distinto (una por superficie).
+
+---
+
+## 2. Variables de entorno
+
+| Variable | Obligatoria | Descripción |
+|---|---|---|
+| `GOVGENAI_API_BASE_URL` | sí | URL base de la API, p. ej. `http://localhost:8000` |
+| `GOVGENAI_PAT` | sí | Personal Access Token (`pat_<prefix>_<secret>`) |
+| `GOVGENAI_GRAPH_PROFILES_PATH` | no | Ruta a `GRAPH_PROFILES.md` (default `<repo>/docs/GRAPH_PROFILES.md`) |
+
+### Cómo emitir el PAT
+
+Desde la UI del hub (Bloque AUTH, prompt AUTH.4): **`/hub/access-tokens`** →
+"Crear token". Elige los **scopes** según lo que vayas a hacer (ver mapa abajo),
+opcionalmente una caducidad, y **copia el token en claro** (se muestra una sola vez).
+El token es revocable desde la misma pantalla.
+
+> Recuerda: un **partner** no puede emitir el scope `chatbots:write` (la mutación
+> in-place de chatbots en producción se reserva a admin; ver `docs/mcp.md` val. 2).
+
+---
+
+## 3. Mapa de scopes → tools
+
+| Scope | Tools |
+|---|---|
+| `redaccion:templates:read` | `list_templates`, `get_template_spec`, `validate_template_draft` |
+| `redaccion:templates:write` | `create_template`, `publish_template_version` |
+| `chatbots:read` | `list_clients`, `list_chatbots`, `get_chatbot`, `get_corpus_stats`, `list_prompt_templates` |
+| `chatbots:write` | `create_chatbot`, `update_chatbot`, `update_prompt_template`, `assign_child`, `unassign_child` |
+| `chat:test` | `test_chat` |
+
+Emite el PAT con el conjunto mínimo de scopes para la tarea. Las tools de lectura no
+necesitan scopes de escritura.
+
+---
+
+## 4. Registro en Claude Code
+
+```bash
+claude mcp add govgenai \
+  --env GOVGENAI_API_BASE_URL=http://localhost:8000 \
+  --env GOVGENAI_PAT=pat_xxxxxxxx_yyyyyyyyyyyy \
+  -- uv run --directory /ruta/al/repo/mcp_server mcp run server.py
+```
+
+- `--env` inyecta las variables en el subproceso del servidor MCP.
+- `uv run --directory .../mcp_server` ejecuta dentro del proyecto del servidor (su
+  propio venv). Alternativa equivalente: `uv run python server.py`.
+- Verifica con `claude mcp list` y, dentro de Claude Code, pide listar los recursos
+  `govgenai://...` o invocar `list_templates`.
+
+### Ejemplo de sesión (autoría de plantilla)
+
+1. Lee el contrato: recurso `govgenai://redaccion/template-schema`.
+2. "Redacta un draft de plantilla GENERIC_REPORT con secciones X/Y/Z."
+3. `validate_template_draft(draft)` → corrige hasta `ok: true`.
+4. `create_template(draft, name="...", confirm=false)` → revisa el plan.
+5. `create_template(..., confirm=true)` → crea la plantilla + versión 1.
+6. Más tarde, nueva versión: `publish_template_version(template_id, spec, confirm=false)`
+   (valida en dry-run) → `confirm=true` publica (append-only, nunca corrompe versiones).
+
+### Ejemplo de sesión (configurar y probar un chatbot)
+
+1. `get_corpus_stats(id)` → modo de retrieval recomendado según el corpus.
+2. `update_chatbot(id, {"retrieval_mode": "...", "retrieval_top_k": ...})` con
+   `dry_run=true` → revisa el **diff** actual→propuesta.
+3. `update_chatbot(..., dry_run=false)` → aplica el cambio.
+4. `test_chat(id, "pregunta de evaluación")` → respuesta + citas; ajusta y repite.
+
+---
+
+## 5. Seguridad
+
+- **HITL por construcción.** El humano aprueba cada *tool call* en Claude Code. Además,
+  toda escritura está *gated*: `create_template`/`publish_template_version`/
+  `create_chatbot`/`update_prompt_template`/`assign_child`/`unassign_child` no
+  persisten sin `confirm=true`, y `update_chatbot` es `dry_run=true` por defecto
+  (devuelve el diff, no aplica). Esto cumple la regla HITL de
+  `REDACCION_CONTRACT_FIRST.md` con el admin como aprobador.
+- **PAT revocable y con scopes.** Cada token porta un techo de scopes por rol y puede
+  revocarse al instante desde `/hub/access-tokens`. El servidor MCP nunca persiste el
+  PAT: lo lee del entorno en cada arranque.
+- **Versionado append-only de plantillas.** `publish_template_version` solo añade; una
+  versión publicada jamás se muta.
+- **Sin acceso a `server/app`.** El servidor MCP solo habla HTTP; no puede tocar la BD
+  ni los módulos internos. Cualquier validación de negocio (límite 128K de
+  `MD_LONG_CONTEXT`, jerarquía de routers, etc.) la aplica la API y el cliente la
+  reporta como error legible (`ValidationError`/`ScopeError`/`AuthError`).
+
+---
+
+## 6. Referencia de toolset
+
+### Resources
+
+| URI | Contenido |
+|---|---|
+| `govgenai://redaccion/template-schema` | JSON Schema de `ReportTemplateSpec` |
+| `govgenai://redaccion/profiles` | Perfiles de informe válidos |
+| `govgenai://docs/graph-profiles` | `docs/GRAPH_PROFILES.md` |
+| `govgenai://chatbots/enums` | Enums de config de chatbot |
+| `govgenai://chatbots/schema` | `ChatbotCreate`/`ChatbotUpdate` (de `/openapi.json`) |
+
+### Tools
+
+**Plantillas de redacción (MCP.2)** — `list_templates`, `get_template_spec`,
+`validate_template_draft`, `create_template`, `publish_template_version`.
+
+**Configuración de chatbots (MCP.3)** — `list_clients`, `list_chatbots`,
+`get_chatbot`, `get_corpus_stats`, `list_prompt_templates`, `create_chatbot`,
+`update_chatbot`, `update_prompt_template`, `assign_child`, `unassign_child`.
+
+**Chat de prueba (MCP.4)** — `test_chat(chatbot_id, message, lang?)`: lanza una
+pregunta y devuelve `answer` + `sources` (consume el stream SSE del endpoint de chat).
+
+Detalle de firmas y efectos en [`mcp_server/README.md`](../mcp_server/README.md).
+
+---
+
+## 7. Verificación de integración (manual, sin `.bat`)
+
+Este bloque es integración MCP/CLI, no UI de navegador, así que no lleva `.bat`. Para
+validar de extremo a extremo con un PAT real:
+
+1. Arranca la plataforma (`docker compose up -d`) y asegúrate de que la API responde
+   en `GOVGENAI_API_BASE_URL`.
+2. Emite un PAT desde **`/hub/access-tokens`** con scopes `chat:test` (+ `chatbots:read`
+   para inspeccionar). Copia el token.
+3. Registra el servidor con el comando `claude mcp add` de la §4, usando ese PAT.
+4. En Claude Code: `list_chatbots()` para obtener un `chatbot_id` existente.
+5. `test_chat(chatbot_id, "¿Qué trámites puedo hacer?")` → debe devolver `answer` y
+   `sources`. Si el PAT no tiene `chat:test`, la tool falla con `ScopeError` (403).
+6. Revoca el PAT desde la UI y repite: la siguiente llamada debe fallar con `AuthError`.

@@ -1,7 +1,10 @@
 # Valoración: configurar plantillas de informes vía MCP
 
 **Fecha**: 2026-06-06
-**Estado**: borrador en ampliación — pendiente de decisión de planificación
+**Estado**: ✅ **PLANIFICADO (2026-06-11)** — convertido en el **Bloque MCP** (MCP.1–MCP.4) de
+`Plan_TDD_Fase1.md`, precedido por el **Bloque AUTH** (AUTH.1–AUTH.4) que adelanta el SSO SAML +
+PAT. Decisiones: opción A (stdio), alcance completo (plantillas + chatbots + test_chat). Ver
+`PROJECT_STATE.md` → orden de ejecución.
 
 **Veredicto corto: muy viable, encaja con la arquitectura existente y no requiere
 reabrir nada de Fase 1.** La arquitectura contract-first hace casi todo el trabajo.

@@ -5,16 +5,22 @@ Template update notice, migración de workspaces, lectura de workspace/blocks/wa
 """
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.api.deps import get_current_user, get_session
+from server.app.api.deps import (
+    get_current_user,
+    get_session,
+    require_role,
+    require_scopes,
+)
 from server.app.core.auth.models import UserInfo
 from server.app.modules.redaccion.contracts.template import ReportTemplateSpec
 from server.app.modules.redaccion.contracts.ui import ReportUIContract
@@ -417,3 +423,121 @@ async def migrate_workspace(
         )
 
     return MigrateResponse(new_workspace_id=new_workspace.id)
+
+
+# ---------------------------------------------------------------------------
+# DTOs — autoría de plantillas vía MCP (MCP.2)
+# ---------------------------------------------------------------------------
+
+class TemplateVersionOut(BaseModel):
+    id: uuid.UUID
+    template_id: uuid.UUID
+    version: int
+    spec: dict
+
+
+class PublishVersionIn(BaseModel):
+    spec_json: dict
+
+
+class PublishVersionOut(BaseModel):
+    template_id: uuid.UUID
+    version: int
+    version_id: uuid.UUID | None = None
+    published: bool
+
+
+# ---------------------------------------------------------------------------
+# Endpoints — autoría de plantillas vía MCP (MCP.2)
+# ---------------------------------------------------------------------------
+
+@router.get("/template-schema", operation_id="getTemplateSchema")
+async def get_template_schema(
+    _user: UserInfo = Depends(require_scopes("redaccion:templates:read")),
+) -> dict:
+    """JSON Schema de ReportTemplateSpec.
+
+    Alimenta el resource ``govgenai://redaccion/template-schema`` del servidor MCP:
+    Claude redacta los drafts de plantilla directamente contra este contrato.
+    """
+    return ReportTemplateSpec.model_json_schema()
+
+
+@router.get(
+    "/template-versions/{version_id}",
+    response_model=TemplateVersionOut,
+    operation_id="getTemplateVersion",
+)
+async def get_template_version(
+    version_id: uuid.UUID,
+    _user: UserInfo = Depends(require_scopes("redaccion:templates:read")),
+    session: AsyncSession = Depends(get_session),
+) -> TemplateVersionOut:
+    """Devuelve la spec completa de una versión de plantilla."""
+    version = await ReportTemplateVersionRepo(session).get(version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail="Template version not found")
+    return TemplateVersionOut(
+        id=version.id,
+        template_id=version.template_id,
+        version=version.version,
+        spec=version.spec_json,
+    )
+
+
+@router.post(
+    "/templates/{template_id}/versions",
+    response_model=PublishVersionOut,
+    status_code=201,
+    operation_id="publishTemplateVersion",
+)
+async def publish_template_version(
+    template_id: uuid.UUID,
+    body: PublishVersionIn,
+    dry_run: bool = False,
+    user: UserInfo = Depends(require_role("admin", "partner")),
+    _scope: UserInfo = Depends(require_scopes("redaccion:templates:write")),
+    session: AsyncSession = Depends(get_session),
+) -> PublishVersionOut:
+    """Publica una nueva versión de plantilla (append-only).
+
+    Nunca muta una versión existente: añade la siguiente. ``dry_run=True`` valida
+    la spec contra ``ReportTemplateSpec`` y calcula la versión resultante SIN
+    persistir.
+    """
+    template = await ReportTemplateRepo(session).get(template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    try:
+        ReportTemplateSpec.model_validate(body.spec_json)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=json.loads(exc.json()))
+
+    version_repo = ReportTemplateVersionRepo(session)
+    existing = await version_repo.list(template_id)
+    next_version = (existing[-1].version + 1) if existing else 1
+
+    if dry_run:
+        return PublishVersionOut(
+            template_id=template_id, version=next_version, published=False
+        )
+
+    new_version_id = uuid.uuid4()
+    new_version = HubReportTemplateVersion(
+        id=new_version_id,
+        template_id=template_id,
+        version=next_version,
+        spec_json=body.spec_json,
+        created_by=uuid.UUID(user.user_id),
+    )
+    await version_repo.save(new_version)
+    await ReportTemplateRepo(session).update_status(template_id, new_version_id)
+    await session.commit()
+
+    return PublishVersionOut(
+        template_id=template_id,
+        version=next_version,
+        version_id=new_version_id,
+        published=True,
+    )

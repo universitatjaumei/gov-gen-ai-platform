@@ -1,0 +1,29 @@
+[project]
+name = "govgenai-mcp"
+version = "0.1.0"
+description = "Servidor MCP stdio para autoría de plantillas y configuración de chatbots de Gov Gen AI Platform."
+requires-python = ">=3.11"
+dependencies = [
+    "mcp[cli]>=1.25.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=1.0",
+    "respx>=0.21",
+]
+
+# Aplicación, no librería: uv gestiona el venv con las dependencias pero no
+# construye/instala este proyecto como paquete. Los módulos viven planos en el
+# directorio y se importan vía pythonpath.
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+addopts = "-q"
