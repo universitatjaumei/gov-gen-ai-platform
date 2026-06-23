@@ -11,6 +11,8 @@ Nota para Windows: Nunca uses el comando python directamente. Si el sistema te r
 
 Sincronización: Si has añadido dependencias, ejecuta primero uv sync para actualizar el entorno antes del check de validación.
 
+Dependencia de sistema (SSO SAML — AUTH.1): el SP SAML usa `python3-saml`, que depende de `xmlsec` (libxml2 + libxmlsec1). En Windows el wheel de `xmlsec` ya las incluye; en imágenes Docker basadas en Debian/Ubuntu añade `libxml2-dev libxmlsec1-dev pkg-config` (vía apt) antes de `uv sync`.
+
 🤖 1. REGLAS DE COMPORTAMIENTO PARA AGENTES (Cline, Claude Code, etc.)
 Análisis Previo Obligatorio: Antes de proponer o ejecutar cambios, DEBES leer ARCHITECTURE.md para entender la soberanía de datos y la jerarquía de servicios.
 

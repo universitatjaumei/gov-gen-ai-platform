@@ -196,7 +196,26 @@
       "Bash(uv --version)",
       "Bash(wait)",
       "PowerShell(git fetch *)",
-      "PowerShell(git add *)"
+      "PowerShell(git add *)",
+      "Bash(rm -f tests/api/test_brain_billing.py tests/unit/test_admin_page.py tests/ui/test_partner_session.py)",
+      "Bash(rm -f tests/e2e/test_multitenancy_flow.py)",
+      "Bash(rm -rf tests/ui)",
+      "Bash(node -e \"console.log\\(JSON.stringify\\(require\\('./package.json'\\).scripts,null,1\\)\\)\")",
+      "PowerShell($p = 'C:\\\\Users\\\\fabra\\\\Documents\\\\AI_agents_hub\\\\pruebas_manuales_promptAUTH_4.bat'; $b = [System.IO.File]::ReadAllBytes\\($p\\); if \\($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF\\) { $clean = $b[3..\\($b.Length-1\\)]; [System.IO.File]::WriteAllBytes\\($p, $clean\\); $b = $clean; \"BOM detectado y eliminado\" } else { \"Sin BOM\" }; \"Primeros 4 bytes \\(esperado 40 65 63 68\\): {0:X2} {1:X2} {2:X2} {3:X2}\" -f $b[0],$b[1],$b[2],$b[3])",
+      "Bash(GOVGENAI_API_BASE_URL=http://localhost:8000 GOVGENAI_PAT=pat_x_y timeout 25 uv run mcp run server.py)",
+      "PowerShell(cd C:\\\\Users\\\\fabra\\\\Documents\\\\AI_agents_hub\\\\frontend; npx tsc -b --force 2>&1 | Select-Object -First 40; \"EXIT: $LASTEXITCODE\")",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/orval/package.json'\\).version\\)\")",
+      "PowerShell(cd C:\\\\Users\\\\fabra\\\\Documents\\\\AI_agents_hub\\\\frontend; npx tsc -b 2>&1 | Select-String \"error TS\"; \"EXIT: $LASTEXITCODE\")",
+      "Bash(rtk curl *)",
+      "Bash(node -e \"try{require.resolve\\('playwright'\\);console.log\\('playwright pkg: yes'\\)}catch{console.log\\('playwright pkg: no'\\)}\")",
+      "Bash(node -e \"try{require.resolve\\('@playwright/test'\\);console.log\\('@playwright/test: yes'\\)}catch{console.log\\('@playwright/test: no'\\)}\")",
+      "Bash('/c/Program Files/Google/Chrome/Application/chrome.exe' --headless --disable-gpu --no-sandbox --dump-dom --virtual-time-budget=6000 http://localhost:5173/)",
+      "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\('tailwindcss:', \\(p.dependencies&&p.dependencies.tailwindcss\\)||\\(p.devDependencies&&p.devDependencies.tailwindcss\\)\\);console.log\\('@tailwindcss/vite:',\\(p.devDependencies&&p.devDependencies['@tailwindcss/vite']\\)||\\(p.dependencies&&p.dependencies['@tailwindcss/vite']\\)\\);console.log\\('@tailwindcss/postcss:',\\(p.devDependencies&&p.devDependencies['@tailwindcss/postcss']\\)||\\(p.dependencies&&p.dependencies['@tailwindcss/postcss']\\)\\)\")",
+      "Bash('/c/Program Files/Google/Chrome/Application/chrome.exe' --headless --disable-gpu --no-sandbox --screenshot=C:/Users/fabra/AppData/Local/Temp/claude/C--Users-fabra-Documents-AI-agents-hub/50a3d7b9-e6bb-4d26-8c9f-f04490eaa159/scratchpad/login_before.png --window-size=1280,900 --virtual-time-budget=6000 http://localhost:5173/login)",
+      "Bash([ -f \"$SHOT\" ])",
+      "Bash('/c/Program Files/Google/Chrome/Application/chrome.exe' --headless --disable-gpu --no-sandbox --screenshot=C:/Users/fabra/AppData/Local/Temp/claude/C--Users-fabra-Documents-AI-agents-hub/50a3d7b9-e6bb-4d26-8c9f-f04490eaa159/scratchpad/login_after.png --window-size=1280,900 --virtual-time-budget=6000 http://localhost:5173/login)",
+      "Bash(rtk proxy *)",
+      "Bash(cat)"
     ]
   },
   "hooks": {
