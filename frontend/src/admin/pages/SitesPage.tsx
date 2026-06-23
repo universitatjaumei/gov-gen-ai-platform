@@ -22,7 +22,8 @@ const siteSchema = z.object({
   audit_semantic_scope: z.enum(['ingested', 'full']).default('ingested'),
 })
 
-type SiteFormValues = z.infer<typeof siteSchema>
+type SiteFormInput = z.input<typeof siteSchema>
+type SiteFormValues = z.output<typeof siteSchema>
 
 export function SitesPage() {
   const { t } = useTranslation('contentQuality')
@@ -44,7 +45,7 @@ export function SitesPage() {
   const deleteMutation = useDeleteSite()
   const crawlMutation = useTriggerSiteCrawl()
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<SiteFormValues>({
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<SiteFormInput, unknown, SiteFormValues>({
     resolver: zodResolver(siteSchema),
     defaultValues: { crawl_interval_hours: 24, audit_semantic_scope: 'ingested' },
   })

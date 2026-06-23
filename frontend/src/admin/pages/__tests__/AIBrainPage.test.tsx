@@ -197,7 +197,7 @@ describe('AIBrainPage', () => {
       await waitFor(() => {
         const fetchMock = vi.mocked(globalThis.fetch as ReturnType<typeof vi.fn>)
         const patchCall = fetchMock.mock.calls.find(
-          ([url, opts]: [string, RequestInit]) =>
+          ([url, opts]: any[]) =>
             typeof url === 'string' &&
             url.includes(LLM_CONFIG_ID_OTHER) &&
             opts?.method === 'PATCH',

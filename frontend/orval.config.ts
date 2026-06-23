@@ -11,6 +11,9 @@ export default defineConfig({
       schemas: './src/shared/api/generated/model',
       client: 'react-query',
       override: {
+        fetch: {
+          includeHttpResponseReturnType: false,
+        },
         mutator: {
           path: './src/shared/api/client.ts',
           name: 'customInstance',

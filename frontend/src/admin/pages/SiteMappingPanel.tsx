@@ -11,10 +11,8 @@ import {
   useListCandidates,
   useIngestPage,
   getListSelectionsQueryKey,
-  getListCandidatesQueryKey,
 } from '@/shared/api/generated/hub-sites/hub-sites'
-import { useListSites } from '@/shared/api/generated/hub-sites/hub-sites'
-import type { CandidatePageView, SiteView } from '@/shared/api/generated/model'
+import type { CandidatePageView } from '@/shared/api/generated/model'
 import { useListChatbotsApiV1HubChatbotsGet } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
 
 interface Props {
@@ -28,7 +26,8 @@ const selSchema = z.object({
   auto_ingest_new: z.boolean().default(true),
 })
 
-type SelFormValues = z.infer<typeof selSchema>
+type SelFormInput = z.input<typeof selSchema>
+type SelFormValues = z.output<typeof selSchema>
 
 export function SiteMappingPanel({ siteId, siteName }: Props) {
   const { t } = useTranslation('contentQuality')
@@ -37,16 +36,20 @@ export function SiteMappingPanel({ siteId, siteName }: Props) {
   const [selDialogOpen, setSelDialogOpen] = useState(false)
   const [selectedChatbotId, setSelectedChatbotId] = useState<string>('')
 
-  const { data: selections = [] } = useListSelections({ chatbotId: '' })
-  const { data: chatbots = [] } = useListChatbotsApiV1HubChatbotsGet()
-  const { data: candidates = [] } = useListCandidates(siteId, {
-    chatbot_id: selectedChatbotId || undefined,
+  const { data: selections = [] } = useListSelections(selectedChatbotId, {
+    query: { enabled: !!selectedChatbotId },
   })
+  const { data: chatbots = [] } = useListChatbotsApiV1HubChatbotsGet()
+  const { data: candidates = [] } = useListCandidates(
+    siteId,
+    { chatbot_id: selectedChatbotId },
+    { query: { enabled: !!selectedChatbotId } },
+  )
 
   const createSelMutation = useCreateSelection({
     mutation: {
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListSelectionsQueryKey({ chatbotId: '' }) })
+        qc.invalidateQueries({ queryKey: getListSelectionsQueryKey(selectedChatbotId) })
         setSelDialogOpen(false)
         reset()
       },
@@ -55,7 +58,7 @@ export function SiteMappingPanel({ siteId, siteName }: Props) {
   const deleteSelMutation = useDeleteSelection()
   const ingestMutation = useIngestPage()
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<SelFormValues>({
+  const { register, handleSubmit, reset } = useForm<SelFormInput, unknown, SelFormValues>({
     resolver: zodResolver(selSchema),
     defaultValues: { rule_type: 'path_prefix', auto_ingest_new: true },
   })
