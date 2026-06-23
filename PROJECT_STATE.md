@@ -38,7 +38,7 @@
 | Bloque MCP — Servidor MCP stdio (plantillas+chatbots+test_chat) | MCP.4 ✅ | — | — | ✅ Completo — MCP.1-MCP.4 (scaffolding + tools plantillas/chatbots/test_chat + docs/MCP_SERVER.md). 16 tools + 5 resources, 54 tests MCP verdes |
 | Fase 11 — Autoinstalación y Distribución | — | 11.1 | Sonnet | ⏳ Pendiente — .env generator, docker-compose.prod.yml, init script (3 prompts) |
 | Deploy GCP | — | D.1 | Sonnet | ⏳ Pendiente — D.1-D.5 (5 prompts, todos Sonnet) |
-| Bloque ING — Ingesta multi-formato (.md/.txt/ZIP) | — | (backlog) | Sonnet | ⏳ Planificado — **no programado** (ver historial 2026-06-23). 4 fases. Bloqueado por: el usuario debe revisar los .md y generar la carpeta definitiva antes de la Fase 0 |
+| Bloque ING — Ingesta multi-formato (.md/.txt/ZIP) | — | (backlog) | Sonnet | ⏳ Planificado — **no programado** (ver historial 2026-06-23). 4 fases. Bloqueado por: el usuario debe revisar los .md y generar la carpeta definitiva antes de la Fase 0. **Para arrancar** (sobreescribe el cursor sin tocar el plan): pedir *"arranca el Bloque ING, Fase 0"* + carpeta canónica + `chatbot_id` destino + idioma (forzar por carpeta o dejar `detect_language`) |
 
 **Cursor actual: 11.1 (Generador de Configuración .env.example — Fase 11 Autoinstalación)**
 **Modelo sugerido para el próximo prompt: Sonnet** — alcance cerrado (generador .env, patrones conocidos). **Bloque MCP completo (MCP.1-MCP.4).**
