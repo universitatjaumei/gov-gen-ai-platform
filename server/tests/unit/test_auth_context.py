@@ -1,4 +1,5 @@
 """Tests para la dependencia get_current_user (JWT)."""
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -11,6 +12,11 @@ JWT_ENV = {
 }
 
 
+def _req():
+    """Request mínimo con .state (la vía JWT escribe request.state.pat_scopes)."""
+    return SimpleNamespace(state=SimpleNamespace())
+
+
 @pytest.mark.asyncio
 async def test_valid_jwt_returns_user_info():
     with patch.dict("os.environ", JWT_ENV, clear=False):
@@ -20,7 +26,9 @@ async def test_valid_jwt_returns_user_info():
         user = UserInfo(user_id="u-1", email="admin@test.com", role="admin")
         token = create_token(user)
 
-        result = await get_current_user(authorization=f"Bearer {token}")
+        result = await get_current_user(
+            request=_req(), authorization=f"Bearer {token}", session=None
+        )
 
         assert result.user_id == "u-1"
         assert result.email == "admin@test.com"
@@ -33,7 +41,11 @@ async def test_invalid_jwt_raises_401():
         from server.app.api.deps import get_current_user
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(authorization="Bearer not.a.real.token")
+            await get_current_user(
+                request=_req(),
+                authorization="Bearer not.a.real.token",
+                session=None,
+            )
 
         assert exc_info.value.status_code == 401
 
@@ -44,6 +56,8 @@ async def test_missing_bearer_prefix_raises_401():
         from server.app.api.deps import get_current_user
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(authorization="just-a-token")
+            await get_current_user(
+                request=_req(), authorization="just-a-token", session=None
+            )
 
         assert exc_info.value.status_code == 401

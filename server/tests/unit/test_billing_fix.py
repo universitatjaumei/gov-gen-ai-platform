@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch
-from server.app.modules.brain.billing_engine import BillingEngine
+from server.app.modules.automation.billing_engine import BillingEngine
 from server.app.database.models import License, ClientAccount, PartnerAccount
 
 @pytest.mark.asyncio
@@ -46,7 +46,7 @@ async def test_record_consumption_fix_no_greenlet_error():
     mock_session.get.side_effect = [mock_license, mock_client, mock_partner]
     
     # El mock de la clase AsyncSession debe devolver el mock_session cuando se usa como context manager
-    with patch("server.app.modules.brain.billing_engine.AsyncSession") as mock_session_class:
+    with patch("server.app.modules.automation.billing_engine.AsyncSession") as mock_session_class:
         mock_session_class.return_value.__aenter__.return_value = mock_session
         
         # Ejecutamos la función
@@ -79,7 +79,7 @@ async def test_record_consumption_log_cleanliness(capsys):
     mock_session = AsyncMock()
     mock_session.get.side_effect = [mock_license, mock_client, mock_partner]
     
-    with patch("server.app.modules.brain.billing_engine.AsyncSession") as mock_session_class:
+    with patch("server.app.modules.automation.billing_engine.AsyncSession") as mock_session_class:
         mock_session_class.return_value.__aenter__.return_value = mock_session
         await engine.record_consumption(license_id=lic_id, tokens_used=50)
         

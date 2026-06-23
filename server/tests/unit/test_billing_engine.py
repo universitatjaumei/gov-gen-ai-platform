@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime
 from unittest.mock import patch, MagicMock
-from server.app.modules.brain.billing_engine import BillingEngine
+from server.app.modules.automation.billing_engine import BillingEngine
 from server.app.database.models import License, ClientAccount, PartnerAccount
 
 # --- Helpers ---
@@ -79,7 +79,7 @@ async def test_billing_engine_records_consumption():
 
     # El patch debe devolver siempre esta instancia (o factory)
     # create_autospec=True puede ser util, pero aqui return_value sirve
-    with patch("server.app.modules.brain.billing_engine.AsyncSession", return_value=fake_session):
+    with patch("server.app.modules.automation.billing_engine.AsyncSession", return_value=fake_session):
         await engine.record_consumption(
             license_id="lic_001",
             tokens_used=500,
@@ -107,7 +107,7 @@ async def test_billing_engine_updates_partner_balance():
         FakeResult(mock_partner)
     ])
 
-    with patch("server.app.modules.brain.billing_engine.AsyncSession", return_value=fake_session):
+    with patch("server.app.modules.automation.billing_engine.AsyncSession", return_value=fake_session):
         await engine.deduct_partner_credits(
             partner_id="partner_001",
             amount=500

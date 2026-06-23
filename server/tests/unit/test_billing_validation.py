@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from server.app.modules.brain.billing_engine import BillingEngine
+from server.app.modules.automation.billing_engine import BillingEngine
 from server.app.database.models import License, ClientAccount, PartnerAccount
 
 @pytest.mark.asyncio
@@ -8,7 +8,7 @@ async def test_validate_access_success():
     """Test standard success path."""
     engine = BillingEngine()
     
-    with patch("server.app.modules.brain.billing_engine.AsyncSession") as mock_session_cls:
+    with patch("server.app.modules.automation.billing_engine.AsyncSession") as mock_session_cls:
         mock_session = AsyncMock()
         mock_session_cls.return_value.__aenter__.return_value = mock_session
         
@@ -39,7 +39,7 @@ async def test_validate_access_success():
 async def test_validate_access_no_license():
     """Test failure when license does not exist."""
     engine = BillingEngine()
-    with patch("server.app.modules.brain.billing_engine.AsyncSession") as mock_session_cls:
+    with patch("server.app.modules.automation.billing_engine.AsyncSession") as mock_session_cls:
         mock_session = mock_session_cls.return_value.__aenter__.return_value = AsyncMock()
         mock_session.get.return_value = None # License None
         
@@ -51,7 +51,7 @@ async def test_validate_access_no_license():
 async def test_validate_access_license_invalid():
     """Test failure when license is expired/consumed."""
     engine = BillingEngine()
-    with patch("server.app.modules.brain.billing_engine.AsyncSession") as mock_session_cls:
+    with patch("server.app.modules.automation.billing_engine.AsyncSession") as mock_session_cls:
         mock_session = mock_session_cls.return_value.__aenter__.return_value = AsyncMock()
         
         # Locked/Expired License
@@ -68,7 +68,7 @@ async def test_validate_access_license_invalid():
 async def test_validate_access_partner_credit_limit():
     """Test failure when partner has insufficient credits."""
     engine = BillingEngine()
-    with patch("server.app.modules.brain.billing_engine.AsyncSession") as mock_session_cls:
+    with patch("server.app.modules.automation.billing_engine.AsyncSession") as mock_session_cls:
         mock_session = mock_session_cls.return_value.__aenter__.return_value = AsyncMock()
         
         from datetime import datetime, timedelta

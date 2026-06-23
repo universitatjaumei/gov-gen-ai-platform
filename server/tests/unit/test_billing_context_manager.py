@@ -1,12 +1,12 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from server.app.modules.brain.billing_engine import BillingEngine
+from server.app.modules.automation.billing_engine import BillingEngine
 
 @pytest.mark.asyncio
 async def test_billing_engine_context_manager_commit():
     """Verify that the context manager commits and closes on success."""
     # We need to mock AsyncSession and server_engine
-    with patch("server.app.modules.brain.billing_engine.AsyncSession") as mock_session_cls:
+    with patch("server.app.modules.automation.billing_engine.AsyncSession") as mock_session_cls:
         mock_session = mock_session_cls.return_value
         mock_session.commit = AsyncMock()
         mock_session.close = AsyncMock()
@@ -23,7 +23,7 @@ async def test_billing_engine_context_manager_commit():
 @pytest.mark.asyncio
 async def test_billing_engine_context_manager_rollback():
     """Verify that the context manager rolls back and closes on exception."""
-    with patch("server.app.modules.brain.billing_engine.AsyncSession") as mock_session_cls:
+    with patch("server.app.modules.automation.billing_engine.AsyncSession") as mock_session_cls:
         mock_session = mock_session_cls.return_value
         mock_session.commit = AsyncMock()
         mock_session.close = AsyncMock()
@@ -42,7 +42,7 @@ async def test_billing_engine_context_manager_rollback():
 @pytest.mark.asyncio
 async def test_billing_engine_session_is_none_after_exit():
     """Verify that the session reference is cleared."""
-    with patch("server.app.modules.brain.billing_engine.AsyncSession") as mock_session_cls:
+    with patch("server.app.modules.automation.billing_engine.AsyncSession") as mock_session_cls:
         mock_session = mock_session_cls.return_value
         mock_session.commit = AsyncMock()
         mock_session.close = AsyncMock()
