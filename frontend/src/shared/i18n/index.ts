@@ -8,18 +8,21 @@ import esAdmin from './locales/es/admin.json'
 import esScripts from './locales/es/scripts.json'
 import esRedaccion from './locales/es/redaccion.json'
 import esContentQuality from './locales/es/contentQuality.json'
+import esAuth from './locales/es/auth.json'
 import enCommon from './locales/en/common.json'
 import enChat from './locales/en/chat.json'
 import enAdmin from './locales/en/admin.json'
 import enScripts from './locales/en/scripts.json'
 import enRedaccion from './locales/en/redaccion.json'
 import enContentQuality from './locales/en/contentQuality.json'
+import enAuth from './locales/en/auth.json'
 import caCommon from './locales/ca/common.json'
 import caChat from './locales/ca/chat.json'
 import caAdmin from './locales/ca/admin.json'
 import caScripts from './locales/ca/scripts.json'
 import caRedaccion from './locales/ca/redaccion.json'
 import caContentQuality from './locales/ca/contentQuality.json'
+import caAuth from './locales/ca/auth.json'
 
 export const SUPPORTED_LANGUAGES = ['es', 'ca', 'en'] as const
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number]
@@ -29,16 +32,16 @@ i18n
   .use(initReactI18next)
   .init({
     resources: {
-      es: { common: esCommon, chat: esChat, admin: esAdmin, scripts: esScripts, redaccion: esRedaccion, contentQuality: esContentQuality },
-      ca: { common: caCommon, chat: caChat, admin: caAdmin, scripts: caScripts, redaccion: caRedaccion, contentQuality: caContentQuality },
-      en: { common: enCommon, chat: enChat, admin: enAdmin, scripts: enScripts, redaccion: enRedaccion, contentQuality: enContentQuality },
+      es: { common: esCommon, chat: esChat, admin: esAdmin, scripts: esScripts, redaccion: esRedaccion, contentQuality: esContentQuality, auth: esAuth },
+      ca: { common: caCommon, chat: caChat, admin: caAdmin, scripts: caScripts, redaccion: caRedaccion, contentQuality: caContentQuality, auth: caAuth },
+      en: { common: enCommon, chat: enChat, admin: enAdmin, scripts: enScripts, redaccion: enRedaccion, contentQuality: enContentQuality, auth: enAuth },
     },
     fallbackLng: {
       'ca-ES': ['ca', 'es'],
       default: ['es'],
     },
     supportedLngs: SUPPORTED_LANGUAGES,
-    ns: ['common', 'chat', 'admin', 'scripts', 'redaccion', 'contentQuality'],
+    ns: ['common', 'chat', 'admin', 'scripts', 'redaccion', 'contentQuality', 'auth'],
     defaultNS: 'common',
     interpolation: { escapeValue: false },
     detection: {

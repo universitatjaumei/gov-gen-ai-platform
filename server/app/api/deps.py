@@ -1,10 +1,13 @@
 from typing import AsyncGenerator
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from server.app.database.db import server_engine
 from server.app.core.auth import AuthenticationError, UserInfo, decode_token
+from server.app.core.auth.pat.service import PatInvalidError, PatService
+from server.app.database.db import server_engine
+
+_PAT_PREFIX = "pat_"
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -13,33 +16,45 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
+def _unauthorized(detail: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=detail,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 async def get_current_user(
+    request: Request,
     authorization: str | None = Header(default=None, alias="Authorization"),
+    session: AsyncSession = Depends(get_session),
 ) -> UserInfo:
-    """Valida el JWT del header Authorization y devuelve el UserInfo."""
+    """Valida el credencial del header Authorization (JWT de sesión o PAT).
+
+    Discrimina por prefijo: ``pat_…`` se valida contra la BD (PatService) y adjunta
+    los scopes del token en ``request.state.pat_scopes``; cualquier otro Bearer se
+    trata como JWT de sesión humana (``pat_scopes = None`` → sin filtrado por scope).
+    """
     if authorization is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing Authorization header. Use: Bearer <token>",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise _unauthorized("Missing Authorization header. Use: Bearer <token>")
     if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header. Use: Bearer <token>",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise _unauthorized("Invalid authorization header. Use: Bearer <token>")
 
     token = authorization.removeprefix("Bearer ").strip()
 
+    if token.startswith(_PAT_PREFIX):
+        try:
+            principal = await PatService(session).verify(token)
+        except PatInvalidError as e:
+            raise _unauthorized(str(e))
+        request.state.pat_scopes = principal.scopes
+        return principal.user_info
+
+    request.state.pat_scopes = None
     try:
         return decode_token(token)
     except AuthenticationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise _unauthorized(str(e))
 
 
 def require_role(*roles: str):
@@ -50,6 +65,30 @@ def require_role(*roles: str):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Role '{user.role}' is not allowed. Required: {', '.join(roles)}",
+            )
+        return user
+
+    return _check
+
+
+def require_scopes(*needed: str):
+    """Dependency factory que exige scopes a los principales PAT.
+
+    Una sesión humana (JWT) no se filtra por scope (``pat_scopes`` es ``None``); un
+    PAT debe portar todos los scopes requeridos o se rechaza con 403.
+    """
+
+    async def _check(
+        request: Request, user: UserInfo = Depends(get_current_user)
+    ) -> UserInfo:
+        scopes = getattr(request.state, "pat_scopes", None)
+        if scopes is None:
+            return user
+        missing = [s for s in needed if s not in scopes]
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "PAT_SCOPE_MISSING", "missing": missing},
             )
         return user
 

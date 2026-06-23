@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.api.deps import get_current_user
+from server.app.api.deps import get_current_user, require_scopes
 from server.app.core.auth import UserInfo
 from server.app.modules.agents_hub.agent.graph import create_agent_graph
 from server.app.modules.agents_hub.agent.router_node import build_route_to_subagent_node
@@ -90,7 +90,11 @@ def _source_to_dict(source) -> dict:
     }
 
 
-@router.post("/{chatbot_id}", status_code=200)
+@router.post(
+    "/{chatbot_id}",
+    status_code=200,
+    dependencies=[Depends(require_scopes("chat:test"))],
+)
 async def chat_stream(
     chatbot_id: uuid.UUID,
     request: ChatRequest,

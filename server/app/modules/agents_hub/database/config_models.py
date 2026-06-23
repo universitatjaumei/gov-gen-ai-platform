@@ -185,3 +185,70 @@ class HubPromptTemplate(HubConfigBase):
     override_tier: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     chatbot: Mapped["HubChatbot"] = relationship(back_populates="prompt_templates")
+
+
+class HubSsoUser(HubConfigBase):
+    """Usuario aprovisionado vía SSO SAML (AUTH.2).
+
+    Identidades que llegan por el IdP institucional y no son AdminAccount ni
+    PartnerAccount. Se crea/actualiza Just-In-Time tras validar la aserción.
+    """
+
+    __tablename__ = "hub_sso_users"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    email: Mapped[str] = mapped_column(
+        String(320), unique=True, index=True, nullable=False
+    )
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    role: Mapped[str] = mapped_column(String(40), nullable=False, default="user")
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)  # NameID
+    idp_entity_id: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class HubPersonalAccessToken(HubConfigBase):
+    """Personal Access Token revocable para clientes máquina (AUTH.3).
+
+    Se guarda solo el hash sha256 del token y un prefijo visible para identificarlo
+    en la UI; el texto plano se entrega una única vez en la creación.
+    """
+
+    __tablename__ = "hub_personal_access_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    owner_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    owner_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    owner_role: Mapped[str] = mapped_column(String(40), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    token_prefix: Mapped[str] = mapped_column(
+        String(16), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    scopes: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

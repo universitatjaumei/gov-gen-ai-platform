@@ -1,8 +1,8 @@
 """Punto de entrada FastAPI standalone del servidor Gov Gen AI.
 
-Incluye únicamente routers sin dependencias de NiceGUI/client_app.
-Los routers automation y telemetry dependen de AIBrainService→cortex→nicegui
-y se registran en main.py (NiceGUI) hasta completar la migración.
+Registra los routers de la plataforma migrada (Hub, redacción, automation API…).
+Los routers automation/telemetry quedan pendientes de registrar aquí mientras se
+completa la migración de su capa de servicio (AIBrainService).
 """
 
 from contextlib import asynccontextmanager
@@ -18,6 +18,8 @@ from server.app.api.v1.hub_tasks import router as hub_tasks_router
 from server.app.api.v1.ingestion import router as ingestion_router
 from server.app.api.v1.edge_sync import router as edge_sync_router
 from server.app.routers.auth_router import router as auth_router
+from server.app.routers.saml_auth_router import router as saml_auth_router
+from server.app.routers.pat_router import router as pat_router
 from server.app.routers.library_router import router as library_router
 from server.app.routers.hub_chatbots_router import router as hub_chatbots_router
 from server.app.routers.hub_clients_router import router as hub_clients_router
@@ -200,6 +202,8 @@ if DEPLOY_MODE not in ("cloud", "edge", "all"):
 
 def _register_cloud(app: FastAPI) -> None:
     app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(saml_auth_router, prefix="/api/v1")  # Deploy: cloud
+    app.include_router(pat_router, prefix="/api/v1")  # Deploy: cloud
     app.include_router(library_router, prefix="/api")
     app.include_router(hub_chatbots_router, prefix="/api/v1")
     app.include_router(hub_clients_router, prefix="/api/v1")

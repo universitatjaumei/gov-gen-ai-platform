@@ -1,29 +1,28 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useMemo } from 'react'
 
 const HUB_SUBNAV = [
-  { key: 'chatbots', path: '/hub/chatbots', ns: 'admin' },
-  { key: 'clients', path: '/hub/clients', ns: 'admin' },
-  { key: 'documents', path: '/hub/documents', ns: 'admin' },
-  { key: 'reports', path: '/hub/reports', ns: 'admin' },
-  { key: 'llm_configs', path: '/hub/llm-configs', ns: 'admin' },
-  { key: 'prompt_templates', path: '/hub/prompts', ns: 'admin' },
-  { key: 'ai_brain', path: '/hub/brain', ns: 'admin' },
-  { key: 'nav_sites', path: '/hub/sites', ns: 'contentQuality' },
-  { key: 'nav_quality', path: '/hub/content-quality', ns: 'contentQuality' },
+  { key: 'hub.chatbots', path: '/hub/chatbots' },
+  { key: 'hub.clients', path: '/hub/clients' },
+  { key: 'hub.documents', path: '/hub/documents' },
+  { key: 'hub.reports', path: '/hub/reports' },
+  { key: 'hub.llm_configs', path: '/hub/llm-configs' },
+  { key: 'hub.prompt_templates', path: '/hub/prompts' },
+  { key: 'hub.ai_brain', path: '/hub/brain' },
+  { key: 'contentQuality:nav_sites', path: '/hub/sites' },
+  { key: 'contentQuality:nav_quality', path: '/hub/content-quality' },
+  { key: 'auth:nav_access_tokens', path: '/hub/access-tokens' },
 ] as const
 
 export function HubLayout() {
-  const { t } = useTranslation('admin')
-  const { t: tq } = useTranslation('contentQuality')
+  const { t } = useTranslation(['admin', 'contentQuality', 'auth'])
 
   return (
     <div className="space-y-4">
-      <nav aria-label={t('hub.subnav_aria')} className="flex gap-1 border-b pb-2 flex-wrap">
-        {HUB_SUBNAV.map(({ key, path, ns }) => (
+      <nav aria-label={t('admin:hub.subnav_aria')} className="flex gap-1 border-b pb-2 flex-wrap">
+        {HUB_SUBNAV.map(({ key, path }) => (
           <NavLink
-            key={key}
+            key={path}
             to={path}
             className={({ isActive }) =>
               `px-3 py-1.5 rounded-md text-sm transition-colors ${
@@ -33,9 +32,7 @@ export function HubLayout() {
               }`
             }
           >
-            {ns === 'contentQuality'
-              ? tq(key as Parameters<typeof tq>[0])
-              : t(`hub.${key}` as Parameters<typeof t>[0])}
+            {t(key)}
           </NavLink>
         ))}
       </nav>

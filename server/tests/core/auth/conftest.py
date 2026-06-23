@@ -1,0 +1,238 @@
+"""Fixtures compartidas para los tests de auth SAML (AUTH.1 / AUTH.2).
+
+Las aserciones SAML firmadas se generan aquí con un par de claves de prueba (sin red,
+sin IdP real): se construye la metadata de un IdP de pruebas con su certificado y se
+firman respuestas con ``OneLogin_Saml2_Utils.add_sign``. NUNCA se usa el IdP real.
+
+Los tests que tocan BD (``db``) usan el PostgreSQL de desarrollo (localhost:5432) y
+limpian las filas creadas en el teardown.
+"""
+
+import base64
+import datetime as dt
+from types import SimpleNamespace
+
+import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
+from onelogin.saml2.utils import OneLogin_Saml2_Utils
+
+SP_ENTITY_ID = "https://govgenai.uji.es/sp"
+ACS_URL = "http://sp.example.com/api/v1/auth/saml/acs"
+IDP_ENTITY_ID = "https://idp.example.com/metadata"
+IDP_SSO_URL = "https://idp.example.com/sso"
+BASE_URL = "http://sp.example.com"
+RETURN_URL = "http://localhost:5173/auth/callback"
+
+
+# --------------------------------------------------------------------------- #
+# Helpers de criptografía / construcción de respuestas SAML firmadas            #
+# --------------------------------------------------------------------------- #
+def _gen_keypair() -> tuple[str, str]:
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Test IdP")])
+    now = dt.datetime.now(dt.timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - dt.timedelta(days=1))
+        .not_valid_after(now + dt.timedelta(days=3650))
+        .sign(key, hashes.SHA256())
+    )
+    key_pem = key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.TraditionalOpenSSL,
+        serialization.NoEncryption(),
+    ).decode()
+    cert_pem = cert.public_bytes(serialization.Encoding.PEM).decode()
+    return key_pem, cert_pem
+
+
+def _cert_body(cert_pem: str) -> str:
+    return "".join(
+        line for line in cert_pem.splitlines() if "CERTIFICATE" not in line
+    ).strip()
+
+
+def _idp_metadata_xml(cert_pem: str) -> str:
+    return (
+        '<?xml version="1.0"?>'
+        '<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" '
+        f'entityID="{IDP_ENTITY_ID}">'
+        '<IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">'
+        '<KeyDescriptor use="signing">'
+        '<KeyInfo xmlns="http://www.w3.org/2000/09/xmldsig#"><X509Data>'
+        f"<X509Certificate>{_cert_body(cert_pem)}</X509Certificate>"
+        "</X509Data></KeyInfo></KeyDescriptor>"
+        '<SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" '
+        f'Location="{IDP_SSO_URL}"/>'
+        "</IDPSSODescriptor></EntityDescriptor>"
+    )
+
+
+def _saml_time(offset_seconds: int = 0) -> str:
+    return (
+        dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=offset_seconds)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _attribute(name: str, *values: str) -> str:
+    vals = "".join(f"<saml:AttributeValue>{v}</saml:AttributeValue>" for v in values)
+    return f'<saml:Attribute Name="{name}">{vals}</saml:Attribute>'
+
+
+def _build_signed_response(
+    *,
+    sign_key_pem: str,
+    sign_cert_pem: str,
+    email: str = "ada@uji.es",
+    audience: str = SP_ENTITY_ID,
+    destination: str = ACS_URL,
+    not_before_off: int = -300,
+    not_after_off: int = 600,
+    attributes: dict | None = None,
+) -> str:
+    """Construye una Response SAML, firma el root y la devuelve en base64."""
+    if attributes is None:
+        attributes = {"mail": [email]}
+    attr_xml = "".join(_attribute(n, *vs) for n, vs in attributes.items())
+    xml = (
+        '<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" '
+        'xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" '
+        'ID="_resp_id_12345" Version="2.0" '
+        f'IssueInstant="{_saml_time()}" Destination="{destination}">'
+        f"<saml:Issuer>{IDP_ENTITY_ID}</saml:Issuer>"
+        "<samlp:Status><samlp:StatusCode "
+        'Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>'
+        '<saml:Assertion ID="_assert_id_12345" Version="2.0" '
+        f'IssueInstant="{_saml_time()}">'
+        f"<saml:Issuer>{IDP_ENTITY_ID}</saml:Issuer>"
+        "<saml:Subject>"
+        '<saml:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">'
+        f"{email}</saml:NameID>"
+        '<saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">'
+        f'<saml:SubjectConfirmationData NotOnOrAfter="{_saml_time(not_after_off)}" '
+        f'Recipient="{destination}"/>'
+        "</saml:SubjectConfirmation></saml:Subject>"
+        f'<saml:Conditions NotBefore="{_saml_time(not_before_off)}" '
+        f'NotOnOrAfter="{_saml_time(not_after_off)}">'
+        f"<saml:AudienceRestriction><saml:Audience>{audience}</saml:Audience>"
+        "</saml:AudienceRestriction></saml:Conditions>"
+        f'<saml:AuthnStatement AuthnInstant="{_saml_time()}" SessionIndex="_sess_idx_1">'
+        "<saml:AuthnContext><saml:AuthnContextClassRef>"
+        "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport"
+        "</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement>"
+        f"<saml:AttributeStatement>{attr_xml}</saml:AttributeStatement>"
+        "</saml:Assertion></samlp:Response>"
+    )
+    signed = OneLogin_Saml2_Utils.add_sign(xml, sign_key_pem, sign_cert_pem)
+    if isinstance(signed, bytes):
+        signed = signed.decode("utf-8")
+    return base64.b64encode(signed.encode("utf-8")).decode("ascii")
+
+
+# --------------------------------------------------------------------------- #
+# Fixtures                                                                      #
+# --------------------------------------------------------------------------- #
+@pytest.fixture(autouse=True)
+def _base_auth_env(monkeypatch):
+    """JWT + TESTING para todos los tests de auth (create_token/decode_token)."""
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-at-least-32-characters-long")
+    monkeypatch.setenv("TESTING", "1")
+
+
+@pytest.fixture
+def saml_ctx(monkeypatch):
+    """Configura el entorno SAML con un IdP de pruebas y expone el contexto."""
+    key_pem, cert_pem = _gen_keypair()
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-at-least-32-characters-long")
+    monkeypatch.setenv("SAML_ENABLED", "true")
+    monkeypatch.setenv("SAML_SP_ENTITY_ID", SP_ENTITY_ID)
+    monkeypatch.setenv("SAML_SP_ACS_URL", ACS_URL)
+    monkeypatch.setenv("SAML_IDP_METADATA_XML", _idp_metadata_xml(cert_pem))
+    monkeypatch.setenv("SAML_ATTR_EMAIL", "mail")
+    monkeypatch.setenv("SAML_ATTR_NAME", "displayName")
+    monkeypatch.setenv("SAML_ATTR_ROLE", "role")
+    monkeypatch.setenv("SAML_ATTR_GROUPS", "groups")
+    monkeypatch.setenv("SAML_DEFAULT_ROLE", "user")
+    monkeypatch.setenv("SAML_FRONTEND_RETURN_URL", RETURN_URL)
+    monkeypatch.delenv("SAML_GROUP_ROLE_MAP", raising=False)
+
+    def _make_response(**kwargs):
+        kwargs.setdefault("sign_key_pem", key_pem)
+        kwargs.setdefault("sign_cert_pem", cert_pem)
+        return _build_signed_response(**kwargs)
+
+    return SimpleNamespace(
+        key_pem=key_pem,
+        cert_pem=cert_pem,
+        sp_entity_id=SP_ENTITY_ID,
+        acs_url=ACS_URL,
+        idp_entity_id=IDP_ENTITY_ID,
+        idp_sso_url=IDP_SSO_URL,
+        base_url=BASE_URL,
+        return_url=RETURN_URL,
+        idp_metadata_xml=_idp_metadata_xml(cert_pem),
+        make_response=_make_response,
+        gen_keypair=_gen_keypair,
+    )
+
+
+@pytest.fixture
+async def db():
+    """Sesión contra el PostgreSQL de desarrollo, con limpieza de filas de test.
+
+    Crea un engine async **fresco por test** (como el conftest e2e) para no reutilizar
+    conexiones del ``server_engine`` global ligadas a otro event loop. Devuelve un
+    namespace con ``session``, ``engine`` y ``track(email)``; el teardown borra de
+    hub_sso_users / AdminAccount / PartnerAccount las filas con esos emails.
+    """
+    import os
+
+    from sqlalchemy import delete
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlmodel import SQLModel
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from server.app.database.models import AdminAccount, PartnerAccount
+    from server.app.modules.agents_hub.database.base import HubConfigBase
+    from server.app.modules.agents_hub.database.config_models import (
+        HubPersonalAccessToken,
+        HubSsoUser,
+    )
+
+    database_url = os.environ.get(
+        "DATABASE_URL",
+        "postgresql+asyncpg://govgenai:govgenai_dev@localhost:5432/govgenai",
+    )
+    engine = create_async_engine(database_url)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+        await conn.run_sync(HubConfigBase.metadata.create_all)
+
+    session = AsyncSession(engine)
+    tracked: list[str] = []
+
+    ns = SimpleNamespace(
+        session=session, engine=engine, track=tracked.append, emails=tracked
+    )
+    try:
+        yield ns
+    finally:
+        if tracked:
+            for model in (HubSsoUser, AdminAccount, PartnerAccount):
+                await session.execute(delete(model).where(model.email.in_(tracked)))
+            await session.execute(
+                delete(HubPersonalAccessToken).where(
+                    HubPersonalAccessToken.owner_email.in_(tracked)
+                )
+            )
+            await session.commit()
+        await session.close()
+        await engine.dispose()

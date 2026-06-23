@@ -26,6 +26,22 @@ class Settings:
     content_quality_enabled: bool = True
     content_quality_interval_hours: int = 24
     content_quality_semantic_enabled: bool = True
+    # SSO SAML (AUTH.1) — Service Provider genérico SAML 2.0
+    saml_enabled: bool = False
+    saml_sp_entity_id: str = ""
+    saml_sp_acs_url: str = ""
+    saml_sp_sls_url: str = ""
+    saml_sp_x509_cert: str = ""
+    saml_sp_private_key: str = ""
+    saml_idp_metadata_url: str = ""
+    saml_idp_metadata_xml: str = ""
+    saml_attr_email: str = "mail"
+    saml_attr_name: str = "displayName"
+    saml_attr_role: str = "role"
+    saml_attr_groups: str = "groups"
+    saml_group_role_map: str = ""
+    saml_default_role: str = "user"
+    saml_frontend_return_url: str = ""
 
     @property
     def is_dev_mode(self) -> bool:
@@ -53,4 +69,19 @@ def get_settings() -> Settings:
         content_quality_enabled=os.getenv("CONTENT_QUALITY_ENABLED", "true").lower() != "false",
         content_quality_interval_hours=int(os.getenv("CONTENT_QUALITY_INTERVAL_HOURS", "24")),
         content_quality_semantic_enabled=os.getenv("CONTENT_QUALITY_SEMANTIC_ENABLED", "true").lower() != "false",
+        saml_enabled=os.getenv("SAML_ENABLED", "false").lower() == "true",
+        saml_sp_entity_id=os.getenv("SAML_SP_ENTITY_ID", ""),
+        saml_sp_acs_url=os.getenv("SAML_SP_ACS_URL", ""),
+        saml_sp_sls_url=os.getenv("SAML_SP_SLS_URL", ""),
+        saml_sp_x509_cert=os.getenv("SAML_SP_X509_CERT", ""),
+        saml_sp_private_key=os.getenv("SAML_SP_PRIVATE_KEY", ""),
+        saml_idp_metadata_url=os.getenv("SAML_IDP_METADATA_URL", ""),
+        saml_idp_metadata_xml=os.getenv("SAML_IDP_METADATA_XML", ""),
+        saml_attr_email=os.getenv("SAML_ATTR_EMAIL", "mail"),
+        saml_attr_name=os.getenv("SAML_ATTR_NAME", "displayName"),
+        saml_attr_role=os.getenv("SAML_ATTR_ROLE", "role"),
+        saml_attr_groups=os.getenv("SAML_ATTR_GROUPS", "groups"),
+        saml_group_role_map=os.getenv("SAML_GROUP_ROLE_MAP", ""),
+        saml_default_role=os.getenv("SAML_DEFAULT_ROLE", "user"),
+        saml_frontend_return_url=os.getenv("SAML_FRONTEND_RETURN_URL", ""),
     )

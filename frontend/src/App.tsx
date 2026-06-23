@@ -5,6 +5,8 @@ import { AuthProvider, PrivateRoute } from '@/shared/auth'
 import { AppLayout } from '@/admin/AppLayout'
 import { HubLayout } from '@/admin/HubLayout'
 import { LoginPage } from '@/admin/pages/LoginPage'
+import { AuthCallbackPage } from '@/admin/pages/AuthCallbackPage'
+import { AccessTokensPage } from '@/admin/pages/AccessTokensPage'
 import { ChatbotsPage } from '@/admin/pages/ChatbotsPage'
 import { ClientsPage } from '@/admin/pages/ClientsPage'
 import { DocumentsPage } from '@/admin/pages/DocumentsPage'
@@ -49,6 +51,7 @@ function App() {
           <Suspense fallback={null}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/auth/callback" element={<AuthCallbackPage />} />
               <Route element={<PrivateRoute />}>
                 <Route element={<AppLayout />}>
                   <Route index element={<Navigate to="/hub" replace />} />
@@ -63,6 +66,7 @@ function App() {
                     <Route path="brain" element={<AIBrainPage />} />
                     <Route path="sites" element={<SitesPage />} />
                     <Route path="content-quality" element={<ContentQualityPage />} />
+                    <Route path="access-tokens" element={<AccessTokensPage />} />
                   </Route>
                   <Route path="/redaccion/builder" element={<ReportTemplateBuilderPage />} />
                   <Route path="/redaccion/wizard" element={<GenericReportWizard />} />
