@@ -7,6 +7,7 @@ Este módulo proporciona:
 - Localización de elementos visuales mediante IA multimodal.
 """
 
+import asyncio
 import json
 import re
 import base64
@@ -14,7 +15,6 @@ from typing import List, Dict, Optional, Union, Tuple
 from google import genai
 from google.genai import types
 import openai
-from nicegui import run
 
 # Importar el gestor de LLM existente
 from server.app.modules.automation.infrastructure.llm_gateway import ejecutar_tarea
@@ -314,7 +314,7 @@ async def locate_visual_element(
                     ],
                 )
 
-            response = await run.io_bound(_call_vision)
+            response = await asyncio.to_thread(_call_vision)
 
             if response and response.text:
                 response_json = _clean_json_markdown(response.text)

@@ -116,7 +116,6 @@ async def ejecutar_tarea(
     backoff_factor = 2  # Seconds
 
     import asyncio
-    from nicegui import run
 
     for attempt in range(max_retries):
         try:
@@ -127,7 +126,7 @@ async def ejecutar_tarea(
 
                 client = genai.Client(api_key=api_key)
 
-                # Refactored to use nicegui.run.io_bound for better Event Loop handling
+                # Offload de la llamada bloqueante a un hilo (sin acoplar el backend a UI)
                 def _google_call():
                     # Check if stream is needed or plain generate_content
                     # Original code used generate_content_stream but concatenated immediately.
@@ -144,7 +143,7 @@ async def ejecutar_tarea(
                         final = chunk
                     return txt, final
 
-                response_text, final_response = await run.io_bound(_google_call)
+                response_text, final_response = await asyncio.to_thread(_google_call)
 
                 if final_response and final_response.usage_metadata:
                     tokens_enviados = final_response.usage_metadata.prompt_token_count
