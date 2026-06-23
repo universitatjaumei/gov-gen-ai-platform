@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, act } from '@testing-library/react';
 import { renderHook } from '@testing-library/react';
-import { ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { ThemeProvider, useTheme } from '../ThemeProvider';
-import { DEFAULT_THEME, ThemeConfig } from '../types';
+import { DEFAULT_THEME, type ThemeConfig } from '../types';
 
 // Mock de fetch para cargar temas
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+globalThis.fetch = mockFetch;
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <ThemeProvider>{children}</ThemeProvider>

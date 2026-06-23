@@ -5,13 +5,13 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
-  ReactNode,
+  type ReactNode,
 } from 'react';
 import {
-  ThemeConfig,
   DEFAULT_THEME,
   validateTheme,
   mergeThemes,
+  type ThemeConfig,
 } from './types';
 import { DARK_THEME, UNIVERSITY_THEME, HIGH_CONTRAST_THEME } from './presets';
 

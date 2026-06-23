@@ -1,14 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
-  ThemeConfig,
   validateTheme,
   DEFAULT_THEME,
   mergeThemes,
-  ThemeColors,
-  ThemeTypography,
-  ThemeSpacing,
-  ThemeBorderRadius,
-  ThemeComponents,
+  type ThemeColors,
 } from '../types';
 
 describe('Theme Types and Validation', () => {

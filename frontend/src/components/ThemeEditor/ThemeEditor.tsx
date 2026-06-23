@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../themes/ThemeProvider';
-import { ThemeConfig, DEFAULT_THEME, validateTheme } from '../../themes/types';
-import { THEME_PRESETS, ThemePresetName } from '../../themes/presets';
+import { DEFAULT_THEME, validateTheme, type ThemeConfig } from '../../themes/types';
+import { THEME_PRESETS, type ThemePresetName } from '../../themes/presets';
 import styles from './ThemeEditor.module.css';
 
 interface ColorInputProps {

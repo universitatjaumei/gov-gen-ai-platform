@@ -1,4 +1,4 @@
-import { ThemeConfig, DEFAULT_THEME, mergeThemes } from './types';
+import { DEFAULT_THEME, mergeThemes, type ThemeConfig } from './types';
 
 export const DARK_THEME: ThemeConfig = mergeThemes(DEFAULT_THEME, {
   name: 'dark',
