@@ -1,89 +1,98 @@
-🛠️ CONTRIBUTING.md: MANUAL UNIFICADO DE DESARROLLO (v2.0)
-Este documento establece las normas obligatorias para la evolución y mantenimiento de AutomatIA. Todo colaborador (humano o agente IA) debe seguir estos protocolos estrictamente.
+# 🛠️ CONTRIBUTING — Manual de desarrollo de Gov Gen AI Platform
 
-🎯 0. PRE-FLIGHT CHECK (Obligatorio)
+Normas obligatorias para evolucionar y mantener la plataforma. Aplican a todo colaborador,
+humano o agente de IA.
 
-Para evitar conflictos con los alias de Windows y asegurar el aislamiento del entorno, toda ejecución de scripts o tests debe realizarse mediante uv.
+> **Fuentes de verdad** (este manual las resume; no las sustituye):
+> - `Arquitectura.md` — **qué** es la plataforma y qué principios la rigen (módulos, roles, privacidad, frontera Cloud/Edge, stack). Decisiones estructurales.
+> - `PLAN_DESARROLLO.md` — **cuándo y en qué orden** se construye (3 Fases Funcionales, calendario).
+> - `Plan_TDD_Fase1.md` / `Plan_TDD_Fase2.md` / `Plan_TDD_Fase3.md` — **cómo** se construye cada pieza (prompts TDD Red/Green).
+> - `CLAUDE.md` — **reglas operativas** para agentes (retirada de legacy, frontera edge/cloud, portabilidad, shell, migraciones). En caso de conflicto, **CLAUDE.md manda**.
+> - `PROJECT_STATE.md` — estado actual y cursor de cada plan.
 
-Antes de iniciar cualquier tarea, el agente DEBE ejecutar: uv run scripts/validate\_dev\_env.py
+---
 
-Nota para Windows: Nunca uses el comando python directamente. Si el sistema te redirige a la Microsoft Store, es una señal de que no estás usando el ejecutor uv.
+## 🎯 0. Pre-flight (obligatorio)
 
-Sincronización: Si has añadido dependencias, ejecuta primero uv sync para actualizar el entorno antes del check de validación.
+- **Entorno Python con `uv`.** Toda ejecución de backend, tests o scripts se hace vía `uv run …`. En Windows, **nunca** invoques `python` directamente (te redirige a la Microsoft Store); usa el ejecutor `uv`. Si añades dependencias, ejecuta `uv sync` antes de continuar.
+- **Shell del proyecto: PowerShell 5.1.** El operador `&&` **no existe** y provoca error de parseo. Encadena con `;` o `; if ($?) { … }`. Usa rutas absolutas al cambiar de directorio (ver `CLAUDE.md` → "Reglas de comandos de shell").
+- **Stack local**: `docker compose up -d` levanta PostgreSQL+pgvector, MinIO y el microservicio `script-sandbox`. Backend: `cd server; uv run pytest`. Frontend: `cd frontend; npm test`.
+- **Dependencia de sistema (SSO SAML)**: el SP SAML usa `python3-saml`, que depende de `xmlsec` (libxml2 + libxmlsec1). En Windows el wheel de `xmlsec` ya las incluye; en imágenes Docker Debian/Ubuntu añade `libxml2-dev libxmlsec1-dev pkg-config` (apt) antes de `uv sync`.
 
-Dependencia de sistema (SSO SAML — AUTH.1): el SP SAML usa `python3-saml`, que depende de `xmlsec` (libxml2 + libxmlsec1). En Windows el wheel de `xmlsec` ya las incluye; en imágenes Docker basadas en Debian/Ubuntu añade `libxml2-dev libxmlsec1-dev pkg-config` (vía apt) antes de `uv sync`.
+---
 
-🤖 1. REGLAS DE COMPORTAMIENTO PARA AGENTES (Cline, Claude Code, etc.)
-Análisis Previo Obligatorio: Antes de proponer o ejecutar cambios, DEBES leer ARCHITECTURE.md para entender la soberanía de datos y la jerarquía de servicios.
+## 🤖 1. Reglas para agentes de IA
 
-No Suposición de Servicios: Utiliza siempre el objeto global state para acceder a la lógica inyectada; nunca instancies servicios de forma aislada si ya existen en el contenedor de dependencias.
+- **Análisis previo obligatorio**: antes de proponer cambios, lee `Arquitectura.md` (soberanía del dato, jerarquía de servicios, frontera Cloud/Edge) y `CLAUDE.md` (reglas duras). Localiza el cursor en `PROJECT_STATE.md`.
+- **Inyección de dependencias, no instanciación manual**: en el servidor FastAPI usa `Depends`. **No** instancies servicios a mano ni accedas a sus métodos privados a través de la frontera HTTP.
+- **Autonomía con responsabilidad**: ejecuta cambios alineados con la arquitectura y reporta tras la ejecución. Si detectas código que viola los estándares, propón la refactorización.
+- **Divide y vencerás**: descompón tareas complejas en pasos pequeños y verificables.
+- **Actualiza `PROJECT_STATE.md`** al cerrar cualquier prompt que avance un paso de un plan.
 
-Autonomía con Responsabilidad: Ejecuta cambios técnicos alineados con la arquitectura y reporta tras la ejecución. Si detectas código que viola los "Estándares de Desarrollo", propón una refactorización inmediata.
+---
 
-Metodología "Divide y Vencerás": Desglosa tareas complejas en pasos pequeños y solicita validación tras cada hito.
+## 🧱 2. Estructura del monorepo
 
-🔄 2. CICLO DE TRABAJO OBLIGATORIO (TDD + GIT)
-Se debe aplicar estrictamente el ciclo de desarrollo dirigido por pruebas y control de versiones:
+```
+server/        FastAPI (AGPLv3) — modules/{automation,agents_hub,redaccion,expedientes}, core/, services/, api/, routers/, migrations/
+frontend/      React + Vite + TS (MIT) — src/{admin,widget,agent,redaccion,shared}
+client_app/    Agente de ejecución local (Thin Client, sin UI). El resto es legacy NiceGUI pendiente de retirada.
+mcp_server/    Servidor MCP stdio (paquete uv autocontenido, sin imports de server/app)
+shared/        Tipos y contratos compartidos
+_legacy_nicegui/   Cuarentena de larga duración durante la migración (solo lectura; borrado final manual al cierre de Fase 1)
+```
 
-🔴 RED: Crea el test en la carpeta tests/ correspondiente y valida que falle.
+Si escribes código nuevo en `client_app/` fuera del agente de ejecución local, para y consulta si pertenece al servidor o al frontend.
 
-🟢 GREEN: Implementa el código mínimo necesario para que los tests pasen.
+---
 
-💾 GIT COMMIT: Realiza un commit inmediatamente después de que los tests pasen y antes de continuar con la siguiente tarea.
+## 🔄 3. Ciclo de trabajo (TDD + Git)
 
-Usa Conventional Commits (ej: feat:, fix:, test:, refactor:).
+- 🔴 **RED**: escribe el test en la carpeta `tests/` correspondiente y comprueba que falla. No hay PR sin tests.
+- 🟢 **GREEN**: implementa el mínimo necesario para pasar.
+- 🔵 **REFACTOR**: limpia manteniendo los tests en verde.
+- 💾 **COMMIT**: commit inmediato tras GREEN, con **Conventional Commits** (`feat:`, `fix:`, `test:`, `refactor:`, `docs:`, `chore:`). Menciona qué tests pasan. **No** incluyas líneas `Co-Authored-By` de Claude.
 
-Menciona explícitamente qué tests han pasado en el mensaje del commit.
+---
 
-🔵 REFACTOR: Limpia y optimiza el código manteniendo la integridad de los tests.
+## 💻 4. Estándares técnicos
 
-🏗️ 3. REGLA DE ORO: LOGIC-FIRST
-Prohibido el desarrollo "UI-First": No se deben implementar componentes de interfaz (NiceGUI) sin haber validado primero la lógica de negocio mediante tests unitarios en los Servicios o el Core.
+- **Asincronía total**: prohibido I/O síncrono en el servidor. Usa `async/await`; envuelve librerías síncronas (Docling, LibreOffice, etc.) en `asyncio.to_thread`.
+- **Tipado estricto**: type hints en todas las funciones (Python) y sin `any` implícito (TypeScript).
+- **Contract-First (frontend)**: la única fuente de verdad de datos es el backend. Usa los tipos y hooks generados por **Orval** desde `openapi.json`; **prohibido** definir interfaces de datos a mano o hacer `fetch` crudo saltándose el cliente generado. Formularios con `react-hook-form` + `zodResolver` alineados al contrato.
+- **SDUI / HATEOAS**: el frontend no conoce campos a priori ni calcula permisos. Renderiza formularios iterando el `ui_contract` del backend y botones iterando `acciones_permitidas`. Nada de `if (rol === …) mostrarBoton()`.
+- **i18n obligatorio**: ningún string hardcodeado en la UI. Usa `i18next` con locales `ca` / `es` / `en` en `frontend/src/shared/i18n/`. (El antiguo `translations.json` de NiceGUI es legacy.)
+- **Sin features no pedidas**: no añadas manejo de errores, validaciones, flags ni abstracciones para escenarios fuera de la tarea.
+- **Migraciones**: cuando toques `server/migrations/versions/`, aplica la migración con `uv run alembic upgrade <rev>` (ver `CLAUDE.md`).
 
-Independencia de la Interfaz: La lógica debe ser funcional incluso sin la capa visual.
+---
 
-💻 4 ESTÁNDARES TÉCNICOS DE CODIFICACIÓN
+## 🚧 5. Frontera Edge/Cloud y desacoplamiento (muro de seguridad)
 
-Asincronía: Toda operación de Entrada/Salida (I/O) y llamadas a la API del Brain deben ser async por defecto.
+Regulado en runtime por `DEPLOY_MODE=cloud|edge|all`. Ver el detalle completo en `CLAUDE.md` → "Frontera Edge-Cloud".
 
-Tipado Estricto: Usa Python Type Hints en todas las definiciones de funciones y métodos.
+- **Dos `DeclarativeBase`**: `HubConfigBase` (config, se sincroniza cloud→edge) y `HubOperationalBase` (solo edge). **Sin `relationship()` cross-base**; navega por `*_id` con query explícito.
+- **Un módulo edge no importa de un módulo cloud.** La configuración se lee vía `ConfigProvider`, no importando modelos de config directamente.
+- **`client_app/` no puede importar de `server/`.** El Thin Client se comunica con el servidor por API/WebSocket.
+- **Etiqueta cada router nuevo** con `Deploy: cloud|edge|shared` en su docstring y regístralo en `_register_cloud`/`_register_edge`.
 
-Seguridad: Todo script generado debe pasar por el SecurityAuditor para asegurar que no existan funciones prohibidas (eval, exec, accesos a rutas absolutas) antes de proponerlo.
+---
 
-Consistencia Windows: Incluye siempre manejo de errores para bloqueos de archivos (WinError 32) en módulos que manipulen el sistema de archivos.
+## 🔒 6. Seguridad y privacidad
 
-Internacionalización (i18n): Prohibido hardcodear strings de texto en la UI. Usa state.i18n.t('key') y actualiza translations.json.
+- **Aislamiento multi-tenant**: cada consulta de datos de una Organización se filtra por el claim de organización del principal; ningún acceso cruzado sin rol global. Es una regla dura verificada por tests de aislamiento en CI.
+- **Scripts generados por IA**: pasan por el `ScriptSecurityAuditor` (análisis AST) y se ejecutan en el **microservicio `script-sandbox`** (aislado, sin red, sin FS del host, no-root). El servidor no ejecuta código generado in-process.
+- **Datos PII y anonimización**: los servicios edge entregan datos ya anonimizados al `model_factory` antes de cualquier LLM externo. En despliegue Edge, el Vault de identidades no sale del nodo institucional. No aplica al chatbot público de información pública.
+- **Secretos por variable de entorno**: nunca hardcodees claves, DSN ni contraseñas. `DATABASE_URL` (async) y `DATABASE_URL_SYNC` (Alembic) solo desde env. En producción, Secret Manager.
+- **Almacenamiento de ficheros de negocio**: siempre vía `StorageService` (`fsspec`), nunca `open()`/`shutil` directos a disco (rompe Cloud Run y acopla al SO).
 
-🧱 5 DESACOPLAMIENTO CLIENTE-SERVIDOR (Muro de Seguridad)
+---
 
-Para garantizar la soberanía de datos y la escalabilidad distribuida:
+## 🧹 7. Retirada de legacy (borra, no comentes)
 
-Prohibición de Importaciones: Ningún archivo bajo client\_app/ puede importar módulos de server/.
+- Una migración **no está completa** hasta retirar el código original. Sin código muerto, imports sin usar ni comentarios `# TODO: migrate`.
+- **Caso A** (NiceGUI con migración activa): al cerrar el prompt GREEN, mover el fichero a `_legacy_nicegui/` manteniendo la ruta relativa. `_legacy_nicegui/` es **solo lectura** y cuarentena de larga duración; el borrado definitivo lo hace el usuario al cierre de la Fase 1.
+- **Caso B** (código huérfano sin migración): borrar directamente. El historial de git es la fuente de verdad del pasado.
+- Nada nuevo entra en `_legacy_archive/`. Sin shims de retrocompatibilidad ni alias `_old_*`.
 
-Comunicación vía API: El cliente debe comunicarse con el Brain únicamente a través de BrainAPIClient (o el LocalBrainClient adapter en modo monolito).
-
-Protocolo de Datos: Los datos PII reales se quedan en el cliente. Solo datos anonimizados viajan al Brain.
-
-🎨 6. INTERFAZ DE USUARIO (UI/UX)
-Estilo Visual: Mantén la consistencia estética basada en Tailwind CSS y componentes nativos de NiceGUI.
-
-Variables y Datos:
-
-Usa el DataFlowAnalyzer para mapear y validar tipos de variables.
-
-Evita visualizaciones crudas: Nunca renderices objetos directamente (ej: \[object Object]). Asegúrate de mostrar el atributo .name o .label de las variables en los chips y selectores.
-
-Navegación: Los asistentes de configuración (Wizards) deben abrirse en paneles laterales (SideDrawer) para no romper el contexto del flujo de trabajo actual.
-
-Feedback: Asegura que cada componente reactivo maneje correctamente los estados de carga mediante spinners o skeletons.a HTTP. No asumas acceso directo a la base de datos del servidor desde el código del cliente.
-
-🌍 7. INTERNACIONALIZACIÓN (i18n)
-
-AutomatIA es un producto global. Se prohíbe el uso de strings de texto directamente en la UI:
-
-Uso de Claves: Usa siempre state.i18n.t('mi\_clave') en los componentes de NiceGUI.
-
-Registro: Toda nueva etiqueta debe ser añadida a client\_app/app/i18n/translations.json.
-
-Visualización de Variables: Al renderizar variables del flujo, nunca uses el objeto completo (evita el error \[object Object]). Usa var.name o var.label.
-
+Ver el procedimiento completo en `CLAUDE.md` → "Regla crítica: migración = código nuevo + retirada del legacy".

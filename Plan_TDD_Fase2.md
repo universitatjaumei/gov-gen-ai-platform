@@ -44,6 +44,93 @@ no se desarrollarán hasta comenzar la subfase correspondiente:
 
 ---
 
+# Recomendaciones y replanteamiento de la Fase 2 (2026-07-11)
+
+> Sección añadida a partir de `VALORACION_PROYECTO.md` y de un inventario real de `client_app/`.
+> **Precede a los bloques 9C/9D/FASE 14-18 originales, que quedan condicionados por esta sección.**
+> No borra ningún prompt: replantea qué merece la pena ejecutar y en qué orden. La decisión
+> go/no-go sobre la migración es del usuario; aquí está la recomendación fundamentada.
+
+## 1. Recomendaciones de ejecución (de la valoración)
+
+Antes de tocar código de Fase 2:
+
+1. **Inventario de migración medible** (esta sección lo aporta, §3). Sin él, el "criterio de éxito 2.B" (`client_app/app/ui` vacío) no es verificable de forma incremental.
+2. **Prompt 0 de calidad**: refactorizar `AIBrainService` (1.082 LOC) y `api/v1/automation.py` (1.189 LOC, DI violada, router sin registrar) **antes** de construir UI React encima. Migrar UI sobre un backend que viola DI consolida el problema.
+3. **`2A.2` Secure Pairing es bloqueante, no opcional**: un Thin Client que ejecuta scripts con un `AGENT_TOKEN` estático de `.env` reproduce a escala local el bypass de autenticación A1 corregido en Fase 1. El enrolment de un solo uso se diseña como parte del scaffolding (9.16), no después.
+4. **El esqueleto de `9.16`** (`websockets.connect` en bucle simple) debe entregarse con reconexión + backoff, heartbeat y cola de jobs pendientes; no el happy path.
+5. **`2C.0` (MCP Client) es prerrequisito bloqueante de la Fase 3**: adelantarlo al principio de la Subfase 2.C para des-arriesgar Expedientes.
+6. **Unificar la ubicación de Focus Mode**: `CAMBIOS PLANIFICACIÓN.md` lo reubicó en `frontend/src/shared/layout/` (ya entregado en Fase 1.C, prompt 1C.0). Los prompts 9.12a de este documento que aún lo sitúan en `src/automation/state/` deben **reutilizar** el store transversal existente, no crear uno nuevo.
+
+## 2. Hallazgo que cambia el alcance: gran parte del "valor legacy" YA está reimplementado
+
+Inventario de `client_app/` (489 ficheros `.py`, de los cuales ~99 UI NiceGUI, ~81 servicios, 238 tests, y un `.venv/` commiteado). Lo esencial: **los servicios de generación que la Fase 2 planeaba migrar ya existen, modernizados, en `server/app/modules/redaccion` y `agents_hub`**:
+
+| Servicio legacy (FASE 15/16/18) | Estado real | Equivalente en el server |
+|---|---|---|
+| `external_script_audit_service` (AST) | ✅ Ya migrado | `redaccion/services/script_auditor.py` (`ScriptSecurityAuditor`) |
+| `anonymizer` / `privacy_guardian` | ✅ Ya migrado | `redaccion/services/anonymization/` |
+| `report_factory` / export PDF/DOCX | ✅ Ya migrado (DOCX; ODT backlog) | `redaccion/services/export_service.py` |
+| `etl_factory` / `deterministic_etl_service` | ⚠️ **No existen ya en legacy** (imports rotos); ✅ reimplementado | `redaccion/services/transformation/` |
+| `graphics_factory` / `deterministic_graphics_service` | ⚠️ **No existen ya en legacy** (imports rotos); ✅ reimplementado | `redaccion/services/charts/` |
+| `copilot_context_service` | ✅ Ya migrado | `redaccion/services/copilot/` |
+| `manifest_signature_service` | ✅ Reimplementado | `server/app/services/manifest_signature_service.py` |
+| `script_library_service` | ✅ Reimplementado (parcial) | `server/app/services/library_service.py` |
+| `local_knowledge_service` (RAG) | ✅ Superado | `agents_hub/` (ingestion/retrieval/embeddings) |
+| Extractor PDF (Docling rico) | ✅ Adelantado en Fase 1 | `redaccion` pipeline (9R.5.9) |
+
+**Consecuencia directa sobre el plan original**:
+- **FASE 16** (Fábricas ETL/gráficos como nodos LangGraph): ya no es una *migración*. El motor existe en `redaccion`. Se reduce a **exponer los servicios existentes como nodos invocables** (un wrapper), cuando la Fase 3 lo pida. Los ficheros legacy `etl_factory`/`graphics_factory` **no hay que migrarlos: no existen**.
+- **FASE 15** (RunManifest + AuditService + Script Registry): parcialmente hecho (`manifest_signature_service`, `library_service`). Se reduce a **unificar** el formato de manifiesto y la cadena de auditoría entre módulos, no a portar 8 servicios.
+- **FASE 18** (Bridges semánticos): no reimplementado, pero de valor bajo hasta que existan varios sistemas externos entre los que mediar (Fase 3). Diferible.
+- **`9.12b`** (refactor extractor a Docling): ya cubierto por 9R.5.9 (Fase 1). Queda solo limpieza residual (ya anotado más abajo).
+
+## 3. Inventario de migración — triaje por categorías
+
+| Categoría | Qué incluye | Recomendación |
+|---|---|---|
+| **A. Ya cubierto / superado** | Auditor AST, anonimización, ETL, charts, export, copiloto/RAG, firma de manifiestos, biblioteca de scripts, extractor PDF | **NO migrar.** Al cierre de Fase 1, mover el legacy correspondiente a `_legacy_nicegui/` (Caso A) como referencia; borrado final manual. |
+| **B. Borrado directo (Caso B)** | 5 UI `_legacy` (`connections_page_legacy`, `custom_script_page_legacy`, `graphics_page_legacy`, `rpa_page_legacy`, `_legacy_webhook_page`), extractores autogenerados en `modules/extraccion/`, imports rotos a factories inexistentes, `report_factory` duplicado, `.venv/` commiteado | **Borrar.** Código muerto o artefactos, sin migración asociada. |
+| **C. Valor real NO cubierto (la decisión de verdad)** | Motor de flujos `workflow_engine.py` (1.781 LOC, 10+ dependientes), `flow_registry_service` (bloqueo optimista), triggers, watchers (folder/mail/web/api), RPA Playwright (`rpa_executor` 1.049 LOC), paquetes `.automatia` (import/export/manifest) | **Migrar solo bajo demanda de un caso de uso del piloto** (ver §4). Concentran las dependencias pesadas (Playwright, estado local, sandbox por proceso). |
+| **D. Diferido a v2** | RPA web (Playwright), `web_watcher_service` | Ya decidido (FASE 21). Mantener diferido. |
+
+## 4. Valoración de utilidad: ¿compensa acometer la migración?
+
+**Recomendación resumida: no acometer una migración "en bloque" de AutomatIA. Migrar por goteo, solo cuando un caso de uso concreto del piloto lo exija. El valor que sí conviene construir es el runner desatendido + gobernanza (Subfase 2.A), porque lo necesita la Fase 3 con independencia del legacy.**
+
+Razonamiento, atacando directamente tu duda (¿lo supera un agente IA general tipo Claude cowork?):
+
+- **La parte de *generación* SÍ está superada.** "Escríbeme un script que transforme este Excel", "haz este gráfico", "extrae estos campos del PDF", "adáptame este script" — es exactamente lo que un agente de codificación general hace hoy mejor, de forma interactiva, sin necesidad de mantener `script_generator_service`, `script_adaptation_service`, `bridge_generation_service` ni las fábricas. Y además **ya está reimplementado** en `redaccion`. Migrar esa capa = coste sin retorno.
+
+- **La parte que un agente general NO reemplaza, y que es el foso defensivo de AutomatIA, es la *ejecución determinista, desatendida, firmada y auditable dentro del perímetro de la institución*.** Un agente conversacional no se dispara solo a las 3am cuando llega un correo o cambia una carpeta, no ejecuta un script *firmado* con aislamiento, no deja un `RunManifest` inmutable para una auditoría RIA/ENS, y no corre en el Edge del cliente sin que los datos salgan. Ese es el valor: **determinismo + desatendido + gobernanza**, no la generación. Y es justo lo que está en la Categoría C (aún sin migrar).
+
+- **Pero ese valor solo se materializa si hay demanda real.** Si el piloto v1 (chatbots + informes) no tiene ningún flujo que necesite un folder/mail watcher o una ejecución programada desatendida, entonces incluso la Categoría C se difiere sin pérdida. La "facilidad de generalización de uso en la institución" que mencionas (empaquetar automatizaciones reutilizables, `.automatia`) es real pero es una apuesta de producto de v2, no un requisito del piloto.
+
+**Criterio de decisión operativo (aplícalo por servicio, no en bloque):**
+
+> Migra un servicio de la Categoría C **solo si** existe un caso de uso nombrado del piloto que (a) requiera ejecución desatendida o disparada por evento, **y** (b) no pueda cubrirse con un agente interactivo + los servicios ya migrados en `redaccion`. En caso contrario, déjalo en `_legacy_nicegui/` como referencia y no lo migres.
+
+**Lo que sí conviene hacer igualmente (independiente del legacy):**
+
+- **Subfase 2.A (Thin Client + Sandbox distribuido + Secure Pairing)**: es el habilitador de los `NodoScript`/`NodoRPA` de la Fase 3 (Expedientes delega ejecución determinista al Edge, invariante 3C.0). Tiene valor aunque no se migre casi nada de 2.B/2.C. **No es "migración de NiceGUI"; es infraestructura nueva.** Priorízala.
+- **`workflow_engine` NO se porta tal cual** (1.781 LOC, nudo de dependencias). Si un flujo del piloto lo necesita, se **reimplementa un runner mínimo sobre LangGraph** (que ya es el orquestador del proyecto), no se migra el motor NiceGUI. Reescritura selectiva > port.
+
+## 5. Impacto en los bloques originales de este documento
+
+Los bloques 9C/9D/FASE 14-18 de más abajo se mantienen como referencia, con estos ajustes:
+
+- **9C.0, 9.12a**: válidos, pero Focus Mode ya existe (reutilizar, no recrear — recomendación 1.6).
+- **9.12b**: ya cubierto por 9R.5.9; solo limpieza residual (ya anotado en el propio prompt).
+- **9.12 (Flujos), 9.14 (Scripts)**: **condicionados a §4** — migrar la UI solo si se decide mantener el motor de flujos/scripts como producto. Si la decisión es "no migrar Categoría C", estas UIs no se construyen en v1.
+- **FASE 14 (Sandbox distribuido)**: mantener; es 2.A, infraestructura para Fase 3.
+- **FASE 15**: reducir a *unificación* de manifiesto/auditoría (no port de 8 servicios).
+- **FASE 16**: reducir a *wrapper LangGraph* de los servicios `redaccion` existentes (no migración de factories inexistentes).
+- **FASE 18 (Bridges)**: diferir hasta Fase 3 (varios sistemas externos).
+
+> **Acción pendiente del usuario**: decidir, servicio a servicio de la Categoría C, si hay caso de uso del piloto que justifique la migración. Hasta esa decisión, la Fase 2 se reduce de facto a **Subfase 2.A (Thin Client, infraestructura para Fase 3)** + limpieza de Categorías A/B.
+
+---
+
 ## BLOQUE 9C — Automatización (migración NiceGUI)
 
 *Prerrequisito: Bloque 9A completado (layout admin disponible). Cada prompt incluye el traslado del equivalente NiceGUI a _legacy_nicegui.*

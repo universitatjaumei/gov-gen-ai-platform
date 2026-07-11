@@ -11333,3 +11333,593 @@ CRITERIOS DE ACEPTACIÓN:
 
 ---
 
+# COMPLECIÓN DE FASE 1 — Bloques nuevos (planificados 2026-07-11)
+
+> Bloques añadidos a partir de la valoración de `VALORACION_PROYECTO.md` (aprobada por el usuario).
+> Todos los prompts son **autocontenidos** y siguen el ciclo TDD RED → GREEN.
+>
+> **Orden de ejecución recomendado** (se inserta sobre el cursor actual, 11.x):
+>
+> ```
+> Bloque ROL  →  Fase 11 (11.1–11.3)  →  Bloque SEC  →  Bloque CAL  →  Bloque ING.0  →  Deploy GCP (D.1–D.5)
+> ```
+>
+> **Justificación del orden**:
+> - **ROL primero**: el renombrado de roles es transversal y toca los mismos modelos de autenticación que `SEC.1`/`SEC.2`. Hacerlo antes evita trabajo doble y evita que Deploy (D.x) arrastre nomenclatura vieja.
+> - **SEC antes de Deploy**: son fallos que, desplegados, quedarían públicos. Es bloqueante de `D.1`.
+> - **CAL e ING.0** se cierran antes de abrir el repositorio bajo AGPLv3 (deuda de reglas del proyecto + corpus real del piloto).
+>
+> **Nota sobre `D.1`/`D.2`**: la autenticación pública del widget por API key (M1 de la valoración) ya está cubierta por `D.1`; la migración de secretos a Secret Manager (parte de A3) ya está en `D.2`. El bloque SEC **no los duplica** y asume que se ejecutan en Deploy. La **rotación** de las credenciales actualmente en `.env` (A3) es una acción de operaciones, no un prompt de código: hágase al migrar a Secret Manager.
+
+---
+
+## Bloque ROL — Renombrado de nomenclatura institucional (Subfase 1.B, PENDIENTE)
+
+> **Contexto**: `Arquitectura.md` §5 y `PLAN_DESARROLLO.md` dan por aplicado el renombrado de roles, pero el código sigue con la nomenclatura antigua. Este bloque lo aplica. Es más barato ahora que tras la Fase 3 (Expedientes introduce `responsable_rol` por todo el módulo).
+
+**Mapa de renombrado (fuente de verdad para ambos prompts):**
+
+| Antiguo (código actual) | Nuevo | Naturaleza | Tabla / campo afectado |
+|---|---|---|---|
+| `AdminAccount` (admin global) | `SuperAdminAccount` | Cuenta | tabla `admin_accounts` → `superadmin_accounts` |
+| rol `admin` (global) | rol `superadmin` | Rol | claim `role` en JWT |
+| `PartnerAccount` | `AdminAccount` | Cuenta | tabla `partner_accounts` → `admin_accounts` |
+| rol `partner` | rol `admin` | Rol | claim `role` en JWT |
+| `HubClient` | `HubOrganizacion` | Entidad de datos | tabla `hub_clients` → `hub_organizaciones` |
+| columna/parámetro `client_id` | `organizacion_id` | FK | en `HubChatbot`, temas, ingestión, etc. |
+| usuario final | rol `user` | Rol | sin cambios de tabla |
+
+> ⚠️ **Trampa**: `AdminAccount` se **reutiliza** para una entidad distinta (el ex-`PartnerAccount`). La migración debe renombrar tablas preservando datos (`ALTER TABLE ... RENAME`), **nunca** drop+create. Ejecutar los renombrados en el orden correcto para no colisionar (`admin_accounts` → `superadmin_accounts` **antes** de `partner_accounts` → `admin_accounts`).
+
+---
+
+### Prompt ROL.1 (RED/GREEN) — Refactor de modelos, migración y dependencias de seguridad
+
+**Modelo sugerido**: **Opus** — refactor transversal (>800 LOC afectadas en modelos, deps, routers, tests), reutilización peligrosa del nombre `AdminAccount` y migración de datos que debe preservar filas y FKs.
+
+**Objetivo**: Aplicar el mapa de renombrado en el backend (modelos ORM, migración Alembic con preservación de datos, dependencias de seguridad y todas las queries/imports afectados) sin perder datos ni romper tests.
+
+```
+# PROMPT ROL.1 (RED/GREEN) — Renombrado institucional en el backend
+# Deploy: cloud (cuentas/roles) + shared (deps de auth)
+
+## Alcance (aplicar el "Mapa de renombrado" del Bloque ROL)
+- database/models.py: AdminAccount→SuperAdminAccount, PartnerAccount→AdminAccount.
+  Añadir NADA de lógica nueva aquí (la contraseña del ex-partner es SEC.1).
+- modules/agents_hub/database/config_models.py: HubClient→HubOrganizacion; todas las
+  columnas y relaciones `client_id`→`organizacion_id`. Mantener HubConfigBase.
+- core/auth/models.py: el enum/Literal de roles pasa a superadmin | admin | user.
+- api/deps.py + core/auth: require_admin (global) → require_superadmin;
+  crear require_admin nuevo (=ex require_partner o el gate de partner); actualizar
+  require_scopes / techos de rol de PAT (core/auth/pat/scopes.py: admin→superadmin,
+  partner→admin en la tabla de techos).
+- routers/auth_router.py: login_admin→login_superadmin (path /auth/superadmin/login),
+  login_partner→login_admin (path /auth/admin/login). Mantener el bug de contraseña
+  TAL CUAL (lo arregla SEC.1); aquí solo se renombra.
+- Reemplazar TODA referencia a client_id/HubClient/partner/PartnerAccount en:
+  hub_chatbots_router, hub_themes_router, hub_feedback, hub_chat, seeds.py, y
+  cualquier servicio que los importe (grep exhaustivo).
+
+## Migración Alembic (preservando datos; NO drop+create)
+- op.rename_table('admin_accounts','superadmin_accounts')
+- op.rename_table('partner_accounts','admin_accounts')     # tras el anterior
+- op.rename_table('hub_clients','hub_organizaciones')
+- op.alter_column(... 'client_id', new_column_name='organizacion_id') en cada tabla con esa FK
+- Data migration de roles: UPDATE de la columna role en tokens/cuentas si se persiste
+  ('admin'→'superadmin', 'partner'→'admin'). Los JWT en vuelo caducan solos (60 min).
+- Reaplicar constraints/índices renombrados. Aplicar con `uv run alembic upgrade head`.
+
+## Tests (RED primero) — tests/core/ + tests/api/
+# test_role_rename.py
+# should_expose_superadmin_admin_user_roles_only            (el Literal no acepta 'partner')
+# should_superadmin_login_verify_password_like_before        (regresión del login global)
+# should_require_superadmin_dependency_rejects_admin_role
+# should_require_admin_dependency_accepts_admin_and_superadmin
+# test_migration_rename.py
+# should_rename_tables_preserving_rows                       (seed → upgrade → filas intactas)
+# should_rename_client_id_to_organizacion_id_on_chatbots
+# should_have_zero_references_to_old_names                   (grep: 'PartnerAccount'|'HubClient'|"role == 'partner'" = 0 en server/app, excl. migración)
+
+## Criterios de cierre (obligatorio)
+- [ ] `grep -rn "PartnerAccount\|HubClient\|'partner'\|\bclient_id\b" server/app` = 0 (excl. la migración y comentarios de mapeo)
+- [ ] `uv run alembic upgrade head` + `alembic current` en head; datos preservados
+- [ ] OpenAPI reexportado (cambian paths de login y esquemas) + Orval pendiente para ROL.2
+- [ ] Suite backend en verde
+```
+
+---
+
+### Prompt ROL.2 (RED/GREEN) — Frontend: tipos Orval, rutas, i18n y checks de rol
+
+**Modelo sugerido**: **Sonnet** — alcance cerrado; la fuente de verdad (OpenAPI) ya cambió en ROL.1, solo hay que propagar.
+
+**Objetivo**: Propagar el renombrado al frontend regenerando Orval y actualizando rutas, checks de rol e i18n. Sin lógica de negocio nueva.
+
+```
+# PROMPT ROL.2 (RED/GREEN) — Renombrado institucional en el frontend
+
+## Regenerar contrato
+- Reexportar openapi.json (ya hecho en ROL.1) → `npm run orval` → tipos/hooks nuevos
+  (SuperAdminAccount, AdminAccount, HubOrganizacion, organizacion_id).
+
+## Cambios
+- shared/auth: el AuthContext y las rutas protegidas usan roles superadmin|admin|user.
+  Reemplazar cualquier comparación con 'partner'/'admin-global'.
+- Renombrar pantallas/labels: "Clientes"→"Organizaciones" (ClientsPage→OrganizacionesPage),
+  "Partners"→"Admins" donde aparezca. Rutas /clients→/organizaciones.
+- i18n: renombrar claves y textos es/ca/en (client→organizacion, partner→admin). Sin strings sueltos.
+
+## Tests Vitest (RED primero) — mínimo 5
+# should_render_organizaciones_page_from_generated_types
+# should_route_superadmin_to_platform_section
+# should_route_admin_to_org_scoped_section
+# should_hide_platform_admin_from_user_role
+# should_use_i18n_keys_not_hardcoded_role_labels
+
+## Pruebas manuales (CLAUDE.md — requiere navegador)
+- .bat prompt ROL_2: login como cada rol y verificar navegación y etiquetas.
+```
+
+---
+
+## Bloque SEC — Endurecimiento de seguridad (Subfase 1.B, PENDIENTE, BLOQUEANTE DE DESPLIEGUE)
+
+> **Contexto**: hallazgos de la auditoría de seguridad (`VALORACION_PROYECTO.md` §4). Se ejecuta **después de ROL** (usa la nomenclatura nueva: rol `admin`, `organizacion_id`) y **antes de Deploy GCP**. Todo `Deploy: cloud|edge|shared` según el router.
+
+---
+
+### Prompt SEC.1 (RED/GREEN) — Login de Admin con verificación de contraseña [A1]
+
+**Modelo sugerido**: **Sonnet** — patrón conocido (bcrypt ya existe para superadmin); alcance cerrado.
+
+**Objetivo**: Cerrar el bypass de autenticación del login de Admin (ex-partner), que hoy emite JWT sin comprobar contraseña. `AdminAccount` (ex-`PartnerAccount`) ni siquiera tiene campo de hash.
+
+```
+# PROMPT SEC.1 (RED/GREEN) — Contraseña obligatoria en login de Admin
+# Deploy: cloud
+
+## Cambios
+- database/models.py: añadir `hashed_password: str` a AdminAccount (ex-PartnerAccount).
+- Migración Alembic: add_column nullable + backfill NULL → cuentas sin password quedan
+  DESHABILITADAS para login local (deben usar SSO/PAT o que un superadmin fije password).
+- routers/auth_router.py::login_admin: verificar con core/security.verify_password
+  (mismo patrón que login_superadmin). Rechazar si hashed_password es NULL.
+- Endpoint para que superadmin establezca/resetee la contraseña de un Admin (o reutilizar
+  el alta con password hasheado). Mensaje y tiempo de respuesta IDÉNTICOS para
+  "cuenta inexistente" y "contraseña inválida" (no filtrar existencia).
+
+## Tests (RED primero) — tests/api/test_auth_login.py
+# should_reject_admin_login_without_password_field         (regresión del bug A1)
+# should_reject_admin_login_with_wrong_password
+# should_accept_admin_login_with_correct_password
+# should_reject_admin_with_null_hashed_password
+# should_return_identical_error_for_unknown_and_wrong_password
+```
+
+---
+
+### Prompt SEC.2 (RED/GREEN) — Aislamiento multi-tenant: claim de organización + filtrado + gate de CI [A2]
+
+**Modelo sugerido**: **Opus** — decisión de diseño del modelo de tenencia + refactor transversal de todos los endpoints con datos de organización + test de aislamiento que debe convertirse en gate.
+
+**Objetivo**: Impedir el acceso horizontal entre organizaciones. Hoy el JWT no lleva la organización y los endpoints no filtran: cualquier admin lista/edita/borra chatbots de todos y lee conversaciones (posible PII ciudadana) de otros.
+
+```
+# PROMPT SEC.2 (RED/GREEN) — Aislamiento por organización
+# Deploy: shared (claim) + edge/cloud (según router)
+
+## Modelo de tenencia (decisión)
+- UserInfo (core/auth/models.py) añade `organizacion_ids: list[str]`:
+    - superadmin → lista vacía = acceso a TODAS (comodín).
+    - admin → ids de las organizaciones que gestiona.
+    - user → la organización a la que pertenece (1 elemento).
+- El claim se rellena al emitir el JWT (login superadmin/admin, ACS SAML, y PAT:
+  PatPrincipal hereda organizacion_ids del owner).
+
+## Capa de filtrado (única, no repetir en cada endpoint)
+- core/auth/tenancy.py: `assert_org_access(principal, organizacion_id)` → 403 si no procede
+  (superadmin siempre pasa). `scope_query_to_orgs(stmt, principal, model)` → añade
+  WHERE organizacion_id IN (...) salvo superadmin.
+- Aplicar en: hub_chatbots_router (list/get/update/delete/corpus-stats/regenerate-chunks),
+  hub_chat (conversar solo con chatbots de la propia organización),
+  hub_feedback (revisar solo interacciones de chatbots propios),
+  hub_themes_router (derivar organizacion_id del principal, NO del body del cliente),
+  hub_ingestion_router (cierra el TODO de autorización en :91).
+
+## Tests (RED primero) — tests/api/test_tenant_isolation.py  ← GATE DE CI
+# should_list_only_own_org_chatbots                        (admin A no ve chatbots de org B)
+# should_forbid_get_chatbot_of_other_org                   (403)
+# should_forbid_update_delete_chatbot_of_other_org         (403)
+# should_forbid_reading_feedback_of_other_org
+# should_forbid_chatting_with_chatbot_of_other_org
+# should_ignore_client_supplied_org_id_in_themes           (usa el del token)
+# should_allow_superadmin_cross_org_access
+# should_scope_ingestion_to_own_org
+
+## Criterios de cierre
+- [ ] test_tenant_isolation.py añadido al job de CI como gate obligatorio
+- [ ] Ningún endpoint de datos de organización hace `session.get(Model, id)` sin pasar por assert_org_access
+```
+
+---
+
+### Prompt SEC.3 (RED/GREEN) — CORS por entorno [A4]
+
+**Modelo sugerido**: **Sonnet** — config declarativa.
+
+```
+# PROMPT SEC.3 (RED/GREEN) — CORS restringido por entorno
+# Deploy: shared
+
+## Cambios
+- core/config.py: `CORS_ALLOWED_ORIGINS: list[str]` (CSV en env), `ENVIRONMENT`.
+- main.py: sustituir allow_origins=["*"] por la lista configurada. En producción, lista
+  cerrada (dominios del panel + dominios de widget de organizaciones). methods/headers
+  acotados a los realmente usados. allow_credentials sigue False.
+- Widget embebible: los orígenes de widget se validan aparte (API key por chatbot, D.1);
+  no se abre CORS global por ellos.
+
+## Tests (RED primero) — tests/api/test_cors.py
+# should_reject_disallowed_origin_in_production_config
+# should_allow_configured_origin
+# should_default_to_no_wildcard_when_env_is_production
+```
+
+---
+
+### Prompt SEC.4 (RED/GREEN) — Rate limiting + cuotas de coste LLM [A5]
+
+**Modelo sugerido**: **Sonnet** — patrón middleware/limiter conocido.
+
+**Objetivo**: Limitar login (fuerza bruta) y endpoints que consumen LLM (coste). Para un chatbot público esto es también control de gasto.
+
+```
+# PROMPT SEC.4 (RED/GREEN) — Rate limiting y cuotas
+# Deploy: shared
+
+## Cambios
+- Añadir slowapi (o limiter propio sobre Redis/memoria). Config por env
+  (RATE_LIMIT_LOGIN, RATE_LIMIT_CHAT). Clave: IP para login/widget anónimo; principal
+  autenticado para el resto.
+- Aplicar a: /auth/*/login (bajo, p.ej. 10/min/IP con backoff),
+  /hub/chat (por chatbot + por IP), ingestión (por organización).
+- Cuota de coste LLM por chatbot/día (contador en BD o cache) → 429 al superarla, con
+  cabecera Retry-After. Configurable por chatbot (default sensato).
+
+## Tests (RED primero) — tests/api/test_rate_limit.py
+# should_429_after_login_attempts_exceed_limit
+# should_reset_login_limit_after_window
+# should_429_chat_when_chatbot_daily_quota_exceeded
+# should_scope_limit_per_ip_for_anonymous_widget
+# should_not_limit_below_threshold
+```
+
+---
+
+### Prompt SEC.5 (RED/GREEN) — Temas: auth en GET + validación anti path-traversal [M2]
+
+**Modelo sugerido**: **Sonnet** — alcance puntual.
+
+```
+# PROMPT SEC.5 (RED/GREEN) — Endurecer hub_themes_router
+# Deploy: cloud
+
+## Cambios (routers/hub_themes_router.py)
+- Validar theme_id como UUID (o slug estricto ^[a-z0-9-]+$) antes de construir rutas.
+- Resolver la ruta con (THEMES_DIR / f"{theme_id}.json").resolve() y comprobar que queda
+  bajo THEMES_DIR.resolve(); si no → 400. Aplica a GET, PUT, DELETE (unlink).
+- Exigir autenticación también en GET /hub/themes/{theme_id} (hoy es público) y aplicar
+  assert_org_access (SEC.2) si el tema es de una organización.
+
+## Tests (RED primero) — tests/api/test_themes_security.py
+# should_reject_theme_id_with_path_traversal          ('../', '%2F', absolute)
+# should_reject_non_uuid_theme_id
+# should_require_auth_on_get_theme
+# should_not_read_files_outside_themes_dir
+```
+
+---
+
+### Prompt SEC.6 (RED/GREEN) — Validación de subidas: tipo real (magic bytes) + límite de tamaño [M4]
+
+**Modelo sugerido**: **Sonnet** — alcance cerrado. Comparte la validación con el futuro Bloque ING.
+
+```
+# PROMPT SEC.6 (RED/GREEN) — Validación robusta de uploads
+# Deploy: edge
+
+## Cambios (api/v1/ingestion.py y cualquier endpoint de upload)
+- core/uploads.py: `validate_upload(file, *, allowed_ext, allowed_magic, max_bytes)`:
+    - comprobar extensión + magic bytes (no confiar en content_type, que es spoofeable);
+    - hacer streaming a un buffer temporal con corte al superar max_bytes → 413;
+    - devolver el buffer validado (no `await file.read()` completo en memoria).
+- MAX_UPLOAD_MB por env. Cuota por organización/chatbot (nº o tamaño acumulado) → 429/413.
+- Reutilizable por el Bloque ING (validación compartida por extensión+magic).
+
+## Tests (RED primero) — tests/api/test_upload_validation.py
+# should_reject_pdf_content_type_with_non_pdf_magic_bytes
+# should_reject_upload_exceeding_max_size            (413, sin cargar todo en memoria)
+# should_accept_valid_pdf
+# should_reject_disallowed_extension
+```
+
+---
+
+### Prompt SEC.7 (RED/GREEN) — Docs off en producción + cabeceras de seguridad [M5]
+
+**Modelo sugerido**: **Sonnet** — config + middleware.
+
+```
+# PROMPT SEC.7 (RED/GREEN) — Superficie mínima + headers
+# Deploy: shared
+
+## Cambios (main.py)
+- Si ENVIRONMENT == 'production': FastAPI(docs_url=None, redoc_url=None, openapi_url=None).
+  En dev/staging quedan disponibles.
+- Middleware de cabeceras de seguridad: X-Content-Type-Options: nosniff, X-Frame-Options:
+  DENY (o CSP frame-ancestors para el widget), Referrer-Policy, HSTS (solo prod/https),
+  y CSP básica para el panel.
+
+## Tests (RED primero) — tests/api/test_security_headers.py
+# should_disable_docs_in_production
+# should_expose_docs_in_development
+# should_set_nosniff_and_frame_options_headers
+# should_set_hsts_only_in_production
+```
+
+---
+
+## Bloque CAL — Deuda de calidad previa al repositorio público (Subfase 1.B, PENDIENTE)
+
+> **Contexto**: hallazgos de las auditorías de calidad backend/frontend (`VALORACION_PROYECTO.md` §3). Cierra violaciones de reglas duras del proyecto (Contract-First, sin código muerto, sin shims) antes de abrir el repo bajo AGPLv3.
+
+---
+
+### Prompt CAL.1 (RED/GREEN) — Retirada de NiceGUI de `server/app/ui/` + Caso B en `client_app/` + código huérfano
+
+**Modelo sugerido**: **Sonnet** — retirada mecánica con verificación por grep (Caso B de CLAUDE.md).
+
+> **Ampliado 2026-07-11** con la limpieza Caso B de `client_app/` identificada en el triaje del
+> replanteamiento de Fase 2 (Plan_TDD_Fase2.md §3, Categoría B). Verificado contra git:
+> el `.venv/` de client_app NO está trackeado (solo ruido de disco local, fuera de alcance);
+> los 5 UI `_legacy` y los artefactos autogenerados SÍ están trackeados.
+
+```
+# PROMPT CAL.1 (RED/GREEN) — Retirar NiceGUI del árbol activo del servidor + Caso B client_app
+
+## Análisis previo (solo lectura)
+- Confirmar que ningún módulo activo importa `server.app.ui` (grep). Confirmado en auditoría.
+- Confirmar que nada importa los 5 UI `_legacy` de client_app ni los artefactos de
+  `client_app/app/modules/extraccion/` (grep en client_app/app y client_app/tests).
+
+## Acción — servidor
+- Mover server/app/ui/ (22 ficheros NiceGUI: admin_security.py, admin_clients.py,
+  partner_security.py, etc.) a _legacy_nicegui/server/app/ui/ (mantener ruta relativa, Caso A)
+  O borrar directamente si no hay migración React asociada (Caso B — la mayoría son admin
+  NiceGUI ya cubiertos por el panel React). Decidir por fichero.
+- Borrar los tests que los mantienen vivos: tests/unit/test_admin_*_ui.py
+  (test_admin_clients_ui, test_admin_partners_ui, test_admin_prompts_ui, test_admin_security_ui).
+- Borrar el huérfano top-level app/modules/extraccion/ (12 ficheros, sin importadores → Caso B).
+- Borrar los scripts ad-hoc en tests/ que no son tests (reproduce_client_id.py, verify_id_logic_standalone.py).
+
+## Acción — client_app (Caso B: borrado directo, sin _legacy_nicegui)
+- Borrar los 5 UI legacy explícitos (reemplazados por versiones posteriores):
+    client_app/app/ui/_legacy_webhook_page.py
+    client_app/app/ui/connections_page_legacy.py
+    client_app/app/ui/custom_script_page_legacy.py
+    client_app/app/ui/graphics_page_legacy.py
+    client_app/app/ui/rpa_page_legacy.py
+- Borrar los artefactos autogenerados trackeados (salida de runtime, no código fuente):
+    client_app/app/modules/extraccion/.servicios_generados/custom_extractor*.py
+    client_app/app/modules/extraccion/servicios/custom_prueba*.py
+  Conservar solo el __init__.py si algo vivo importa el paquete; si nada lo importa,
+  borrar el directorio completo.
+- .gitignore: añadir client_app/app/modules/extraccion/.servicios_generados/ y
+  client_app/app/modules/extraccion/servicios/ (evitar que el runtime los re-trackee).
+- Si algún test de client_app/tests referenciaba lo borrado, borrarlo también (es test
+  de código muerto).
+
+## FUERA DE ALCANCE (no tocar en este prompt)
+- Los imports rotos a factories inexistentes (workflow_engine.py:1417/1478,
+  clarification_service.py:504, graphics_wizard.py:8): esos ficheros son Categoría C
+  pendiente de decisión go/no-go (Plan_TDD_Fase2.md §4); se resuelven con esa decisión.
+- El report_factory duplicado (services/ vs modules/factory/): decidir cuál sobra
+  pertenece a la misma decisión de Categoría C.
+- client_app/.venv/: no está en git; borrado de disco a discreción del usuario.
+
+## Tests / verificación
+# should_have_no_nicegui_imports_in_server_app        (grep 'from nicegui' en server/app = 0)
+# should_have_no_references_to_server_app_ui           (grep = 0)
+# should_collect_pytest_without_removed_ui_tests       (pytest --collect-only sin errores)
+# should_have_no_legacy_ui_files_in_client_app         (glob '*_legacy*' en client_app/app/ui = 0)
+# should_have_no_generated_extractors_tracked          (git ls-files 'client_app/app/modules/extraccion/**' = 0 o solo __init__.py)
+# should_collect_client_app_tests_without_errors       (pytest --collect-only en client_app/tests sin errores)
+
+## Cierre
+- [ ] `grep -rn "from nicegui\|server.app.ui\|modules.extraccion" server/` = 0
+- [ ] `grep -rn "_legacy_webhook_page\|connections_page_legacy\|custom_script_page_legacy\|graphics_page_legacy\|rpa_page_legacy" client_app/` = 0
+- [ ] `git ls-files client_app/app/modules/extraccion` vacío (o solo __init__.py justificado)
+- [ ] Suite backend en verde tras la retirada; colección de tests de client_app sin errores
+```
+
+---
+
+### Prompt CAL.2 (RED/GREEN) — Migrar la capa API manual del frontend a Orval (cierra CF.4)
+
+**Modelo sugerido**: **Opus** — refactor transversal que toca la página más grande (DocumentsPage) y alinea con el contrato; riesgo de regresión alto.
+
+```
+# PROMPT CAL.2 (RED/GREEN) — Eliminar shared/api/*.ts hechos a mano
+
+## Objetivo
+- Retirar los 5 módulos con fetch crudo + tipos hardcodeados + API_BASE a localhost:
+  shared/api/{ingestion,clients,feedback,llmConfigs,promptTemplates}.ts (cierra el
+  literal '// TODO CF.4' de ingestion.ts).
+
+## Acción
+- Sustituir cada llamada por el hook Orval generado (useX de shared/api/generated) y los
+  tipos de generated/model (IngestionJob, HubDocument, etc. → tipos del contrato).
+- Pasar todo por el customInstance (interceptor de auth) en lugar de headers duplicados.
+- El streaming SSE del chat del widget queda EXENTO (Orval no cubre SSE); ese fetch se
+  mantiene pero centralizando la construcción de Authorization.
+- Borrar los 5 ficheros y actualizar los imports (DocumentsPage.tsx:16 y demás consumidores).
+
+## Tests Vitest (RED primero)
+# should_use_generated_hook_not_manual_fetch_in_documents_page
+# should_not_import_from_shared_api_manual_modules       (los 5 ficheros ya no existen)
+# should_send_auth_via_custom_instance
+# should_type_ingestion_job_from_generated_model
+
+## Cierre
+- [ ] `grep -rn "shared/api/(ingestion|clients|feedback|llmConfigs|promptTemplates)" frontend/src` = 0
+- [ ] `grep -rn "localhost:8000" frontend/src` = 0 (fuera de config de dev)
+- [ ] tsc --noEmit + vitest en verde
+```
+
+---
+
+### Prompt CAL.3 (RED/GREEN) — Descomponer DocumentsPage
+
+**Modelo sugerido**: **Sonnet** — refactor de composición sin cambio de comportamiento.
+
+```
+# PROMPT CAL.3 (RED/GREEN) — Partir DocumentsPage.tsx (1019 líneas)
+
+## Acción
+- Extraer subcomponentes con responsabilidad única: <UploadDropzone>, <SourcesPanel>
+  (sitios/spider), <DocumentsTable>, <IngestionJobsPanel>, <RechunkControls>.
+  DocumentsPage queda como orquestador (<300 líneas).
+- Sin cambio de comportamiento; los datos siguen viniendo de hooks Orval (CAL.2).
+
+## Tests Vitest (RED primero → mantener verdes tras el split)
+# should_render_upload_dropzone_component
+# should_render_sources_panel_component
+# should_render_documents_table_component
+# should_render_jobs_panel_component
+# should_keep_existing_documents_page_behaviour     (tests actuales siguen pasando)
+```
+
+---
+
+### Prompt CAL.4 (RED/GREEN) — i18n: completar `ca/admin.json` + retirar strings hardcodeados
+
+**Modelo sugerido**: **Sonnet** — alcance cerrado, verificable por conteo de claves.
+
+```
+# PROMPT CAL.4 (RED/GREEN) — Cobertura i18n del panel admin
+
+## Acción
+- Completar shared/i18n/locales/ca/admin.json a paridad con es/en (hoy ~34 vs ~130 líneas).
+- Extraer a claves i18n los literales en español de LLMConfigsPage (~22), ChatbotsPage (~12)
+  y las constantes con etiquetas de DocumentsPage (INTERVAL_OPTIONS, LANGUAGE_OPTIONS,
+  RETRIEVAL_LABELS, SPIDER_TYPES → usar t() en render, no strings fijos en el array).
+- Asociar labels a inputs (htmlFor/id) donde falten (relacionado con a11y de Fase 20).
+
+## Tests Vitest (RED primero)
+# should_have_key_parity_across_es_ca_en_admin_namespace
+# should_not_render_hardcoded_spanish_in_llmconfigs_page
+# should_render_interval_options_via_i18n
+# should_associate_labels_with_inputs
+```
+
+---
+
+### Prompt CAL.5 (RED/GREEN) — Code-splitting (lazy routes) + retirada de shims
+
+**Modelo sugerido**: **Sonnet** — cambio de build + limpieza puntual.
+
+```
+# PROMPT CAL.5 (RED/GREEN) — Bundle y shims
+
+## Frontend
+- App.tsx: convertir los imports estáticos de páginas en React.lazy + <Suspense> por ruta
+  → romper el chunk monolítico (~927 KB). Verificar chunks por ruta en el build.
+
+## Backend
+- Eliminar los shims prohibidos por CLAUDE.md: `init_db = init_server_db` (db.py:31-32) y
+  el "Legacy alias" de seeds.py:174-176. Actualizar los llamantes al nombre real.
+
+## Tests
+# (frontend) should_lazy_load_route_chunks               (assert de dynamic import)
+# (frontend) should_not_bundle_all_pages_in_single_chunk (inspección del manifest de build)
+# (backend)  should_import_init_server_db_directly        (grep 'init_db' = 0 fuera de la definición)
+# (backend)  should_have_no_legacy_aliases_in_seeds
+```
+
+---
+
+## Bloque ING.0 — Ingesta de corpus curado como vía principal (Subfase 1.A, PENDIENTE)
+
+> **Contexto**: replanificación 2026-07-11 (ver `PROJECT_STATE.md` y `VALORACION_PROYECTO.md`). La ingesta de corpus **curado y revisado fuera de la app** es la vía principal; el scraper autónomo queda para web estructurada. El pipeline de la app ya es markdown-céntrico → importar `.md` curado es passthrough + dedup por `content_hash`.
+>
+> **Bloqueante externo**: el usuario provee la carpeta canónica de `.md` revisados y el manifiesto. El tool de conversión vive fuera (`Descarregar_pdf/normativa_uji`).
+
+---
+
+### Prompt ING.0.1 (RED/GREEN) — Manifiesto de procedencia + contrato de paquete de corpus
+
+**Modelo sugerido**: **Sonnet** — contratos Pydantic + validación; alcance cerrado.
+
+```
+# PROMPT ING.0.1 (RED/GREEN) — Contrato del paquete de corpus curado
+# Deploy: edge
+
+## Contratos (modules/agents_hub/ingestion/corpus/manifest.py)
+- CorpusDocumentEntry (Pydantic frozen): relative_path (.md), source_url, original_pdf_sha256,
+  language ('ca'|'es'|'en'|...), content_class ('regulation'|'faq'|'generic'), category,
+  reviewer, reviewed_at (datetime), docling_version | converter, title | None.
+- CorpusManifest: chatbot/organizacion destino (o resuelto al importar), created_at,
+  documents: list[CorpusDocumentEntry]. Validación: rutas relativas (no absolutas ni '..'),
+  content_class 'regulation' EXIGE reviewer + reviewed_at no nulos (revisión obligatoria).
+- Loader: leer el manifiesto (json/yaml). El normativa_uji_log.json existente se puede
+  transformar a este formato (documentar el mapeo; no acoplar el loader a ese formato).
+
+## Tests (RED primero) — tests/modules/agents_hub/ingestion/test_corpus_manifest.py
+# should_reject_absolute_or_parent_paths
+# should_require_reviewer_for_regulation_class
+# should_allow_missing_reviewer_for_faq_class
+# should_parse_language_and_category
+# should_roundtrip_manifest_json
+```
+
+---
+
+### Prompt ING.0.2 (RED/GREEN) — CLI de carga masiva de corpus curado (passthrough + procedencia + idempotencia)
+
+**Modelo sugerido**: **Sonnet** — reutiliza `IngestionWatcher`; el trabajo es cablear, no diseñar pipeline nuevo.
+
+```
+# PROMPT ING.0.2 (RED/GREEN) — Script de carga de corpus curado
+# Deploy: edge
+
+## CLI (scripts/ingest_corpus.py o comando `python -m ...ingestion.corpus.load`)
+- Argumentos: --dir (carpeta con .md), --manifest (ruta del CorpusManifest), --chatbot-id,
+  --dry-run.
+- Recorre las entradas del manifiesto; por cada .md:
+    - lee el markdown (passthrough; NO reconvierte, NO llama a Docling);
+    - reusa IngestionWatcher.process_source con el markdown como fuente
+      (watcher ya hace hash_content → detect_language → MarkdownChunker → embedding →
+       HubDocumentChunk);
+    - PRESERVA la procedencia en HubDocument: source_url, content_hash, language (del
+      manifiesto, no re-adivinar si viene dado), content_class, reviewer/reviewed_at.
+- Idempotencia: apoyarse en la dedup por content_hash del watcher (watcher.py:~102-108);
+  reimportar un .md no cambiado NO duplica; uno corregido re-ingiere solo ese.
+- --dry-run: reporta qué se ingeriría/omitiría sin escribir.
+- Rechazar entradas 'regulation' sin revisión (coherente con ING.0.1) antes de ingerir.
+- Reutilizar la validación por extensión de SEC.6 (allowed_ext incluye .md/.txt).
+
+## Tests (RED primero) — test_corpus_loader.py (fakes en memoria, sin BD real donde sea posible)
+# should_ingest_markdown_passthrough_without_docling
+# should_persist_provenance_fields_on_hub_document
+# should_skip_unchanged_document_by_content_hash        (idempotencia)
+# should_reingest_only_changed_document
+# should_refuse_regulation_entry_without_review
+# should_report_plan_in_dry_run_without_writing
+
+## Cierre
+- [ ] Cargar la carpeta canónica de normativa UJI curada contra el chatbot destino
+- [ ] Verificar citas trazables (source_url) en una consulta de prueba
+```
+
+---
+

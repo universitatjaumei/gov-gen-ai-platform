@@ -184,7 +184,7 @@ La plataforma adapta su interfaz y capacidades al contexto del usuario.
 
 |Característica|Chatbot público|Agente identificado|Gestor de Expedientes|
 |-|-|-|-|
-|**Acceso**|Anónimo y abierto|Identificado mediante OIDC/SAML|Identificado y autorizado|
+|**Acceso**|Anónimo y abierto|Identificado mediante SSO institucional (SAML 2.0)|Identificado y autorizado|
 |**Interfaz**|Widget compacto integrado en la web|Interfaz expandida con documentos, dropzone y previsualización|Pantallas de tramitación, bandejas y timeline|
 |**Capacidades**|FAQs, normativa, orientación general|RAG, PDFs de usuario, datos corporativos, informes|Fases, acciones, aprobaciones, audit, integración con gestor externo|
 |**Idiomas**|Catalán, castellano e inglés|Adaptación dinámica al idioma del usuario|Según configuración institucional|
@@ -292,8 +292,8 @@ GOV GEN AI PLATFORM
 |-|-|
 |**LLM Gateway / Model Factory**|Abstrae proveedores, modelos, versiones y parámetros de inferencia.|
 |**Dynamic Prompts**|Centraliza prompts editables desde base de datos y versionables por contexto.|
-|**Auth OIDC/SAML**|Identidad institucional para usuarios, administradores y aprobadores.|
-|**Multi-tenancy**|Aislamiento lógico por Organización.|
+|**Auth SSO (SAML 2.0) + PAT**|Identidad institucional (SAML 2.0) para humanos y Personal Access Tokens revocables para clientes máquina (p. ej. servidor MCP). OIDC queda como opción futura.|
+|**Multi-tenancy**|Aislamiento lógico por Organización, aplicado en el token (claim de Organización) y en un filtro obligatorio por consulta. Ningún acceso a datos de otra Organización sin rol global.|
 |**MCP Client**|Conexión segura con sistemas corporativos, como Oracle u otros endpoints.|
 |**Audit / Logging**|Trazabilidad de acciones, decisiones, artefactos, prompts, modelos y aprobaciones.|
 |**Job Queue**|Ejecución asíncrona de trabajos y coordinación con runners locales.|
@@ -345,7 +345,7 @@ El solapamiento técnico con AutomatIA hace preferible una implementación comú
 |Dynamic Prompts|Necesario en ambos módulos|Compartido|
 |Multi-tenancy|Necesario para Organizaciones|Compartido|
 |MCP Client|Necesario para datos corporativos|Implementación única|
-|Auth OIDC/SAML|Necesario para agentes identificados y Automation web|Implementación única|
+|Auth SSO SAML 2.0 + PAT|Necesario para agentes identificados y clientes máquina|Implementación única|
 |PostgreSQL|Base común de plataforma|Extender schema existente|
 |pgvector|Necesario para RAG|Añadir al PostgreSQL común|
 
@@ -378,6 +378,17 @@ Al integrarse en la plataforma, algunas fases originales se eliminan o reducen:
 |React frontend|Mantenida y ampliada|Frontend unificado|
 |Autoinstalación|Fusionada|Docker Compose común|
 
+### 7.4 Estrategia de ingesta y calidad del corpus
+
+La calidad del corpus indexado es un requisito de fiabilidad jurídica: en un chatbot de administración pública, una norma con ruido de conversión citada con autoridad es peor que la ausencia de respuesta. Por ello:
+
+* **Ingesta de corpus curado como vía principal.** El contenido normativo se descarga, se convierte a Markdown y se **revisa por un humano fuera de la aplicación** antes de indexarlo. La plataforma importa el corpus curado preservando su procedencia (URL de origen, hash del documento original, idioma, versión del conversor, revisor y fecha, vigencia `valid_from`/`valid_to`). La conversión pesada (Docling) no vive en la ruta de petición.
+* **Revisión humana obligatoria para contenido normativo (`regulation`).** Para FAQs o información pública genérica se admite una vía más ligera.
+* **El scraper autónomo integrado se reserva a fuentes web estructuradas y homogéneas**, donde la extracción por selectores es fiable; no es la vía general para normativa heterogénea en PDF.
+* **Auditoría de calidad continua (post-ingesta):** detección de contenido obsoleto, duplicado o contradictorio, con recuperación consciente de calidad (páginas superseded excluidas). Es complementaria a la revisión previa, no la sustituye.
+
+La procedencia preservada habilita citas trazables y los *snapshots* temporales (`as_of_date`) necesarios para resolver expedientes con la normativa vigente en su momento.
+
 \---
 
 ## 8\. Módulo AutomatIA
@@ -399,6 +410,8 @@ AutomatIA es el módulo de automatización de procesos internos de la plataforma
 La lógica de negocio se consolida en el servidor FastAPI. El antiguo cliente NiceGUI queda deprecado y será reemplazado por el frontend React unificado.
 
 La migración se realizará módulo a módulo, con cobertura TDD. La lógica más crítica ya situada en servidor —LLM Gateway, estrategias LLM, prompts y configuración— se mantiene y se amplía.
+
+La migración **no es un port en bloque**. Buena parte del valor de generación del AutomatIA original (generación y adaptación de scripts, ETL, gráficos, extracción documental) ya está reimplementado en el servidor o ha quedado superado por los agentes de IA generales; portarlo tal cual aporta poco. El valor duradero que un agente conversacional no reemplaza es la **ejecución determinista, desatendida, firmada y auditable** dentro del perímetro de la institución (triggers, watchers, runner del Edge, gobernanza). La migración es, por tanto, **selectiva y guiada por casos de uso reales**, no exhaustiva.
 
 ### 8.3 Modelo de triggers
 
@@ -852,6 +865,9 @@ Repos separados pueden reconsiderarse si el widget público, el runner local o u
 * PostgreSQL es la base común; pgvector se añade para RAG.
 * LangGraph se utiliza tanto para agentes como para expedientes.
 * El Job Queue existente se reutiliza antes de introducir Celery/Redis.
+* La autenticación institucional se implementa con SSO SAML 2.0 + PAT revocables para clientes máquina; OIDC queda como opción futura.
+* La ingesta de corpus curado con revisión humana previa es la vía principal para contenido normativo; el scraper autónomo se reserva a fuentes web estructuradas.
+* La migración del AutomatIA legacy es selectiva y guiada por casos de uso, no un port en bloque.
 
 ### 17.2 Seguridad y privacidad
 
@@ -859,6 +875,7 @@ Repos separados pueden reconsiderarse si el widget público, el runner local o u
 * El Vault de identidades reside en Edge cuando el despliegue lo exige.
 * La memoria de estilo se construye sobre texto re-anonimizado.
 * La auditoría registra política aplicada, modelo, prompt, artefactos y aprobación humana.
+* El aislamiento multi-tenant se aplica en la capa de token (claim de Organización) y en un filtro obligatorio por consulta; ningún acceso a datos de otra Organización sin rol global.
 
 ### 17.3 Producto y distribución
 
@@ -877,6 +894,9 @@ Repos separados pueden reconsiderarse si el widget público, el runner local o u
 |Política concreta de publicación AGPLv3|Repositorio público, contribuciones y gestión de forks|
 |Catálogo inicial de tipos de expediente|Validación funcional con usuarios reales|
 |Profundidad del diseñador low-code|Roadmap v2 del Gestor de Expedientes|
+|Alcance de la migración de AutomatIA legacy|Esfuerzo de Fase 2 frente al valor real en el piloto|
+|Institución y tipo de expediente piloto de la Fase 3|Compromiso previo antes de invertir en el Gestor de Expedientes|
+|Acceso a APIs de UJI / Gestión 400 y specs ENI/ENS|Viabilidad de la Subfase 3.C (dependencia externa)|
 
 \---
 

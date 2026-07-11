@@ -59,6 +59,49 @@ no se desarrollarán hasta comenzar la subfase correspondiente:
 
 ---
 
+# Recomendaciones de la Fase 3 (2026-07-11)
+
+> Sección añadida a partir de `VALORACION_PROYECTO.md`. **Precede y condiciona** a los sprints
+> E1–E5, FASE 17 y 19 de más abajo. No borra prompts: reconcilia los prerrequisitos con el estado
+> real del proyecto y añade recomendaciones técnicas y de riesgo. Léela antes de detallar el TDD
+> de cualquier sprint de Fase 3.
+
+## 1. Prerrequisitos actualizados (reconciliación con el estado real)
+
+Los prerrequisitos escritos en este documento ("Auth OIDC/SAML activo", "MCP Client", etc.) se redactaron antes de cerrar la Fase 1. Estado real y ajustes:
+
+- **Autenticación**: NO existe OIDC; existe **SAML 2.0 + JWT + PAT** (Bloque AUTH de Fase 1, ya cerrado). Es suficiente para el modo identificado. Sustituir "OIDC/SAML" por "SAML/JWT" en los prerrequisitos de E1/E2/E4.
+- **Aislamiento multi-tenant (crítico para expedientes)**: los expedientes contienen datos personales sensibles del ciudadano. El aislamiento por organización se implementa en Fase 1 (**Bloque SEC, prompt SEC.2**: claim `organizacion_ids` + `assert_org_access`/`scope_query_to_orgs` + gate de CI). **Todos los endpoints de expedientes (E1, E2, E4) deben pasar por esa capa desde el diseño**, no redescubrirla. Añadir a los tests de E1/E2 casos de aislamiento por organización (un Admin de la organización A no ve/tramita expedientes de la B).
+- **Nomenclatura institucional**: usar la nueva, ya aplicada en Fase 1 (Bloque ROL): roles `superadmin`/`admin`/`user`, entidad `HubOrganizacion`, FK `organizacion_id`. Los `tipos_expediente`/`acciones_fase` declaran `responsable_rol` contra esos roles. Sustituir cualquier referencia a `client_id`/`partner`.
+- **Thin Client + Sandbox (Subfase 2.A)** es prerrequisito de `NodoScript` y `NodoRPA`: el replanteamiento de Fase 2 (2026-07-11) **mantiene 2.A** precisamente porque la Fase 3 la necesita. `NodoScript`/`NodoRPA` **delegan la ejecución al Edge** (invariante 3C.0); el cloud recibe el resultado, nunca el documento original.
+- **MCP Client (2C.0)** es prerrequisito bloqueante de la Subfase 3.C (adaptadores). Recomendación de Fase 2: adelantarlo al inicio de 2.C. Confirmar que está operativo antes de abrir E5.
+
+## 2. Recomendaciones técnicas por sprint
+
+- **E2 — Checkpointing**: NO implementar a mano la tabla `langgraph_checkpoints`. Usar el saver oficial **`langgraph-checkpoint-postgres`** (`AsyncPostgresSaver`): menos código, compatibilidad garantizada con `interrupt()`/resume (justo lo que necesita el `NodoHuman`) y con el versionado de LangGraph. Solo justificar tabla propia si hay un requisito que el saver oficial no cubra.
+- **E3 — Log de auditoría realmente inmutable**: proteger `audit_expediente` no solo por ausencia de endpoints UPDATE/DELETE (control débil, saltable por cualquier bug o acceso directo), sino con **defensa en profundidad**: (a) rol de BD de la aplicación **sin privilegio UPDATE/DELETE** sobre esa tabla (solo INSERT/SELECT); (b) **anclaje periódico del hash de cabeza** de la cadena (p.ej. sellado diario) para detectar manipulación retroactiva. Añadir un test que verifique que la app no puede mutar ni borrar filas de la tabla de auditoría.
+- **3B.6 — Fairness Audit (RGPD antes que código)**: definir **qué metadatos de colectivo se capturan y con qué base jurídica RGPD** ANTES de implementar el `FairnessScore`. Sin esa definición el dashboard no tiene datos que agrupar, y capturar datos de colectivo protegido sin base legal es un riesgo mayor que el que la métrica pretende mitigar. Documentar la base jurídica y la minimización como parte del prompt, no como añadido.
+- **3B.5 — Snapshots (`as_of_date`)**: apoyarse en la **procedencia del corpus** ya definida en Fase 1 (`CorpusManifest`/`CorpusDocumentEntry` de ING.0.1 ya prevé `valid_from`/`valid_to`). El snapshot de KB normativa se construye sobre esos campos, no sobre una vigencia inventada en Fase 3. Conectar ambos: el corpus `regulation` se ingiere con vigencia; el retriever la filtra por fecha.
+
+## 3. Reutilización de lo ya construido (no reimplementar)
+
+Varios componentes que los sprints de Fase 3 dan por construir **ya existen** tras Fase 1:
+
+- **`NodoScript`/`NodoValidador`** reutilizan el `ScriptSecurityAuditor` (auditoría AST, `redaccion/services/script_auditor.py`) y el `sandbox_client` (microservicio Docker, `core/sandbox_client.py`) ya migrados. No reimplementar la auditoría ni el sandbox por proceso legacy.
+- **`NodoAnalista` (3B.1)** reutiliza el retriever de `agents_hub` + la KB `regulation` ingerida vía **corpus curado (Bloque ING.0)** con citas trazables (`source_url` en `HubDocument`). La normativa con procedencia y revisión humana es justo lo que exige la fiabilidad jurídica de un expediente.
+- **Anonimización/Vault**: el motor NER reversible existe (Fase 13); el Vault Edge se completa en 2.A.4/2.A.5. Los expedientes marcados sensibles fuerzan anonimización (política `HubTipoExpediente.requires_anonymization`, §7.2 Arquitectura). No reescribir el motor.
+- **Export/RunManifest**: el `export_service` (DOCX) y el `DraftingRunManifest` existen; el informe RIA de E3 extiende ese manifiesto con el *Learning Trace*, no crea uno nuevo.
+
+## 4. Riesgo dominante: dependencia institucional externa (E5 / FASE 19)
+
+La Subfase 3.C (AdaptadorUJI, AdaptadorGestion400, capa ENI/ENS) es la de **mayor incertidumbre, y NO es de código**: depende de conseguir credenciales, entornos de prueba y las especificaciones reales (DIR3, eEMGDE, formatos CSV, XSD de evidencia ENI) de sistemas de terceros. Recomendación:
+
+- **Spike temprano al inicio de la Fase 3**, no al final (E5): confirmar acceso real a las APIs de UJI y Gestión 400 y a las specs ENI/ENS. Si el acceso o la documentación no están disponibles, se sabe pronto y no bloquea el resto.
+- **El `AdaptadorNativo` (E1) permite avanzar todo el motor** (E2/E3/E4) sin depender de sistemas externos. Diseñar E1–E4 para que funcionen end-to-end en modo nativo; los adaptadores externos (E5) se enchufan cuando el acceso institucional llegue.
+- **Confirmar un caso/institución comprometido** antes de invertir las ~9-10 semanas de Fase 3: es un producto distinto (tramitación) con dependencias externas fuertes; conviene un tipo de expediente piloto real acordado con UJI antes de empezar.
+
+---
+
 ## FASE 12: Gestor de Expedientes (Integración vía MCP)
 
 > **Arquitectura MCP**: La integración con el Gestor de Expedientes legacy se realizará exponiendo dicho sistema como un Servidor MCP (Model Context Protocol) que GovGenAI consumirá como cliente agnóstico. Esto aísla la plataforma de las especificidades del sistema antiguo.
