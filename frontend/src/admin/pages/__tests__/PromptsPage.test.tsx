@@ -54,7 +54,7 @@ const DEMO_TEMPLATE_OVERRIDE = {
 const DEMO_CHATBOT = {
   id: CHATBOT_ID,
   name: 'Bot Demo',
-  client_id: 'client-1',
+  organizacion_id: 'client-1',
   llm_config_id: 'llm-1',
   system_prompt: 'Eres útil.',
   sources: [],

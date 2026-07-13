@@ -16,7 +16,7 @@ export function ReportTemplateBuilderPage() {
   const templates = (templatesRaw as unknown as TemplateOut[] | undefined) ?? []
   const { mutate: createTemplate, isPending } = useCreateTemplate()
 
-  if (!user || !['admin', 'partner'].includes(user.role)) {
+  if (!user || !['superadmin', 'admin'].includes(user.role)) {
     return <div data-testid="access-denied">Sin permisos</div>
   }
 

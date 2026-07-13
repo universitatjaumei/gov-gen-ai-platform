@@ -6,12 +6,12 @@
     "main": "Navegació principal"
   },
   "hub": {
-    "clients": "Organitzacions",
+    "organizaciones": "Organitzacions",
     "chatbot_client": "Organització",
-    "new_client": "Nova organització",
-    "client_name": "Nom de l'organització",
-    "no_clients": "No hi ha organitzacions creades",
-    "delete_client_confirm": "Eliminar aquesta organització?",
+    "new_organizacion": "Nova organització",
+    "organizacion_name": "Nom de l'organització",
+    "no_organizaciones": "No hi ha organitzacions creades",
+    "delete_organizacion_confirm": "Eliminar aquesta organització?",
     "ai_brain": "Cervell IA",
     "brain_select_chatbot": "— Selecciona un chatbot —",
     "brain_prompt_editor": "Editor de Prompt del Sistema",

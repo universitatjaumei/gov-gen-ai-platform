@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import i18n from '@/shared/i18n'
 import { AuthProvider } from '@/shared/auth'
-import { ClientsPage } from '@/admin/pages/ClientsPage'
+import { OrganizacionesPage } from '@/admin/pages/OrganizacionesPage'
 import { expectNoA11yViolations } from '@/test/a11y'
 
 const TOKEN =
@@ -22,7 +22,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('ClientsPage — WCAG 2.2 AA baseline', () => {
+describe('OrganizacionesPage — WCAG 2.2 AA baseline', () => {
   it('should_have_no_critical_a11y_violations', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [] }))
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -30,7 +30,7 @@ describe('ClientsPage — WCAG 2.2 AA baseline', () => {
       <QueryClientProvider client={qc}>
         <MemoryRouter>
           <AuthProvider>
-            <ClientsPage />
+            <OrganizacionesPage />
           </AuthProvider>
         </MemoryRouter>
       </QueryClientProvider>,

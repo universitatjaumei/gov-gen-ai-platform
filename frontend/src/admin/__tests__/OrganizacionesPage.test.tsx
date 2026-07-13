@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import i18n from '@/shared/i18n'
 import { AuthProvider } from '@/shared/auth'
-import { ClientsPage } from '../pages/ClientsPage'
+import { OrganizacionesPage } from '../pages/OrganizacionesPage'
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
   btoa(JSON.stringify({ sub: '1', email: 'admin@test.com', role: 'admin', exp: 9999999999 }))
@@ -50,15 +50,15 @@ function renderPage(clients: object[] = []) {
     <QueryClientProvider client={qc}>
       <MemoryRouter>
         <AuthProvider>
-          <ClientsPage />
+          <OrganizacionesPage />
         </AuthProvider>
       </MemoryRouter>
     </QueryClientProvider>
   )
 }
 
-describe('ClientsPage', () => {
-  it('should_list_clients_on_mount', async () => {
+describe('OrganizacionesPage', () => {
+  it('should_render_organizaciones_page_from_generated_types', async () => {
     renderPage(SAMPLE_CLIENTS)
     await waitFor(() => {
       expect(screen.getByText('Universitat Jaume I')).toBeDefined()
@@ -90,7 +90,7 @@ describe('ClientsPage', () => {
       <QueryClientProvider client={qc}>
         <MemoryRouter>
           <AuthProvider>
-            <ClientsPage />
+            <OrganizacionesPage />
           </AuthProvider>
         </MemoryRouter>
       </QueryClientProvider>
@@ -104,7 +104,7 @@ describe('ClientsPage', () => {
     expect(screen.getByRole('dialog')).toBeDefined()
 
     const nameInput = screen.getByLabelText(/nombre de la organización/i)
-    const partnerInput = screen.getByLabelText(/partner id/i)
+    const partnerInput = screen.getByLabelText(/admin id/i)
     fireEvent.change(nameInput, { target: { value: 'Nou Client' } })
     fireEvent.change(partnerInput, { target: { value: 'partner-3' } })
 
@@ -113,7 +113,7 @@ describe('ClientsPage', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/hub/clients'),
+      expect.stringContaining('/hub/organizaciones'),
       expect.objectContaining({ method: 'POST' }),
     )
   })

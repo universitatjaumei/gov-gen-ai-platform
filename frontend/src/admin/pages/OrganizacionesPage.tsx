@@ -5,12 +5,12 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
-  fetchClients,
-  createClient,
-  updateClient,
-  deleteClient,
-} from '@/shared/api/clients'
-import type { ClientRead } from '@/shared/api/generated/model'
+  fetchOrganizaciones,
+  createOrganizacion,
+  updateOrganizacion,
+  deleteOrganizacion,
+} from '@/shared/api/organizaciones'
+import type { OrganizacionRead } from '@/shared/api/generated/model'
 
 const schema = z.object({
   name: z.string().min(1),
@@ -28,25 +28,25 @@ const schema = z.object({
 })
 type FormValues = z.infer<typeof schema>
 
-export function ClientsPage() {
+export function OrganizacionesPage() {
   const { t } = useTranslation('admin')
   const { t: tc } = useTranslation('common')
   const qc = useQueryClient()
-  const [editing, setEditing] = useState<ClientRead | null>(null)
+  const [editing, setEditing] = useState<OrganizacionRead | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<ClientRead | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<OrganizacionRead | null>(null)
   const [deleteError, setDeleteError] = useState('')
   const [filter, setFilter] = useState('')
   const [defaultsOpen, setDefaultsOpen] = useState(false)
 
-  const { data: clients = [], isLoading } = useQuery({
-    queryKey: ['clients'],
-    queryFn: fetchClients,
+  const { data: organizaciones = [], isLoading } = useQuery({
+    queryKey: ['organizaciones'],
+    queryFn: fetchOrganizaciones,
   })
 
   const createMutation = useMutation({
     mutationFn: (values: FormValues) =>
-      createClient({
+      createOrganizacion({
         name: values.name,
         partner_id: values.partner_id,
         theme_config: parseJson(values.theme_config),
@@ -61,14 +61,14 @@ export function ClientsPage() {
         default_answer_template: values.default_answer_template,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['clients'] })
+      qc.invalidateQueries({ queryKey: ['organizaciones'] })
       closeDialog()
     },
   })
 
   const updateMutation = useMutation({
     mutationFn: (values: FormValues) =>
-      updateClient(editing!.id, {
+      updateOrganizacion(editing!.id, {
         name: values.name,
         partner_id: values.partner_id,
         theme_config: parseJson(values.theme_config),
@@ -83,20 +83,20 @@ export function ClientsPage() {
         default_answer_template: values.default_answer_template,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['clients'] })
+      qc.invalidateQueries({ queryKey: ['organizaciones'] })
       closeDialog()
     },
   })
 
   const toggleMutation = useMutation({
-    mutationFn: (c: ClientRead) => updateClient(c.id, { is_active: !c.is_active }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['clients'] }),
+    mutationFn: (c: OrganizacionRead) => updateOrganizacion(c.id, { is_active: !c.is_active }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['organizaciones'] }),
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteClient(id),
+    mutationFn: (id: string) => deleteOrganizacion(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['clients'] })
+      qc.invalidateQueries({ queryKey: ['organizaciones'] })
       setDeleteTarget(null)
       setDeleteError('')
     },
@@ -126,7 +126,7 @@ export function ClientsPage() {
     setDialogOpen(true)
   }
 
-  function openEdit(c: ClientRead) {
+  function openEdit(c: OrganizacionRead) {
     setEditing(c)
     setDefaultsOpen(false)
     reset({
@@ -163,19 +163,19 @@ export function ClientsPage() {
   const isPending = createMutation.isPending || updateMutation.isPending
 
   const filtered = filter
-    ? clients.filter((c) => c.name.toLowerCase().includes(filter.toLowerCase()))
-    : clients
+    ? organizaciones.filter((c) => c.name.toLowerCase().includes(filter.toLowerCase()))
+    : organizaciones
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">{t('hub.clients')}</h1>
+        <h1 className="text-xl font-semibold">{t('hub.organizaciones')}</h1>
         <button
           type="button"
           onClick={openCreate}
           className="px-3 py-2 bg-primary text-primary-foreground text-sm rounded-md"
         >
-          {t('hub.new_client')}
+          {t('hub.new_organizacion')}
         </button>
       </div>
 
@@ -191,17 +191,17 @@ export function ClientsPage() {
       {isLoading && <p className="text-muted-foreground text-sm">{tc('loading')}</p>}
 
       {!isLoading && filtered.length === 0 && (
-        <p className="text-muted-foreground text-sm py-8 text-center">{t('hub.no_clients')}</p>
+        <p className="text-muted-foreground text-sm py-8 text-center">{t('hub.no_organizaciones')}</p>
       )}
 
       {filtered.length > 0 && (
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b text-left text-muted-foreground">
-              <th className="pb-2 font-medium">{t('hub.client_name')}</th>
-              <th className="pb-2 font-medium">{t('hub.client_partner')}</th>
-              <th className="pb-2 font-medium">{t('hub.client_chatbots')}</th>
-              <th className="pb-2 font-medium">{t('hub.client_active')}</th>
+              <th className="pb-2 font-medium">{t('hub.organizacion_name')}</th>
+              <th className="pb-2 font-medium">{t('hub.organizacion_admin')}</th>
+              <th className="pb-2 font-medium">{t('hub.organizacion_chatbots')}</th>
+              <th className="pb-2 font-medium">{t('hub.organizacion_active')}</th>
               <th className="pb-2" />
             </tr>
           </thead>
@@ -229,7 +229,7 @@ export function ClientsPage() {
                         : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'
                     }`}
                   >
-                    {c.is_active ? t('hub.client_active') : tc('edit')}
+                    {c.is_active ? t('hub.organizacion_active') : tc('edit')}
                   </button>
                 </td>
                 <td className="py-3 text-right">
@@ -252,31 +252,31 @@ export function ClientsPage() {
         <div role="dialog" aria-modal="true" className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">
           <div className="bg-card rounded-lg p-6 w-full max-w-md shadow-lg space-y-4">
             <h2 className="text-lg font-semibold">
-              {editing ? tc('edit') + ' — ' + editing.name : t('hub.new_client')}
+              {editing ? tc('edit') + ' — ' + editing.name : t('hub.new_organizacion')}
             </h2>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
               <div>
-                <label htmlFor="client_name" className="text-sm font-medium">{t('hub.client_name')}</label>
+                <label htmlFor="organizacion_name" className="text-sm font-medium">{t('hub.organizacion_name')}</label>
                 <input
-                  id="client_name"
+                  id="organizacion_name"
                   {...register('name')}
                   className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                 />
                 {errors.name && <p className="text-destructive text-xs mt-1">{errors.name.message}</p>}
               </div>
               <div>
-                <label htmlFor="client_partner_id" className="text-sm font-medium">{t('hub.client_partner')}</label>
+                <label htmlFor="organizacion_admin_id" className="text-sm font-medium">{t('hub.organizacion_admin')}</label>
                 <input
-                  id="client_partner_id"
+                  id="organizacion_admin_id"
                   {...register('partner_id')}
                   className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                 />
                 {errors.partner_id && <p className="text-destructive text-xs mt-1">{errors.partner_id.message}</p>}
               </div>
               <div>
-                <label htmlFor="client_theme_config" className="text-sm font-medium">{t('hub.client_theme')}</label>
+                <label htmlFor="organizacion_theme_config" className="text-sm font-medium">{t('hub.organizacion_theme')}</label>
                 <textarea
-                  id="client_theme_config"
+                  id="organizacion_theme_config"
                   {...register('theme_config')}
                   rows={4}
                   className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background font-mono resize-y"
@@ -288,20 +288,20 @@ export function ClientsPage() {
                   onClick={() => setDefaultsOpen(v => !v)}
                   className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium bg-muted/30 hover:bg-muted/50 transition-colors"
                 >
-                  <span>{t('hub.client_graph_defaults')}</span>
+                  <span>{t('hub.organizacion_graph_defaults')}</span>
                   <span className="text-muted-foreground">{defaultsOpen ? '▾' : '▸'}</span>
                 </button>
                 {defaultsOpen && (
                   <div className="p-3 space-y-3 border-t">
                     <div>
-                      <label className="text-xs font-medium text-muted-foreground">{t('hub.client_default_graph_profile')}</label>
+                      <label className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_graph_profile')}</label>
                       <select {...register('default_public_graph_profile')} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background">
                         <option value="PUBLIC_KB_RICH">{t('hub.chatbot_graph_profile_rich')}</option>
                         <option value="PUBLIC_PORTAL_AGGREGATOR">{t('hub.chatbot_graph_profile_aggregator')}</option>
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-muted-foreground">{t('hub.client_default_retrieval_mode')}</label>
+                      <label className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_retrieval_mode')}</label>
                       <select {...register('default_retrieval_mode')} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background">
                         <option value="RAG">Vectorial RAG</option>
                         <option value="MD_LONG_CONTEXT">Contexto largo</option>
@@ -309,7 +309,7 @@ export function ClientsPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-muted-foreground">{t('hub.client_default_language_mode')}</label>
+                      <label className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_language_mode')}</label>
                       <select {...register('default_language_mode')} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background">
                         <option value="prefer">{t('hub.chatbot_language_prefer')}</option>
                         <option value="strict">{t('hub.chatbot_language_strict')}</option>
@@ -318,19 +318,19 @@ export function ClientsPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-xs font-medium text-muted-foreground">{t('hub.client_default_quality_threshold')}</label>
+                        <label className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_quality_threshold')}</label>
                         <input type="number" min={0} max={1} step={0.05} {...register('default_quality_threshold', { valueAsNumber: true })} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background" />
                       </div>
                       <div>
-                        <label className="text-xs font-medium text-muted-foreground">{t('hub.client_default_min_results')}</label>
+                        <label className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_min_results')}</label>
                         <input type="number" min={1} max={20} {...register('default_min_retrieval_results', { valueAsNumber: true })} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background" />
                       </div>
                       <div>
-                        <label className="text-xs font-medium text-muted-foreground">{t('hub.client_default_min_score')}</label>
+                        <label className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_min_score')}</label>
                         <input type="number" min={0} max={1} step={0.05} {...register('default_min_retrieval_score', { valueAsNumber: true })} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background" />
                       </div>
                       <div>
-                        <label className="text-xs font-medium text-muted-foreground">{t('hub.client_default_answer_template')}</label>
+                        <label className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_answer_template')}</label>
                         <select {...register('default_answer_template')} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background">
                           <option value="generic">{t('hub.chatbot_answer_template_generic')}</option>
                           <option value="institutional">{t('hub.chatbot_answer_template_institutional')}</option>
@@ -339,14 +339,14 @@ export function ClientsPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <input type="checkbox" id="default_reranker_enabled" {...register('default_reranker_enabled')} className="rounded" />
-                      <label htmlFor="default_reranker_enabled" className="text-xs">{t('hub.client_default_reranker_enabled')}</label>
+                      <label htmlFor="default_reranker_enabled" className="text-xs">{t('hub.organizacion_default_reranker_enabled')}</label>
                     </div>
                   </div>
                 )}
               </div>
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="is_active" {...register('is_active')} className="rounded" />
-                <label htmlFor="is_active" className="text-sm">{t('hub.client_active')}</label>
+                <label htmlFor="is_active" className="text-sm">{t('hub.organizacion_active')}</label>
               </div>
               <div className="flex gap-2 justify-end pt-2">
                 <button
@@ -373,7 +373,7 @@ export function ClientsPage() {
       {deleteTarget && (
         <div role="dialog" aria-modal="true" className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">
           <div className="bg-card rounded-lg p-6 w-full max-w-sm shadow-lg space-y-4">
-            <p className="text-sm">{t('hub.delete_client_confirm')}</p>
+            <p className="text-sm">{t('hub.delete_organizacion_confirm')}</p>
             <p className="font-medium">{deleteTarget.name}</p>
             {deleteError && <p className="text-destructive text-xs">{deleteError}</p>}
             <div className="flex gap-2 justify-end">

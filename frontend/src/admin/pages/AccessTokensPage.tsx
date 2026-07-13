@@ -21,10 +21,10 @@ const ALL_SCOPES = [
   'chat:test',
 ] as const
 
-// Techo de scopes por rol (espejo del backend: el partner no emite chatbots:write).
-function scopesForRole(role: string | undefined): string[] {
-  if (role === 'admin') return [...ALL_SCOPES]
-  if (role === 'partner') return ALL_SCOPES.filter((s) => s !== 'chatbots:write')
+// Techo de scopes por rol (espejo del backend: el admin no emite chatbots:write).
+export function scopesForRole(role: string | undefined): string[] {
+  if (role === 'superadmin') return [...ALL_SCOPES]
+  if (role === 'admin') return ALL_SCOPES.filter((s) => s !== 'chatbots:write')
   return []
 }
 

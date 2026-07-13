@@ -106,7 +106,7 @@ function ProposalCard({ proposal }: ProposalCardProps) {
 export function AdminScriptReviewQueuePage() {
   const { t } = useTranslation('scripts')
   const { user } = useAuth()
-  const isAdmin = user?.role === 'admin' || user?.role === 'partner'
+  const isAdmin = user?.role === 'superadmin' || user?.role === 'admin'
 
   const listHook = useListPendingScripts()
   const proposals = listHook.data as unknown as PendingProposalOut[] | undefined

@@ -42,7 +42,7 @@ const LLM_CONFIG_ID_OTHER = 'llm-brain-other'
 const DEMO_CHATBOT = {
   id: CHATBOT_ID,
   name: 'Bot Cerebro',
-  client_id: 'client-1',
+  organizacion_id: 'client-1',
   llm_config_id: LLM_CONFIG_ID_DEFAULT,
   system_prompt: '',
   sources: [],

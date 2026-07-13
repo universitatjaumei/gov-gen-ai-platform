@@ -16,7 +16,7 @@ import { useAuth } from '@/shared/auth'
 export function LLMDraftPreviewPage() {
   const { t } = useTranslation('common')
   const { user } = useAuth()
-  const isAdmin = user?.role === 'admin' || user?.role === 'partner'
+  const isAdmin = user?.role === 'superadmin' || user?.role === 'admin'
 
   const [promptText, setPromptText] = useState('')
   const [draftName, setDraftName] = useState('')
@@ -112,7 +112,7 @@ export function LLMDraftPreviewPage() {
             </ul>
           )}
 
-          {/* Mode toggle — admin/partner only */}
+          {/* Mode toggle — superadmin/admin only */}
           {isAdmin && (
             <div className="flex gap-2">
               <button

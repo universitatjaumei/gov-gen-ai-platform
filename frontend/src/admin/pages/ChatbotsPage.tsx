@@ -26,7 +26,7 @@ const RETRIEVAL_MODES = [
   { value: 'MD_AGENT_SELECTOR', label: 'Exploración agéntica',  hint: 'El LLM decide qué documentos leer durante la conversación usando herramientas. Sin límite de corpus, pero más lento.' },
 ] as const
 
-const DEV_CLIENT_ID = '00000000-0000-0000-0000-000000000010'
+const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010'
 const DEV_LLM_ID = '00000000-0000-0000-0000-000000000001'
 
 export function ChatbotsPage() {
@@ -262,7 +262,7 @@ export function ChatbotsPage() {
           retrieval_top_k: values.retrieval_top_k,
           use_prompt_caching: values.use_prompt_caching,
           cache_ttl: values.cache_ttl,
-          client_id: DEV_CLIENT_ID,
+          organizacion_id: DEV_ORG_ID,
           llm_config_id: DEV_LLM_ID,
           public_graph_profile: values.public_graph_profile,
           language_mode: values.language_mode,
@@ -286,7 +286,7 @@ export function ChatbotsPage() {
     (cb) =>
       cb.id !== editing?.id &&
       cb.kind === 'atomic' &&
-      cb.client_id === (editing?.client_id ?? DEV_CLIENT_ID) &&
+      cb.organizacion_id === (editing?.organizacion_id ?? DEV_ORG_ID) &&
       cb.parent_chatbot_id === null,
   )
 

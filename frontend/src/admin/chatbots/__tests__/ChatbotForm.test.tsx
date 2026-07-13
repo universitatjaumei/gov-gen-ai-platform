@@ -61,7 +61,7 @@ vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
 // tsc --noEmit fallará en esta línea antes de que se ejecute ningún test.
 const _contractCheck: ChatbotCreate = {
   name: 'Test Bot',
-  client_id: '00000000-0000-0000-0000-000000000010',
+  organizacion_id: '00000000-0000-0000-0000-000000000010',
   llm_config_id: '00000000-0000-0000-0000-000000000001',
   system_prompt: 'You are a helpful assistant.',
 }
@@ -78,7 +78,7 @@ const TOKEN =
 const DEMO_CHATBOT: ChatbotCreate & { id: string; is_active: boolean; created_at: string; updated_at: string; sources: string[]; retrieval_top_k: number; use_prompt_caching: boolean; cache_ttl: number; kind: string; parent_chatbot_id: null; public_graph_profile: string; language_mode: string; quality_threshold: number; min_retrieval_results: number; min_retrieval_score: number; reranker_enabled: boolean; answer_template: string } = {
   id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
   name: 'Bot Demo',
-  client_id: '00000000-0000-0000-0000-000000000010',
+  organizacion_id: '00000000-0000-0000-0000-000000000010',
   llm_config_id: '00000000-0000-0000-0000-000000000001',
   system_prompt: 'Eres útil.',
   sources: [],

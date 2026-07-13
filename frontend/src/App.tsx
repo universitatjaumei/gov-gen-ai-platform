@@ -8,7 +8,7 @@ import { LoginPage } from '@/admin/pages/LoginPage'
 import { AuthCallbackPage } from '@/admin/pages/AuthCallbackPage'
 import { AccessTokensPage } from '@/admin/pages/AccessTokensPage'
 import { ChatbotsPage } from '@/admin/pages/ChatbotsPage'
-import { ClientsPage } from '@/admin/pages/ClientsPage'
+import { OrganizacionesPage } from '@/admin/pages/OrganizacionesPage'
 import { DocumentsPage } from '@/admin/pages/DocumentsPage'
 import { ReportsPage } from '@/admin/pages/ReportsPage'
 import { LLMConfigsPage } from '@/admin/pages/LLMConfigsPage'
@@ -58,7 +58,7 @@ function App() {
                   <Route path="/hub" element={<HubLayout />}>
                     <Route index element={<Navigate to="/hub/chatbots" replace />} />
                     <Route path="chatbots" element={<ChatbotsPage />} />
-                    <Route path="clients" element={<ClientsPage />} />
+                    <Route path="organizaciones" element={<OrganizacionesPage />} />
                     <Route path="documents" element={<DocumentsPage />} />
                     <Route path="reports" element={<ReportsPage />} />
                     <Route path="llm-configs" element={<LLMConfigsPage />} />

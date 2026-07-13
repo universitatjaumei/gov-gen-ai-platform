@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 
 const HUB_SUBNAV = [
   { key: 'hub.chatbots', path: '/hub/chatbots' },
-  { key: 'hub.clients', path: '/hub/clients' },
+  { key: 'hub.organizaciones', path: '/hub/organizaciones' },
   { key: 'hub.documents', path: '/hub/documents' },
   { key: 'hub.reports', path: '/hub/reports' },
   { key: 'hub.llm_configs', path: '/hub/llm-configs' },

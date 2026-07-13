@@ -57,7 +57,7 @@ afterEach(() => {
 const DEMO_CHATBOT: ChatbotRead = {
   id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
   name: 'Bot Demo',
-  client_id: '00000000-0000-0000-0000-000000000010',
+  organizacion_id: '00000000-0000-0000-0000-000000000010',
   llm_config_id: '00000000-0000-0000-0000-000000000001',
   system_prompt: 'Eres útil.',
   sources: [],

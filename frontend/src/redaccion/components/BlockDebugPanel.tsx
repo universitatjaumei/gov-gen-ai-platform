@@ -24,7 +24,7 @@ export function BlockDebugPanel({ block, workspaceId, workspaceStatus }: BlockDe
   const [open, setOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<DebugTab>('debug')
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'partner'
+  const isAdmin = user?.role === 'superadmin' || user?.role === 'admin'
   if (!isAdmin) return null
 
   const canShowAnon =

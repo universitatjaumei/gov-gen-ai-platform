@@ -68,7 +68,7 @@ vi.mock('@/components/ui/progress', () => ({
 const CHATBOT = {
   id: 'bot-1',
   name: 'Bot Test',
-  client_id: 'client-1',
+  organizacion_id: 'client-1',
   llm_config_id: 'llm-1',
   system_prompt: '',
   sources: [],

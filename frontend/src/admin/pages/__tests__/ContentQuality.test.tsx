@@ -68,7 +68,7 @@ const SITE = {
   last_crawled_at: null,
   status: 'active',
   created_at: '2026-06-06T00:00:00Z',
-  client_id: null,
+  organizacion_id: null,
 }
 
 const FINDING = {
