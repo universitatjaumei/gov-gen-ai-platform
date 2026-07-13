@@ -8,7 +8,7 @@ from __future__ import annotations
 import io
 import re
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
 
 @dataclass

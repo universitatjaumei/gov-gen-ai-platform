@@ -13,9 +13,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from server.app.modules.redaccion.services.anonymization.run_context import (
-        RunAnonymizationContext,
-    )
+    pass
 
 from server.app.modules.redaccion.contracts.template import (
     ReportProfileId,

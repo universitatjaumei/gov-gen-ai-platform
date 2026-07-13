@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, get_session
 from server.app.core.auth.models import UserInfo
-from server.app.modules.redaccion.contracts.manifest import DraftingRunManifest
 from server.app.modules.redaccion.database.models import (
     HubRunManifest,
     HubWorkspace,

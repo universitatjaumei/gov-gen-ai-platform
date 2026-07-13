@@ -18,7 +18,6 @@ from fastapi import (
     Response,
     status,
 )
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +31,6 @@ from server.app.modules.agents_hub.ingestion.quality.findings_repo import (
     ContentFindingRepo,
 )
 from server.app.modules.agents_hub.ingestion.quality.report_contracts import (
-    ContentFindingView,
     WebQualityReport,
 )
 
@@ -69,7 +67,6 @@ def get_report_builder(
     )
     from server.app.modules.agents_hub.ingestion.quality.site_repo import (
         WebSiteRepo,
-        ContentFindingRepo as _FR,
     )
 
     findings_repo = ContentFindingRepo(session)

@@ -11,11 +11,9 @@ Sin hash el documento no está ensamblado y la exportación se rechaza.
 from __future__ import annotations
 
 import io
-from datetime import datetime, timezone
 
 from docx import Document
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Pt, RGBColor
+from docx.shared import RGBColor
 
 from server.app.modules.redaccion.contracts.manifest import DraftingRunManifest
 

@@ -24,7 +24,7 @@ from typing import Any, Literal, Protocol
 
 import httpx
 
-from server.app.core.config import Settings, get_settings
+from server.app.core.config import get_settings
 from server.app.modules.redaccion.pipelines.contracts import (
     ExtractionProvenance,
     ExtractionResult,

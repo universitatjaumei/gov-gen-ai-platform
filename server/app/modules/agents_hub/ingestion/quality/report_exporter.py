@@ -23,12 +23,11 @@ class WebQualityReportExporter:
     async def to_docx(self, report: WebQualityReport) -> bytes:
         """Genera un DOCX estructurado con los hallazgos del informe."""
         from docx import Document
-        from docx.shared import Pt, RGBColor
 
         doc = Document()
 
         # Cabecera
-        title = doc.add_heading(f"Informe de Auditoría Web — {report.site_name}", level=1)
+        doc.add_heading(f"Informe de Auditoría Web — {report.site_name}", level=1)
         doc.add_paragraph(
             f"Fecha de generación: {report.generated_at.strftime('%Y-%m-%d %H:%M UTC')}"
         )

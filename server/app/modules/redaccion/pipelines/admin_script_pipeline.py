@@ -79,7 +79,6 @@ class AdminScriptExtractionPipeline:
 
         file_path: str | None = None
         if inp.file_ref:
-            import os
             from pathlib import Path
             file_path = str(Path(inp.file_ref.bucket) / inp.file_ref.key)
 
