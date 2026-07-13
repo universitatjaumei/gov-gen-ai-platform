@@ -175,11 +175,11 @@ class AutomationLibrary(SQLModel, table=True):
 # === MULTITENANCY MODELS (Future - Phase 1) ===
 
 
-class AdminAccount(SQLModel, table=True):
+class SuperAdminAccount(SQLModel, table=True):
     """
-    Cuenta de Administrador del Sistema (SuperAdmin).
+    Cuenta de Superadministrador del Sistema.
 
-    Gestiona la plataforma global, partners y configuraciones de IA.
+    Gestiona la plataforma global, admins y configuraciones de IA.
     """
 
     model_config = ConfigDict(validate_assignment=True)
@@ -206,11 +206,11 @@ class AdminAccount(SQLModel, table=True):
         return v.strip()
 
 
-class PartnerAccount(SQLModel, table=True):
+class AdminAccount(SQLModel, table=True):
     """
-    Cuenta de Partner (Distribuidor) para el esquema multi-tenencia.
+    Cuenta de Administrador (gestor de organizaciones) para multi-tenencia.
 
-    Los Partners administran múltiples cuentas de cliente y sus créditos.
+    Los Admins administran múltiples organizaciones y sus créditos.
     """
 
     partner_id: str = Field(primary_key=True)
@@ -229,7 +229,7 @@ class ClientAccount(SQLModel, table=True):
     """
 
     client_id: str = Field(primary_key=True)
-    partner_id: str = Field(foreign_key="partneraccount.partner_id")
+    partner_id: str = Field(foreign_key="adminaccount.partner_id")
     name: str
     email: str = Field(nullable=False)
     nif: Optional[str] = Field(default=None, description="Tax ID (NIF/CIF)")
@@ -305,7 +305,7 @@ class BillingRecord(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     timestamp: datetime = Field(default_factory=datetime.utcnow)
-    partner_id: str = Field(foreign_key="partneraccount.partner_id")
+    partner_id: str = Field(foreign_key="adminaccount.partner_id")
     client_id: str = Field(foreign_key="clientaccount.client_id")
     operation: str
     tokens_used: int
@@ -352,7 +352,7 @@ class ScriptEscalation(SQLModel, table=True):
     """
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    partner_id: str = Field(foreign_key="partneraccount.partner_id", index=True)
+    partner_id: str = Field(foreign_key="adminaccount.partner_id", index=True)
     client_id: str = Field(foreign_key="clientaccount.client_id", index=True)
     script_name: str
     original_code: str = Field(sa_column=Column(Text))
@@ -383,7 +383,7 @@ class ServerSecurityPolicy(SQLModel, table=True):
     # Scope determines the policy level
     scope: str = Field(default="SYSTEM", description="SYSTEM, PARTNER, or CLIENT")
     partner_id: Optional[str] = Field(
-        default=None, foreign_key="partneraccount.partner_id", index=True
+        default=None, foreign_key="adminaccount.partner_id", index=True
     )
     client_id: Optional[str] = Field(
         default=None, foreign_key="clientaccount.client_id", index=True

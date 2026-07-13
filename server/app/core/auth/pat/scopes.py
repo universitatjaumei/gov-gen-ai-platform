@@ -20,13 +20,13 @@ ALL_SCOPES: frozenset[str] = frozenset(
 )
 
 # Techo de scopes que cada rol puede EMITIR en un PAT (los demás roles no pueden
-# emitir PAT). Un partner queda excluido de `chatbots:write` vía token máquina: la
+# emitir PAT). Un admin queda excluido de `chatbots:write` vía token máquina: la
 # mutación in-place de un chatbot en producción es el riesgo dominante (ver
-# docs/mcp.md, valoración 2), así que se reserva a admin; el partner sigue
+# docs/mcp.md, valoración 2), así que se reserva a superadmin; el admin sigue
 # configurando chatbots de forma interactiva (sesión JWT, no acotada por scopes).
 _ROLE_SCOPES: dict[str, frozenset[str]] = {
-    UserRole.ADMIN.value: ALL_SCOPES,
-    UserRole.PARTNER.value: ALL_SCOPES - {CHATBOTS_WRITE},
+    UserRole.SUPERADMIN.value: ALL_SCOPES,
+    UserRole.ADMIN.value: ALL_SCOPES - {CHATBOTS_WRITE},
 }
 
 

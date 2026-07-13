@@ -18,7 +18,7 @@ from server.app.modules.agents_hub.database.connection import get_async_session
 
 router = APIRouter(prefix="/hub/prompt-templates", tags=["hub-prompt-templates"])
 
-_require_admin = require_role("admin", "partner")
+_require_admin = require_role("superadmin", "admin")
 
 
 class PromptTemplateRead(BaseModel):

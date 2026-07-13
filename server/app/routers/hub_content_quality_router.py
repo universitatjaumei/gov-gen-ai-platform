@@ -85,8 +85,8 @@ def get_report_exporter() -> Any:
     return WebQualityReportExporter()
 
 
-async def _require_admin_or_partner(user: UserInfo = Depends(get_current_user)) -> UserInfo:
-    if not (user.is_admin or user.is_partner):
+async def _require_admin(user: UserInfo = Depends(get_current_user)) -> UserInfo:
+    if not (user.is_superadmin or user.is_admin):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role")
     return user
 
@@ -122,7 +122,7 @@ async def list_site_findings(
     site_id: uuid.UUID,
     finding_status: str | None = Query(default=None, alias="status"),
     finding_type: str | None = Query(default=None, alias="type"),
-    current_user: UserInfo = Depends(_require_admin_or_partner),
+    current_user: UserInfo = Depends(_require_admin),
     findings_repo: ContentFindingRepo = Depends(get_findings_repo),
 ):
     """Lista hallazgos de un sitio (cola de revisión).
@@ -145,7 +145,7 @@ async def transition_finding(
     site_id: uuid.UUID,
     finding_id: uuid.UUID,
     body: _TransitionIn,
-    current_user: UserInfo = Depends(_require_admin_or_partner),
+    current_user: UserInfo = Depends(_require_admin),
     findings_repo: ContentFindingRepo = Depends(get_findings_repo),
 ):
     """Transiciona el estado de un hallazgo (confirm/dismiss/resolve).
@@ -185,7 +185,7 @@ def _is_uuid(value: str) -> bool:
 )
 async def get_site_report(
     site_id: uuid.UUID,
-    current_user: UserInfo = Depends(_require_admin_or_partner),
+    current_user: UserInfo = Depends(_require_admin),
     builder: Any = Depends(get_report_builder),
 ):
     """Genera y devuelve el informe de auditoría de calidad de un sitio.
@@ -202,7 +202,7 @@ async def get_site_report(
 async def export_site_report(
     site_id: uuid.UUID,
     report_format: str = Query(default="docx", alias="format"),
-    current_user: UserInfo = Depends(_require_admin_or_partner),
+    current_user: UserInfo = Depends(_require_admin),
     builder: Any = Depends(get_report_builder),
     exporter: Any = Depends(get_report_exporter),
 ):
@@ -240,7 +240,7 @@ async def export_site_report(
 async def analyze_site(
     site_id: uuid.UUID,
     background_tasks: BackgroundTasks,
-    current_user: UserInfo = Depends(_require_admin_or_partner),
+    current_user: UserInfo = Depends(_require_admin),
     quality_job: Any = Depends(get_quality_job),
 ):
     """Dispara un análisis de calidad completo del sitio en background.

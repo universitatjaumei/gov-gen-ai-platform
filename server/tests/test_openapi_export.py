@@ -156,16 +156,16 @@ class TestOpenAPISchemaContract:
             "en server/app/routers/hub_chatbots_router.py"
         )
 
-    def test_client_read_schema_has_stable_name(self):
-        """El schema de respuesta de Client debe llamarse 'ClientRead'."""
+    def test_organizacion_read_schema_has_stable_name(self):
+        """El schema de respuesta de Organización debe llamarse 'OrganizacionRead'."""
         schema = app.openapi()
         schemas = schema.get("components", {}).get("schemas", {})
-        assert "ClientRead" in schemas, (
-            "Schema 'ClientRead' no encontrado.\n"
-            "Schemas de client presentes: "
-            + str([k for k in schemas if "client" in k.lower()])
-            + "\nSolución (CF.1.4): renombrar ClientOut -> ClientRead "
-            "en server/app/routers/hub_clients_router.py"
+        assert "OrganizacionRead" in schemas, (
+            "Schema 'OrganizacionRead' no encontrado.\n"
+            "Schemas de organización presentes: "
+            + str([k for k in schemas if "organizacion" in k.lower()])
+            + "\nSolución: exponer OrganizacionRead "
+            "en server/app/routers/hub_organizaciones_router.py"
         )
 
     def test_llmconfig_read_schema_has_stable_name(self):
@@ -234,7 +234,7 @@ class TestOpenAPISchemaContract:
         props = set(read_schema.get("properties", {}).keys())
 
         expected = {
-            "id", "name", "client_id", "llm_config_id", "system_prompt",
+            "id", "name", "organizacion_id", "llm_config_id", "system_prompt",
             "sources", "is_active", "retrieval_mode", "retrieval_top_k",
             "use_prompt_caching", "cache_ttl", "kind", "parent_chatbot_id",
             "created_at", "updated_at",
@@ -244,13 +244,13 @@ class TestOpenAPISchemaContract:
             f"Campos faltantes en el schema de respuesta de Chatbot: {sorted(missing)}"
         )
 
-    def test_client_read_fields_are_complete(self):
-        """El schema de respuesta de Client tiene los campos que el frontend espera."""
+    def test_organizacion_read_fields_are_complete(self):
+        """El schema de respuesta de Organización tiene los campos que el frontend espera."""
         schema = app.openapi()
         schemas = schema.get("components", {}).get("schemas", {})
 
-        read_schema = schemas.get("ClientRead") or schemas.get(
-            next((k for k in schemas if "hub_clients" in k), ""), {}
+        read_schema = schemas.get("OrganizacionRead") or schemas.get(
+            next((k for k in schemas if "hub_organizaciones" in k), ""), {}
         )
         props = set(read_schema.get("properties", {}).keys())
 
@@ -260,7 +260,7 @@ class TestOpenAPISchemaContract:
         }
         missing = expected - props
         assert not missing, (
-            f"Campos faltantes en el schema de respuesta de Client: {sorted(missing)}"
+            f"Campos faltantes en el schema de respuesta de Organización: {sorted(missing)}"
         )
 
     def test_llmconfig_read_fields_are_complete(self):

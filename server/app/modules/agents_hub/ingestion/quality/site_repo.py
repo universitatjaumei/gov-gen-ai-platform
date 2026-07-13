@@ -32,7 +32,7 @@ class WebSiteRepo:
     async def create(
         self,
         *,
-        client_id: uuid.UUID | None,
+        organizacion_id: uuid.UUID | None,
         name: str,
         root_url: str,
         sitemap_url: str | None = None,
@@ -42,7 +42,7 @@ class WebSiteRepo:
         audit_semantic_scope: str = "ingested",
     ) -> HubWebSite:
         site = HubWebSite(
-            client_id=client_id,
+            organizacion_id=organizacion_id,
             name=name,
             root_url=root_url,
             sitemap_url=sitemap_url,
@@ -59,10 +59,10 @@ class WebSiteRepo:
     async def get(self, site_id: uuid.UUID) -> HubWebSite | None:
         return await self.session.get(HubWebSite, site_id)
 
-    async def list_by_client(self, client_id: uuid.UUID) -> list[HubWebSite]:
+    async def list_by_organizacion(self, organizacion_id: uuid.UUID) -> list[HubWebSite]:
         stmt = (
             select(HubWebSite)
-            .where(HubWebSite.client_id == client_id)
+            .where(HubWebSite.organizacion_id == organizacion_id)
             .order_by(HubWebSite.created_at.desc())
         )
         result = await self.session.execute(stmt)

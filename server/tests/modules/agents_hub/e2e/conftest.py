@@ -80,7 +80,7 @@ def admin_headers():
 @pytest.fixture
 async def setup_chatbot(db_session):
     """Crea un chatbot de prueba con cliente, config LLM y chunk de conocimiento."""
-    from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig, HubProvider
+    from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion, HubLLMConfig, HubProvider
     from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
     from server.app.modules.agents_hub.ingestion.hasher import hash_content
 
@@ -95,12 +95,12 @@ async def setup_chatbot(db_session):
     db_session.add(llm_config)
     await db_session.flush()
 
-    client = HubClient(name="E2E Test Client", partner_id="partner-e2e-1")
+    client = HubOrganizacion(name="E2E Test Client", partner_id="partner-e2e-1")
     db_session.add(client)
     await db_session.flush()
 
     chatbot = HubChatbot(
-        client_id=client.id,
+        organizacion_id=client.id,
         llm_config_id=llm_config.id,
         name=f"E2E Bot {uuid.uuid4()}",
         system_prompt="Eres un asistente de prueba.",

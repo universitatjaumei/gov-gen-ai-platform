@@ -4,6 +4,7 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from server.app.core.auth import AuthenticationError, UserInfo, decode_token
+from server.app.core.auth.models import UserRole
 from server.app.core.auth.pat.service import PatInvalidError, PatService
 from server.app.database.db import server_engine
 
@@ -69,6 +70,13 @@ def require_role(*roles: str):
         return user
 
     return _check
+
+
+# Gates nombrados con jerarquía superadmin > admin > user.
+# `require_superadmin` solo acepta superadmin (plataforma global).
+# `require_admin` acepta admin y superadmin (superadmin puede todo lo que un admin).
+require_superadmin = require_role(UserRole.SUPERADMIN.value)
+require_admin = require_role(UserRole.SUPERADMIN.value, UserRole.ADMIN.value)
 
 
 def require_scopes(*needed: str):

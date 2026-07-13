@@ -17,8 +17,8 @@ from server.app.modules.agents_hub.database.connection import get_async_session
 
 router = APIRouter(prefix="/hub/themes", tags=["hub-themes"])
 
-_require_partner = require_role("admin", "partner")
-_require_admin = require_role("admin")
+_require_admin = require_role("superadmin", "admin")
+_require_superadmin = require_role("superadmin")
 
 
 # ============================================
@@ -77,12 +77,12 @@ class ThemeConfig(BaseModel):
 
 class ThemeCreate(BaseModel):
     """Sistema de cascada visual:
-    - client_id solo: tema nivel cliente (hereda plataforma).
+    - organizacion_id solo: tema nivel cliente (hereda plataforma).
     - chatbot_id: tema nivel chatbot (hereda cliente → plataforma).
     - ninguno: tema de plataforma (solo Admin).
     """
     name: str = Field(..., min_length=1, max_length=100)
-    client_id: str | None = None
+    organizacion_id: str | None = None
     chatbot_id: str | None = None
     config: ThemeConfig
 
@@ -94,7 +94,7 @@ class ThemeUpdate(BaseModel):
 class ThemeResponse(BaseModel):
     id: str
     name: str
-    client_id: str | None
+    organizacion_id: str | None
     chatbot_id: str | None
     config: dict
     is_default: bool
@@ -154,9 +154,9 @@ async def get_preset_themes() -> list[dict]:
 
 @router.get("", response_model=list[ThemeResponse])
 async def get_themes(
-    client_id: str | None = None,
+    organizacion_id: str | None = None,
     chatbot_id: str | None = None,
-    user: UserInfo = Depends(_require_partner),
+    user: UserInfo = Depends(_require_admin),
 ) -> list[dict]:
     """Lista los temas disponibles para el partner.
 
@@ -167,11 +167,11 @@ async def get_themes(
         themes = [
             t for t in themes
             if t.get("chatbot_id") == chatbot_id
-            or t.get("client_id") == client_id
+            or t.get("organizacion_id") == organizacion_id
             or t.get("is_default")
         ]
-    elif client_id:
-        themes = [t for t in themes if t.get("client_id") == client_id or t.get("is_default")]
+    elif organizacion_id:
+        themes = [t for t in themes if t.get("organizacion_id") == organizacion_id or t.get("is_default")]
     return themes
 
 
@@ -187,7 +187,7 @@ async def get_theme(theme_id: str) -> dict:
 @router.post("", response_model=ThemeResponse, status_code=status.HTTP_201_CREATED)
 async def create_theme(
     data: ThemeCreate,
-    user: UserInfo = Depends(_require_partner),
+    user: UserInfo = Depends(_require_admin),
 ) -> dict:
     """Crea un nuevo tema para un cliente o chatbot del partner."""
     theme_id = str(uuid.uuid4())
@@ -195,7 +195,7 @@ async def create_theme(
     theme = {
         "id": theme_id,
         "name": data.name,
-        "client_id": data.client_id,
+        "organizacion_id": data.organizacion_id,
         "chatbot_id": data.chatbot_id,
         "config": data.config.model_dump(),
         "is_default": False,
@@ -211,7 +211,7 @@ async def create_theme(
 async def update_theme(
     theme_id: str,
     data: ThemeUpdate,
-    user: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_superadmin),
 ) -> dict:
     """Actualiza un tema existente."""
     theme = _load_theme(theme_id)
@@ -228,7 +228,7 @@ async def update_theme(
 @router.delete("/{theme_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_theme(
     theme_id: str,
-    user: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_superadmin),
 ) -> None:
     """Elimina un tema personalizado."""
     theme = _load_theme(theme_id)
@@ -243,7 +243,7 @@ async def delete_theme(
 async def apply_theme_to_chatbot(
     theme_id: str,
     chatbot_id: str,
-    user: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_superadmin),
     session: AsyncSession = Depends(get_async_session),
 ) -> dict:
     """Aplica un tema a un chatbot específico."""

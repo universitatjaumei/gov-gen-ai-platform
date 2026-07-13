@@ -1,4 +1,4 @@
-"""CRUD de clientes del Hub.
+"""CRUD de organizaciones del Hub.
 
 Deploy: cloud
 """
@@ -13,14 +13,14 @@ from sqlalchemy import func, select, delete as sql_delete
 from server.app.api.deps import require_role
 from server.app.core.auth.models import UserInfo
 from server.app.modules.agents_hub.database.connection import get_async_session
-from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient
+from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion
 
-router = APIRouter(prefix="/hub/clients", tags=["hub-clients"])
+router = APIRouter(prefix="/hub/organizaciones", tags=["hub-organizaciones"])
 
-_require_admin = require_role("admin", "partner")
+_require_admin = require_role("superadmin", "admin")
 
 
-class ClientRead(BaseModel):
+class OrganizacionRead(BaseModel):
     id: uuid.UUID
     name: str
     partner_id: str
@@ -41,7 +41,7 @@ class ClientRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class ClientCreate(BaseModel):
+class OrganizacionCreate(BaseModel):
     name: str
     partner_id: str
     theme_config: dict = {}
@@ -56,7 +56,7 @@ class ClientCreate(BaseModel):
     default_answer_template: str = "generic"
 
 
-class ClientUpdate(BaseModel):
+class OrganizacionUpdate(BaseModel):
     name: str | None = None
     partner_id: str | None = None
     theme_config: dict | None = None
@@ -73,37 +73,37 @@ class ClientUpdate(BaseModel):
 
 _count_sq = (
     select(func.count(HubChatbot.id))
-    .where(HubChatbot.client_id == HubClient.id)
-    .correlate(HubClient)
+    .where(HubChatbot.organizacion_id == HubOrganizacion.id)
+    .correlate(HubOrganizacion)
     .scalar_subquery()
 )
 
 
-@router.get("", response_model=list[ClientRead])
-async def list_clients(
+@router.get("", response_model=list[OrganizacionRead])
+async def list_organizaciones(
     _: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
     rows = (
         await session.execute(
-            select(HubClient, _count_sq.label("chatbot_count")).order_by(
-                HubClient.created_at.desc()
+            select(HubOrganizacion, _count_sq.label("chatbot_count")).order_by(
+                HubOrganizacion.created_at.desc()
             )
         )
     ).all()
     return [
-        ClientRead.model_validate(c).model_copy(update={"chatbot_count": count})
-        for c, count in rows
+        OrganizacionRead.model_validate(o).model_copy(update={"chatbot_count": count})
+        for o, count in rows
     ]
 
 
-@router.post("", response_model=ClientRead, status_code=status.HTTP_201_CREATED)
-async def create_client(
-    body: ClientCreate,
+@router.post("", response_model=OrganizacionRead, status_code=status.HTTP_201_CREATED)
+async def create_organizacion(
+    body: OrganizacionCreate,
     _: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
-    client = HubClient(
+    organizacion = HubOrganizacion(
         name=body.name,
         partner_id=body.partner_id,
         theme_config=body.theme_config,
@@ -117,44 +117,50 @@ async def create_client(
         default_reranker_enabled=body.default_reranker_enabled,
         default_answer_template=body.default_answer_template,
     )
-    session.add(client)
+    session.add(organizacion)
     await session.commit()
-    await session.refresh(client)
-    return ClientRead.model_validate(client).model_copy(update={"chatbot_count": 0})
+    await session.refresh(organizacion)
+    return OrganizacionRead.model_validate(organizacion).model_copy(
+        update={"chatbot_count": 0}
+    )
 
 
-@router.patch("/{client_id}", response_model=ClientRead)
-async def update_client(
-    client_id: uuid.UUID,
-    body: ClientUpdate,
+@router.patch("/{organizacion_id}", response_model=OrganizacionRead)
+async def update_organizacion(
+    organizacion_id: uuid.UUID,
+    body: OrganizacionUpdate,
     _: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
-    client = await session.get(HubClient, client_id)
-    if not client:
+    organizacion = await session.get(HubOrganizacion, organizacion_id)
+    if not organizacion:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Organización not found"
         )
 
     for field, value in body.model_dump(exclude_none=True).items():
-        setattr(client, field, value)
-    client.updated_at = datetime.now(timezone.utc)
+        setattr(organizacion, field, value)
+    organizacion.updated_at = datetime.now(timezone.utc)
 
     await session.commit()
-    await session.refresh(client)
-    return ClientRead.model_validate(client).model_copy(update={"chatbot_count": 0})
+    await session.refresh(organizacion)
+    return OrganizacionRead.model_validate(organizacion).model_copy(
+        update={"chatbot_count": 0}
+    )
 
 
-@router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_client(
-    client_id: uuid.UUID,
+@router.delete("/{organizacion_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_organizacion(
+    organizacion_id: uuid.UUID,
     _: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
-    client = await session.get(HubClient, client_id)
-    if not client:
+    organizacion = await session.get(HubOrganizacion, organizacion_id)
+    if not organizacion:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Organización not found"
         )
-    await session.execute(sql_delete(HubClient).where(HubClient.id == client_id))
+    await session.execute(
+        sql_delete(HubOrganizacion).where(HubOrganizacion.id == organizacion_id)
+    )
     await session.commit()

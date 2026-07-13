@@ -20,7 +20,7 @@ from server.app.services.model_fetcher import get_models_for_provider
 
 router = APIRouter(prefix="/hub/llm-configs", tags=["hub-llm-configs"])
 
-_require_admin = require_role("admin", "partner")
+_require_admin = require_role("superadmin", "admin")
 
 
 class HubProviderOut(BaseModel):

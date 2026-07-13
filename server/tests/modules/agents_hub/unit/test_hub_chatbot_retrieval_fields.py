@@ -17,7 +17,7 @@ def _make_chatbot(**kwargs):
     from server.app.modules.agents_hub.database.config_models import HubChatbot
     defaults = dict(
         id=uuid.uuid4(),
-        client_id=uuid.uuid4(),
+        organizacion_id=uuid.uuid4(),
         llm_config_id=uuid.uuid4(),
         name=f"chatbot-{uuid.uuid4().hex[:6]}",
         system_prompt="Asistente de prueba",

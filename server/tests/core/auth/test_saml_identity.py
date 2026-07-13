@@ -21,14 +21,14 @@ def _uid() -> str:
 def test_resolve_role_explicit_attribute(saml_ctx):
     from server.app.core.auth.saml.role_mapping import resolve_role
 
-    assert resolve_role({"role": ["partner"]}) == "partner"
+    assert resolve_role({"role": ["admin"]}) == "admin"
 
 
 def test_resolve_role_from_group_map(saml_ctx, monkeypatch):
     from server.app.core.auth.saml.role_mapping import resolve_role
 
-    monkeypatch.setenv("SAML_GROUP_ROLE_MAP", '{"pas-informatica": "partner"}')
-    assert resolve_role({"groups": ["pas-informatica"]}) == "partner"
+    monkeypatch.setenv("SAML_GROUP_ROLE_MAP", '{"pas-informatica": "admin"}')
+    assert resolve_role({"groups": ["pas-informatica"]}) == "admin"
 
 
 def test_resolve_role_default_when_nothing(saml_ctx):
@@ -37,40 +37,40 @@ def test_resolve_role_default_when_nothing(saml_ctx):
     assert resolve_role({}) == "user"  # SAML_DEFAULT_ROLE
 
 
-def test_resolve_role_precedence_admin_over_partner(saml_ctx, monkeypatch):
+def test_resolve_role_precedence_superadmin_over_admin(saml_ctx, monkeypatch):
     from server.app.core.auth.saml.role_mapping import resolve_role
 
     monkeypatch.setenv(
         "SAML_GROUP_ROLE_MAP",
-        '{"grupo-admin": "admin", "grupo-partner": "partner"}',
+        '{"grupo-super": "superadmin", "grupo-admin": "admin"}',
     )
-    role = resolve_role({"groups": ["grupo-partner", "grupo-admin"]})
-    assert role == "admin"
+    role = resolve_role({"groups": ["grupo-admin", "grupo-super"]})
+    assert role == "superadmin"
 
 
 # --------------------------------------------------------------------------- #
 # resolve_session (BD)                                                          #
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
-async def test_resolve_session_known_admin(saml_ctx, db):
+async def test_resolve_session_known_superadmin(saml_ctx, db):
     from server.app.core.auth.saml.identity_service import SamlIdentityService
-    from server.app.database.models import AdminAccount
+    from server.app.database.models import SuperAdminAccount
     from server.app.modules.agents_hub.database.config_models import HubSsoUser
     from sqlalchemy import select
 
-    email = f"admin-{_uid()}@uji.es"
+    email = f"superadmin-{_uid()}@uji.es"
     db.track(email)
     db.session.add(
-        AdminAccount(name="Admin Test", email=email, hashed_password="x", is_active=True)
+        SuperAdminAccount(name="SuperAdmin Test", email=email, hashed_password="x", is_active=True)
     )
     await db.session.commit()
 
     info = await SamlIdentityService(db.session).resolve_session(
         nameid=email, attributes={"mail": [email]}
     )
-    assert info.role == "admin"
+    assert info.role == "superadmin"
     assert info.email == email
-    # No se crea HubSsoUser para una cuenta admin existente.
+    # No se crea HubSsoUser para una cuenta superadmin existente.
     sso = (
         await db.session.execute(select(HubSsoUser).where(HubSsoUser.email == email))
     ).scalars().first()
@@ -78,21 +78,21 @@ async def test_resolve_session_known_admin(saml_ctx, db):
 
 
 @pytest.mark.asyncio
-async def test_resolve_session_known_partner(saml_ctx, db):
+async def test_resolve_session_known_admin(saml_ctx, db):
     from server.app.core.auth.saml.identity_service import SamlIdentityService
-    from server.app.database.models import PartnerAccount
+    from server.app.database.models import AdminAccount
 
-    email = f"partner-{_uid()}@uji.es"
+    email = f"admin-{_uid()}@uji.es"
     db.track(email)
     db.session.add(
-        PartnerAccount(partner_id=f"p-{_uid()}", name="Partner Test", email=email)
+        AdminAccount(partner_id=f"p-{_uid()}", name="Admin Test", email=email)
     )
     await db.session.commit()
 
     info = await SamlIdentityService(db.session).resolve_session(
         nameid=email, attributes={"mail": [email]}
     )
-    assert info.role == "partner"
+    assert info.role == "admin"
     assert info.email == email
 
 
@@ -102,7 +102,7 @@ async def test_resolve_session_jit_provision_with_group_role(saml_ctx, db, monke
     from server.app.modules.agents_hub.database.config_models import HubSsoUser
     from sqlalchemy import select
 
-    monkeypatch.setenv("SAML_GROUP_ROLE_MAP", '{"pas-info": "partner"}')
+    monkeypatch.setenv("SAML_GROUP_ROLE_MAP", '{"pas-info": "admin"}')
     email = f"jit-{_uid()}@uji.es"
     db.track(email)
 
@@ -114,12 +114,12 @@ async def test_resolve_session_jit_provision_with_group_role(saml_ctx, db, monke
             "groups": ["pas-info"],
         },
     )
-    assert info.role == "partner"
+    assert info.role == "admin"
     sso = (
         await db.session.execute(select(HubSsoUser).where(HubSsoUser.email == email))
     ).scalars().first()
     assert sso is not None
-    assert sso.role == "partner"
+    assert sso.role == "admin"
     assert sso.display_name == "JIT User"
 
 

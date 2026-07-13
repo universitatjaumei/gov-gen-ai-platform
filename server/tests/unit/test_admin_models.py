@@ -8,8 +8,8 @@ from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone
 import asyncio
 
-# We'll import AdminAccount once it exists
-# from server.app.database.models import AdminAccount 
+# We'll import SuperAdminAccount once it exists
+# from server.app.database.models import SuperAdminAccount 
 
 @pytest.fixture(name="session")
 async def session_fixture():
@@ -30,9 +30,9 @@ async def session_fixture():
 @pytest.mark.asyncio
 async def test_create_admin_account_success(session):
     """Test creating a valid admin account."""
-    from server.app.database.models import AdminAccount
+    from server.app.database.models import SuperAdminAccount
     
-    admin = AdminAccount(
+    admin = SuperAdminAccount(
         name="Super Admin",
         email="admin@automatia.com",
         hashed_password="hashed_dummy_pw"
@@ -49,9 +49,9 @@ async def test_create_admin_account_success(session):
 @pytest.mark.asyncio
 async def test_email_uniqueness(session):
     """Test that email must be unique."""
-    from server.app.database.models import AdminAccount
+    from server.app.database.models import SuperAdminAccount
     
-    admin1 = AdminAccount(
+    admin1 = SuperAdminAccount(
         name="Admin 1",
         email="duplicate@test.com",
         hashed_password="pw1"
@@ -59,7 +59,7 @@ async def test_email_uniqueness(session):
     session.add(admin1)
     await session.commit()
     
-    admin2 = AdminAccount(
+    admin2 = SuperAdminAccount(
         name="Admin 2",
         email="duplicate@test.com",
         hashed_password="pw2"
@@ -73,9 +73,9 @@ async def test_email_uniqueness(session):
 async def test_email_normalization(session):
     """Test that email is normalized to lowercase (logic should be in service or model)."""
     # Note: If we want the model to handle this, we can add a validator.
-    from server.app.database.models import AdminAccount
+    from server.app.database.models import SuperAdminAccount
     
-    admin = AdminAccount(
+    admin = SuperAdminAccount(
         name="Case Test",
         email="UPPER@test.com",
         hashed_password="pw"

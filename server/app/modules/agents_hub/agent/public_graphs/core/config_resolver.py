@@ -1,6 +1,6 @@
 """ConfigResolver: resuelve la configuración efectiva del grafo público.
 
-Cascada: PlatformDefaults → OrgDefaults (HubClient) → ChatbotOverrides (HubChatbot).
+Cascada: PlatformDefaults → OrgDefaults (HubOrganizacion) → ChatbotOverrides (HubChatbot).
 Un campo None en el chatbot o el org indica "heredar del nivel superior".
 
 Deploy: edge
@@ -49,7 +49,7 @@ async def get_effective_public_graph_config(
 
     Aplica cascada: plataforma → organización → chatbot.
     """
-    from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient
+    from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion
 
     config = replace(_PLATFORM_DEFAULTS, chatbot_id=chatbot_id)
 
@@ -57,17 +57,17 @@ async def get_effective_public_graph_config(
     if chatbot is None:
         return config
 
-    client = await session.get(HubClient, chatbot.client_id)
-    if client is not None:
+    organizacion = await session.get(HubOrganizacion, chatbot.organizacion_id)
+    if organizacion is not None:
         config = _apply_layer(config, {
-            "profile":               client.default_public_graph_profile,
-            "retrieval_mode":        client.default_retrieval_mode,
-            "language_mode":         client.default_language_mode,
-            "quality_threshold":     client.default_quality_threshold,
-            "min_retrieval_results": client.default_min_retrieval_results,
-            "min_retrieval_score":   client.default_min_retrieval_score,
-            "reranker_enabled":      client.default_reranker_enabled,
-            "answer_template":       client.default_answer_template,
+            "profile":               organizacion.default_public_graph_profile,
+            "retrieval_mode":        organizacion.default_retrieval_mode,
+            "language_mode":         organizacion.default_language_mode,
+            "quality_threshold":     organizacion.default_quality_threshold,
+            "min_retrieval_results": organizacion.default_min_retrieval_results,
+            "min_retrieval_score":   organizacion.default_min_retrieval_score,
+            "reranker_enabled":      organizacion.default_reranker_enabled,
+            "answer_template":       organizacion.default_answer_template,
         })
 
     config = _apply_layer(config, {

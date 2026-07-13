@@ -104,22 +104,22 @@ async def test_verify_wrong_secret_raises(db):
 
 
 @pytest.mark.asyncio
-async def test_partner_cannot_grant_chatbots_write(db):
+async def test_admin_cannot_grant_chatbots_write(db):
     from server.app.core.auth.models import UserInfo
     from server.app.core.auth.pat.service import PatForbiddenError, PatService
 
-    partner = UserInfo(
-        user_id=f"p-{_uid()}", email=f"partner-{_uid()}@uji.es", role="partner"
+    admin = UserInfo(
+        user_id=f"a-{_uid()}", email=f"admin-{_uid()}@uji.es", role="admin"
     )
-    db.track(partner.email)
+    db.track(admin.email)
     with pytest.raises(PatForbiddenError):
         await PatService(db.session).create(
-            partner, name="mcp", scopes=["chatbots:write"]
+            admin, name="mcp", scopes=["chatbots:write"]
         )
 
 
 @pytest.mark.asyncio
-async def test_non_admin_partner_cannot_create(db):
+async def test_non_privileged_role_cannot_create(db):
     from server.app.core.auth.models import UserInfo
     from server.app.core.auth.pat.service import PatForbiddenError, PatService
 

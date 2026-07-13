@@ -60,10 +60,10 @@ class HubLLMConfig(HubConfigBase):
     provider_rel: Mapped["HubProvider"] = relationship(back_populates="llm_configs")
 
 
-class HubClient(HubConfigBase):
-    """Institución (cliente) gestionada por un partner."""
+class HubOrganizacion(HubConfigBase):
+    """Institución (organización) gestionada por un admin."""
 
-    __tablename__ = "hub_clients"
+    __tablename__ = "hub_organizaciones"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -89,12 +89,12 @@ class HubClient(HubConfigBase):
     )
 
     chatbots: Mapped[list["HubChatbot"]] = relationship(
-        back_populates="client", cascade="all, delete-orphan"
+        back_populates="organizacion", cascade="all, delete-orphan"
     )
 
 
 class HubChatbot(HubConfigBase):
-    """Chatbot RAG asociado a un cliente."""
+    """Chatbot RAG asociado a una organización."""
 
     __tablename__ = "hub_chatbots"
     __table_args__ = (
@@ -111,9 +111,9 @@ class HubChatbot(HubConfigBase):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    client_id: Mapped[uuid.UUID] = mapped_column(
+    organizacion_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("hub_clients.id", ondelete="CASCADE"),
+        ForeignKey("hub_organizaciones.id", ondelete="CASCADE"),
         nullable=False,
     )
     llm_config_id: Mapped[uuid.UUID] = mapped_column(
@@ -152,7 +152,7 @@ class HubChatbot(HubConfigBase):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
-    client: Mapped["HubClient"] = relationship(back_populates="chatbots")
+    organizacion: Mapped["HubOrganizacion"] = relationship(back_populates="chatbots")
     llm_config: Mapped["HubLLMConfig"] = relationship(back_populates="chatbots")
     prompt_templates: Mapped[list["HubPromptTemplate"]] = relationship(
         back_populates="chatbot", cascade="all, delete-orphan"
@@ -190,8 +190,8 @@ class HubPromptTemplate(HubConfigBase):
 class HubSsoUser(HubConfigBase):
     """Usuario aprovisionado vía SSO SAML (AUTH.2).
 
-    Identidades que llegan por el IdP institucional y no son AdminAccount ni
-    PartnerAccount. Se crea/actualiza Just-In-Time tras validar la aserción.
+    Identidades que llegan por el IdP institucional y no son SuperAdminAccount ni
+    AdminAccount. Se crea/actualiza Just-In-Time tras validar la aserción.
     """
 
     __tablename__ = "hub_sso_users"

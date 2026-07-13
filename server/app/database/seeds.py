@@ -2,14 +2,14 @@
 Seeds de multitenancy para desarrollo.
 
 Este módulo crea los datos iniciales necesarios para desarrollo:
-- Admin de desarrollo
-- Partner de desarrollo
+- SuperAdmin de desarrollo
+- Admin de desarrollo (ex-partner)
 - Cliente de desarrollo
 - Licencia de desarrollo con cuota amplia
 
 Credenciales de desarrollo:
-  Admin:   fabra@uji.es  /  admin1234
-  Partner: dev@automatia.local   /  (cualquiera — login partner no verifica pwd)
+  SuperAdmin: fabra@uji.es  /  admin1234
+  Admin:      dev@automatia.local  /  (cualquiera — login admin no verifica pwd, lo arregla SEC.1)
 
 La clave de licencia de desarrollo es: DEV_LICENSE_KEY_12345
 """
@@ -20,8 +20,8 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from server.app.database.db import server_engine
 from server.app.database.models import (
+    SuperAdminAccount,
     AdminAccount,
-    PartnerAccount,
     ClientAccount,
     License,
     ExtractionServiceConfig,
@@ -44,17 +44,17 @@ async def seed_multitenancy_defaults():
     no duplicará los datos.
 
     Crea:
-    - 1 AdminAccount  (admin@govgenai.local / admin1234)
-    - 1 PartnerAccount (partner_dev)
+    - 1 SuperAdminAccount (fabra@uji.es / admin1234)
+    - 1 AdminAccount (partner_dev, ex-partner)
     - 1 ClientAccount (client_dev)
     - 1 License (lic_dev) con 10M tokens de cuota
     """
     async with AsyncSession(server_engine) as session:
-        # 0. Crear Admin de desarrollo
-        await _seed_dev_admin(session)
+        # 0. Crear SuperAdmin de desarrollo
+        await _seed_dev_superadmin(session)
 
-        # 1. Crear Partner de desarrollo
-        await _seed_dev_partner(session)
+        # 1. Crear Admin de desarrollo (ex-partner)
+        await _seed_dev_admin(session)
 
         # 2. Crear Cliente de desarrollo
         await _seed_dev_client(session)
@@ -66,45 +66,45 @@ async def seed_multitenancy_defaults():
         print("[SEED] Multitenancy de desarrollo creado/verificado.")
 
 
-async def _seed_dev_admin(session: AsyncSession):
-    """Crea el AdminAccount de desarrollo si no existe."""
+async def _seed_dev_superadmin(session: AsyncSession):
+    """Crea el SuperAdminAccount de desarrollo si no existe."""
     result = await session.execute(
-        select(AdminAccount).where(AdminAccount.email == DEV_ADMIN_EMAIL)
+        select(SuperAdminAccount).where(SuperAdminAccount.email == DEV_ADMIN_EMAIL)
+    )
+    existing = result.scalar_one_or_none()
+
+    if not existing:
+        superadmin = SuperAdminAccount(
+            name="SuperAdmin Desarrollo",
+            email=DEV_ADMIN_EMAIL,
+            hashed_password=hash_password(DEV_ADMIN_PASSWORD),
+            is_active=True,
+        )
+        session.add(superadmin)
+        print(f"[SEED] SuperAdmin de desarrollo creado: {DEV_ADMIN_EMAIL}")
+    else:
+        print("[SEED] SuperAdmin de desarrollo ya existe.")
+
+
+async def _seed_dev_admin(session: AsyncSession):
+    """Crea el AdminAccount de desarrollo (ex-partner) si no existe."""
+    result = await session.execute(
+        select(AdminAccount).where(AdminAccount.partner_id == "partner_dev")
     )
     existing = result.scalar_one_or_none()
 
     if not existing:
         admin = AdminAccount(
-            name="Admin Desarrollo",
-            email=DEV_ADMIN_EMAIL,
-            hashed_password=hash_password(DEV_ADMIN_PASSWORD),
-            is_active=True,
-        )
-        session.add(admin)
-        print(f"[SEED] Admin de desarrollo creado: {DEV_ADMIN_EMAIL}")
-    else:
-        print("[SEED] Admin de desarrollo ya existe.")
-
-
-async def _seed_dev_partner(session: AsyncSession):
-    """Crea el Partner de desarrollo si no existe."""
-    result = await session.execute(
-        select(PartnerAccount).where(PartnerAccount.partner_id == "partner_dev")
-    )
-    existing = result.scalar_one_or_none()
-
-    if not existing:
-        partner = PartnerAccount(
             partner_id="partner_dev",
-            name="Partner Desarrollo",
+            name="Admin Desarrollo",
             email="dev@automatia.local",
             credits_balance=1000000,  # 1M de créditos para desarrollo
             is_active=True,
         )
-        session.add(partner)
-        print("[SEED] Partner de desarrollo creado: partner_dev")
+        session.add(admin)
+        print("[SEED] Admin de desarrollo creado: partner_dev")
     else:
-        print("[SEED] Partner de desarrollo ya existe.")
+        print("[SEED] Admin de desarrollo ya existe.")
 
 
 async def _seed_dev_client(session: AsyncSession):

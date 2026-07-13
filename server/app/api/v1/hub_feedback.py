@@ -53,10 +53,10 @@ async def get_interactions_for_review(
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[dict]:
-    if user.role not in ("admin", "partner"):
+    if user.role not in ("superadmin", "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin or partner can access interaction reviews",
+            detail="Only admin or superadmin can access interaction reviews",
         )
     service = FeedbackService(session)
     interactions = await service.get_interactions_for_review(

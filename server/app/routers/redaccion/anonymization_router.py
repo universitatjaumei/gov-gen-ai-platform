@@ -76,11 +76,11 @@ async def _get_workspace_checked(
     user: UserInfo,
     session: AsyncSession,
 ) -> HubWorkspace:
-    """Carga el workspace y verifica permisos: owner o admin/partner."""
+    """Carga el workspace y verifica permisos: owner o admin/superadmin."""
     workspace = await session.get(HubWorkspace, workspace_id)
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    is_admin = user.role in ("admin", "partner", "superadmin")
+    is_admin = user.role in ("superadmin", "admin")
     is_owner = str(workspace.owner_id) == user.user_id
     if not is_admin and not is_owner:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -121,7 +121,7 @@ async def get_anonymization_summary(
 
     - 200: resumen disponible.
     - 404: no hay run ejecutado todavía para este workspace.
-    - 403: usuario no es owner ni admin/partner.
+    - 403: usuario no es owner ni admin/superadmin.
     """
     workspace = await _get_workspace_checked(workspace_id, user, session)
     manifest_orm = await _get_last_manifest(workspace_id, session)

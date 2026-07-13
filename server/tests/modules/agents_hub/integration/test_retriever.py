@@ -14,7 +14,7 @@ async def populated_session():
         create_session_factory,
     )
     from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
-    from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig, HubProvider, HubPromptTemplate
+    from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion, HubLLMConfig, HubProvider, HubPromptTemplate
     from server.app.modules.agents_hub.database.operational_models import HubDocument, HubDocumentChunk, HubInteraction, HubIngestionJob
 
     engine = create_async_engine(DB_URL)
@@ -30,12 +30,12 @@ async def populated_session():
 
         llm = HubLLMConfig(provider="google", model_name="gemini-flash")
         session.add(llm)
-        client = HubClient(name="Retriever Test", partner_id="partner_dev")
+        client = HubOrganizacion(name="Retriever Test", partner_id="partner_dev")
         session.add(client)
         await session.flush()
 
         chatbot = HubChatbot(
-            client_id=client.id,
+            organizacion_id=client.id,
             llm_config_id=llm.id,
             name="Retriever Bot",
             system_prompt="Test",

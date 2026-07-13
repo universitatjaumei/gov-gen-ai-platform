@@ -33,7 +33,7 @@ from server.app.modules.redaccion.services.llm_spec_service import LLMSpecServic
 
 router = APIRouter(prefix="/redaccion/llm-drafts", tags=["redaccion-llm-drafts"])
 
-_require_admin_or_partner = require_role("admin", "partner")
+_require_admin = require_role("superadmin", "admin")
 
 
 def _user_to_uuid(user_id: str) -> uuid.UUID:
@@ -102,7 +102,7 @@ async def propose(
 ) -> ReportTemplateDraft:
     """Genera un ReportTemplateDraft a partir de texto natural. Sin persistir."""
     owner_kind: Literal["admin", "user"] = (
-        "admin" if user.role in ("admin", "partner") else "user"
+        "admin" if user.role in ("superadmin", "admin") else "user"
     )
     return await service.propose_template(body.prompt_nl, owner_kind)
 
@@ -119,10 +119,10 @@ async def validate_draft(
 @router.post("/approve-as-template", response_model=ApproveAsTemplateResponse, operation_id="approveAsTemplate")
 async def approve_as_template(
     body: ApproveAsTemplateRequest,
-    user: UserInfo = Depends(_require_admin_or_partner),
+    user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_session),
 ) -> ApproveAsTemplateResponse:
-    """Persiste el draft como plantilla. Solo admin/partner. is_global requiere admin."""
+    """Persiste el draft como plantilla. Solo admin/superadmin. is_global requiere admin."""
     if body.is_global and user.role != "admin":
         raise HTTPException(status_code=403, detail="Only admin can create global templates")
 

@@ -23,7 +23,7 @@ async def protected_route(user: UserInfo = Depends(get_current_user)):
 
 
 @app.get("/test-admin-only")
-async def admin_only_route(user: UserInfo = Depends(require_role("admin"))):
+async def admin_only_route(user: UserInfo = Depends(require_role("superadmin"))):
     return {"email": user.email}
 
 
@@ -44,15 +44,15 @@ def test_valid_jwt_returns_user_info():
         assert response.json()["role"] == "admin"
 
 
-def test_partner_jwt_is_accepted():
+def test_admin_jwt_is_accepted():
     with patch.dict("os.environ", JWT_ENV, clear=False):
-        token = _make_token("partner", "partner@test.com")
+        token = _make_token("admin", "admin2@test.com")
         client = TestClient(app)
 
         response = client.get("/test-protected", headers={"Authorization": f"Bearer {token}"})
 
         assert response.status_code == 200
-        assert response.json()["role"] == "partner"
+        assert response.json()["role"] == "admin"
 
 
 def test_missing_authorization_header_returns_401():
@@ -70,7 +70,7 @@ def test_invalid_token_returns_401():
 
 def test_wrong_role_returns_403():
     with patch.dict("os.environ", JWT_ENV, clear=False):
-        token = _make_token("partner")
+        token = _make_token("admin")
         client = TestClient(app)
 
         response = client.get("/test-admin-only", headers={"Authorization": f"Bearer {token}"})

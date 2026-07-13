@@ -15,7 +15,7 @@ async def db_session():
     )
     from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
 
-    from server.app.modules.agents_hub.database.config_models import HubProvider, HubLLMConfig, HubChatbot, HubClient, HubPromptTemplate
+    from server.app.modules.agents_hub.database.config_models import HubProvider, HubLLMConfig, HubChatbot, HubOrganizacion, HubPromptTemplate
     from server.app.modules.agents_hub.database.operational_models import HubDocument, HubDocumentChunk, HubInteraction, HubIngestionJob
 
     engine = create_async_engine(DB_URL)
@@ -67,14 +67,14 @@ class TestHubChatbotModel:
     @pytest.mark.asyncio
     async def test_create_chatbot_requires_llm_config(self, db_session) -> None:
         """Prompt 2.9 — Validar que no se puede crear un chatbot sin llm_config_id."""
-        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient
+        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion
 
-        client = HubClient(name="Test Inst", partner_id="partner_dev")
+        client = HubOrganizacion(name="Test Inst", partner_id="partner_dev")
         db_session.add(client)
         await db_session.flush()
 
         chatbot = HubChatbot(
-            client_id=client.id,
+            organizacion_id=client.id,
             llm_config_id=uuid.uuid4(),  # FK inválido — debe fallar
             name="Bot sin modelo",
             system_prompt="Test",
@@ -87,18 +87,18 @@ class TestHubChatbotModel:
     @pytest.mark.asyncio
     async def test_create_chatbot_with_valid_model(self, db_session) -> None:
         """Chatbot con llm_config válido se persiste correctamente."""
-        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig
+        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion, HubLLMConfig
 
         llm = HubLLMConfig(provider="openai", model_name="gpt-4o", temperature=0.5)
         db_session.add(llm)
         await db_session.flush()
 
-        client = HubClient(name="Univ. Test", partner_id="partner_dev")
+        client = HubOrganizacion(name="Univ. Test", partner_id="partner_dev")
         db_session.add(client)
         await db_session.flush()
 
         chatbot = HubChatbot(
-            client_id=client.id,
+            organizacion_id=client.id,
             llm_config_id=llm.id,
             name="Bot Válido",
             system_prompt="Eres útil.",
@@ -119,16 +119,16 @@ class TestHubPromptTemplateModel:
     @pytest.mark.asyncio
     async def test_chatbot_retrieves_correct_prompt_by_language(self, db_session) -> None:
         """Prompt 2.8 — Al pedir 'system_base' en catalán no devuelve el de castellano."""
-        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig, HubPromptTemplate
+        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion, HubLLMConfig, HubPromptTemplate
 
         llm = HubLLMConfig(provider="google", model_name="gemini-flash")
         db_session.add(llm)
-        client = HubClient(name="Univ. CA", partner_id="partner_dev")
+        client = HubOrganizacion(name="Univ. CA", partner_id="partner_dev")
         db_session.add(client)
         await db_session.flush()
 
         chatbot = HubChatbot(
-            client_id=client.id,
+            organizacion_id=client.id,
             llm_config_id=llm.id,
             name="Bot CA",
             system_prompt="Base",
@@ -169,17 +169,17 @@ class TestHubDocumentChunkModel:
 
     @pytest.mark.asyncio
     async def test_create_chunk_with_vector(self, db_session) -> None:
-        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig
+        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion, HubLLMConfig
         from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
 
         llm = HubLLMConfig(provider="google", model_name="gemini-flash")
         db_session.add(llm)
-        client = HubClient(name="Test", partner_id="partner_dev")
+        client = HubOrganizacion(name="Test", partner_id="partner_dev")
         db_session.add(client)
         await db_session.flush()
 
         chatbot = HubChatbot(
-            client_id=client.id,
+            organizacion_id=client.id,
             llm_config_id=llm.id,
             name="Chunk Bot",
             system_prompt="Test",

@@ -19,7 +19,7 @@ class ConfigProvider(Protocol):
     async def get_chatbot(self, chatbot_id: uuid.UUID) -> HubChatbot | None: ...
     async def get_llm_config(self, llm_config_id: uuid.UUID) -> HubLLMConfig | None: ...
     async def get_llm_config_for_tier(self, tier: int) -> HubLLMConfig | None: ...
-    async def list_active_chatbots(self, client_id: uuid.UUID) -> list[HubChatbot]: ...
+    async def list_active_chatbots(self, organizacion_id: uuid.UUID) -> list[HubChatbot]: ...
     async def get_retrieval_mode(self, chatbot_id: uuid.UUID) -> str: ...
 
 
@@ -57,11 +57,11 @@ class LocalConfigProvider:
         )
         return result.scalars().first()
 
-    async def list_active_chatbots(self, client_id: uuid.UUID) -> list[HubChatbot]:
-        """Obtiene los chatbots activos de un cliente."""
+    async def list_active_chatbots(self, organizacion_id: uuid.UUID) -> list[HubChatbot]:
+        """Obtiene los chatbots activos de una organización."""
         result = await self.session.execute(
             select(HubChatbot).where(
-                HubChatbot.client_id == client_id, HubChatbot.is_active.is_(True)
+                HubChatbot.organizacion_id == organizacion_id, HubChatbot.is_active.is_(True)
             )
         )
         return list(result.scalars().all())

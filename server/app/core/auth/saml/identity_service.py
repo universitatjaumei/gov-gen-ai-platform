@@ -1,7 +1,7 @@
 """Provisioning de identidad desde una aserción SAML validada (AUTH.2).
 
 Mapea NameID + atributos a una sesión del sistema (``UserInfo``): localiza la cuenta
-(AdminAccount / PartnerAccount) por email o aprovisiona (JIT) un ``HubSsoUser``.
+(SuperAdminAccount / AdminAccount) por email o aprovisiona (JIT) un ``HubSsoUser``.
 """
 
 from datetime import datetime, timezone
@@ -11,7 +11,7 @@ from sqlalchemy import select
 from server.app.core.auth.models import UserInfo
 from server.app.core.auth.saml.role_mapping import resolve_role
 from server.app.core.config import get_settings
-from server.app.database.models import AdminAccount, PartnerAccount
+from server.app.database.models import SuperAdminAccount, AdminAccount
 from server.app.modules.agents_hub.database.config_models import HubSsoUser
 
 
@@ -40,6 +40,16 @@ class SamlIdentityService:
             )
         email = email.lower()
 
+        superadmin = (
+            await self.session.execute(
+                select(SuperAdminAccount).where(SuperAdminAccount.email == email)
+            )
+        ).scalars().first()
+        if superadmin and superadmin.is_active:
+            return UserInfo(
+                user_id=str(superadmin.admin_id), email=superadmin.email, role="superadmin"
+            )
+
         admin = (
             await self.session.execute(
                 select(AdminAccount).where(AdminAccount.email == email)
@@ -47,17 +57,7 @@ class SamlIdentityService:
         ).scalars().first()
         if admin and admin.is_active:
             return UserInfo(
-                user_id=str(admin.admin_id), email=admin.email, role="admin"
-            )
-
-        partner = (
-            await self.session.execute(
-                select(PartnerAccount).where(PartnerAccount.email == email)
-            )
-        ).scalars().first()
-        if partner and partner.is_active:
-            return UserInfo(
-                user_id=partner.partner_id, email=partner.email, role="partner"
+                user_id=admin.partner_id, email=admin.email, role="admin"
             )
 
         return await self._provision_sso_user(nameid, attributes, email)

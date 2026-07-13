@@ -51,26 +51,26 @@ async def db_session():
 class TestWebSiteRepo:
 
     @pytest.mark.asyncio
-    async def test_create_get_list_by_client(self, db_session) -> None:
+    async def test_create_get_list_by_organizacion(self, db_session) -> None:
         from server.app.modules.agents_hub.database.operational_models import HubWebSite
         from server.app.modules.agents_hub.ingestion.quality.site_repo import WebSiteRepo
 
         repo = WebSiteRepo(db_session)
-        client_id = uuid.uuid4()
+        organizacion_id = uuid.uuid4()
         other_client_id = uuid.uuid4()
 
         site_a = await repo.create(
-            client_id=client_id,
+            organizacion_id=organizacion_id,
             name="Web de Trámites",
             root_url="https://uji.es/tramites",
         )
         site_b = await repo.create(
-            client_id=client_id,
+            organizacion_id=organizacion_id,
             name="Web institucional",
             root_url="https://uji.es",
         )
         site_other = await repo.create(
-            client_id=other_client_id,
+            organizacion_id=other_client_id,
             name="Otra entidad",
             root_url="https://other.example",
         )
@@ -80,7 +80,7 @@ class TestWebSiteRepo:
         assert isinstance(fetched, HubWebSite)
         assert fetched.name == "Web de Trámites"
 
-        listed = await repo.list_by_client(client_id)
+        listed = await repo.list_by_organizacion(organizacion_id)
         ids = {s.id for s in listed}
         assert site_a.id in ids
         assert site_b.id in ids
@@ -92,7 +92,7 @@ class TestWebSiteRepo:
 
         repo = WebSiteRepo(db_session)
         site = await repo.create(
-            client_id=uuid.uuid4(),
+            organizacion_id=uuid.uuid4(),
             name="Web por defecto",
             root_url="https://example.com",
         )
@@ -119,7 +119,7 @@ class TestWebSiteRepo:
         sel_repo = CorpusSelectionRepo(db_session)
 
         site = await site_repo.create(
-            client_id=uuid.uuid4(),
+            organizacion_id=uuid.uuid4(),
             name="Cascada",
             root_url="https://cascade.example",
         )
@@ -166,7 +166,7 @@ class TestCrawledPageRepo:
         page_repo = CrawledPageRepo(db_session)
 
         site = await site_repo.create(
-            client_id=uuid.uuid4(),
+            organizacion_id=uuid.uuid4(),
             name="Upsert site",
             root_url="https://up.example",
         )
@@ -203,7 +203,7 @@ class TestCrawledPageRepo:
         )
 
         site = await WebSiteRepo(db_session).create(
-            client_id=uuid.uuid4(),
+            organizacion_id=uuid.uuid4(),
             name="Defaults site",
             root_url="https://def.example",
         )
@@ -226,7 +226,7 @@ class TestCrawledPageRepo:
         )
 
         site = await WebSiteRepo(db_session).create(
-            client_id=uuid.uuid4(),
+            organizacion_id=uuid.uuid4(),
             name="List site",
             root_url="https://list.example",
         )
@@ -252,7 +252,7 @@ class TestCrawledPageRepo:
         )
 
         site = await WebSiteRepo(db_session).create(
-            client_id=uuid.uuid4(),
+            organizacion_id=uuid.uuid4(),
             name="Gone site",
             root_url="https://gone.example",
         )
@@ -278,7 +278,7 @@ class TestCrawledPageRepo:
         )
 
         site = await WebSiteRepo(db_session).create(
-            client_id=uuid.uuid4(),
+            organizacion_id=uuid.uuid4(),
             name="Canon site",
             root_url="https://canon.example",
         )
@@ -317,10 +317,10 @@ class TestCorpusSelectionRepo:
         site_repo = WebSiteRepo(db_session)
         sel_repo = CorpusSelectionRepo(db_session)
         site_a = await site_repo.create(
-            client_id=uuid.uuid4(), name="A", root_url="https://a.example"
+            organizacion_id=uuid.uuid4(), name="A", root_url="https://a.example"
         )
         site_b = await site_repo.create(
-            client_id=uuid.uuid4(), name="B", root_url="https://b.example"
+            organizacion_id=uuid.uuid4(), name="B", root_url="https://b.example"
         )
 
         sel_a = await sel_repo.create(
@@ -356,7 +356,7 @@ class TestCorpusSelectionRepo:
         )
 
         site = await WebSiteRepo(db_session).create(
-            client_id=uuid.uuid4(), name="P", root_url="https://p.example"
+            organizacion_id=uuid.uuid4(), name="P", root_url="https://p.example"
         )
         sel = await CorpusSelectionRepo(db_session).create(
             chatbot_id=uuid.uuid4(),
@@ -378,7 +378,7 @@ class TestCorpusSelectionRepo:
         )
 
         site = await WebSiteRepo(db_session).create(
-            client_id=uuid.uuid4(), name="M", root_url="https://m.example"
+            organizacion_id=uuid.uuid4(), name="M", root_url="https://m.example"
         )
         sel = await CorpusSelectionRepo(db_session).create(
             chatbot_id=uuid.uuid4(),
@@ -426,7 +426,7 @@ class TestHubDocumentCrawledPageFK:
         )
 
         site = await WebSiteRepo(db_session).create(
-            client_id=uuid.uuid4(), name="FK", root_url="https://fk.example"
+            organizacion_id=uuid.uuid4(), name="FK", root_url="https://fk.example"
         )
         page = await CrawledPageRepo(db_session).upsert(
             site_id=site.id, url="https://fk.example/x"

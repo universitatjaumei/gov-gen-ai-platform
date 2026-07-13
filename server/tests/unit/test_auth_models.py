@@ -36,9 +36,15 @@ class TestUserInfoModel:
     def test_user_info_role_validation(self) -> None:
         from server.app.core.auth.models import UserInfo
 
-        for role in ["user", "admin", "partner", "informer"]:
+        for role in ["user", "superadmin", "admin", "informer"]:
             user = UserInfo(user_id="123", email="test@test.com", role=role)
             assert user.role == role
+
+    def test_user_info_rejects_legacy_partner_role(self) -> None:
+        from server.app.core.auth.models import UserInfo
+
+        with pytest.raises(ValueError):
+            UserInfo(user_id="123", email="test@test.com", role="partner")
 
     def test_user_info_invalid_role_raises_error(self) -> None:
         from server.app.core.auth.models import UserInfo
@@ -52,6 +58,12 @@ class TestUserRole:
         from server.app.core.auth.models import UserRole
 
         assert UserRole.USER.value == "user"
+        assert UserRole.SUPERADMIN.value == "superadmin"
         assert UserRole.ADMIN.value == "admin"
-        assert UserRole.PARTNER.value == "partner"
         assert UserRole.INFORMER.value == "informer"
+
+    def test_user_role_has_no_partner_member(self) -> None:
+        from server.app.core.auth.models import UserRole
+
+        assert not hasattr(UserRole, "PARTNER")
+        assert "partner" not in {r.value for r in UserRole}

@@ -26,7 +26,7 @@ def _make_token(role: str = "admin") -> str:
 def _fake_site(**kw):
     m = MagicMock()
     m.id = kw.get("id", uuid.uuid4())
-    m.client_id = kw.get("client_id", None)
+    m.organizacion_id = kw.get("organizacion_id", None)
     m.name = kw.get("name", "Sitio Test")
     m.root_url = kw.get("root_url", "https://ej.es")
     m.sitemap_url = kw.get("sitemap_url", None)

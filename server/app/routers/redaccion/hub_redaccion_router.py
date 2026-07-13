@@ -182,9 +182,9 @@ async def create_template(
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> TemplateOut:
-    """Crea plantilla + versión 1. Solo admin/partner."""
-    if user.role not in ("admin", "partner"):
-        raise HTTPException(status_code=403, detail="Only admin/partner can create templates")
+    """Crea plantilla + versión 1. Solo admin/superadmin."""
+    if user.role not in ("superadmin", "admin"):
+        raise HTTPException(status_code=403, detail="Only admin can create templates")
 
     template = HubReportTemplate(
         name=body.name,
@@ -495,7 +495,7 @@ async def publish_template_version(
     template_id: uuid.UUID,
     body: PublishVersionIn,
     dry_run: bool = False,
-    user: UserInfo = Depends(require_role("admin", "partner")),
+    user: UserInfo = Depends(require_role("superadmin", "admin")),
     _scope: UserInfo = Depends(require_scopes("redaccion:templates:write")),
     session: AsyncSession = Depends(get_session),
 ) -> PublishVersionOut:

@@ -8,15 +8,15 @@ from typing import Any
 class UserRole(str, Enum):
     """Roles de usuario disponibles.
 
-    - ADMIN: gestiona la plataforma global (proveedores LLM, partners, config sistema).
-    - PARTNER: crea y configura chatbots/agentes para sus clientes.
+    - SUPERADMIN: gestiona la plataforma global (proveedores LLM, admins, config sistema).
+    - ADMIN: crea y configura chatbots/agentes para sus organizaciones.
     - INFORMER: supervisa y valida respuestas de la IA.
     - USER: usuario final del chatbot/agente.
     """
 
     USER = "user"
+    SUPERADMIN = "superadmin"
     ADMIN = "admin"
-    PARTNER = "partner"
     INFORMER = "informer"
 
 
@@ -47,12 +47,12 @@ class UserInfo:
         return {"user_id": self.user_id, "email": self.email, "role": self.role}
 
     @property
-    def is_admin(self) -> bool:
-        return self.role == UserRole.ADMIN.value
+    def is_superadmin(self) -> bool:
+        return self.role == UserRole.SUPERADMIN.value
 
     @property
-    def is_partner(self) -> bool:
-        return self.role == UserRole.PARTNER.value
+    def is_admin(self) -> bool:
+        return self.role == UserRole.ADMIN.value
 
     @property
     def is_informer(self) -> bool:

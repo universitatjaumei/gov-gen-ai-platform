@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 class SiteView(BaseModel):
     id: uuid.UUID
-    client_id: uuid.UUID | None
+    organizacion_id: uuid.UUID | None
     name: str
     root_url: str
     sitemap_url: str | None

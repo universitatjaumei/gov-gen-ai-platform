@@ -25,12 +25,12 @@ def _make_chatbot(
     kind: str = "atomic",
     parent_chatbot_id: uuid.UUID | None = None,
     chatbot_id: uuid.UUID = DEV_CHATBOT_ID,
-    client_id: uuid.UUID = DEV_CLIENT_ID,
+    organizacion_id: uuid.UUID = DEV_CLIENT_ID,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         id=chatbot_id,
         name=name,
-        client_id=client_id,
+        organizacion_id=organizacion_id,
         llm_config_id=DEV_LLM_ID,
         system_prompt="Eres un asistente.",
         sources=[],
@@ -42,6 +42,13 @@ def _make_chatbot(
         cache_ttl=3600,
         kind=kind,
         parent_chatbot_id=parent_chatbot_id,
+        public_graph_profile="PUBLIC_KB_RICH",
+        language_mode="prefer",
+        quality_threshold=0.6,
+        min_retrieval_results=2,
+        min_retrieval_score=0.25,
+        reranker_enabled=True,
+        answer_template="generic",
         created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
         updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
     )
@@ -126,7 +133,7 @@ class TestCreateChatbot:
                 "/api/v1/hub/chatbots",
                 json={
                     "name": "Nuevo Bot",
-                    "client_id": str(DEV_CLIENT_ID),
+                    "organizacion_id": str(DEV_CLIENT_ID),
                     "llm_config_id": str(DEV_LLM_ID),
                     "system_prompt": "Eres útil.",
                 },
@@ -445,7 +452,7 @@ class TestChatbotHierarchy:
         finally:
             app.dependency_overrides.pop(get_async_session, None)
 
-    def test_cannot_assign_child_from_different_client(self, client):
+    def test_cannot_assign_child_from_different_organizacion(self, client):
         router_id = uuid.uuid4()
         child_id = uuid.uuid4()
 
@@ -453,13 +460,13 @@ class TestChatbotHierarchy:
             name="UJI Router",
             kind="router",
             chatbot_id=router_id,
-            client_id=uuid.uuid4(),
+            organizacion_id=uuid.uuid4(),
         )
         child_cb = _make_chatbot(
             name="Otro cliente",
             kind="atomic",
             chatbot_id=child_id,
-            client_id=uuid.uuid4(),
+            organizacion_id=uuid.uuid4(),
         )
 
         session = self._mount_session(router_cb, child_cb)
@@ -470,7 +477,7 @@ class TestChatbotHierarchy:
                 json={"child_chatbot_id": str(child_id)},
             )
             assert resp.status_code == 400
-            assert "mismo cliente" in resp.json()["detail"]
+            assert "misma organización" in resp.json()["detail"]
         finally:
             app.dependency_overrides.pop(get_async_session, None)
 

@@ -172,7 +172,7 @@ def test_publish_first_version_when_no_existing():
     session_mock.flush = AsyncMock()
     session_mock.commit = AsyncMock()
 
-    app = _build_app(session_mock, role="partner")
+    app = _build_app(session_mock, role="admin")
     with TestClient(app) as client:
         resp = client.post(
             f"/api/v1/hub/redaccion/templates/{template_id}/versions",

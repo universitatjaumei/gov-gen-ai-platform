@@ -366,9 +366,9 @@ async def anonymize_test_data(
 # Helpers 9R.5.6
 # ---------------------------------------------------------------------------
 
-def _require_admin_or_partner(user: UserInfo) -> None:
-    if user.role not in ("admin", "partner"):
-        raise HTTPException(status_code=403, detail="Admin or partner access required")
+def _require_admin(user: UserInfo) -> None:
+    if user.role not in ("superadmin", "admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
 
 
 def _is_recent_retest(retested_at_str: str | None) -> bool:
@@ -638,8 +638,8 @@ async def list_pending_scripts(
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[PendingProposalOut]:
-    """Lista propuestas en status=pending_review. Solo admin/partner."""
-    _require_admin_or_partner(user)
+    """Lista propuestas en status=pending_review. Solo admin/superadmin."""
+    _require_admin(user)
     proposals = await ScriptProposalRepo(session).list_by_status("pending_review")
     return [
         PendingProposalOut(
@@ -671,7 +671,7 @@ async def admin_retest(
     sandbox: SandboxClient = Depends(get_sandbox_client),
 ) -> AdminRetestResponse:
     """El admin re-ejecuta el script contra el mismo test_data_ref y verifica el hash."""
-    _require_admin_or_partner(user)
+    _require_admin(user)
     proposal = await _load_proposal(proposal_id, session)
 
     test_data = proposal.test_data_ref or {}
@@ -724,7 +724,7 @@ async def approve_script_proposal(
     session: AsyncSession = Depends(get_session),
 ) -> ApproveResponse:
     """El admin aprueba la propuesta e incrusta el script en la plantilla global."""
-    _require_admin_or_partner(user)
+    _require_admin(user)
     proposal = await _load_proposal(proposal_id, session)
 
     if proposal.status != "pending_review":
@@ -777,7 +777,7 @@ async def reject_script_proposal(
     session: AsyncSession = Depends(get_session),
 ) -> RejectResponse:
     """El admin rechaza la propuesta y registra la nota de revisión."""
-    _require_admin_or_partner(user)
+    _require_admin(user)
     proposal = await _load_proposal(proposal_id, session)
 
     if proposal.status != "pending_review":

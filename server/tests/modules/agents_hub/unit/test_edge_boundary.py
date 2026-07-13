@@ -4,14 +4,17 @@ def test_config_base_contains_only_config_models() -> None:
     from server.app.modules.agents_hub.database.base import HubConfigBase
     import server.app.modules.agents_hub.database.config_models  # noqa: F401
 
-    # Verify that metadata has exactly the 4 expected tables
+    # Verify that metadata contains exactly the expected config tables
     tables = set(HubConfigBase.metadata.tables.keys())
     assert tables == {
-        "hub_clients",
+        "hub_organizaciones",
         "hub_chatbots",
         "hub_llm_configs",
         "hub_prompt_templates",
         "hub_providers",
+        # SSO/PAT (AUTH.2 / AUTH.3) — configuración cloud→edge
+        "hub_sso_users",
+        "hub_personal_access_tokens",
     }
 
 def test_operational_base_contains_only_operational_models() -> None:

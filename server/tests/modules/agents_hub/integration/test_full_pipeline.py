@@ -37,7 +37,7 @@ class TestRAGPipeline:
             create_session_factory,
         )
         from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
-        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubClient, HubLLMConfig, HubProvider, HubPromptTemplate
+        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion, HubLLMConfig, HubProvider, HubPromptTemplate
         from server.app.modules.agents_hub.database.operational_models import HubDocument, HubDocumentChunk, HubInteraction, HubIngestionJob
         from server.app.modules.agents_hub.ingestion.chunker import MarkdownChunker
         from server.app.modules.agents_hub.ingestion.hasher import hash_content
@@ -65,7 +65,7 @@ class TestRAGPipeline:
             session.add(llm_config)
             await session.flush()
 
-            client = HubClient(
+            client = HubOrganizacion(
                 name="Pipeline Test Client",
                 partner_id="partner-pipeline-1",
             )
@@ -73,7 +73,7 @@ class TestRAGPipeline:
             await session.flush()
 
             chatbot = HubChatbot(
-                client_id=client.id,
+                organizacion_id=client.id,
                 llm_config_id=llm_config.id,
                 name=f"Pipeline Test {uuid.uuid4()}",
                 system_prompt="Test",

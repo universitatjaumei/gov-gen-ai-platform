@@ -190,7 +190,7 @@ async def db():
     Crea un engine async **fresco por test** (como el conftest e2e) para no reutilizar
     conexiones del ``server_engine`` global ligadas a otro event loop. Devuelve un
     namespace con ``session``, ``engine`` y ``track(email)``; el teardown borra de
-    hub_sso_users / AdminAccount / PartnerAccount las filas con esos emails.
+    hub_sso_users / SuperAdminAccount / AdminAccount las filas con esos emails.
     """
     import os
 
@@ -199,7 +199,7 @@ async def db():
     from sqlmodel import SQLModel
     from sqlmodel.ext.asyncio.session import AsyncSession
 
-    from server.app.database.models import AdminAccount, PartnerAccount
+    from server.app.database.models import SuperAdminAccount, AdminAccount
     from server.app.modules.agents_hub.database.base import HubConfigBase
     from server.app.modules.agents_hub.database.config_models import (
         HubPersonalAccessToken,
@@ -226,7 +226,7 @@ async def db():
         yield ns
     finally:
         if tracked:
-            for model in (HubSsoUser, AdminAccount, PartnerAccount):
+            for model in (HubSsoUser, SuperAdminAccount, AdminAccount):
                 await session.execute(delete(model).where(model.email.in_(tracked)))
             await session.execute(
                 delete(HubPersonalAccessToken).where(

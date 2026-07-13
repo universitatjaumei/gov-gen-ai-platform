@@ -117,7 +117,7 @@ class TestThemeAPI:
     @pytest.mark.asyncio
     async def test_create_theme_success(self, test_app, sample_theme_config, tmp_path):
         def mock_user():
-            return UserInfo(user_id="test-user", email="test@example.com", role="partner")
+            return UserInfo(user_id="test-user", email="test@example.com", role="admin")
 
         test_app.dependency_overrides[get_current_user] = mock_user
 

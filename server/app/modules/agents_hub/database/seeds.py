@@ -11,13 +11,13 @@ from server.app.modules.agents_hub.database.connection import (
 )
 from server.app.modules.agents_hub.database.config_models import (
     HubChatbot,
-    HubClient,
+    HubOrganizacion,
     HubLLMConfig,
     HubProvider,
 )
 
 _DEV_LLM_CONFIG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
-_DEV_CLIENT_ID = uuid.UUID("00000000-0000-0000-0000-000000000010")
+_DEV_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000010")
 _DEV_CHATBOT_ID = uuid.UUID("00000000-0000-0000-0000-000000000100")
 
 
@@ -29,7 +29,7 @@ async def seed_hub_defaults() -> None:
     async with factory() as session:
         await _seed_providers(session)
         await _seed_llm_config(session)
-        await _seed_client(session)
+        await _seed_organizacion(session)
         await _seed_chatbot(session)
         await session.commit()
 
@@ -72,19 +72,19 @@ async def _seed_llm_config(session: AsyncSession) -> None:
     print("[SEED] HubLLMConfig de desarrollo creada.")
 
 
-async def _seed_client(session: AsyncSession) -> None:
-    existing = await session.get(HubClient, _DEV_CLIENT_ID)
+async def _seed_organizacion(session: AsyncSession) -> None:
+    existing = await session.get(HubOrganizacion, _DEV_ORG_ID)
     if existing:
         return
     session.add(
-        HubClient(
-            id=_DEV_CLIENT_ID,
-            name="Cliente Demo",
-            partner_id="partner_dev",
+        HubOrganizacion(
+            id=_DEV_ORG_ID,
+            name="Organización Demo",
+            partner_id="admin_dev",
             is_active=True,
         )
     )
-    print("[SEED] HubClient de desarrollo creado.")
+    print("[SEED] HubOrganizacion de desarrollo creada.")
 
 
 async def _seed_chatbot(session: AsyncSession) -> None:
@@ -96,7 +96,7 @@ async def _seed_chatbot(session: AsyncSession) -> None:
     session.add(
         HubChatbot(
             id=_DEV_CHATBOT_ID,
-            client_id=_DEV_CLIENT_ID,
+            organizacion_id=_DEV_ORG_ID,
             llm_config_id=_DEV_LLM_CONFIG_ID,
             name="Chatbot Demo",
             system_prompt="Eres un asistente útil que responde preguntas basándose en los documentos proporcionados.",

@@ -78,12 +78,6 @@ def test_brain_cortex_import():
     assert locate_visual_element is not None
 
 
-def test_ai_brain_service_import():
-    """Verifica que AIBrainService se importa correctamente."""
-    from server.app.services.ai_brain import AIBrainService
-    assert AIBrainService is not None
-
-
 def test_agent_service_import():
     """Verifica que agent_service se importa correctamente."""
     from server.app.services.agent_service import BrowserAgentWrapper, AgentResult

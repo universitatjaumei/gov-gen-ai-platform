@@ -25,13 +25,13 @@ from server.app.modules.agents_hub.services.embedding_service import get_embeddi
 
 router = APIRouter(prefix="/hub/chatbots", tags=["hub-chatbots"])
 
-_require_admin = require_role("admin", "partner")
+_require_admin = require_role("superadmin", "admin")
 
 
 class ChatbotRead(BaseModel):
     id: uuid.UUID
     name: str
-    client_id: uuid.UUID
+    organizacion_id: uuid.UUID
     llm_config_id: uuid.UUID
     system_prompt: str
     sources: list[str]
@@ -57,7 +57,7 @@ class ChatbotRead(BaseModel):
 
 class ChatbotCreate(BaseModel):
     name: str
-    client_id: uuid.UUID
+    organizacion_id: uuid.UUID
     llm_config_id: uuid.UUID
     system_prompt: str
     sources: list[str] = []
@@ -149,7 +149,7 @@ async def create_chatbot(
     session=Depends(get_async_session),
 ):
     chatbot = HubChatbot(
-        client_id=body.client_id,
+        organizacion_id=body.organizacion_id,
         llm_config_id=body.llm_config_id,
         name=body.name,
         system_prompt=body.system_prompt,
@@ -395,10 +395,10 @@ async def assign_child(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No se puede asignar un hijo de tipo router",
         )
-    if child_cb.client_id != router_cb.client_id:
+    if child_cb.organizacion_id != router_cb.organizacion_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El hijo debe pertenecer al mismo cliente que el router",
+            detail="El hijo debe pertenecer a la misma organización que el router",
         )
     if (
         child_cb.parent_chatbot_id is not None

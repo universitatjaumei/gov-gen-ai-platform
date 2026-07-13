@@ -22,14 +22,14 @@ from server.app.modules.agents_hub.database.base import HubOperationalBase
 
 
 class HubWebSite(HubOperationalBase):
-    """Sitio web rastreado. Unidad de crawl + auditoría; propiedad del cliente, no del chatbot."""
+    """Sitio web rastreado. Unidad de crawl + auditoría; propiedad de la organización, no del chatbot."""
 
     __tablename__ = "hub_web_sites"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    client_id: Mapped[uuid.UUID | None] = mapped_column(
+    organizacion_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True, index=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)

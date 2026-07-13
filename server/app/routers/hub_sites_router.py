@@ -68,8 +68,8 @@ async def get_selection_service(
     return CorpusSelectionService(session, page_repo, sel_repo, watcher=None)
 
 
-async def _require_admin_or_partner(user: UserInfo = Depends(get_current_user)) -> UserInfo:
-    if not (user.is_admin or user.is_partner):
+async def _require_admin(user: UserInfo = Depends(get_current_user)) -> UserInfo:
+    if not (user.is_superadmin or user.is_admin):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role")
     return user
 
@@ -85,17 +85,17 @@ async def _require_admin_or_partner(user: UserInfo = Depends(get_current_user)) 
 )
 async def create_site(
     body: SiteCreate,
-    client_id: uuid.UUID | None = Query(default=None),
-    current_user: UserInfo = Depends(_require_admin_or_partner),
+    organizacion_id: uuid.UUID | None = Query(default=None),
+    current_user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Crea un nuevo sitio rastreado.
 
-    Deploy: edge. client_id se provee como query param; no va en el body.
+    Deploy: edge. organizacion_id se provee como query param; no va en el body.
     """
     repo = WebSiteRepo(session)
     site = await repo.create(
-        client_id=client_id,
+        organizacion_id=organizacion_id,
         name=body.name,
         root_url=body.root_url,
         sitemap_url=body.sitemap_url,
@@ -112,19 +112,19 @@ async def create_site(
     operation_id="listSites",
 )
 async def list_sites(
-    client_id: uuid.UUID | None = Query(default=None),
-    current_user: UserInfo = Depends(_require_admin_or_partner),
+    organizacion_id: uuid.UUID | None = Query(default=None),
+    current_user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
 ):
-    """Lista sitios, opcionalmente filtrados por client_id.
+    """Lista sitios, opcionalmente filtrados por organizacion_id.
 
     Deploy: edge.
     """
     from server.app.modules.agents_hub.database.operational_models import HubWebSite
 
     stmt = select(HubWebSite).order_by(HubWebSite.created_at.desc())
-    if client_id is not None:
-        stmt = stmt.where(HubWebSite.client_id == client_id)
+    if organizacion_id is not None:
+        stmt = stmt.where(HubWebSite.organizacion_id == organizacion_id)
     result = await session.execute(stmt)
     return result.scalars().all()
 
@@ -137,7 +137,7 @@ async def list_sites(
 async def patch_site(
     site_id: uuid.UUID,
     body: SitePatch,
-    current_user: UserInfo = Depends(_require_admin_or_partner),
+    current_user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Actualiza campos de un sitio.
@@ -160,7 +160,7 @@ async def patch_site(
 )
 async def delete_site(
     site_id: uuid.UUID,
-    current_user: UserInfo = Depends(_require_admin_or_partner),
+    current_user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Elimina un sitio y todas sus páginas (CASCADE).
@@ -183,7 +183,7 @@ async def delete_site(
 async def trigger_crawl(
     site_id: uuid.UUID,
     background_tasks: BackgroundTasks,
-    current_user: UserInfo = Depends(_require_admin_or_partner),
+    current_user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
     quality_job: Any = Depends(get_quality_job),
 ):
@@ -214,7 +214,7 @@ async def trigger_crawl(
 async def list_site_pages(
     site_id: uuid.UUID,
     page_status: str | None = Query(default=None, alias="status"),
-    current_user: UserInfo = Depends(_require_admin_or_partner),
+    current_user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Lista las páginas rastreadas de un sitio, opcionalmente filtradas por status.
@@ -241,7 +241,7 @@ async def list_site_pages(
 async def create_selection(
     chatbot_id: uuid.UUID,
     body: SelectionCreate,
-    current_user: UserInfo = Depends(_require_admin_or_partner),
+    current_user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Crea una regla de selección de corpus para un chatbot.
@@ -267,7 +267,7 @@ async def create_selection(
 )
 async def list_selections(
     chatbot_id: uuid.UUID,
-    current_user: UserInfo = Depends(_require_admin_or_partner),
+    current_user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Lista las selecciones de corpus de un chatbot.
@@ -293,7 +293,7 @@ async def list_selections(
 async def delete_selection(
     chatbot_id: uuid.UUID,
     selection_id: uuid.UUID,
-    current_user: UserInfo = Depends(_require_admin_or_partner),
+    current_user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Elimina una selección de corpus.
@@ -316,7 +316,7 @@ async def delete_selection(
 async def list_candidates(
     site_id: uuid.UUID,
     chatbot_id: uuid.UUID = Query(...),
-    current_user: UserInfo = Depends(_require_admin_or_partner),
+    current_user: UserInfo = Depends(_require_admin),
     svc: Any = Depends(get_selection_service),
 ):
     """Páginas candidatas a ingerir: activas, no ingeridas aún para el chatbot.
@@ -335,7 +335,7 @@ async def ingest_page(
     chatbot_id: uuid.UUID,
     page_id: uuid.UUID,
     background_tasks: BackgroundTasks,
-    current_user: UserInfo = Depends(_require_admin_or_partner),
+    current_user: UserInfo = Depends(_require_admin),
     svc: Any = Depends(get_selection_service),
 ):
     """Ingesta manual de una página concreta en un chatbot (idempotente).
@@ -353,7 +353,7 @@ async def ingest_page(
 async def retire_page(
     chatbot_id: uuid.UUID,
     page_id: uuid.UUID,
-    current_user: UserInfo = Depends(_require_admin_or_partner),
+    current_user: UserInfo = Depends(_require_admin),
     svc: Any = Depends(get_selection_service),
 ):
     """Retira todos los documentos de una página para un chatbot.

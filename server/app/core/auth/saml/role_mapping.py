@@ -7,8 +7,8 @@ from server.app.core.config import get_settings
 
 # Precedencia de mayor a menor privilegio.
 _ROLE_PRECEDENCE = (
+    UserRole.SUPERADMIN.value,
     UserRole.ADMIN.value,
-    UserRole.PARTNER.value,
     UserRole.INFORMER.value,
     UserRole.USER.value,
 )
