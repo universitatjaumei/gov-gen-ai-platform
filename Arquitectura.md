@@ -389,6 +389,16 @@ La calidad del corpus indexado es un requisito de fiabilidad jurídica: en un ch
 
 La procedencia preservada habilita citas trazables y los *snapshots* temporales (`as_of_date`) necesarios para resolver expedientes con la normativa vigente en su momento.
 
+### 7.5 Estrategia de recuperación y evolución agéntica
+
+Decisiones adoptadas el 2026-07-15 a partir de la comparativa arquitectónica con LAMB (`docs/COMPARATIVA_RAG_LAMB.md`); su implementación se planifica en el Bloque RAG de `Plan_TDD_Fase1.md`:
+
+* **Búsqueda híbrida real.** Rama vectorial (pgvector con índice HNSW, distancia coseno) + rama léxica (full-text search de PostgreSQL, `tsvector`/GIN con ranking) fusionadas por Reciprocal Rank Fusion, con **reranking cross-encoder** (BGE-reranker-v2-m3, misma familia que el embedding BGE-M3) activable por chatbot. La rama léxica cubre lo que los embeddings pierden en dominio administrativo: siglas, códigos de procedimiento, nombres de convocatorias y artículos de normativa.
+* **Representación con contexto.** Los chunks se embeben enriquecidos con el título del documento y su jerarquía de cabeceras (*contextual retrieval*); el chunking *parent-child* (small-to-big: hijo pequeño para buscar, sección padre como evidencia) está disponible por configuración. Cada chunk registra el modelo y la dimensión de embedding con que fue generado, y existe una ruta de re-embedding masivo — cambiar de modelo de embedding es una operación soportada, no una migración ad-hoc.
+* **Calidad medible antes que mejoras.** Dataset dorado de consultas por chatbot con métricas puras de recuperación (recall@k, MRR) como gate de CI; ninguna mejora del retriever se adopta sin comparar contra la baseline. RAGAS queda para evaluación periódica de fidelidad y los *test scenarios* por chatbot (ejecución del pipeline real con veredicto humano) complementan la evaluación end-to-end. El feedback negativo y los fallbacks sin cita alimentan la detección de **huecos de corpus** (integrada con la auditoría de calidad de §7.4).
+* **La consulta se reescribe antes de buscar.** En conversaciones multivuelta, un modelo pequeño y rápido reformula la consulta con el contexto del historial (con fallback al último mensaje); el retrieval nunca depende solo del último turno.
+* **Pipeline gobernado con escalada agéntica, no dicotomía.** El pipeline RAG determinista (barato, trazable, citable) es la vía por defecto para el volumen de consultas informacionales; el modo agéntico (`MD_AGENT_SELECTOR`, herramientas de listado/lectura de documentos) es la **escalada** cuando la evidencia recuperada no supera el quality gate. La recuperación se diseña como **herramienta consumible por agentes**: las inversiones en índice híbrido, reranking y calidad del corpus sirven igual al pipeline actual y a cualquier orquestación agéntica futura, mientras que se evita deliberadamente la sofisticación de pipeline (multi-hop cableado, cadenas de reescritura) que un bucle agéntico sustituye con menos código.
+
 \---
 
 ## 8\. Módulo AutomatIA
@@ -731,8 +741,11 @@ La plataforma utiliza PostgreSQL como base común. El schema existente de Automa
 |Modelos locales|Soporte mediante selector de modelos cuando aplique|
 |Ingesta|Docling|
 |Web dinámica|Playwright|
-|Embeddings|BGE-M3 u otros modelos libres adecuados para contexto multilingüe y técnico|
-|Evaluación|RAGAS|
+|Embeddings|BGE-M3 u otros modelos libres adecuados para contexto multilingüe y técnico (modelo y dimensión registrados por chunk)|
+|Búsqueda vectorial|pgvector con índice HNSW (coseno)|
+|Búsqueda léxica|Full-text search de PostgreSQL (`tsvector` + GIN), fusión RRF con la vectorial|
+|Reranking|Cross-encoder BGE-reranker-v2-m3, activable por chatbot|
+|Evaluación|RAGAS (periódica) + dataset dorado de recuperación (recall@k, MRR) como gate de CI + test scenarios con veredicto humano|
 
 ### 13.3 Almacenamiento y conectividad
 

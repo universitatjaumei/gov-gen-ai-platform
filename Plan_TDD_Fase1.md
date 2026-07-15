@@ -11923,3 +11923,703 @@ CRITERIOS DE ACEPTACIÓN:
 
 ---
 
+## Bloque RAG — Refuerzo del retrieval y calidad RAG (Subfase 1.B → 1.C, PENDIENTE)
+
+> **Contexto**: planificado 2026-07-15 a partir de `docs/COMPARATIVA_RAG_LAMB.md` (comparativa arquitectónica del RAG con LAMB + recomendaciones propias + análisis "RAG vs agentes"). Principio rector: invertir en los **cimientos del retrieval** (índice híbrido real, reranker, representación del corpus, evaluación) porque son la herramienta que cualquier evolución agéntica consumirá; no invertir en sofisticación de pipeline que un bucle agéntico haría gratis.
+>
+> **Posición en el orden de ejecución** (acordada 2026-07-15): tras `ING.0` + pruebas manuales con corpus de prueba, **antes** del resto del Bloque SEC. El corpus de prueba ya cargado es insumo del dataset dorado (RAG.1).
+>
+> **Estado**: ✅ relación de prompts aprobada y ✅ **detalle verbatim completado** (2ª pasada, 2026-07-15). Bloque listo para ejecutar cuando llegue su turno en el orden.
+
+### Propósito del bloque
+
+1. **Consolidar los dos grafos** en uno: llevar `public_graphs/CoreGraph` (quality gate, cascada de config, LanguagePolicy — hoy solo en tests) a producción y retirar `agent/graph.py`.
+2. **Medir antes de mejorar**: dataset dorado + métricas de recuperación en CI; toda mejora posterior se valida contra baseline.
+3. **Elevar la calidad del retrieval**: índice HNSW, pata léxica real (tsvector), umbral + presupuesto de tokens, reranker cross-encoder, contextual retrieval, parent-child chunking.
+4. **Robustecer los embeddings**: metadato de modelo/dimensión por chunk, validación inmutable al crear, ruta de re-embedding (patrón LAMB "por colección").
+5. **Cerrar el bucle de calidad**: query rewriting conversacional, modo bypass de depuración, progreso granular de ingesta, test scenarios por chatbot y detección de huecos de corpus desde el feedback.
+
+### Decisiones de diseño
+
+- **Medir primero**: RAG.1 establece la baseline; ningún cambio del retriever (RAG.3–RAG.8, RAG.10) se cierra sin comparar recall@k/MRR contra ella en CI.
+- **Consolidación temprana** (RAG.2): a partir de ahí existe **un solo grafo**; `agent/graph.py` se retira por **Caso B** (borrado directo, no es legacy NiceGUI) con el checklist completo de migración de CLAUDE.md. `Source` y `EvidenceItem` se unifican en el contrato de `public_graphs`.
+- **Sin flags muertos**: `reranker_enabled` y `min_retrieval_score` (en `HubChatbot` desde 9B) o se activan (RAG.5, RAG.6) o se retiran del contrato. No queda config expuesta en la API admin sin consumidor.
+- **Patrones importados de LAMB** (ver `docs/COMPARATIVA_RAG_LAMB.md` §7): query rewriting (`context_aware_rag`), config de embeddings inmutable y validada, parent-child chunking, connector `bypass`, `progress_callback` de ingesta, test scenarios. Lo que NO se copia: ChromaDB/SQLite, disco local, I/O síncrona, token estático.
+- **Cambios de representación exigen re-embedding**: RAG.7 y RAG.8 alteran el texto embebido → migración de corpus documentada (comando de re-chunk/re-embed de RAG.9 como prerrequisito operativo si el corpus ya está cargado).
+- **Deploy: edge** en todo el bloque (retrieval y datos del cliente); solo la UI admin de test scenarios (RAG.13) toca superficie cloud.
+
+### Mapa de ejecución
+
+| # | Prompt | Título | Depende de | Modelo sugerido |
+|---|--------|--------|------------|-----------------|
+| 1 | RAG.1 | Dataset dorado + métricas recall@k/MRR + CI de regresión | corpus de prueba (ING.0) | Sonnet |
+| 2 | RAG.2 | Consolidación de grafos: CoreGraph a producción, retirada de `agent/graph.py` | 9B ✅, RAG.1 | **Opus** |
+| 3 | RAG.3 | Índice HNSW en pgvector (migración Alembic) | — | Sonnet |
+| 4 | RAG.4 | Pata léxica real: tsvector + GIN sustituye ILIKE en `HybridRetriever` | RAG.1 | Sonnet |
+| 5 | RAG.5 | Activar `min_retrieval_score` + presupuesto de tokens del contexto | RAG.2 | Sonnet |
+| 6 | RAG.6 | Reranker cross-encoder (BGE-reranker-v2-m3) + activar `reranker_enabled` | RAG.1, RAG.4 | **Opus** |
+| 7 | RAG.7 | Contextual retrieval: headers + título en el texto embebido | RAG.1 | Sonnet |
+| 8 | RAG.8 | Parent-child chunking (small-to-big) + chunking configurable por chatbot | RAG.7 | Sonnet |
+| 9 | RAG.9 | Metadato de embeddings por chunk + validación inmutable + re-embedding | — | Sonnet |
+| 10 | RAG.10 | Query rewriting conversacional (LLM pequeño + fallback) | RAG.2 | Sonnet |
+| 11 | RAG.11 | Modo bypass/debug: prompt final sin llamar al LLM | RAG.2 | Sonnet |
+| 12 | RAG.12 | Progreso granular de `HubIngestionJob` (callback + stats) | — | Sonnet |
+| 13 | RAG.13 | Test scenarios por chatbot (backend + UI admin mínima) | RAG.11 | Sonnet |
+| 14 | RAG.14 | Feedback → huecos de corpus (clustering + `HubContentFinding`, integra 9Q) | — | Sonnet/**Opus** |
+
+RAG.3, RAG.9 y RAG.12 son independientes y pueden intercalarse como prompts cortos entre los mayores.
+
+### Reglas duras del bloque
+
+- Ninguna mejora del retriever se cierra sin ejecutar la suite de RAG.1 y comparar contra baseline (adjuntar cifras en el cierre del prompt).
+- RAG.2 cumple el checklist de migración completo de CLAUDE.md: grep de referencias a `agent/graph.py` y a `Source` antiguo antes de cerrar; ningún import activo al código retirado.
+- Los tests de retrieval de RAG.1 son **métricas puras sin LLM** (deben correr en CI en segundos); RAGAS queda para evaluación periódica, nunca como gate de CI.
+- Todo router o servicio nuevo se etiqueta `Deploy: edge|cloud` en su docstring y se registra en `_register_edge`/`_register_cloud`.
+
+### Prompts del bloque (detalle verbatim — 2ª pasada 2026-07-15)
+
+---
+
+### Prompt RAG.1 (RED/GREEN) — Dataset dorado + métricas de recuperación + CI de regresión
+
+**Modelo sugerido**: **Sonnet** — métricas puras + harness; alcance cerrado, sin decisiones abiertas.
+
+```
+# PROMPT RAG.1 (RED/GREEN) — Dataset dorado y gate de CI de retrieval
+# Deploy: edge
+
+## Contratos (modules/agents_hub/evaluation/golden_dataset.py)
+- GoldenQuery (Pydantic frozen): query, language ('ca'|'es'|'en'), expected_canonical_urls
+  (list[str], min 1) | expected_document_ids, tags (list[str], p.ej. 'sigla', 'conversacional',
+  'normativa'), history (list[str] | None — para RAG.10), notes.
+- GoldenDataset: nombre, chatbot de referencia, documents_fingerprint (hash del corpus esperado,
+  para detectar dataset desalineado del corpus), queries: list[GoldenQuery]. Loader JSON.
+
+## Métricas (modules/agents_hub/evaluation/retrieval_metrics.py) — SIN LLM
+- recall_at_k(retrieved_ids, expected_ids, k) -> float
+- mrr(retrieved_ids, expected_ids) -> float
+- Funciones puras sobre listas de IDs/URLs; nada de red ni BD.
+
+## Harness (modules/agents_hub/evaluation/retrieval_eval.py)
+- run_golden_eval(retriever, dataset, top_k) -> EvalReport {per_query: [...], recall_at_5,
+  recall_at_10, mrr}: ejecuta HybridRetriever.hybrid_search por query y evalúa.
+- Baseline versionada en server/tests/modules/agents_hub/evaluation/baselines/<dataset>.json.
+- CLI (python -m ...evaluation.run_golden --dataset X --chatbot-id Y [--update-baseline]):
+  informe tabular + diff contra baseline. --update-baseline regenera (uso deliberado, nunca CI).
+
+## Dos niveles de ejecución (decisión de diseño)
+1. CI: mini-corpus fixture determinista (15-25 .md pequeños en tests/fixtures/golden_corpus/,
+   ingeridos en el setup del test vía IngestionWatcher sobre BD de test) + dataset dorado de
+   ~25 queries. Gate: recall@5 y MRR >= baseline - 0.02 (tolerancia). Debe correr en segundos.
+2. Manual/nightly: dataset completo (30-50 queries) contra el corpus de prueba cargado por
+   ING.0.2 — vía CLI, no bloquea CI.
+
+## RAGAS queda fuera de CI
+- Documentar en evaluation/rag_metrics.py (docstring de módulo) que faithfulness/answer_relevancy
+  son evaluación periódica manual; nunca gate de CI. Corregir de paso el `except Exception: pass`
+  silencioso: log warning con el motivo del fallback léxico.
+
+## Tests (RED primero) — tests/modules/agents_hub/evaluation/
+# should_compute_recall_at_k_for_hit_and_miss
+# should_compute_mrr_with_first_relevant_position
+# should_load_and_validate_golden_dataset_schema
+# should_reject_query_without_expected_targets
+# should_run_eval_over_fixture_corpus_and_produce_report
+# should_fail_gate_when_recall_drops_beyond_tolerance
+# should_pass_gate_when_metrics_meet_baseline
+# should_detect_corpus_fingerprint_mismatch
+
+## Criterio de done
+- [ ] Gate verde en CI con el mini-corpus (añadir al workflow ci.yml)
+- [ ] Baseline inicial commiteada con las cifras del retriever actual (pre-mejoras)
+- [ ] CLI probado contra el corpus de prueba de ING.0 (adjuntar cifras en el cierre)
+```
+
+---
+
+### Prompt RAG.2 (RED/GREEN) — Consolidación de grafos: CoreGraph a producción
+
+**Modelo sugerido**: **Opus** — migración multi-módulo con decisiones embebidas (unificación de contratos, port del loop agéntico, preservación del contrato SSE).
+
+```
+# PROMPT RAG.2 (RED/GREEN) — Un solo grafo: public_graphs/CoreGraph sirve /hub/chat
+# Deploy: edge
+
+## Objetivo
+api/v1/hub_chat.py deja de construir el grafo con agent/graph.py:create_agent_graph y pasa a
+usar public_graphs/core/graph_factory.py + CoreGraph. Entran en producción: quality gate con
+fallback, cascada ConfigResolver (Plataforma→Organización→Chatbot), LanguagePolicy y el
+contrato EvidenceItem.
+
+## Qué se preserva (sin cambio de contrato observable)
+- SSE: eventos status/token/done(sources)/error idénticos (astream_events v2). El evento done
+  serializa EvidenceItem con el MISMO shape JSON actual (document_id, title, url, score) —
+  el frontend/widget no se toca.
+- enforce_citation_contract (agent/citation_validator.py) aplicado tras la generación.
+- Router multi-materia (agent/router_node.py) ejecutado en el endpoint antes del grafo.
+- Persistencia HubInteraction + trazas Langfuse (services/observability.py).
+- agent/language_detector.py como implementación del nodo detect_language del CoreGraph.
+
+## Port del modo agéntico
+- El loop de agent/graph.py:_run_agentic_loop (bind_tools, máx. 10 iteraciones, acumulación de
+  fuentes por read_document) se extrae a un componente del CoreGraph usado cuando
+  retrieval_mode == MD_AGENT_SELECTOR. Los tools (agent/tools/) no cambian.
+- strategies/md_agent_selector_pipeline.py deja de ser stub "índice completo": devuelve el
+  índice de documentos como evidencia inicial y delega la selección al loop agéntico.
+
+## Unificación de contratos
+- Source (agent/state.py) se retira; EvidenceItem (strategies/retrieval_contract.py) es el único
+  contrato de evidencia. Las REGLAS DE CITA y format_sources_block de agent/prompts.py se
+  integran en la TemplateStrategy del CoreGraph (una sola fuente del system prompt).
+
+## Quality gate en producción
+- cfg desde ConfigResolver (quality_threshold, min_retrieval_results, min_retrieval_score).
+- Si el gate no pasa → nodo fallback: respuesta "no tengo información suficiente" (misma que
+  usa el citation validator) emitida por SSE como respuesta normal + marcada en HubInteraction
+  (nueva columna fallback_reason: 'quality_gate' | 'citation' | NULL — migración Alembic;
+  RAG.14 la consume).
+
+## Retirada (Caso B — borrado directo, checklist CLAUDE.md completo)
+- agent/graph.py, Source en agent/state.py, partes de agent/prompts.py absorbidas.
+- grep -r de create_agent_graph / AgentState.Source / imports de agent.graph antes de cerrar.
+- Los tests que testeaban el grafo antiguo se migran al CoreGraph (no se borran aserciones de
+  comportamiento: se reapuntan).
+
+## Tests (RED primero) — tests/modules/agents_hub/ + tests/public_graphs/
+# should_serve_chat_via_coregraph_in_rag_mode
+# should_serve_chat_via_coregraph_in_long_context_mode
+# should_serve_chat_via_coregraph_in_agent_selector_mode
+# should_keep_sse_event_contract_unchanged           (snapshot de eventos)
+# should_apply_quality_gate_fallback_on_low_evidence
+# should_persist_fallback_reason_on_interaction
+# should_resolve_config_cascade_in_live_chat         (org override visible en runtime)
+# should_enforce_citation_contract_after_generation
+# should_route_router_kind_chatbot_before_graph
+# should_run_agentic_loop_with_tools_in_selector_mode
+# should_have_no_references_to_retired_graph         (import scan)
++ suite e2e de chat existente (test_chat_flow.py, test_hub_chat_sse.py) verde SIN cambios de
+  aserciones de contrato.
+
+## Criterio de done
+- [ ] Suite completa verde (backend) + RAG.1 sin regresión (adjuntar cifras)
+- [ ] agent/graph.py eliminado; grep de referencias limpio
+- [ ] Migración Alembic de fallback_reason aplicada (alembic current)
+```
+
+---
+
+### Prompt RAG.3 (RED/GREEN) — Índice HNSW en pgvector
+
+**Modelo sugerido**: **Sonnet** — migración puntual con verificación de plan de consulta.
+
+```
+# PROMPT RAG.3 (RED/GREEN) — Índice ANN para la búsqueda vectorial
+# Deploy: edge
+
+## Migración Alembic (server/migrations/versions/)
+- CREATE INDEX ix_hub_document_chunks_embedding_hnsw ON hub_document_chunks
+  USING hnsw (embedding vector_cosine_ops);  (defaults m=16, ef_construction=64)
+- Ídem para hub_crawled_pages.page_embedding (lo usa el detector semántico 9Q).
+- Downgrade: DROP INDEX. Requiere pgvector >= 0.5 (verificar versión de la imagen Docker;
+  actualizar docker-compose si hace falta).
+
+## Sin cambios de código
+- La query de retriever.py (cosine_distance + ORDER BY) ya es indexable; no se toca.
+
+## Tests (RED primero) — tests/modules/agents_hub/integration/test_hnsw_index.py
+# should_use_hnsw_index_in_query_plan          (EXPLAIN contiene 'hnsw')
+# should_return_same_top_k_as_exact_scan_on_small_corpus  (corpus fixture: ANN==exacto)
+# should_apply_and_rollback_migration_cleanly
+
+## Criterio de done
+- [ ] uv run alembic upgrade head aplicado y alembic current mostrado
+- [ ] Suite RAG.1 sin regresión (tolerancia del gate ya contempla ANN)
+```
+
+---
+
+### Prompt RAG.4 (RED/GREEN) — Pata léxica real: tsvector + GIN sustituye ILIKE
+
+**Modelo sugerido**: **Sonnet** — sustitución localizada en `_keyword_search`; contrato RRF intacto.
+
+```
+# PROMPT RAG.4 (RED/GREEN) — Full-text search de PostgreSQL en la rama léxica del híbrido
+# Deploy: edge
+
+## Migración Alembic
+- Columna generada en hub_document_chunks:
+  tsv tsvector GENERATED ALWAYS AS (to_tsvector(
+    CASE WHEN language = 'es' THEN 'spanish'::regconfig ELSE 'simple'::regconfig END,
+    coalesce(content, ''))) STORED
+  (si el chunk no tiene columna language propia, derivarla del documento en la ingesta y
+  añadirla primero — verificar el modelo real antes de escribir la migración).
+- CREATE INDEX ... USING gin (tsv).
+- Documentar limitación: catalán sin stemmer nativo en PG core → config 'simple' (sin stemming);
+  posible diccionario Snowball/Hunspell catalán como mejora de despliegue, fuera de alcance.
+
+## Retriever (services/retriever.py — _keyword_search)
+- Sustituir el AND de ILIKE por websearch_to_tsquery(config_del_idioma, query) @@ tsv con
+  ranking ts_rank_cd normalizado a [0,1] (dividir por el máximo del lote).
+- Conservar: filtros chatbot_id / temporales / superseded / idioma, top_k*2, y la fusión RRF
+  (k=60, vector_weight=0.7) SIN cambios.
+- BORRAR el código ILIKE (borra, no comentes).
+
+## Tests (RED primero) — tests/modules/agents_hub/unit+integration/test_retriever.py (ampliar)
+# should_match_stemmed_spanish_terms            ('becas' encuentra 'beca')
+# should_rank_chunks_with_exact_terminology_first  (siglas/códigos: 'EBEP', 'RD 203/2021')
+# should_use_simple_config_for_catalan_chunks
+# should_return_normalized_keyword_scores
+# should_keep_rrf_fusion_contract_unchanged
+# should_use_gin_index_in_query_plan            (EXPLAIN)
+# should_have_no_ilike_left_in_retriever        (scan del fichero)
+
+## Criterio de done
+- [ ] Migración aplicada (alembic current)
+- [ ] RAG.1: mejora o igualdad de recall@5/MRR contra baseline, con cifras en el cierre
+      (se esperan ganancias en las queries con tag 'sigla')
+```
+
+---
+
+### Prompt RAG.5 (RED/GREEN) — Umbral de score aplicado + presupuesto de tokens del contexto
+
+**Modelo sugerido**: **Sonnet** — consumo de config existente + empaquetador; decisiones acotadas aquí.
+
+```
+# PROMPT RAG.5 (RED/GREEN) — min_retrieval_score real + context packer con presupuesto
+# Deploy: edge
+
+## Umbral (decisión de diseño cerrada)
+- min_retrieval_score (ya en HubChatbot, defaults org y ConfigResolver, default 0.25) se aplica
+  sobre la SIMILITUD COSENO de la rama vectorial, ANTES de la fusión RRF (WHERE similarity >=
+  umbral). La rama léxica no filtra por umbral (su señal es de ranking, no de similitud) —
+  documentarlo en el docstring del retriever.
+- El quality gate del CoreGraph (RAG.2) sigue usando quality_threshold sobre la media de
+  evidencias: son dos controles distintos (por-chunk vs por-respuesta); documentar la relación.
+
+## Empaquetador (services/retrieval/context_packer.py)
+- pack(evidences: list[EvidenceItem], budget_tokens: int) -> PackedContext:
+  1) ordenar por score desc; 2) fusionar chunks adyacentes del mismo documento (chunk_index
+  consecutivos) eliminando solapamiento textual; 3) acumular hasta el presupuesto (contador de
+  tokens reutilizando el que usa LongContextRetrievalStrategy para el límite de 128k); 4)
+  registrar dropped_count para trazas/bypass.
+- Config: nueva columna context_token_budget (nullable) en HubChatbot + default_context_token_budget
+  en HubOrganizacion + default de plataforma 4000 en ConfigResolver (misma cascada que el resto).
+  Migración Alembic + exposición en routers CRUD (hub_chatbots_router, hub_organizaciones_router).
+- La estrategia RAG (vector_strategy / rag_vector_pipeline) usa el packer antes de construir el
+  bloque DOCUMENTOS DISPONIBLES.
+
+## Tests (RED primero)
+# should_filter_vector_candidates_below_min_score
+# should_keep_all_candidates_when_threshold_is_zero
+# should_pack_context_within_token_budget
+# should_drop_lowest_scored_evidence_first_when_cutting
+# should_merge_adjacent_chunks_of_same_document
+# should_resolve_budget_from_cascade_platform_org_chatbot
+# should_report_dropped_count_in_packed_context
+
+## Criterio de done
+- [ ] Migración aplicada; flags visibles y FUNCIONALES desde la API admin
+- [ ] RAG.1 sin regresión (el umbral 0.25 no debe recortar hits del dorado; si lo hace,
+      ajustar default con datos y documentar)
+```
+
+---
+
+### Prompt RAG.6 (RED/GREEN) — Reranker cross-encoder + activación de `reranker_enabled`
+
+**Modelo sugerido**: **Opus** — integración con decisiones reales: normalización de scores, pool de candidatos, gestión del default heredado y medición.
+
+```
+# PROMPT RAG.6 (RED/GREEN) — BGE-reranker-v2-m3 detrás de protocolo, flag por chatbot
+# Deploy: edge
+
+## Protocolo e implementación (services/reranker.py)
+- class Reranker(Protocol): async def rerank(query: str, candidates: list[str], top_k: int)
+  -> list[RerankResult {index, score}].
+- LocalReranker: sentence_transformers.CrossEncoder('BAAI/bge-reranker-v2-m3'), singleton
+  lazy-load + asyncio.to_thread + batch, scores normalizados con sigmoide a [0,1]
+  (mismo patrón que LocalEmbeddingService). get_reranker() para Depends.
+- SIN fallback silencioso (regla CLAUDE.md): si reranker_enabled y el modelo no carga,
+  error explícito en el arranque del servicio — no degradar a híbrido sin avisar.
+
+## Integración (vector_strategy / rag_vector_pipeline)
+- Si cfg.reranker_enabled: recuperar pool ampliado (max(30, top_k*3)) del híbrido →
+  rerank(query, [content]) → quedarse top_k. El score del reranker SUSTITUYE al de fusión
+  para el packer (RAG.5) y el quality gate (los umbrales operan sobre [0,1] coherente).
+- Log de duración del rerank en la traza Langfuse (observability).
+
+## Default heredado (decisión cerrada)
+- reranker_enabled tiene default True desde 9B pero nunca se consumió. Al activarlo de verdad:
+  migración Alembic que pone False en chatbots/organizaciones existentes + default False en
+  modelo, routers y ConfigResolver. El admin lo activa por chatbot tras validar con RAG.1.
+  (~1.1 GB extra de RAM in-process: mismo criterio de extracción a microservicio que BGE-M3,
+  CLAUDE.md §microservicios; el protocolo ya deja listo un futuro HttpReranker.)
+
+## Tests (RED primero) — unit con CrossEncoder mockeado; 1 test integración marcado slow
+# should_rerank_candidates_with_relevant_first        (fixture con pares obvios)
+# should_not_call_reranker_when_flag_disabled         (spy)
+# should_retrieve_wider_pool_when_reranking
+# should_normalize_scores_to_unit_interval
+# should_replace_fusion_score_with_rerank_score
+# should_fail_loudly_when_enabled_and_model_unavailable
+# should_log_rerank_latency_in_trace
+# should_default_to_disabled_after_migration
+
+## Criterio de done
+- [ ] RAG.1 con flag ON vs OFF: adjuntar tabla comparativa (recall@5, MRR, latencia media)
+- [ ] Migración de defaults aplicada; sin flags muertos restantes en el contrato
+```
+
+---
+
+### Prompt RAG.7 (RED/GREEN) — Contextual retrieval estructural (headers en el texto embebido)
+
+**Modelo sugerido**: **Sonnet** — cambio localizado en chunker/watcher + regeneración con herramienta existente.
+
+```
+# PROMPT RAG.7 (RED/GREEN) — Embeber chunks con su contexto jerárquico
+# Deploy: edge
+
+## Chunker (ingestion/chunker.py)
+- Cada chunk expone embedding_text = "<título documento> > <header_1> > <header_2> > <header_3>
+  \n\n<content>" (niveles presentes; sin duplicar si el content empieza por el propio header).
+- El content ALMACENADO y mostrado como evidencia NO cambia; embedding_text no se persiste.
+
+## Watcher (ingestion/watcher.py)
+- embed(embedding_text) en lugar de embed(content).
+- De paso: embeber por LOTES (encode acepta lista) en vez de chunk a chunk (watcher es hoy
+  secuencial) — mismo prompt porque toca la misma línea.
+
+## Hook de nivel 2 (definir, NO implementar)
+- Protocolo ContextEnricher (enrich(document, chunk) -> str) con NoopEnricher por defecto,
+  inyectado en el chunker. El enricher LLM (frase de contexto generada en ingesta, técnica
+  "contextual retrieval") queda documentado como candidato post-corpus-definitivo. Sin código
+  muerto: solo el protocolo + Noop que ya se usa.
+
+## Regeneración del corpus
+- Reutilizar services/corpus_recalculator.py (ya regenera chunks al cambiar de modo) para
+  re-chunk+re-embed del corpus de prueba tras el cambio. Si RAG.9 ya está hecho, usar su CLI.
+
+## Tests (RED primero)
+# should_build_embedding_text_with_title_and_header_hierarchy
+# should_not_duplicate_header_when_content_starts_with_it
+# should_keep_stored_content_unchanged
+# should_embed_enriched_text_not_raw_content      (spy sobre embedding_service)
+# should_embed_chunks_in_batches
+# should_regenerate_corpus_via_recalculator
+
+## Criterio de done
+- [ ] Corpus de prueba regenerado; RAG.1 comparado (adjuntar cifras; se espera mejora en
+      queries cuya respuesta vive en secciones profundas)
+```
+
+---
+
+### Prompt RAG.8 (RED/GREEN) — Parent-child chunking + chunking configurable por chatbot
+
+**Modelo sugerido**: **Sonnet** — patrón conocido (LAMB `hierarchical_ingest`/`parent_child_query`) sobre infraestructura propia ya existente.
+
+```
+# PROMPT RAG.8 (RED/GREEN) — Small-to-big opcional + parámetros de chunking en la cascada
+# Deploy: edge
+
+## Config por chatbot (migración Alembic + cascada)
+- HubChatbot: chunk_size (int, nullable), chunk_overlap (int, nullable),
+  chunking_strategy ('structural' | 'parent_child', nullable).
+- Defaults org (default_chunk_*) + plataforma (1000/100/'structural') vía ConfigResolver.
+- watcher deja de instanciar MarkdownChunker con defaults hardcodeados: lee la config resuelta.
+- Exponer en routers CRUD (contract-first: el frontend los recibe del contrato OpenAPI).
+
+## Estrategia parent_child (ingestion/chunker.py)
+- Hijos: RecursiveCharacterTextSplitter con chunk_size_child (default 400) DENTRO de cada
+  sección estructural; el embedding es del hijo (compone con embedding_text de RAG.7).
+- Padre: la sección estructural completa → columna parent_content (Text, nullable) en
+  HubDocumentChunk (migración). Decisión: columna directa, no join — simplicidad y el
+  padre ya existe como texto en el documento.
+- Retrieval: cuando parent_content no es NULL, la evidencia devuelve parent_content como
+  excerpt (vector_strategy agrupa por documento: el "mejor chunk" pasa a ser "mejor padre",
+  deduplicando hijos del mismo padre).
+
+## Cambio de estrategia = regeneración
+- corpus_recalculator soporta el cambio chunking_strategy (borra chunks y regenera), igual
+  que hace hoy con retrieval_mode.
+
+## Tests (RED primero)
+# should_use_per_chatbot_chunk_size_and_overlap
+# should_fall_back_to_cascade_defaults_when_unset
+# should_split_children_within_structural_sections
+# should_store_parent_section_on_child_chunks
+# should_return_parent_content_as_evidence
+# should_deduplicate_children_of_same_parent_in_results
+# should_regenerate_chunks_on_strategy_change
+
+## Criterio de done
+- [ ] Migraciones aplicadas; config visible y funcional en API admin
+- [ ] RAG.1 sobre el fixture con parent_child ON vs OFF: cifras en el cierre
+```
+
+---
+
+### Prompt RAG.9 (RED/GREEN) — Metadato de embeddings + validación + re-embedding masivo
+
+**Modelo sugerido**: **Sonnet** — patrón LAMB "config por colección" adaptado; alcance enumerado.
+
+```
+# PROMPT RAG.9 (RED/GREEN) — Trazabilidad y migrabilidad del modelo de embedding
+# Deploy: edge
+
+## Esquema (migración Alembic)
+- HubDocumentChunk: embedding_model (String, nullable=False tras backfill),
+  embedding_dim (Integer). Backfill: filas existentes → 'BAAI/bge-m3' / 1024.
+
+## Servicio (services/embedding_service.py)
+- El protocolo EmbeddingService expone model_name y dim; LocalEmbeddingService ('BAAI/bge-m3',
+  1024) y GoogleEmbeddingService ('models/text-embedding-004', 768) los implementan.
+- El watcher estampa model_name/dim en cada chunk al ingerir.
+
+## Guardas (decisión cerrada: un solo modelo por despliegue edge)
+- En query: si el corpus del chatbot contiene embedding_model distinto del servicio activo →
+  error explícito con instrucción de re-embedding (nunca resultados silenciosamente malos).
+- Al crear/activar chatbot: validación con embedding de prueba del servicio activo (patrón
+  LAMB) — falla rápido si el servicio no está operativo.
+- Documentar en el docstring del módulo: la incompatibilidad Google-768d vs Vector(1024) se
+  resuelve por re-embedding completo del despliegue, no por convivencia de dimensiones.
+
+## CLI de re-embedding (python -m ...ingestion.reembed)
+- Argumentos: --chatbot-id [--all] [--dry-run]. Recorre chunks en lotes (streaming, sin cargar
+  el corpus en memoria), re-embebe con el servicio activo y estampa metadato nuevo.
+- Idempotente: chunks ya en el modelo activo se saltan (salvo --force).
+- Es la herramienta operativa de RAG.7/RAG.8 cuando el corpus ya está cargado.
+
+## Tests (RED primero)
+# should_stamp_model_and_dim_on_ingestion
+# should_backfill_existing_chunks_in_migration
+# should_raise_clear_error_on_model_mismatch_at_query
+# should_validate_embedding_service_on_chatbot_creation
+# should_reembed_corpus_in_batches_via_cli
+# should_skip_chunks_already_on_active_model
+# should_report_plan_in_dry_run
+
+## Criterio de done
+- [ ] Migración + backfill aplicados (alembic current)
+- [ ] CLI ejecutado en dry-run contra el corpus de prueba (salida en el cierre)
+```
+
+---
+
+### Prompt RAG.10 (RED/GREEN) — Query rewriting conversacional
+
+**Modelo sugerido**: **Sonnet** — patrón `context_aware_rag` de LAMB con fallbacks; alcance cerrado.
+
+```
+# PROMPT RAG.10 (RED/GREEN) — Reescritura de consulta con historial antes del retrieve
+# Deploy: edge
+
+## Nodo (public_graphs/core/) — antes del retrieve en CoreGraph
+- Condición: cfg.query_rewriting_enabled Y len(historial) >= 2 turnos. Si no → passthrough.
+- LLM pequeño-rápido vía model_factory. Config en cascada: rewrite_llm_config_id (nullable) en
+  organización; fallback al LLM del chatbot con max_tokens bajo (~100). Prompt de optimización
+  fijo (plantilla en el módulo, no editable por admin en este prompt): "genera la consulta de
+  búsqueda autónoma que capture la intención del último mensaje usando el contexto" sobre los
+  últimos 10 mensajes.
+- Triple fallback (patrón LAMB): excepción → timeout (2 s) → respuesta vacía/anómala ⇒ usar el
+  último mensaje del usuario tal cual. El chat NUNCA falla por el rewriting.
+- La query reescrita se usa SOLO para retrieval; la generación recibe el historial original.
+  Se guarda en el estado del grafo (rewritten_query) → visible en trazas Langfuse y en el
+  bypass (RAG.11).
+
+## Config
+- query_rewriting_enabled (bool) en HubChatbot + default org + plataforma False (migración,
+  cascada, routers CRUD). Default False hasta validar con datos.
+
+## Tests (RED primero) — LLM mockeado
+# should_skip_rewriting_on_first_turn
+# should_skip_rewriting_when_disabled
+# should_rewrite_followup_query_using_history
+# should_fallback_to_last_message_on_llm_error
+# should_fallback_to_last_message_on_timeout
+# should_use_rewritten_query_only_for_retrieval
+# should_record_rewritten_query_in_graph_state
+
+## Criterio de done
+- [ ] Subconjunto 'conversacional' del dataset dorado (queries con history, RAG.1) evaluado
+      con flag ON vs OFF: cifras en el cierre
+```
+
+---
+
+### Prompt RAG.11 (RED/GREEN) — Modo bypass/debug del pipeline
+
+**Modelo sugerido**: **Sonnet** — patrón connector `bypass` de LAMB; corto y cerrado.
+
+```
+# PROMPT RAG.11 (RED/GREEN) — Prompt final construido sin llamar al LLM
+# Deploy: edge
+
+## Endpoint (api/v1/hub_chat.py)
+- Body opcional debug_bypass: true. Gate estricto: rol admin/superadmin o PAT con scope
+  chat:debug (scope nuevo). El widget/público NUNCA lo recibe (403).
+- Con bypass: el grafo ejecuta todo (detect_language → rewrite → retrieve → gate → packer)
+  y se detiene ANTES de invocar el LLM. Respuesta JSON (no SSE): {system_prompt, messages,
+  packed_context {evidencias, dropped_count}, sources, rewritten_query, resolved_config
+  (snapshot de la cascada), quality_gate {score, passed}}. Cero tokens de LLM.
+- No persiste HubInteraction (es inspección, no conversación) — decisión cerrada.
+
+## Implementación
+- Flag en el estado del CoreGraph; el nodo generate_answer lo comprueba y devuelve los
+  mensajes construidos en lugar de invocar (spy-friendly por diseño).
+
+## Tests (RED primero)
+# should_return_final_prompt_without_calling_llm      (spy: 0 invocaciones)
+# should_include_packed_context_sources_and_resolved_config
+# should_include_rewritten_query_when_rewriting_enabled
+# should_reject_bypass_for_non_admin_without_scope
+# should_not_persist_interaction_on_bypass
+# should_report_quality_gate_result_in_bypass
+
+## Criterio de done
+- [ ] Verificado manualmente contra el corpus de prueba (una consulta real, salida en el cierre)
+- [ ] docs: sección breve en docs/ sobre cómo depurar contexto con bypass
+```
+
+---
+
+### Prompt RAG.12 (RED/GREEN) — Progreso granular de jobs de ingesta
+
+**Modelo sugerido**: **Sonnet** — patrón `FileRegistry`/`progress_callback` de LAMB; mecánico.
+
+```
+# PROMPT RAG.12 (RED/GREEN) — HubIngestionJob con progreso y estadísticas por etapa
+# Deploy: edge
+
+## Esquema (migración Alembic) — HubIngestionJob
+- progress_current (int), progress_total (int|null), progress_message (String),
+  processing_stats (JSON), processing_started_at / processing_completed_at (DateTime).
+
+## Watcher (ingestion/watcher.py)
+- run_job / process_user_upload aceptan progress_callback(current, total, message) y lo
+  invocan por etapa: convert (Docling) → chunk → embed (por lote, no por chunk) → persist.
+- Throttle: actualizar la fila como máximo una vez por lote/etapa (no por chunk).
+- processing_stats al completar (y lo acumulado al fallar): n_chunks, total_chars,
+  duración por etapa (ms), n_batches de embedding, embedding_model usado.
+
+## Exposición
+- El endpoint de estado de jobs existente (routers de ingesta) devuelve los campos nuevos.
+- El CLI de ING.0.2 usa el mismo callback para reportar progreso por consola en cargas masivas.
+
+## Tests (RED primero)
+# should_update_progress_per_embedding_batch
+# should_record_stage_timings_in_processing_stats
+# should_persist_partial_stats_on_failure
+# should_expose_progress_fields_in_job_status_endpoint
+# should_throttle_progress_writes_per_batch
+# should_report_progress_in_bulk_corpus_cli
+
+## Criterio de done
+- [ ] Migración aplicada (alembic current)
+- [ ] Carga del corpus de prueba mostrando progreso (salida del CLI en el cierre)
+```
+
+---
+
+### Prompt RAG.13 (RED/GREEN) — Test scenarios por chatbot (backend + UI admin mínima)
+
+**Modelo sugerido**: **Sonnet** — patrón LAMB test scenarios; CRUD + ejecución por pipeline real + UI enumerada.
+
+```
+# PROMPT RAG.13 (RED/GREEN) — Escenarios de prueba con veredicto humano
+# Deploy: edge (modelos y ejecución; la UI admin lo consume vía API)
+
+## ORM (operational_models.py — HubOperationalBase, keyed por chatbot_id)
+- HubTestScenario: chatbot_id, name, prompt, history (JSON|null), expectation_note (Text|null),
+  created_by, timestamps.
+- HubTestRun: scenario_id (FK CASCADE), executed_at, answer (Text), sources (JSON),
+  bypass_snapshot (JSON|null — captura de RAG.11), verdict ('good'|'bad'|'mixed'|null),
+  verdict_note, verdict_by.
+- Migración Alembic.
+
+## Endpoints (router nuevo, docstring Deploy: edge, registrado en _register_edge)
+- CRUD de escenarios por chatbot (scope admin).
+- POST /run: ejecuta el escenario por el PIPELINE REAL (CoreGraph completo, LLM incluido) y
+  guarda answer+sources; con ?capture_context=true adjunta además el bypass_snapshot
+  (reutiliza RAG.11 internamente).
+- PATCH /runs/{id}/verdict: registra el veredicto humano.
+- Aislamiento por chatbot_id en toda query (mismo patrón que el resto del módulo).
+
+## UI admin mínima (frontend/src/admin/) — contract-first
+- Página por chatbot: lista de escenarios, crear/editar, botón "Ejecutar", historial de runs
+  con respuesta + fuentes + (desplegable) contexto capturado, botones de veredicto good/bad/mixed.
+- Hooks Orval regenerados desde openapi.json; react-hook-form + zodResolver; i18n es/ca/en
+  (ninguna string hardcodeada).
+
+## Tests (RED primero)
+# backend — tests/modules/agents_hub/
+# should_crud_scenarios_scoped_by_chatbot
+# should_execute_scenario_through_real_pipeline     (LLM fake del harness de tests)
+# should_capture_bypass_snapshot_when_requested
+# should_record_human_verdict_on_run
+# should_reject_access_without_admin_scope
+# frontend — Vitest
+# should_render_scenarios_from_contract
+# should_run_scenario_and_show_answer_with_sources
+# should_submit_verdict
+
+## Criterio de done
+- [ ] Migración aplicada; Orval regenerado; tsc + Vitest verdes
+- [ ] Este prompt SÍ genera pruebas manuales (hay UI): .bat según CLAUDE.md al ejecutarlo
+```
+
+---
+
+### Prompt RAG.14 (RED/GREEN) — Feedback → huecos de corpus
+
+**Modelo sugerido**: **Opus** — clustering + integración con los contratos 9Q; decisiones de agregación abiertas.
+
+```
+# PROMPT RAG.14 (RED/GREEN) — Detección de huecos de contenido desde señales de fallo
+# Deploy: edge
+
+## Señales de entrada (ya existen tras RAG.2)
+- HubInteraction con feedback_score <= umbral (config del detector, default 2 sobre 5).
+- HubInteraction con fallback_reason IN ('quality_gate', 'citation') — la señal gratuita de
+  "no encontré nada" que persiste RAG.2.
+
+## Detector (ingestion/quality/gap_detector.py — integra el subsistema 9Q)
+- Ventana temporal configurable (default 30 días), por chatbot.
+- Embebe las queries de las interacciones-señal (embedding service existente) y clusteriza
+  reutilizando las utilidades de clustering de quality/semantic_detector.py.
+- Cluster con >= min_cluster_size (default 3) ⇒ HubContentFinding de tipo 'content_gap':
+  payload con queries representativas (máx. 5), recuento, rango de fechas y términos top.
+  Extensión del contrato/modelo de findings 9Q: finding a nivel chatbot (page_id nullable) —
+  migración Alembic + ajuste de contracts.py/findings_repo.py preservando los tests 9Q verdes.
+- Deduplicación: no crear finding nuevo si existe uno 'content_gap' abierto cuyo centroide
+  esté a distancia coseno < umbral del cluster nuevo (se actualiza su recuento).
+
+## Disparo
+- Comando manual (python -m ...quality.detect_gaps --chatbot-id) + endpoint admin POST
+  /hub/quality/gaps/analyze. NO se integra en el scheduler periódico 9Q en este prompt
+  (el scheduler arranca hoy con detectores vacíos; integrarlo es decisión operativa posterior).
+- Los findings aparecen en la cola de revisión 9Q existente del admin.
+
+## Tests (RED primero) — tests/modules/agents_hub/ (unit con embeddings fake deterministas)
+# should_collect_low_feedback_interactions_as_signals
+# should_collect_citation_and_gate_fallbacks_as_signals
+# should_cluster_similar_queries_into_one_gap
+# should_ignore_clusters_below_min_size
+# should_create_content_gap_finding_with_representative_queries
+# should_not_duplicate_open_finding_for_same_cluster
+# should_scope_analysis_by_chatbot_and_time_window
+# should_keep_existing_9q_finding_tests_green      (regresión de la extensión del contrato)
+
+## Criterio de done
+- [ ] Migración aplicada; suite 9Q completa verde tras la extensión del contrato
+- [ ] Ejecución del comando contra datos sembrados de prueba (salida en el cierre)
+```
+
+### Continuación tras el bloque RAG
+
+Sigue el orden acordado: resto del Bloque SEC (SEC.1-5, SEC.7) → Bloque CAL → Deploy GCP (septiembre). El hook LLM de contextual retrieval nivel 2 y la variante conversacional ampliada del dataset dorado quedan como candidatos post-deploy.
+
+---
+
