@@ -43,5 +43,7 @@ Antes de codificar, verifica si existe una librería Open Source que resuelva la
 
 ## 6\. Instrucciones de Flujo de Trabajo
 
-Seguiremos el **Índice de Prompts Atómicos (0.1 al 11.3)**. No avances a la siguiente fase hasta que la actual tenga una cobertura de tests superior al 80% y sea validada.
+Seguiremos el **Índice de Prompts Atómicos** del plan activo. No avances a la siguiente fase hasta que la actual tenga una cobertura de tests superior al 80% y sea validada.
+
+Los prompts se ejecutan de forma **autónoma y secuencial por bloques**: el agente encadena los prompts del bloque sin pedir confirmación entre ellos y solo informa al cerrarlo. La regla operativa vive en `CLAUDE.md` (§"Ejecución agéntica por bloques") y el detalle en `docs/METODOLOGIA_AGENTICA.md`. `CLAUDE.md` prevalece sobre este documento en caso de conflicto.
 

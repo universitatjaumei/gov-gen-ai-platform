@@ -9109,6 +9109,35 @@ Deploy: edge
 
 El handler valida que `public_api_key` coincide con el `chatbot_id` en la tabla. No crea `HubInteraction` con `user_id` (usuario anónimo); genera un UUID de sesión efímero.
 
+**Ampliación 2026-07-27 — la API key no basta: hay que comprobar el modo de acceso.**
+
+Tal como estaba escrito este prompt, generar una `public_api_key` bastaría para exponer **cualquier** chatbot, incluido uno de gestión interna. Con SEC.2.1 en el plan, el handler del widget debe pasar por las tres guardas compartidas, en este orden y sin reimplementar ninguna:
+
+```
+1. assert_chatbot_access(actor=None, chatbot, via='widget_api_key')   # SEC.2.1
+     -> 403 ACCESS_MODE_FORBIDDEN si access_mode != 'public_anon',
+        aunque la API key sea válida y corresponda al chatbot.
+2. assert_chatbot_available(session, chatbot, now)                    # SEC.4.1
+     -> 403 CHATBOT_UNAVAILABLE (caducado / fuera de ventana / presupuesto agotado),
+        con el unavailable_message del admin.
+3. assert_within_quota(session, actor=None, chatbot, via='widget_api_key')  # SEC.4
+     -> 429 con la cuota anon_ip_daily_token_quota, sujeto = IP.
+```
+
+La contabilidad de tokens (SEC.4) también aplica al camino anónimo: el `HubUsageCounter` se
+actualiza con `subject_type='ip'` y con `subject_type='chatbot'`, y el `HubInteraction`
+anónimo guarda `prompt_tokens`/`completion_tokens` igual que el autenticado.
+
+**Dependencias nuevas**: D.1 pasa a requerir **SEC.2.1**, **SEC.4** y **SEC.4.1** cerrados.
+
+**Tests añadidos**:
+```python
+# should_403_widget_when_chatbot_is_authenticated_mode   (API key válida, modo incorrecto)
+# should_403_widget_when_chatbot_expired
+# should_429_widget_when_ip_daily_quota_exceeded
+# should_record_anonymous_usage_under_ip_subject
+```
+
 **Cambios en el widget**:
 
 - `main.tsx`: leer `data-api-key` en lugar de `data-token`
@@ -11543,6 +11572,116 @@ CRITERIOS DE ACEPTACIÓN:
 
 ---
 
+### Prompt SEC.2.1 (RED/GREEN) — Modo de acceso por chatbot + identidad delegada
+
+**Modelo sugerido**: **Opus** — decide el modelo de visibilidad (enum + grupos SAML), refactoriza los tres caminos de conversación tras un único helper, y fija un contrato criptográfico de identidad delegada con riesgo de escalada si se diseña mal.
+
+**Objetivo**: Hoy `HubChatbot` solo tiene `is_active`; no existe forma de expresar "este chatbot es solo para personal autenticado" ni "solo para el grupo Gerencia". SEC.2 aísla **entre** organizaciones, pero **dentro** de una organización todos los chatbots quedan igual de accesibles. Además, el piloto con Open WebUI exige que el backend sepa **qué persona** pregunta cuando la petición llega por un cliente de confianza que porta un PAT de servicio: sin eso, la cuota por usuario de SEC.4 es inaplicable.
+
+**Origen**: revisión de planificación 2026-07-27 (chatbots de gestión para personal + límite de uso). El usuario eligió la **opción (a)**: propagación de identidad por cabecera firmada, no un PAT por usuario (que no escala a cientos de personas ni sobrevive a las bajas).
+
+**Dependencias**: requiere SEC.2 cerrado (`assert_org_access`, claim `organizacion_ids`). El endpoint del widget llega en **D.1**; aquí el helper se testea a nivel unitario con `via='widget_api_key'` y D.1 lo consume — este prompt **no** queda bloqueado por D.1.
+
+```
+# PROMPT SEC.2.1 (RED/GREEN) — Autorización por chatbot e identidad delegada
+# Deploy: edge (enforcement en el chat) + shared (modelo y helpers de auth)
+
+## PARTE 1 — Modo de acceso por chatbot
+
+### Modelo (agents_hub/database/config_models.py, HubChatbot)
+- `access_mode: Mapped[str]` String(20) NOT NULL default 'authenticated'
+  + CheckConstraint access_mode IN ('public_anon','authenticated','restricted')
+    - public_anon    -> conversable sin sesión, solo por el endpoint widget con API key (D.1)
+    - authenticated  -> exige JWT o PAT + pertenencia a la organización (SEC.2)
+    - restricted     -> lo anterior + rol en allowed_roles O grupo en allowed_saml_groups
+- `allowed_roles: Mapped[list[str]]` ARRAY(String) default list
+- `allowed_saml_groups: Mapped[list[str]]` ARRAY(String) default list
+- Decisión documentada: **no se crea tabla de grants**. El atributo de grupo ya llega en el
+  ACS SAML (bloque AUTH) y dos ARRAY cubren el caso del piloto. Si más adelante hace falta
+  granularidad por usuario individual, se añade tabla entonces; estos campos quedan como
+  atajo. No sobreingeniería ahora.
+- Migración Alembic **fail-closed**: todos los chatbots existentes -> 'authenticated'.
+  NO usar 'public_anon' como valor de migración: hoy no existe endpoint anónimo (llega en
+  D.1) y abrirlo por migración expondría el corpus sin que nadie lo haya decidido.
+
+### Helper único (core/auth/chatbot_access.py)
+- `assert_chatbot_access(actor: EffectiveActor | None, chatbot: HubChatbot, *, via: str) -> None`
+  - `via` ∈ {'session','widget_api_key'} — por dónde entró la petición.
+  - public_anon + via='widget_api_key' -> pasa sin actor.
+  - public_anon + via='session'        -> pasa (un chatbot abierto también es usable logueado).
+  - authenticated|restricted + via='widget_api_key' -> 403 ACCESS_MODE_FORBIDDEN.
+  - authenticated -> exige actor + assert_org_access(actor, chatbot.organizacion_id).
+  - restricted    -> lo anterior + (actor.role in allowed_roles OR
+                     intersección no vacía entre actor.saml_groups y allowed_saml_groups).
+                     Ambas listas vacías en modo restricted => solo superadmin (fail-closed).
+  - superadmin siempre pasa (comodín, coherente con SEC.2).
+- `UserInfo` añade `saml_groups: list[str]` (se rellena en el ACS SAML; vacío en login local).
+- Consumidores obligatorios: `hub_chat`, adaptador compatible-OpenAI (OWUI.1) y endpoint
+  widget (D.1). **Ningún endpoint construye la decisión a mano** (grep de cierre).
+
+### Router admin (hub_chatbots_router)
+- `access_mode`, `allowed_roles`, `allowed_saml_groups` en ChatbotRead/Create/Update.
+- Cambiar access_mode solo admin/superadmin (ya cubierto por require_admin).
+
+## PARTE 2 — Identidad delegada (actor firmado)
+
+Motivo: el Pipe de Open WebUI usa **un PAT de servicio**. Sin esto el backend solo ve al
+dueño del PAT, y la cuota por usuario de SEC.4 no puede existir.
+
+### Contrato (core/auth/delegated_actor.py)
+- Cabecera `X-GovGenAI-Actor`: JWT compacto firmado por el cliente de confianza.
+  HS256 con `DELEGATED_ACTOR_SECRET` (secreto compartido; RS256 se deja para cuando haya
+  más de un cliente delegante — decisión documentada, no implementar ahora).
+  Claims: `sub` (id estable del usuario en el cliente), `email`, `groups: list[str]`,
+  `iat`, `exp` (ventana corta, <= 300 s), `aud` = "govgenai-backend".
+- Nuevo scope `chat:onbehalf` en core/auth/pat/scopes.py (+ techo de rol superadmin/admin).
+  **Sin el scope la cabecera se ignora por completo**: no es error, simplemente el actor
+  efectivo es el dueño del PAT. Así un PAT robado sin ese scope no puede suplantar a nadie.
+- `resolve_effective_actor(request, principal) -> EffectiveActor`
+  con `EffectiveActor(subject_id, email, role, organizacion_ids, saml_groups, delegated: bool)`.
+  - PAT con scope `chat:onbehalf` + cabecera válida -> actor delegado.
+    **`organizacion_ids` se heredan del PAT, NUNCA de la cabecera** (si vinieran de la
+    cabecera, el cliente delegante podría escalar de organización). `saml_groups` sí
+    vienen de la cabecera (es lo que el IdP del cliente sabe y el backend no).
+  - Firma inválida, expirada, `aud` incorrecto -> 401 ACTOR_TOKEN_INVALID.
+  - Sesión humana JWT -> actor = el propio usuario, `delegated=False`.
+- `assert_chatbot_access` y la cuota de SEC.4 consumen **el actor efectivo**, no el principal.
+  Este es el punto de costura: SEC.4 se escribe sobre `resolve_effective_actor` desde el
+  principio, para que OWUI.1 no tenga que retrofitear la cuota por usuario.
+
+## Tests (RED primero)
+
+# tests/api/test_chatbot_access_mode.py
+# should_allow_anon_widget_only_when_public_anon
+# should_403_widget_key_on_authenticated_chatbot
+# should_403_authenticated_user_of_other_org              (se apoya en SEC.2)
+# should_allow_restricted_when_role_in_allowed_roles
+# should_allow_restricted_when_saml_group_matches
+# should_403_restricted_when_no_role_or_group_matches
+# should_403_restricted_when_lists_empty_and_not_superadmin
+# should_allow_superadmin_regardless_of_access_mode
+# should_default_existing_chatbots_to_authenticated_after_migration
+
+# tests/core/auth/test_delegated_actor.py
+# should_resolve_actor_from_signed_header_when_scope_present
+# should_ignore_actor_header_when_pat_lacks_onbehalf_scope
+# should_401_on_invalid_signature
+# should_401_on_expired_actor_token
+# should_401_on_wrong_audience
+# should_inherit_organizacion_ids_from_pat_not_from_header    <- anti-escalada, clave
+# should_use_session_user_as_actor_for_human_jwt
+
+## Criterios de cierre
+- [ ] Migración aplicada (`alembic upgrade head` + `alembic current`); chatbots existentes en 'authenticated'
+- [ ] grep: hub_chat, adaptador OpenAI y endpoint widget pasan TODOS por assert_chatbot_access
+- [ ] grep: ningún endpoint decide el acceso a mano
+- [ ] `DELEGATED_ACTOR_SECRET` añadido a `.env.example` y generado en `scripts/generate_env.sh` (11.1)
+- [ ] OpenAPI reexportado + Orval regenerado
+- [ ] Frontera edge/cloud respetada: los tres campos nuevos son configuración (HubConfigBase), sin contadores
+```
+
+---
+
 ### Prompt SEC.3 (RED/GREEN) — CORS por entorno [A4]
 
 **Modelo sugerido**: **Sonnet** — config declarativa.
@@ -11567,31 +11706,183 @@ CRITERIOS DE ACEPTACIÓN:
 
 ---
 
-### Prompt SEC.4 (RED/GREEN) — Rate limiting + cuotas de coste LLM [A5]
+### Prompt SEC.4 (RED/GREEN) — Rate limiting + contabilidad de tokens + cuotas multi-sujeto [A5]
 
-**Modelo sugerido**: **Sonnet** — patrón middleware/limiter conocido.
+**Modelo sugerido**: **Sonnet** — el limiter es patrón conocido y la cascada de cuotas se copia del patrón ya existente en `config_resolver.py`. Añade una migración, pero sin decisiones de diseño abiertas.
 
-**Objetivo**: Limitar login (fuerza bruta) y endpoints que consumen LLM (coste). Para un chatbot público esto es también control de gasto.
+**Objetivo**: Limitar login (fuerza bruta) y consumo de LLM (coste). Para un chatbot público es control de gasto; para los chatbots de gestión del piloto, control de consumo **por persona**.
+
+**Ampliado el 2026-07-27** (revisión de planificación con Open WebUI): la cuota pasa de *solo por chatbot/día* a **multi-sujeto en cascada**, y se añade la **contabilidad real de tokens** — que no existía en ningún prompt y sin la cual no hay cuota posible, solo conteo de peticiones.
+
+**Dependencias**: SEC.2.1 (el sujeto "usuario" es el **actor efectivo**, no el dueño del PAT).
 
 ```
-# PROMPT SEC.4 (RED/GREEN) — Rate limiting y cuotas
-# Deploy: shared
+# PROMPT SEC.4 (RED/GREEN) — Rate limiting, contabilidad de tokens y cuotas
+# Deploy: shared (limiter) + edge (contadores y cuotas: son datos operacionales de cliente)
 
-## Cambios
+## PARTE 1 — Rate limiting (sin cambios respecto al plan original)
 - Añadir slowapi (o limiter propio sobre Redis/memoria). Config por env
-  (RATE_LIMIT_LOGIN, RATE_LIMIT_CHAT). Clave: IP para login/widget anónimo; principal
-  autenticado para el resto.
+  (RATE_LIMIT_LOGIN, RATE_LIMIT_CHAT). Clave: IP para login/widget anónimo; actor efectivo
+  para el resto.
 - Aplicar a: /auth/*/login (bajo, p.ej. 10/min/IP con backoff),
   /hub/chat (por chatbot + por IP), ingestión (por organización).
-- Cuota de coste LLM por chatbot/día (contador en BD o cache) → 429 al superarla, con
-  cabecera Retry-After. Configurable por chatbot (default sensato).
 
-## Tests (RED primero) — tests/api/test_rate_limit.py
+## PARTE 2 — Contabilidad de tokens (prerrequisito de toda cuota)
+
+### HubInteraction (operational_models.py) — campos nuevos + migración
+- `prompt_tokens: Mapped[int | None]`
+- `completion_tokens: Mapped[int | None]`
+- `cost_estimated: Mapped[float | None]`   (según precio del HubLLMConfig usado)
+- Nullable: las interacciones históricas no tienen el dato y no se inventa.
+
+### Captura del uso real
+- Leer el usage del proveedor en el trayecto del grafo (callback/`response_metadata` de
+  LangChain). Si el proveedor no lo expone, estimar con el tokenizer y **marcarlo** en
+  `interaction_metadata.usage_source = 'provider'|'estimated'` — una cuota que se apoya en
+  una estimación silenciosa es una cuota que no se puede defender ante el usuario.
+- La escritura del usage va en el MISMO commit que la HubInteraction (hoy en
+  `api/v1/hub_chat.py`, tras RAG.2 en el CoreGraph). No un segundo write.
+
+### Contador operacional (operational_models.py) — modelo nuevo
+- `HubUsageCounter(HubOperationalBase)`:
+    subject_type: 'user'|'chatbot'|'organizacion'|'ip'
+    subject_id: String(255)
+    window_key: String(20)     -- '2026-07-27' (día), '2026-07' (mes), 'total' (acumulado)
+    tokens: int, cost: float, updated_at
+    UniqueConstraint(subject_type, subject_id, window_key)
+- UPSERT atómico (`ON CONFLICT ... DO UPDATE`), no read-modify-write: el chat es concurrente.
+- **Vive en HubOperationalBase, nunca en el chatbot**: es dato de consumo del cliente final,
+  no configuración, y no se sincroniza al cloud (P8). Un contador en HubChatbot rompería la
+  frontera edge/cloud.
+- Este contador lo reutiliza SEC.4.1 con `window_key='total'`.
+
+## PARTE 3 — Cuotas en cascada
+
+### Campos de configuración (cascada plataforma -> organización -> chatbot, patrón config_resolver.py)
+- En HubOrganizacion: `default_user_daily_token_quota`, `default_user_monthly_token_quota`,
+  `monthly_token_quota` (de la organización entera), `default_chatbot_daily_token_quota`
+- En HubChatbot: `user_daily_token_quota`, `chatbot_daily_token_quota`,
+  `anon_ip_daily_token_quota` (para el widget)
+- `None` en cualquier nivel = heredar; `0` = sin límite explícito. Distinguir los dos casos
+  (que `0` no signifique "bloqueado") es requisito de test.
+
+### Enforcement (un único punto)
+- `core/quotas.py`: `assert_within_quota(session, actor, chatbot, via) -> None`
+  Evalúa en orden y devuelve **413/429 en el primer sujeto agotado**, con
+  `Retry-After` y un cuerpo que diga QUÉ cuota se agotó
+  (`{"code":"QUOTA_EXCEEDED","subject":"user","window":"day","limit":N,"used":M}`).
+  Sujetos: usuario/día -> usuario/mes -> chatbot/día -> organización/mes -> IP/día (anónimo).
+- Llamado desde `hub_chat`, el adaptador OpenAI (OWUI.1) y el endpoint widget (D.1).
+  Mismo criterio que `assert_chatbot_access`: la regla vive en un sitio.
+- Se comprueba **antes** de invocar el LLM y se contabiliza **después**. Se acepta el
+  desbordamiento de una petición (no se pre-reserva presupuesto): decisión documentada,
+  reservar exigiría estimar el coste antes de generar.
+
+### Endpoint de consulta (para que el usuario sepa cuánto le queda)
+- `GET /api/v1/hub/usage/me` -> cuotas y consumo del actor efectivo. Deploy: edge.
+  Sin esto, un 429 es indistinguible de un fallo.
+
+## Tests (RED primero) — tests/api/test_rate_limit.py + tests/api/test_quotas.py
 # should_429_after_login_attempts_exceed_limit
 # should_reset_login_limit_after_window
-# should_429_chat_when_chatbot_daily_quota_exceeded
-# should_scope_limit_per_ip_for_anonymous_widget
 # should_not_limit_below_threshold
+# should_scope_limit_per_ip_for_anonymous_widget
+# should_persist_prompt_and_completion_tokens_on_interaction
+# should_mark_usage_source_when_estimated
+# should_upsert_usage_counter_atomically_under_concurrency
+# should_429_chat_when_chatbot_daily_quota_exceeded
+# should_429_chat_when_user_daily_token_quota_exceeded
+# should_429_chat_when_user_monthly_token_quota_exceeded
+# should_429_when_organizacion_monthly_quota_exceeded
+# should_cascade_quota_from_org_default_to_chatbot
+# should_treat_zero_as_unlimited_and_none_as_inherit
+# should_report_which_subject_exhausted_the_quota
+# should_charge_quota_to_delegated_actor_not_pat_owner      <- integra SEC.2.1
+# should_return_remaining_quota_on_usage_me
+
+## Criterios de cierre
+- [ ] Migración aplicada (`alembic upgrade head` + `alembic current`)
+- [ ] grep: los tres caminos de conversación pasan por assert_within_quota
+- [ ] Contadores en HubOperationalBase; ningún contador en tablas de HubConfigBase
+- [ ] OpenAPI reexportado + Orval regenerado (usage/me)
+```
+
+---
+
+### Prompt SEC.4.1 (RED/GREEN) — Ventana de vigencia y presupuesto acumulado por chatbot
+
+**Modelo sugerido**: **Sonnet** — campos de configuración, una guarda y estado derivado en la UI admin. Sin decisiones abiertas: el contador ya lo aporta SEC.4.
+
+**Objetivo**: Un chatbot público de campaña (plazo de matrícula, convocatoria, periodo de alegaciones) debe poder **caducar solo** y tener **techo de gasto total**, no solo diario. Hoy la única palanca es que un humano se acuerde de poner `is_active = false`.
+
+**Origen**: revisión de planificación 2026-07-27 — "límite de uso temporal para chatbots públicos".
+
+**Dependencias**: SEC.4 (`HubUsageCounter`, `assert_within_quota`).
+
+```
+# PROMPT SEC.4.1 (RED/GREEN) — Vigencia temporal y presupuesto total
+# Deploy: edge (enforcement) + shared (campos de configuración)
+
+## Campos de configuración (HubChatbot — HubConfigBase, sin contadores)
+- `valid_from: Mapped[datetime | None]`   DateTime(timezone=True), nullable
+- `valid_until: Mapped[datetime | None]`  DateTime(timezone=True), nullable
+- `total_token_budget: Mapped[int | None]` nullable (None = sin techo acumulado)
+- `unavailable_message: Mapped[str]` Text, default "" — texto que ve el ciudadano cuando el
+  chatbot no está disponible. Vacío -> mensaje genérico i18n del frontend.
+- Migración Alembic. Los chatbots existentes quedan con los cuatro campos nulos/vacíos =
+  comportamiento actual sin cambios.
+
+## Estado derivado, NO almacenado (decisión de diseño)
+- **No se añade `closed_reason` ni se voltea `is_active`.** El estado se calcula:
+    expired          <- valid_until  < now
+    not_yet_open     <- valid_from   > now
+    budget_exhausted <- HubUsageCounter(chatbot, 'total').tokens >= total_token_budget
+    available        <- resto
+- Razones: (1) un flag persistido se queda obsoleto y obliga a un job que lo refresque;
+  (2) el consumo acumulado es dato **operacional** y `HubChatbot` es config que se
+  sincroniza cloud->edge — guardar ahí el contador rompería la frontera (P8);
+  (3) `is_active` sigue significando lo que significa hoy (el admin lo apagó a mano),
+  sin mezclar dos conceptos en un booleano.
+
+## Enforcement (core/chatbot_availability.py)
+- `assert_chatbot_available(session, chatbot, now) -> None`
+  -> 403 `{"code":"CHATBOT_UNAVAILABLE","reason":"expired|not_yet_open|budget_exhausted",
+           "message": chatbot.unavailable_message or None}`
+- Se invoca en los tres caminos de conversación, **inmediatamente después de
+  `assert_chatbot_access` y antes de `assert_within_quota`** (primero "¿puedes hablar con
+  este bot?", luego "¿está abierto?", luego "¿te queda cuota?").
+- El 403 NO es un error genérico: lleva el motivo y el mensaje del admin, para que el
+  ciudadano lea "el plazo de matrícula terminó el 30 de septiembre" y no "Forbidden".
+
+## Superficie admin
+- Los cuatro campos en ChatbotRead/Create/Update + campo **de solo lectura**
+  `availability: {state, reason, tokens_used, total_token_budget}` en ChatbotRead,
+  calculado en el servidor (Contract-First: el frontend no recalcula el estado).
+- `frontend/src/admin`: badge de estado en la lista de chatbots (Disponible / Caducado /
+  Presupuesto agotado / Pendiente de apertura) iterando el contrato, más los campos en el
+  formulario. i18n es/ca/en.
+- **Aviso al admin**: se limita a que el estado sea visible en el panel y en la API. NO se
+  implementa email ni webhook: no existe infraestructura de notificaciones en el proyecto y
+  crearla aquí sería una feature no pedida. Si el piloto la exige, se planifica aparte.
+
+## Tests (RED primero) — tests/api/test_chatbot_availability.py
+# should_403_when_valid_until_in_the_past
+# should_403_when_valid_from_in_the_future
+# should_allow_when_now_inside_window
+# should_allow_when_window_fields_are_null            (comportamiento actual preservado)
+# should_403_when_total_token_budget_exhausted
+# should_use_total_window_counter_not_daily
+# should_return_admin_unavailable_message_in_403_body
+# should_expose_derived_availability_in_chatbot_read
+# should_not_persist_availability_state_in_db          (grep: sin closed_reason)
+# should_check_availability_after_access_and_before_quota   (orden de las guardas)
+
+## Criterios de cierre
+- [ ] Migración aplicada (`alembic upgrade head` + `alembic current`)
+- [ ] Los tres caminos de conversación invocan la guarda en el orden documentado
+- [ ] `availability` es de solo lectura y se calcula en el servidor
+- [ ] Verificado en navegador: badge de caducado visible en la lista de chatbots
+- [ ] OpenAPI reexportado + Orval regenerado
 ```
 
 ---
@@ -11930,6 +12221,8 @@ CRITERIOS DE ACEPTACIÓN:
 > **Posición en el orden de ejecución** (acordada 2026-07-15): tras `ING.0` + pruebas manuales con corpus de prueba, **antes** del resto del Bloque SEC. El corpus de prueba ya cargado es insumo del dataset dorado (RAG.1).
 >
 > **Estado**: ✅ relación de prompts aprobada y ✅ **detalle verbatim completado** (2ª pasada, 2026-07-15). Bloque listo para ejecutar cuando llegue su turno en el orden.
+>
+> **Lente de mantenibilidad (añadida 2026-07-24)**: `docs/RAG_SUSTITUCION_DEPENDENCIAS.md` reencuadra este bloque + el Bloque ING como "código propio → dependencia madura", derivado de `docs/DECISION_OPENWEBUI_CARCASA_CHAT.md` §6 (RAG/ingesta se queda en el perímetro; el alivio de mantenimiento viene de apoyar las **primitivas** en librerías, no de mover nada a OWUI). Clasificación: **✅ ya apoyado, no tocar** (chunker→`langchain-text-splitters`, embeddings→`sentence-transformers`, PDF→`docling`); **♻️ reinventado, sustituir** (`keyword_search` ILIKE→FTS `tsvector` = **RAG.4**); **➕ hueco, añadir** (HNSW=**RAG.3**, reranker `bge-reranker-v2-m3` vía `sentence-transformers` ya instalada=**RAG.6**, parent-child=**RAG.8**, multi-formato en Docling=Bloque ING); **🔒 diferencial, no sustituir nunca** (`superseded`/P9, aislamiento `owner_id`, contrato de citas `sources`/P6, `hasher`, `quality/*`). **Anti-patrón**: no adoptar LlamaIndex/Haystack como orquestador (rompería la gobernanza tejida en el SQL). **80 % del valor**: RAG.4 + RAG.6.
 
 ### Propósito del bloque
 
@@ -12620,6 +12913,264 @@ contrato EvidenceItem.
 ### Continuación tras el bloque RAG
 
 Sigue el orden acordado: resto del Bloque SEC (SEC.1-5, SEC.7) → Bloque CAL → Deploy GCP (septiembre). El hook LLM de contextual retrieval nivel 2 y la variante conversacional ampliada del dataset dorado quedan como candidatos post-deploy.
+
+---
+
+## Bloque OWUI — Carcasa de chat desechable: adaptador compatible-OpenAI + Pipe (post-deploy, PENDIENTE)
+
+> **Contexto**: derivado de `docs/DECISION_OPENWEBUI_CARCASA_CHAT.md`. Open WebUI se adopta como carcasa de chat **desechable e intercambiable** para la capa conversacional; el backend sigue siendo la fuente de verdad. Regla de acoplamiento: **OWUI llama HACIA el backend (API compatible-OpenAI); la gobernanza NUNCA vive en OWUI.** No aplica a expedientes (Fase 3) ni a informes formales, que mantienen interfaz propia.
+>
+> **Posición en el orden de ejecución** (acordada 2026-07-24): **tras Deploy GCP**, como spike/comparación para el piloto de septiembre. El frontend React de chat ya existe y es la línea de comparación; este bloque levanta la carcasa OWUI sobre el MISMO backend desplegado. (La decisión §9 contempla adelantarlo si se quisiera descartar trabajo de chat-UI en CAL; el orden acordado aquí es post-deploy.)
+>
+> **Estado**: relación de prompts (1ª pasada, 2026-07-24). Pendiente 2ª pasada de detalle verbatim cuando llegue su turno.
+
+### Propósito del bloque
+
+1. Exponer una **superficie compatible-OpenAI** (`/v1/models`, `/v1/chat/completions`) sobre el grafo de chat existente, sin reimplementar RAG ni gobernanza.
+2. Preservar el **contrato de citas (P6)** y la **anonimización (P7)** en el trayecto del backend, nunca en la carcasa.
+3. Entregar un **Pipe delgado** de Open WebUI (transporte + presentación) y la guía de despliegue edge (P8).
+4. Habilitar la **comparación UX** React vs OWUI sobre idéntico backend (insumo de la decisión de carcasa).
+
+### Decisiones de diseño
+
+- **El adaptador es traducción de protocolo, no lógica.** Reusa el mismo grafo que `hub_chat.py` (CoreGraph tras RAG.2); si duplica retrieval, generación o filtrado, está mal.
+- **Un chatbot = un "model" de OpenAI.** `/v1/models` lista los chatbots visibles al PAT; el campo `model` de la petición resuelve a `chatbot_id`.
+- **Auth máquina por PAT** con scope nuevo `chat:completions` (servir a usuarios finales), distinto de `chat:test` (superficie de prueba admin). La autorización usuario↔org↔chatbot del Bloque SEC sigue aplicando.
+- **La gobernanza no se toca ni se reimplementa**: P6/P7/P9 se heredan del grafo. Ni el adaptador ni el Pipe pueden añadir ni saltarse controles.
+- **Deploy: edge** para el adaptador; el Pipe vive en OWUI (edge). OWUI y su BD son dato operacional edge (P8), no sincronizado al cloud.
+
+### Mapa de ejecución
+
+| # | Prompt | Título | Depende de | Modelo sugerido |
+|---|--------|--------|------------|-----------------|
+| 1 | OWUI.1 | Superficie compatible-OpenAI (`/v1/models` + `/v1/chat/completions`) sobre el grafo | RAG.2 (grafo consolidado), AUTH ✅ | **Opus** |
+| 2 | OWUI.2 | Citas (P6) y anonimización (P7) en la respuesta compatible-OpenAI | OWUI.1 | **Opus** |
+| 3 | OWUI.3 | Pipe delgado de OWUI + despliegue edge + validación e2e de gobernanza | OWUI.2 | Sonnet |
+
+### Reglas duras del bloque
+
+- Prohibido reimplementar retrieval/generación/anonimización en el adaptador o el Pipe: se reusa el grafo (grep de ausencia de llamadas directas a `retriever`/`model_factory`/estrategias en el adaptador).
+- Sin scope muerto: `chat:completions` se consume en OWUI.1 o no se añade.
+- El adaptador debe producir gobernanza **idéntica** a `hub_chat` para la misma entrada (test de equivalencia, OWUI.2).
+- Todo router nuevo etiquetado `Deploy: edge` y registrado en `_register_edge`.
+
+### Prompts del bloque (relación — 1ª pasada 2026-07-24)
+
+---
+
+### Prompt OWUI.1 (RED/GREEN) — Superficie compatible-OpenAI sobre el grafo
+
+**Modelo sugerido**: **Opus** — traducción de protocolo SSE↔OpenAI con decisiones de mapeo (chunks de streaming, historial, model→chatbot).
+
+```
+# PROMPT OWUI.1 (RED/GREEN) — /v1/models + /v1/chat/completions compatible-OpenAI
+# Deploy: edge
+
+## Router nuevo (server/app/api/v1/openai_compat.py) — prefix /v1, Deploy: edge
+- GET /v1/models: lista los chatbots visibles al PAT como objetos OpenAI
+  {id: <chatbot_id o slug>, object: "model", owned_by: <organizacion>}.
+- POST /v1/chat/completions: acepta {model, messages:[{role,content}], stream: bool}
+  (tolerar e ignorar temperature/max_tokens/etc.).
+  - Resolver model -> chatbot_id (404 si no visible al PAT).
+  - Tomar el último mensaje 'user' como message; pasar el historial previo tal cual
+    (insumo de RAG.10 query rewriting — NO recortar aquí).
+  - Invocar EL MISMO grafo que hub_chat.py (CoreGraph tras RAG.2). Prohibido instanciar
+    retriever/model_factory/estrategias directamente.
+
+## Streaming (stream=true) — SSE compatible-OpenAI
+- Traducir eventos internos -> chunks OpenAI:
+  token{delta} -> {object:"chat.completion.chunk", choices:[{delta:{content}}]}.
+  done -> chunk final finish_reason "stop" + linea [DONE].
+  status -> se omite. error -> chunk de error OpenAI.
+- Reusar _SSE_HEADERS de hub_chat.
+
+## No-streaming (stream=false)
+- Acumular tokens -> {object:"chat.completion", choices:[{message:{role:"assistant",content}}],
+  usage?} (usage best-effort si el grafo lo expone; si no, omitir).
+
+## Auth (server/app/core/auth/pat/scopes.py)
+- Añadir CHAT_COMPLETIONS = "chat:completions" a ALL_SCOPES + techo de rol
+  (superadmin/admin, mismo criterio que CHAT_TEST). Endpoint con require_scopes("chat:completions").
+- Reusar get_current_user; la autorización usuario<->org<->chatbot del Bloque SEC aplica igual
+  que en hub_chat (extraer helper compartido, no duplicar reglas).
+
+## Actor efectivo y guardas (ampliación 2026-07-27)
+
+El Pipe de OWUI usa **un PAT de servicio**: sin resolver el actor, todo el consumo del piloto
+se cargaría a un único sujeto y la cuota por usuario sería inútil. El adaptador **no** implementa
+nada de esto: consume los helpers de SEC.2.1/SEC.4/SEC.4.1.
+
+- `actor = resolve_effective_actor(request, principal)` (SEC.2.1) al principio del handler.
+  El PAT del Pipe debe portar `chat:onbehalf` además de `chat:completions`.
+- Guardas, en el mismo orden que hub_chat y el widget:
+    assert_chatbot_access(actor, chatbot, via='session')
+    assert_chatbot_available(session, chatbot, now)
+    assert_within_quota(session, actor, chatbot, via='session')
+- `GET /v1/models` lista **solo los chatbots que `assert_chatbot_access` permite al actor
+  efectivo** — no "todos los del PAT". Así el usuario de OWUI ve exactamente lo que puede
+  usar y **OWUI no decide nada**: no se usan sus Groups para autorizar.
+- Traducción de errores al formato OpenAI (si no, OWUI muestra un fallo opaco):
+    429 QUOTA_EXCEEDED    -> {"error":{"type":"rate_limit_exceeded","message":<qué cuota, cuánto queda>}}
+    403 CHATBOT_UNAVAILABLE -> {"error":{"type":"invalid_request_error","message":<unavailable_message>}}
+    403 ACCESS_MODE_FORBIDDEN / 401 ACTOR_TOKEN_INVALID -> error OpenAI equivalente, sin filtrar
+    detalles internos de tenencia.
+  En streaming, el error se emite como chunk de error + `[DONE]`, no cortando la conexión.
+- El `usage` de la respuesta no-streaming se rellena con los tokens reales de SEC.4 cuando el
+  proveedor los expone (deja de ser "best-effort" en ese caso).
+
+## Registro
+- main.py: _register_edge; docstring "Deploy: edge".
+
+## Tests (RED primero) — tests/modules/agents_hub/integration/test_openai_compat.py
+# should_list_visible_chatbots_as_openai_models
+# should_map_model_field_to_chatbot_id
+# should_404_when_model_not_visible_to_pat
+# should_stream_openai_chunks_with_content_deltas
+# should_end_stream_with_stop_and_done_sentinel
+# should_return_chat_completion_object_when_not_streaming
+# should_require_chat_completions_scope
+# should_invoke_same_graph_as_hub_chat            (spy: sin acceso directo a retriever)
+# should_pass_history_messages_through
+# --- ampliación 2026-07-27 ---
+# should_list_only_chatbots_allowed_by_access_mode        (authenticated/restricted respetados)
+# should_hide_public_anon_only_chatbots_from_models_list_when_actor_lacks_org
+# should_charge_usage_to_delegated_actor_not_pat_owner
+# should_translate_quota_429_to_openai_rate_limit_error
+# should_translate_unavailable_403_to_openai_invalid_request
+# should_emit_error_chunk_and_done_when_failing_mid_stream
+# should_not_leak_tenancy_details_in_error_messages
+
+## Criterio de done
+- [ ] Un cliente OpenAI genérico (SDK openai apuntado al backend) obtiene respuesta en stream
+- [ ] Scope chat:completions consumido; sin scope muerto
+- [ ] grep: el adaptador no importa VectorRetrievalStrategy/model_factory directamente
+- [ ] grep: el adaptador no reimplementa acceso, disponibilidad ni cuota — solo llama a los helpers
+- [ ] Dos usuarios distintos vía el mismo PAT consumen cuotas distintas (verificado en test)
+```
+
+---
+
+### Prompt OWUI.2 (RED/GREEN) — Citas (P6) y anonimización (P7) en la respuesta compatible-OpenAI
+
+**Modelo sugerido**: **Opus** — el punto donde la gobernanza cruza a la carcasa; decisiones de contrato.
+
+```
+# PROMPT OWUI.2 (RED/GREEN) — sources->citations + preservación de anonimización
+# Deploy: edge
+
+## Citas (P6) — mapeo del contrato interno a la respuesta OpenAI
+- El 'done' interno lleva sources[]. Emitirlas en un formato consumible por el Pipe:
+  campo custom en el chunk final (p.ej. choices[].delta.sources) y/o al estilo OWUI.
+  Documentar EXACTAMENTE el formato que el Pipe de OWUI.3 espera.
+- Enforce del contrato de disponibilidad: si el grafo devuelve respuesta SIN fuentes
+  verificables -> respuesta de indisponibilidad (la que ya produce el grafo), NUNCA texto
+  libre. El adaptador no puede saltarse este control.
+
+## Anonimización (P7) — se ejecuta en el grafo, no en el adaptador ni en el Pipe
+- El adaptador pasa por el MISMO trayecto que hub_chat (RunAnonymizationContext / hooks
+  pre/post-LLM, Fase 13) según lo aplique el grafo. No se anonimiza en el adaptador.
+- No exponer mapas de reversión en la respuesta ni en trazas enviadas al cloud (P8).
+
+## Test de equivalencia de gobernanza (clave del bloque)
+- Para una misma entrada, el adaptador y hub_chat producen: mismas sources, mismo
+  comportamiento de indisponibilidad y misma anonimización del texto que llega al LLM.
+
+## Tests (RED primero) — test_openai_compat_governance.py
+# should_expose_sources_in_openai_response
+# should_return_unavailability_when_no_verifiable_sources
+# should_not_emit_free_text_without_sources
+# should_apply_same_anonymization_path_as_hub_chat
+# should_not_leak_reversal_map_in_response_or_cloud_trace
+# should_match_hub_chat_governance_for_same_input   (equivalencia)
+
+## Criterio de done
+- [ ] Respuesta sin fuentes -> indisponibilidad, verificado por el cliente OpenAI
+- [ ] Entrada con PII -> el LLM recibe texto anonimizado (igual que hub_chat)
+- [ ] Formato de citas documentado para OWUI.3
+```
+
+---
+
+### Prompt OWUI.3 (RED/GREEN) — Pipe delgado + despliegue edge + validación e2e
+
+**Modelo sugerido**: **Sonnet** — Pipe de transporte + guía de despliegue + checklist e2e.
+
+```
+# PROMPT OWUI.3 — Pipe delgado de Open WebUI + despliegue edge + validación
+# Deploy: edge (OWUI vive en el edge)
+
+## Pipe/Function de OWUI (owui/pipe_govhub.py, versionado en este repo)
+- Function tipo "pipe" que llama a POST {BACKEND}/v1/chat/completions con el PAT
+  (scopes chat:completions + chat:onbehalf), en streaming, y mapea el formato de citas de
+  OWUI.2 al mecanismo de citas/sources de Open WebUI.
+- SIN lógica de gobernanza: solo transporte y presentación. Prohibido anonimizar, filtrar o
+  decidir disponibilidad en el Pipe (grep de ausencia).
+- Config del Pipe: BACKEND_URL, PAT (secreto), ACTOR_SIGNING_SECRET (secreto), timeout. Nada más.
+
+## Identidad delegada (ampliación 2026-07-27 — decisión (a) del usuario)
+- El Pipe construye la cabecera `X-GovGenAI-Actor` a partir del contexto `__user__` que le
+  entrega OWUI (id, email, y grupos si están disponibles) y la firma con
+  `ACTOR_SIGNING_SECRET` (HS256, `exp` <= 300 s, `aud` = "govgenai-backend").
+- **Esto no es gobernanza, es identificación de transporte**: el Pipe declara *quién*
+  pregunta; el backend decide *qué puede hacer* (SEC.2.1) y *cuánto le queda* (SEC.4). El
+  Pipe no consulta cuotas ni interpreta el 429: solo lo muestra.
+- Alternativa descartada: un PAT por usuario. No escala a cientos de personas ni sobrevive a
+  las bajas, y multiplicaría los secretos a rotar.
+- Si el Pipe no firma la cabecera (o el PAT no tiene `chat:onbehalf`), el backend carga todo
+  el consumo al dueño del PAT: **el despliegue queda funcional pero sin cuota por persona**.
+  Debe verificarse explícitamente en el checklist, no asumirse.
+
+## Despliegue (docs/OWUI_INTEGRATION.md)
+- OWUI dentro del perímetro edge; su BD (conversaciones/ficheros) es dato operacional edge (P8),
+  no sincronizado al cloud. Versión de OWUI fijada y probada antes de actualizar.
+- SSO SAML compartido para humanos (AUTH); PAT solo para el Pipe.
+- Cómo dar de alta un chatbot como "model" en OWUI.
+- **Sección obligatoria "Lo que NO se usa de Open WebUI, y por qué"** (si no se escribe,
+  alguien lo intentará dentro de seis meses):
+    - **Groups/RBAC de OWUI para autorizar chatbots** -> NO. La autorización es gobernanza y
+      vive en `assert_chatbot_access` (SEC.2.1). OWUI solo muestra lo que `/v1/models`
+      devuelve. Además su modelo de permisos es aditivo y sin "deny", así que no puede
+      expresar `restricted` fail-closed.
+    - **LiteLLM de sidecar para cuotas por usuario** -> NO. Duplicaría `model_factory`,
+      añadiría una pieza más al edge y sacaría el control de gasto del perímetro auditado.
+      Las cuotas viven en SEC.4.
+    - **Plugins de token-tracking de terceros dentro de OWUI** -> NO. Es la Opción B ya
+      descartada en `docs/DECISION_OPENWEBUI_CARCASA_CHAT.md` §3: pone gobernanza dentro del
+      ciclo de releases de un tercero.
+    - Contexto: las cuotas por usuario **no existen de forma nativa en OWUI** (peticiones
+      abiertas upstream), de ahí que la tentación de resolverlas allí sea real.
+
+## Validación e2e (checklist; el Pipe corre fuera de la suite pytest)
+- [ ] Citas visibles en la UI de OWUI, resolubles a su fuente (P6).
+- [ ] Entrada con PII: en trazas, el LLM recibió texto anonimizado (P7).
+- [ ] Sin PII ni mapas de reversión en trazas enviadas al cloud (P8).
+- [ ] Respuesta sin fuentes -> indisponibilidad también en OWUI.
+- [ ] Comparación UX React vs OWUI sobre el mismo backend (notas para la decisión de carcasa).
+- [ ] **Un chatbot en modo `authenticated` de otra organización NO aparece en el selector de
+      modelos de OWUI** (el filtrado de `/v1/models` funciona de verdad).
+- [ ] **Dos usuarios distintos de OWUI consumen cuotas distintas** con el mismo PAT del Pipe:
+      agotar la cuota del usuario A no afecta al usuario B (verifica la cadena completa
+      Pipe -> cabecera firmada -> resolve_effective_actor -> HubUsageCounter).
+- [ ] Al agotar la cuota, OWUI muestra un mensaje legible de límite alcanzado, no un fallo opaco.
+- [ ] Un chatbot caducado (`valid_until` pasado) muestra en OWUI el `unavailable_message` del admin.
+
+## Tests (RED primero) — lo testeable del lado backend/formato
+# should_document_citation_format_consumed_by_pipe
+# should_reject_pipe_config_without_pat
+# should_reject_pipe_config_without_actor_signing_secret
+# should_sign_actor_header_from_owui_user_context
+# should_not_contain_governance_logic_in_pipe        (grep: sin anonimización/cuota/filtrado)
+
+## Criterio de done
+- [ ] Pipe funcional contra el backend desplegado; citas visibles en OWUI
+- [ ] docs/OWUI_INTEGRATION.md con la guía de despliegue edge y la sección "Lo que NO se usa"
+- [ ] Checklist e2e de gobernanza superado y anotado
+- [ ] Cuota por persona verificada end-to-end (no solo por PAT)
+```
+
+### Continuación tras el bloque OWUI
+
+Con la carcasa OWUI validada sobre el backend desplegado, la decisión de qué carcasa(s) sirve cada caso de uso se toma con datos del piloto (ver `docs/DECISION_OPENWEBUI_CARCASA_CHAT.md` §9). Expedientes (Fase 3) e informes formales mantienen interfaz propia.
 
 ---
 
