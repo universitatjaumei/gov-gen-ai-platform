@@ -42,7 +42,11 @@ _AUDITOR = ScriptSecurityAuditor()
 
 # Directorio para ficheros temporales del sandbox. En producción se monta como
 # tmpfs vía docker-compose (SBX.4) con tamaño máximo.
-_TMP_DIR = Path(os.environ.get("SANDBOX_TMP_DIR", tempfile.gettempdir())) / "sandbox"
+# `or` en vez de os.environ.get(k, tempfile.gettempdir()): el segundo
+# argumento de .get() se evalúa siempre (aunque la clave exista), y
+# tempfile.gettempdir() falla bajo el filesystem read_only del contenedor si
+# SANDBOX_TMP_DIR no está definida — con `or` solo se llama si hace falta.
+_TMP_DIR = Path(os.environ.get("SANDBOX_TMP_DIR") or tempfile.gettempdir()) / "sandbox"
 _TMP_DIR.mkdir(parents=True, exist_ok=True)
 
 _STDERR_CAP = 500

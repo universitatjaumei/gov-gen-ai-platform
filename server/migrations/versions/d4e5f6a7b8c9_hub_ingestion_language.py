@@ -16,11 +16,19 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _table_exists(table: str) -> bool:
+    return table in sa.inspect(op.get_bind()).get_table_names()
+
+
 def upgrade() -> None:
-    op.add_column(
-        "hub_ingestion_sources",
-        sa.Column("language", sa.String(10), nullable=True),
-    )
+    # hub_ingestion_sources no existe en una instalación nueva: la crea código
+    # fuera de esta cadena de migraciones y 9Q.0 (t1c2d3e4f5g6) la retira. En
+    # instalaciones existentes donde sí está presente, se le añade la columna.
+    if _table_exists("hub_ingestion_sources"):
+        op.add_column(
+            "hub_ingestion_sources",
+            sa.Column("language", sa.String(10), nullable=True),
+        )
     op.add_column(
         "hub_ingestion_jobs",
         sa.Column("language", sa.String(10), nullable=True),
@@ -29,4 +37,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column("hub_ingestion_jobs", "language")
-    op.drop_column("hub_ingestion_sources", "language")
+    if _table_exists("hub_ingestion_sources"):
+        op.drop_column("hub_ingestion_sources", "language")

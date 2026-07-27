@@ -38,6 +38,11 @@ ENV PATH="/app/server/.venv/bin:$PATH"
 ENV PYTHONPATH="/app"
 ENV PYTHONUNBUFFERED=1
 
+# hub_themes_router crea data/themes (ruta relativa a WORKDIR) al importarse;
+# /app es de root hasta aquí, así que appuser necesita este directorio ya
+# creado y con permisos antes de arrancar (si no, PermissionError en el import).
+RUN mkdir -p /app/data && chown -R appuser:appuser /app/data
+
 USER appuser
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \

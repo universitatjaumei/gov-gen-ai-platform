@@ -1,3 +1,11 @@
+# Nombre de proyecto explícito: sin esto, docker-compose.yml (dev) y
+# docker-compose.prod.yml comparten por defecto el nombre derivado del
+# directorio ("ai_agents_hub") y Compose puede recrear/eliminar contenedores
+# del otro fichero al levantar cualquiera de los dos (visto en Fase 11.2:
+# `docker compose -f docker-compose.yml up postgres` recreó el postgres de
+# producción). Nombres distintos aíslan completamente ambos proyectos.
+name: govgenai-dev
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -128,6 +136,8 @@ services:
       context: ./services/script_sandbox
       dockerfile: Dockerfile
     container_name: govgenai_script_sandbox
+    environment:
+      SANDBOX_TMP_DIR: /tmp/sandbox
     networks:
       - sandbox-net
     read_only: true
