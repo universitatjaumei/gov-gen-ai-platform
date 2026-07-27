@@ -149,6 +149,11 @@ STORAGE_BUCKET=${STORAGE_BUCKET}
 MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
 
+# === LÍMITES DE SUBIDA (SEC.6) ===
+MAX_UPLOAD_MB=10
+# 0 = sin límite de documentos por chatbot
+MAX_DOCUMENTS_PER_CHATBOT=0
+
 # === CONECTIVIDAD INSTITUCIONAL (servidor MCP — mcp_server/) ===
 # El servidor MCP es un proceso aparte (cliente stdio para Claude Code / IDEs).
 # Emite un Personal Access Token desde /hub/access-tokens tras el primer login

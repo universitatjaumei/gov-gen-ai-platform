@@ -17,12 +17,17 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user
 from server.app.core.auth import UserInfo
 from server.app.core.storage import FsspecStorageService, get_storage_service
+from server.app.core.uploads import (
+    UploadKind,
+    assert_within_document_quota,
+    validate_upload,
+)
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.operational_models import (
     HubDocument,
@@ -196,20 +201,19 @@ async def upload_document(
     storage: FsspecStorageService = Depends(get_storage_service),
 ):
     """Sube un documento y lanza su ingestión en background."""
-    if file.content_type not in ("application/pdf",):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Solo se admiten archivos PDF.",
-        )
+    # Validación compartida (SEC.6): extensión + magic bytes + corte por tamaño
+    # durante la lectura. No se mira content_type: lo fija el cliente y es
+    # spoofeable. El límite sale de MAX_UPLOAD_MB.
+    validado = await validate_upload(file, kind=UploadKind.PDF)
+    content = validado.read()
+    validado.close()
 
-    # Validar tamaño (10 MB). Leer todo de una vez para verificar antes de persistir.
-    max_size = 10 * 1024 * 1024
-    content = await file.read(max_size + 1)
-    if len(content) > max_size:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="El archivo supera el límite de 10 MB.",
-        )
+    documentos_actuales = await session.scalar(
+        select(func.count())
+        .select_from(HubIngestionJob)
+        .where(HubIngestionJob.chatbot_id == chatbot_id)
+    )
+    assert_within_document_quota(documentos_actuales or 0)
 
     # Generar el UUID explícitamente para poder construir la storage key antes del commit
     # (mapped_column default= es un default SQL, no Python; job.id sería None hasta el flush)

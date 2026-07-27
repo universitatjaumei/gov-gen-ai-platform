@@ -5,11 +5,12 @@ Deploy: edge
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user
 from server.app.core.auth import UserInfo
+from server.app.core.uploads import UploadKind, validate_upload
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
 from server.app.modules.agents_hub.services.embedding_service import get_embedding_service
@@ -28,19 +29,18 @@ async def user_upload(
 
     Los chunks creados son visibles únicamente para el usuario que los subió.
     """
-    if file.content_type not in ("application/pdf",):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Solo se admiten archivos PDF.",
-        )
+    # Validación compartida (SEC.6): extensión + magic bytes + corte por tamaño
+    # durante la lectura. No se mira content_type: lo fija el cliente.
+    validado = await validate_upload(file, kind=UploadKind.PDF)
 
+    import shutil
     import tempfile
     from pathlib import Path
 
-    content = await file.read()
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        tmp.write(content)
+        shutil.copyfileobj(validado, tmp)
         tmp_path = tmp.name
+    validado.close()
 
     try:
         watcher = IngestionWatcher(

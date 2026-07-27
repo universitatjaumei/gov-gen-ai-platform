@@ -42,6 +42,9 @@ class Settings:
     saml_group_role_map: str = ""
     saml_default_role: str = "user"
     saml_frontend_return_url: str = ""
+    # Subidas (SEC.6) — límite de tamaño y cuota de documentos por chatbot
+    max_upload_mb: int = 10
+    max_documents_per_chatbot: int = 0  # 0 = sin límite
 
     @property
     def is_dev_mode(self) -> bool:
@@ -84,4 +87,6 @@ def get_settings() -> Settings:
         saml_group_role_map=os.getenv("SAML_GROUP_ROLE_MAP", ""),
         saml_default_role=os.getenv("SAML_DEFAULT_ROLE", "user"),
         saml_frontend_return_url=os.getenv("SAML_FRONTEND_RETURN_URL", ""),
+        max_upload_mb=int(os.getenv("MAX_UPLOAD_MB", "10")),
+        max_documents_per_chatbot=int(os.getenv("MAX_DOCUMENTS_PER_CHATBOT", "0")),
     )
