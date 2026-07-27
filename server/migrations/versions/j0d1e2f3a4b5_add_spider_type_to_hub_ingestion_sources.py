@@ -19,13 +19,22 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _table_exists(table: str) -> bool:
+    return table in inspect(op.get_bind()).get_table_names()
+
+
 def _column_exists(table: str, column: str) -> bool:
     cols = [c["name"] for c in inspect(op.get_bind()).get_columns(table)]
     return column in cols
 
 
 def upgrade() -> None:
-    if not _column_exists("hub_ingestion_sources", "spider_type"):
+    # hub_ingestion_sources no existe en una instalación nueva (9Q.0 la retira
+    # de la cadena de migraciones); esta columna solo aplica a instalaciones
+    # existentes donde la tabla aún esté presente.
+    if _table_exists("hub_ingestion_sources") and not _column_exists(
+        "hub_ingestion_sources", "spider_type"
+    ):
         op.add_column(
             "hub_ingestion_sources",
             sa.Column(
@@ -38,5 +47,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    if _column_exists("hub_ingestion_sources", "spider_type"):
+    if _table_exists("hub_ingestion_sources") and _column_exists(
+        "hub_ingestion_sources", "spider_type"
+    ):
         op.drop_column("hub_ingestion_sources", "spider_type")

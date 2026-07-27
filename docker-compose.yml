@@ -1,3 +1,11 @@
+# Nombre de proyecto explícito: sin esto, docker-compose.yml (dev) y
+# docker-compose.prod.yml comparten por defecto el nombre derivado del
+# directorio ("ai_agents_hub") y Compose puede recrear/eliminar contenedores
+# del otro fichero al levantar cualquiera de los dos (visto en Fase 11.2:
+# `docker compose -f docker-compose.yml up postgres` recreó el postgres de
+# producción). Nombres distintos aíslan completamente ambos proyectos.
+name: govgenai-dev
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -128,6 +136,8 @@ services:
       context: ./services/script_sandbox
       dockerfile: Dockerfile
     container_name: govgenai_script_sandbox
+    environment:
+      SANDBOX_TMP_DIR: /tmp/sandbox
     networks:
       - sandbox-net
     read_only: true
@@ -159,8 +169,16 @@ networks:
     driver: bridge
     internal: false  # en dev, false para permitir build/pull; en prod usar internal: true
 
+# Los nombres van pinchados explícitamente: Compose prefija los volúmenes con el
+# nombre de proyecto, así que sin `name:` un cambio de `name:` (o del directorio)
+# deja los datos huérfanos montando un volumen vacío. Estos son los volúmenes
+# históricos de desarrollo; no renombrarlos sin migrar los datos primero.
 volumes:
   postgres_data:
+    name: ai_agents_hub_postgres_data
   minio_data:
+    name: ai_agents_hub_minio_data
   clickhouse_data:
+    name: ai_agents_hub_clickhouse_data
   redis_data:
+    name: ai_agents_hub_redis_data

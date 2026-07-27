@@ -70,6 +70,7 @@ jobs:
             tests/unit/test_jwt_handler.py \
             tests/unit/test_auth_context.py \
             tests/api/test_role_context.py \
+            tests/infra/ \
             --no-cov \
             -v
 

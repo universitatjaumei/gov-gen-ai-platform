@@ -10,6 +10,62 @@ El cliente NiceGUI (`client_app/`) está siendo migrado progresivamente al servi
 
 ---
 
+## Ejecución agéntica por bloques
+
+El desarrollo se ejecuta **de forma autónoma y secuencial, por bloques de prompts**.
+Un bloque es una fila de la tabla de planes activos de `PROJECT_STATE.md`
+(Fase 11 = 11.1→11.3; Bloque SEC = SEC.1→SEC.7; Bloque RAG = RAG.1→RAG.14...).
+
+**El bloque es la unidad de interacción: una vez arrancado, no informes hasta cerrarlo.**
+No pidas confirmación entre prompts. Detalle completo en `docs/METODOLOGIA_AGENTICA.md`.
+
+### Bucle por prompt (sin interacción)
+
+RED → GREEN → REFACTOR → verificaciones de cierre (suite verde, migración aplicada,
+contrato regenerado si cambió la API, retirada del legacy con `grep -r` a cero,
+verificación en navegador si toca UI) → actualizar `PROJECT_STATE.md` →
+**un commit Conventional por prompt** con el identificador del prompt en el asunto,
+sin `Co-Authored-By` y **sin push** → siguiente prompt.
+
+El commit por prompt es lo que hace reversible un bloque largo: si el prompt 5 rompe
+el 3, hay un punto exacto al que volver.
+
+### Cuándo SÍ interrumpir a mitad de bloque
+
+Solo por estas cuatro causas:
+
+1. **Operación de riesgo** — la detecta la guarda (`.claude/hooks/guard_operaciones_riesgo.ps1`)
+   y genera un prompt de permiso. No la fuerces ni busques rodeos.
+2. **Decisión de criterio** — ambigüedad del plan que llevaría a productos distintos,
+   arquitectura que el plan no cierra, o alcance que excede el bloque. Usa
+   `AskUserQuestion` con opciones y recomendación.
+3. **Fallo persistente** — un RED que no llega a GREEN, o suite en rojo por causa no
+   atribuible al prompt. Para y reporta **con el output real**; no marques el prompt
+   como cerrado.
+4. **Prerrequisito externo ausente** — BD apagada, Docker cerrado, corpus no entregado,
+   credencial que falta.
+
+### Cuándo NO interrumpir
+
+- **Desviaciones entre el plan y el código real.** Aplica la interpretación más fiel al
+  espíritu del prompt, sin inventar infraestructura inexistente ni añadir features no
+  pedidas; regístralo como *"Desviación documentada"* en el historial de
+  `PROJECT_STATE.md` y sigue. Se resume en el informe de cierre.
+- Fallos de test preexistentes ya inventariados.
+- Dudas de estilo o estructura resolubles con las reglas de este documento.
+
+### Al arrancar y al cerrar
+
+- **Al arrancar**: lee el cursor de `PROJECT_STATE.md`, lee los prompts verbatim del plan,
+  comprueba los prerrequisitos, y si algún prompt del bloque sugiere un modelo más capaz
+  que el de la sesión, dilo **una sola vez antes de empezar**.
+- **Al cerrar**: un solo informe con prompts cerrados + commits, cifras reales de tests,
+  migraciones aplicadas, qué verificaste en navegador con qué evidencia, desviaciones
+  documentadas, pendientes, y las instrucciones de pruebas manuales del bloque.
+  Después **espera**: el siguiente bloque no arranca solo.
+
+---
+
 ## Regla crítica: migración = código nuevo + retirada del legacy
 
 Una tarea de migración **no está completa** hasta que el código original quede retirado.
@@ -88,27 +144,32 @@ para y consulta si pertenece al servidor o al frontend.
 
 ---
 
-## Pruebas manuales después de cada prompt
+## Verificación de UI: navegador primero, humano al final del bloque
 
-Genera pruebas manuales **únicamente cuando el prompt incluye cambios que exigen interacción humana con la interfaz de usuario** (navegador). Si el prompt es exclusivamente backend — tests, servicios, modelos, migraciones, infraestructura, endpoints de API — no generes ningún archivo `.bat` ni bloque de instrucciones.
+Cuando un prompt toca frontend, **el agente lo verifica él mismo en el navegador** con la extensión de Chrome (`mcp__claude-in-chrome__*`), dentro del bloque y sin pedir permiso: navega a la URL, comprueba el contenido con `read_page`/`find`, interactúa con `computer`/`form_input`, y revisa `read_console_messages` y `read_network_requests` en busca de errores que los tests unitarios no ven. Detalle del protocolo en `docs/METODOLOGIA_AGENTICA.md` §4.
 
-### Qué exige pruebas manuales
+Las **pruebas manuales humanas se reservan para el cierre del bloque** y se limitan a lo imprescindible: SSO SAML real, sistemas externos no simulables (G400, ENI, APIs UJI), juicio subjetivo de identidad visual, accesibilidad con lector de pantalla real y cualquier cosa con datos personales o credenciales reales.
 
-Solo estas situaciones justifican un archivo `.bat` e instrucciones:
+### Qué exige pruebas manuales humanas
 
-- Flujos de usuario en el frontend (navegación, formularios, visualización de datos).
-- Comportamiento visual: que algo aparece, desaparece, muestra el texto correcto.
-- Interacciones end-to-end que cruzan frontend + API + BD y no tienen test de integración.
+Solo lo que el agente **no puede** verificar con el navegador:
+
+- Flujos con credenciales reales o IdP institucional.
+- Integración con sistemas externos no disponibles en local.
+- Valoración subjetiva: identidad visual, tipografía, tono del texto institucional.
+- Accesibilidad con lector de pantalla real.
 
 ### Qué NO necesita pruebas manuales
 
 - Código exclusivamente backend: tests unitarios, tests de integración, servicios, modelos ORM, workers, migraciones de BD, endpoints de API sin UI asociada.
 - Comprobaciones que ya cubren los tests automáticos.
+- **Todo lo que el agente ya verificó en navegador**: no se repite en el `.bat`; se menciona como verificado en el informe de cierre.
 - Infraestructura, configuración o scripts sin impacto visual.
 
 ### Archivo .bat
 
-- **Nombre**: `pruebas_manuales_promptXX.bat` donde `XX` es el identificador del prompt (p. ej. `pruebas_manuales_prompt9_10.bat`).
+- **Uno por bloque, no por prompt.** Se genera al cerrar el bloque.
+- **Nombre**: `pruebas_manuales_bloque<NOMBRE>.bat` (p. ej. `pruebas_manuales_bloqueSEC.bat`). Para prompts sueltos fuera de un bloque: `pruebas_manuales_promptXX.bat`.
 - **Ubicación**: en el directorio desde el que deben ejecutarse los comandos (normalmente la raíz del proyecto o el subdirectorio correspondiente).
 - **Contenido mínimo obligatorio**:
   - Línea `@echo off` al inicio y `chcp 65001 > nul` para codificación UTF-8.
@@ -139,15 +200,18 @@ Solo estas situaciones justifican un archivo `.bat` e instrucciones:
 Tras generar el `.bat`, muestra en la respuesta un bloque con instrucciones sencillas, sin jerga técnica, con este formato:
 
 ```
-## Pruebas manuales — Prompt X.Y
+## Pruebas manuales — Bloque <NOMBRE>
+
+### Ya verificado por el agente en navegador
+- <flujo comprobado + evidencia: URL, texto encontrado, consola limpia>
 
 ### Antes de empezar
 1. Abre Docker Desktop y asegúrate de que está en marcha (icono verde en la barra de tareas).
 2. <paso concreto adicional, p. ej. "Abre una terminal y ejecuta: docker compose up -d">
-3. <si el prompt incluye migración: "Ejecuta en una terminal: cd server && uv run alembic upgrade head">
+3. <si el bloque incluye migración: "Ejecuta en una terminal: cd server; uv run alembic upgrade head">
 
 ### Ejecuta el archivo
-- Haz doble clic en `pruebas_manuales_promptXY.bat` (está en la carpeta <ruta relativa>).
+- Haz doble clic en `pruebas_manuales_bloque<NOMBRE>.bat` (está en la carpeta <ruta relativa>).
 - El script irá mostrando los pasos; pulsa cualquier tecla para avanzar entre ellos.
 
 ### Pasos en la interfaz
@@ -435,6 +499,8 @@ Cómo actúa un agente al abrir una sesión:
 2. Si el modelo de la sesión actual coincide con el sugerido → procede.
 3. Si NO coincide → menciona la discrepancia en una sola línea al inicio de la respuesta ("El cursor sugiere Opus para este prompt; estoy en Sonnet. ¿Continúo o prefieres cambiar con `/model opus`?") y espera decisión del usuario antes de ejecutar.
 4. No intentes auto-cambiar de modelo. La elección es del usuario por motivos de coste/disponibilidad.
+
+En **ejecución por bloques**, esta comprobación se hace **una sola vez, al arrancar el bloque**, sobre el conjunto de sus prompts: si alguno sugiere un modelo más capaz que el de la sesión, dilo antes de empezar y espera decisión. Dentro del bloque no se vuelve a interrumpir por este motivo.
 
 Cuándo delegar a un sub-agente con modelo distinto:
 

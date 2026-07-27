@@ -23,7 +23,15 @@ COPY sandbox/ ./sandbox/
 # creamos por si el contenedor se ejecuta sin el tmpfs en local.
 RUN mkdir -p /tmp/sandbox && chown 65534:65534 /tmp/sandbox
 
+# El venv ya quedó sincronizado por `uv sync` en el paso anterior (con red
+# disponible en build-time). El CMD debe invocar uvicorn DIRECTAMENTE desde
+# ese venv, nunca vía `uv run`: `uv run` re-resuelve/reconstruye el proyecto
+# local en cada arranque (necesita red para el build backend), y este
+# contenedor corre sin red (sandbox-net internal) y sin $HOME escribible
+# (USER 65534, root fs read_only) — mismo patrón que el Dockerfile raíz.
+ENV PATH="/srv/sandbox/.venv/bin:$PATH"
+
 USER 65534:65534
 EXPOSE 5000
 
-CMD ["uv", "run", "uvicorn", "sandbox.main:app", "--host", "0.0.0.0", "--port", "5000"]
+CMD ["uvicorn", "sandbox.main:app", "--host", "0.0.0.0", "--port", "5000"]

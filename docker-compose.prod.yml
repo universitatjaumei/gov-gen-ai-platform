@@ -1,3 +1,20 @@
+# docker-compose.prod.yml — Fase 11 "One-Click": levanta TODO el stack con
+# `docker compose -f docker-compose.prod.yml up -d` (más `--profile ollama` si
+# se quiere LLM local en vez de un proveedor cloud). Ver Prompt 11.3 para el
+# script de arranque asistido (setup.sh) que envuelve este fichero.
+#
+# | Componente   | Opción cloud (GCP/Azure) | Opción autoinstalable (local) |
+# |--------------|--------------------------|--------------------------------|
+# | Cerebro (LLM)| Vertex AI / OpenAI/OpenRouter | Ollama (`--profile ollama`) |
+# | Archivos     | GCS / S3                 | MinIO (este compose)          |
+# | Identidad    | SSO SAML institucional   | login email+contraseña (por defecto) |
+# | Despliegue   | Cloud Run / Terraform    | Docker Compose (este fichero) |
+
+# Nombre de proyecto explícito y distinto de docker-compose.yml (dev): evita
+# que Compose confunda ambos ficheros como el mismo proyecto y recree/elimine
+# contenedores del otro entorno al levantar cualquiera de los dos.
+name: govgenai-prod
+
 services:
   app:
     build:
@@ -25,16 +42,59 @@ services:
         condition: service_healthy
       script-sandbox:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     networks:
       - default
       - sandbox-net
     restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Same-origin: nginx reenvía /api/* a "app" (ver frontend/nginx.conf).
+        # No hace falta conocer un host público en tiempo de build.
+        VITE_API_URL: ""
+    container_name: govgenai_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: govgenai_ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    profiles:
+      - ollama
 
   script-sandbox:
     build:
       context: ./services/script_sandbox
       dockerfile: Dockerfile
     container_name: govgenai_script_sandbox
+    environment:
+      SANDBOX_TMP_DIR: /tmp/sandbox
     networks:
       - sandbox-net
     read_only: true
@@ -138,7 +198,13 @@ networks:
     driver: bridge
     internal: true   # PROD: sin egress a internet, solo intercomunicación entre containers conectados
 
+# Nombres pinchados: ver la nota equivalente en docker-compose.yml. En producción
+# esto además evita que mover o renombrar el directorio de instalación desconecte
+# la base de datos del cliente.
 volumes:
   postgres_data_prod:
+    name: govgenai-prod_postgres_data_prod
   minio_data_prod:
-  langfuse_data_prod:
+    name: govgenai-prod_minio_data_prod
+  ollama_data:
+    name: govgenai-prod_ollama_data

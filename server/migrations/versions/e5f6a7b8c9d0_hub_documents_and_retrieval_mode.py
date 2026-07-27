@@ -155,53 +155,59 @@ def upgrade() -> None:
             "kind IN ('atomic', 'router')",
         )
 
-    # 4. Backfill: crear HubDocument por cada job completado con chunks
-    op.execute(
-        """
-        INSERT INTO hub_documents
-            (id, chatbot_id, title, canonical_url, markdown_content,
-             content_hash, language, source_kind, token_count,
-             created_at, updated_at)
-        SELECT
-            gen_random_uuid(),
-            j.chatbot_id,
-            COALESCE(j.original_filename, j.canonical_url, j.source_url),
-            COALESCE(j.canonical_url, j.source_url),
-            '',
-            COALESCE(
-                (SELECT MIN(c.content_hash)
-                 FROM hub_document_chunks c
-                 WHERE c.chatbot_id = j.chatbot_id
-                   AND c.source_url = COALESCE(j.canonical_url, j.source_url)),
-                'backfill'
-            ),
-            COALESCE(j.language, 'es'),
-            CASE WHEN j.source_url LIKE 'http%' THEN 'crawler' ELSE 'upload' END,
-            COALESCE(j.chunks_processed * 250, 0),
-            j.created_at,
-            j.created_at
-        FROM hub_ingestion_jobs j
-        WHERE j.status = 'completed'
-          AND EXISTS (
-              SELECT 1 FROM hub_document_chunks c
-              WHERE c.chatbot_id = j.chatbot_id
-                AND c.source_url = COALESCE(j.canonical_url, j.source_url)
-          )
-        ON CONFLICT (chatbot_id, content_hash) DO NOTHING;
-        """
-    )
+    # 4-5. Backfill: solo aplica a instalaciones existentes cuyo
+    # hub_ingestion_jobs ya tenga canonical_url/original_filename (columnas
+    # de una etapa ad-hoc anterior a esta migración, nunca creadas por
+    # ninguna migración). En una instalación nueva la tabla está vacía y
+    # estas columnas no existen: el backfill no tiene nada que hacer.
+    if _column_exists("hub_ingestion_jobs", "canonical_url"):
+        # 4. Backfill: crear HubDocument por cada job completado con chunks
+        op.execute(
+            """
+            INSERT INTO hub_documents
+                (id, chatbot_id, title, canonical_url, markdown_content,
+                 content_hash, language, source_kind, token_count,
+                 created_at, updated_at)
+            SELECT
+                gen_random_uuid(),
+                j.chatbot_id,
+                COALESCE(j.original_filename, j.canonical_url, j.source_url),
+                COALESCE(j.canonical_url, j.source_url),
+                '',
+                COALESCE(
+                    (SELECT MIN(c.content_hash)
+                     FROM hub_document_chunks c
+                     WHERE c.chatbot_id = j.chatbot_id
+                       AND c.source_url = COALESCE(j.canonical_url, j.source_url)),
+                    'backfill'
+                ),
+                COALESCE(j.language, 'es'),
+                CASE WHEN j.source_url LIKE 'http%' THEN 'crawler' ELSE 'upload' END,
+                COALESCE(j.chunks_processed * 250, 0),
+                j.created_at,
+                j.created_at
+            FROM hub_ingestion_jobs j
+            WHERE j.status = 'completed'
+              AND EXISTS (
+                  SELECT 1 FROM hub_document_chunks c
+                  WHERE c.chatbot_id = j.chatbot_id
+                    AND c.source_url = COALESCE(j.canonical_url, j.source_url)
+              )
+            ON CONFLICT (chatbot_id, content_hash) DO NOTHING;
+            """
+        )
 
-    # 5. Backfill: vincular chunks a su documento
-    op.execute(
-        """
-        UPDATE hub_document_chunks c
-        SET document_id = d.id
-        FROM hub_documents d
-        WHERE d.chatbot_id = c.chatbot_id
-          AND d.canonical_url = c.source_url
-          AND c.document_id IS NULL;
-        """
-    )
+        # 5. Backfill: vincular chunks a su documento
+        op.execute(
+            """
+            UPDATE hub_document_chunks c
+            SET document_id = d.id
+            FROM hub_documents d
+            WHERE d.chatbot_id = c.chatbot_id
+              AND d.canonical_url = c.source_url
+              AND c.document_id IS NULL;
+            """
+        )
 
 
 def downgrade() -> None:
