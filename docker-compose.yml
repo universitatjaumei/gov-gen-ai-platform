@@ -169,8 +169,16 @@ networks:
     driver: bridge
     internal: false  # en dev, false para permitir build/pull; en prod usar internal: true
 
+# Los nombres van pinchados explícitamente: Compose prefija los volúmenes con el
+# nombre de proyecto, así que sin `name:` un cambio de `name:` (o del directorio)
+# deja los datos huérfanos montando un volumen vacío. Estos son los volúmenes
+# históricos de desarrollo; no renombrarlos sin migrar los datos primero.
 volumes:
   postgres_data:
+    name: ai_agents_hub_postgres_data
   minio_data:
+    name: ai_agents_hub_minio_data
   clickhouse_data:
+    name: ai_agents_hub_clickhouse_data
   redis_data:
+    name: ai_agents_hub_redis_data

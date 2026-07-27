@@ -288,3 +288,34 @@ def test_every_service_healthy_dependency_has_a_healthcheck() -> None:
         "servicios esperados como 'healthy' que no definen healthcheck "
         f"(ni en compose ni en su Dockerfile): {sin_healthcheck}"
     )
+
+
+# ---------------------------------------------------------------------------
+# 9. Los volúmenes no dependen del nombre de proyecto
+# ---------------------------------------------------------------------------
+
+def test_named_volumes_pin_an_explicit_name() -> None:
+    """Compose prefija los volúmenes con el nombre de proyecto. Cuando se
+    introdujo `name:` para separar dev de prod, el prefijo pasó de
+    `ai_agents_hub_` a `govgenai-dev_` y la base de datos de desarrollo quedó
+    huérfana: `up` montaba un volumen vacío mientras los 104 MB de datos
+    seguían en el volumen anterior.
+
+    Pinchar `name:` en cada volumen desacopla la identidad del dato del nombre
+    del proyecto (y del nombre del directorio), que es lo que debe ser en un
+    producto que se instala en máquinas ajenas.
+    """
+    for filename in ("docker-compose.yml", "docker-compose.prod.yml"):
+        compose = _load_compose(filename)
+        volumes = compose.get("volumes") or {}
+        assert volumes, f"{filename} debe declarar volúmenes con nombre"
+
+        sin_nombre = [
+            key for key, cfg in volumes.items()
+            if not (isinstance(cfg, dict) and cfg.get("name"))
+        ]
+        assert not sin_nombre, (
+            f"{filename}: volúmenes sin `name:` explícito {sin_nombre}. "
+            "Sin él, renombrar el proyecto (o mover el directorio) deja los "
+            "datos huérfanos."
+        )

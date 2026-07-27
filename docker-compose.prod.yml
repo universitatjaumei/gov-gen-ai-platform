@@ -198,7 +198,13 @@ networks:
     driver: bridge
     internal: true   # PROD: sin egress a internet, solo intercomunicación entre containers conectados
 
+# Nombres pinchados: ver la nota equivalente en docker-compose.yml. En producción
+# esto además evita que mover o renombrar el directorio de instalación desconecte
+# la base de datos del cliente.
 volumes:
   postgres_data_prod:
+    name: govgenai-prod_postgres_data_prod
   minio_data_prod:
+    name: govgenai-prod_minio_data_prod
   ollama_data:
+    name: govgenai-prod_ollama_data

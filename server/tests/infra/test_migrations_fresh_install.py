@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import uuid
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
@@ -82,8 +83,11 @@ def fresh_database():
 def test_alembic_upgrade_head_succeeds_on_empty_database(fresh_database: str) -> None:
     env = {**os.environ, "DATABASE_URL_SYNC": fresh_database}
 
+    # `python -m alembic` y no `alembic`: el ejecutable de consola solo está en
+    # el PATH con el venv activado, y en Windows sin activar el test moría con
+    # FileNotFoundError en lugar de comprobar las migraciones.
     result = subprocess.run(
-        ["alembic", "upgrade", "head"],
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
         cwd=_SERVER_ROOT,
         env=env,
         capture_output=True,
