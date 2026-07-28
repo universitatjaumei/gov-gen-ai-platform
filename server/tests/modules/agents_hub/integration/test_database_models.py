@@ -1,46 +1,33 @@
-"""Prompt 2.4 — Tests de modelos ORM (TDD - RED → GREEN)."""
+"""Prompt 2.4 — Tests de modelos ORM (TDD - RED → GREEN).
+
+La fixture base `db_session` vive en el conftest.py de este directorio y usa una BD
+desechable por test: antes este fichero creaba y DESTRUÍA las tablas de la BD de
+desarrollo.
+"""
 import uuid
 import pytest
 from sqlalchemy import select, text
 
-DB_URL = "postgresql+asyncpg://govgenai:govgenai_dev@localhost:5432/govgenai"
-
 
 @pytest.fixture
-async def db_session():
-    """Sesión con tablas Hub creadas y eliminadas al finalizar el test."""
-    from server.app.modules.agents_hub.database.connection import (
-        create_async_engine,
-        create_session_factory,
+async def seeded_session(db_session):
+    """Sesión con los proveedores de LLM que estos tests dan por sembrados."""
+    from server.app.modules.agents_hub.database.config_models import HubProvider
+
+    await db_session.merge(
+        HubProvider(id="google", name="Google", provider_type="google_genai")
     )
-    from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
-
-    from server.app.modules.agents_hub.database.config_models import HubProvider, HubLLMConfig, HubChatbot, HubOrganizacion, HubPromptTemplate
-    from server.app.modules.agents_hub.database.operational_models import HubDocument, HubDocumentChunk, HubInteraction, HubIngestionJob
-
-    engine = create_async_engine(DB_URL)
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        await conn.run_sync(HubConfigBase.metadata.create_all)
-        await conn.run_sync(HubOperationalBase.metadata.create_all)
-
-    session_factory = create_session_factory(engine)
-    async with session_factory() as session:
-        await session.merge(HubProvider(id="google", name="Google", provider_type="google_genai"))
-        await session.merge(HubProvider(id="openai", name="OpenAI", provider_type="openai_compatible"))
-        await session.commit()
-        yield session
-
-    async with engine.begin() as conn:
-        await conn.run_sync(HubOperationalBase.metadata.drop_all)
-        await conn.run_sync(HubConfigBase.metadata.drop_all)
-    await engine.dispose()
+    await db_session.merge(
+        HubProvider(id="openai", name="OpenAI", provider_type="openai_compatible")
+    )
+    await db_session.commit()
+    return db_session
 
 
 class TestHubLLMConfigModel:
 
     @pytest.mark.asyncio
-    async def test_llm_config_persistence(self, db_session) -> None:
+    async def test_llm_config_persistence(self, seeded_session) -> None:
         """Prompt 2.8 — Validar que se pueden guardar y recuperar parámetros LLM."""
         from server.app.modules.agents_hub.database.config_models import HubLLMConfig
 
@@ -50,10 +37,10 @@ class TestHubLLMConfigModel:
             temperature=0.3,
             max_tokens=4096,
         )
-        db_session.add(config)
-        await db_session.commit()
+        seeded_session.add(config)
+        await seeded_session.commit()
 
-        result = await db_session.execute(
+        result = await seeded_session.execute(
             select(HubLLMConfig).where(HubLLMConfig.model_name == "gemini-2.5-flash")
         )
         saved = result.scalar_one()
@@ -65,13 +52,13 @@ class TestHubLLMConfigModel:
 class TestHubChatbotModel:
 
     @pytest.mark.asyncio
-    async def test_create_chatbot_requires_llm_config(self, db_session) -> None:
+    async def test_create_chatbot_requires_llm_config(self, seeded_session) -> None:
         """Prompt 2.9 — Validar que no se puede crear un chatbot sin llm_config_id."""
         from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion
 
         client = HubOrganizacion(name="Test Inst", partner_id="partner_dev")
-        db_session.add(client)
-        await db_session.flush()
+        seeded_session.add(client)
+        await seeded_session.flush()
 
         chatbot = HubChatbot(
             organizacion_id=client.id,
@@ -80,22 +67,22 @@ class TestHubChatbotModel:
             system_prompt="Test",
             sources=[],
         )
-        db_session.add(chatbot)
+        seeded_session.add(chatbot)
         with pytest.raises(Exception):
-            await db_session.flush()
+            await seeded_session.flush()
 
     @pytest.mark.asyncio
-    async def test_create_chatbot_with_valid_model(self, db_session) -> None:
+    async def test_create_chatbot_with_valid_model(self, seeded_session) -> None:
         """Chatbot con llm_config válido se persiste correctamente."""
         from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion, HubLLMConfig
 
         llm = HubLLMConfig(provider="openai", model_name="gpt-4o", temperature=0.5)
-        db_session.add(llm)
-        await db_session.flush()
+        seeded_session.add(llm)
+        await seeded_session.flush()
 
         client = HubOrganizacion(name="Univ. Test", partner_id="partner_dev")
-        db_session.add(client)
-        await db_session.flush()
+        seeded_session.add(client)
+        await seeded_session.flush()
 
         chatbot = HubChatbot(
             organizacion_id=client.id,
@@ -104,10 +91,10 @@ class TestHubChatbotModel:
             system_prompt="Eres útil.",
             sources=[],
         )
-        db_session.add(chatbot)
-        await db_session.commit()
+        seeded_session.add(chatbot)
+        await seeded_session.commit()
 
-        result = await db_session.execute(
+        result = await seeded_session.execute(
             select(HubChatbot).where(HubChatbot.name == "Bot Válido")
         )
         saved = result.scalar_one()
@@ -117,15 +104,15 @@ class TestHubChatbotModel:
 class TestHubPromptTemplateModel:
 
     @pytest.mark.asyncio
-    async def test_chatbot_retrieves_correct_prompt_by_language(self, db_session) -> None:
+    async def test_chatbot_retrieves_correct_prompt_by_language(self, seeded_session) -> None:
         """Prompt 2.8 — Al pedir 'system_base' en catalán no devuelve el de castellano."""
         from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion, HubLLMConfig, HubPromptTemplate
 
         llm = HubLLMConfig(provider="google", model_name="gemini-flash")
-        db_session.add(llm)
+        seeded_session.add(llm)
         client = HubOrganizacion(name="Univ. CA", partner_id="partner_dev")
-        db_session.add(client)
-        await db_session.flush()
+        seeded_session.add(client)
+        await seeded_session.flush()
 
         chatbot = HubChatbot(
             organizacion_id=client.id,
@@ -134,10 +121,10 @@ class TestHubPromptTemplateModel:
             system_prompt="Base",
             sources=[],
         )
-        db_session.add(chatbot)
-        await db_session.flush()
+        seeded_session.add(chatbot)
+        await seeded_session.flush()
 
-        db_session.add_all([
+        seeded_session.add_all([
             HubPromptTemplate(
                 chatbot_id=chatbot.id,
                 slug="system_base",
@@ -151,9 +138,9 @@ class TestHubPromptTemplateModel:
                 template_text="Ets un assistent.",
             ),
         ])
-        await db_session.commit()
+        await seeded_session.commit()
 
-        result = await db_session.execute(
+        result = await seeded_session.execute(
             select(HubPromptTemplate).where(
                 HubPromptTemplate.chatbot_id == chatbot.id,
                 HubPromptTemplate.slug == "system_base",
@@ -168,15 +155,15 @@ class TestHubPromptTemplateModel:
 class TestHubDocumentChunkModel:
 
     @pytest.mark.asyncio
-    async def test_create_chunk_with_vector(self, db_session) -> None:
+    async def test_create_chunk_with_vector(self, seeded_session) -> None:
         from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion, HubLLMConfig
         from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
 
         llm = HubLLMConfig(provider="google", model_name="gemini-flash")
-        db_session.add(llm)
+        seeded_session.add(llm)
         client = HubOrganizacion(name="Test", partner_id="partner_dev")
-        db_session.add(client)
-        await db_session.flush()
+        seeded_session.add(client)
+        await seeded_session.flush()
 
         chatbot = HubChatbot(
             organizacion_id=client.id,
@@ -185,8 +172,8 @@ class TestHubDocumentChunkModel:
             system_prompt="Test",
             sources=[],
         )
-        db_session.add(chatbot)
-        await db_session.flush()
+        seeded_session.add(chatbot)
+        await seeded_session.flush()
 
         chunk = HubDocumentChunk(
             chatbot_id=chatbot.id,
@@ -196,10 +183,10 @@ class TestHubDocumentChunkModel:
             embedding=[0.1] * 1024,
             language="es",
         )
-        db_session.add(chunk)
-        await db_session.commit()
+        seeded_session.add(chunk)
+        await seeded_session.commit()
 
-        result = await db_session.execute(
+        result = await seeded_session.execute(
             select(HubDocumentChunk).where(HubDocumentChunk.content_hash == "abc123")
         )
         saved = result.scalar_one()

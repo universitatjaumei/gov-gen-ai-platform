@@ -1,30 +1,22 @@
-"""Prompt 2.6 â€” Tests del retriever hÃ­brido (TDD - RED â†’ GREEN)."""
+"""Prompt 2.6 â€” Tests del retriever hÃ­brido (TDD - RED â†’ GREEN).
+
+La fixture base `db_session` vive en el conftest.py de este directorio y usa una BD
+desechable por test: antes este fichero creaba y DESTRUÃA las tablas de la BD de
+desarrollo.
+"""
 import uuid
 import pytest
 from sqlalchemy import text
 
-DB_URL = "postgresql+asyncpg://govgenai:govgenai_dev@localhost:5432/govgenai"
-
 
 @pytest.fixture
-async def populated_session():
-    """SesiÃ³n con tablas Hub y datos de prueba para el retriever."""
-    from server.app.modules.agents_hub.database.connection import (
-        create_async_engine,
-        create_session_factory,
-    )
-    from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
-    from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion, HubLLMConfig, HubProvider, HubPromptTemplate
-    from server.app.modules.agents_hub.database.operational_models import HubDocument, HubDocumentChunk, HubInteraction, HubIngestionJob
+async def populated_session(db_session):
+    """SesiÃ³n con datos de prueba para el retriever."""
+    from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion, HubLLMConfig, HubProvider
+    from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
 
-    engine = create_async_engine(DB_URL)
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        await conn.run_sync(HubConfigBase.metadata.create_all)
-        await conn.run_sync(HubOperationalBase.metadata.create_all)
-
-    session_factory = create_session_factory(engine)
-    async with session_factory() as session:
+    session = db_session
+    if True:
         await session.merge(HubProvider(id="google", name="Google", provider_type="google_genai"))
         await session.commit()
 
@@ -66,11 +58,6 @@ async def populated_session():
         await session.commit()
 
         yield session, chatbot.id
-
-    async with engine.begin() as conn:
-        await conn.run_sync(HubOperationalBase.metadata.drop_all)
-        await conn.run_sync(HubConfigBase.metadata.drop_all)
-    await engine.dispose()
 
 
 class TestHybridRetriever:

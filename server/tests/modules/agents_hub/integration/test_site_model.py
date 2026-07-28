@@ -1,46 +1,13 @@
 """Tests de integración 9Q.0 — entidades sitio/página/selección + retirada de HubIngestionSource.
 
 Requieren PostgreSQL con pgvector corriendo en localhost:5432.
+La fixture `db_session` vive en el conftest.py de este directorio y usa una BD
+desechable por test: antes creaba y DESTRUÍA las tablas de la BD de desarrollo.
 """
-import os
 import uuid
 
 import pytest
 from sqlalchemy import select, text
-
-
-DB_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://govgenai:govgenai_dev@localhost:5432/govgenai",
-)
-
-
-@pytest.fixture
-async def db_session():
-    """Sesión con tablas Hub creadas y eliminadas al finalizar el test."""
-    from server.app.modules.agents_hub.database.connection import (
-        create_async_engine,
-        create_session_factory,
-    )
-    from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
-
-    import server.app.modules.agents_hub.database.config_models  # noqa: F401 — registra tablas
-    import server.app.modules.agents_hub.database.operational_models  # noqa: F401 — registra tablas
-
-    engine = create_async_engine(DB_URL)
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        await conn.run_sync(HubConfigBase.metadata.create_all)
-        await conn.run_sync(HubOperationalBase.metadata.create_all)
-
-    session_factory = create_session_factory(engine)
-    async with session_factory() as session:
-        yield session
-
-    async with engine.begin() as conn:
-        await conn.run_sync(HubOperationalBase.metadata.drop_all)
-        await conn.run_sync(HubConfigBase.metadata.drop_all)
-    await engine.dispose()
 
 
 # ────────────────────────────────────────────────────────────────────────────
