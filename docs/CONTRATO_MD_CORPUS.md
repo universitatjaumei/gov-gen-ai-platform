@@ -210,15 +210,70 @@ Los artículos y las disposiciones se numeran de corrido en toda la norma, así 
 
 ---
 
-## 6. Adyacente, y bloqueante para Gerencia
+## 6. Tablas
 
-Fuera del alcance de esta especificación pero del mismo trabajo de conversión: **las 92 tablas
-complejas de 31 documentos** cuyo contenido vive solo en el sidecar `.tables.json`, con un
-`<!-- TABLE-IMG -->` en el `.md`. Para el asistente son datos invisibles, sin aviso, y afectan de
-lleno a lo que Gerencia consulta a diario (precios públicos, RLT, importes de dietas).
+El problema original: el contenido de las tablas complejas vivía **solo** en el sidecar
+`.tables.json`, y el `.md` llevaba únicamente un `<!-- TABLE-IMG -->`. Para el asistente eso son
+datos invisibles, sin aviso, y afecta de lleno a lo que Gerencia consulta a diario (precios
+públicos, RLT, importes de dietas).
 
-En el `.md` que alimenta al asistente hay que emitir el `<table>` HTML; la imagen puede quedarse
-para la vista de publicación. El HTML de las 92 tablas ya existe: el arreglo es mecánico.
+El requisito, por tanto, es **que el dato tabular esté presente como texto**. No que esté en un
+formato concreto. (La versión inicial de este documento exigía `<table>` HTML; era un argumento de
+procedencia —el HTML es lo que había en el sidecar— disfrazado de argumento de recuperación.
+Corregido el 2026-07-28 con el corpus ya convertido delante.)
+
+### Forma canónica: el bloque `TABLA-TEXT`
+
+```
+<!-- TABLE-IMG: img/<doc>/t01.png | page=21 2x6 -->
+
+<!-- TABLA-TEXT: t01.png | pàg. 21 | 2x6 | markdown -->
+| Sou | Complement de destinació (CD) | Complement específic (CE) |
+| --- | --- | --- |
+| 1.288,31 € | 924,48 € | 294,95 € |
+<!-- /TABLA-TEXT -->
+```
+
+Tres propiedades que el `.md` debe conservar, porque de ellas depende que el chunker haga su
+trabajo:
+
+1. **Bloque delimitado** con apertura y cierre. Es lo que permite tratar la tabla como unidad y no
+   como texto suelto que se corta por donde caiga.
+2. **Procedencia en la cabecera**: PNG de origen, página y dimensiones. El hub las lleva a
+   `chunk_metadata`, de modo que una cita puede decir de qué tabla y de qué página sale un importe.
+3. **Formato declarado** (`markdown` | `html`) como último campo. Los dos formatos conviven y el
+   chunker ramifica según lo declarado; no hay que adivinar mirando el contenido.
+
+### Qué formato usar
+
+| Caso | Formato |
+|---|---|
+| Tabla rectangular (misma estructura en todas las filas) | **`markdown`** (pipe table) |
+| Celdas combinadas (`colspan`/`rowspan`), cabeceras a varios niveles, tabla anidada | **`html`** |
+
+**El pipe table es el formato por defecto** y cuesta menos: medido sobre una tabla de 42×11 del
+corpus, 1.311 tokens en pipe contra 2.087 en HTML (**×1,59**; el factor sube en tablas estrechas,
+donde el marcado domina). Y ese ahorro pesa doble, porque el Nivel 2 de la estrategia inyecta
+documentos enteros y el presupuesto de contexto decide si una norma cabe.
+
+El HTML se reserva a lo que los pipes **no pueden expresar**. Una tabla con celdas fusionadas
+volcada a pipes o pierde información o obliga a repetir valores, y las dos cosas producen
+respuestas equivocadas sobre importes.
+
+### La cabecera de la tabla y el troceado
+
+Medido sobre el corpus convertido: **30 de los 54 bloques superan los 1.000 caracteres**, que es el
+`chunk_size` del chunker. Un bloque que no cabe se parte, y por defecto **todos los fragmentos
+menos el primero pierden la fila de cabecera**: quedan importes sin nombre de columna, que es peor
+que no tener el dato, porque se pueden recuperar y sostener una respuesta segura y falsa.
+
+Eso **se arregla en el hub, no en el corpus** (ING.0.4: troceado consciente de tablas, que repite
+la fila de cabecera en cada fragmento). Del lado del `.md` solo hacen falta dos cosas, y las dos
+ya se cumplen: el bloque delimitado y el formato declarado.
+
+Lo que sí conviene del lado del corpus: **preceder cada tabla de un encabezado o de una frase que
+la nombre**. «Retribucions del professorat permanent laboral» delante de la tabla convierte un
+bloque de importes anónimos en algo recuperable por su asunto.
 
 ---
 
@@ -233,7 +288,9 @@ Puerta de calidad del propio script, antes de dar un documento por convertido:
 - [ ] Ningún artículo marcado con negrita en lugar de encabezado.
 - [ ] Las dos versiones idiomáticas de la misma norma tienen el **mismo juego de anclas** (si no,
       o falta un artículo en una o hay un error de numeración).
-- [ ] Ningún `<!-- TABLE-IMG -->` sin su `<table>` al lado.
+- [ ] Ningún `<!-- TABLE-IMG -->` sin su bloque `TABLA-TEXT` al lado (a 2026-07-28: **54 de 54**).
+- [ ] Todo bloque `TABLA-TEXT` declara su formato, y el `html` se usa solo donde hay celdas
+      combinadas o cabeceras a varios niveles.
 - [ ] El recuento de artículos coincide con el del documento original.
 
 El hub tolera un `.md` sin anclas y sin jerarquía —`ancora=None` y la ruta que haya—, así que un

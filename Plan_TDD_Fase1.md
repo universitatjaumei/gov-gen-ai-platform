@@ -12458,6 +12458,33 @@ Poblarla con la ruta estructural del documento; si no encaja, retirarla por Caso
 checklist completo de CLAUDE.md (grep de los 4 lectores: long_context_strategy.py:65,
 agentic_strategy.py:33, list_documents.py:28, md_agent_selector_pipeline.py:54).
 
+## Troceado consciente de tablas (añadido el 2026-07-28, medido sobre el corpus convertido)
+El corpus trae las tablas en bloques delimitados y autodescriptivos:
+
+    <!-- TABLA-TEXT: t01.png | pàg. 21 | 2x6 | markdown -->
+    | Sou | Complement de destinació (CD) | ... |
+    | --- | --- | ... |
+    | 1.288,31 € | 924,48 € | ... |
+    <!-- /TABLA-TEXT -->
+
+Medido: 54 bloques en 13 de los 226 documentos, 49 en markdown (pipe) y 5 en html (los de
+colspan/rowspan, que los pipes no pueden expresar). **30 de los 54 superan los 1.000 caracteres
+del chunk_size**, mediana 1.161, máximo 11.886.
+
+Sin tratamiento especial, RecursiveCharacterTextSplitter los parte por '\n' —frontera de fila,
+que está bien— pero **todos los fragmentos menos el primero pierden la fila de cabecera**: quedan
+importes sin nombre de columna. Es peor que no tener el dato, porque se recuperan igual y
+sostienen una respuesta segura y falsa sobre una cuantía.
+
+- Detectar el bloque TABLA-TEXT y tratarlo como unidad: si cabe en el presupuesto del chunk, NO
+  se parte aunque supere chunk_size (una tabla partida vale menos que una tabla larga).
+- Si no cabe, partir **por filas** y **repetir la fila de cabecera** (y el separador '| --- |')
+  al principio de cada fragmento. Para los bloques 'html', repetir el <thead> y cerrar/reabrir
+  <table> en cada fragmento.
+- Llevar a chunk_metadata la procedencia de la cabecera del marcador: 'taula_origen' (PNG),
+  'pagina', 'dimensions'. Permite que una cita diga de qué tabla y de qué página sale un importe.
+- El formato se lee del ÚLTIMO campo del marcador, no se adivina del contenido.
+
 ## Regla dura que hereda el Bloque RAG
 Solo se embebe contexto ESTRUCTURAL (título/capítulo/artículo), que es estable. La taxonomía
 (ámbito, submaterias) NO entra nunca en el texto embebido. Ver enmienda a RAG.7.
@@ -12476,11 +12503,23 @@ Solo se embebe contexto ESTRUCTURAL (título/capítulo/artículo), que es establ
 # should_handle_document_without_articulado
 # should_build_citation_url_with_anchor_fragment
 # should_not_include_taxonomy_in_embedded_text     (guardarraíl de la regla dura)
+# --- troceado de tablas ---
+# should_keep_small_table_block_in_one_chunk
+# should_not_split_table_block_that_fits_even_over_chunk_size
+# should_repeat_header_row_in_every_chunk_of_a_split_pipe_table
+# should_repeat_thead_and_reopen_table_tag_for_split_html_table
+# should_split_pipe_table_on_row_boundaries_never_mid_row
+# should_record_table_provenance_in_chunk_metadata   (taula_origen, pagina, dimensions)
+# should_read_format_from_marker_not_from_content
+# should_handle_table_block_without_declared_format  (degradación: tratar como markdown)
 
 ## Criterio de done
 - [ ] Chunks regenerados con corpus_recalculator sobre el corpus de prueba
 - [ ] Una cita real con fragmento #art-N verificada extremo a extremo
 - [ ] section_path poblada o retirada; grep limpio si se retira
+- [ ] Comprobado contra los 30 bloques de tabla que superan chunk_size: ningún fragmento con
+      importes sin fila de cabecera (adjuntar un fragmento real de la tabla de retribuciones del
+      Convenio colectivo, que es el caso canónico)
 ```
 
 ---
