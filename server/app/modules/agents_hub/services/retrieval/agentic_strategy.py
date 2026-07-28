@@ -29,7 +29,6 @@ class AgenticRetrievalStrategy:
                 "title": d.title,
                 "url": d.canonical_url,
                 "language": d.language,
-                "section_path": d.section_path,
                 "token_count": d.token_count,
             }
             for d in res.scalars().all()

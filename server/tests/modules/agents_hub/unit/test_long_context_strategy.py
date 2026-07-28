@@ -13,7 +13,6 @@ def _make_doc(token_count: int, language: str = "es") -> MagicMock:
     doc.markdown_content = "Contenido de norma " * 50
     doc.language = language
     doc.token_count = token_count
-    doc.section_path = None
     doc.created_at = None
     return doc
 

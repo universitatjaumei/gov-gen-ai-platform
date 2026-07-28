@@ -71,7 +71,6 @@ def _make_selector_deps() -> GraphDeps:
     mock_doc.canonical_url = "https://example.com/doc"
     mock_doc.title = "Documento de prueba"
     mock_doc.language = "es"
-    mock_doc.section_path = "/test"
 
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = [mock_doc]

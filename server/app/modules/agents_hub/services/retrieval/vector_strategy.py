@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.modules.agents_hub.database.operational_models import HubDocument
+from server.app.modules.agents_hub.services.retrieval.citations import with_anchor
 from server.app.modules.agents_hub.services.retrieval.types import RetrievalContext, Source
 from server.app.modules.agents_hub.services.retriever import HybridRetriever
 
@@ -64,7 +65,10 @@ class VectorRetrievalStrategy:
             best = max(chunks, key=lambda c: c.score)
             doc = docs_map.get(doc_id) if doc_id else None
             title = doc.title if doc else best.source_url.rsplit("/", 1)[-1]
-            url = doc.canonical_url if doc else best.source_url
+            base_url = doc.canonical_url if doc else best.source_url
+            # La cita apunta al artículo del que sale la evidencia, no al documento
+            # entero: el ancla viene del chunk mejor puntuado (ING.0.4).
+            url = with_anchor(base_url, best.metadata)
             excerpt = best.content
             sources.append(Source(
                 document_id=doc.id if doc else uuid.uuid4(),
@@ -72,7 +76,11 @@ class VectorRetrievalStrategy:
                 url=url,
                 excerpt=excerpt,
                 score=best.score,
-                metadata={"chunks_matched": len(chunks)},
+                metadata={
+                    "chunks_matched": len(chunks),
+                    "ancora": best.metadata.get("ancora"),
+                    "ruta": best.metadata.get("ruta"),
+                },
             ))
             total_tokens += len(excerpt) // 4
 

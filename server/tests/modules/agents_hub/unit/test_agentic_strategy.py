@@ -12,7 +12,6 @@ def _make_doc_record(**kwargs) -> MagicMock:
     doc.canonical_url = kwargs.get("url", "https://ejemplo.com/norma.pdf")
     doc.markdown_content = kwargs.get("content", "Contenido completo")
     doc.language = kwargs.get("language", "es")
-    doc.section_path = kwargs.get("section_path", None)
     doc.token_count = kwargs.get("token_count", 500)
     return doc
 
@@ -113,7 +112,7 @@ class TestListDocumentsTool:
             async def list_index(self, chatbot_id, language):
                 return [
                     {"id": str(uuid.uuid4()), "title": "Norma A", "url": "https://ej.com/a.pdf",
-                     "language": "es", "section_path": None, "token_count": 200},
+                     "language": "es", "token_count": 200},
                 ]
 
         result = await list_documents(str(uuid.uuid4()), FakeIndex())

@@ -15,7 +15,7 @@ async def list_documents(
 ) -> str:
     """Devuelve un indice formateado de documentos disponibles.
 
-    Cada entrada: `[id] titulo -- seccion_path (idioma, ~tokens)`. El LLM lo lee y decide
+    Cada entrada: `[id] titulo (idioma, ~tokens, url)`. El LLM lo lee y decide
     que cargar con `read_document(id=<uuid>)`.
     """
     items = await index.list_index(uuid.UUID(chatbot_id), language)
@@ -23,9 +23,8 @@ async def list_documents(
         return "No hay documentos disponibles para este chatbot."
     lines = ["Documentos disponibles (usa read_document(id=<id>) para leer uno):"]
     for it in items:
-        section = f" -- {it['section_path']}" if it.get("section_path") else ""
         lines.append(
-            f"[{it['id']}] {it['title']}{section} "
+            f"[{it['id']}] {it['title']} "
             f"({it['language']}, ~{it['token_count']} tokens, {it['url']})"
         )
     return "\n".join(lines)

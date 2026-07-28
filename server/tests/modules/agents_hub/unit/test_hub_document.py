@@ -62,8 +62,11 @@ class TestHubDocumentModel:
             assert hasattr(HubDocument, field), f"HubDocument falta campo: {field}"
 
     def test_hub_document_optional_fields(self):
+        """ING.0.4 retiró section_path (declarada y jamás escrita); la ruta estructural
+        vive ahora en chunk_metadata['ruta']."""
         from server.app.modules.agents_hub.database.operational_models import HubDocument
-        assert hasattr(HubDocument, "section_path")
+        assert hasattr(HubDocument, "crawled_page_id")
+        assert hasattr(HubDocument, "doc_metadata")
 
     def test_hub_document_lives_in_operational_base(self):
         from server.app.modules.agents_hub.database.base import HubOperationalBase
@@ -88,7 +91,6 @@ class TestHubDocumentModel:
         assert doc.title == "Reglamento de Permanencia"
         assert doc.token_count == 1234
         assert doc.language == "es"
-        assert doc.section_path is None
 
 
 # ---------------------------------------------------------------------------

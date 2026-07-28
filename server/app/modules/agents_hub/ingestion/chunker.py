@@ -1,5 +1,29 @@
-"""Chunker para documentos Markdown."""
+"""Chunker para documentos Markdown (ING.0.4).
 
+Consume el formato de `docs/CONTRATO_MD_CORPUS.md`:
+
+    #      documento (uno por fichero)
+    ##     preámbulo | título | grupo de disposiciones | anexo
+    ###    capítulo
+    ####   sección
+    #####  UNIDAD CITABLE: artículo | disposición concreta   → ancla obligatoria
+
+**El nivel lo determina el TIPO de elemento, no su anidamiento**, así que el chunker puede
+fiarse de él. De ahí que haya saltos de nivel legítimos —`#####` justo bajo `##` en las
+disposiciones— que no son errores y que el splitter trata bien: registra los encabezados
+que ve y descarta los niveles intermedios que quedaron atrás.
+
+Dos cosas que este módulo garantiza y de las que depende el resto:
+
+- **La taxonomía nunca entra en el texto** (CLAUDE.md §5). Solo contexto estructural.
+- **Las tablas no se parten dejando fragmentos sin cabecera.** Medido sobre el corpus
+  convertido: 30 de los 54 bloques `TABLA-TEXT` superan `chunk_size`, y sin tratamiento
+  especial todo fragmento menos el primero queda con importes sin nombre de columna. Eso
+  es peor que no tener el dato, porque se recupera igual y sostiene una respuesta segura
+  y falsa sobre una cuantía.
+"""
+
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -7,6 +31,23 @@ from langchain_text_splitters import (
     MarkdownHeaderTextSplitter,
     RecursiveCharacterTextSplitter,
 )
+
+# Ancla de atributos Pandoc/kramdown al final del encabezado: '{#art-14}'.
+_ANCORA = re.compile(r"\s*\{#(?P<ancora>[A-Za-z0-9][A-Za-z0-9._-]*)\}\s*$")
+_ANCORA_EN_TEXTO = re.compile(r"\s*\{#[A-Za-z0-9][A-Za-z0-9._-]*\}")
+# Ancla vacía o mal formada: se limpia del texto pero no produce ancla.
+_ANCORA_ROTA = re.compile(r"\s*\{#[^}]*\}")
+
+_BLOQUE_TABLA = re.compile(
+    r"<!--\s*TABLA-TEXT:(?P<cabecera>[^>]*?)-->\s*\n"
+    r"(?P<cuerpo>.*?)"
+    r"\n?\s*<!--\s*/TABLA-TEXT\s*-->",
+    re.DOTALL,
+)
+_MARCADOR_IMAGEN = re.compile(r"^\s*<!--\s*TABLE-IMG:.*?-->\s*$", re.MULTILINE)
+_FORMATOS_TABLA = ("markdown", "html")
+
+_NIVELES = 5
 
 
 @dataclass
@@ -17,18 +58,42 @@ class Chunk:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-class MarkdownChunker:
-    """Divide documentos Markdown en chunks semánticos."""
+def strip_anchor_tokens(texto: str) -> str:
+    """Quita los tokens `{#...}` del texto visible.
 
-    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 100):
+    Se usa también al inyectar documentos completos (long context): el token es ruido
+    tanto para el modelo como para quien lee la respuesta.
+    """
+    return _ANCORA_ROTA.sub("", texto)
+
+
+def _extraer_ancora(encabezado: str) -> tuple[str, str | None]:
+    """Devuelve (encabezado_limpio, ancora)."""
+    match = _ANCORA.search(encabezado)
+    if match:
+        return encabezado[: match.start()].rstrip(), match.group("ancora")
+    return _ANCORA_ROTA.sub("", encabezado).rstrip(), None
+
+
+class MarkdownChunker:
+    """Divide documentos Markdown en chunks semánticos.
+
+    `table_chunk_size` es el presupuesto de atomicidad de una tabla: un bloque que quepa
+    en él NO se parte, aunque supere `chunk_size`. El default de 4.000 caracteres deja
+    enteros 51 de los 54 bloques del corpus medido.
+    """
+
+    def __init__(
+        self,
+        chunk_size: int = 1000,
+        chunk_overlap: int = 100,
+        table_chunk_size: int = 4000,
+    ):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+        self.table_chunk_size = table_chunk_size
 
-        self.headers_to_split = [
-            ("#", "header_1"),
-            ("##", "header_2"),
-            ("###", "header_3"),
-        ]
+        self.headers_to_split = [("#" * n, f"header_{n}") for n in range(1, _NIVELES + 1)]
 
         self.md_splitter = MarkdownHeaderTextSplitter(
             headers_to_split_on=self.headers_to_split,
@@ -40,6 +105,170 @@ class MarkdownChunker:
             chunk_overlap=chunk_overlap,
         )
 
+    # ───────────────────────── Encabezados ─────────────────────────
+
+    def _limpiar_encabezados(self, doc_metadata: dict) -> tuple[dict, list[str], str | None]:
+        """Separa los encabezados en ruta de ancestros + ancla de la unidad citable."""
+        limpios: dict[str, str] = {}
+        ancora: str | None = None
+        presentes: list[str] = []
+
+        for nivel in range(1, _NIVELES + 1):
+            clave = f"header_{nivel}"
+            if clave not in doc_metadata:
+                continue
+            texto, ancora_nivel = _extraer_ancora(str(doc_metadata[clave]))
+            limpios[clave] = texto
+            presentes.append(clave)
+            if ancora_nivel:
+                # El ancla del nivel más profundo es la que cita el fragmento.
+                ancora = ancora_nivel
+
+        # La ruta son los ancestros: todo menos el encabezado más profundo.
+        ruta = [limpios[c] for c in presentes[:-1]] if len(presentes) > 1 else []
+        return limpios, ruta, ancora
+
+    # ───────────────────────── Tablas ─────────────────────────
+
+    @staticmethod
+    def _metadatos_tabla(cabecera: str) -> dict[str, Any]:
+        """Lee la procedencia del marcador: origen, página, dimensiones y formato."""
+        campos = [c.strip() for c in cabecera.split("|")]
+        datos: dict[str, Any] = {
+            "es_taula": True,
+            "taula_origen": campos[0] if campos else None,
+            "pagina": None,
+            "dimensions": None,
+            # Sin formato declarado se asume markdown, que es el del contrato.
+            "taula_format": "markdown",
+        }
+        for campo in campos[1:]:
+            bajo = campo.lower()
+            if bajo in _FORMATOS_TABLA:
+                datos["taula_format"] = bajo
+            elif re.fullmatch(r"\d+x\d+", bajo):
+                datos["dimensions"] = campo
+            elif datos["pagina"] is None and re.search(r"\d", campo):
+                datos["pagina"] = campo
+        return datos
+
+    @staticmethod
+    def _es_separador(linea: str) -> bool:
+        limpia = linea.replace("|", "").replace(" ", "")
+        return bool(limpia) and set(limpia) <= {"-", ":"}
+
+    def _partir_tabla_pipe(self, cuerpo: str) -> list[str]:
+        """Parte por filas repitiendo el prefijo (leyenda + cabecera) en cada fragmento.
+
+        La fila de cabecera es la que **precede al separador** `| --- |`, no la primera
+        línea del bloque: el corpus curado mete la leyenda de la tabla dentro del bloque
+        («**Retribucions del professorat…**»), y tomarla por cabecera dejaría la cabecera
+        real convertida en una fila de datos.
+        """
+        lineas = [ln for ln in cuerpo.splitlines() if ln.strip()]
+        if not lineas:
+            return []
+
+        separador = next(
+            (i for i, ln in enumerate(lineas) if self._es_separador(ln)), None
+        )
+        if separador is not None:
+            # Todo hasta el separador (leyenda + cabecera) se repite en cada fragmento.
+            cabecera = lineas[: separador + 1]
+            resto = lineas[separador + 1 :]
+        else:
+            cabecera = lineas[:1]
+            resto = lineas[1:]
+
+        prefijo = "\n".join(cabecera)
+        fragmentos: list[str] = []
+        actual: list[str] = []
+        for fila in resto:
+            candidato = "\n".join([prefijo, *actual, fila])
+            if actual and len(candidato) > self.table_chunk_size:
+                fragmentos.append("\n".join([prefijo, *actual]))
+                actual = [fila]
+            else:
+                actual.append(fila)
+        if actual:
+            fragmentos.append("\n".join([prefijo, *actual]))
+        return fragmentos or [prefijo]
+
+    def _partir_tabla_html(self, cuerpo: str) -> list[str]:
+        """Parte por `<tr>` del cuerpo, repitiendo apertura y `<thead>`."""
+        apertura = re.search(r"<table[^>]*>", cuerpo)
+        thead = re.search(r"<thead>.*?</thead>", cuerpo, re.DOTALL)
+        filas = re.findall(r"<tr>(?!.*?</thead>).*?</tr>", cuerpo, re.DOTALL)
+        if thead:
+            filas = [f for f in filas if f not in thead.group(0)]
+        if not filas:
+            return [cuerpo]
+
+        prefijo = (apertura.group(0) if apertura else "<table>") + (
+            "\n" + thead.group(0) if thead else ""
+        )
+        fragmentos: list[str] = []
+        actual: list[str] = []
+        for fila in filas:
+            candidato = f"{prefijo}\n<tbody>\n" + "\n".join([*actual, fila]) + "\n</tbody>\n</table>"
+            if actual and len(candidato) > self.table_chunk_size:
+                fragmentos.append(
+                    f"{prefijo}\n<tbody>\n" + "\n".join(actual) + "\n</tbody>\n</table>"
+                )
+                actual = [fila]
+            else:
+                actual.append(fila)
+        if actual:
+            fragmentos.append(
+                f"{prefijo}\n<tbody>\n" + "\n".join(actual) + "\n</tbody>\n</table>"
+            )
+        return fragmentos
+
+    def _trocear_tabla(self, cabecera: str, cuerpo: str) -> list[tuple[str, dict]]:
+        metadatos = self._metadatos_tabla(cabecera)
+        cuerpo = cuerpo.strip()
+
+        if len(cuerpo) <= self.table_chunk_size:
+            return [(cuerpo, metadatos)]
+
+        partes = (
+            self._partir_tabla_html(cuerpo)
+            if metadatos["taula_format"] == "html"
+            else self._partir_tabla_pipe(cuerpo)
+        )
+        total = len(partes)
+        return [
+            (parte, {**metadatos, "taula_part": i + 1, "taula_parts": total})
+            for i, parte in enumerate(partes)
+        ]
+
+    # ───────────────────────── Troceado de una sección ─────────────────────────
+
+    def _trocear_seccion(self, contenido: str) -> list[tuple[str, dict]]:
+        """Devuelve [(texto, metadatos_extra)] separando prosa y bloques de tabla."""
+        piezas: list[tuple[str, dict]] = []
+        posicion = 0
+
+        for match in _BLOQUE_TABLA.finditer(contenido):
+            prosa = contenido[posicion : match.start()]
+            piezas.extend((t, {}) for t in self._trocear_prosa(prosa))
+            piezas.extend(self._trocear_tabla(match.group("cabecera"), match.group("cuerpo")))
+            posicion = match.end()
+
+        piezas.extend((t, {}) for t in self._trocear_prosa(contenido[posicion:]))
+        return piezas
+
+    def _trocear_prosa(self, texto: str) -> list[str]:
+        # El marcador de imagen no aporta nada al índice y ensucia el fragmento.
+        limpio = _MARCADOR_IMAGEN.sub("", texto).strip()
+        if not limpio:
+            return []
+        if len(limpio) <= self.chunk_size:
+            return [limpio]
+        return self.text_splitter.split_text(limpio)
+
+    # ───────────────────────── API ─────────────────────────
+
     def split(
         self, content: str, metadata: dict[str, Any] | None = None
     ) -> list[Chunk]:
@@ -47,30 +276,31 @@ class MarkdownChunker:
 
         Args:
             content: Contenido Markdown
-            metadata: Metadatos adicionales
+            metadata: Metadatos adicionales (document_id, source_url…). **No se copia
+                al texto**: si trajera taxonomía, entraría en el embedding.
 
         Returns:
             Lista de chunks
         """
         base_metadata = metadata or {}
 
-        md_docs = self.md_splitter.split_text(content)
+        chunks: list[Chunk] = []
+        for doc in self.md_splitter.split_text(content):
+            encabezados, ruta, ancora = self._limpiar_encabezados(doc.metadata)
+            comun = {
+                **base_metadata,
+                **encabezados,
+                "ruta": ruta,
+                "ancora": ancora,
+            }
 
-        chunks = []
-        for doc in md_docs:
-            doc_content = doc.page_content
-            doc_metadata = {**base_metadata, **doc.metadata}
-
-            if len(doc_content) > self.chunk_size:
-                sub_docs = self.text_splitter.split_text(doc_content)
-                for i, sub_content in enumerate(sub_docs):
-                    chunks.append(
-                        Chunk(
-                            content=sub_content,
-                            metadata={**doc_metadata, "chunk_index": i},
-                        )
+            piezas = self._trocear_seccion(strip_anchor_tokens(doc.page_content))
+            for indice, (texto, extra) in enumerate(piezas):
+                chunks.append(
+                    Chunk(
+                        content=texto,
+                        metadata={**comun, **extra, "chunk_index": indice},
                     )
-            else:
-                chunks.append(Chunk(content=doc_content, metadata=doc_metadata))
+                )
 
         return chunks

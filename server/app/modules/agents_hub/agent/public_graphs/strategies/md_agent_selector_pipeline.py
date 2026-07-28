@@ -51,7 +51,7 @@ class MdAgentSelectorPipeline:
                 title=d.title,
                 language=d.language,
                 score=1.0,
-                metadata={"section_path": d.section_path},
+                metadata={},
             )
             for d in documents
         ]

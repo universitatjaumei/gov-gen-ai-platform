@@ -61,7 +61,6 @@ class LongContextRetrievalStrategy:
                     score=1.0,
                     metadata={
                         "language": d.language,
-                        "section_path": d.section_path,
                         "cacheable": True,
                         "cache_block": is_cache_block,
                         "cache_ttl": cache_ttl if is_cache_block else None,

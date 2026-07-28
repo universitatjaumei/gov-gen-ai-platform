@@ -206,7 +206,6 @@ class HubDocument(HubOperationalBase):
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     language: Mapped[str] = mapped_column(String(10), nullable=False)
     source_kind: Mapped[str] = mapped_column(String(20), nullable=False)
-    section_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     crawled_page_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

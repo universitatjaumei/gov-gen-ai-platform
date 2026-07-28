@@ -58,7 +58,6 @@ def _make_doc(language: str = "es") -> MagicMock:
     doc.canonical_url = "https://ejemplo.com/doc.md"
     doc.markdown_content = "# Título\n\nContenido del documento."
     doc.language = language
-    doc.section_path = None
     return doc
 
 
