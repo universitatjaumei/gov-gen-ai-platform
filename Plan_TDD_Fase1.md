@@ -12157,7 +12157,7 @@ dueño del PAT, y la cuota por usuario de SEC.4 no puede existir.
 > **Origen del corpus (decidido 2026-07-28)**: la UJI está definiendo el modelo de publicación normativa. El `.md` autoritativo vivirá **en la BD de publicación**, y de ahí se generarán el PDF y el HTML consultable. **Las circulares de Gerencia pasan por el mismo circuito de publicación**, con `nivell_acces: intern`. Consecuencias duras:
 > - **Un solo maestro para el corpus propio**: la BD de publicación. El hub es réplica de solo lectura (`source_kind='publicacio'`). No se construye UI de edición de metadatos en el hub (regla de CLAUDE.md: sin código especulativo); la carga manual queda cubierta por el CLI de ING.0.5 para emergencias.
 > - **El crawler queda desactivado para este corpus.** Dos rutas de entrada para la misma norma producirían dos conversiones del mismo texto compitiendo en el top-k. `CRITERIS` §3.2: declarar fuente autoritativa antes de indexar y retirar las redundantes.
-> - **Los `.md` llegan con jerarquía real de encabezados (4 niveles) y ancla estable por artículo** — confirmado que se aplica tanto a las normas nuevas como retroactivamente al corpus histórico. Por tanto el parser estructural de la tarea 8 del informe **no se implementa en el hub**: el hub consume la jerarquía, no la reconstruye.
+> - **Los `.md` llegan con jerarquía real de encabezados (5 niveles) y ancla estable por unidad citable** — confirmado que se aplica tanto a las normas nuevas como retroactivamente al corpus histórico. Especificación cerrada en **`docs/CONTRATO_MD_CORPUS.md`**. Por tanto el parser estructural de la tarea 8 del informe **no se implementa en el hub**: el hub consume la jerarquía, no la reconstruye.
 >
 > **Dos transportes, un solo reconciliador (decidido 2026-07-28)**: el pipeline de publicación **no estará hasta dentro de unos meses**, así que durante ese tiempo la actualización del corpus se hace **por CLI sobre una carpeta de `.md`**, y no como carga inicial de una sola vez: es el mecanismo de mantenimiento en funcionamiento. Después se le añade el transporte programático (MCP o export incremental). Regla dura para que eso no produzca dos pipelines divergentes:
 > - **La lógica de reconciliación se escribe UNA vez**, en ING.0.5, detrás de un protocolo `CorpusSource`. La carpeta local y el servicio MCP son dos **fuentes** del mismo reconciliador; SYNC.1 añade una fuente, no un pipeline.
@@ -12387,9 +12387,14 @@ si un documento trae front-matter, MANDA el front-matter; si no, manda la entrad
 
 ---
 
-### Prompt ING.0.4 (RED/GREEN) — Chunker jerárquico de 4 niveles + anclas de artículo
+### Prompt ING.0.4 (RED/GREEN) — Chunker jerárquico de 5 niveles + anclas de artículo
 
 **Modelo sugerido**: **Sonnet** — cambio acotado en el chunker con efecto medible en las citas.
+
+> **Especificación del formato: `docs/CONTRATO_MD_CORPUS.md`** (2026-07-28). Es el contrato que
+> aplica el conversor del corpus y el generador de publicación; este prompt implementa el lado
+> consumidor. Corrección respecto a la primera versión de este plan: **son 5 niveles, no 4** —
+> faltaba la Sección, que aparece en 280 casos del corpus medido.
 
 ```
 # PROMPT ING.0.4 (RED/GREEN) — Jerarquía real y cita por artículo
@@ -12397,22 +12402,38 @@ si un documento trae front-matter, MANDA el front-matter; si no, manda la entrad
 
 ## Contexto medido
 El corpus tiene 4.649 artículos, 685 capítulos, 432 títulos, 280 secciones y 675 disposiciones
-marcados como encabezado, pero HOY casi todos aplanados en '##'. El modelo de publicación nuevo
-emite jerarquía real (# documento / ## título / ### capítulo / #### artículo) y ancla estable
-por artículo, también retroactivamente sobre el histórico. El chunker solo sigue 3 niveles
-(chunker.py:27-31), así que los artículos se perderían como nivel.
+marcados como encabezado, pero HOY casi todos aplanados en '##'. El corpus convertido y el
+modelo de publicación nuevo emiten jerarquía real y ancla estable por unidad citable, según
+docs/CONTRATO_MD_CORPUS.md:
+
+    #      documento (uno por fichero)
+    ##     preámbulo | título | grupo de disposiciones | anexo
+    ###    capítulo
+    ####   sección
+    #####  UNIDAD CITABLE: artículo | disposición concreta   → ancla obligatoria
+
+El nivel lo determina el TIPO de elemento, no su anidamiento: un artículo es '#####' también en
+una norma sin títulos ni capítulos. Por eso el chunker PUEDE fiarse del nivel, y por eso hay
+saltos de nivel legítimos ('#####' bajo '##' en las disposiciones) que no debe tratar como error.
+El chunker solo sigue 3 niveles hoy (chunker.py:27-31), así que artículos y secciones se
+perderían como nivel.
 
 ## Cambios en ingestion/chunker.py
-- headers_to_split pasa a 4 niveles: header_1..header_4.
-- Extracción del ancla del propio encabezado (patrón estable acordado con publicación, p. ej.
-  '#### Article 14. Import de la dieta {#art-14}'):
+- headers_to_split pasa a 5 niveles: header_1..header_5.
+- Extracción del ancla del propio encabezado, sintaxis de atributos Pandoc/kramdown
+  ('##### Article 14. Import de la dieta {#art-14}'):
   * 'ancora' va a chunk_metadata;
   * el token '{#...}' se ELIMINA del texto del chunk (es ruido para el embedding y para el
     usuario); el resto del encabezado se conserva (strip_headers=False sigue vigente: RAG.7 lo
     necesita).
-- 'ruta': lista de encabezados ancestros (['Títol I','Capítol III']) en chunk_metadata, para que
-  un artículo recuperado aislado no pierda el contexto que le da su capítulo (informe §5.2).
-- Un .md sin anclas ni jerarquía sigue funcionando: ancora=None, ruta con lo que haya.
+- 'ruta': lista de encabezados ancestros (['Títol I','Capítol III','Secció 2a']) en
+  chunk_metadata, para que un artículo recuperado aislado no pierda el contexto que le da su
+  capítulo (informe §5.2).
+- Un .md sin anclas ni jerarquía sigue funcionando: ancora=None, ruta con lo que haya. Los
+  documentos sin articulado (41 de 226: protocolos, planes, anexos de tablas) son válidos.
+- Las anclas son las MISMAS en las dos versiones idiomáticas de una norma (prefijo neutro:
+  'art-14' vale para «Article 14» y «Artículo 14»), lo que permite que una cita resuelva contra
+  cualquiera de las dos. VIS.3 lo aprovecha.
 
 ## Cita verificable (el pago de este prompt)
 Cuando el chunk tiene 'ancora', la URL de la evidencia es canonical_url + '#' + ancora. Se
@@ -12428,12 +12449,17 @@ Solo se embebe contexto ESTRUCTURAL (título/capítulo/artículo), que es establ
 (ámbito, submaterias) NO entra nunca en el texto embebido. Ver enmienda a RAG.7.
 
 ## Tests (RED primero) — tests/modules/agents_hub/ingestion/test_chunker_hierarchy.py
-# should_split_on_four_heading_levels
+# should_split_on_five_heading_levels
+# should_treat_article_as_level_five_without_intermediate_divisions  (norma sin títulos)
+# should_handle_level_jump_from_group_to_citable_unit                (disposiciones: ## → #####)
 # should_extract_article_anchor_into_metadata
+# should_extract_anchor_from_disposicio_and_annex
 # should_strip_anchor_token_from_chunk_text
 # should_keep_heading_text_in_chunk_content
 # should_record_ancestor_route_in_metadata
+# should_include_seccio_in_the_route
 # should_handle_md_without_anchors_or_hierarchy
+# should_handle_document_without_articulado
 # should_build_citation_url_with_anchor_fragment
 # should_not_include_taxonomy_in_embedded_text     (guardarraíl de la regla dura)
 
@@ -13116,9 +13142,9 @@ contrato EvidenceItem.
 - El content ALMACENADO y mostrado como evidencia NO cambia; embedding_text no se persiste.
 
 # ENMIENDA (2026-07-28): la jerarquía son CUATRO niveles y la taxonomía no entra.
-# - Tras ING.0.4 el chunker sigue header_1..header_4 (# documento / ## título / ### capítulo /
-#   #### artículo, que es lo que emite el modelo de publicación nuevo). embedding_text los usa
-#   todos, y usa 'ruta' cuando esté disponible.
+# - Tras ING.0.4 el chunker sigue header_1..header_5 (documento / título / capítulo / sección /
+#   unidad citable, según docs/CONTRATO_MD_CORPUS.md). embedding_text los usa todos, y usa
+#   'ruta' cuando esté disponible.
 # - REGLA DURA: en embedding_text solo entra contexto ESTRUCTURAL (título del documento y
 #   encabezados). NUNCA ambit_principal, submateries, submateries_internes ni ninguna etiqueta
 #   del vocabulario. Motivo: el vocabulario está pendiente de validar por SG y debe seguir
