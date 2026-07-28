@@ -12305,6 +12305,20 @@ Declarada (línea 160) y JAMÁS escrita en todo server/app; solo se lee en 4 sit
 no la puebla con la ruta estructural, se retira por Caso B (borrado directo) con el checklist
 de CLAUDE.md. Decidirlo dentro de ING.0.4, no dejarla en el limbo.
 
+## Fallo de despliegue que se arregla aquí (hallado el 2026-07-28)
+El ORM declara HubIngestionJob.canonical_url y .original_filename (operational_models.py:237-238)
+pero NINGUNA migración las crea: e5f6a7b8c9d0 las trata como opcionales (`if _column_exists`)
+porque las creó código fuera de la cadena. En una instalación limpia no existen, y
+POST /hub/ingestion/upload las escribe (hub_ingestion_router.py:228, watcher.py:266,277) ⇒ la
+subida de documentos falla con UndefinedColumn en un despliegue nuevo. Misma familia que el fallo
+de hub_ingestion_sources que arregló 11.2.
+- La migración de este prompt añade ambas columnas a hub_ingestion_jobs, guardadas por
+  _column_exists (el patrón ya usado en la cadena) para no chocar donde ya estén.
+- Test: should_have_ingestion_job_columns_on_fresh_install, sobre el esquema resultante de
+  `alembic upgrade head` en BD limpia (reusar el harness de tests/infra/test_migrations_fresh_install.py).
+- La columna hub_interactions.metadata existe en instalación limpia y el ORM no la declara: se
+  RETIRA en esta misma migración (columna muerta, Caso B) tras comprobar con grep que nadie la lee.
+
 ## Tests (RED primero) — tests/modules/agents_hub/test_document_metadata_model.py
 # should_default_new_document_to_public_and_canonical
 # should_persist_and_read_back_submateries_array
