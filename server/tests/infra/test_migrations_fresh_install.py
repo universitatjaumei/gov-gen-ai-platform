@@ -99,3 +99,93 @@ def test_alembic_upgrade_head_succeeds_on_empty_database(fresh_database: str) ->
         "alembic upgrade head falló sobre una BD vacía (regresión 11.2):\n"
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
+
+
+def _upgrade_head(fresh_database: str) -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        cwd=_SERVER_ROOT,
+        env={**os.environ, "DATABASE_URL_SYNC": fresh_database},
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def _columns(fresh_database: str, table: str) -> set[str]:
+    conn = psycopg2.connect(fresh_database.replace("postgresql+psycopg2", "postgresql"))
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "select column_name from information_schema.columns "
+                "where table_name = %s",
+                (table,),
+            )
+            return {r[0] for r in cur.fetchall()}
+    finally:
+        conn.close()
+
+
+def test_should_have_ingestion_job_columns_on_fresh_install(fresh_database: str) -> None:
+    """ING.0.2 — el ORM declara HubIngestionJob.canonical_url y .original_filename
+    (operational_models.py) y POST /hub/ingestion/upload las escribe
+    (hub_ingestion_router.py), pero hasta ING.0.2 NINGUNA migración las creaba: en un
+    despliegue limpio la subida de documentos fallaba con UndefinedColumn. Misma familia
+    que el fallo de hub_ingestion_sources que arregló 11.2.
+    """
+    _upgrade_head(fresh_database)
+    columnas = _columns(fresh_database, "hub_ingestion_jobs")
+
+    assert "canonical_url" in columnas
+    assert "original_filename" in columnas
+
+
+def test_should_not_keep_dead_metadata_column_on_interactions(fresh_database: str) -> None:
+    """SQLAlchemy reserva `metadata` en las clases declarativas, así que la columna que
+    creaba a1b2c3d4e5f6 era inalcanzable desde el ORM (que usa interaction_metadata).
+    Se retira en ING.0.2 por Caso B."""
+    _upgrade_head(fresh_database)
+    columnas = _columns(fresh_database, "hub_interactions")
+
+    assert "metadata" not in columnas
+    assert "interaction_metadata" in columnas
+
+
+def test_should_have_document_metadata_columns_and_fk(fresh_database: str) -> None:
+    """Las columnas de ING.0.2 y la FK de document_id que VIS.1 necesita para el JOIN."""
+    _upgrade_head(fresh_database)
+    columnas = _columns(fresh_database, "hub_documents")
+
+    for esperada in (
+        "content_class", "ambit_principal", "ambits_secundaris", "submateries",
+        "submateries_internes", "nivell_acces", "us_assistents", "canonica",
+        "versio_idiomatica_de", "estat_vigencia", "vigencia_validada_el",
+        "revisat_per", "revisat_el", "data_revisio_prevista", "id_publicacio",
+        "last_seen_at", "doc_metadata",
+    ):
+        assert esperada in columnas, f"falta hub_documents.{esperada}"
+
+    conn = psycopg2.connect(
+        fresh_database.replace("postgresql+psycopg2", "postgresql")
+    )
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "select confdeltype from pg_constraint "
+                "where conrelid = 'hub_document_chunks'::regclass and contype = 'f' "
+                "and conname like '%document_id%'"
+            )
+            fks = cur.fetchall()
+            assert fks, "hub_document_chunks.document_id sigue sin FK"
+            assert fks[0][0] == "c", "la FK de document_id debe ser ON DELETE CASCADE"
+
+            cur.execute(
+                "select indexdef from pg_indexes where tablename = 'hub_documents'"
+            )
+            defs = [r[0] for r in cur.fetchall()]
+            assert any("gin" in d.lower() and "submateries" in d for d in defs), (
+                "falta el indice GIN sobre submateries en instalacion limpia"
+            )
+    finally:
+        conn.close()

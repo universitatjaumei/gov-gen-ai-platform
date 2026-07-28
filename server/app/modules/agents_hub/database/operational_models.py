@@ -1,21 +1,25 @@
 """Modelos ORM operacionales para agents_hub."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
+    Date,
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
 from server.app.modules.agents_hub.database.base import HubOperationalBase
@@ -140,11 +144,56 @@ class HubCorpusSelection(HubOperationalBase):
 
 
 class HubDocument(HubOperationalBase):
-    """Documento citable. Unidad atomica del corpus de un chatbot."""
+    """Documento citable. Unidad atomica del corpus de un chatbot.
+
+    Metadatos del corpus normativo (ING.0.2). **Regla que decide el esquema**: una
+    columna de primer nivel SOLO si algo la filtra, la ordena o la usa como puerta;
+    todo lo demas va a `doc_metadata` JSONB. Sin esa disciplina los 56 campos del
+    esquema de metadatos (`vocabulari/esquema_metadades.yaml`) acabarian aqui.
+
+    Los codigos de vocabulario (`ambit_principal`, `submateries`) **no llevan
+    CheckConstraint**: son dato revisable y se validan en la capa de contrato
+    (ING.0.3) contra `HubVocabularyTerm`. Ver CLAUDE.md §5. `nivell_acces`,
+    `us_assistents` y `content_class` si lo llevan: son enumeraciones estables con
+    consumidor (filtrado fail-closed de VIS.1).
+
+    `source_kind` expresa el origen y sus valores documentados son
+    'crawler' | 'upload' | 'publicacio' | 'boe'. No hay columna `origen` aparte:
+    duplicar el eje seria deuda.
+    """
 
     __tablename__ = "hub_documents"
     __table_args__ = (
         UniqueConstraint("chatbot_id", "content_hash", name="uq_document_chatbot_hash"),
+        CheckConstraint(
+            "nivell_acces IN ('public', 'intern', 'restringit')",
+            name="ck_document_nivell_acces",
+        ),
+        CheckConstraint(
+            "us_assistents IN ('si', 'restringit', 'no')",
+            name="ck_document_us_assistents",
+        ),
+        CheckConstraint(
+            "content_class IN ('regulation', 'faq', 'generic')",
+            name="ck_document_content_class",
+        ),
+        Index("ix_hub_documents_chatbot_ambit", "chatbot_id", "ambit_principal"),
+        Index("ix_hub_documents_chatbot_nivell", "chatbot_id", "nivell_acces"),
+        Index(
+            "ix_hub_documents_submateries",
+            "submateries",
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_hub_documents_submateries_internes",
+            "submateries_internes",
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_hub_documents_doc_metadata",
+            "doc_metadata",
+            postgresql_using="gin",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -165,6 +214,57 @@ class HubDocument(HubOperationalBase):
         nullable=True,
         index=True,
     )
+    # --- Clasificacion (ING.0.2). Vocabulario validado en ING.0.3, no con CHECK ---
+    content_class: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="generic"
+    )
+    ambit_principal: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # ARRAY del dialecto PostgreSQL y no el genérico: VIS.1 filtra con el operador de
+    # solapamiento `&&` (`.overlap()`), que solo expone el tipo del dialecto.
+    ambits_secundaris: Mapped[list[str]] = mapped_column(
+        PG_ARRAY(String), nullable=False, default=list
+    )
+    submateries: Mapped[list[str]] = mapped_column(
+        PG_ARRAY(String), nullable=False, default=list
+    )
+    submateries_internes: Mapped[list[str]] = mapped_column(
+        PG_ARRAY(String), nullable=False, default=list
+    )
+    # --- Acceso y uso. nivell_acces se impone en la capa de recuperacion (VIS.1) ---
+    nivell_acces: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="public"
+    )
+    us_assistents: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="si"
+    )
+    # --- Version idiomatica: solo la canonica se indexa (VIS.3) ---
+    canonica: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    versio_idiomatica_de: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_documents.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # --- Vigencia. vigencia_validada_el NULL => el asistente ADVIERTE (VIS.3) ---
+    estat_vigencia: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    vigencia_validada_el: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    revisat_per: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    revisat_el: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    data_revisio_prevista: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # --- Sincronizacion con el registro de publicacion (SYNC.1) ---
+    id_publicacio: Mapped[str | None] = mapped_column(
+        String(80), nullable=True, index=True
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # --- El resto del esquema de 56 campos ---
+    doc_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -182,8 +282,14 @@ class HubDocumentChunk(HubOperationalBase):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     chatbot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    # FK añadida en ING.0.2: VIS.1 filtra los chunks por los metadatos de su documento
+    # mediante JOIN. Nullable porque los chunks temporales de subida de usuario no
+    # tienen documento (los acota owner_id).
     document_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("hub_documents.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     source_url: Mapped[str] = mapped_column(String(2048), nullable=False)

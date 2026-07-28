@@ -1,0 +1,83 @@
+"""Reclasificación del corpus al sustituir un término del vocabulario (ING.0.2).
+
+Deploy: edge — escribe documentos del cliente.
+
+Es la otra mitad de `vocabulary/load.py:supersede_term`, que solo marca el término
+antiguo. Aquí se barren los documentos que lo usaban.
+
+**Invariante que sostiene la promesa de vocabulario revisable** (CLAUDE.md §5):
+reclasificar cuesta un `UPDATE` y **no toca ni un chunk**. Es cierto porque la
+taxonomía nunca entra en el texto embebido; si alguien la mete, este servicio deja de
+ser suficiente y cada revisión del vocabulario pasa a costar un re-embedding del corpus.
+"""
+from __future__ import annotations
+
+import uuid
+
+from sqlalchemy import func, or_, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from server.app.modules.agents_hub.database.operational_models import HubDocument
+from server.app.modules.agents_hub.services.vocabulary_service import VocabularyAxis
+
+# Columnas afectadas por eje. Solo los dos ejes que el documento materializa como
+# columnas de primer nivel; los demás (rang, colectiu, tipus) viven en doc_metadata y
+# no gobiernan la recuperación, así que no se barren aquí.
+_COLUMNAS_POR_EJE: dict[str, tuple[str, tuple[str, ...]]] = {
+    VocabularyAxis.AMBIT: ("ambit_principal", ("ambits_secundaris",)),
+    VocabularyAxis.SUBMATERIA: (None, ("submateries", "submateries_internes")),
+}
+
+
+async def reclassify_documents(
+    session: AsyncSession,
+    axis: str,
+    codi_antic: str,
+    codi_nou: str,
+    chatbot_id: uuid.UUID | None = None,
+) -> int:
+    """Sustituye `codi_antic` por `codi_nou` en los documentos que lo usan.
+
+    Devuelve el número de documentos tocados. Idempotente: una segunda pasada
+    devuelve 0 porque ya no queda ninguno con el código antiguo.
+    """
+    if axis not in _COLUMNAS_POR_EJE:
+        raise ValueError(
+            f"Eje '{axis}' sin columnas en hub_documents. "
+            f"Ejes barribles: {sorted(_COLUMNAS_POR_EJE)}"
+        )
+    if codi_antic == codi_nou:
+        raise ValueError("El código antiguo y el nuevo son el mismo")
+
+    columna_escalar, columnas_array = _COLUMNAS_POR_EJE[axis]
+
+    condiciones = [
+        getattr(HubDocument, nombre).any(codi_antic) for nombre in columnas_array
+    ]
+    if columna_escalar:
+        condiciones.append(getattr(HubDocument, columna_escalar) == codi_antic)
+
+    filtro = [or_(*condiciones)]
+    if chatbot_id is not None:
+        filtro.append(HubDocument.chatbot_id == chatbot_id)
+
+    afectados = await session.scalar(
+        select(func.count()).select_from(HubDocument).where(*filtro)
+    )
+    if not afectados:
+        return 0
+
+    valores: dict = {
+        nombre: func.array_replace(getattr(HubDocument, nombre), codi_antic, codi_nou)
+        for nombre in columnas_array
+    }
+    if columna_escalar:
+        valores[columna_escalar] = func.nullif(
+            func.replace(getattr(HubDocument, columna_escalar), codi_antic, codi_nou),
+            "",
+        )
+
+    await session.execute(
+        update(HubDocument).where(*filtro).values(**valores)
+    )
+    return int(afectados)
