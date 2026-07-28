@@ -132,7 +132,58 @@ Text del preàmbul...
 
 El front-matter va **antes** del `#`. El hub lo separa del cuerpo y **calcula el hash sobre el
 cuerpo**, no sobre el front-matter: así reetiquetar una norma no dispara un re-troceado ni un
-re-embedding, y cambiar el texto sí.
+re-embedding, y cambiar el texto sí. Dos corolarios de la implementación (ING.0.3):
+
+- Un `.md` que **gana** front-matter después conserva su hash y no se reingiere: la línea en
+  blanco que separa el bloque del cuerpo es formato, no contenido.
+- El hash **no depende del final de línea**: CRLF y LF dan el mismo. El corpus se produce en
+  Windows y el sync puede entregarlo con LF; no debe reingerirse por eso.
+
+### Claves del front-matter
+
+No hace falta que el `.md` enumere los 56 campos del esquema, y tampoco hace falta que el hub los
+conozca: **las claves que el contrato no declara van a `doc_metadata`** tal cual. Así el esquema
+puede crecer sin tocar el código. Las que sí tienen tratamiento propio, porque gobiernan
+recuperación, acceso o puertas de calidad:
+
+`id_publicacio` · `title` · `language` · `content_class` · `ambit_principal` ·
+`ambits_secundaris` · `submateries` · `submateries_internes` · `nivell_acces` ·
+`us_assistents` · `motiu_exclusio` · `canonica` · `versio_idiomatica_de` ·
+`estat_vigencia` · `vigencia_validada_per` · `vigencia_validada_el` · `revisat_per` ·
+`revisat_el` · `data_revisio_prevista` · `original_pdf_sha256` · `converter`
+
+Tres reglas de validación que rechazan el paquete antes de ingerir nada:
+
+- `content_class: regulation` **exige** `revisat_per` y `revisat_el`.
+- `us_assistents: no` **exige** `motiu_exclusio` — que quedar fuera del índice sea una decisión
+  auditable y no un silencio.
+- `ambit_principal` y las submaterias se validan contra el vocabulario, y el error **enumera
+  todos** los códigos no reconocidos con el fichero en que aparecen, no el primero que falla.
+
+`versio_idiomatica_de` lleva la **referencia** de la versión canónica (su `id_publicacio`), no un
+identificador de base de datos: al escribir el `.md` ese id no existe todavía.
+
+### Mapeo desde el catálogo existente
+
+Para el corpus histórico, los metadatos que ya existen salen de
+`normativa_propia/cataleg_metadades_amb_resum.csv`:
+
+| Columna del catálogo | Campo del front-matter |
+|---|---|
+| `id` | `id_publicacio` |
+| `fitxer` | ruta del `.md` |
+| `titol` | `title` |
+| `idioma` | `language` |
+| `estat_vigencia` | `estat_vigencia` (tal cual, incluido `vigent?`) |
+| `tipus`, `organ_emissor`, `data_aprovacio`, `resum_abstractiu` | claves libres → `doc_metadata` |
+| `n_caracters` | se descarta (derivado) |
+| `materia`, `categoria_actual` | **clave libre, NUNCA `ambit_principal` ni `submateries`** |
+
+La última fila es la importante. El eje `materia` actual mezcla cuatro ejes —colectivo, función,
+unidad orgánica e instrumento—, y de ahí que «Gestió econòmica» tenga 3 documentos de 314 cuando
+la vicegerencia seleccionó 121. Mapearlo automáticamente al ámbito importaría esa incoherencia al
+corpus indexado. Se conserva como `materia_antiga` para trazabilidad, y la clasificación nueva se
+etiqueta aparte.
 
 ---
 
