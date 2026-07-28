@@ -12421,10 +12421,15 @@ modelo de publicación nuevo emiten jerarquía real y ancla estable por unidad c
 docs/CONTRATO_MD_CORPUS.md:
 
     #      documento (uno por fichero)
-    ##     preámbulo | título | grupo de disposiciones | anexo
+    ##     preámbulo | título | grupo de disposiciones | anexo | división (docs sin articulado)
     ###    capítulo
     ####   sección
-    #####  UNIDAD CITABLE: artículo | disposición concreta   → ancla obligatoria
+    #####  UNIDAD CITABLE: artículo | disposición | apartado de resolución | unidad ordinal
+
+**Contrato v2 (2026-07-29)**: las anclas son **oportunistas, no obligatorias**, y las divisiones
+estructurales (título/capítulo/sección) NO llevan ancla. El hub reconstruye la ruta del TEXTO del
+encabezado, no del ancla, así que no pierde nada. El chunker debe degradar sin ruido cuando no hay
+ancla: verificado sobre el corpus real (12.044 fragmentos, ancla presente en una parte).
 
 El nivel lo determina el TIPO de elemento, no su anidamiento: un artículo es '#####' también en
 una norma sin títulos ni capítulos. Por eso el chunker PUEDE fiarse del nivel, y por eso hay
