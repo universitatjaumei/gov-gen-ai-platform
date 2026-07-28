@@ -93,6 +93,55 @@ class HubOrganizacion(HubConfigBase):
     )
 
 
+class HubVocabularyTerm(HubConfigBase):
+    """Término del vocabulario controlado del corpus (ING.0.1).
+
+    Deploy: cloud — es configuración institucional y se sincroniza cloud→edge.
+    Los módulos edge NO importan este modelo: leen vía `ConfigProvider.list_vocabulary`.
+
+    **No lleva CheckConstraint sobre `codi` ni sobre `axis`, y es deliberado**: el
+    vocabulario de ámbitos y submaterias está pendiente de validación por Secretaría
+    General y tiene que poder cambiar sin migración. Un CHECK sería exactamente lo que
+    lo impide (CLAUDE.md §5).
+
+    Renombrar o fusionar un término = fila nueva + la vieja con `vigent=False` y
+    `substituit_per_codi` apuntando a la nueva. **La cadena de sustituciones ES la
+    traza de auditoría**: no hay tabla de historial aparte.
+    """
+
+    __tablename__ = "hub_vocabulary_terms"
+    __table_args__ = (
+        UniqueConstraint(
+            "organizacion_id", "axis", "codi", name="uq_vocabulary_org_axis_codi"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    organizacion_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_organizaciones.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    axis: Mapped[str] = mapped_column(String(20), nullable=False)
+    codi: Mapped[str] = mapped_column(String(80), nullable=False)
+    nom_primari: Mapped[str] = mapped_column(String(255), nullable=False)
+    nom_secundari: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    parent_codi: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    descripcio_router: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ordre: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    vigent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    substituit_per_codi: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class HubChatbot(HubConfigBase):
     """Chatbot RAG asociado a una organización."""
 

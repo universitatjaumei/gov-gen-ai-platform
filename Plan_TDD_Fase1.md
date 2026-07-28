@@ -12139,77 +12139,577 @@ dueño del PAT, y la cuota por usuario de SEC.4 no puede existir.
 
 ---
 
-## Bloque ING.0 — Ingesta de corpus curado como vía principal (Subfase 1.A, PENDIENTE)
+## Bloque ING.0 — Fundamentos del corpus normativo (Subfase 1.A, PENDIENTE)
 
-> **Contexto**: replanificación 2026-07-11 (ver `PROJECT_STATE.md` y `VALORACION_PROYECTO.md`). La ingesta de corpus **curado y revisado fuera de la app** es la vía principal; el scraper autónomo queda para web estructurada. El pipeline de la app ya es markdown-céntrico → importar `.md` curado es passthrough + dedup por `content_hash`.
+> **Contexto**: replanificado el 2026-07-28 tras la valoración cruzada con la estrategia de recuperación de `openwebui-gerencia` (`INFORME_ESTRATEGIA_ASISTENTE_GERENCIA.md`) y, sobre todo, con `Descarregar_pdf\normativa_propia\INFORME_MATERIES_I_METADADES_AGENTS.md`, que es donde la clasificación está cerrada: **5 ámbitos, 58 submaterias, esquema de 56 campos** (`vocabulari/ambits.csv`, `vocabulari/submateries.csv`, `vocabulari/esquema_metadades.yaml`).
 >
-> **Bloqueante externo**: el usuario provee la carpeta canónica de `.md` revisados y el manifiesto. El tool de conversión vive fuera (`Descarregar_pdf/normativa_uji`).
+> **Qué sustituye**: los antiguos ING.0.1 (`CorpusManifest`) e ING.0.2 (CLI de carga), que no llegaron a ejecutarse. Su contenido se conserva ampliado en ING.0.3 e ING.0.5. El contrato anterior era incompatible con la estrategia por tres motivos medidos: un `category: str` único donde hacen falta tres ejes; ningún sitio en `HubDocument` donde persistir los metadatos (no hay columna JSON ni `content_class` ni `reviewer`); y ningún filtrado por metadatos en la capa de recuperación, que es exactamente el Nivel 1 de la estrategia y lo que `CRITERIS` §1.4 exige para el control de acceso.
+>
+> **Estrategia de recuperación objetivo** (informe §6.1), que este bloque + el Bloque VIS habilitan:
+> ```
+> NIVEL 0  índice de las 58 submaterias en el system prompt      2.307 tokens (medido)
+> NIVEL 1  router: pregunta → 1-3 submaterias → fichas filtradas ~1.500 tokens
+> NIVEL 2  inyección de 1-3 normas completas                     ~25k tokens
+> NIVEL 3  RAG por artículos, SOLO para las 22 leyes externas    (Bloque RAG)
+> ```
+> El 99,7 % de la normativa propia se inyecta entera (131 docs < 6k tokens, 170 entre 6k y 25k, 1 por encima de 78k). El RAG por fragmentos solo es imprescindible para LCSP (~352k tokens), Ley 6/2024 (~303k) y Decreto-ley 14/2025 (~283k).
+>
+> **Origen del corpus (decidido 2026-07-28)**: la UJI está definiendo el modelo de publicación normativa. El `.md` autoritativo vivirá **en la BD de publicación**, y de ahí se generarán el PDF y el HTML consultable. **Las circulares de Gerencia pasan por el mismo circuito de publicación**, con `nivell_acces: intern`. Consecuencias duras:
+> - **Un solo maestro para el corpus propio**: la BD de publicación. El hub es réplica de solo lectura (`source_kind='publicacio'`). No se construye UI de edición de metadatos en el hub (regla de CLAUDE.md: sin código especulativo); la carga manual queda cubierta por el CLI de ING.0.5 para emergencias.
+> - **El crawler queda desactivado para este corpus.** Dos rutas de entrada para la misma norma producirían dos conversiones del mismo texto compitiendo en el top-k. `CRITERIS` §3.2: declarar fuente autoritativa antes de indexar y retirar las redundantes.
+> - **Los `.md` llegan con jerarquía real de encabezados (4 niveles) y ancla estable por artículo** — confirmado que se aplica tanto a las normas nuevas como retroactivamente al corpus histórico. Por tanto el parser estructural de la tarea 8 del informe **no se implementa en el hub**: el hub consume la jerarquía, no la reconstruye.
+>
+> **Dos transportes, un solo reconciliador (decidido 2026-07-28)**: el pipeline de publicación **no estará hasta dentro de unos meses**, así que durante ese tiempo la actualización del corpus se hace **por CLI sobre una carpeta de `.md`**, y no como carga inicial de una sola vez: es el mecanismo de mantenimiento en funcionamiento. Después se le añade el transporte programático (MCP o export incremental). Regla dura para que eso no produzca dos pipelines divergentes:
+> - **La lógica de reconciliación se escribe UNA vez**, en ING.0.5, detrás de un protocolo `CorpusSource`. La carpeta local y el servicio MCP son dos **fuentes** del mismo reconciliador; SYNC.1 añade una fuente, no un pipeline.
+> - **Lo incremental no es un modo**: emerge del hash. El mismo comando sobre la misma carpeta omite lo no cambiado, actualiza metadatos sin re-chunk y re-ingiere solo lo modificado.
+> - **Lo que sí es un modo, y es peligroso, es el censo.** Detectar retiradas exige saber que la fuente es el corpus COMPLETO. Un `--prune` sobre una subcarpeta retiraría cientos de normas. Por eso el censo es opt-in explícito y va con salvaguarda de proporción.
+> - **Identidad estable desde el primer día**: `id_publicacio` en el contrato aunque hoy venga vacío, para que el día que llegue el transporte programático sea una continuación y no una recarga del corpus.
+>
+> **Vocabulario revisable (requisito, decidido 2026-07-28)**: los 5 ámbitos y las 58 submaterias son una **propuesta pendiente de validar por SG** y deben poder cambiar después. Eso impone dos reglas que atraviesan este bloque y el Bloque RAG:
+> 1. El vocabulario es **dato versionado en tabla**, nunca `Enum` de Python ni `CheckConstraint`.
+> 2. **La taxonomía no entra JAMÁS en el texto que se embebe.** Si `submateria` acabara dentro del chunk embebido, cada revisión del vocabulario costaría un re-embedding del corpus completo y la promesa del informe §3.3 («RRHH sale al coste de un campo») dejaría de ser cierta. Ver enmiendas a RAG.4 y RAG.7.
+>
+> **Posición en el orden**: ING.0.1→ING.0.5 → carga del corpus v1 → RAG.1 (baseline) → RAG.2 (consolidación) → VIS.1→VIS.3 → resto del Bloque RAG → Bloque SYNC.
 
 ---
 
-### Prompt ING.0.1 (RED/GREEN) — Manifiesto de procedencia + contrato de paquete de corpus
+### Prompt ING.0.1 (RED/GREEN) — Vocabulario controlado como dato versionado
 
-**Modelo sugerido**: **Sonnet** — contratos Pydantic + validación; alcance cerrado.
+**Modelo sugerido**: **Sonnet** — modelo + servicio + CLI con alcance cerrado; la decisión de diseño (ejes en código, términos en tabla) viene dada aquí.
 
 ```
-# PROMPT ING.0.1 (RED/GREEN) — Contrato del paquete de corpus curado
+# PROMPT ING.0.1 (RED/GREEN) — Ámbitos y submaterias como dato, no como enum
+# Deploy: cloud  (HubConfigBase: es configuración institucional, se sincroniza cloud→edge)
+
+## Decisión de diseño que gobierna el prompt
+Los EJES son estructura (pocos, estables, y añadir uno exige código que lo consuma) → StrEnum
+en código. Los TÉRMINOS son dato (cambian sin tocar código) → filas en tabla. No hay
+CheckConstraint sobre los códigos de término: sería exactamente lo que impide revisar el
+vocabulario.
+
+## Modelo (database/config_models.py — HubConfigBase)
+- VocabularyAxis (StrEnum en código): 'ambit' | 'submateria' | 'rang' | 'colectiu' | 'tipus'.
+- HubVocabularyTerm:
+    id, organizacion_id (FK hub_organizaciones ondelete CASCADE), axis String(20) NOT NULL,
+    codi String(80) NOT NULL, nom_primari String(255), nom_secundari String(255) | None,
+    parent_codi String(80) | None      # submateria → su ámbito; jerarquía en la misma tabla
+    descripcio_router Text | None      # el texto que ve el router en el índice del Nivel 0
+    ordre Integer default 0,
+    vigent Boolean NOT NULL default True,
+    substituit_per_codi String(80) | None,
+    created_at, updated_at
+  UniqueConstraint(organizacion_id, axis, codi) — clave natural, base de la idempotencia.
+- Renombrar / fusionar un término = fila nueva + la vieja a vigent=False con
+  substituit_per_codi apuntando a la nueva. **La cadena de substituit_per_codi ES la traza de
+  auditoría**: no se crea tabla de historial aparte.
+- Migración Alembic + sembrado NO incluido aquí (lo hace el CLI).
+
+## Servicio (services/vocabulary_service.py)
+- validate(axis, codis) -> list[str]: devuelve los códigos DESCONOCIDOS o no vigentes (vacío = OK).
+- resolve(axis, codi) -> str: sigue la cadena substituit_per_codi hasta el término vigente
+  (con corte por ciclo → error explícito, no bucle infinito).
+- build_router_index(organizacion_id) -> str: el índice de submaterias del Nivel 0, agrupado por
+  ámbito, con descripcio_router. Debe caber en el orden de magnitud medido (~2.3k tokens para 58).
+- reclassify(axis, codi_antic, codi_nou): UPDATE de los documentos afectados siguiendo la
+  substitución. **No re-embebe nada** (ver regla 2 del bloque) — devuelve el recuento tocado.
+
+## Frontera edge/cloud (regla dura de CLAUDE.md)
+El módulo de ingesta es edge y NO puede importar HubVocabularyTerm. Se amplía el protocolo
+ConfigProvider (services/config_provider.py:16-23) con:
+    async def list_vocabulary(self, axis: str, organizacion_id: uuid.UUID) -> list[VocabularyTermDTO]
+implementado en LocalConfigProvider. El DTO es un dataclass del lado edge, no el modelo ORM.
+
+## CLI (python -m ...vocabulary.load)
+- Argumentos: --axis, --csv, --organizacion-id, --dry-run.
+- Carga ambits.csv (columnas code/nom/…) y submateries.csv (codi;ambit;nom_val;nom_es;abast;…)
+  del directorio vocabulari/ del proyecto de normativa. Idempotente por (organizacion_id, axis, codi):
+  segunda pasada no duplica y reporta "sin cambios".
+- Un CSV con un parent_codi inexistente se rechaza ENTERO (no carga a medias).
+
+## Tests (RED primero) — tests/modules/agents_hub/test_vocabulary_service.py
+# should_reject_unknown_submateria_codes
+# should_accept_codes_present_and_vigent
+# should_reject_code_marked_not_vigent
+# should_resolve_renamed_code_to_its_replacement
+# should_raise_on_substitution_cycle
+# should_build_router_index_grouped_by_ambit
+# should_scope_vocabulary_by_organizacion          (dos orgs, taxonomías distintas)
+# should_be_idempotent_on_second_csv_load
+# should_reject_csv_with_dangling_parent_codi
+# should_expose_vocabulary_through_config_provider (frontera: sin import del modelo en edge)
+# should_not_declare_check_constraint_on_codi      (guardarraíl del diseño: inspección de metadata)
+
+## Criterio de done
+- [ ] Migración aplicada (adjuntar `alembic current`)
+- [ ] Los 5 ámbitos y las 58 submaterias cargados desde vocabulari/*.csv, con recuentos reales
+- [ ] Índice del Nivel 0 generado y su tamaño en tokens medido y anotado en el cierre
+```
+
+---
+
+### Prompt ING.0.2 (RED/GREEN) — Modelo de datos del documento normativo
+
+**Modelo sugerido**: **Sonnet** — migración con criterio explícito de qué es columna y qué es JSONB; sin decisiones abiertas.
+
+```
+# PROMPT ING.0.2 (RED/GREEN) — Metadatos del corpus en HubDocument
 # Deploy: edge
 
-## Contratos (modules/agents_hub/ingestion/corpus/manifest.py)
-- CorpusDocumentEntry (Pydantic frozen): relative_path (.md), source_url, original_pdf_sha256,
-  language ('ca'|'es'|'en'|...), content_class ('regulation'|'faq'|'generic'), category,
-  reviewer, reviewed_at (datetime), docling_version | converter, title | None.
-- CorpusManifest: chatbot/organizacion destino (o resuelto al importar), created_at,
-  documents: list[CorpusDocumentEntry]. Validación: rutas relativas (no absolutas ni '..'),
-  content_class 'regulation' EXIGE reviewer + reviewed_at no nulos (revisión obligatoria).
-- Loader: leer el manifiesto (json/yaml). El normativa_uji_log.json existente se puede
-  transformar a este formato (documentar el mapeo; no acoplar el loader a ese formato).
+## Regla que decide el esquema (evita las 56 columnas)
+Una columna de primer nivel SOLO si algo la filtra, la ordena o la usa como puerta.
+Todo lo demás va a doc_metadata JSONB. Se documenta en el docstring del modelo.
+
+## Migración sobre hub_documents (operational_models.py:142-173)
+Columnas nuevas de primer nivel:
+- content_class String(20) NOT NULL default 'generic'   # gate de revisión (era del viejo ING.0.1)
+- ambit_principal String(80) | None                     # filtro del Nivel 1
+- ambits_secundaris ARRAY(String) default []            # amplía alcance (informe §2.3)
+- submateries ARRAY(String) default []                  # el filtro propiamente dicho
+- submateries_internes ARRAY(String) default []          # contenido disperso (informe §5.2)
+- nivell_acces String(20) NOT NULL default 'public'     # 'public'|'intern'|'restringit'
+- us_assistents String(20) NOT NULL default 'si'        # 'si'|'restringit'|'no'
+- canonica Boolean NOT NULL default True                # una sola versión indexada (informe §6.3)
+- versio_idiomatica_de UUID | None                      # la otra lengua, recuperable por id
+- estat_vigencia String(20) | None
+- vigencia_validada_el DateTime(tz) | None              # NULL ⇒ el asistente ADVIERTE (VIS.3)
+- revisat_per String(255) | None, revisat_el DateTime(tz) | None   # revisión de conversión
+- data_revisio_prevista Date | None                     # caducidad activa (SYNC.2)
+- id_publicacio String(80) | None, indexada              # id estable del registro de publicación.
+    Se rellena cuando exista; hoy puede venir vacío. Es la clave de emparejamiento del sync
+    (SYNC.1) para que el cambio de transporte NO sea una recarga del corpus. Fallback
+    documentado: doc_metadata->>'url_oficial' + language.
+- last_seen_at DateTime(tz) | None                       # última vez que la fuente lo declaró.
+    Lo estampa cada pasada de censo (ING.0.5). Es el mecanismo que hace segura la detección de
+    retiradas: se marca lo que el último censo NO vio, no lo que "falta" en una carga parcial.
+- doc_metadata JSONB NOT NULL default '{}'              # rang, aplica_a, resum_router,
+    preguntes_tipus, termes_bilingues, tipus_font, font_autoritativa, deroga, derogat_per,
+    url_oficial, motiu_exclusio, original_pdf_sha256, converter/docling_version…
+- ARRAY y no tabla de relación: mismo criterio ya adoptado en SEC.2.1 para allowed_roles.
+
+Sin columna 'origen' nueva: se REUTILIZA source_kind (ya existe, String(20)) ampliando sus
+valores documentados a 'crawler'|'upload'|'publicacio'|'boe'. Duplicar el eje sería deuda.
+
+Índices: btree (chatbot_id, ambit_principal), btree (chatbot_id, nivell_acces),
+GIN (submateries), GIN (submateries_internes), GIN (doc_metadata).
+
+## FK que falta y que VIS.1 necesita
+hub_document_chunks.document_id existe pero NO tiene FK (operational_models.py:185-187).
+VIS.1 filtra los chunks por los metadatos de su documento mediante JOIN — se elige JOIN y no
+denormalizar sobre el chunk porque así reclasificar es UN UPDATE sobre hub_documents y no hay
+dos copias que divergir. La migración: limpiar huérfanos (document_id que no existe) y añadir
+FK → hub_documents.id ondelete CASCADE. Los chunks temporales (document_id NULL, subida de
+usuario) siguen siendo válidos y se tratan aparte en VIS.1.
+
+## section_path
+Declarada (línea 160) y JAMÁS escrita en todo server/app; solo se lee en 4 sitios. Si ING.0.4
+no la puebla con la ruta estructural, se retira por Caso B (borrado directo) con el checklist
+de CLAUDE.md. Decidirlo dentro de ING.0.4, no dejarla en el limbo.
+
+## Tests (RED primero) — tests/modules/agents_hub/test_document_metadata_model.py
+# should_default_new_document_to_public_and_canonical
+# should_persist_and_read_back_submateries_array
+# should_persist_arbitrary_schema_fields_in_doc_metadata
+# should_reject_chunk_with_dangling_document_id      (la FK nueva muerde)
+# should_cascade_chunk_deletion_when_document_deleted
+# should_allow_null_document_id_for_temporary_chunks
+# should_have_gin_index_on_submateries               (inspección de índices)
+# should_migrate_existing_rows_with_safe_defaults    (fail-closed: nivell_acces='public' solo
+#                                                     porque hoy todo el corpus cargado es público;
+#                                                     documentarlo en la migración)
+
+## Criterio de done
+- [ ] Migración aplicada (`alembic current`) y reversible (downgrade probado)
+- [ ] Recuento de huérfanos limpiados por la migración, anotado en el cierre
+```
+
+---
+
+### Prompt ING.0.3 (RED/GREEN) — Front-matter como portador + manifiesto derivado
+
+**Modelo sugerido**: **Sonnet** — contratos Pydantic + validación contra vocabulario; alcance cerrado.
+
+```
+# PROMPT ING.0.3 (RED/GREEN) — Contrato de metadatos del .md curado
+# Deploy: edge
+
+## Decisión de diseño: el portador es el front-matter, el manifiesto se deriva
+El .md es autodescriptivo (es lo que hace posible el sync de SYNC.1 y la carga manual con el
+mismo contrato). El manifiesto sigue existiendo para corpus SIN front-matter (histórico, BOE):
+si un documento trae front-matter, MANDA el front-matter; si no, manda la entrada del manifiesto.
+
+## Parser (ingestion/corpus/frontmatter.py)
+- parse(raw_md) -> (metadata: dict, body: str). Front-matter YAML delimitado por '---'.
+- **El hash y el chunking se calculan SOBRE EL BODY, nunca sobre el front-matter.** Es la
+  decisión con más consecuencias del prompt: así un cambio SOLO de metadatos no altera
+  content_hash → no dispara re-chunk ni re-embedding, y un cambio de texto sí. Hoy
+  hash_content() recibiría el front-matter como parte del contenido (watcher.py:94-95) y
+  cualquier reetiquetado costaría reindexar el corpus entero.
+- Un .md sin front-matter no es error: devuelve ({}, raw_md).
+
+## Contratos (ingestion/corpus/manifest.py)
+- CorpusDocumentEntry (Pydantic frozen): relative_path (.md), source_url, language,
+  id_publicacio | None (id estable del registro de publicación; hoy puede ir vacío, ver ING.0.2),
+  content_class ('regulation'|'faq'|'generic'), title | None, original_pdf_sha256 | None,
+  converter/docling_version | None, revisat_per | None, revisat_el | None,
+  ambit_principal | None, ambits_secundaris: list[str] = [], submateries: list[str] = [],
+  submateries_internes: list[str] = [], nivell_acces = 'public', us_assistents = 'si',
+  canonica: bool = True, versio_idiomatica_de | None, estat_vigencia | None,
+  vigencia_validada_per | None, vigencia_validada_el | None, data_revisio_prevista | None,
+  motiu_exclusio | None, extra: dict = {}  (→ doc_metadata).
+- CorpusManifest: chatbot/organizacion destino, created_at, documents: list[...].
+- Validación:
+  * rutas relativas, sin absolutas ni '..';
+  * content_class 'regulation' EXIGE revisat_per + revisat_el (revisión obligatoria, se
+    conserva del contrato anterior);
+  * ambit_principal y submateries se validan contra VocabularyService vía ConfigProvider;
+    término desconocido ⇒ error que ENUMERA los códigos no reconocidos (no falla en el primero);
+  * us_assistents == 'no' EXIGE motiu_exclusio (informe §4: convierte «no se publica» en
+    decisión auditable en vez de silencio);
+  * nivell_acces y us_assistents contra sus listas cerradas (sí son enumeraciones estables).
+- El mapeo de normativa_uji_log.json a este contrato se DOCUMENTA (docstring o docs/) sin
+  acoplar el loader a ese formato.
 
 ## Tests (RED primero) — tests/modules/agents_hub/ingestion/test_corpus_manifest.py
 # should_reject_absolute_or_parent_paths
-# should_require_reviewer_for_regulation_class
-# should_allow_missing_reviewer_for_faq_class
-# should_parse_language_and_category
+# should_require_review_for_regulation_class
+# should_allow_missing_review_for_faq_class
+# should_parse_frontmatter_and_strip_it_from_body
+# should_hash_body_without_frontmatter               (el test central del prompt)
+# should_not_change_hash_when_only_metadata_changes
+# should_change_hash_when_body_changes
+# should_treat_md_without_frontmatter_as_empty_metadata
+# should_reject_unknown_submateria_against_vocabulary
+# should_list_all_unknown_codes_not_just_the_first
+# should_require_motiu_exclusio_when_us_assistents_is_no
+# should_prefer_frontmatter_over_manifest_entry
 # should_roundtrip_manifest_json
 ```
 
 ---
 
-### Prompt ING.0.2 (RED/GREEN) — CLI de carga masiva de corpus curado (passthrough + procedencia + idempotencia)
+### Prompt ING.0.4 (RED/GREEN) — Chunker jerárquico de 4 niveles + anclas de artículo
 
-**Modelo sugerido**: **Sonnet** — reutiliza `IngestionWatcher`; el trabajo es cablear, no diseñar pipeline nuevo.
+**Modelo sugerido**: **Sonnet** — cambio acotado en el chunker con efecto medible en las citas.
 
 ```
-# PROMPT ING.0.2 (RED/GREEN) — Script de carga de corpus curado
+# PROMPT ING.0.4 (RED/GREEN) — Jerarquía real y cita por artículo
 # Deploy: edge
 
-## CLI (scripts/ingest_corpus.py o comando `python -m ...ingestion.corpus.load`)
-- Argumentos: --dir (carpeta con .md), --manifest (ruta del CorpusManifest), --chatbot-id,
-  --dry-run.
-- Recorre las entradas del manifiesto; por cada .md:
-    - lee el markdown (passthrough; NO reconvierte, NO llama a Docling);
-    - reusa IngestionWatcher.process_source con el markdown como fuente
-      (watcher ya hace hash_content → detect_language → MarkdownChunker → embedding →
-       HubDocumentChunk);
-    - PRESERVA la procedencia en HubDocument: source_url, content_hash, language (del
-      manifiesto, no re-adivinar si viene dado), content_class, reviewer/reviewed_at.
-- Idempotencia: apoyarse en la dedup por content_hash del watcher (watcher.py:~102-108);
-  reimportar un .md no cambiado NO duplica; uno corregido re-ingiere solo ese.
-- --dry-run: reporta qué se ingeriría/omitiría sin escribir.
-- Rechazar entradas 'regulation' sin revisión (coherente con ING.0.1) antes de ingerir.
-- Reutilizar la validación por extensión de SEC.6 (allowed_ext incluye .md/.txt).
+## Contexto medido
+El corpus tiene 4.649 artículos, 685 capítulos, 432 títulos, 280 secciones y 675 disposiciones
+marcados como encabezado, pero HOY casi todos aplanados en '##'. El modelo de publicación nuevo
+emite jerarquía real (# documento / ## título / ### capítulo / #### artículo) y ancla estable
+por artículo, también retroactivamente sobre el histórico. El chunker solo sigue 3 niveles
+(chunker.py:27-31), así que los artículos se perderían como nivel.
 
-## Tests (RED primero) — test_corpus_loader.py (fakes en memoria, sin BD real donde sea posible)
+## Cambios en ingestion/chunker.py
+- headers_to_split pasa a 4 niveles: header_1..header_4.
+- Extracción del ancla del propio encabezado (patrón estable acordado con publicación, p. ej.
+  '#### Article 14. Import de la dieta {#art-14}'):
+  * 'ancora' va a chunk_metadata;
+  * el token '{#...}' se ELIMINA del texto del chunk (es ruido para el embedding y para el
+    usuario); el resto del encabezado se conserva (strip_headers=False sigue vigente: RAG.7 lo
+    necesita).
+- 'ruta': lista de encabezados ancestros (['Títol I','Capítol III']) en chunk_metadata, para que
+  un artículo recuperado aislado no pierda el contexto que le da su capítulo (informe §5.2).
+- Un .md sin anclas ni jerarquía sigue funcionando: ancora=None, ruta con lo que haya.
+
+## Cita verificable (el pago de este prompt)
+Cuando el chunk tiene 'ancora', la URL de la evidencia es canonical_url + '#' + ancora. Se
+aplica en el punto donde se construye la evidencia, para las tres estrategias.
+
+## section_path (deuda heredada, se cierra aquí)
+Poblarla con la ruta estructural del documento; si no encaja, retirarla por Caso B con el
+checklist completo de CLAUDE.md (grep de los 4 lectores: long_context_strategy.py:65,
+agentic_strategy.py:33, list_documents.py:28, md_agent_selector_pipeline.py:54).
+
+## Regla dura que hereda el Bloque RAG
+Solo se embebe contexto ESTRUCTURAL (título/capítulo/artículo), que es estable. La taxonomía
+(ámbito, submaterias) NO entra nunca en el texto embebido. Ver enmienda a RAG.7.
+
+## Tests (RED primero) — tests/modules/agents_hub/ingestion/test_chunker_hierarchy.py
+# should_split_on_four_heading_levels
+# should_extract_article_anchor_into_metadata
+# should_strip_anchor_token_from_chunk_text
+# should_keep_heading_text_in_chunk_content
+# should_record_ancestor_route_in_metadata
+# should_handle_md_without_anchors_or_hierarchy
+# should_build_citation_url_with_anchor_fragment
+# should_not_include_taxonomy_in_embedded_text     (guardarraíl de la regla dura)
+
+## Criterio de done
+- [ ] Chunks regenerados con corpus_recalculator sobre el corpus de prueba
+- [ ] Una cita real con fragmento #art-N verificada extremo a extremo
+- [ ] section_path poblada o retirada; grep limpio si se retira
+```
+
+---
+
+### Prompt ING.0.5 (RED/GREEN) — Reconciliador de corpus + CLI sobre carpeta local
+
+**Modelo sugerido**: **Opus** — es el prompt con más decisiones embebidas del bloque: semántica de censo, salvaguarda de poda y el protocolo que evita que SYNC.1 duplique el pipeline.
+
+```
+# PROMPT ING.0.5 (RED/GREEN) — Un reconciliador, dos fuentes (la segunda llega en SYNC.1)
+# Deploy: edge
+
+## Por qué este prompt es el reconciliador y no "el cargador"
+El pipeline de publicación no existirá hasta dentro de meses. Durante ese tiempo el CLI **es** el
+mecanismo de mantenimiento del corpus, no una carga inicial. Cuando llegue el transporte
+programático, debe añadirse una FUENTE, no un segundo pipeline. Por tanto la reconciliación se
+escribe aquí, una sola vez, detrás de un protocolo.
+
+## Protocolo de fuente (ingestion/corpus/source.py)
+class CorpusSource(Protocol):
+    def is_census(self) -> bool                      # ¿declara el corpus COMPLETO?
+    async def list_entries(self) -> list[CorpusDocumentEntry]
+    async def read_body(self, entry) -> str          # el .md ya sin front-matter (ING.0.3)
+- LocalDirectorySource(dir, manifest | None) en este prompt.
+- PublicationMcpSource en SYNC.1. Nada más cambia allí.
+
+## Reconciliador (ingestion/corpus/reconciler.py)
+Por cada entrada, contra hub_documents del chatbot destino. Emparejamiento: id_publicacio si
+viene; si no, url_oficial + language (fallback documentado en ING.0.2).
+- ausente en el hub                → ingerir
+- hash del body distinto           → re-ingerir solo ese documento
+- hash igual, metadatos distintos  → **UPDATE de metadatos SIN re-chunk ni re-embedding**
+- hash y metadatos iguales         → omitido
+- us_assistents == 'no'            → no se ingiere; omitido con su motiu_exclusio
+- content_class 'regulation' sin revisión → rechazado antes de tocar la BD
+Toda entrada vista, cambiada o no, estampa last_seen_at.
+
+## Censo y poda: el modo peligroso
+- Sin --prune (default) el reconciliador NO retira nada. Una carga parcial nunca puede
+  interpretarse como censo.
+- Con --prune, y SOLO si source.is_census() es True: los documentos del chatbot cuyo
+  last_seen_at es anterior a esta pasada se marcan (us_assistents='no',
+  motiu_exclusio='retirada_de_la_font') y emiten HubContentFinding para la cola del admin.
+  **Nunca se borran.** Retirada de la fuente ≠ derogación: la distinción la hace una persona.
+- **Salvaguarda de proporción**: si la poda afectaría a más del N % del corpus (default 10 %),
+  ABORTA y exige --force-prune con el recuento por delante. Es la red que evita convertir un
+  `--dir` mal escrito en la retirada del corpus entero.
+
+## CLI (python -m ...ingestion.corpus.load)
+- Argumentos: --dir, --manifest (opcional si hay front-matter), --chatbot-id, --dry-run,
+  --census, --prune, --force-prune, --prune-threshold.
+- Por cada .md: parse de front-matter (ING.0.3) → passthrough del body (NO reconvierte, NO
+  llama a Docling) → IngestionWatcher.process_source, que ya hace hash → detect_language →
+  MarkdownChunker → embedding → HubDocumentChunk.
+- language del front-matter/manifiesto MANDA sobre detect_language cuando viene dado.
+- source_kind = 'publicacio' | 'boe' | 'upload' según el origen declarado.
+- Persiste TODOS los campos de ING.0.2, incluidos los ARRAY y doc_metadata.
+- Reutiliza validate_upload(file, kind=UploadKind.TEXT) de SEC.6 (core/uploads.py) — no
+  reimplementar validación de extensión ni de binario disfrazado.
+- **Un HubIngestionJob por ejecución**, con los seis recuentos (ingeridos / re-ingeridos /
+  metadatos actualizados / omitidos / rechazados / retirados). Si el CLI va a ser el mecanismo
+  de mantenimiento durante meses, el historial tiene que estar en la BD y visible en el admin,
+  no solo en la consola de quien lo ejecutó.
+- --dry-run: el plan completo, incluido lo que se podaría, sin escribir.
+
+## Watcher: la ampliación que esto exige
+Hoy, en el acierto de hash, el watcher solo refresca canonical_url/title/updated_at
+(watcher.py:101-114). Debe además refrescar los metadatos de ING.0.2. Es la ruta que hará barata
+la reclasificación cuando SG revise el vocabulario, así que tiene test propio.
+
+## Tests (RED primero) — test_corpus_reconciler.py + test_corpus_loader.py
 # should_ingest_markdown_passthrough_without_docling
-# should_persist_provenance_fields_on_hub_document
-# should_skip_unchanged_document_by_content_hash        (idempotencia)
+# should_persist_all_metadata_fields_on_hub_document
+# should_prefer_declared_language_over_detection
+# should_skip_unchanged_document_by_content_hash
+# should_update_metadata_without_rechunking_when_only_metadata_changed
 # should_reingest_only_changed_document
+# should_match_existing_document_by_id_publicacio
+# should_fall_back_to_url_and_language_when_id_publicacio_missing
+# should_stamp_last_seen_at_on_every_entry_including_unchanged
 # should_refuse_regulation_entry_without_review
+# should_skip_documents_marked_us_assistents_no_with_reason
+# should_not_prune_anything_without_the_prune_flag
+# should_not_prune_when_source_is_not_a_census
+# should_mark_and_emit_finding_for_pruned_document_without_deleting
+# should_abort_prune_above_proportion_threshold
+# should_prune_above_threshold_only_with_force
+# should_record_one_ingestion_job_per_run_with_counters
 # should_report_plan_in_dry_run_without_writing
 
-## Cierre
-- [ ] Cargar la carpeta canónica de normativa UJI curada contra el chatbot destino
-- [ ] Verificar citas trazables (source_url) en una consulta de prueba
+## Cierre del bloque ING.0
+- [ ] Cargar el corpus curado contra el chatbot destino y **congelar el manifiesto como
+      `corpus v1`** (versionado), para que la baseline de RAG.1 no se mueva después
+- [ ] Cifras reales del HubIngestionJob de la carga
+- [ ] Segunda pasada sobre la misma carpeta: todo omitido, cero chunks nuevos (idempotencia real,
+      no solo en test)
+- [ ] Tercera pasada con un `.md` reetiquetado: metadatos actualizados y **cero re-embeddings**
+- [ ] Verificar una cita trazable (source_url + ancla) en una consulta de prueba
+- [ ] Confirmar que el crawler está desactivado para este chatbot (fuente autoritativa única)
+- [ ] Documentar en `docs/` el procedimiento de actualización por CLI, que es el que estará en
+      uso hasta que exista el pipeline de publicación
+```
+
+---
+
+## Bloque VIS — Vistas del fundamento único: recuperación por metadatos (PENDIENTE)
+
+> **Contexto**: implementa los Niveles 0, 1 y 2 de la estrategia (`INFORME_MATERIES_I_METADADES_AGENTS.md` §6.1, `INFORME_ESTRATEGIA_ASISTENTE_GERENCIA.md` §4). Hoy la recuperación filtra **solo** por `chatbot_id`, `is_temporary`/`owner_id` y opcionalmente `language` (`retriever.py:63-71,104-112`); no existe ni un operador JSONB en el código. Sin este bloque, los metadatos de ING.0 son decorativos y el control de acceso por perfil que exige `CRITERIS` §1.4 no es expresable.
+>
+> **Posición en el orden**: **después de RAG.2**. VIS.2 reescribe `md_agent_selector_pipeline`, que RAG.2 saca de su estado de stub al consolidar los grafos; hacerlo antes sería escribir contra `agent/graph.py`, que RAG.2 elimina.
+>
+> **Regla del bloque**: todo filtro se aplica **en SQL**, no en Python después del `LIMIT`. El precedente a no repetir es `_get_superseded_doc_ids` (`retriever.py:31-49`), que filtra en memoria tras el `top_k`: los documentos excluidos consumen plazas del resultado en vez de ser reemplazados.
+
+---
+
+### Prompt VIS.1 (RED/GREEN) — Filtro de metadatos en la capa de recuperación
+
+**Modelo sugerido**: **Sonnet** — SQL + contrato de filtro; las decisiones (JOIN, fail-closed) vienen dadas.
+
+```
+# PROMPT VIS.1 (RED/GREEN) — Recuperación filtrada por ámbito, submateria y nivel de acceso
+# Deploy: edge
+
+## Contrato (services/retrieval/metadata_filter.py)
+@dataclass(frozen=True) MetadataFilter:
+    ambits: tuple[str, ...] = ()            # ámbito activo + secundarios + 'transversal'
+    submateries: tuple[str, ...] = ()       # vacío = sin restringir por submateria
+    max_nivell_acces: str = 'public'        # 'public' < 'intern' < 'restringit'
+    include_non_canonical: bool = False
+    include_superseded: bool = False
+
+## Aplicación en retriever.py (vector_search, keyword_search, hybrid_search)
+- JOIN hub_document_chunks → hub_documents por document_id (FK añadida en ING.0.2) y filtro en
+  el WHERE, ANTES del ORDER BY / LIMIT.
+- ambits: hub_documents.ambit_principal IN (...) OR ambits_secundaris && ARRAY[...]
+- submateries: submateries && ARRAY[...] OR submateries_internes && ARRAY[...]
+  (el operador && de solapamiento de arrays, que aprovecha el índice GIN de ING.0.2)
+- max_nivell_acces: **fail-closed**. Si el nivel del actor no se puede determinar, 'public'.
+  Nunca una instrucción al modelo: es filtro de recuperación (CRITERIS §1.4).
+- us_assistents != 'no' siempre.
+- canonica IS TRUE salvo include_non_canonical (VIS.3).
+- Chunks temporales (document_id NULL, subida del propio usuario): NO se filtran por ámbito ni
+  submateria — son del actor y ya están acotados por owner_id. Documentarlo y probarlo.
+
+## Las otras dos estrategias, que hoy no filtran NADA
+long_context_strategy.py:34-36 y agentic_strategy.py:20-36 seleccionan por chatbot_id (+lengua)
+y ya está: ni superseded, ni nivell_acces, ni us_assistents. Un documento derogado se inyecta
+entero en MD_LONG_CONTEXT y list_documents lo sigue listando. Ambas pasan a recibir y aplicar
+MetadataFilter. Es una fuga de control de acceso, no una mejora de calidad.
+
+## Tests (RED primero) — tests/modules/agents_hub/test_metadata_filter.py
+# should_return_only_chunks_of_requested_ambit
+# should_include_documents_matching_by_ambits_secundaris
+# should_match_submateria_in_submateries_internes
+# should_exclude_intern_documents_for_public_actor
+# should_default_to_public_when_actor_level_unknown        (fail-closed)
+# should_never_return_us_assistents_no_documents
+# should_apply_filter_in_sql_before_limit                 (top_k no se degrada; se compara
+#                                                          recuento con y sin filtro)
+# should_not_filter_temporary_chunks_by_ambit
+# should_apply_filter_in_long_context_strategy
+# should_apply_filter_in_agentic_index
+# should_exclude_superseded_in_all_three_strategies
+
+## Criterio de done
+- [ ] RAG.1 ejecutado y comparado con baseline (adjuntar recall@k/MRR)
+- [ ] Test de fuga: un actor 'public' no recupera NI UN chunk de documento 'intern' por ninguna
+      de las tres estrategias
+```
+
+---
+
+### Prompt VIS.2 (RED/GREEN) — Niveles 0/1/2: índice de submaterias, selección e inyección de subconjunto
+
+**Modelo sugerido**: **Opus** — es la pieza con más decisiones embebidas del bloque: qué va al prompt fijo, cómo se selecciona, cómo se degrada cuando no cabe.
+
+```
+# PROMPT VIS.2 (RED/GREEN) — El router ve temas, no documentos
+# Deploy: edge
+
+## El error que este prompt corrige
+RAG.2 deja md_agent_selector_pipeline devolviendo «el índice de documentos» como evidencia
+inicial. Medido en el informe: el catálogo de fichas con los campos del router son ~72k tokens
+y NO cabe en un system prompt; el índice de las 58 submaterias son 2.307 tokens y sí cabe. El
+router no necesita saber qué normas existen: necesita saber qué TEMAS existen.
+
+## Nivel 0 — system prompt fijo (~6k tokens)
+- Índice de submaterias desde VocabularyService.build_router_index (ING.0.1), vía ConfigProvider.
+- Reglas de rango, vigencia y citación.
+- Se integra en la TemplateStrategy del CoreGraph (única fuente del system prompt tras RAG.2).
+
+## Nivel 1 — selección
+- El modelo selecciona 1-3 submaterias con el tool list_documents, que se AMPLÍA con el
+  parámetro submateries: list[str] (y ámbito implícito del chatbot). No se añade un tool nuevo:
+  el índice ya está en el prompt, así que no hace falta un list_submaterias.
+- Devuelve las fichas de los documentos de esas submaterias (~1.5k tokens), no su contenido.
+- Retroceso escalonado (informe §4.2, la pieza que hace que esto supere a un corpus curado):
+  nada encaja → fichas de TODAS las submaterias del ámbito → sigue sin encajar → catálogo global.
+  Cada escalón se registra en el debug de la evidencia para poder medirlo.
+
+## Nivel 2 — inyección del subconjunto
+- read_document sobre 1-3 documentos, enteros (~25k tokens).
+- LongContextRetrievalStrategy deja de significar «todo el corpus del chatbot» y pasa a aceptar
+  un MetadataFilter (VIS.1): inyecta el SUBCONJUNTO.
+- **Degradación en vez de excepción**: hoy la estrategia lanza ValueError si el corpus pasa de
+  128k (long_context_strategy.py:41-46). En producción eso es una caída. Pasa a recortar por
+  presupuesto y a marcar la evidencia como truncada, con el recuento de lo descartado.
+- Columna context_token_budget (nullable) en HubChatbot + default_context_token_budget en
+  HubOrganizacion + default de plataforma en ConfigResolver, misma cascada que el resto.
+  **Se crea AQUÍ**, no en RAG.5 (ver enmienda): RAG.5 la consume para su packer.
+
+## Tests (RED primero) — tests/public_graphs/test_vis_levels.py
+# should_include_submateria_index_in_system_prompt
+# should_keep_level0_index_within_token_order_of_magnitude
+# should_list_documents_filtered_by_selected_submateries
+# should_fall_back_to_ambit_wide_index_when_nothing_matches
+# should_fall_back_to_global_catalog_as_last_resort
+# should_record_fallback_level_in_evidence_debug
+# should_inject_only_selected_documents_not_whole_corpus
+# should_truncate_instead_of_raising_when_over_budget
+# should_resolve_context_budget_from_cascade
+# should_not_leak_documents_outside_the_actor_filter      (VIS.1 sigue mandando)
+
+## Criterio de done
+- [ ] Migración de context_token_budget aplicada y visible en la API admin
+- [ ] RAG.1 sin regresión (adjuntar cifras)
+- [ ] Traza real de una consulta: submaterias elegidas, documentos inyectados, tokens usados
+```
+
+---
+
+### Prompt VIS.3 (RED/GREEN) — Versión canónica bilingüe + advertencia de vigencia no validada
+
+**Modelo sugerido**: **Sonnet** — dos reglas acotadas con efecto directo en la respuesta.
+
+```
+# PROMPT VIS.3 (RED/GREEN) — Una versión indexada y una advertencia honesta
+# Deploy: edge
+
+## Canónica (informe §6.3)
+Medido: 233 fichas en valenciano y 81 en castellano, muchas la misma norma. Hoy el hub las
+indexa como documentos distintos coexistiendo por (canonical_url, language)
+(watcher.py:116-131) → el mismo contenido ocupa dos plazas del top-k.
+- Solo canonica=True entra en la recuperación (VIS.1 ya lo aplica).
+- La otra versión es recuperable por id con read_document, vía versio_idiomatica_de, cuando el
+  usuario pide la cita literal en la otra lengua.
+- El cargador (ING.0.5) enlaza los pares: canonica declarada en el front-matter; si ambas se
+  declaran canónicas para el mismo url_oficial, error explícito (no elegir a ciegas).
+
+## Advertencia de vigencia (riesgo nº1 del informe: 312 de 314 fichas dicen «vigent?»)
+- Si un documento citado tiene vigencia_validada_el IS NULL, o estat_vigencia distinto de
+  'vigent', la respuesta lo DICE. Se implementa en la capa de plantilla/evidencia del CoreGraph
+  (flag en EvidenceItem + texto de la TemplateStrategy), NO como frase suelta en el system
+  prompt: una instrucción al modelo no es garantía.
+- Los documentos derogados (estat_vigencia='derogat') no se recuperan salvo petición explícita
+  por id.
+
+## Tests (RED primero)
+# should_retrieve_only_canonical_version_by_default
+# should_read_language_variant_by_id_on_demand
+# should_error_when_two_canonical_versions_share_url
+# should_warn_when_cited_document_has_unvalidated_vigencia
+# should_not_warn_when_vigencia_is_validated
+# should_exclude_derogated_documents_from_retrieval
+# should_still_allow_derogated_document_by_explicit_id
+
+## Criterio de done
+- [ ] RAG.1 sin regresión; anotar el efecto de la desduplicación bilingüe en el top-k
+- [ ] Una respuesta real con la advertencia de vigencia, pegada en el cierre
 ```
 
 ---
@@ -12218,7 +12718,7 @@ dueño del PAT, y la cuota por usuario de SEC.4 no puede existir.
 
 > **Contexto**: planificado 2026-07-15 a partir de `docs/COMPARATIVA_RAG_LAMB.md` (comparativa arquitectónica del RAG con LAMB + recomendaciones propias + análisis "RAG vs agentes"). Principio rector: invertir en los **cimientos del retrieval** (índice híbrido real, reranker, representación del corpus, evaluación) porque son la herramienta que cualquier evolución agéntica consumirá; no invertir en sofisticación de pipeline que un bucle agéntico haría gratis.
 >
-> **Posición en el orden de ejecución** (acordada 2026-07-15): tras `ING.0` + pruebas manuales con corpus de prueba, **antes** del resto del Bloque SEC. El corpus de prueba ya cargado es insumo del dataset dorado (RAG.1).
+> **Posición en el orden de ejecución** (acordada 2026-07-15, **actualizada 2026-07-28**): tras `ING.0` + carga del corpus v1, **antes** del resto del Bloque SEC. El corpus cargado es insumo del dataset dorado (RAG.1). El bloque se **parte**: `RAG.1` (baseline) y `RAG.2` (consolidación de grafos) van delante del **Bloque VIS**; `RAG.3→RAG.14`, detrás. Ver la tabla de enmiendas más abajo.
 >
 > **Estado**: ✅ relación de prompts aprobada y ✅ **detalle verbatim completado** (2ª pasada, 2026-07-15). Bloque listo para ejecutar cuando llegue su turno en el orden.
 >
@@ -12262,9 +12762,19 @@ dueño del PAT, y la cuota por usuario de SEC.4 no puede existir.
 
 RAG.3, RAG.9 y RAG.12 son independientes y pueden intercalarse como prompts cortos entre los mayores.
 
+> **Enmiendas del 2026-07-28 (replanificación del corpus normativo).** El Bloque VIS se intercala **entre RAG.2 y RAG.3**: `ING.0.1→0.5` → carga del corpus v1 → `RAG.1` (baseline) → `RAG.2` (consolidación) → `VIS.1→VIS.3` → `RAG.3→RAG.14` → Bloque SYNC. Cuatro prompts de este bloque quedan enmendados en su detalle verbatim, marcado con `# ENMIENDA` in situ:
+>
+> | Prompt | Enmienda | Por qué |
+> |---|---|---|
+> | RAG.2 | La evidencia inicial del selector no se cementa como «índice de documentos» | ~72k tokens, no cabe; VIS.2 lo sustituye por el índice de submaterias (2.307 tokens) |
+> | RAG.4 | El `tsvector` incorpora `termes_bilingues` de `doc_metadata` | El puente léxico despesa/gasto se regenera con SQL; en el embedding costaría GPU |
+> | RAG.5 | `context_token_budget` **la crea VIS.2**; RAG.5 solo la consume | La columna la necesita antes la inyección de subconjunto del Nivel 2 |
+> | RAG.7 | Solo se embebe contexto **estructural**; nunca la taxonomía | El vocabulario es revisable: taxonomía embebida ⇒ re-embedding en cada revisión |
+
 ### Reglas duras del bloque
 
 - Ninguna mejora del retriever se cierra sin ejecutar la suite de RAG.1 y comparar contra baseline (adjuntar cifras en el cierre del prompt).
+- **La taxonomía (ámbito, submaterias) nunca forma parte del texto embebido.** Es lo que mantiene revisable el vocabulario pendiente de validar por SG: reclasificar debe costar un `UPDATE`, no una reindexación.
 - RAG.2 cumple el checklist de migración completo de CLAUDE.md: grep de referencias a `agent/graph.py` y a `Source` antiguo antes de cerrar; ningún import activo al código retirado.
 - Los tests de retrieval de RAG.1 son **métricas puras sin LLM** (deben correr en CI en segundos); RAGAS queda para evaluación periódica, nunca como gate de CI.
 - Todo router o servicio nuevo se etiqueta `Deploy: edge|cloud` en su docstring y se registra en `_register_edge`/`_register_cloud`.
@@ -12359,6 +12869,12 @@ contrato EvidenceItem.
   retrieval_mode == MD_AGENT_SELECTOR. Los tools (agent/tools/) no cambian.
 - strategies/md_agent_selector_pipeline.py deja de ser stub "índice completo": devuelve el
   índice de documentos como evidencia inicial y delega la selección al loop agéntico.
+# ENMIENDA (2026-07-28, Bloque VIS): el índice de DOCUMENTOS es provisional y no se cementa.
+# Medido en INFORME_MATERIES_I_METADADES_AGENTS.md §6.1: el catálogo de fichas son ~72k tokens
+# y no cabe en el system prompt; el índice de las 58 submaterias son 2.307 tokens y sí cabe.
+# VIS.2 lo sustituye por el índice de submaterias. Aquí basta con dejar el pipeline consolidado
+# y el loop agéntico portado, con la selección aislada en un punto de extensión — sin asumir en
+# los tests que la evidencia inicial es "todos los documentos".
 
 ## Unificación de contratos
 - Source (agent/state.py) se retira; EvidenceItem (strategies/retrieval_contract.py) es el único
@@ -12454,8 +12970,23 @@ contrato EvidenceItem.
 - Sustituir el AND de ILIKE por websearch_to_tsquery(config_del_idioma, query) @@ tsv con
   ranking ts_rank_cd normalizado a [0,1] (dividir por el máximo del lote).
 - Conservar: filtros chatbot_id / temporales / superseded / idioma, top_k*2, y la fusión RRF
-  (k=60, vector_weight=0.7) SIN cambios.
+  (k=60, vector_weight=0.7) SIN cambios. Si VIS.1 ya está cerrado, conservar también su
+  MetadataFilter (ámbito / submateria / nivell_acces) — la sustitución es de la rama léxica,
+  no del filtrado.
 - BORRAR el código ILIKE (borra, no comentes).
+
+# ENMIENDA (2026-07-28): puente léxico bilingüe en el tsvector, no en el embedding.
+# El BM25 cross-lingüe falla del todo entre 'despesa' y 'gasto' (no comparten una letra). El
+# informe de materias §6.2 propone pares bilingües del dominio como puente léxico. Su sitio es
+# ESTA columna, no el texto embebido: el tsvector se regenera con una sentencia SQL, un
+# embedding necesita GPU y horas.
+# - La expresión del tsvector concatena content con los termes_bilingues del documento
+#   (doc_metadata->>'termes_bilingues'). Como es columna generada y los términos viven en
+#   hub_documents, la vía es o denormalizar esos términos al chunk en la ingesta, o pasar de
+#   columna generada a columna materializada por trigger/ingesta. Elegir con el modelo real
+#   delante y documentar la elección; NO meter la taxonomía (ámbito/submaterias) en ningún caso.
+# - Test añadido: should_bridge_bilingual_terms_in_lexical_search  ('despesa' encuentra el chunk
+#   castellano cuyo documento declara el par despesa/gasto).
 
 ## Tests (RED primero) — tests/modules/agents_hub/unit+integration/test_retriever.py (ampliar)
 # should_match_stemmed_spanish_terms            ('becas' encuentra 'beca')
@@ -12499,6 +13030,11 @@ contrato EvidenceItem.
 - Config: nueva columna context_token_budget (nullable) en HubChatbot + default_context_token_budget
   en HubOrganizacion + default de plataforma 4000 en ConfigResolver (misma cascada que el resto).
   Migración Alembic + exposición en routers CRUD (hub_chatbots_router, hub_organizaciones_router).
+# ENMIENDA (2026-07-28): la columna y su cascada las crea VIS.2, que las necesita antes para la
+# inyección del subconjunto del Nivel 2. Aquí NO se crea la migración: solo se consume el valor
+# ya resuelto por ConfigResolver. Se conserva el test should_resolve_budget_from_cascade_* como
+# regresión. Si por lo que sea VIS.2 no estuviera cerrado al llegar aquí, crear la columna en
+# este prompt y retirar el trozo correspondiente de VIS.2 — pero no en los dos.
 - La estrategia RAG (vector_strategy / rag_vector_pipeline) usa el packer antes de construir el
   bloque DOCUMENTOS DISPONIBLES.
 
@@ -12578,6 +13114,19 @@ contrato EvidenceItem.
 - Cada chunk expone embedding_text = "<título documento> > <header_1> > <header_2> > <header_3>
   \n\n<content>" (niveles presentes; sin duplicar si el content empieza por el propio header).
 - El content ALMACENADO y mostrado como evidencia NO cambia; embedding_text no se persiste.
+
+# ENMIENDA (2026-07-28): la jerarquía son CUATRO niveles y la taxonomía no entra.
+# - Tras ING.0.4 el chunker sigue header_1..header_4 (# documento / ## título / ### capítulo /
+#   #### artículo, que es lo que emite el modelo de publicación nuevo). embedding_text los usa
+#   todos, y usa 'ruta' cuando esté disponible.
+# - REGLA DURA: en embedding_text solo entra contexto ESTRUCTURAL (título del documento y
+#   encabezados). NUNCA ambit_principal, submateries, submateries_internes ni ninguna etiqueta
+#   del vocabulario. Motivo: el vocabulario está pendiente de validar por SG y debe seguir
+#   siendo revisable; taxonomía embebida ⇒ cada revisión cuesta un re-embedding del corpus.
+#   Los pares bilingües van al tsvector de RAG.4, por lo mismo.
+# - El ancla ({#art-14}) NO va en embedding_text: es ruido para el vector. Va en chunk_metadata
+#   y se usa para construir la URL de la cita.
+# - Test añadido: should_not_include_taxonomy_or_anchor_in_embedding_text
 
 ## Watcher (ingestion/watcher.py)
 - embed(embedding_text) en lugar de embed(content).
@@ -12912,7 +13461,133 @@ contrato EvidenceItem.
 
 ### Continuación tras el bloque RAG
 
-Sigue el orden acordado: resto del Bloque SEC (SEC.1-5, SEC.7) → Bloque CAL → Deploy GCP (septiembre). El hook LLM de contextual retrieval nivel 2 y la variante conversacional ampliada del dataset dorado quedan como candidatos post-deploy.
+Sigue el orden acordado: **Bloque SYNC** → resto del Bloque SEC (SEC.1-5, SEC.7) → Bloque CAL → Deploy GCP. El hook LLM de contextual retrieval nivel 2 y la variante conversacional ampliada del dataset dorado quedan como candidatos post-deploy.
+
+---
+
+## Bloque SYNC — Sostenibilidad de la vigencia del corpus (PENDIENTE)
+
+> **Contexto**: planificado el 2026-07-28. Cierra la pregunta de mantenimiento: quién actualiza el corpus cuando una norma cambia, y cómo se evita que envejezca en silencio. La decisión de fondo ya está tomada en el Bloque ING.0: **el `.md` autoritativo vive en la BD de publicación de la UJI y las circulares de Gerencia pasan por el mismo circuito**, así que hay un solo maestro y el hub es réplica.
+>
+> **Lo que este bloque NO construye**: UI de administrador con formulario de metadatos. Con un solo maestro no hace falta, y CLAUDE.md prohíbe el código especulativo. La carga manual de emergencia la cubre el CLI de ING.0.5.
+>
+> **Transporte disponible (dato del 2026-07-28)**: la UJI expone sus datasets por un **servicio MCP** (`execute_dataset`, argumentos `dataset_code` + `token` por dataset). El corpus normativo se publicará por esa vía o por un export incremental equivalente.
+>
+> **Este bloque añade un transporte, no un pipeline.** El pipeline de publicación no existirá hasta dentro de meses; hasta entonces el mantenimiento del corpus se hace por **CLI sobre carpeta local**, que es lo que entrega ING.0.5 junto con el reconciliador y el protocolo `CorpusSource`. SYNC.1 implementa una **segunda fuente** (`PublicationMcpSource`) sobre ese mismo reconciliador. Si SYNC.1 acaba reimplementando emparejamiento, deltas o poda, está mal: eso ya está en ING.0.5.
+
+---
+
+### Prompt SYNC.1 (RED/GREEN) — Fuente MCP sobre el reconciliador de ING.0.5
+
+**Modelo sugerido**: **Sonnet** — cliente + adaptador de fuente; la reconciliación (censo, poda, emparejamiento) ya viene decidida e implementada en ING.0.5.
+
+```
+# PROMPT SYNC.1 (RED/GREEN) — Pull del corpus autoritativo, sin agente y sin borrar
+# Deploy: edge  (el edge node tira del sistema de publicación del cliente; el cloud no ve el corpus)
+
+## Regla número uno: esto es ETL, no una operación agéntica
+El sync NO pasa por un LLM en ningún punto: un script llama a la tool, recibe texto, calcula
+hash y escribe. Consecuencias que hay que respetar en el código:
+- Cero tokens de modelo, cero trazas Langfuse en esta ruta.
+- El token del dataset viaja como ARGUMENTO de la tool. Si esta llamada se hiciera desde un
+  agente con trazas activas, el token quedaría escrito en el almacén de trazas. Va en variable
+  de entorno / secreto, no se registra en logs ni en el informe de ejecución (redactar si se
+  vuelca la petición para depurar).
+
+## Cliente (ingestion/corpus/publication_client.py)
+- Cliente MCP sobre HTTP (JSON-RPC) para la tool execute_dataset(dataset_code, token).
+- Dos datasets, y esta es la decisión que hace el coste proporcional a los cambios y no al corpus:
+  * ÍNDICE (censo completo): una entrada por norma con id estable, content_hash | updated_at y
+    el bloque de metadatos. Pequeño; se pide entero y a menudo.
+  * CONTENIDO: el .md. Solo se pide para las normas cuyo hash cambió. Si la tool no admite
+    parámetros (hoy solo dataset_code + token), la variante es un dataset de "modificadas en los
+    últimos N días"; el diseño de reconciliación es el mismo.
+- Guardarraíl de tamaño: el corpus completo ronda los ~10 MB (≈380 normas × ~25k caracteres),
+  que está en la zona de los límites de respuesta de una Lambda. Si la respuesta llega truncada
+  o no parsea, **fallar ruidosamente**; nunca sincronizar con un censo parcial (produciría
+  despublicaciones falsas).
+- Configuración por entorno, añadida a .env.example y a scripts/generate_env.sh (precedente
+  SEC.6): PUBLICATION_MCP_URL, PUBLICATION_DATASET_INDEX, PUBLICATION_DATASET_CONTENT,
+  PUBLICATION_DATASET_TOKEN.
+
+## Adaptador de fuente (ingestion/corpus/publication_source.py)
+PublicationMcpSource implementa CorpusSource (ING.0.5):
+- is_census() → True **solo** si la pasada obtuvo el índice completo. Si se usó el dataset de
+  "modificadas en los últimos N días", es False, y entonces el reconciliador no poda: correcto,
+  porque un delta no puede distinguir "retirada" de "no tocada".
+- list_entries() → mapea el índice a CorpusDocumentEntry, con id_publicacio del registro.
+- read_body() → pide el dataset de CONTENIDO solo para las entradas que el reconciliador marcó
+  como cambiadas (lazy, no precargar el corpus).
+Toda la semántica de emparejamiento, deltas, poda, salvaguarda de proporción, findings y
+HubIngestionJob viene de ING.0.5 y **no se reimplementa aquí**. La retirada detectada por censo
+usa motiu_exclusio='retirada_de_la_font' (mismo valor que el CLI): despublicada ≠ derogada, y la
+distinción la hace una persona en la cola de revisión.
+
+## Disparo
+- CLI (python -m ...corpus.sync --chatbot-id [--dry-run] [--prune]).
+- NO se engancha al scheduler en este prompt (decisión operativa posterior, igual que RAG.14).
+
+## Tests (RED primero) — tests/modules/agents_hub/ingestion/test_publication_sync.py
+# should_call_execute_dataset_with_code_and_token
+# should_never_log_the_dataset_token
+# should_fail_loudly_on_truncated_or_unparseable_index
+# should_report_is_census_true_only_for_full_index
+# should_report_is_census_false_for_delta_dataset
+# should_map_index_entries_to_corpus_document_entries_with_id_publicacio
+# should_request_content_only_for_changed_documents      (spy: nº de llamadas al dataset de contenido)
+# should_reuse_reconciler_without_reimplementing_matching  (el sync no toca hub_documents
+#                                                           directamente; lo hace el reconciliador)
+# should_not_emit_llm_calls_during_sync                  (spy sobre model_factory)
++ los tests de reconciliación de ING.0.5 se ejecutan también con esta fuente (parametrizar el
+  test del reconciliador por CorpusSource: carpeta local y MCP fake deben dar el mismo resultado).
+
+## Criterio de done
+- [ ] Ejecución real contra el entorno de pruebas de la UJI (o fake fiel si aún no publica el
+      dataset del corpus), con el informe de recuentos pegado en el cierre
+- [ ] La suite del reconciliador pasa con ambas fuentes
+- [ ] Crawler confirmado desactivado para el chatbot sincronizado (fuente autoritativa única)
+```
+
+---
+
+### Prompt SYNC.2 (RED/GREEN) — Caducidad activa del corpus
+
+**Modelo sugerido**: **Sonnet** — detector corto sobre el mecanismo de findings ya existente.
+
+```
+# PROMPT SYNC.2 (RED/GREEN) — Que nada envejezca en silencio
+# Deploy: edge
+
+## El problema
+Hoy un documento cargado se queda indefinidamente y nada avisa. El riesgo nº1 del informe es la
+vigencia (312 de 314 fichas dicen «vigent?»), y el sync solo detecta lo que cambia en origen: una
+norma que nadie toca durante tres años no genera ninguna señal.
+
+## Detector (ingestion/quality/staleness_detector.py)
+- Lee data_revisio_prevista (columna de ING.0.2). Vencida ⇒ HubContentFinding de tipo
+  'revisio_vencuda' a nivel documento, con la fecha prevista y la última de actualización.
+- Default de la fecha al ingerir, si el front-matter no la trae: 1 año. Las normas de vigencia
+  anual (Presupuesto) la traen explícita y más corta.
+- Deduplicación: no se emite un finding nuevo si hay uno abierto para el mismo documento.
+- Los findings caen en la cola de revisión 9Q existente del admin, junto a los 'content_gap' de
+  RAG.14 y las 'despublicada' de SYNC.1.
+
+## Disparo
+CLI (python -m ...quality.detect_stale --chatbot-id) + endpoint admin. Sin scheduler (igual que
+RAG.14 y SYNC.1).
+
+## Tests (RED primero)
+# should_emit_finding_for_document_past_its_review_date
+# should_not_emit_for_document_within_review_window
+# should_default_review_date_to_one_year_on_ingest
+# should_respect_explicit_review_date_from_frontmatter
+# should_not_duplicate_open_finding_for_same_document
+# should_keep_existing_9q_finding_tests_green
+
+## Criterio de done
+- [ ] Ejecución contra datos sembrados con fechas vencidas y vigentes (salida en el cierre)
+- [ ] La cola de revisión del admin muestra los tres tipos de finding
+```
 
 ---
 

@@ -289,6 +289,33 @@ Al implementar tests (TDD) o escribir código, DEBES aplicar las siguientes rest
 * Usa siempre los tipos y hooks generados por Orval a partir de `openapi.json`. 
 * Usa `react-hook-form` y `zodResolver`. La validación del cliente debe derivarse o estar estrictamente alineada con el contrato del backend.
 
+## 5. Corpus normativo: clasificación revisable y coste de reindexado
+
+El corpus del asistente normativo se clasifica por **ámbito** y **submaterias** (vocabulario en
+`Descarregar_pdf\normativa_propia\vocabulari\`), y ese vocabulario **está pendiente de validación
+por Secretaría General**: va a cambiar. Dos reglas lo mantienen revisable. Violar cualquiera de
+las dos convierte «reclasificar el corpus» en «reindexar el corpus», y a partir de ahí el
+vocabulario deja de revisarse en la práctica.
+
+* **El vocabulario es dato, no código.** Los términos (ámbitos, submaterias, rangos, colectivos)
+  viven en tabla versionada, con `vigent` y `substituit_per_codi` para renombrar y fusionar.
+  **Prohibido** expresarlos como `Enum` de Python, `CheckConstraint` de Postgres o lista literal
+  en el código. Los **ejes** sí son estructura (pocos y estables): esos van en `StrEnum`, porque
+  añadir un eje exige de todos modos código que lo consuma.
+
+* **La taxonomía NUNCA entra en el texto que se embebe.** En `embedding_text` solo va contexto
+  **estructural** —título del documento y jerarquía de encabezados (título / capítulo / artículo)—,
+  que es estable. Nunca `ambit_principal`, `submateries`, `submateries_internes` ni ninguna etiqueta
+  del vocabulario, ni el ancla del artículo. Los pares bilingües del dominio (`despesa`/`gasto`)
+  son puente **léxico** y van al `tsvector` de la búsqueda de texto completo, que se regenera con
+  una sentencia SQL; un embedding necesita GPU y horas.
+
+  Corolario operativo: reclasificar debe costar un `UPDATE` sobre `hub_documents`. Si un cambio de
+  etiqueta te obliga a re-embeber, algo se ha colado en el texto embebido.
+
+Contexto completo de la estrategia de recuperación en tres niveles: bloques **ING.0**, **VIS** y
+**SYNC** de `Plan_TDD_Fase1.md`.
+
 ---
 
 ## Frontera Edge-Cloud (preparación del despliegue híbrido)

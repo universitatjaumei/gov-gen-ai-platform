@@ -15,6 +15,10 @@ def test_config_base_contains_only_config_models() -> None:
         # SSO/PAT (AUTH.2 / AUTH.3) — configuración cloud→edge
         "hub_sso_users",
         "hub_personal_access_tokens",
+        # Vocabulario controlado del corpus (ING.0.1) — ámbitos y submaterias son
+        # configuración institucional, no dato operacional del cliente: se
+        # sincronizan cloud→edge y los módulos edge los leen vía ConfigProvider.
+        "hub_vocabulary_terms",
     }
 
 def test_operational_base_contains_only_operational_models() -> None:
