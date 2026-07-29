@@ -1,0 +1,566 @@
+"""Tests TDD — Reconciliador de corpus (Prompt ING.0.5).
+
+Un reconciliador, dos fuentes: aquí la carpeta local, en SYNC.1 el servicio MCP. Si
+SYNC.1 acaba reimplementando emparejamiento, deltas o poda, está mal.
+
+Lo incremental no es un modo: emerge del hash. **El censo sí es un modo, y es peligroso**:
+`--prune` sobre una subcarpeta retiraría cientos de normas, así que exige que la fuente
+declare corpus completo y lleva salvaguarda de proporción.
+"""
+from __future__ import annotations
+
+import uuid
+from pathlib import Path
+
+import pytest
+from sqlalchemy import func, select
+
+
+# ───────────────────────── Fakes ─────────────────────────
+
+
+class _FakeEmbedding:
+    def __init__(self) -> None:
+        self.llamadas = 0
+
+    async def embed(self, text: str) -> list[float]:
+        self.llamadas += 1
+        return [0.1] * 1024
+
+
+class _FakeChatbotProvider:
+    def __init__(self, mode: str = "RAG") -> None:
+        self.mode = mode
+
+    async def get_retrieval_mode(self, chatbot_id: uuid.UUID) -> str:
+        return self.mode
+
+
+FRONT = """---
+id_publicacio: {id}
+title: {title}
+language: ca
+url_oficial: https://www.uji.es/{id}
+ambit_principal: administracio
+submateries: [indemnitzacions-i-dietes]
+{extra}---
+
+# {title}
+
+##### Article 1. Objecte {{#art-1}}
+
+{body}
+"""
+
+
+def _escribir(
+    directorio: Path,
+    id_publicacio: str,
+    *,
+    title: str | None = None,
+    body: str = "Text de la norma.",
+    extra: str = "",
+) -> Path:
+    ruta = directorio / f"{id_publicacio}.md"
+    ruta.write_text(
+        FRONT.format(
+            id=id_publicacio,
+            title=title or f"Norma {id_publicacio}",
+            body=body,
+            extra=extra,
+        ),
+        encoding="utf-8",
+    )
+    return ruta
+
+
+async def _reconciliar(session, directorio: Path, chatbot_id, **kwargs):
+    from server.app.modules.agents_hub.ingestion.corpus.reconciler import (
+        CorpusReconciler,
+    )
+    from server.app.modules.agents_hub.ingestion.corpus.source import (
+        LocalDirectorySource,
+    )
+    from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+
+    fuente = LocalDirectorySource(
+        directorio, is_census_declared=kwargs.pop("census", False)
+    )
+    watcher = IngestionWatcher(
+        session,
+        kwargs.pop("embedding", None) or _FakeEmbedding(),
+        chatbot_provider=_FakeChatbotProvider(kwargs.pop("mode", "RAG")),
+    )
+    reconciler = CorpusReconciler(session, watcher)
+    return await reconciler.reconcile(fuente, chatbot_id, **kwargs)
+
+
+async def _documentos(session, chatbot_id):
+    from server.app.modules.agents_hub.database.operational_models import HubDocument
+
+    result = await session.execute(
+        select(HubDocument).where(HubDocument.chatbot_id == chatbot_id)
+    )
+    return {d.id_publicacio or d.canonical_url: d for d in result.scalars().all()}
+
+
+# ───────────────────────── Ingesta y idempotencia ─────────────────────────
+
+
+class TestIngesta:
+
+    @pytest.mark.asyncio
+    async def test_should_ingest_markdown_passthrough_without_docling(
+        self, db_session, tmp_path
+    ):
+        _escribir(tmp_path, "REG-001")
+        chatbot_id = uuid.uuid4()
+
+        informe = await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        assert informe.ingeridos == 1
+        docs = await _documentos(db_session, chatbot_id)
+        assert "REG-001" in docs
+        assert "Article 1" in docs["REG-001"].markdown_content
+
+    @pytest.mark.asyncio
+    async def test_should_persist_all_metadata_fields_on_hub_document(
+        self, db_session, tmp_path
+    ):
+        _escribir(
+            tmp_path,
+            "REG-002",
+            extra="nivell_acces: intern\nestat_vigencia: vigent\nrang: reglament\n",
+        )
+        chatbot_id = uuid.uuid4()
+
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        doc = (await _documentos(db_session, chatbot_id))["REG-002"]
+        assert doc.ambit_principal == "administracio"
+        assert doc.submateries == ["indemnitzacions-i-dietes"]
+        assert doc.nivell_acces == "intern"
+        assert doc.estat_vigencia == "vigent"
+        assert doc.doc_metadata["rang"] == "reglament"
+        assert doc.source_kind == "publicacio"
+        assert doc.last_seen_at is not None
+
+    @pytest.mark.asyncio
+    async def test_should_prefer_declared_language_over_detection(
+        self, db_session, tmp_path
+    ):
+        _escribir(tmp_path, "REG-003", body="Texto claramente en castellano y largo.")
+        chatbot_id = uuid.uuid4()
+
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        assert (await _documentos(db_session, chatbot_id))["REG-003"].language == "ca"
+
+    @pytest.mark.asyncio
+    async def test_should_skip_unchanged_document_by_content_hash(
+        self, db_session, tmp_path
+    ):
+        _escribir(tmp_path, "REG-004")
+        chatbot_id = uuid.uuid4()
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        embedding = _FakeEmbedding()
+        informe = await _reconciliar(
+            db_session, tmp_path, chatbot_id, embedding=embedding
+        )
+        await db_session.commit()
+
+        assert informe.omitidos == 1
+        assert informe.ingeridos == 0 and informe.reingeridos == 0
+        assert embedding.llamadas == 0, "una pasada sin cambios no debe embeber"
+
+    @pytest.mark.asyncio
+    async def test_should_update_metadata_without_rechunking_when_only_metadata_changed(
+        self, db_session, tmp_path
+    ):
+        """La ruta que hace barata la reclasificación cuando SG revise el vocabulario."""
+        from server.app.modules.agents_hub.database.operational_models import (
+            HubDocumentChunk,
+        )
+
+        _escribir(tmp_path, "REG-005")
+        chatbot_id = uuid.uuid4()
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+        chunks_antes = await db_session.scalar(
+            select(func.count()).select_from(HubDocumentChunk)
+        )
+
+        _escribir(
+            tmp_path,
+            "REG-005",
+            extra="submateries: [execucio-de-la-despesa]\n",
+        )
+        embedding = _FakeEmbedding()
+        informe = await _reconciliar(
+            db_session, tmp_path, chatbot_id, embedding=embedding
+        )
+        await db_session.commit()
+
+        assert informe.metadatos_actualizados == 1
+        assert informe.reingeridos == 0
+        assert embedding.llamadas == 0, "reetiquetar no debe re-embeber"
+        assert chunks_antes == await db_session.scalar(
+            select(func.count()).select_from(HubDocumentChunk)
+        )
+        doc = (await _documentos(db_session, chatbot_id))["REG-005"]
+        assert doc.submateries == ["execucio-de-la-despesa"]
+
+    @pytest.mark.asyncio
+    async def test_should_reingest_only_changed_document(self, db_session, tmp_path):
+        _escribir(tmp_path, "REG-006")
+        _escribir(tmp_path, "REG-007")
+        chatbot_id = uuid.uuid4()
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        _escribir(tmp_path, "REG-007", body="Texto corregido: 55,00 euros.")
+        informe = await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        assert informe.reingeridos == 1
+        assert informe.omitidos == 1
+        doc = (await _documentos(db_session, chatbot_id))["REG-007"]
+        assert "55,00" in doc.markdown_content
+
+
+# ───────────────────────── Emparejamiento ─────────────────────────
+
+
+class TestEmparejamiento:
+
+    @pytest.mark.asyncio
+    async def test_should_match_existing_document_by_id_publicacio(
+        self, db_session, tmp_path
+    ):
+        """Aunque cambie la URL oficial, el id de publicación empareja."""
+        _escribir(tmp_path, "REG-008")
+        chatbot_id = uuid.uuid4()
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        ruta = tmp_path / "REG-008.md"
+        ruta.write_text(
+            ruta.read_text(encoding="utf-8").replace(
+                "url_oficial: https://www.uji.es/REG-008",
+                "url_oficial: https://www.uji.es/nova-ruta/REG-008",
+            ),
+            encoding="utf-8",
+        )
+        informe = await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        assert informe.ingeridos == 0, "no debe crear un documento nuevo"
+        total = await db_session.scalar(
+            select(func.count()).select_from(
+                __import__(
+                    "server.app.modules.agents_hub.database.operational_models",
+                    fromlist=["HubDocument"],
+                ).HubDocument
+            )
+        )
+        assert total == 1
+
+    @pytest.mark.asyncio
+    async def test_should_fall_back_to_url_and_language_when_id_publicacio_missing(
+        self, db_session, tmp_path
+    ):
+        ruta = tmp_path / "sin-id.md"
+        ruta.write_text(
+            "---\nlanguage: ca\nurl_oficial: https://www.uji.es/x\n---\n\n# T\n\nText.\n",
+            encoding="utf-8",
+        )
+        chatbot_id = uuid.uuid4()
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        informe = await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        assert informe.omitidos == 1
+        assert informe.ingeridos == 0
+
+    @pytest.mark.asyncio
+    async def test_should_stamp_last_seen_at_on_every_entry_including_unchanged(
+        self, db_session, tmp_path
+    ):
+        _escribir(tmp_path, "REG-009")
+        chatbot_id = uuid.uuid4()
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+        primera = (await _documentos(db_session, chatbot_id))["REG-009"].last_seen_at
+
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+        doc = (await _documentos(db_session, chatbot_id))["REG-009"]
+        await db_session.refresh(doc)
+
+        assert doc.last_seen_at >= primera
+
+
+# ───────────────────────── Rechazos y omisiones ─────────────────────────
+
+
+class TestRechazos:
+
+    @pytest.mark.asyncio
+    async def test_should_refuse_regulation_entry_without_review(
+        self, db_session, tmp_path
+    ):
+        from server.app.modules.agents_hub.ingestion.corpus.manifest import (
+            CorpusValidationError,
+        )
+        from server.app.modules.agents_hub.database.operational_models import HubDocument
+
+        _escribir(tmp_path, "REG-010", extra="content_class: regulation\n")
+        _escribir(tmp_path, "REG-011")
+
+        with pytest.raises(CorpusValidationError) as exc:
+            await _reconciliar(db_session, tmp_path, uuid.uuid4())
+
+        assert "revisat" in str(exc.value)
+        # el paquete se rechaza ENTERO: tampoco entra el documento válido
+        total = await db_session.scalar(select(func.count()).select_from(HubDocument))
+        assert total == 0
+
+    @pytest.mark.asyncio
+    async def test_should_skip_documents_marked_us_assistents_no_with_reason(
+        self, db_session, tmp_path
+    ):
+        _escribir(
+            tmp_path,
+            "REG-012",
+            extra="us_assistents: 'no'\nmotiu_exclusio: derogat\n",
+        )
+        _escribir(tmp_path, "REG-013")
+        chatbot_id = uuid.uuid4()
+
+        informe = await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        assert informe.ingeridos == 1
+        assert informe.omitidos == 1
+        assert any("derogat" in m for m in informe.motivos_omision)
+        assert "REG-012" not in await _documentos(db_session, chatbot_id)
+
+
+# ───────────────────────── Censo y poda ─────────────────────────
+
+
+class TestPoda:
+
+    async def _cargar_tres(self, db_session, tmp_path, chatbot_id):
+        for n in (1, 2, 3):
+            _escribir(tmp_path, f"REG-10{n}")
+        await _reconciliar(db_session, tmp_path, chatbot_id, census=True)
+        await db_session.commit()
+
+    @pytest.mark.asyncio
+    async def test_should_not_prune_anything_without_the_prune_flag(
+        self, db_session, tmp_path
+    ):
+        chatbot_id = uuid.uuid4()
+        await self._cargar_tres(db_session, tmp_path, chatbot_id)
+        (tmp_path / "REG-102.md").unlink()
+
+        informe = await _reconciliar(db_session, tmp_path, chatbot_id, census=True)
+        await db_session.commit()
+
+        assert informe.retirados == 0
+        docs = await _documentos(db_session, chatbot_id)
+        assert docs["REG-102"].us_assistents == "si"
+
+    @pytest.mark.asyncio
+    async def test_should_not_prune_when_source_is_not_a_census(
+        self, db_session, tmp_path
+    ):
+        """Un delta no distingue «retirada» de «no tocada»."""
+        chatbot_id = uuid.uuid4()
+        await self._cargar_tres(db_session, tmp_path, chatbot_id)
+        (tmp_path / "REG-102.md").unlink()
+
+        informe = await _reconciliar(
+            db_session, tmp_path, chatbot_id, census=False, prune=True
+        )
+        await db_session.commit()
+
+        assert informe.retirados == 0
+        assert informe.poda_omitida_por_no_censo is True
+
+    @pytest.mark.asyncio
+    async def test_should_mark_and_emit_finding_for_pruned_document_without_deleting(
+        self, db_session, tmp_path
+    ):
+        from server.app.modules.agents_hub.database.operational_models import HubDocument
+
+        chatbot_id = uuid.uuid4()
+        for n in range(1, 21):
+            _escribir(tmp_path, f"REG-2{n:02d}")
+        await _reconciliar(db_session, tmp_path, chatbot_id, census=True)
+        await db_session.commit()
+        (tmp_path / "REG-205.md").unlink()
+
+        informe = await _reconciliar(
+            db_session, tmp_path, chatbot_id, census=True, prune=True
+        )
+        await db_session.commit()
+
+        assert informe.retirados == 1
+        total = await db_session.scalar(select(func.count()).select_from(HubDocument))
+        assert total == 20, "retirada de la fuente NO es borrado"
+        doc = (await _documentos(db_session, chatbot_id))["REG-205"]
+        assert doc.us_assistents == "no"
+        assert doc.doc_metadata["motiu_exclusio"] == "retirada_de_la_font"
+
+    @pytest.mark.asyncio
+    async def test_should_abort_prune_above_proportion_threshold(
+        self, db_session, tmp_path
+    ):
+        """Es la red que evita convertir un --dir mal escrito en la retirada del corpus."""
+        from server.app.modules.agents_hub.ingestion.corpus.reconciler import (
+            PruneThresholdExceeded,
+        )
+
+        chatbot_id = uuid.uuid4()
+        await self._cargar_tres(db_session, tmp_path, chatbot_id)
+        (tmp_path / "REG-102.md").unlink()  # 1 de 3 = 33 % > 10 %
+
+        with pytest.raises(PruneThresholdExceeded) as exc:
+            await _reconciliar(
+                db_session, tmp_path, chatbot_id, census=True, prune=True
+            )
+        assert "1" in str(exc.value) and "3" in str(exc.value)
+
+    @pytest.mark.asyncio
+    async def test_should_prune_above_threshold_only_with_force(
+        self, db_session, tmp_path
+    ):
+        chatbot_id = uuid.uuid4()
+        await self._cargar_tres(db_session, tmp_path, chatbot_id)
+        (tmp_path / "REG-102.md").unlink()
+
+        informe = await _reconciliar(
+            db_session, tmp_path, chatbot_id, census=True, prune=True, force_prune=True
+        )
+        await db_session.commit()
+
+        assert informe.retirados == 1
+
+    @pytest.mark.asyncio
+    async def test_no_vuelve_a_retirar_lo_ya_retirado(self, db_session, tmp_path):
+        chatbot_id = uuid.uuid4()
+        await self._cargar_tres(db_session, tmp_path, chatbot_id)
+        (tmp_path / "REG-102.md").unlink()
+        await _reconciliar(
+            db_session, tmp_path, chatbot_id, census=True, prune=True, force_prune=True
+        )
+        await db_session.commit()
+
+        informe = await _reconciliar(
+            db_session, tmp_path, chatbot_id, census=True, prune=True, force_prune=True
+        )
+        await db_session.commit()
+
+        assert informe.retirados == 0
+
+
+# ───────────────────────── Job e informe ─────────────────────────
+
+
+class TestInforme:
+
+    @pytest.mark.asyncio
+    async def test_should_record_one_ingestion_job_per_run_with_counters(
+        self, db_session, tmp_path
+    ):
+        """Si el CLI mantiene el corpus durante meses, el historial va en la BD."""
+        from server.app.modules.agents_hub.database.operational_models import (
+            HubIngestionJob,
+        )
+
+        _escribir(tmp_path, "REG-301")
+        chatbot_id = uuid.uuid4()
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        jobs = (
+            await db_session.execute(
+                select(HubIngestionJob).where(HubIngestionJob.chatbot_id == chatbot_id)
+            )
+        ).scalars().all()
+
+        assert len(jobs) == 1
+        assert jobs[0].status == "completed"
+        assert "ingeridos=1" in (jobs[0].error_message or "") or "ingeridos=1" in (
+            jobs[0].source_url or ""
+        )
+
+    @pytest.mark.asyncio
+    async def test_should_report_plan_in_dry_run_without_writing(
+        self, db_session, tmp_path
+    ):
+        from server.app.modules.agents_hub.database.operational_models import HubDocument
+
+        _escribir(tmp_path, "REG-401")
+        chatbot_id = uuid.uuid4()
+
+        informe = await _reconciliar(db_session, tmp_path, chatbot_id, dry_run=True)
+        await db_session.commit()
+
+        assert informe.ingeridos == 1
+        total = await db_session.scalar(select(func.count()).select_from(HubDocument))
+        assert total == 0
+
+    @pytest.mark.asyncio
+    async def test_el_dry_run_reporta_lo_que_podaria(self, db_session, tmp_path):
+        chatbot_id = uuid.uuid4()
+        for n in range(1, 21):
+            _escribir(tmp_path, f"REG-5{n:02d}")
+        await _reconciliar(db_session, tmp_path, chatbot_id, census=True)
+        await db_session.commit()
+        (tmp_path / "REG-505.md").unlink()
+
+        informe = await _reconciliar(
+            db_session, tmp_path, chatbot_id, census=True, prune=True, dry_run=True
+        )
+        await db_session.commit()
+
+        assert informe.retirados == 1
+        doc = (await _documentos(db_session, chatbot_id))["REG-505"]
+        assert doc.us_assistents == "si", "dry-run no escribe"
+
+
+# ───────────────────────── Versión idiomática ─────────────────────────
+
+
+class TestVersionIdiomatica:
+
+    @pytest.mark.asyncio
+    async def test_resuelve_la_referencia_de_version_idiomatica_a_uuid(
+        self, db_session, tmp_path
+    ):
+        """En el .md la referencia es un id_publicacio; en la BD es un UUID."""
+        _escribir(tmp_path, "REG-601")
+        _escribir(
+            tmp_path,
+            "REG-601-es",
+            extra="canonica: false\nversio_idiomatica_de: REG-601\n",
+        )
+        chatbot_id = uuid.uuid4()
+
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        docs = await _documentos(db_session, chatbot_id)
+        assert docs["REG-601-es"].versio_idiomatica_de == docs["REG-601"].id
+        assert docs["REG-601-es"].canonica is False
+        assert docs["REG-601"].canonica is True
