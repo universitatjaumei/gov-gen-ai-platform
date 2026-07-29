@@ -33,8 +33,17 @@ from langchain_text_splitters import (
 )
 
 # Ancla de atributos Pandoc/kramdown al final del encabezado: '{#art-14}'.
-_ANCORA = re.compile(r"\s*\{#(?P<ancora>[A-Za-z0-9][A-Za-z0-9._-]*)\}\s*$")
-_ANCORA_EN_TEXTO = re.compile(r"\s*\{#[A-Za-z0-9][A-Za-z0-9._-]*\}")
+# Bloque de atributos Pandoc/kramdown al final del encabezado. Admite clases junto al
+# ancla —`{#art-14 .modificat}`— porque el estado de consolidación del elemento viaja ahí:
+# es el mismo token que el ancla, así que sobrevive al troceado y queda pegado al artículo.
+# Sin este soporte, un `{#art-14 .modificat}` perdía el ancla EN SILENCIO.
+_ANCORA = re.compile(
+    r"\s*\{#(?P<ancora>[A-Za-z0-9][A-Za-z0-9._-]*)(?P<atributos>[^}]*)\}\s*$"
+)
+_CLASE = re.compile(r"\.([A-Za-z][A-Za-z0-9_-]*)")
+# Estados de consolidación conocidos. Se nombran para que un filtro pueda usarlos; el
+# resto de clases se conserva en `classes` sin interpretarlas.
+ESTADOS_CONSOLIDACION = ("suprimit", "modificat", "afegit")
 # Ancla vacía o mal formada: se limpia del texto pero no produce ancla.
 _ANCORA_ROTA = re.compile(r"\s*\{#[^}]*\}")
 
@@ -67,12 +76,13 @@ def strip_anchor_tokens(texto: str) -> str:
     return _ANCORA_ROTA.sub("", texto)
 
 
-def _extraer_ancora(encabezado: str) -> tuple[str, str | None]:
-    """Devuelve (encabezado_limpio, ancora)."""
+def _extraer_ancora(encabezado: str) -> tuple[str, str | None, list[str]]:
+    """Devuelve (encabezado_limpio, ancora, clases)."""
     match = _ANCORA.search(encabezado)
     if match:
-        return encabezado[: match.start()].rstrip(), match.group("ancora")
-    return _ANCORA_ROTA.sub("", encabezado).rstrip(), None
+        clases = _CLASE.findall(match.group("atributos") or "")
+        return encabezado[: match.start()].rstrip(), match.group("ancora"), clases
+    return _ANCORA_ROTA.sub("", encabezado).rstrip(), None, []
 
 
 class MarkdownChunker:
@@ -107,26 +117,31 @@ class MarkdownChunker:
 
     # ───────────────────────── Encabezados ─────────────────────────
 
-    def _limpiar_encabezados(self, doc_metadata: dict) -> tuple[dict, list[str], str | None]:
-        """Separa los encabezados en ruta de ancestros + ancla de la unidad citable."""
+    def _limpiar_encabezados(
+        self, doc_metadata: dict
+    ) -> tuple[dict, list[str], str | None, list[str]]:
+        """Separa los encabezados en ruta de ancestros + ancla y clases de la unidad."""
         limpios: dict[str, str] = {}
         ancora: str | None = None
+        clases: list[str] = []
         presentes: list[str] = []
 
         for nivel in range(1, _NIVELES + 1):
             clave = f"header_{nivel}"
             if clave not in doc_metadata:
                 continue
-            texto, ancora_nivel = _extraer_ancora(str(doc_metadata[clave]))
+            texto, ancora_nivel, clases_nivel = _extraer_ancora(str(doc_metadata[clave]))
             limpios[clave] = texto
             presentes.append(clave)
             if ancora_nivel:
-                # El ancla del nivel más profundo es la que cita el fragmento.
+                # El ancla del nivel más profundo es la que cita el fragmento, y sus
+                # clases son el estado de consolidación de ese elemento.
                 ancora = ancora_nivel
+                clases = clases_nivel
 
         # La ruta son los ancestros: todo menos el encabezado más profundo.
         ruta = [limpios[c] for c in presentes[:-1]] if len(presentes) > 1 else []
-        return limpios, ruta, ancora
+        return limpios, ruta, ancora, clases
 
     # ───────────────────────── Tablas ─────────────────────────
 
@@ -286,12 +301,18 @@ class MarkdownChunker:
 
         chunks: list[Chunk] = []
         for doc in self.md_splitter.split_text(content):
-            encabezados, ruta, ancora = self._limpiar_encabezados(doc.metadata)
+            encabezados, ruta, ancora, clases = self._limpiar_encabezados(doc.metadata)
+            estado = next((c for c in clases if c in ESTADOS_CONSOLIDACION), None)
             comun = {
                 **base_metadata,
                 **encabezados,
                 "ruta": ruta,
                 "ancora": ancora,
+                # Estado de consolidación del elemento, del bloque de atributos del
+                # encabezado. Pegado al artículo y sobreviviendo al troceado, es lo que
+                # evita citar un artículo suprimido como si estuviera en vigor.
+                "estat": estado,
+                "classes": clases,
             }
 
             piezas = self._trocear_seccion(strip_anchor_tokens(doc.page_content))

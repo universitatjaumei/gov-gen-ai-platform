@@ -155,6 +155,34 @@ class TestAnclas:
         assert "Article 14" in art14.content
         assert "Import de la dieta" in art14.content
 
+    def test_extrae_el_ancla_cuando_el_encabezado_lleva_clases(self):
+        """`{#art-14 .modificat}` es el mismo token que el ancla, no un mecanismo nuevo.
+        Antes de soportarlo, el ancla se perdía EN SILENCIO."""
+        con_clase = "# T\n\n##### Article 14. Import {#art-14 .modificat}\n\nText.\n"
+        chunk = _chunks(con_clase)[-1]
+
+        assert chunk.metadata["ancora"] == "art-14"
+        assert chunk.metadata["estat"] == "modificat"
+        assert "{#" not in chunk.content
+        assert "Article 14. Import" in chunk.content
+
+    @pytest.mark.parametrize("estado", ["suprimit", "modificat", "afegit"])
+    def test_reconoce_los_tres_estados_de_consolidacion(self, estado: str):
+        md = f"# T\n\n##### Article 3 {{#art-3 .{estado}}}\n\nText.\n"
+        assert _chunks(md)[-1].metadata["estat"] == estado
+
+    def test_conserva_clases_desconocidas_sin_interpretarlas(self):
+        md = "# T\n\n##### Article 5 {#art-5 .modificat .transitori}\n\nText.\n"
+        chunk = _chunks(md)[-1]
+
+        assert chunk.metadata["estat"] == "modificat"
+        assert set(chunk.metadata["classes"]) == {"modificat", "transitori"}
+
+    def test_sin_clases_el_estado_es_none(self):
+        chunk = _por_ancora(NORMA)["art-14"]
+        assert chunk.metadata["estat"] is None
+        assert chunk.metadata["classes"] == []
+
     def test_una_ancla_mal_formada_no_rompe_el_troceado(self):
         roto = "# T\n\n##### Article 1. Objecte {#}\n\nText.\n"
         chunks = _chunks(roto)
