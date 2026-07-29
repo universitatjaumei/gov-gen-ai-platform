@@ -36,9 +36,9 @@ marcada por el BOE: ahí las anclas salen del XML sin que nadie clasifique encab
 
 De donde sale la regla de prioridad de esta versión:
 
-**1. Las anclas son oportunistas, no obligatorias.** Se emiten donde el patrón es inequívoco —las
-familias que este contrato decide sin ambigüedad, 752 de 1.115 encabezados en la medición actual— y
-**no se fuerzan** en el resto. Su único consumidor es el enlace profundo de la cita, y un ancla que
+**1. Las anclas son oportunistas, no obligatorias.** Se emiten donde el patrón es inequívoco —con
+los tres prefijos que fija esta versión, las doce familias de la taxonomía quedan decididas y
+cubren los 1.115 encabezados— y **no se fuerzan** en el resto. Su único consumidor es el enlace profundo de la cita, y un ancla que
 falta degrada a citar el documento, que es lo que el hub ya hace. Verificado: con el corpus sin
 anclas, 14.192 fragmentos y todo funcionando.
 
@@ -49,9 +49,16 @@ queda en `##` y no pasa nada.
 **3. Lo que sí es obligatorio es que el contenido esté completo.** Un artículo cuyo cuerpo se
 perdió en la conversión falla en **todos** los modos de recuperación —inyección, RAG y cita— y es
 el fallo que hunde un piloto en silencio, porque nadie descubre que falta hasta que el asistente
-responde mal a alguien. En la medición actual son **40 artículos sin cuerpo** más el artículo 19 del
-Convenio ausente del DOGV castellano. **Ese es el trabajo que paga**, por delante de cualquier
-refinamiento de la taxonomía de encabezados.
+responde mal a alguien. En la medición actual son **14 unidades citables sin cuerpo**, de las cuales
+**3 son pérdida real de contenido**, más el artículo 19 del Convenio ausente del DOGV castellano
+(Anexo A). **Ese es el trabajo que paga**, por delante de cualquier refinamiento de la taxonomía de
+encabezados.
+
+Conviene medirlo **sobre la salida convertida y no sobre la entrada**: sobre `md/` salen 40, porque
+una división estructural interpuesta entre el artículo y su cuerpo hace que el artículo parezca
+vacío, y la conversión la degrada precisamente por eso. Y conviene **clasificar por causa antes de
+abrir un PDF**: de las 14, dos son artículos suprimidos —la «rúbrica» es la llamada a una nota al pie
+que dice «Suprimido por Acuerdo del Consejo de Gobierno»— y ahí la ausencia de cuerpo es correcta.
 
 **4. Para BOE y DOGV no se escribe `.md` a mano.** Se genera desde el XML consolidado.
 
@@ -158,6 +165,19 @@ Tampoco son encabezados:
   > la conversión, y degradarlo borra la última traza que queda de él. Solo se degrada si el mismo
   > número aparece **otra vez** en el documento con cuerpo. Con la regla mal puesta se destruían 39
   > encabezados legítimos.
+
+  **Punto ciego conocido, y se deja así a propósito.** La delimitación de arriba parte del
+  encabezado `ÍNDICE`/`ÍNDEX`, y **el índice no siempre es una región de encabezados**: en 43 de los
+  229 documentos es una **tabla** (`| Índex |` y una fila por entrada), sin encabezado que abra la
+  región. Ahí la regla no puede dispararse, y basta con que una línea se escape de la tabla y se
+  promueva a encabezado para que aparezca un resto de índice con ancla. Es lo que pasa en el
+  `Reglament per a la concessió de distincions`, donde además el resto fusiona dos entradas
+  (`DISPOSICIÓ DEROGATÒRIA DISPOSICIÓ FINAL` en una sola línea).
+
+  **No se endurece la detección de la región.** El coste esperado es malo: este terreno ya destruyó
+  39 encabezados legítimos una vez, y el problema que quedaría por resolver es **un caso de 13**
+  (§4.8). Se cubre por la vía barata y reversible —el desempate por cuerpo del §4.8, que no
+  reclasifica nada— y se vigila con un detector que reporta y no bloquea (§7).
 
 ### 2.4 Prohibido sustituir encabezados por negrita
 
@@ -338,7 +358,9 @@ resuelven todos mal en un sentido o en el otro.
 
 Motivo medido: en el `Reglamento de selección del PDI`, `CAPÍTULO I` aparece tres veces, una por
 título, y el contrato scopeaba las secciones por capítulo pero no los capítulos por título. Con las
-anclas estructurales suprimidas, las anclas duplicadas del corpus bajaron de **127 a 21**.
+anclas estructurales suprimidas, las anclas duplicadas del corpus bajaron de **127 a 21**, y en la
+medición actual quedan **11**, todas del cuerpo y legítimas: documentos con preámbulo y exposición
+de motivos a la vez, y numeración repetida en el original.
 
 No se pierde nada: las divisiones no son destino de cita, y **el hub reconstruye la ruta del texto
 del encabezado**, no del ancla. Verificado sobre el corpus convertido.
@@ -378,6 +400,60 @@ duplicado.** Es lo que evita que un enlace publicado apunte a dos sitios.
 Los artículos y las disposiciones del cuerpo se numeran de corrido, así que `art-14` ya es único.
 Los **artículos dentro de un anexo no**: reinician la numeración, y por eso se scopean con el anexo
 (§4.2, enmienda 1).
+
+**Ante una colisión hay dos regímenes, y el prefijo decide cuál.**
+
+- Las anclas del cuerpo —`art-`, `da-`, `annex-`, `preambul`— se **desambiguan** con sufijo `-2`,
+  como dice el §5: los dos elementos existen de verdad y ambos han de ser alcanzables.
+- Las oportunistas de esta versión —`div-`, `res-`, `norma-`— se **descartan**. Un `div-1-2` no
+  corresponde a ninguna cita real: nadie escribe «la división 1-2». Vale más no emitirla —§0.1: un
+  ancla que falta degrada a citar el documento— que inventar una que engaña (§4.6). En la medición
+  actual se descartan 13 por esta regla.
+
+Y el separador tras el número **es obligatorio** para reconocer una división numerada. Con el
+separador opcional, `1 Benchmarking de la Universitat de Kent www.kent.ac.uk/…` —que es una nota al
+pie— recibía `{#div-1}`.
+
+### 4.8 Desempate por cuerpo: quién se lleva el ancla limpia
+
+> **Decidido el 2026-07-29** a partir de un hallazgo en el `Reglament per a la concessió de
+> distincions`, donde un resto de índice se llevaba `{#dd-1}` y la disposición derogatoria real
+> quedaba en `{#dd-1-2}`: una cita a `dd-1` aterrizaba en el índice.
+
+El §4.7 desambigua las colisiones con sufijo, pero **no dice quién se queda el ancla limpia**, y por
+omisión decide el **orden de aparición**. Cuando el que aparece primero es un resto de índice, el
+orden premia al equivocado.
+
+**Regla: ante una colisión, el ancla limpia va al que tiene cuerpo.**
+
+| Situación | Qué se hace |
+|---|---|
+| Exactamente uno de los que colisionan tiene cuerpo | Ese se lleva el ancla limpia. Los demás **conservan su encabezado y pierden el ancla** |
+| Dos o más tienen cuerpo | Es el duplicado real del §5: ancla limpia al primero, `-2`, `-3`… al resto |
+| Ninguno tiene cuerpo | Decide el orden, como hasta ahora. Ninguna cita queda peor |
+
+El perdedor pierde el ancla y no un `-2` por dos razones: un ancla sobre un resto de índice es un
+destino de enlace que no lleva a nada, y así **un sufijo `-N` en la salida pasa a significar una sola
+cosa** —numeración duplicada de verdad en el original— en vez de ser ambiguo.
+
+**Por qué esta regla no repite el error de los 39 encabezados.** La regla que destruyó contenido era
+«un encabezado sin cuerpo es una entrada de índice, degrádalo», y se aplicaba a **cualquier
+encabezado aislado**: por eso arrasó con artículos cuyo cuerpo se había perdido. Esta solo se activa
+**cuando dos encabezados chocan en el mismo ancla**, no reclasifica nada y no borra nada —el
+perdedor sigue siendo un encabezado—. Un encabezado sin cuerpo que no colisiona con nadie **no la
+activa nunca**: conserva su nivel y su ancla, y quien lo señala es la puerta de calidad del §7 como
+posible pérdida de contenido, que es donde tiene que salir.
+
+**Alcance medido** sobre `md_contracte` (229 documentos): 13 colisiones con sufijo, de las cuales
+**12 son duplicado legítimo** —los dos con cuerpo, régimen §5 sin cambios— y **1 es el caso malo**,
+el que motivó esta regla. Cero colisiones sin cuerpo en ninguno de los dos lados. Es decir: la regla
+corrige exactamente un caso y no toca los otros doce.
+
+**Una colisión puede indicar que el ancla limpia se la ha quedado el elemento equivocado.** En el
+`Reglament per a la concessió de distincions`, una entrada de índice que escapó a la delimitación de
+la región de índice se queda `{#dd-1}` y la disposición derogatoria real queda `{#dd-1-2}`: una cita
+a `dd-1` aterriza en el índice. El orden de aparición decide quién se queda el ancla limpia, así que
+la delimitación de la región de índice (§2.3) es lo que protege esto, no la regla de unicidad.
 
 ---
 
@@ -469,7 +545,8 @@ no bloquea**.
 - [ ] Ningún ancla derivada de la rúbrica en lugar del número.
 - [ ] *(Enmienda 4.)* Ningún ancla de artículo derivada de un `Artículo N.M`.
 - [ ] *(Enmienda 14.)* **Ninguna unidad citable sin cuerpo.** Detecta el contenido perdido en la
-      conversión, que es el defecto que importa (§0.3). Hoy son **40 artículos**.
+      conversión, que es el defecto que importa (§0.3). Se mide **sobre la salida**, no sobre la
+      entrada. Hoy son **14** (9 artículos y 5 disposiciones), y solo 3 son pérdida real.
 - [ ] *(Enmienda 14.)* **Ninguna unidad citable repetida con cuerpo** (índice mal degradado, §2.3).
 - [ ] Ningún artículo marcado con negrita en lugar de encabezado.
 - [ ] Ningún `<!-- TABLE-IMG -->` sin su bloque `TABLA-TEXT` al lado.
@@ -487,6 +564,13 @@ no bloquea**.
       puerta**: puede fallar legítimamente cuando el original está incompleto. Encontró 16 artículos
       presentes en una lengua y ausentes en la otra —15 estaban en el documento como texto plano sin
       reconocer y uno falta de verdad en el DOGV castellano—, que es exactamente el defecto del §0.3.
+- [ ] **Colisiones de ancla resueltas por el §4.8**: cuántas hubo, y en cuántas el perdedor era un
+      encabezado sin cuerpo. Es el sustituto de endurecer la detección de la región de índice
+      (§2.3): si el patrón crece, aquí se ve. Hoy: 13 colisiones, 12 duplicado legítimo, 1 resto de
+      índice.
+- [ ] **Encabezado que casa con dos patrones de unidad citable a la vez** —`DISPOSICIÓ DEROGATÒRIA
+      DISPOSICIÓ FINAL` en una sola línea— es señal de alta precisión de que dos entradas de índice
+      se fusionaron. Reporta: no siempre lo es, pero merece un ojo.
 
 > **Advertencia metodológica, aprendida en este trabajo.** Comparar texto **ignorando espacios** no
 > puede detectar una corrección cuyo único contenido es un espacio. Una corrección que pedía añadir
@@ -504,18 +588,43 @@ todo o nada.
 > *(Enmienda 15.)* Las cifras del cuerpo del contrato eran una instantánea y quedaron obsoletas al
 > partir los bilingües. Se recogen aquí, fechadas, y el texto normativo no depende de ellas.
 
-Medido sobre `publicacio_transparencia_2026-07/md_contracte/` el **2026-07-29**:
+Medido sobre `publicacio_transparencia_2026-07/md_contracte/` el **2026-07-29**, después de la
+pasada que aplica las doce familias de `regles_encapcalaments.json`:
 
 | Magnitud | Valor |
 |---|---|
 | Documentos | 229 (eran 226 antes de partir 3 bilingües) |
-| Encabezados clasificados | 9.087 |
-| Unidades citables con ancla | 5.582 |
+| Encabezados por nivel | `#` 229 · `##` 1.092 · `###` 873 · `####` 293 · `#####` 5.439 |
+| Anclas emitidas | **5.730** |
+| Anclas por prefijo | `art` 4.462 · `annex` 283 · `da` 252 · `df` 171 · `preambul` 160 · `dd` 135 · `dt` 133 · `norma` 87 · `div` 39 · `res` 8 |
+| Cobertura de ancla por clase | artículo/disposición 5.438/5.439 · preámbulo 160/160 · anexo 93/93 |
+| Anclas duplicadas sin resolver | 0 |
 | Documentos sin articulado | 38 |
-| Familias de regla decididas por el contrato | 752 de 1.115 encabezados |
+| Familias de regla decididas por el contrato | **12 de 12** (las 1.115 de la taxonomía) |
 | Bloques `TABLA-TEXT` | 59 (49 `markdown`, 5 `html` en la medición anterior de 54) |
 | Fragmentos que produce el hub | 12.044 |
-| Artículos sin cuerpo (**a corregir**) | 40 |
+| Unidades citables sin cuerpo (**a corregir**) | **14** (9 artículos + 5 disposiciones) |
+| …de las cuales pérdida real de contenido | **3** |
+
+Las tres decisiones de prefijo de la versión 2 —`res-`, `norma-`, `div-`— aportan 134 anclas, y los
+ordinales que caen dentro de un grupo de disposiciones resuelven por contexto a su propio prefijo
+(§4.3): `da` +10, `dt` +3, `df` +1 respecto de la medición anterior.
+
+**Sobre las 14 unidades sin cuerpo.** La cifra depende de dónde se mida, y conviene decirlo porque
+la versión anterior de este anexo daba 40. Contadas sobre la entrada (`md/`) son 40; sobre la salida
+convertida son 14. La diferencia no es un criterio más laxo: cuando una división estructural queda
+interpuesta entre el artículo y su cuerpo, la conversión la degrada y el artículo recupera su cuerpo.
+Clasificadas por causa, solo **3** son pérdida real de contenido que exija volver al PDF:
+
+| Causa | n | Qué necesita |
+|---|---|---|
+| Artículo suprimido (la «rúbrica» es la llamada a una nota al pie que dice «Suprimido por Acuerdo…») | 2 | Nada. No es defecto: §5 |
+| Entrada de índice promovida, delante del preámbulo | 2 | Retirar el ancla falsa (§4.6) |
+| División interpuesta entre el artículo y su cuerpo | 2 | Mover la división; el texto está |
+| Disposición cuyo ancla queda una línea desplazada | 5 | Cosmético; no falta texto |
+| **Pérdida real** | **3** | PDF |
+
+El detalle por documento y línea está en `publicacio_transparencia_2026-07/articles_sense_cos.csv`.
 
 ---
 
@@ -538,6 +647,7 @@ Medido sobre `publicacio_transparencia_2026-07/md_contracte/` el **2026-07-29**:
 | 13 | Partir un bilingüe: ids derivados | §5 |
 | 14 | Comprobaciones nuevas, y cuáles no bloquean | §7 |
 | 15 | Las cifras son una instantánea | Anexo A |
+| — | *(posterior)* Desempate por cuerpo ante colisión de ancla | §4.8, §2.3, §7 |
 
 **Lo que la propuesta pedía no cambiar, y no ha cambiado**: el principio de nivel por tipo (§1), el
 artículo como unidad atómica (§2.3), la sintaxis `{#ancla}` de Pandoc (§4.1), el ancla derivada del
