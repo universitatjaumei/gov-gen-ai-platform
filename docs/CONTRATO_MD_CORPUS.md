@@ -175,7 +175,7 @@ Tampoco son encabezados:
   (`DISPOSICIÓ DEROGATÒRIA DISPOSICIÓ FINAL` en una sola línea).
 
   **No se endurece la detección de la región.** El coste esperado es malo: este terreno ya destruyó
-  39 encabezados legítimos una vez, y el problema que quedaría por resolver es **un caso de 13**
+  39 encabezados legítimos una vez, y el problema que quedaría por resolver es **un caso de 11**
   (§4.8). Se cubre por la vía barata y reversible —el desempate por cuerpo del §4.8, que no
   reclasifica nada— y se vigila con un detector que reporta y no bloquea (§7).
 
@@ -275,6 +275,46 @@ Tres reglas de validación que rechazan el paquete antes de ingerir nada:
 
 `versio_idiomatica_de` lleva la **referencia** de la versión canónica (su `id_publicacio`), no un
 identificador de base de datos: al escribir el `.md` ese id no existe todavía.
+
+### El front-matter es un artefacto derivado
+
+Conviene separar dos papeles que no son el mismo:
+
+| Papel | Quién |
+|---|---|
+| **Maestro de autoría**: donde una persona etiqueta y revisa | El catálogo (CSV hoy; la BD de publicación después) |
+| **Portador de transporte**: lo que viaja con el contenido y lee el hub | El front-matter, **generado por script** |
+
+El etiquetado vive en la tabla y no en los 380 YAML por una razón de revisión: en una tabla se
+puede ordenar por ámbito y **ver la distribución**, que es lo que permite detectar de un vistazo el
+fallo medido en el informe de materias —3 documentos etiquetados «Gestió econòmica» frente a 121
+seleccionados por la vicegerencia—. Repartido en 380 ficheros, ese error es invisible.
+
+**Regla: el front-matter no se edita a mano.** Una corrección hecha en el `.md` la pierde la
+siguiente regeneración; las correcciones van a la fuente. Y regenerarlo es gratis para el hub:
+como el hash se calcula sobre el cuerpo (§3), reemitir el front-matter —idéntico o distinto— no
+dispara reingesta, re-troceado ni re-embedding.
+
+### Dos hitos, no uno
+
+De la lista de campos sale una secuencia útil, porque **no todo depende de que Secretaría General
+valide el vocabulario**:
+
+- **Hito A, sin SG** — `url_oficial`, `title`, `language`, `content_class` + `revisat_per`/`revisat_el`,
+  `nivell_acces`/`us_assistents`, `canonica`/`versio_idiomatica_de`, `rang`,
+  `data_revisio_prevista`. Con esto el corpus **carga, cita con enlace correcto y respeta el nivel
+  de acceso**. Recuperable, todavía no enrutable por submateria.
+- **Hito B, con SG** — `ambit_principal`, `ambits_secundaris`, `submateries`,
+  `submateries_internes`, `resum_router`, `preguntes_tipus`, `termes_bilingues`. Con esto funcionan
+  los Niveles 0-2.
+
+Pasar de A a B es una edición del catálogo, regenerar y volver a cargar: el reconciliador lo
+reporta como «metadatos actualizados» y **no re-embebe nada**.
+
+> Precisión que ahorra un malentendido: **`resum` ≠ `resum_router`**. El resumen abstractivo del
+> catálogo está escrito para el buscador del portal; el `resum_router` debe decir objeto + a quién
+> se aplica + qué resuelve. Y **`perfil` ≠ `nivell_acces`**: `perfil` es el eje de destinatario
+> (`aplica_a`), no el control de acceso.
 
 ### Mapeo desde el catálogo existente
 
@@ -444,16 +484,19 @@ perdedor sigue siendo un encabezado—. Un encabezado sin cuerpo que no colision
 activa nunca**: conserva su nivel y su ancla, y quien lo señala es la puerta de calidad del §7 como
 posible pérdida de contenido, que es donde tiene que salir.
 
-**Alcance medido** sobre `md_contracte` (229 documentos): 13 colisiones con sufijo, de las cuales
-**12 son duplicado legítimo** —los dos con cuerpo, régimen §5 sin cambios— y **1 es el caso malo**,
-el que motivó esta regla. Cero colisiones sin cuerpo en ninguno de los dos lados. Es decir: la regla
-corrige exactamente un caso y no toca los otros doce.
+**Alcance medido** sobre `md_contracte` (229 documentos), con la regla ya implementada: **11
+colisiones con sufijo, 1 desempatada** por esta regla —el caso que la motivó— y **10 que son
+duplicado legítimo**, los dos con cuerpo y régimen §5 sin cambios. Cero colisiones sin cuerpo en
+ninguno de los dos lados. La regla corrige exactamente un caso y no toca los demás.
 
-**Una colisión puede indicar que el ancla limpia se la ha quedado el elemento equivocado.** En el
-`Reglament per a la concessió de distincions`, una entrada de índice que escapó a la delimitación de
-la región de índice se queda `{#dd-1}` y la disposición derogatoria real queda `{#dd-1-2}`: una cita
-a `dd-1` aterriza en el índice. El orden de aparición decide quién se queda el ancla limpia, así que
-la delimitación de la región de índice (§2.3) es lo que protege esto, no la regla de unicidad.
+El conversor lo reporta en la parte no bloqueante del §7, con el ancla, el perdedor y su línea, para
+que un aumento de esta cifra se vea: si un día desempata veinte, lo que ha cambiado es la calidad de
+la conversión, no esta regla.
+
+**Umbral de «tiene cuerpo».** Aquí es **más permisivo** que el de la puerta del §7 (10 caracteres
+visibles frente a 40), y es deliberado: la puerta busca contenido perdido y le conviene ser sensible,
+mientras que aquí un falso negativo le quitaría el ancla a una unidad legítima. Con 10, un resto de
+índice —que no tiene cuerpo en absoluto— se distingue de un artículo de cuerpo corto, que la conserva.
 
 ---
 
@@ -566,7 +609,7 @@ no bloquea**.
       reconocer y uno falta de verdad en el DOGV castellano—, que es exactamente el defecto del §0.3.
 - [ ] **Colisiones de ancla resueltas por el §4.8**: cuántas hubo, y en cuántas el perdedor era un
       encabezado sin cuerpo. Es el sustituto de endurecer la detección de la región de índice
-      (§2.3): si el patrón crece, aquí se ve. Hoy: 13 colisiones, 12 duplicado legítimo, 1 resto de
+      (§2.3): si el patrón crece, aquí se ve. Hoy: 11 colisiones, 10 duplicado legítimo, 1 resto de
       índice.
 - [ ] **Encabezado que casa con dos patrones de unidad citable a la vez** —`DISPOSICIÓ DEROGATÒRIA
       DISPOSICIÓ FINAL` en una sola línea— es señal de alta precisión de que dos entradas de índice
@@ -595,10 +638,12 @@ pasada que aplica las doce familias de `regles_encapcalaments.json`:
 |---|---|
 | Documentos | 229 (eran 226 antes de partir 3 bilingües) |
 | Encabezados por nivel | `#` 229 · `##` 1.092 · `###` 873 · `####` 293 · `#####` 5.439 |
-| Anclas emitidas | **5.730** |
-| Anclas por prefijo | `art` 4.462 · `annex` 283 · `da` 252 · `df` 171 · `preambul` 160 · `dd` 135 · `dt` 133 · `norma` 87 · `div` 39 · `res` 8 |
-| Cobertura de ancla por clase | artículo/disposición 5.438/5.439 · preámbulo 160/160 · anexo 93/93 |
+| Anclas emitidas | **5.729** |
+| Anclas por prefijo | `art` 4.462 · `annex` 283 · `da` 252 · `df` 171 · `preambul` 160 · `dd` 134 · `dt` 133 · `norma` 87 · `div` 39 · `res` 8 |
+| Cobertura de ancla por clase | artículo/disposición 5.437/5.439 · preámbulo 160/160 · anexo 93/93 |
 | Anclas duplicadas sin resolver | 0 |
+| Colisiones con sufijo | 11 · **1 desempatada por cuerpo** (§4.8) · 10 duplicado legítimo |
+| Anclas oportunistas descartadas por colisión | 13 |
 | Documentos sin articulado | 38 |
 | Familias de regla decididas por el contrato | **12 de 12** (las 1.115 de la taxonomía) |
 | Bloques `TABLA-TEXT` | 59 (49 `markdown`, 5 `html` en la medición anterior de 54) |
@@ -653,6 +698,17 @@ El detalle por documento y línea está en `publicacio_transparencia_2026-07/art
 artículo como unidad atómica (§2.3), la sintaxis `{#ancla}` de Pandoc (§4.1), el ancla derivada del
 número e idéntica entre lenguas (§4.1), y que el hub tolere un `.md` imperfecto (§7).
 
-**Fuera del contrato porque es contenido y no formato**: los 40 artículos sin cuerpo, el artículo 19
-del Convenio ausente del DOGV castellano, y los 35 encabezados propios del DOCENTIA (`NORMA
-TÈCNICA`, `Dimensió I`), que merecen una regla para ese documento antes que una regla general.
+**Fuera del contrato porque es contenido y no formato**: las 14 unidades citables sin cuerpo —de las
+que 3 son pérdida real (Anexo A)— y el artículo 19 del Convenio ausente del DOGV castellano.
+
+Los 35 encabezados propios del DOCENTIA (`NORMA TÈCNICA 1..4`, `Dimensió I..III`) **ya no necesitan
+una regla para ese documento**: no eran un caso especial, eran una regla mal puesta. La familia J
+—«rúbrica dentro de artículo, degrádala a texto»— se había extendido a «dentro de artículo *o de
+disposición*», y el estado es pegajoso: pasada la disposición final, toda la cola del documento lo
+heredaba y perdía sus divisiones. Restringida a artículo, como decía la taxonomía, el DOCENTIA
+recupera su estructura y con él otros 9 documentos, 23 encabezados en total.
+
+La moraleja generaliza, y por eso queda escrita aquí: **antes de escribir una regla para un documento
+que parece único, comprobar que no es una regla general que le está pasando por encima.** El §0.2 da
+el comportamiento seguro por defecto —un encabezado que no encaja se queda donde está y no pasa
+nada—, y degradar es siempre la opción que hay que justificar.
