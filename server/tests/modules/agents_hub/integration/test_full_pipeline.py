@@ -13,7 +13,6 @@ import os
 import uuid
 
 import pytest
-from sqlalchemy import text
 
 _JWT_ENV = {
     "JWT_SECRET_KEY": "test-secret-key-that-is-at-least-32-characters-long",
@@ -21,36 +20,25 @@ _JWT_ENV = {
     "JWT_EXPIRATION_MINUTES": "60",
 }
 
-DB_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://govgenai:govgenai_dev@localhost:5432/govgenai",
-)
-
 
 class TestRAGPipeline:
 
     @pytest.mark.asyncio
-    async def test_ingestion_to_retrieval_pipeline(self) -> None:
-        """Pipeline completo: ingestiÃ³n â†’ chunking â†’ embedding â†’ retrieval."""
-        from server.app.modules.agents_hub.database.connection import (
-            create_async_engine,
-            create_session_factory,
-        )
-        from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
-        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion, HubLLMConfig, HubProvider, HubPromptTemplate
-        from server.app.modules.agents_hub.database.operational_models import HubDocument, HubDocumentChunk, HubInteraction, HubIngestionJob
+    async def test_ingestion_to_retrieval_pipeline(self, db_session) -> None:
+        """Pipeline completo: ingestiÃ³n â†’ chunking â†’ embedding â†’ retrieval.
+
+        Sobre la BD desechable de la fixture `db_session` (TST.2): antes creaba su
+        propio motor sobre DATABASE_URL y dejaba organizaciones `Pipeline Test Client`
+        residuales en la BD del desarrollador.
+        """
+        from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion, HubLLMConfig, HubProvider
+        from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
         from server.app.modules.agents_hub.ingestion.chunker import MarkdownChunker
         from server.app.modules.agents_hub.ingestion.hasher import hash_content
         from server.app.modules.agents_hub.services.retriever import HybridRetriever
 
-        engine = create_async_engine(DB_URL)
-        async with engine.begin() as conn:
-            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-            await conn.run_sync(HubConfigBase.metadata.create_all)
-            await conn.run_sync(HubOperationalBase.metadata.create_all)
-
-        factory = create_session_factory(engine)
-        async with factory() as session:
+        session = db_session
+        if True:
             # 0. Crear proveedor
             await session.merge(HubProvider(id="google", name="Google", provider_type="google_genai"))
             await session.commit()
@@ -128,8 +116,6 @@ class TestRAGPipeline:
                 top_k=3,
             )
             assert len(hybrid_results) >= 1
-
-        await engine.dispose()
 
     @pytest.mark.asyncio
     async def test_chunker_splits_and_hasher_deduplicates(self) -> None:

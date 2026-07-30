@@ -69,3 +69,40 @@ def test_should_declare_asyncio_fixture_loop_scope_in_config():
     warning de deprecación en cada ejecución."""
     pyproject = (SERVER / "pyproject.toml").read_text(encoding="utf-8")
     assert 'asyncio_default_fixture_loop_scope = "function"' in pyproject
+
+
+# ───────────────────────── TST.2: la BD del desarrollador es intocable ─────────────────────────
+
+# Único lugar autorizado para crear tablas partiendo de DATABASE_URL: la fixture de BD
+# desechable. Usa DATABASE_URL solo para la conexión de administración con la que crea
+# y borra bases `test_hub_*`.
+_FIXTURE_DESECHABLE = "tests/conftest.py"
+
+
+def test_should_have_no_test_fixture_calling_drop_all():
+    """`drop_all` sobre la BD del desarrollador fue lo que la dejó sin esquema del hub
+    dos veces (2026-07-28). La fixture desechable no lo necesita: borra la BD entera."""
+    infractores = []
+    for path in _ficheros_de_test():
+        # Llamadas reales (`X.metadata.drop_all`), no menciones en docstrings.
+        if "metadata.drop_all" in path.read_text(encoding="utf-8", errors="replace"):
+            infractores.append(str(path.relative_to(SERVER)))
+    assert infractores == [], f"drop_all en tests: {infractores}"
+
+
+def test_should_have_no_test_creating_tables_on_the_dev_database():
+    """TST.2: la suite e2e creaba tablas sobre DATABASE_URL —la BD del desarrollador—
+    y dejó 12 chatbots residuales. Crear tablas partiendo de DATABASE_URL solo puede
+    hacerlo la fixture desechable; sqlite en memoria queda fuera de la regla."""
+    infractores = []
+    for path in _ficheros_de_test():
+        relativa = path.relative_to(SERVER).as_posix()
+        if relativa == _FIXTURE_DESECHABLE:
+            continue
+        texto = path.read_text(encoding="utf-8", errors="replace")
+        if "create_all" in texto and "DATABASE_URL" in texto:
+            infractores.append(relativa)
+    assert infractores == [], (
+        "create_all sobre DATABASE_URL fuera de la fixture desechable; usa las "
+        f"fixtures db_url/db_session: {infractores}"
+    )

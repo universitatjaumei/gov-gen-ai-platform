@@ -1,8 +1,10 @@
 """Fixtures compartidas para tests E2E de agents_hub.
 
-Requieren PostgreSQL con pgvector corriendo en localhost:5432.
-Por defecto usan la misma BD de desarrollo (govgenai).
-En CI se sobreescribe DATABASE_URL con las credenciales del servicio.
+Requieren PostgreSQL con pgvector corriendo en localhost:5432. Corren contra la **BD
+desechable por test** de la fixture `db_url` (conftest raíz): la versión anterior creaba
+las tablas del hub sobre `DATABASE_URL` —la BD del desarrollador— y `setup_chatbot` le
+dejó 12 organizaciones y chatbots residuales (TST.2). Lo vigila
+`e2e/test_db_isolation.py`.
 
 Nota de diseño: todos los fixtures de BD tienen scope="function" para
 evitar conflictos de event loop entre pytest-asyncio y httpx.AsyncClient.
@@ -20,11 +22,6 @@ _JWT_ENV = {
     "GEMINI_API_KEY": "test-key",
 }
 
-_TEST_DB_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://govgenai:govgenai_dev@localhost:5432/govgenai",
-)
-
 
 @pytest.fixture(autouse=True)
 def _set_jwt_env():
@@ -32,15 +29,11 @@ def _set_jwt_env():
 
 
 @pytest.fixture
-async def db_engine():
-    """Motor de BD por test: crea las tablas hub_ si no existen."""
+async def db_engine(db_url):
+    """Motor por test sobre la BD desechable (las tablas hub_ ya vienen creadas)."""
     from server.app.modules.agents_hub.database.connection import create_async_engine
-    from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
 
-    engine = create_async_engine(_TEST_DB_URL)
-    async with engine.begin() as conn:
-        await conn.run_sync(HubConfigBase.metadata.create_all)
-        await conn.run_sync(HubOperationalBase.metadata.create_all)
+    engine = create_async_engine(db_url)
     yield engine
     await engine.dispose()
 

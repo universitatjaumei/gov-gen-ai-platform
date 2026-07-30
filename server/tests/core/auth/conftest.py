@@ -184,37 +184,23 @@ def saml_ctx(monkeypatch):
 
 
 @pytest.fixture
-async def db():
-    """Sesión contra el PostgreSQL de desarrollo, con limpieza de filas de test.
+async def db(db_url):
+    """Sesión contra la BD desechable del test (fixture `db_url` del conftest raíz).
 
-    Crea un engine async **fresco por test** (como el conftest e2e) para no reutilizar
-    conexiones del ``server_engine`` global ligadas a otro event loop. Devuelve un
-    namespace con ``session``, ``engine`` y ``track(email)``; el teardown borra de
-    hub_sso_users / SuperAdminAccount / AdminAccount las filas con esos emails.
+    La versión anterior apuntaba al PostgreSQL de desarrollo y limpiaba por email en el
+    teardown (TST.2): ahora la BD entera se borra al acabar el test, así que la
+    limpieza sobra. Se conserva ``track(email)`` como no-op para no tocar los tests.
+
+    Las tablas del hub ya vienen creadas por `db_url`; aquí se añaden las de SQLModel
+    (SuperAdminAccount, AdminAccount…), que los tests de auth también usan.
     """
-    import os
-
-    from sqlalchemy import delete
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlmodel import SQLModel
     from sqlmodel.ext.asyncio.session import AsyncSession
 
-    from server.app.database.models import SuperAdminAccount, AdminAccount
-    from server.app.modules.agents_hub.database.base import HubConfigBase
-    from server.app.modules.agents_hub.database.config_models import (
-        HubPersonalAccessToken,
-        HubSsoUser,
-    )
-
-    database_url = os.environ.get(
-        "DATABASE_URL",
-        "postgresql+asyncpg://govgenai:govgenai_dev@localhost:5432/govgenai",
-    )
-    engine = create_async_engine(database_url)
-
+    engine = create_async_engine(db_url)
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
-        await conn.run_sync(HubConfigBase.metadata.create_all)
 
     session = AsyncSession(engine)
     tracked: list[str] = []
@@ -225,14 +211,5 @@ async def db():
     try:
         yield ns
     finally:
-        if tracked:
-            for model in (HubSsoUser, SuperAdminAccount, AdminAccount):
-                await session.execute(delete(model).where(model.email.in_(tracked)))
-            await session.execute(
-                delete(HubPersonalAccessToken).where(
-                    HubPersonalAccessToken.owner_email.in_(tracked)
-                )
-            )
-            await session.commit()
         await session.close()
         await engine.dispose()
