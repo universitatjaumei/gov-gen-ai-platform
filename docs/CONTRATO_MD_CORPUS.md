@@ -49,7 +49,7 @@ queda en `##` y no pasa nada.
 **3. Lo que sí es obligatorio es que el contenido esté completo.** Un artículo cuyo cuerpo se
 perdió en la conversión falla en **todos** los modos de recuperación —inyección, RAG y cita— y es
 el fallo que hunde un piloto en silencio, porque nadie descubre que falta hasta que el asistente
-responde mal a alguien. En la medición actual son **14 unidades citables sin cuerpo**, de las cuales
+responde mal a alguien. En la medición actual son **11 unidades citables sin cuerpo**, de las cuales
 **3 son pérdida real de contenido**, más el artículo 19 del Convenio ausente del DOGV castellano
 (Anexo A). **Ese es el trabajo que paga**, por delante de cualquier refinamiento de la taxonomía de
 encabezados.
@@ -57,8 +57,8 @@ encabezados.
 Conviene medirlo **sobre la salida convertida y no sobre la entrada**: sobre `md/` salen 40, porque
 una división estructural interpuesta entre el artículo y su cuerpo hace que el artículo parezca
 vacío, y la conversión la degrada precisamente por eso. Y conviene **clasificar por causa antes de
-abrir un PDF**: de las 14, dos son artículos suprimidos —la «rúbrica» es la llamada a una nota al pie
-que dice «Suprimido por Acuerdo del Consejo de Gobierno»— y ahí la ausencia de cuerpo es correcta.
+abrir un PDF**: los artículos suprimidos no tienen cuerpo porque no deben tenerlo, y desde el §8.3 lo
+declaran con la clase `.suprimit` en vez de deducirse de una nota al pie.
 
 **4. Para BOE y DOGV no se escribe `.md` a mano.** Se genera desde el XML consolidado.
 
@@ -510,7 +510,7 @@ mientras que aquí un falso negativo le quitaría el ancla a una unidad legítim
 | Numeración duplicada en el original | Se conserva la del original y se desambigua el ancla con sufijo `-2`, dejando nota en el cuerpo. No se renumera la norma. |
 | **Anexo con articulado** *(enmienda 1)* | Un anexo **puede** contener artículos, y cuando los contiene **reinician la numeración**. El anexo es `##`, sus artículos `#####`, y las anclas se scopean: `{#annex-1-art-1}`. Se citan así en la práctica: «l'article 1 de l'Annex I». Son 3 documentos y 190 anclas. |
 | Anexo con divisiones que no son artículos | El anexo es `##` y sus divisiones internas `###`/`####`. |
-| **Documento sin articulado** *(enmienda 9)* | Las divisiones de primer orden **son** las unidades citables: `##` con ancla `div-<n>` derivada de su número. Si la división no está numerada, no lleva ancla. Son 38 documentos y 178 divisiones, y varias se citan de verdad. |
+| **Documento sin articulado** *(enmienda 9)* | Las divisiones de primer orden **son** las unidades citables: `##` con ancla `div-<n>` derivada de su número. Si la división no está numerada, no lleva ancla. Son 40 documentos y 178 divisiones, y varias se citan de verdad. |
 | **Documento bilingüe a dos columnas** *(enmienda 13)* | Se parte en dos ficheros, uno por lengua, con las mismas anclas. El fichero nuevo recibe un id **derivado del de su hermana con sufijo de lengua** (`CNV-001-val`, `REG-127-es`) y las dos fichas se enlazan. **No se usa el primer número libre de la serie**: `CNV-002`, `REG-008` y `REG-012` ya están ocupados por normas distintas en el catálogo global de 314 fichas, y reutilizarlos colisiona al unificar catálogos. Si las dos versiones se publican como documentos separados en el portal es decisión del propietario del conjunto publicable. |
 
 ---
@@ -589,7 +589,7 @@ no bloquea**.
 - [ ] *(Enmienda 4.)* Ningún ancla de artículo derivada de un `Artículo N.M`.
 - [ ] *(Enmienda 14.)* **Ninguna unidad citable sin cuerpo.** Detecta el contenido perdido en la
       conversión, que es el defecto que importa (§0.3). Se mide **sobre la salida**, no sobre la
-      entrada. Hoy son **14** (9 artículos y 5 disposiciones), y solo 3 son pérdida real.
+      entrada. Hoy son **11**, y solo 3 son pérdida real.
 - [ ] *(Enmienda 14.)* **Ninguna unidad citable repetida con cuerpo** (índice mal degradado, §2.3).
 - [ ] Ningún artículo marcado con negrita en lugar de encabezado.
 - [ ] Ningún `<!-- TABLE-IMG -->` sin su bloque `TABLA-TEXT` al lado.
@@ -631,31 +631,78 @@ todo o nada.
 > *(Enmienda 15.)* Las cifras del cuerpo del contrato eran una instantánea y quedaron obsoletas al
 > partir los bilingües. Se recogen aquí, fechadas, y el texto normativo no depende de ellas.
 
-Medido sobre `publicacio_transparencia_2026-07/md_contracte/` el **2026-07-29**, después de la
-pasada que aplica las doce familias de `regles_encapcalaments.json`:
+Medido sobre `publicacio_transparencia_2026-07/md_contracte/` el **2026-07-30**, después de importar
+del DOGV los 6 documentos que se publicaron a dos columnas:
 
 | Magnitud | Valor |
 |---|---|
 | Documentos | 229 (eran 226 antes de partir 3 bilingües) |
-| Encabezados por nivel | `#` 229 · `##` 1.092 · `###` 873 · `####` 293 · `#####` 5.439 |
-| Anclas emitidas | **5.729** |
-| Anclas por prefijo | `art` 4.462 · `annex` 283 · `da` 252 · `df` 171 · `preambul` 160 · `dd` 134 · `dt` 133 · `norma` 87 · `div` 39 · `res` 8 |
-| Cobertura de ancla por clase | artículo/disposición 5.437/5.439 · preámbulo 160/160 · anexo 93/93 |
+| Caracteres visibles del corpus | 6.089.248 |
+| Encabezados por nivel | `#` 229 · `##` 1.093 · `###` 902 · `####` 316 · `#####` 5.664 |
+| Anclas emitidas | **5.952** |
+| Anclas por prefijo | `art` 4.774 · `da` 265 · `df` 174 · `annex` 172 · `preambul` 157 · `dt` 144 · `dd` 136 · `norma` 87 · `div` 39 · `res` 4 |
+| Cobertura de ancla por clase | artículo/disposición 5.662/5.664 |
 | Anclas duplicadas sin resolver | 0 |
-| Colisiones con sufijo | 11 · **1 desempatada por cuerpo** (§4.8) · 10 duplicado legítimo |
-| Anclas oportunistas descartadas por colisión | 13 |
-| Documentos sin articulado | 38 |
-| Familias de regla decididas por el contrato | **12 de 12** (las 1.115 de la taxonomía) |
-| Bloques `TABLA-TEXT` | 59 (49 `markdown`, 5 `html` en la medición anterior de 54) |
-| Fragmentos que produce el hub | 12.044 |
-| Unidades citables sin cuerpo (**a corregir**) | **14** (9 artículos + 5 disposiciones) |
-| …de las cuales pérdida real de contenido | **3** |
+| `id` emitidos en las 229 páginas HTML | 5.952 (uno por ancla) |
+| Documentos sin articulado | 40 |
+| Familias de regla decididas por el contrato | **12 de 12** |
+| Bloques `TABLA-TEXT` | 52 |
+| Clases de consolidación en uso (§8.3) | `.suprimit` 4 |
+| Unidades citables sin cuerpo (**a corregir**) | **10** |
+
+### La importación desde el DOGV (2026-07-30)
+
+Seis documentos se publicaron en el DOGV **a dos columnas**, valenciano y castellano en la misma
+página, y el OCR de ese formato era el origen de la mayor parte del daño del corpus: **141 de los 190
+encabezados de artículo perdidos** estaban en esos seis ficheros. El DOGV los ofrece en HTML con una
+versión por lengua, de donde no hace falta OCR.
+
+| Documento | Artículos antes → después | Caracteres |
+|---|---|---|
+| Estatuts (va) | 112 → **172** | +60.310 |
+| Estatutos (es) | 151 → **172** | +30.135 |
+| Admin. electrónica (va) | 41 → **62** | −1.619 |
+| Admin. electrónica (es) | 41 → **62** | +992 |
+| Convenio colectivo (va) | 59 → **82** | −5.288 |
+| Convenio colectivo (es) | 58 → **82** | +2.941 |
+
+**Los tres deltas negativos no son pérdida de contenido**, y comprobarlo fue el trabajo:
+
+- En administración electrónica (va), el documento anterior contenía **2.724 caracteres de castellano**
+  en 5 párrafos, restos de la partición de bilingües. El nuevo trae 1.105 caracteres más de valenciano
+  real y suelta ese castellano.
+- En el Convenio (va), de los 60 importes distintos del documento anterior **no se pierde ninguno**:
+  los 13 que la comparación de multiconjuntos señalaba eran repeticiones que el doble columnado había
+  duplicado (`1.236,60 €` ocho veces frente a cuatro).
+
+**Y la paridad idiomática del §4.1, que no se cumplía**, queda resuelta en dos de los tres pares:
+
+| Par | Antes | Ahora |
+|---|---|---|
+| Estatuts | `art-N` (es) frente a `annex-1-art-N` (va): **cero anclas comunes** | **172 = 172, completa** |
+| Admin. electrónica | 41 y 41, estructura mal detectada | **62 = 62, completa** |
+| Convenio colectivo | 59 y 58 | **82 = 82, completa** |
+
+**La paridad se cierra en los tres pares.** El `art-164` que parecía faltar de la versión valenciana sí
+está publicado, pero con una errata de la fuente: el DOGV escribe «**Articles** 164. Dret de sufragi»,
+en plural, y así aparece tanto en el índice como en el cuerpo. El patrón de `RE_ARTICLE` tolera ahora el
+plural **sin tocar el texto**, con un guardián que excluye el plural legítimo —«Articles 5 i 6 queden
+redactats»— porque tras el número lleva conjunción y otro número. Medido: en todo el corpus hay 2
+ocurrencias del plural, las dos de esta errata.
+
+Y el `art-19` del Convenio, que se daba por ausente del DOGV castellano, **está en las dos lenguas**: era
+un defecto de la versión OCR, no de la publicación oficial.
+
+**Lo que ninguna vía de extracción recupera** son las tablas retributivas del artículo 51 del Convenio:
+en el DOGV van como imagen, así que el `.txt` del portapapeles y la impresión a PDF dan los mismos 49
+importes. Esas tablas solo pueden venir del corpus anterior, y por eso la importación **fusiona** en vez
+de sustituir: reinserta un bloque `TABLA-TEXT` solo si aporta algún importe que el texto nuevo no tenga.
 
 Las tres decisiones de prefijo de la versión 2 —`res-`, `norma-`, `div-`— aportan 134 anclas, y los
 ordinales que caen dentro de un grupo de disposiciones resuelven por contexto a su propio prefijo
 (§4.3): `da` +10, `dt` +3, `df` +1 respecto de la medición anterior.
 
-**Sobre las 14 unidades sin cuerpo.** La cifra depende de dónde se mida, y conviene decirlo porque
+**Sobre las unidades sin cuerpo.** La cifra depende de dónde se mida, y conviene decirlo porque
 la versión anterior de este anexo daba 40. Contadas sobre la entrada (`md/`) son 40; sobre la salida
 convertida son 14. La diferencia no es un criterio más laxo: cuando una división estructural queda
 interpuesta entre el artículo y su cuerpo, la conversión la degrada y el artículo recupera su cuerpo.
@@ -698,7 +745,7 @@ El detalle por documento y línea está en `publicacio_transparencia_2026-07/art
 artículo como unidad atómica (§2.3), la sintaxis `{#ancla}` de Pandoc (§4.1), el ancla derivada del
 número e idéntica entre lenguas (§4.1), y que el hub tolere un `.md` imperfecto (§7).
 
-**Fuera del contrato porque es contenido y no formato**: las 14 unidades citables sin cuerpo —de las
+**Fuera del contrato porque es contenido y no formato**: las 11 unidades citables sin cuerpo —de las
 que 3 son pérdida real (Anexo A)— y el artículo 19 del Convenio ausente del DOGV castellano.
 
 Los 35 encabezados propios del DOCENTIA (`NORMA TÈCNICA 1..4`, `Dimensió I..III`) **ya no necesitan
