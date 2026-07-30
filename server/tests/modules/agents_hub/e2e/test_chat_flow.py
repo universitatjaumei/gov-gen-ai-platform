@@ -17,7 +17,7 @@ Rutas reales (monorepo):
 """
 import json
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -70,7 +70,7 @@ class TestChatFlowE2E:
             },
             {
                 "event": "on_chain_end",
-                "name": "generate_response",
+                "name": "generate_answer",
                 "data": {
                     "output": {
                         "sources": [],
@@ -83,7 +83,8 @@ class TestChatFlowE2E:
         mock_graph = _make_mock_graph_astream_events(raw_events)
 
         with (
-            patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
+            patch("server.app.api.v1.hub_chat.GraphFactory",
+                  return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
         ):
             async with AsyncClient(
@@ -128,7 +129,7 @@ class TestChatFlowE2E:
             },
             {
                 "event": "on_chain_end",
-                "name": "generate_response",
+                "name": "generate_answer",
                 "data": {
                     "output": {
                         "sources": [],
@@ -141,7 +142,8 @@ class TestChatFlowE2E:
         mock_graph = _make_mock_graph_astream_events(raw_events)
 
         with (
-            patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
+            patch("server.app.api.v1.hub_chat.GraphFactory",
+                  return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
         ):
             async with AsyncClient(
@@ -191,7 +193,7 @@ class TestExportFlowE2E:
             },
             {
                 "event": "on_chain_end",
-                "name": "generate_response",
+                "name": "generate_answer",
                 "data": {
                     "output": {
                         "sources": [],
@@ -204,7 +206,8 @@ class TestExportFlowE2E:
         mock_graph = _make_mock_graph_astream_events(raw_events)
 
         with (
-            patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
+            patch("server.app.api.v1.hub_chat.GraphFactory",
+                  return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
         ):
             async with AsyncClient(
@@ -250,7 +253,7 @@ class TestExportFlowE2E:
             },
             {
                 "event": "on_chain_end",
-                "name": "generate_response",
+                "name": "generate_answer",
                 "data": {
                     "output": {
                         "sources": [],
@@ -268,7 +271,8 @@ class TestExportFlowE2E:
         other_headers = {"Authorization": f"Bearer {other_token}"}
 
         with (
-            patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
+            patch("server.app.api.v1.hub_chat.GraphFactory",
+                  return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
         ):
             async with AsyncClient(

@@ -21,6 +21,10 @@ class PublicGraphConfig:
     reranker_enabled: bool
     answer_template: str
     chatbot_id: uuid.UUID | None = None
+    # RAG.2: el system_prompt del chatbot entra por la cascada porque *es* configuración
+    # efectiva del chatbot. Así la TemplateStrategy —única fuente del system prompt— lo
+    # recibe por el mismo camino que el resto de la config, sin parámetros paralelos.
+    system_prompt: str | None = None
 
 
 _PLATFORM_DEFAULTS = PublicGraphConfig(
@@ -73,6 +77,7 @@ async def get_effective_public_graph_config(
     config = _apply_layer(config, {
         "profile":               chatbot.public_graph_profile,
         "retrieval_mode":        chatbot.retrieval_mode,
+        "system_prompt":         chatbot.system_prompt,
         "language_mode":         chatbot.language_mode,
         "quality_threshold":     chatbot.quality_threshold,
         "min_retrieval_results": chatbot.min_retrieval_results,

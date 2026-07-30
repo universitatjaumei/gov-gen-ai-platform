@@ -86,7 +86,14 @@ class TestCoreGraph:
         result = await graph.run("¿qué es esto?", str(uuid.uuid4()))
 
         assert result["fallback_used"] is True
-        assert result["answer"] is None
+        # Reapuntado en RAG.2: el fallback dejó de devolver answer=None y ahora emite el
+        # mensaje, que el endpoint manda por SSE como respuesta normal.
+        from server.app.modules.agents_hub.agent.citation_validator import (
+            NO_CITATION_FALLBACK,
+        )
+
+        assert result["answer"] == NO_CITATION_FALLBACK
+        assert result["fallback_reason"] == "quality_gate"
 
     async def test_core_graph_runs_with_each_retrieval_mode_using_generic_profile(self):
         """Con 2 items de score 0.9, el grafo produce una respuesta en cada retrieval_mode."""

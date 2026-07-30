@@ -161,7 +161,8 @@ class TestChatEndpointSSE:
 
         token = _make_token()
         with (
-            patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
+            patch("server.app.api.v1.hub_chat.GraphFactory",
+                  return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
             patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
         ):
@@ -191,14 +192,15 @@ class TestChatEndpointSSE:
         # Simular on_chain_start para dos nodos conocidos
         raw_events = [
             {"event": "on_chain_start", "name": "detect_language", "data": {}},
-            {"event": "on_chain_start", "name": "generate_response", "data": {}},
+            {"event": "on_chain_start", "name": "generate_answer", "data": {}},
         ]
         mock_graph = _make_mock_graph_astream_events(raw_events)
 
         token = _make_token()
         all_lines: list[str] = []
         with (
-            patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
+            patch("server.app.api.v1.hub_chat.GraphFactory",
+                  return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
             patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
         ):
@@ -217,7 +219,7 @@ class TestChatEndpointSSE:
 
         nodes_emitted = [p["node"] for _, p in status_events]
         assert "detect_language" in nodes_emitted
-        assert "generate_response" in nodes_emitted
+        assert "generate_answer" in nodes_emitted
 
         # Verificar que los mensajes de progreso son los esperados
         for _, payload in status_events:
@@ -249,7 +251,8 @@ class TestChatEndpointSSE:
         token = _make_token()
         all_lines: list[str] = []
         with (
-            patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
+            patch("server.app.api.v1.hub_chat.GraphFactory",
+                  return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
             patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
         ):
@@ -289,7 +292,7 @@ class TestChatEndpointSSE:
         raw_events = [
             {
                 "event": "on_chain_end",
-                "name": "generate_response",
+                "name": "generate_answer",
                 "data": {
                     "output": {
                         "sources": sources,
@@ -304,7 +307,8 @@ class TestChatEndpointSSE:
         token = _make_token()
         all_lines: list[str] = []
         with (
-            patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
+            patch("server.app.api.v1.hub_chat.GraphFactory",
+                  return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
             patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
         ):
@@ -340,25 +344,33 @@ class TestChatEndpointSSE:
         chatbot.id = uuid.uuid4()
         app = _build_test_app(chatbot)
 
+        # Reapuntado en RAG.2: el idioma detectado sale del nodo detect_language y el aviso
+        # de traducción del nodo merge (que es donde la LanguagePolicy lo decide), en vez de
+        # venir ambos en la salida del nodo de generación.
         raw_events = [
             {
                 "event": "on_chain_end",
-                "name": "generate_response",
-                "data": {
-                    "output": {
-                        "sources": [],
-                        "language_fallback_triggered": True,
-                        "language": "ca",
-                    }
-                },
-            }
+                "name": "detect_language",
+                "data": {"output": {"language": "ca"}},
+            },
+            {
+                "event": "on_chain_end",
+                "name": "merge",
+                "data": {"output": {"translation_warning": True}},
+            },
+            {
+                "event": "on_chain_end",
+                "name": "generate_answer",
+                "data": {"output": {"sources": [], "fallback_used": False}},
+            },
         ]
         mock_graph = _make_mock_graph_astream_events(raw_events)
 
         token = _make_token()
         all_lines: list[str] = []
         with (
-            patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
+            patch("server.app.api.v1.hub_chat.GraphFactory",
+                  return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
             patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
         ):
@@ -399,7 +411,8 @@ class TestChatEndpointSSE:
         token = _make_token()
         all_lines: list[str] = []
         with (
-            patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=mock_graph),
+            patch("server.app.api.v1.hub_chat.GraphFactory",
+                  return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
             patch("server.app.api.v1.hub_chat.get_embedding_service"),
             patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
         ):

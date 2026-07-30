@@ -18,6 +18,16 @@ def has_valid_citations(response_text: str, allowed_urls: set[str]) -> bool:
     return False
 
 
+def _url_de(evidencia) -> str | None:
+    """URL de un EvidenceItem (`source_url`).
+
+    RAG.2 unificó el contrato de evidencia en EvidenceItem; se acepta también `url`
+    porque los tools de lectura y las estrategias de `services/retrieval/` siguen
+    hablando ese dialecto por debajo de los pipelines.
+    """
+    return getattr(evidencia, "source_url", None) or getattr(evidencia, "url", None)
+
+
 def enforce_citation_contract(
     response_text: str,
     sources: list,
@@ -30,7 +40,7 @@ def enforce_citation_contract(
     """
     if not sources:
         return response_text
-    allowed = {s.url for s in sources}
+    allowed = {u for u in (_url_de(s) for s in sources) if u}
     if has_valid_citations(response_text, allowed):
         return response_text
     return NO_CITATION_FALLBACK

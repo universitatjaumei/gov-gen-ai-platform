@@ -19,12 +19,17 @@ _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _run(*args: str) -> subprocess.CompletedProcess:
+    # 120 s y no 30: el script genera una clave RSA-2048 y, ejecutado junto al resto de la
+    # suite, el subprocess de bash expiraba de forma intermitente —cada vez en un test
+    # distinto— en Windows. Un fallo por tiempo que aparece según la carga de la máquina no
+    # informa de nada y estropea cualquier comparación de la suite. Un cuelgue real sigue
+    # fallando con este margen.
     return subprocess.run(
         ["bash", str(_SCRIPT), *args],
         cwd=_ROOT,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=120,
     )
 
 

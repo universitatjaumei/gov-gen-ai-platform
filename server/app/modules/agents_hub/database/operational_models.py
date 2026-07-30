@@ -322,6 +322,11 @@ class HubInteraction(HubOperationalBase):
     )
     feedback_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     feedback_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 'quality_gate' | 'citation' | NULL. NULL = la respuesta salió del camino normal.
+    # RAG.14 lo consume para detectar huecos de corpus. Sin CheckConstraint: los motivos
+    # son un vocabulario que crecerá (reranker, presupuesto de tokens...) y una restricción
+    # en la BD obligaría a una migración por cada motivo nuevo.
+    fallback_reason: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     interaction_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

@@ -24,11 +24,18 @@ from server.app.modules.agents_hub.agent.public_graphs.strategies.protocols impo
     RetrievalStrategy,
     TemplateStrategy,
 )
+from server.app.modules.agents_hub.agent.citation_validator import (
+    NO_CITATION_FALLBACK,
+    enforce_citation_contract,
+)
 from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_contract import (
     EvidenceItem,
 )
 
 if TYPE_CHECKING:
+    from server.app.modules.agents_hub.agent.public_graphs.strategies.agentic_loop import (
+        AgenticLoop,
+    )
     from server.app.modules.agents_hub.agent.public_graphs.core.config_resolver import (
         PublicGraphConfig,
     )
@@ -49,6 +56,8 @@ class CoreGraphState(TypedDict):
     quality_score: float
     fallback_used: bool
     translation_warning: bool
+    fallback_reason: str | None     # 'quality_gate' | 'citation' | None (RAG.2)
+    sources: list                  # list[EvidenceItem] citables emitidas en el done SSE
 
 
 class CoreGraph:
@@ -67,6 +76,7 @@ class CoreGraph:
         cfg: "PublicGraphConfig",
         deps: "GraphDeps",
         llm: Any = None,
+        agentic_loop: "AgenticLoop | None" = None,
     ) -> None:
         self.retrieval_strategy = retrieval_strategy
         self.merge_strategy = merge_strategy
@@ -75,6 +85,7 @@ class CoreGraph:
         self.cfg = cfg
         self.deps = deps
         self.llm = llm
+        self.agentic_loop = agentic_loop
 
     def compile(self):
         """Compila y devuelve el grafo LangGraph listo para invocar."""
@@ -131,23 +142,56 @@ class CoreGraph:
             return "fallback"
 
         async def generate_answer_node(state: CoreGraphState) -> dict:
+            items: list[EvidenceItem] = state["merged_items"]
             context = self.template_strategy.build_prompt_context(
-                state["merged_items"],
+                items,
                 state.get("language"),
                 state["query"],
             )
-            if self.llm is not None:
+            if self.llm is None:
+                return {
+                    "answer": context,
+                    "fallback_used": False,
+                    "fallback_reason": None,
+                    "sources": items,
+                }
+
+            if self.agentic_loop is not None:
+                # Modo MD_AGENT_SELECTOR: los items recuperados son el ÍNDICE, y sólo se
+                # pueden citar los documentos que el loop lea de verdad.
+                citables, answer = await self.agentic_loop.run(
+                    llm=self.llm,
+                    system=context,
+                    query=state["query"],
+                    chatbot_id=state["chatbot_id"],
+                    language=state.get("language"),
+                )
+            else:
                 response = await self.llm.ainvoke([
                     {"role": "system", "content": context},
                     {"role": "user", "content": state["query"]},
                 ])
                 answer = response.content if hasattr(response, "content") else str(response)
-            else:
-                answer = context
-            return {"answer": answer, "fallback_used": False}
+                citables = items
+
+            validated = enforce_citation_contract(answer, citables, self.cfg.retrieval_mode)
+            incumplio_citas = validated != answer
+            return {
+                "answer": validated,
+                "fallback_used": incumplio_citas,
+                "fallback_reason": "citation" if incumplio_citas else None,
+                "sources": citables,
+            }
 
         async def fallback_node(state: CoreGraphState) -> dict:
-            return {"answer": None, "fallback_used": True}
+            # El fallback EMITE el mensaje, no deja answer=None: el endpoint lo manda por
+            # SSE como una respuesta normal y el usuario ve una explicación en vez de nada.
+            return {
+                "answer": NO_CITATION_FALLBACK,
+                "fallback_used": True,
+                "fallback_reason": "quality_gate",
+                "sources": [],
+            }
 
         async def log_node(state: CoreGraphState) -> dict:
             return {}
@@ -186,5 +230,7 @@ class CoreGraph:
             "quality_score": 0.0,
             "fallback_used": False,
             "translation_warning": False,
+            "fallback_reason": None,
+            "sources": [],
         }
         return await compiled.ainvoke(initial)

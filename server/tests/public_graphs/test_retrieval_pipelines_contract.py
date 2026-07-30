@@ -208,7 +208,10 @@ class TestMdAgentSelectorPipelineContract:
         assert isinstance(result, RetrievalResult)
         assert isinstance(result.items, list)
         assert result.debug.get("pipeline_mode") == "MD_AGENT_SELECTOR"
-        assert result.debug.get("selection") == "stub_all"
+        # Reapuntado en RAG.2: el stub «índice completo» pasó a ser un IndexProvider
+        # inyectable, y la traza dice cuál se usó (VIS.2 lo sustituirá).
+        assert result.debug.get("index_provider") == "DocumentIndexProvider"
+        assert result.debug.get("index_entries") == len(result.items)
 
     async def test_md_agent_selector_returns_all_docs_as_items(self):
         from server.app.modules.agents_hub.agent.public_graphs.strategies.md_agent_selector_pipeline import (
@@ -248,4 +251,4 @@ class TestMdAgentSelectorPipelineContract:
 
         assert result.items == []
         assert result.context_source_language is None
-        assert result.debug["docs_available"] == 0
+        assert result.debug["index_entries"] == 0  # reapuntado en RAG.2 (era docs_available)

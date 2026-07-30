@@ -26,9 +26,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, require_scopes
 from server.app.core.auth import UserInfo
-from server.app.modules.agents_hub.agent.graph import create_agent_graph
+from server.app.modules.agents_hub.agent.public_graphs.core.graph_factory import GraphFactory
+from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_pipeline_protocol import (
+    GraphDeps,
+)
 from server.app.modules.agents_hub.agent.router_node import build_route_to_subagent_node
-from server.app.modules.agents_hub.agent.state import create_initial_state
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.config_models import HubChatbot
 from server.app.modules.agents_hub.database.operational_models import HubInteraction
@@ -36,9 +38,6 @@ from server.app.modules.agents_hub.services.config_provider import LocalConfigPr
 from server.app.modules.agents_hub.services.embedding_service import get_embedding_service
 from server.app.modules.agents_hub.services.model_factory import get_model
 from server.app.modules.agents_hub.services.observability import create_callback_handler
-from server.app.modules.agents_hub.services.retrieval.agentic_strategy import AgenticRetrievalStrategy
-from server.app.modules.agents_hub.services.retrieval.long_context_strategy import LongContextRetrievalStrategy
-from server.app.modules.agents_hub.services.retrieval.vector_strategy import VectorRetrievalStrategy
 
 router = APIRouter(prefix="/hub/chat", tags=["hub-chat"])
 
@@ -53,11 +52,18 @@ class _ChatbotChildrenProvider:
         )
         return list(result.scalars().all())
 
+# Nodos del CoreGraph → mensaje de progreso. RAG.2 cambió los nombres internos de los
+# nodos (search_or_skip → retrieve, generate_response → generate_answer) pero NO el
+# contrato SSE observable: los tres mensajes que ve el usuario son los mismos, y los nodos
+# internos que no tenían mensaje (merge, log, fallback) siguen sin emitir status.
 NODE_STATUS_MESSAGES: dict[str, str] = {
-    "detect_language":    "Detectando idioma...",
-    "search_or_skip":     "Buscando en la base de conocimiento...",
-    "generate_response":  "Generando respuesta...",
+    "detect_language":  "Detectando idioma...",
+    "retrieve":         "Buscando en la base de conocimiento...",
+    "generate_answer":  "Generando respuesta...",
 }
+
+# Nodo del CoreGraph cuyo on_chain_end trae el estado final del que salen las fuentes.
+_FINAL_NODES = ("generate_answer", "fallback")
 
 _SSE_HEADERS = {
     "Cache-Control": "no-cache",
@@ -81,12 +87,33 @@ def _build_translation_warning(language: str) -> str | None:
     return f"⚠️ La pregunta se detecto en {lang_display}. La respuesta puede estar en ese idioma."
 
 
+def _es_citable(source) -> bool:
+    """Sólo van al done las evidencias con URL: sin URL no hay cita verificable.
+
+    En modo selector eso descarta además las entradas de índice, que llegan sin haber
+    sido leídas.
+    """
+    if getattr(source, "metadata", None) and source.metadata.get("index_entry"):
+        return False
+    return bool(getattr(source, "source_url", None) or getattr(source, "url", None))
+
+
 def _source_to_dict(source) -> dict:
+    """Serializa una evidencia al shape del evento done.
+
+    RAG.2 unificó el contrato interno en EvidenceItem (source_id / source_url), pero el
+    shape JSON que ve el frontend **no cambia**: document_id, title, url, score. Se acepta
+    también el dialecto `Source` (document_id/url) porque los tools y las estrategias de
+    `services/retrieval/` siguen hablándolo por debajo de los pipelines.
+    """
+    document_id = getattr(source, "source_id", None) or getattr(source, "document_id", None)
+    url = getattr(source, "source_url", None) or getattr(source, "url", None)
+    score = getattr(source, "score", None)
     return {
-        "document_id": str(source.document_id),
+        "document_id": str(document_id),
         "title": source.title,
-        "url": source.url,
-        "score": round(source.score, 3),
+        "url": url,
+        "score": round(score, 3) if score is not None else None,
     }
 
 
@@ -150,31 +177,29 @@ async def chat_stream(
         chatbot = child_chatbot
         router_status_message = f"Materia detectada: {chatbot.name}"
 
-    retrieval_mode = getattr(chatbot, "retrieval_mode", "RAG")
-    if retrieval_mode == "MD_LONG_CONTEXT":
-        strategy = LongContextRetrievalStrategy(session)
-    elif retrieval_mode == "MD_AGENT_SELECTOR":
-        strategy = AgenticRetrievalStrategy(session)
-    else:
-        strategy = VectorRetrievalStrategy(
-            session, embedding_service, top_k=chatbot.retrieval_top_k
-        )
-
     llm = await get_model(selected_chatbot_id, config_provider)
 
-    initial_state = create_initial_state(
-        user_id=user.user_id,
-        chatbot_id=str(selected_chatbot_id),
-        initial_message=request.message,
-    )
+    # El grafo lo construye la GraphFactory: resuelve la cascada de config
+    # (Plataforma → Organización → Chatbot) y selecciona el perfil y el pipeline de
+    # retrieval a partir de cfg.retrieval_mode. El endpoint ya no elige estrategia.
+    deps = GraphDeps(session=session, embedder=embedding_service, llm=llm)
+    core_graph = await GraphFactory().build(selected_chatbot_id, deps, llm)
+    compiled = core_graph.compile()
+
+    initial_state = {
+        "query": request.message,
+        "chatbot_id": str(selected_chatbot_id),
+        "language": None,
+        "retrieval_output": None,
+        "merged_items": [],
+        "answer": None,
+        "quality_score": 0.0,
+        "fallback_used": False,
+        "translation_warning": False,
+        "fallback_reason": None,
+        "sources": [],
+    }
     interaction_id = uuid.uuid4()
-    graph = create_agent_graph(
-        retrieval_strategy=strategy,
-        llm=llm,
-        base_system_prompt=chatbot.system_prompt,
-        user_id=user.user_id,
-    )
-    compiled = graph.compile()
 
     langfuse_handler = create_callback_handler(
         session_id=str(interaction_id), user_id=user.user_id
@@ -196,6 +221,8 @@ async def chat_stream(
         final_sources: list = []
         language_fallback = False
         detected_language = "es"
+        fallback_reason: str | None = None
+        fallback_answer: str | None = None
 
         try:
             if router_status_message:
@@ -219,16 +246,33 @@ async def chat_stream(
                             collected_tokens.append(delta)
                             yield _sse("token", {"delta": delta})
 
-                elif kind == "on_chain_end" and name == "generate_response":
-                    output = event.get("data", {}).get("output", {})
+                elif kind == "on_chain_end" and name in _FINAL_NODES:
+                    output = event.get("data", {}).get("output") or {}
                     raw_sources = output.get("sources", [])
-                    final_sources = [_source_to_dict(s) for s in raw_sources if hasattr(s, "url")]
-                    language_fallback = output.get("language_fallback_triggered", False)
-                    detected_language = output.get("language", "es")
+                    final_sources = [
+                        _source_to_dict(s) for s in raw_sources if _es_citable(s)
+                    ]
+                    fallback_reason = output.get("fallback_reason")
+                    if output.get("fallback_used"):
+                        fallback_answer = output.get("answer")
+
+                elif kind == "on_chain_end" and name == "detect_language":
+                    output = event.get("data", {}).get("output") or {}
+                    detected_language = output.get("language") or "es"
+
+                elif kind == "on_chain_end" and name == "merge":
+                    output = event.get("data", {}).get("output") or {}
+                    language_fallback = bool(output.get("translation_warning"))
 
         except Exception as exc:  # noqa: BLE001
             yield _sse("error", {"message": str(exc)})
             return
+
+        # El fallback y el mensaje del validador de citas no pasan por el stream de tokens
+        # del LLM, así que hay que emitirlos aquí para que el usuario vea una respuesta.
+        if fallback_answer and not collected_tokens:
+            collected_tokens.append(fallback_answer)
+            yield _sse("token", {"delta": fallback_answer})
 
         assistant_message = "".join(collected_tokens)
         interaction = HubInteraction(
@@ -238,6 +282,7 @@ async def chat_stream(
             user_message=request.message,
             assistant_message=assistant_message,
             run_id=interaction_id,
+            fallback_reason=fallback_reason,
         )
         session.add(interaction)
         await session.commit()

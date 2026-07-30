@@ -71,7 +71,7 @@ def _make_mock_graph_with_sources(
     raw_events = [
         {
             "event": "on_chain_end",
-            "name": "generate_response",
+            "name": "generate_answer",
             "data": {
                 "output": {
                     "sources": sources,
@@ -97,7 +97,8 @@ def _run_chat_and_get_done(chatbot, graph, token) -> dict:
     """Ejecuta el endpoint de chat y devuelve el payload del evento done."""
     app = _build_test_app(chatbot)
     with (
-        patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=graph),
+        patch("server.app.api.v1.hub_chat.GraphFactory",
+                  return_value=MagicMock(build=AsyncMock(return_value=graph))),
         patch("server.app.api.v1.hub_chat.get_embedding_service"),
         patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
     ):
@@ -204,84 +205,89 @@ class TestDoneEventStructuredSources:
 # ──────────────────────────────────────────────────────────────────────────────
 
 class TestRetrievalModeDispatch:
+    """Reapuntado en RAG.2.
 
-    @patch.dict("os.environ", _JWT_ENV)
-    def test_long_context_strategy_instantiated_for_long_context_mode(self) -> None:
-        """Cuando retrieval_mode='MD_LONG_CONTEXT', se instancia LongContextRetrievalStrategy."""
+    Antes se comprobaba que el endpoint instanciara `LongContextRetrievalStrategy`,
+    `AgenticRetrievalStrategy` o `VectorRetrievalStrategy` según el modo. Esa decisión ya
+    no vive en el endpoint: la GraphFactory resuelve la cascada de config y
+    `PipelineRetrievalStrategy` enruta al pipeline que corresponda a `cfg.retrieval_mode`.
+
+    La aserción de comportamiento se conserva —cada modo acaba en su pipeline— pero
+    apuntando al seam nuevo, que es donde ahora se toma la decisión.
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "mode,esperado",
+        [
+            ("RAG", "RagVectorPipeline"),
+            ("MD_LONG_CONTEXT", "MdLongContextPipeline"),
+            ("MD_AGENT_SELECTOR", "MdAgentSelectorPipeline"),
+        ],
+    )
+    async def test_each_retrieval_mode_dispatches_to_its_pipeline(self, mode, esperado):
+        from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_pipeline_factory import (
+            get_pipeline,
+        )
+
+        assert type(get_pipeline(mode)).__name__ == esperado
+
+    @pytest.mark.asyncio
+    async def test_chatbot_retrieval_mode_reaches_the_graph_config(self):
+        """El modo del chatbot llega al cfg del CoreGraph por la cascada, sin que el
+        endpoint elija estrategia."""
+        from server.app.modules.agents_hub.agent.public_graphs.core.graph_factory import (
+            GraphFactory,
+        )
+        from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_pipeline_protocol import (
+            GraphDeps,
+        )
+
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.id = uuid.uuid4()
+        chatbot.organizacion_id = uuid.uuid4()
         chatbot.retrieval_mode = "MD_LONG_CONTEXT"
-        graph = _make_mock_graph_with_sources([])
+        chatbot.public_graph_profile = None
+        chatbot.language_mode = None
+        chatbot.quality_threshold = None
+        chatbot.min_retrieval_results = None
+        chatbot.min_retrieval_score = None
+        chatbot.reranker_enabled = None
+        chatbot.answer_template = None
+        chatbot.system_prompt = "Eres un asistente."
 
-        app = _build_test_app(chatbot)
-        with (
-            patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=graph),
-            patch("server.app.api.v1.hub_chat.get_embedding_service"),
-            patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
-            patch("server.app.api.v1.hub_chat.LongContextRetrievalStrategy") as mock_lc,
-        ):
-            with TestClient(app) as client:
-                with client.stream(
-                    "POST",
-                    f"/api/v1/hub/chat/{chatbot.id}",
-                    json={"message": "Test"},
-                    headers={"Authorization": f"Bearer {_make_token()}"},
-                ) as response:
-                    list(response.iter_lines())
+        session = AsyncMock()
+        session.get = AsyncMock(side_effect=[chatbot, None])
 
-        mock_lc.assert_called_once()
+        graph = await GraphFactory().build(
+            chatbot.id, GraphDeps(session=session, embedder=AsyncMock()), llm=None
+        )
 
-    @patch.dict("os.environ", _JWT_ENV)
-    def test_agentic_strategy_instantiated_for_agentic_mode(self) -> None:
-        """Cuando retrieval_mode='MD_AGENT_SELECTOR', se instancia AgenticRetrievalStrategy."""
-        chatbot = MagicMock(spec=HubChatbot)
-        chatbot.id = uuid.uuid4()
-        chatbot.retrieval_mode = "MD_AGENT_SELECTOR"
-        graph = _make_mock_graph_with_sources([])
+        assert graph.cfg.retrieval_mode == "MD_LONG_CONTEXT"
+        assert graph.agentic_loop is None, "sólo el modo selector monta el loop agéntico"
 
-        app = _build_test_app(chatbot)
-        with (
-            patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=graph),
-            patch("server.app.api.v1.hub_chat.get_embedding_service"),
-            patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
-            patch("server.app.api.v1.hub_chat.AgenticRetrievalStrategy") as mock_ag,
-        ):
-            with TestClient(app) as client:
-                with client.stream(
-                    "POST",
-                    f"/api/v1/hub/chat/{chatbot.id}",
-                    json={"message": "Test"},
-                    headers={"Authorization": f"Bearer {_make_token()}"},
-                ) as response:
-                    list(response.iter_lines())
+    @pytest.mark.asyncio
+    async def test_selector_mode_attaches_the_agentic_loop(self):
+        from server.app.modules.agents_hub.agent.public_graphs.core.graph_factory import (
+            build_agentic_loop_if_needed,
+        )
+        from server.app.modules.agents_hub.agent.public_graphs.core.config_resolver import (
+            PublicGraphConfig,
+        )
+        from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_pipeline_protocol import (
+            GraphDeps,
+        )
 
-        mock_ag.assert_called_once()
+        def _cfg(mode):
+            return PublicGraphConfig(
+                profile="PUBLIC_KB_RICH", retrieval_mode=mode, language_mode="prefer",
+                quality_threshold=0.6, min_retrieval_results=2, min_retrieval_score=0.25,
+                reranker_enabled=False, answer_template="generic",
+            )
 
-    @patch.dict("os.environ", _JWT_ENV)
-    def test_vector_strategy_used_as_default(self) -> None:
-        """Cuando retrieval_mode='RAG' (default), se instancia VectorRetrievalStrategy."""
-        chatbot = MagicMock(spec=HubChatbot)
-        chatbot.id = uuid.uuid4()
-        chatbot.retrieval_mode = "RAG"
-        graph = _make_mock_graph_with_sources([])
-
-        app = _build_test_app(chatbot)
-        with (
-            patch("server.app.api.v1.hub_chat.create_agent_graph", return_value=graph),
-            patch("server.app.api.v1.hub_chat.get_embedding_service"),
-            patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
-            patch("server.app.api.v1.hub_chat.VectorRetrievalStrategy") as mock_vec,
-        ):
-            with TestClient(app) as client:
-                with client.stream(
-                    "POST",
-                    f"/api/v1/hub/chat/{chatbot.id}",
-                    json={"message": "Test"},
-                    headers={"Authorization": f"Bearer {_make_token()}"},
-                ) as response:
-                    list(response.iter_lines())
-
-        mock_vec.assert_called_once()
+        deps = GraphDeps(session=AsyncMock(), embedder=AsyncMock())
+        assert build_agentic_loop_if_needed(_cfg("RAG"), deps) is None
+        assert build_agentic_loop_if_needed(_cfg("MD_AGENT_SELECTOR"), deps) is not None
 
     @patch.dict("os.environ", _JWT_ENV)
     def test_long_context_mode_sources_marked_with_canonical_urls(self) -> None:

@@ -46,6 +46,44 @@ class GraphFactory:
 # ---------------------------------------------------------------------------
 
 
+def build_agentic_loop_if_needed(cfg: Any, deps: Any):
+    """AgenticLoop sólo en MD_AGENT_SELECTOR y sólo si hay LLM al que hacer bind_tools.
+
+    Vive aquí, en el punto de integración, porque es una decisión de composición: el
+    CoreGraph no debe conocer el retrieval_mode (RAG.2).
+    """
+    if cfg.retrieval_mode != "MD_AGENT_SELECTOR":
+        return None
+
+    from server.app.modules.agents_hub.agent.public_graphs.strategies.agentic_loop import (
+        AgenticLoop,
+    )
+    from server.app.modules.agents_hub.services.retrieval.agentic_strategy import (
+        AgenticRetrievalStrategy,
+    )
+
+    estrategia = AgenticRetrievalStrategy(deps.session)
+    return AgenticLoop(
+        reader=_ReaderDesdeEstrategia(estrategia),
+        tools=estrategia.get_agent_tools(),
+    )
+
+
+class _ReaderDesdeEstrategia:
+    """Adapta AgenticRetrievalStrategy al protocolo DocumentReader del AgenticLoop."""
+
+    def __init__(self, estrategia: Any) -> None:
+        self._estrategia = estrategia
+
+    async def list_index(self, chatbot_id: str, language: str | None) -> str:
+        from server.app.modules.agents_hub.agent.tools.list_documents import list_documents
+
+        return await list_documents(chatbot_id, self._estrategia, language)
+
+    async def read(self, document_id: Any) -> dict | None:
+        return await self._estrategia.read(document_id)
+
+
 def _make_public_kb_rich(cfg: Any, deps: Any, llm: Any = None) -> CoreGraph:
     from server.app.modules.agents_hub.agent.public_graphs.profiles.public_kb_rich import (
         DefaultLanguagePolicy,
@@ -57,11 +95,15 @@ def _make_public_kb_rich(cfg: Any, deps: Any, llm: Any = None) -> CoreGraph:
     return CoreGraph(
         retrieval_strategy=SingleSourceRetrievalStrategy(),
         merge_strategy=PassthroughMergeStrategy(),
-        template_strategy=GenericAnswerTemplateStrategy(),
+        template_strategy=GenericAnswerTemplateStrategy(
+            base_system_prompt=getattr(cfg, "system_prompt", None),
+            retrieval_mode=cfg.retrieval_mode,
+        ),
         language_policy=DefaultLanguagePolicy(),
         cfg=cfg,
         deps=deps,
         llm=llm,
+        agentic_loop=build_agentic_loop_if_needed(cfg, deps),
     )
 
 
