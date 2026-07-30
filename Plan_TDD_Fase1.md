@@ -12798,6 +12798,130 @@ indexa como documentos distintos coexistiendo por (canonical_url, language)
 
 ---
 
+## Bloque TST — Fiabilidad de la suite de tests (PENDIENTE)
+
+> **Contexto**: deuda encontrada al ejecutar los bloques ING.0 y RAG.1, con los síntomas medidos abajo. No bloquea ninguna funcionalidad, pero **hace poco fiable la verificación**: de aquí en adelante cada cierre de bloque afirma «suite verde», y hoy esa afirmación necesita un asterisco.
+>
+> **Posición en el orden (recomendada): antes de RAG.2.** Quedan 39 prompts y todos se cierran comparando la suite; arreglar esto primero hace verificable el resto. Son dos prompts cortos.
+>
+> **Lo que ya está arreglado y da contexto** (no hay que repetirlo): la fixture de `integration/` que hacía `drop_all` sobre la BD de desarrollo (commit `79dbbf3`), y el `Windows fatal exception: access violation` por cargar torch después de asyncpg, resuelto importando `langchain_text_splitters` al principio de `tests/modules/agents_hub/conftest.py`. **No reordenar ese import.**
+
+---
+
+### Prompt TST.1 (RED/GREEN) — Aislamiento entre tests: el `event_loop` de sesión
+
+**Modelo sugerido**: **Sonnet** — cambio pequeño con verificación amplia; el diagnóstico viene dado.
+
+```
+# PROMPT TST.1 (RED/GREEN) — Los 10 fallos de test_site_model.py en ejecución conjunta
+# Deploy: n/a (infraestructura de tests)
+
+## Síntoma medido
+`tests/modules/agents_hub/integration/test_site_model.py` da **10 fallos en ejecución
+conjunta** con `unit/` y **pasa en solitario**:
+
+    solo test_site_model.py                        → 15 passed
+    los tres ficheros de BD juntos                 → 24 passed
+    integration/ completo                          → 90 passed
+    unit/ + integration/                           → 10 failed, 584 passed
+
+Los 10: TestWebSiteRepo (2), TestCrawledPageRepo (5), TestCorpusSelectionRepo (2),
+TestHubDocumentCrawledPageFK (1). El error es un **IntegrityError de FK sobre
+hub_crawled_pages.site_id**: el INSERT del sitio y el de la página acaban en transacciones
+distintas, así que cuando se inserta la página el sitio todavía no existe para ella.
+
+Descartados como causa: `test_hub_document.py` y `test_ingestion_storage.py` (se ejecutaron
+junto a test_site_model.py y dan 34 passed).
+
+## Hipótesis principal, y por qué
+`server/tests/conftest.py` sobreescribe la fixture `event_loop` con `scope="session"`:
+
+    @pytest.fixture(scope="session")
+    def event_loop():
+        loop = asyncio.get_event_loop_policy().new_event_loop()
+        yield loop
+        loop.close()
+
+Con pytest-asyncio 1.3 ese override está **deprecado** y produce exactamente esta clase de
+síntoma: fixtures async y tests corriendo en loops distintos, conexiones asyncpg mezcladas
+entre tests y trabajo que acaba en transacciones que no son la que el test cree. El propio
+`tests/modules/agents_hub/e2e/conftest.py` ya lo documenta: «todos los fixtures de BD tienen
+scope="function" para evitar conflictos de event loop entre pytest-asyncio y httpx».
+
+## Trabajo
+- **Retirar el override** de `event_loop` del conftest raíz.
+- Declarar la política en configuración, no en una fixture:
+  `asyncio_default_fixture_loop_scope = "function"` en `[tool.pytest.ini_options]` de
+  `server/pyproject.toml` (hoy sale `=None` en la cabecera de pytest, con su warning).
+- **Si la hipótesis no se confirma**, bisecar `unit/` por mitades hasta aislar el fichero
+  que interfiere y arreglar la causa real. NO cerrar el prompt con los 10 fallos
+  reetiquetados como «preexistentes»: eso es lo que ha pasado hasta ahora.
+- Segunda sospecha si la primera falla: el motor global cacheado de
+  `agents_hub/database/connection.py:get_engine()`, que apunta a `DATABASE_URL` y sobrevive
+  entre tests.
+
+## Tests (RED primero)
+# should_pass_site_model_suite_together_with_unit_tests   (el que hoy falla: 10 → 0)
+# should_not_override_event_loop_fixture_anywhere         (scan de los conftest)
+# should_declare_asyncio_fixture_loop_scope_in_config     (lee pyproject)
+
+## Criterio de done
+- [ ] `pytest tests/modules/agents_hub/unit tests/modules/agents_hub/integration` → **0 failed**
+- [ ] Sin fallos nuevos: `unit`+`integration`+`evaluation`+`public_graphs`+`infra` y
+      `tests/modules/agents_hub/e2e` (adjuntar las cifras de antes y después)
+- [ ] Cero warnings de pytest-asyncio sobre `event_loop` en la salida
+- [ ] Los 3 `test_brain_*` de `tests/test_imports.py` siguen siendo el único fallo
+      inventariado (módulo `modules/brain` inexistente), o se retiran si ya no aplican
+```
+
+---
+
+### Prompt TST.2 (RED/GREEN) — Ningún test escribe en la BD de desarrollo
+
+**Modelo sugerido**: **Sonnet** — reutiliza la fixture desechable ya existente; el trabajo es cablear y poner el guardarraíl.
+
+```
+# PROMPT TST.2 (RED/GREEN) — La suite e2e deja residuos en la BD del desarrollador
+# Deploy: n/a (infraestructura de tests)
+
+## Síntoma medido
+En la BD de desarrollo hay **12 chatbots residuales** de ejecuciones de test:
+8 `E2E Bot <uuid>` (organización «E2E Test Client») y 4 `Pipeline Test <uuid>`
+(«Pipeline Test Client»). `tests/modules/agents_hub/e2e/conftest.py` lo dice en su
+docstring: «Por defecto usan la misma BD de desarrollo (govgenai)», y su fixture
+`db_engine` crea las tablas del hub ahí.
+
+Es la misma familia que la fixture destructiva ya arreglada: un test que escribe en la BD
+del desarrollador ensucia el entorno y, cuando además la limpia, se lo lleva por delante.
+
+## Trabajo
+- `e2e/conftest.py` pasa a usar la **BD desechable por test** de
+  `tests/modules/agents_hub/conftest.py` (fixture `db_url` / `db_session`), en lugar de
+  `os.getenv("DATABASE_URL")`. Si algún test e2e necesita el `app` de FastAPI apuntando a
+  esa BD, sobreescribir la dependencia de sesión, no el entorno global.
+- **Limpieza de los residuos actuales**: comando o paso documentado que borre las
+  organizaciones `E2E Test Client` y `Pipeline Test Client` con sus chatbots en cascada.
+  Que **reporte lo que borra** y no lo haga en silencio: es la BD del usuario.
+- **Guardarraíl**, que es lo que evita la recaída:
+  ningún fichero de `tests/` puede (a) llamar a `metadata.drop_all`, ni (b) crear tablas
+  sobre una URL que venga de `DATABASE_URL` sin pasar por la fixture desechable.
+
+## Tests (RED primero)
+# should_have_no_test_fixture_calling_drop_all              (scan de tests/)
+# should_have_no_test_creating_tables_on_the_dev_database   (scan de tests/)
+# should_run_e2e_against_a_disposable_database              (la BD del test no es la de DATABASE_URL)
+# should_leave_no_rows_in_the_dev_database_after_e2e        (recuento antes/después)
+
+## Criterio de done
+- [ ] `tests/modules/agents_hub/e2e` verde contra BD desechable
+- [ ] Recuento de `hub_chatbots` en la BD de desarrollo **idéntico antes y después** de
+      ejecutar la suite completa (adjuntar los dos números)
+- [ ] Los 12 residuos retirados, con el recuento de lo borrado en el cierre
+- [ ] Sin BD `test_hub_*` huérfanas tras la ejecución (la fixture las borra en su finally)
+```
+
+---
+
 ## Bloque RAG — Refuerzo del retrieval y calidad RAG (Subfase 1.B → 1.C, PENDIENTE)
 
 > **Contexto**: planificado 2026-07-15 a partir de `docs/COMPARATIVA_RAG_LAMB.md` (comparativa arquitectónica del RAG con LAMB + recomendaciones propias + análisis "RAG vs agentes"). Principio rector: invertir en los **cimientos del retrieval** (índice híbrido real, reranker, representación del corpus, evaluación) porque son la herramienta que cualquier evolución agéntica consumirá; no invertir en sofisticación de pipeline que un bucle agéntico haría gratis.
