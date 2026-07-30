@@ -64,21 +64,21 @@ jobs:
       - name: Lint (ruff)
         run: uv run ruff check app/
 
-      - name: Run unit tests
+      # Unit + integration + e2e en UNA sola invocación de pytest, a propósito (TST.1):
+      # separados en dos procesos, el estado filtrado entre tests —un mock asignado a
+      # una clase, un singleton contaminado— es invisible para CI. Así fue como
+      # `WebSiteRepo.create = AsyncMock(...)` rompió 10 tests de integración durante
+      # meses sin que ningún build se enterara.
+      - name: Run unit + integration + E2E tests (single invocation, needs PostgreSQL)
         run: |
-          uv run pytest tests/modules/agents_hub/unit/ \
+          uv run pytest \
+            tests/modules/agents_hub/unit/ \
+            tests/modules/agents_hub/integration/ \
+            tests/modules/agents_hub/e2e/ \
             tests/unit/test_jwt_handler.py \
             tests/unit/test_auth_context.py \
             tests/api/test_role_context.py \
             tests/infra/ \
-            --no-cov \
-            -v
-
-      - name: Run integration & E2E tests (needs PostgreSQL)
-        run: |
-          uv run pytest \
-            tests/modules/agents_hub/integration/ \
-            tests/modules/agents_hub/e2e/ \
             --cov=app \
             --cov-report=xml \
             --cov-report=term-missing \

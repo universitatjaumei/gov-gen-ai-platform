@@ -87,16 +87,20 @@ def _build_app(session_mock=None, site_repo_mock=None, selection_service_mock=No
 # ───────────────────────── Tests de sites CRUD ─────────────────────────
 
 
-def test_create_site_returns_201():
+def test_create_site_returns_201(monkeypatch):
     """POST /hub/sites → 201 con el sitio creado."""
     site = _fake_site(name="Mi Sitio")
     session = AsyncMock()
     session.flush = AsyncMock()
     session.refresh = AsyncMock()
 
-    # Simula WebSiteRepo.create retornando el site
+    # Simula WebSiteRepo.create retornando el site. Vía monkeypatch y NUNCA por
+    # asignación directa a la clase: `WebSiteRepo.create = AsyncMock(...)` dejaba el
+    # mock instalado para el resto del proceso, y todo test posterior que creara un
+    # sitio de verdad recibía este objeto desanclado sin ejecutar ni un INSERT — el
+    # origen de los 10 fallos de test_site_model.py en ejecución conjunta (TST.1).
     from server.app.modules.agents_hub.ingestion.quality.site_repo import WebSiteRepo
-    WebSiteRepo.create = AsyncMock(return_value=site)
+    monkeypatch.setattr(WebSiteRepo, "create", AsyncMock(return_value=site))
 
     client = TestClient(_build_app(session_mock=session))
     resp = client.post(
@@ -213,7 +217,7 @@ def test_list_site_pages_returns_200():
 # ───────────────────────── Tests de selecciones ─────────────────────────
 
 
-def test_create_selection_returns_201():
+def test_create_selection_returns_201(monkeypatch):
     """POST /hub/chatbots/{id}/selections → 201."""
     chatbot_id = uuid.uuid4()
     sel = _fake_selection(chatbot_id=chatbot_id)
@@ -221,8 +225,9 @@ def test_create_selection_returns_201():
     session.flush = AsyncMock()
     session.refresh = AsyncMock()
 
+    # monkeypatch, no asignación a la clase: ver el comentario de test_create_site.
     from server.app.modules.agents_hub.ingestion.quality.site_repo import CorpusSelectionRepo
-    CorpusSelectionRepo.create = AsyncMock(return_value=sel)
+    monkeypatch.setattr(CorpusSelectionRepo, "create", AsyncMock(return_value=sel))
 
     client = TestClient(_build_app(session_mock=session))
     resp = client.post(

@@ -12812,6 +12812,20 @@ indexa como documentos distintos coexistiendo por (canonical_url, language)
 
 **Modelo sugerido**: **Sonnet** — cambio pequeño con verificación amplia; el diagnóstico viene dado.
 
+> **RESUELTO (2026-07-30) — la hipótesis de abajo resultó FALSA.** Se retiró el override y
+> los 10 fallos persistieron. La causa real, encontrada con hooks de evento a nivel de la
+> clase `Engine` (el `echo` está cableado a `False` en `connection.py`, así que la traza
+> por logging no era viable directamente): `test_hub_sites_router.py` asignaba
+> `WebSiteRepo.create = AsyncMock(return_value=site)` **sobre la clase, sin restaurar** —
+> desde ese test, `create` no ejecutaba SQL y devolvía siempre el mismo objeto desanclado,
+> y los tests posteriores reventaban con FK contra un sitio fantasma. La pista decisiva:
+> `session.refresh()` tenía éxito sobre una fila que "no existía" — imposible salvo que
+> `create` entero fuera un mock. Arreglo: `monkeypatch.setattr` en los dos puntos +
+> guardarraíl de escaneo estático (`tests/infra/test_suite_hygiene.py`) + la higiene del
+> `event_loop` (que sí se hizo, como limpieza) + **CI pasa a una sola invocación de
+> pytest**, porque en dos procesos separados esta clase de fallo es invisible. Detalle en
+> `PROJECT_STATE.md` 2026-07-30.
+
 ```
 # PROMPT TST.1 (RED/GREEN) — Los 10 fallos de test_site_model.py en ejecución conjunta
 # Deploy: n/a (infraestructura de tests)
