@@ -12798,11 +12798,11 @@ indexa como documentos distintos coexistiendo por (canonical_url, language)
 
 ---
 
-## Bloque TST — Fiabilidad de la suite de tests (PENDIENTE)
+## Bloque TST — Fiabilidad de la suite de tests
 
 > **Contexto**: deuda encontrada al ejecutar los bloques ING.0 y RAG.1, con los síntomas medidos abajo. No bloquea ninguna funcionalidad, pero **hace poco fiable la verificación**: de aquí en adelante cada cierre de bloque afirma «suite verde», y hoy esa afirmación necesita un asterisco.
 >
-> **Posición en el orden (recomendada): antes de RAG.2.** Quedan 39 prompts y todos se cierran comparando la suite; arreglar esto primero hace verificable el resto. Son dos prompts cortos.
+> **Posición en el orden (recomendada): antes de RAG.2.** Quedan 39 prompts y todos se cierran comparando la suite; arreglar esto primero hace verificable el resto. Tres prompts cortos (**TST.3 añadido el 2026-07-30**, al cerrar TST.1/TST.2, para llevar a cero los 12 rojos preexistentes que quedaban).
 >
 > **Lo que ya está arreglado y da contexto** (no hay que repetirlo): la fixture de `integration/` que hacía `drop_all` sobre la BD de desarrollo (commit `79dbbf3`), y el `Windows fatal exception: access violation` por cargar torch después de asyncpg, resuelto importando `langchain_text_splitters` al principio de `tests/modules/agents_hub/conftest.py`. **No reordenar ese import.**
 
@@ -12932,6 +12932,56 @@ del desarrollador ensucia el entorno y, cuando además la limpia, se lo lleva po
       ejecutar la suite completa (adjuntar los dos números)
 - [ ] Los 12 residuos retirados, con el recuento de lo borrado en el cierre
 - [ ] Sin BD `test_hub_*` huérfanas tras la ejecución (la fixture las borra en su finally)
+```
+
+---
+
+### Prompt TST.3 (GREEN) — Cero fallos preexistentes: se acaban los asteriscos
+
+**Modelo sugerido**: **Sonnet** — dos arreglos mecánicos y un guardarraíl; ninguna decisión de diseño abierta.
+
+```
+# PROMPT TST.3 (GREEN) — Retirar los últimos fallos que se venían filtrando
+# Deploy: n/a (infraestructura de tests)
+
+## Síntoma medido (tras TST.1 y TST.2)
+Con el aislamiento ya arreglado, la suite completa sigue arrastrando 12 resultados rojos
+que llevan meses «inventariados» y que hay que recordar filtrar en cada cierre de bloque:
+
+- **3 failed** en `tests/test_imports.py`: `test_brain_llm_gateway_import`,
+  `test_brain_extraction_strategies_import`, `test_brain_cortex_import`.
+  `ModuleNotFoundError: No module named 'server.app.modules.brain'`. El módulo `brain`
+  fue retirado; son tests-smoke de un import que ya no existe.
+- **9 errors** de colección en `tests/unit/test_admin_models.py` (3) y
+  `tests/unit/test_prompt2_db_api.py` (6): `ModuleNotFoundError: No module named
+  'aiosqlite'`. Ambos usan `sqlite+aiosqlite:///:memory:` pero `aiosqlite` no está
+  declarado ni en `pyproject.toml` ni en `uv.lock`.
+
+Un fallo que se filtra a mano deja de ser información: nadie distingue el 12 esperado del
+13 nuevo. Este prompt lo lleva a cero para que «suite verde» vuelva a significar algo.
+
+## Trabajo
+- **`aiosqlite` como dependencia de desarrollo**: `uv add --dev aiosqlite`. Es lo que ya
+  presuponen los tests; no se cambian los tests para no usar sqlite.
+- **Los 3 tests de `brain`: Caso B, borrado directo.** El módulo no existe y no hay
+  migración en curso asociada; el historial de git es la fuente de verdad del pasado.
+  No dejar el test comentado ni con `skip`: se borra la función.
+  Comprobar antes con `grep -r` que no queda ninguna otra referencia a `modules.brain`
+  en el proyecto (código, tests, docs); si queda, retirarla también.
+- **Guardarraíl** en `tests/infra/test_suite_hygiene.py`: ningún test puede importar un
+  módulo del proyecto que no exista. Basta con un escaneo de los `import
+  server.app.modules.<x>` de `tests/` comprobando que el paquete está en disco — barato
+  y detecta la próxima retirada que deje tests huérfanos.
+
+## Tests (RED primero para el guardarraíl)
+# should_not_import_nonexistent_project_modules   (scan de tests/, RED con los 3 de brain)
+
+## Criterio de done
+- [ ] `uv run pytest tests/unit tests/api tests/core tests/modules tests/infra` y los
+      ficheros de `tests/` raíz: **0 failed, 0 errors** (adjuntar la cifra)
+- [ ] `grep -r "modules.brain"` a cero en todo el proyecto
+- [ ] `aiosqlite` en `pyproject.toml` **y** en `uv.lock`
+- [ ] Actualizar la memoria de gaps preexistentes: ya no hay nada que filtrar
 ```
 
 ---

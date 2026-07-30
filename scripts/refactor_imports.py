@@ -39,7 +39,6 @@ SERVER_REPLACEMENTS = {
     r'from app\.services\.pricing_service import': 'from server.app.services.pricing_service import',
     r'from app\.services\.model_fetcher import': 'from server.app.services.model_fetcher import',
     r'from app\.services\.agent_service import': 'from server.app.services.agent_service import',
-    r'from app\.modules\.brain\.': 'from server.app.modules.brain.',
 }
 
 CLIENT_REPLACEMENTS = {

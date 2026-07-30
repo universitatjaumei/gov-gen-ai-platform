@@ -45,39 +45,6 @@ def test_services_api_key_import():
     assert get_api_key is not None
 
 
-def test_brain_llm_gateway_import():
-    """Verifica que llm_gateway se importa correctamente."""
-    from server.app.modules.brain.infrastructure.llm_gateway import ejecutar_tarea, limpiar_respuesta_json
-    assert ejecutar_tarea is not None
-    assert limpiar_respuesta_json is not None
-
-
-def test_brain_extraction_strategies_import():
-    """Verifica que extraction_strategies se importa correctamente."""
-    from server.app.modules.brain.extraction_strategies import (
-        analyze_document_structure,
-        extraer_datos_precision,
-        generar_script_determinista,
-        supervisar_codigo
-    )
-    assert analyze_document_structure is not None
-    assert extraer_datos_precision is not None
-    assert generar_script_determinista is not None
-    assert supervisar_codigo is not None
-
-
-def test_brain_cortex_import():
-    """Verifica que cortex se importa correctamente."""
-    from server.app.modules.brain.cortex import (
-        analyze_recording_with_ai,
-        refine_playbook_with_ai,
-        locate_visual_element
-    )
-    assert analyze_recording_with_ai is not None
-    assert refine_playbook_with_ai is not None
-    assert locate_visual_element is not None
-
-
 def test_agent_service_import():
     """Verifica que agent_service se importa correctamente."""
     from server.app.services.agent_service import BrowserAgentWrapper, AgentResult

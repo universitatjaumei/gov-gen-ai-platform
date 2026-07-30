@@ -106,3 +106,32 @@ def test_should_have_no_test_creating_tables_on_the_dev_database():
         "create_all sobre DATABASE_URL fuera de la fixture desechable; usa las "
         f"fixtures db_url/db_session: {infractores}"
     )
+
+
+# ───────────────────────── TST.3: sin tests de módulos que ya no existen ─────────────────────────
+
+_IMPORT_DE_MODULO = re.compile(
+    r"(?:from|import)\s+server\.app\.modules\.(?P<paquete>[A-Za-z_][A-Za-z0-9_]*)"
+)
+
+
+def test_should_not_import_nonexistent_project_modules():
+    """`modules/brain` se retiró y quedaron tres tests-smoke importándolo: 3 fallos que
+    llevaban meses «inventariados» y que había que recordar filtrar en cada cierre. Un
+    fallo que se filtra a mano deja de ser información. Esto detecta la próxima retirada
+    que deje tests huérfanos."""
+    modules = SERVER / "app" / "modules"
+    infractores = []
+    for path in _ficheros_de_test():
+        texto = path.read_text(encoding="utf-8", errors="replace")
+        for m in _IMPORT_DE_MODULO.finditer(texto):
+            paquete = m.group("paquete")
+            if not (modules / paquete).is_dir():
+                linea = texto[: m.start()].count("\n") + 1
+                infractores.append(
+                    f"{path.relative_to(SERVER)}:{linea}: server.app.modules.{paquete}"
+                )
+    assert infractores == [], (
+        "tests importando módulos del proyecto que no existen en disco:\n  "
+        + "\n  ".join(infractores)
+    )

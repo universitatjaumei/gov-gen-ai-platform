@@ -32,12 +32,6 @@ def test_pymupdf_is_not_in_any_whitelist():
         content = f.read()
         assert "PyMuPDF" not in content, "PyMuPDF found in client_app/app/services/sandbox_service.py"
 
-    # 3. Check server/app/modules/brain/extraction_strategies.py
-    strategies_path = os.path.abspath("server/app/modules/brain/extraction_strategies.py")
-    with open(strategies_path, "r", encoding="utf-8") as f:
-        content = f.read()
-        assert "PyMuPDF" not in content, "PyMuPDF found in server/app/modules/brain/extraction_strategies.py"
-
 def test_openpyxl_is_allowed_for_pandas():
     """Confirmar que pandas y openpyxl están permitidos."""
     # indirect check via audit_code
