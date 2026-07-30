@@ -1,7 +1,7 @@
-"""Fixtures de BD para los tests de integración de agents_hub.
+"""Fixtures de BD para los tests de agents_hub (integración y evaluación).
 
-**Por qué existe este fichero (hallado el 2026-07-28).** Tres ficheros de este
-directorio creaban las tablas del hub con `create_all` sobre `DATABASE_URL` —la BD de
+**Por qué existe este fichero (hallado el 2026-07-28).** Tres ficheros de
+ creaban las tablas del hub con `create_all` sobre `DATABASE_URL` —la BD de
 desarrollo— y las destruían con `drop_all` al terminar cada test. Consecuencias
 verificadas:
 

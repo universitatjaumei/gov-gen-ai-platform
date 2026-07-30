@@ -1,0 +1,9 @@
+{
+ "dataset": "dietes",
+ "queries": 25,
+ "recall_at_5": 0.96,
+ "recall_at_10": 0.96,
+ "mrr": 0.8613,
+ "nota": "Linea base PRE-mejoras del retriever (RAG.1). Medida con embedding determinista sobre el corpus de fixture: mide el MECANISMO de recuperacion, no la calidad de BGE-M3. Regenerar solo con --update-baseline y de forma deliberada.",
+ "medida_el": "2026-07-29"
+}

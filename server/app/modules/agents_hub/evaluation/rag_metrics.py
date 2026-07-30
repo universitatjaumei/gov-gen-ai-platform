@@ -1,4 +1,23 @@
-"""Métricas de calidad RAG usando RAGAS."""
+"""Métricas de calidad RAG con RAGAS: evaluación periódica, NUNCA un gate de CI.
+
+`faithfulness` y `answer_relevancy` llaman a un LLM, así que cuestan dinero, tardan y no
+son deterministas. Meterlas en CI daría un build lento y con falsos rojos.
+
+La división del bloque RAG es:
+
+- **Gate de CI**: `retrieval_metrics.py` + `retrieval_eval.py` — recall@k y MRR, funciones
+  puras sin LLM, en segundos, en cada cambio del retriever.
+- **Evaluación periódica manual**: este módulo, cuando se quiera saber si las respuestas
+  se apoyan en el contexto. A mano o de noche, jamás bloqueando un PR.
+
+Cuando RAGAS falla se cae a una métrica léxica de solapamiento, que es **mucho más pobre**.
+Ese fallback se registra con el motivo: un número que parece una métrica y en realidad es
+un solapamiento de palabras, sin dejar rastro de por qué, es peor que no tener el número.
+"""
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 try:
     from datasets import Dataset
@@ -31,8 +50,13 @@ async def calculate_faithfulness(answer: str, context: str) -> float:
         try:
             result = evaluate(dataset, metrics=[faithfulness])
             return result["faithfulness"]
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "RAGAS faithfulness fallo (%s: %s); se degrada a solapamiento lexico, "
+                "que NO es comparable con una medida de RAGAS",
+                type(exc).__name__,
+                exc,
+            )
 
     # Fallback: overlap de palabras clave entre contexto y respuesta
     context_words = set(context.lower().split())
@@ -63,8 +87,13 @@ async def calculate_answer_relevance(question: str, answer: str) -> float:
         try:
             result = evaluate(dataset, metrics=[answer_relevancy])
             return result["answer_relevancy"]
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "RAGAS answer_relevancy fallo (%s: %s); se degrada a solapamiento "
+                "lexico, que NO es comparable con una medida de RAGAS",
+                type(exc).__name__,
+                exc,
+            )
 
     # Fallback: overlap de palabras significativas entre pregunta y respuesta
     import re

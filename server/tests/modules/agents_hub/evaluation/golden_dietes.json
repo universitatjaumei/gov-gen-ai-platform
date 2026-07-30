@@ -1,0 +1,334 @@
+{
+ "name": "dietes",
+ "documents_fingerprint": "4a22fe5b69e559259188c33b31a28934",
+ "chatbot_reference": "fixture:golden_corpus",
+ "queries": [
+  {
+   "query": "quant cobro de dieta per anar a Madrid?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-020"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "dieta",
+    "import"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "quin és l'import màxim d'allotjament en un viatge?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-020"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "dieta"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "fins a quant puc gastar en un contracte menor de serveis?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/INS-001"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "llindar"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "qui signa un contracte menor?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/INS-001"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "signatura",
+    "delegacio"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "quantes convocatòries tinc per assignatura?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-003"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "avaluacio"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "quants dies tinc per demanar revisió de qualificació?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-003"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "avaluacio"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "estic exempt de pagar matrícula si tinc discapacitat?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-011"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "exempcio"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "com es reconeix el complement de mèrits docents?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-045"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "retribucions"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "necessite autorització per una gratificació?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-045"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "retribucions"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "amb quanta antelació demane una bestreta de viatge?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/INS-004"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "bestreta"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "quan he de justificar una bestreta?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/INS-004"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "bestreta"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "què passa si no complisc la finalitat d'una subvenció?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-060"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "subvencions"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "en quant temps s'ha de notificar una bretxa de seguretat?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-072"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "proteccio-dades"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "qui és el delegat de protecció de dades?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-072"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "proteccio-dades"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "quin quòrum fa falta al Consell de Govern?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-088"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "organs"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "quina majoria cal per modificar un reglament?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-088"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "organs"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "cuanto puedo gastar por comensal en un gasto protocolario?",
+   "language": "es",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-095"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "protocolari"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "quants dies de teletreball puc fer?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-100"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "teletreball"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "quant dura el préstec de la biblioteca?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-101"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "biblioteca"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "quina àrea de respecte ha de tenir el logotip?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-102"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "identitat"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "es reconeixen els crèdits de l'Erasmus?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-103"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "mobilitat"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "qui tutoritza les pràctiques externes?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-104"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "practiques"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "fins quan puc tramitar despesa abans del tancament?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-108"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "tancament"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "en quant temps s'envien les factures al SII?",
+   "language": "es",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-110"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "tributari"
+   ],
+   "history": null,
+   "notes": null
+  },
+  {
+   "query": "quant dura com a màxim un conveni?",
+   "language": "ca",
+   "expected_canonical_urls": [
+    "https://www.uji.es/REG-112"
+   ],
+   "expected_document_ids": [],
+   "tags": [
+    "convenis"
+   ],
+   "history": null,
+   "notes": null
+  }
+ ]
+}
