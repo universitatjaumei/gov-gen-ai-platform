@@ -1,8 +1,12 @@
 """Prompt 2.7 — Retriever híbrido (vector + keyword, Reciprocal Rank Fusion).
 
-9Q.6: vector_search / keyword_search / hybrid_search aceptan include_superseded=False
-para excluir chunks cuyo documento proviene de una HubCrawledPage con superseded=True.
-Chunks sin crawled_page_id (PDFs subidos, legado) nunca se excluyen.
+VIS.1: las tres búsquedas aceptan un MetadataFilter y lo aplican **en SQL**, con OUTER
+JOIN a `hub_documents` y el filtro en el WHERE, antes del ORDER BY / LIMIT. Sustituye al
+filtrado en memoria posterior al top_k de 9Q.6, que hacía que los documentos excluidos
+consumieran plazas del resultado en vez de ser reemplazados.
+
+Sin filtro explícito se aplica `MetadataFilter()`: público, canónico, sin superseded y
+sin documentos con `us_assistents='no'`. El defecto es el cerrado.
 """
 
 import uuid
@@ -11,7 +15,11 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
+from server.app.modules.agents_hub.database.operational_models import (
+    HubDocument,
+    HubDocumentChunk,
+)
+from server.app.modules.agents_hub.services.retrieval.metadata_filter import MetadataFilter
 
 
 @dataclass
@@ -28,25 +36,13 @@ class HybridRetriever:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def _get_superseded_doc_ids(self, chatbot_id: uuid.UUID) -> set[str]:
-        """IDs (str) de documentos del chatbot cuya página está marcada superseded=True.
-
-        Solo incluye documentos con crawled_page_id != None (PDFs subidos → nunca excluidos).
-        """
-        from server.app.modules.agents_hub.database.operational_models import (
-            HubCrawledPage,
-            HubDocument,
-        )
-
-        stmt = (
-            select(HubDocument.id)
-            .join(HubCrawledPage, HubDocument.crawled_page_id == HubCrawledPage.id)
-            .where(HubDocument.chatbot_id == chatbot_id)
-            .where(HubDocument.crawled_page_id.isnot(None))
-            .where(HubCrawledPage.superseded.is_(True))
-        )
-        result = await self.session.execute(stmt)
-        return {str(row[0]) for row in result.all()}
+    @staticmethod
+    def _with_metadata_filter(query, metadata_filter: MetadataFilter | None):
+        """OUTER JOIN al documento + condición del filtro en el WHERE."""
+        mf = metadata_filter if metadata_filter is not None else MetadataFilter()
+        return query.outerjoin(
+            HubDocument, HubDocumentChunk.document_id == HubDocument.id
+        ).where(mf.chunk_condition())
 
     async def vector_search(
         self,
@@ -55,7 +51,7 @@ class HybridRetriever:
         top_k: int = 5,
         language: str | None = None,
         owner_id: uuid.UUID | None = None,
-        include_superseded: bool = False,
+        metadata_filter: MetadataFilter | None = None,
     ) -> list[SearchResult]:
         similarity = 1 - HubDocumentChunk.embedding.cosine_distance(query_embedding)
         query = (
@@ -69,10 +65,11 @@ class HybridRetriever:
         )
         if language:
             query = query.where(HubDocumentChunk.language == language)
+        query = self._with_metadata_filter(query, metadata_filter)
         query = query.order_by(similarity.desc()).limit(top_k)
 
         result = await self.session.execute(query)
-        results = [
+        return [
             SearchResult(
                 id=row.HubDocumentChunk.id,
                 content=row.HubDocumentChunk.content,
@@ -83,14 +80,6 @@ class HybridRetriever:
             )
             for row in result.all()
         ]
-        if not include_superseded:
-            excluded = await self._get_superseded_doc_ids(chatbot_id)
-            if excluded:
-                results = [
-                    r for r in results
-                    if r.metadata.get("document_id") not in excluded
-                ]
-        return results
 
     async def keyword_search(
         self,
@@ -99,7 +88,7 @@ class HybridRetriever:
         top_k: int = 5,
         language: str | None = None,
         owner_id: uuid.UUID | None = None,
-        include_superseded: bool = False,
+        metadata_filter: MetadataFilter | None = None,
     ) -> list[SearchResult]:
         filters = [
             HubDocumentChunk.chatbot_id == chatbot_id,
@@ -111,9 +100,11 @@ class HybridRetriever:
         if language:
             filters.append(HubDocumentChunk.language == language)
 
-        stmt = select(HubDocumentChunk).where(*filters).limit(top_k)
+        stmt = self._with_metadata_filter(
+            select(HubDocumentChunk).where(*filters), metadata_filter
+        ).limit(top_k)
         result = await self.session.execute(stmt)
-        results = [
+        return [
             SearchResult(
                 id=c.id,
                 content=c.content,
@@ -124,14 +115,6 @@ class HybridRetriever:
             )
             for c in result.scalars().all()
         ]
-        if not include_superseded:
-            excluded = await self._get_superseded_doc_ids(chatbot_id)
-            if excluded:
-                results = [
-                    r for r in results
-                    if r.metadata.get("document_id") not in excluded
-                ]
-        return results
 
     async def hybrid_search(
         self,
@@ -142,15 +125,15 @@ class HybridRetriever:
         language: str | None = None,
         vector_weight: float = 0.7,
         owner_id: uuid.UUID | None = None,
-        include_superseded: bool = False,
+        metadata_filter: MetadataFilter | None = None,
     ) -> list[SearchResult]:
         vector_results = await self.vector_search(
             query_embedding, chatbot_id, top_k * 2, language, owner_id,
-            include_superseded=include_superseded,
+            metadata_filter=metadata_filter,
         )
         keyword_results = await self.keyword_search(
             query, chatbot_id, top_k * 2, language, owner_id,
-            include_superseded=include_superseded,
+            metadata_filter=metadata_filter,
         )
 
         k = 60

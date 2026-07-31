@@ -28,6 +28,7 @@ from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_cont
     EvidenceItem,
     RetrievalResult,
 )
+from server.app.modules.agents_hub.services.retrieval.metadata_filter import MetadataFilter
 
 INDEX_TITLE_MAX = 300
 
@@ -49,7 +50,14 @@ class DocumentIndexProvider:
     """Índice por documento: título + id, sin el cuerpo.
 
     Provisional: VIS.2 lo sustituye por el índice de submaterias.
+
+    Aplica el `MetadataFilter` de VIS.1 con el mismo defecto cerrado que las tres
+    estrategias de recuperación. Un índice sin filtrar sería una fuga aunque el modelo
+    no llegara a leer el documento: el título ya dice que existe.
     """
+
+    def __init__(self, metadata_filter: MetadataFilter | None = None) -> None:
+        self._filter = metadata_filter if metadata_filter is not None else MetadataFilter()
 
     async def build_index(self, chatbot_id: str, deps) -> list[EvidenceItem]:
         from server.app.modules.agents_hub.database.operational_models import HubDocument
@@ -58,6 +66,7 @@ class DocumentIndexProvider:
         stmt = (
             select(HubDocument)
             .where(HubDocument.chatbot_id == cid)
+            .where(*self._filter.document_conditions())
             .order_by(HubDocument.title)
         )
         result = await deps.session.execute(stmt)

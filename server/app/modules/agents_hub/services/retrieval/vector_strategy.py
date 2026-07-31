@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.modules.agents_hub.database.operational_models import HubDocument
 from server.app.modules.agents_hub.services.retrieval.citations import with_anchor
+from server.app.modules.agents_hub.services.retrieval.metadata_filter import MetadataFilter
 from server.app.modules.agents_hub.services.retrieval.types import RetrievalContext, Source
 from server.app.modules.agents_hub.services.retriever import HybridRetriever
 
@@ -20,11 +21,13 @@ class VectorRetrievalStrategy:
         session: AsyncSession,
         embedding_service,
         top_k: int = 8,
+        metadata_filter: MetadataFilter | None = None,
     ):
         self._session = session
         self._embedding = embedding_service
         self._retriever = HybridRetriever(session)
         self._top_k = top_k
+        self._filter = metadata_filter if metadata_filter is not None else MetadataFilter()
 
     async def get_context(
         self,
@@ -39,7 +42,9 @@ class VectorRetrievalStrategy:
             chatbot_id=chatbot_id,
             top_k=self._top_k,
             language=language,
-            include_superseded=False,  # el chatbot nunca sirve páginas superseded (9Q.6)
+            # El filtro incluye la exclusión de páginas superseded (9Q.6) y el nivel de
+            # acceso del actor (VIS.1); el defecto es cerrado.
+            metadata_filter=self._filter,
         )
         if not results:
             return RetrievalContext(sources=[], mode=self.mode, total_tokens=0)

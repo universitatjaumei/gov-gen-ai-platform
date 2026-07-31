@@ -1,4 +1,9 @@
-"""LongContextRetrievalStrategy -- empaqueta todo el corpus en el contexto del LLM."""
+"""LongContextRetrievalStrategy -- empaqueta el corpus accesible en el contexto del LLM.
+
+VIS.1: «el corpus» dejo de significar «todos los documentos del chatbot». La estrategia
+aplica el MetadataFilter igual que el retriever vectorial; sin filtro explicito rige el
+defecto cerrado (publico, canonico, sin superseded, sin us_assistents='no').
+"""
 
 import uuid
 
@@ -7,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.modules.agents_hub.database.config_models import HubChatbot
 from server.app.modules.agents_hub.database.operational_models import HubDocument
+from server.app.modules.agents_hub.services.retrieval.metadata_filter import MetadataFilter
 from server.app.modules.agents_hub.services.retrieval.types import RetrievalContext, Source
 
 
@@ -17,9 +23,15 @@ PROMPT_CACHE_BLOCK_MIN_TOKENS = 32_000
 class LongContextRetrievalStrategy:
     mode = "MD_LONG_CONTEXT"
 
-    def __init__(self, session: AsyncSession, token_limit: int = LONG_CONTEXT_TOKEN_LIMIT):
+    def __init__(
+        self,
+        session: AsyncSession,
+        token_limit: int = LONG_CONTEXT_TOKEN_LIMIT,
+        metadata_filter: MetadataFilter | None = None,
+    ):
         self._session = session
         self._token_limit = token_limit
+        self._filter = metadata_filter if metadata_filter is not None else MetadataFilter()
 
     async def get_context(
         self,
@@ -34,6 +46,7 @@ class LongContextRetrievalStrategy:
         stmt = select(HubDocument).where(HubDocument.chatbot_id == chatbot_id)
         if language:
             stmt = stmt.where(HubDocument.language == language)
+        stmt = stmt.where(*self._filter.document_conditions())
         stmt = stmt.order_by(HubDocument.created_at)
         result = await self._session.execute(stmt)
         documents = list(result.scalars().all())
