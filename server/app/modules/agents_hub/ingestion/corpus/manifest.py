@@ -162,6 +162,37 @@ class CorpusManifest(BaseModel):
             raise ValueError(f"rutas repetidas en el manifiesto: {sorted(repetidas)}")
         return self
 
+    @model_validator(mode="after")
+    def _una_sola_canonica_por_norma(self) -> "CorpusManifest":
+        """VIS.3: dos versiones canónicas de la misma norma es un error, no una elección.
+
+        Medido en el informe: 233 fichas en valenciano y 81 en castellano, muchas la misma
+        norma. Si el paquete declara canónicas las dos, elegir por orden de aparición
+        indexaría el mismo contenido dos veces —ocupando dos plazas del top-k— sin que nadie
+        lo hubiera decidido. Falla aquí, antes de tocar la BD, y nombra las dos rutas para
+        que se sepa cuál hay que corregir.
+        """
+        por_url: dict[str, list[str]] = {}
+        for documento in self.documents:
+            if not documento.canonica:
+                continue
+            clave = (documento.source_url or "").strip().lower()
+            if not clave:
+                continue
+            por_url.setdefault(clave, []).append(documento.relative_path)
+
+        conflictos = {url: rutas for url, rutas in por_url.items() if len(rutas) > 1}
+        if conflictos:
+            detalle = "; ".join(
+                f"{url} → {sorted(rutas)}" for url, rutas in sorted(conflictos.items())
+            )
+            raise ValueError(
+                "dos o mas versiones declaradas canonicas para la misma norma: "
+                f"{detalle}. Declara canonica solo una y enlaza la otra con "
+                "versio_idiomatica_de"
+            )
+        return self
+
 
 # ───────────────────────── Front-matter → entrada ─────────────────────────
 

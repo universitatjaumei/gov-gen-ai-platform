@@ -14,6 +14,7 @@ from server.app.modules.agents_hub.database.config_models import HubChatbot
 from server.app.modules.agents_hub.database.operational_models import HubDocument
 from server.app.modules.agents_hub.services.retrieval.metadata_filter import MetadataFilter
 from server.app.modules.agents_hub.services.retrieval.types import RetrievalContext, Source
+from server.app.modules.agents_hub.services.retrieval.vigencia import marca_de_vigencia
 
 
 LONG_CONTEXT_TOKEN_LIMIT = 128_000
@@ -92,6 +93,7 @@ class LongContextRetrievalStrategy:
                         "cacheable": True,
                         "cache_block": is_cache_block,
                         "cache_ttl": cache_ttl if is_cache_block else None,
+                        **marca_de_vigencia(d),
                     },
                 )
             )

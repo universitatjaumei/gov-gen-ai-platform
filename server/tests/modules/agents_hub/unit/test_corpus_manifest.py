@@ -370,7 +370,13 @@ class TestManifiesto:
             created_at=datetime(2026, 7, 28, tzinfo=timezone.utc),
             documents=[
                 _entrada(),
-                _entrada(relative_path="b.md", content_class="faq"),
+                # url propia: dos documentos distintos no comparten url oficial, y desde
+                # VIS.3 compartirla declarándose ambos canónicos es un error del paquete.
+                _entrada(
+                    relative_path="b.md",
+                    content_class="faq",
+                    source_url="https://www.uji.es/FAQ-001",
+                ),
             ],
         )
         destino = tmp_path / "manifest.json"
@@ -406,6 +412,45 @@ class TestManifiesto:
                 chatbot_id=uuid.uuid4(),
                 documents=[_entrada(), _entrada()],
             )
+
+    def test_should_error_when_two_canonical_versions_share_url(self):
+        """VIS.3: dos canónicas para la misma norma es un error, no una eleccion a ciegas.
+
+        Si el paquete declara canónicas la versión valenciana y la castellana de la misma
+        norma, elegir una por orden de aparición indexaría el mismo contenido dos veces sin
+        que nadie lo hubiera decidido. Falla antes de tocar la BD, con las dos rutas.
+        """
+        from pydantic import ValidationError
+
+        from server.app.modules.agents_hub.ingestion.corpus.manifest import CorpusManifest
+
+        with pytest.raises(ValidationError) as error:
+            CorpusManifest(
+                chatbot_id=uuid.uuid4(),
+                documents=[
+                    _entrada(relative_path="reg-020-ca.md", language="ca", canonica=True),
+                    _entrada(relative_path="reg-020-es.md", language="es", canonica=True),
+                ],
+            )
+
+        mensaje = str(error.value)
+        assert "reg-020-ca.md" in mensaje and "reg-020-es.md" in mensaje
+
+    def test_should_accept_one_canonical_and_one_variant_for_the_same_url(self):
+        from server.app.modules.agents_hub.ingestion.corpus.manifest import CorpusManifest
+
+        manifiesto = CorpusManifest(
+            chatbot_id=uuid.uuid4(),
+            documents=[
+                _entrada(relative_path="reg-020-ca.md", language="ca", canonica=True),
+                _entrada(
+                    relative_path="reg-020-es.md", language="es", canonica=False,
+                    versio_idiomatica_de="REG-020",
+                ),
+            ],
+        )
+
+        assert len(manifiesto.documents) == 2
 
 
 # ───────────────────────── Validación contra el vocabulario ─────────────────────────

@@ -24,6 +24,7 @@ from server.app.modules.agents_hub.agent.tools.read_document import read_documen
 from server.app.modules.agents_hub.database.operational_models import HubDocument
 from server.app.modules.agents_hub.services.retrieval.metadata_filter import MetadataFilter
 from server.app.modules.agents_hub.services.retrieval.types import RetrievalContext
+from server.app.modules.agents_hub.services.retrieval.vigencia import marca_de_vigencia
 
 # Escalones del indice, de mas estrecho a mas ancho.
 INDEX_LEVEL_SUBMATERIES = "submateries"
@@ -104,6 +105,14 @@ class AgenticRetrievalStrategy:
         ]
 
     async def read(self, document_id: uuid.UUID) -> dict | None:
+        """Documento completo por id. **Sin filtro a proposito** (VIS.3).
+
+        Es la puerta por la que se leen las dos cosas que la recuperacion excluye: la
+        version en la otra lengua, cuando el usuario pide la cita literal, y una norma
+        derogada, cuando la pregunta es justo qué decia antes. Ambas son consultas
+        legitimas y ambas exigen el id explicito, que solo se obtiene de un indice ya
+        filtrado o de `variant_id`.
+        """
         doc = await self._session.get(HubDocument, document_id)
         if not doc:
             return None
@@ -111,7 +120,24 @@ class AgenticRetrievalStrategy:
             "title": doc.title,
             "url": doc.canonical_url,
             "markdown_content": doc.markdown_content,
+            "language": doc.language,
+            "estat_vigencia": doc.estat_vigencia,
+            "canonica": doc.canonica,
+            # La canonica declara donde esta su hermana; sin esto, pedir la cita literal en
+            # la otra lengua exigiria una busqueda por url, que es adivinar.
+            "variant_id": await self._variant_id(doc),
+            **marca_de_vigencia(doc),
         }
+
+    async def _variant_id(self, doc: HubDocument) -> str | None:
+        """Id de la version en la otra lengua, en cualquiera de los dos sentidos."""
+        if doc.versio_idiomatica_de is not None:
+            return str(doc.versio_idiomatica_de)
+        res = await self._session.execute(
+            select(HubDocument.id).where(HubDocument.versio_idiomatica_de == doc.id).limit(1)
+        )
+        hermana = res.scalars().first()
+        return str(hermana) if hermana else None
 
     async def get_context(
         self,

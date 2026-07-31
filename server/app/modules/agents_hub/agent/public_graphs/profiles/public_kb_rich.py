@@ -18,6 +18,9 @@ from server.app.modules.agents_hub.agent.public_graphs.strategies.protocols impo
 from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_contract import (
     EvidenceItem,
 )
+from server.app.modules.agents_hub.services.retrieval.vigencia import (
+    CLAVE_METADATO as CLAVE_VIGENCIA,
+)
 
 
 class SingleSourceRetrievalStrategy(PipelineRetrievalStrategy):
@@ -93,6 +96,11 @@ class GenericAnswerTemplateStrategy:
             lineas.append(f"## {item.title or item.source_id}")
             if item.source_url:
                 lineas.append(f"_URL: {item.source_url}_")
+            # VIS.3: marcado por documento, no aviso general. El modelo necesita saber de
+            # CUAL de las normas se duda para poder redactarlo con naturalidad; el aviso
+            # que garantiza que se diga lo pone el CoreGraph sobre la respuesta.
+            if (item.metadata or {}).get(CLAVE_VIGENCIA):
+                lineas.append("_[VIGENCIA NO VALIDADA: dilo si citas este documento]_")
             lineas.append("")
             lineas.append(item.content)
             lineas.append("")

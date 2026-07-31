@@ -10,6 +10,7 @@ from server.app.modules.agents_hub.database.operational_models import HubDocumen
 from server.app.modules.agents_hub.services.retrieval.citations import with_anchor
 from server.app.modules.agents_hub.services.retrieval.metadata_filter import MetadataFilter
 from server.app.modules.agents_hub.services.retrieval.types import RetrievalContext, Source
+from server.app.modules.agents_hub.services.retrieval.vigencia import marca_de_vigencia
 from server.app.modules.agents_hub.services.retriever import HybridRetriever
 
 
@@ -85,6 +86,9 @@ class VectorRetrievalStrategy:
                     "chunks_matched": len(chunks),
                     "ancora": best.metadata.get("ancora"),
                     "ruta": best.metadata.get("ruta"),
+                    # VIS.3: sin documento no hay dato de vigencia que consultar (chunk
+                    # temporal o legado), y en ese caso no se advierte de lo que no se sabe.
+                    **(marca_de_vigencia(doc) if doc else {}),
                 },
             ))
             total_tokens += len(excerpt) // 4

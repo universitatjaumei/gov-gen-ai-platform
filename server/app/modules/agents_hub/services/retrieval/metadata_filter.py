@@ -27,6 +27,7 @@ from server.app.modules.agents_hub.database.operational_models import (
     HubDocument,
     HubDocumentChunk,
 )
+from server.app.modules.agents_hub.services.retrieval.vigencia import ESTAT_DEROGAT
 
 # Orden de menos a mas restringido. Un actor de nivel N ve los documentos de nivel <= N.
 NIVELLS_ACCES = ("public", "intern", "restringit")
@@ -87,6 +88,17 @@ class MetadataFilter:
             )
         if not self.include_non_canonical:
             conditions.append(HubDocument.canonica.is_(True))
+        # Derogado no se recupera nunca, ni con el filtro mas abierto: no es una preferencia
+        # de recuperacion sino un hecho sobre la norma (VIS.3). Sigue siendo legible por id
+        # explicito con read_document, porque citar la norma que YA no rige es una consulta
+        # legitima. Solo excluye 'derogat' exacto: el catalogo real trae 'vigent?' y otros
+        # estados dudosos, que se advierten en la respuesta y no se ocultan.
+        conditions.append(
+            or_(
+                HubDocument.estat_vigencia.is_(None),
+                HubDocument.estat_vigencia != ESTAT_DEROGAT,
+            )
+        )
         if not self.include_superseded:
             # Subconsulta correlacionada en vez de un JOIN mas: el llamante solo tiene
             # que unir hub_documents, y esto vale igual en las tres estrategias.

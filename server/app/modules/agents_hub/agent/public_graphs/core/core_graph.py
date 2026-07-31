@@ -31,6 +31,9 @@ from server.app.modules.agents_hub.agent.citation_validator import (
 from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_contract import (
     EvidenceItem,
 )
+from server.app.modules.agents_hub.services.retrieval.vigencia import (
+    aviso_para as aviso_de_vigencia,
+)
 
 if TYPE_CHECKING:
     from server.app.modules.agents_hub.agent.public_graphs.strategies.agentic_loop import (
@@ -176,6 +179,15 @@ class CoreGraph:
 
             validated = enforce_citation_contract(answer, citables, self.cfg.retrieval_mode)
             incumplio_citas = validated != answer
+            # VIS.3: el aviso de vigencia se AÑADE aquí, después del contrato de citas y
+            # sobre la evidencia realmente citable. No es una instrucción al modelo: una
+            # instrucción se cumple casi siempre, y «casi siempre» no basta para decir si
+            # una norma rige. Si el fallback ya sustituyó la respuesta, no hay nada citado
+            # de lo que advertir.
+            if not incumplio_citas:
+                aviso = aviso_de_vigencia(citables)
+                if aviso:
+                    validated = f"{validated}\n\n{aviso}"
             return {
                 "answer": validated,
                 "fallback_used": incumplio_citas,
