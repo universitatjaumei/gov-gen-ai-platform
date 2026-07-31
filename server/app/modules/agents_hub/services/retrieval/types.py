@@ -22,6 +22,10 @@ class RetrievalContext:
     sources: list[Source]
     mode: str                       # "RAG" | "MD_LONG_CONTEXT" | "MD_AGENT_SELECTOR"
     total_tokens: int               # suma estimada de tokens del excerpt agregado
+    # VIS.2: el subconjunto no cabía en el presupuesto y se recortó. Se dice, no se calla:
+    # una respuesta construida sobre parte del fundamento tiene que poder detectarse.
+    truncated: bool = False
+    discarded_documents: int = 0
 
 
 class RetrievalStrategy(Protocol):

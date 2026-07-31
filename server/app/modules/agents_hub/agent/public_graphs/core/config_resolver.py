@@ -25,6 +25,21 @@ class PublicGraphConfig:
     # efectiva del chatbot. Así la TemplateStrategy —única fuente del system prompt— lo
     # recibe por el mismo camino que el resto de la config, sin parámetros paralelos.
     system_prompt: str | None = None
+    # VIS.2: presupuesto de contexto para la inyección de documentos. Mismo argumento que
+    # el system_prompt para entrar por aquí.
+    #
+    # El default de plataforma son 128.000 tokens porque el Nivel 2 inyecta documentos
+    # ENTEROS (1-3 normas, ~25k). **Aviso para RAG.5**, que reutiliza esta columna en su
+    # empaquetador de chunks: su prompt pide un default de plataforma de 4.000, y bajarlo
+    # aquí recortaría MD_LONG_CONTEXT a 4k, o sea lo dejaría inservible. Si el packer de
+    # RAG necesita un techo más bajo, que lo aplique en el packer —`min(budget, 4_000)`—
+    # y no en el default compartido. Un valor que significa dos cosas distintas según
+    # quién lo lea es la clase de deuda que hay que ver venir.
+    context_token_budget: int = 128_000
+    # VIS.2 (Nivel 0): índice de submaterias del vocabulario de la organización. Se resuelve
+    # solo en MD_AGENT_SELECTOR —en RAG serían ~2.300 tokens de prompt que nadie usa— y
+    # entra por la cascada porque depende de la organización del chatbot, igual que el resto.
+    router_index: str | None = None
 
 
 _PLATFORM_DEFAULTS = PublicGraphConfig(
@@ -36,6 +51,7 @@ _PLATFORM_DEFAULTS = PublicGraphConfig(
     min_retrieval_score=0.25,
     reranker_enabled=True,
     answer_template="generic",
+    context_token_budget=128_000,
 )
 
 
@@ -72,6 +88,7 @@ async def get_effective_public_graph_config(
             "min_retrieval_score":   organizacion.default_min_retrieval_score,
             "reranker_enabled":      organizacion.default_reranker_enabled,
             "answer_template":       organizacion.default_answer_template,
+            "context_token_budget":  organizacion.default_context_token_budget,
         })
 
     config = _apply_layer(config, {
@@ -84,6 +101,28 @@ async def get_effective_public_graph_config(
         "min_retrieval_score":   chatbot.min_retrieval_score,
         "reranker_enabled":      chatbot.reranker_enabled,
         "answer_template":       chatbot.answer_template,
+        "context_token_budget":  chatbot.context_token_budget,
     })
 
+    if config.retrieval_mode == "MD_AGENT_SELECTOR":
+        config = replace(
+            config,
+            router_index=await _build_router_index(chatbot.organizacion_id, session),
+        )
+
     return config
+
+
+async def _build_router_index(organizacion_id: uuid.UUID, session: Any) -> str | None:
+    """Índice de submaterias del Nivel 0, vía ConfigProvider (nunca el ORM del vocabulario).
+
+    Devuelve None si la organización no tiene vocabulario cargado: el system prompt se
+    compone igual y el modo selector degrada al catálogo de documentos, que es el
+    comportamiento previo a VIS.2. Un vocabulario vacío no es un error de configuración.
+    """
+    from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
+    from server.app.modules.agents_hub.services.vocabulary_service import VocabularyService
+
+    servicio = VocabularyService(LocalConfigProvider(session), organizacion_id)
+    index = await servicio.build_router_index()
+    return index or None

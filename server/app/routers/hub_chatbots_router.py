@@ -49,6 +49,8 @@ class ChatbotRead(BaseModel):
     min_retrieval_score: float
     reranker_enabled: bool
     answer_template: str
+    # VIS.2: None = heredar de la organización y, en su defecto, del default de plataforma
+    context_token_budget: int | None
     created_at: datetime
     updated_at: datetime
 
@@ -74,6 +76,7 @@ class ChatbotCreate(BaseModel):
     min_retrieval_score: float = 0.25
     reranker_enabled: bool = True
     answer_template: str = "generic"
+    context_token_budget: int | None = None
 
 
 class ChatbotUpdate(BaseModel):
@@ -94,6 +97,7 @@ class ChatbotUpdate(BaseModel):
     min_retrieval_score: float | None = None
     reranker_enabled: bool | None = None
     answer_template: str | None = None
+    context_token_budget: int | None = None
 
 
 class AssignChildIn(BaseModel):
@@ -167,6 +171,7 @@ async def create_chatbot(
         min_retrieval_score=body.min_retrieval_score,
         reranker_enabled=body.reranker_enabled,
         answer_template=body.answer_template,
+        context_token_budget=body.context_token_budget,
     )
     session.add(chatbot)
     await session.commit()

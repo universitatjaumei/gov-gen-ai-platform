@@ -81,6 +81,10 @@ class HubOrganizacion(HubConfigBase):
     default_min_retrieval_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.25)
     default_reranker_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     default_answer_template: Mapped[str] = mapped_column(String(50), nullable=False, default="generic")
+    # Nullable a propósito, al revés que sus hermanas: NULL significa «heredar el default
+    # de plataforma» (VIS.2). Con un valor no nulo por defecto, subir el presupuesto en la
+    # plataforma no llegaría nunca a las organizaciones ya creadas.
+    default_context_token_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -188,6 +192,10 @@ class HubChatbot(HubConfigBase):
     min_retrieval_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.25)
     reranker_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     answer_template: Mapped[str] = mapped_column(String(50), nullable=False, default="generic")
+    # Presupuesto de contexto en tokens para la inyección de documentos (VIS.2). NULL =
+    # heredar de la organización y, en su defecto, del default de plataforma. Lo consume
+    # LongContextRetrievalStrategy para RECORTAR, no para lanzar una excepción.
+    context_token_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
     parent_chatbot_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("hub_chatbots.id", ondelete="SET NULL"),

@@ -12,6 +12,7 @@ from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_cont
     RetrievalResult,
 )
 from server.app.modules.agents_hub.services.retrieval.long_context_strategy import (
+    LONG_CONTEXT_TOKEN_LIMIT,
     LongContextRetrievalStrategy,
 )
 from server.app.modules.agents_hub.services.retrieval.types import Source
@@ -47,7 +48,10 @@ class MdLongContextPipeline:
         deps,
     ) -> RetrievalResult:
         cid = uuid.UUID(chatbot_id) if isinstance(chatbot_id, str) else chatbot_id
-        strategy = LongContextRetrievalStrategy(session=deps.session)
+        strategy = LongContextRetrievalStrategy(
+            session=deps.session,
+            token_limit=getattr(cfg, "context_token_budget", None) or LONG_CONTEXT_TOKEN_LIMIT,
+        )
         ctx = await strategy.get_context(query=query, chatbot_id=cid)
         items = [_source_to_evidence(s) for s in ctx.sources]
         return RetrievalResult(
@@ -56,6 +60,8 @@ class MdLongContextPipeline:
                 "pipeline_mode": "MD_LONG_CONTEXT",
                 "total_tokens": ctx.total_tokens,
                 "docs": len(items),
+                "truncated": ctx.truncated,
+                "discarded_documents": ctx.discarded_documents,
             },
             context_source_language=_dominant_language(items),
         )

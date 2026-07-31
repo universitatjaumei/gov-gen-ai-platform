@@ -31,8 +31,13 @@ EXCERPT_MAX = 500
 class DocumentReader(Protocol):
     """Acceso a documentos para los tools del modo selector."""
 
-    async def list_index(self, chatbot_id: str, language: str | None) -> str:
-        """Índice legible por el LLM (títulos + ids)."""
+    async def list_index(
+        self,
+        chatbot_id: str,
+        language: str | None,
+        submateries: list[str] | None = None,
+    ) -> str:
+        """Índice legible por el LLM (fichas: título, id, rango, resumen)."""
         ...
 
     async def read(self, document_id: uuid.UUID) -> dict | None:
@@ -98,7 +103,9 @@ class AgenticLoop:
         args = llamada.get("args", {})
 
         if nombre == "list_documents":
-            return await self._reader.list_index(chatbot_id, language)
+            return await self._reader.list_index(
+                chatbot_id, language, args.get("submateries")
+            )
 
         if nombre == "read_document":
             doc_id = str(args.get("document_id", ""))
@@ -113,6 +120,14 @@ class AgenticLoop:
                     title=documento["title"],
                     language=documento.get("language"),
                     score=1.0,
+                    # VIS.2: qué escalón del índice sirvió este documento. Sin esto, el
+                    # retroceso escalonado no se puede medir sobre respuestas reales, y
+                    # una estrategia que no se mide no se ajusta.
+                    metadata={
+                        "index_fallback_level": getattr(
+                            self._reader, "last_index_level", None
+                        )
+                    },
                 )
             )
             return documento["markdown_content"]

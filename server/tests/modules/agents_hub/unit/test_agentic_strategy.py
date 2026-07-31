@@ -109,7 +109,7 @@ class TestListDocumentsTool:
         from server.app.modules.agents_hub.agent.tools.list_documents import list_documents
 
         class FakeIndex:
-            async def list_index(self, chatbot_id, language):
+            async def list_index(self, chatbot_id, language, submateries=None):
                 return [
                     {"id": str(uuid.uuid4()), "title": "Norma A", "url": "https://ej.com/a.pdf",
                      "language": "es", "token_count": 200},
@@ -123,7 +123,7 @@ class TestListDocumentsTool:
         from server.app.modules.agents_hub.agent.tools.list_documents import list_documents
 
         class EmptyIndex:
-            async def list_index(self, chatbot_id, language):
+            async def list_index(self, chatbot_id, language, submateries=None):
                 return []
 
         result = await list_documents(str(uuid.uuid4()), EmptyIndex())

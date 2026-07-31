@@ -75,10 +75,20 @@ class _ReaderDesdeEstrategia:
     def __init__(self, estrategia: Any) -> None:
         self._estrategia = estrategia
 
-    async def list_index(self, chatbot_id: str, language: str | None) -> str:
+    @property
+    def last_index_level(self) -> str | None:
+        """Escalón del último índice servido; el loop lo sella en la evidencia (VIS.2)."""
+        return getattr(self._estrategia, "last_index_level", None)
+
+    async def list_index(
+        self,
+        chatbot_id: str,
+        language: str | None,
+        submateries: list[str] | None = None,
+    ) -> str:
         from server.app.modules.agents_hub.agent.tools.list_documents import list_documents
 
-        return await list_documents(chatbot_id, self._estrategia, language)
+        return await list_documents(chatbot_id, self._estrategia, language, submateries)
 
     async def read(self, document_id: Any) -> dict | None:
         return await self._estrategia.read(document_id)
@@ -98,6 +108,7 @@ def _make_public_kb_rich(cfg: Any, deps: Any, llm: Any = None) -> CoreGraph:
         template_strategy=GenericAnswerTemplateStrategy(
             base_system_prompt=getattr(cfg, "system_prompt", None),
             retrieval_mode=cfg.retrieval_mode,
+            router_index=getattr(cfg, "router_index", None),
         ),
         language_policy=DefaultLanguagePolicy(),
         cfg=cfg,

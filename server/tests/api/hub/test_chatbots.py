@@ -49,6 +49,7 @@ def _make_chatbot(
         min_retrieval_score=0.25,
         reranker_enabled=True,
         answer_template="generic",
+        context_token_budget=None,  # VIS.2: None = heredar de la cascada
         created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
         updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
     )

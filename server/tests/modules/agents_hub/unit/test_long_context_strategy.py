@@ -43,15 +43,25 @@ class TestLongContextRetrievalStrategy:
         assert ctx.mode == "MD_LONG_CONTEXT"
         assert ctx.total_tokens == 3000
 
-    async def test_raises_when_corpus_exceeds_limit(self):
+    async def test_truncates_when_corpus_exceeds_limit(self):
+        """VIS.2 cambió el contrato: se recorta y se dice, no se lanza.
+
+        La versión anterior lanzaba ValueError, y en producción eso es una caída: el
+        usuario recibe un error en vez de una respuesta parcial y marcada como parcial.
+        """
         from server.app.modules.agents_hub.services.retrieval.long_context_strategy import (
             LongContextRetrievalStrategy,
         )
         docs = [_make_doc(60_000), _make_doc(60_000)]
         session = _make_session(docs)
         strategy = LongContextRetrievalStrategy(session, token_limit=100_000)
-        with pytest.raises(ValueError, match="long context mode"):
-            await strategy.get_context("consulta", uuid.uuid4())
+
+        ctx = await strategy.get_context("consulta", uuid.uuid4())
+
+        assert len(ctx.sources) == 1
+        assert ctx.total_tokens == 60_000
+        assert ctx.truncated is True
+        assert ctx.discarded_documents == 1
 
     async def test_filters_by_language_when_specified(self):
         from server.app.modules.agents_hub.services.retrieval.long_context_strategy import (

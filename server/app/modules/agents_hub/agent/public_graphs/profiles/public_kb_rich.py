@@ -49,9 +49,19 @@ REGLAS DE CITA (obligatorias):
    recuperados.
 4. NUNCA inventes URLs ni titulos. Usa SOLO los proporcionados en el contexto."""
 
+RANK_AND_VALIDITY_RULES = """\
+REGLAS DE RANGO Y VIGENCIA (obligatorias):
+1. Ante dos normas que regulan lo mismo, manda la de rango superior: ley > decreto >
+   reglamento > acuerdo > instruccion. Dilo cuando resuelvas una contradiccion asi.
+2. No presentes como vigente lo que el documento no declara vigente. Si la vigencia del
+   documento citado no esta validada, advierte de ello en la respuesta.
+3. No cites una norma derogada como si estuviera en vigor, ni siquiera si la recuperas."""
+
 _INSTRUCCION_TOOLS = (
-    "Usa la tool `list_documents` para ver el indice y `read_document(id=...)` "
-    "para cargar el texto completo de cada documento que necesites antes de responder."
+    "Usa la tool `list_documents(submateries=[...])` con 1-3 submaterias del indice de "
+    "materias para ver las fichas de las normas de esos temas, y `read_document(id=...)` "
+    "para cargar el texto completo de cada documento que necesites antes de responder. "
+    "Si ninguna submateria encaja, llama a `list_documents` sin submaterias."
 )
 
 
@@ -71,9 +81,11 @@ class GenericAnswerTemplateStrategy:
         self,
         base_system_prompt: str | None = None,
         retrieval_mode: str = "RAG",
+        router_index: str | None = None,
     ) -> None:
         self._base = (base_system_prompt or "").strip()
         self._retrieval_mode = retrieval_mode
+        self._router_index = (router_index or "").strip()
 
     def _bloque_de_fuentes(self, items: list[EvidenceItem]) -> str:
         lineas: list[str] = []
@@ -100,6 +112,13 @@ class GenericAnswerTemplateStrategy:
         partes.append(CITATION_RULES.strip())
 
         if self._retrieval_mode == "MD_AGENT_SELECTOR":
+            # Nivel 0 (VIS.2): el router necesita saber qué TEMAS existen, no qué normas.
+            # El catálogo de fichas son ~72k tokens y no cabe aquí; el índice de las 58
+            # submaterias son ~2,3k y sí. Va acompañado de las reglas con las que el modelo
+            # tiene que leer lo que después seleccione.
+            partes.extend(["", RANK_AND_VALIDITY_RULES.strip()])
+            if self._router_index:
+                partes.extend(["", "INDICE DE MATERIAS:", "", self._router_index])
             partes.extend(["", _INSTRUCCION_TOOLS])
         elif items:
             partes.extend(["", "DOCUMENTOS DISPONIBLES:", "", self._bloque_de_fuentes(items)])

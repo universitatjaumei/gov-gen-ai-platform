@@ -75,6 +75,7 @@ const DEMO_CHATBOT: ChatbotRead = {
   min_retrieval_score: 0.25,
   reranker_enabled: true,
   answer_template: 'generic',
+  context_token_budget: null,
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
 }

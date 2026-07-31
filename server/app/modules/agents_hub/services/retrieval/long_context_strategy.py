@@ -51,15 +51,30 @@ class LongContextRetrievalStrategy:
         result = await self._session.execute(stmt)
         documents = list(result.scalars().all())
 
-        total = sum(d.token_count for d in documents)
-        if total > self._token_limit:
-            raise ValueError(
-                f"long context mode no admite corpus de {total} tokens "
-                f"(limite {self._token_limit}). Cambia el modo a 'MD_AGENT_SELECTOR' o 'RAG'."
-            )
+        # VIS.2: recortar por presupuesto en vez de lanzar. La version anterior lanzaba
+        # ValueError cuando el corpus pasaba del limite, y en produccion eso no es un aviso
+        # sino una caida: el usuario recibe un error en vez de una respuesta parcial y
+        # honesta. Se conserva el orden de creacion, que es el que el chatbot declara.
+        cabidos: list = []
+        acumulado = 0
+        for d in documents:
+            coste = int(d.token_count or 0)
+            if cabidos and acumulado + coste > self._token_limit:
+                continue
+            if not cabidos and coste > self._token_limit:
+                # Ni el primero cabe: se inyecta igualmente, porque un contexto vacio no
+                # produce ninguna respuesta y uno recortado sí. Queda marcado como truncado.
+                cabidos.append(d)
+                acumulado += coste
+                break
+            cabidos.append(d)
+            acumulado += coste
+
+        descartados = len(documents) - len(cabidos)
+        total = acumulado
 
         sources = []
-        for d in documents:
+        for d in cabidos:
             is_cache_block = use_prompt_caching and int(d.token_count or 0) > PROMPT_CACHE_BLOCK_MIN_TOKENS
             excerpt = d.markdown_content
             if is_cache_block:
@@ -80,7 +95,13 @@ class LongContextRetrievalStrategy:
                     },
                 )
             )
-        return RetrievalContext(sources=sources, mode=self.mode, total_tokens=total)
+        return RetrievalContext(
+            sources=sources,
+            mode=self.mode,
+            total_tokens=total,
+            truncated=descartados > 0,
+            discarded_documents=descartados,
+        )
 
     def get_agent_tools(self) -> list:
         return []

@@ -35,6 +35,8 @@ class OrganizacionRead(BaseModel):
     default_min_retrieval_score: float
     default_reranker_enabled: bool
     default_answer_template: str
+    # VIS.2: None = heredar el default de plataforma (128.000 tokens)
+    default_context_token_budget: int | None
     created_at: datetime
     updated_at: datetime
 
@@ -54,6 +56,7 @@ class OrganizacionCreate(BaseModel):
     default_min_retrieval_score: float = 0.25
     default_reranker_enabled: bool = True
     default_answer_template: str = "generic"
+    default_context_token_budget: int | None = None
 
 
 class OrganizacionUpdate(BaseModel):
@@ -69,6 +72,7 @@ class OrganizacionUpdate(BaseModel):
     default_min_retrieval_score: float | None = None
     default_reranker_enabled: bool | None = None
     default_answer_template: str | None = None
+    default_context_token_budget: int | None = None
 
 
 _count_sq = (
@@ -116,6 +120,7 @@ async def create_organizacion(
         default_min_retrieval_score=body.default_min_retrieval_score,
         default_reranker_enabled=body.default_reranker_enabled,
         default_answer_template=body.default_answer_template,
+        default_context_token_budget=body.default_context_token_budget,
     )
     session.add(organizacion)
     await session.commit()
