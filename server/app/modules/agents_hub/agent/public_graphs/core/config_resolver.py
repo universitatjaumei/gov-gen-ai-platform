@@ -42,6 +42,11 @@ class PublicGraphConfig:
     # solo en MD_AGENT_SELECTOR —en RAG serían ~2.300 tokens de prompt que nadie usa— y
     # entra por la cascada porque depende de la organización del chatbot, igual que el resto.
     router_index: str | None = None
+    # RAG.8: parámetros de troceado. Viven en la misma cascada que el resto porque son
+    # configuración del chatbot, y el watcher los lee en vez de hardcodear los defaults.
+    chunk_size: int = 1000
+    chunk_overlap: int = 100
+    chunking_strategy: str = "structural"
 
 
 _PLATFORM_DEFAULTS = PublicGraphConfig(
@@ -113,6 +118,9 @@ async def get_effective_public_graph_config(
             "reranker_enabled":      organizacion.default_reranker_enabled,
             "answer_template":       organizacion.default_answer_template,
             "context_token_budget":  organizacion.default_context_token_budget,
+            "chunk_size":            organizacion.default_chunk_size,
+            "chunk_overlap":         organizacion.default_chunk_overlap,
+            "chunking_strategy":     organizacion.default_chunking_strategy,
         })
 
     config = _apply_layer(config, {
@@ -126,6 +134,9 @@ async def get_effective_public_graph_config(
         "reranker_enabled":      chatbot.reranker_enabled,
         "answer_template":       chatbot.answer_template,
         "context_token_budget":  chatbot.context_token_budget,
+        "chunk_size":            chatbot.chunk_size,
+        "chunk_overlap":         chatbot.chunk_overlap,
+        "chunking_strategy":     chatbot.chunking_strategy,
     })
 
     if config.retrieval_mode == "MD_AGENT_SELECTOR":

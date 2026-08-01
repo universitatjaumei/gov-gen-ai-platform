@@ -37,6 +37,10 @@ class OrganizacionRead(BaseModel):
     default_answer_template: str
     # VIS.2: None = heredar el default de plataforma (128.000 tokens)
     default_context_token_budget: int | None
+    # RAG.8: troceado. None = heredar (1000 / 100 / 'structural')
+    default_chunk_size: int | None
+    default_chunk_overlap: int | None
+    default_chunking_strategy: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -57,6 +61,9 @@ class OrganizacionCreate(BaseModel):
     default_reranker_enabled: bool = False
     default_answer_template: str = "generic"
     default_context_token_budget: int | None = None
+    default_chunk_size: int | None = None
+    default_chunk_overlap: int | None = None
+    default_chunking_strategy: str | None = None
 
 
 class OrganizacionUpdate(BaseModel):
@@ -73,6 +80,9 @@ class OrganizacionUpdate(BaseModel):
     default_reranker_enabled: bool | None = None
     default_answer_template: str | None = None
     default_context_token_budget: int | None = None
+    default_chunk_size: int | None = None
+    default_chunk_overlap: int | None = None
+    default_chunking_strategy: str | None = None
 
 
 _count_sq = (
@@ -121,6 +131,9 @@ async def create_organizacion(
         default_reranker_enabled=body.default_reranker_enabled,
         default_answer_template=body.default_answer_template,
         default_context_token_budget=body.default_context_token_budget,
+        default_chunk_size=body.default_chunk_size,
+        default_chunk_overlap=body.default_chunk_overlap,
+        default_chunking_strategy=body.default_chunking_strategy,
     )
     session.add(organizacion)
     await session.commit()

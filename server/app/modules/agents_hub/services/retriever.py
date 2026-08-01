@@ -41,6 +41,9 @@ class SearchResult:
     language: str
     score: float
     metadata: dict = field(default_factory=dict)
+    # RAG.8: sección completa a la que pertenece el fragmento, con la estrategia
+    # 'parent_child'. Se busca con el hijo y se responde con el padre.
+    parent_content: str | None = None
 
 
 class HybridRetriever:
@@ -98,6 +101,7 @@ class HybridRetriever:
                 language=row.HubDocumentChunk.language,
                 score=float(row.score),
                 metadata=row.HubDocumentChunk.chunk_metadata or {},
+                parent_content=row.HubDocumentChunk.parent_content,
             )
             for row in result.all()
         ]
@@ -152,6 +156,7 @@ class HybridRetriever:
                 language=fila.HubDocumentChunk.language,
                 score=float(fila.rank) / maximo,
                 metadata=fila.HubDocumentChunk.chunk_metadata or {},
+                parent_content=fila.HubDocumentChunk.parent_content,
             )
             for fila in filas
         ]
@@ -205,6 +210,7 @@ class HybridRetriever:
                 language=r.language,
                 score=s,
                 metadata=r.metadata,
+                parent_content=r.parent_content,
             )
             for r, s in sorted_results[:top_k]
         ]

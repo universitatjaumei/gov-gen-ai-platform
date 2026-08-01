@@ -28,6 +28,9 @@ def _make_session_for_new_doc() -> AsyncMock:
     third_exec = MagicMock()  # DELETE chunks
     fourth_exec = MagicMock()  # DELETE old chunks
     session.begin_nested = MagicMock(return_value=AsyncMock())
+    # RAG.8: el watcher consulta la config de troceado; sin chatbot en BD, la cascada
+    # devuelve los defaults de plataforma, que es el camino realista para estos tests.
+    session.get = AsyncMock(return_value=None)
     session.execute = AsyncMock(side_effect=[first_exec, second_exec, third_exec])
     session.flush = AsyncMock()
     session.commit = AsyncMock()
@@ -43,6 +46,9 @@ def _make_session_for_existing_doc(existing_doc) -> AsyncMock:
     second_exec = MagicMock()  # DELETE chunks for vector
     session.execute = AsyncMock(side_effect=[first_exec, second_exec])
     session.begin_nested = MagicMock(return_value=AsyncMock())
+    # RAG.8: el watcher consulta la config de troceado; sin chatbot en BD, la cascada
+    # devuelve los defaults de plataforma, que es el camino realista para estos tests.
+    session.get = AsyncMock(return_value=None)
     session.flush = AsyncMock()
     session.commit = AsyncMock()
     session.add = MagicMock()

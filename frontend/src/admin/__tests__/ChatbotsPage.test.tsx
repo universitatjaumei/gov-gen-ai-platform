@@ -76,6 +76,9 @@ const DEMO_CHATBOT: ChatbotRead = {
   reranker_enabled: true,
   answer_template: 'generic',
   context_token_budget: null,
+  chunk_size: null,
+  chunk_overlap: null,
+  chunking_strategy: null,
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
 }

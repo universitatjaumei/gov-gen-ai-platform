@@ -57,6 +57,11 @@ class ChatbotRead(BaseModel):
     answer_template: str
     # VIS.2: None = heredar de la organización y, en su defecto, del default de plataforma
     context_token_budget: int | None
+    # RAG.8: parámetros de troceado. None = heredar. Cambiar `chunking_strategy` exige
+    # recalcular el corpus para que surta efecto (POST /recalculate-corpus).
+    chunk_size: int | None
+    chunk_overlap: int | None
+    chunking_strategy: Literal["structural", "parent_child"] | None
     created_at: datetime
     updated_at: datetime
 
@@ -83,6 +88,9 @@ class ChatbotCreate(BaseModel):
     reranker_enabled: bool = False
     answer_template: str = "generic"
     context_token_budget: int | None = None
+    chunk_size: int | None = None
+    chunk_overlap: int | None = None
+    chunking_strategy: Literal["structural", "parent_child"] | None = None
 
 
 class ChatbotUpdate(BaseModel):
@@ -104,6 +112,9 @@ class ChatbotUpdate(BaseModel):
     reranker_enabled: bool | None = None
     answer_template: str | None = None
     context_token_budget: int | None = None
+    chunk_size: int | None = None
+    chunk_overlap: int | None = None
+    chunking_strategy: Literal["structural", "parent_child"] | None = None
 
 
 class AssignChildIn(BaseModel):
@@ -178,6 +189,9 @@ async def create_chatbot(
         reranker_enabled=body.reranker_enabled,
         answer_template=body.answer_template,
         context_token_budget=body.context_token_budget,
+        chunk_size=body.chunk_size,
+        chunk_overlap=body.chunk_overlap,
+        chunking_strategy=body.chunking_strategy,
     )
     session.add(chatbot)
     await session.commit()

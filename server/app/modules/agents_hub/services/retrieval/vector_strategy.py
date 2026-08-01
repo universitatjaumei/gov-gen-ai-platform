@@ -95,7 +95,15 @@ class VectorRetrievalStrategy:
             # La cita apunta al artículo del que sale la evidencia, no al documento
             # entero: el ancla viene del chunk mejor puntuado (ING.0.4).
             url = with_anchor(base_url, best.metadata)
-            excerpt = best.content
+            # RAG.8 (small-to-big): si el fragmento tiene padre, la evidencia es el padre.
+            # Se busca con el hijo —vector más específico, se encuentra mejor— y se responde
+            # con la sección entera, que trae el contexto que al hijo le falta.
+            #
+            # La deduplicación de hijos del mismo padre sale gratis de agrupar por documento,
+            # que ya se hacía: es un superconjunto. Y se mantiene así a propósito, porque
+            # emitir una entrada por padre duplicaría documentos en el `sources` del evento
+            # SSE `done`, contrato que RAG.2 fijó por snapshot.
+            excerpt = best.parent_content or best.content
             sources.append(Source(
                 document_id=doc.id if doc else uuid.uuid4(),
                 title=title,

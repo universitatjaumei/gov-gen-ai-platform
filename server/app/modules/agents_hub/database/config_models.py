@@ -109,6 +109,10 @@ class HubOrganizacion(HubConfigBase):
     # de plataforma» (VIS.2). Con un valor no nulo por defecto, subir el presupuesto en la
     # plataforma no llegaría nunca a las organizaciones ya creadas.
     default_context_token_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # --- Troceado (RAG.8). Nullable = heredar del default de plataforma ---
+    default_chunk_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    default_chunk_overlap: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    default_chunking_strategy: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -183,6 +187,13 @@ class HubChatbot(HubConfigBase):
             "kind IN ('atomic', 'router')",
             name="ck_chatbot_kind",
         ),
+        # RAG.8. Admite NULL porque NULL significa «heredar», no «valor inválido»; son dos
+        # estrategias estables con consumidor en el chunker, así que CHECK sí (mismo criterio
+        # que `nivell_acces` en ING.0.2 y al contrario que el vocabulario de ámbitos).
+        CheckConstraint(
+            "chunking_strategy IS NULL OR chunking_strategy IN ('structural', 'parent_child')",
+            name="ck_chatbot_chunking_strategy",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -220,6 +231,10 @@ class HubChatbot(HubConfigBase):
     # heredar de la organización y, en su defecto, del default de plataforma. Lo consume
     # LongContextRetrievalStrategy para RECORTAR, no para lanzar una excepción.
     context_token_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # --- Troceado (RAG.8). NULL = heredar; el CHECK admite NULL a propósito ---
+    chunk_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    chunk_overlap: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    chunking_strategy: Mapped[str | None] = mapped_column(String(20), nullable=True)
     parent_chatbot_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("hub_chatbots.id", ondelete="SET NULL"),

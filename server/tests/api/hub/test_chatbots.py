@@ -50,6 +50,9 @@ def _make_chatbot(
         reranker_enabled=True,
         answer_template="generic",
         context_token_budget=None,  # VIS.2: None = heredar de la cascada
+        chunk_size=None,  # RAG.8: idem para los parametros de troceado
+        chunk_overlap=None,
+        chunking_strategy=None,
         created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
         updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
     )

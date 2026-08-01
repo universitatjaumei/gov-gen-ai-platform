@@ -75,6 +75,9 @@ class Chunk:
     content: str
     metadata: dict[str, Any] = field(default_factory=dict)
     embedding_text: str = ""
+    # RAG.8: seccion estructural completa a la que pertenece el fragmento, con la estrategia
+    # 'parent_child'. Vacio con 'structural'.
+    parent_content: str = ""
 
     def __post_init__(self) -> None:
         if not self.embedding_text:
@@ -133,11 +136,22 @@ class MarkdownChunker:
         chunk_overlap: int = 100,
         table_chunk_size: int = 4000,
         enricher: ContextEnricher | None = None,
+        strategy: str = "structural",
+        chunk_size_child: int = 400,
     ):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.table_chunk_size = table_chunk_size
         self.enricher = enricher or NoopEnricher()
+        # RAG.8. 'parent_child' trocea mas fino DENTRO de cada seccion y guarda la seccion
+        # entera como padre: se busca con el hijo, que es mas especifico y se encuentra
+        # mejor, y se responde con el padre, que trae el contexto que al hijo le falta.
+        self.strategy = strategy
+        self.chunk_size_child = chunk_size_child
+        self.child_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size_child,
+            chunk_overlap=min(chunk_overlap, chunk_size_child // 4),
+        )
 
         self.headers_to_split = [("#" * n, f"header_{n}") for n in range(1, _NIVELES + 1)]
 
@@ -391,7 +405,17 @@ class MarkdownChunker:
                 "classes": clases,
             }
 
-            piezas = self._trocear_seccion(strip_anchor_tokens(doc.page_content))
+            seccion = strip_anchor_tokens(doc.page_content)
+            piezas = self._trocear_seccion(seccion)
+            if self.strategy == "parent_child":
+                # El padre es la SECCION estructural entera, no la pieza: la unidad que da
+                # contexto es el articulo completo, no el trozo del que salio el hijo.
+                piezas = [
+                    (hijo, extra)
+                    for texto, extra in piezas
+                    for hijo in self.child_splitter.split_text(texto)
+                ]
+
             for indice, (texto, extra) in enumerate(piezas):
                 chunks.append(
                     Chunk(
@@ -402,6 +426,9 @@ class MarkdownChunker:
                             encabezados,
                             texto,
                             self.enricher.enrich(content, texto),
+                        ),
+                        parent_content=(
+                            seccion if self.strategy == "parent_child" else ""
                         ),
                     )
                 )

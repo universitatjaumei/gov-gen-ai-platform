@@ -320,6 +320,13 @@ class HubDocumentChunk(HubOperationalBase):
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
     chunk_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     language: Mapped[str] = mapped_column(String(10), nullable=False)
+    # --- Parent-child, small-to-big (RAG.8) ---
+    # La seccion estructural completa a la que pertenece este fragmento. Se busca con el
+    # hijo —vector mas especifico, se encuentra mejor— y se responde con el padre, que trae
+    # el contexto que al hijo le falta. NULL con la estrategia 'structural'.
+    # Columna directa y no JOIN: el padre ya existe como texto y duplicarlo cuesta menos que
+    # una tabla de secciones que habria que mantener sincronizada con el troceado.
+    parent_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     # --- Procedencia del vector (MOD.1) ---
     # Con que modelo y a que dimension se genero `embedding`. Misma dimension NO significa
     # mismo espacio vectorial: el coseno entre vectores de dos modelos distintos no da error,

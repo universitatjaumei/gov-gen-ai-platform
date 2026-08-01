@@ -61,6 +61,9 @@ class IngestionWatcher:
         self._storage = storage
         self._chatbot_provider = chatbot_provider
         self._processor: DoclingProcessor | None = None
+        # RAG.8: el chunker por defecto es el de plataforma. `_chunker_para` lo sustituye
+        # por el resuelto en la cascada cuando hay chatbot; se conserva este para los
+        # caminos que no lo tienen (subidas temporales) y para no romper a quien lo use.
         self.chunker = MarkdownChunker()
         # Keep legacy attribute for backward compatibility
         self.session = session
@@ -187,6 +190,31 @@ class IngestionWatcher:
         await self._session.commit()
         return doc, n_chunks
 
+    async def _chunker_para(self, chatbot_id: uuid.UUID) -> MarkdownChunker:
+        """Chunker con los parámetros resueltos en la cascada (RAG.8).
+
+        Antes se instanciaba con los defaults del código, así que la configuración por
+        chatbot no existía: el admin podía cambiar `chunk_size` en la API y no pasaba nada.
+        Si la cascada no responde —chatbot inexistente, o llamada fuera de contexto—, se
+        usa el chunker de plataforma en vez de reventar la ingesta por un dato de tuning.
+        """
+        from server.app.modules.agents_hub.agent.public_graphs.core.config_resolver import (
+            get_effective_public_graph_config,
+        )
+
+        try:
+            cfg = await get_effective_public_graph_config(chatbot_id, self._session)
+            return MarkdownChunker(
+                chunk_size=int(cfg.chunk_size),
+                chunk_overlap=int(cfg.chunk_overlap),
+                strategy=str(cfg.chunking_strategy),
+            )
+        except Exception:  # pragma: no cover - la ingesta no cae por la config de troceado
+            logger.warning(
+                "No se pudo resolver la config de troceado; se usa la de plataforma"
+            )
+            return self.chunker
+
     async def _embed_en_lote(self, textos: list[str]) -> list[list[float]]:
         """Embebe una lista, usando el lote del servicio si lo expone."""
         if not textos:
@@ -201,7 +229,8 @@ class IngestionWatcher:
         await self._session.execute(
             delete(HubDocumentChunk).where(HubDocumentChunk.document_id == doc.id)
         )
-        chunks = self.chunker.split(
+        chunker = await self._chunker_para(doc.chatbot_id)
+        chunks = chunker.split(
             doc.markdown_content,
             metadata={
                 "document_id": str(doc.id),
@@ -233,6 +262,7 @@ class IngestionWatcher:
                 bilingual_terms=terminos,
                 embedding_model=modelo,
                 embedding_dim=dimension,
+                parent_content=ch.parent_content or None,
             ))
         return len(chunks)
 

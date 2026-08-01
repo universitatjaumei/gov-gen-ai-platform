@@ -33,6 +33,9 @@ def _make_organizacion(name: str = "UJI", is_active: bool = True) -> SimpleNames
         default_reranker_enabled=True,
         default_answer_template="generic",
         default_context_token_budget=None,  # VIS.2: None = heredar el default de plataforma
+        default_chunk_size=None,  # RAG.8
+        default_chunk_overlap=None,
+        default_chunking_strategy=None,
         created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
         updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
     )
