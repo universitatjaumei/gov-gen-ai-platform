@@ -30,6 +30,34 @@ sin `Co-Authored-By` y **sin push** → siguiente prompt.
 El commit por prompt es lo que hace reversible un bloque largo: si el prompt 5 rompe
 el 3, hay un punto exacto al que volver.
 
+### Qué tests ejecutar y cuándo (escalonado)
+
+Ejecutar la suite entera después de cada prompt cuesta minutos y no aporta información nueva
+la mayoría de las veces. Tres niveles:
+
+| Cuándo | Qué | Coste |
+|---|---|---|
+| **Durante el prompt** (bucle RED→GREEN) | Solo el fichero de tests que estás escribiendo | segundos |
+| **Al cerrar el prompt** | Los directorios que el prompt toca + `tests/infra/test_suite_hygiene.py` | segundos a 1 min |
+| **Al cerrar el bloque** | `uv run pytest tests` completo, **desde Git Bash** | 1-3 min |
+
+`test_suite_hygiene.py` entra en el nivel intermedio porque tarda medio segundo y caza justo
+lo que se escapa de un subconjunto: mocks sobre clases, `create_all` sobre la BD del
+desarrollador, imports a módulos que ya no existen.
+
+**Desde Git Bash, no desde PowerShell.** `tests/infra/test_setup_script.py` invoca `bash`, que
+en PowerShell resuelve al lanzador de WSL y da 10 rojos de entorno. Ver la nota del historial
+del 2026-07-31 en `PROJECT_STATE.md`.
+
+La suite corre en paralelo (`-n auto` en `addopts`) y sin cobertura; para depurar un fallo con
+la salida en orden, `-n0`, y para medir cobertura en local, `--cov=app`. **Si una cifra de
+tests no se ha medido, no se reporta como medida**: dilo como lo que es.
+
+**CI corre con `-n0`, a propósito.** El paralelismo reparte los tests entre 16 procesos, y eso
+esconde el estado filtrado entre tests —un mock asignado a una clase, un singleton
+contaminado—, que es justo lo que TST.1 unificó CI para cazar. En local manda la velocidad;
+en CI manda la detección. No añadas `-n auto` a los pasos de CI.
+
 ### Cuándo SÍ interrumpir a mitad de bloque
 
 Solo por estas cuatro causas:

@@ -69,6 +69,12 @@ jobs:
       # una clase, un singleton contaminado— es invisible para CI. Así fue como
       # `WebSiteRepo.create = AsyncMock(...)` rompió 10 tests de integración durante
       # meses sin que ningún build se enterara.
+      #
+      # `-n0` desactiva el paralelismo que TST.4 puso por defecto en `addopts`, y es la otra
+      # mitad de la misma razón: con 16 workers los tests se reparten entre procesos y el
+      # estado filtrado vuelve a ser invisible, que es exactamente lo que este paso existe
+      # para cazar. En local manda la velocidad; aquí manda la detección, y CI puede
+      # permitirse los minutos.
       - name: Run unit + integration + E2E tests (single invocation, needs PostgreSQL)
         run: |
           uv run pytest \
@@ -79,6 +85,7 @@ jobs:
             tests/unit/test_auth_context.py \
             tests/api/test_role_context.py \
             tests/infra/ \
+            -n0 \
             --cov=app \
             --cov-report=xml \
             --cov-report=term-missing \
@@ -94,6 +101,7 @@ jobs:
         run: |
           uv run pytest \
             tests/modules/agents_hub/evaluation/ \
+            -n0 \
             --no-cov \
             -v
 

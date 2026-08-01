@@ -12986,6 +12986,50 @@ Un fallo que se filtra a mano deja de ser información: nadie distingue el 12 es
 
 ---
 
+### Prompt TST.4 (GREEN) — Coste de la verificación: que la suite deje de frenar el desarrollo
+
+**Modelo sugerido**: **Sonnet** — tres cambios de infraestructura medidos; ninguna decisión de diseño abierta.
+
+> **Añadido el 2026-08-01 a petición del usuario**, al ver que ejecutar la suite completa tras
+> cada prompt costaba entre 5 minutos y más de una hora según la carga de la máquina. La
+> pregunta era «¿reducimos tests o los ejecutamos solo al cerrar el bloque?»; la respuesta
+> medida fue que el problema no es el número de tests sino cómo se ejecutan.
+
+```
+# PROMPT TST.4 (GREEN) — Tres cambios medidos y una politica escalonada
+
+## Lo que se midio antes de tocar nada (mismo subconjunto, tiempo que reporta pytest)
+- Cobertura forzada en addopts: 21,3 s -> 12,8 s sin ella. ~40 % de toda ejecucion local.
+- BD desechable por test: ~1,3 s de SETUP por test. tests/.../integration son 139 tests en
+  212 s, o sea que el setup era practicamente todo el directorio.
+- Cola gorda: 39 s (chat CoreGraph en modo RAG), 21 s (reconciliador), 13 s (migracion HNSW).
+
+## Los tres cambios
+1. Quitar --cov de addopts. CI ya lo pasa explicito en sus dos invocaciones, asi que la
+   cobertura vigilada no baja ni un punto. En local, bajo demanda.
+2. pytest-xdist con -n auto en addopts. Es seguro porque cada test de BD crea la suya con
+   nombre unico, sin estado compartido que serializar.
+3. BD desechable por TEMPLATE: una plantilla por sesion con el esquema creado, y cada test
+   la copia con CREATE DATABASE ... TEMPLATE, que es copia de ficheros.
+
+## La contrapartida que hay que atajar en el mismo prompt
+-n auto reparte los tests entre procesos, y eso ESCONDE el estado filtrado entre tests, que
+es justo lo que TST.1 unifico CI para cazar. CI se queda en -n0, con el porque escrito en el
+workflow y en CLAUDE.md. En local manda la velocidad; en CI manda la deteccion.
+
+## Politica escalonada (CLAUDE.md, seccion de ejecucion por bloques)
+- Durante el prompt: solo el fichero de tests que se esta escribiendo.
+- Al cerrar el prompt: los directorios que toca + tests/infra/test_suite_hygiene.py.
+- Al cerrar el bloque: la suite entera, desde Git Bash.
+
+## Criterio de done
+- [ ] Suite completa verde con -n auto y cifra medida (no deducida)
+- [ ] Suite verde tambien con -n0, que es el modo de CI
+- [ ] Antes/despues del setup por test, medido
+```
+
+---
+
 ## Bloque RAG — Refuerzo del retrieval y calidad RAG (Subfase 1.B → 1.C, PENDIENTE)
 
 > **Contexto**: planificado 2026-07-15 a partir de `docs/COMPARATIVA_RAG_LAMB.md` (comparativa arquitectónica del RAG con LAMB + recomendaciones propias + análisis "RAG vs agentes"). Principio rector: invertir en los **cimientos del retrieval** (índice híbrido real, reranker, representación del corpus, evaluación) porque son la herramienta que cualquier evolución agéntica consumirá; no invertir en sofisticación de pipeline que un bucle agéntico haría gratis.

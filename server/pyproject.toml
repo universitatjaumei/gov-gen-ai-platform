@@ -63,6 +63,7 @@ dev = [
     "respx>=0.21",
     "ruff",
     "aiosqlite>=0.22.1",
+    "pytest-xdist>=3.8.0",
 ]
 
 [[tool.uv.index]]
@@ -83,8 +84,18 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+# TST.4: `addopts` mínimo, a propósito.
+#
+# La cobertura estaba forzada en TODA ejecución local y cuesta ~40 % (medido: 21,3 s → 12,8 s
+# sobre `tests/public_graphs`). Quien la mide de verdad es CI, que ya pasa `--cov=app
+# --cov-report=xml --cov-report=term-missing` explícito en sus dos invocaciones, así que
+# quitarla de aquí no baja la cobertura vigilada ni un punto. En local, bajo demanda:
+#
+#     uv run pytest tests --cov=app --cov-report=term-missing
+#
+# `-n auto` reparte los tests entre los núcleos disponibles. Es seguro porque cada test que
+# toca BD crea la suya con nombre único (fixture `db_url`), así que no hay estado compartido
+# que serializar. Para depurar un fallo con la salida en orden: `-p no:randomly -n0`.
 addopts = [
-    "--verbose",
-    "--cov=app",
-    "--cov-report=term-missing",
+    "-n", "auto",
 ]
