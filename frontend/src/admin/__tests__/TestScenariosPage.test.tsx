@@ -1,0 +1,273 @@
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import i18n from '@/shared/i18n'
+import { AuthProvider } from '@/shared/auth'
+import type { ChatbotRead, RunRead, ScenarioRead } from '@/shared/api/generated/model'
+import { TestScenariosPage } from '../pages/TestScenariosPage'
+
+/**
+ * Tests RAG.13 — la página se construye desde el contrato, no desde campos inventados.
+ *
+ * Por eso los dobles devuelven objetos tipados `ScenarioRead` / `RunRead`: si el backend
+ * cambia el contrato, esto deja de compilar, que es exactamente lo que debe pasar. Un
+ * doble con `any` convertiría un cambio de contrato en un fallo silencioso en producción.
+ */
+
+const { mockRun, mockVerdict, mockData } = vi.hoisted(() => ({
+  mockRun: vi.fn(),
+  mockVerdict: vi.fn(),
+  mockData: {
+    chatbots: [] as ChatbotRead[],
+    scenarios: [] as ScenarioRead[],
+    runs: [] as RunRead[],
+  },
+}))
+
+vi.mock('@/shared/api/generated/hub-test-scenarios/hub-test-scenarios', () => ({
+  useListScenariosApiV1HubChatbotsChatbotIdTestScenariosGet: vi.fn(() => ({
+    data: mockData.scenarios,
+    isLoading: false,
+  })),
+  useListRunsApiV1HubChatbotsChatbotIdTestScenariosScenarioIdRunsGet: vi.fn(() => ({
+    data: mockData.runs,
+    isLoading: false,
+  })),
+  useCreateScenarioApiV1HubChatbotsChatbotIdTestScenariosPost: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
+  useUpdateScenarioApiV1HubChatbotsChatbotIdTestScenariosScenarioIdPatch: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
+  useDeleteScenarioApiV1HubChatbotsChatbotIdTestScenariosScenarioIdDelete: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
+  useRunScenarioApiV1HubChatbotsChatbotIdTestScenariosScenarioIdRunPost: vi.fn(() => ({
+    mutate: mockRun,
+    isPending: false,
+  })),
+  useSetVerdictApiV1HubChatbotsChatbotIdTestScenariosRunsRunIdVerdictPatch: vi.fn(() => ({
+    mutate: mockVerdict,
+    isPending: false,
+  })),
+  getListScenariosApiV1HubChatbotsChatbotIdTestScenariosGetQueryKey: vi.fn(() => ['s']),
+  getListRunsApiV1HubChatbotsChatbotIdTestScenariosScenarioIdRunsGetQueryKey: vi.fn(() => ['r']),
+}))
+
+vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
+  useListChatbotsApiV1HubChatbotsGet: vi.fn(() => ({
+    data: mockData.chatbots,
+    isLoading: false,
+  })),
+}))
+
+const CHATBOT_ID = '00000000-0000-0000-0000-000000000100'
+const SCENARIO_ID = '00000000-0000-0000-0000-000000000200'
+const RUN_ID = '00000000-0000-0000-0000-000000000300'
+
+const TOKEN =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
+  btoa(JSON.stringify({ sub: '1', email: 'admin@test.com', role: 'admin', exp: 9999999999 }))
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_') +
+  '.signature'
+
+function unChatbot(): ChatbotRead {
+  return {
+    id: CHATBOT_ID,
+    name: 'Assistent normatiu',
+    organizacion_id: '00000000-0000-0000-0000-000000000010',
+    llm_config_id: '00000000-0000-0000-0000-000000000001',
+    system_prompt: 'Ets un assistent.',
+    sources: [],
+    is_active: true,
+    retrieval_mode: 'RAG',
+    retrieval_top_k: 8,
+    use_prompt_caching: false,
+    cache_ttl: 3600,
+    kind: 'atomic',
+    parent_chatbot_id: null,
+    public_graph_profile: 'PUBLIC_KB_RICH',
+    language_mode: 'prefer',
+    quality_threshold: 0.6,
+    min_retrieval_results: 2,
+    min_retrieval_score: 0,
+    reranker_enabled: false,
+    answer_template: 'generic',
+    context_token_budget: null,
+    chunk_size: null,
+    chunk_overlap: null,
+    chunking_strategy: null,
+    query_rewriting_enabled: null,
+    created_at: '2026-08-01T00:00:00Z',
+    updated_at: '2026-08-01T00:00:00Z',
+  }
+}
+
+function unEscenario(): ScenarioRead {
+  return {
+    id: SCENARIO_ID,
+    chatbot_id: CHATBOT_ID,
+    name: 'Dieta a Madrid',
+    prompt: 'quant cobro de dieta per anar a Madrid?',
+    history: null,
+    expectation_note: 'Debe citar REG-020.',
+    created_by: 'admin@uji.es',
+    created_at: '2026-08-01T00:00:00Z',
+    updated_at: '2026-08-01T00:00:00Z',
+  }
+}
+
+function unRun(overrides: Partial<RunRead> = {}): RunRead {
+  return {
+    id: RUN_ID,
+    scenario_id: SCENARIO_ID,
+    executed_at: '2026-08-01T10:00:00Z',
+    answer: "L'import de la dieta és de 53,34 euros.",
+    sources: [
+      {
+        document_id: '00000000-0000-0000-0000-000000000400',
+        title: 'Reglament indemnitzacions',
+        url: 'https://www.uji.es/REG-020',
+        score: 0.91,
+      },
+    ],
+    bypass_snapshot: null,
+    verdict: null,
+    verdict_note: null,
+    verdict_by: null,
+    ...overrides,
+  }
+}
+
+beforeAll(async () => {
+  await i18n.changeLanguage('es')
+  localStorage.setItem('access_token', TOKEN)
+})
+
+afterEach(() => {
+  vi.clearAllMocks()
+  mockData.chatbots = []
+  mockData.scenarios = []
+  mockData.runs = []
+})
+
+function renderPage() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>
+        <AuthProvider>
+          <TestScenariosPage />
+        </AuthProvider>
+      </MemoryRouter>
+    </QueryClientProvider>
+  )
+}
+
+describe('TestScenariosPage', () => {
+  it('renderiza los escenarios que llegan del contrato', async () => {
+    mockData.chatbots = [unChatbot()]
+    mockData.scenarios = [unEscenario()]
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('Dieta a Madrid')).toBeInTheDocument()
+    })
+    expect(
+      screen.getByText('quant cobro de dieta per anar a Madrid?')
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Debe citar REG-020/)).toBeInTheDocument()
+  })
+
+  it('ejecuta un escenario y muestra la respuesta con sus fuentes', async () => {
+    mockData.chatbots = [unChatbot()]
+    mockData.scenarios = [unEscenario()]
+    mockData.runs = [unRun()]
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('Dieta a Madrid')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByTestId(`run-${SCENARIO_ID}`))
+    expect(mockRun).toHaveBeenCalled()
+
+    expect(screen.getByText(/53,34 euros/)).toBeInTheDocument()
+    const fuente = screen.getByText('Reglament indemnitzacions')
+    expect(fuente).toHaveAttribute('href', 'https://www.uji.es/REG-020')
+  })
+
+  it('envía el veredicto humano', async () => {
+    mockData.chatbots = [unChatbot()]
+    mockData.scenarios = [unEscenario()]
+    mockData.runs = [unRun()]
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByTestId(`verdict-good-${RUN_ID}`)).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByTestId(`verdict-good-${RUN_ID}`))
+
+    expect(mockVerdict).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: RUN_ID,
+        data: expect.objectContaining({ verdict: 'good' }),
+      }),
+      expect.anything()
+    )
+  })
+
+  it('no muestra el contexto capturado si el run no lo trae', async () => {
+    mockData.chatbots = [unChatbot()]
+    mockData.scenarios = [unEscenario()]
+    mockData.runs = [unRun()]
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText(/53,34 euros/)).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId(`context-${RUN_ID}`)).not.toBeInTheDocument()
+  })
+
+  it('muestra el contexto capturado cuando el run lo trae', async () => {
+    mockData.chatbots = [unChatbot()]
+    mockData.scenarios = [unEscenario()]
+    mockData.runs = [
+      unRun({
+        bypass_snapshot: {
+          system_prompt: 'SYSTEM del chatbot',
+          quality_gate: { score: 0.82, passed: true },
+        },
+      }),
+    ]
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByTestId(`context-${RUN_ID}`)).toBeInTheDocument()
+    })
+  })
+
+  it('no deja ninguna cadena de interfaz sin traducir', async () => {
+    mockData.chatbots = [unChatbot()]
+    mockData.scenarios = []
+
+    renderPage()
+
+    // Una clave sin traducción se renderiza como la propia clave: 'hub.test_scenarios.x'.
+    await waitFor(() => {
+      expect(screen.queryByText(/hub\.test_scenarios\./)).not.toBeInTheDocument()
+    })
+  })
+})

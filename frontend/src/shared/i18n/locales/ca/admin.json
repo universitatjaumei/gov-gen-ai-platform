@@ -29,6 +29,34 @@
     "subnav_aria": "Navegació del Hub",
     "filter_usage_aria": "Filtrar per tipus d'ús",
     "filter_chatbot_aria": "Filtrar per chatbot",
-    "search_prompts_aria": "Cercar prompts"
+    "search_prompts_aria": "Cercar prompts",
+    "test_scenarios": {
+      "title": "Escenaris de prova",
+      "subtitle": "Consultes desades per revisar a mà el que respon el chatbot.",
+      "chatbot": "Chatbot",
+      "select_chatbot": "Selecciona un chatbot",
+      "empty": "Encara no hi ha escenaris per a aquest chatbot.",
+      "new": "Nou escenari",
+      "name": "Nom",
+      "prompt": "Consulta",
+      "expectation": "Què s'espera",
+      "expectation_hint": "En prosa. No es comprova automàticament: és la nota que llegeix qui jutja.",
+      "save": "Desa",
+      "cancel": "Cancel·la",
+      "delete": "Elimina",
+      "run": "Executa",
+      "capture_context": "Captura el context",
+      "capture_context_hint": "Desa el prompt final i la configuració resolta al costat de la resposta.",
+      "runs": "Execucions",
+      "no_runs": "Sense execucions encara.",
+      "sources": "Fonts",
+      "context": "Context capturat",
+      "verdict": "Veredicte",
+      "verdict_good": "Correcta",
+      "verdict_bad": "Incorrecta",
+      "verdict_mixed": "Regular",
+      "verdict_by": "Jutjat per",
+      "verdict_note": "Comentari"
+    }
   }
 }

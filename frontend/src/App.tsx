@@ -23,6 +23,7 @@ import { WorkspacePreview } from '@/redaccion/preview/WorkspacePreview'
 import { AIBrainPage } from '@/admin/pages/AIBrainPage'
 import { SitesPage } from '@/admin/pages/SitesPage'
 import { ContentQualityPage } from '@/admin/pages/ContentQualityPage'
+import { TestScenariosPage } from '@/admin/pages/TestScenariosPage'
 import { ThemeProvider } from './themes/ThemeProvider'
 import './index.css'
 import './themes/base.css'
@@ -66,6 +67,7 @@ function App() {
                     <Route path="brain" element={<AIBrainPage />} />
                     <Route path="sites" element={<SitesPage />} />
                     <Route path="content-quality" element={<ContentQualityPage />} />
+                    <Route path="test-scenarios" element={<TestScenariosPage />} />
                     <Route path="access-tokens" element={<AccessTokensPage />} />
                   </Route>
                   <Route path="/redaccion/builder" element={<ReportTemplateBuilderPage />} />

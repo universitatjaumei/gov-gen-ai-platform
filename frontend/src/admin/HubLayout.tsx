@@ -11,6 +11,7 @@ const HUB_SUBNAV = [
   { key: 'hub.ai_brain', path: '/hub/brain' },
   { key: 'contentQuality:nav_sites', path: '/hub/sites' },
   { key: 'contentQuality:nav_quality', path: '/hub/content-quality' },
+  { key: 'admin:hub.test_scenarios.title', path: '/hub/test-scenarios' },
   { key: 'auth:nav_access_tokens', path: '/hub/access-tokens' },
 ] as const
 

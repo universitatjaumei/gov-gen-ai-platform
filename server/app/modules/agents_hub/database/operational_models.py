@@ -21,7 +21,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from server.app.modules.agents_hub.database.base import HubOperationalBase
 
@@ -494,3 +494,85 @@ class HubContentFinding(HubOperationalBase):
     def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("status", "new")
         super().__init__(**kwargs)
+
+
+class HubTestScenario(HubOperationalBase):
+    """Consulta guardada para probar un chatbot a mano, con lo que se espera de ella (RAG.13).
+
+    Que exista esto y el dataset dorado de RAG.1 no es duplicidad: el dorado mide
+    RECUPERACION con metricas automaticas y bloquea el build; esto mide la RESPUESTA con
+    juicio humano, que es lo que ninguna metrica sustituye en un asistente normativo. Uno
+    dice si el documento correcto sale entre los cinco primeros; el otro, si lo que se le
+    contesta a una persona vale.
+
+    Operacional y no de configuracion: son las pruebas del cliente sobre su propio corpus,
+    asi que viven en el edge y no se sincronizan al cloud.
+    """
+
+    __tablename__ = "hub_test_scenarios"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    chatbot_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    # Turnos previos en el formato 'rol: texto' que consume el grafo (RAG.10). NULL = el
+    # escenario es de un solo turno, que es el caso normal.
+    history: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    # Que se espera de la respuesta, en prosa. NO se comprueba automaticamente a proposito:
+    # convertirlo en una asercion exigiria un criterio de igualdad entre respuestas de un
+    # LLM, y ese criterio es el problema, no la solucion. Es la nota que lee quien juzga.
+    expectation_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    runs: Mapped[list["HubTestRun"]] = relationship(
+        back_populates="scenario", cascade="all, delete-orphan"
+    )
+
+
+class HubTestRun(HubOperationalBase):
+    """Una ejecucion de un escenario y el veredicto humano que recibio (RAG.13)."""
+
+    __tablename__ = "hub_test_runs"
+    __table_args__ = (
+        # Tres valores estables con consumidor en la UI: CHECK si, mismo criterio que
+        # `purpose` en MOD.1 y al contrario que el vocabulario de ambitos (CLAUDE.md §5).
+        # Admite NULL porque NULL es "sin juzgar todavia", no valor invalido.
+        CheckConstraint(
+            "verdict IS NULL OR verdict IN ('good', 'bad', 'mixed')",
+            name="ck_test_run_verdict",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    scenario_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_test_scenarios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    executed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    answer: Mapped[str] = mapped_column(Text, nullable=False)
+    sources: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    # Captura del bypass de RAG.11, solo si se pidio: el prompt final, el contexto empaquetado
+    # y la configuracion resuelta EN EL MOMENTO de la ejecucion. Sin esto, un run de hace un
+    # mes no se puede explicar, porque la configuracion ya no es la misma.
+    bypass_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    verdict: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    verdict_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    verdict_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    scenario: Mapped["HubTestScenario"] = relationship(back_populates="runs")

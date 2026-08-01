@@ -67,7 +67,11 @@ class CoreGraphState(TypedDict):
     rewritten_query: str | None
     # RAG.11: ejecutar todo el pipeline y pararse ANTES de invocar al modelo.
     debug_bypass: bool
-    bypass: dict | None            # lo que se iba a enviar, cuando debug_bypass
+    # RAG.13: compone la MISMA instantánea pero **sin** detener el grafo. Es lo que permite
+    # que un escenario guarde a la vez la respuesta y el contexto con el que se produjo,
+    # sin recomponerlo desde fuera —recomponerlo daría un contexto parecido, no el mismo—.
+    capture_context: bool
+    bypass: dict | None            # lo que se envió (o se iba a enviar, si debug_bypass)
     retrieval_output: Any          # RetrievalOutput | None
     merged_items: list             # list[EvidenceItem]
     answer: str | None
@@ -191,9 +195,14 @@ class CoreGraph:
                 state.get("language"),
                 state["query"],
             )
+            instantanea = (
+                self._instantanea_de_bypass(state, context, items)
+                if state.get("debug_bypass") or state.get("capture_context")
+                else None
+            )
             if state.get("debug_bypass"):
                 return {
-                    "bypass": self._instantanea_de_bypass(state, context, items),
+                    "bypass": instantanea,
                     "answer": None,
                     "fallback_used": False,
                     "fallback_reason": None,
@@ -206,6 +215,7 @@ class CoreGraph:
                     "fallback_used": False,
                     "fallback_reason": None,
                     "sources": items,
+                    "bypass": instantanea,
                 }
 
             if self.agentic_loop is not None:
@@ -242,6 +252,7 @@ class CoreGraph:
                 "fallback_used": incumplio_citas,
                 "fallback_reason": "citation" if incumplio_citas else None,
                 "sources": citables,
+                "bypass": instantanea,
             }
 
         async def fallback_node(state: CoreGraphState) -> dict:
@@ -345,6 +356,7 @@ class CoreGraph:
         chatbot_id: str,
         history: list[str] | None = None,
         debug_bypass: bool = False,
+        capture_context: bool = False,
     ) -> dict:
         """Ejecuta el grafo y devuelve el estado final."""
         compiled = self.compile()
@@ -355,6 +367,7 @@ class CoreGraph:
             "history": list(history or []),
             "rewritten_query": None,
             "debug_bypass": debug_bypass,
+            "capture_context": capture_context,
             "bypass": None,
             "retrieval_output": None,
             "merged_items": [],

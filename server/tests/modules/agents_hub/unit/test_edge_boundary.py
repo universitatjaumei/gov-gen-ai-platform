@@ -46,6 +46,11 @@ def test_operational_base_contains_only_operational_models() -> None:
         "hub_workspace_audit_events",  # 9R.5.x — auditoría de workspace
         # Bloque 9Q.1 — hallazgos de calidad de contenido
         "hub_content_findings",
+        # RAG.13 — escenarios de prueba y su veredicto humano. Operacionales y no de
+        # configuración: son las pruebas del cliente sobre su propio corpus, con sus
+        # consultas reales dentro, así que no salen del edge.
+        "hub_test_scenarios",
+        "hub_test_runs",
     }
 
 def test_no_cross_base_relationships() -> None:
