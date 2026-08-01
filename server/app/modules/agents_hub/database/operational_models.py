@@ -8,6 +8,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Computed,
     Date,
     DateTime,
     Float,
@@ -18,7 +19,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -296,6 +297,8 @@ class HubDocumentChunk(HubOperationalBase):
             postgresql_using="hnsw",
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
+        # Indice de la rama lexica del hibrido (RAG.4).
+        Index("ix_hub_document_chunks_tsv", "tsv", postgresql_using="gin"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -317,6 +320,27 @@ class HubDocumentChunk(HubOperationalBase):
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
     chunk_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     language: Mapped[str] = mapped_column(String(10), nullable=False)
+    # --- Rama lexica del hibrido (RAG.4) ---
+    # Puente bilingue del dominio ('despesa/gasto'), copiado del documento en la ingesta.
+    # Se DENORMALIZA aqui porque una columna generada solo puede referirse a su propia fila,
+    # y los terminos viven en hub_documents.doc_metadata. Refrescarlos cuando cambien es un
+    # UPDATE con JOIN, no un re-embedding: el invariante de CLAUDE.md §5 se conserva.
+    # Aqui va SOLO el puente lexico; la taxonomia (ambit/submateries) no entra jamas.
+    bilingual_terms: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # `simple` para todo lo que no sea castellano: PostgreSQL core no trae stemmer catalan,
+    # asi que en catalan se busca por forma exacta. Un diccionario Snowball catalan seria
+    # mejora de despliegue, no de codigo.
+    tsv: Mapped[str | None] = mapped_column(
+        TSVECTOR,
+        Computed(
+            "to_tsvector("
+            "CASE WHEN language = 'es' THEN 'spanish'::regconfig "
+            "ELSE 'simple'::regconfig END, "
+            "coalesce(content, '') || ' ' || coalesce(bilingual_terms, ''))",
+            persisted=True,
+        ),
+        nullable=True,
+    )
     is_temporary: Mapped[bool] = mapped_column(Boolean, default=False)
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True, index=True

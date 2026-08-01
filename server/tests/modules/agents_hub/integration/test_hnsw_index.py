@@ -30,6 +30,9 @@ _SERVER_ROOT = Path(__file__).parent.parent.parent.parent.parent
 
 INDICE_CHUNKS = "ix_hub_document_chunks_embedding_hnsw"
 INDICE_PAGINAS = "ix_hub_crawled_pages_embedding_hnsw"
+# `down_revision` de e2n3o4p5q6r7 (RAG.3). Explícito para que el test siga probando lo suyo
+# cuando se apilen migraciones nuevas encima.
+REVISION_ANTES_DE_HNSW = "d1m2n3o4p5q6"
 
 
 def _vector(*componentes: tuple[int, float]) -> list[float]:
@@ -133,11 +136,16 @@ class TestEquivalenciaConElEscaneoExacto:
 class TestMigracion:
 
     def test_should_apply_and_rollback_migration_cleanly(self, fresh_database: str) -> None:
-        """La migración crea los dos índices y el downgrade los retira sin residuos."""
+        """La migración crea los dos índices y el downgrade los retira sin residuos.
+
+        Se baja a la revisión ANTERIOR a la de HNSW por su id, no con `-1`: con `-1` el test
+        daba por hecho que esta migración era la cabeza, y se rompió en cuanto RAG.4 añadió
+        la suya encima —bajaba una revisión que no tenía nada que ver con estos índices—.
+        """
         _alembic(fresh_database, "upgrade", "head")
         assert _indices(fresh_database) == {INDICE_CHUNKS, INDICE_PAGINAS}
 
-        _alembic(fresh_database, "downgrade", "-1")
+        _alembic(fresh_database, "downgrade", REVISION_ANTES_DE_HNSW)
         assert _indices(fresh_database) == set()
 
         _alembic(fresh_database, "upgrade", "head")

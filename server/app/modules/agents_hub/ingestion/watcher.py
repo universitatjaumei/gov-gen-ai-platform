@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.modules.agents_hub.agent.language_detector import detect_language
+from server.app.modules.agents_hub.ingestion.bilingual_bridge import terminos_bilingues
 from server.app.modules.agents_hub.database.operational_models import (
     HubDocument,
     HubDocumentChunk,
@@ -198,6 +199,7 @@ class IngestionWatcher:
                 "source_url": doc.canonical_url,
             },
         )
+        terminos = terminos_bilingues(doc)
         for ch in chunks:
             embedding = await self._embedding.embed(ch.content)
             self._session.add(HubDocumentChunk(
@@ -209,6 +211,7 @@ class IngestionWatcher:
                 embedding=embedding,
                 chunk_metadata={**ch.metadata, "document_id": str(doc.id)},
                 language=doc.language,
+                bilingual_terms=terminos,
             ))
         return len(chunks)
 

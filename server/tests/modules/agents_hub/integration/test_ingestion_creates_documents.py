@@ -8,6 +8,7 @@ Verifica el contrato del Prompt 9CBis.8:
 """
 import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -241,3 +242,76 @@ class TestMarkdownUtils:
         from server.app.modules.agents_hub.ingestion.markdown_utils import estimate_tokens
         content = "A" * 400
         assert estimate_tokens(content) == 100
+
+
+@pytest.mark.asyncio
+class TestPuenteBilingueEnLaIngesta:
+    """RAG.4: el puente léxico lo copia la ingesta del documento al chunk.
+
+    Se prueba aparte del `tsvector` porque son dos fallos distintos y con síntomas
+    distintos: si el puente no se copia, la búsqueda no revienta — deja de encontrar
+    'despesa' en silencio, que es la peor forma de fallar.
+    """
+
+    async def test_should_derive_bilingual_terms_from_document_metadata(self):
+        from server.app.modules.agents_hub.ingestion.bilingual_bridge import (
+            terminos_bilingues,
+        )
+
+        doc = SimpleNamespace(
+            doc_metadata={"termes_bilingues": ["despesa/gasto", "dieta"]}
+        )
+
+        # La barra no la entiende el parser de full-text: lo que hace de puente es que
+        # ambas formas queden indexadas como palabras sueltas.
+        assert terminos_bilingues(doc) == "despesa gasto dieta"
+
+    async def test_should_return_none_when_document_declares_no_pairs(self):
+        from server.app.modules.agents_hub.ingestion.bilingual_bridge import (
+            terminos_bilingues,
+        )
+
+        assert terminos_bilingues(SimpleNamespace(doc_metadata={})) is None
+        assert terminos_bilingues(SimpleNamespace(doc_metadata=None)) is None
+        assert terminos_bilingues(
+            SimpleNamespace(doc_metadata={"termes_bilingues": "no-es-una-lista"})
+        ) is None
+
+    async def test_should_write_bilingual_terms_when_chunking_a_labelled_document(self):
+        """Reingesta de un documento que YA tiene los pares: el chunk nace con el puente."""
+        from server.app.modules.agents_hub.database.operational_models import (
+            HubDocument,
+            HubDocumentChunk,
+        )
+        from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+
+        session = _make_session_for_new_doc()
+        embedding_svc = AsyncMock()
+        embedding_svc.embed = AsyncMock(return_value=[0.1] * 1024)
+        watcher = IngestionWatcher(
+            session=session,
+            embedding_service=embedding_svc,
+            chatbot_provider=_make_chatbot_provider("RAG"),
+        )
+
+        doc = HubDocument(
+            id=uuid.uuid4(),
+            chatbot_id=uuid.uuid4(),
+            title="Norma",
+            canonical_url="https://ej.com/norma.pdf",
+            markdown_content="# Norma\n\nLa ejecucion del gasto se autoriza.",
+            content_hash="h" * 64,
+            language="es",
+            source_kind="publicacio",
+            doc_metadata={"termes_bilingues": ["despesa/gasto"]},
+        )
+
+        await watcher._regenerate_chunks_for_document(doc)
+
+        chunks = [
+            c.args[0]
+            for c in session.add.call_args_list
+            if isinstance(c.args[0], HubDocumentChunk)
+        ]
+        assert chunks, "no se creo ningun chunk"
+        assert all(c.bilingual_terms == "despesa gasto" for c in chunks)

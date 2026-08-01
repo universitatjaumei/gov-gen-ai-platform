@@ -28,6 +28,9 @@ from server.app.modules.agents_hub.database.operational_models import (
     HubDocument,
     HubIngestionJob,
 )
+from server.app.modules.agents_hub.ingestion.bilingual_bridge import (
+    refrescar_puente_bilingue,
+)
 from server.app.modules.agents_hub.ingestion.corpus.frontmatter import hash_markdown_body
 from server.app.modules.agents_hub.ingestion.corpus.manifest import CorpusDocumentEntry
 from server.app.modules.agents_hub.ingestion.corpus.source import CorpusSource
@@ -205,6 +208,10 @@ class CorpusReconciler:
                 informe.detalle.append(f"= {entry.relative_path} (metadatos)")
                 if not dry_run:
                     _aplicar(existente, entry, title)
+                    # El puente bilingüe vive denormalizado en los chunks (RAG.4). Aquí es
+                    # donde se ve que reetiquetar cuesta un UPDATE: ni se trocea ni se
+                    # embebe de nuevo.
+                    await refrescar_puente_bilingue(self._session, existente)
             else:
                 informe.omitidos += 1
 
@@ -258,6 +265,10 @@ class CorpusReconciler:
         # Los metadatos se aplican aquí y no en el watcher: el watcher es la tubería
         # compartida con el crawler y no tiene por qué conocer el contrato del corpus.
         _aplicar(doc, entry, title)
+        # Y por eso mismo hay que refrescar el puente bilingüe después: al trocear, el
+        # documento todavía no tenía `termes_bilingues`, así que los chunks nacieron sin él.
+        await self._session.flush()
+        await refrescar_puente_bilingue(self._session, doc)
         doc.last_seen_at = datetime.now(timezone.utc)
         return doc
 

@@ -12,7 +12,7 @@ sin documentos con `us_assistents='no'`. El defecto es el cerrado.
 import uuid
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.modules.agents_hub.database.operational_models import (
@@ -20,6 +20,17 @@ from server.app.modules.agents_hub.database.operational_models import (
     HubDocumentChunk,
 )
 from server.app.modules.agents_hub.services.retrieval.metadata_filter import MetadataFilter
+
+
+def _fts_config(language: str | None) -> str:
+    """Configuración de full-text search para un idioma.
+
+    Solo el castellano tiene stemmer en PostgreSQL core; el catalán no, así que va con
+    `simple` y se busca por forma exacta de la palabra. Cuando no se filtra por idioma
+    también manda `simple`: la consulta es una sola y no puede tener dos configuraciones a
+    la vez, y stemmizar en español un corpus mixto produce falsos positivos silenciosos.
+    """
+    return "spanish" if language == "es" else "simple"
 
 
 @dataclass
@@ -90,30 +101,49 @@ class HybridRetriever:
         owner_id: uuid.UUID | None = None,
         metadata_filter: MetadataFilter | None = None,
     ) -> list[SearchResult]:
+        """Full-text search de PostgreSQL sobre la columna generada `tsv` (RAG.4).
+
+        `websearch_to_tsquery` y no `plainto_tsquery`: acepta la sintaxis que el usuario ya
+        conoce de un buscador (comillas para frase exacta, `or`, `-`) y no revienta con
+        entradas raras, que es lo que se recibe de un chat.
+
+        El score es `ts_rank_cd` **normalizado dividiendo por el maximo del lote**, para que
+        quede en [0,1] como el de la rama vectorial. Es normalizacion relativa a la consulta,
+        no absoluta: el mejor resultado de cada busqueda vale 1.0. A la fusion RRF le da
+        igual —solo mira el orden— pero quien lea el score sabra que compara dentro del lote.
+        """
+        config = _fts_config(language)
+        tsquery = func.websearch_to_tsquery(config, query)
+        rank = func.ts_rank_cd(HubDocumentChunk.tsv, tsquery)
+
         filters = [
             HubDocumentChunk.chatbot_id == chatbot_id,
             (~HubDocumentChunk.is_temporary)
             | (HubDocumentChunk.owner_id == owner_id),
+            HubDocumentChunk.tsv.op("@@")(tsquery),
         ]
-        for word in query.split():
-            filters.append(HubDocumentChunk.content.ilike(f"%{word}%"))
         if language:
             filters.append(HubDocumentChunk.language == language)
 
         stmt = self._with_metadata_filter(
-            select(HubDocumentChunk).where(*filters), metadata_filter
-        ).limit(top_k)
-        result = await self.session.execute(stmt)
+            select(HubDocumentChunk, rank.label("rank")).where(*filters), metadata_filter
+        )
+        stmt = stmt.order_by(rank.desc()).limit(top_k)
+
+        filas = (await self.session.execute(stmt)).all()
+        if not filas:
+            return []
+        maximo = max(float(fila.rank) for fila in filas) or 1.0
         return [
             SearchResult(
-                id=c.id,
-                content=c.content,
-                source_url=c.source_url,
-                language=c.language,
-                score=1.0,
-                metadata=c.chunk_metadata or {},
+                id=fila.HubDocumentChunk.id,
+                content=fila.HubDocumentChunk.content,
+                source_url=fila.HubDocumentChunk.source_url,
+                language=fila.HubDocumentChunk.language,
+                score=float(fila.rank) / maximo,
+                metadata=fila.HubDocumentChunk.chunk_metadata or {},
             )
-            for c in result.scalars().all()
+            for fila in filas
         ]
 
     async def hybrid_search(
