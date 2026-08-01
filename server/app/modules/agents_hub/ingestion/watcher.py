@@ -6,7 +6,7 @@ import tempfile
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
@@ -31,7 +31,29 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddingService(Protocol):
+    model_name: str
+    dimensions: int
+
     async def embed(self, text: str) -> list[float]: ...
+
+
+def _procedencia(embedding_service: Any) -> tuple[str, int]:
+    """Modelo y dimension del servicio, o error explicito (RAG.9).
+
+    Antes esto era un `getattr(..., None)` y escribia NULL cuando el servicio no lo
+    declaraba, que es exactamente el vector anonimo que la columna vino a impedir. Ahora
+    la columna es NOT NULL, asi que sin esto el sintoma seria un NotNullViolation de
+    Postgres en mitad de una ingesta, sin decir cual de los dos datos falta ni de quien.
+    """
+    modelo = getattr(embedding_service, "model_name", None)
+    dimension = getattr(embedding_service, "dimensions", None)
+    if not modelo or not dimension:
+        raise ValueError(
+            f"El servicio de embeddings {type(embedding_service).__name__} no declara "
+            "`model_name` y `dimensions`, y sin ellos el vector queda sin procedencia: "
+            "cambiar de modelo dejaria de ser detectable."
+        )
+    return str(modelo), int(dimension)
 
 
 class StorageService(Protocol):
@@ -242,8 +264,7 @@ class IngestionWatcher:
         terminos = terminos_bilingues(doc)
         # MOD.1: la procedencia se graba CON el vector. Sin ella, cambiar de modelo es una
         # avería silenciosa; con ella, `assert_embedding_space_matches` puede detectarla.
-        modelo = getattr(self._embedding, "model_name", None)
-        dimension = getattr(self._embedding, "dimensions", None)
+        modelo, dimension = _procedencia(self._embedding)
         # RAG.7: se embebe `embedding_text` —jerarquía + contenido—, no el contenido crudo.
         # Y por LOTES cuando el servicio lo soporta: el watcher iba chunk a chunk, o sea una
         # llamada por fragmento, que con un proveedor por API es una ida y vuelta de red por
@@ -262,6 +283,9 @@ class IngestionWatcher:
                 bilingual_terms=terminos,
                 embedding_model=modelo,
                 embedding_dim=dimension,
+                # RAG.9: se guarda el texto que se embebio, no solo el que se muestra. Es lo
+                # que permite que un re-embed produzca el mismo vector que produjo la ingesta.
+                embedding_text=ch.embedding_text,
                 parent_content=ch.parent_content or None,
             ))
         return len(chunks)
@@ -281,8 +305,15 @@ class IngestionWatcher:
         chunks = self.chunker.split(content, metadata={"source_url": source_url})
         created_chunks = []
 
-        for chunk in chunks:
-            embedding = await self._embedding.embed(chunk.content)
+        # RAG.9: los adjuntos caen en la MISMA tabla y se buscan junto al corpus, asi que
+        # tienen que embeberse igual —`embedding_text`, no `content`— y declarar su
+        # procedencia. Hacian ninguna de las dos cosas: mientras la columna fue opcional el
+        # hueco era invisible, y el vector de un adjunto salia de un texto distinto del que
+        # habria salido si el mismo documento hubiera entrado por la ingesta normal.
+        modelo, dimension = _procedencia(self._embedding)
+        vectores = await self._embed_en_lote([ch.embedding_text for ch in chunks])
+
+        for chunk, embedding in zip(chunks, vectores):
             db_chunk = HubDocumentChunk(
                 chatbot_id=chatbot_id,
                 content=chunk.content,
@@ -291,6 +322,9 @@ class IngestionWatcher:
                 embedding=embedding,
                 chunk_metadata=chunk.metadata,
                 language=language,
+                embedding_model=modelo,
+                embedding_dim=dimension,
+                embedding_text=chunk.embedding_text,
                 is_temporary=True,
                 owner_id=owner_id,
             )

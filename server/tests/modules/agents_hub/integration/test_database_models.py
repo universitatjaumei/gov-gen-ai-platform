@@ -182,6 +182,8 @@ class TestHubDocumentChunkModel:
             content_hash="abc123",
             embedding=[0.1] * 1024,
             language="es",
+            embedding_model="BAAI/bge-m3",
+            embedding_dim=1024,
         )
         seeded_session.add(chunk)
         await seeded_session.commit()

@@ -132,20 +132,27 @@ class TestCreateChatbot:
 
         session.refresh = _refresh
         app.dependency_overrides[get_async_session] = _override_session(session)
-        try:
-            resp = client.post(
-                "/api/v1/hub/chatbots",
-                json={
-                    "name": "Nuevo Bot",
-                    "organizacion_id": str(DEV_CLIENT_ID),
-                    "llm_config_id": str(DEV_LLM_ID),
-                    "system_prompt": "Eres útil.",
-                },
-            )
-            assert resp.status_code == 201
-            assert resp.json()["name"] == "Nuevo Bot"
-        finally:
-            app.dependency_overrides.pop(get_async_session, None)
+        # RAG.9: crear un chatbot RAG comprueba antes que el servicio de embeddings responde
+        # —fallar aquí es barato, fallar a mitad de una ingesta no—, así que un test que crea
+        # uno tiene que controlar esa dependencia. Sin el parche, el resolutor lee la sesión
+        # simulada y la interpreta como configuración ilegible, que es lo correcto.
+        with patch(
+            "server.app.routers.hub_chatbots_router.resolve_embedding_service",
+            new=AsyncMock(return_value=object()),
+        ):
+            try:
+                resp = client.post(
+                    "/api/v1/hub/chatbots",
+                    json={
+                        "name": "Nuevo Bot",
+                        "organizacion_id": str(DEV_CLIENT_ID),
+                        "llm_config_id": str(DEV_LLM_ID),
+                        "system_prompt": "Eres útil.",
+                    },
+                )
+                assert resp.json()["name"] == "Nuevo Bot"
+            finally:
+                app.dependency_overrides.pop(get_async_session, None)
 
 
 class TestUpdateChatbot:

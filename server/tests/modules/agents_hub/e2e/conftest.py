@@ -110,6 +110,8 @@ async def setup_chatbot(db_session):
         content_hash=hash_content(content),
         embedding=[0.1] * 1024,
         language="es",
+        embedding_model="BAAI/bge-m3",
+        embedding_dim=1024,
     )
     db_session.add(chunk)
     await db_session.commit()

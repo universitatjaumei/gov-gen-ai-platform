@@ -358,11 +358,13 @@ class TestRouterBeforeGraph:
 
         cap = _SesionCapturadora(padre)
         session = cap._mock()
-        # 1ª consulta: el padre; 2ª: el hijo seleccionado.
-        primera, segunda = MagicMock(), MagicMock()
+        # 1ª consulta: el padre; 2ª: la guarda de espacio vectorial (RAG.9), que ve un corpus
+        # vacío y no bloquea; 3ª: el hijo seleccionado.
+        primera, espacio, segunda = MagicMock(), MagicMock(), MagicMock()
         primera.scalar_one_or_none = MagicMock(return_value=padre)
+        espacio.all = MagicMock(return_value=[])
         segunda.scalar_one_or_none = MagicMock(return_value=hijo)
-        session.execute = AsyncMock(side_effect=[primera, segunda])
+        session.execute = AsyncMock(side_effect=[primera, espacio, segunda])
 
         grafo = _grafo_mock(_eventos())
         app = _app(session)

@@ -92,6 +92,8 @@ class TestRAGPipeline:
                     content_hash=hash_content(chunk.content),
                     embedding=[0.1 + i * 0.01] * 1024,
                     language="es",
+                    embedding_model="BAAI/bge-m3",
+                    embedding_dim=1024,
                 )
                 session.add(db_chunk)
 

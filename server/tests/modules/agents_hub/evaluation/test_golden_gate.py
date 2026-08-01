@@ -36,6 +36,9 @@ class DeterministicEmbedding:
     """
 
     DIM = 1024
+    # RAG.9: procedencia obligatoria. El dorado ingiere por el watcher, que la exige.
+    model_name = "test/deterministic-bow"
+    dimensions = DIM
 
     async def embed(self, text: str) -> list[float]:
         vector = [0.0] * self.DIM

@@ -20,6 +20,11 @@ from sqlalchemy import func, select
 
 
 class _FakeEmbedding:
+    # RAG.9: la procedencia es NOT NULL, así que un doble sin declararla ya no representa
+    # a ningún servicio real — el watcher lo rechaza antes de escribir un vector anónimo.
+    model_name = "BAAI/bge-m3"
+    dimensions = 1024
+
     def __init__(self) -> None:
         self.llamadas = 0
 

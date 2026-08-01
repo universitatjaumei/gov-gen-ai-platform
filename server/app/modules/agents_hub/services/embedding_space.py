@@ -27,16 +27,16 @@ async def describe_corpus_embedding_space(
 ) -> set[tuple[str, int]]:
     """Pares (modelo, dimensión) presentes en los chunks del chatbot.
 
-    Los chunks sin procedencia —los anteriores a MOD.1— no entran: no se puede exigir un
-    dato que no existía, y bloquear por eso convertiría una mejora en migración forzosa.
+    RAG.9 corre esto en cada consulta de chat, y lo hace asequible el índice
+    `ix_hub_document_chunks_embedding_space`, que cubre exactamente estas tres columnas: el
+    caso bueno —no hay desajuste— se resuelve sin tocar el heap.
     """
     filas = await session.execute(
         select(HubDocumentChunk.embedding_model, HubDocumentChunk.embedding_dim)
         .where(HubDocumentChunk.chatbot_id == chatbot_id)
-        .where(HubDocumentChunk.embedding_model.isnot(None))
         .distinct()
     )
-    return {(modelo, int(dim or 0)) for modelo, dim in filas.all()}
+    return {(modelo, int(dim)) for modelo, dim in filas.all()}
 
 
 async def assert_embedding_space_matches(

@@ -226,22 +226,3 @@ class TestProcedenciaDelVector:
             dimensions = 1024
 
         await assert_embedding_space_matches(db_session, cb, _Servicio())  # no lanza
-
-    @pytest.mark.asyncio
-    async def test_should_accept_a_corpus_without_provenance_yet(self, db_session):
-        """Los chunks anteriores a MOD.1 no declaran modelo. No se les puede exigir, y
-        bloquear por eso convertiría una mejora en una migración forzosa."""
-        from server.app.modules.agents_hub.services.embedding_space import (
-            assert_embedding_space_matches,
-        )
-
-        cb = uuid.uuid4()
-        doc = await _documento(db_session, cb)
-        await _chunk(db_session, cb, doc, "Texto legado")
-        await db_session.commit()
-
-        class _Servicio:
-            model_name = "BAAI/bge-m3"
-            dimensions = 1024
-
-        await assert_embedding_space_matches(db_session, cb, _Servicio())  # no lanza

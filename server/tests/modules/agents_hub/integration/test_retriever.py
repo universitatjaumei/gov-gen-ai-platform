@@ -44,6 +44,8 @@ async def populated_session(db_session):
                 content_hash="h1",
                 embedding=[0.1] * 1024,
                 language="es",
+                embedding_model="BAAI/bge-m3",
+                embedding_dim=1024,
             ),
             HubDocumentChunk(
                 chatbot_id=chatbot.id,
@@ -52,6 +54,8 @@ async def populated_session(db_session):
                 content_hash="h2",
                 embedding=[0.9] * 1024,
                 language="es",
+                embedding_model="BAAI/bge-m3",
+                embedding_dim=1024,
             ),
         ]
         session.add_all(chunks)

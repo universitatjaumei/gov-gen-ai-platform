@@ -131,6 +131,8 @@ class TestForeignKeyDeChunks:
             source_url="https://www.uji.es/norma",
             content_hash=uuid.uuid4().hex,
             language="ca",
+            embedding_model=kw.pop("embedding_model", "BAAI/bge-m3"),
+            embedding_dim=kw.pop("embedding_dim", 1024),
             **kw,
         )
         session.add(chunk)
@@ -300,6 +302,8 @@ class TestReclasificacion:
             content_hash=uuid.uuid4().hex,
             language="ca",
             embedding=[0.5] * 1024,
+            embedding_model="BAAI/bge-m3",
+            embedding_dim=1024,
         )
         db_session.add(chunk)
         await db_session.commit()

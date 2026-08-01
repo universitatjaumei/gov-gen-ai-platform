@@ -169,6 +169,21 @@ async def create_chatbot(
     _: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
+    # RAG.9: fallar al crear es barato; fallar a mitad de una ingesta de miles de documentos
+    # no. Solo en modo RAG: los otros dos no embeben nada, y exigirles un servicio operativo
+    # sería inventarles un requisito que no tienen.
+    if body.retrieval_mode == "RAG":
+        try:
+            await resolve_embedding_service(session)
+        except Exception as fallo:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "El servicio de embeddings configurado no está operativo, y un chatbot "
+                    f"en modo RAG no puede ingerir nada sin él: {fallo}"
+                ),
+            ) from fallo
+
     chatbot = HubChatbot(
         organizacion_id=body.organizacion_id,
         llm_config_id=body.llm_config_id,

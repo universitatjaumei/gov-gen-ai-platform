@@ -38,6 +38,10 @@ from server.app.modules.agents_hub.services.config_provider import LocalConfigPr
 from server.app.modules.agents_hub.services.embedding_resolver import (
     resolve_embedding_service,
 )
+from server.app.modules.agents_hub.services.embedding_space import (
+    EmbeddingSpaceMismatch,
+    assert_embedding_space_matches,
+)
 from server.app.modules.agents_hub.services.model_factory import get_model
 from server.app.modules.agents_hub.services.observability import create_callback_handler
 
@@ -142,6 +146,18 @@ async def chat_stream(
         )
 
     embedding_service = await resolve_embedding_service(session, chatbot_id)
+
+    # RAG.9: parar antes que responder mal. Si el corpus está embebido con otro modelo, la
+    # búsqueda vectorial devuelve las fuentes más parecidas *en un espacio que no es el
+    # suyo*: normas que no vienen a cuento sosteniendo una respuesta que suena razonable.
+    # No hay error que ver, y en un asistente normativo esa es la avería cara.
+    try:
+        await assert_embedding_space_matches(session, chatbot_id, embedding_service)
+    except EmbeddingSpaceMismatch as desajuste:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(desajuste)
+        ) from desajuste
+
     config_provider = LocalConfigProvider(session)
 
     router_status_message: str | None = None

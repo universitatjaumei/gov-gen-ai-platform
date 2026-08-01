@@ -25,6 +25,24 @@ from langchain_core.messages import AIMessage
 from sqlalchemy import select
 
 
+class _ServicioDelCorpus:
+    """El mismo modelo con el que la fixture embebió los chunks (RAG.9).
+
+    Sin esto, el doble era un `AsyncMock` pelado cuyo `model_name` es otro mock, así que la
+    guarda de espacio vectorial veía un desajuste real y devolvía 409. Que estos E2E tengan
+    que declararlo es la señal de que la guarda está de verdad en el camino de la consulta.
+    """
+
+    model_name = "BAAI/bge-m3"
+    dimensions = 1024
+
+    async def embed(self, text: str) -> list[float]:
+        return [0.1] * 1024
+
+
+_SERVICIO_DEL_CORPUS = _ServicioDelCorpus()
+
+
 def _parse_sse_lines(lines: list[str]) -> list[tuple[str, dict]]:
     """Parsea líneas SSE y devuelve lista de (event_name, payload)."""
     events: list[tuple[str, dict]] = []
@@ -85,7 +103,8 @@ class TestChatFlowE2E:
         with (
             patch("server.app.api.v1.hub_chat.GraphFactory",
                   return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
-            patch("server.app.api.v1.hub_chat.resolve_embedding_service", new_callable=AsyncMock),
+            patch("server.app.api.v1.hub_chat.resolve_embedding_service",
+                  new=AsyncMock(return_value=_SERVICIO_DEL_CORPUS)),
         ):
             async with AsyncClient(
                 transport=ASGITransport(app=test_app), base_url="http://test"
@@ -144,7 +163,8 @@ class TestChatFlowE2E:
         with (
             patch("server.app.api.v1.hub_chat.GraphFactory",
                   return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
-            patch("server.app.api.v1.hub_chat.resolve_embedding_service", new_callable=AsyncMock),
+            patch("server.app.api.v1.hub_chat.resolve_embedding_service",
+                  new=AsyncMock(return_value=_SERVICIO_DEL_CORPUS)),
         ):
             async with AsyncClient(
                 transport=ASGITransport(app=test_app), base_url="http://test"
@@ -208,7 +228,8 @@ class TestExportFlowE2E:
         with (
             patch("server.app.api.v1.hub_chat.GraphFactory",
                   return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
-            patch("server.app.api.v1.hub_chat.resolve_embedding_service", new_callable=AsyncMock),
+            patch("server.app.api.v1.hub_chat.resolve_embedding_service",
+                  new=AsyncMock(return_value=_SERVICIO_DEL_CORPUS)),
         ):
             async with AsyncClient(
                 transport=ASGITransport(app=test_app), base_url="http://test"
@@ -273,7 +294,8 @@ class TestExportFlowE2E:
         with (
             patch("server.app.api.v1.hub_chat.GraphFactory",
                   return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
-            patch("server.app.api.v1.hub_chat.resolve_embedding_service", new_callable=AsyncMock),
+            patch("server.app.api.v1.hub_chat.resolve_embedding_service",
+                  new=AsyncMock(return_value=_SERVICIO_DEL_CORPUS)),
         ):
             async with AsyncClient(
                 transport=ASGITransport(app=test_app), base_url="http://test"

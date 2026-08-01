@@ -299,6 +299,17 @@ class HubDocumentChunk(HubOperationalBase):
         ),
         # Indice de la rama lexica del hibrido (RAG.4).
         Index("ix_hub_document_chunks_tsv", "tsv", postgresql_using="gin"),
+        # RAG.9: la guarda de espacio vectorial corre en CADA consulta de chat, y su pregunta
+        # —"que pares (modelo, dimension) hay en este chatbot"— es un DISTINCT sobre todos los
+        # chunks del chatbot. Con este indice es un recorrido solo-indice de entradas
+        # estrechas; sin el, el caso bueno (no hay desajuste) obliga a leer el heap entero
+        # por pregunta, que es la forma mas cara posible de responder "no pasa nada".
+        Index(
+            "ix_hub_document_chunks_embedding_space",
+            "chatbot_id",
+            "embedding_model",
+            "embedding_dim",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -327,13 +338,21 @@ class HubDocumentChunk(HubOperationalBase):
     # Columna directa y no JOIN: el padre ya existe como texto y duplicarlo cuesta menos que
     # una tabla de secciones que habria que mantener sincronizada con el troceado.
     parent_content: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # --- Procedencia del vector (MOD.1) ---
+    # --- Procedencia del vector (MOD.1, obligatoria desde RAG.9) ---
     # Con que modelo y a que dimension se genero `embedding`. Misma dimension NO significa
     # mismo espacio vectorial: el coseno entre vectores de dos modelos distintos no da error,
     # da resultados malos. Sin esto, cambiar de modelo es una averia silenciosa.
-    # NULL en los chunks anteriores a MOD.1, y eso no bloquea nada: se trata como desconocido.
-    embedding_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    embedding_dim: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # NOT NULL tras el backfill de RAG.9: mientras existieron filas sin procedencia habia que
+    # tratarlas como desconocidas, y "desconocido" es el hueco por el que se cuela justo la
+    # averia que la columna vino a impedir. Rellenables => obligatorias.
+    embedding_model: Mapped[str] = mapped_column(String(255), nullable=False)
+    embedding_dim: Mapped[int] = mapped_column(Integer, nullable=False)
+    # El texto que SE EMBEBIO, que desde RAG.7 no es `content`: lleva delante titulo y
+    # jerarquia. Se guarda para que re-embeber sea fiel — reconstruirlo desde `content`
+    # produciria vectores que la ingesta nunca genero, y la incoherencia no daria error.
+    # NULL en los chunks anteriores a RAG.9: no se puede reconstruir, asi que la CLI de
+    # re-embedding los cuenta aparte y remite a `recalculate-corpus`, que si re-trocea.
+    embedding_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     # --- Rama lexica del hibrido (RAG.4) ---
     # Puente bilingue del dominio ('despesa/gasto'), copiado del documento en la ingesta.
     # Se DENORMALIZA aqui porque una columna generada solo puede referirse a su propia fila,

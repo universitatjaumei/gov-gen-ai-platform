@@ -35,6 +35,9 @@ l'annex II d'aquest reglament, actualitzats anualment per acord del Consell de G
 
 
 class _Emb:
+    model_name = "BAAI/bge-m3"
+    dimensions = 1024
+
     async def embed(self, text: str):
         return _emb(0)
 
@@ -154,6 +157,7 @@ class TestRecuperacion:
                 parent_content="Article 7. Import i justificacio. TEXTO COMPLETO DE LA SECCION.",
                 source_url=doc.canonical_url, content_hash=uuid.uuid4().hex * 2,
                 embedding=_emb(0), language="ca", chunk_metadata={},
+                embedding_model="BAAI/bge-m3", embedding_dim=1024,
             )
         )
         await db_session.commit()
@@ -183,6 +187,7 @@ class TestRecuperacion:
                     chatbot_id=cb, document_id=doc.id, content=texto, parent_content=padre,
                     source_url=doc.canonical_url, content_hash=uuid.uuid4().hex * 2,
                     embedding=_emb(0), language="ca", chunk_metadata={},
+                    embedding_model="BAAI/bge-m3", embedding_dim=1024,
                 )
             )
         await db_session.commit()

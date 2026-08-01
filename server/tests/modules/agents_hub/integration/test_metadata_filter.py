@@ -56,6 +56,11 @@ async def _chunk(session, chatbot_id: uuid.UUID, doc, content: str, embedding=No
         embedding=embedding if embedding is not None else _emb(0),
         chunk_metadata={"document_id": str(doc.id)} if doc is not None else {},
         language=kwargs.pop("language", "ca"),
+        # RAG.9: la procedencia es NOT NULL. Por defecto, la del servicio local, que es de
+        # donde salió todo el corpus real hasta MOD.2; los tests que prueban el desajuste la
+        # pisan explícitamente, que es justo lo que se quiere leer en ellos.
+        embedding_model=kwargs.pop("embedding_model", "BAAI/bge-m3"),
+        embedding_dim=kwargs.pop("embedding_dim", 1024),
         **kwargs,
     )
     session.add(chunk)
