@@ -13489,6 +13489,26 @@ espacios vectoriales.
 # PROMPT RAG.6 (RED/GREEN) — Reranker detrás de protocolo, flag por chatbot
 # Deploy: edge
 
+# PRERREQUISITO EXTERNO (2026-08-01) — NO empezar sin esto:
+# El Ranking API vive en **Discovery Engine / Agent Builder**, no en la API de Gemini. Mismo
+# proyecto de GCP y mismo DPA, pero es OTRO servicio que hay que habilitar y con su propia
+# cuota. Pendiente de habilitar a fecha de hoy. Al habilitarlo, comprobar dos cosas en la
+# consola de facturación, porque la documentación pública no las deja cerradas:
+#   1. Precio por consulta vigente (la referencia que se manejó, ~1 $/1.000 consultas, viene
+#      de fuente secundaria: la pagina oficial de precios no se pudo leer).
+#   2. Si aplica el **modelo de suscripción mensual** que Discovery Engine ofrece para apps y
+#      data stores. El Ranking API es STATELESS —no indexa, no hay data store— asi que no
+#      deberia aplicarle, pero es la unica via de coste fijo plausible y hay que confirmarlo.
+#
+# ELECCION DE MODELO, ya cerrada por medicion del codigo: `semantic-ranker-default-004`
+# (1.024 tokens). Las variantes -003 y -002 son de 512 tokens y el chunker produce chunks de
+# 4.000 caracteres (~1.000 tokens): truncarian la mitad de cada chunk.
+#
+# RIESGO ABIERTO que este prompt debe cerrar con datos: Google declara 25 idiomas y NO
+# publica cuales; el catalan no aparece. Si el valenciano no esta, el reranker reordenaria
+# por senales que no entiende y la degradacion seria silenciosa. Se decide con el gate de
+# RAG.1 sobre el dorado en valenciano: dos ejecuciones, con y sin reranker.
+#
 # ENMIENDA (2026-08-01, decisión del usuario — ver docs/DECISION_MODELOS_EMBEDDING_RERANKER.md):
 # **el reranker nace por API, no local.** El prompt original ponía LocalReranker como
 # implementación de referencia; eso añade ~600 MB al contenedor y construye justo el problema
