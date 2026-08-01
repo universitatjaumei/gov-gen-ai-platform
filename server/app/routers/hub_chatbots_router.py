@@ -22,6 +22,10 @@ from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
 from server.app.modules.agents_hub.services.corpus_recalculator import recalculate_corpus
 from server.app.modules.agents_hub.services.corpus_recommender import recommend_retrieval_mode
 from server.app.modules.agents_hub.services.embedding_service import get_embedding_service
+from server.app.modules.agents_hub.services.embedding_space import (
+    EmbeddingSpaceMismatch,
+    assert_embedding_space_matches,
+)
 
 router = APIRouter(prefix="/hub/chatbots", tags=["hub-chatbots"])
 
@@ -317,20 +321,18 @@ async def recalculate_corpus_endpoint(
     chatbot = await _get_chatbot_or_404(session, chatbot_id)
 
     embedding_service = get_embedding_service()
-    current_dimensions = int(getattr(embedding_service, "dimensions", 1024))
-    configured_dimensions = int(
-        getattr(getattr(chatbot, "llm_config", None), "embedding_dimensions", current_dimensions)
-    )
 
-    if configured_dimensions != current_dimensions:
+    # MOD.1: esta guarda existía y NO PODÍA SALTAR. Comparaba `getattr(servicio,
+    # "dimensions", 1024)` con `getattr(llm_config, "embedding_dimensions", 1024)`, y ninguno
+    # de los dos atributos existía: los dos caían al default y la comparación era 1024 !=
+    # 1024. Ahora compara el espacio vectorial REAL del corpus contra el del modelo activo,
+    # que es lo que importa — misma dimensión no significa mismo espacio.
+    try:
+        await assert_embedding_space_matches(session, chatbot_id, embedding_service)
+    except EmbeddingSpaceMismatch as desajuste:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "La dimensión del modelo de embeddings configurado "
-                f"({configured_dimensions}) difiere de la activa ({current_dimensions}). "
-                "Ejecuta la migración de dimensión antes de recalcular."
-            ),
-        )
+            status_code=status.HTTP_409_CONFLICT, detail=str(desajuste)
+        ) from desajuste
 
     documents_processed, chunks_created, chunks_deleted = await recalculate_corpus(
         session=session,

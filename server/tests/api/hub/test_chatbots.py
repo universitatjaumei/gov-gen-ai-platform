@@ -343,22 +343,39 @@ class TestChatbotRetrievalMode:
             finally:
                 app.dependency_overrides.pop(get_async_session, None)
 
-    def test_recalculate_corpus_rejects_dimension_mismatch(self, client):
+    def test_recalculate_corpus_rejects_embedding_space_mismatch(self, client):
+        """El endpoint traduce el desajuste de espacio vectorial a un 409 con su motivo.
+
+        **Este test probaba antes una ficción** (MOD.1): montaba
+        `SimpleNamespace(embedding_dimensions=1536)`, un campo que no existe en `HubLLMConfig`,
+        así que verificaba que la guarda salta con un atributo inventado. Contra el modelo
+        real ese `getattr` caía siempre al default y la guarda no podía dispararse — el test
+        en verde es justo la razón de que nadie lo notara.
+
+        La detección de verdad se prueba contra BD real en `test_embedding_provenance.py`;
+        aquí solo la traducción a HTTP, que es lo que le toca al endpoint.
+        """
+        from server.app.modules.agents_hub.services.embedding_space import (
+            EmbeddingSpaceMismatch,
+        )
+
         chatbot = _make_chatbot()
         chatbot.retrieval_mode = "RAG"
-        chatbot.llm_config = SimpleNamespace(embedding_dimensions=1536)
         session = self._mount_session_for_stats(chatbot)
         app.dependency_overrides[get_async_session] = _override_session(session)
 
-        embedding_service = SimpleNamespace(dimensions=1024)
         with patch(
-            "server.app.routers.hub_chatbots_router.get_embedding_service",
-            return_value=embedding_service,
+            "server.app.routers.hub_chatbots_router.assert_embedding_space_matches",
+            side_effect=EmbeddingSpaceMismatch(
+                "El corpus contiene vectores de BAAI/bge-m3 (1024), y el modelo activo es "
+                "gemini-embedding-001 (1024)."
+            ),
         ):
             try:
                 resp = client.post(f"/api/v1/hub/chatbots/{chatbot.id}/recalculate-corpus")
                 assert resp.status_code == 409
-                assert "dimensión" in resp.json()["detail"]
+                assert "bge-m3" in resp.json()["detail"]
+                assert "gemini-embedding-001" in resp.json()["detail"]
             finally:
                 app.dependency_overrides.pop(get_async_session, None)
 

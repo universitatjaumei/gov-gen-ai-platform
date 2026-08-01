@@ -320,6 +320,13 @@ class HubDocumentChunk(HubOperationalBase):
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
     chunk_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     language: Mapped[str] = mapped_column(String(10), nullable=False)
+    # --- Procedencia del vector (MOD.1) ---
+    # Con que modelo y a que dimension se genero `embedding`. Misma dimension NO significa
+    # mismo espacio vectorial: el coseno entre vectores de dos modelos distintos no da error,
+    # da resultados malos. Sin esto, cambiar de modelo es una averia silenciosa.
+    # NULL en los chunks anteriores a MOD.1, y eso no bloquea nada: se trata como desconocido.
+    embedding_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    embedding_dim: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # --- Rama lexica del hibrido (RAG.4) ---
     # Puente bilingue del dominio ('despesa/gasto'), copiado del documento en la ingesta.
     # Se DENORMALIZA aqui porque una columna generada solo puede referirse a su propia fila,

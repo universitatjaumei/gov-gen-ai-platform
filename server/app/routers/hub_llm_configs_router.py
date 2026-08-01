@@ -1,9 +1,16 @@
-"""CRUD de configuraciones LLM del Hub.
+"""CRUD de configuraciones de modelos del Hub: chat, embeddings y reranking.
+
+MOD.1: la tabla dejó de ser implícitamente de chat. `purpose` distingue los tres usos y
+`output_dimensionality` fija la dimensión que se le pide al proveedor de embeddings. Se
+reutiliza todo lo que ya había —proveedores con su `base_url` y su clave, `available-models`,
+test de conexión— en vez de construir un panel paralelo. Ver
+`docs/DECISION_MODELOS_EMBEDDING_RERANKER.md`.
 
 Deploy: cloud
 """
 import time
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from langchain_core.messages import HumanMessage
@@ -151,6 +158,8 @@ class LLMConfigRead(BaseModel):
     max_tokens: int
     api_key_secret_name: str | None
     tier: int
+    purpose: Literal["chat", "embedding", "rerank"]
+    output_dimensionality: int | None
     label: str
     is_default: bool
 
@@ -165,6 +174,8 @@ class LLMConfigCreate(BaseModel):
     max_tokens: int = 12000
     api_key_secret_name: str | None = None
     tier: int = 1
+    purpose: Literal["chat", "embedding", "rerank"] = "chat"
+    output_dimensionality: int | None = None
     label: str = ""
     is_default: bool = False
 
@@ -172,6 +183,8 @@ class LLMConfigCreate(BaseModel):
 class LLMConfigUpdate(BaseModel):
     label: str | None = None
     tier: int | None = None
+    purpose: Literal["chat", "embedding", "rerank"] | None = None
+    output_dimensionality: int | None = None
     model_name: str | None = None
     api_key_secret_name: str | None = None
     is_default: bool | None = None

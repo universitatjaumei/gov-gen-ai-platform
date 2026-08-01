@@ -1,7 +1,26 @@
-"""Servicio de embeddings vectoriales para búsqueda semántica."""
+"""Servicios de embeddings vectoriales para búsqueda semántica.
+
+MOD.1: los dos servicios declaran `model_name` y `dimensions`. No es decorado — es lo que
+permite grabar la procedencia con cada vector y que la guarda de `recalculate-corpus` pueda
+saltar. Hasta MOD.1 esa guarda leía dos atributos que no existían, caía a los defaults y
+comparaba `1024 != 1024`: estaba escrita y no podía dispararse nunca.
+
+**La plataforma trabaja a 1024 dimensiones.** Es el único valor que sirve a la vez a BGE-M3
+en edge (nativo) y a Google en cloud (rango flexible 128-3072), así que cambiar de proveedor
+no obliga a migrar la columna `Vector(1024)` ni a reconstruir el índice HNSW. Detalle y
+verificación en `docs/DECISION_MODELOS_EMBEDDING_RERANKER.md`.
+"""
 
 import asyncio
+import math
 import os
+
+DIMENSION_PLATAFORMA = 1024
+
+
+def _l2_normalize(vector: list[float]) -> list[float]:
+    norma = math.sqrt(sum(v * v for v in vector))
+    return [v / norma for v in vector] if norma else vector
 
 
 class LocalEmbeddingService:
@@ -9,13 +28,21 @@ class LocalEmbeddingService:
 
     El modelo se descarga desde HuggingFace Hub en la primera llamada (~1.1 GB).
     Las llamadas sucesivas reutilizan los pesos en memoria (singleton).
-    Dimensión de salida: 1024 (dense, L2-normalizado).
+    Dimensión de salida: 1024 (dense, L2-normalizado por el propio modelo).
     """
 
     MODEL_NAME = "BAAI/bge-m3"
 
     def __init__(self) -> None:
         self._model = None
+
+    @property
+    def model_name(self) -> str:
+        return self.MODEL_NAME
+
+    @property
+    def dimensions(self) -> int:
+        return DIMENSION_PLATAFORMA
 
     def _get_model(self):
         if self._model is None:
@@ -31,29 +58,58 @@ class LocalEmbeddingService:
 
 
 class GoogleEmbeddingService:
-    """Genera embeddings usando Google Generative AI (models/text-embedding-004).
+    """Embeddings por API de Google, para el modo cloud.
 
-    Para uso en modo cloud cuando no se dispone de edge local.
-    Dimensión de salida: 768.
+    **Normaliza siempre**, y esa es la decisión que no se puede quitar: la API no normaliza
+    las dimensiones distintas de 3072 —«you must manually normalize non-3072 dimensions»—, y
+    mezclar vectores normalizados y sin normalizar en la misma columna rompe cualquier
+    semántica de score absoluto, como el umbral de RAG.5. Normalizar aquí cuesta tres líneas
+    y deja de depender de una nota al pie que cambia entre versiones del modelo.
     """
 
-    def __init__(self) -> None:
+    MODEL_NAME = "gemini-embedding-001"
+
+    def __init__(
+        self,
+        model_name: str | None = None,
+        output_dimensionality: int = DIMENSION_PLATAFORMA,
+        client=None,
+    ) -> None:
+        self._model_name = model_name or self.MODEL_NAME
+        self._dimensions = output_dimensionality
+        self._client = client if client is not None else self._build_client()
+
+    def _build_client(self):
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-        self._model = GoogleGenerativeAIEmbeddings(
-            model="models/text-embedding-004",
+        return GoogleGenerativeAIEmbeddings(
+            model=f"models/{self._model_name}",
             google_api_key=os.getenv("GOOGLE_API_KEY", ""),
+            output_dimensionality=self._dimensions,
         )
 
+    @property
+    def model_name(self) -> str:
+        return self._model_name
+
+    @property
+    def dimensions(self) -> int:
+        return self._dimensions
+
     async def embed(self, text: str) -> list[float]:
-        return await self._model.aembed_query(text)
+        return _l2_normalize(await self._client.aembed_query(text))
 
 
 _local_service: LocalEmbeddingService | None = None
 
 
 def get_embedding_service() -> LocalEmbeddingService:
-    """Singleton del servicio local — carga el modelo solo en la primera llamada."""
+    """Singleton del servicio local — carga el modelo solo en la primera llamada.
+
+    Sigue devolviendo el local a propósito: la selección por configuración es MOD.2. Cambiar
+    esto aquí, sin la cascada y sin el guardarraíl de espacio vectorial, sería justo el
+    interruptor silencioso que MOD.1 viene a impedir.
+    """
     global _local_service
     if _local_service is None:
         _local_service = LocalEmbeddingService()

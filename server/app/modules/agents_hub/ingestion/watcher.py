@@ -200,6 +200,10 @@ class IngestionWatcher:
             },
         )
         terminos = terminos_bilingues(doc)
+        # MOD.1: la procedencia se graba CON el vector. Sin ella, cambiar de modelo es una
+        # avería silenciosa; con ella, `assert_embedding_space_matches` puede detectarla.
+        modelo = getattr(self._embedding, "model_name", None)
+        dimension = getattr(self._embedding, "dimensions", None)
         for ch in chunks:
             embedding = await self._embedding.embed(ch.content)
             self._session.add(HubDocumentChunk(
@@ -212,6 +216,8 @@ class IngestionWatcher:
                 chunk_metadata={**ch.metadata, "document_id": str(doc.id)},
                 language=doc.language,
                 bilingual_terms=terminos,
+                embedding_model=modelo,
+                embedding_dim=dimension,
             ))
         return len(chunks)
 

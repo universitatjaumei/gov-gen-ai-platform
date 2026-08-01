@@ -13377,19 +13377,113 @@ contrato EvidenceItem.
 
 ---
 
-### Prompt RAG.6 (RED/GREEN) — Reranker cross-encoder + activación de `reranker_enabled`
+## Bloque MOD — Modelos de embedding y reranker: local en edge, API en cloud (2026-08-01)
+
+> **Añadido a petición del usuario**, antes de ejecutar RAG.6 y **antes de cargar el corpus v1**.
+> Decisión completa, con la verificación de la API de Google: `docs/DECISION_MODELOS_EMBEDDING_RERANKER.md`.
+>
+> Lo que lo motiva: BGE-M3 (1,1 GB) más el reranker local (~600 MB) son los 3-4 GB por instancia
+> que `CLAUDE.md` fija como criterio de extracción a microservicio. En cloud queremos API; en
+> edge queremos modelo local, porque el dato no sale. El mismo codebase debe servir a los dos.
+>
+> **Por qué antes de cargar el corpus**: cambiar de modelo después cuesta re-embeber las ~380
+> normas con su índice HNSW detrás. Ahora es el momento más barato que va a existir.
+
+---
+
+### Prompt MOD.1 (RED/GREEN) — Propósito en la configuración + procedencia en el vector
+
+**Modelo sugerido**: **Sonnet** — dos columnas y un guardarraíl; las decisiones están cerradas en el documento.
+
+```
+# PROMPT MOD.1 (RED/GREEN) — Que cambiar de modelo deje de ser un salto al vacio
+# Deploy: cloud (configuracion) + edge (procedencia y guarda)
+
+## Contexto medido (no repetir la investigacion)
+- gemini-embedding-001 admite dimension FLEXIBLE de 128 a 3072: 1024 es valido. La columna
+  Vector(1024), el indice HNSW y el corpus cargado sobreviven a un cambio de proveedor.
+- Las dimensiones distintas de 3072 NO vienen normalizadas ("you must manually normalize
+  non-3072 dimensions"). Normalizamos nosotros, siempre, venga como venga del proveedor.
+- La guarda de dimension de hub_chatbots_router.py NO PUEDE SALTAR: compara dos getattr de
+  atributos que no existen. Se arregla aqui.
+
+## Configuracion (HubLLMConfig)
+- purpose: 'chat' | 'embedding' | 'rerank', default 'chat', CON CheckConstraint —es una
+  enumeracion estable con consumidor, mismo criterio que nivell_acces en ING.0.2.
+- output_dimensionality: int | None. None = el default del modelo.
+- Se REUTILIZA el panel existente (HubProvider con base_url y api_key, available-models, test
+  de conexion, LLMConfigsPage). No se construye un panel nuevo: se filtra por purpose.
+
+## Procedencia (HubDocumentChunk)
+- embedding_model: str | None y embedding_dim: int | None, escritos por la ingesta.
+- Sin esto, la configuracion es un interruptor que rompe en silencio: el coseno entre
+  vectores de dos espacios distintos no da error, da resultados malos.
+
+## Servicios
+- LocalEmbeddingService y GoogleEmbeddingService exponen `model_name` y `dimensions`.
+- GoogleEmbeddingService acepta modelo y output_dimensionality, y L2-normaliza su salida.
+- get_embedding_service() sigue devolviendo el local: la seleccion por configuracion es MOD.2.
+
+## Tests (RED primero)
+# should_persist_purpose_and_output_dimensionality
+# should_reject_an_unknown_purpose                  (el CHECK muerde)
+# should_expose_model_name_and_dimensions_on_services
+# should_l2_normalize_google_embeddings             (venga o no normalizado del proveedor)
+# should_record_model_and_dimension_on_every_chunk  (la ingesta escribe procedencia)
+# should_detect_a_corpus_embedded_with_another_model (la guarda ya puede saltar)
+
+## Criterio de done
+- [ ] Migracion aplicada y reversible
+- [ ] La guarda de recalculate-corpus salta de verdad, con test que lo demuestre
+- [ ] Contrato OpenAPI + Orval regenerados si cambia la API
+```
+
+---
+
+### Prompt MOD.2 (RED/GREEN) — Seleccion del servicio de embeddings por configuracion
+
+**Modelo sugerido**: **Sonnet** — cableado sobre la cascada que ya existe.
+
+```
+# PROMPT MOD.2 (RED/GREEN) — get_embedding_service resuelve contra la config efectiva
+# Deploy: shared
+
+- La cascada Plataforma -> Organizacion -> Chatbot elige el servicio, igual que el resto de
+  la configuracion. GoogleEmbeddingService deja de ser codigo muerto.
+- Aqui encaja HttpEmbeddingService, previsto en CLAUDE.md para cuando BGE-M3 se extraiga a
+  microservicio: el resto del codigo no cambia.
+- SIN fallback silencioso: si el modelo configurado no carga, error explicito.
+- El default de plataforma SIGUE siendo BGE-M3 local. Cambiarlo es un UPDATE, no un deploy.
+```
+
+---
+
+### Prompt RAG.6 (RED/GREEN) — Reranker detrás de protocolo + activación de `reranker_enabled`
 
 **Modelo sugerido**: **Opus** — integración con decisiones reales: normalización de scores, pool de candidatos, gestión del default heredado y medición.
 
 ```
-# PROMPT RAG.6 (RED/GREEN) — BGE-reranker-v2-m3 detrás de protocolo, flag por chatbot
+# PROMPT RAG.6 (RED/GREEN) — Reranker detrás de protocolo, flag por chatbot
 # Deploy: edge
+
+# ENMIENDA (2026-08-01, decisión del usuario — ver docs/DECISION_MODELOS_EMBEDDING_RERANKER.md):
+# **el reranker nace por API, no local.** El prompt original ponía LocalReranker como
+# implementación de referencia; eso añade ~600 MB al contenedor y construye justo el problema
+# que el Bloque MOD viene a evitar. Se invierte:
+# - La implementación de referencia es por API (proveedor a decidir con datos de precio y
+#   latencia: Vertex AI Ranking, Cohere Rerank u otro; NO se elige a ciegas en este prompt).
+# - `LocalReranker` se conserva como opción de EDGE, detrás del mismo protocolo.
+# - El proveedor y el modelo se configuran con `purpose='rerank'` en HubLLMConfig (MOD.1), no
+#   con una constante en el código.
+# - **Ojo al default**: `reranker_enabled` viene en True en toda la cascada, así que en cuanto
+#   exista la implementación se activa para TODOS los chatbots. Decidir explícitamente si el
+#   default se queda en True, con la misma disciplina que el umbral de RAG.5.
 
 ## Protocolo e implementación (services/reranker.py)
 - class Reranker(Protocol): async def rerank(query: str, candidates: list[str], top_k: int)
   -> list[RerankResult {index, score}].
-- LocalReranker: sentence_transformers.CrossEncoder('BAAI/bge-reranker-v2-m3'), singleton
-  lazy-load + asyncio.to_thread + batch, scores normalizados con sigmoide a [0,1]
+- LocalReranker (opción edge): sentence_transformers.CrossEncoder('BAAI/bge-reranker-v2-m3'),
+  singleton lazy-load + asyncio.to_thread + batch, scores normalizados con sigmoide a [0,1]
   (mismo patrón que LocalEmbeddingService). get_reranker() para Depends.
 - SIN fallback silencioso (regla CLAUDE.md): si reranker_enabled y el modelo no carga,
   error explícito en el arranque del servicio — no degradar a híbrido sin avisar.

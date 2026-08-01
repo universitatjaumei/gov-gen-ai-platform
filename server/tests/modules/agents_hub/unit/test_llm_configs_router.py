@@ -39,6 +39,8 @@ def _make_config(**kwargs) -> HubLLMConfig:
         tier=1,
         label="Flash",
         is_default=True,
+        purpose="chat",  # MOD.1: la tabla ya no es implicitamente de chat
+        output_dimensionality=None,
     )
     defaults.update(kwargs)
     m = MagicMock(spec=HubLLMConfig)

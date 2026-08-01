@@ -37,9 +37,26 @@ class HubProvider(HubConfigBase):
 
 
 class HubLLMConfig(HubConfigBase):
-    """Configuración de modelo LLM reutilizable por chatbot."""
+    """Configuración de un modelo reutilizable: chat, embeddings o reranking.
+
+    `purpose` lo añade MOD.1 (ver `docs/DECISION_MODELOS_EMBEDDING_RERANKER.md`). Hasta
+    entonces esta tabla era implícitamente de chat —lo delatan `temperature`, `top_p` y
+    `max_tokens`—, y los modelos de embedding se elegían con un `import`, no con
+    configuración. Con el propósito explícito se reutiliza todo lo que ya existe:
+    proveedores con su `base_url` y su clave, `available-models` y el test de conexión.
+
+    **Lleva CheckConstraint, al contrario que el vocabulario de ámbitos** (CLAUDE.md §5): son
+    tres valores estables, cada uno con consumidor en el código, y añadir uno exige escribir
+    el código que lo consuma. Mismo criterio que `nivell_acces` en ING.0.2.
+    """
 
     __tablename__ = "hub_llm_configs"
+    __table_args__ = (
+        CheckConstraint(
+            "purpose IN ('chat', 'embedding', 'rerank')",
+            name="ck_llm_config_purpose",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -55,6 +72,13 @@ class HubLLMConfig(HubConfigBase):
     tier: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     label: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # --- MOD.1: para qué sirve este modelo ---
+    purpose: Mapped[str] = mapped_column(String(20), nullable=False, default="chat")
+    # Dimensión pedida al proveedor. None = la que dé por defecto. La plataforma trabaja a
+    # 1024 porque es el único valor que sirve a la vez a BGE-M3 en edge (nativo) y a Google
+    # en cloud (rango flexible 128-3072): mantenerlo salva la columna Vector(1024), el índice
+    # HNSW y el corpus ya cargado cuando se cambia de proveedor.
+    output_dimensionality: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     chatbots: Mapped[list["HubChatbot"]] = relationship(back_populates="llm_config")
     provider_rel: Mapped["HubProvider"] = relationship(back_populates="llm_configs")
