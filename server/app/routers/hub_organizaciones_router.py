@@ -53,7 +53,7 @@ class OrganizacionCreate(BaseModel):
     default_language_mode: str = "prefer"
     default_quality_threshold: float = 0.6
     default_min_retrieval_results: int = 2
-    default_min_retrieval_score: float = 0.25
+    default_min_retrieval_score: float = 0.0
     default_reranker_enabled: bool = True
     default_answer_template: str = "generic"
     default_context_token_budget: int | None = None

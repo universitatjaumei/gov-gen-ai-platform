@@ -50,7 +50,21 @@ _PLATFORM_DEFAULTS = PublicGraphConfig(
     language_mode="prefer",
     quality_threshold=0.6,
     min_retrieval_results=2,
-    min_retrieval_score=0.25,
+    # RAG.5: el umbral está implementado y probado, pero **desactivado por defecto**, y el
+    # 0.0 es una decisión con medición detrás. Con el default anterior (0,25) el dataset
+    # dorado caía de recall@5 0,960 a 0,720 y MRR 0,861 a 0,693.
+    #
+    # Ese 0,72 NO prueba que 0,25 sea mal umbral en producción: el corpus de fixture usa un
+    # embedding determinista (bolsa de palabras por hash) cuyas similitudes coseno son
+    # estructuralmente bajas —una consulta de 6 palabras contra un fragmento de 100 rara vez
+    # pasa de 0,25 aunque sea el acierto correcto—, y BGE-M3 tiene otra distribución. Un
+    # umbral ABSOLUTO es justo lo que ese corpus no puede calibrar.
+    #
+    # Así que ni se calibra contra la distribución equivocada ni se deja activo un filtro
+    # que recorta un 24 % de recall en lo único medible: se deja el mecanismo listo y la
+    # activación pendiente de medir con el corpus real cargado. Decidido con el usuario el
+    # 2026-08-01. Lo vigila `test_should_not_lose_golden_hits_with_the_default_threshold`.
+    min_retrieval_score=0.0,
     reranker_enabled=True,
     answer_template="generic",
     context_token_budget=128_000,

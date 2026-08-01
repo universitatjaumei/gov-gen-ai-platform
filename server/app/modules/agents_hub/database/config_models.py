@@ -78,7 +78,7 @@ class HubOrganizacion(HubConfigBase):
     default_language_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="prefer")
     default_quality_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.6)
     default_min_retrieval_results: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
-    default_min_retrieval_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.25)
+    default_min_retrieval_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     default_reranker_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     default_answer_template: Mapped[str] = mapped_column(String(50), nullable=False, default="generic")
     # Nullable a propósito, al revés que sus hermanas: NULL significa «heredar el default
@@ -189,7 +189,7 @@ class HubChatbot(HubConfigBase):
     language_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="prefer")
     quality_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.6)
     min_retrieval_results: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
-    min_retrieval_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.25)
+    min_retrieval_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     reranker_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     answer_template: Mapped[str] = mapped_column(String(50), nullable=False, default="generic")
     # Presupuesto de contexto en tokens para la inyección de documentos (VIS.2). NULL =

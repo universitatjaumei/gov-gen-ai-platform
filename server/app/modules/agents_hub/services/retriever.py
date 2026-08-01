@@ -63,7 +63,15 @@ class HybridRetriever:
         language: str | None = None,
         owner_id: uuid.UUID | None = None,
         metadata_filter: MetadataFilter | None = None,
+        min_score: float = 0.0,
     ) -> list[SearchResult]:
+        """Búsqueda vectorial con umbral de similitud opcional (RAG.5).
+
+        `min_score` se aplica sobre la **similitud coseno** y en el WHERE, antes del
+        ORDER BY / LIMIT: filtrar después dejaría que los candidatos por debajo del umbral
+        ocuparan plazas del top_k, que es el mismo error que VIS.1 corrigió con el filtro
+        de metadatos.
+        """
         similarity = 1 - HubDocumentChunk.embedding.cosine_distance(query_embedding)
         query = (
             select(HubDocumentChunk, similarity.label("score"))
@@ -74,6 +82,8 @@ class HybridRetriever:
                 | (HubDocumentChunk.owner_id == owner_id)
             )
         )
+        if min_score > 0.0:
+            query = query.where(similarity >= min_score)
         if language:
             query = query.where(HubDocumentChunk.language == language)
         query = self._with_metadata_filter(query, metadata_filter)
@@ -156,10 +166,19 @@ class HybridRetriever:
         vector_weight: float = 0.7,
         owner_id: uuid.UUID | None = None,
         metadata_filter: MetadataFilter | None = None,
+        min_score: float = 0.0,
     ) -> list[SearchResult]:
+        """Fusión RRF de las dos ramas (k=60, `vector_weight`), sin cambios desde 2.7.
+
+        `min_score` viaja **solo a la rama vectorial** (RAG.5). La señal de la rama léxica es
+        de ranking, no de similitud: un `ts_rank_cd` de 0,3 no significa lo mismo que un
+        coseno de 0,3, y filtrar ambas con el mismo número sería comparar magnitudes
+        distintas. El quality gate del CoreGraph es otro control y no se solapa con este:
+        aquel decide por-respuesta sobre la media de evidencias, este por-chunk.
+        """
         vector_results = await self.vector_search(
             query_embedding, chatbot_id, top_k * 2, language, owner_id,
-            metadata_filter=metadata_filter,
+            metadata_filter=metadata_filter, min_score=min_score,
         )
         keyword_results = await self.keyword_search(
             query, chatbot_id, top_k * 2, language, owner_id,

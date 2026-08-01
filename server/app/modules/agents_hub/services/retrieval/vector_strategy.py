@@ -23,12 +23,14 @@ class VectorRetrievalStrategy:
         embedding_service,
         top_k: int = 8,
         metadata_filter: MetadataFilter | None = None,
+        min_score: float = 0.0,
     ):
         self._session = session
         self._embedding = embedding_service
         self._retriever = HybridRetriever(session)
         self._top_k = top_k
         self._filter = metadata_filter if metadata_filter is not None else MetadataFilter()
+        self._min_score = min_score
 
     async def get_context(
         self,
@@ -46,6 +48,7 @@ class VectorRetrievalStrategy:
             # El filtro incluye la exclusión de páginas superseded (9Q.6) y el nivel de
             # acceso del actor (VIS.1); el defecto es cerrado.
             metadata_filter=self._filter,
+            min_score=self._min_score,
         )
         if not results:
             return RetrievalContext(sources=[], mode=self.mode, total_tokens=0)

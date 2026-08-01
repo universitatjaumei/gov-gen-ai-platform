@@ -73,7 +73,7 @@ class ChatbotCreate(BaseModel):
     language_mode: str = "prefer"
     quality_threshold: float = 0.6
     min_retrieval_results: int = 2
-    min_retrieval_score: float = 0.25
+    min_retrieval_score: float = 0.0
     reranker_enabled: bool = True
     answer_template: str = "generic"
     context_token_budget: int | None = None

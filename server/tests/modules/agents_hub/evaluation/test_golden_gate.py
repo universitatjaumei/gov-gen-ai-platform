@@ -161,3 +161,66 @@ class TestGateDeRegresion:
             + f"\n  actual:   {informe.render()}"
             + f"\n  baseline: {baseline}"
         )
+
+
+class TestUmbralContraElDorado:
+    """RAG.5: el umbral **vigente por defecto** no puede recortar aciertos del dorado.
+
+    El criterio de done de RAG.5 lo pedía, y la medición cambió el default: con 0,25 el
+    dorado caía de recall@5 0,960 a 0,720. Ese 0,72 no prueba que 0,25 sea mal umbral en
+    producción —el corpus de fixture usa un embedding determinista cuyas similitudes coseno
+    son estructuralmente bajas, y BGE-M3 tiene otra distribución—, pero tampoco se deja
+    activo un filtro que recorta un 24 % de recall en lo único medible. El umbral quedó
+    implementado y desactivado (0,0) hasta poder medirlo con el corpus real.
+
+    Este test lee el default de la **cascada**, no un número escrito aquí: si alguien lo
+    sube sin datos que lo respalden, falla.
+    """
+
+    @pytest.mark.asyncio
+    async def test_should_not_lose_golden_hits_with_the_default_threshold(
+        self, corpus_ingerido, db_session
+    ):
+        from server.app.modules.agents_hub.agent.public_graphs.core.config_resolver import (
+            _PLATFORM_DEFAULTS,
+        )
+        from server.app.modules.agents_hub.evaluation.golden_dataset import (
+            load_golden_dataset,
+        )
+        from server.app.modules.agents_hub.evaluation.retrieval_eval import run_golden_eval
+        from server.app.modules.agents_hub.services.retriever import HybridRetriever
+
+        chatbot_id, _ = corpus_ingerido
+        dataset = load_golden_dataset(DATASET)
+
+        class _ConUmbral:
+            """Inyecta el umbral por defecto en cada consulta del dorado."""
+
+            def __init__(self, retriever, min_score: float) -> None:
+                self._retriever = retriever
+                self._min_score = min_score
+
+            async def hybrid_search(self, **kw):
+                return await self._retriever.hybrid_search(**kw, min_score=self._min_score)
+
+        sin_umbral = await run_golden_eval(
+            HybridRetriever(db_session), DeterministicEmbedding(), dataset, chatbot_id
+        )
+        umbral = _PLATFORM_DEFAULTS.min_retrieval_score
+        con_umbral = await run_golden_eval(
+            _ConUmbral(HybridRetriever(db_session), umbral),
+            DeterministicEmbedding(),
+            dataset,
+            chatbot_id,
+        )
+
+        print(
+            f"\n  sin umbral: recall@5={sin_umbral.recall_at_5:.3f} mrr={sin_umbral.mrr:.3f}"
+            f"\n  umbral {umbral}: recall@5={con_umbral.recall_at_5:.3f} "
+            f"mrr={con_umbral.mrr:.3f}"
+        )
+
+        assert con_umbral.recall_at_5 >= sin_umbral.recall_at_5 - 0.02, (
+            "el umbral por defecto recorta aciertos del dorado: ajustarlo con datos "
+            "y documentar el porqué (criterio de done de RAG.5)"
+        )

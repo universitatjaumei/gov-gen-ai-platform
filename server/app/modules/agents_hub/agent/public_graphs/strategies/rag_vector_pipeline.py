@@ -11,6 +11,10 @@ from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_cont
     EvidenceItem,
     RetrievalResult,
 )
+from server.app.modules.agents_hub.services.retrieval.context_packer import pack
+from server.app.modules.agents_hub.services.retrieval.long_context_strategy import (
+    LONG_CONTEXT_TOKEN_LIMIT,
+)
 from server.app.modules.agents_hub.services.retrieval.types import Source
 from server.app.modules.agents_hub.services.retrieval.vector_strategy import (
     VectorRetrievalStrategy,
@@ -39,6 +43,15 @@ def _dominant_language(items: list[EvidenceItem]) -> str | None:
 class RagVectorPipeline:
     """Pipeline RAG vectorial: HybridRetriever + agrupación por documento → EvidenceItem."""
 
+    def _construir_estrategia(self, deps, cfg) -> VectorRetrievalStrategy:
+        """Punto de extensión: RAG.6 mete aquí el reranker sin tocar `run`."""
+        return VectorRetrievalStrategy(
+            session=deps.session,
+            embedding_service=deps.embedder,
+            top_k=cfg.min_retrieval_results,
+            min_score=getattr(cfg, "min_retrieval_score", 0.0) or 0.0,
+        )
+
     async def run(
         self,
         query: str,
@@ -46,18 +59,26 @@ class RagVectorPipeline:
         cfg,
         deps,
     ) -> RetrievalResult:
-        strategy = VectorRetrievalStrategy(
-            session=deps.session,
-            embedding_service=deps.embedder,
-            top_k=cfg.min_retrieval_results,
-        )
+        strategy = self._construir_estrategia(deps, cfg)
         ctx = await strategy.get_context(
             query=query,
             chatbot_id=uuid.UUID(chatbot_id) if isinstance(chatbot_id, str) else chatbot_id,
         )
-        items = [_source_to_evidence(s) for s in ctx.sources]
+        # RAG.5: el contexto se empaqueta contra el presupuesto de la cascada antes de
+        # construir el bloque DOCUMENTOS DISPONIBLES. Sin esto, quien recortaba era el
+        # proveedor del modelo, y sin dejar traza de qué se habia perdido.
+        presupuesto = getattr(cfg, "context_token_budget", None) or LONG_CONTEXT_TOKEN_LIMIT
+        empaquetado = pack([_source_to_evidence(s) for s in ctx.sources], presupuesto)
+
         return RetrievalResult(
-            items=items,
-            debug={"pipeline_mode": "RAG", "total_tokens": ctx.total_tokens, "sources": len(items)},
-            context_source_language=_dominant_language(items),
+            items=empaquetado.items,
+            debug={
+                "pipeline_mode": "RAG",
+                "total_tokens": empaquetado.total_tokens,
+                "sources": len(empaquetado.items),
+                "dropped_count": empaquetado.dropped_count,
+                "context_token_budget": presupuesto,
+                "min_retrieval_score": getattr(cfg, "min_retrieval_score", 0.0),
+            },
+            context_source_language=_dominant_language(empaquetado.items),
         )

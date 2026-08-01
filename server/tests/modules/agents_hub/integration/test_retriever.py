@@ -354,3 +354,63 @@ class TestBusquedaLexica:
 
         assert len(resultados) == 1
         assert embedding_intacto is not None  # no se re-embebio nada
+
+
+class TestUmbralDeSimilitud:
+    """RAG.5: `min_retrieval_score` se aplica en la rama VECTORIAL, antes de la fusión.
+
+    Solo en la vectorial: la señal de la rama léxica es de ranking, no de similitud, y un
+    `ts_rank_cd` de 0,3 no significa lo mismo que un coseno de 0,3. Filtrar las dos con el
+    mismo número sería comparar magnitudes distintas.
+    """
+
+    @pytest.mark.asyncio
+    async def test_should_filter_vector_candidates_below_min_score(self, db_session):
+        from server.app.modules.agents_hub.services.retriever import HybridRetriever
+
+        cb = uuid.uuid4()
+        doc = await _documento(db_session, cb)
+        await _chunk(db_session, cb, doc, "Muy parecido", embedding=_emb(0))
+        await _chunk(db_session, cb, doc, "Nada que ver", embedding=_emb(500))
+        await db_session.commit()
+
+        resultados = await HybridRetriever(db_session).vector_search(
+            _emb(0), cb, top_k=10, min_score=0.5
+        )
+
+        assert [r.content for r in resultados] == ["Muy parecido"]
+
+    @pytest.mark.asyncio
+    async def test_should_keep_all_candidates_when_threshold_is_zero(self, db_session):
+        from server.app.modules.agents_hub.services.retriever import HybridRetriever
+
+        cb = uuid.uuid4()
+        doc = await _documento(db_session, cb)
+        await _chunk(db_session, cb, doc, "Muy parecido", embedding=_emb(0))
+        await _chunk(db_session, cb, doc, "Nada que ver", embedding=_emb(500))
+        await db_session.commit()
+
+        resultados = await HybridRetriever(db_session).vector_search(
+            _emb(0), cb, top_k=10, min_score=0.0
+        )
+
+        assert len(resultados) == 2
+
+    @pytest.mark.asyncio
+    async def test_should_not_apply_the_threshold_to_the_lexical_branch(self, db_session):
+        """El híbrido pasa el umbral a la rama vectorial y NO a la léxica."""
+        from server.app.modules.agents_hub.services.retriever import HybridRetriever
+
+        cb = uuid.uuid4()
+        doc = await _documento(db_session, cb, language="es")
+        # Coseno nulo con la consulta, pero coincidencia léxica exacta
+        await _chunk(db_session, cb, doc, "El importe de la dieta es de 53 euros",
+                     embedding=_emb(500), language="es")
+        await db_session.commit()
+
+        resultados = await HybridRetriever(db_session).hybrid_search(
+            query="dieta", query_embedding=_emb(0), chatbot_id=cb, top_k=5,
+            language="es", min_score=0.5,
+        )
+
+        assert len(resultados) == 1
