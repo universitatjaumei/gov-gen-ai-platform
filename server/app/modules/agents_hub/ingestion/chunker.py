@@ -25,7 +25,7 @@ Dos cosas que este módulo garantiza y de las que depende el resto:
 
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from langchain_text_splitters import (
     MarkdownHeaderTextSplitter,
@@ -61,10 +61,44 @@ _NIVELES = 5
 
 @dataclass
 class Chunk:
-    """Representa un chunk de documento."""
+    """Representa un chunk de documento.
+
+    `embedding_text` (RAG.7) es lo que se embebe; `content` es lo que se almacena y se
+    muestra como evidencia. **Son distintos a propósito**: un fragmento que dice «L'import
+    es de 53,34 euros» no dice de qué importe habla ni de qué norma sale, y embebido asi
+    compite contra cualquier otro importe del corpus. Con su jerarquia delante queda anclado
+    a su contexto sin cambiar ni una letra de lo que lee el usuario.
+
+    No se persiste: se calcula al trocear y se consume en la ingesta.
+    """
 
     content: str
     metadata: dict[str, Any] = field(default_factory=dict)
+    embedding_text: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.embedding_text:
+            self.embedding_text = self.content
+
+
+@runtime_checkable
+class ContextEnricher(Protocol):
+    """Nivel 2 de contextual retrieval: una frase de contexto generada en la ingesta.
+
+    Se define el protocolo y se deja `NoopEnricher` por defecto. La implementacion con LLM
+    —que redacta «este fragmento trata de X» leyendo el documento entero— queda como
+    candidata para cuando el corpus definitivo este cargado: cuesta una llamada por chunk en
+    la ingesta y no tiene sentido pagarla contra un corpus que aun va a cambiar.
+    """
+
+    def enrich(self, document: str, chunk: str) -> str: ...
+
+
+class NoopEnricher:
+    """No enriquece. El default, y el unico que existe hoy."""
+
+    def enrich(self, document: str, chunk: str) -> str:
+        return ""
 
 
 def strip_anchor_tokens(texto: str) -> str:
@@ -98,10 +132,12 @@ class MarkdownChunker:
         chunk_size: int = 1000,
         chunk_overlap: int = 100,
         table_chunk_size: int = 4000,
+        enricher: ContextEnricher | None = None,
     ):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.table_chunk_size = table_chunk_size
+        self.enricher = enricher or NoopEnricher()
 
         self.headers_to_split = [("#" * n, f"header_{n}") for n in range(1, _NIVELES + 1)]
 
@@ -284,8 +320,45 @@ class MarkdownChunker:
 
     # ───────────────────────── API ─────────────────────────
 
+    @staticmethod
+    def _texto_embebible(
+        titulo: str | None, encabezados: dict[str, str], contenido: str, prefacio: str
+    ) -> str:
+        """Jerarquía estructural + contenido (RAG.7).
+
+        Solo entra el título del documento y sus encabezados. **Nunca taxonomía ni ancla**:
+        la taxonomía porque el vocabulario está pendiente de validar y debe seguir siendo
+        revisable —embebida, cada revisión costaría re-embeber el corpus (CLAUDE.md §5)—; el
+        ancla porque es ruido para el vector y su sitio es la URL de la cita.
+
+        El encabezado más profundo no se repite si el contenido ya empieza por él: duplicar
+        la misma frase sesga el vector hacia ella.
+        """
+        # El contenido conserva sus encabezados (`strip_headers=False` desde ING.0.4), así
+        # que el PRIMER fragmento de una sección ya los lleva dentro y prefijarlos otra vez
+        # solo sesgaría el vector hacia ellos. Los que ganan contexto son los fragmentos
+        # SIGUIENTES de una sección larga, que se quedaron sin encabezado al trocear.
+        ya_presentes = set()
+        for linea in contenido.lstrip().splitlines():
+            if not linea.lstrip().startswith("#"):
+                break
+            ya_presentes.add(linea.lstrip("#").strip())
+
+        niveles: list[str] = []
+        for nivel in ([titulo] if titulo else []) + [
+            encabezados[c] for c in sorted(encabezados) if encabezados[c]
+        ]:
+            if nivel and nivel not in ya_presentes and nivel not in niveles:
+                niveles.append(nivel)
+
+        partes = [p for p in (prefacio.strip(), " > ".join(niveles)) if p]
+        return f"{chr(10).join(partes)}\n\n{contenido}" if partes else contenido
+
     def split(
-        self, content: str, metadata: dict[str, Any] | None = None
+        self,
+        content: str,
+        metadata: dict[str, Any] | None = None,
+        document_title: str | None = None,
     ) -> list[Chunk]:
         """Divide el contenido en chunks.
 
@@ -293,6 +366,9 @@ class MarkdownChunker:
             content: Contenido Markdown
             metadata: Metadatos adicionales (document_id, source_url…). **No se copia
                 al texto**: si trajera taxonomía, entraría en el embedding.
+            document_title: título del documento, que encabeza el `embedding_text`. Va como
+                parámetro y no dentro de `metadata` justamente para que quede claro que no
+                es un metadato del chunk: es contexto de embedding y no se persiste.
 
         Returns:
             Lista de chunks
@@ -321,6 +397,12 @@ class MarkdownChunker:
                     Chunk(
                         content=texto,
                         metadata={**comun, **extra, "chunk_index": indice},
+                        embedding_text=self._texto_embebible(
+                            document_title,
+                            encabezados,
+                            texto,
+                            self.enricher.enrich(content, texto),
+                        ),
                     )
                 )
 

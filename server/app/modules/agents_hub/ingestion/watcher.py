@@ -187,6 +187,15 @@ class IngestionWatcher:
         await self._session.commit()
         return doc, n_chunks
 
+    async def _embed_en_lote(self, textos: list[str]) -> list[list[float]]:
+        """Embebe una lista, usando el lote del servicio si lo expone."""
+        if not textos:
+            return []
+        en_lote = getattr(self._embedding, "embed_batch", None)
+        if en_lote is not None:
+            return await en_lote(textos)
+        return [await self._embedding.embed(t) for t in textos]
+
     async def _regenerate_chunks_for_document(self, doc: HubDocument) -> int:
         """Borra los chunks del documento y los regenera. Devuelve el numero creado."""
         await self._session.execute(
@@ -198,14 +207,20 @@ class IngestionWatcher:
                 "document_id": str(doc.id),
                 "source_url": doc.canonical_url,
             },
+            # RAG.7: el título encabeza el texto que se embebe, no el que se almacena.
+            document_title=doc.title,
         )
         terminos = terminos_bilingues(doc)
         # MOD.1: la procedencia se graba CON el vector. Sin ella, cambiar de modelo es una
         # avería silenciosa; con ella, `assert_embedding_space_matches` puede detectarla.
         modelo = getattr(self._embedding, "model_name", None)
         dimension = getattr(self._embedding, "dimensions", None)
-        for ch in chunks:
-            embedding = await self._embedding.embed(ch.content)
+        # RAG.7: se embebe `embedding_text` —jerarquía + contenido—, no el contenido crudo.
+        # Y por LOTES cuando el servicio lo soporta: el watcher iba chunk a chunk, o sea una
+        # llamada por fragmento, que con un proveedor por API es una ida y vuelta de red por
+        # cada uno. `embed` suelto se conserva para los servicios que no expongan lote.
+        vectores = await self._embed_en_lote([ch.embedding_text for ch in chunks])
+        for ch, embedding in zip(chunks, vectores):
             self._session.add(HubDocumentChunk(
                 chatbot_id=doc.chatbot_id,
                 document_id=doc.id,

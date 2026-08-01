@@ -68,6 +68,9 @@ class TestIngestionCreatesDocuments:
         chatbot_provider = _make_chatbot_provider("RAG")
         embedding_svc = AsyncMock()
         embedding_svc.embed = AsyncMock(return_value=[0.1] * 1024)
+        # RAG.7: explícito, porque un AsyncMock pelado fabrica embed_batch y devuelve algo
+        # que no es una lista de vectores (el watcher no crearía ningún chunk).
+        embedding_svc.embed_batch = AsyncMock(side_effect=lambda ts: [[0.1] * 1024] * len(ts))
 
         watcher = IngestionWatcher(
             session=session,
@@ -91,6 +94,9 @@ class TestIngestionCreatesDocuments:
         chatbot_provider = _make_chatbot_provider("RAG")
         embedding_svc = AsyncMock()
         embedding_svc.embed = AsyncMock(return_value=[0.1] * 1024)
+        # RAG.7: explícito, porque un AsyncMock pelado fabrica embed_batch y devuelve algo
+        # que no es una lista de vectores (el watcher no crearía ningún chunk).
+        embedding_svc.embed_batch = AsyncMock(side_effect=lambda ts: [[0.1] * 1024] * len(ts))
 
         watcher = IngestionWatcher(
             session=session,
@@ -166,6 +172,9 @@ class TestIngestionCreatesDocuments:
         chatbot_provider = _make_chatbot_provider("RAG")
         embedding_svc = AsyncMock()
         embedding_svc.embed = AsyncMock(return_value=[0.1] * 1024)
+        # RAG.7: explícito, porque un AsyncMock pelado fabrica embed_batch y devuelve algo
+        # que no es una lista de vectores (el watcher no crearía ningún chunk).
+        embedding_svc.embed_batch = AsyncMock(side_effect=lambda ts: [[0.1] * 1024] * len(ts))
 
         watcher = IngestionWatcher(
             session=session,
@@ -205,6 +214,9 @@ class TestIngestionCreatesDocuments:
         session = _make_session_for_new_doc()
         embedding_svc = AsyncMock()
         embedding_svc.embed = AsyncMock(return_value=[0.1] * 1024)
+        # RAG.7: explícito, porque un AsyncMock pelado fabrica embed_batch y devuelve algo
+        # que no es una lista de vectores (el watcher no crearía ningún chunk).
+        embedding_svc.embed_batch = AsyncMock(side_effect=lambda ts: [[0.1] * 1024] * len(ts))
 
         watcher = IngestionWatcher(
             session=session,
@@ -288,6 +300,9 @@ class TestPuenteBilingueEnLaIngesta:
         session = _make_session_for_new_doc()
         embedding_svc = AsyncMock()
         embedding_svc.embed = AsyncMock(return_value=[0.1] * 1024)
+        # RAG.7: explícito, porque un AsyncMock pelado fabrica embed_batch y devuelve algo
+        # que no es una lista de vectores (el watcher no crearía ningún chunk).
+        embedding_svc.embed_batch = AsyncMock(side_effect=lambda ts: [[0.1] * 1024] * len(ts))
         watcher = IngestionWatcher(
             session=session,
             embedding_service=embedding_svc,

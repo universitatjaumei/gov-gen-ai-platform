@@ -56,6 +56,18 @@ class LocalEmbeddingService:
 
         return await asyncio.to_thread(_encode, text)
 
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        """Un `encode` para toda la lista (RAG.7).
+
+        `SentenceTransformer.encode` acepta lista y la procesa por lotes internamente, así
+        que una llamada por documento en vez de una por fragmento aprovecha la vectorización
+        en vez de pagar el arranque de la inferencia N veces.
+        """
+        def _encode(ts: list[str]) -> list[list[float]]:
+            return self._get_model().encode(ts, normalize_embeddings=True).tolist()
+
+        return await asyncio.to_thread(_encode, texts)
+
 
 class GoogleEmbeddingService:
     """Embeddings por API de Google, para el modo cloud.

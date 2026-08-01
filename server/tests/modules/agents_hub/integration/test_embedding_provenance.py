@@ -152,8 +152,12 @@ class TestProcedenciaDelVector:
         session.add = MagicMock()
         session.execute = AsyncMock()
 
+        # `embed_batch` explícito (RAG.7): un AsyncMock pelado lo fabrica solo y devuelve
+        # algo que no es una lista de vectores, con lo que el watcher no crea ningún chunk
+        # y el test falla por una razón que no tiene que ver con lo que prueba.
         embedding_svc = AsyncMock()
         embedding_svc.embed = AsyncMock(return_value=[0.1] * 1024)
+        embedding_svc.embed_batch = AsyncMock(side_effect=lambda ts: [[0.1] * 1024] * len(ts))
         embedding_svc.model_name = "BAAI/bge-m3"
         embedding_svc.dimensions = 1024
 
