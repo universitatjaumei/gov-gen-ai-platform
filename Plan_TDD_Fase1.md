@@ -13454,6 +13454,29 @@ contrato EvidenceItem.
   microservicio: el resto del codigo no cambia.
 - SIN fallback silencioso: si el modelo configurado no carga, error explicito.
 - El default de plataforma SIGUE siendo BGE-M3 local. Cambiarlo es un UPDATE, no un deploy.
+
+## Despacho por provider_type, no por proposito (ampliacion del 2026-08-01)
+
+MOD.1 dejo configurable QUE modelo y con QUE clave, pero QUE ADAPTADOR lo habla seguia
+siendo codigo. El mecanismo para resolverlo ya existe y hay que aprovecharlo, no duplicarlo:
+`HubProvider.provider_type` ('google_genai', 'openai_compatible', ...) es lo que usa
+`model_factory._build_model` para elegir implementacion DESDE DATOS en el chat.
+
+- La factoria de embeddings y la de rerank despachan por `provider_type`, igual que la de
+  chat. Anadir un modelo o cambiar de proveedor DENTRO de un tipo ya soportado pasa a ser un
+  UPDATE; el codigo solo se toca para un tipo de proveedor nuevo, que es irreducible.
+- Los tres purpose comparten factoria y contrato de resolucion. Tres despachos paralelos
+  divergen: ya paso con el system prompt antes de RAG.2.
+- Test: should_resolve_the_adapter_from_provider_type_without_code_changes
+
+## Medicion pendiente que este prompt habilita (no la ejecuta)
+
+Cuando el corpus v1 este cargado, comparar BGE-M3 contra Google a 1024 con `run_golden.py`
+sobre el dorado en valenciano. La documentacion de Google declara 100+ idiomas y lidera
+MMTEB, pero NO publica lista por idioma y el catalan no aparece explicitamente: la calidad en
+valenciano hay que medirla, no suponerla. Con la cascada por chatbot y la procedencia de
+MOD.1 se pueden tener dos chatbots sobre el mismo corpus, uno por modelo, sin mezclar
+espacios vectoriales.
 ```
 
 ---

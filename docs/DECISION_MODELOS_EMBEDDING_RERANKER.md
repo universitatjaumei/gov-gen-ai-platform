@@ -56,6 +56,26 @@ resultados malos.
    de referencia y `LocalReranker` queda como opción de edge, detrás del mismo protocolo.
    Meter un segundo modelo local ahora es construir el problema que este documento evita.
 
+## Calidad en castellano y valenciano: se mide, no se supone
+
+`gemini-embedding-001` declara **más de 100 idiomas** y lidera MMTEB (250+ lenguas), pero la
+documentación **no publica lista por idioma y el catalán no aparece mencionado**. «100+
+idiomas» sin lista es una estadística, no un compromiso, y el corpus es **valenciano** con
+consultas que llegarán en las dos lenguas — que es justo donde más varía la calidad entre
+modelos.
+
+**No hace falta decidirlo por reputación.** RAG.1 dejó `run_golden.py`, que mide recall@5 y
+MRR del retriever real con el servicio de embeddings real contra un dataset dorado escrito en
+valenciano con el vocabulario del usuario. Cuando el corpus v1 esté cargado: dos ejecuciones,
+BGE-M3 y Google a 1024, y se compara con datos propios. Cuesta un par de horas y ~1 $ de API.
+
+La cascada por chatbot y la procedencia de MOD.1 permiten tener **dos chatbots sobre el mismo
+corpus**, uno por modelo, midiéndose en paralelo sin riesgo de mezclar espacios vectoriales.
+
+Un matiz para esa medición: truncar a 1024 con MRL pierde algo de calidad frente a los 3072
+nativos. Si la diferencia saliera grande, la decisión de «1024 en toda la plataforma» habría
+que revisarla, al precio de romper la compatibilidad de esquema con BGE-M3 en edge.
+
 ## Lo que NO se decide aquí
 
 - **Qué proveedor de reranking** (Vertex AI Ranking, Cohere Rerank u otro): hay que
