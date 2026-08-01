@@ -43,6 +43,16 @@ from server.app.modules.agents_hub.ingestion.corpus.reconciler import (
 from server.app.modules.agents_hub.ingestion.corpus.source import LocalDirectorySource
 
 
+def progreso_por_consola(actual: int, total: int | None, mensaje: str) -> None:
+    """Reporte de progreso para la carga masiva (RAG.12).
+
+    Es el mismo `progress_callback` que consume el watcher para escribir la fila del job:
+    una sola forma de contar el progreso, y no dos que se contradigan. `total` es None hasta
+    que se trocea —antes no se sabe—, y ahí se muestra `?` en vez de inventar un cero.
+    """
+    print(f"  [{actual}/{total if total is not None else '?'}] {mensaje}", flush=True)
+
+
 async def _run(args: argparse.Namespace) -> int:
     from server.app.modules.agents_hub.database.config_models import HubChatbot
     from server.app.modules.agents_hub.database.connection import (

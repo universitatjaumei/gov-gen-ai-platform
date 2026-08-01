@@ -145,14 +145,16 @@ class TestRunJobPropagatesLanguage:
         with patch.object(watcher, "process_source", new_callable=AsyncMock, return_value=(MagicMock(), 0)) as mock_ps:
             await watcher.run_job(job_id)
 
-        mock_ps.assert_called_once_with(
-            job.source_url,
-            job.chatbot_id,
-            citation_url=job.canonical_url,
-            prefetched_content=None,
-            language="ca",
-            title=None,
-        )
+        # RAG.12 anadio `seguimiento`; lo que este test protege es la propagacion del
+        # idioma, asi que se comprueba eso y no la firma entera, que cambia con cada prompt
+        # que instrumenta la ingesta.
+        mock_ps.assert_called_once()
+        args, kwargs = mock_ps.call_args
+        assert args == (job.source_url, job.chatbot_id)
+        assert kwargs["language"] == "ca"
+        assert kwargs["citation_url"] == job.canonical_url
+        assert kwargs["prefetched_content"] is None
+        assert kwargs["title"] is None
 
     @pytest.mark.asyncio
     async def test_run_job_propagates_none_language_for_auto_detect(self) -> None:

@@ -22,6 +22,10 @@ from server.app.modules.agents_hub.database.operational_models import (
 from server.app.modules.agents_hub.ingestion.chunker import MarkdownChunker
 from server.app.modules.agents_hub.ingestion.docling_processor import DoclingProcessor
 from server.app.modules.agents_hub.ingestion.hasher import hash_content
+from server.app.modules.agents_hub.ingestion.job_progress import (
+    ProgressCallback,
+    SeguimientoDeJob,
+)
 from server.app.modules.agents_hub.ingestion.markdown_utils import (
     estimate_tokens,
     extract_title_from_markdown,
@@ -105,17 +109,22 @@ class IngestionWatcher:
         prefetched_content: str | None = None,
         title: str | None = None,
         crawled_page_id: uuid.UUID | None = None,
+        seguimiento: SeguimientoDeJob | None = None,
     ) -> tuple[HubDocument, int]:
         """Crea/actualiza un HubDocument. Genera chunks SOLO si retrieval_mode == 'RAG'.
 
         Returns:
             (HubDocument, chunks_created_count) — idempotente por content_hash.
         """
-        if prefetched_content is not None:
-            content = prefetched_content
-        else:
-            processor = await self._get_processor()
-            content = await asyncio.to_thread(processor.process, source_url)
+        seg = seguimiento or SeguimientoDeJob()
+
+        async with seg.etapa("convert", "docling"):
+            if prefetched_content is not None:
+                content = prefetched_content
+            else:
+                processor = await self._get_processor()
+                content = await asyncio.to_thread(processor.process, source_url)
+        seg.total_chars = len(content)
 
         if language is None:
             language = detect_language(content)
@@ -202,7 +211,7 @@ class IngestionWatcher:
         )
         n_chunks = 0
         if retrieval_mode == "RAG":
-            n_chunks = await self._regenerate_chunks_for_document(doc)
+            n_chunks = await self._regenerate_chunks_for_document(doc, seguimiento=seg)
         else:
             # Limpiar chunks previos si el modo cambió
             await self._session.execute(
@@ -237,6 +246,24 @@ class IngestionWatcher:
             )
             return self.chunker
 
+    def _anotar_progreso(
+        self, job: HubIngestionJob, callback: ProgressCallback | None
+    ) -> ProgressCallback:
+        """Escribe el progreso en la fila y, si hay, se lo pasa a quien mira.
+
+        Sin `commit`: el `flush` implícito de la sesión basta para que el valor viaje con la
+        transacción de la ingesta. Comprometerse a un commit por etapa expondría un
+        documento sin sus fragmentos a cualquier lector concurrente.
+        """
+        def _anotar(actual: int, total: int | None, mensaje: str) -> None:
+            job.progress_current = actual
+            job.progress_total = total
+            job.progress_message = mensaje[:255]
+            if callback is not None:
+                callback(actual, total, mensaje)
+
+        return _anotar
+
     async def _embed_en_lote(self, textos: list[str]) -> list[list[float]]:
         """Embebe una lista, usando el lote del servicio si lo expone."""
         if not textos:
@@ -246,21 +273,29 @@ class IngestionWatcher:
             return await en_lote(textos)
         return [await self._embedding.embed(t) for t in textos]
 
-    async def _regenerate_chunks_for_document(self, doc: HubDocument) -> int:
+    async def _regenerate_chunks_for_document(
+        self, doc: HubDocument, seguimiento: SeguimientoDeJob | None = None
+    ) -> int:
         """Borra los chunks del documento y los regenera. Devuelve el numero creado."""
+        seg = seguimiento or SeguimientoDeJob()
         await self._session.execute(
             delete(HubDocumentChunk).where(HubDocumentChunk.document_id == doc.id)
         )
         chunker = await self._chunker_para(doc.chatbot_id)
-        chunks = chunker.split(
-            doc.markdown_content,
-            metadata={
-                "document_id": str(doc.id),
-                "source_url": doc.canonical_url,
-            },
-            # RAG.7: el título encabeza el texto que se embebe, no el que se almacena.
-            document_title=doc.title,
-        )
+        async with seg.etapa("chunk"):
+            chunks = chunker.split(
+                doc.markdown_content,
+                metadata={
+                    "document_id": str(doc.id),
+                    "source_url": doc.canonical_url,
+                },
+                # RAG.7: el título encabeza el texto que se embebe, no el que se almacena.
+                document_title=doc.title,
+            )
+        # A partir de aquí sí se sabe cuántos pasos quedan; antes, `progress_total` es None
+        # a propósito, porque un 0 se leería como «no hay nada que hacer».
+        seg.total = len(chunks)
+        seg.n_chunks = len(chunks)
         terminos = terminos_bilingues(doc)
         # MOD.1: la procedencia se graba CON el vector. Sin ella, cambiar de modelo es una
         # avería silenciosa; con ella, `assert_embedding_space_matches` puede detectarla.
@@ -269,7 +304,18 @@ class IngestionWatcher:
         # Y por LOTES cuando el servicio lo soporta: el watcher iba chunk a chunk, o sea una
         # llamada por fragmento, que con un proveedor por API es una ida y vuelta de red por
         # cada uno. `embed` suelto se conserva para los servicios que no expongan lote.
-        vectores = await self._embed_en_lote([ch.embedding_text for ch in chunks])
+        seg.embedding_model = modelo
+        async with seg.etapa("embed", f"{len(chunks)} fragmentos en 1 lote"):
+            vectores = await self._embed_en_lote([ch.embedding_text for ch in chunks])
+        seg.n_batches += 1
+
+        async with seg.etapa("persist", actual=len(chunks)):
+            self._persistir_chunks(doc, chunks, vectores, terminos, modelo, dimension)
+        return len(chunks)
+
+    def _persistir_chunks(
+        self, doc: HubDocument, chunks, vectores, terminos, modelo, dimension
+    ) -> None:
         for ch, embedding in zip(chunks, vectores):
             self._session.add(HubDocumentChunk(
                 chatbot_id=doc.chatbot_id,
@@ -288,21 +334,26 @@ class IngestionWatcher:
                 embedding_text=ch.embedding_text,
                 parent_content=ch.parent_content or None,
             ))
-        return len(chunks)
 
     async def process_user_upload(
         self,
         source_url: str,
         chatbot_id: uuid.UUID,
         owner_id: uuid.UUID,
+        progress_callback: ProgressCallback | None = None,
     ) -> list[HubDocumentChunk]:
         """Procesa un documento subido por un usuario (siempre re-procesa, marca como temporal)."""
+        seg = SeguimientoDeJob(progress_callback)
+
         def _process() -> str:
             return DoclingProcessor().process(source_url)
 
-        content = await asyncio.to_thread(_process)
+        async with seg.etapa("convert", "docling"):
+            content = await asyncio.to_thread(_process)
         language = detect_language(content)
-        chunks = self.chunker.split(content, metadata={"source_url": source_url})
+        async with seg.etapa("chunk"):
+            chunks = self.chunker.split(content, metadata={"source_url": source_url})
+        seg.total = len(chunks)
         created_chunks = []
 
         # RAG.9: los adjuntos caen en la MISMA tabla y se buscan junto al corpus, asi que
@@ -311,8 +362,10 @@ class IngestionWatcher:
         # hueco era invisible, y el vector de un adjunto salia de un texto distinto del que
         # habria salido si el mismo documento hubiera entrado por la ingesta normal.
         modelo, dimension = _procedencia(self._embedding)
-        vectores = await self._embed_en_lote([ch.embedding_text for ch in chunks])
+        async with seg.etapa("embed", f"{len(chunks)} fragmentos en 1 lote"):
+            vectores = await self._embed_en_lote([ch.embedding_text for ch in chunks])
 
+        seg.avisar("persist", actual=len(chunks))
         for chunk, embedding in zip(chunks, vectores):
             db_chunk = HubDocumentChunk(
                 chatbot_id=chatbot_id,
@@ -338,13 +391,23 @@ class IngestionWatcher:
         self,
         job_id: uuid.UUID,
         prefetched_content: str | None = None,
+        progress_callback: ProgressCallback | None = None,
     ) -> None:
-        """Ejecuta un job de ingestión."""
+        """Ejecuta un job de ingestión, anotando progreso y tiempos por etapa (RAG.12).
+
+        **Límite conocido**: la fila se actualiza en la misma transacción que la ingesta, así
+        que el progreso intermedio no es visible desde fuera hasta que el job cierra. Hacerlo
+        visible en vivo exige una transacción autónoma —una segunda sesión—, y comprometerse
+        a eso por una barra de progreso no sale a cuenta hoy. El consumidor en vivo es
+        `progress_callback`, que es por donde informa la carga masiva por consola.
+        """
         job = await self._session.get(HubIngestionJob, job_id)
         if not job:
             return
 
+        seguimiento = SeguimientoDeJob(self._anotar_progreso(job, progress_callback))
         job.status = "running"
+        job.processing_started_at = datetime.now(timezone.utc)
         await self._session.commit()
 
         tmp_path: str | None = None
@@ -370,9 +433,12 @@ class IngestionWatcher:
                 prefetched_content=prefetched_content,
                 language=job.language,
                 title=filename_hint,
+                seguimiento=seguimiento,
             )
             job.status = "completed"
             job.chunks_processed = n_chunks
+            job.processing_stats = seguimiento.resumen()
+            job.processing_completed_at = datetime.now(timezone.utc)
         except Exception as e:
             logger.error("Job %s falló: %s", job_id, e, exc_info=True)
             error = e
@@ -387,6 +453,11 @@ class IngestionWatcher:
                 if job:
                     job.status = "failed"
                     job.error_message = str(error)
+                    # Lo medido hasta el fallo vive en memoria, así que el rollback de
+                    # arriba no se lo llevó. Es justo cuando más falta hace: dice por dónde
+                    # iba y cuál fue la etapa que reventó.
+                    job.processing_stats = seguimiento.resumen()
+                    job.processing_completed_at = datetime.now(timezone.utc)
                     await self._session.commit()
             except Exception as save_err:
                 logger.error("No se pudo guardar el estado 'failed' del job %s: %s", job_id, save_err, exc_info=True)
