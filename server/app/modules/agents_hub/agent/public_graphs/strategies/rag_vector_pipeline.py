@@ -11,6 +11,7 @@ from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_cont
     EvidenceItem,
     RetrievalResult,
 )
+from server.app.modules.agents_hub.services.reranker import resolve_reranker
 from server.app.modules.agents_hub.services.retrieval.context_packer import pack
 from server.app.modules.agents_hub.services.retrieval.long_context_strategy import (
     LONG_CONTEXT_TOKEN_LIMIT,
@@ -43,13 +44,24 @@ def _dominant_language(items: list[EvidenceItem]) -> str | None:
 class RagVectorPipeline:
     """Pipeline RAG vectorial: HybridRetriever + agrupación por documento → EvidenceItem."""
 
-    def _construir_estrategia(self, deps, cfg) -> VectorRetrievalStrategy:
-        """Punto de extensión: RAG.6 mete aquí el reranker sin tocar `run`."""
+    async def _construir_estrategia(self, deps, cfg) -> VectorRetrievalStrategy:
+        """Punto de extensión que RAG.5 dejó puesto y RAG.6a usa para el reranker.
+
+        El reranker se resuelve **solo si el flag está encendido**, y si está encendido y no
+        hay configuración, `resolve_reranker` lanza. Deliberado: seguir sin reranker en
+        silencio haría creer al admin que está actuando. El flag viene en `False` por defecto
+        desde MOD.2, así que nada de esto se activa por sorpresa.
+        """
+        reranker = None
+        if getattr(cfg, "reranker_enabled", False):
+            reranker = await resolve_reranker(deps.session)
+
         return VectorRetrievalStrategy(
             session=deps.session,
             embedding_service=deps.embedder,
             top_k=cfg.min_retrieval_results,
             min_score=getattr(cfg, "min_retrieval_score", 0.0) or 0.0,
+            reranker=reranker,
         )
 
     async def run(
@@ -59,7 +71,7 @@ class RagVectorPipeline:
         cfg,
         deps,
     ) -> RetrievalResult:
-        strategy = self._construir_estrategia(deps, cfg)
+        strategy = await self._construir_estrategia(deps, cfg)
         ctx = await strategy.get_context(
             query=query,
             chatbot_id=uuid.UUID(chatbot_id) if isinstance(chatbot_id, str) else chatbot_id,

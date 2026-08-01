@@ -130,8 +130,11 @@ class TestIntegracionConElPipeline:
         )
         deps = type("D", (), {"session": None, "embedder": None, "llm": None})()
 
+        async def _factoria(deps, cfg):  # RAG.6a la hizo async (resuelve el reranker)
+            return _Estrategia()
+
         pipeline = RagVectorPipeline()
-        pipeline._construir_estrategia = lambda deps, cfg: _Estrategia()  # type: ignore[attr-defined]
+        pipeline._construir_estrategia = _factoria  # type: ignore[attr-defined]
         resultado = await pipeline.run("q", str(uuid.uuid4()), cfg, deps)
 
         assert len(resultado.items) == 2
