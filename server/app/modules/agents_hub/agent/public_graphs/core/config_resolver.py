@@ -29,12 +29,14 @@ class PublicGraphConfig:
     # el system_prompt para entrar por aquí.
     #
     # El default de plataforma son 128.000 tokens porque el Nivel 2 inyecta documentos
-    # ENTEROS (1-3 normas, ~25k). **Aviso para RAG.5**, que reutiliza esta columna en su
-    # empaquetador de chunks: su prompt pide un default de plataforma de 4.000, y bajarlo
-    # aquí recortaría MD_LONG_CONTEXT a 4k, o sea lo dejaría inservible. Si el packer de
-    # RAG necesita un techo más bajo, que lo aplique en el packer —`min(budget, 4_000)`—
-    # y no en el default compartido. Un valor que significa dos cosas distintas según
-    # quién lo lea es la clase de deuda que hay que ver venir.
+    # ENTEROS (1-3 normas, ~25k).
+    #
+    # **Decidido por el usuario el 2026-07-31: 128.000 con carácter general.** El prompt de
+    # RAG.5 pide un default de plataforma de 4.000 para su empaquetador de chunks; queda
+    # anulado. Un mismo valor no puede significar dos cosas según quién lo lea, y bajarlo
+    # aquí recortaría MD_LONG_CONTEXT a 4k, o sea lo dejaría inservible. RAG.5 consume este
+    # presupuesto tal cual; si su packer necesita cortar antes, es una decisión del packer
+    # con su propia constante, no un cambio de este default.
     context_token_budget: int = 128_000
     # VIS.2 (Nivel 0): índice de submaterias del vocabulario de la organización. Se resuelve
     # solo en MD_AGENT_SELECTOR —en RAG serían ~2.300 tokens de prompt que nadie usa— y

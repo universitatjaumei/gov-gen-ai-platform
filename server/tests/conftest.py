@@ -36,6 +36,61 @@ def _psycopg_url(async_url: str, dbname: str) -> str:
     return urlunsplit(parts._replace(path=f"/{dbname}"))
 
 
+def _sync_url() -> str:
+    """DSN síncrono para Alembic. `DATABASE_URL_SYNC` si está, derivado del async si no."""
+    url = os.getenv("DATABASE_URL_SYNC")
+    if url:
+        return url
+    return _base_url().replace("postgresql+asyncpg", "postgresql+psycopg2")
+
+
+@pytest.fixture
+def fresh_database():
+    """BD vacía con pgvector, para probar la cadena de migraciones con `alembic upgrade`.
+
+    Hermana de `db_url` y aquí por el mismo motivo (TST.2): la usan `tests/infra` y
+    `tests/modules/agents_hub/integration`, e importar una fixture de otro módulo de test
+    hace que el parámetro del test redefina el nombre importado. Devuelve una URL
+    **síncrona**, que es la que consume Alembic.
+    """
+    import psycopg2
+
+    sync_url = _sync_url()
+    admin_dsn = _psycopg_url(sync_url.replace("postgresql+psycopg2", "postgresql"), "postgres")
+
+    try:
+        admin = psycopg2.connect(admin_dsn)
+    except Exception:  # pragma: no cover - entorno sin BD
+        pytest.skip("BD Postgres no disponible")
+    admin.autocommit = True
+
+    db_name = f"test_fresh_install_{uuid.uuid4().hex[:12]}"
+    with admin.cursor() as cur:
+        cur.execute(f'CREATE DATABASE "{db_name}"')
+
+    fresh_url = urlunsplit(urlsplit(sync_url)._replace(path=f"/{db_name}"))
+
+    # pgvector es requisito de hub_schema (a1b2c3d4e5f6): replicar lo que hace
+    # scripts/postgres/init.sql en el contenedor real.
+    conn = psycopg2.connect(fresh_url.replace("postgresql+psycopg2", "postgresql"))
+    conn.autocommit = True
+    with conn.cursor() as cur:
+        cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    conn.close()
+
+    try:
+        yield fresh_url
+    finally:
+        with admin.cursor() as cur:
+            cur.execute(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                "WHERE datname = %s AND pid <> pg_backend_pid()",
+                (db_name,),
+            )
+            cur.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
+        admin.close()
+
+
 @pytest.fixture
 async def db_url():
     """URL de una BD desechable por test, con pgvector y las tablas del hub creadas.

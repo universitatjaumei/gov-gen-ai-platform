@@ -61,6 +61,15 @@ class HubCrawledPage(HubOperationalBase):
     __tablename__ = "hub_crawled_pages"
     __table_args__ = (
         UniqueConstraint("site_id", "url", name="uq_page_site_url"),
+        # HNSW sobre el embedding de pagina (RAG.3): lo consulta por coseno el detector
+        # semantico de 9Q. Declarado tambien en la migracion; ambos sitios, o la BD de los
+        # tests (create_all) no lo tendria.
+        Index(
+            "ix_hub_crawled_pages_embedding_hnsw",
+            "page_embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"page_embedding": "vector_cosine_ops"},
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -276,6 +285,18 @@ class HubDocumentChunk(HubOperationalBase):
     """Fragmento de documento con embedding vectorial."""
 
     __tablename__ = "hub_document_chunks"
+    __table_args__ = (
+        # Indice ANN de la busqueda vectorial (RAG.3). Sin el, cada consulta calcula la
+        # distancia coseno contra todos los chunks del chatbot: un escaneo secuencial por
+        # pregunta. `vector_cosine_ops` porque `retriever.py` ordena por `cosine_distance`;
+        # un opclass distinto dejaria el indice inservible para esa consulta.
+        Index(
+            "ix_hub_document_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

@@ -93,14 +93,27 @@ def test_should_have_no_test_fixture_calling_drop_all():
 def test_should_have_no_test_creating_tables_on_the_dev_database():
     """TST.2: la suite e2e creaba tablas sobre DATABASE_URL —la BD del desarrollador—
     y dejó 12 chatbots residuales. Crear tablas partiendo de DATABASE_URL solo puede
-    hacerlo la fixture desechable; sqlite en memoria queda fuera de la regla."""
+    hacerlo la fixture desechable; sqlite en memoria queda fuera de la regla.
+
+    Afinado en RAG.3 a `metadata.create_all`, igual que ya lo estaba el guardarraíl de
+    `drop_all` de arriba: la versión por substring marcaba un fichero que solo mencionaba
+    `create_all` en su docstring —explicando por qué los índices tienen que estar en el ORM
+    y no solo en la migración— y pasaba `DATABASE_URL_SYNC` a Alembic sobre una BD
+    `test_fresh_install_*`. Un guardarraíl que da falsos positivos se acaba desactivando, y
+    entonces deja de proteger lo que venía a proteger.
+
+    **`metadata.create_all` y no `create_all(`**: el patrón de los infractores originales
+    era `await conn.run_sync(Base.metadata.create_all)`, pasando el método como callable y
+    por tanto SIN paréntesis. Filtrar por la llamada con paréntesis habría desarmado el
+    guardarraíl en vez de afinarlo.
+    """
     infractores = []
     for path in _ficheros_de_test():
         relativa = path.relative_to(SERVER).as_posix()
         if relativa == _FIXTURE_DESECHABLE:
             continue
         texto = path.read_text(encoding="utf-8", errors="replace")
-        if "create_all" in texto and "DATABASE_URL" in texto:
+        if "metadata.create_all" in texto and "DATABASE_URL" in texto:
             infractores.append(relativa)
     assert infractores == [], (
         "create_all sobre DATABASE_URL fuera de la fixture desechable; usa las "

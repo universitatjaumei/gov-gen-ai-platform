@@ -134,7 +134,12 @@ class TestRenderChartFromScript:
     async def test_valid_script_returns_bytes(self):
         df = _numeric_df()
         code = "fig, ax = plt.subplots()\nax.plot(df['x'], df['y'])"
-        result = await render_chart_from_script(code, df)
+        # `timeout` explícito y generoso: el default de producción son 30 s, y este test
+        # levanta un subprocess con matplotlib que bajo la carga de la suite completa en
+        # Windows no llega (visto al cerrar RAG.3; en aislamiento tarda ~10 s). El default de
+        # producción NO se toca por un problema del entorno de test, y lo que este test
+        # comprueba es que un script válido devuelve un PNG, no cuánto tarda.
+        result = await render_chart_from_script(code, df, timeout=180)
         assert isinstance(result, bytes)
         assert result[:4] == b"\x89PNG"
 

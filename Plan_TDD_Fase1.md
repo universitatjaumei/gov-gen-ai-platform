@@ -13307,6 +13307,12 @@ contrato EvidenceItem.
 # ya resuelto por ConfigResolver. Se conserva el test should_resolve_budget_from_cascade_* como
 # regresión. Si por lo que sea VIS.2 no estuviera cerrado al llegar aquí, crear la columna en
 # este prompt y retirar el trozo correspondiente de VIS.2 — pero no en los dos.
+# ENMIENDA (2026-07-31, decisión del usuario al cerrar el Bloque VIS): el default de plataforma
+# es **128.000 y con carácter general**, no 4.000. Ya está creado y aplicado por VIS.2
+# (migración d1m2n3o4p5q6). Bajarlo recortaría MD_LONG_CONTEXT a 4k y lo dejaría inservible, y
+# un mismo valor no puede significar dos cosas según quién lo lea. El packer CONSUME este
+# presupuesto tal cual; si necesita cortar antes por razones propias, con su constante y no
+# tocando el default compartido.
 - La estrategia RAG (vector_strategy / rag_vector_pipeline) usa el packer antes de construir el
   bloque DOCUMENTOS DISPONIBLES.
 
