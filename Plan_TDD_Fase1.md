@@ -9060,16 +9060,60 @@ TESTS REQUERIDOS (Vitest):
 
 Esta fase no añade funcionalidad nueva: convierte la pila de desarrollo (Docker Compose local) en un sistema desplegado en Google Cloud Platform. El codebase ya está diseñado para ello (ver sección "Infraestructura objetivo" en CLAUDE.md); estos prompts completan la configuración y documentan el proceso operativo.
 
-**Requisito previo**: tener acceso a un proyecto GCP con facturación activa y los servicios habilitados: Cloud Run, Cloud SQL, Cloud Storage, Artifact Registry, Secret Manager, Cloud Build.
+**Requisito previo**: acceso a un proyecto GCP con **facturación activa**. Los servicios ya no se dan por habilitados a mano: los habilita **D.0**, que es un paso del despliegue y no una nota en prosa (enmienda del 2026-08-01, a petición del usuario de habilitarlo todo de una vez en el deploy).
 
 ```
 Fase Deploy
+  ├── D.0  Habilitación de servicios del proyecto — gcloud services enable, versionado
   ├── D.1  Autenticación pública del widget — API key por chatbot
   ├── D.2  Secrets y variables de entorno — migración a Secret Manager
   ├── D.3  Base de datos en producción — Cloud SQL + migraciones Alembic
   ├── D.4  Imágenes Docker — Artifact Registry + Cloud Run
   ├── D.5  CI/CD — pipeline GitHub Actions → Cloud Build → Cloud Run
   └── D.6  Edge node — despliegue híbrido cloud/edge en GCP
+```
+
+---
+
+### Prompt D.0 — Habilitación de servicios del proyecto GCP
+
+**Modelo sugerido**: **Sonnet** — script idempotente y lista versionada; sin decisiones abiertas.
+
+> **Añadido el 2026-08-01**, a petición del usuario: habilitar todos los servicios de una vez
+> durante el despliegue en vez de irlos encendiendo a mano según hagan falta. Hasta ahora esto
+> era una frase de «requisito previo» en prosa, con una lista **incompleta** —no incluía Vertex
+> AI ni Discovery Engine— y nadie la ejecutaba: los cinco prompts de deploy daban por hecho que
+> las APIs ya estaban encendidas.
+
+```
+# PROMPT D.0 — Los servicios se habilitan con un script, no con clics
+# Deploy: cloud
+
+## Script (scripts/gcp_enable_services.sh)
+- `gcloud services enable` con la lista COMPLETA, idempotente (volver a ejecutarlo no rompe) y
+  con el proyecto como parametro, no cableado.
+- Lista minima a partir de lo que el sistema usa hoy; verificar contra el codigo antes de
+  darla por buena, porque una API que falta se manifiesta como un 403 en produccion:
+    run.googleapis.com                  Cloud Run (la aplicacion)
+    sqladmin.googleapis.com             Cloud SQL (Postgres + pgvector)
+    secretmanager.googleapis.com        secretos (D.2)
+    artifactregistry.googleapis.com     imagenes (D.4)
+    cloudbuild.googleapis.com           build (D.5)
+    storage.googleapis.com              GCS via StorageService
+    aiplatform.googleapis.com           Vertex AI
+    generativelanguage.googleapis.com   Gemini API con API key (embeddings de MOD.2)
+    discoveryengine.googleapis.com      Ranking API del reranker (RAG.6b)
+- Documentar QUE prompt necesita cada servicio, para que quien lo lea sepa que se rompe si
+  quita uno.
+
+## Comprobacion, no solo habilitacion
+- El script termina LISTANDO los servicios habilitados y marcando los que faltan. Habilitar y
+  no comprobar deja el mismo agujero que habia: creer que estan.
+- Anotar la cuota por defecto de discoveryengine, que puede ser baja.
+
+## Tests
+# should_list_every_service_the_codebase_needs   (la lista del script cubre lo que se usa)
+# should_be_idempotent                            (segunda ejecucion, exit 0)
 ```
 
 ---
@@ -13489,11 +13533,31 @@ espacios vectoriales.
 # PROMPT RAG.6 (RED/GREEN) — Reranker detrás de protocolo, flag por chatbot
 # Deploy: edge
 
-# PRERREQUISITO EXTERNO (2026-08-01) — NO empezar sin esto:
-# El Ranking API vive en **Discovery Engine / Agent Builder**, no en la API de Gemini. Mismo
-# proyecto de GCP y mismo DPA, pero es OTRO servicio que hay que habilitar y con su propia
-# cuota. Pendiente de habilitar a fecha de hoy. Al habilitarlo, comprobar dos cosas en la
-# consola de facturación, porque la documentación pública no las deja cerradas:
+# PARTIDO EN DOS (2026-08-01, decisión del usuario de habilitar los servicios de GCP todos a
+# la vez durante el despliegue). Cada mitad entrega algo que funciona:
+#
+#   RAG.6a — EL MECANISMO. Se puede hacer YA, sin ningún servicio habilitado: protocolo
+#     Reranker, resolución por configuración (purpose='rerank' + provider_type, patrón de
+#     MOD.2), pool ampliado, sustitución del score, normalización y cableado en
+#     rag_vector_pipeline por `_construir_estrategia`. Tests con un **reranker determinista**,
+#     igual que RAG.1 mide el mecanismo de recuperación con un embedding determinista.
+#
+#   RAG.6b — EL ADAPTADOR REAL Y LA MEDICIÓN. **Va DESPUÉS del bloque Deploy**, porque el
+#     Ranking API vive en Discovery Engine y lo habilita D.0. Aquí se comprueba que el
+#     contrato escrito coincide con el real —un adaptador probado solo contra un doble está
+#     verificado en su lógica, no en su integración— y se decide con datos si el flag se
+#     enciende en algún sitio.
+#
+# Por qué se parte y no se espera entero: escribir un adaptador que nunca ha hablado con el
+# servicio real es la familia de riesgo que este proyecto ya pisó tres veces el 2026-08-01
+# —GoogleEmbeddingService inalcanzable durante meses, la guarda de dimensión que no podía
+# saltar, y su test verificando un campo inventado—. Las tres pasaban los tests.
+#
+# La medición del idioma NO necesita el corpus v1: el dataset dorado ya está en valenciano y
+# el corpus de fixture son 25 normas breves. RAG.6b depende solo de D.0.
+#
+# Al habilitar el servicio (en D.0), comprobar dos cosas que la documentación pública no deja
+# cerradas:
 #   1. Precio por consulta vigente (la referencia que se manejó, ~1 $/1.000 consultas, viene
 #      de fuente secundaria: la pagina oficial de precios no se pudo leer).
 #   2. Si aplica el **modelo de suscripción mensual** que Discovery Engine ofrece para apps y
