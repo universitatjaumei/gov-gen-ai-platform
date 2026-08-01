@@ -1,0 +1,109 @@
+{
+  "name": "conversacional",
+  "documents_fingerprint": "4a22fe5b69e559259188c33b31a28934",
+  "chatbot_reference": "fixture:golden_corpus",
+  "queries": [
+    {
+      "query": "i si és a l'estranger?",
+      "language": "ca",
+      "expected_canonical_urls": ["https://www.uji.es/REG-020"],
+      "tags": ["conversacional", "dieta"],
+      "history": [
+        "usuario: quant cobro de dieta per anar a Madrid?",
+        "asistente: L'import de la dieta per dia complet és de 53,34 euros."
+      ],
+      "notes": "Ni 'dieta' ni 'import' aparecen en el seguimiento: sin el turno previo no hay por dónde agarrarlo."
+    },
+    {
+      "query": "i qui l'ha de signar?",
+      "language": "ca",
+      "expected_canonical_urls": ["https://www.uji.es/INS-001"],
+      "tags": ["conversacional", "contractacio"],
+      "history": [
+        "usuario: fins a quant puc gastar en un contracte menor de serveis?",
+        "asistente: El límit del contracte menor de serveis està fixat a la instrucció."
+      ],
+      "notes": "El 'l'' es el contrato menor; el pronombre es todo el contenido de la consulta."
+    },
+    {
+      "query": "i quant de temps tinc per reclamar?",
+      "language": "ca",
+      "expected_canonical_urls": ["https://www.uji.es/REG-003"],
+      "tags": ["conversacional", "avaluacio"],
+      "history": [
+        "usuario: quantes convocatòries tinc per assignatura?",
+        "asistente: El nombre de convocatòries per assignatura el fixa el reglament d'avaluació."
+      ]
+    },
+    {
+      "query": "cal demanar autorització abans?",
+      "language": "ca",
+      "expected_canonical_urls": ["https://www.uji.es/REG-045"],
+      "tags": ["conversacional", "retribucions"],
+      "history": [
+        "usuario: com es reconeix el complement de mèrits docents?",
+        "asistente: El reconeixement del complement segueix el procediment del reglament de retribucions."
+      ]
+    },
+    {
+      "query": "i després, quan l'he de justificar?",
+      "language": "ca",
+      "expected_canonical_urls": ["https://www.uji.es/INS-004"],
+      "tags": ["conversacional", "bestreta"],
+      "history": [
+        "usuario: amb quanta antelació demane una bestreta de viatge?",
+        "asistente: La sol·licitud de bestreta de viatge té un termini mínim d'antelació."
+      ]
+    },
+    {
+      "query": "i en quant temps s'ha de notificar?",
+      "language": "ca",
+      "expected_canonical_urls": ["https://www.uji.es/REG-072"],
+      "tags": ["conversacional", "proteccio-dades"],
+      "history": [
+        "usuario: qui és el delegat de protecció de dades?",
+        "asistente: El delegat de protecció de dades el designa la Universitat."
+      ]
+    },
+    {
+      "query": "i per modificar-lo, quina fa falta?",
+      "language": "ca",
+      "expected_canonical_urls": ["https://www.uji.es/REG-088"],
+      "tags": ["conversacional", "governanca"],
+      "history": [
+        "usuario: quin quòrum fa falta al Consell de Govern?",
+        "asistente: El quòrum del Consell de Govern el fixa el seu reglament."
+      ]
+    },
+    {
+      "query": "es poden ampliar?",
+      "language": "ca",
+      "expected_canonical_urls": ["https://www.uji.es/REG-100"],
+      "tags": ["conversacional", "teletreball"],
+      "history": [
+        "usuario: quants dies de teletreball puc fer?",
+        "asistente: El nombre de dies de teletreball està regulat."
+      ]
+    },
+    {
+      "query": "i es pot renovar?",
+      "language": "ca",
+      "expected_canonical_urls": ["https://www.uji.es/REG-101"],
+      "tags": ["conversacional", "biblioteca"],
+      "history": [
+        "usuario: quant dura el préstec de la biblioteca?",
+        "asistente: La durada del préstec depèn del tipus d'usuari."
+      ]
+    },
+    {
+      "query": "i es pot prorrogar?",
+      "language": "ca",
+      "expected_canonical_urls": ["https://www.uji.es/REG-112"],
+      "tags": ["conversacional", "convenis"],
+      "history": [
+        "usuario: quant dura com a màxim un conveni?",
+        "asistente: La durada màxima d'un conveni la fixa el reglament de convenis."
+      ]
+    }
+  ]
+}

@@ -113,6 +113,21 @@ class HubOrganizacion(HubConfigBase):
     default_chunk_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     default_chunk_overlap: Mapped[int | None] = mapped_column(Integer, nullable=True)
     default_chunking_strategy: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # --- Reescritura de consulta (RAG.10). NULL = heredar del default de plataforma ---
+    # Nullable y no `default=False` como sus hermanas booleanas mas antiguas: con un False
+    # no nulo, la organizacion pisaria siempre a la plataforma y encenderlo por organizacion
+    # no serviria de nada. Es el mismo motivo por el que context_token_budget es nullable.
+    default_query_rewriting_enabled: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
+    # Modelo con el que se reescribe: pequeno y rapido, distinto del que responde. Vive en
+    # la organizacion porque repetirlo en cada chatbot solo multiplicaria sitios donde
+    # olvidarlo. NULL = usar el del chatbot con el tope de salida bajado.
+    rewrite_llm_config_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_llm_configs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -235,6 +250,9 @@ class HubChatbot(HubConfigBase):
     chunk_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     chunk_overlap: Mapped[int | None] = mapped_column(Integer, nullable=True)
     chunking_strategy: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # RAG.10. NULL = heredar; un False no nulo haria que el chatbot pisara siempre a la
+    # organizacion y encender la reescritura por organizacion no llegaria a ningun sitio.
+    query_rewriting_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     parent_chatbot_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("hub_chatbots.id", ondelete="SET NULL"),

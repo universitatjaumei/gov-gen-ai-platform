@@ -53,6 +53,7 @@ def _make_chatbot(
         chunk_size=None,  # RAG.8: idem para los parametros de troceado
         chunk_overlap=None,
         chunking_strategy=None,
+        query_rewriting_enabled=None,  # RAG.10
         created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
         updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
     )

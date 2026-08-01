@@ -41,6 +41,9 @@ class OrganizacionRead(BaseModel):
     default_chunk_size: int | None
     default_chunk_overlap: int | None
     default_chunking_strategy: str | None
+    # RAG.10: None = heredar el default de plataforma (False)
+    default_query_rewriting_enabled: bool | None
+    rewrite_llm_config_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
 
@@ -64,6 +67,8 @@ class OrganizacionCreate(BaseModel):
     default_chunk_size: int | None = None
     default_chunk_overlap: int | None = None
     default_chunking_strategy: str | None = None
+    default_query_rewriting_enabled: bool | None = None
+    rewrite_llm_config_id: uuid.UUID | None = None
 
 
 class OrganizacionUpdate(BaseModel):
@@ -83,6 +88,8 @@ class OrganizacionUpdate(BaseModel):
     default_chunk_size: int | None = None
     default_chunk_overlap: int | None = None
     default_chunking_strategy: str | None = None
+    default_query_rewriting_enabled: bool | None = None
+    rewrite_llm_config_id: uuid.UUID | None = None
 
 
 _count_sq = (
@@ -134,6 +141,8 @@ async def create_organizacion(
         default_chunk_size=body.default_chunk_size,
         default_chunk_overlap=body.default_chunk_overlap,
         default_chunking_strategy=body.default_chunking_strategy,
+        default_query_rewriting_enabled=body.default_query_rewriting_enabled,
+        rewrite_llm_config_id=body.rewrite_llm_config_id,
     )
     session.add(organizacion)
     await session.commit()

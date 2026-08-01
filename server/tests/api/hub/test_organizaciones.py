@@ -36,6 +36,8 @@ def _make_organizacion(name: str = "UJI", is_active: bool = True) -> SimpleNames
         default_chunk_size=None,  # RAG.8
         default_chunk_overlap=None,
         default_chunking_strategy=None,
+        default_query_rewriting_enabled=None,  # RAG.10
+        rewrite_llm_config_id=None,
         created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
         updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
     )

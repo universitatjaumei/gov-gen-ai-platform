@@ -38,12 +38,47 @@ class GraphFactory:
     ) -> CoreGraph:
         cfg = await get_effective_public_graph_config(chatbot_id, deps.session)
         profile_factory = self._registry.get_profile(cfg.profile)
-        return profile_factory(cfg, deps, llm)
+        grafo = profile_factory(cfg, deps, llm)
+        # RAG.10: el LLM de reescritura se asigna aquí y no se pasa por las tres factorías
+        # de perfil. Es una decisión de composición que depende de la cascada —igual que el
+        # AgenticLoop— y añadirlo a sus firmas obligaría a los tres perfiles a conocer algo
+        # que ninguno usa. Si el modelo no se puede construir, la reescritura simplemente no
+        # está disponible: el chat no puede caerse por una optimización de recuperación.
+        if getattr(cfg, "query_rewriting_enabled", False):
+            grafo.rewrite_llm = await _resolver_llm_de_reescritura(cfg, deps)
+        return grafo
 
 
 # ---------------------------------------------------------------------------
 # Registro de perfiles en el registry por defecto
 # ---------------------------------------------------------------------------
+
+
+async def _resolver_llm_de_reescritura(cfg: Any, deps: Any):
+    """Modelo de reescritura, o None si no se puede construir (RAG.10).
+
+    Devolver None en vez de propagar es lo mismo que hacen los tres fallbacks del
+    reescritor, y por el mismo motivo: la conversación no se cae porque falte un modelo
+    auxiliar. Aquí sí es correcto tragarse el error —no es el patrón «fallback silencioso»
+    que el proyecto prohíbe, porque no se degrada a otro modelo: se apaga el paso entero y
+    se busca con lo que escribió el usuario, que es el comportamiento por defecto.
+    """
+    import logging
+
+    from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
+    from server.app.modules.agents_hub.services.model_factory import get_rewrite_model
+
+    try:
+        return await get_rewrite_model(
+            cfg.chatbot_id,
+            LocalConfigProvider(deps.session),
+            rewrite_llm_config_id=getattr(cfg, "rewrite_llm_config_id", None),
+        )
+    except Exception as fallo:  # noqa: BLE001
+        logging.getLogger(__name__).warning(
+            "Reescritura no disponible para %s: %s", cfg.chatbot_id, fallo
+        )
+        return None
 
 
 def build_agentic_loop_if_needed(cfg: Any, deps: Any):

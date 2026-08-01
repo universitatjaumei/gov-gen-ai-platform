@@ -16,7 +16,7 @@ Deploy: edge
 
 import json
 import uuid
-from typing import AsyncIterator
+from typing import AsyncIterator, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -77,8 +77,21 @@ _SSE_HEADERS = {
 }
 
 
+class ChatTurn(BaseModel):
+    """Un turno anterior de la conversación."""
+
+    role: Literal["user", "assistant"]
+    content: str = Field(..., max_length=10_000)
+
+
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=10_000)
+    # RAG.10: el historial lo manda el cliente. La API es sin estado y no existe entidad
+    # «conversación», así que no hay de dónde recuperarlo en el servidor. Se usa solo para
+    # reescribir la consulta de búsqueda; la generación sigue recibiendo el mensaje actual.
+    # Se acota a 50 turnos para que el cuerpo de la petición no sea ilimitado; el
+    # reescritor solo mira los últimos.
+    history: list[ChatTurn] = Field(default_factory=list, max_length=50)
 
 
 def _sse(event: str, payload: dict) -> str:
@@ -208,6 +221,10 @@ async def chat_stream(
         "query": request.message,
         "chatbot_id": str(selected_chatbot_id),
         "language": None,
+        # RAG.10: los turnos previos, ya aplanados a 'rol: texto', que es lo que consume el
+        # reescritor. El grafo no necesita objetos de mensaje para esto.
+        "history": [f"{t.role}: {t.content}" for t in request.history],
+        "rewritten_query": None,
         "retrieval_output": None,
         "merged_items": [],
         "answer": None,

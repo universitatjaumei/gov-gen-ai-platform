@@ -49,6 +49,33 @@ async def get_model(chatbot_id: uuid.UUID, config_provider: ConfigProvider):
     return _build_model(config, chatbot=chatbot)
 
 
+async def get_rewrite_model(
+    chatbot_id: uuid.UUID,
+    config_provider: ConfigProvider,
+    rewrite_llm_config_id: uuid.UUID | None = None,
+    max_tokens: int = 100,
+):
+    """Modelo para reescribir la consulta de búsqueda (RAG.10).
+
+    Si la organización declara uno, se usa tal cual: se eligió pequeño y rápido a
+    propósito. Si no, se cae al del chatbot **con el tope de salida bajado**, porque la
+    reescritura devuelve una línea y pagar el `max_tokens` del modelo de respuesta por una
+    línea es tirar dinero y latencia en el camino crítico de cada turno.
+    """
+    if rewrite_llm_config_id is not None:
+        config = await config_provider.get_llm_config(rewrite_llm_config_id)
+        if config is not None:
+            return _build_model(config)
+
+    chatbot = await config_provider.get_chatbot(chatbot_id)
+    if chatbot is None:
+        raise ValueError(f"Chatbot {chatbot_id} not found")
+    config = await config_provider.get_llm_config(chatbot.llm_config_id)
+    if config is None:
+        raise ValueError(f"LLM config not found for chatbot {chatbot_id}")
+    return _build_model(config, max_tokens_override=max_tokens)
+
+
 def _apply_prompt_caching(model, chatbot) -> None:
     if not chatbot:
         return
@@ -57,8 +84,9 @@ def _apply_prompt_caching(model, chatbot) -> None:
     setattr(model, "_prompt_caching_enabled", enabled)
     setattr(model, "_prompt_cache_ttl", ttl)
 
-def _build_model(config: HubLLMConfig, chatbot=None):
+def _build_model(config: HubLLMConfig, chatbot=None, max_tokens_override: int | None = None):
     """Construye la instancia LLM a partir del config y su proveedor."""
+    tope_salida = max_tokens_override if max_tokens_override is not None else config.max_tokens
     provider = getattr(config, "provider_rel", None)
     if not provider:
         raise ValueError(f"Provider not loaded or missing for config {config.id}")
@@ -92,7 +120,7 @@ def _build_model(config: HubLLMConfig, chatbot=None):
             model=config.model_name,
             temperature=config.temperature,
             top_p=getattr(config, "top_p", 1.0),
-            max_output_tokens=config.max_tokens,
+            max_output_tokens=tope_salida,
         )
         if api_key:
             kwargs["google_api_key"] = api_key
@@ -105,7 +133,7 @@ def _build_model(config: HubLLMConfig, chatbot=None):
             model=config.model_name,
             temperature=config.temperature,
             top_p=getattr(config, "top_p", 1.0),
-            max_tokens=config.max_tokens,
+            max_tokens=tope_salida,
         )
         if api_key:
             kwargs["api_key"] = api_key

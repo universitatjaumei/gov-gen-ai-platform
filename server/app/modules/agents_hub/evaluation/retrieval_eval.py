@@ -41,6 +41,10 @@ class EmbeddingService(Protocol):
     async def embed(self, text: str) -> list[float]: ...
 
 
+class Rewriter(Protocol):
+    async def __call__(self, query: str, history: list[str]) -> str: ...
+
+
 @dataclass(frozen=True)
 class QueryResult:
     query: str
@@ -96,14 +100,23 @@ async def run_golden_eval(
     dataset: GoldenDataset,
     chatbot_id: uuid.UUID,
     top_k: int = 10,
+    rewriter: "Rewriter | None" = None,
 ) -> EvalReport:
-    """Ejecuta cada consulta del dorado y agrega las métricas."""
+    """Ejecuta cada consulta del dorado y agrega las métricas.
+
+    `rewriter` (RAG.10) permite medir la reescritura de consulta ON vs OFF sin montar el
+    grafo entero: es el único punto donde el harness necesita saber que existe, porque la
+    reescritura cambia **con qué se busca** y nada más.
+    """
     resultados: list[QueryResult] = []
 
     for consulta in dataset.queries:
-        vector = await embedding.embed(consulta.query)
+        texto = consulta.query
+        if rewriter is not None and consulta.history:
+            texto = await rewriter(consulta.query, list(consulta.history))
+        vector = await embedding.embed(texto)
         hallados = await retriever.hybrid_search(
-            query=consulta.query,
+            query=texto,
             query_embedding=vector,
             chatbot_id=chatbot_id,
             top_k=top_k,

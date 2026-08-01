@@ -47,6 +47,15 @@ class PublicGraphConfig:
     chunk_size: int = 1000
     chunk_overlap: int = 100
     chunking_strategy: str = "structural"
+    # RAG.10: reescritura de la consulta con el historial antes de recuperar. **False de
+    # plataforma**, por el mismo motivo que `reranker_enabled` y `min_retrieval_score`:
+    # cuesta una llamada al LLM por turno de seguimiento y su ganancia no se ha medido
+    # todavía contra el corpus real. Se enciende por chatbot cuando el gate lo respalde.
+    query_rewriting_enabled: bool = False
+    # LLM de reescritura, configurable en la organización porque es otro modelo —pequeño y
+    # rápido— y no tiene sentido repetirlo en cada chatbot. None = usar el del chatbot con
+    # el tope de salida bajado.
+    rewrite_llm_config_id: uuid.UUID | None = None
 
 
 _PLATFORM_DEFAULTS = PublicGraphConfig(
@@ -121,6 +130,8 @@ async def get_effective_public_graph_config(
             "chunk_size":            organizacion.default_chunk_size,
             "chunk_overlap":         organizacion.default_chunk_overlap,
             "chunking_strategy":     organizacion.default_chunking_strategy,
+            "query_rewriting_enabled": organizacion.default_query_rewriting_enabled,
+            "rewrite_llm_config_id": organizacion.rewrite_llm_config_id,
         })
 
     config = _apply_layer(config, {
@@ -137,6 +148,7 @@ async def get_effective_public_graph_config(
         "chunk_size":            chatbot.chunk_size,
         "chunk_overlap":         chatbot.chunk_overlap,
         "chunking_strategy":     chatbot.chunking_strategy,
+        "query_rewriting_enabled": chatbot.query_rewriting_enabled,
     })
 
     if config.retrieval_mode == "MD_AGENT_SELECTOR":

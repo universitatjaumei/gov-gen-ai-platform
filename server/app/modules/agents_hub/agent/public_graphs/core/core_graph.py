@@ -31,6 +31,10 @@ from server.app.modules.agents_hub.agent.citation_validator import (
 from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_contract import (
     EvidenceItem,
 )
+from server.app.modules.agents_hub.agent.public_graphs.core.query_rewriter import (
+    necesita_reescritura,
+    reescribir_consulta,
+)
 from server.app.modules.agents_hub.services.retrieval.vigencia import (
     aviso_para as aviso_de_vigencia,
 )
@@ -53,6 +57,13 @@ class CoreGraphState(TypedDict):
     query: str
     chatbot_id: str
     language: str | None
+    # RAG.10: turnos previos, ya formateados como 'rol: texto'. Los manda el cliente: la API
+    # es sin estado y no hay entidad conversación.
+    history: list                  # list[str]
+    # La consulta autónoma con la que se BUSCA, cuando la reescritura está encendida y sale
+    # bien. None significa «se buscó con lo que escribió el usuario» — y hay que poder
+    # distinguirlo, porque es lo que se lee en la traza y en el bypass de RAG.11.
+    rewritten_query: str | None
     retrieval_output: Any          # RetrievalOutput | None
     merged_items: list             # list[EvidenceItem]
     answer: str | None
@@ -80,6 +91,7 @@ class CoreGraph:
         deps: "GraphDeps",
         llm: Any = None,
         agentic_loop: "AgenticLoop | None" = None,
+        rewrite_llm: Any = None,
     ) -> None:
         self.retrieval_strategy = retrieval_strategy
         self.merge_strategy = merge_strategy
@@ -89,6 +101,10 @@ class CoreGraph:
         self.deps = deps
         self.llm = llm
         self.agentic_loop = agentic_loop
+        # RAG.10: modelo pequeño y rápido para reescribir. Lo resuelve la GraphFactory, que
+        # es quien ve la cascada; el nodo solo lo usa. None = no hay reescritura posible,
+        # que es lo mismo que tenerla apagada.
+        self.rewrite_llm = rewrite_llm
 
     def compile(self):
         """Compila y devuelve el grafo LangGraph listo para invocar."""
@@ -98,9 +114,24 @@ class CoreGraph:
             lang = self.language_policy.detect(state["query"])
             return {"language": lang}
 
+        async def rewrite_query_node(state: CoreGraphState) -> dict:
+            """Passthrough salvo que el flag esté encendido Y haya conversación previa."""
+            historial = list(state.get("history") or [])
+            habilitado = getattr(self.cfg, "query_rewriting_enabled", False)
+            if self.rewrite_llm is None or not necesita_reescritura(habilitado, historial):
+                return {"rewritten_query": None}
+
+            reescrita = await reescribir_consulta(
+                state["query"], historial, self.rewrite_llm
+            )
+            # Si el fallback devolvió la original, no hubo reescritura: dejarla en None
+            # evita que la traza y el bypass muestren un paso que no ocurrió.
+            return {"rewritten_query": reescrita if reescrita != state["query"] else None}
+
         async def retrieve_node(state: CoreGraphState) -> dict:
             output = await self.retrieval_strategy.retrieve(
-                state["query"],
+                # Se BUSCA con la reescrita; a partir de aquí nadie más la ve.
+                state.get("rewritten_query") or state["query"],
                 state["chatbot_id"],
                 self.cfg,
                 self.deps,
@@ -209,6 +240,7 @@ class CoreGraph:
             return {}
 
         graph.add_node("detect_language", detect_language_node)
+        graph.add_node("rewrite_query", rewrite_query_node)
         graph.add_node("retrieve", retrieve_node)
         graph.add_node("merge", merge_node)
         graph.add_node("generate_answer", generate_answer_node)
@@ -216,7 +248,8 @@ class CoreGraph:
         graph.add_node("log", log_node)
 
         graph.set_entry_point("detect_language")
-        graph.add_edge("detect_language", "retrieve")
+        graph.add_edge("detect_language", "rewrite_query")
+        graph.add_edge("rewrite_query", "retrieve")
         graph.add_edge("retrieve", "merge")
         graph.add_conditional_edges(
             "merge",
@@ -229,13 +262,17 @@ class CoreGraph:
 
         return graph.compile()
 
-    async def run(self, query: str, chatbot_id: str) -> dict:
+    async def run(
+        self, query: str, chatbot_id: str, history: list[str] | None = None
+    ) -> dict:
         """Ejecuta el grafo y devuelve el estado final."""
         compiled = self.compile()
         initial: CoreGraphState = {
             "query": query,
             "chatbot_id": chatbot_id,
             "language": None,
+            "history": list(history or []),
+            "rewritten_query": None,
             "retrieval_output": None,
             "merged_items": [],
             "answer": None,

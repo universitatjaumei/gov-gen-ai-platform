@@ -227,3 +227,62 @@ class TestUmbralContraElDorado:
             "el umbral por defecto recorta aciertos del dorado: ajustarlo con datos "
             "y documentar el porqué (criterio de done de RAG.5)"
         )
+
+
+class TestReescrituraContraElDorado:
+    """RAG.10: el criterio de done, medido sobre el subconjunto conversacional.
+
+    **Qué se mide y qué no.** El reescritor de aquí es determinista —concatena el último
+    turno del usuario con el seguimiento—, no un LLM. Es la misma postura que RAG.1 con el
+    embedding y RAG.6a con el reranker: lo que se verifica es que **resolver la anáfora
+    ayuda a recuperar**, no la calidad de un modelo concreto reescribiendo. Un LLM haría
+    una consulta más limpia que la concatenación, así que esta cifra es un suelo, no un
+    techo.
+
+    El subconjunto vive en su propio fichero y no dentro de `golden_dietes.json`: mezclarlo
+    movería la media contra la que se compararon RAG.3–RAG.9 y dejaría la línea base del
+    gate midiendo otra cosa.
+    """
+
+    @pytest.mark.asyncio
+    async def test_rewriting_should_improve_the_conversational_subset(
+        self, corpus_ingerido, db_session
+    ):
+        from server.app.modules.agents_hub.evaluation.golden_dataset import (
+            load_golden_dataset,
+        )
+        from server.app.modules.agents_hub.evaluation.retrieval_eval import run_golden_eval
+        from server.app.modules.agents_hub.services.retriever import HybridRetriever
+
+        chatbot_id, _ = corpus_ingerido
+        dataset = load_golden_dataset(Path(__file__).parent / "golden_conversacional.json")
+
+        async def _concatenar(query: str, history: list[str]) -> str:
+            ultimo_usuario = next(
+                (m.split(":", 1)[1].strip() for m in reversed(history)
+                 if m.startswith("usuario:")),
+                "",
+            )
+            return f"{ultimo_usuario} {query}".strip()
+
+        apagado = await run_golden_eval(
+            HybridRetriever(db_session), DeterministicEmbedding(), dataset, chatbot_id
+        )
+        encendido = await run_golden_eval(
+            HybridRetriever(db_session), DeterministicEmbedding(), dataset, chatbot_id,
+            rewriter=_concatenar,
+        )
+
+        print(
+            f"\n  conversacional OFF: recall@5={apagado.recall_at_5:.3f} "
+            f"recall@10={apagado.recall_at_10:.3f} mrr={apagado.mrr:.3f}"
+            f"\n  conversacional ON:  recall@5={encendido.recall_at_5:.3f} "
+            f"recall@10={encendido.recall_at_10:.3f} mrr={encendido.mrr:.3f}"
+        )
+
+        assert encendido.recall_at_5 > apagado.recall_at_5, (
+            "resolver la anafora no mejora la recuperacion en el subconjunto "
+            "conversacional: o el subconjunto no es anaforico de verdad, o la reescritura "
+            "no aporta nada en este corpus. Las dos cosas hay que mirarlas antes de "
+            "encender el flag."
+        )

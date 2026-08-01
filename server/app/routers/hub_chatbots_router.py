@@ -62,6 +62,8 @@ class ChatbotRead(BaseModel):
     chunk_size: int | None
     chunk_overlap: int | None
     chunking_strategy: Literal["structural", "parent_child"] | None
+    # RAG.10: None = heredar. Un False no nulo pisaria a la organizacion.
+    query_rewriting_enabled: bool | None
     created_at: datetime
     updated_at: datetime
 
@@ -91,6 +93,7 @@ class ChatbotCreate(BaseModel):
     chunk_size: int | None = None
     chunk_overlap: int | None = None
     chunking_strategy: Literal["structural", "parent_child"] | None = None
+    query_rewriting_enabled: bool | None = None
 
 
 class ChatbotUpdate(BaseModel):
@@ -115,6 +118,7 @@ class ChatbotUpdate(BaseModel):
     chunk_size: int | None = None
     chunk_overlap: int | None = None
     chunking_strategy: Literal["structural", "parent_child"] | None = None
+    query_rewriting_enabled: bool | None = None
 
 
 class AssignChildIn(BaseModel):
@@ -207,6 +211,7 @@ async def create_chatbot(
         chunk_size=body.chunk_size,
         chunk_overlap=body.chunk_overlap,
         chunking_strategy=body.chunking_strategy,
+        query_rewriting_enabled=body.query_rewriting_enabled,
     )
     session.add(chatbot)
     await session.commit()
