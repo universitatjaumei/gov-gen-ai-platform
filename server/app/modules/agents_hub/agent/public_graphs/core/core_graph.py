@@ -11,6 +11,7 @@ Deploy: edge
 """
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING, Any, Literal
 
 from typing_extensions import TypedDict
@@ -64,6 +65,9 @@ class CoreGraphState(TypedDict):
     # bien. None significa «se buscó con lo que escribió el usuario» — y hay que poder
     # distinguirlo, porque es lo que se lee en la traza y en el bypass de RAG.11.
     rewritten_query: str | None
+    # RAG.11: ejecutar todo el pipeline y pararse ANTES de invocar al modelo.
+    debug_bypass: bool
+    bypass: dict | None            # lo que se iba a enviar, cuando debug_bypass
     retrieval_output: Any          # RetrievalOutput | None
     merged_items: list             # list[EvidenceItem]
     answer: str | None
@@ -171,6 +175,11 @@ class CoreGraph:
         def quality_gate(
             state: CoreGraphState,
         ) -> Literal["generate_answer", "fallback"]:
+            # RAG.11: en bypass el gate INFORMA pero no desvía. Si desviara, el caso que
+            # más interesa depurar —puntuación baja— sería justo el que no enseña ningún
+            # prompt, que es lo único que el bypass existe para enseñar.
+            if state.get("debug_bypass"):
+                return "generate_answer"
             if state["quality_score"] >= self.cfg.quality_threshold:
                 return "generate_answer"
             return "fallback"
@@ -182,6 +191,15 @@ class CoreGraph:
                 state.get("language"),
                 state["query"],
             )
+            if state.get("debug_bypass"):
+                return {
+                    "bypass": self._instantanea_de_bypass(state, context, items),
+                    "answer": None,
+                    "fallback_used": False,
+                    "fallback_reason": None,
+                    "sources": items,
+                }
+
             if self.llm is None:
                 return {
                     "answer": context,
@@ -262,8 +280,71 @@ class CoreGraph:
 
         return graph.compile()
 
+    def _instantanea_de_bypass(
+        self, state: CoreGraphState, context: str, items: list
+    ) -> dict:
+        """Lo que se iba a enviar al modelo, más el porqué (RAG.11).
+
+        Se serializa aquí y no en el endpoint porque el endpoint no ve la evidencia ni el
+        contexto construido: solo el estado final. Y va todo junto a propósito — el valor
+        del bypass es leer el prompt y su configuración resuelta **en la misma pantalla**.
+        """
+        from dataclasses import asdict, is_dataclass
+
+        salida = state.get("retrieval_output")
+        debug: dict = {}
+        if salida is not None and getattr(salida, "buckets", None):
+            for bucket in salida.buckets:
+                debug.update(getattr(bucket, "debug", None) or {})
+
+        def _evidencia(item) -> dict:
+            # Se aceptan los dos dialectos por el mismo motivo que `_serialize_source` en
+            # el endpoint: RAG.2 unificó el contrato en `EvidenceItem`, pero las
+            # estrategias de `services/retrieval/` siguen hablando `Source` por debajo.
+            identificador = (
+                getattr(item, "source_id", None) or getattr(item, "document_id", None)
+            )
+            return {
+                "document_id": str(identificador) if identificador else None,
+                "title": getattr(item, "title", None),
+                "url": getattr(item, "source_url", None) or getattr(item, "url", None),
+                "excerpt": (
+                    getattr(item, "content", None) or getattr(item, "excerpt", None)
+                ),
+                "score": getattr(item, "score", None),
+            }
+
+        return {
+            "system_prompt": context,
+            "messages": [
+                {"role": "system", "content": context},
+                {"role": "user", "content": state["query"]},
+            ],
+            "packed_context": {
+                "evidencias": [_evidencia(i) for i in items],
+                "dropped_count": debug.get("dropped_count", 0),
+                "total_tokens": debug.get("total_tokens"),
+                "context_token_budget": debug.get("context_token_budget"),
+            },
+            "sources": [_evidencia(i) for i in items],
+            "rewritten_query": state.get("rewritten_query"),
+            "resolved_config": (
+                {k: str(v) if isinstance(v, uuid.UUID) else v
+                 for k, v in asdict(self.cfg).items()}
+                if is_dataclass(self.cfg) else {}
+            ),
+            "quality_gate": {
+                "score": state.get("quality_score", 0.0),
+                "passed": state.get("quality_score", 0.0) >= self.cfg.quality_threshold,
+            },
+        }
+
     async def run(
-        self, query: str, chatbot_id: str, history: list[str] | None = None
+        self,
+        query: str,
+        chatbot_id: str,
+        history: list[str] | None = None,
+        debug_bypass: bool = False,
     ) -> dict:
         """Ejecuta el grafo y devuelve el estado final."""
         compiled = self.compile()
@@ -273,6 +354,8 @@ class CoreGraph:
             "language": None,
             "history": list(history or []),
             "rewritten_query": None,
+            "debug_bypass": debug_bypass,
+            "bypass": None,
             "retrieval_output": None,
             "merged_items": [],
             "answer": None,

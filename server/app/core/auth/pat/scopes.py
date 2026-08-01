@@ -8,6 +8,10 @@ REDACCION_TEMPLATES_WRITE = "redaccion:templates:write"
 CHATBOTS_READ = "chatbots:read"
 CHATBOTS_WRITE = "chatbots:write"
 CHAT_TEST = "chat:test"
+# RAG.11: inspeccionar el prompt final sin invocar al modelo. Separado de `chat:test`
+# porque enseña el system prompt entero y la configuración resuelta del chatbot, que es
+# más de lo que concede poder charlar con él.
+CHAT_DEBUG = "chat:debug"
 
 ALL_SCOPES: frozenset[str] = frozenset(
     {
@@ -16,6 +20,7 @@ ALL_SCOPES: frozenset[str] = frozenset(
         CHATBOTS_READ,
         CHATBOTS_WRITE,
         CHAT_TEST,
+        CHAT_DEBUG,
     }
 )
 

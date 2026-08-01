@@ -18,7 +18,7 @@ import json
 import uuid
 from typing import AsyncIterator, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -26,6 +26,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, require_scopes
 from server.app.core.auth import UserInfo
+from server.app.core.auth.models import UserRole
+from server.app.core.auth.pat.scopes import CHAT_DEBUG
 from server.app.modules.agents_hub.agent.public_graphs.core.graph_factory import GraphFactory
 from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_pipeline_protocol import (
     GraphDeps,
@@ -92,6 +94,23 @@ class ChatRequest(BaseModel):
     # Se acota a 50 turnos para que el cuerpo de la petición no sea ilimitado; el
     # reescritor solo mira los últimos.
     history: list[ChatTurn] = Field(default_factory=list, max_length=50)
+    # RAG.11: ejecuta el pipeline entero y devuelve el prompt final SIN invocar al modelo.
+    # Requiere sesión admin o PAT con `chat:debug`; el widget público recibe 403.
+    debug_bypass: bool = False
+
+
+def puede_depurar(request: Request, user: UserInfo) -> bool:
+    """Quién puede pedir el bypass (RAG.11).
+
+    Dos clases de principal y dos comprobaciones distintas: un PAT lleva el permiso
+    explícito o no lo lleva —no lo hereda de quien lo emitió, que es el sentido de acotar
+    un token de máquina—, y una sesión humana lo tiene por rol. Un `require_scopes` a secas
+    no serviría: deja pasar cualquier sesión JWT, incluida la del widget público.
+    """
+    scopes = getattr(request.state, "pat_scopes", None)
+    if scopes is not None:
+        return CHAT_DEBUG in scopes
+    return user.role in (UserRole.ADMIN.value, UserRole.SUPERADMIN.value)
 
 
 def _sse(event: str, payload: dict) -> str:
@@ -144,10 +163,21 @@ def _source_to_dict(source) -> dict:
 async def chat_stream(
     chatbot_id: uuid.UUID,
     request: ChatRequest,
+    http_request: Request,
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> StreamingResponse:
-    """Chat con streaming SSE."""
+):
+    """Chat con streaming SSE, o inspección del prompt final si `debug_bypass` (RAG.11)."""
+    if request.debug_bypass and not puede_depurar(http_request, user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "El modo de depuración expone el system prompt y la configuración "
+                "resuelta del chatbot: requiere sesión de administración o un PAT con "
+                f"el scope '{CHAT_DEBUG}'."
+            ),
+        )
+
     result = await session.execute(
         select(HubChatbot).where(HubChatbot.id == chatbot_id)
     )
@@ -225,6 +255,8 @@ async def chat_stream(
         # reescritor. El grafo no necesita objetos de mensaje para esto.
         "history": [f"{t.role}: {t.content}" for t in request.history],
         "rewritten_query": None,
+        "debug_bypass": request.debug_bypass,
+        "bypass": None,
         "retrieval_output": None,
         "merged_items": [],
         "answer": None,
@@ -234,6 +266,14 @@ async def chat_stream(
         "fallback_reason": None,
         "sources": [],
     }
+
+    if request.debug_bypass:
+        # JSON, no SSE: no hay nada que transmitir en trozos —no se genera texto— y quien
+        # depura quiere el objeto entero de una vez. Tampoco se persiste `HubInteraction`:
+        # esto es inspección, no conversación, y contarla ensuciaría las métricas de uso.
+        estado = await compiled.ainvoke(initial_state)
+        return estado.get("bypass") or {}
+
     interaction_id = uuid.uuid4()
 
     langfuse_handler = create_callback_handler(
