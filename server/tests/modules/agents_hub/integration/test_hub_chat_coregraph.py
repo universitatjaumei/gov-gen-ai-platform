@@ -124,7 +124,7 @@ def _lanzar(chatbot, eventos, capturadora=None):
             "server.app.api.v1.hub_chat.GraphFactory",
             return_value=MagicMock(build=AsyncMock(return_value=grafo)),
         ),
-        patch("server.app.api.v1.hub_chat.get_embedding_service"),
+        patch("server.app.api.v1.hub_chat.resolve_embedding_service", new_callable=AsyncMock),
         patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
     ):
         with TestClient(app) as client:
@@ -373,7 +373,7 @@ class TestRouterBeforeGraph:
                 "server.app.api.v1.hub_chat.GraphFactory",
                 return_value=MagicMock(build=AsyncMock(return_value=grafo)),
             ),
-            patch("server.app.api.v1.hub_chat.get_embedding_service"),
+            patch("server.app.api.v1.hub_chat.resolve_embedding_service", new_callable=AsyncMock),
             patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
             patch(
                 "server.app.api.v1.hub_chat.build_route_to_subagent_node",

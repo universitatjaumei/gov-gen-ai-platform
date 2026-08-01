@@ -65,7 +65,15 @@ _PLATFORM_DEFAULTS = PublicGraphConfig(
     # activación pendiente de medir con el corpus real cargado. Decidido con el usuario el
     # 2026-08-01. Lo vigila `test_should_not_lose_golden_hits_with_the_default_threshold`.
     min_retrieval_score=0.0,
-    reranker_enabled=True,
+    # RAG.6 / decisión del usuario (2026-08-01): **el mecanismo se construye, el interruptor
+    # no se enciende**. Con el default en True, en cuanto exista la implementación el
+    # reranker se activaría de golpe para todos los chatbots, y eso (a) acopla la
+    # disponibilidad del chat a un segundo servicio —el prompt exige error explícito, no
+    # fallback—, (b) añade latencia y coste por consulta y (c) no se ha medido que mejore.
+    # Es exactamente lo que pasó con min_retrieval_score, activo por defecto y recortando 24
+    # puntos de recall sin que nadie lo hubiera comprobado. Se activa por chatbot cuando el
+    # gate de RAG.1 lo respalde.
+    reranker_enabled=False,
     answer_template="generic",
     context_token_budget=128_000,
 )

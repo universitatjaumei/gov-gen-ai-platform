@@ -110,7 +110,7 @@ export function OrganizacionesPage() {
     default_quality_threshold: 0.6,
     default_min_retrieval_results: 2,
     default_min_retrieval_score: 0.0,
-    default_reranker_enabled: true,
+    default_reranker_enabled: false,
     default_answer_template: 'generic',
   }
 
@@ -140,7 +140,7 @@ export function OrganizacionesPage() {
       default_quality_threshold: c.default_quality_threshold ?? 0.6,
       default_min_retrieval_results: c.default_min_retrieval_results ?? 2,
       default_min_retrieval_score: c.default_min_retrieval_score ?? 0.0,
-      default_reranker_enabled: c.default_reranker_enabled ?? true,
+      default_reranker_enabled: c.default_reranker_enabled ?? false,
       default_answer_template: c.default_answer_template ?? 'generic',
     })
     setDialogOpen(true)

@@ -35,7 +35,9 @@ from server.app.modules.agents_hub.database.operational_models import (
     HubIngestionJob,
 )
 from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
-from server.app.modules.agents_hub.services.embedding_service import get_embedding_service
+from server.app.modules.agents_hub.services.embedding_resolver import (
+    resolve_embedding_service,
+)
 
 
 class AnalyzeHtmlRequest(BaseModel):
@@ -240,7 +242,7 @@ async def upload_document(
         async for bg_session in get_async_session():
             watcher = IngestionWatcher(
                 session=bg_session,
-                embedding_service=get_embedding_service(),
+                embedding_service=await resolve_embedding_service(session, chatbot_id),
                 storage=get_storage_service(),
             )
             await watcher.run_job(job_id)

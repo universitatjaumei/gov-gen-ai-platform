@@ -85,7 +85,7 @@ class TestChatFlowE2E:
         with (
             patch("server.app.api.v1.hub_chat.GraphFactory",
                   return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
-            patch("server.app.api.v1.hub_chat.get_embedding_service"),
+            patch("server.app.api.v1.hub_chat.resolve_embedding_service", new_callable=AsyncMock),
         ):
             async with AsyncClient(
                 transport=ASGITransport(app=test_app), base_url="http://test"
@@ -144,7 +144,7 @@ class TestChatFlowE2E:
         with (
             patch("server.app.api.v1.hub_chat.GraphFactory",
                   return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
-            patch("server.app.api.v1.hub_chat.get_embedding_service"),
+            patch("server.app.api.v1.hub_chat.resolve_embedding_service", new_callable=AsyncMock),
         ):
             async with AsyncClient(
                 transport=ASGITransport(app=test_app), base_url="http://test"
@@ -208,7 +208,7 @@ class TestExportFlowE2E:
         with (
             patch("server.app.api.v1.hub_chat.GraphFactory",
                   return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
-            patch("server.app.api.v1.hub_chat.get_embedding_service"),
+            patch("server.app.api.v1.hub_chat.resolve_embedding_service", new_callable=AsyncMock),
         ):
             async with AsyncClient(
                 transport=ASGITransport(app=test_app), base_url="http://test"
@@ -273,7 +273,7 @@ class TestExportFlowE2E:
         with (
             patch("server.app.api.v1.hub_chat.GraphFactory",
                   return_value=MagicMock(build=AsyncMock(return_value=mock_graph))),
-            patch("server.app.api.v1.hub_chat.get_embedding_service"),
+            patch("server.app.api.v1.hub_chat.resolve_embedding_service", new_callable=AsyncMock),
         ):
             async with AsyncClient(
                 transport=ASGITransport(app=test_app), base_url="http://test"

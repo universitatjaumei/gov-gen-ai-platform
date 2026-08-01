@@ -101,7 +101,7 @@ export function ChatbotsPage() {
       quality_threshold: 0.6,
       min_retrieval_results: 2,
       min_retrieval_score: 0.0,
-      reranker_enabled: true,
+      reranker_enabled: false,
       answer_template: 'generic',
     },
   })
@@ -157,7 +157,7 @@ export function ChatbotsPage() {
       quality_threshold: 0.6,
       min_retrieval_results: 2,
       min_retrieval_score: 0.0,
-      reranker_enabled: true,
+      reranker_enabled: false,
       answer_template: 'generic',
     })
     setDialogOpen(true)
@@ -182,7 +182,7 @@ export function ChatbotsPage() {
       quality_threshold: c.quality_threshold ?? 0.6,
       min_retrieval_results: c.min_retrieval_results ?? 2,
       min_retrieval_score: c.min_retrieval_score ?? 0.0,
-      reranker_enabled: c.reranker_enabled ?? true,
+      reranker_enabled: c.reranker_enabled ?? false,
       answer_template: c.answer_template ?? 'generic',
     })
     setDialogOpen(true)

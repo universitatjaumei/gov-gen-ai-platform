@@ -307,7 +307,7 @@ class TestChatbotRetrievalMode:
         session = self._mount_session_for_stats(chatbot, by_language=[doc1, doc2])
         app.dependency_overrides[get_async_session] = _override_session(session)
 
-        with patch("server.app.routers.hub_chatbots_router.get_embedding_service", return_value=object()):
+        with patch("server.app.routers.hub_chatbots_router.resolve_embedding_service", new_callable=AsyncMock, return_value=object()):
             with patch("server.app.routers.hub_chatbots_router.IngestionWatcher") as watcher_cls:
                 watcher = watcher_cls.return_value
                 watcher._regenerate_chunks_for_document = AsyncMock(side_effect=[3, 5])
@@ -328,7 +328,14 @@ class TestChatbotRetrievalMode:
         session = self._mount_session_for_stats(chatbot)
         app.dependency_overrides[get_async_session] = _override_session(session)
 
+        # MOD.2: el endpoint resuelve el servicio de embeddings por configuración, así que
+        # un test que lo ejerce tiene que controlar esa dependencia. Sin el parche, el
+        # resolutor consulta la sesión simulada, interpreta el mock como una configuración
+        # de proveedor y falla — que es el comportamiento correcto ante una config ilegible.
         with patch(
+            "server.app.routers.hub_chatbots_router.resolve_embedding_service",
+            new=AsyncMock(return_value=object()),
+        ), patch(
             "server.app.routers.hub_chatbots_router.recalculate_corpus",
             new=AsyncMock(return_value=(4, 20, 0)),
         ):
@@ -365,6 +372,9 @@ class TestChatbotRetrievalMode:
         app.dependency_overrides[get_async_session] = _override_session(session)
 
         with patch(
+            "server.app.routers.hub_chatbots_router.resolve_embedding_service",
+            new=AsyncMock(return_value=object()),
+        ), patch(
             "server.app.routers.hub_chatbots_router.assert_embedding_space_matches",
             side_effect=EmbeddingSpaceMismatch(
                 "El corpus contiene vectores de BAAI/bge-m3 (1024), y el modelo activo es "

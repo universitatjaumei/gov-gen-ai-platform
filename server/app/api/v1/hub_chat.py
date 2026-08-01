@@ -35,7 +35,9 @@ from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.config_models import HubChatbot
 from server.app.modules.agents_hub.database.operational_models import HubInteraction
 from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
-from server.app.modules.agents_hub.services.embedding_service import get_embedding_service
+from server.app.modules.agents_hub.services.embedding_resolver import (
+    resolve_embedding_service,
+)
 from server.app.modules.agents_hub.services.model_factory import get_model
 from server.app.modules.agents_hub.services.observability import create_callback_handler
 
@@ -139,7 +141,7 @@ async def chat_stream(
             detail=f"Chatbot {chatbot_id} not found",
         )
 
-    embedding_service = get_embedding_service()
+    embedding_service = await resolve_embedding_service(session, chatbot_id)
     config_provider = LocalConfigProvider(session)
 
     router_status_message: str | None = None

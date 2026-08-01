@@ -21,7 +21,9 @@ from server.app.modules.agents_hub.database.operational_models import HubDocumen
 from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
 from server.app.modules.agents_hub.services.corpus_recalculator import recalculate_corpus
 from server.app.modules.agents_hub.services.corpus_recommender import recommend_retrieval_mode
-from server.app.modules.agents_hub.services.embedding_service import get_embedding_service
+from server.app.modules.agents_hub.services.embedding_resolver import (
+    resolve_embedding_service,
+)
 from server.app.modules.agents_hub.services.embedding_space import (
     EmbeddingSpaceMismatch,
     assert_embedding_space_matches,
@@ -78,7 +80,7 @@ class ChatbotCreate(BaseModel):
     quality_threshold: float = 0.6
     min_retrieval_results: int = 2
     min_retrieval_score: float = 0.0
-    reranker_enabled: bool = True
+    reranker_enabled: bool = False
     answer_template: str = "generic"
     context_token_budget: int | None = None
 
@@ -294,7 +296,7 @@ async def regenerate_chunks(
 
     watcher = IngestionWatcher(
         session=session,
-        embedding_service=get_embedding_service(),
+        embedding_service=await resolve_embedding_service(session, chatbot_id),
     )
     created = 0
     for doc in docs:
@@ -320,7 +322,7 @@ async def recalculate_corpus_endpoint(
 ):
     chatbot = await _get_chatbot_or_404(session, chatbot_id)
 
-    embedding_service = get_embedding_service()
+    embedding_service = await resolve_embedding_service(session, chatbot_id)
 
     # MOD.1: esta guarda existía y NO PODÍA SALTAR. Comparaba `getattr(servicio,
     # "dimensions", 1024)` con `getattr(llm_config, "embedding_dimensions", 1024)`, y ninguno

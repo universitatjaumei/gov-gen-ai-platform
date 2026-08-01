@@ -13,7 +13,9 @@ from server.app.core.auth import UserInfo
 from server.app.core.uploads import UploadKind, validate_upload
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
-from server.app.modules.agents_hub.services.embedding_service import get_embedding_service
+from server.app.modules.agents_hub.services.embedding_resolver import (
+    resolve_embedding_service,
+)
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 
@@ -45,7 +47,7 @@ async def user_upload(
     try:
         watcher = IngestionWatcher(
             session=session,
-            embedding_service=get_embedding_service(),
+            embedding_service=await resolve_embedding_service(session, chatbot_id),
         )
         chunks = await watcher.process_user_upload(
             source_url=tmp_path,
