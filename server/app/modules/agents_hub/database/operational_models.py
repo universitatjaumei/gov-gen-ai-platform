@@ -451,7 +451,7 @@ class HubIngestionJob(HubOperationalBase):
 
 
 class HubContentFinding(HubOperationalBase):
-    """Hallazgo de calidad sobre una página o sitio web. Keyed a sitio/página, no a chatbot."""
+    """Hallazgo de calidad: sobre una pagina/sitio (9Q) o sobre un chatbot (RAG.14)."""
 
     __tablename__ = "hub_content_findings"
     __table_args__ = (
@@ -459,16 +459,31 @@ class HubContentFinding(HubOperationalBase):
             "site_id", "finding_type", "page_id", "related_page_id",
             name="uq_finding_dedup",
         ),
+        # RAG.14: un hallazgo tiene UN sujeto, y ahora hay dos clases. Los de 9Q auditan
+        # paginas y cuelgan de un sitio; los huecos de corpus nacen de conversaciones y
+        # cuelgan de un chatbot — forzarles un sitio seria inventarle un sitio web a una
+        # pregunta. Nullable NO significa opcional: sin sujeto, el hallazgo no se puede
+        # revisar, y por eso el CHECK exige exactamente uno de los dos.
+        CheckConstraint(
+            "(site_id IS NULL) <> (chatbot_id IS NULL)",
+            name="ck_finding_tiene_un_sujeto",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    site_id: Mapped[uuid.UUID] = mapped_column(
+    site_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("hub_web_sites.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
+    )
+    # RAG.14: sujeto alternativo al sitio, para los hallazgos que salen del uso y no de una
+    # auditoria de paginas. Sin FK a hub_chatbots: es config (cloud) y esta tabla es
+    # operacional (edge), y CLAUDE.md prohibe cruzar las dos bases.
+    chatbot_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
     )
     finding_type: Mapped[str] = mapped_column(String(40), nullable=False)
     severity: Mapped[str] = mapped_column(String(20), nullable=False)

@@ -32,6 +32,11 @@ vi.mock('@/shared/api/generated/hub-content-quality/hub-content-quality', () => 
   useAnalyzeSite: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useGetSiteQualityReport: vi.fn(() => ({ data: mockReport.data, isLoading: false })),
   getListSiteFindingsQueryKey: vi.fn(() => ['listSiteFindings']),
+  // RAG.14: la pagina monta el panel de huecos de corpus, que consume estos tres. El
+  // mock del modulo es total, asi que omitirlos rompe la pagina entera.
+  useListContentGaps: vi.fn(() => ({ data: [], isLoading: false })),
+  useAnalyzeContentGaps: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  getListContentGapsQueryKey: vi.fn(() => ['listContentGaps']),
 }))
 
 vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({

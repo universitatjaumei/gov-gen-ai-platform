@@ -30,6 +30,9 @@ from server.app.modules.agents_hub.ingestion.quality.contracts import (
 from server.app.modules.agents_hub.ingestion.quality.findings_repo import (
     ContentFindingRepo,
 )
+from server.app.modules.agents_hub.services.embedding_resolver import (
+    resolve_embedding_service,
+)
 from server.app.modules.agents_hub.ingestion.quality.report_contracts import (
     WebQualityReport,
 )
@@ -247,3 +250,90 @@ async def analyze_site(
     if quality_job is not None:
         background_tasks.add_task(quality_job.run_for_site, site_id)
     return {"status": "queued", "site_id": str(site_id)}
+
+
+class GapAnalysisOut(BaseModel):
+    chatbot_id: uuid.UUID
+    gaps_found: int
+    window_days: int
+
+
+@router.post(
+    "/hub/quality/gaps/analyze",
+    response_model=GapAnalysisOut,
+    operation_id="analyzeContentGaps",
+)
+async def analyze_content_gaps(
+    chatbot_id: uuid.UUID = Query(..., description="Chatbot cuyas conversaciones se leen"),
+    dias: int = Query(30, ge=1, le=365),
+    min_cluster: int = Query(3, ge=2, le=100),
+    _: UserInfo = Depends(_require_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Busca huecos de corpus en las conversaciones que salieron mal (RAG.14).
+
+    Deploy: edge. **Síncrono y no en background**, al revés que el análisis de sitio: aquí
+    el trabajo es embeber unas decenas de consultas cortas, no rastrear un sitio entero, y
+    quien lo lanza quiere ver el número. Devolverlo en 202 obligaría a inventar un job para
+    consultar algo que ya se sabe al terminar.
+    """
+    from server.app.modules.agents_hub.ingestion.quality.gap_detector import (
+        analizar_huecos,
+    )
+
+    servicio = await resolve_embedding_service(session, chatbot_id)
+    encontrados = await analizar_huecos(
+        session, chatbot_id, servicio, dias=dias, min_cluster_size=min_cluster
+    )
+    await session.commit()
+    return GapAnalysisOut(
+        chatbot_id=chatbot_id, gaps_found=encontrados, window_days=dias
+    )
+
+
+@router.get(
+    "/hub/quality/gaps",
+    response_model=list[dict],
+    operation_id="listContentGaps",
+)
+async def list_content_gaps(
+    chatbot_id: uuid.UUID = Query(...),
+    status_filter: str | None = Query(None, alias="status"),
+    _: UserInfo = Depends(_require_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Cola de revisión de los huecos de un chatbot (RAG.14).
+
+    Endpoint aparte de `/hub/sites/{id}/findings` porque el sujeto es otro: aquel filtra por
+    sitio y un hueco no tiene sitio. Sin esto, los hallazgos se escribirían y no los vería
+    nadie, que es la forma más cara de no hacer nada.
+    """
+    from sqlalchemy import select
+
+    from server.app.modules.agents_hub.database.operational_models import HubContentFinding
+
+    consulta = (
+        select(HubContentFinding)
+        .where(HubContentFinding.chatbot_id == chatbot_id)
+        .where(HubContentFinding.finding_type == "content_gap")
+        .order_by(HubContentFinding.detected_at.desc())
+    )
+    if status_filter:
+        consulta = consulta.where(HubContentFinding.status == status_filter)
+
+    filas = (await session.execute(consulta)).scalars().all()
+    return [
+        {
+            "id": str(f.id),
+            "chatbot_id": str(f.chatbot_id),
+            "severity": f.severity,
+            "status": f.status,
+            "detected_at": f.detected_at.isoformat(),
+            "count": (f.signal_json or {}).get("count", 0),
+            "queries": (f.signal_json or {}).get("queries", []),
+            "top_terms": (f.signal_json or {}).get("top_terms", []),
+            "first_seen": (f.signal_json or {}).get("first_seen"),
+            "last_seen": (f.signal_json or {}).get("last_seen"),
+        }
+        for f in filas
+    ]

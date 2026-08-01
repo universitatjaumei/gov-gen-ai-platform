@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 > nul
 echo ============================================================
-echo  PRUEBAS MANUALES - Bloque RAG (prompts RAG.6a a RAG.13)
+echo  PRUEBAS MANUALES - Bloque RAG (prompts RAG.6a a RAG.14)
 echo ============================================================
 echo.
 echo Lo que el agente YA verifico solo (no hace falta repetirlo):
@@ -85,6 +85,26 @@ echo       pero NO el desplegable de contexto.
 echo   [ ] Eliminar un escenario borra tambien sus ejecuciones.
 echo   [ ] Crea un escenario en un chatbot y comprueba que NO aparece al
 echo       seleccionar otro chatbot distinto.
+echo.
+pause
+echo.
+echo ------------------------------------------------------------
+echo  COMPROBACION 4 - Huecos de corpus (RAG.14)
+echo ------------------------------------------------------------
+echo  Abre http://localhost:5173/hub/content-quality y baja del todo,
+echo  a la seccion "Huecos de corpus".
+echo.
+echo  a) Elige el mismo chatbot con el que has estado probando.
+echo  b) Pulsa "Buscar huecos".
+echo  c) Si has hecho varias preguntas parecidas que el asistente no
+echo     supo responder, deben aparecer agrupadas en un solo hueco, con
+echo     el recuento, las fechas y los terminos que las relacionan.
+echo  d) Vuelve a pulsar "Buscar huecos": NO debe duplicarse el hueco,
+echo     solo actualizarse el recuento.
+echo.
+echo  Si no aparece nada es correcto cuando no hay al menos 3 preguntas
+echo  parecidas sin responder en los ultimos 30 dias. Para forzarlo,
+echo  pregunta 3 o 4 veces por algo que no este en el corpus.
 echo.
 pause
 echo.

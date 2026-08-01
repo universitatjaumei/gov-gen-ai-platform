@@ -73,5 +73,13 @@
   "report_sections": "Seccions per tipus",
   "report_recommendation": "Recomanació",
   "download_docx": "Descarregar DOCX",
-  "download_pdf": "Descarregar PDF"
+  "download_pdf": "Descarregar PDF",
+  "gaps_title": "Buits de corpus",
+  "gaps_hint": "Preguntes semblants que l'assistent no ha sabut respondre. Solen apuntar a un document que falta.",
+  "gaps_analyze": "Cerca buits",
+  "gaps_chatbot": "Chatbot",
+  "gaps_none": "No hi ha buits detectats per a aquest chatbot.",
+  "gaps_count": "consultes sense resposta",
+  "gaps_terms": "Termes",
+  "gaps_range": "Entre"
 }

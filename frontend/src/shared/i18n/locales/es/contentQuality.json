@@ -73,5 +73,13 @@
   "report_sections": "Secciones por tipo",
   "report_recommendation": "Recomendación",
   "download_docx": "Descargar DOCX",
-  "download_pdf": "Descargar PDF"
+  "download_pdf": "Descargar PDF",
+  "gaps_title": "Huecos de corpus",
+  "gaps_hint": "Preguntas parecidas que el asistente no supo responder. Suelen apuntar a un documento que falta.",
+  "gaps_analyze": "Buscar huecos",
+  "gaps_chatbot": "Chatbot",
+  "gaps_none": "No hay huecos detectados para este chatbot.",
+  "gaps_count": "consultas sin respuesta",
+  "gaps_terms": "Términos",
+  "gaps_range": "Entre"
 }

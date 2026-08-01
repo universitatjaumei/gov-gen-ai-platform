@@ -12,6 +12,7 @@ import {
 } from '@/shared/api/generated/hub-content-quality/hub-content-quality'
 import type { SiteView } from '@/shared/api/generated/model'
 import { WebQualityReportViewer } from './WebQualityReportViewer'
+import { ContentGapsPanel } from './ContentGapsPanel'
 
 type Severity = 'critical' | 'warning' | 'info'
 
@@ -187,6 +188,9 @@ export function ContentQualityPage() {
           </div>
         )
       )}
+      {/* RAG.14: los huecos de corpus son la misma tarea de revisión, pero su sujeto es un
+          chatbot y no un sitio, así que van en su propio panel con su propio selector. */}
+      <ContentGapsPanel />
     </div>
   )
 }

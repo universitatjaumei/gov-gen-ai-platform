@@ -73,5 +73,13 @@
   "report_sections": "Sections by type",
   "report_recommendation": "Recommendation",
   "download_docx": "Download DOCX",
-  "download_pdf": "Download PDF"
+  "download_pdf": "Download PDF",
+  "gaps_title": "Corpus gaps",
+  "gaps_hint": "Similar questions the assistant could not answer. They usually point at a missing document.",
+  "gaps_analyze": "Find gaps",
+  "gaps_chatbot": "Chatbot",
+  "gaps_none": "No gaps detected for this chatbot.",
+  "gaps_count": "unanswered queries",
+  "gaps_terms": "Terms",
+  "gaps_range": "Between"
 }
