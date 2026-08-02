@@ -291,6 +291,75 @@ async def analyze_content_gaps(
     )
 
 
+class StaleAnalysisOut(BaseModel):
+    chatbot_id: uuid.UUID
+    stale_found: int
+
+
+@router.post(
+    "/hub/quality/stale/analyze",
+    response_model=StaleAnalysisOut,
+    operation_id="analyzeStaleDocuments",
+)
+async def analyze_stale_documents(
+    chatbot_id: uuid.UUID = Query(..., description="Chatbot cuyo corpus se revisa"),
+    _: UserInfo = Depends(_require_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Busca documentos con la revisión prevista vencida (SYNC.2).
+
+    Deploy: edge. Síncrono: es una comparación de fechas en SQL, sin embeddings ni modelo,
+    así que devolver un 202 y un job obligaría a consultar algo que ya se sabe al terminar.
+    """
+    from server.app.modules.agents_hub.ingestion.quality.staleness_detector import (
+        analizar_caducidad,
+    )
+
+    encontrados = await analizar_caducidad(session, chatbot_id)
+    await session.commit()
+    return StaleAnalysisOut(chatbot_id=chatbot_id, stale_found=encontrados)
+
+
+@router.get(
+    "/hub/quality/stale",
+    response_model=list[dict],
+    operation_id="listStaleDocuments",
+)
+async def list_stale_documents(
+    chatbot_id: uuid.UUID = Query(...),
+    status_filter: str | None = Query(None, alias="status"),
+    _: UserInfo = Depends(_require_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Cola de revisión de las caducidades de un chatbot (SYNC.2).
+
+    Tercer tipo de hallazgo que cuelga de un chatbot y no de un sitio, junto a los huecos de
+    RAG.14 y las retiradas de SYNC.1. Sin este endpoint, el detector escribiría hallazgos
+    que no vería nadie, que es la forma más cara de no hacer nada.
+    """
+    from server.app.modules.agents_hub.ingestion.quality.staleness_detector import (
+        listar_caducados,
+    )
+
+    filas = await listar_caducados(session, chatbot_id, status=status_filter)
+    return [
+        {
+            "id": str(f.id),
+            "chatbot_id": str(f.chatbot_id),
+            "severity": f.severity,
+            "status": f.status,
+            "detected_at": f.detected_at.isoformat(),
+            "source_url": f.source_url,
+            "id_publicacio": (f.signal_json or {}).get("id_publicacio"),
+            "title": (f.signal_json or {}).get("title"),
+            "data_revisio_prevista": (f.signal_json or {}).get("data_revisio_prevista"),
+            "darrera_actualitzacio": (f.signal_json or {}).get("darrera_actualitzacio"),
+            "dies_de_retard": (f.signal_json or {}).get("dies_de_retard", 0),
+        }
+        for f in filas
+    ]
+
+
 @router.get(
     "/hub/quality/gaps",
     response_model=list[dict],

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,6 +37,9 @@ from server.app.modules.agents_hub.ingestion.corpus.source import CorpusSource
 
 MOTIU_RETIRADA = "retirada_de_la_font"
 UMBRAL_PODA_POR_DEFECTO = 0.10
+# SYNC.2: cuánto vale una revisión cuando el front-matter no dice otra cosa. Las normas de
+# vigencia anual —el Presupuesto— traen la suya, explícita y más corta.
+DIAS_REVISION_POR_DEFECTO = 365
 
 # Campos de la entrada que se materializan como columna en HubDocument (ING.0.2).
 _COLUMNAS = (
@@ -100,6 +103,12 @@ def _difiere(doc: HubDocument, entry: CorpusDocumentEntry, title: str) -> bool:
     if doc.title != title:
         return True
     for campo in _COLUMNAS:
+        # SYNC.2: si la fuente no declara fecha de revisión, no puede estar en desacuerdo
+        # con la que el documento ya tiene. Sin esta excepción, el default que se pone al
+        # ingerir haría que cada pasada viera una diferencia, la «corrigiera» renovando la
+        # fecha y nada venciera jamás.
+        if campo == "data_revisio_prevista" and entry.data_revisio_prevista is None:
+            continue
         if getattr(doc, campo) != getattr(entry, campo):
             return True
     for campo in _COLUMNAS_ARRAY:
@@ -112,6 +121,13 @@ def _aplicar(doc: HubDocument, entry: CorpusDocumentEntry, title: str) -> None:
     doc.title = title
     for campo in _COLUMNAS:
         setattr(doc, campo, getattr(entry, campo))
+    # SYNC.2: sin fecha de revisión no hay caducidad posible y el documento envejecería en
+    # silencio, que es el riesgo nº1 del informe (312 de 314 fichas dicen «vigent?»). Se
+    # rellena solo si no hay ninguna: renovarla en cada pasada equivaldría a no tenerla.
+    if entry.data_revisio_prevista is None:
+        doc.data_revisio_prevista = doc.data_revisio_prevista or (
+            date.today() + timedelta(days=DIAS_REVISION_POR_DEFECTO)
+        )
     for campo in _COLUMNAS_ARRAY:
         setattr(doc, campo, list(getattr(entry, campo) or []))
     doc.doc_metadata = _metadata_objetivo(entry)

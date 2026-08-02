@@ -20,6 +20,10 @@ FindingType = Literal[
     # RAG.14: hueco de corpus. A diferencia de los demas, no sale de auditar paginas
     # sino de leer conversaciones que salieron mal.
     "content_gap",
+    # SYNC.2: la fecha de revision prevista de un documento ha vencido. Tampoco sale de
+    # auditar paginas: sale de que pase el tiempo. El sync detecta lo que cambia en origen,
+    # y una norma que nadie toca durante tres anos no emite ninguna senal.
+    "revisio_vencuda",
 ]
 
 FindingSeverity = Literal["info", "warning", "critical"]
