@@ -3,7 +3,7 @@
  "queries": 25,
  "recall_at_5": 0.96,
  "recall_at_10": 0.96,
- "mrr": 0.8613,
- "nota": "Linea base PRE-mejoras del retriever (RAG.1). Medida con embedding determinista sobre el corpus de fixture: mide el MECANISMO de recuperacion, no la calidad de BGE-M3. Regenerar solo con --update-baseline y de forma deliberada.",
- "medida_el": "2026-07-29"
+ "mrr": 0.94,
+ "nota": "Linea base POST-mejoras del retriever (RAG.3-RAG.14), regenerada al cerrar el Bloque RAG. Sustituye a la de RAG.1 (MRR 0,8613), que dejaba sin proteger la mejora de RAG.7. Medida con embedding determinista sobre el corpus de fixture: mide el MECANISMO de recuperacion, no la calidad de BGE-M3. AVISO: 0,940 son 23 consultas en rango 1, una en rango 2 y un fallo; una de las 25 ('qui tutoritza les practiques externes?') empata en coseno exacto con otro documento y su orden lo decide el plan de la consulta, no el retriever, asi que puede dar 0,920 sin que nada haya empeorado. Regenerar solo con GOLDEN_UPDATE_BASELINE=1 y de forma deliberada.",
+ "medida_el": "2026-08-02"
 }

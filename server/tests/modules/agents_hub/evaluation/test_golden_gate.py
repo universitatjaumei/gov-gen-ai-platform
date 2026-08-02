@@ -10,13 +10,23 @@ Qué mide y qué no, porque confundirlo llevaría a conclusiones falsas:
   RAG.3–RAG.8, y por eso vive en CI.
 - **No mide BGE-M3.** Con embedding determinista, la señal semántica es la que da el
   solapamiento de vocabulario. Medir el modelo real exige el corpus real y va por el CLI.
+
+**Regenerar la línea base.** El `--update-baseline` de `run_golden.py` NO vale para este
+fichero: aquel mide BGE-M3 contra el corpus real, y escribir esas cifras aquí dejaría el
+gate comparando dos regímenes distintos. La regeneración deliberada de la baseline del gate
+se hace en el régimen del gate, con una variable de entorno que nunca se pone en CI:
+
+    GOLDEN_UPDATE_BASELINE=1 uv run pytest \
+        tests/modules/agents_hub/evaluation/test_golden_gate.py -k meet_baseline -n0
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import uuid
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -47,6 +57,18 @@ class DeterministicEmbedding:
             vector[indice] += 1.0
         norma = sum(v * v for v in vector) ** 0.5
         return [v / norma for v in vector] if norma else vector
+
+
+def _regenerar_baseline(informe, ruta: Path, nota: str) -> None:
+    """Reescribe la línea base con las cifras de esta ejecución.
+
+    Deliberado y fuera de CI: una baseline que se regenera sola no detecta nada, que es
+    justo lo que el gate existe para hacer.
+    """
+    datos = informe.to_baseline()
+    datos["nota"] = nota
+    datos["medida_el"] = date.today().isoformat()
+    ruta.write_text(json.dumps(datos, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 
 
 @pytest.fixture
@@ -155,6 +177,24 @@ class TestGateDeRegresion:
         )
 
         ruta = BASELINES / f"{dataset.name}.json"
+
+        if os.getenv("GOLDEN_UPDATE_BASELINE") == "1":
+            _regenerar_baseline(
+                informe,
+                ruta,
+                "Linea base POST-mejoras del retriever (RAG.3-RAG.14), regenerada al cerrar "
+                "el Bloque RAG. Sustituye a la de RAG.1 (MRR 0,8613), que dejaba sin "
+                "proteger la mejora de RAG.7. Medida con embedding determinista sobre el "
+                "corpus de fixture: mide el MECANISMO de recuperacion, no la calidad de "
+                "BGE-M3. AVISO: 0,940 son 23 consultas en rango 1, una en rango 2 y un "
+                "fallo; una de las 25 ('qui tutoritza les practiques externes?') empata en "
+                "coseno exacto con otro documento y su orden lo decide el plan de la "
+                "consulta, no el retriever, asi que puede dar 0,920 sin que nada haya "
+                "empeorado. Regenerar solo con GOLDEN_UPDATE_BASELINE=1 y de forma "
+                "deliberada.",
+            )
+            pytest.skip(f"baseline regenerada a peticion explicita: {informe.render()}")
+
         baseline = json.loads(ruta.read_text(encoding="utf-8")) if ruta.is_file() else None
         veredicto = check_gate(informe, baseline)
 
