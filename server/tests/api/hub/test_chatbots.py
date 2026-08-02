@@ -49,6 +49,11 @@ def _make_chatbot(
         cache_ttl=3600,
         kind=kind,
         parent_chatbot_id=parent_chatbot_id,
+        # SEC.2.1: el chatbot declara para quién es. Los dobles llevan el default del
+        # modelo; quien prueba el modo de acceso es `tests/api/test_chatbot_access_mode.py`.
+        access_mode="authenticated",
+        allowed_roles=[],
+        allowed_saml_groups=[],
         public_graph_profile="PUBLIC_KB_RICH",
         language_mode="prefer",
         quality_threshold=0.6,

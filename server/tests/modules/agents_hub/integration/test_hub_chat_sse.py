@@ -19,6 +19,19 @@ from server.app.modules.agents_hub.services.retrieval.types import Source
 # `tests/api/test_tenant_isolation.py`—, así que doble y token comparten organización.
 ORG_PRUEBA = "00000000-0000-0000-0000-00000000dead"
 
+
+def _con_acceso(chatbot):
+    """Declara el modo de acceso del doble (SEC.2.1).
+
+    Sin esto, `access_mode` es un MagicMock y `assert_chatbot_access` cierra ante un modo
+    que no reconoce —que es lo que debe hacer—. Estos tests miden el protocolo SSE; la
+    autorización tiene su gate en `tests/api/test_chatbot_access_mode.py`.
+    """
+    chatbot.access_mode = "authenticated"
+    chatbot.allowed_roles = []
+    chatbot.allowed_saml_groups = []
+    return chatbot
+
 _JWT_ENV = {
     "JWT_SECRET_KEY": "test-secret-key-that-is-at-least-32-characters-long",
     "JWT_ALGORITHM": "HS256",
@@ -149,6 +162,7 @@ class TestDoneEventStructuredSources:
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
+        _con_acceso(chatbot)
 
         done = _run_chat_and_get_done(chatbot, _make_mock_graph_with_sources(sources), _make_token())
 
@@ -174,6 +188,7 @@ class TestDoneEventStructuredSources:
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
+        _con_acceso(chatbot)
 
         done = _run_chat_and_get_done(chatbot, _make_mock_graph_with_sources(sources), _make_token())
 
@@ -189,6 +204,7 @@ class TestDoneEventStructuredSources:
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
+        _con_acceso(chatbot)
 
         done = _run_chat_and_get_done(chatbot, _make_mock_graph_with_sources([]), _make_token())
 
@@ -206,6 +222,7 @@ class TestDoneEventStructuredSources:
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
+        _con_acceso(chatbot)
 
         done = _run_chat_and_get_done(chatbot, _make_mock_graph_with_sources(sources), _make_token())
 
@@ -261,6 +278,7 @@ class TestRetrievalModeDispatch:
 
         chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
+        _con_acceso(chatbot)
         chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.retrieval_mode = "MD_LONG_CONTEXT"
         chatbot.public_graph_profile = None
@@ -321,6 +339,7 @@ class TestRetrievalModeDispatch:
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
+        _con_acceso(chatbot)
         chatbot.retrieval_mode = "MD_LONG_CONTEXT"
 
         done = _run_chat_and_get_done(chatbot, _make_mock_graph_with_sources(sources), _make_token())
@@ -347,6 +366,7 @@ class TestRetrievalModeDispatch:
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
+        _con_acceso(chatbot)
         chatbot.retrieval_mode = "MD_AGENT_SELECTOR"
 
         done = _run_chat_and_get_done(
@@ -371,6 +391,7 @@ class TestNoCitationFallback:
         chatbot = MagicMock(spec=HubChatbot)
         chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
+        _con_acceso(chatbot)
 
         done = _run_chat_and_get_done(chatbot, _make_mock_graph_with_sources([]), _make_token())
 

@@ -12,6 +12,10 @@ CHAT_TEST = "chat:test"
 # porque enseña el system prompt entero y la configuración resuelta del chatbot, que es
 # más de lo que concede poder charlar con él.
 CHAT_DEBUG = "chat:debug"
+# SEC.2.1: habilita la cabecera `X-GovGenAI-Actor`, o sea preguntar en nombre de otra
+# persona. Es lo más que concede un PAT, así que va aparte de `chat:test`: sin este scope la
+# cabecera se ignora, y un token robado que no lo lleve no puede suplantar a nadie.
+CHAT_ONBEHALF = "chat:onbehalf"
 
 ALL_SCOPES: frozenset[str] = frozenset(
     {
@@ -21,6 +25,7 @@ ALL_SCOPES: frozenset[str] = frozenset(
         CHATBOTS_WRITE,
         CHAT_TEST,
         CHAT_DEBUG,
+        CHAT_ONBEHALF,
     }
 )
 

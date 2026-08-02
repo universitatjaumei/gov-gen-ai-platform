@@ -314,6 +314,12 @@ class TestGuardaEnConsulta:
 
         chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
+        # SEC.2.1: el doble declara su modo de acceso. Sin esto `access_mode` es un
+        # MagicMock y la guarda cierra antes de llegar a la del espacio vectorial, que es
+        # lo que este test mide.
+        chatbot.access_mode = "authenticated"
+        chatbot.allowed_roles = []
+        chatbot.allowed_saml_groups = []
         token = create_token(UserInfo(user_id="u1", email="u@test.com", role="user", organizacion_ids=(ORG_PRUEBA,)))
 
         with patch(

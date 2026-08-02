@@ -164,6 +164,11 @@ def _chatbot(mode: str = "RAG", kind: str = "atomic") -> MagicMock:
     cb = MagicMock(spec=HubChatbot)
     cb.id = uuid.uuid4()
     cb.organizacion_id = uuid.UUID(ORG_PRUEBA)
+    # SEC.2.1: el modo de acceso no se adivina. Un doble sin declararlo lo deja en un
+    # MagicMock, y `assert_chatbot_access` cierra ante un modo que no reconoce.
+    cb.access_mode = "authenticated"
+    cb.allowed_roles = []
+    cb.allowed_saml_groups = []
     cb.retrieval_mode = mode
     cb.kind = kind
     cb.name = "Bot"

@@ -223,3 +223,163 @@ def test_acs_issues_jwt_and_redirects(saml_ctx, db):
     info = decode_token(token)
     assert info.email == email
     assert info.role == "user"
+
+
+# --------------------------------------------------------------------------- #
+# La organización de un usuario SAML (SEC.2.1, encargo heredado de SEC.2)       #
+#                                                                               #
+# SEC.2 dejó a los usuarios provisionados por SSO con el claim vacío y, por su  #
+# propia regla, sin acceso a ningún recurso de organización. Se cierra aquí, y  #
+# la decisión es de dónde sale el dato: **de la configuración del IdP, nunca de #
+# la aserción**. Si viniera de fuera, quien controla el IdP podría declarar a   #
+# qué organización pertenece cada persona que entra. Un IdP institucional       #
+# pertenece a una institución, y esa relación la fija quien despliega.          #
+# --------------------------------------------------------------------------- #
+ORG_DEL_IDP = "00000000-0000-0000-0000-0000000000f1"
+ORG_RECLAMADA = "00000000-0000-0000-0000-0000000000f2"
+
+
+async def _crear_organizacion(db, organizacion_id: str) -> None:
+    """La organización tiene que existir: `hub_sso_users.organizacion_id` es una FK."""
+    import uuid as _uuid
+
+    from server.app.modules.agents_hub.database.config_models import HubOrganizacion
+
+    db.session.add(
+        HubOrganizacion(
+            id=_uuid.UUID(organizacion_id),
+            name=f"Org {organizacion_id[-4:]}",
+            partner_id=f"partner-{_uid()}",
+        )
+    )
+    await db.session.commit()
+
+
+@pytest.mark.asyncio
+async def test_should_take_the_organizacion_from_the_idp_configuration(
+    saml_ctx, db, monkeypatch
+):
+    from server.app.core.auth.saml.identity_service import SamlIdentityService
+    from server.app.modules.agents_hub.database.config_models import HubSsoUser
+    from sqlalchemy import select
+
+    monkeypatch.setenv("SAML_ORGANIZACION_ID", ORG_DEL_IDP)
+    await _crear_organizacion(db, ORG_DEL_IDP)
+    email = f"org-idp-{_uid()}@uji.es"
+    db.track(email)
+
+    info = await SamlIdentityService(db.session).resolve_session(
+        nameid=email, attributes={"mail": [email]}
+    )
+
+    assert info.organizacion_ids == (ORG_DEL_IDP,)
+    sso = (
+        await db.session.execute(select(HubSsoUser).where(HubSsoUser.email == email))
+    ).scalars().first()
+    assert str(sso.organizacion_id) == ORG_DEL_IDP
+
+
+@pytest.mark.asyncio
+async def test_should_ignore_an_organizacion_claimed_in_the_assertion(
+    saml_ctx, db, monkeypatch
+):
+    """Anti-escalada: el atributo de la aserción no concede organización."""
+    from server.app.core.auth.saml.identity_service import SamlIdentityService
+
+    monkeypatch.setenv("SAML_ORGANIZACION_ID", ORG_DEL_IDP)
+    await _crear_organizacion(db, ORG_DEL_IDP)
+    email = f"org-escalada-{_uid()}@uji.es"
+    db.track(email)
+
+    info = await SamlIdentityService(db.session).resolve_session(
+        nameid=email,
+        attributes={
+            "mail": [email],
+            "organizacion_id": [ORG_RECLAMADA],
+            "orgs": [ORG_RECLAMADA],
+        },
+    )
+
+    assert info.organizacion_ids == (ORG_DEL_IDP,)
+    assert ORG_RECLAMADA not in info.organizacion_ids
+
+
+@pytest.mark.asyncio
+async def test_should_provision_without_organizacion_when_the_idp_declares_none(
+    saml_ctx, db, monkeypatch
+):
+    """Fail-closed: sin configuración no se inventa una organización."""
+    from server.app.core.auth.saml.identity_service import SamlIdentityService
+
+    monkeypatch.delenv("SAML_ORGANIZACION_ID", raising=False)
+    email = f"org-vacia-{_uid()}@uji.es"
+    db.track(email)
+
+    info = await SamlIdentityService(db.session).resolve_session(
+        nameid=email, attributes={"mail": [email]}
+    )
+
+    assert info.organizacion_ids == ()
+
+
+@pytest.mark.asyncio
+async def test_should_not_break_the_login_when_the_configured_organizacion_is_unknown(
+    saml_ctx, db, monkeypatch
+):
+    """Un id mal escrito en la configuración no puede tirar el login por la clave ajena.
+
+    Caerse al entrar es peor que no dar acceso: el usuario entra sin organización —el mismo
+    fallo seguro que sin configurar nada— y el despliegue se entera por el log.
+    """
+    from server.app.core.auth.saml.identity_service import SamlIdentityService
+
+    monkeypatch.setenv("SAML_ORGANIZACION_ID", "00000000-0000-0000-0000-0000000000ff")
+    email = f"org-inexistente-{_uid()}@uji.es"
+    db.track(email)
+
+    info = await SamlIdentityService(db.session).resolve_session(
+        nameid=email, attributes={"mail": [email]}
+    )
+
+    assert info.organizacion_ids == ()
+
+
+@pytest.mark.asyncio
+async def test_should_carry_the_saml_groups_into_the_session(saml_ctx, db):
+    """Los grupos viajan en la sesión: `restricted` de SEC.2.1 los necesita."""
+    from server.app.core.auth.saml.identity_service import SamlIdentityService
+
+    email = f"grupos-{_uid()}@uji.es"
+    db.track(email)
+
+    info = await SamlIdentityService(db.session).resolve_session(
+        nameid=email, attributes={"mail": [email], "groups": ["gerencia", "pas"]}
+    )
+
+    assert info.saml_groups == ("gerencia", "pas")
+
+
+def test_should_leave_existing_sso_users_without_organizacion_after_migration():
+    """Ningún usuario SSO existente hereda una organización al migrar.
+
+    Que la columna quede nullable y sin default lo comprueba, ejecutando la migración,
+    `tests/infra/test_migrations_fresh_install.py`. Lo que solo se ve leyendo el fichero es
+    la ausencia de un `UPDATE`: una instalación limpia no tiene usuarios previos a los que
+    repartir organización, así que allí un backfill pasaría inadvertido.
+    """
+    from pathlib import Path
+
+    ficheros = [
+        f
+        for f in Path("migrations/versions").glob("*.py")
+        if "hub_sso_users" in f.read_text(encoding="utf-8")
+        and "organizacion_id" in f.read_text(encoding="utf-8")
+    ]
+    assert ficheros, "ninguna migración añade organizacion_id a hub_sso_users"
+    texto = max(ficheros, key=lambda f: f.stat().st_mtime).read_text(encoding="utf-8")
+    arriba = texto.split("def downgrade")[0]
+
+    assert "nullable=True" in arriba
+    assert "UPDATE hub_sso_users" not in arriba, (
+        "ningún usuario SSO existente puede heredar una organización por migración"
+    )

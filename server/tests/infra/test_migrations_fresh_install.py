@@ -134,3 +134,83 @@ def test_should_have_document_metadata_columns_and_fk(fresh_database: str) -> No
             )
     finally:
         conn.close()
+
+
+def test_should_close_new_chatbots_by_default_on_fresh_install(fresh_database: str) -> None:
+    """SEC.2.1 — la migración del modo de acceso es fail-closed, comprobado ejecutándola.
+
+    Aquí sí se ejecuta `alembic upgrade head` de verdad, así que esto mide lo que le pasa a
+    una instalación: un chatbot insertado sin declarar el modo queda en `authenticated`, y
+    la tabla rechaza cualquier modo fuera del vocabulario. Un `server_default` en
+    `'public_anon'` publicaría el corpus de cada organización sin que nadie lo decidiera.
+    """
+    import uuid as _uuid
+
+    _upgrade_head(fresh_database)
+    assert "access_mode" in _columns(fresh_database, "hub_chatbots")
+
+    conn = psycopg2.connect(fresh_database.replace("postgresql+psycopg2", "postgresql"))
+    try:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute(
+                "select column_default, is_nullable from information_schema.columns "
+                "where table_name = 'hub_chatbots' and column_name = 'access_mode'"
+            )
+            defecto, admite_null = cur.fetchone()
+            assert "authenticated" in defecto
+            assert admite_null == "NO"
+
+            organizacion, llm, chatbot = _uuid.uuid4(), _uuid.uuid4(), _uuid.uuid4()
+            cur.execute(
+                "insert into hub_organizaciones (id, name, partner_id) values (%s,%s,%s)",
+                (str(organizacion), "Org", "p-1"),
+            )
+            cur.execute(
+                "insert into hub_llm_configs (id, provider, model_name) values (%s,%s,%s)",
+                (str(llm), "google", "gemini-2.5-flash"),
+            )
+            cur.execute(
+                "insert into hub_chatbots (id, organizacion_id, llm_config_id, name, "
+                "system_prompt) values (%s,%s,%s,%s,%s)",
+                (str(chatbot), str(organizacion), str(llm), "Bot", "Eres útil."),
+            )
+            cur.execute(
+                "select access_mode from hub_chatbots where id = %s", (str(chatbot),)
+            )
+            assert cur.fetchone()[0] == "authenticated"
+
+            try:
+                cur.execute(
+                    "update hub_chatbots set access_mode = 'barra_libre' where id = %s",
+                    (str(chatbot),),
+                )
+                raise AssertionError("la tabla aceptó un modo de acceso desconocido")
+            except psycopg2.errors.CheckViolation:
+                pass
+    finally:
+        conn.close()
+
+
+def test_should_leave_sso_users_without_organizacion_on_fresh_install(
+    fresh_database: str,
+) -> None:
+    """SEC.2.1 — la columna existe, admite NULL y nadie hereda una organización."""
+    _upgrade_head(fresh_database)
+
+    assert "organizacion_id" in _columns(fresh_database, "hub_sso_users")
+
+    conn = psycopg2.connect(fresh_database.replace("postgresql+psycopg2", "postgresql"))
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "select is_nullable, column_default from information_schema.columns "
+                "where table_name = 'hub_sso_users' and column_name = 'organizacion_id'"
+            )
+            admite_null, defecto = cur.fetchone()
+            assert admite_null == "YES"
+            assert defecto is None, (
+                "un default aquí daría organización de oficio a los usuarios SSO"
+            )
+    finally:
+        conn.close()

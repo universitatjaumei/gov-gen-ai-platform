@@ -65,9 +65,17 @@ El token es revocable desde la misma pantalla.
 | `chatbots:read` | `list_clients`, `list_chatbots`, `get_chatbot`, `get_corpus_stats`, `list_prompt_templates` |
 | `chatbots:write` | `create_chatbot`, `update_chatbot`, `update_prompt_template`, `assign_child`, `unassign_child` |
 | `chat:test` | `test_chat` |
+| `chat:debug` | inspección del prompt final (`debug_bypass`) — enseña el system prompt entero |
+| `chat:onbehalf` | preguntar **en nombre de otra persona** (cabecera `X-GovGenAI-Actor`) |
 
 Emite el PAT con el conjunto mínimo de scopes para la tarea. Las tools de lectura no
 necesitan scopes de escritura.
+
+`chat:onbehalf` es el más delicado de los tres últimos: habilita que el portador del token
+declare quién pregunta. Sin él, la cabecera se ignora **sin error** y todo queda atribuido al
+dueño del token, que es lo que hace inservible un PAT robado para suplantar a nadie. Solo lo
+necesita un cliente de confianza que atienda a varias personas —el Pipe de Open WebUI—; una
+integración de una sola persona no debe llevarlo.
 
 ---
 

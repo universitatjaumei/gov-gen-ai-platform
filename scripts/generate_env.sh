@@ -56,6 +56,10 @@ mkdir -p "$OUTPUT_DIR/server" "$OUTPUT_DIR/frontend"
 
 # --- Secretos generados en cada ejecución ---------------------------------
 JWT_SECRET_KEY="$(openssl rand -hex 32)"
+# SEC.2.1: secreto de la cabecera X-GovGenAI-Actor. Se genera siempre aunque hoy solo lo use
+# el Pipe de Open WebUI: un secreto sin usar no cuesta nada, y pedirlo a mano el dia del
+# despliegue es como se acaba compartiendo el de otro entorno.
+DELEGATED_ACTOR_SECRET="$(openssl rand -hex 32)"
 LANGFUSE_NEXTAUTH_SECRET="$(openssl rand -hex 32)"
 LANGFUSE_SALT="$(openssl rand -hex 32)"
 LANGFUSE_ENCRYPTION_KEY="$(openssl rand -hex 32)"
@@ -165,6 +169,11 @@ MAX_DOCUMENTS_PER_CHATBOT=0
 JWT_SECRET_KEY=${JWT_SECRET_KEY}
 JWT_ALGORITHM=HS256
 JWT_EXPIRATION_MINUTES=60
+
+# === Identidad delegada (SEC.2.1) ===
+# Compartir con el cliente de confianza que firma X-GovGenAI-Actor. Sin el scope
+# chat:onbehalf en su PAT, la cabecera se ignora aunque la firma sea correcta.
+DELEGATED_ACTOR_SECRET=${DELEGATED_ACTOR_SECRET}
 
 # === App ===
 ENVIRONMENT=${APP_ENVIRONMENT}

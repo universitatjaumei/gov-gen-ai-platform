@@ -50,12 +50,17 @@ class UserInfo:
     # justamente para que nadie amplíe los permisos a mitad de una petición, y una lista
     # dejaría esa puerta abierta con `principal.organizacion_ids.append(...)`.
     organizacion_ids: tuple[str, ...] = field(default=())
+    # SEC.2.1: grupos que el IdP declara para esta persona. Los consume el modo de acceso
+    # `restricted` de `assert_chatbot_access`. Vacío en el login local, que no tiene grupos:
+    # ahí la autorización fina se expresa con `allowed_roles`.
+    saml_groups: tuple[str, ...] = field(default=())
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "role", _validate_role(self.role))
         object.__setattr__(
             self, "organizacion_ids", tuple(str(o) for o in self.organizacion_ids)
         )
+        object.__setattr__(self, "saml_groups", tuple(str(g) for g in self.saml_groups))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -63,6 +68,7 @@ class UserInfo:
             "email": self.email,
             "role": self.role,
             "organizacion_ids": list(self.organizacion_ids),
+            "saml_groups": list(self.saml_groups),
         }
 
     @property

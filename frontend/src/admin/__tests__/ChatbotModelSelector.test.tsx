@@ -83,7 +83,10 @@ const CHATBOT_OLLAMA: ChatbotRead = {
   retrieval_top_k: 8,
   use_prompt_caching: false,
   cache_ttl: 3600,
-} as ChatbotRead
+  access_mode: 'authenticated',
+  allowed_roles: [],
+  allowed_saml_groups: [],
+} as unknown as ChatbotRead
 
 function sembrarCatalogos() {
   mockData.configs = [

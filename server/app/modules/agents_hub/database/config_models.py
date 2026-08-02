@@ -209,6 +209,13 @@ class HubChatbot(HubConfigBase):
             "chunking_strategy IS NULL OR chunking_strategy IN ('structural', 'parent_child')",
             name="ck_chatbot_chunking_strategy",
         ),
+        # SEC.2.1. Tres modos, estables y con consumidor en `assert_chatbot_access`: esto
+        # es estructura, no vocabulario. Añadir un cuarto exige escribir el código que lo
+        # aplique, así que el CHECK no estorba a nadie (criterio de CLAUDE.md §5).
+        CheckConstraint(
+            "access_mode IN ('public_anon', 'authenticated', 'restricted')",
+            name="ck_chatbot_access_mode",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -234,6 +241,26 @@ class HubChatbot(HubConfigBase):
     use_prompt_caching: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     cache_ttl: Mapped[int] = mapped_column(Integer, nullable=False, default=3600)
     kind: Mapped[str] = mapped_column(String(20), nullable=False, default="atomic")
+    # --- Autorización por chatbot (SEC.2.1) ---
+    #
+    # `is_active` decía si un chatbot funciona; nada decía **para quién**. Dentro de una
+    # organización todos quedaban igual de accesibles, así que un chatbot de gestión
+    # interna era tan alcanzable como el público.
+    #
+    # El default es `authenticated` y no `public_anon` a propósito: un chatbot recién
+    # creado no expone su corpus mientras nadie decida lo contrario.
+    access_mode: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="authenticated", server_default="authenticated"
+    )
+    # Dos ARRAY y **ninguna tabla de grants**: el atributo de grupo ya llega en el ACS SAML
+    # y esto cubre el caso del piloto. Si algún día hace falta granularidad por persona, se
+    # añade la tabla entonces; hoy sería infraestructura sin usuario.
+    allowed_roles: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, default=list, server_default="{}"
+    )
+    allowed_saml_groups: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, default=list, server_default="{}"
+    )
     # --- Campos del grafo público (9B.2) ---
     public_graph_profile: Mapped[str] = mapped_column(String(50), nullable=False, default="PUBLIC_KB_RICH")
     language_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="prefer")
@@ -320,6 +347,19 @@ class HubSsoUser(HubConfigBase):
     role: Mapped[str] = mapped_column(String(40), nullable=False, default="user")
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)  # NameID
     idp_entity_id: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # SEC.2.1. Sin esto, un usuario provisionado por SSO se quedaba con el claim de SEC.2
+    # vacío y, por su propia regla, sin acceso a ningún recurso de organización.
+    #
+    # **Sale de la configuración del IdP (`SAML_ORGANIZACION_ID`), nunca de la aserción**:
+    # si viniera de fuera, quien controla el IdP podría declarar a qué organización
+    # pertenece cada persona que entra. Nullable porque un despliegue puede no haberla
+    # configurado todavía, y ahí lo correcto es no dar acceso a nada.
+    organizacion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_organizaciones.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

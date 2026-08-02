@@ -85,6 +85,10 @@ const DEMO_CHATBOT: ChatbotRead = {
   cache_ttl: 3600,
   kind: 'atomic',
   parent_chatbot_id: null,
+  // SEC.2.1: el contrato dice para quién es el chatbot. Quien lo aplica es el backend.
+  access_mode: 'authenticated',
+  allowed_roles: [],
+  allowed_saml_groups: [],
   public_graph_profile: 'PUBLIC_KB_RICH',
   language_mode: 'prefer',
   quality_threshold: 0.6,
@@ -96,6 +100,7 @@ const DEMO_CHATBOT: ChatbotRead = {
   chunk_size: null,
   chunk_overlap: null,
   chunking_strategy: null,
+  query_rewriting_enabled: null,
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
 }

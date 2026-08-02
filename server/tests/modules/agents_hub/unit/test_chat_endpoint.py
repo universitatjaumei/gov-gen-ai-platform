@@ -48,7 +48,17 @@ def _make_token(role: str = "user", user_id: str = "user-1") -> str:
 
 
 def _build_test_app(chatbot_mock) -> FastAPI:
-    """Crea una app FastAPI aislada con la sesión mockeada."""
+    """Crea una app FastAPI aislada con la sesión mockeada.
+
+    SEC.2.1: al doble se le pone el modo de acceso aquí, en un solo sitio. Sin declararlo,
+    `access_mode` sería un MagicMock y `assert_chatbot_access` cerraría —correctamente— ante
+    un modo que no reconoce. Estos tests miden el protocolo SSE, no la autorización, que
+    tiene su gate en `tests/api/test_chatbot_access_mode.py`.
+    """
+    if chatbot_mock is not None:
+        chatbot_mock.access_mode = "authenticated"
+        chatbot_mock.allowed_roles = []
+        chatbot_mock.allowed_saml_groups = []
     from fastapi import FastAPI
     from server.app.api.v1.hub_chat import router as chat_router
     from server.app.modules.agents_hub.database.connection import get_async_session

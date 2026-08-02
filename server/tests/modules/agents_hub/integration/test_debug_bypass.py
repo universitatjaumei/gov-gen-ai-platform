@@ -235,6 +235,12 @@ class TestGateDeAcceso:
 class TestEndpointDeBypass:
 
     def _cliente(self, chatbot, rol="admin"):
+        # SEC.2.1: el doble declara su modo de acceso o `assert_chatbot_access` lo cierra.
+        # Aquí se mide el bypass de depuración, no la autorización por chatbot.
+        chatbot.access_mode = "authenticated"
+        chatbot.allowed_roles = []
+        chatbot.allowed_saml_groups = []
+
         from unittest.mock import AsyncMock, MagicMock
 
         from fastapi import FastAPI

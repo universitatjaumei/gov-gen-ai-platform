@@ -49,6 +49,11 @@ class ChatbotRead(BaseModel):
     cache_ttl: int
     kind: str
     parent_chatbot_id: uuid.UUID | None
+    # SEC.2.1: para quién es este chatbot. Lo aplica `assert_chatbot_access`, nunca el
+    # frontend: aquí viaja para poder mostrarlo y editarlo, no para decidir con ello.
+    access_mode: Literal["public_anon", "authenticated", "restricted"]
+    allowed_roles: list[str]
+    allowed_saml_groups: list[str]
     public_graph_profile: str
     language_mode: str
     quality_threshold: float
@@ -83,6 +88,10 @@ class ChatbotCreate(BaseModel):
     use_prompt_caching: bool = False
     cache_ttl: int = 3600
     kind: str = "atomic"
+    # SEC.2.1: se crea cerrado. Abrir un chatbot al público es una decisión explícita.
+    access_mode: Literal["public_anon", "authenticated", "restricted"] = "authenticated"
+    allowed_roles: list[str] = []
+    allowed_saml_groups: list[str] = []
     public_graph_profile: str = "PUBLIC_KB_RICH"
     language_mode: str = "prefer"
     quality_threshold: float = 0.6
@@ -112,6 +121,9 @@ class ChatbotUpdate(BaseModel):
     cache_ttl: int | None = None
     kind: str | None = None
     parent_chatbot_id: uuid.UUID | None = None
+    access_mode: Literal["public_anon", "authenticated", "restricted"] | None = None
+    allowed_roles: list[str] | None = None
+    allowed_saml_groups: list[str] | None = None
     public_graph_profile: str | None = None
     language_mode: str | None = None
     quality_threshold: float | None = None
@@ -222,6 +234,9 @@ async def create_chatbot(
         use_prompt_caching=body.use_prompt_caching,
         cache_ttl=body.cache_ttl,
         kind=body.kind,
+        access_mode=body.access_mode,
+        allowed_roles=body.allowed_roles,
+        allowed_saml_groups=body.allowed_saml_groups,
         public_graph_profile=body.public_graph_profile,
         language_mode=body.language_mode,
         quality_threshold=body.quality_threshold,

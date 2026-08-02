@@ -42,6 +42,10 @@ class Settings:
     saml_group_role_map: str = ""
     saml_default_role: str = "user"
     saml_frontend_return_url: str = ""
+    # SEC.2.1: la organización a la que pertenece este IdP. Sale de aquí y NUNCA de la
+    # aserción: si viniera de fuera, quien controla el IdP podría declarar a qué
+    # organización pertenece cada persona que entra.
+    saml_organizacion_id: str = ""
     # Subidas (SEC.6) — límite de tamaño y cuota de documentos por chatbot
     max_upload_mb: int = 10
     max_documents_per_chatbot: int = 0  # 0 = sin límite
@@ -87,6 +91,7 @@ def get_settings() -> Settings:
         saml_group_role_map=os.getenv("SAML_GROUP_ROLE_MAP", ""),
         saml_default_role=os.getenv("SAML_DEFAULT_ROLE", "user"),
         saml_frontend_return_url=os.getenv("SAML_FRONTEND_RETURN_URL", ""),
+        saml_organizacion_id=os.getenv("SAML_ORGANIZACION_ID", ""),
         max_upload_mb=int(os.getenv("MAX_UPLOAD_MB", "10")),
         max_documents_per_chatbot=int(os.getenv("MAX_DOCUMENTS_PER_CHATBOT", "0")),
     )

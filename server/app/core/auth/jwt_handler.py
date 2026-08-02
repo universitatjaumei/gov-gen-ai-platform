@@ -27,6 +27,9 @@ def create_token(user: UserInfo, expires_in_minutes: int | None = None) -> str:
         # eso los endpoints no filtraban. Se emite en TODAS las vias: login local, ACS
         # de SAML y PAT, porque una sola que lo omita reabre el acceso horizontal.
         "orgs": list(user.organizacion_ids),
+        # SEC.2.1: los grupos del IdP viajan con la sesión porque el modo `restricted` los
+        # consulta en cada peticion, y volver a preguntarselos al IdP no es una opcion.
+        "groups": list(user.saml_groups),
         "exp": expire,
         "iat": datetime.now(timezone.utc),
     }
@@ -71,4 +74,5 @@ def decode_token(token: str) -> UserInfo:
         # Un token emitido antes de SEC.2 no trae el claim. Se lee como SIN acceso, no
         # como acceso total: lo contrario convertiria un token viejo en una llave maestra.
         organizacion_ids=tuple(payload.get("orgs") or ()),
+        saml_groups=tuple(payload.get("groups") or ()),
     )
