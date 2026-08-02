@@ -12225,6 +12225,102 @@ dueño del PAT, y la cuota por usuario de SEC.4 no puede existir.
 
 ---
 
+## Prompt suelto FIX.1 — El modelo de un chatbot no se puede cambiar (PENDIENTE)
+
+> **Contexto**: encontrado el 2026-08-02 durante las pruebas manuales del Bloque RAG, que el
+> usuario no pudo completar. Un solo síntoma —«el botón de ejecutar no hace nada»— tapaba
+> cuatro fallos distintos, y ninguno era el que parecía.
+>
+> **Lo que estaba pasando de verdad**:
+>
+> 1. **`gemini-2.0-flash` está retirado.** Google devuelve `404 NOT_FOUND: "This model
+>    models/gemini-2.0-flash is no longer available"`. El chatbot demo lo tenía asignado.
+> 2. **El fallo era invisible.** `POST …/run` devuelve **500** cuando el modelo no responde y
+>    `TestScenariosPage` lanza la mutación **sin `onError`**: el botón se comporta igual que si
+>    no lo hubieras pulsado. Y en el chatbot demo el 500 ni siquiera aparecía, porque sin
+>    corpus el grafo corta antes de llamar al LLM y devuelve el fallback — o sea que el modelo
+>    roto quedaba tapado por un corpus vacío.
+> 3. **No hay forma de cambiar el modelo.** El formulario **hardcodea**
+>    `llm_config_id: DEV_LLM_ID` (y `organizacion_id: DEV_ORG_ID`), y `ChatbotUpdate` **ni
+>    siquiera declara `llm_config_id`**: no es un hueco de UI, es que la API no lo permite.
+>    Hubo que repuntar el chatbot por SQL.
+> 4. **Marcar una configuración por defecto exige un baile de dos pasos** que la API no
+>    documenta: responde 409 «ya existe una por defecto para el tier N» en vez de demotar la
+>    anterior. En la BD de desarrollo habían quedado **dos configuraciones tier 1 por
+>    defecto** a la vez.
+>
+> **El riesgo latente, que es el peor de los cuatro**: mientras el formulario hardcodee
+> `llm_config_id`, **editar cualquier chatbot en la UI le reasigna el modelo en silencio**.
+> El «Chatbot de Ejemplo» usa Ollama a propósito y una edición inocente lo pasaría a Gemini.
+>
+> **Relación con CAL.2 y con las reglas maestras**: `DEV_LLM_ID`/`DEV_ORG_ID` son exactamente
+> lo que CLAUDE.md prohíbe —lógica y datos hardcodeados en React que no vienen del contrato—.
+> No se espera a CAL.2 porque esto bloquea las pruebas manuales hoy.
+
+---
+
+### Prompt FIX.1 (RED/GREEN) — Elegir el modelo, y ver el error cuando falla
+
+**Modelo sugerido**: **Sonnet** — cuatro arreglos acotados, todos con causa ya diagnosticada.
+
+```
+# PROMPT FIX.1 (RED/GREEN) — Que el modelo se pueda cambiar y que los fallos se vean
+# Deploy: cloud (chatbots y configuración de LLM son configuración)
+
+## 1. BACKEND — `llm_config_id` entra en ChatbotUpdate
+- `ChatbotUpdate` gana `llm_config_id: uuid.UUID | None`.
+- Se VALIDA que la configuración existe: 404 con mensaje, no un IntegrityError de la FK a
+  mitad de la petición.
+- El resto del handler ya aplica `payload` con setattr, así que no hay más que tocar.
+
+## 2. BACKEND — marcar por defecto demota a la anterior
+Hoy `is_default=True` responde 409 si ya hay otra del mismo tier. Eso convierte «quiero que
+esta sea la de por defecto» en dos peticiones y un hueco: entre la una y la otra no hay
+ninguna. Pasa a ser una sola operación: se demota la anterior del mismo tier y se promueve
+esta, en la MISMA transacción. Vale para POST y para PATCH.
+NOTA: el 409 de BORRAR una configuración en uso se queda como está — ahí sí hay que decidir
+qué pasa con los chatbots que la usan, y eso no es este prompt.
+
+## 3. FRONTEND — selector de modelo, y fuera los identificadores hardcodeados
+- El formulario de chatbot lista las configuraciones (`GET /hub/llm-configs`) y deja elegir.
+- Al EDITAR, el desplegable arranca en la configuración actual del chatbot, no en una
+  constante. Esto es lo que cierra el riesgo de reasignar el modelo en silencio.
+- `DEV_LLM_ID` y `DEV_ORG_ID` desaparecen del fichero. La organización se elige de
+  `GET /hub/organizaciones` al crear; al editar no se toca (ChatbotUpdate no la admite).
+
+## 4. FRONTEND — los errores se ven
+- Ejecutar un escenario muestra el error si la mutación falla, con `role="alert"`.
+- Mismo tratamiento para crear y borrar: si el backend dice que no, se dice.
+
+## 5. FRONTEND — editar un escenario
+El `PATCH` existe desde RAG.13 y no lo usa nadie. Botón de editar que reutiliza el mismo
+formulario de crear, prellenado.
+
+## TESTS (RED primero)
+# backend  tests/api/test_chatbot_llm_config.py
+#   should_change_the_model_of_an_existing_chatbot
+#   should_reject_an_unknown_llm_config_with_404
+#   should_not_touch_the_model_when_the_field_is_absent      (el riesgo de la reasignación muda)
+#   should_promote_to_default_demoting_the_previous_one
+#   should_leave_exactly_one_default_per_tier
+# frontend src/admin/__tests__/ChatbotModelSelector.test.tsx
+#   should_list_available_llm_configs_in_the_form
+#   should_preselect_the_current_config_when_editing
+#   should_not_send_a_hardcoded_llm_config_id
+# frontend src/admin/__tests__/TestScenariosPage.test.tsx  (amplía el existente)
+#   should_show_an_error_when_the_run_fails
+#   should_edit_an_existing_scenario
+
+## CRITERIO DE DONE
+- [ ] `grep -rn "DEV_LLM_ID\|DEV_ORG_ID" frontend/src` = 0
+- [ ] Contrato OpenAPI + Orval regenerados; `tsc` limpio
+- [ ] Suite backend y frontend sin regresiones
+- [ ] Verificación en navegador por el agente si la extensión lo permite; si no, se dice
+- [ ] Sin migración
+```
+
+---
+
 ## Bloque CUR — La curación como producto propio (PENDIENTE)
 
 > **Contexto**: añadido el 2026-08-02. Decisión completa en `docs/DECISION_CURACION_SEPARADA.md`,

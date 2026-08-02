@@ -30,6 +30,23 @@ vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
   getGetCorpusStatsApiV1HubChatbotsChatbotIdCorpusStatsGetQueryKey: vi.fn((id: string) => [`/api/v1/hub/chatbots/${id}/corpus-stats`]),
 }))
 
+// FIX.1: la página lee dos catálogos del contrato en vez de dos constantes hardcodeadas.
+vi.mock('@/shared/api/generated/hub-llm-configs/hub-llm-configs', () => ({
+  useListLlmConfigsApiV1HubLlmConfigsGet: vi.fn(() => ({
+    data: [
+      { id: '00000000-0000-0000-0000-000000000001', provider: 'google', model_name: 'gemini-2.5-flash', label: '', tier: 1, purpose: 'chat', is_default: true },
+    ],
+    isLoading: false,
+  })),
+}))
+
+vi.mock('@/shared/api/generated/hub-organizaciones/hub-organizaciones', () => ({
+  useListOrganizacionesApiV1HubOrganizacionesGet: vi.fn(() => ({
+    data: [{ id: '00000000-0000-0000-0000-000000000010', name: 'UJI' }],
+    isLoading: false,
+  })),
+}))
+
 const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
   btoa(JSON.stringify({ sub: '1', email: 'admin@test.com', role: 'admin', exp: 9999999999 }))
     .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_') +
@@ -202,7 +219,7 @@ describe('ChatbotsPage', () => {
       fireEvent.click(screen.getByRole('button', { name: /nuevo chatbot/i }))
     })
 
-    const kindSelect = screen.getAllByRole('combobox')[0]
+    const kindSelect = screen.getByLabelText(/tipo de chatbot/i)
     await act(async () => {
       fireEvent.change(kindSelect, { target: { value: 'router' } })
     })
@@ -254,7 +271,7 @@ describe('ChatbotsPage', () => {
     await openEditDialog(DEMO_CHATBOT, [DEMO_CHATBOT], [], DEMO_CORPUS_STATS)
     await waitFor(() => screen.getByText(/sugerido:/i))
 
-    const retrievalSelect = screen.getAllByRole('combobox')[1]
+    const retrievalSelect = screen.getByLabelText(/modo de retrieval/i)
     await act(async () => {
       fireEvent.change(retrievalSelect, { target: { value: 'RAG' } })
     })
@@ -266,7 +283,7 @@ describe('ChatbotsPage', () => {
     await openEditDialog(DEMO_CHATBOT, [DEMO_CHATBOT], [], DEMO_CORPUS_STATS)
     expect(screen.getByRole('button', { name: /recalcular chunks/i })).toBeInTheDocument()
 
-    const retrievalSelect = screen.getAllByRole('combobox')[1]
+    const retrievalSelect = screen.getByLabelText(/modo de retrieval/i)
     await act(async () => {
       fireEvent.change(retrievalSelect, { target: { value: 'MD_AGENT_SELECTOR' } })
     })

@@ -67,6 +67,23 @@ const _contractCheck: ChatbotCreate = {
 }
 void _contractCheck
 
+// FIX.1: la página lee dos catálogos del contrato en vez de dos constantes hardcodeadas.
+vi.mock('@/shared/api/generated/hub-llm-configs/hub-llm-configs', () => ({
+  useListLlmConfigsApiV1HubLlmConfigsGet: vi.fn(() => ({
+    data: [
+      { id: '00000000-0000-0000-0000-000000000001', provider: 'google', model_name: 'gemini-2.5-flash', label: '', tier: 1, purpose: 'chat', is_default: true },
+    ],
+    isLoading: false,
+  })),
+}))
+
+vi.mock('@/shared/api/generated/hub-organizaciones/hub-organizaciones', () => ({
+  useListOrganizacionesApiV1HubOrganizacionesGet: vi.fn(() => ({
+    data: [{ id: '00000000-0000-0000-0000-000000000010', name: 'UJI' }],
+    isLoading: false,
+  })),
+}))
+
 const TOKEN =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
   btoa(JSON.stringify({ sub: '1', email: 'admin@test.com', role: 'admin', exp: 9999999999 }))

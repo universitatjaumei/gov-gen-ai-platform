@@ -17,6 +17,8 @@ import {
   getListChildrenApiV1HubChatbotsChatbotIdChildrenGetQueryKey,
   getGetCorpusStatsApiV1HubChatbotsChatbotIdCorpusStatsGetQueryKey,
 } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
+import { useListLlmConfigsApiV1HubLlmConfigsGet } from '@/shared/api/generated/hub-llm-configs/hub-llm-configs'
+import { useListOrganizacionesApiV1HubOrganizacionesGet } from '@/shared/api/generated/hub-organizaciones/hub-organizaciones'
 import { chatbotCreateSchema, type FormValues } from '../chatbots/schemas/chatbotSchemas'
 import { mapApiErrorsToFormErrors } from '@/shared/utils/formErrors'
 
@@ -26,8 +28,30 @@ const RETRIEVAL_MODES = [
   { value: 'MD_AGENT_SELECTOR', label: 'Exploración agéntica',  hint: 'El LLM decide qué documentos leer durante la conversación usando herramientas. Sin límite de corpus, pero más lento.' },
 ] as const
 
-const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010'
-const DEV_LLM_ID = '00000000-0000-0000-0000-000000000001'
+// FIX.1: aquí vivían `DEV_ORG_ID` y `DEV_LLM_ID`. Eran dos identificadores de la BD de
+// desarrollo escritos a mano en React —lo que CLAUDE.md prohíbe—, y el del modelo tenía
+// consecuencia funcional: no había forma de cambiar de modelo, y guardar cualquier edición
+// reasignaba el chatbot a esa configuración sin decirlo. Ahora salen del contrato.
+
+type LlmConfigOption = {
+  id: string
+  provider: string
+  model_name: string
+  label?: string | null
+  is_default?: boolean
+}
+
+type OrganizacionOption = { id: string; name: string }
+
+function etiquetaModelo(config: LlmConfigOption): string {
+  // El `model_name` exacto va SIEMPRE, aunque haya etiqueta. Es lo que distingue
+  // `gemini-2.0-flash` de `gemini-2.5-flash`, y lo que deja ver de un vistazo que
+  // `gemini-2.5-flash-preview-tts` es de texto a voz y no sirve para chatear.
+  const etiqueta = config.label?.trim()
+  const base = `${config.provider} · ${config.model_name}`
+  const conEtiqueta = etiqueta ? `${etiqueta} — ${base}` : base
+  return config.is_default ? `${conEtiqueta} (por defecto)` : conEtiqueta
+}
 
 export function ChatbotsPage() {
   const { t } = useTranslation('admin')
@@ -43,6 +67,12 @@ export function ChatbotsPage() {
 
   const { data: chatbotsRaw, isLoading } = useListChatbotsApiV1HubChatbotsGet()
   const chatbots: ChatbotRead[] = (chatbotsRaw as unknown as ChatbotRead[] | undefined) ?? []
+
+  // FIX.1: los dos catálogos que antes eran constantes escritas a mano.
+  const { data: configsRaw } = useListLlmConfigsApiV1HubLlmConfigsGet()
+  const llmConfigs = (configsRaw as unknown as LlmConfigOption[] | undefined) ?? []
+  const { data: orgsRaw } = useListOrganizacionesApiV1HubOrganizacionesGet()
+  const organizaciones = (orgsRaw as unknown as OrganizacionOption[] | undefined) ?? []
 
   const createMutation = useCreateChatbotApiV1HubChatbotsPost({
     mutation: {
@@ -103,6 +133,8 @@ export function ChatbotsPage() {
       min_retrieval_score: 0.0,
       reranker_enabled: false,
       answer_template: 'generic',
+      llm_config_id: '',
+      organizacion_id: '',
     },
   })
   const selectedKind = watch('kind')
@@ -159,6 +191,10 @@ export function ChatbotsPage() {
       min_retrieval_score: 0.0,
       reranker_enabled: false,
       answer_template: 'generic',
+      // Al crear se propone la configuración marcada por defecto, que es una sugerencia
+      // visible en el desplegable y no un identificador oculto en el código.
+      llm_config_id: (llmConfigs.find((c) => c.is_default) ?? llmConfigs[0])?.id ?? '',
+      organizacion_id: organizaciones[0]?.id ?? '',
     })
     setDialogOpen(true)
   }
@@ -184,6 +220,10 @@ export function ChatbotsPage() {
       min_retrieval_score: c.min_retrieval_score ?? 0.0,
       reranker_enabled: c.reranker_enabled ?? false,
       answer_template: c.answer_template ?? 'generic',
+      // La del chatbot, no la de por defecto: es lo que impide que guardar una edición
+      // cualquiera lo mueva de modelo sin que nadie lo haya pedido.
+      llm_config_id: c.llm_config_id,
+      organizacion_id: c.organizacion_id,
     })
     setDialogOpen(true)
   }
@@ -249,6 +289,7 @@ export function ChatbotsPage() {
           min_retrieval_score: values.min_retrieval_score,
           reranker_enabled: values.reranker_enabled,
           answer_template: values.answer_template,
+          llm_config_id: values.llm_config_id,
         },
       })
     } else {
@@ -262,8 +303,8 @@ export function ChatbotsPage() {
           retrieval_top_k: values.retrieval_top_k,
           use_prompt_caching: values.use_prompt_caching,
           cache_ttl: values.cache_ttl,
-          organizacion_id: DEV_ORG_ID,
-          llm_config_id: DEV_LLM_ID,
+          organizacion_id: values.organizacion_id,
+          llm_config_id: values.llm_config_id,
           public_graph_profile: values.public_graph_profile,
           language_mode: values.language_mode,
           quality_threshold: values.quality_threshold,
@@ -286,7 +327,7 @@ export function ChatbotsPage() {
     (cb) =>
       cb.id !== editing?.id &&
       cb.kind === 'atomic' &&
-      cb.organizacion_id === (editing?.organizacion_id ?? DEV_ORG_ID) &&
+      cb.organizacion_id === (editing?.organizacion_id ?? organizaciones[0]?.id) &&
       cb.parent_chatbot_id === null,
   )
 
@@ -422,16 +463,56 @@ export function ChatbotsPage() {
 
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
                 <div>
-                  <label className="text-sm font-medium">{t('hub.chatbot_name')}</label>
+                  <label htmlFor="chatbot-name" className="text-sm font-medium">{t('hub.chatbot_name')}</label>
                   <input
+                    id="chatbot-name"
                     {...register('name')}
                     className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                   />
                   {errors.name && <p className="text-destructive text-xs mt-1">{errors.name.message}</p>}
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Tipo de chatbot</label>
+                  <label htmlFor="chatbot-llm-config" className="text-sm font-medium">
+                    {t('hub.chatbot_model')}
+                  </label>
                   <select
+                    id="chatbot-llm-config"
+                    {...register('llm_config_id')}
+                    className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                  >
+                    {llmConfigs.length === 0 && <option value="">{t('hub.no_llm_configs')}</option>}
+                    {llmConfigs.map((config) => (
+                      <option key={config.id} value={config.id}>{etiquetaModelo(config)}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground mt-1">{t('hub.chatbot_model_hint')}</p>
+                  {errors.llm_config_id && (
+                    <p className="text-destructive text-xs mt-1">{errors.llm_config_id.message}</p>
+                  )}
+                </div>
+                {!editing && (
+                  <div>
+                    <label htmlFor="chatbot-organizacion" className="text-sm font-medium">
+                      {t('hub.chatbot_organizacion')}
+                    </label>
+                    <select
+                      id="chatbot-organizacion"
+                      {...register('organizacion_id')}
+                      className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                    >
+                      {organizaciones.map((org) => (
+                        <option key={org.id} value={org.id}>{org.name}</option>
+                      ))}
+                    </select>
+                    {errors.organizacion_id && (
+                      <p className="text-destructive text-xs mt-1">{errors.organizacion_id.message}</p>
+                    )}
+                  </div>
+                )}
+                <div>
+                  <label htmlFor="chatbot-kind" className="text-sm font-medium">Tipo de chatbot</label>
+                  <select
+                    id="chatbot-kind"
                     {...register('kind')}
                     className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                   >
@@ -440,8 +521,9 @@ export function ChatbotsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium">{selectedKind === 'router' ? 'Descripción del router' : t('hub.chatbot_prompt')}</label>
+                  <label htmlFor="chatbot-system-prompt" className="text-sm font-medium">{selectedKind === 'router' ? 'Descripción del router' : t('hub.chatbot_prompt')}</label>
                   <textarea
+                    id="chatbot-system-prompt"
                     {...register('system_prompt')}
                     rows={8}
                     className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background resize-y"
@@ -479,8 +561,9 @@ export function ChatbotsPage() {
                 {selectedKind === 'atomic' && (
                   <>
                     <div>
-                      <label className="text-sm font-medium">Modo de retrieval</label>
+                      <label htmlFor="chatbot-retrieval-mode" className="text-sm font-medium">Modo de retrieval</label>
                       <select
+                        id="chatbot-retrieval-mode"
                         {...register('retrieval_mode')}
                         className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                       >

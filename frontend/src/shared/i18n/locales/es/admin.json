@@ -15,7 +15,7 @@
     "chatbot_prompt": "Prompt del sistema",
     "chatbot_active": "Activo",
     "chatbot_client": "Organización",
-    "chatbot_model": "Modelo LLM",
+    "chatbot_model": "Modelo de lenguaje",
     "no_chatbots": "No hay chatbots creados",
     "delete_confirm": "¿Eliminar este chatbot?",
     "new_organizacion": "Nueva organización",
@@ -47,7 +47,7 @@
     "chatbot_install_desc": "Incluye este código en tu página web:",
     "llm_configs": "Modelos LLM",
     "new_llm_config": "Nueva config",
-    "no_llm_configs": "No hay configuraciones LLM",
+    "no_llm_configs": "No hay ninguna configuración de LLM dada de alta",
     "llm_config_label": "Etiqueta",
     "llm_config_provider": "Proveedor",
     "llm_config_model": "Modelo",
@@ -146,8 +146,13 @@
       "verdict_bad": "Incorrecta",
       "verdict_mixed": "Regular",
       "verdict_by": "Juzgado por",
-      "verdict_note": "Comentario"
-    }
+      "verdict_note": "Comentario",
+      "edit": "Editar",
+      "error_generic": "No se ha podido guardar. Revisa los datos o vuelve a intentarlo.",
+      "error_run": "No se ha podido ejecutar el escenario. Comprueba que el modelo del chatbot responde."
+    },
+    "chatbot_model_hint": "Configuración de LLM que usará este chatbot. Se gestiona en Configuración de modelos.",
+    "chatbot_organizacion": "Organización"
   },
   "login": {
     "title": "Iniciar sesión",

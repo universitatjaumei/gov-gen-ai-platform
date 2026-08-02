@@ -204,6 +204,26 @@ async def list_llm_configs(
     return result.scalars().all()
 
 
+async def _relevar_default(session, tier: int, excepto: uuid.UUID | None = None) -> None:
+    """Quita la marca de defecto a las demás configuraciones del mismo tier (FIX.1).
+
+    Antes esto era un 409: «ya existe una por defecto para el tier N». Convertía «quiero que
+    esta sea la de por defecto» en dos peticiones y, entre la una y la otra, un momento sin
+    ninguna. Peor aún, nadie documentaba el orden, así que en la BD de desarrollo acabaron
+    conviviendo **dos** configuraciones tier 1 marcadas por defecto.
+
+    El relevo ocurre en la misma transacción que la promoción, así que o hay exactamente una
+    o no hay cambio.
+    """
+    condiciones = [HubLLMConfig.tier == tier, HubLLMConfig.is_default.is_(True)]
+    if excepto is not None:
+        condiciones.append(HubLLMConfig.id != excepto)
+
+    anteriores = (await session.execute(select(HubLLMConfig).where(*condiciones))).scalars().all()
+    for anterior in anteriores:
+        anterior.is_default = False
+
+
 @router.post("", response_model=LLMConfigRead, status_code=status.HTTP_201_CREATED)
 async def create_llm_config(
     body: LLMConfigCreate,
@@ -211,17 +231,7 @@ async def create_llm_config(
     session=Depends(get_async_session),
 ):
     if body.is_default:
-        existing = await session.execute(
-            select(HubLLMConfig).where(
-                HubLLMConfig.tier == body.tier,
-                HubLLMConfig.is_default.is_(True),
-            )
-        )
-        if existing.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Ya existe una configuración por defecto para el tier {body.tier}",
-            )
+        await _relevar_default(session, body.tier)
 
     payload = body.model_dump()
     # Defaults operativos para precisión: Tier 1 => 0.1, Tier 2/3 => 0.0
@@ -248,18 +258,7 @@ async def update_llm_config(
 
     target_tier = body.tier if body.tier is not None else config.tier
     if body.is_default is True:
-        existing = await session.execute(
-            select(HubLLMConfig).where(
-                HubLLMConfig.tier == target_tier,
-                HubLLMConfig.is_default.is_(True),
-                HubLLMConfig.id != config_id,
-            )
-        )
-        if existing.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Ya existe una configuración por defecto para el tier {target_tier}",
-            )
+        await _relevar_default(session, target_tier, excepto=config_id)
 
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(config, field, value)

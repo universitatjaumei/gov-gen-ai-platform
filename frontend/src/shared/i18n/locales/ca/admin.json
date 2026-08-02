@@ -56,8 +56,15 @@
       "verdict_bad": "Incorrecta",
       "verdict_mixed": "Regular",
       "verdict_by": "Jutjat per",
-      "verdict_note": "Comentari"
-    }
+      "verdict_note": "Comentari",
+      "edit": "Editar",
+      "error_generic": "No s'ha pogut desar. Revisa les dades o torna-ho a provar.",
+      "error_run": "No s'ha pogut executar l'escenari. Comprova que el model del chatbot respon."
+    },
+    "chatbot_model": "Model de llenguatge",
+    "chatbot_model_hint": "Configuració d'LLM que farà servir aquest chatbot. Es gestiona a Configuració de models.",
+    "chatbot_organizacion": "Organització",
+    "no_llm_configs": "No hi ha cap configuració d'LLM donada d'alta"
   },
   "login": {
     "show_password": "Mostrar la contrasenya",

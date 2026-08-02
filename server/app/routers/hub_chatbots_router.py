@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from server.app.api.deps import require_role
 from server.app.core.auth.models import UserInfo
-from server.app.modules.agents_hub.database.config_models import HubChatbot
+from server.app.modules.agents_hub.database.config_models import HubChatbot, HubLLMConfig
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.operational_models import HubDocument
 from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
@@ -98,6 +98,10 @@ class ChatbotCreate(BaseModel):
 
 class ChatbotUpdate(BaseModel):
     name: str | None = None
+    # FIX.1: sin esto no había forma de cambiar el modelo de un chatbot. Cuando Google retiró
+    # `gemini-2.0-flash` hubo que repuntarlo por SQL, porque el formulario hardcodeaba el id y
+    # la API ni siquiera aceptaba el campo.
+    llm_config_id: uuid.UUID | None = None
     system_prompt: str | None = None
     sources: list[str] | None = None
     is_active: bool | None = None
@@ -229,6 +233,16 @@ async def update_chatbot(
     chatbot = await _get_chatbot_or_404(session, chatbot_id)
 
     payload = body.model_dump(exclude_none=True)
+
+    # FIX.1: se comprueba que la configuración existe antes de asignarla. Dejar que reviente
+    # la FK daría un 500 opaco a mitad de la petición en vez de decir qué falta.
+    if "llm_config_id" in payload:
+        if await session.get(HubLLMConfig, payload["llm_config_id"]) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"LLM config {payload['llm_config_id']} not found",
+            )
+
     next_mode = payload.get("retrieval_mode", chatbot.retrieval_mode)
 
     if next_mode == "MD_LONG_CONTEXT":

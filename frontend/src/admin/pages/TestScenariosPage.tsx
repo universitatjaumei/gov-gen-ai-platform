@@ -9,6 +9,7 @@ import {
   useListScenariosApiV1HubChatbotsChatbotIdTestScenariosGet,
   useListRunsApiV1HubChatbotsChatbotIdTestScenariosScenarioIdRunsGet,
   useCreateScenarioApiV1HubChatbotsChatbotIdTestScenariosPost,
+  useUpdateScenarioApiV1HubChatbotsChatbotIdTestScenariosScenarioIdPatch,
   useDeleteScenarioApiV1HubChatbotsChatbotIdTestScenariosScenarioIdDelete,
   useRunScenarioApiV1HubChatbotsChatbotIdTestScenariosScenarioIdRunPost,
   useSetVerdictApiV1HubChatbotsChatbotIdTestScenariosRunsRunIdVerdictPatch,
@@ -43,6 +44,9 @@ export function TestScenariosPage() {
 
   const [chatbotId, setChatbotId] = useState('')
   const [creando, setCreando] = useState(false)
+  // El PATCH existe desde RAG.13 y no lo usaba nadie: se creaba un escenario y ya no se
+  // podía corregir ni una errata. Se reutiliza el mismo formulario, prellenado.
+  const [editando, setEditando] = useState<ScenarioRead | null>(null)
   const [capturarContexto, setCapturarContexto] = useState(false)
   const [expandido, setExpandido] = useState<string | null>(null)
 
@@ -57,18 +61,56 @@ export function TestScenariosPage() {
       queryKey: getListScenariosApiV1HubChatbotsChatbotIdTestScenariosGetQueryKey(chatbotId),
     })
 
+  // FIX.1: hasta aquí las mutaciones fallaban en silencio. Un 500 del backend dejaba la
+  // pantalla idéntica, así que «no funciona» era literalmente todo lo que se podía observar.
+  const [error, setError] = useState('')
+  const alFallar = (err: unknown) =>
+    setError(err instanceof Error ? err.message : t('hub.test_scenarios.error_generic'))
+
   const crear = useCreateScenarioApiV1HubChatbotsChatbotIdTestScenariosPost({
-    mutation: { onSuccess: () => { setCreando(false); invalidarEscenarios() } },
+    mutation: {
+      onSuccess: () => { setCreando(false); setEditando(null); invalidarEscenarios() },
+      onError: alFallar,
+    },
+  })
+  const actualizar = useUpdateScenarioApiV1HubChatbotsChatbotIdTestScenariosScenarioIdPatch({
+    mutation: {
+      onSuccess: () => { setCreando(false); setEditando(null); invalidarEscenarios() },
+      onError: alFallar,
+    },
   })
   const borrar = useDeleteScenarioApiV1HubChatbotsChatbotIdTestScenariosScenarioIdDelete({
-    mutation: { onSuccess: invalidarEscenarios },
+    mutation: { onSuccess: invalidarEscenarios, onError: alFallar },
   })
 
   const { register, handleSubmit, reset } = useForm<FormularioEscenario>({
     resolver: zodResolver(esquemaEscenario),
   })
 
+  function abrirEdicion(escenario: ScenarioRead) {
+    setError('')
+    setEditando(escenario)
+    setCreando(true)
+    reset({
+      name: escenario.name,
+      prompt: escenario.prompt,
+      expectation_note: escenario.expectation_note ?? '',
+    })
+  }
+
+  function abrirCreacion() {
+    setError('')
+    setEditando(null)
+    setCreando(true)
+    reset({ name: '', prompt: '', expectation_note: '' })
+  }
+
   const enviar = handleSubmit((valores) => {
+    setError('')
+    if (editando) {
+      actualizar.mutate({ chatbotId, scenarioId: editando.id, data: valores })
+      return
+    }
     crear.mutate({ chatbotId, data: { ...valores, history: null } })
     reset()
   })
@@ -111,11 +153,17 @@ export function TestScenariosPage() {
         )}
 
         {chatbotId && !creando && (
-          <button className="border rounded px-3 py-1" onClick={() => setCreando(true)}>
+          <button className="border rounded px-3 py-1" onClick={abrirCreacion}>
             {t('hub.test_scenarios.new')}
           </button>
         )}
       </div>
+
+      {error && (
+        <p role="alert" className="text-sm text-red-700 border border-red-300 rounded p-2">
+          {error}
+        </p>
+      )}
 
       {creando && (
         <form onSubmit={enviar} className="border rounded p-4 space-y-3 max-w-2xl">
@@ -141,7 +189,11 @@ export function TestScenariosPage() {
             <button type="submit" className="border rounded px-3 py-1">
               {t('hub.test_scenarios.save')}
             </button>
-            <button type="button" className="px-3 py-1" onClick={() => setCreando(false)}>
+            <button
+              type="button"
+              className="px-3 py-1"
+              onClick={() => { setCreando(false); setEditando(null) }}
+            >
               {t('hub.test_scenarios.cancel')}
             </button>
           </div>
@@ -162,6 +214,7 @@ export function TestScenariosPage() {
             expandido={expandido}
             onExpandir={setExpandido}
             onBorrar={() => borrar.mutate({ chatbotId, scenarioId: escenario.id })}
+            onEditar={() => abrirEdicion(escenario)}
           />
         ))}
       </ul>
@@ -176,6 +229,7 @@ function Escenario({
   expandido,
   onExpandir,
   onBorrar,
+  onEditar,
 }: {
   escenario: ScenarioRead
   chatbotId: string
@@ -183,6 +237,7 @@ function Escenario({
   expandido: string | null
   onExpandir: (id: string | null) => void
   onBorrar: () => void
+  onEditar: () => void
 }) {
   const { t } = useTranslation('admin')
   const qc = useQueryClient()
@@ -202,8 +257,18 @@ function Escenario({
       ),
     })
 
+  // FIX.1: el fallo de una ejecución era invisible. El endpoint devuelve 500 cuando el
+  // modelo del chatbot no responde —le pasó al usuario con `gemini-2.0-flash` retirado— y
+  // sin esto el botón se comporta exactamente igual que si no se hubiera pulsado.
+  const [errorEjecucion, setErrorEjecucion] = useState('')
   const ejecutar = useRunScenarioApiV1HubChatbotsChatbotIdTestScenariosScenarioIdRunPost({
-    mutation: { onSuccess: invalidarRuns },
+    mutation: {
+      onSuccess: () => { setErrorEjecucion(''); invalidarRuns() },
+      onError: (err: unknown) =>
+        setErrorEjecucion(
+          err instanceof Error ? err.message : t('hub.test_scenarios.error_run')
+        ),
+    },
   })
   const veredicto = useSetVerdictApiV1HubChatbotsChatbotIdTestScenariosRunsRunIdVerdictPatch({
     mutation: { onSuccess: invalidarRuns },
@@ -234,11 +299,22 @@ function Escenario({
           >
             {t('hub.test_scenarios.run')}
           </button>
+          <button
+            className="border rounded px-3 py-1 text-sm"
+            data-testid={`edit-${escenario.id}`}
+            onClick={onEditar}
+          >
+            {t('hub.test_scenarios.edit')}
+          </button>
           <button className="px-3 py-1 text-sm text-red-700" onClick={onBorrar}>
             {t('hub.test_scenarios.delete')}
           </button>
         </div>
       </div>
+
+      {errorEjecucion && (
+        <p role="alert" className="text-sm text-red-700">{errorEjecucion}</p>
+      )}
 
       <section>
         <h3 className="text-sm font-medium">{t('hub.test_scenarios.runs')}</h3>

@@ -17,6 +17,11 @@ export const chatbotCreateSchema = z.object({
   min_retrieval_score: z.number().min(0).max(1),
   reranker_enabled: z.boolean(),
   answer_template: z.string(),
+  // FIX.1: el modelo se elige en el formulario. Antes era una constante del fichero de la
+  // página, así que no se podía cambiar y una edición cualquiera lo reasignaba en silencio.
+  llm_config_id: z.string().min(1),
+  // Solo se usa al crear: `ChatbotUpdate` no admite cambiar de organización.
+  organizacion_id: z.string().min(1),
 })
 
 export type FormValues = z.infer<typeof chatbotCreateSchema>

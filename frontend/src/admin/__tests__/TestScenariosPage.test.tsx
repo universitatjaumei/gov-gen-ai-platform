@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import i18n from '@/shared/i18n'
@@ -15,9 +15,13 @@ import { TestScenariosPage } from '../pages/TestScenariosPage'
  * doble con `any` convertiría un cambio de contrato en un fallo silencioso en producción.
  */
 
-const { mockRun, mockVerdict, mockData } = vi.hoisted(() => ({
+const { mockRun, mockVerdict, mockData, opcionesRun } = vi.hoisted(() => ({
   mockRun: vi.fn(),
   mockVerdict: vi.fn(),
+  // FIX.1: se guardan las opciones con que se registra la mutación para poder disparar su
+  // `onError` desde el test. Sin esto no hay forma de comprobar que un fallo se ve, que es
+  // justo lo que faltaba: el 500 dejaba la pantalla idéntica.
+  opcionesRun: { actual: null as { mutation?: { onError?: (e: unknown) => void } } | null },
   mockData: {
     chatbots: [] as ChatbotRead[],
     scenarios: [] as ScenarioRead[],
@@ -46,10 +50,10 @@ vi.mock('@/shared/api/generated/hub-test-scenarios/hub-test-scenarios', () => ({
     mutate: vi.fn(),
     isPending: false,
   })),
-  useRunScenarioApiV1HubChatbotsChatbotIdTestScenariosScenarioIdRunPost: vi.fn(() => ({
-    mutate: mockRun,
-    isPending: false,
-  })),
+  useRunScenarioApiV1HubChatbotsChatbotIdTestScenariosScenarioIdRunPost: vi.fn((opciones) => {
+    opcionesRun.actual = opciones
+    return { mutate: mockRun, isPending: false }
+  }),
   useSetVerdictApiV1HubChatbotsChatbotIdTestScenariosRunsRunIdVerdictPatch: vi.fn(() => ({
     mutate: mockVerdict,
     isPending: false,
@@ -268,6 +272,38 @@ describe('TestScenariosPage', () => {
     // Una clave sin traducción se renderiza como la propia clave: 'hub.test_scenarios.x'.
     await waitFor(() => {
       expect(screen.queryByText(/hub\.test_scenarios\./)).not.toBeInTheDocument()
+    })
+  })
+})
+
+describe('TestScenariosPage — FIX.1: los fallos se ven y los escenarios se editan', () => {
+  it('should_show_an_error_when_the_run_fails', async () => {
+    mockData.chatbots = [unChatbot()]
+    mockData.scenarios = [unEscenario()]
+    renderPage()
+
+    await screen.findByTestId(`run-${SCENARIO_ID}`)
+    // El backend devuelve 500 cuando el modelo del chatbot no responde. Antes de FIX.1 eso
+    // no producía ningún cambio observable en la pantalla.
+    act(() => {
+      opcionesRun.actual?.mutation?.onError?.(new Error('Request failed with status code 500'))
+    })
+
+    const aviso = await screen.findByRole('alert')
+    expect(aviso.textContent).toContain('500')
+  })
+
+  it('should_edit_an_existing_scenario', async () => {
+    mockData.chatbots = [unChatbot()]
+    mockData.scenarios = [unEscenario()]
+    renderPage()
+
+    fireEvent.click(await screen.findByTestId(`edit-${SCENARIO_ID}`))
+
+    // El PATCH existía desde RAG.13 y no lo usaba nadie: se creaba un escenario y ya no se
+    // podía corregir. El formulario debe abrirse relleno con lo que hay.
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Dieta a Madrid')).toBeInTheDocument()
     })
   })
 })
