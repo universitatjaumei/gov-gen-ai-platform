@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from server.app.modules.agents_hub.database.config_models import HubChatbot
 from server.app.modules.agents_hub.services.retrieval.types import Source
+from server.tests.dobles import completar_chatbot
 
 # SEC.2: el chat exige que el principal gestione la organización del chatbot. Estos
 # tests prueban el grafo, no la tenencia —que tiene su gate en
@@ -27,15 +28,7 @@ def _con_acceso(chatbot):
     que no reconoce —que es lo que debe hacer—. Estos tests miden el protocolo SSE; la
     autorización tiene su gate en `tests/api/test_chatbot_access_mode.py`.
     """
-    chatbot.access_mode = "authenticated"
-    chatbot.allowed_roles = []
-    chatbot.allowed_saml_groups = []
-    # SEC.4: y las cuotas. Un `MagicMock(spec=HubChatbot)` inventa un numero
-    # para cada columna nueva, asi que sin esto la peticion se va en 429.
-    chatbot.user_daily_token_quota = None
-    chatbot.chatbot_daily_token_quota = None
-    chatbot.anon_ip_daily_token_quota = None
-    return chatbot
+    return completar_chatbot(chatbot)
 
 _JWT_ENV = {
     "JWT_SECRET_KEY": "test-secret-key-that-is-at-least-32-characters-long",

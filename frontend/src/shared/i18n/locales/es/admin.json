@@ -152,7 +152,12 @@
       "error_run": "No se ha podido ejecutar el escenario. Comprueba que el modelo del chatbot responde."
     },
     "chatbot_model_hint": "Configuración de LLM que usará este chatbot. Se gestiona en Configuración de modelos.",
-    "chatbot_organizacion": "Organización"
+    "chatbot_organizacion": "Organización",
+    "availability": "Disponibilidad",
+    "availability_available": "Disponible",
+    "availability_expired": "Caducado",
+    "availability_not_yet_open": "Pendiente de apertura",
+    "availability_budget_exhausted": "Presupuesto agotado"
   },
   "login": {
     "title": "Iniciar sesión",

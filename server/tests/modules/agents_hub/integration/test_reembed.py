@@ -16,6 +16,8 @@ import uuid
 
 import pytest
 
+from server.tests.dobles import completar_chatbot
+
 from server.tests.modules.agents_hub.integration.test_metadata_filter import (
     _chunk,
     _documento,
@@ -317,17 +319,10 @@ class TestGuardaEnConsulta:
 
         chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
-        # SEC.2.1: el doble declara su modo de acceso. Sin esto `access_mode` es un
-        # MagicMock y la guarda cierra antes de llegar a la del espacio vectorial, que es
-        # lo que este test mide.
-        chatbot.access_mode = "authenticated"
-        chatbot.allowed_roles = []
-        chatbot.allowed_saml_groups = []
-        # SEC.4: y las cuotas. Un `MagicMock(spec=HubChatbot)` inventa un numero
-        # para cada columna nueva, asi que sin esto la peticion se va en 429.
-        chatbot.user_daily_token_quota = None
-        chatbot.chatbot_daily_token_quota = None
-        chatbot.anon_ip_daily_token_quota = None
+        # Los campos de configuracion del doble salen del ORM (`tests/dobles.py`):
+        # un MagicMock inventa un valor por cada columna nueva, y eso ya rompio
+        # estos tests tres veces —SEC.2.1, SEC.4 y SEC.4.1—.
+        completar_chatbot(chatbot)
         token = create_token(UserInfo(user_id="u1", email="u@test.com", role="user", organizacion_ids=(ORG_PRUEBA,)))
 
         with patch(

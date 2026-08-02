@@ -28,6 +28,15 @@ const RETRIEVAL_MODES = [
   { value: 'MD_AGENT_SELECTOR', label: 'Exploración agéntica',  hint: 'El LLM decide qué documentos leer durante la conversación usando herramientas. Sin límite de corpus, pero más lento.' },
 ] as const
 
+// SEC.4.1: solo el color. El estado y su motivo vienen del contrato —los calcula el
+// servidor—, y el texto sale de i18n; aquí no se decide nada sobre disponibilidad.
+const AVAILABILITY_STYLES: Record<string, string> = {
+  available: 'bg-green-100 text-green-700 border-green-200',
+  expired: 'bg-red-100 text-red-700 border-red-200',
+  not_yet_open: 'bg-amber-100 text-amber-700 border-amber-200',
+  budget_exhausted: 'bg-orange-100 text-orange-700 border-orange-200',
+}
+
 // FIX.1: aquí vivían `DEV_ORG_ID` y `DEV_LLM_ID`. Eran dos identificadores de la BD de
 // desarrollo escritos a mano en React —lo que CLAUDE.md prohíbe—, y el del modelo tenía
 // consecuencia funcional: no había forma de cambiar de modelo, y guardar cualquier edición
@@ -357,6 +366,7 @@ export function ChatbotsPage() {
               <th className="pb-2 font-medium">{t('hub.chatbot_name')}</th>
               <th className="pb-2 font-medium">Retrieval</th>
               <th className="pb-2 font-medium">{t('hub.chatbot_active')}</th>
+              <th className="pb-2 font-medium">{t('hub.availability')}</th>
               <th className="pb-2" />
             </tr>
           </thead>
@@ -388,6 +398,19 @@ export function ChatbotsPage() {
                   >
                     {c.is_active ? t('hub.chatbot_active') : tc('edit')}
                   </button>
+                </td>
+                <td className="py-3 pr-4">
+                  {/* SEC.4.1: el estado lo calcula el servidor y aquí solo se pinta. Nada
+                      de comparar fechas en el cliente: serían dos máquinas de estado, la
+                      del panel y la del chat, y se contradirían. */}
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full border ${
+                      AVAILABILITY_STYLES[c.availability?.state ?? 'available'] ??
+                      AVAILABILITY_STYLES.available
+                    }`}
+                  >
+                    {t(`hub.availability_${c.availability?.state ?? 'available'}`)}
+                  </span>
                 </td>
                 <td className="py-3 text-right">
                   <button

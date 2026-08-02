@@ -99,6 +99,12 @@ function unChatbot(): ChatbotRead {
     access_mode: 'authenticated',
     allowed_roles: [],
     allowed_saml_groups: [],
+    // SEC.4.1: la ventana de vigencia y el techo acumulado. `availability` es
+    // derivado y de solo lectura: lo calcula el servidor.
+    valid_from: null,
+    valid_until: null,
+    total_token_budget: null,
+    unavailable_message: '',
     public_graph_profile: 'PUBLIC_KB_RICH',
     language_mode: 'prefer',
     quality_threshold: 0.6,

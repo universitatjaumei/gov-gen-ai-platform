@@ -35,6 +35,15 @@ router = APIRouter(prefix="/hub/chatbots", tags=["hub-chatbots"])
 _require_admin = require_role("superadmin", "admin")
 
 
+class DisponibilidadOut(BaseModel):
+    """Estado derivado del chatbot (SEC.4.1). No se guarda: se calcula al pedirlo."""
+
+    state: Literal["available", "expired", "not_yet_open", "budget_exhausted"]
+    reason: str | None
+    tokens_used: int
+    total_token_budget: int | None
+
+
 class ChatbotRead(BaseModel):
     id: uuid.UUID
     name: str
@@ -54,6 +63,14 @@ class ChatbotRead(BaseModel):
     access_mode: Literal["public_anon", "authenticated", "restricted"]
     allowed_roles: list[str]
     allowed_saml_groups: list[str]
+    # SEC.4.1: la ventana y el techo son configuración; `availability` es **derivado y de
+    # solo lectura**. Lo calcula el servidor y el frontend lo pinta: recalcular la fecha en
+    # el cliente sería tener dos máquinas de estado que se pueden contradecir.
+    valid_from: datetime | None
+    valid_until: datetime | None
+    total_token_budget: int | None
+    unavailable_message: str
+    availability: "DisponibilidadOut | None" = None
     public_graph_profile: str
     language_mode: str
     quality_threshold: float
@@ -92,6 +109,12 @@ class ChatbotCreate(BaseModel):
     access_mode: Literal["public_anon", "authenticated", "restricted"] = "authenticated"
     allowed_roles: list[str] = []
     allowed_saml_groups: list[str] = []
+    # SEC.4.1: sin ventana ni techo por defecto. `availability` no se acepta al crear —es
+    # derivado— y por eso no está aquí.
+    valid_from: datetime | None = None
+    valid_until: datetime | None = None
+    total_token_budget: int | None = None
+    unavailable_message: str = ""
     public_graph_profile: str = "PUBLIC_KB_RICH"
     language_mode: str = "prefer"
     quality_threshold: float = 0.6
@@ -124,6 +147,10 @@ class ChatbotUpdate(BaseModel):
     access_mode: Literal["public_anon", "authenticated", "restricted"] | None = None
     allowed_roles: list[str] | None = None
     allowed_saml_groups: list[str] | None = None
+    valid_from: datetime | None = None
+    valid_until: datetime | None = None
+    total_token_budget: int | None = None
+    unavailable_message: str | None = None
     public_graph_profile: str | None = None
     language_mode: str | None = None
     quality_threshold: float | None = None
@@ -182,6 +209,28 @@ async def _get_chatbot_or_404(session, chatbot_id: uuid.UUID, principal=None) ->
     return chatbot
 
 
+async def _leer_con_disponibilidad(session, chatbot) -> ChatbotRead:
+    """`ChatbotRead` con el estado derivado ya calculado (SEC.4.1).
+
+    Se calcula en el servidor y viaja en el contrato: si el frontend comparase las fechas
+    por su cuenta habría dos máquinas de estado —la suya y la del chat— y se contradirían
+    en cuanto una de las dos cambiara.
+    """
+    from server.app.core.chatbot_availability import calcular_disponibilidad
+
+    estado = await calcular_disponibilidad(session, chatbot)
+    return ChatbotRead.model_validate(chatbot).model_copy(
+        update={
+            "availability": DisponibilidadOut(
+                state=estado.state,
+                reason=estado.reason,
+                tokens_used=estado.tokens_used,
+                total_token_budget=estado.total_token_budget,
+            )
+        }
+    )
+
+
 @router.get("", response_model=list[ChatbotRead])
 async def list_chatbots(
     user: UserInfo = Depends(_require_admin),
@@ -193,7 +242,10 @@ async def list_chatbots(
         select(HubChatbot).order_by(HubChatbot.created_at.desc()), user, HubChatbot
     )
     result = await session.execute(consulta)
-    return result.scalars().all()
+    return [
+        await _leer_con_disponibilidad(session, chatbot)
+        for chatbot in result.scalars().all()
+    ]
 
 
 @router.post("", response_model=ChatbotRead, status_code=status.HTTP_201_CREATED)
@@ -237,6 +289,10 @@ async def create_chatbot(
         access_mode=body.access_mode,
         allowed_roles=body.allowed_roles,
         allowed_saml_groups=body.allowed_saml_groups,
+        valid_from=body.valid_from,
+        valid_until=body.valid_until,
+        total_token_budget=body.total_token_budget,
+        unavailable_message=body.unavailable_message,
         public_graph_profile=body.public_graph_profile,
         language_mode=body.language_mode,
         quality_threshold=body.quality_threshold,

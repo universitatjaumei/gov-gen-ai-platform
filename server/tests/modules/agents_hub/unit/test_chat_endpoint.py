@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 
 from server.app.modules.agents_hub.database.config_models import HubChatbot
+from server.tests.dobles import completar_chatbot
 
 # SEC.2: el chat exige que el principal gestione la organización del chatbot. Estos
 # tests prueban el grafo, no la tenencia —que tiene su gate en
@@ -56,14 +57,7 @@ def _build_test_app(chatbot_mock) -> FastAPI:
     tiene su gate en `tests/api/test_chatbot_access_mode.py`.
     """
     if chatbot_mock is not None:
-        chatbot_mock.access_mode = "authenticated"
-        chatbot_mock.allowed_roles = []
-        chatbot_mock.allowed_saml_groups = []
-        # SEC.4: y las cuotas. Un `MagicMock(spec=HubChatbot)` inventa un numero
-        # para cada columna nueva, asi que sin esto la peticion se va en 429.
-        chatbot_mock.user_daily_token_quota = None
-        chatbot_mock.chatbot_daily_token_quota = None
-        chatbot_mock.anon_ip_daily_token_quota = None
+        completar_chatbot(chatbot_mock)
     from fastapi import FastAPI
     from server.app.api.v1.hub_chat import router as chat_router
     from server.app.modules.agents_hub.database.connection import get_async_session

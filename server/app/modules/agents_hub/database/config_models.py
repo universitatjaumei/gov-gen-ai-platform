@@ -276,6 +276,23 @@ class HubChatbot(HubConfigBase):
     allowed_saml_groups: Mapped[list[str]] = mapped_column(
         ARRAY(String), nullable=False, default=list, server_default="{}"
     )
+    # --- Vigencia y presupuesto acumulado (SEC.4.1) ---
+    #
+    # Un chatbot de campaña —plazo de matrícula, convocatoria, alegaciones— tiene que poder
+    # caducar solo. Hasta aquí la única palanca era que alguien se acordara de apagarlo.
+    #
+    # **No hay campo de estado.** Ni `closed_reason` ni voltear `is_active`: el estado se
+    # calcula al preguntarlo. Un flag persistido se queda obsoleto y obliga a un job que lo
+    # refresque, el consumo acumulado es dato operacional que no puede vivir en una tabla de
+    # configuración, e `is_active` seguiría significando dos cosas a la vez —«el admin lo
+    # apagó» y «se le pasó el plazo»— en un solo booleano.
+    valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    total_token_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Lo que lee el ciudadano cuando el chatbot no está disponible. Vacío = mensaje genérico
+    # del frontend: «el plazo de matrícula terminó el 30 de septiembre» lo escribe quien
+    # gestiona el trámite, no un catálogo de errores.
+    unavailable_message: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     # --- Cuotas de consumo (SEC.4). NULL = heredar de la organización; 0 = sin límite ---
     user_daily_token_quota: Mapped[int | None] = mapped_column(Integer, nullable=True)
     chatbot_daily_token_quota: Mapped[int | None] = mapped_column(Integer, nullable=True)

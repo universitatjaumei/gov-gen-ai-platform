@@ -21,6 +21,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from server.app.modules.agents_hub.database.config_models import HubChatbot
+from server.tests.dobles import completar_chatbot
 
 # SEC.2: el chat exige que el principal gestione la organización del chatbot. Estos
 # tests prueban el grafo, no la tenencia —que tiene su gate en
@@ -167,16 +168,10 @@ def _chatbot(mode: str = "RAG", kind: str = "atomic") -> MagicMock:
     cb = MagicMock(spec=HubChatbot)
     cb.id = uuid.uuid4()
     cb.organizacion_id = uuid.UUID(ORG_PRUEBA)
-    # SEC.2.1: el modo de acceso no se adivina. Un doble sin declararlo lo deja en un
-    # MagicMock, y `assert_chatbot_access` cierra ante un modo que no reconoce.
-    cb.access_mode = "authenticated"
-    cb.allowed_roles = []
-    cb.allowed_saml_groups = []
-    # SEC.4: y las cuotas. Un `MagicMock(spec=HubChatbot)` inventa un numero
-    # para cada columna nueva, asi que sin esto la peticion se va en 429.
-    cb.user_daily_token_quota = None
-    cb.chatbot_daily_token_quota = None
-    cb.anon_ip_daily_token_quota = None
+    # Los campos de configuracion del doble salen del ORM (`tests/dobles.py`):
+    # un MagicMock inventa un valor por cada columna nueva, y eso ya rompio
+    # estos tests tres veces —SEC.2.1, SEC.4 y SEC.4.1—.
+    completar_chatbot(cb)
     cb.retrieval_mode = mode
     cb.kind = kind
     cb.name = "Bot"

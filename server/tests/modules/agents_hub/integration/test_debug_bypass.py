@@ -26,6 +26,8 @@ import uuid
 
 import pytest
 
+from server.tests.dobles import completar_chatbot
+
 
 class _LLMEspia:
     def __init__(self) -> None:
@@ -235,11 +237,10 @@ class TestGateDeAcceso:
 class TestEndpointDeBypass:
 
     def _cliente(self, chatbot, rol="admin"):
-        # SEC.2.1: el doble declara su modo de acceso o `assert_chatbot_access` lo cierra.
-        # Aquí se mide el bypass de depuración, no la autorización por chatbot.
-        chatbot.access_mode = "authenticated"
-        chatbot.allowed_roles = []
-        chatbot.allowed_saml_groups = []
+        # Los campos de configuracion del doble salen del ORM (`tests/dobles.py`):
+        # un MagicMock inventa un valor por cada columna nueva, y eso ya rompio
+        # estos tests tres veces —SEC.2.1, SEC.4 y SEC.4.1—.
+        completar_chatbot(chatbot)
 
         # SEC.4: y las cuotas. Un `MagicMock(spec=HubChatbot)` inventa un numero
         # para cada columna nueva, asi que sin esto la peticion se va en 429.

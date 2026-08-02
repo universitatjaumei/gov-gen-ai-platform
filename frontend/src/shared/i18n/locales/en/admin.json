@@ -152,7 +152,12 @@
       "error_run": "Could not run the scenario. Check that the chatbot's model responds."
     },
     "chatbot_model_hint": "LLM configuration this chatbot will use. Managed under Model settings.",
-    "chatbot_organizacion": "Organisation"
+    "chatbot_organizacion": "Organisation",
+    "availability": "Availability",
+    "availability_available": "Available",
+    "availability_expired": "Expired",
+    "availability_not_yet_open": "Not yet open",
+    "availability_budget_exhausted": "Budget exhausted"
   },
   "login": {
     "title": "Sign in",

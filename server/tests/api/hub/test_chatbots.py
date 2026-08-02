@@ -54,6 +54,13 @@ def _make_chatbot(
         access_mode="authenticated",
         allowed_roles=[],
         allowed_saml_groups=[],
+        # SEC.4.1: sin ventana ni techo. `availability` no se declara: es derivado y lo
+        # calcula el servidor al leer, que es justo lo que prueba
+        # `tests/api/test_chatbot_availability.py`.
+        valid_from=None,
+        valid_until=None,
+        total_token_budget=None,
+        unavailable_message="",
         public_graph_profile="PUBLIC_KB_RICH",
         language_mode="prefer",
         quality_threshold=0.6,

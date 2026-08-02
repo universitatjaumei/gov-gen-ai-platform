@@ -36,6 +36,7 @@ from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_pipe
 )
 from server.app.modules.agents_hub.agent.router_node import build_route_to_subagent_node
 from server.app.modules.agents_hub.database.connection import get_async_session
+from server.app.core.chatbot_availability import assert_chatbot_available
 from server.app.core.quotas import assert_within_quota, contabilizar_interaccion
 from server.app.core.rate_limit import limitar_chat
 from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion
@@ -236,6 +237,11 @@ async def chat_stream(
     # y es su rol y sus grupos lo que decide, no los del dueño del PAT.
     actor = resolve_effective_actor(http_request, user)
     assert_chatbot_access(actor, chatbot, via="session")
+
+    # SEC.4.1: ¿está abierto? Va **después** del acceso y **antes** de la cuota: contarle a
+    # alguien que el plazo se cerró es contarle que el trámite existe, y eso solo se le dice
+    # a quien podría usarlo.
+    await assert_chatbot_available(session, chatbot)
 
     # SEC.4: primero el limitador —cuenta peticiones y es barato— y después la cuota, que
     # cuenta tokens y necesita ir a la BD. Las dos por actor efectivo: si se contaran por
