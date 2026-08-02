@@ -179,6 +179,14 @@ CONTENT_QUALITY_ENABLED=true
 CONTENT_QUALITY_INTERVAL_HOURS=24
 CONTENT_QUALITY_SEMANTIC_ENABLED=true
 
+# === Sincronizacion del corpus con el servicio de publicacion (Bloque SYNC) ===
+# Se dejan vacias a proposito: son datos del cliente y no hay valor por defecto sensato.
+# El token es un secreto; en produccion va por Secret Manager (D.2), no en este fichero.
+PUBLICATION_MCP_URL=
+PUBLICATION_DATASET_INDEX=
+PUBLICATION_DATASET_CONTENT=
+PUBLICATION_DATASET_TOKEN=
+
 # === Firma de manifiestos (RSA, autogenerada) ===
 AUTOMATIA_SIGNING_KEY="${AUTOMATIA_SIGNING_KEY}"
 

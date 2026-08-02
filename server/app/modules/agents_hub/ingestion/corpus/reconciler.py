@@ -151,7 +151,6 @@ class CorpusReconciler:
         force_prune: bool = False,
         prune_threshold: float = UMBRAL_PODA_POR_DEFECTO,
     ) -> ReconcileReport:
-        inicio = datetime.now(timezone.utc)
         informe = ReconcileReport()
 
         # list_entries() valida el paquete y aborta ENTERO si algo no cumple el contrato:
@@ -175,9 +174,27 @@ class CorpusReconciler:
                 )
                 continue
 
-            body = await source.read_body(entry)
-            content_hash = hash_markdown_body(body)
             existente = await self._buscar(chatbot_id, entry, url)
+
+            # SYNC.1: si la fuente sabe declarar el hash del cuerpo sin entregarlo —el
+            # índice del servicio de publicación lo trae— y coincide con el que ya está
+            # guardado, no hay nada que descargar. Es lo que hace que una pasada cueste en
+            # proporción a los cambios y no al tamaño del corpus: sin esto, cada sync
+            # bajaría los ~10 MB del corpus entero para descubrir que no ha cambiado nada.
+            #
+            # El atajo es seguro porque compara el hash declarado contra el NUESTRO, que se
+            # calculó con `hash_markdown_body`. Un publicador que hashee de otra forma
+            # simplemente no acierta nunca: se descarga el cuerpo y se decide con el hash
+            # real. Se pierde el ahorro, no la corrección.
+            if (
+                existente is not None
+                and entry.content_hash is not None
+                and existente.content_hash == entry.content_hash
+            ):
+                body, content_hash = None, existente.content_hash
+            else:
+                body = await source.read_body(entry)
+                content_hash = hash_markdown_body(body)
 
             if existente is None:
                 informe.ingeridos += 1
@@ -191,7 +208,7 @@ class CorpusReconciler:
 
             emparejados.add(existente.id)
 
-            if existente.content_hash != content_hash:
+            if body is not None and existente.content_hash != content_hash:
                 informe.reingeridos += 1
                 informe.detalle.append(f"~ {entry.relative_path} (contenido)")
                 if not dry_run:

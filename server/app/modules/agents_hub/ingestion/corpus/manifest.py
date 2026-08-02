@@ -74,6 +74,13 @@ class CorpusDocumentEntry(BaseModel):
     source_url: str
     language: str
     id_publicacio: str | None = None
+    # --- Transporte, no metadato del documento (SYNC.1) ---
+    # Hash del cuerpo tal como lo declara la fuente, cuando puede declararlo sin entregarlo.
+    # El servicio de publicación lo trae en el índice, y con él una pasada sin cambios no
+    # descarga ni un byte de contenido. La carpeta local lo deja en None: tiene el fichero
+    # delante, así que declararlo no le ahorraría nada.
+    # NO se persiste como columna ni entra en `doc_metadata`: describe el viaje, no la norma.
+    content_hash: str | None = None
     content_class: Literal["regulation", "faq", "generic"] = "generic"
     title: str | None = None
     original_pdf_sha256: str | None = None

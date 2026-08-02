@@ -79,18 +79,106 @@ def _escribir(
     return ruta
 
 
+# ───────────────────── Las dos fuentes, la misma reconciliación ─────────────────────
+#
+# SYNC.1 exige que la carpeta local y el servicio de publicación den EL MISMO resultado.
+# Sin esto, «no se reimplementa la reconciliación» sería una promesa: la única forma de
+# comprobarlo es correr la suite entera contra las dos fuentes. La fixture es autouse y
+# parametrizada, así que cada test de este fichero se ejecuta dos veces.
+
+
+def _fuente_local(directorio: Path, *, census: bool):
+    from server.app.modules.agents_hub.ingestion.corpus.source import LocalDirectorySource
+
+    return LocalDirectorySource(directorio, is_census_declared=census)
+
+
+class _TransporteFalso:
+    """Sirve por JSON-RPC los mismos `.md` que la carpeta, sin tocar la red."""
+
+    def __init__(self, datasets: dict[str, list[dict]]) -> None:
+        self.datasets = datasets
+
+    async def call(self, payload: dict) -> dict:
+        import json
+
+        code = payload["params"]["arguments"]["dataset_code"]
+        return {
+            "jsonrpc": "2.0",
+            "id": payload["id"],
+            "result": {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(self.datasets[code], ensure_ascii=False),
+                    }
+                ]
+            },
+        }
+
+
+def _fuente_publicacion(directorio: Path, *, census: bool):
+    from server.app.modules.agents_hub.ingestion.corpus.frontmatter import (
+        hash_markdown_body,
+        parse_frontmatter,
+    )
+    from server.app.modules.agents_hub.ingestion.corpus.publication_client import (
+        PublicationMcpClient,
+    )
+    from server.app.modules.agents_hub.ingestion.corpus.publication_source import (
+        PublicationMcpSource,
+    )
+
+    indice, contenido = [], []
+    for ruta in sorted(directorio.rglob("*.md")):
+        texto = ruta.read_text(encoding="utf-8-sig", errors="replace")
+        metadatos, cuerpo = parse_frontmatter(texto)
+        relativa = ruta.relative_to(directorio).as_posix()
+        indice.append({
+            "id_publicacio": metadatos.get("id_publicacio"),
+            "relative_path": relativa,
+            # El índice declara el hash, que es lo que permite no descargar lo no cambiado.
+            # Corriendo la suite con esto activado, el atajo queda cubierto por los ~22
+            # tests de reconciliación y no solo por los suyos propios.
+            "content_hash": hash_markdown_body(cuerpo),
+            "metadades": metadatos,
+        })
+        contenido.append({
+            "id_publicacio": metadatos.get("id_publicacio"),
+            "relative_path": relativa,
+            "markdown": texto,
+        })
+
+    cliente = PublicationMcpClient(
+        url="https://mcp.example/rpc",
+        token="tok-de-prueba",
+        transport=_TransporteFalso({"IDX": indice, "CNT": contenido}),
+    )
+    return PublicationMcpSource(
+        cliente, index_dataset="IDX", content_dataset="CNT", is_census_declared=census
+    )
+
+
+_FABRICAS = {"carpeta_local": _fuente_local, "servicio_mcp": _fuente_publicacion}
+_FABRICA_ACTUAL = _fuente_local
+
+
+@pytest.fixture(autouse=True, params=sorted(_FABRICAS))
+def fuente_parametrizada(request):
+    """Fija con qué `CorpusSource` corre este test. Ambas deben dar el mismo resultado."""
+    global _FABRICA_ACTUAL
+    _FABRICA_ACTUAL = _FABRICAS[request.param]
+    yield request.param
+    _FABRICA_ACTUAL = _fuente_local
+
+
 async def _reconciliar(session, directorio: Path, chatbot_id, **kwargs):
     from server.app.modules.agents_hub.ingestion.corpus.reconciler import (
         CorpusReconciler,
     )
-    from server.app.modules.agents_hub.ingestion.corpus.source import (
-        LocalDirectorySource,
-    )
     from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
 
-    fuente = LocalDirectorySource(
-        directorio, is_census_declared=kwargs.pop("census", False)
-    )
+    fuente = _FABRICA_ACTUAL(directorio, census=kwargs.pop("census", False))
     watcher = IngestionWatcher(
         session,
         kwargs.pop("embedding", None) or _FakeEmbedding(),
