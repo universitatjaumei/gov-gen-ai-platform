@@ -51,6 +51,11 @@ def test_operational_base_contains_only_operational_models() -> None:
         # consultas reales dentro, así que no salen del edge.
         "hub_test_scenarios",
         "hub_test_runs",
+        # SEC.4 — consumo por sujeto y ventana. Operacional y no configuración: el LÍMITE
+        # se configura y viaja cloud→edge, pero lo GASTADO es dato del cliente final y no
+        # sale del edge. Un contador colgado de `HubChatbot` se habría sincronizado con la
+        # configuración, que es justo lo que la frontera existe para impedir.
+        "hub_usage_counters",
     }
 
 def test_no_cross_base_relationships() -> None:

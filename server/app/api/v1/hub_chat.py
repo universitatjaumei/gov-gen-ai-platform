@@ -36,7 +36,9 @@ from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_pipe
 )
 from server.app.modules.agents_hub.agent.router_node import build_route_to_subagent_node
 from server.app.modules.agents_hub.database.connection import get_async_session
-from server.app.modules.agents_hub.database.config_models import HubChatbot
+from server.app.core.quotas import assert_within_quota, contabilizar_interaccion
+from server.app.core.rate_limit import limitar_chat
+from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion
 from server.app.modules.agents_hub.database.operational_models import HubInteraction
 from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
 from server.app.modules.agents_hub.services.embedding_resolver import (
@@ -119,6 +121,41 @@ def _sse(event: str, payload: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
+def _uso_del_evento(event: dict) -> tuple[int, int]:
+    """Tokens de entrada y salida que declara el proveedor, o `(0, 0)`.
+
+    LangChain los expone en `usage_metadata` desde la versión unificada y, en modelos más
+    antiguos, dentro de `response_metadata['token_usage']`. Se miran los dos sitios porque el
+    proveedor se elige por configuración y no se puede saber aquí cuál responderá.
+    """
+    salida = (event.get("data") or {}).get("output")
+    if salida is None:
+        return 0, 0
+
+    uso = getattr(salida, "usage_metadata", None)
+    if isinstance(uso, dict) and (uso.get("input_tokens") or uso.get("output_tokens")):
+        return int(uso.get("input_tokens") or 0), int(uso.get("output_tokens") or 0)
+
+    metadatos = getattr(salida, "response_metadata", None) or {}
+    crudo = metadatos.get("token_usage") or metadatos.get("usage") or {}
+    if isinstance(crudo, dict):
+        return (
+            int(crudo.get("prompt_tokens") or crudo.get("input_tokens") or 0),
+            int(crudo.get("completion_tokens") or crudo.get("output_tokens") or 0),
+        )
+    return 0, 0
+
+
+def _tokens_estimados(texto: str) -> int:
+    """Estimación por longitud cuando el proveedor no declara nada.
+
+    Cuatro caracteres por token: la regla de servilleta habitual para texto latino. No
+    pretende ser exacta —por eso lo que se guarda junto al número es `usage_source
+    = 'estimated'`—, solo evitar que una cuota se quede a cero porque el proveedor calle.
+    """
+    return max(1, len(texto or "") // 4) if texto else 0
+
+
 def _build_translation_warning(language: str) -> str | None:
     if not language or language == "es":
         return None
@@ -199,6 +236,14 @@ async def chat_stream(
     # y es su rol y sus grupos lo que decide, no los del dueño del PAT.
     actor = resolve_effective_actor(http_request, user)
     assert_chatbot_access(actor, chatbot, via="session")
+
+    # SEC.4: primero el limitador —cuenta peticiones y es barato— y después la cuota, que
+    # cuenta tokens y necesita ir a la BD. Las dos por actor efectivo: si se contaran por
+    # credencial, un cliente de confianza que atiende a cien personas se llevaría el límite
+    # y la cuota de una sola.
+    limitar_chat(http_request, actor_id=actor.subject_id, chatbot_id=chatbot_id)
+    organizacion = await session.get(HubOrganizacion, chatbot.organizacion_id)
+    await assert_within_quota(session, actor, chatbot, organizacion)
 
     embedding_service = await resolve_embedding_service(session, chatbot_id)
 
@@ -304,6 +349,7 @@ async def chat_stream(
     )
 
     async def event_generator() -> AsyncIterator[str]:
+        uso = {"prompt": 0, "completion": 0, "source": "estimated"}
         collected_tokens: list[str] = []
         final_sources: list = []
         language_fallback = False
@@ -351,6 +397,17 @@ async def chat_stream(
                     output = event.get("data", {}).get("output") or {}
                     language_fallback = bool(output.get("translation_warning"))
 
+                elif kind == "on_chat_model_end":
+                    # SEC.4: el uso real, tal como lo declara el proveedor. Se acumula en
+                    # vez de asignarse porque un turno puede invocar al modelo más de una
+                    # vez —reescritura de consulta, selector de agente—, y todo eso lo paga
+                    # la misma persona.
+                    entrada, salida = _uso_del_evento(event)
+                    if entrada or salida:
+                        uso["prompt"] += entrada
+                        uso["completion"] += salida
+                        uso["source"] = "provider"
+
         except Exception as exc:  # noqa: BLE001
             yield _sse("error", {"message": str(exc)})
             return
@@ -362,16 +419,32 @@ async def chat_stream(
             yield _sse("token", {"delta": fallback_answer})
 
         assistant_message = "".join(collected_tokens)
+
+        # SEC.4: si el proveedor no declaró uso, se estima por longitud y **se marca**. Una
+        # cuota apoyada en una estimación silenciosa no se puede defender ante quien la
+        # sufre; con la marca, al menos se sabe qué número se está discutiendo.
+        if uso["source"] == "estimated":
+            uso["prompt"] = _tokens_estimados(request.message)
+            uso["completion"] = _tokens_estimados(assistant_message)
+
+        total_tokens = uso["prompt"] + uso["completion"]
         interaction = HubInteraction(
             id=interaction_id,
             chatbot_id=selected_chatbot_id,
-            user_id=user.user_id,
+            user_id=actor.subject_id,
             user_message=request.message,
             assistant_message=assistant_message,
             run_id=interaction_id,
             fallback_reason=fallback_reason,
+            prompt_tokens=uso["prompt"] or None,
+            completion_tokens=uso["completion"] or None,
+            interaction_metadata={"usage_source": uso["source"]},
         )
         session.add(interaction)
+        # El consumo va en el MISMO commit que la interacción, no en un segundo write: si
+        # se separaran, un fallo entre los dos dejaría respuestas servidas sin contabilizar
+        # —o al revés— y la cuota dejaría de cuadrar con lo que el usuario ha recibido.
+        await contabilizar_interaccion(session, actor, chatbot, total_tokens)
         await session.commit()
 
         translation_warning = (

@@ -128,6 +128,21 @@ class HubOrganizacion(HubConfigBase):
         ForeignKey("hub_llm_configs.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # --- Cuotas de consumo (SEC.4). Todo en TOKENS ---
+    #
+    # `NULL` = heredar del nivel de arriba; `0` = **sin límite**. Son dos cosas distintas y
+    # confundirlas es el fallo caro: si `0` significara «bloqueado», poner un límite a cero
+    # para «quitar la restricción» dejaría al chatbot sin poder responder a nadie. Hay test.
+    #
+    # Los contadores NO viven aquí: son `HubUsageCounter`, operacionales. Aquí solo está el
+    # límite, que es configuración y sí se sincroniza al edge.
+    default_user_daily_token_quota: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    default_user_monthly_token_quota: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # De la organización entera, no de cada usuario: es el techo de gasto del contrato.
+    monthly_token_quota: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    default_chatbot_daily_token_quota: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -261,6 +276,12 @@ class HubChatbot(HubConfigBase):
     allowed_saml_groups: Mapped[list[str]] = mapped_column(
         ARRAY(String), nullable=False, default=list, server_default="{}"
     )
+    # --- Cuotas de consumo (SEC.4). NULL = heredar de la organización; 0 = sin límite ---
+    user_daily_token_quota: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    chatbot_daily_token_quota: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Para el widget anónimo (D.1), donde el sujeto no es una persona sino una IP. Sin
+    # heredar de la organización: un chatbot público y uno interno no comparten criterio.
+    anon_ip_daily_token_quota: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # --- Campos del grafo público (9B.2) ---
     public_graph_profile: Mapped[str] = mapped_column(String(50), nullable=False, default="PUBLIC_KB_RICH")
     language_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="prefer")

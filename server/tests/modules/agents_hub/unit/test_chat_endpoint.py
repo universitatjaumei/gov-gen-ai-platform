@@ -59,6 +59,11 @@ def _build_test_app(chatbot_mock) -> FastAPI:
         chatbot_mock.access_mode = "authenticated"
         chatbot_mock.allowed_roles = []
         chatbot_mock.allowed_saml_groups = []
+        # SEC.4: y las cuotas. Un `MagicMock(spec=HubChatbot)` inventa un numero
+        # para cada columna nueva, asi que sin esto la peticion se va en 429.
+        chatbot_mock.user_daily_token_quota = None
+        chatbot_mock.chatbot_daily_token_quota = None
+        chatbot_mock.anon_ip_daily_token_quota = None
     from fastapi import FastAPI
     from server.app.api.v1.hub_chat import router as chat_router
     from server.app.modules.agents_hub.database.connection import get_async_session
@@ -70,6 +75,11 @@ def _build_test_app(chatbot_mock) -> FastAPI:
     mock_session.execute = AsyncMock(return_value=mock_scalar)
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
+    # SEC.4: el chat lee la organización para resolver la cascada de cuotas. Sin declararlo,
+    # el doble devuelve un MagicMock cuyos límites son números inventados y la petición se
+    # va en 429. `None` = organización no encontrada = ninguna cuota heredada, que es lo que
+    # estos tests quieren: aquí se mide el protocolo SSE, no las cuotas.
+    mock_session.get = AsyncMock(return_value=None)
 
     async def _mock_session():
         yield mock_session

@@ -30,6 +30,11 @@ def _con_acceso(chatbot):
     chatbot.access_mode = "authenticated"
     chatbot.allowed_roles = []
     chatbot.allowed_saml_groups = []
+    # SEC.4: y las cuotas. Un `MagicMock(spec=HubChatbot)` inventa un numero
+    # para cada columna nueva, asi que sin esto la peticion se va en 429.
+    chatbot.user_daily_token_quota = None
+    chatbot.chatbot_daily_token_quota = None
+    chatbot.anon_ip_daily_token_quota = None
     return chatbot
 
 _JWT_ENV = {
@@ -60,6 +65,9 @@ def _build_test_app(chatbot_mock) -> FastAPI:
     mock_scalar = MagicMock()
     mock_scalar.scalar_one_or_none = MagicMock(return_value=chatbot_mock)
     mock_session.execute = AsyncMock(return_value=mock_scalar)
+    # SEC.4: la organización se lee para la cascada de cuotas; `None` = sin cuotas
+    # heredadas. Con el doble por defecto, los límites serían números inventados.
+    mock_session.get = AsyncMock(return_value=None)
     mock_session.add = MagicMock()
     mock_session.commit = AsyncMock()
 

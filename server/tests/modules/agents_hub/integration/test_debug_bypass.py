@@ -241,6 +241,11 @@ class TestEndpointDeBypass:
         chatbot.allowed_roles = []
         chatbot.allowed_saml_groups = []
 
+        # SEC.4: y las cuotas. Un `MagicMock(spec=HubChatbot)` inventa un numero
+        # para cada columna nueva, asi que sin esto la peticion se va en 429.
+        chatbot.user_daily_token_quota = None
+        chatbot.chatbot_daily_token_quota = None
+        chatbot.anon_ip_daily_token_quota = None
         from unittest.mock import AsyncMock, MagicMock
 
         from fastapi import FastAPI
@@ -256,6 +261,9 @@ class TestEndpointDeBypass:
         resultado = MagicMock()
         resultado.scalar_one_or_none = MagicMock(return_value=chatbot)
         session.execute = AsyncMock(return_value=resultado)
+        # SEC.4: la organización se lee para la cascada de cuotas; `None` = sin cuotas
+        # heredadas. Con el doble por defecto, los límites serían números inventados.
+        session.get = AsyncMock(return_value=None)
         session.add = MagicMock()
         session.commit = AsyncMock()
 

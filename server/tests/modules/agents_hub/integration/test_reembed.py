@@ -283,6 +283,9 @@ class TestGuardaEnConsulta:
         resultado = MagicMock()
         resultado.scalar_one_or_none = MagicMock(return_value=chatbot)
         session.execute = AsyncMock(return_value=resultado)
+        # SEC.4: la organización se lee para la cascada de cuotas; `None` = sin cuotas
+        # heredadas. Con el doble por defecto, los límites serían números inventados.
+        session.get = AsyncMock(return_value=None)
 
         async def _sesion():
             yield session
@@ -320,6 +323,11 @@ class TestGuardaEnConsulta:
         chatbot.access_mode = "authenticated"
         chatbot.allowed_roles = []
         chatbot.allowed_saml_groups = []
+        # SEC.4: y las cuotas. Un `MagicMock(spec=HubChatbot)` inventa un numero
+        # para cada columna nueva, asi que sin esto la peticion se va en 429.
+        chatbot.user_daily_token_quota = None
+        chatbot.chatbot_daily_token_quota = None
+        chatbot.anon_ip_daily_token_quota = None
         token = create_token(UserInfo(user_id="u1", email="u@test.com", role="user", organizacion_ids=(ORG_PRUEBA,)))
 
         with patch(

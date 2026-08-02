@@ -4,7 +4,7 @@ Deploy: cloud
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from pydantic import Field as PydanticField
 from sqlmodel import select
@@ -13,6 +13,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from server.app.api.deps import get_session, get_current_user
 from server.app.core.auth import UserInfo, create_token
 from server.app.core.auth.models import UserRole
+from server.app.core.rate_limit import limitar_login
 from server.app.core.security import hash_password, verify_password
 from server.app.database.models import SuperAdminAccount, AdminAccount
 
@@ -59,9 +60,14 @@ async def _orgs_del_admin(session, partner_id: str) -> tuple[str, ...]:
 @router.post("/superadmin/login", response_model=TokenResponse)
 async def login_superadmin(
     body: LoginRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> TokenResponse:
     """Emite un JWT para un SuperAdminAccount con email + contraseña."""
+    # SEC.4: por IP, porque en el login todavía no se sabe quién llama y esa es justamente
+    # la gracia del ataque. Va lo primero: comprobar la contraseña de una cuenta que ya ha
+    # gastado su cupo sería hacerle el trabajo al que prueba diccionarios.
+    limitar_login(request)
     result = await session.exec(
         select(SuperAdminAccount).where(SuperAdminAccount.email == body.email.lower())
     )
@@ -91,6 +97,7 @@ async def login_superadmin(
 @router.post("/admin/login", response_model=TokenResponse)
 async def login_admin(
     body: LoginRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> TokenResponse:
     """Emite un JWT para un AdminAccount con email + contraseña (SEC.1, hallazgo A1).
@@ -107,6 +114,10 @@ async def login_admin(
     el formulario de login en un oráculo para enumerar administradores, y responder antes
     cuando el email no existe lo convierte en el mismo oráculo medido con un cronómetro.
     """
+    # SEC.4: lo primero, antes incluso de mirar la cuenta. El hash de descarte de SEC.1
+    # protege del oráculo temporal, pero nada impedía probar diccionarios a ritmo de red.
+    limitar_login(request)
+
     result = await session.exec(
         select(AdminAccount).where(AdminAccount.email == body.email.lower())
     )

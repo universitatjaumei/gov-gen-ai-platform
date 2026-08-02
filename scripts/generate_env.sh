@@ -187,6 +187,9 @@ DEPLOY_MODE=all
 # ningun navegador podra llamar a la API. Se deja escrito y vacio, y no ausente, para que se
 # vea que falta rellenarlo.
 CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
+# SEC.4: limite de PETICIONES (el gasto en tokens son las cuotas, que van en la BD).
+RATE_LIMIT_LOGIN=10/minute
+RATE_LIMIT_CHAT=30/minute
 
 # === Sandbox de scripts (microservicio aislado — Bloque SBX) ===
 SANDBOX_BASE_URL=http://script-sandbox:5000

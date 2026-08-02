@@ -405,8 +405,64 @@ class HubInteraction(HubOperationalBase):
     # son un vocabulario que crecerá (reranker, presupuesto de tokens...) y una restricción
     # en la BD obligaría a una migración por cada motivo nuevo.
     fallback_reason: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    # SEC.4: consumo real de la interacción. **Nullable a propósito**: las interacciones
+    # anteriores a este prompt no tienen el dato y no se inventa. Un cero significaría «no
+    # gastó nada», que es una afirmación distinta de «no lo sabemos».
+    #
+    # De dónde salió el número se anota en `interaction_metadata.usage_source`
+    # ('provider' | 'estimated'): una cuota apoyada en una estimación silenciosa es una
+    # cuota que no se puede defender ante quien la sufre.
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # El chat no la rellena, y es deliberado: la tabla de precios (`ModelPricing`, que
+    # alimenta OpenRouter) vive en la BD de plataforma, y el chat es **edge**. Convertir
+    # tokens en euros es asunto de facturación —cloud—, que ya tiene `calculate_cost`. La
+    # columna queda porque las cuotas se miden en tokens pero se justifican en dinero, y el
+    # día que facturación lo calcule tiene dónde escribirlo sin migrar otra vez.
+    cost_estimated: Mapped[float | None] = mapped_column(Float, nullable=True)
     interaction_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class HubUsageCounter(HubOperationalBase):
+    """Consumo acumulado por sujeto y ventana (SEC.4).
+
+    **Vive en `HubOperationalBase` y no colgado del chatbot**, y no es un detalle: es dato de
+    consumo del cliente final, no configuración, así que no se sincroniza al cloud. Un
+    contador en `HubChatbot` rompería la frontera edge/cloud en cuanto la sync API empezara
+    a copiar configuración.
+
+    `window_key` es la ventana en texto —`'2026-08-02'` (día), `'2026-08'` (mes), `'total'`
+    (acumulado, que reutiliza SEC.4.1)—. En texto y no como fecha porque las tres conviven
+    en la misma columna y la clave única las distingue sin tabla aparte ni nulos.
+
+    Se actualiza con un UPSERT atómico, nunca leyendo-modificando-escribiendo: el chat es
+    concurrente y dos respuestas simultáneas del mismo usuario se pisarían los contadores,
+    que es exactamente el hueco por el que se cuela quien quiera saltarse una cuota.
+    """
+
+    __tablename__ = "hub_usage_counters"
+    __table_args__ = (
+        UniqueConstraint(
+            "subject_type", "subject_id", "window_key", name="uq_usage_counter_subject_window"
+        ),
+        CheckConstraint(
+            "subject_type IN ('user', 'chatbot', 'organizacion', 'ip')",
+            name="ck_usage_counter_subject_type",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    subject_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    subject_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    window_key: Mapped[str] = mapped_column(String(20), nullable=False)
+    tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cost: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 

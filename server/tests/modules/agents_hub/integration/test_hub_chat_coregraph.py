@@ -62,6 +62,9 @@ class _SesionCapturadora:
         scalar = MagicMock()
         scalar.scalar_one_or_none = MagicMock(return_value=self._chatbot)
         session.execute = AsyncMock(return_value=scalar)
+        # SEC.4: la organización se lee para la cascada de cuotas; `None` = sin cuotas
+        # heredadas. Con el doble por defecto, los límites serían números inventados.
+        session.get = AsyncMock(return_value=None)
         session.add = MagicMock(side_effect=self.anadidos.append)
         session.commit = AsyncMock()
         return session
@@ -169,6 +172,11 @@ def _chatbot(mode: str = "RAG", kind: str = "atomic") -> MagicMock:
     cb.access_mode = "authenticated"
     cb.allowed_roles = []
     cb.allowed_saml_groups = []
+    # SEC.4: y las cuotas. Un `MagicMock(spec=HubChatbot)` inventa un numero
+    # para cada columna nueva, asi que sin esto la peticion se va en 429.
+    cb.user_daily_token_quota = None
+    cb.chatbot_daily_token_quota = None
+    cb.anon_ip_daily_token_quota = None
     cb.retrieval_mode = mode
     cb.kind = kind
     cb.name = "Bot"
@@ -380,7 +388,16 @@ class TestRouterBeforeGraph:
         primera.scalar_one_or_none = MagicMock(return_value=padre)
         espacio.all = MagicMock(return_value=[])
         segunda.scalar_one_or_none = MagicMock(return_value=hijo)
-        session.execute = AsyncMock(side_effect=[primera, espacio, segunda])
+
+        # Las tres primeras consultas son las que este test mide; a partir de ahí van las
+        # de la contabilidad de consumo (SEC.4), que no le importan. Con una lista pelada,
+        # la cuarta reventaba el generador del stream con `StopAsyncIteration`.
+        pendientes = [primera, espacio, segunda]
+
+        async def _execute(*_args, **_kwargs):
+            return pendientes.pop(0) if pendientes else MagicMock()
+
+        session.execute = AsyncMock(side_effect=_execute)
 
         grafo = _grafo_mock(_eventos())
         app = _app(session)

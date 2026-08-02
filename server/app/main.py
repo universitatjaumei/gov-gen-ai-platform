@@ -15,6 +15,7 @@ from server.app.core.cors import politica_cors
 from server.app.database.db import init_server_db
 from server.app.api.v1.hub_chat import router as hub_chat_router
 from server.app.api.v1.hub_feedback import router as hub_feedback_router
+from server.app.api.v1.hub_usage import router as hub_usage_router
 from server.app.api.v1.hub_tasks import router as hub_tasks_router
 from server.app.api.v1.ingestion import router as ingestion_router
 from server.app.api.v1.edge_sync import router as edge_sync_router
@@ -221,6 +222,7 @@ def _register_cloud(app: FastAPI) -> None:
 def _register_edge(app: FastAPI) -> None:
     app.include_router(hub_chat_router, prefix="/api/v1")
     app.include_router(hub_feedback_router, prefix="/api/v1")
+    app.include_router(hub_usage_router, prefix="/api/v1")  # Deploy: edge (SEC.4)
     app.include_router(hub_tasks_router, prefix="/api/v1")
     app.include_router(ingestion_router, prefix="/api/v1")
     app.include_router(llm_drafts_router, prefix="/api/v1")  # Deploy: edge
