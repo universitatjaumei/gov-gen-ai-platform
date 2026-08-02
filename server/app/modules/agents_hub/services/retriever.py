@@ -74,6 +74,17 @@ class HybridRetriever:
         ORDER BY / LIMIT: filtrar después dejaría que los candidatos por debajo del umbral
         ocuparan plazas del top_k, que es el mismo error que VIS.1 corrigió con el filtro
         de metadatos.
+
+        DET.1: el desempate va **en Python y después del LIMIT**, no en el ORDER BY. pgvector
+        solo sirve el índice HNSW para `ORDER BY <distancia>` a secas; añadirle una segunda
+        clave lo inutiliza y devuelve cada consulta a recorrer todos los chunks del chatbot,
+        deshaciendo RAG.3. Medido: `ORDER BY embedding <=> $1, id` cae a `Seq Scan + Sort`.
+
+        Residuo que se acepta a cambio de conservar el índice: si un empate cae justo en el
+        borde del LIMIT, **qué filas vuelven** sigue dependiendo del plan; lo que ya no depende
+        es en qué orden salen las que vuelven. Con BGE-M3 el caso es teórico —empates exactos
+        entre floats de 1024 dimensiones no ocurren—; aparece con embeddings deterministas
+        como el del corpus de fixture.
         """
         similarity = 1 - HubDocumentChunk.embedding.cosine_distance(query_embedding)
         query = (
@@ -93,6 +104,10 @@ class HybridRetriever:
         query = query.order_by(similarity.desc()).limit(top_k)
 
         result = await self.session.execute(query)
+        filas = sorted(
+            result.all(),
+            key=lambda row: (-float(row.score), row.HubDocumentChunk.content_hash),
+        )
         return [
             SearchResult(
                 id=row.HubDocumentChunk.id,
@@ -103,7 +118,7 @@ class HybridRetriever:
                 metadata=row.HubDocumentChunk.chunk_metadata or {},
                 parent_content=row.HubDocumentChunk.parent_content,
             )
-            for row in result.all()
+            for row in filas
         ]
 
     async def keyword_search(
@@ -142,7 +157,11 @@ class HybridRetriever:
         stmt = self._with_metadata_filter(
             select(HubDocumentChunk, rank.label("rank")).where(*filters), metadata_filter
         )
-        stmt = stmt.order_by(rank.desc()).limit(top_k)
+        # DET.1: desempate en SQL, que aquí es gratis. El GIN sirve el WHERE y no el ORDER BY,
+        # así que este Sort ya se pagaba; y `ts_rank_cd` devuelve valores muy cuantizados, o sea
+        # que los empates son frecuentes y lo seguirán siendo con el corpus real. `content_hash`
+        # y no `id`: el id es un uuid4 y rebarajaría los empates en cada reingesta.
+        stmt = stmt.order_by(rank.desc(), HubDocumentChunk.content_hash).limit(top_k)
 
         filas = (await self.session.execute(stmt)).all()
         if not filas:

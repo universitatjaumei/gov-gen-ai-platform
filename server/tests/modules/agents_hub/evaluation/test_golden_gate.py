@@ -182,16 +182,16 @@ class TestGateDeRegresion:
             _regenerar_baseline(
                 informe,
                 ruta,
-                "Linea base POST-mejoras del retriever (RAG.3-RAG.14), regenerada al cerrar "
-                "el Bloque RAG. Sustituye a la de RAG.1 (MRR 0,8613), que dejaba sin "
-                "proteger la mejora de RAG.7. Medida con embedding determinista sobre el "
+                "Linea base POST-mejoras del retriever (RAG.3-RAG.14) y POST-DET.1, que hizo "
+                "determinista el desempate. Sustituye a la de RAG.1 (MRR 0,8613), que dejaba "
+                "sin proteger la mejora de RAG.7. Medida con embedding determinista sobre el "
                 "corpus de fixture: mide el MECANISMO de recuperacion, no la calidad de "
-                "BGE-M3. AVISO: 0,940 son 23 consultas en rango 1, una en rango 2 y un "
-                "fallo; una de las 25 ('qui tutoritza les practiques externes?') empata en "
-                "coseno exacto con otro documento y su orden lo decide el plan de la "
-                "consulta, no el retriever, asi que puede dar 0,920 sin que nada haya "
-                "empeorado. Regenerar solo con GOLDEN_UPDATE_BASELINE=1 y de forma "
-                "deliberada.",
+                "BGE-M3. 0,940 son 23 consultas en rango 1, una en rango 2 y un fallo. Antes "
+                "de DET.1 esta cifra oscilaba entre 0,920 y 0,940 segun el plan de la "
+                "consulta, porque una de las 25 empata en coseno exacto con otro documento y "
+                "el ORDER BY no desempataba; ahora el empate se rompe por content_hash y la "
+                "cifra es estable entre maquinas y entre reingestas. Regenerar solo con "
+                "GOLDEN_UPDATE_BASELINE=1 y de forma deliberada.",
             )
             pytest.skip(f"baseline regenerada a peticion explicita: {informe.render()}")
 
