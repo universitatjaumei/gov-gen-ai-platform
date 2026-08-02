@@ -1,5 +1,7 @@
 """Tests para el sistema de temas (hub_themes_router)."""
 import pytest
+import uuid
+
 from pathlib import Path
 from unittest.mock import patch
 
@@ -8,6 +10,11 @@ from httpx import ASGITransport, AsyncClient
 
 from server.app.core.auth.models import UserInfo
 from server.app.api.deps import get_current_user
+
+# SEC.2: el chat y la ingesta exigen que el principal gestione la organizacion del
+# chatbot. Estos tests prueban otra cosa, asi que doble y token comparten organizacion;
+# la tenencia tiene su propio gate en `tests/api/test_tenant_isolation.py`.
+ORG_PRUEBA = "00000000-0000-0000-0000-00000000dead"
 
 
 @pytest.fixture
@@ -109,7 +116,13 @@ class TestThemeAPI:
         ) as client:
             response = await client.post(
                 "/api/v1/hub/themes",
-                json={"name": "new-theme", "config": sample_theme_config},
+                json={
+                            "name": "new-theme",
+                            "config": sample_theme_config,
+                            # SEC.2: un tema sin organizacion es de plataforma y solo
+                            # lo crea un superadmin. Este test crea uno de organizacion.
+                            "organizacion_id": ORG_PRUEBA,
+                        },
             )
 
         assert response.status_code == 401
@@ -117,7 +130,7 @@ class TestThemeAPI:
     @pytest.mark.asyncio
     async def test_create_theme_success(self, test_app, sample_theme_config, tmp_path):
         def mock_user():
-            return UserInfo(user_id="test-user", email="test@example.com", role="admin")
+            return UserInfo(user_id="test-user", email="test@example.com", role="admin", organizacion_ids=(ORG_PRUEBA,))
 
         test_app.dependency_overrides[get_current_user] = mock_user
 
@@ -128,7 +141,13 @@ class TestThemeAPI:
                 ) as client:
                     response = await client.post(
                         "/api/v1/hub/themes",
-                        json={"name": "new-theme", "config": sample_theme_config},
+                        json={
+                            "name": "new-theme",
+                            "config": sample_theme_config,
+                            # SEC.2: un tema sin organizacion es de plataforma y solo
+                            # lo crea un superadmin. Este test crea uno de organizacion.
+                            "organizacion_id": ORG_PRUEBA,
+                        },
                     )
         finally:
             test_app.dependency_overrides.clear()

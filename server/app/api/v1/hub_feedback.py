@@ -19,6 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user
 from server.app.core.auth import UserInfo
+from server.app.core.auth.tenancy import assert_org_access
+from server.app.modules.agents_hub.database.config_models import HubChatbot
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.services.feedback_service import FeedbackService
 
@@ -58,6 +60,14 @@ async def get_interactions_for_review(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin or superadmin can access interaction reviews",
         )
+    # SEC.2: tener rol de admin no basta. Estas interacciones son conversaciones de
+    # ciudadanos con el asistente de OTRA administración; leerlas sin ser de su organización
+    # es el caso más grave del hallazgo A2, porque el dato es personal y de un tercero.
+    chatbot = await session.get(HubChatbot, chatbot_id)
+    if chatbot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chatbot not found")
+    assert_org_access(user, chatbot.organizacion_id)
+
     service = FeedbackService(session)
     interactions = await service.get_interactions_for_review(
         chatbot_id=chatbot_id,

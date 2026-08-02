@@ -28,7 +28,9 @@ CHATBOT_ID = uuid.UUID("00000000-0000-0000-0000-000000000100")
 CONFIG_VIEJA = uuid.UUID("00000000-0000-0000-0000-000000000001")
 CONFIG_NUEVA = uuid.UUID("00000000-0000-0000-0000-0000000000aa")
 
-_ADMIN = UserInfo(user_id="admin-1", email="admin@test.com", role="admin")
+# SEC.2: superadmin, para que estos tests sigan probando lo suyo y no la tenencia
+# —que tiene su propio gate en `tests/api/test_tenant_isolation.py`—.
+_ADMIN = UserInfo(user_id="root", email="root@test.com", role="superadmin")
 
 
 def _chatbot() -> SimpleNamespace:

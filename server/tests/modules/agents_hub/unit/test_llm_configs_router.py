@@ -105,12 +105,24 @@ class TestLLMConfigsRouter:
         )
         assert resp.status_code == 201
 
-    def test_should_reject_duplicate_default_for_same_tier(self):
+    def test_should_relieve_the_previous_default_for_same_tier(self):
+        """FIX.1 cambió el contrato: promover releva a la anterior, ya no da 409.
+
+        El 409 convertía «quiero que esta sea la de por defecto» en dos peticiones y,
+        entre la una y la otra, un momento sin ninguna. En la BD de desarrollo llegaron
+        a convivir dos configuraciones tier 1 marcadas por defecto.
+        """
         existing = _make_config(id=uuid.uuid4(), tier=1, is_default=True)
         session = AsyncMock()
         dup_result = MagicMock()
         dup_result.scalar_one_or_none.return_value = existing
+        dup_result.scalars.return_value.all.return_value = [existing]
         session.execute = AsyncMock(return_value=dup_result)
+        # La BD asigna el id al hacer flush; sin esto el 500 de validacion de respuesta
+        # taparia lo que este test comprueba.
+        session.refresh = AsyncMock(
+            side_effect=lambda obj: setattr(obj, "id", uuid.uuid4())
+        )
 
         client = TestClient(_build_app(session))
         resp = client.post(
@@ -124,7 +136,8 @@ class TestLLMConfigsRouter:
             },
             headers={"Authorization": f"Bearer {_make_token()}"},
         )
-        assert resp.status_code == 409
+        assert resp.status_code == 201, resp.text
+        assert existing.is_default is False
 
     def test_should_delete_config_not_in_use(self):
         cfg = _make_config()

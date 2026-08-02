@@ -24,6 +24,11 @@ from httpx import ASGITransport, AsyncClient
 from langchain_core.messages import AIMessage
 from sqlalchemy import select
 
+# SEC.2: el chat y la ingesta exigen que el principal gestione la organizacion del
+# chatbot. Estos tests prueban otra cosa, asi que doble y token comparten organizacion;
+# la tenencia tiene su propio gate en `tests/api/test_tenant_isolation.py`.
+ORG_PRUEBA = "00000000-0000-0000-0000-00000000dead"
+
 
 class _ServicioDelCorpus:
     """El mismo modelo con el que la fixture embebió los chunks (RAG.9).
@@ -287,7 +292,7 @@ class TestExportFlowE2E:
         mock_graph = _make_mock_graph_astream_events(raw_events)
 
         other_token = create_token(
-            UserInfo(user_id="intruder-99", email="intruder@test.com", role="user")
+            UserInfo(user_id="intruder-99", email="intruder@test.com", role="user", organizacion_ids=(ORG_PRUEBA,))
         )
         other_headers = {"Authorization": f"Bearer {other_token}"}
 

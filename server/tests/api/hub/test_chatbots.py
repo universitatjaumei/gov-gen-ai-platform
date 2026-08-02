@@ -16,7 +16,14 @@ DEV_LLM_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 DEV_CLIENT_ID = uuid.UUID("00000000-0000-0000-0000-000000000010")
 DEV_CHATBOT_ID = uuid.UUID("00000000-0000-0000-0000-000000000100")
 
-_ADMIN = UserInfo(user_id="admin-1", email="admin@test.com", role="admin")
+# SEC.2: un admin ahora lleva sus organizaciones en el token. Sin el claim no ve
+# nada, que es justo lo que la frontera de tenencia garantiza.
+_ADMIN = UserInfo(
+    user_id="admin-1",
+    email="admin@test.com",
+    role="admin",
+    organizacion_ids=(str(DEV_CLIENT_ID),),
+)
 
 
 def _make_chatbot(
@@ -515,10 +522,44 @@ class TestChatbotHierarchy:
                 f"/api/v1/hub/chatbots/{router_id}/children",
                 json={"child_chatbot_id": str(child_id)},
             )
+            # SEC.2 cambió el veredicto de 400 a 403, y es más correcto: para este admin,
+            # que no gestiona ninguna de las dos organizaciones del montaje, esos chatbots
+            # no son un recurso mal combinado — son un recurso al que no tiene acceso. La
+            # regla de negocio («deben ser de la misma organización») sigue cubierta abajo,
+            # con un principal que sí ve las dos.
+            assert resp.status_code == 403
+        finally:
+            app.dependency_overrides.pop(get_async_session, None)
+
+    def test_cannot_assign_child_from_different_organizacion_even_seeing_both(self, client):
+        """La regla de negocio, con un superadmin que sí ve las dos organizaciones."""
+        from server.app.api.deps import get_current_user
+
+        router_id, child_id = uuid.uuid4(), uuid.uuid4()
+        router_cb = _make_chatbot(
+            name="UJI Router", kind="router", chatbot_id=router_id,
+            organizacion_id=uuid.uuid4(),
+        )
+        child_cb = _make_chatbot(
+            name="Otro cliente", kind="atomic", chatbot_id=child_id,
+            organizacion_id=uuid.uuid4(),
+        )
+
+        session = self._mount_session(router_cb, child_cb)
+        app.dependency_overrides[get_async_session] = _override_session(session)
+        app.dependency_overrides[get_current_user] = lambda: UserInfo(
+            user_id="root", email="root@test.com", role="superadmin"
+        )
+        try:
+            resp = client.post(
+                f"/api/v1/hub/chatbots/{router_id}/children",
+                json={"child_chatbot_id": str(child_id)},
+            )
             assert resp.status_code == 400
             assert "misma organización" in resp.json()["detail"]
         finally:
             app.dependency_overrides.pop(get_async_session, None)
+            app.dependency_overrides.pop(get_current_user, None)
 
     def test_list_children_returns_only_direct_children(self, client):
         router_id = uuid.uuid4()

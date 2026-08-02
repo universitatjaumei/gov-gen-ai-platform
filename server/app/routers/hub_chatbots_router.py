@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from server.app.api.deps import require_role
 from server.app.core.auth.models import UserInfo
+from server.app.core.auth.tenancy import assert_org_access, scope_query_to_orgs
 from server.app.modules.agents_hub.database.config_models import HubChatbot, HubLLMConfig
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.operational_models import HubDocument
@@ -151,32 +152,49 @@ class RecalculateCorpusOut(BaseModel):
     chunks_deleted: int
 
 
-async def _get_chatbot_or_404(session, chatbot_id: uuid.UUID) -> HubChatbot:
+async def _get_chatbot_or_404(session, chatbot_id: uuid.UUID, principal=None) -> HubChatbot:
+    """Único punto de lectura de un chatbot, y por eso el único sitio donde comprobar.
+
+    SEC.2: `principal` es opcional por compatibilidad con las llamadas internas que no vienen
+    de una petición, pero **todo endpoint debe pasarlo**. Hay un guardarraíl en
+    `tests/api/test_tenant_isolation.py` que falla si aparece una segunda lectura directa de
+    `HubChatbot` en este fichero, porque saltarse esta función es reabrir el hallazgo A2.
+    """
     chatbot = await session.get(HubChatbot, chatbot_id)
     if not chatbot:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Chatbot not found"
         )
+    if principal is not None:
+        assert_org_access(principal, chatbot.organizacion_id)
     return chatbot
 
 
 @router.get("", response_model=list[ChatbotRead])
 async def list_chatbots(
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
-    result = await session.execute(
-        select(HubChatbot).order_by(HubChatbot.created_at.desc())
+    # SEC.2: acotado en SQL y no en memoria. Filtrar despues de leer con LIMIT deja
+    # fuera resultados propios y de todos modos trae los ajenos al proceso.
+    consulta = scope_query_to_orgs(
+        select(HubChatbot).order_by(HubChatbot.created_at.desc()), user, HubChatbot
     )
+    result = await session.execute(consulta)
     return result.scalars().all()
 
 
 @router.post("", response_model=ChatbotRead, status_code=status.HTTP_201_CREATED)
 async def create_chatbot(
     body: ChatbotCreate,
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
+    # SEC.2: no se puede crear un chatbot en una organizacion ajena. Va delante de la
+    # comprobación de embeddings: a quien no gestiona la organización no se le contesta
+    # con el estado del servicio de embeddings, que es información de la instalación.
+    assert_org_access(user, body.organizacion_id)
+
     # RAG.9: fallar al crear es barato; fallar a mitad de una ingesta de miles de documentos
     # no. Solo en modo RAG: los otros dos no embeben nada, y exigirles un servicio operativo
     # sería inventarles un requisito que no tienen.
@@ -227,10 +245,10 @@ async def create_chatbot(
 async def update_chatbot(
     chatbot_id: uuid.UUID,
     body: ChatbotUpdate,
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
-    chatbot = await _get_chatbot_or_404(session, chatbot_id)
+    chatbot = await _get_chatbot_or_404(session, chatbot_id, user)
 
     payload = body.model_dump(exclude_none=True)
 
@@ -273,10 +291,10 @@ async def update_chatbot(
 @router.delete("/{chatbot_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_chatbot(
     chatbot_id: uuid.UUID,
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
-    await _get_chatbot_or_404(session, chatbot_id)
+    await _get_chatbot_or_404(session, chatbot_id, user)
     await session.execute(sql_delete(HubChatbot).where(HubChatbot.id == chatbot_id))
     await session.commit()
 
@@ -284,10 +302,10 @@ async def delete_chatbot(
 @router.get("/{chatbot_id}/corpus-stats", response_model=CorpusStatsOut)
 async def get_corpus_stats(
     chatbot_id: uuid.UUID,
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
-    await _get_chatbot_or_404(session, chatbot_id)
+    await _get_chatbot_or_404(session, chatbot_id, user)
 
     total_docs_row = await session.execute(
         select(func.count(HubDocument.id)).where(HubDocument.chatbot_id == chatbot_id)
@@ -327,10 +345,10 @@ async def get_corpus_stats(
 @router.post("/{chatbot_id}/regenerate-chunks", response_model=RegenerateChunksOut)
 async def regenerate_chunks(
     chatbot_id: uuid.UUID,
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
-    chatbot = await _get_chatbot_or_404(session, chatbot_id)
+    chatbot = await _get_chatbot_or_404(session, chatbot_id, user)
     if chatbot.retrieval_mode != "RAG":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -365,10 +383,10 @@ async def regenerate_chunks(
 )
 async def recalculate_corpus_endpoint(
     chatbot_id: uuid.UUID,
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
-    chatbot = await _get_chatbot_or_404(session, chatbot_id)
+    chatbot = await _get_chatbot_or_404(session, chatbot_id, user)
 
     embedding_service = await resolve_embedding_service(session, chatbot_id)
 
@@ -405,10 +423,10 @@ async def recalculate_corpus_endpoint(
 @router.get("/{chatbot_id}/children", response_model=list[ChatbotRead])
 async def list_children(
     chatbot_id: uuid.UUID,
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
-    router_cb = await _get_chatbot_or_404(session, chatbot_id)
+    router_cb = await _get_chatbot_or_404(session, chatbot_id, user)
     if router_cb.kind != "router":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -425,10 +443,10 @@ async def list_children(
 async def assign_child(
     chatbot_id: uuid.UUID,
     body: AssignChildIn,
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
-    router_cb = await _get_chatbot_or_404(session, chatbot_id)
+    router_cb = await _get_chatbot_or_404(session, chatbot_id, user)
     if router_cb.kind != "router":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -440,7 +458,7 @@ async def assign_child(
             detail="No se permite jerarquía de más de 2 niveles",
         )
 
-    child_cb = await _get_chatbot_or_404(session, body.child_chatbot_id)
+    child_cb = await _get_chatbot_or_404(session, body.child_chatbot_id, user)
 
     if child_cb.id == router_cb.id:
         raise HTTPException(
@@ -477,17 +495,17 @@ async def assign_child(
 async def unassign_child(
     chatbot_id: uuid.UUID,
     child_chatbot_id: uuid.UUID,
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
-    router_cb = await _get_chatbot_or_404(session, chatbot_id)
+    router_cb = await _get_chatbot_or_404(session, chatbot_id, user)
     if router_cb.kind != "router":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Solo los chatbots de tipo router pueden tener hijos",
         )
 
-    child_cb = await _get_chatbot_or_404(session, child_chatbot_id)
+    child_cb = await _get_chatbot_or_404(session, child_chatbot_id, user)
     if child_cb.parent_chatbot_id != router_cb.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

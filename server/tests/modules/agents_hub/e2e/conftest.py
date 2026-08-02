@@ -14,6 +14,12 @@ import uuid
 
 import pytest
 
+# SEC.2: el chat y la exportación exigen que el principal gestione la organización del
+# chatbot. Estos E2E prueban otra cosa, así que la organización del doble y la del token
+# son la misma; la tenencia tiene su gate propio en `tests/api/test_tenant_isolation.py`.
+# El mismo valor está en `test_chat_flow.py`, que crea principales adicionales.
+ORG_PRUEBA = uuid.UUID("00000000-0000-0000-0000-00000000dead")
+
 _JWT_ENV = {
     "JWT_SECRET_KEY": "test-secret-key-that-is-at-least-32-characters-long",
     "JWT_ALGORITHM": "HS256",
@@ -54,7 +60,12 @@ def auth_headers():
     from server.app.core.auth import UserInfo, create_token
 
     token = create_token(
-        UserInfo(user_id="e2e-user-1", email="e2e@test.com", role="user")
+        UserInfo(
+            user_id="e2e-user-1",
+            email="e2e@test.com",
+            role="user",
+            organizacion_ids=(str(ORG_PRUEBA),),
+        )
     )
     return {"Authorization": f"Bearer {token}"}
 
@@ -65,7 +76,12 @@ def admin_headers():
     from server.app.core.auth import UserInfo, create_token
 
     token = create_token(
-        UserInfo(user_id="admin-e2e-1", email="admin-e2e@test.com", role="admin")
+        UserInfo(
+            user_id="admin-e2e-1",
+            email="admin-e2e@test.com",
+            role="admin",
+            organizacion_ids=(str(ORG_PRUEBA),),
+        )
     )
     return {"Authorization": f"Bearer {token}"}
 
@@ -88,7 +104,9 @@ async def setup_chatbot(db_session):
     db_session.add(llm_config)
     await db_session.flush()
 
-    client = HubOrganizacion(name="E2E Test Client", partner_id="partner-e2e-1")
+    client = HubOrganizacion(
+        id=ORG_PRUEBA, name="E2E Test Client", partner_id="partner-e2e-1"
+    )
     db_session.add(client)
     await db_session.flush()
 

@@ -124,15 +124,36 @@ class PatService:
 
         # Capturar los valores ANTES del commit: expire_on_commit los invalidaría y un
         # acceso posterior dispararía un lazy-load síncrono (MissingGreenlet).
+        # SEC.2: el PAT **hereda** las organizaciones de su dueño y no las lleva guardadas.
+        # Guardarlas en la fila las congelaría: a un admin al que se le retira una
+        # organización le seguiría valiendo un token emitido antes, que es una revocación
+        # que no revoca. Resolverlas aquí cuesta una consulta por validación y siempre dice
+        # la verdad de hoy.
         principal = PatPrincipal(
             user_info=UserInfo(
-                user_id=pat.owner_id, email=pat.owner_email, role=pat.owner_role
+                user_id=pat.owner_id,
+                email=pat.owner_email,
+                role=pat.owner_role,
+                organizacion_ids=await self._orgs_del_dueno(pat.owner_role, pat.owner_id),
             ),
             scopes=list(pat.scopes),
         )
         pat.last_used_at = datetime.now(timezone.utc)
         await self.session.commit()
         return principal
+
+    async def _orgs_del_dueno(self, owner_role: str, owner_id: str) -> tuple[str, ...]:
+        """Organizaciones del dueño del PAT. Vacío en superadmin: ahí es el comodín."""
+        from sqlalchemy import select as sa_select
+
+        from server.app.modules.agents_hub.database.config_models import HubOrganizacion
+
+        if owner_role == "superadmin":
+            return ()
+        filas = await self.session.execute(
+            sa_select(HubOrganizacion.id).where(HubOrganizacion.partner_id == owner_id)
+        )
+        return tuple(str(fila) for fila in filas.scalars().all())
 
     async def list_for(self, owner: UserInfo) -> list[HubPersonalAccessToken]:
         """Lista los PAT del owner (metadatos; nunca el plano ni el hash)."""

@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, require_scopes
 from server.app.core.auth import UserInfo
+from server.app.core.auth.tenancy import assert_org_access
 from server.app.core.auth.models import UserRole
 from server.app.core.auth.pat.scopes import CHAT_DEBUG
 from server.app.modules.agents_hub.agent.public_graphs.core.graph_factory import GraphFactory
@@ -187,6 +188,13 @@ async def chat_stream(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Chatbot {chatbot_id} not found",
         )
+
+    # SEC.2: un admin de otra organización no conversa con este chatbot. Conversar no es
+    # «solo leer»: la respuesta cita el corpus, así que sin esta línea el chat es una vía de
+    # exfiltración del corpus ajeno más cómoda que el propio CRUD.
+    # SEC.2.1 mueve esta decisión —junto con el modo de acceso— a `assert_chatbot_access`,
+    # que será el único sitio donde se resuelva. Aquí queda la mitad que toca a SEC.2.
+    assert_org_access(user, chatbot.organizacion_id)
 
     embedding_service = await resolve_embedding_service(session, chatbot_id)
 

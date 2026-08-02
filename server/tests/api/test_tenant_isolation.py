@@ -1,0 +1,425 @@
+"""GATE DE CI — Aislamiento entre organizaciones (Prompt SEC.2, hallazgo A2).
+
+**El agujero**: el JWT no llevaba la organización y los endpoints no filtraban. Cualquier
+administrador listaba, editaba y borraba los chatbots de todas las organizaciones, y leía sus
+conversaciones — que en un asistente de administración pública contienen preguntas de
+ciudadanos, o sea datos personales de terceros.
+
+Este fichero es un **gate**, no una suite de cobertura: si algo de aquí se pone en rojo, hay
+acceso horizontal entre organizaciones y no se despliega. Por eso las aserciones son sobre el
+comportamiento observable de la frontera —403, listas filtradas, el id del token mandando
+sobre el del cuerpo— y no sobre cómo esté implementada por dentro.
+
+El último test no prueba comportamiento: recorre el código y falla si un endpoint lee una
+entidad de organización sin pasar por la comprobación. Es el que evita que el agujero vuelva
+por un endpoint nuevo que nadie acordó revisar.
+"""
+from __future__ import annotations
+
+import uuid
+from pathlib import Path
+
+import pytest
+
+from server.app.core.auth.models import UserInfo
+
+# Los routers se importan aquí arriba y no dentro de cada test, aunque el resto del fichero
+# use imports perezosos: `hub_chatbots_router` arrastra el chunker y, con él, pyarrow, cuya
+# carga nativa revienta el proceso en Windows si ocurre a mitad de la sesión de pytest
+# (`Windows fatal exception: access violation`). Importarlo en la recolección lo evita.
+from server.app.api.v1.hub_chat import router as chat_router
+from server.app.api.v1.hub_feedback import router as feedback_router
+from server.app.routers.hub_chatbots_router import router as chatbots_router
+from server.app.routers.hub_ingestion_router import router as ingestion_router
+from server.app.routers.hub_themes_router import router as themes_router
+
+ORG_A = str(uuid.UUID("00000000-0000-0000-0000-0000000000a1"))
+ORG_B = str(uuid.UUID("00000000-0000-0000-0000-0000000000b2"))
+
+
+def _admin(*orgs: str) -> UserInfo:
+    return UserInfo(user_id="admin-1", email="a@uji.es", role="admin", organizacion_ids=orgs)
+
+
+def _superadmin() -> UserInfo:
+    return UserInfo(user_id="root", email="root@uji.es", role="superadmin")
+
+
+def _user(org: str) -> UserInfo:
+    return UserInfo(user_id="u", email="u@uji.es", role="user", organizacion_ids=(org,))
+
+
+# ───────────────────────── El claim ─────────────────────────
+
+
+class TestClaimDeOrganizacion:
+
+    def test_should_carry_organizacion_ids_in_user_info(self):
+        assert _admin(ORG_A).organizacion_ids == (ORG_A,)
+
+    def test_should_treat_superadmin_empty_list_as_wildcard(self):
+        """Vacío en un superadmin es «todas», no «ninguna». Es la única excepción."""
+        from server.app.core.auth.tenancy import puede_acceder
+
+        assert _superadmin().organizacion_ids == ()
+        assert puede_acceder(_superadmin(), ORG_A) is True
+
+    def test_should_treat_empty_list_as_no_access_for_a_non_superadmin(self):
+        """El mismo valor significa lo contrario según el rol, y eso hay que fijarlo.
+
+        Si «vacío = todas» se aplicara a cualquiera, un admin al que se le olvidara poblar el
+        claim pasaría a verlo todo — el agujero A2 exactamente, reintroducido por un descuido.
+        """
+        from server.app.core.auth.tenancy import puede_acceder
+
+        assert puede_acceder(_admin(), ORG_A) is False
+
+    def test_should_survive_a_round_trip_through_the_jwt(self):
+        from server.app.core.auth import create_token
+        from server.app.core.auth.jwt_handler import decode_token
+
+        token = create_token(_admin(ORG_A, ORG_B))
+        recuperado = decode_token(token)
+
+        assert set(recuperado.organizacion_ids) == {ORG_A, ORG_B}
+        assert recuperado.role == "admin"
+
+    def test_should_default_to_no_organizations_for_an_old_token(self):
+        """Un token emitido antes de SEC.2 no trae el claim: se lee como sin acceso."""
+        import jwt as pyjwt
+
+        from server.app.core.config import get_settings
+        from server.app.core.auth.jwt_handler import decode_token
+
+        ajustes = get_settings()
+        antiguo = pyjwt.encode(
+            {"sub": "1", "email": "a@uji.es", "role": "admin", "exp": 9_999_999_999},
+            ajustes.jwt_secret_key,
+            algorithm=ajustes.jwt_algorithm,
+        )
+        assert decode_token(antiguo).organizacion_ids == ()
+
+
+# ───────────────────────── La frontera ─────────────────────────
+
+
+class TestAssertOrgAccess:
+
+    def test_should_allow_access_to_own_org(self):
+        from server.app.core.auth.tenancy import assert_org_access
+
+        assert_org_access(_admin(ORG_A), ORG_A)  # no lanza
+
+    def test_should_forbid_access_to_another_org(self):
+        from fastapi import HTTPException
+
+        from server.app.core.auth.tenancy import assert_org_access
+
+        with pytest.raises(HTTPException) as exc:
+            assert_org_access(_admin(ORG_A), ORG_B)
+        assert exc.value.status_code == 403
+
+    def test_should_allow_superadmin_cross_org_access(self):
+        from server.app.core.auth.tenancy import assert_org_access
+
+        assert_org_access(_superadmin(), ORG_B)  # no lanza
+
+    def test_should_forbid_a_user_outside_its_own_org(self):
+        from fastapi import HTTPException
+
+        from server.app.core.auth.tenancy import assert_org_access
+
+        with pytest.raises(HTTPException):
+            assert_org_access(_user(ORG_A), ORG_B)
+
+    def test_should_accept_uuid_and_string_alike(self):
+        """El id llega como UUID desde el ORM y como str desde el token."""
+        from server.app.core.auth.tenancy import assert_org_access
+
+        assert_org_access(_admin(ORG_A), uuid.UUID(ORG_A))
+
+    def test_should_forbid_when_the_entity_has_no_org(self):
+        """Sin organización no se puede decidir, y no decidir es dejar pasar."""
+        from fastapi import HTTPException
+
+        from server.app.core.auth.tenancy import assert_org_access
+
+        with pytest.raises(HTTPException):
+            assert_org_access(_admin(ORG_A), None)
+
+
+class TestScopeQuery:
+
+    def test_should_filter_the_query_by_the_principals_orgs(self):
+        from sqlalchemy import select
+
+        from server.app.core.auth.tenancy import scope_query_to_orgs
+        from server.app.modules.agents_hub.database.config_models import HubChatbot
+
+        sql = str(
+            scope_query_to_orgs(select(HubChatbot), _admin(ORG_A), HubChatbot)
+        ).lower()
+        assert "organizacion_id in" in sql.replace("\n", " ")
+
+    def test_should_not_filter_for_superadmin(self):
+        from sqlalchemy import select
+
+        from server.app.core.auth.tenancy import scope_query_to_orgs
+        from server.app.modules.agents_hub.database.config_models import HubChatbot
+
+        original = select(HubChatbot)
+        assert str(scope_query_to_orgs(original, _superadmin(), HubChatbot)) == str(original)
+
+    def test_should_produce_an_impossible_filter_for_a_principal_without_orgs(self):
+        """Un admin sin organizaciones no ve nada; nunca «no filtres»."""
+        from sqlalchemy import select
+
+        from server.app.core.auth.tenancy import scope_query_to_orgs
+        from server.app.modules.agents_hub.database.config_models import HubChatbot
+
+        sql = str(scope_query_to_orgs(select(HubChatbot), _admin(), HubChatbot)).lower()
+        assert "organizacion_id in" in sql.replace("\n", " ")
+
+
+# ───────────────────── La frontera vista desde fuera ─────────────────────
+
+
+def _app_con(router, principal: UserInfo, session, prefijo: str = "/api/v1"):
+    """App mínima con un router, la sesión doblada y el principal dado.
+
+    Una app por test en vez de `main.app`: el gate no debería depender de que el registro
+    de routers de la aplicación real siga igual mañana, ni arrastrar su middleware.
+    """
+    from fastapi import FastAPI
+
+    from server.app.api.deps import get_current_user
+    from server.app.modules.agents_hub.database.connection import get_async_session
+
+    async def _sesion():
+        yield session
+
+    app = FastAPI()
+    app.dependency_overrides[get_current_user] = lambda: principal
+    app.dependency_overrides[get_async_session] = _sesion
+    app.include_router(router, prefix=prefijo)
+    return app
+
+
+def _chatbot_de(org: str):
+    """Doble de chatbot que solo necesita declarar de quién es."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(id=uuid.uuid4(), organizacion_id=uuid.UUID(org), name="Bot")
+
+
+def _sesion_que_devuelve(entidad=None, filas: list | None = None):
+    from unittest.mock import AsyncMock, MagicMock
+
+    session = MagicMock()
+    session.get = AsyncMock(return_value=entidad)
+    resultado = MagicMock()
+    resultado.scalars.return_value.all.return_value = filas or []
+    resultado.scalar_one_or_none = MagicMock(return_value=entidad)
+    session.execute = AsyncMock(return_value=resultado)
+    session.commit = AsyncMock()
+    session.refresh = AsyncMock()
+    return session
+
+
+class TestLaFronteraEnLosEndpoints:
+    """Los 403 tal y como los ve un cliente HTTP.
+
+    Los tests de `assert_org_access` prueban que la regla existe; estos prueban que está
+    **en el camino** de cada endpoint, que es lo que falló en A2: la regla nunca fue el
+    problema, su ausencia en la ruta sí.
+    """
+
+    def test_should_list_only_own_org_chatbots(self):
+        """El acotado ocurre en SQL. Se comprueba en la consulta, no en la respuesta:
+        un doble de sesión devuelve lo que se le diga, así que afirmar sobre las filas
+        probaría el doble y no el endpoint."""
+        from fastapi.testclient import TestClient
+
+        session = _sesion_que_devuelve(filas=[])
+        cliente = TestClient(_app_con(chatbots_router, _admin(ORG_A), session))
+
+        assert cliente.get("/api/v1/hub/chatbots").status_code == 200
+
+        consulta = session.execute.await_args.args[0]
+        # Sin guiones: así es como SQLAlchemy escribe un UUID al fijar el literal.
+        sql = str(consulta.compile(compile_kwargs={"literal_binds": True}))
+        assert uuid.UUID(ORG_A).hex in sql
+        assert uuid.UUID(ORG_B).hex not in sql
+
+    def test_should_not_scope_the_listing_for_a_superadmin(self):
+        from fastapi.testclient import TestClient
+
+        session = _sesion_que_devuelve(filas=[])
+        cliente = TestClient(_app_con(chatbots_router, _superadmin(), session))
+        cliente.get("/api/v1/hub/chatbots")
+
+        consulta = session.execute.await_args.args[0]
+        assert "organizacion_id IN" not in str(consulta)
+
+    def test_should_forbid_get_chatbot_of_other_org(self):
+        """Sobre `corpus-stats`, que es la lectura de un chatbot concreto que sí existe:
+        el router no expone `GET /{chatbot_id}` a secas. Ambos pasan por
+        `_get_chatbot_or_404`, así que la frontera es la misma."""
+        from fastapi.testclient import TestClient
+
+        ajeno = _chatbot_de(ORG_B)
+        cliente = TestClient(
+            _app_con(chatbots_router, _admin(ORG_A), _sesion_que_devuelve(ajeno))
+        )
+
+        resp = cliente.get(f"/api/v1/hub/chatbots/{ajeno.id}/corpus-stats")
+        assert resp.status_code == 403
+
+    def test_should_forbid_update_delete_chatbot_of_other_org(self):
+        from fastapi.testclient import TestClient
+
+        ajeno = _chatbot_de(ORG_B)
+        session = _sesion_que_devuelve(ajeno)
+        cliente = TestClient(_app_con(chatbots_router, _admin(ORG_A), session))
+
+        patch_resp = cliente.patch(
+            f"/api/v1/hub/chatbots/{ajeno.id}", json={"name": "Secuestrado"}
+        )
+        delete_resp = cliente.delete(f"/api/v1/hub/chatbots/{ajeno.id}")
+
+        assert patch_resp.status_code == 403
+        assert delete_resp.status_code == 403
+        session.commit.assert_not_awaited()
+
+    def test_should_allow_superadmin_cross_org_access_over_http(self):
+        """El comodín no es solo una función que devuelve True: se ve en la respuesta."""
+        from fastapi.testclient import TestClient
+
+        ajeno = _chatbot_de(ORG_B)
+        cliente = TestClient(
+            _app_con(chatbots_router, _superadmin(), _sesion_que_devuelve(ajeno))
+        )
+
+        # El borrado, que es lo más que se puede hacer con un chatbot ajeno: si el comodín
+        # no llegara hasta aquí, esto sería un 403 como el del test anterior.
+        assert cliente.delete(f"/api/v1/hub/chatbots/{ajeno.id}").status_code == 204
+
+    def test_should_forbid_reading_feedback_of_other_org(self):
+        """El caso más grave: son conversaciones de ciudadanos con otra administración."""
+        from fastapi.testclient import TestClient
+
+        ajeno = _chatbot_de(ORG_B)
+        cliente = TestClient(
+            _app_con(feedback_router, _admin(ORG_A), _sesion_que_devuelve(ajeno))
+        )
+
+        resp = cliente.get(f"/api/v1/hub/feedback/{ajeno.id}/review")
+        assert resp.status_code == 403
+
+    def test_should_forbid_chatting_with_chatbot_of_other_org(self):
+        """Conversar con el chatbot ajeno extrae su corpus sin pasar por el CRUD."""
+        from fastapi.testclient import TestClient
+
+        ajeno = _chatbot_de(ORG_B)
+        cliente = TestClient(
+            _app_con(chat_router, _admin(ORG_A), _sesion_que_devuelve(ajeno))
+        )
+
+        resp = cliente.post(
+            f"/api/v1/hub/chat/{ajeno.id}", json={"message": "Dame vuestro corpus"}
+        )
+        assert resp.status_code == 403
+
+    def test_should_scope_ingestion_to_own_org(self):
+        """Los trabajos de ingesta llevan las URL y los ficheros del corpus ajeno."""
+        from fastapi.testclient import TestClient
+
+        ajeno = _chatbot_de(ORG_B)
+        cliente = TestClient(
+            _app_con(ingestion_router, _admin(ORG_A), _sesion_que_devuelve(ajeno))
+        )
+
+        resp = cliente.get(f"/api/v1/hub/ingestion/{ajeno.id}/jobs")
+        assert resp.status_code == 403
+
+    def test_should_reject_client_supplied_org_id_in_themes(self):
+        """El cuerpo propone, el token dispone.
+
+        **Desviación documentada respecto al plan**, que pedía *derivar* la organización del
+        principal e ignorar la del cuerpo. Un admin puede gestionar varias, así que derivarla
+        obligaría a elegir una por él —silenciosamente, y mal en cuanto haya dos—. Se valida
+        contra el token en su lugar: mismo cierre (nadie crea en organización ajena) y sin
+        adivinar la intención.
+        """
+        from fastapi.testclient import TestClient
+
+        cliente = TestClient(
+            _app_con(themes_router, _admin(ORG_A), _sesion_que_devuelve(None))
+        )
+
+        resp = cliente.post(
+            "/api/v1/hub/themes",
+            json={
+                "name": "Robado",
+                "organizacion_id": ORG_B,
+                "config": {"name": "robado", "version": "1.0.0"},
+            },
+        )
+        assert resp.status_code == 403
+
+    def test_should_reserve_platform_themes_for_the_superadmin(self):
+        """Un tema sin organización entra en la cascada de todas: es configuración global."""
+        from fastapi.testclient import TestClient
+
+        cliente = TestClient(
+            _app_con(themes_router, _admin(ORG_A), _sesion_que_devuelve(None))
+        )
+
+        resp = cliente.post(
+            "/api/v1/hub/themes",
+            json={"name": "Global", "config": {"name": "global", "version": "1.0.0"}},
+        )
+        assert resp.status_code == 403
+
+
+# ───────────────────── El guardarraíl que impide la recaída ─────────────────────
+
+
+class TestNingunEndpointSeSaltaLaFrontera:
+    """Recorre los routers de datos de organización y exige la comprobación.
+
+    Un test de comportamiento cubre los endpoints que existen hoy. Este cubre los que
+    alguien escriba mañana, que es por donde volvería A2: nadie recuerda una regla que no
+    falla cuando se incumple.
+    """
+
+    ROUTERS = (
+        "hub_chatbots_router.py",
+        "hub_themes_router.py",
+        "hub_ingestion_router.py",
+        "hub_feedback_router.py",
+    )
+
+    def test_should_import_the_tenancy_layer_in_every_org_scoped_router(self):
+        base = Path("app/routers")
+        faltan = []
+        for nombre in self.ROUTERS:
+            ruta = base / nombre
+            if not ruta.is_file():
+                continue
+            texto = ruta.read_text(encoding="utf-8")
+            if "tenancy" not in texto:
+                faltan.append(nombre)
+        assert not faltan, (
+            "estos routers manejan datos de organización y no pasan por la capa de "
+            f"tenencia: {faltan}. Sin ella, un admin ve los datos de otra organización."
+        )
+
+    def test_should_not_reintroduce_an_unscoped_chatbot_lookup(self):
+        """`_get_chatbot_or_404` es el único punto de entrada, y comprueba la organización."""
+        texto = Path("app/routers/hub_chatbots_router.py").read_text(encoding="utf-8")
+        assert "assert_org_access" in texto
+        assert texto.count("session.get(HubChatbot") <= 1, (
+            "hay más de una lectura directa de HubChatbot: la comprobación de organización "
+            "vive en `_get_chatbot_or_404` y saltársela es el hallazgo A2"
+        )

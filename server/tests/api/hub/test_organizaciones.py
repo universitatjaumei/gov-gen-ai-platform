@@ -14,7 +14,9 @@ from server.app.api.deps import get_current_user
 
 DEV_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000010")
 
-_ADMIN = UserInfo(user_id="admin-1", email="admin@test.com", role="admin")
+# SEC.2: superadmin, para que estos tests sigan probando lo suyo y no la tenencia
+# —que tiene su propio gate en `tests/api/test_tenant_isolation.py`—.
+_ADMIN = UserInfo(user_id="root", email="root@test.com", role="superadmin")
 
 
 def _make_organizacion(name: str = "UJI", is_active: bool = True) -> SimpleNamespace:

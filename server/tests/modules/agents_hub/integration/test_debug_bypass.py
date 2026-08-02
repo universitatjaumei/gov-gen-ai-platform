@@ -17,6 +17,11 @@ Tres decisiones que estos tests fijan:
 """
 from __future__ import annotations
 
+# SEC.2: el chat y la ingesta exigen que el principal gestione la organizacion del
+# chatbot. Estos tests prueban otra cosa, asi que doble y token comparten organizacion;
+# la tenencia tiene su propio gate en `tests/api/test_tenant_isolation.py`.
+ORG_PRUEBA = "00000000-0000-0000-0000-00000000dead"
+
 import uuid
 
 import pytest
@@ -255,7 +260,7 @@ class TestEndpointDeBypass:
         app.dependency_overrides[get_async_session] = _sesion
         app.dependency_overrides[get_current_user] = lambda: UserInfo(
             user_id="u1", email="u@test.com", role=rol
-        )
+        , organizacion_ids=(ORG_PRUEBA,))
         app.include_router(chat_router, prefix="/api/v1")
         return TestClient(app, raise_server_exceptions=False), session
 
@@ -265,6 +270,8 @@ class TestEndpointDeBypass:
         from server.app.modules.agents_hub.database.config_models import HubChatbot
 
         chatbot = MagicMock(spec=HubChatbot)
+
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
         cliente, _ = self._cliente(chatbot, rol="user")
 
@@ -282,6 +289,8 @@ class TestEndpointDeBypass:
         from server.app.modules.agents_hub.database.operational_models import HubInteraction
 
         chatbot = MagicMock(spec=HubChatbot)
+
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
         cliente, session = self._cliente(chatbot)
 

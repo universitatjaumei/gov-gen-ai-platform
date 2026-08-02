@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import require_role
 from server.app.core.auth.models import UserInfo
+from server.app.core.auth.tenancy import assert_org_access, puede_acceder
 from server.app.modules.agents_hub.database.connection import get_async_session
 
 router = APIRouter(prefix="/hub/themes", tags=["hub-themes"])
@@ -163,6 +164,12 @@ async def get_themes(
     Cascada de resolución: plataforma (defaults) → cliente → chatbot.
     """
     themes = _list_themes()
+    # SEC.2: el listado se acota a lo que el principal gestiona. Los temas de
+    # plataforma (`is_default`) los ve todo el mundo: son la base de la cascada.
+    themes = [
+        t for t in themes
+        if t.get("is_default") or puede_acceder(user, t.get("organizacion_id"))
+    ]
     if chatbot_id:
         themes = [
             t for t in themes
@@ -190,6 +197,24 @@ async def create_theme(
     user: UserInfo = Depends(_require_admin),
 ) -> dict:
     """Crea un nuevo tema para un cliente o chatbot del partner."""
+    # SEC.2: la organización viene del CUERPO de la petición, así que sin esto un admin
+    # podía crear un tema en la organización que escribiera. Se comprueba contra el
+    # token: el cliente propone, el token dispone.
+    #
+    # Sin organización, el tema es **de plataforma** y lo ven todas: eso es un superadmin.
+    # Antes de SEC.2 cualquier admin podía crear uno, y un tema de plataforma se cuela en la
+    # cascada de todas las organizaciones.
+    if data.organizacion_id is None:
+        if not user.is_superadmin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Un tema sin organización es de plataforma y lo hereda todo el mundo: "
+                    "solo un superadministrador puede crearlo. Indica `organizacion_id`."
+                ),
+            )
+    else:
+        assert_org_access(user, data.organizacion_id)
     theme_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     theme = {

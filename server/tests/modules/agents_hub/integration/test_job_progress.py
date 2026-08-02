@@ -17,6 +17,11 @@ from __future__ import annotations
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
+# SEC.2: el chat y la ingesta exigen que el principal gestione la organizacion del
+# chatbot. Estos tests prueban otra cosa, asi que doble y token comparten organizacion;
+# la tenencia tiene su propio gate en `tests/api/test_tenant_isolation.py`.
+ORG_PRUEBA = "00000000-0000-0000-0000-00000000dead"
+
 import pytest
 
 
@@ -221,6 +226,10 @@ class TestExposicion:
         resultado = MagicMock()
         resultado.scalars.return_value.all.return_value = [job]
         session.execute = AsyncMock(return_value=resultado)
+        # SEC.2: el endpoint lee antes el chatbot para comprobar la organización.
+        chatbot = MagicMock()
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
+        session.get = AsyncMock(return_value=chatbot)
 
         async def _sesion():
             yield session
@@ -229,7 +238,7 @@ class TestExposicion:
         app.dependency_overrides[get_async_session] = _sesion
         app.dependency_overrides[get_current_user] = lambda: UserInfo(
             user_id="a1", email="a@test.com", role="admin"
-        )
+        , organizacion_ids=(ORG_PRUEBA,))
         app.include_router(ingestion_router, prefix="/api/v1")
 
         resp = TestClient(app).get(f"/api/v1/hub/ingestion/{job.chatbot_id}/jobs")

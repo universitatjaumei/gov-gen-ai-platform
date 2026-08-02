@@ -10,6 +10,11 @@ Verifica que:
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch, call
 
+# SEC.2: el chat y la ingesta exigen que el principal gestione la organizacion del
+# chatbot. Estos tests prueban otra cosa, asi que doble y token comparten organizacion;
+# la tenencia tiene su propio gate en `tests/api/test_tenant_isolation.py`.
+ORG_PRUEBA = "00000000-0000-0000-0000-00000000dead"
+
 import pytest
 
 
@@ -26,13 +31,15 @@ def _make_token(role: str = "admin") -> str:
     import os
     os.environ.update(_JWT_ENV)
     from server.app.core.auth import UserInfo, create_token
-    return create_token(UserInfo(user_id="admin-1", email="admin@test.com", role=role))
+    return create_token(UserInfo(user_id="admin-1", email="admin@test.com", role=role, organizacion_ids=(ORG_PRUEBA,)))
 
 
 def _make_job(source_url: str, status: str = "pending"):
     job = MagicMock()
     job.id = uuid.uuid4()
     job.chatbot_id = uuid.uuid4()
+    # SEC.2: la guarda de tenencia lee la organizacion de lo que devuelva `session.get`.
+    job.organizacion_id = uuid.UUID(ORG_PRUEBA)
     job.source_url = source_url
     job.canonical_url = None
     job.language = None
@@ -51,6 +58,13 @@ def _build_upload_app(mock_session, mock_storage):
 
     async def _mock_session():
         yield mock_session
+
+    # SEC.2: `session.get` resuelve el chatbot para comprobar la organizacion. Con un
+    # AsyncMock pelado devuelve un Mock cuya organizacion no casa con la del token y el
+    # endpoint responde 403 antes de llegar a lo que estos tests miden.
+    chatbot = MagicMock()
+    chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
+    mock_session.get = AsyncMock(return_value=chatbot)
 
     app = FastAPI()
     app.dependency_overrides[get_async_session] = _mock_session

@@ -23,6 +23,10 @@ def create_token(user: UserInfo, expires_in_minutes: int | None = None) -> str:
         "sub": user.user_id,
         "email": user.email,
         "role": user.role,
+        # SEC.2: sin este claim el servidor no sabe de quien es el que pregunta, y por
+        # eso los endpoints no filtraban. Se emite en TODAS las vias: login local, ACS
+        # de SAML y PAT, porque una sola que lo omita reabre el acceso horizontal.
+        "orgs": list(user.organizacion_ids),
         "exp": expire,
         "iat": datetime.now(timezone.utc),
     }
@@ -64,4 +68,7 @@ def decode_token(token: str) -> UserInfo:
         user_id=payload["sub"],
         email=payload["email"],
         role=payload.get("role", "user"),
+        # Un token emitido antes de SEC.2 no trae el claim. Se lee como SIN acceso, no
+        # como acceso total: lo contrario convertiria un token viejo en una llave maestra.
+        organizacion_ids=tuple(payload.get("orgs") or ()),
     )

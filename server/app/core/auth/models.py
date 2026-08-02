@@ -39,12 +39,31 @@ class UserInfo:
     user_id: str
     email: str
     role: str = field(default="user")
+    # SEC.2 (hallazgo A2): organizaciones a las que este principal tiene acceso.
+    #
+    # **Vacío significa cosas opuestas según el rol, y es deliberado**: en un superadmin es
+    # el comodín «todas»; en cualquier otro es «ninguna». Si «vacío = todas» valiera para
+    # todos, un admin al que se le olvidara poblar el claim volvería a verlo todo, que es
+    # exactamente el agujero que este claim viene a cerrar. Lo fija un test.
+    #
+    # **Tupla y no lista**, al contrario de lo que decía el plan: este dataclass es `frozen`
+    # justamente para que nadie amplíe los permisos a mitad de una petición, y una lista
+    # dejaría esa puerta abierta con `principal.organizacion_ids.append(...)`.
+    organizacion_ids: tuple[str, ...] = field(default=())
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "role", _validate_role(self.role))
+        object.__setattr__(
+            self, "organizacion_ids", tuple(str(o) for o in self.organizacion_ids)
+        )
 
     def to_dict(self) -> dict[str, Any]:
-        return {"user_id": self.user_id, "email": self.email, "role": self.role}
+        return {
+            "user_id": self.user_id,
+            "email": self.email,
+            "role": self.role,
+            "organizacion_ids": list(self.organizacion_ids),
+        }
 
     @property
     def is_superadmin(self) -> bool:

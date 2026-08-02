@@ -22,6 +22,11 @@ from langchain_core.messages import AIMessage
 
 from server.app.modules.agents_hub.database.config_models import HubChatbot
 
+# SEC.2: el chat exige que el principal gestione la organización del chatbot. Estos
+# tests prueban el grafo, no la tenencia —que tiene su gate en
+# `tests/api/test_tenant_isolation.py`—, así que doble y token comparten organización.
+ORG_PRUEBA = "00000000-0000-0000-0000-00000000dead"
+
 # JWT env para tests
 _JWT_ENV = {
     "JWT_SECRET_KEY": "test-secret-key-that-is-at-least-32-characters-long",
@@ -34,7 +39,12 @@ def _make_token(role: str = "user", user_id: str = "user-1") -> str:
     import os
     os.environ.update(_JWT_ENV)
     from server.app.core.auth import UserInfo, create_token
-    return create_token(UserInfo(user_id=user_id, email="user@test.com", role=role))
+    return create_token(
+        UserInfo(
+            user_id=user_id, email="user@test.com", role=role,
+            organizacion_ids=(ORG_PRUEBA,),
+        )
+    )
 
 
 def _build_test_app(chatbot_mock) -> FastAPI:
@@ -154,6 +164,7 @@ class TestChatEndpointSSE:
     def test_chat_endpoint_returns_streaming_response(self) -> None:
         """Petición válida → 200 con Content-Type text/event-stream y cabeceras anti-buffering."""
         chatbot = MagicMock(spec=HubChatbot)
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
         app = _build_test_app(chatbot)
 
@@ -186,6 +197,7 @@ class TestChatEndpointSSE:
     def test_chat_endpoint_emits_status_events_per_node(self) -> None:
         """Cada nodo LangGraph que comienza emite un evento SSE 'status'."""
         chatbot = MagicMock(spec=HubChatbot)
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
         app = _build_test_app(chatbot)
 
@@ -231,6 +243,7 @@ class TestChatEndpointSSE:
     def test_chat_endpoint_emits_token_events(self) -> None:
         """Cada fragmento del LLM emite un evento SSE 'token' con campo 'delta'."""
         chatbot = MagicMock(spec=HubChatbot)
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
         app = _build_test_app(chatbot)
 
@@ -280,6 +293,8 @@ class TestChatEndpointSSE:
         from server.app.modules.agents_hub.services.retrieval.types import Source
 
         chatbot = MagicMock(spec=HubChatbot)
+
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
         app = _build_test_app(chatbot)
 
@@ -341,6 +356,7 @@ class TestChatEndpointSSE:
     def test_chat_endpoint_includes_translation_warning_when_language_fallback(self) -> None:
         """Si language_fallback_triggered=True, done incluye translation_warning no nulo."""
         chatbot = MagicMock(spec=HubChatbot)
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
         app = _build_test_app(chatbot)
 
@@ -396,6 +412,7 @@ class TestChatEndpointSSE:
     def test_chat_endpoint_emits_error_event_on_graph_failure(self) -> None:
         """Si el grafo lanza una excepción, el stream emite evento 'error' y termina."""
         chatbot = MagicMock(spec=HubChatbot)
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
         app = _build_test_app(chatbot)
 

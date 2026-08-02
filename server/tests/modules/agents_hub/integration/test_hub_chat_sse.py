@@ -14,6 +14,11 @@ from fastapi.testclient import TestClient
 from server.app.modules.agents_hub.database.config_models import HubChatbot
 from server.app.modules.agents_hub.services.retrieval.types import Source
 
+# SEC.2: el chat exige que el principal gestione la organización del chatbot. Estos
+# tests prueban el grafo, no la tenencia —que tiene su gate en
+# `tests/api/test_tenant_isolation.py`—, así que doble y token comparten organización.
+ORG_PRUEBA = "00000000-0000-0000-0000-00000000dead"
+
 _JWT_ENV = {
     "JWT_SECRET_KEY": "test-secret-key-that-is-at-least-32-characters-long",
     "JWT_ALGORITHM": "HS256",
@@ -25,7 +30,12 @@ def _make_token(user_id: str = "user-1") -> str:
     import os
     os.environ.update(_JWT_ENV)
     from server.app.core.auth import UserInfo, create_token
-    return create_token(UserInfo(user_id=user_id, email="user@test.com", role="user"))
+    return create_token(
+        UserInfo(
+            user_id=user_id, email="user@test.com", role="user",
+            organizacion_ids=(ORG_PRUEBA,),
+        )
+    )
 
 
 def _build_test_app(chatbot_mock) -> FastAPI:
@@ -137,6 +147,7 @@ class TestDoneEventStructuredSources:
             )
         ]
         chatbot = MagicMock(spec=HubChatbot)
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
 
         done = _run_chat_and_get_done(chatbot, _make_mock_graph_with_sources(sources), _make_token())
@@ -161,6 +172,7 @@ class TestDoneEventStructuredSources:
             )
         ]
         chatbot = MagicMock(spec=HubChatbot)
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
 
         done = _run_chat_and_get_done(chatbot, _make_mock_graph_with_sources(sources), _make_token())
@@ -175,6 +187,7 @@ class TestDoneEventStructuredSources:
     def test_done_event_empty_sources_when_no_retrieval_happened(self) -> None:
         """Si generate_response devuelve sources=[], done emite sources=[]."""
         chatbot = MagicMock(spec=HubChatbot)
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
 
         done = _run_chat_and_get_done(chatbot, _make_mock_graph_with_sources([]), _make_token())
@@ -191,6 +204,7 @@ class TestDoneEventStructuredSources:
             for i in range(3)
         ]
         chatbot = MagicMock(spec=HubChatbot)
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
 
         done = _run_chat_and_get_done(chatbot, _make_mock_graph_with_sources(sources), _make_token())
@@ -244,8 +258,10 @@ class TestRetrievalModeDispatch:
         )
 
         chatbot = MagicMock(spec=HubChatbot)
+
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
-        chatbot.organizacion_id = uuid.uuid4()
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.retrieval_mode = "MD_LONG_CONTEXT"
         chatbot.public_graph_profile = None
         chatbot.language_mode = None
@@ -303,6 +319,7 @@ class TestRetrievalModeDispatch:
             )
         ]
         chatbot = MagicMock(spec=HubChatbot)
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
         chatbot.retrieval_mode = "MD_LONG_CONTEXT"
 
@@ -328,6 +345,7 @@ class TestRetrievalModeDispatch:
             )
         ]
         chatbot = MagicMock(spec=HubChatbot)
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
         chatbot.retrieval_mode = "MD_AGENT_SELECTOR"
 
@@ -351,6 +369,7 @@ class TestNoCitationFallback:
         """Cuando retrieval no encontró nada (sources=[]), done emite sources=[]
         sin lanzar error y con interaction_id válido."""
         chatbot = MagicMock(spec=HubChatbot)
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
 
         done = _run_chat_and_get_done(chatbot, _make_mock_graph_with_sources([]), _make_token())

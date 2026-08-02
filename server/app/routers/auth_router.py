@@ -38,6 +38,24 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+
+async def _orgs_del_admin(session, partner_id: str) -> tuple[str, ...]:
+    """Organizaciones que gestiona este Admin (SEC.2).
+
+    Se resuelve al emitir el token y no en cada petición: el claim tiene que viajar dentro
+    del JWT para que el servidor sepa de quién es el que pregunta sin volver a la BD en cada
+    endpoint. El precio es que un alta de organización no se ve hasta el siguiente login,
+    que para una relación admin↔organización —que cambia muy de tarde en tarde— sale a
+    cuenta frente a una consulta por petición.
+    """
+    from server.app.modules.agents_hub.database.config_models import HubOrganizacion
+
+    filas = await session.exec(
+        select(HubOrganizacion.id).where(HubOrganizacion.partner_id == partner_id)
+    )
+    return tuple(str(fila) for fila in filas.all())
+
+
 @router.post("/superadmin/login", response_model=TokenResponse)
 async def login_superadmin(
     body: LoginRequest,
@@ -60,6 +78,8 @@ async def login_superadmin(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # El superadmin va con la lista VACIA a proposito: en su rol eso es el comodin
+    # «todas las organizaciones». Ver `core/auth/tenancy.py`.
     user_info = UserInfo(
         user_id=str(superadmin.admin_id),
         email=superadmin.email,
@@ -108,6 +128,7 @@ async def login_admin(
         user_id=admin.partner_id,
         email=admin.email,
         role=UserRole.ADMIN.value,
+        organizacion_ids=await _orgs_del_admin(session, admin.partner_id),
     )
     return TokenResponse(access_token=create_token(user_info))
 

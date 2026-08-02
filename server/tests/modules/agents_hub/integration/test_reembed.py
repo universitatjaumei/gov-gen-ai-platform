@@ -21,6 +21,11 @@ from server.tests.modules.agents_hub.integration.test_metadata_filter import (
     _documento,
 )
 
+# SEC.2: el chat y la ingesta exigen que el principal gestione la organizacion del
+# chatbot. Estos tests prueban otra cosa, asi que doble y token comparten organizacion;
+# la tenencia tiene su propio gate en `tests/api/test_tenant_isolation.py`.
+ORG_PRUEBA = "00000000-0000-0000-0000-00000000dead"
+
 MODELO = "BAAI/bge-m3"
 DIMENSION = 1024
 
@@ -306,8 +311,10 @@ class TestGuardaEnConsulta:
         from server.app.core.auth import UserInfo, create_token
 
         chatbot = MagicMock(spec=HubChatbot)
+
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
         chatbot.id = uuid.uuid4()
-        token = create_token(UserInfo(user_id="u1", email="u@test.com", role="user"))
+        token = create_token(UserInfo(user_id="u1", email="u@test.com", role="user", organizacion_ids=(ORG_PRUEBA,)))
 
         with patch(
             "server.app.api.v1.hub_chat.resolve_embedding_service", new_callable=AsyncMock
@@ -357,7 +364,7 @@ class TestValidacionAlCrearChatbot:
 
         app.dependency_overrides[get_current_user] = lambda: UserInfo(
             user_id="a1", email="a@test.com", role="admin"
-        )
+        , organizacion_ids=(ORG_PRUEBA,))
         app.dependency_overrides[get_async_session] = _sesion
         try:
             with patch(
@@ -368,7 +375,7 @@ class TestValidacionAlCrearChatbot:
                     "/api/v1/hub/chatbots",
                     json={
                         "name": "Nou",
-                        "organizacion_id": str(uuid.uuid4()),
+                        "organizacion_id": ORG_PRUEBA,
                         "llm_config_id": str(uuid.uuid4()),
                         "system_prompt": "Ets un assistent.",
                         "retrieval_mode": "RAG",
@@ -407,7 +414,7 @@ class TestValidacionAlCrearChatbot:
 
         app.dependency_overrides[get_current_user] = lambda: UserInfo(
             user_id="a1", email="a@test.com", role="admin"
-        )
+        , organizacion_ids=(ORG_PRUEBA,))
         app.dependency_overrides[get_async_session] = _sesion
         try:
             with patch(
@@ -418,7 +425,7 @@ class TestValidacionAlCrearChatbot:
                     "/api/v1/hub/chatbots",
                     json={
                         "name": "Selector",
-                        "organizacion_id": str(uuid.uuid4()),
+                        "organizacion_id": ORG_PRUEBA,
                         "llm_config_id": str(uuid.uuid4()),
                         "system_prompt": "Ets un assistent.",
                         "retrieval_mode": "MD_AGENT_SELECTOR",

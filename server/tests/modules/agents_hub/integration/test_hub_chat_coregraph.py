@@ -22,6 +22,11 @@ from fastapi.testclient import TestClient
 
 from server.app.modules.agents_hub.database.config_models import HubChatbot
 
+# SEC.2: el chat exige que el principal gestione la organización del chatbot. Estos
+# tests prueban el grafo, no la tenencia —que tiene su gate en
+# `tests/api/test_tenant_isolation.py`—, así que doble y token comparten organización.
+ORG_PRUEBA = "00000000-0000-0000-0000-00000000dead"
+
 _JWT_ENV = {
     "JWT_SECRET_KEY": "test-secret-key-that-is-at-least-32-characters-long",
     "JWT_ALGORITHM": "HS256",
@@ -37,7 +42,12 @@ def _token(user_id: str = "user-1") -> str:
     os.environ.update(_JWT_ENV)
     from server.app.core.auth import UserInfo, create_token
 
-    return create_token(UserInfo(user_id=user_id, email="u@test.com", role="user"))
+    return create_token(
+        UserInfo(
+            user_id=user_id, email="u@test.com", role="user",
+            organizacion_ids=(ORG_PRUEBA,),
+        )
+    )
 
 
 class _SesionCapturadora:
@@ -153,6 +163,7 @@ def _parsear(lineas: list[str]) -> list[tuple[str, dict]]:
 def _chatbot(mode: str = "RAG", kind: str = "atomic") -> MagicMock:
     cb = MagicMock(spec=HubChatbot)
     cb.id = uuid.uuid4()
+    cb.organizacion_id = uuid.UUID(ORG_PRUEBA)
     cb.retrieval_mode = mode
     cb.kind = kind
     cb.name = "Bot"

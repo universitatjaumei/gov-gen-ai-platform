@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user
 from server.app.core.auth import UserInfo
+from server.app.core.auth.tenancy import assert_org_access
 from server.app.core.storage import FsspecStorageService, get_storage_service
 from server.app.core.uploads import (
     UploadKind,
@@ -88,6 +89,23 @@ async def analyze_html(
     }
 
 
+
+async def _chatbot_autorizado(session, chatbot_id, principal):
+    """Lee el chatbot y comprueba la organización (SEC.2).
+
+    Aquí vivía un `# TODO: Validar que el usuario tiene acceso al chatbot`. Mientras estuvo
+    sin cerrar, cualquier administrador podía leer los trabajos de ingesta —y por tanto las
+    URL y los nombres de fichero del corpus— de cualquier organización.
+    """
+    from server.app.modules.agents_hub.database.config_models import HubChatbot
+
+    chatbot = await session.get(HubChatbot, chatbot_id)
+    if chatbot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chatbot not found")
+    assert_org_access(principal, chatbot.organizacion_id)
+    return chatbot
+
+
 @router.get("/{chatbot_id}/jobs")
 async def get_ingestion_jobs(
     chatbot_id: uuid.UUID,
@@ -95,7 +113,7 @@ async def get_ingestion_jobs(
     current_user: UserInfo = Depends(get_current_user),
 ):
     """Obtiene los trabajos de ingestión de un chatbot."""
-    # TODO: Validar que el usuario tiene acceso al chatbot (Cloud logic)
+    await _chatbot_autorizado(session, chatbot_id, current_user)
     stmt = (
         select(HubIngestionJob)
         .where(HubIngestionJob.chatbot_id == chatbot_id)
@@ -117,6 +135,7 @@ async def list_documents(
 
     Acepta ?language=es para filtrar por idioma.
     """
+    await _chatbot_autorizado(session, chatbot_id, current_user)
     stmt = (
         select(HubDocument)
         .where(HubDocument.chatbot_id == chatbot_id)
@@ -152,6 +171,7 @@ async def get_document(
     current_user: UserInfo = Depends(get_current_user),
 ):
     """Devuelve un documento con su contenido markdown (para preview en la UI)."""
+    await _chatbot_autorizado(session, chatbot_id, current_user)
     doc = await session.get(HubDocument, document_id)
     if not doc or doc.chatbot_id != chatbot_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado.")
@@ -177,6 +197,7 @@ async def delete_document(
     current_user: UserInfo = Depends(get_current_user),
 ):
     """Elimina un documento ingestado y todos sus chunks."""
+    await _chatbot_autorizado(session, chatbot_id, current_user)
     from sqlalchemy import delete as sa_delete
 
     doc = await session.get(HubDocument, document_id)
@@ -203,6 +224,7 @@ async def upload_document(
     storage: FsspecStorageService = Depends(get_storage_service),
 ):
     """Sube un documento y lanza su ingestión en background."""
+    await _chatbot_autorizado(session, chatbot_id, current_user)
     # Validación compartida (SEC.6): extensión + magic bytes + corte por tamaño
     # durante la lectura. No se mira content_type: lo fija el cliente y es
     # spoofeable. El límite sale de MAX_UPLOAD_MB.
@@ -261,6 +283,7 @@ async def delete_ingestion_job(
     storage: FsspecStorageService = Depends(get_storage_service),
 ):
     """Elimina un job de ingestión y todos sus chunks asociados."""
+    await _chatbot_autorizado(session, chatbot_id, current_user)
     job = await session.get(HubIngestionJob, job_id)
     if not job or job.chatbot_id != chatbot_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job no encontrado.")
@@ -311,6 +334,7 @@ async def clear_chatbot_collection(
     storage: FsspecStorageService = Depends(get_storage_service),
 ):
     """Elimina todos los documentos, chunks y jobs de un chatbot."""
+    await _chatbot_autorizado(session, chatbot_id, current_user)
     from sqlalchemy import delete as sa_delete
 
     await session.execute(
