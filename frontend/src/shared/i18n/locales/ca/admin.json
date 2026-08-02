@@ -58,5 +58,9 @@
       "verdict_by": "Jutjat per",
       "verdict_note": "Comentari"
     }
+  },
+  "login": {
+    "show_password": "Mostrar la contrasenya",
+    "hide_password": "Amagar la contrasenya"
   }
 }

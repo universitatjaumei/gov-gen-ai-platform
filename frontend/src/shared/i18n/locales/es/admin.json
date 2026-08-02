@@ -154,6 +154,8 @@
     "email": "Usuario",
     "password": "Contraseña",
     "submit": "Entrar",
-    "error": "Credenciales incorrectas"
+    "error": "Credenciales incorrectas",
+    "show_password": "Mostrar la contraseña",
+    "hide_password": "Ocultar la contraseña"
   }
 }

@@ -154,6 +154,8 @@
     "email": "Username",
     "password": "Password",
     "submit": "Sign in",
-    "error": "Invalid credentials"
+    "error": "Invalid credentials",
+    "show_password": "Show the password",
+    "hide_password": "Hide the password"
   }
 }
