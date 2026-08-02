@@ -11,6 +11,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from server.app.core.cors import politica_cors
 from server.app.database.db import init_server_db
 from server.app.api.v1.hub_chat import router as hub_chat_router
 from server.app.api.v1.hub_feedback import router as hub_feedback_router
@@ -188,12 +189,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Gov Gen AI Platform", version="1.0.0", lifespan=lifespan)
 
+# SEC.3: los orígenes salen de la configuración y no del código. En producción no hay
+# comodín ni aunque la variable de entorno lo traiga; el porqué está en `core/cors.py`.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    **politica_cors(
+        entorno=os.getenv("ENVIRONMENT", "development"),
+        origenes_csv=os.getenv("CORS_ALLOWED_ORIGINS"),
+    ),
 )
 
 DEPLOY_MODE = os.getenv("DEPLOY_MODE", "all").lower()

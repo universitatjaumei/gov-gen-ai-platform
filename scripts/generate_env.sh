@@ -69,6 +69,10 @@ LANGFUSE_PUBLIC_KEY="lf-pk-govgenai-$(openssl rand -hex 8)"
 LANGFUSE_SECRET_KEY="lf-sk-govgenai-$(openssl rand -hex 8)"
 LANGFUSE_ADMIN_PASSWORD="$(openssl rand -hex 12)"
 [ "$MODE" = "local" ] && APP_ENVIRONMENT="development" || APP_ENVIRONMENT="production"
+# SEC.3: en local se deja vacío (comodín en desarrollo). El generador no puede adivinar el
+# dominio del panel en producción, así que lo deja vacío y visible: mejor un CORS que falla
+# con nombre propio en la consola del navegador que un comodín puesto por un script.
+CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-}"
 
 # Clave RSA para la firma de manifiestos (AUTOMATIA_SIGNING_KEY). PKCS1 PEM;
 # server/app/services/manifest_signature_service.py normaliza '\n' literal a
@@ -178,6 +182,11 @@ DELEGATED_ACTOR_SECRET=${DELEGATED_ACTOR_SECRET}
 # === App ===
 ENVIRONMENT=${APP_ENVIRONMENT}
 DEPLOY_MODE=all
+# SEC.3: origenes permitidos desde un navegador. En modo local se deja vacio (comodin en
+# desarrollo); en produccion hay que enumerar el dominio del panel y los de los widgets, o
+# ningun navegador podra llamar a la API. Se deja escrito y vacio, y no ausente, para que se
+# vea que falta rellenarlo.
+CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
 
 # === Sandbox de scripts (microservicio aislado — Bloque SBX) ===
 SANDBOX_BASE_URL=http://script-sandbox:5000
