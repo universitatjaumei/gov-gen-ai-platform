@@ -3,6 +3,7 @@
 Deploy: cloud
 """
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -111,8 +112,36 @@ THEMES_DIR = Path("data/themes")
 THEMES_DIR.mkdir(parents=True, exist_ok=True)
 
 
+_ID_DE_TEMA = re.compile(r"^[a-z0-9-]{1,64}$")
+
+
 def _theme_path(theme_id: str) -> Path:
-    return THEMES_DIR / f"{theme_id}.json"
+    """La ruta del fichero del tema, o 400 si el identificador no es un identificador.
+
+    SEC.5: esto construía una ruta concatenando lo que llegara en la URL. Con `../` bastaba
+    para leer —y con DELETE, para borrar— cualquier `.json` del servidor. Dos cierres, y los
+    dos hacen falta:
+
+    - **La forma**: solo minúsculas, dígitos y guiones. Los identificadores reales son UUID,
+      así que la regla no aprieta nada; deja fuera `..`, `/`, `%2f` decodificado y las rutas
+      absolutas de Windows de una vez.
+    - **El destino resuelto**: aunque la forma pase, la ruta final tiene que caer dentro de
+      `THEMES_DIR`. Comprobar solo la cadena es apostar a que uno ha pensado en todas las
+      codificaciones posibles; comprobar el destino es no tener que acertar.
+    """
+    if not _ID_DE_TEMA.match(theme_id or ""):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Identificador de tema inválido",
+        )
+
+    destino = (THEMES_DIR / f"{theme_id}.json").resolve()
+    if not destino.is_relative_to(THEMES_DIR.resolve()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Identificador de tema inválido",
+        )
+    return destino
 
 
 def _load_theme(theme_id: str) -> dict | None:
@@ -183,11 +212,24 @@ async def get_themes(
 
 
 @router.get("/{theme_id}", response_model=ThemeResponse)
-async def get_theme(theme_id: str) -> dict:
-    """Obtiene un tema específico por ID."""
+async def get_theme(
+    theme_id: str,
+    user: UserInfo = Depends(_require_admin),
+) -> dict:
+    """Obtiene un tema específico por ID.
+
+    SEC.5: hasta aquí era **público**. Un tema no es un secreto de estado, pero lleva los
+    colores, el logotipo y el nombre de la organización a la que pertenece, así que la lista
+    de temas es un censo de clientes servido sin pedir nada.
+
+    Los temas de plataforma (`is_default`) los ve cualquier administrador: son la base de la
+    cascada y no pertenecen a nadie. Los de una organización, solo quien la gestiona.
+    """
     theme = _load_theme(theme_id)
     if not theme:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Theme {theme_id} not found")
+    if not theme.get("is_default") and theme.get("organizacion_id"):
+        assert_org_access(user, theme["organizacion_id"])
     return theme
 
 
