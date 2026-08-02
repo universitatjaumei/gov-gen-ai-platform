@@ -216,6 +216,13 @@ class AdminAccount(SQLModel, table=True):
     partner_id: str = Field(primary_key=True)
     name: str
     email: str = Field(nullable=False)
+    # SEC.1 (hallazgo A1): hasta aquí esta tabla no tenía hash, así que el login de Admin no
+    # comprobaba nada — no era un descuido de una rama, es que no había contra qué comparar.
+    #
+    # NULL significa **login local deshabilitado**: la cuenta entra por SSO o por PAT, o un
+    # superadmin le fija una contraseña. Nunca significa «pasa sin comprobar»; interpretarlo
+    # así reabriría el mismo agujero por la puerta de atrás, y por eso tiene test propio.
+    hashed_password: str | None = Field(default=None, nullable=True)
     credits_balance: int = Field(default=0)
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
