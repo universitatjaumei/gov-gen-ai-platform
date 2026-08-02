@@ -12,6 +12,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from server.app.core.cors import politica_cors
+from server.app.core.security_headers import (
+    SecurityHeadersMiddleware,
+    urls_de_documentacion,
+)
 from server.app.database.db import init_server_db
 from server.app.api.v1.hub_chat import router as hub_chat_router
 from server.app.api.v1.hub_feedback import router as hub_feedback_router
@@ -188,14 +192,29 @@ async def lifespan(app: FastAPI):
         quality_scheduler.shutdown(wait=False)
 
 
-app = FastAPI(title="Gov Gen AI Platform", version="1.0.0", lifespan=lifespan)
+# SEC.7: el entorno se lee una vez y decide dos cosas —si se publica la documentación
+# interactiva y si se manda HSTS—. `os.getenv` y no `get_settings()` porque esto corre
+# en el import del módulo, donde `get_settings()` exigiría ya el JWT_SECRET_KEY.
+ENTORNO = os.getenv("ENVIRONMENT", "development")
+
+app = FastAPI(
+    title="Gov Gen AI Platform",
+    version="1.0.0",
+    lifespan=lifespan,
+    # En producción, `/docs` y `/openapi.json` publican el mapa entero de la API,
+    # rutas de administración incluidas. No oculta ninguna vulnerabilidad: es que no
+    # hay razón para servir el índice.
+    **urls_de_documentacion(ENTORNO),
+)
+
+app.add_middleware(SecurityHeadersMiddleware, entorno=ENTORNO)
 
 # SEC.3: los orígenes salen de la configuración y no del código. En producción no hay
 # comodín ni aunque la variable de entorno lo traiga; el porqué está en `core/cors.py`.
 app.add_middleware(
     CORSMiddleware,
     **politica_cors(
-        entorno=os.getenv("ENVIRONMENT", "development"),
+        entorno=ENTORNO,
         origenes_csv=os.getenv("CORS_ALLOWED_ORIGINS"),
     ),
 )
