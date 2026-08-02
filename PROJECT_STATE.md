@@ -53,9 +53,59 @@
 | Bloque MOD — Modelos de embedding y reranker: local en edge, API en cloud | MOD.2 ✅ | — | — | ✅ Completo — **añadido el 2026-08-01** a petición del usuario, antes de RAG.6 y **antes de cargar el corpus v1**. Decisión en `docs/DECISION_MODELOS_EMBEDDING_RERANKER.md`. 2 prompts: ~~MOD.1 propósito en la configuración + procedencia en el vector~~ ✅, MOD.2 selección del servicio por la cascada (`get_embedding_service` deja de devolver el local a pelo; `HttpEmbeddingService` para el microservicio) |
 | Bloque RAG — Refuerzo del retrieval y calidad RAG | RAG.14 ✅ | — | — | ✅ **Completo (2026-08-02)** — planificado 2026-07-15 desde `docs/COMPARATIVA_RAG_LAMB.md`. 14 prompts (RAG.1-RAG.14), 13 ejecutados aquí + RAG.6b fuera del bloque: ~~dataset dorado+CI~~ ✅, ~~consolidación de grafos~~ ✅, ~~HNSW~~ ✅, ~~tsvector~~ ✅, ~~umbral+presupuesto~~ ✅, **reranker RAG.6 → partido en 6a/6b el 2026-08-01**, ~~contextual retrieval~~ ✅, ~~parent-child~~ ✅, ~~metadato embeddings~~ ✅, ~~query rewriting~~ ✅, ~~bypass~~ ✅, ~~progreso jobs~~ ✅, ~~test scenarios~~ ✅, ~~feedback→huecos~~ ✅. **RAG.6b salió de este bloque y va detrás de Deploy** —ver su fila propia—. RAG.9 llegó muy solapado con MOD.1 y se redujo a hacer obligatoria la procedencia, poner la guarda en la consulta y escribir la CLI |
 
-**Cursor actual: SEC.1 (login de Admin con verificación de contraseña)** — **Bloques RAG, DET y SYNC COMPLETOS el 2026-08-02**.
-**Modelo sugerido para el próximo prompt: Sonnet** (pero SEC.2 y SEC.2.1 son **Opus**; conviene decidir el modelo al abrir el bloque SEC, no a mitad).
-**Nota del cierre de SYNC**: SEC.1 tiene ahora un motivo extra de urgencia que no estaba en el plan. Al arreglar el login (2026-08-02) se comprobó que `/api/v1/auth/admin/login` **no verifica la contraseña** —está documentado en el propio código— y que el formulario prueba las dos puertas en orden, así que cualquiera con un email de `adminaccount` entra hoy sin contraseña. Unificar el login en un endpoint que resuelva el tipo de cuenta es trabajo de SEC.1.
+**Cursor actual: SEC.2 (aislamiento multi-tenant), ▶ EN CURSO Y SIN COMMITEAR** — **Bloques RAG, DET y SYNC COMPLETOS el 2026-08-02**. SEC.1 ✅ commiteado (`3a7b5a4`).
+**Modelo sugerido: Opus** — SEC.2 y SEC.2.1 lo piden; el resto del bloque (SEC.3, SEC.4, SEC.4.1, SEC.5, SEC.7) es Sonnet.
+
+---
+
+## ⏸ TRASPASO — SEC.2 a medias (escrito el 2026-08-02 antes de reiniciar la sesión)
+
+**Lee esto antes de tocar nada del Bloque SEC.** El trabajo de SEC.2 está **escrito y en el árbol, sin commitear**, con 6 tests en rojo. No se commiteó a propósito: la regla del proyecto es que un prompt con la suite en rojo no se marca como cerrado.
+
+### Qué hay hecho y funcionando
+
+- `UserInfo.organizacion_ids` + claim `orgs` en el JWT (emisión y decodificación). Un token anterior a SEC.2 se lee **sin acceso**, no con acceso total.
+- **`server/app/core/auth/tenancy.py`** (fichero nuevo, sin trackear): `puede_acceder`, `assert_org_access`, `scope_query_to_orgs`, `orgs_del_principal`.
+- Frontera aplicada en: `hub_chatbots_router` (listado acotado en SQL + `_get_chatbot_or_404` como único punto de lectura), `hub_chat`, `hub_feedback`, `hub_themes_router`, `hub_ingestion_router` (**cierra el `TODO` de autorización** que el plan señalaba).
+- Claim poblado en login de admin (organizaciones por `partner_id`) y en PAT (**heredado del dueño, resuelto en cada validación**: guardarlo en la fila lo congelaría y una revocación dejaría de revocar).
+- Gate `tests/api/test_tenant_isolation.py` (**16/16 en verde**) y paso propio en `.github/workflows/ci.yml`.
+- `tests/api` y `tests/core` pasan enteros.
+
+### Lo que falta: 6 tests, y el arreglo es mecánico
+
+Suite completa: **1530 passed, 1 skipped, 6 failed**. Vengo de 35 rojos; los 29 recuperados siguieron todos el mismo patrón.
+
+```
+tests/modules/agents_hub/e2e/test_chat_flow.py::TestChatFlowE2E::test_full_chat_flow
+tests/modules/agents_hub/e2e/test_chat_flow.py::TestChatFlowE2E::test_chat_stores_interaction
+tests/modules/agents_hub/e2e/test_chat_flow.py::TestExportFlowE2E::test_export_after_chat
+tests/modules/agents_hub/e2e/test_chat_flow.py::TestExportFlowE2E::test_export_forbidden_for_other_user
+tests/modules/agents_hub/integration/test_job_progress.py::TestExposicion::test_should_expose_progress_fields_in_job_status_endpoint
+tests/modules/agents_hub/integration/test_reembed.py::TestValidacionAlCrearChatbot::test_should_not_require_embeddings_for_a_non_rag_chatbot
+```
+
+**Ninguno es un defecto de producción**: son dobles de test a los que les falta la organización. El patrón que cierra los 29 anteriores:
+
+1. Constante `ORG_PRUEBA = "00000000-0000-0000-0000-00000000dead"` en el fichero (ojo: **no la metas dentro de un import multilínea**, ya pasó una vez y dio `SyntaxError`).
+2. Todo `UserInfo(...)` del fichero recibe `organizacion_ids=(ORG_PRUEBA,)`. **Cuidado con los multilínea**: un `re.sub` sobre `UserInfo\(([^()]*)\)` no los coge, y es justo lo que dejó estos 6 fuera.
+3. Todo doble de chatbot recibe `organizacion_id = uuid.UUID(ORG_PRUEBA)`.
+4. Si el fallo es `object MagicMock can't be used in 'await' expression`, el doble de sesión necesita `AsyncMock` en `session.get`: la guarda de tenencia lo espera.
+
+Si un test mide otra cosa y la organización solo estorba, el atajo legítimo es hacer superadmin al principal —comodín— y dejar la tenencia a su gate.
+
+### Tres decisiones tomadas, con su porqué
+
+1. **`organizacion_ids` es tupla, no lista** (el plan decía lista). `UserInfo` es `frozen` para que nadie amplíe permisos a mitad de petición, y una lista dejaba `.append(...)` disponible. **Decidido: se queda.**
+2. **Un tema sin `organizacion_id` es de plataforma y exige superadmin.** Entra en la cascada de todas las organizaciones, así que es configuración de plataforma. **Pendiente de verificar**: si la pantalla de temas del frontend no envía `organizacion_id` en el cuerpo, los admins empezarán a recibir 403 al crear un tema. No comprobado; es un `grep` de un minuto sobre `frontend/src`.
+3. **`HubSsoUser` no tiene organización**, así que un usuario provisionado por SAML se queda sin acceso a recursos de organización. Es fail-closed y no rompe nada vivo —el SSO real contra el IdP sigue en pruebas manuales pendientes—, pero **capa funcionalmente el login SSO** hasta que se resuelva. Va en SEC.2.1, ver abajo.
+
+### Encargo añadido a SEC.2.1 (ya escrito en el plan)
+
+La organización de un usuario SAML **sale de la configuración del IdP, nunca de la aserción**. Mismo razonamiento que la regla anti-escalada que SEC.2.1 ya tiene para la identidad delegada: si el dato viniera de fuera, el IdP podría declarar a qué organización pertenece cada quien.
+
+---
+
+**Nota del cierre de SYNC (ya resuelta por SEC.1)**: se detectó que `/api/v1/auth/admin/login` no verificaba la contraseña. Cerrado en `3a7b5a4`.
 **DEUDA DEL BLOQUE RAG: CERRADA el 2026-08-02.** La baseline del gate está regenerada en **MRR 0,940 · recall@5 0,960 · recall@10 0,960** (antes 0,8613 de RAG.1), así que la mejora de RAG.7 ya está protegida. Y los 0,02 están cuadrados **por medición, no por hipótesis**: son **una sola consulta** —«qui tutoritza les pràctiques externes?»— que pasa de rango 2 a rango 1, lo que vale exactamente 0,5/25 = 0,02. **La hipótesis de HNSW queda refutada**: con 52 chunks el planificador nunca toca el índice vectorial (`EXPLAIN` da `Sort` + top-N heapsort sobre un Index Scan por `chatbot_id`). Lo que hay debajo es un **empate exacto de coseno** (0,316227773316) entre dos fragmentos de documentos distintos, y el `ORDER BY` de las dos ramas del retriever **no tiene desempate**: cuál de los dos queda primero lo decide el plan de la consulta, no la recuperación. Detalle y controles en el historial.
 **Recordatorio del orden vigente**: tras RAG.7→RAG.14 van SYNC, resto de SEC y CAL; después **Deploy empezando por D.0** (habilita los nueve servicios de GCP de una vez) y, solo entonces, **RAG.6b** (adaptador de Vertex + medición del valenciano), que depende de que D.0 haya habilitado Discovery Engine.
 

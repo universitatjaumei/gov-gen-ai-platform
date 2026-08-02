@@ -11702,6 +11702,35 @@ CRITERIOS DE ACEPTACIÓN:
                      Ambas listas vacías en modo restricted => solo superadmin (fail-closed).
   - superadmin siempre pasa (comodín, coherente con SEC.2).
 - `UserInfo` añade `saml_groups: list[str]` (se rellena en el ACS SAML; vacío en login local).
+
+### La organización de un usuario SAML (añadido el 2026-08-02, desde SEC.2)
+
+**Problema que deja abierto SEC.2**: `HubSsoUser` no tiene organización, así que un usuario
+provisionado por SSO se queda con el claim vacío y, por la regla de SEC.2, **sin acceso a
+ningún recurso de organización**. Es fail-closed y no rompe nada vivo —el SSO real contra el
+IdP sigue en la lista de pruebas manuales—, pero capa el login SSO. Se cierra aquí porque
+este prompt ya toca `UserInfo` y ya toca el ACS.
+
+**La decisión, y es la mitad importante del encargo: la organización sale de la
+configuración del IdP, NUNCA de la aserción.**
+
+- `HubSsoUser` gana `organizacion_id`, que se rellena **al aprovisionar en el ACS** tomándolo
+  de la configuración del proveedor de identidad, no de un atributo de la respuesta SAML ni
+  del dominio del correo.
+- Es el mismo razonamiento anti-escalada que la Parte 2 de este prompt aplica a la cabecera
+  delegada: si el dato viniera de fuera, quien controla el IdP podría declarar a qué
+  organización pertenece cada persona que entra. Un IdP institucional pertenece a **una**
+  institución, y esa relación la fija quien despliega.
+- Migración fail-closed, como la de `access_mode`: los `HubSsoUser` existentes se quedan sin
+  organización hasta que alguien la asigne. Ninguno hereda una por defecto.
+
+Tests que añade a `tests/core/auth/test_saml_identity.py`:
+
+```
+# should_take_the_organizacion_from_the_idp_configuration
+# should_ignore_an_organizacion_claimed_in_the_assertion    <- anti-escalada, el que importa
+# should_leave_existing_sso_users_without_organizacion_after_migration
+```
 - Consumidores obligatorios: `hub_chat`, adaptador compatible-OpenAI (OWUI.1) y endpoint
   widget (D.1). **Ningún endpoint construye la decisión a mano** (grep de cierre).
 
