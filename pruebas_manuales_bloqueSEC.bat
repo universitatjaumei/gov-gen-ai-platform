@@ -111,7 +111,15 @@ echo     (rojo).
 echo  f) Intenta conversar con el desde el panel: debe responder
 echo     403 con TU mensaje, no un Forbidden generico.
 echo  g) Vuelve a editarlo, vacia el campo de fecha y guarda: debe
-echo     volver a Disponible.
+echo     volver a Disponible (es lo que arreglo FIX.3: antes el null
+echo     se ignoraba y la fecha se quedaba puesta).
+echo.
+echo  OJO en el paso f: si el chatbot ya esta Disponible y al
+echo  conversar sale un 500 en vez de una respuesta, NO es del
+echo  bloque. En la BD de desarrollo hay chatbots que apuntan a un
+echo  proveedor openai_compatible sin API key, y eso falla por su
+echo  cuenta. Lo que este paso comprueba es el 403 con tu mensaje
+echo  cuando esta caducado.
 echo.
 echo  SSO SAML real contra el IdP institucional: sigue pendiente y
 echo  no se puede probar en local.

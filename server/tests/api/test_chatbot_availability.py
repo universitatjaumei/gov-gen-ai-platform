@@ -220,3 +220,110 @@ class TestEstadoDerivadoYNoAlmacenado:
         cuota = texto.index("assert_within_quota(")
 
         assert acceso < disponibilidad < cuota
+
+
+class TestPoderQuitarLaFecha:
+    """FIX.3 — `null` en la ventana significa quitar la fecha, no «no tocar».
+
+    Con `model_dump(exclude_none=True)` a secas no había forma de reabrir un chatbot
+    caducado: el cliente mandaba `valid_until: null`, el campo se descartaba y la fecha
+    seguía puesta. El formulario del panel hace exactamente eso al vaciar el campo.
+    """
+
+    def _app(self, chatbot):
+        from unittest.mock import AsyncMock, MagicMock
+
+        from fastapi import FastAPI
+
+        from server.app.api.deps import get_current_user
+        from server.app.core.auth.models import UserInfo
+        from server.app.modules.agents_hub.database.connection import get_async_session
+        from server.app.routers.hub_chatbots_router import router
+
+        session = MagicMock()
+        session.get = AsyncMock(return_value=chatbot)
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock()
+        resultado = MagicMock()
+        resultado.scalars.return_value.first.return_value = 0
+        session.execute = AsyncMock(return_value=resultado)
+
+        async def _sesion():
+            yield session
+
+        app = FastAPI()
+        app.dependency_overrides[get_current_user] = lambda: UserInfo(
+            user_id="a1",
+            email="a@uji.es",
+            role="admin",
+            organizacion_ids=(str(chatbot.organizacion_id),),
+        )
+        app.dependency_overrides[get_async_session] = _sesion
+        app.include_router(router, prefix="/api/v1")
+        return app, chatbot
+
+    def _chatbot_completo(self, **campos):
+        """Doble con todas las columnas, para que `ChatbotRead` valide la respuesta."""
+        from unittest.mock import MagicMock
+
+        from server.app.modules.agents_hub.database.config_models import HubChatbot
+        from server.tests.dobles import completar_chatbot
+
+        doble = MagicMock(spec=HubChatbot)
+        completar_chatbot(
+            doble,
+            id=uuid.uuid4(),
+            organizacion_id=uuid.uuid4(),
+            # Las tres columnas sin default en el ORM: `completar_chatbot` las deja en None
+            # —que es la verdad, no tienen default— y `ChatbotRead` las exige al responder.
+            name="Bot",
+            system_prompt="Eres útil.",
+            llm_config_id=uuid.uuid4(),
+            **campos,
+        )
+        return doble
+
+    def test_should_clear_the_date_when_the_client_sends_null(self):
+        from fastapi.testclient import TestClient
+
+        caducado = self._chatbot_completo(valid_until=AHORA - timedelta(days=1))
+        app, chatbot = self._app(caducado)
+
+        respuesta = TestClient(app).patch(
+            f"/api/v1/hub/chatbots/{chatbot.id}", json={"valid_until": None}
+        )
+
+        assert respuesta.status_code == 200, respuesta.text
+        assert chatbot.valid_until is None, "la fecha siguió puesta: el chatbot no se reabre"
+
+    def test_should_leave_the_date_alone_when_the_field_is_absent(self):
+        """Lo que no se envía no se toca: guardar el nombre no puede borrar la ventana."""
+        from fastapi.testclient import TestClient
+
+        hasta = AHORA + timedelta(days=5)
+        abierto = self._chatbot_completo(valid_until=hasta)
+        app, chatbot = self._app(abierto)
+
+        respuesta = TestClient(app).patch(
+            f"/api/v1/hub/chatbots/{chatbot.id}", json={"name": "Otro nombre"}
+        )
+
+        assert respuesta.status_code == 200, respuesta.text
+        assert chatbot.valid_until == hasta
+
+    def test_should_reject_a_field_the_server_does_not_know(self):
+        """El fallo que hizo invisible un servidor desactualizado: un 200 que no guarda.
+
+        Con `extra="forbid"`, el mismo caso responde 422 y dice qué campo sobra.
+        """
+        from fastapi.testclient import TestClient
+
+        app, chatbot = self._app(self._chatbot_completo())
+
+        respuesta = TestClient(app).patch(
+            f"/api/v1/hub/chatbots/{chatbot.id}",
+            json={"campo_del_futuro": "algo"},
+        )
+
+        assert respuesta.status_code == 422
+        assert "campo_del_futuro" in respuesta.text

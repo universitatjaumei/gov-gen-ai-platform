@@ -130,6 +130,15 @@ class ChatbotCreate(BaseModel):
 
 
 class ChatbotUpdate(BaseModel):
+    # FIX.3: un campo que el servidor no conoce es un **error**, no algo que se ignora.
+    #
+    # Por defecto Pydantic descarta lo que no reconoce, y eso convierte un desajuste de
+    # versiones en el peor fallo posible: un 200 que no guarda nada. Pasó de verdad —un
+    # servidor anterior a SEC.4.1 recibía `valid_until`, lo tiraba y contestaba «guardado»,
+    # así que la fecha «no se guardaba» sin ningún error a la vista, ni en el navegador ni
+    # en el log—. Con `forbid`, el mismo caso responde 422 diciendo qué campo sobra.
+    model_config = {"extra": "forbid"}
+
     name: str | None = None
     # FIX.1: sin esto no había forma de cambiar el modelo de un chatbot. Cuando Google retiró
     # `gemini-2.0-flash` hubo que repuntarlo por SQL, porque el formulario hardcodeaba el id y
@@ -322,6 +331,18 @@ async def update_chatbot(
     chatbot = await _get_chatbot_or_404(session, chatbot_id, user)
 
     payload = body.model_dump(exclude_none=True)
+
+    # FIX.3: en la ventana de vigencia, `null` significa **quitar la fecha**, no «no tocar».
+    # Con `exclude_none` a secas no había forma de volver a abrir un chatbot caducado desde
+    # la API: se mandaba `valid_until: null`, el campo se descartaba y la fecha seguía ahí.
+    #
+    # `model_fields_set` distingue lo que el cliente **envió** de lo que simplemente no
+    # venía, que es la diferencia que hace falta aquí y que `exclude_none` no puede ver. No
+    # se cambia el criterio del resto de campos —donde `None` sí es «heredar»— porque ahí el
+    # comportamiento actual es el correcto.
+    for campo in ("valid_from", "valid_until", "total_token_budget"):
+        if campo in body.model_fields_set:
+            payload[campo] = getattr(body, campo)
 
     # FIX.1: se comprueba que la configuración existe antes de asignarla. Dejar que reviente
     # la FK daría un 500 opaco a mitad de la petición en vez de decir qué falta.
