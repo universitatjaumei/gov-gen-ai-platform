@@ -17,7 +17,9 @@ import { HubLayout } from '@/admin/HubLayout'
 
 describe('ROL.2 — i18n keys', () => {
   it('should_use_i18n_keys_not_hardcoded_role_labels', () => {
-    const hub = (esAdmin as { hub: Record<string, string> }).hub
+    // `as unknown` primero: el JSON tiene claves anidadas (test_scenarios) y el tipo
+    // inferido no solapa con Record<string, string>. Aquí sólo se leen claves planas.
+    const hub = (esAdmin as unknown as { hub: Record<string, string> }).hub
     // Claves renombradas presentes…
     expect(hub.organizaciones).toBeDefined()
     expect(hub.new_organizacion).toBeDefined()

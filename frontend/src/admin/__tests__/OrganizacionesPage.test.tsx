@@ -1,10 +1,27 @@
-import { describe, it, expect, beforeAll, vi } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import i18n from '@/shared/i18n'
 import { AuthProvider } from '@/shared/auth'
 import { OrganizacionesPage } from '../pages/OrganizacionesPage'
+import {
+  useListOrganizacionesApiV1HubOrganizacionesGet,
+  useCreateOrganizacionApiV1HubOrganizacionesPost,
+  useUpdateOrganizacionApiV1HubOrganizacionesOrganizacionIdPatch,
+  useDeleteOrganizacionApiV1HubOrganizacionesOrganizacionIdDelete,
+} from '@/shared/api/generated/hub-organizaciones/hub-organizaciones'
+
+// Se doblan los hooks generados, no `fetch`: desde CAL.2 la página habla por el
+// cliente de Orval (axios sobre `customInstance`), así que un `fetch` global
+// stubbeado ya no intercepta nada y el test mediría una pantalla vacía.
+vi.mock('@/shared/api/generated/hub-organizaciones/hub-organizaciones', () => ({
+  useListOrganizacionesApiV1HubOrganizacionesGet: vi.fn(),
+  useCreateOrganizacionApiV1HubOrganizacionesPost: vi.fn(),
+  useUpdateOrganizacionApiV1HubOrganizacionesOrganizacionIdPatch: vi.fn(),
+  useDeleteOrganizacionApiV1HubOrganizacionesOrganizacionIdDelete: vi.fn(),
+  getListOrganizacionesApiV1HubOrganizacionesGetQueryKey: vi.fn(() => ['/api/v1/hub/organizaciones']),
+}))
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
   btoa(JSON.stringify({ sub: '1', email: 'admin@test.com', role: 'admin', exp: 9999999999 }))
@@ -34,16 +51,26 @@ const SAMPLE_CLIENTS = [
   },
 ]
 
+const createMutate = vi.fn()
+const mutationDouble = (mutate = vi.fn()) => ({ mutate, isPending: false }) as any
+
 beforeAll(async () => {
   await i18n.changeLanguage('es')
   localStorage.setItem('access_token', TOKEN)
 })
 
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(useCreateOrganizacionApiV1HubOrganizacionesPost).mockReturnValue(mutationDouble(createMutate))
+  vi.mocked(useUpdateOrganizacionApiV1HubOrganizacionesOrganizacionIdPatch).mockReturnValue(mutationDouble())
+  vi.mocked(useDeleteOrganizacionApiV1HubOrganizacionesOrganizacionIdDelete).mockReturnValue(mutationDouble())
+})
+
 function renderPage(clients: object[] = []) {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-    ok: true,
-    json: async () => clients,
-  }))
+  vi.mocked(useListOrganizacionesApiV1HubOrganizacionesGet).mockReturnValue({
+    data: clients,
+    isLoading: false,
+  } as any)
 
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -67,34 +94,7 @@ describe('OrganizacionesPage', () => {
   })
 
   it('should_create_client_with_valid_data', async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => [] })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          id: '00000000-0000-0000-0000-000000000020',
-          name: 'Nou Client',
-          partner_id: 'partner-3',
-          theme_config: {},
-          is_active: true,
-          chatbot_count: 0,
-          created_at: '2024-01-01T00:00:00Z',
-          updated_at: '2024-01-01T00:00:00Z',
-        }),
-      })
-      .mockResolvedValue({ ok: true, json: async () => [] })
-    vi.stubGlobal('fetch', fetchMock)
-
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={qc}>
-        <MemoryRouter>
-          <AuthProvider>
-            <OrganizacionesPage />
-          </AuthProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
-    )
+    renderPage([])
 
     await waitFor(() => screen.getByRole('button', { name: /nueva organización/i }))
     await act(async () => {
@@ -103,18 +103,20 @@ describe('OrganizacionesPage', () => {
 
     expect(screen.getByRole('dialog')).toBeDefined()
 
-    const nameInput = screen.getByLabelText(/nombre de la organización/i)
-    const partnerInput = screen.getByLabelText(/admin id/i)
-    fireEvent.change(nameInput, { target: { value: 'Nou Client' } })
-    fireEvent.change(partnerInput, { target: { value: 'partner-3' } })
+    fireEvent.change(screen.getByLabelText(/nombre de la organización/i), {
+      target: { value: 'Nou Client' },
+    })
+    fireEvent.change(screen.getByLabelText(/admin id/i), { target: { value: 'partner-3' } })
 
     await act(async () => {
       screen.getByRole('button', { name: /guardar/i }).click()
     })
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/hub/organizaciones'),
-      expect.objectContaining({ method: 'POST' }),
+    // El cuerpo va en `data`, que es la forma de variables del hook generado.
+    expect(createMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ name: 'Nou Client', partner_id: 'partner-3' }),
+      }),
     )
   })
 

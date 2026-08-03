@@ -1,15 +1,16 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
-  fetchOrganizaciones,
-  createOrganizacion,
-  updateOrganizacion,
-  deleteOrganizacion,
-} from '@/shared/api/organizaciones'
+  useListOrganizacionesApiV1HubOrganizacionesGet,
+  useCreateOrganizacionApiV1HubOrganizacionesPost,
+  useUpdateOrganizacionApiV1HubOrganizacionesOrganizacionIdPatch,
+  useDeleteOrganizacionApiV1HubOrganizacionesOrganizacionIdDelete,
+  getListOrganizacionesApiV1HubOrganizacionesGetQueryKey,
+} from '@/shared/api/generated/hub-organizaciones/hub-organizaciones'
 import type { OrganizacionRead } from '@/shared/api/generated/model'
 
 const schema = z.object({
@@ -39,68 +40,47 @@ export function OrganizacionesPage() {
   const [filter, setFilter] = useState('')
   const [defaultsOpen, setDefaultsOpen] = useState(false)
 
-  const { data: organizaciones = [], isLoading } = useQuery({
-    queryKey: ['organizaciones'],
-    queryFn: fetchOrganizaciones,
+  const listQueryKey = getListOrganizacionesApiV1HubOrganizacionesGetQueryKey()
+  const invalidateList = () => qc.invalidateQueries({ queryKey: listQueryKey })
+
+  const { data: organizaciones = [], isLoading } = useListOrganizacionesApiV1HubOrganizacionesGet()
+
+  const toBody = (values: FormValues) => ({
+    name: values.name,
+    partner_id: values.partner_id,
+    theme_config: parseJson(values.theme_config),
+    is_active: values.is_active,
+    default_public_graph_profile: values.default_public_graph_profile,
+    default_retrieval_mode: values.default_retrieval_mode,
+    default_language_mode: values.default_language_mode,
+    default_quality_threshold: values.default_quality_threshold,
+    default_min_retrieval_results: values.default_min_retrieval_results,
+    default_min_retrieval_score: values.default_min_retrieval_score,
+    default_reranker_enabled: values.default_reranker_enabled,
+    default_answer_template: values.default_answer_template,
   })
 
-  const createMutation = useMutation({
-    mutationFn: (values: FormValues) =>
-      createOrganizacion({
-        name: values.name,
-        partner_id: values.partner_id,
-        theme_config: parseJson(values.theme_config),
-        is_active: values.is_active,
-        default_public_graph_profile: values.default_public_graph_profile,
-        default_retrieval_mode: values.default_retrieval_mode,
-        default_language_mode: values.default_language_mode,
-        default_quality_threshold: values.default_quality_threshold,
-        default_min_retrieval_results: values.default_min_retrieval_results,
-        default_min_retrieval_score: values.default_min_retrieval_score,
-        default_reranker_enabled: values.default_reranker_enabled,
-        default_answer_template: values.default_answer_template,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['organizaciones'] })
-      closeDialog()
+  const createMutation = useCreateOrganizacionApiV1HubOrganizacionesPost({
+    mutation: { onSuccess: () => { invalidateList(); closeDialog() } },
+  })
+
+  const updateMutation = useUpdateOrganizacionApiV1HubOrganizacionesOrganizacionIdPatch({
+    mutation: { onSuccess: () => { invalidateList(); closeDialog() } },
+  })
+
+  const toggleMutation = useUpdateOrganizacionApiV1HubOrganizacionesOrganizacionIdPatch({
+    mutation: { onSuccess: invalidateList },
+  })
+
+  const deleteMutation = useDeleteOrganizacionApiV1HubOrganizacionesOrganizacionIdDelete({
+    mutation: {
+      onSuccess: () => {
+        invalidateList()
+        setDeleteTarget(null)
+        setDeleteError('')
+      },
+      onError: (err: Error) => setDeleteError(err.message),
     },
-  })
-
-  const updateMutation = useMutation({
-    mutationFn: (values: FormValues) =>
-      updateOrganizacion(editing!.id, {
-        name: values.name,
-        partner_id: values.partner_id,
-        theme_config: parseJson(values.theme_config),
-        is_active: values.is_active,
-        default_public_graph_profile: values.default_public_graph_profile,
-        default_retrieval_mode: values.default_retrieval_mode,
-        default_language_mode: values.default_language_mode,
-        default_quality_threshold: values.default_quality_threshold,
-        default_min_retrieval_results: values.default_min_retrieval_results,
-        default_min_retrieval_score: values.default_min_retrieval_score,
-        default_reranker_enabled: values.default_reranker_enabled,
-        default_answer_template: values.default_answer_template,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['organizaciones'] })
-      closeDialog()
-    },
-  })
-
-  const toggleMutation = useMutation({
-    mutationFn: (c: OrganizacionRead) => updateOrganizacion(c.id, { is_active: !c.is_active }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['organizaciones'] }),
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteOrganizacion(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['organizaciones'] })
-      setDeleteTarget(null)
-      setDeleteError('')
-    },
-    onError: (err: Error) => setDeleteError(err.message),
   })
 
   const DEFAULT_GRAPH_VALUES = {
@@ -154,9 +134,9 @@ export function OrganizacionesPage() {
 
   function onSubmit(values: FormValues) {
     if (editing) {
-      updateMutation.mutate(values)
+      updateMutation.mutate({ organizacionId: editing.id, data: toBody(values) })
     } else {
-      createMutation.mutate(values)
+      createMutation.mutate({ data: toBody(values) })
     }
   }
 
@@ -222,7 +202,10 @@ export function OrganizacionesPage() {
                 <td className="py-3 pr-4">
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); toggleMutation.mutate(c) }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleMutation.mutate({ organizacionId: c.id, data: { is_active: !c.is_active } })
+                    }}
                     className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
                       c.is_active
                         ? 'bg-green-100 text-green-700 border-green-200 hover:bg-green-200'
@@ -386,7 +369,7 @@ export function OrganizacionesPage() {
               </button>
               <button
                 type="button"
-                onClick={() => deleteMutation.mutate(deleteTarget.id)}
+                onClick={() => deleteMutation.mutate({ organizacionId: deleteTarget.id })}
                 disabled={deleteMutation.isPending}
                 className="px-3 py-2 bg-destructive text-destructive-foreground rounded-md text-sm disabled:opacity-50"
               >

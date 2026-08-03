@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReportsPage } from '../ReportsPage'
-import * as feedbackApi from '@/shared/api/feedback'
+import { useGetInteractionsForReviewApiV1HubFeedbackChatbotIdReviewGet } from '@/shared/api/generated/hub-feedback/hub-feedback'
 import { useListChatbotsApiV1HubChatbotsGet } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
+import type { InteractionReviewOut } from '@/shared/api/generated/model'
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -37,9 +38,11 @@ vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
   useListChatbotsApiV1HubChatbotsGet: vi.fn(),
   getListChatbotsApiV1HubChatbotsGetQueryKey: vi.fn(() => ['/api/v1/hub/chatbots']),
 }))
-vi.mock('@/shared/api/feedback', () => ({ fetchInteractions: vi.fn() }))
+vi.mock('@/shared/api/generated/hub-feedback/hub-feedback', () => ({
+  useGetInteractionsForReviewApiV1HubFeedbackChatbotIdReviewGet: vi.fn(),
+}))
 
-const SAMPLE_INTERACTIONS: feedbackApi.Interaction[] = [
+const SAMPLE_INTERACTIONS: InteractionReviewOut[] = [
   {
     id: 'i-1',
     user_message: 'How does Python work?',
@@ -77,7 +80,10 @@ describe('ReportsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(useListChatbotsApiV1HubChatbotsGet).mockReturnValue({ data: SAMPLE_CHATBOTS } as any)
-    vi.mocked(feedbackApi.fetchInteractions).mockResolvedValue(SAMPLE_INTERACTIONS)
+    vi.mocked(useGetInteractionsForReviewApiV1HubFeedbackChatbotIdReviewGet).mockReturnValue({
+      data: SAMPLE_INTERACTIONS,
+      isLoading: false,
+    } as any)
   })
 
   it('should_display_interactions_table', async () => {
@@ -94,10 +100,13 @@ describe('ReportsPage', () => {
 
     fireEvent.click(screen.getByRole('checkbox'))
 
+    // El filtro viaja como parámetro de consulta del contrato, no como opción propia
+    // de la pantalla: es el backend quien decide qué es «puntuación baja».
     await waitFor(() => {
-      expect(feedbackApi.fetchInteractions).toHaveBeenCalledWith(
+      expect(useGetInteractionsForReviewApiV1HubFeedbackChatbotIdReviewGet).toHaveBeenCalledWith(
         'c-1',
-        expect.objectContaining({ onlyLowScores: true }),
+        expect.objectContaining({ only_low_scores: true }),
+        expect.anything(),
       )
     })
   })

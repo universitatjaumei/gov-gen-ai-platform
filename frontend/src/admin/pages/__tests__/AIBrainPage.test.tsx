@@ -4,6 +4,14 @@ import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import i18n from '@/shared/i18n'
 import { AIBrainPage } from '../AIBrainPage'
+import {
+  useListPromptTemplatesApiV1HubPromptTemplatesGet,
+  useUpdatePromptTemplateApiV1HubPromptTemplatesTemplateIdPatch,
+} from '@/shared/api/generated/hub-prompt-templates/hub-prompt-templates'
+import {
+  useListLlmConfigsApiV1HubLlmConfigsGet,
+  useUpdateLlmConfigApiV1HubLlmConfigsConfigIdPatch,
+} from '@/shared/api/generated/hub-llm-configs/hub-llm-configs'
 
 // ── Hoisted mock data ──────────────────────────────────────────────
 const mockChatbotsData = vi.hoisted(() => ({ list: [] as object[] }))
@@ -13,6 +21,21 @@ vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
     data: mockChatbotsData.list,
     isLoading: false,
   })),
+}))
+
+// Desde CAL.2 la página consume los hooks generados por Orval, así que se doblan
+// esos y no `fetch`: axios no pasa por `fetch` y el stub global no interceptaba.
+vi.mock('@/shared/api/generated/hub-prompt-templates/hub-prompt-templates', () => ({
+  useListPromptTemplatesApiV1HubPromptTemplatesGet: vi.fn(),
+  useUpdatePromptTemplateApiV1HubPromptTemplatesTemplateIdPatch: vi.fn(),
+  getListPromptTemplatesApiV1HubPromptTemplatesGetQueryKey: vi.fn(() => ['/api/v1/hub/prompt-templates/']),
+}))
+
+vi.mock('@/shared/api/generated/hub-llm-configs/hub-llm-configs', () => ({
+  useListLlmConfigsApiV1HubLlmConfigsGet: vi.fn(),
+  useUpdateLlmConfigApiV1HubLlmConfigsConfigIdPatch: vi.fn(),
+  testLlmConnectionApiV1HubLlmConfigsConfigIdTestPost: vi.fn(),
+  getListLlmConfigsApiV1HubLlmConfigsGetQueryKey: vi.fn(() => ['/api/v1/hub/llm-configs']),
 }))
 
 const TOKEN =
@@ -93,32 +116,35 @@ const DEMO_LLM_CONFIGS = [
   },
 ]
 
-function mockFetch({
+const setDefaultMutate = vi.fn()
+
+/** Doblado de los hooks generados que consume la página. */
+function mockApi({
   templates = [] as object[],
   llmConfigs = DEMO_LLM_CONFIGS as object[],
   updateTemplateResponse = null as object | null,
-  updateLLMConfigResponse = null as object | null,
 } = {}) {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockImplementation(async (url: string, opts?: RequestInit) => {
-      const method = opts?.method ?? 'GET'
+  vi.mocked(useListPromptTemplatesApiV1HubPromptTemplatesGet).mockReturnValue({
+    data: templates,
+    isLoading: false,
+  } as any)
+  vi.mocked(useListLlmConfigsApiV1HubLlmConfigsGet).mockReturnValue({
+    data: llmConfigs,
+    isLoading: false,
+  } as any)
 
-      if (typeof url === 'string' && url.includes('/hub/prompt-templates/') && method === 'PATCH') {
-        return { ok: true, json: async () => updateTemplateResponse }
-      }
-      if (typeof url === 'string' && url.includes('/hub/prompt-templates')) {
-        return { ok: true, json: async () => templates }
-      }
-      if (typeof url === 'string' && url.includes('/hub/llm-configs/') && method === 'PATCH') {
-        return { ok: true, json: async () => updateLLMConfigResponse }
-      }
-      if (typeof url === 'string' && url.includes('/hub/llm-configs')) {
-        return { ok: true, json: async () => llmConfigs }
-      }
-      return { ok: true, json: async () => [] }
-    }),
+  // `useMutation` real dispararía la petición; aquí basta con invocar el `onSuccess`
+  // que la página registra, que es donde vive la lógica que se está probando.
+  vi.mocked(useUpdatePromptTemplateApiV1HubPromptTemplatesTemplateIdPatch).mockImplementation(
+    ((options?: any) => ({
+      mutate: () => options?.mutation?.onSuccess?.(updateTemplateResponse),
+      isPending: false,
+    })) as any,
   )
+  vi.mocked(useUpdateLlmConfigApiV1HubLlmConfigsConfigIdPatch).mockReturnValue({
+    mutate: setDefaultMutate,
+    isPending: false,
+  } as any)
 }
 
 function renderBrainPage() {
@@ -137,7 +163,7 @@ describe('AIBrainPage', () => {
   describe('test_prompt_editor_saves_new_version', () => {
     it('displays the updated version number after saving a prompt', async () => {
       mockChatbotsData.list = [DEMO_CHATBOT]
-      mockFetch({
+      mockApi({
         templates: [DEMO_TEMPLATE],
         updateTemplateResponse: { ...DEMO_TEMPLATE, version: 4 },
       })
@@ -170,8 +196,7 @@ describe('AIBrainPage', () => {
   describe('test_model_selector_updates_chatbot', () => {
     it('calls updateLLMConfig with is_default:true when a new model is selected and saved', async () => {
       mockChatbotsData.list = [DEMO_CHATBOT]
-      const updatedConfig = { ...DEMO_LLM_CONFIGS[1], is_default: true }
-      mockFetch({ updateLLMConfigResponse: updatedConfig })
+      mockApi()
 
       renderBrainPage()
 
@@ -193,18 +218,13 @@ describe('AIBrainPage', () => {
         fireEvent.click(btn)
       })
 
-      // Verify fetch was called with PATCH and is_default: true
+      // La configuración elegida y el `is_default` viajan como variables del hook
+      // generado, que es la forma que impone el contrato.
       await waitFor(() => {
-        const fetchMock = vi.mocked(globalThis.fetch as ReturnType<typeof vi.fn>)
-        const patchCall = fetchMock.mock.calls.find(
-          ([url, opts]: any[]) =>
-            typeof url === 'string' &&
-            url.includes(LLM_CONFIG_ID_OTHER) &&
-            opts?.method === 'PATCH',
-        )
-        expect(patchCall).toBeTruthy()
-        const body = JSON.parse(patchCall![1]?.body as string)
-        expect(body.is_default).toBe(true)
+        expect(setDefaultMutate).toHaveBeenCalledWith({
+          configId: LLM_CONFIG_ID_OTHER,
+          data: { is_default: true },
+        })
       })
     })
   })

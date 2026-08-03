@@ -1,11 +1,10 @@
 import { Fragment, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Download, Star, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { useListChatbotsApiV1HubChatbotsGet } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
-import type { ChatbotRead } from '@/shared/api/generated/model'
-import { fetchInteractions, type Interaction } from '@/shared/api/feedback'
+import { useGetInteractionsForReviewApiV1HubFeedbackChatbotIdReviewGet } from '@/shared/api/generated/hub-feedback/hub-feedback'
+import type { ChatbotRead, InteractionReviewOut } from '@/shared/api/generated/model'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 
 function StarRating({ score }: { score: number | null }) {
@@ -22,7 +21,7 @@ function StarRating({ score }: { score: number | null }) {
   )
 }
 
-function exportToCsv(chatbotId: string, interactions: Interaction[]) {
+function exportToCsv(chatbotId: string, interactions: InteractionReviewOut[]) {
   const header = ['date', 'user_message', 'assistant_message', 'score', 'comment']
   const escape = (s: string) => `"${s.replace(/"/g, '""')}"`
   const rows = interactions.map((i) => [
@@ -56,13 +55,14 @@ export function ReportsPage() {
     setSelectedChatbotId(chatbots[0].id)
   }
 
-  const { data: interactions = [], isLoading } = useQuery({
-    queryKey: ['interactions', selectedChatbotId, onlyLowScores],
-    queryFn: () => fetchInteractions(selectedChatbotId, { onlyLowScores }),
-    enabled: !!selectedChatbotId,
-  })
+  const { data: interactions = [], isLoading } =
+    useGetInteractionsForReviewApiV1HubFeedbackChatbotIdReviewGet(
+      selectedChatbotId,
+      { only_low_scores: onlyLowScores },
+      { query: { enabled: !!selectedChatbotId } },
+    )
 
-  const scoredInteractions = interactions.filter((i) => i.feedback_score !== null)
+  const scoredInteractions = interactions.filter((i) => i.feedback_score != null)
   const avgScore =
     scoredInteractions.length > 0
       ? scoredInteractions.reduce((s, i) => s + i.feedback_score!, 0) / scoredInteractions.length
@@ -184,7 +184,7 @@ export function ReportsPage() {
                       {interaction.user_message}
                     </td>
                     <td className="px-3 py-2">
-                      <StarRating score={interaction.feedback_score} />
+                      <StarRating score={interaction.feedback_score ?? null} />
                     </td>
                     <td className="px-3 py-2 max-w-xs truncate text-muted-foreground">
                       {interaction.feedback_text ?? '—'}

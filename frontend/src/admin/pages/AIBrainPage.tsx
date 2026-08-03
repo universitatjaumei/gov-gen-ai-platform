@@ -1,17 +1,19 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useListChatbotsApiV1HubChatbotsGet } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
 import {
-  fetchPromptTemplates,
-  updatePromptTemplate,
-} from '@/shared/api/promptTemplates'
+  useListPromptTemplatesApiV1HubPromptTemplatesGet,
+  useUpdatePromptTemplateApiV1HubPromptTemplatesTemplateIdPatch,
+  getListPromptTemplatesApiV1HubPromptTemplatesGetQueryKey,
+} from '@/shared/api/generated/hub-prompt-templates/hub-prompt-templates'
 import {
-  fetchLLMConfigs,
-  updateLLMConfig,
-  testLLMConfig,
-} from '@/shared/api/llmConfigs'
-import type { PromptTemplateRead, LLMConfigRead } from '@/shared/api/generated/model'
+  useListLlmConfigsApiV1HubLlmConfigsGet,
+  useUpdateLlmConfigApiV1HubLlmConfigsConfigIdPatch,
+  testLlmConnectionApiV1HubLlmConfigsConfigIdTestPost,
+  getListLlmConfigsApiV1HubLlmConfigsGetQueryKey,
+} from '@/shared/api/generated/hub-llm-configs/hub-llm-configs'
+import type { PromptTemplateRead } from '@/shared/api/generated/model'
 
 function HighlightedVars({ text }: { text: string }) {
   const parts = text.split(/(\{\w+\})/g)
@@ -40,11 +42,10 @@ export function AIBrainPage() {
   const { data: chatbots = [] } = useListChatbotsApiV1HubChatbotsGet()
 
   // ── Prompt templates ──────────────────────────────────────────────
-  const { data: templates = [] } = useQuery<PromptTemplateRead[]>({
-    queryKey: ['prompt-templates', chatbotId],
-    queryFn: () => fetchPromptTemplates(chatbotId),
-    enabled: !!chatbotId,
-  })
+  const { data: templates = [] } = useListPromptTemplatesApiV1HubPromptTemplatesGet(
+    { chatbot_id: chatbotId },
+    { query: { enabled: !!chatbotId } },
+  )
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
   const [editText, setEditText] = useState('')
@@ -58,33 +59,34 @@ export function AIBrainPage() {
     setSavedVersion(null)
   }
 
-  const savePromptMutation = useMutation({
-    mutationFn: (text: string) =>
-      updatePromptTemplate(selectedTemplate!.id, { template_text: text }),
-    onSuccess: (updated) => {
-      setSavedVersion(updated.version)
-      qc.invalidateQueries({ queryKey: ['prompt-templates', chatbotId] })
+  const savePromptMutation = useUpdatePromptTemplateApiV1HubPromptTemplatesTemplateIdPatch({
+    mutation: {
+      onSuccess: (updated) => {
+        setSavedVersion(updated.version)
+        qc.invalidateQueries({
+          queryKey: getListPromptTemplatesApiV1HubPromptTemplatesGetQueryKey({ chatbot_id: chatbotId }),
+        })
+      },
     },
   })
 
   // ── LLM configs ───────────────────────────────────────────────────
-  const { data: llmConfigs = [] } = useQuery<LLMConfigRead[]>({
-    queryKey: ['llm-configs'],
-    queryFn: fetchLLMConfigs,
-  })
+  const { data: llmConfigs = [] } = useListLlmConfigsApiV1HubLlmConfigsGet()
 
   const [selectedConfigId, setSelectedConfigId] = useState<string>('')
 
-  const setDefaultModelMutation = useMutation({
-    mutationFn: (id: string) => updateLLMConfig(id, { is_default: true }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['llm-configs'] }),
+  const setDefaultModelMutation = useUpdateLlmConfigApiV1HubLlmConfigsConfigIdPatch({
+    mutation: {
+      onSuccess: () =>
+        qc.invalidateQueries({ queryKey: getListLlmConfigsApiV1HubLlmConfigsGetQueryKey() }),
+    },
   })
 
   // ── Sandbox ───────────────────────────────────────────────────────
   const [sandboxResult, setSandboxResult] = useState<string | null>(null)
 
   const testModelMutation = useMutation({
-    mutationFn: (id: string) => testLLMConfig(id),
+    mutationFn: (id: string) => testLlmConnectionApiV1HubLlmConfigsConfigIdTestPost(id),
     onSuccess: (res) =>
       setSandboxResult(t('hub.brain_sandbox_ok', { ms: res.latency_ms })),
     onError: () => setSandboxResult(t('hub.brain_sandbox_fail')),
@@ -168,7 +170,10 @@ export function AIBrainPage() {
                     data-testid="save-prompt-btn"
                     className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm disabled:opacity-50"
                     disabled={savePromptMutation.isPending || !selectedTemplate}
-                    onClick={() => savePromptMutation.mutate(editText)}
+                    onClick={() => selectedTemplate && savePromptMutation.mutate({
+                      templateId: selectedTemplate.id,
+                      data: { template_text: editText },
+                    })}
                   >
                     {savePromptMutation.isPending
                       ? t('common.saving', 'Guardando…')
@@ -208,7 +213,10 @@ export function AIBrainPage() {
               data-testid="set-default-btn"
               className="px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground text-sm disabled:opacity-50"
               disabled={!selectedConfigId || setDefaultModelMutation.isPending}
-              onClick={() => setDefaultModelMutation.mutate(selectedConfigId)}
+              onClick={() => setDefaultModelMutation.mutate({
+                configId: selectedConfigId,
+                data: { is_default: true },
+              })}
             >
               {t('hub.brain_set_default')}
             </button>

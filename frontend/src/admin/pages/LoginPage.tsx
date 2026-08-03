@@ -6,8 +6,7 @@ import {
   getLoginAdminApiV1AuthAdminLoginPostUrl,
   getLoginSuperadminApiV1AuthSuperadminLoginPostUrl,
 } from '@/shared/api/generated/auth/auth'
-
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+import { apiBaseUrl as API_BASE } from '@/shared/api/client'
 
 // Las rutas se toman de lo generado por Orval desde `openapi.json`, no se escriben a mano.
 // Escritas a mano llevaban desde el 2026-04-24 apuntando a `/api/v1/auth/token/admin`, que

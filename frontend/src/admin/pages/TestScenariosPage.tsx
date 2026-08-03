@@ -326,7 +326,6 @@ function Escenario({
               <Run
                 key={run.id}
                 run={run}
-                expandido={expandido === run.id}
                 onExpandir={() => onExpandir(expandido === run.id ? null : run.id)}
                 onVeredicto={(v) =>
                   veredicto.mutate(
@@ -345,12 +344,10 @@ function Escenario({
 
 function Run({
   run,
-  expandido,
   onExpandir,
   onVeredicto,
 }: {
   run: RunRead
-  expandido: boolean
   onExpandir: () => void
   onVeredicto: (v: (typeof VEREDICTOS)[number]) => void
 }) {

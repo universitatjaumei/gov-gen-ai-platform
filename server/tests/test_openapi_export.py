@@ -281,3 +281,139 @@ class TestOpenAPISchemaContract:
         assert not missing, (
             f"Campos faltantes en el schema de respuesta de LLMConfig: {sorted(missing)}"
         )
+
+
+class TestOpenAPIResponseTypesForFrontend:
+    """CAL.2 (RED) — Los endpoints que consume el panel de administración declaran
+    `response_model`.
+
+    Sin `response_model`, FastAPI documenta la respuesta como un objeto vacío, Orval
+    genera `Promise<unknown>` y el frontend no tiene más remedio que redeclarar la
+    forma del dato a mano. Eso es exactamente lo que hacían los cinco módulos de
+    `shared/api/*.ts` que CAL.2 retira, y lo que prohíbe la regla maestra 4: los tipos
+    del frontend salen del contrato, no de una interfaz escrita en paralelo.
+
+    Mientras estos tests estén en rojo, migrar a los hooks de Orval no elimina el tipo
+    hardcodeado: solo lo mueve de sitio.
+    """
+
+    def _schemas(self) -> dict:
+        return app.openapi().get("components", {}).get("schemas", {})
+
+    def _response_ref(self, path: str, method: str) -> str:
+        """Devuelve el $ref del 200/202 de un endpoint, o '' si no lo declara."""
+        operation = app.openapi()["paths"][path][method]
+        content = (
+            operation.get("responses", {}).get("200")
+            or operation.get("responses", {}).get("202")
+            or {}
+        ).get("content", {})
+        return content.get("application/json", {}).get("schema", {}).get("$ref", "")
+
+    # -- Ingesta: la superficie que consume DocumentsPage --
+
+    def test_ingestion_job_schema_exists(self):
+        """El job de ingesta es un tipo del contrato, no una interfaz del frontend.
+
+        Es el caso más claro: `IngestionJob` estaba declarado a mano en
+        `frontend/src/shared/api/ingestion.ts` con nueve campos copiados del ORM.
+        """
+        schemas = self._schemas()
+        assert "IngestionJob" in schemas, (
+            "Schema 'IngestionJob' no encontrado en el contrato.\n"
+            "Schemas de ingesta presentes: "
+            + str(sorted(k for k in schemas if "ingestion" in k.lower()))
+            + "\nSolución (CAL.2): declarar response_model en GET "
+            "/api/v1/hub/ingestion/{chatbot_id}/jobs"
+        )
+
+    def test_ingestion_job_fields_are_complete(self):
+        """`IngestionJob` trae los campos que la tabla de jobs pinta."""
+        job = self._schemas().get("IngestionJob", {})
+        props = set(job.get("properties", {}).keys())
+        expected = {
+            "id", "chatbot_id", "source_url", "original_filename", "canonical_url",
+            "status", "chunks_processed", "error_message", "created_at",
+        }
+        missing = expected - props
+        assert not missing, f"Campos faltantes en IngestionJob: {sorted(missing)}"
+
+    def test_document_schemas_exist(self):
+        """Documento del corpus: resumen para la tabla y detalle con markdown."""
+        schemas = self._schemas()
+        for name in ("HubDocumentOut", "HubDocumentDetailOut"):
+            assert name in schemas, (
+                f"Schema '{name}' no encontrado en el contrato.\n"
+                "Schemas de documento presentes: "
+                + str(sorted(k for k in schemas if "document" in k.lower()))
+                + "\nSolución (CAL.2): declarar response_model en los endpoints de "
+                "/api/v1/hub/ingestion/{chatbot_id}/documents"
+            )
+
+    def test_document_detail_carries_markdown(self):
+        """El detalle es lo que alimenta el modal de preview: lleva el markdown."""
+        detail = self._schemas().get("HubDocumentDetailOut", {})
+        assert "markdown_content" in detail.get("properties", {}), (
+            "HubDocumentDetailOut no expone markdown_content; el modal de preview "
+            "quedaría sin contrato que lo respalde."
+        )
+
+    def test_ingestion_endpoints_declare_a_response_schema(self):
+        """Ningún endpoint de ingesta consumido por la UI responde `unknown`."""
+        sin_contrato = [
+            f"{method.upper()} {path}"
+            for path, method in (
+                ("/api/v1/hub/ingestion/{chatbot_id}/jobs", "get"),
+                ("/api/v1/hub/ingestion/{chatbot_id}/documents", "get"),
+                ("/api/v1/hub/ingestion/{chatbot_id}/documents/{document_id}", "get"),
+                ("/api/v1/hub/ingestion/{chatbot_id}/documents/{document_id}", "delete"),
+                ("/api/v1/hub/ingestion/upload", "post"),
+                ("/api/v1/hub/ingestion/{chatbot_id}/jobs/{job_id}", "delete"),
+                ("/api/v1/hub/ingestion/{chatbot_id}/chunks", "delete"),
+            )
+            if not self._response_ref(path, method)
+        ]
+        assert not sin_contrato, (
+            "Estos endpoints no declaran response_model, así que Orval los genera como "
+            f"Promise<unknown>: {sin_contrato}"
+        )
+
+    # -- Feedback: la superficie que consume ReportsPage --
+
+    def test_interaction_review_schema_exists(self):
+        """La interacción para revisión humana es un tipo del contrato."""
+        schemas = self._schemas()
+        assert "InteractionReviewOut" in schemas, (
+            "Schema 'InteractionReviewOut' no encontrado.\n"
+            "Solución (CAL.2): declarar response_model en GET "
+            "/api/v1/hub/feedback/{chatbot_id}/review"
+        )
+
+    def test_interaction_review_fields_are_complete(self):
+        """Lleva los campos que ReportsPage tabula y exporta a CSV."""
+        review = self._schemas().get("InteractionReviewOut", {})
+        props = set(review.get("properties", {}).keys())
+        expected = {
+            "id", "user_message", "assistant_message",
+            "feedback_score", "feedback_text", "run_id", "created_at",
+        }
+        missing = expected - props
+        assert not missing, f"Campos faltantes en InteractionReviewOut: {sorted(missing)}"
+
+    # -- LLM configs: los dos endpoints que quedaron sin tipar --
+
+    def test_llm_config_auxiliary_schemas_exist(self):
+        """Modelos disponibles y prueba de conexión, los dos huecos de hub-llm-configs.
+
+        El resto del router ya declara `response_model`; estos dos se quedaron fuera y
+        son justo los que `LLMConfigsPage` consume para poblar el desplegable de modelos
+        y para pintar el resultado del botón de probar conexión.
+        """
+        schemas = self._schemas()
+        for name in ("AvailableModelsOut", "LLMConnectionTestOut"):
+            assert name in schemas, (
+                f"Schema '{name}' no encontrado en el contrato.\n"
+                "Solución (CAL.2): declarar response_model en "
+                "/api/v1/hub/llm-configs/available-models/{provider_id} y "
+                "/api/v1/hub/llm-configs/{config_id}/test"
+            )

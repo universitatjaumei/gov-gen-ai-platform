@@ -1,10 +1,16 @@
-import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import i18n from '@/shared/i18n'
 import { AuthProvider } from '@/shared/auth'
 import { PromptsPage } from '../PromptsPage'
+import {
+  useListPromptTemplatesApiV1HubPromptTemplatesGet,
+  useCreatePromptTemplateApiV1HubPromptTemplatesPost,
+  useUpdatePromptTemplateApiV1HubPromptTemplatesTemplateIdPatch,
+  useDeletePromptTemplateApiV1HubPromptTemplatesTemplateIdDelete,
+} from '@/shared/api/generated/hub-prompt-templates/hub-prompt-templates'
 
 const mockChatbotsData = vi.hoisted(() => ({ list: [] as object[] }))
 
@@ -12,6 +18,15 @@ vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
   useListChatbotsApiV1HubChatbotsGet: vi.fn(() => ({ data: mockChatbotsData.list, isLoading: false })),
   useUpdateChatbotApiV1HubChatbotsChatbotIdPatch: vi.fn(() => ({ mutate: vi.fn(), isPending: false, reset: vi.fn() })),
   getListChatbotsApiV1HubChatbotsGetQueryKey: vi.fn(() => ['/api/v1/hub/chatbots']),
+}))
+
+// Desde CAL.2 las plantillas llegan por el hook generado, no por `fetch`.
+vi.mock('@/shared/api/generated/hub-prompt-templates/hub-prompt-templates', () => ({
+  useListPromptTemplatesApiV1HubPromptTemplatesGet: vi.fn(),
+  useCreatePromptTemplateApiV1HubPromptTemplatesPost: vi.fn(),
+  useUpdatePromptTemplateApiV1HubPromptTemplatesTemplateIdPatch: vi.fn(),
+  useDeletePromptTemplateApiV1HubPromptTemplatesTemplateIdDelete: vi.fn(),
+  getListPromptTemplatesApiV1HubPromptTemplatesGetQueryKey: vi.fn(() => ['/api/v1/hub/prompt-templates/']),
 }))
 
 const TOKEN =
@@ -67,24 +82,23 @@ const DEMO_CHATBOT = {
   updated_at: '',
 }
 
-function mockFetch(templates: object[], chatbots: object[] = [DEMO_CHATBOT]) {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockImplementation(async (url: string) => {
-      if (typeof url === 'string' && url.includes('/hub/chatbots')) {
-        return { ok: true, json: async () => chatbots }
-      }
-      if (typeof url === 'string' && url.includes('/hub/prompt-templates')) {
-        return { ok: true, json: async () => templates }
-      }
-      return { ok: true, json: async () => [] }
-    }),
-  )
-}
+const savePromptMutate = vi.fn()
+const mutationDouble = (mutate = vi.fn()) => ({ mutate, isPending: false }) as any
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(useCreatePromptTemplateApiV1HubPromptTemplatesPost).mockReturnValue(mutationDouble())
+  vi.mocked(useDeletePromptTemplateApiV1HubPromptTemplatesTemplateIdDelete).mockReturnValue(mutationDouble())
+  vi.mocked(useUpdatePromptTemplateApiV1HubPromptTemplatesTemplateIdPatch)
+    .mockReturnValue(mutationDouble(savePromptMutate))
+})
 
 function renderPage(templates: object[] = [], chatbots: object[] = [DEMO_CHATBOT]) {
   mockChatbotsData.list = chatbots
-  mockFetch(templates, chatbots)
+  vi.mocked(useListPromptTemplatesApiV1HubPromptTemplatesGet).mockReturnValue({
+    data: templates,
+    isLoading: false,
+  } as any)
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
@@ -132,38 +146,7 @@ describe('PromptsPage', () => {
   })
 
   it('should_increment_version_on_save', async () => {
-    mockChatbotsData.list = [DEMO_CHATBOT]
-    const patchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ ...DEMO_TEMPLATE, version: 4 }),
-    })
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation(async (url: string, opts?: RequestInit) => {
-        if (
-          typeof url === 'string' &&
-          url.includes('/hub/prompt-templates/') &&
-          opts?.method === 'PATCH'
-        ) {
-          return patchMock(url, opts)
-        }
-        if (typeof url === 'string' && url.includes('/hub/prompt-templates')) {
-          return { ok: true, json: async () => [DEMO_TEMPLATE] }
-        }
-        return { ok: true, json: async () => [] }
-      }),
-    )
-
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={qc}>
-        <MemoryRouter>
-          <AuthProvider>
-            <PromptsPage />
-          </AuthProvider>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
+    renderPage([DEMO_TEMPLATE])
 
     await waitFor(() => screen.getByText('system_base'))
     await act(async () => {
@@ -173,8 +156,16 @@ describe('PromptsPage', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /guardar/i }))
     })
+
+    // El PATCH viaja como variables del hook generado: id en `templateId`, cuerpo en
+    // `data`. Es el servidor quien decide el número de versión resultante.
     await waitFor(() => {
-      expect(patchMock).toHaveBeenCalled()
+      expect(savePromptMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          templateId: DEMO_TEMPLATE.id,
+          data: expect.objectContaining({ template_text: DEMO_TEMPLATE.template_text }),
+        }),
+      )
     })
   })
 

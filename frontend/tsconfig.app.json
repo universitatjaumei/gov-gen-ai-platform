@@ -4,7 +4,10 @@
     "target": "es2023",
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
-    "types": ["vite/client"],
+    // "node" lo necesita el guardarraíl de CAL.2 (src/shared/api/__tests__/contractFirstApi.test.ts),
+    // que lee el árbol de fuentes con node:fs para comprobar que nadie reintroduce
+    // una capa API escrita a mano. Vitest ejecuta en Node, así que es real, no un apaño.
+    "types": ["vite/client", "node"],
     "skipLibCheck": true,
 
     /* Bundler mode */

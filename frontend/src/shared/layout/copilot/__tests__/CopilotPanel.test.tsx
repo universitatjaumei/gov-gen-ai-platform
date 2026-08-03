@@ -2,6 +2,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { useFocusStore } from '../../useFocusStore'
 import { CopilotPanel } from '../CopilotPanel'
+import { translateCopilotApiV1RedaccionCopilotTranslatePost } from '@/shared/api/generated/redaccion-copilot/redaccion-copilot'
+
+// Desde CAL.2 el panel llama al cliente generado por Orval, que va sobre axios: un
+// stub global de `fetch` ya no intercepta la petición.
+vi.mock('@/shared/api/generated/redaccion-copilot/redaccion-copilot', () => ({
+  askCopilotApiV1RedaccionCopilotAskPost: vi.fn(),
+  translateCopilotApiV1RedaccionCopilotTranslatePost: vi.fn(),
+}))
 
 describe('CopilotPanel', () => {
   beforeEach(() => {
@@ -38,16 +46,10 @@ describe('CopilotPanel', () => {
   })
 
   it('should_dispatch_action_to_active_wizard_when_apply_clicked', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          kind: 'chart_config',
-          payload: { chart_type: 'bar', x_column: 'mes', y_column: 'importe' },
-        }),
-      }),
-    )
+    vi.mocked(translateCopilotApiV1RedaccionCopilotTranslatePost).mockResolvedValue({
+      kind: 'chart_config',
+      payload: { chart_type: 'bar', x_column: 'mes', y_column: 'importe' },
+    } as any)
 
     act(() => useFocusStore.getState().setContext({ type: 'informe', entityId: 'ws-1' }))
     render(<CopilotPanel />)

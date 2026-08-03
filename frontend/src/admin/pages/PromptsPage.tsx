@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import {
   useListChatbotsApiV1HubChatbotsGet,
@@ -7,11 +7,12 @@ import {
   getListChatbotsApiV1HubChatbotsGetQueryKey,
 } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
 import {
-  createPromptTemplate,
-  deletePromptTemplate,
-  fetchPromptTemplates,
-  updatePromptTemplate,
-} from '@/shared/api/promptTemplates'
+  useListPromptTemplatesApiV1HubPromptTemplatesGet,
+  useCreatePromptTemplateApiV1HubPromptTemplatesPost,
+  useUpdatePromptTemplateApiV1HubPromptTemplatesTemplateIdPatch,
+  useDeletePromptTemplateApiV1HubPromptTemplatesTemplateIdDelete,
+  getListPromptTemplatesApiV1HubPromptTemplatesGetQueryKey,
+} from '@/shared/api/generated/hub-prompt-templates/hub-prompt-templates'
 import type { ChatbotRead, PromptTemplateRead, PromptTemplateCreate, ChatbotUpdate } from '@/shared/api/generated/model'
 
 // Render template text with {variable} spans highlighted (for the editor preview)
@@ -81,10 +82,14 @@ export function PromptsPage() {
 
   const selectedChatbotId = chatbotFilter !== 'all' ? chatbotFilter : undefined
 
-  const { data: templates = [] } = useQuery({
-    queryKey: ['prompt-templates', selectedChatbotId ?? 'all'],
-    queryFn: () => fetchPromptTemplates(selectedChatbotId),
-  })
+  const { data: templates = [] } = useListPromptTemplatesApiV1HubPromptTemplatesGet(
+    selectedChatbotId ? { chatbot_id: selectedChatbotId } : undefined,
+  )
+
+  // Sin `params`, la clave generada es el prefijo común de todas las variantes por
+  // chatbot, así que invalidarla alcanza también a las filtradas.
+  const invalidateTemplates = () =>
+    qc.invalidateQueries({ queryKey: getListPromptTemplatesApiV1HubPromptTemplatesGetQueryKey() })
 
   const { data: chatbotsRaw } = useListChatbotsApiV1HubChatbotsGet()
   const chatbots: ChatbotRead[] = (chatbotsRaw as unknown as ChatbotRead[] | undefined) ?? []
@@ -113,14 +118,8 @@ export function PromptsPage() {
     setEditChatbotPrompt(cb.system_prompt)
   }
 
-  const saveTemplateMutation = useMutation({
-    mutationFn: ({ id, text, defaultTier, overrideTier }: { id: string; text: string; defaultTier: number | null; overrideTier: number | null }) =>
-      updatePromptTemplate(id, {
-        template_text: text,
-        default_tier: defaultTier,
-        override_tier: overrideTier,
-      }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['prompt-templates'] }),
+  const saveTemplateMutation = useUpdatePromptTemplateApiV1HubPromptTemplatesTemplateIdPatch({
+    mutation: { onSuccess: invalidateTemplates },
   })
 
   const saveChatbotPromptMutation = useUpdateChatbotApiV1HubChatbotsChatbotIdPatch({
@@ -131,21 +130,23 @@ export function PromptsPage() {
     },
   })
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => deletePromptTemplate(id),
-    onSuccess: () => {
-      setSelectedType(null)
-      setSelectedId(null)
-      qc.invalidateQueries({ queryKey: ['prompt-templates'] })
+  const deleteMutation = useDeletePromptTemplateApiV1HubPromptTemplatesTemplateIdDelete({
+    mutation: {
+      onSuccess: () => {
+        setSelectedType(null)
+        setSelectedId(null)
+        invalidateTemplates()
+      },
     },
   })
 
-  const createMutation = useMutation({
-    mutationFn: (data: PromptTemplateCreate) => createPromptTemplate(data),
-    onSuccess: () => {
-      setShowCreate(false)
-      setNewForm({ language: 'es' })
-      qc.invalidateQueries({ queryKey: ['prompt-templates'] })
+  const createMutation = useCreatePromptTemplateApiV1HubPromptTemplatesPost({
+    mutation: {
+      onSuccess: () => {
+        setShowCreate(false)
+        setNewForm({ language: 'es' })
+        invalidateTemplates()
+      },
     },
   })
 
@@ -178,10 +179,12 @@ export function PromptsPage() {
   function handleSaveTemplate() {
     if (!selectedTemplate) return
     saveTemplateMutation.mutate({
-      id: selectedTemplate.id,
-      text: editText,
-      defaultTier: editDefaultTier,
-      overrideTier: editOverrideTier,
+      templateId: selectedTemplate.id,
+      data: {
+        template_text: editText,
+        default_tier: editDefaultTier,
+        override_tier: editOverrideTier,
+      },
     })
   }
 
@@ -372,7 +375,7 @@ export function PromptsPage() {
               )}
             </div>
             <button
-              onClick={() => deleteMutation.mutate(selectedTemplate.id)}
+              onClick={() => deleteMutation.mutate({ templateId: selectedTemplate.id })}
               className="text-xs text-destructive hover:underline"
             >
               {t('hub.delete_prompt_template')}
@@ -512,10 +515,12 @@ export function PromptsPage() {
                 onClick={() => {
                   if (chatbotFilter !== 'all' && newForm.slug && newForm.language && newForm.template_text) {
                     createMutation.mutate({
-                      chatbot_id: chatbotFilter,
-                      slug: newForm.slug,
-                      language: newForm.language,
-                      template_text: newForm.template_text,
+                      data: {
+                        chatbot_id: chatbotFilter,
+                        slug: newForm.slug,
+                        language: newForm.language,
+                        template_text: newForm.template_text,
+                      },
                     })
                   }
                 }}

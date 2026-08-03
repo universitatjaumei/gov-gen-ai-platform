@@ -220,6 +220,12 @@ class TestExposicion:
             progress_message="embed: lote 2/3",
             processing_stats={"n_chunks": 8, "stage_ms": {"convert": 120}},
             processing_started_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
+            # `chunks_processed` y `created_at` son NOT NULL con `default=` de
+            # SQLAlchemy: una fila leída de la base de datos siempre los trae. Aquí el
+            # objeto no pasa por el flush, así que hay que ponerlos a mano para que el
+            # doble se parezca a lo que el endpoint lee de verdad.
+            chunks_processed=0,
+            created_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
         )
 
         session = MagicMock()

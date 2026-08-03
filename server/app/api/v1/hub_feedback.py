@@ -12,6 +12,7 @@ Deploy: edge
 """
 
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -32,6 +33,23 @@ class FeedbackRequest(BaseModel):
     comment: str | None = Field(None, max_length=2000)
 
 
+class InteractionReviewOut(BaseModel):
+    """Interacción servida a la revisión humana (CAL.2).
+
+    El endpoint devolvía `list[dict]`, que en el contrato es una lista de objetos sin
+    forma; `ReportsPage` se veía obligada a redeclarar los siete campos a mano. Lo que
+    la pantalla tabula y exporta a CSV sale de aquí.
+    """
+
+    id: uuid.UUID
+    user_message: str
+    assistant_message: str
+    feedback_score: int | None = None
+    feedback_text: str | None = None
+    run_id: str | None = None
+    created_at: datetime
+
+
 @router.post("/{interaction_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def submit_feedback(
     interaction_id: uuid.UUID,
@@ -47,7 +65,7 @@ async def submit_feedback(
     )
 
 
-@router.get("/{chatbot_id}/review")
+@router.get("/{chatbot_id}/review", response_model=list[InteractionReviewOut])
 async def get_interactions_for_review(
     chatbot_id: uuid.UUID,
     limit: int = Query(50, ge=1, le=200),

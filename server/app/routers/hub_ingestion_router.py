@@ -4,6 +4,8 @@ Deploy: cloud
 """
 
 import uuid
+from datetime import datetime
+from typing import Any
 
 from fastapi import (
     APIRouter,
@@ -16,7 +18,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,6 +48,96 @@ class AnalyzeHtmlRequest(BaseModel):
     url_hint: str = ""
 
 
+# ── Contrato de respuesta (CAL.2) ──────────────────────────────────────────────
+# Estos endpoints nacieron devolviendo dicts sueltos. FastAPI documenta eso como un
+# objeto vacío, Orval lo genera como `Promise<unknown>` y el frontend acababa
+# redeclarando la forma del dato a mano en `shared/api/ingestion.ts`. Declarar el
+# `response_model` es lo que hace que el tipo del panel venga del contrato.
+#
+# `status` va como `str` y no como `Literal`: es un campo de presentación, la tabla de
+# jobs ya tiene rama por defecto, y un valor inesperado en una fila debe pintarse "en
+# cola", no tumbar el listado entero con un 500 de validación de respuesta.
+
+
+class IngestionJob(BaseModel):
+    """Trabajo de ingesta tal y como lo pinta la tabla técnica del panel."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    chatbot_id: uuid.UUID
+    source_url: str
+    original_filename: str | None = None
+    canonical_url: str | None = None
+    language: str | None = None
+    status: str
+    chunks_processed: int
+    error_message: str | None = None
+    # Progreso y estadísticas por etapa (RAG.12). Van en el contrato porque el panel
+    # los pinta: sin ellos, un job trabajando y un job colgado se ven igual.
+    progress_current: int = 0
+    progress_total: int | None = None
+    progress_message: str = ""
+    processing_stats: dict[str, Any] = Field(default_factory=dict)
+    processing_started_at: datetime | None = None
+    processing_completed_at: datetime | None = None
+    created_at: datetime
+
+
+class IngestionJobsOut(BaseModel):
+    jobs: list[IngestionJob]
+
+
+class HubDocumentOut(BaseModel):
+    """Documento citable, en la forma resumida que lista la tabla del corpus."""
+
+    id: uuid.UUID
+    chatbot_id: uuid.UUID
+    title: str
+    canonical_url: str
+    language: str
+    source_kind: str
+    token_count: int
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class HubDocumentDetailOut(HubDocumentOut):
+    """El mismo documento con su markdown, que es lo que alimenta el preview."""
+
+    markdown_content: str
+
+
+class HubDocumentsOut(BaseModel):
+    documents: list[HubDocumentOut]
+
+
+class MessageOut(BaseModel):
+    message: str
+
+
+class UploadDocumentOut(BaseModel):
+    job: IngestionJob
+    message: str
+
+
+class DeleteIngestionJobOut(BaseModel):
+    message: str
+    documents_deleted: int
+
+
+class ClearCollectionOut(BaseModel):
+    message: str
+    documents_deleted: int
+    jobs_deleted: int
+
+
+class AnalyzeHtmlOut(BaseModel):
+    proposed_selectors: dict[str, str | None]
+    confidence: float
+    sample_extraction: dict[str, str]
+
+
 router = APIRouter(prefix="/hub/ingestion", tags=["hub-ingestion"])
 
 
@@ -59,7 +151,7 @@ async def _get_llm_service(session: AsyncSession = Depends(get_async_session)):
     return LangChainLLMAdapter(model)
 
 
-@router.post("/analyze-html", status_code=status.HTTP_200_OK)
+@router.post("/analyze-html", status_code=status.HTTP_200_OK, response_model=AnalyzeHtmlOut)
 async def analyze_html(
     body: AnalyzeHtmlRequest,
     current_user: UserInfo = Depends(get_current_user),
@@ -106,7 +198,7 @@ async def _chatbot_autorizado(session, chatbot_id, principal):
     return chatbot
 
 
-@router.get("/{chatbot_id}/jobs")
+@router.get("/{chatbot_id}/jobs", response_model=IngestionJobsOut)
 async def get_ingestion_jobs(
     chatbot_id: uuid.UUID,
     session: AsyncSession = Depends(get_async_session),
@@ -124,7 +216,7 @@ async def get_ingestion_jobs(
     return {"jobs": jobs}
 
 
-@router.get("/{chatbot_id}/documents")
+@router.get("/{chatbot_id}/documents", response_model=HubDocumentsOut)
 async def list_documents(
     chatbot_id: uuid.UUID,
     language: str | None = Query(None, description="Filtrar por idioma (es, ca, en…)"),
@@ -163,7 +255,7 @@ async def list_documents(
     }
 
 
-@router.get("/{chatbot_id}/documents/{document_id}")
+@router.get("/{chatbot_id}/documents/{document_id}", response_model=HubDocumentDetailOut)
 async def get_document(
     chatbot_id: uuid.UUID,
     document_id: uuid.UUID,
@@ -189,7 +281,11 @@ async def get_document(
     }
 
 
-@router.delete("/{chatbot_id}/documents/{document_id}", status_code=status.HTTP_200_OK)
+@router.delete(
+    "/{chatbot_id}/documents/{document_id}",
+    status_code=status.HTTP_200_OK,
+    response_model=MessageOut,
+)
 async def delete_document(
     chatbot_id: uuid.UUID,
     document_id: uuid.UUID,
@@ -212,7 +308,9 @@ async def delete_document(
     return {"message": "Documento eliminado."}
 
 
-@router.post("/upload", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/upload", status_code=status.HTTP_202_ACCEPTED, response_model=UploadDocumentOut
+)
 async def upload_document(
     background_tasks: BackgroundTasks,
     chatbot_id: uuid.UUID = Form(...),
@@ -274,7 +372,11 @@ async def upload_document(
     return {"job": job, "message": "Documento subido y encolado."}
 
 
-@router.delete("/{chatbot_id}/jobs/{job_id}", status_code=status.HTTP_200_OK)
+@router.delete(
+    "/{chatbot_id}/jobs/{job_id}",
+    status_code=status.HTTP_200_OK,
+    response_model=DeleteIngestionJobOut,
+)
 async def delete_ingestion_job(
     chatbot_id: uuid.UUID,
     job_id: uuid.UUID,
@@ -326,7 +428,11 @@ async def delete_ingestion_job(
     return {"message": "Documento eliminado.", "documents_deleted": len(docs)}
 
 
-@router.delete("/{chatbot_id}/chunks", status_code=status.HTTP_200_OK)
+@router.delete(
+    "/{chatbot_id}/chunks",
+    status_code=status.HTTP_200_OK,
+    response_model=ClearCollectionOut,
+)
 async def clear_chatbot_collection(
     chatbot_id: uuid.UUID,
     session: AsyncSession = Depends(get_async_session),

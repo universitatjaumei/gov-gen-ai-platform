@@ -246,7 +246,28 @@ class TestUploadEndpointStorageIntegration:
         job_mock.source_url = ""
         job_mock.status = "pending"
         mock_session.get = AsyncMock(return_value=job_mock)
-        mock_session.refresh = AsyncMock(side_effect=lambda obj: None)
+
+        def _refresh(obj):
+            """Rellena los defaults que pone el INSERT, como haría un refresh real.
+
+            `chunks_processed` y `created_at` son `default=` de SQLAlchemy: se aplican
+            al hacer flush, no al construir el objeto. Sin esto, la fila que devuelve
+            el endpoint tiene `None` donde la columna es NOT NULL — un estado que en
+            la base de datos no existe, y que desde CAL.2 el `response_model` rechaza.
+            """
+            from datetime import datetime, timezone
+
+            for campo, valor in (
+                ("chunks_processed", 0),
+                ("progress_current", 0),
+                ("progress_message", ""),
+                ("processing_stats", {}),
+                ("created_at", datetime.now(timezone.utc)),
+            ):
+                if getattr(obj, campo, None) is None:
+                    setattr(obj, campo, valor)
+
+        mock_session.refresh = AsyncMock(side_effect=_refresh)
         return mock_session, job_mock
 
     def test_upload_calls_storage_put_with_pdf_key(self) -> None:

@@ -1,21 +1,23 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
-  fetchLLMConfigs,
-  createLLMConfig,
-  updateLLMConfig,
-  deleteLLMConfig,
-  testLLMConfig,
-  fetchAvailableModels,
-  fetchProviders,
-  createProvider,
-  updateProvider,
-  deleteProvider,
-} from '@/shared/api/llmConfigs'
+  useListLlmConfigsApiV1HubLlmConfigsGet,
+  useCreateLlmConfigApiV1HubLlmConfigsPost,
+  useUpdateLlmConfigApiV1HubLlmConfigsConfigIdPatch,
+  useDeleteLlmConfigApiV1HubLlmConfigsConfigIdDelete,
+  useListAvailableModelsApiV1HubLlmConfigsAvailableModelsProviderIdGet,
+  useListProvidersApiV1HubLlmConfigsProvidersGet,
+  useCreateProviderApiV1HubLlmConfigsProvidersPost,
+  useUpdateProviderApiV1HubLlmConfigsProvidersProviderIdPatch,
+  useDeleteProviderApiV1HubLlmConfigsProvidersProviderIdDelete,
+  testLlmConnectionApiV1HubLlmConfigsConfigIdTestPost,
+  getListLlmConfigsApiV1HubLlmConfigsGetQueryKey,
+  getListProvidersApiV1HubLlmConfigsProvidersGetQueryKey,
+} from '@/shared/api/generated/hub-llm-configs/hub-llm-configs'
 import type { LLMConfigRead, HubProviderOut } from '@/shared/api/generated/model'
 
 const TIERS = [1, 2, 3] as const
@@ -93,30 +95,27 @@ export function LLMConfigsPage() {
   const [testingId, setTestingId] = useState<string | null>(null)
   const [isCustomModel, setIsCustomModel] = useState(false)
 
-  const { data: configs = [], isLoading: isLoadingConfigs } = useQuery({
-    queryKey: ['llm-configs'],
-    queryFn: fetchLLMConfigs,
+  const invalidateConfigs = () =>
+    qc.invalidateQueries({ queryKey: getListLlmConfigsApiV1HubLlmConfigsGetQueryKey() })
+
+  const { data: configs = [], isLoading: isLoadingConfigs } = useListLlmConfigsApiV1HubLlmConfigsGet()
+
+  const { data: providers = [], isLoading: isLoadingProviders } =
+    useListProvidersApiV1HubLlmConfigsProvidersGet()
+
+  const createMutation = useCreateLlmConfigApiV1HubLlmConfigsPost({
+    mutation: { onSuccess: () => { invalidateConfigs(); closeDialog() } },
   })
 
-  const { data: providers = [], isLoading: isLoadingProviders } = useQuery({
-    queryKey: ['hub-providers'],
-    queryFn: fetchProviders,
+  const updateMutation = useUpdateLlmConfigApiV1HubLlmConfigsConfigIdPatch({
+    mutation: { onSuccess: () => { invalidateConfigs(); closeDialog() } },
   })
 
-  const createMutation = useMutation({
-    mutationFn: (values: FormValues) => createLLMConfig(values),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['llm-configs'] }); closeDialog() },
-  })
-
-  const updateMutation = useMutation({
-    mutationFn: (values: FormValues) => updateLLMConfig(editing!.id, values),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['llm-configs'] }); closeDialog() },
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteLLMConfig(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['llm-configs'] }); setDeleteTarget(null); setDeleteError('') },
-    onError: (err: Error) => setDeleteError(err.message),
+  const deleteMutation = useDeleteLlmConfigApiV1HubLlmConfigsConfigIdDelete({
+    mutation: {
+      onSuccess: () => { invalidateConfigs(); setDeleteTarget(null); setDeleteError('') },
+      onError: (err: Error) => setDeleteError(err.message),
+    },
   })
 
   const isPending = createMutation.isPending || updateMutation.isPending
@@ -137,11 +136,12 @@ export function LLMConfigsPage() {
   })
 
   const currentProvider = useWatch({ control, name: 'provider' })
-  const { data: availableModels = [] } = useQuery({
-    queryKey: ['available-models', currentProvider],
-    queryFn: () => fetchAvailableModels(currentProvider),
-    enabled: dialogOpen && !!currentProvider,
-  })
+  const { data: availableModelsData } =
+    useListAvailableModelsApiV1HubLlmConfigsAvailableModelsProviderIdGet(
+      currentProvider,
+      { query: { enabled: dialogOpen && !!currentProvider } },
+    )
+  const availableModels = availableModelsData?.models ?? []
 
   function openCreate() {
     setEditing(null)
@@ -181,14 +181,16 @@ export function LLMConfigsPage() {
   function closeDialog() { setDialogOpen(false); setEditing(null) }
 
   function onSubmit(values: FormValues) {
-    if (editing) updateMutation.mutate(values)
-    else createMutation.mutate(values)
+    if (editing) updateMutation.mutate({ configId: editing.id, data: values })
+    else createMutation.mutate({ data: values })
   }
 
   async function handleTest(id: string) {
     setTestingId(id)
     try {
-      const result = await testLLMConfig(id)
+      // Imperativo a propósito: el resultado va a un mapa por fila, no a caché de
+      // react-query, y la prueba se dispara al pulsar, no al montar.
+      const result = await testLlmConnectionApiV1HubLlmConfigsConfigIdTestPost(id)
       setTestResults(prev => ({ ...prev, [id]: result }))
     } catch (e) {
       setTestResults(prev => ({ ...prev, [id]: { error: (e as Error).message } }))
@@ -302,7 +304,7 @@ export function LLMConfigsPage() {
               <div className="flex gap-2 justify-end">
                 <button onClick={() => { setDeleteTarget(null); setDeleteError('') }} className="px-3 py-2 border rounded-md text-sm">{tc('cancel')}</button>
                 <button
-                  onClick={() => deleteMutation.mutate(deleteTarget.id)}
+                  onClick={() => deleteMutation.mutate({ configId: deleteTarget.id })}
                   disabled={deleteMutation.isPending}
                   className="px-3 py-2 bg-destructive text-destructive-foreground rounded-md text-sm disabled:opacity-50"
                 >
@@ -457,20 +459,22 @@ function ProvidersSection({ providers, isLoading }: { providers: HubProviderOut[
   const [deleteTarget, setDeleteTarget] = useState<HubProviderOut | null>(null)
   const [deleteError, setDeleteError] = useState('')
 
-  const createMutation = useMutation({
-    mutationFn: (values: ProviderFormValues) => createProvider(values),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['hub-providers'] }); closeDialog() },
+  const invalidateProviders = () =>
+    qc.invalidateQueries({ queryKey: getListProvidersApiV1HubLlmConfigsProvidersGetQueryKey() })
+
+  const createMutation = useCreateProviderApiV1HubLlmConfigsProvidersPost({
+    mutation: { onSuccess: () => { invalidateProviders(); closeDialog() } },
   })
 
-  const updateMutation = useMutation({
-    mutationFn: (values: ProviderFormValues) => updateProvider(editing!.id, values),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['hub-providers'] }); closeDialog() },
+  const updateMutation = useUpdateProviderApiV1HubLlmConfigsProvidersProviderIdPatch({
+    mutation: { onSuccess: () => { invalidateProviders(); closeDialog() } },
   })
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteProvider(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['hub-providers'] }); setDeleteTarget(null); setDeleteError('') },
-    onError: (err: Error) => setDeleteError(err.message),
+  const deleteMutation = useDeleteProviderApiV1HubLlmConfigsProvidersProviderIdDelete({
+    mutation: {
+      onSuccess: () => { invalidateProviders(); setDeleteTarget(null); setDeleteError('') },
+      onError: (err: Error) => setDeleteError(err.message),
+    },
   })
 
   const isPending = createMutation.isPending || updateMutation.isPending
@@ -495,8 +499,8 @@ function ProvidersSection({ providers, isLoading }: { providers: HubProviderOut[
   function closeDialog() { setDialogOpen(false); setEditing(null) }
 
   function onSubmit(values: ProviderFormValues) {
-    if (editing) updateMutation.mutate(values)
-    else createMutation.mutate(values)
+    if (editing) updateMutation.mutate({ providerId: editing.id, data: values })
+    else createMutation.mutate({ data: values })
   }
 
   return (
@@ -564,7 +568,7 @@ function ProvidersSection({ providers, isLoading }: { providers: HubProviderOut[
             <div className="flex gap-2 justify-end">
               <button onClick={() => { setDeleteTarget(null); setDeleteError('') }} className="px-3 py-2 border rounded-md text-sm">{tc('cancel')}</button>
               <button
-                onClick={() => deleteMutation.mutate(deleteTarget.id)}
+                onClick={() => deleteMutation.mutate({ providerId: deleteTarget.id })}
                 disabled={deleteMutation.isPending}
                 className="px-3 py-2 bg-destructive text-destructive-foreground rounded-md text-sm disabled:opacity-50"
               >

@@ -128,7 +128,26 @@ async def delete_provider(
     await session.commit()
 
 
-@router.get("/available-models/{provider_id}")
+class AvailableModelsOut(BaseModel):
+    """Modelos que ofrece un proveedor (CAL.2).
+
+    Puebla el desplegable de modelos del diálogo de configuración LLM. Sin
+    `response_model` el frontend recibía `unknown` y hacía `data.models || []`
+    sobre un tipo que el contrato no respalda.
+    """
+
+    ok: bool
+    models: list[str]
+
+
+class LLMConnectionTestOut(BaseModel):
+    """Resultado de probar la conexión con un modelo."""
+
+    ok: bool
+    latency_ms: int
+
+
+@router.get("/available-models/{provider_id}", response_model=AvailableModelsOut)
 async def list_available_models(
     provider_id: str,
     _: UserInfo = Depends(_require_admin),
@@ -291,7 +310,7 @@ async def delete_llm_config(
     await session.commit()
 
 
-@router.post("/{config_id}/test")
+@router.post("/{config_id}/test", response_model=LLMConnectionTestOut)
 async def test_llm_connection(
     config_id: uuid.UUID,
     _: UserInfo = Depends(_require_admin),

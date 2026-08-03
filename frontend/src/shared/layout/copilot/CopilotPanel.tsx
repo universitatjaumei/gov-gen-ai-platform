@@ -2,11 +2,10 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useFocusStore, type CopilotActionKind } from '../useFocusStore'
 import {
-  askCopilot,
-  translateCopilot,
-  type CopilotAnswerResponse,
-  type CopilotTranslateResponse,
-} from './copilotApi'
+  askCopilotApiV1RedaccionCopilotAskPost,
+  translateCopilotApiV1RedaccionCopilotTranslatePost,
+} from '@/shared/api/generated/redaccion-copilot/redaccion-copilot'
+import type { CopilotAnswer, CopilotTranslateResponse } from '@/shared/api/generated/model'
 
 type Mode = 'ask' | 'chart' | 'etl' | 'script'
 
@@ -38,7 +37,7 @@ export function CopilotPanel() {
   const [mode, setMode] = useState<Mode>('ask')
   const [input, setInput] = useState('')
   const [isPending, setIsPending] = useState(false)
-  const [askResponse, setAskResponse] = useState<CopilotAnswerResponse | null>(null)
+  const [askResponse, setAskResponse] = useState<CopilotAnswer | null>(null)
   const [translateResponse, setTranslateResponse] = useState<CopilotTranslateResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -53,10 +52,14 @@ export function CopilotPanel() {
     try {
       if (mode === 'ask') {
         const moduleHint = context?.type === 'flujo' ? 'general' : 'redaccion'
-        const res = await askCopilot({ question: input, module: moduleHint })
+        const res = await askCopilotApiV1RedaccionCopilotAskPost({
+          question: input,
+          module: moduleHint,
+          top_k: 4,
+        })
         setAskResponse(res)
       } else {
-        const res = await translateCopilot({
+        const res = await translateCopilotApiV1RedaccionCopilotTranslatePost({
           instruction: input,
           target_kind: MODE_TO_KIND[mode],
         })
@@ -136,9 +139,9 @@ export function CopilotPanel() {
       {askResponse && (
         <div data-testid="copilot-answer" className="space-y-2 border-t pt-2 text-sm">
           <p className="whitespace-pre-wrap">{askResponse.answer}</p>
-          {askResponse.source_refs.length > 0 && (
+          {(askResponse.source_refs?.length ?? 0) > 0 && (
             <ul className="text-xs text-muted-foreground space-y-1">
-              {askResponse.source_refs.map((ref, i) => (
+              {askResponse.source_refs!.map((ref, i) => (
                 <li key={`${ref.path}-${ref.chunk_idx}-${i}`}>
                   <span className="font-mono">{ref.path}</span> — {ref.excerpt}
                 </li>

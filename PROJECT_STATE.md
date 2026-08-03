@@ -41,7 +41,7 @@
 | Bloque SEC — Endurecimiento de seguridad (bloqueante de despliegue) | SEC.7 ✅ | — | — | ✅ **Completo (2026-08-03)** — los 9 prompts: SEC.1 (contraseña en el login de Admin), SEC.2 (aislamiento entre organizaciones), SEC.2.1 (modo de acceso por chatbot + identidad delegada), SEC.3 (CORS por entorno), SEC.4 (límite de peticiones, contabilidad de tokens y cuotas), SEC.4.1 (vigencia y presupuesto), SEC.5 (temas), SEC.6 (validación de subidas, adelantado) y SEC.7 (docs off + cabeceras). **Pendientes las pruebas manuales del bloque.** ~~SEC.1~~, ~~SEC.2~~, ~~SEC.2.1~~, ~~SEC.3~~, ~~SEC.4~~, ~~SEC.4.1~~, ~~SEC.5~~, ~~SEC.7~~, SEC.4, **SEC.4.1**, SEC.5, SEC.6, SEC.7 (login con password A1, aislamiento multi-tenant A2, **modo de acceso por chatbot + identidad delegada**, CORS, **contabilidad de tokens + cuotas multi-sujeto**, **vigencia y presupuesto por chatbot**, temas, uploads, docs/headers). Planificado 2026-07-11, ampliado 2026-07-27 |
 | **FIX.1** — El modelo de un chatbot no se puede cambiar | FIX.1 ✅ | — | — | ✅ **Completo (2026-08-02)** — detalle en el historial. ~~Pendiente— **añadido el 2026-08-02** desde las pruebas manuales del Bloque RAG, que quedaron bloqueadas. Un síntoma («el botón de ejecutar no hace nada») tapaba cuatro fallos: `gemini-2.0-flash` retirado por Google (404), el 500 de la ejecución invisible porque la mutación no tiene `onError`, `llm_config_id` **hardcodeado en el formulario y ausente de `ChatbotUpdate`** —la API no permite cambiar el modelo—, y el 409 al marcar por defecto en vez de demotar la anterior. **Riesgo latente**: editar cualquier chatbot en la UI le reasigna el modelo en silencio |
 | **Bloque CUR** — La curación como producto propio | — | CUR.1 | Sonnet | ⏳ Pendiente — **añadido el 2026-08-02**, decisión en `docs/DECISION_CURACION_SEPARADA.md`. 2 prompts. Preparar el corpus normativo falsó la hipótesis de la ingesta automatizada: si el mejor caso posible (PDFs con filtro previo de SG, catálogo, numeración estable) exigió front-matter derivado, decisión humana de consolidación y panel de revisión, un conjunto de páginas rastreadas **no es un corpus, es materia prima**. CUR.1 mueve `ingestion/quality/` + spiders a `modules/curation/` (el `gap_detector` **se queda** en agents_hub: es la señal que el asistente emite hacia la curación); CUR.2 le da superficie propia en el frontend y hace explícito el paso de publicación. **No reescribe nada y no toca el esquema.** Va **entre CAL y Deploy**, detrás de CAL.1: los artefactos de D.4/D.5 codifican la estructura de módulos, así que decidirla después obliga a rehacerlos. **Descartado partir en dos repos**: duplicaría AUTH/tenancy/storage/CI/Orval y rompería el bucle de RAG.14 |
-| Bloque CAL — Deuda de calidad pre-repo público | CAL.1 ✅ | CAL.2 | Opus | ▶ Parcial — **CAL.1 ✅ (2026-08-03)**. CAL.2-CAL.5 (~~retirar NiceGUI ui/~~ **+ Caso B client_app** (ampliado 2026-07-11), migrar API manual a Orval **Opus**/CF.4, descomponer DocumentsPage, i18n ca, lazy routes+shims). Planificado 2026-07-11 |
+| Bloque CAL — Deuda de calidad pre-repo público | CAL.2 ✅ | CAL.3 | Sonnet | ▶ Parcial — **CAL.1 ✅ y CAL.2 ✅ (2026-08-03)**. CAL.3-CAL.5 (~~retirar NiceGUI ui/~~ **+ Caso B client_app** (ampliado 2026-07-11), ~~migrar API manual a Orval~~ ✅ **cierra CF.4**, descomponer DocumentsPage, i18n ca, lazy routes+shims). Planificado 2026-07-11 |
 | Deploy GCP | — | **D.0** | Sonnet | ⏳ Pendiente — **D.0 añadido 2026-08-01**: habilita los servicios de GCP con `gcloud services enable` versionado e idempotente y **comprueba** lo habilitado, en vez de la frase de «requisito previo» en prosa —incompleta y que nadie ejecutaba— que había. Va **primero** del bloque: los otros cinco prompts daban por hecho las APIs encendidas. Nueve servicios, incluidos `aiplatform`, `generativelanguage` (embeddings de MOD.2) y `discoveryengine` (Ranking API de RAG.6b). Luego D.1-D.5 (5 prompts, todos Sonnet). **D.1 ampliado 2026-07-27**: el endpoint del widget pasa por las tres guardas compartidas (acceso/disponibilidad/cuota); la API key sola ya no autoriza. D.1 depende ahora de SEC.2.1 + SEC.4 + SEC.4.1 |
 | **RAG.6b** — Adaptador de Vertex para el reranker + medición del valenciano | — | RAG.6b | Opus | ⏳ **Pendiente, y va DESPUÉS del bloque Deploy** (decisión 2026-08-01). El Ranking API vive en Discovery Engine y lo habilita **D.0**, así que este prompt no puede cerrarse antes. Comprueba que el contrato escrito coincide con el real —un adaptador probado solo contra un doble está verificado en su lógica, no en su integración— y decide con el gate de RAG.1 sobre el dorado en valenciano si el flag se enciende en algún sitio. **No depende del corpus v1**: el dorado ya está en valenciano y el corpus de fixture son 25 normas breves. Modelo cerrado: `semantic-ranker-default-004` (1.024 tokens; las variantes de 512 truncarían la mitad de cada chunk). Riesgo abierto: Google declara 25 idiomas y no publica cuáles; el catalán no aparece |
 | Bloque OWUI — Carcasa de chat desechable (adaptador compatible-OpenAI + Pipe) | — | OWUI.1 | Opus/Sonnet | ⏳ Pendiente — OWUI.1-OWUI.3 (post-deploy). Añadido 2026-07-24 desde `docs/DECISION_OPENWEBUI_CARCASA_CHAT.md`. Adaptador `/v1/chat/completions`+`/v1/models` sobre el grafo, contrato de citas P6 + anonimización P7, Pipe delgado. Reglas: OWUI llama al backend, la gobernanza no vive en OWUI. **Ampliado 2026-07-27**: `/v1/models` filtrado por `assert_chatbot_access`, cabecera `X-GovGenAI-Actor` firmada emitida por el Pipe (decisión (a)), traducción de 429/403 a errores OpenAI, y sección obligatoria "Lo que NO se usa de OWUI" (ni Groups para autorizar, ni LiteLLM, ni plugins de token-tracking) |
@@ -53,97 +53,107 @@
 | Bloque MOD — Modelos de embedding y reranker: local en edge, API en cloud | MOD.2 ✅ | — | — | ✅ Completo — **añadido el 2026-08-01** a petición del usuario, antes de RAG.6 y **antes de cargar el corpus v1**. Decisión en `docs/DECISION_MODELOS_EMBEDDING_RERANKER.md`. 2 prompts: ~~MOD.1 propósito en la configuración + procedencia en el vector~~ ✅, MOD.2 selección del servicio por la cascada (`get_embedding_service` deja de devolver el local a pelo; `HttpEmbeddingService` para el microservicio) |
 | Bloque RAG — Refuerzo del retrieval y calidad RAG | RAG.14 ✅ | — | — | ✅ **Completo (2026-08-02)** — planificado 2026-07-15 desde `docs/COMPARATIVA_RAG_LAMB.md`. 14 prompts (RAG.1-RAG.14), 13 ejecutados aquí + RAG.6b fuera del bloque: ~~dataset dorado+CI~~ ✅, ~~consolidación de grafos~~ ✅, ~~HNSW~~ ✅, ~~tsvector~~ ✅, ~~umbral+presupuesto~~ ✅, **reranker RAG.6 → partido en 6a/6b el 2026-08-01**, ~~contextual retrieval~~ ✅, ~~parent-child~~ ✅, ~~metadato embeddings~~ ✅, ~~query rewriting~~ ✅, ~~bypass~~ ✅, ~~progreso jobs~~ ✅, ~~test scenarios~~ ✅, ~~feedback→huecos~~ ✅. **RAG.6b salió de este bloque y va detrás de Deploy** —ver su fila propia—. RAG.9 llegó muy solapado con MOD.1 y se redujo a hacer obligatoria la procedencia, poner la guarda en la consulta y escribir la CLI |
 
-**Cursor actual: CAL.2 (migrar la capa API manual del frontend a Orval, cierra CF.4)** — **BLOQUE SEC COMPLETO el 2026-08-03** y **CAL.1 ✅**. SEC.1 (`3a7b5a4`), SEC.2 (`2ad9125`), SEC.2.1 (`3c4fa24`), SEC.3 (`35cfdcb`), SEC.4 (`7127e36`), SEC.4.1 (`2ddc121`), SEC.5 (`d59c842`), SEC.7 (`d0712b6`), FIX.2 (`18f8969`) y FIX.3 (`1f58f53`).
-**Modelo sugerido: Opus** para CAL.2 — refactor transversal que toca la página más grande (`DocumentsPage`) con riesgo de regresión alto. **Pruebas manuales del Bloque SEC pendientes de reejecutar**: la primera pasada las tumbó por un uvicorn del día anterior que seguía quedándose el puerto 8000 por delante del reiniciado (Windows lo permite sin avisar) y por los campos de vigencia que faltaban en el formulario, ya arreglados en FIX.2/FIX.3. Lo único que no se puede probar en local sigue siendo el **SSO SAML real contra el IdP**.
+**Cursor actual: CAL.3 (descomponer `DocumentsPage` en subcomponentes)** — **BLOQUE SEC COMPLETO el 2026-08-03**, **CAL.1 ✅** y **CAL.2 ✅**. SEC.1 (`3a7b5a4`), SEC.2 (`2ad9125`), SEC.2.1 (`3c4fa24`), SEC.3 (`35cfdcb`), SEC.4 (`7127e36`), SEC.4.1 (`2ddc121`), SEC.5 (`d59c842`), SEC.7 (`d0712b6`), FIX.2 (`18f8969`) y FIX.3 (`1f58f53`).
+**Modelo sugerido: Sonnet** para CAL.3 — refactor de composición sin cambio de comportamiento; el alcance viene cerrado en el prompt. Ojo: CAL.2 ya dejó `DocumentsPage` en **~610 líneas** (no 1.019) al retirar el panel de fuentes, así que el objetivo de «<300 líneas orquestador» está más cerca y `<SourcesPanel>` **ya no aplica** — ese componente listaba el endpoint retirado.
+**El uvicorn zombi ya no bloquea las pruebas manuales**: el PID 7576 del 2026-08-02 (arrancado sin `--reload`, quedándose `127.0.0.1:8000` por delante del reiniciado en `0.0.0.0:8000`) se paró el 2026-08-03 al verificar CAL.2 en navegador. Si vuelve a aparecer un 8000 duplicado, la comprobación es `Get-NetTCPConnection -State Listen -LocalPort 8000`. Lo único que no se puede probar en local sigue siendo el **SSO SAML real contra el IdP**.
 
 ---
 
-## ⏸ TRASPASO — CAL.2 analizado y sin empezar a escribir (2026-08-03)
+## ✅ CAL.2 cerrado — la capa API del frontend sale del contrato (2026-08-03)
 
-**Lee esto antes de tocar CAL.2.** El análisis está hecho y **el árbol está limpio**: CAL.1
-commiteado (`944bb48`), suite en **1682 passed, 1 skipped, 0 failed**. No hay nada a medias.
-Se paró aquí a propósito: lo que queda es un refactor de un `.tsx` de 1.019 líneas y empezarlo
-sin contexto para acabarlo habría dejado el frontend sin compilar, que es peor que no empezar.
+*(El traspaso «CAL.2 analizado y sin empezar» que ocupaba este sitio queda resuelto: ejecutado
+entero, verificado en navegador y commiteado. Lo que sigue es lo que hay que saber para CAL.3.)*
 
-### Decisión del usuario, ya tomada: **retirar el panel de fuentes (opción B)**
+### Lo que resultó ser el trabajo de verdad: el contrato no tenía los tipos
 
-El usuario preguntó qué se perdía y la respuesta, con evidencia, es **nada**:
+El prompt pedía «usar los tipos de `generated/model` (IngestionJob, HubDocument…)». **Esos tipos
+no existían**, y no por un despiste de Orval: **los endpoints no declaraban `response_model`**, así
+que FastAPI los documentaba como objeto vacío y Orval los generaba como `Promise<unknown>`. Migrar
+a los hooks sin arreglar eso habría *movido* la interfaz escrita a mano de `shared/api/*.ts` a la
+página, no eliminado. Por eso CAL.2 empieza en el backend:
 
-- El panel llama a `/api/v1/hub/ingestion/{id}/sources`, que **no existe**: sin ruta, sin
-  modelo ORM, sin tabla en la BD y sin entrada en el contrato.
-- **Se retiró a propósito** en el commit `0196ff5` («9Q.0: site/page/selection model +
-  retire HubIngestionSource»). El panel es el mando a distancia de un aparato que ya no está.
-- El sustituto está vivo y enrutado: **10 endpoints** `/hub/sites/*`, pantalla `SitesPage`
-  en `/admin/sites`, `SiteMappingPanel` y la de calidad de contenido.
-- **El hueco que había que comprobar no existe**: `HubCorpusSelection(chatbot_id, site_id)`
-  es justo la unión sitio↔chatbot que las fuentes hacían por su cuenta.
+- **`hub_ingestion_router.py`** — 10 modelos nuevos: `IngestionJob`, `IngestionJobsOut`,
+  `HubDocumentOut`, `HubDocumentDetailOut`, `HubDocumentsOut`, `UploadDocumentOut`,
+  `DeleteIngestionJobOut`, `ClearCollectionOut`, `AnalyzeHtmlOut`, `MessageOut`. Los 8 endpoints
+  del panel declaran ya `response_model`.
+- **`hub_feedback.py`** — `InteractionReviewOut` sustituye a `list[dict]`.
+- **`hub_llm_configs_router.py`** — `AvailableModelsOut` y `LLMConnectionTestOut`, los dos huecos
+  que quedaban en un router que ya tenía tipado el resto.
 
-### Verificado en el navegador el 2026-08-03 (permiso concedido por el usuario)
+**Decisión que no se rediscute: `IngestionJob.status` es `str`, no `Literal`.** Es un campo de
+presentación, la tabla ya tiene rama por defecto, y un valor inesperado en una fila debe pintarse
+«en cola», no tumbar el listado entero con un 500 de validación de respuesta.
 
-La extensión ya tiene permiso para `localhost:5173`, así que **esto ya no hay que probarlo a
-mano**. Recorrido hecho: `/hub/chatbots` —ojo, la ruta real es `/hub/...`, no `/admin/...`,
-que redirige— muestra la **columna «Disponibilidad»** con los dos chatbots en «Disponible», y
-el diálogo de edición tiene **los cuatro campos** de SEC.4.1 (`Disponible desde`, `Disponible
-hasta`, `Presupuesto total (tokens)`, `Mensaje cuando no está disponible`).
+### La trampa de los `response_model` sobre objetos ORM (costó 3 rojos)
 
-**Y se reprodujo el fallo del usuario de punta a punta**: se rellenó la fecha, se pulsó
-guardar y en la BD `valid_until` siguió en `None`. La causa está medida y **no es del
-frontend**: hay **dos uvicorn vivos** —PID 7576 de ayer y el reiniciado hoy— y en Windows
-`SO_REUSEADDR` deja que el segundo arranque sin protestar mientras el primero se queda las
-peticiones del 8000. Hasta que muera el de ayer (`Stop-Process -Id 7576 -Force`), cualquier
-prueba manual mide código anterior al bloque. El badge «Disponible» que se ve es el
-`?? 'available'` del frontend, no dato del servidor.
+`chunks_processed`, `progress_current`, `progress_message`, `processing_stats` y `created_at` son
+**NOT NULL con `default=` de SQLAlchemy**, o sea que el valor lo pone el *flush*, no el constructor.
+Una fila leída de la BD siempre los trae; un `HubIngestionJob(...)` recién construido los tiene a
+`None`. Tres tests montaban la sesión con `AsyncMock`, así que su job nunca pasaba por el flush y
+el `response_model` nuevo lo rechazaba con razón. **Arreglado en los dobles, no en el modelo**:
+`test_ingestion_storage.py` tiene ahora un `refresh` que rellena los defaults como haría el real, y
+`test_job_progress.py` construye el job completo. Si añades un `response_model` sobre un objeto ORM,
+mira primero qué columnas dependen del flush.
 
-### Alcance exacto de la retirada (medido, no estimado)
+**Y no recortes campos al tipar**: la primera versión de `IngestionJob` se dejó fuera
+`processing_stats`, que el endpoint sí devolvía —el `response_model` filtra en silencio— y tumbó el
+test de progreso de RAG.12. El modelo describe lo que ya se sirve; no es la ocasión de podar.
 
-En `frontend/src/admin/pages/DocumentsPage.tsx` (1.019 líneas, 3 pestañas: `documents`,
-`sources`, `assistant`):
+### Retirada del panel de fuentes: hecha
 
-Sobre el fichero de 1.019 líneas, **líneas contadas una a una** (borrar de abajo arriba para
-que no se desplacen):
+Se ejecutó la opción B ya decidida. `DocumentsPage` pasa de **1.019 a ~610 líneas** y de 3 pestañas
+a ninguna (con una sola vista, la barra sobra). Fuera: `AdminIngestionAssistant.tsx` y su test, y
+los 5 módulos manuales de `shared/api/`. El analizador de HTML (`/hub/ingestion/analyze-html`,
+endpoint vivo) cae con el asistente porque su botón de guardar iba al 404 de `createSource`;
+recuperarlo es repuntarlo a `/hub/sites/{id}/analyze`, y eso es producto, no limpieza.
 
-| Qué | Líneas |
-|---|---|
-| Componentes solo del panel: `SourceKindIcon`, `LanguageBadge`, `StatusBadge`, `SourceRow` | entre **945 y 986** (los límites: `RetrievalBanner` acaba en 918 y `ConfirmDialog` empieza en 987) |
-| Bloque de la pestaña «Fuentes web» | **624-829** |
-| Bloque de la pestaña «Asistente» | **620-622** |
-| Entrada de las dos pestañas en el selector | **309** (`['documents', 'sources', 'assistant']`) y el ternario de etiquetas **321-325**. Con una sola pestaña, la barra entera (**307-328**) sobra |
-| Queries, mutaciones y `handleCreateSource` | **219-279** (desde el comentario `// ── Sources ──` hasta el cierre del handler) |
-| Estado del panel | **86-97** (el bloque entero bajo `// Sources tab state`) |
-| Nombres muertos del import | **14** completa y `type IngestionSource` en la **16** |
+### Dos extensiones sobre el alcance literal del prompt
 
-Además: borrar `AdminIngestionAssistant.tsx` y su test, y de `shared/api/ingestion.ts` las
-seis funciones muertas (`fetchSources`, `createSource`, `updateSource`, `deleteSource`,
-`triggerSourceCheck`, `analyzeHtml` —esta última se queda sin consumidor al caer el
-asistente—) con los tipos `IngestionSource` y `AnalysisResult`. Y limpiar de
-`DocumentsPage.test.tsx` los dobles de fuentes.
+1. **`copilotApi.ts` también se retira.** El prompt nombra 5 módulos, pero su criterio de cierre
+   (`grep localhost:8000` = 0) lo alcanza, y su propio `// TODO CF.4` decía «cuando openapi.json se
+   regenere con `/redaccion/copilot/*`» — ya está regenerado. Único consumidor: `CopilotPanel`.
+2. **`LoginPage` deja de construir su `API_BASE`.** Ahora importa `apiBaseUrl` de `client.ts`, que
+   es el único sitio del frontend donde vive el host. Su `fetch` **se queda**: el bucle de dos rutas
+   con manejo explícito del 401 (SEC.1) no se traduce a axios sin cambiar comportamiento, y ahí no
+   hay cabecera de autenticación que centralizar.
 
-**La pestaña `assistant` cae con ella**, y esto es lo que hay que decidir al ejecutar:
-`AdminIngestionAssistant` analiza HTML con `/hub/ingestion/analyze-html` —endpoint **vivo**—
-pero su botón de guardar llama a `createSource`, o sea al 404. Analizar sin poder guardar en
-ningún sitio no es una función, y su equivalente en 9Q es `SiteMappingPanel`. Retirar las dos
-pestañas es lo coherente; si se quiere conservar el analizador, hay que repuntarlo a
-`/hub/sites/{id}/analyze` y eso ya es trabajo de producto, no limpieza.
+### `client.ts` ahora traduce `detail` a `error.message`
 
-### Cobertura de hooks para el resto de CAL.2 (verificada una a una)
+Al pasar de `fetch` a axios, las pantallas que pintan `err.message` habrían empezado a mostrar
+«Request failed with status code 409» en vez del motivo. El interceptor de respuesta copia el
+`detail` de FastAPI (string o lista de errores de Pydantic) a `message`. **Sin esto, migrar a Orval
+degrada todos los mensajes de error del panel** — y no lo habría cazado ningún test de tipos.
 
-Los otros **~20** métodos manuales **sí** tienen hook generado, así que la migración es
-mecánica. Ojo: los hooks de lectura son `export function useX...Get` y los de escritura
-`export const useX...Post|Patch|Delete` — un `grep "export const use"` deja fuera los GET y
-hace creer que faltan.
+### El guardarraíl que impide la recaída
 
-| Módulo manual | Destino generado |
-|---|---|
-| `ingestion.ts` (jobs, upload, delete job, documentos) | `hub-ingestion` (`useGetIngestionJobs…Get`, `useUploadDocument…Post`, `useDeleteIngestionJob…Delete`, `useListDocuments…Get`) |
-| `organizaciones.ts` (era `clients.ts`, renombrado en ROL.1) | `hub-organizaciones` (4) |
-| `feedback.ts` | `hub-feedback` (`useGetInteractionsForReview…Get`) |
-| `llmConfigs.ts` (configs, proveedores, modelos, test) | `hub-llm-configs` (10) |
-| `promptTemplates.ts` | `hub-prompt-templates` (4) |
+`frontend/src/shared/api/__tests__/contractFirstApi.test.ts` lee el árbol de fuentes y falla si
+alguien reintroduce un módulo API a mano, un `fetch` en `DocumentsPage`, un `localhost:8000` fuera
+de configuración, o una cabecera `Authorization` construida fuera de `client.ts`. **Único exento:
+`widget/hooks/useChat.ts`** (SSE; Orval no lo cubre y axios no expone el cuerpo incremental).
+Exigió añadir `"node"` a `types` en `tsconfig.app.json`.
 
-Consumidores a repuntar: `DocumentsPage`, `AdminIngestionAssistant`, `AIBrainPage`,
-`LLMConfigsPage`, `PromptsPage`, `ReportsPage` y sus tres ficheros de test.
-`client.ts` (el `customInstance`) **se queda**: es el interceptor de auth al que hay que
-pasar todo. El SSE del widget queda exento, como dice el prompt.
+### ⚠️ Tras `git pull` de este commit hay que regenerar el contrato
+
+`server/openapi.json`, `frontend/openapi.json` y `frontend/src/shared/api/generated/` están en
+`.gitignore` (líneas 103-107), así que **el commit no los lleva**. Como CAL.2 introduce tipos
+nuevos que el frontend importa, sin regenerar **el `tsc` falla**:
+
+```
+cd server;   uv run python export_openapi.py
+cd frontend; npm run generate:api
+```
+
+### Desviaciones documentadas
+
+- **Nombres**: el prompt sugería `HubDocument`; se usa **`HubDocumentOut`** porque `HubDocument` ya
+  es la clase ORM en `operational_models.py` y colisionaría en el router. `IngestionJob` sí es literal.
+- **Dos rojos preexistentes de `tsc` arreglados** para poder cumplir el criterio de cierre
+  («tsc --noEmit en verde»), ambos ajenos a CAL.2: una prop `expandido` muerta en
+  `TestScenariosPage` (el `<details>` gestiona su propio estado) y un cast que necesitaba
+  `as unknown as` en `rol2_rename.test.tsx`.
+- **Los tests que stubbeaban `fetch` global ahora doblan los hooks generados** (Organizaciones,
+  AIBrain, LLMConfigs, Prompts, CopilotPanel). No es cosmético: axios **no pasa por `fetch`**, así
+  que esos stubs habían dejado de interceptar y los tests medían pantallas vacías.
 
 ---
 
@@ -262,6 +272,7 @@ Prompts verbatim para el agente: `Migración_extracción_pdf.txt` §5.
 
 | Fecha | Prompt | Descripción |
 |-------|--------|-------------|
+| 2026-08-03 | CAL.2 (RED/GREEN) — La capa API del frontend sale del contrato (cierra CF.4) | **Cursor: CAL.2 ✅ → CAL.3.** El prompt pedía «usar los tipos de `generated/model`», y esos tipos **no existían**: los endpoints de ingesta, el de revisión de feedback y dos de `llm-configs` **no declaraban `response_model`**, así que FastAPI los documentaba como objeto vacío y Orval los generaba `Promise<unknown>`. Migrar sin arreglar eso habría *movido* la interfaz escrita a mano de `shared/api/*.ts` a la página, no eliminado — que es justo lo que prohíbe la regla maestra 4. **RED medido sobre el contrato commiteado**: los 6 schemas, ausentes. **GREEN**: 13 modelos de respuesta nuevos en `hub_ingestion_router.py`, `hub_feedback.py` y `hub_llm_configs_router.py`; contrato y cliente Orval regenerados (200 schemas). Retirados **6 módulos manuales** (los 5 del prompt + `copilotApi.ts`, que su criterio de cierre alcanza y cuyo `// TODO CF.4` ya estaba desbloqueado), `AdminIngestionAssistant` y el panel de fuentes web —mando a distancia de un endpoint retirado en `0196ff5`—: `DocumentsPage` pasa de **1.019 a ~610 líneas** y de 3 pestañas a ninguna. Repuntadas 6 pantallas + 8 ficheros de test. **Tres hallazgos que no estaban en el plan**: (1) un `response_model` sobre un objeto ORM **recién construido** revienta, porque `chunks_processed`/`created_at`/`processing_stats` los pone el *flush*, no el constructor —3 tests montaban la sesión con `AsyncMock` y su job nunca lo pasaba; arreglados los dobles, no el modelo—; (2) el `response_model` **filtra en silencio**, y dejarse `processing_stats` fuera tumbó el test de progreso de RAG.12; (3) al pasar de `fetch` a axios, `err.message` habría degradado a «Request failed with status code 409» en todo el panel, así que `client.ts` traduce ahora el `detail` de FastAPI a `message`. Guardarraíl nuevo `contractFirstApi.test.ts` (lee el árbol; falla si vuelve un módulo a mano, un `fetch` en `DocumentsPage`, un `localhost:8000` o un `Authorization` fuera de `client.ts`; exento el SSE del widget). **245/245 vitest, `tsc --noEmit` limpio, 91 tests backend de las áreas tocadas + higiene en verde.** Verificado en navegador: 24 llamadas a `/api/v1/hub/*` en las 6 pantallas, **todas 200**, consola sin errores; de paso se paró el **uvicorn zombi PID 7576** que llevaba desde el 2026-08-02 quedándose `127.0.0.1:8000` y falseaba las pruebas manuales |
 | 2026-08-03 | CAL.1 (RED/GREEN) — Retirada de NiceGUI del árbol activo del servidor + Caso B en client_app | **Cursor: CAL.1 ✅ → CAL.2.** `server/app/ui/` eran **21 módulos NiceGUI** —panel de administración y portal de partner— que nadie importaba y que `main.py` no monta, o sea **inalcanzables por HTTP**. Lo único que los mantenía vivos eran tres tests que los importaban para probarlos. **Se mueven enteros a `_legacy_nicegui/server/app/ui/` (Caso A) y no repartidos entre borrado y cuarentena**, que es lo que el prompt dejaba a decisión por fichero: **9 de los 21 se importan entre sí** (comparten `admin_layout`, `partner_layout` y el JSON de traducciones), así que separar los que ya cubre el panel React de los que no habría dejado referencias rotas dentro de la propia cuarentena — y quien migre el portal de partner en Fase 2 los quiere completos o no los quiere. El borrado definitivo sigue siendo del usuario al cerrar la Fase 1, como manda CLAUDE.md. **Borrado directo (Caso B)**: los 3 tests del UI muerto, los 5 UI legacy de `client_app` (ninguno con importadores, comprobado) y **24 extractores generados que estaban trackeados** en las dos copias de `modules/extraccion` —los escribe el runtime, no son código fuente—, con reglas nuevas en `.gitignore` para que el siguiente arranque no los vuelva a colar, que es como llegaron la primera vez. 6 guardarraíles en `tests/infra/test_nicegui_retirado.py`, incluido uno que exige que la **cuarentena esté completa**: incompleta no sirve de referencia. **Desviación documentada**: el prompt mandaba borrar `tests/unit/test_admin_*_ui.py` (cuatro ficheros por nombre) y **no existen**; los que de verdad mantenían vivo el UI eran `test_partner_billing_ui.py`, `test_partner_layout.py` y `test_partner_scripts_ui.py`. Mismo propósito, otros nombres. Los `test_partner_*` de servicio (billing, clients, licenses, scripts) **se quedan**: prueban lógica viva, no interfaz. Fuera de alcance, como el prompt indica: los imports rotos de `workflow_engine`/`clarification_service`/`graphics_wizard` y el `report_factory` duplicado, que dependen de la decisión go/no-go de Categoría C. Suite completa **1682 passed, 1 skipped, 0 failed** |
 | 2026-08-03 | FIX.3 — «Pongo la fecha y no la guarda»: dos fallos y un servidor caducado | **Cursor: sin cambio (bloque SEC completo).** El síntoma que reportó el usuario tenía **tres causas distintas**, y solo una era suya. **(1) El servidor seguía siendo el anterior al bloque**, comprobado sin ambigüedad: `/hub/usage/me` respondía 404 y un `PATCH` con `valid_until` devolvía **200 con la respuesta sin ninguno de los campos nuevos**, y en la BD el valor seguía en `None`. Un `ChatbotUpdate` que no conoce el campo lo descarta en silencio, así que «guardado» y «no se guardó nada» son la misma respuesta. **(2) Ese silencio es un defecto en sí mismo**, y se cierra: `ChatbotUpdate` pasa a `extra="forbid"`, así que el mismo caso responde **422 diciendo qué campo sobra** en vez de mentir con un 200. Es la diferencia entre un desajuste de versiones que se ve en el primer intento y uno que se persigue durante dos rondas de pruebas manuales. **(3) Y había un fallo real de SEC.4.1 que aún no había salido**: `model_dump(exclude_none=True)` descartaba `valid_until: null`, así que **vaciar la fecha para reabrir un chatbot caducado no funcionaba** —el paso (g) de las pruebas manuales habría fallado a continuación—. Se arregla mirando `model_fields_set`, que distingue «lo envió como null» de «no lo envió», distinción que `exclude_none` no puede ver; el criterio del resto de campos —donde `None` sí significa «heredar»— no se toca. **Verificado contra un servidor real con el código nuevo** (puerto 8013, apagado después): poner la fecha → 200 y `availability.state=expired`; conversar → **403 con el mensaje del admin**; vaciar la fecha → `available` otra vez; campo desconocido → **422** nombrándolo. La BD de desarrollo queda como estaba y el token de depuración, borrado. 3 tests nuevos. **Hallazgo colateral, ajeno al bloque**: al reabrir el chatbot, el chat da 500 porque su proveedor (`openai_compatible`) no tiene API key en el `.env` de desarrollo — anotado en el `.bat` para que no vuelva a parecer un fallo de SEC.4.1 |
 | 2026-08-03 | FIX.2 — Los campos de vigencia faltaban en el formulario (cierre real de SEC.4.1) | **Cursor: sin cambio (bloque SEC completo).** Sale de las pruebas manuales del bloque, y **es un fallo mío de SEC.4.1**: implementé el badge de la lista y el contrato, pero **no los campos del formulario**, que el prompt pedía explícitamente. Resultado: la columna decía «Disponible», no había ningún sitio donde poner la fecha y la función era **inalcanzable desde la interfaz**. Peor, el `.bat` mandaba al usuario a editar un campo que no existía. Añadidos los cuatro campos al formulario (`valid_from`, `valid_until`, `total_token_budget`, `unavailable_message`) con i18n es/ca/en, más el estado derivado en el propio diálogo. **Dos detalles que se ven al usarlo y no al escribirlo**: un `<input type="datetime-local">` no entiende zona, así que la ISO del contrato se recorta a `YYYY-MM-DDTHH:mm` —sin recortar, el campo aparece vacío y **guardar borraría la fecha en silencio**—; y el campo vacío viaja como `null`, no como `''`, porque el backend distingue «sin ventana» de «con fecha» y `''` no es ninguna de las dos. 5 tests nuevos, uno por cada cosa que podía romperse en silencio; frontend completo **244 passed**. **El `.bat` se reescribió** por la otra mitad del problema: los pasos 2, 3 y 4 fallaron en las pruebas manuales porque **el servidor del usuario era anterior al bloque** —el proceso no tenía `/hub/usage/me`, que añadió SEC.4—, y el guion no lo detectaba, así que tres resultados engañosos parecían tres fallos. Ahora hay un **paso 0** que pide una ruta que solo existe desde SEC.4 y manda parar si responde 404. También se corrigió el paso 4, que se contradecía —pedía «400 o 404» y a la vez decía «debe ser 401»—: sin sesión todo responde 401 antes de llegar a la validación de ruta, así que la travesía se comprueba con los 15 tests automáticos y no a mano. **Verificado levantando dos servidores de verdad** (8011 en desarrollo, 8012 en producción, los dos apagados después): 10×401 y luego 429 en el login, las cuatro cabeceras presentes sin HSTS en desarrollo, 401 al leer un tema sin sesión, y en producción `/docs` y `/openapi.json` a 404 con HSTS presente. **Nota para quien lea el historial**: los 500 que aparecieron al probar el login en proceso con `TestClient` **no son un defecto**; son el motor asyncpg reutilizando conexiones de un event loop ya cerrado entre peticiones del TestClient. Contra un servidor real no ocurren |
