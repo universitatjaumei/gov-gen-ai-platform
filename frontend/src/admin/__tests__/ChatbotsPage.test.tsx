@@ -7,8 +7,10 @@ import { AuthProvider } from '@/shared/auth'
 import type { ChatbotRead, CorpusStatsOut } from '@/shared/api/generated/model'
 import { ChatbotsPage } from '../pages/ChatbotsPage'
 
-const { mockAssignMutate, mockData } = vi.hoisted(() => ({
+const { mockAssignMutate, mockUpdateMutate, mockData } = vi.hoisted(() => ({
   mockAssignMutate: vi.fn(),
+  // SEC.4.1: hace falta ver QUE se envia, no solo que se envie algo.
+  mockUpdateMutate: vi.fn(),
   mockData: {
     chatbots: [] as ChatbotRead[],
     children: [] as ChatbotRead[],
@@ -21,7 +23,7 @@ vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
   useListChildrenApiV1HubChatbotsChatbotIdChildrenGet: vi.fn(() => ({ data: mockData.children, isLoading: false })),
   useGetCorpusStatsApiV1HubChatbotsChatbotIdCorpusStatsGet: vi.fn(() => ({ data: mockData.corpusStats })),
   useCreateChatbotApiV1HubChatbotsPost: vi.fn(() => ({ mutate: vi.fn(), isPending: false, reset: vi.fn() })),
-  useUpdateChatbotApiV1HubChatbotsChatbotIdPatch: vi.fn(() => ({ mutate: vi.fn(), isPending: false, reset: vi.fn() })),
+  useUpdateChatbotApiV1HubChatbotsChatbotIdPatch: vi.fn(() => ({ mutate: mockUpdateMutate, isPending: false, reset: vi.fn() })),
   useDeleteChatbotApiV1HubChatbotsChatbotIdDelete: vi.fn(() => ({ mutate: vi.fn(), isPending: false, reset: vi.fn() })),
   useAssignChildApiV1HubChatbotsChatbotIdChildrenPost: vi.fn(() => ({ mutate: mockAssignMutate, isPending: false })),
   useRegenerateChunksApiV1HubChatbotsChatbotIdRegenerateChunksPost: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
@@ -300,5 +302,89 @@ describe('ChatbotsPage', () => {
     })
 
     expect(screen.queryByRole('button', { name: /recalcular chunks/i })).not.toBeInTheDocument()
+  })
+  // ── SEC.4.1: vigencia y presupuesto ───────────────────────────────────────────
+  //
+  // Estos tests existen porque el badge se implementó y el formulario no: la lista
+  // enseñaba "Disponible" y no había ningún sitio donde poner la fecha, así que la
+  // función era inalcanzable desde la interfaz.
+
+  it('should_render_the_availability_window_fields_in_the_form', async () => {
+    await openEditDialog()
+
+    expect(screen.getByLabelText(/disponible desde/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/disponible hasta/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/presupuesto total/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/mensaje cuando no está disponible/i)).toBeInTheDocument()
+  })
+
+  it('should_preload_the_dates_the_chatbot_already_has', async () => {
+    // El `datetime-local` no entiende zona: si no se recorta la ISO, el campo sale vacío
+    // y guardar borraría la fecha en silencio.
+    const conVentana: ChatbotRead = {
+      ...DEMO_CHATBOT,
+      valid_until: '2026-09-30T23:59:00+00:00',
+      total_token_budget: 50000,
+      unavailable_message: 'El plazo terminó.',
+    }
+    await openEditDialog(conVentana, [conVentana])
+
+    expect(screen.getByLabelText(/disponible hasta/i)).toHaveValue('2026-09-30T23:59')
+    expect(screen.getByLabelText(/presupuesto total/i)).toHaveValue(50000)
+    expect(screen.getByLabelText(/mensaje cuando no está disponible/i)).toHaveValue('El plazo terminó.')
+  })
+
+  it('should_send_the_window_to_the_api_when_saving', async () => {
+    await openEditDialog()
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/disponible hasta/i), {
+        target: { value: '2026-09-30T23:59' },
+      })
+      fireEvent.change(screen.getByLabelText(/mensaje cuando no está disponible/i), {
+        target: { value: 'Plazo cerrado.' },
+      })
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /guardar/i }))
+    })
+
+    await waitFor(() => expect(mockUpdateMutate).toHaveBeenCalled())
+    const enviado = mockUpdateMutate.mock.calls[0][0].data
+    expect(enviado.valid_until).toContain('2026-09-30')
+    expect(enviado.unavailable_message).toBe('Plazo cerrado.')
+  })
+
+  it('should_send_null_when_the_date_is_left_empty', async () => {
+    // Vacío es «sin ventana». Mandar '' rompería la validación de fecha del backend en
+    // vez de significar «ninguna».
+    const conVentana: ChatbotRead = { ...DEMO_CHATBOT, valid_until: '2026-09-30T23:59:00+00:00' }
+    await openEditDialog(conVentana, [conVentana])
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/disponible hasta/i), { target: { value: '' } })
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /guardar/i }))
+    })
+
+    await waitFor(() => expect(mockUpdateMutate).toHaveBeenCalled())
+    expect(mockUpdateMutate.mock.calls[0][0].data.valid_until).toBeNull()
+  })
+
+  it('should_show_the_derived_state_the_server_calculated', async () => {
+    const caducado: ChatbotRead = {
+      ...DEMO_CHATBOT,
+      availability: {
+        state: 'expired',
+        reason: 'expired',
+        tokens_used: 120,
+        total_token_budget: null,
+      },
+    }
+    renderPage([caducado])
+
+    await waitFor(() => screen.getByText('Bot Demo'))
+    expect(screen.getByText('Caducado')).toBeInTheDocument()
   })
 })

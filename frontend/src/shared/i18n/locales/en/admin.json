@@ -157,7 +157,14 @@
     "availability_available": "Available",
     "availability_expired": "Expired",
     "availability_not_yet_open": "Not yet open",
-    "availability_budget_exhausted": "Budget exhausted"
+    "availability_budget_exhausted": "Budget exhausted",
+    "availability_hint": "Leave the dates empty so the chatbot never expires. It applies itself; no need to switch it off by hand.",
+    "valid_from": "Available from",
+    "valid_until": "Available until",
+    "total_token_budget": "Total budget (tokens)",
+    "total_token_budget_hint": "0 = no ceiling. Once reached, the chatbot stops answering.",
+    "unavailable_message": "Message when unavailable",
+    "unavailable_message_placeholder": "The enrolment period ended on 30 September."
   },
   "login": {
     "title": "Sign in",

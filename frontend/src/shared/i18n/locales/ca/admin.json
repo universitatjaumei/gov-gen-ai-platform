@@ -69,7 +69,14 @@
     "availability_available": "Disponible",
     "availability_expired": "Caducat",
     "availability_not_yet_open": "Pendent d'obertura",
-    "availability_budget_exhausted": "Pressupost esgotat"
+    "availability_budget_exhausted": "Pressupost esgotat",
+    "availability_hint": "Deixa les dates buides perquè el chatbot no caduqui. S'aplica sol; no cal desactivar-lo a mà.",
+    "valid_from": "Disponible des de",
+    "valid_until": "Disponible fins a",
+    "total_token_budget": "Pressupost total (tokens)",
+    "total_token_budget_hint": "0 = sense sostre. En assolir-lo, el chatbot deixa de respondre.",
+    "unavailable_message": "Missatge quan no està disponible",
+    "unavailable_message_placeholder": "El termini de matrícula va acabar el 30 de setembre."
   },
   "login": {
     "show_password": "Mostrar la contrasenya",

@@ -37,6 +37,16 @@ const AVAILABILITY_STYLES: Record<string, string> = {
   budget_exhausted: 'bg-orange-100 text-orange-700 border-orange-200',
 }
 
+/** ISO del contrato → valor de un `<input type="datetime-local">` (sin zona ni segundos). */
+function paraCampoDeFecha(iso: string | null | undefined): string {
+  return iso ? iso.slice(0, 16) : ''
+}
+
+/** Valor del campo → lo que espera el contrato: vacío es `null`, no cadena vacía. */
+function paraElContrato(valor: string): string | null {
+  return valor ? new Date(valor).toISOString() : null
+}
+
 // FIX.1: aquí vivían `DEV_ORG_ID` y `DEV_LLM_ID`. Eran dos identificadores de la BD de
 // desarrollo escritos a mano en React —lo que CLAUDE.md prohíbe—, y el del modelo tenía
 // consecuencia funcional: no había forma de cambiar de modelo, y guardar cualquier edición
@@ -144,6 +154,10 @@ export function ChatbotsPage() {
       answer_template: 'generic',
       llm_config_id: '',
       organizacion_id: '',
+      valid_from: '',
+      valid_until: '',
+      total_token_budget: 0,
+      unavailable_message: '',
     },
   })
   const selectedKind = watch('kind')
@@ -204,6 +218,11 @@ export function ChatbotsPage() {
       // visible en el desplegable y no un identificador oculto en el código.
       llm_config_id: (llmConfigs.find((c) => c.is_default) ?? llmConfigs[0])?.id ?? '',
       organizacion_id: organizaciones[0]?.id ?? '',
+      // SEC.4.1: se crea sin ventana y sin techo, igual que el default del modelo.
+      valid_from: '',
+      valid_until: '',
+      total_token_budget: 0,
+      unavailable_message: '',
     })
     setDialogOpen(true)
   }
@@ -233,6 +252,13 @@ export function ChatbotsPage() {
       // cualquiera lo mueva de modelo sin que nadie lo haya pedido.
       llm_config_id: c.llm_config_id,
       organizacion_id: c.organizacion_id,
+      // SEC.4.1: el `<input type="datetime-local">` no entiende zona horaria, así que se
+      // recorta la ISO a `YYYY-MM-DDTHH:mm`. Sin recortar, el campo aparece vacío y guardar
+      // borraría silenciosamente la fecha que ya tenía puesta.
+      valid_from: paraCampoDeFecha(c.valid_from),
+      valid_until: paraCampoDeFecha(c.valid_until),
+      total_token_budget: c.total_token_budget ?? 0,
+      unavailable_message: c.unavailable_message ?? '',
     })
     setDialogOpen(true)
   }
@@ -298,6 +324,12 @@ export function ChatbotsPage() {
           min_retrieval_score: values.min_retrieval_score,
           reranker_enabled: values.reranker_enabled,
           answer_template: values.answer_template,
+          // SEC.4.1: vacio viaja como null. El backend distingue «sin ventana» de «con
+          // fecha», y '' no es ninguna de las dos cosas.
+          valid_from: paraElContrato(values.valid_from),
+          valid_until: paraElContrato(values.valid_until),
+          total_token_budget: values.total_token_budget,
+          unavailable_message: values.unavailable_message,
           llm_config_id: values.llm_config_id,
         },
       })
@@ -321,6 +353,12 @@ export function ChatbotsPage() {
           min_retrieval_score: values.min_retrieval_score,
           reranker_enabled: values.reranker_enabled,
           answer_template: values.answer_template,
+          // SEC.4.1: vacio viaja como null. El backend distingue «sin ventana» de «con
+          // fecha», y '' no es ninguna de las dos cosas.
+          valid_from: paraElContrato(values.valid_from),
+          valid_until: paraElContrato(values.valid_until),
+          total_token_budget: values.total_token_budget,
+          unavailable_message: values.unavailable_message,
         },
       })
     }
@@ -794,6 +832,88 @@ export function ChatbotsPage() {
                   <input type="checkbox" id="is_active" {...register('is_active')} className="rounded" />
                   <label htmlFor="is_active" className="text-sm">{t('hub.chatbot_active')}</label>
                 </div>
+
+                {/* SEC.4.1: vigencia y techo de gasto. `is_active` es el interruptor manual;
+                    esto es el que se apaga solo. Son cosas distintas y se editan aparte. */}
+                <fieldset className="border rounded-md p-3 space-y-3">
+                  <legend className="text-xs font-medium px-1">{t('hub.availability')}</legend>
+                  <p className="text-xs text-muted-foreground">
+                    {t('hub.availability_hint')}
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label htmlFor="valid_from" className="block text-sm mb-1">
+                        {t('hub.valid_from')}
+                      </label>
+                      <input
+                        type="datetime-local"
+                        id="valid_from"
+                        {...register('valid_from')}
+                        className="w-full px-2 py-1 border rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="valid_until" className="block text-sm mb-1">
+                        {t('hub.valid_until')}
+                      </label>
+                      <input
+                        type="datetime-local"
+                        id="valid_until"
+                        {...register('valid_until')}
+                        className="w-full px-2 py-1 border rounded-md text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="total_token_budget" className="block text-sm mb-1">
+                      {t('hub.total_token_budget')}
+                    </label>
+                    <input
+                      type="number"
+                      id="total_token_budget"
+                      min={0}
+                      {...register('total_token_budget', { valueAsNumber: true })}
+                      className="w-full px-2 py-1 border rounded-md text-sm"
+                    />
+                    {/* 0 = sin techo, igual que en el backend. Decirlo aquí evita que
+                        alguien ponga 0 creyendo que bloquea el chatbot. */}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {t('hub.total_token_budget_hint')}
+                    </p>
+                    {errors.total_token_budget && (
+                      <p className="text-xs text-destructive mt-1">
+                        {errors.total_token_budget.message}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label htmlFor="unavailable_message" className="block text-sm mb-1">
+                      {t('hub.unavailable_message')}
+                    </label>
+                    <textarea
+                      id="unavailable_message"
+                      rows={2}
+                      {...register('unavailable_message')}
+                      className="w-full px-2 py-1 border rounded-md text-sm"
+                      placeholder={t('hub.unavailable_message_placeholder')}
+                    />
+                    {errors.unavailable_message && (
+                      <p className="text-xs text-destructive mt-1">
+                        {errors.unavailable_message.message}
+                      </p>
+                    )}
+                  </div>
+                  {editing?.availability && (
+                    <p className="text-xs text-muted-foreground">
+                      {t('hub.availability')}:{' '}
+                      <span data-testid="availability-state">
+                        {t(`hub.availability_${editing.availability.state}`)}
+                      </span>
+                      {' · '}
+                      {editing.availability.tokens_used} tokens
+                    </p>
+                  )}
+                </fieldset>
                 <div className="flex gap-2 justify-end pt-2">
                   <button
                     type="button"

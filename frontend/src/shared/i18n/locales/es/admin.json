@@ -157,7 +157,14 @@
     "availability_available": "Disponible",
     "availability_expired": "Caducado",
     "availability_not_yet_open": "Pendiente de apertura",
-    "availability_budget_exhausted": "Presupuesto agotado"
+    "availability_budget_exhausted": "Presupuesto agotado",
+    "availability_hint": "Deja las fechas vacías para que el chatbot no caduque. Se aplica solo; no hace falta desactivarlo a mano.",
+    "valid_from": "Disponible desde",
+    "valid_until": "Disponible hasta",
+    "total_token_budget": "Presupuesto total (tokens)",
+    "total_token_budget_hint": "0 = sin techo. Al alcanzarlo, el chatbot deja de responder.",
+    "unavailable_message": "Mensaje cuando no está disponible",
+    "unavailable_message_placeholder": "El plazo de matrícula terminó el 30 de septiembre."
   },
   "login": {
     "title": "Iniciar sesión",

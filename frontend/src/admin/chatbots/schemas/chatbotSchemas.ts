@@ -22,6 +22,16 @@ export const chatbotCreateSchema = z.object({
   llm_config_id: z.string().min(1),
   // Solo se usa al crear: `ChatbotUpdate` no admite cambiar de organización.
   organizacion_id: z.string().min(1),
+  // SEC.4.1: ventana de vigencia y techo acumulado. Cadena vacía = «sin límite», y se
+  // traduce a `null` al enviar: el backend distingue «no hay ventana» de «ventana con
+  // fecha», y mandar '' rompería la validación de fecha en vez de significar «ninguna».
+  //
+  // `availability` NO está aquí a propósito: es estado derivado que calcula el servidor.
+  // Aceptarlo en el formulario dejaría al cliente declarar si su chatbot está caducado.
+  valid_from: z.string(),
+  valid_until: z.string(),
+  total_token_budget: z.number().int().min(0),
+  unavailable_message: z.string().max(500),
 })
 
 export type FormValues = z.infer<typeof chatbotCreateSchema>
