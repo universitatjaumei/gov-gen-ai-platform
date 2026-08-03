@@ -58,6 +58,68 @@
 
 ---
 
+## ⏸ TRASPASO — CAL.2 analizado y sin empezar a escribir (2026-08-03)
+
+**Lee esto antes de tocar CAL.2.** El análisis está hecho y **el árbol está limpio**: CAL.1
+commiteado (`944bb48`), suite en **1682 passed, 1 skipped, 0 failed**. No hay nada a medias.
+Se paró aquí a propósito: lo que queda es un refactor de un `.tsx` de 1.019 líneas y empezarlo
+sin contexto para acabarlo habría dejado el frontend sin compilar, que es peor que no empezar.
+
+### Decisión del usuario, ya tomada: **retirar el panel de fuentes (opción B)**
+
+El usuario preguntó qué se perdía y la respuesta, con evidencia, es **nada**:
+
+- El panel llama a `/api/v1/hub/ingestion/{id}/sources`, que **no existe**: sin ruta, sin
+  modelo ORM, sin tabla en la BD y sin entrada en el contrato.
+- **Se retiró a propósito** en el commit `0196ff5` («9Q.0: site/page/selection model +
+  retire HubIngestionSource»). El panel es el mando a distancia de un aparato que ya no está.
+- El sustituto está vivo y enrutado: **10 endpoints** `/hub/sites/*`, pantalla `SitesPage`
+  en `/admin/sites`, `SiteMappingPanel` y la de calidad de contenido.
+- **El hueco que había que comprobar no existe**: `HubCorpusSelection(chatbot_id, site_id)`
+  es justo la unión sitio↔chatbot que las fuentes hacían por su cuenta.
+
+### Alcance exacto de la retirada (medido, no estimado)
+
+En `frontend/src/admin/pages/DocumentsPage.tsx` (1.019 líneas, 3 pestañas: `documents`,
+`sources`, `assistant`):
+
+- Import muerto: línea **14-16** (`fetchSources`, `createSource`, `updateSource`,
+  `deleteSource`, `triggerSourceCheck`, `type IngestionSource`).
+- Estado: líneas **87, 88, 90, 96, 97** (`newUrl`, `newLabel`, `newSourceLanguage`,
+  `sourceError`, `deleteSourceTarget`).
+- Query y mutaciones: **220-267**. Handler `handleCreateSource`: **271+**.
+- Pestaña en el selector (**~313-322**) y bloque de la pestaña **625-829**.
+- Componente `SourceRow` (**~979**) y `SourceKindIcon` si queda sin usar.
+
+**La pestaña `assistant` cae con ella**, y esto es lo que hay que decidir al ejecutar:
+`AdminIngestionAssistant` analiza HTML con `/hub/ingestion/analyze-html` —endpoint **vivo**—
+pero su botón de guardar llama a `createSource`, o sea al 404. Analizar sin poder guardar en
+ningún sitio no es una función, y su equivalente en 9Q es `SiteMappingPanel`. Retirar las dos
+pestañas es lo coherente; si se quiere conservar el analizador, hay que repuntarlo a
+`/hub/sites/{id}/analyze` y eso ya es trabajo de producto, no limpieza.
+
+### Cobertura de hooks para el resto de CAL.2 (verificada una a una)
+
+Los otros **~20** métodos manuales **sí** tienen hook generado, así que la migración es
+mecánica. Ojo: los hooks de lectura son `export function useX...Get` y los de escritura
+`export const useX...Post|Patch|Delete` — un `grep "export const use"` deja fuera los GET y
+hace creer que faltan.
+
+| Módulo manual | Destino generado |
+|---|---|
+| `ingestion.ts` (jobs, upload, delete job, documentos) | `hub-ingestion` (`useGetIngestionJobs…Get`, `useUploadDocument…Post`, `useDeleteIngestionJob…Delete`, `useListDocuments…Get`) |
+| `organizaciones.ts` (era `clients.ts`, renombrado en ROL.1) | `hub-organizaciones` (4) |
+| `feedback.ts` | `hub-feedback` (`useGetInteractionsForReview…Get`) |
+| `llmConfigs.ts` (configs, proveedores, modelos, test) | `hub-llm-configs` (10) |
+| `promptTemplates.ts` | `hub-prompt-templates` (4) |
+
+Consumidores a repuntar: `DocumentsPage`, `AdminIngestionAssistant`, `AIBrainPage`,
+`LLMConfigsPage`, `PromptsPage`, `ReportsPage` y sus tres ficheros de test.
+`client.ts` (el `customInstance`) **se queda**: es el interceptor de auth al que hay que
+pasar todo. El SSE del widget queda exento, como dice el prompt.
+
+---
+
 ## ✅ SEC.2 y SEC.2.1 cerrados — el modelo de autorización, en una página
 
 *(El traspaso «SEC.2 a medias» que ocupaba este sitio queda resuelto: los 6 rojos arreglados, el gate probando endpoints y todo commiteado. Detalle en las filas de SEC.2 y SEC.2.1 del historial.)*
