@@ -230,7 +230,7 @@ export function LLMConfigsPage() {
                   <th className="text-left px-4 py-3 font-medium">{t('hub.llm_config_tier')}</th>
                   <th className="text-left px-4 py-3 font-medium">{t('hub.llm_config_is_default')}</th>
                   <th className="text-left px-4 py-3 font-medium">{t('hub.llm_config_api_key')}</th>
-                  <th className="text-right px-4 py-3 font-medium">Acciones</th>
+                  <th className="text-right px-4 py-3 font-medium">{t('hub.llm_config_actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -325,13 +325,14 @@ export function LLMConfigsPage() {
               <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col flex-1 overflow-hidden">
                 <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
                   <div>
-                    <label className="text-sm font-medium">{t('hub.llm_config_label')}</label>
-                    <input {...register('label')} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" />
+                    <label htmlFor="llm-label" className="text-sm font-medium">{t('hub.llm_config_label')}</label>
+                    <input id="llm-label" {...register('label')} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" />
                     {errors.label && <p className="text-destructive text-xs mt-1">{errors.label.message}</p>}
                   </div>
                   <div>
-                    <label className="text-sm font-medium">{t('hub.llm_config_provider')}</label>
+                    <label htmlFor="llm-provider" className="text-sm font-medium">{t('hub.llm_config_provider')}</label>
                     <select
+                      id="llm-provider"
                       {...register('provider')}
                       className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                       onChange={(e) => {
@@ -341,16 +342,17 @@ export function LLMConfigsPage() {
                         }
                       }}
                     >
-                      <option value="" disabled>-- {t('hub.llm_config_provider')} --</option>
+                      <option value="" disabled>— {t('hub.llm_config_provider')} —</option>
                       {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="text-sm font-medium">{t('hub.llm_config_model')}</label>
+                    <label htmlFor="llm-model" className="text-sm font-medium">{t('hub.llm_config_model')}</label>
                     <div className="flex gap-2 mt-1">
                       {!isCustomModel ? (
-                        <select 
-                          {...register('model_name')} 
+                        <select
+                          id="llm-model"
+                          {...register('model_name')}
                           className="flex-1 px-3 py-2 border rounded-md text-sm bg-background"
                           onChange={(e) => {
                             if (e.target.value === '__custom__') {
@@ -360,36 +362,38 @@ export function LLMConfigsPage() {
                             }
                           }}
                         >
-                          <option value="">-- Seleccionar de la lista --</option>
+                          <option value="">{t('hub.llm_config_model_select')}</option>
                           {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
-                          <option value="__custom__">Escribir manualmente...</option>
+                          <option value="__custom__">{t('hub.llm_config_model_custom')}</option>
                         </select>
                       ) : (
                         <div className="flex flex-1 gap-2">
-                          <input 
-                            {...register('model_name')} 
-                            className="flex-1 px-3 py-2 border rounded-md text-sm bg-background" 
-                            placeholder="Ej: gpt-4o-custom" 
+                          <input
+                            id="llm-model"
+                            {...register('model_name')}
+                            className="flex-1 px-3 py-2 border rounded-md text-sm bg-background"
+                            placeholder={t('hub.llm_config_model_custom_placeholder')}
                             autoFocus
                           />
-                          <button 
-                            type="button" 
-                            onClick={() => setIsCustomModel(false)} 
+                          <button
+                            type="button"
+                            onClick={() => setIsCustomModel(false)}
                             className="px-3 py-2 border rounded bg-muted text-xs"
                           >
-                            Lista
+                            {t('hub.llm_config_model_list')}
                           </button>
                         </div>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Lista de modelos obtenida dinámicamente para el proveedor seleccionado.
+                      {t('hub.llm_config_model_hint')}
                     </p>
                     {errors.model_name && <p className="text-destructive text-xs mt-1">{errors.model_name.message}</p>}
                   </div>
                   <div>
-                    <label className="text-sm font-medium">{t('hub.llm_config_tier')}</label>
+                    <label htmlFor="llm-tier" className="text-sm font-medium">{t('hub.llm_config_tier')}</label>
                     <select
+                      id="llm-tier"
                       {...tierField}
                       className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                       onChange={(e) => {
@@ -403,23 +407,23 @@ export function LLMConfigsPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-sm font-medium">{t('hub.llm_config_api_key')}</label>
-                    <input {...register('api_key_secret_name')} placeholder="GOOGLE_API_KEY / OPENROUTER_API_KEY" className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background font-mono" />
-                    <p className="text-xs text-muted-foreground mt-1">Nombre de la variable de entorno que contiene la clave (opcional si el proveedor ya la tiene).</p>
+                    <label htmlFor="llm-api-key" className="text-sm font-medium">{t('hub.llm_config_api_key')}</label>
+                    <input id="llm-api-key" {...register('api_key_secret_name')} placeholder={t('hub.llm_config_api_key_placeholder')} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background font-mono" />
+                    <p className="text-xs text-muted-foreground mt-1">{t('hub.llm_config_api_key_hint')}</p>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className="text-sm font-medium">Temperature</label>
-                      <input type="number" step="0.1" {...register('temperature', { valueAsNumber: true })} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" />
+                      <label htmlFor="llm-temperature" className="text-sm font-medium">{t('hub.llm_config_temperature')}</label>
+                      <input id="llm-temperature" type="number" step="0.1" {...register('temperature', { valueAsNumber: true })} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" />
                     </div>
                     <div>
-                      <label className="text-sm font-medium">Top P</label>
-                      <input type="number" step="0.1" min="0" max="1" {...register('top_p', { valueAsNumber: true })} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" />
+                      <label htmlFor="llm-top-p" className="text-sm font-medium">{t('hub.llm_config_top_p')}</label>
+                      <input id="llm-top-p" type="number" step="0.1" min="0" max="1" {...register('top_p', { valueAsNumber: true })} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" />
                     </div>
                     <div>
-                      <label className="text-sm font-medium">Max tokens (salida)</label>
-                      <input type="number" {...register('max_tokens', { valueAsNumber: true })} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" />
-                      <p className="text-xs text-muted-foreground mt-1">Por defecto: 12000 (salida). La ventana de contexto para long context se controla aparte (128K).</p>
+                      <label htmlFor="llm-max-tokens" className="text-sm font-medium">{t('hub.llm_config_max_tokens')}</label>
+                      <input id="llm-max-tokens" type="number" {...register('max_tokens', { valueAsNumber: true })} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" />
+                      <p className="text-xs text-muted-foreground mt-1">{t('hub.llm_config_max_tokens_hint')}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -452,6 +456,7 @@ const providerSchema = z.object({
 type ProviderFormValues = z.infer<typeof providerSchema>
 
 function ProvidersSection({ providers, isLoading }: { providers: HubProviderOut[], isLoading: boolean }) {
+  const { t } = useTranslation('admin')
   const { t: tc } = useTranslation('common')
   const qc = useQueryClient()
   const [editing, setEditing] = useState<HubProviderOut | null>(null)
@@ -506,25 +511,25 @@ function ProvidersSection({ providers, isLoading }: { providers: HubProviderOut[
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Proveedores de Modelos (Dinámicos)</h2>
+        <h2 className="text-lg font-semibold">{t('hub.providers_title')}</h2>
         <button onClick={openCreate} className="px-3 py-2 border border-primary text-primary rounded-md text-sm hover:bg-primary/5 transition-colors">
-          Nuevo Proveedor
+          {t('hub.provider_new')}
         </button>
       </div>
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">…</p>
       ) : providers.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No hay proveedores definidos.</p>
+        <p className="text-sm text-muted-foreground">{t('hub.no_providers')}</p>
       ) : (
         <div className="border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
               <tr>
-                <th className="text-left px-4 py-3 font-medium">ID</th>
-                <th className="text-left px-4 py-3 font-medium">Nombre</th>
-                <th className="text-left px-4 py-3 font-medium">Tipo</th>
-                <th className="text-left px-4 py-3 font-medium">Base URL</th>
+                <th className="text-left px-4 py-3 font-medium">{t('hub.provider_table_id')}</th>
+                <th className="text-left px-4 py-3 font-medium">{t('hub.provider_table_name')}</th>
+                <th className="text-left px-4 py-3 font-medium">{t('hub.provider_table_type')}</th>
+                <th className="text-left px-4 py-3 font-medium">{t('hub.provider_table_base_url')}</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -560,7 +565,7 @@ function ProvidersSection({ providers, isLoading }: { providers: HubProviderOut[
       {deleteTarget && (
         <div role="dialog" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-background border rounded-lg p-6 w-96 space-y-4 shadow-xl">
-            <h2 className="font-semibold">Eliminar Proveedor</h2>
+            <h2 className="font-semibold">{t('hub.provider_delete')}</h2>
             <p className="text-sm text-muted-foreground">{deleteTarget.name} ({deleteTarget.id})</p>
             {deleteError && (
               <p className="text-sm text-destructive">{deleteError}</p>
@@ -584,36 +589,36 @@ function ProvidersSection({ providers, isLoading }: { providers: HubProviderOut[
         <div role="dialog" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-background border rounded-lg w-full max-w-md shadow-xl flex flex-col">
             <div className="px-6 py-4 border-b shrink-0">
-              <h2 className="font-semibold">{editing ? 'Editar Proveedor' : 'Nuevo Proveedor'}</h2>
+              <h2 className="font-semibold">{editing ? t('hub.provider_edit') : t('hub.provider_new')}</h2>
             </div>
             <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col flex-1">
               <div className="px-6 py-4 space-y-4">
                 <div>
-                  <label className="text-sm font-medium">ID del Proveedor</label>
-                  <input {...register('id')} disabled={!!editing} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background font-mono disabled:opacity-50" placeholder="ej: mi-lmstudio" />
+                  <label htmlFor="provider-id" className="text-sm font-medium">{t('hub.provider_id')}</label>
+                  <input id="provider-id" {...register('id')} disabled={!!editing} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background font-mono disabled:opacity-50" placeholder={t('hub.provider_id_placeholder')} />
                   {errors.id && <p className="text-destructive text-xs mt-1">{errors.id.message}</p>}
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Nombre a mostrar</label>
-                  <input {...register('name')} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" placeholder="ej: LM Studio Local" />
+                  <label htmlFor="provider-name" className="text-sm font-medium">{t('hub.provider_name')}</label>
+                  <input id="provider-name" {...register('name')} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" placeholder={t('hub.provider_name_placeholder')} />
                   {errors.name && <p className="text-destructive text-xs mt-1">{errors.name.message}</p>}
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Tipo de API</label>
-                  <select {...register('provider_type')} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background">
-                    <option value="openai_compatible">OpenAI Compatible (OpenRouter, LMStudio, vLLM, OpenAI)</option>
-                    <option value="google_genai">Google GenAI (Gemini)</option>
-                    <option value="ollama">Ollama</option>
+                  <label htmlFor="provider-type" className="text-sm font-medium">{t('hub.provider_type')}</label>
+                  <select id="provider-type" {...register('provider_type')} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background">
+                    <option value="openai_compatible">{t('hub.provider_type_openai')}</option>
+                    <option value="google_genai">{t('hub.provider_type_google')}</option>
+                    <option value="ollama">{t('hub.provider_type_ollama')}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Base URL (Opcional)</label>
-                  <input {...register('base_url')} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" placeholder="http://localhost:1234/v1" />
+                  <label htmlFor="provider-base-url" className="text-sm font-medium">{t('hub.provider_base_url')}</label>
+                  <input id="provider-base-url" {...register('base_url')} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" placeholder="http://localhost:1234/v1" />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">API Key (Opcional)</label>
-                  <input type="password" {...register('api_key')} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" placeholder="••••••••••••" />
-                  <p className="text-xs text-muted-foreground mt-1">Si se especifica, se usará en lugar de la variable de entorno.</p>
+                  <label htmlFor="provider-api-key" className="text-sm font-medium">{t('hub.provider_api_key')}</label>
+                  <input id="provider-api-key" type="password" {...register('api_key')} className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background" placeholder="••••••••••••" />
+                  <p className="text-xs text-muted-foreground mt-1">{t('hub.provider_api_key_hint')}</p>
                 </div>
               </div>
               <div className="px-6 py-4 border-t flex gap-2 justify-end shrink-0 bg-muted/10">

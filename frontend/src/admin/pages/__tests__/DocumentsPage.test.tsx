@@ -17,12 +17,20 @@ import {
 } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
 import type { HubDocumentOut } from '@/shared/api/generated/model'
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (_key: string, defaultText?: string) => defaultText || _key,
-    i18n: { changeLanguage: vi.fn() },
-  }),
-}))
+// El doble resuelve contra el diccionario castellano real, no devuelve la clave: desde CAL.4
+// hay etiquetas que sólo existen en `admin.json` (las de `LANGUAGE_OPTIONS` y
+// `RETRIEVAL_LABEL_KEYS`), y un doble que devolviera la clave escondería que falta traducir.
+vi.mock('react-i18next', async () => {
+  const es = (await import('@/shared/i18n/locales/es/admin.json')).default as Record<string, unknown>
+  const resolver = (clave: string) =>
+    clave.split('.').reduce<unknown>((o, p) => (o as Record<string, unknown>)?.[p], es)
+  return {
+    useTranslation: () => ({
+      t: (key: string, defaultText?: string) => (resolver(key) as string) ?? defaultText ?? key,
+      i18n: { changeLanguage: vi.fn() },
+    }),
+  }
+})
 
 vi.mock('lucide-react', () => ({
   UploadCloud: () => <div data-testid="upload-icon" />,

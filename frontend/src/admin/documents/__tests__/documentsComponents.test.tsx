@@ -22,12 +22,18 @@ import { IngestionJobsPanel } from '../IngestionJobsPanel'
 import { RechunkControls, RechunkStatus } from '../RechunkControls'
 import type { HubDocumentOut, IngestionJob } from '@/shared/api/generated/model'
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (_key: string, defaultText?: string) => defaultText || _key,
-    i18n: { changeLanguage: vi.fn() },
-  }),
-}))
+// Resuelve contra el diccionario castellano real (ver la nota del test de DocumentsPage).
+vi.mock('react-i18next', async () => {
+  const es = (await import('@/shared/i18n/locales/es/admin.json')).default as Record<string, unknown>
+  const resolver = (clave: string) =>
+    clave.split('.').reduce<unknown>((o, p) => (o as Record<string, unknown>)?.[p], es)
+  return {
+    useTranslation: () => ({
+      t: (key: string, defaultText?: string) => (resolver(key) as string) ?? defaultText ?? key,
+      i18n: { changeLanguage: vi.fn() },
+    }),
+  }
+})
 
 vi.mock('react-dropzone', () => ({
   useDropzone: () => ({

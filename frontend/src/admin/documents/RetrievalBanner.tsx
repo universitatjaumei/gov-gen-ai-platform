@@ -1,13 +1,14 @@
 import { useTranslation } from 'react-i18next'
 
-import { RETRIEVAL_LABELS } from './constants'
+import { RETRIEVAL_LABEL_KEYS } from './constants'
 import { formatTokens } from './format'
 
 /** Recuerda con qué estrategia se recupera el corpus y cuánto pesa en tokens. */
 export function RetrievalBanner({ mode, totalTokens }: { mode: string; totalTokens: number }) {
   const { t } = useTranslation('admin')
 
-  const modeLabel = RETRIEVAL_LABELS[mode] ?? mode
+  const claveModo = RETRIEVAL_LABEL_KEYS[mode]
+  const modeLabel = claveModo ? t(claveModo) : mode
   const recommendation =
     mode === 'RAG'               ? t('hub.retrieval_rec_vector', 'Usa RAG para documentos extensos.')
     : mode === 'MD_LONG_CONTEXT' ? t('hub.retrieval_rec_lc', 'El documento completo se envía al LLM en cada consulta.')

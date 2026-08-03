@@ -277,23 +277,23 @@ export function OrganizacionesPage() {
                 {defaultsOpen && (
                   <div className="p-3 space-y-3 border-t">
                     <div>
-                      <label className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_graph_profile')}</label>
-                      <select {...register('default_public_graph_profile')} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background">
+                      <label htmlFor="org-default-graph-profile" className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_graph_profile')}</label>
+                      <select id="org-default-graph-profile" {...register('default_public_graph_profile')} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background">
                         <option value="PUBLIC_KB_RICH">{t('hub.chatbot_graph_profile_rich')}</option>
                         <option value="PUBLIC_PORTAL_AGGREGATOR">{t('hub.chatbot_graph_profile_aggregator')}</option>
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_retrieval_mode')}</label>
-                      <select {...register('default_retrieval_mode')} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background">
+                      <label htmlFor="org-default-retrieval-mode" className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_retrieval_mode')}</label>
+                      <select id="org-default-retrieval-mode" {...register('default_retrieval_mode')} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background">
                         <option value="RAG">Vectorial RAG</option>
                         <option value="MD_LONG_CONTEXT">Contexto largo</option>
                         <option value="MD_AGENT_SELECTOR">Exploración agéntica</option>
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_language_mode')}</label>
-                      <select {...register('default_language_mode')} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background">
+                      <label htmlFor="org-default-language-mode" className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_language_mode')}</label>
+                      <select id="org-default-language-mode" {...register('default_language_mode')} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background">
                         <option value="prefer">{t('hub.chatbot_language_prefer')}</option>
                         <option value="strict">{t('hub.chatbot_language_strict')}</option>
                         <option value="none">{t('hub.chatbot_language_none')}</option>
@@ -301,20 +301,20 @@ export function OrganizacionesPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_quality_threshold')}</label>
-                        <input type="number" min={0} max={1} step={0.05} {...register('default_quality_threshold', { valueAsNumber: true })} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background" />
+                        <label htmlFor="org-default-quality-threshold" className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_quality_threshold')}</label>
+                        <input type="number" min={0} max={1} step={0.05} id="org-default-quality-threshold" {...register('default_quality_threshold', { valueAsNumber: true })} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background" />
                       </div>
                       <div>
-                        <label className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_min_results')}</label>
-                        <input type="number" min={1} max={20} {...register('default_min_retrieval_results', { valueAsNumber: true })} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background" />
+                        <label htmlFor="org-default-min-results" className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_min_results')}</label>
+                        <input type="number" min={1} max={20} id="org-default-min-results" {...register('default_min_retrieval_results', { valueAsNumber: true })} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background" />
                       </div>
                       <div>
-                        <label className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_min_score')}</label>
-                        <input type="number" min={0} max={1} step={0.05} {...register('default_min_retrieval_score', { valueAsNumber: true })} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background" />
+                        <label htmlFor="org-default-min-score" className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_min_score')}</label>
+                        <input type="number" min={0} max={1} step={0.05} id="org-default-min-score" {...register('default_min_retrieval_score', { valueAsNumber: true })} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background" />
                       </div>
                       <div>
-                        <label className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_answer_template')}</label>
-                        <select {...register('default_answer_template')} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background">
+                        <label htmlFor="org-default-answer-template" className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_answer_template')}</label>
+                        <select id="org-default-answer-template" {...register('default_answer_template')} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background">
                           <option value="generic">{t('hub.chatbot_answer_template_generic')}</option>
                           <option value="institutional">{t('hub.chatbot_answer_template_institutional')}</option>
                         </select>

@@ -62,7 +62,7 @@ export function UploadDropzone({
           aria-label={t('hub.language_label', 'Idioma')}
         >
           {LANGUAGE_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
+            <option key={o.value} value={o.value}>{t(o.labelKey)}</option>
           ))}
         </select>
       </div>

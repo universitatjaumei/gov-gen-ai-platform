@@ -22,10 +22,12 @@ import { useListOrganizacionesApiV1HubOrganizacionesGet } from '@/shared/api/gen
 import { chatbotCreateSchema, type FormValues } from '../chatbots/schemas/chatbotSchemas'
 import { mapApiErrorsToFormErrors } from '@/shared/utils/formErrors'
 
+// Claves de traducción, no texto: una constante de módulo se evalúa una sola vez, así que
+// guardar aquí la etiqueta ya traducida la congelaría en el idioma activo al cargar (CAL.4).
 const RETRIEVAL_MODES = [
-  { value: 'RAG',               label: 'Vectorial RAG',         hint: 'Recupera los fragmentos más relevantes por búsqueda semántica. Recomendado para bases de conocimiento grandes.' },
-  { value: 'MD_LONG_CONTEXT',   label: 'Contexto largo',        hint: 'Mete todos los documentos enteros en el prompt (máx. 128k tokens de contexto). Útil para colecciones pequeñas donde importa la visión global.' },
-  { value: 'MD_AGENT_SELECTOR', label: 'Exploración agéntica',  hint: 'El LLM decide qué documentos leer durante la conversación usando herramientas. Sin límite de corpus, pero más lento.' },
+  { value: 'RAG',               labelKey: 'hub.chatbot_retrieval_rag',           hintKey: 'hub.chatbot_retrieval_hint_rag' },
+  { value: 'MD_LONG_CONTEXT',   labelKey: 'hub.chatbot_retrieval_long_context',  hintKey: 'hub.chatbot_retrieval_hint_long_context' },
+  { value: 'MD_AGENT_SELECTOR', labelKey: 'hub.chatbot_retrieval_agentic',       hintKey: 'hub.chatbot_retrieval_hint_agentic' },
 ] as const
 
 // SEC.4.1: solo el color. El estado y su motivo vienen del contrato —los calcula el
@@ -161,7 +163,8 @@ export function ChatbotsPage() {
     },
   })
   const selectedKind = watch('kind')
-  const retrievalHint = RETRIEVAL_MODES.find(m => m.value === watch('retrieval_mode'))?.hint
+  const claveHint = RETRIEVAL_MODES.find(m => m.value === watch('retrieval_mode'))?.hintKey
+  const retrievalHint = claveHint ? t(claveHint) : undefined
 
   const { data: childrenRaw, isLoading: isLoadingChildren } = useListChildrenApiV1HubChatbotsChatbotIdChildrenGet(
     editing?.id ?? '',
@@ -418,7 +421,10 @@ export function ChatbotsPage() {
                 <td className="py-3 pr-4">{c.name}</td>
                 <td className="py-3 pr-4">
                   <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground border">
-                    {RETRIEVAL_MODES.find(m => m.value === c.retrieval_mode)?.label ?? c.retrieval_mode}
+                    {(() => {
+                      const clave = RETRIEVAL_MODES.find(m => m.value === c.retrieval_mode)?.labelKey
+                      return clave ? t(clave) : c.retrieval_mode
+                    })()}
                   </span>
                 </td>
                 <td className="py-3 pr-4">
@@ -571,18 +577,18 @@ export function ChatbotsPage() {
                   </div>
                 )}
                 <div>
-                  <label htmlFor="chatbot-kind" className="text-sm font-medium">Tipo de chatbot</label>
+                  <label htmlFor="chatbot-kind" className="text-sm font-medium">{t('hub.chatbot_kind')}</label>
                   <select
                     id="chatbot-kind"
                     {...register('kind')}
                     className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                   >
-                    <option value="atomic">Atómico</option>
-                    <option value="router">Router</option>
+                    <option value="atomic">{t('hub.chatbot_kind_atomic')}</option>
+                    <option value="router">{t('hub.chatbot_kind_router')}</option>
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="chatbot-system-prompt" className="text-sm font-medium">{selectedKind === 'router' ? 'Descripción del router' : t('hub.chatbot_prompt')}</label>
+                  <label htmlFor="chatbot-system-prompt" className="text-sm font-medium">{selectedKind === 'router' ? t('hub.chatbot_router_description') : t('hub.chatbot_prompt')}</label>
                   <textarea
                     id="chatbot-system-prompt"
                     {...register('system_prompt')}
@@ -594,7 +600,7 @@ export function ChatbotsPage() {
                 {editing && corpusStats && (
                   <div className="rounded-md border bg-blue-50 border-blue-200 p-3 space-y-1">
                     <p className="text-sm">
-                      <span className="font-medium">Sugerido:</span>{' '}
+                      <span className="font-medium">{t('hub.chatbot_suggested')}</span>{' '}
                       <strong>{corpusStats.recommended_mode}</strong>
                       <span className="text-muted-foreground"> — {corpusStats.total_tokens.toLocaleString()} tokens</span>
                     </p>
@@ -622,30 +628,31 @@ export function ChatbotsPage() {
                 {selectedKind === 'atomic' && (
                   <>
                     <div>
-                      <label htmlFor="chatbot-retrieval-mode" className="text-sm font-medium">Modo de retrieval</label>
+                      <label htmlFor="chatbot-retrieval-mode" className="text-sm font-medium">{t('hub.chatbot_retrieval_mode')}</label>
                       <select
                         id="chatbot-retrieval-mode"
                         {...register('retrieval_mode')}
                         className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                       >
                         {RETRIEVAL_MODES.map(m => (
-                          <option key={m.value} value={m.value}>{m.label}</option>
+                          <option key={m.value} value={m.value}>{t(m.labelKey)}</option>
                         ))}
                       </select>
                       {retrievalHint && <p className="text-xs text-muted-foreground mt-1">{retrievalHint}</p>}
                     </div>
                     {watch('retrieval_mode') === 'RAG' && (
                       <div>
-                        <label className="text-sm font-medium">Resultados recuperados (top-k)</label>
+                        <label htmlFor="chatbot-top-k" className="text-sm font-medium">{t('hub.chatbot_top_k')}</label>
                         <input
                           type="number"
                           min={1}
                           max={50}
-                          {...register('retrieval_top_k', { valueAsNumber: true })}
+                          id="chatbot-top-k"
+                            {...register('retrieval_top_k', { valueAsNumber: true })}
                           className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                         />
                         {errors.retrieval_top_k && <p className="text-destructive text-xs mt-1">{errors.retrieval_top_k.message}</p>}
-                        <p className="text-xs text-muted-foreground mt-1">Número de fragmentos que se recuperan por consulta (1–50). Valor recomendado: 8.</p>
+                        <p className="text-xs text-muted-foreground mt-1">{t('hub.chatbot_top_k_hint')}</p>
                       </div>
                     )}
                     {watch('retrieval_mode') === 'MD_LONG_CONTEXT' && (
@@ -658,17 +665,18 @@ export function ChatbotsPage() {
                             className="rounded"
                           />
                           <label htmlFor="use_prompt_caching" className="text-sm">
-                            Activar Prompt Caching
+                            {t('hub.chatbot_prompt_caching')}
                           </label>
                         </div>
                         {watch('use_prompt_caching') && (
                           <div>
-                            <label className="text-sm font-medium">TTL de caché (segundos)</label>
+                            <label htmlFor="chatbot-cache-ttl" className="text-sm font-medium">{t('hub.chatbot_cache_ttl')}</label>
                             <input
                               type="number"
                               min={60}
                               max={86400}
-                              {...register('cache_ttl', { valueAsNumber: true })}
+                              id="chatbot-cache-ttl"
+                            {...register('cache_ttl', { valueAsNumber: true })}
                               className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                             />
                             {errors.cache_ttl && <p className="text-destructive text-xs mt-1">{errors.cache_ttl.message}</p>}
@@ -685,8 +693,9 @@ export function ChatbotsPage() {
                       <p className="text-sm font-medium text-muted-foreground mb-2">{t('hub.chatbot_graph_section')}</p>
                       <div className="space-y-3 rounded-md border bg-muted/40 p-3">
                         <div>
-                          <label className="text-sm font-medium">{t('hub.chatbot_graph_profile')}</label>
+                          <label htmlFor="chatbot-graph-profile" className="text-sm font-medium">{t('hub.chatbot_graph_profile')}</label>
                           <select
+                            id="chatbot-graph-profile"
                             {...register('public_graph_profile')}
                             className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                           >
@@ -695,8 +704,9 @@ export function ChatbotsPage() {
                           </select>
                         </div>
                         <div>
-                          <label className="text-sm font-medium">{t('hub.chatbot_language_mode')}</label>
+                          <label htmlFor="chatbot-language-mode" className="text-sm font-medium">{t('hub.chatbot_language_mode')}</label>
                           <select
+                            id="chatbot-language-mode"
                             {...register('language_mode')}
                             className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                           >
@@ -706,33 +716,36 @@ export function ChatbotsPage() {
                           </select>
                         </div>
                         <div>
-                          <label className="text-sm font-medium">{t('hub.chatbot_quality_threshold')}</label>
+                          <label htmlFor="chatbot-quality-threshold" className="text-sm font-medium">{t('hub.chatbot_quality_threshold')}</label>
                           <input
                             type="number"
                             min={0}
                             max={1}
                             step={0.05}
+                            id="chatbot-quality-threshold"
                             {...register('quality_threshold', { valueAsNumber: true })}
                             className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                           />
                         </div>
                         <div>
-                          <label className="text-sm font-medium">{t('hub.chatbot_min_results')}</label>
+                          <label htmlFor="chatbot-min-results" className="text-sm font-medium">{t('hub.chatbot_min_results')}</label>
                           <input
                             type="number"
                             min={1}
                             max={20}
+                            id="chatbot-min-results"
                             {...register('min_retrieval_results', { valueAsNumber: true })}
                             className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                           />
                         </div>
                         <div>
-                          <label className="text-sm font-medium">{t('hub.chatbot_min_score')}</label>
+                          <label htmlFor="chatbot-min-score" className="text-sm font-medium">{t('hub.chatbot_min_score')}</label>
                           <input
                             type="number"
                             min={0}
                             max={1}
                             step={0.05}
+                            id="chatbot-min-score"
                             {...register('min_retrieval_score', { valueAsNumber: true })}
                             className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                           />
@@ -747,8 +760,9 @@ export function ChatbotsPage() {
                           <label htmlFor="reranker_enabled" className="text-sm">{t('hub.chatbot_reranker_enabled')}</label>
                         </div>
                         <div>
-                          <label className="text-sm font-medium">{t('hub.chatbot_answer_template')}</label>
+                          <label htmlFor="chatbot-answer-template" className="text-sm font-medium">{t('hub.chatbot_answer_template')}</label>
                           <select
+                            id="chatbot-answer-template"
                             {...register('answer_template')}
                             className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                           >
@@ -792,7 +806,7 @@ export function ChatbotsPage() {
 
                 {assignOpen && editing && selectedKind === 'router' && (
                   <div className="rounded-md border p-3 space-y-2 bg-background">
-                    <label className="text-xs font-medium">Selecciona chatbot atómico</label>
+                    <label htmlFor="chatbot-child-select" className="text-xs font-medium">{t('hub.chatbot_select_atomic')}</label>
                     <select
                       value={selectedChildId}
                       onChange={(e) => setSelectedChildId(e.target.value)}

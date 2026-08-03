@@ -265,11 +265,14 @@ export function DocumentsPage() {
         />
       )}
 
+      {/* `hub.delete_doc_confirm` y no `hub.delete_confirm`: esa otra es la *pregunta*
+          «¿Eliminar este chatbot?» de la pantalla de chatbots, y reutilizarla ponía ese
+          texto —hablando de un chatbot— en el botón de borrar un documento. */}
       {deleteDocTarget && (
         <ConfirmDialog
           title={t('hub.delete_doc_title', '¿Eliminar documento?')}
           description={<>{t('hub.delete_doc_text', 'Se eliminarán el documento y todos sus chunks indexados.')}{' '}<strong>{deleteDocTarget.title}</strong></>}
-          confirmLabel={t('hub.delete_confirm', 'Sí, eliminar')}
+          confirmLabel={t('hub.delete_doc_confirm', 'Sí, eliminar')}
           isPending={deleteDocMutation.isPending}
           onConfirm={() => deleteDocMutation.mutate({ chatbotId: selectedChatbotId, documentId: deleteDocTarget.id })}
           onCancel={() => setDeleteDocTarget(null)}
