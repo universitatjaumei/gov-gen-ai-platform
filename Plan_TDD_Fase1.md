@@ -12254,6 +12254,57 @@ dueño del PAT, y la cuota por usuario de SEC.4 no puede existir.
 
 ---
 
+### Prompt CAL.4.1 (RED/GREEN) — Las 41 claves de la pantalla de documentos
+
+**Modelo sugerido**: **Sonnet** — alcance cerrado y verificable por conteo de claves.
+
+**Por qué existe**: CAL.4 dejó `es`/`ca`/`en` en paridad y el test en verde, pero la paridad es
+de claves **del diccionario**. La pantalla de documentos casi no tiene: sus etiquetas viven como
+*default* dentro del `t('clave', 'texto')`, y el default sólo actúa cuando la clave **falta**. El
+resultado es que con `i18nextLng=ca` la navegación sale en catalán y el cuerpo de esa pantalla se
+queda en castellano. Medido el 2026-08-03 con el árbol de CAL.5.
+
+```
+# PROMPT CAL.4.1 (RED/GREEN) — Subir al diccionario las claves que sólo viven como default
+
+## Contexto medido (no hay que volver a contarlo)
+- 41 claves del namespace `admin` se usan como t('hub.x', 'texto') y NO están en
+  es/ca/en admin.json. Reparto por fichero:
+    admin/documents/DocumentsTable.tsx      12
+    admin/documents/IngestionJobsPanel.tsx   7
+    admin/documents/RechunkControls.tsx      7
+    admin/pages/DocumentsPage.tsx            5
+    admin/documents/RetrievalBanner.tsx      4
+    admin/documents/UploadDropzone.tsx       4
+    admin/documents/DocumentBadges.tsx       2
+- El texto castellano actual es el que ya está en el segundo argumento de t():
+  se sube tal cual a es/admin.json y se traduce a ca/en.
+
+## Acción
+- Subir las 41 claves a es/ca/en admin.json conservando el texto castellano actual.
+- Dejar el t() con un solo argumento donde la clave ya exista: un default que nunca se
+  usa es texto muerto que se desincroniza del diccionario sin que nadie lo note.
+- OJO con las cadenas fijas que aún no pasan por t() en esos ficheros: los estados de
+  JobStatusBadge ('Completado', 'Procesando', 'Error', 'En cola') están escritos a pelo
+  en el switch. Entran también.
+
+## Tests Vitest (RED primero)
+# should_not_keep_admin_keys_only_as_inline_default
+#   Barre src/ buscando t('hub.x', '...') y falla si la clave no está en es/admin.json.
+#   Es el guardarrail que faltaba: el de paridad NO puede cazar esto por construcción,
+#   porque lo que no está en el diccionario no se compara con nada.
+# should_render_documents_screen_in_catalan
+#   Render de DocumentsPage con el doble de i18n resolviendo contra ca/admin.json;
+#   assert sobre texto catalán, no sobre la clave.
+
+## Cierre
+- [ ] Paridad es/ca/en sigue verde y sube a ~259 claves
+- [ ] `i18nextLng=ca` en el navegador: la pantalla de documentos, entera en catalán
+- [ ] vitest + tsc --noEmit en verde (la suite en serie: ver la nota de falsos rojos)
+```
+
+---
+
 ## Prompt suelto FIX.1 — El modelo de un chatbot no se puede cambiar (PENDIENTE)
 
 > **Contexto**: encontrado el 2026-08-02 durante las pruebas manuales del Bloque RAG, que el
