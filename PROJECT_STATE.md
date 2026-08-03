@@ -78,18 +78,45 @@ El usuario preguntó qué se perdía y la respuesta, con evidencia, es **nada**:
 - **El hueco que había que comprobar no existe**: `HubCorpusSelection(chatbot_id, site_id)`
   es justo la unión sitio↔chatbot que las fuentes hacían por su cuenta.
 
+### Verificado en el navegador el 2026-08-03 (permiso concedido por el usuario)
+
+La extensión ya tiene permiso para `localhost:5173`, así que **esto ya no hay que probarlo a
+mano**. Recorrido hecho: `/hub/chatbots` —ojo, la ruta real es `/hub/...`, no `/admin/...`,
+que redirige— muestra la **columna «Disponibilidad»** con los dos chatbots en «Disponible», y
+el diálogo de edición tiene **los cuatro campos** de SEC.4.1 (`Disponible desde`, `Disponible
+hasta`, `Presupuesto total (tokens)`, `Mensaje cuando no está disponible`).
+
+**Y se reprodujo el fallo del usuario de punta a punta**: se rellenó la fecha, se pulsó
+guardar y en la BD `valid_until` siguió en `None`. La causa está medida y **no es del
+frontend**: hay **dos uvicorn vivos** —PID 7576 de ayer y el reiniciado hoy— y en Windows
+`SO_REUSEADDR` deja que el segundo arranque sin protestar mientras el primero se queda las
+peticiones del 8000. Hasta que muera el de ayer (`Stop-Process -Id 7576 -Force`), cualquier
+prueba manual mide código anterior al bloque. El badge «Disponible» que se ve es el
+`?? 'available'` del frontend, no dato del servidor.
+
 ### Alcance exacto de la retirada (medido, no estimado)
 
 En `frontend/src/admin/pages/DocumentsPage.tsx` (1.019 líneas, 3 pestañas: `documents`,
 `sources`, `assistant`):
 
-- Import muerto: línea **14-16** (`fetchSources`, `createSource`, `updateSource`,
-  `deleteSource`, `triggerSourceCheck`, `type IngestionSource`).
-- Estado: líneas **87, 88, 90, 96, 97** (`newUrl`, `newLabel`, `newSourceLanguage`,
-  `sourceError`, `deleteSourceTarget`).
-- Query y mutaciones: **220-267**. Handler `handleCreateSource`: **271+**.
-- Pestaña en el selector (**~313-322**) y bloque de la pestaña **625-829**.
-- Componente `SourceRow` (**~979**) y `SourceKindIcon` si queda sin usar.
+Sobre el fichero de 1.019 líneas, **líneas contadas una a una** (borrar de abajo arriba para
+que no se desplacen):
+
+| Qué | Líneas |
+|---|---|
+| Componentes solo del panel: `SourceKindIcon`, `LanguageBadge`, `StatusBadge`, `SourceRow` | entre **945 y 986** (los límites: `RetrievalBanner` acaba en 918 y `ConfirmDialog` empieza en 987) |
+| Bloque de la pestaña «Fuentes web» | **624-829** |
+| Bloque de la pestaña «Asistente» | **620-622** |
+| Entrada de las dos pestañas en el selector | **309** (`['documents', 'sources', 'assistant']`) y el ternario de etiquetas **321-325**. Con una sola pestaña, la barra entera (**307-328**) sobra |
+| Queries, mutaciones y `handleCreateSource` | **219-279** (desde el comentario `// ── Sources ──` hasta el cierre del handler) |
+| Estado del panel | **86-97** (el bloque entero bajo `// Sources tab state`) |
+| Nombres muertos del import | **14** completa y `type IngestionSource` en la **16** |
+
+Además: borrar `AdminIngestionAssistant.tsx` y su test, y de `shared/api/ingestion.ts` las
+seis funciones muertas (`fetchSources`, `createSource`, `updateSource`, `deleteSource`,
+`triggerSourceCheck`, `analyzeHtml` —esta última se queda sin consumidor al caer el
+asistente—) con los tipos `IngestionSource` y `AnalysisResult`. Y limpiar de
+`DocumentsPage.test.tsx` los dobles de fuentes.
 
 **La pestaña `assistant` cae con ella**, y esto es lo que hay que decidir al ejecutar:
 `AdminIngestionAssistant` analiza HTML con `/hub/ingestion/analyze-html` —endpoint **vivo**—
