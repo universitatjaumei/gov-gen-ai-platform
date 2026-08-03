@@ -12305,6 +12305,130 @@ queda en castellano. Medido el 2026-08-03 con el árbol de CAL.5.
 
 ---
 
+## Bloque MAN — Validación manual de la plataforma completa
+
+**Añadido el 2026-08-03 a petición del usuario.** Hasta ahora las pruebas manuales se han hecho
+**por bloque**, y han dejado **10 ficheros `.bat` sueltos** en la raíz. Ese modelo se ha quedado
+corto por dos motivos:
+
+1. **Varios de esos `.bat` han caducado sin que nadie lo note.** ROL renombró Partner→Admin y
+   Client→Organización, CAL.2 retiró el panel de fuentes web, y CAL.3/CAL.4 rehicieron la
+   pantalla de documentos y sus etiquetas. Un guion que dice «pulsa *Fuentes web*» ya no se
+   puede seguir, pero sigue ahí, y quien lo ejecute concluirá que la aplicación está rota.
+2. **Nadie ha probado nunca la plataforma de una pieza.** Cada campaña validó su bloque contra
+   el estado de ese día; los caminos que cruzan módulos —Hub → Redacción → Automatización, o
+   una organización con dos chatbots y temas distintos— no los ha recorrido nadie entero.
+
+**Regla que no cambia** (CLAUDE.md §Verificación de UI): lo que el agente puede comprobar en
+navegador **no entra** en estos guiones. Lo humano es lo irreducible: credenciales e IdP reales,
+sistemas externos no simulables, juicio subjetivo de identidad visual, lector de pantalla real y
+cualquier cosa con datos personales de verdad.
+
+**Superficie a cubrir**: `server/app/modules/{agents_hub,automation,redaccion}`, el frontend
+(`admin`, `redaccion`, `widget`, `themes`), el servidor MCP, el `client_app` como agente de
+ejecución local, y los dos modos de despliegue (`DEPLOY_MODE=cloud|edge`).
+
+---
+
+### Prompt MAN.1 — Inventario, poda y matriz de lo irreducible
+
+**Modelo sugerido**: **Sonnet** — trabajo de recorrido y criterio acotado, sin código nuevo.
+
+```
+# PROMPT MAN.1 — Qué exige humano, y qué de lo escrito ya no vale
+
+## Acción
+- Revisar los 10 pruebas_manuales_*.bat de la raíz contra el código de HOY. Para cada uno:
+  vigente / caducado / parcialmente caducado, con el motivo concreto (qué prompt lo
+  invalidó). Los caducados se BORRAN — el historial de git guarda lo que decían.
+- Construir docs/PRUEBAS_MANUALES.md: matriz por módulo con, en cada fila, qué se prueba,
+  por qué NO puede hacerlo el agente en navegador, y quién puede ejecutarlo (cualquiera /
+  alguien con credenciales institucionales / alguien con lector de pantalla / diseño).
+- Marcar explícitamente lo que NO va a la matriz por estar ya cubierto en navegador o por
+  tests, para que no se repita por inercia.
+
+## Cierre
+- [ ] Cada .bat de la raíz o está justificado como vigente o ha desaparecido
+- [ ] La matriz cubre agents_hub, automation, redaccion, widget, themes, MCP y client_app
+- [ ] Cada fila dice por qué es irreducible; si no se sabe decir, no es irreducible
+```
+
+---
+
+### Prompt MAN.2 — Campaña funcional en local (pre-deploy)
+
+**Modelo sugerido**: **Sonnet** — redacción de guiones sobre la matriz de MAN.1.
+
+```
+# PROMPT MAN.2 — Recorrido completo de la plataforma sin GCP
+
+## Acción
+- Un pruebas_manuales_plataforma.bat maestro que encadene las áreas de la matriz y permita
+  ejecutar sólo una (parámetro o menú): levantar, comprobar con curl que responde, y guiar.
+- Guiones de los caminos que CRUZAN módulos, que son los que nadie ha recorrido enteros:
+    · organización nueva -> dos chatbots -> temas distintos -> widget de cada uno
+    · corpus ingerido -> consulta -> cita -> feedback -> el hueco aparece en curación
+    · plantilla de redacción -> borrador LLM -> anonimización -> exportación
+    · script propuesto -> sandbox -> aprobación -> ejecución en el agente local
+- Cada paso con URL exacta, dato de ejemplo y resultado esperado. «Comprobar que
+  funciona» no es un paso.
+
+## Cierre
+- [ ] El .bat en ANSI (cp1252) sin BOM — se escribe con WriteAllText, ver CLAUDE.md
+- [ ] Primeros bytes 0x40 0x65 0x63 0x68 verificados
+- [ ] Ejecutado de principio a fin por el usuario, con los fallos anotados como prompts
+```
+
+---
+
+### Prompt MAN.3 — Accesibilidad con lector real e identidad visual
+
+**Modelo sugerido**: **Sonnet** — guion de validación; el juicio lo pone el humano.
+
+```
+# PROMPT MAN.3 — Lo que no puede juzgar ni un test ni el agente
+
+## Acción
+- Guion de recorrido con lector de pantalla REAL (NVDA/JAWS) sobre los formularios del
+  panel: chatbots, organizaciones, modelos LLM, documentos y prompts. Fase 20 dejó el gate
+  de axe en CI, y CAL.4 asoció 29 <label> a su campo, pero axe no oye: que el foco siga un
+  orden razonable y que cada campo se anuncie con su nombre sólo lo dice una persona.
+- Guion de identidad visual institucional: tipografía, color, tono del texto y del widget
+  embebido en una página real de la UJI.
+
+## Cierre
+- [ ] Cada hallazgo, o prompt nuevo o descarte razonado; nada queda en «lo miramos»
+```
+
+---
+
+### Prompt MAN.4 — Campaña contra el entorno desplegado (POST-DEPLOY)
+
+**Modelo sugerido**: **Sonnet** — depende de que D.5 haya terminado.
+
+```
+# PROMPT MAN.4 — Lo que sólo existe en producción
+
+## Prerrequisito
+- Deploy GCP completo (D.0-D.5). Antes de eso este prompt no se puede empezar.
+
+## Acción
+- SSO SAML real contra el IdP institucional: alta de usuario nuevo, organización asignada
+  desde SAML_ORGANIZACION_ID, y el caso que nunca se ha probado — un usuario del IdP que
+  NO debería tener acceso.
+- Sistemas externos no simulables en local (G400, ENI, APIs UJI).
+- Cloud Run de verdad: cold start medido, Cloud SQL vía proxy, ficheros en GCS a través
+  del StorageService.
+- Modo edge contra modo cloud: que la frontera de datos aguanta donde se dijo.
+
+## Cierre
+- [ ] El cold start medido se compara con el criterio de extracción a microservicio
+      (>15 s -> toca extraer embedding/Docling; ver CLAUDE.md)
+- [ ] Ningún dato de cliente real sale del edge en modo edge
+```
+
+---
+
 ## Prompt suelto FIX.1 — El modelo de un chatbot no se puede cambiar (PENDIENTE)
 
 > **Contexto**: encontrado el 2026-08-02 durante las pruebas manuales del Bloque RAG, que el
