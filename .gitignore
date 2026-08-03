@@ -67,6 +67,12 @@ outputs/
 
 # Legacy/Specific ignores
 app/modules/extraccion/servicios/*
+# CAL.1: extractores que ESCRIBE el runtime, no codigo fuente. Estaban trackeados -24
+# ficheros entre las dos copias- y volverian a colarse en el siguiente arranque, que es
+# como llegaron la primera vez.
+app/modules/extraccion/.servicios_generados/
+client_app/app/modules/extraccion/.servicios_generados/
+client_app/app/modules/extraccion/servicios/
 
 # Browser Automation & Cache
 **/sessions/

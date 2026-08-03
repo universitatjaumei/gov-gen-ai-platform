@@ -1,1 +1,0 @@
-def extraer_datos(file): return {'demo': 123}
