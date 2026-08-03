@@ -15,7 +15,7 @@ async def test_startup():
     
     try:
         print("\n[1/10] Testing DB imports...")
-        from app.database.db import init_db, seed_db
+        from server.app.database.db import init_server_db, seed_db
         print("✓ DB imports successful")
         
         print("\n[2/10] Testing service imports...")
@@ -26,7 +26,7 @@ async def test_startup():
         print("✓ Service imports successful")
         
         print("\n[3/10] Initializing database...")
-        await init_db()
+        await init_server_db()
         print("✓ Database initialized")
         
         print("\n[4/10] Seeding database...")

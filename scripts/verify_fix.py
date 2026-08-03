@@ -7,7 +7,7 @@ from pathlib import Path
 # Add project root to sys.path
 sys.path.insert(0, os.getcwd())
 
-from app.database.db import init_db
+from server.app.database.db import init_server_db
 from app.database.seeds_multitenancy import seed_multitenancy_defaults
 from client_app.app.database.db import init_client_db, seed_client_db, client_engine
 from server.app.database.db import server_engine
@@ -23,7 +23,7 @@ async def verify():
     
     # 1. Run Seeds
     print("\n[1] Running Seeds...")
-    await init_db()
+    await init_server_db()
     await seed_multitenancy_defaults()
     await init_client_db()
     await seed_client_db()

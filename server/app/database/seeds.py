@@ -171,9 +171,6 @@ async def seed_prompt_tiers():
         "sys_phase3_factory_gen": 2,  # Cambiado de 3 a 2 para programación (Tier 2: Lógica)
         "sys_phase3_refinement": 3,
         "sys_phase3_audit_forensic": 3,
-        "sys_script_gen": 3,  # Legacy alias
-        "factory_gen": 3,  # Legacy alias
-        "anchor_based": 3,  # Legacy alias
     }
 
     async with AsyncSession(server_engine) as session:

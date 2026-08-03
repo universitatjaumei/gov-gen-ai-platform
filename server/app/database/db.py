@@ -28,10 +28,6 @@ async def init_server_db():
         await conn.run_sync(SQLModel.metadata.create_all)
 
 
-# Alias for backwards compatibility
-init_db = init_server_db
-
-
 async def get_session() -> AsyncSession:
     async with AsyncSessionLocal() as session:
         yield session

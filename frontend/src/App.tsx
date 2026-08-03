@@ -1,33 +1,48 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Suspense } from 'react'
+import { Suspense, lazy } from 'react'
 import { AuthProvider, PrivateRoute } from '@/shared/auth'
 import { AppLayout } from '@/admin/AppLayout'
 import { HubLayout } from '@/admin/HubLayout'
-import { LoginPage } from '@/admin/pages/LoginPage'
-import { AuthCallbackPage } from '@/admin/pages/AuthCallbackPage'
-import { AccessTokensPage } from '@/admin/pages/AccessTokensPage'
-import { ChatbotsPage } from '@/admin/pages/ChatbotsPage'
-import { OrganizacionesPage } from '@/admin/pages/OrganizacionesPage'
-import { DocumentsPage } from '@/admin/pages/DocumentsPage'
-import { ReportsPage } from '@/admin/pages/ReportsPage'
-import { LLMConfigsPage } from '@/admin/pages/LLMConfigsPage'
-import { PromptsPage } from '@/admin/pages/PromptsPage'
-import { PlaceholderPage } from '@/admin/pages/PlaceholderPage'
-import { ReportTemplateBuilderPage } from '@/redaccion/pages/ReportTemplateBuilderPage'
-import { GenericReportWizard } from '@/redaccion/pages/GenericReportWizard'
-import { LLMDraftPreviewPage } from '@/redaccion/pages/LLMDraftPreviewPage'
-import { ScriptProposalWizardPage } from '@/redaccion/pages/ScriptProposalWizardPage'
-import { AdminScriptReviewQueuePage } from '@/redaccion/pages/AdminScriptReviewQueuePage'
-import { WorkspacePreview } from '@/redaccion/preview/WorkspacePreview'
-import { AIBrainPage } from '@/admin/pages/AIBrainPage'
-import { SitesPage } from '@/admin/pages/SitesPage'
-import { ContentQualityPage } from '@/admin/pages/ContentQualityPage'
-import { TestScenariosPage } from '@/admin/pages/TestScenariosPage'
 import { ThemeProvider } from './themes/ThemeProvider'
 import './index.css'
 import './themes/base.css'
 import '@/shared/i18n'
+
+/**
+ * Las páginas se cargan por ruta (CAL.5).
+ *
+ * Con imports estáticos, Rollup metía las 17 pantallas en un solo bundle de **1,18 MB**: quien
+ * entraba a ver una lista de chatbots se descargaba también el constructor de informes, el
+ * asistente de scripts y `recharts`. Cada `import()` de aquí es un punto de corte, así que el
+ * arranque sólo trae el armazón y la pantalla que se pide.
+ *
+ * Los envoltorios —`AppLayout`, `HubLayout`, `PrivateRoute`— siguen siendo estáticos: están en
+ * todas las rutas, así que separarlos sólo añadiría una espera más sin ahorrar nada.
+ *
+ * `.then(m => ({ default: ... }))` es necesario porque estos módulos exportan con nombre y
+ * `React.lazy` espera un `default`.
+ */
+const LoginPage = lazy(() => import('@/admin/pages/LoginPage').then(m => ({ default: m.LoginPage })))
+const AuthCallbackPage = lazy(() => import('@/admin/pages/AuthCallbackPage').then(m => ({ default: m.AuthCallbackPage })))
+const AccessTokensPage = lazy(() => import('@/admin/pages/AccessTokensPage').then(m => ({ default: m.AccessTokensPage })))
+const ChatbotsPage = lazy(() => import('@/admin/pages/ChatbotsPage').then(m => ({ default: m.ChatbotsPage })))
+const OrganizacionesPage = lazy(() => import('@/admin/pages/OrganizacionesPage').then(m => ({ default: m.OrganizacionesPage })))
+const DocumentsPage = lazy(() => import('@/admin/pages/DocumentsPage').then(m => ({ default: m.DocumentsPage })))
+const ReportsPage = lazy(() => import('@/admin/pages/ReportsPage').then(m => ({ default: m.ReportsPage })))
+const LLMConfigsPage = lazy(() => import('@/admin/pages/LLMConfigsPage').then(m => ({ default: m.LLMConfigsPage })))
+const PromptsPage = lazy(() => import('@/admin/pages/PromptsPage').then(m => ({ default: m.PromptsPage })))
+const PlaceholderPage = lazy(() => import('@/admin/pages/PlaceholderPage').then(m => ({ default: m.PlaceholderPage })))
+const AIBrainPage = lazy(() => import('@/admin/pages/AIBrainPage').then(m => ({ default: m.AIBrainPage })))
+const SitesPage = lazy(() => import('@/admin/pages/SitesPage').then(m => ({ default: m.SitesPage })))
+const ContentQualityPage = lazy(() => import('@/admin/pages/ContentQualityPage').then(m => ({ default: m.ContentQualityPage })))
+const TestScenariosPage = lazy(() => import('@/admin/pages/TestScenariosPage').then(m => ({ default: m.TestScenariosPage })))
+const ReportTemplateBuilderPage = lazy(() => import('@/redaccion/pages/ReportTemplateBuilderPage').then(m => ({ default: m.ReportTemplateBuilderPage })))
+const GenericReportWizard = lazy(() => import('@/redaccion/pages/GenericReportWizard').then(m => ({ default: m.GenericReportWizard })))
+const LLMDraftPreviewPage = lazy(() => import('@/redaccion/pages/LLMDraftPreviewPage').then(m => ({ default: m.LLMDraftPreviewPage })))
+const ScriptProposalWizardPage = lazy(() => import('@/redaccion/pages/ScriptProposalWizardPage').then(m => ({ default: m.ScriptProposalWizardPage })))
+const AdminScriptReviewQueuePage = lazy(() => import('@/redaccion/pages/AdminScriptReviewQueuePage').then(m => ({ default: m.AdminScriptReviewQueuePage })))
+const WorkspacePreview = lazy(() => import('@/redaccion/preview/WorkspacePreview').then(m => ({ default: m.WorkspacePreview })))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,13 +58,28 @@ const getThemeUrl = (): string | undefined => {
   return params.get('theme') ?? undefined
 }
 
+/**
+ * Espera mientras llega el trozo de la ruta.
+ *
+ * Antes el `fallback` era `null` porque no había nada que esperar: todo venía en el bundle
+ * inicial. Con la carga por ruta, `null` dejaría la pantalla en blanco durante la descarga y
+ * parecería que la aplicación se ha colgado.
+ */
+function CargandoRuta() {
+  return (
+    <div className="flex items-center justify-center p-12" role="status" aria-live="polite">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted border-t-primary" />
+    </div>
+  )
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider themeUrl={getThemeUrl()}>
       <BrowserRouter>
         <AuthProvider>
-          <Suspense fallback={null}>
+          <Suspense fallback={<CargandoRuta />}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/auth/callback" element={<AuthCallbackPage />} />

@@ -7,7 +7,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from app.database.db import server_engine, init_db
+from server.app.database.db import server_engine, init_server_db
 from app.database.models import ExtractionServiceConfig
 
 # 1. Prompt de Análisis (Generalización)
@@ -101,7 +101,7 @@ async def init_rpa_prompts():
     print("🚀 Inicializando Prompts RPA en DB...")
     
     # Asegurar tablas
-    await init_db()
+    await init_server_db()
     
     configs = [
         ExtractionServiceConfig(
