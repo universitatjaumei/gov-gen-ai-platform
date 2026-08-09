@@ -11,6 +11,17 @@ de verdad.
 
 ---
 
+## Hallazgos que requieren tu decisión (MAN.1 + MAN.2, para revisar juntos)
+
+| # | Hallazgo | Estado | Alcance |
+|---|---|---|---|
+| 1 | `curation/SitesPage.tsx`: `useDeleteSite` no invalidaba la lista tras borrar (DELETE 204 en servidor, fila seguía en pantalla) | ✅ **Arreglado** (commit `6cba8fc`, test RED/GREEN) | 1 fichero |
+| 2 | `GET /api/v1/hub/redaccion/templates` (y 5 sitios más del mismo router) devuelve **500** para cualquier sesión cuyo `user_id` no sea UUID — el SuperAdmin de desarrollo tiene `admin_id` entero y el Admin `partner_id` de texto libre, ninguno UUID. `/redaccion/wizard` se queda en blanco sin avisar | ⏳ **Pendiente de decisión** — bloquea entero el Camino 3 de MAN.2 (plantilla → borrador → anonimización → exportación) | `hub_redaccion_router.py`, 6 ocurrencias de `uuid.UUID(user.user_id)`; probablemente toca decidir si SuperAdmin/Admin deben poder "poseer" plantillas o si siempre deben verse tratados como `is_global` |
+| 3 | El widget público (`frontend/src/widget/`) **no consume ningún tema** de organización/chatbot — `ThemeProvider` sólo está cableado en `frontend/src/App.tsx` (panel admin) | ⏳ **Pendiente de decisión** — no es un bug de regresión, es una promesa del roadmap (Subfase 1.B) que no llegó a esta pieza. Afecta al Camino 1 de MAN.2 ("temas distintos → widget de cada uno") | Requiere diseño: qué theming aplica el widget y de dónde lo lee |
+| 4 | "Ejecutar" en `/hub/test-scenarios` fija `fallback_reason=None` a propósito (línea 256 de `hub_test_scenarios_router.py`) — **no es un bug**, pero significa que las ejecuciones de escenarios de prueba **nunca** alimentan la detección de huecos de RAG.14. Sólo lo hace una conversación real (widget o `POST /hub/chat/{id}`) | ℹ️ Documentado, sin acción — es la separación correcta entre "revisión manual" y "señal de uso real" | Ninguno; queda anotado para que nadie repita la confusión |
+
+---
+
 ## Ya verificado por el agente en navegador (2026-08-09) — no repetir
 
 Con `docker compose up -d db`, backend en `:8000` y frontend en `:5173`, sesión real como
@@ -35,8 +46,22 @@ Con `docker compose up -d db`, backend en `:8000` y frontend en `:5173`, sesión
 | Widget | `widget.html` requiere `npm run build:widget`; tras construirlo, el input y "Enviar" renderizan |
 | MCP | Suite propia `mcp_server/tests`: 54 passed |
 
-**Hallazgos de esta sesión** (no son "irreducibles": son código a corregir, no trabajo para el
-usuario). Documentados en el informe de cierre del bloque, no aquí.
+**MAN.2 — recorrido de punta a punta (2026-08-09), datos reales creados en esta sesión:**
+
+| Paso | Qué se hizo | Resultado |
+|---|---|---|
+| Organización nueva | `POST /hub/organizaciones` → "Organización MAN.2" | 201, aparece en la lista con 0 chatbots |
+| Dos chatbots bajo la misma organización | "Chatbot MAN Uno" y "Chatbot MAN Dos" | 201 × 2, ambos Vectorial RAG / Activo |
+| Ingesta de un PDF real | `ARQUITECTURA GEN-GOV.pdf` (240 KB) subido a "Chatbot MAN Uno" vía dropzone | Job pasa de "Procesando" a documento en el corpus, 4,8 k tokens, Docling + RapidOCR en los logs |
+| Consulta real contra el LLM (Gemini, clave real configurada) | 3 preguntas sobre la arquitectura de despliegue vía Escenarios de prueba | El chatbot respondió (sin alucinar) "no tengo información suficiente… con citas verificables" las 3 veces — el PDF elegido es sobre todo diagramas, poco texto extraíble; ver hallazgo #4 sobre por qué esto NO alimentó la detección de huecos |
+| `POST /hub/quality/gaps/analyze` contra el `GapFinding` corregido en CUR.1 | Ejecutado desde Curación → Hallazgos | 200 OK, 0 huecos (esperado, ver hallazgo #4) — confirma que el fix de CUR.1 no rompió el camino feliz con datos reales |
+| Organización + 2 chatbots + 1 documento **se dejan sembrados** en la BD de desarrollo, por si quieres continuar la verificación de RAG.14 tú mismo repitiendo el paso de consulta desde el widget en vez de Escenarios de prueba | — | — |
+
+**Nuevo `.bat` maestro**: `pruebas_manuales_plataforma.bat`, con menú (o parámetro `0`-`4`) para
+los cuatro caminos cruzados de MAN.2. Probado en seco (`0`, `1`, `2`, `3`, `4`): arranca, hace
+los `curl` reales y no se cuelga. Corregido en el proceso un bug propio del guion (faltaba el
+salto para el parámetro `0`, y unos `^` de escape sobrantes en las cadenas de `curl` que hacían
+salir un `^>` literal en vez de `->`).
 
 ---
 
@@ -59,6 +84,10 @@ usuario). Documentados en el informe de cierre del bloque, no aquí.
 
 ### `modules/redaccion` (plantillas, borrador LLM, anonimización, exportación)
 
+> ⚠️ **Bloqueado de raíz** (hallazgo #2 de la tabla de arriba): `GET /hub/redaccion/templates`
+> devuelve 500 para cualquier sesión de desarrollo (SuperAdmin o Admin), así que ninguna fila
+> de esta tabla se puede recorrer todavía sin arreglar antes ese endpoint.
+
 | Qué se prueba | Por qué NO lo hace el agente en navegador | Quién |
 |---|---|---|
 | Calidad de la anonimización sobre un documento con datos personales reales | El agente no debe procesar PII real; los tests usan datos sintéticos | Alguien con un documento de prueba ya anonimizado por otra vía, o con autorización expresa para usar uno real |
@@ -73,6 +102,11 @@ usuario). Documentados en el informe de cierre del bloque, no aquí.
 | `pruebas_manuales_prompt9CBis11.bat` (citas como pills) contra un chatbot con corpus real | `widget.html` apunta a un `chatbot_id` de fixture (`E2E Bot`) que no existe en el seed de desarrollo actual — de ahí el 401 al preguntar. Hace falta un chatbot con API key pública y corpus cargado | Alguien que configure ese chatbot de prueba con datos reales |
 
 ### `themes` (identidad visual)
+
+> ⚠️ **El widget no aplica ningún tema todavía** (hallazgo #3 de la tabla de arriba): esto no es
+> "irreducible" en el sentido de MAN.1 — no es que el agente no pueda juzgarlo, es que el código
+> que lo haría posible no existe aún fuera del panel admin. Las dos filas de abajo son las que
+> serán irreducibles **una vez** exista esa pieza.
 
 | Qué se prueba | Por qué NO lo hace el agente en navegador | Quién |
 |---|---|---|
@@ -131,3 +165,4 @@ usuario). Documentados en el informe de cierre del bloque, no aquí.
 | `pruebas_manuales_promptFIX1.bat` | Vigente | Selector de modelo y escenarios de prueba sin cambios desde FIX.1 |
 | `pruebas_manuales_promptROL_2.bat` | Vigente | Renombrado Partner→Admin, Client→Organización sin cambios desde ROL.2 |
 | `pruebas_manuales_promptSBX_4.bat` | Vigente | Aislamiento Docker del sandbox, infraestructura no tocada por ningún bloque posterior |
+| `pruebas_manuales_plataforma.bat` | **Nuevo (MAN.2)** | `.bat` maestro con menú/parámetro para los 4 caminos que cruzan módulos; ver la sección MAN.2 más arriba |
