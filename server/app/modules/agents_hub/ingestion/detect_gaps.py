@@ -1,6 +1,6 @@
 """Comando de detección de huecos de corpus (RAG.14). Deploy: edge.
 
-    uv run python -m server.app.modules.agents_hub.ingestion.quality.detect_gaps \
+    uv run python -m server.app.modules.agents_hub.ingestion.detect_gaps \
         --chatbot-id <uuid> [--dry-run] [--dias 30] [--min-cluster 3]
 
 **No se engancha al scheduler periódico de 9Q en este prompt**, y es deliberado: el
@@ -21,7 +21,7 @@ async def _main(args: argparse.Namespace) -> None:
         create_session_factory,
         get_engine,
     )
-    from server.app.modules.agents_hub.ingestion.quality.gap_detector import (
+    from server.app.modules.agents_hub.ingestion.gap_detector import (
         analizar_huecos,
         detectar_huecos,
         render_huecos,

@@ -21,15 +21,18 @@ Tres decisiones que lo sostienen:
   revisión.
 
 El clustering es **aglomerativo por umbral de coseno**, no k-means: no se sabe cuántos
-huecos hay —es justo lo que se busca— y k-means exige decidirlo de antemano. Reutiliza el
-mismo `_cosine` que el detector semántico de 9Q.
+huecos hay —es justo lo que se busca— y k-means exige decidirlo de antemano. `_cosine` es una
+copia local, no un import cruzado hacia el módulo de curación (que tiene el mismo cálculo en
+su detector semántico): la frontera de CUR.1 prohíbe que este lado importe del otro, y cinco
+líneas de aritmética no justifican una dependencia cruzada.
 """
 from __future__ import annotations
 
+import math
 import re
 import uuid
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 
@@ -40,8 +43,6 @@ from server.app.modules.agents_hub.database.operational_models import (
     HubContentFinding,
     HubInteraction,
 )
-from server.app.modules.agents_hub.ingestion.quality.contracts import ContentFinding
-from server.app.modules.agents_hub.ingestion.quality.semantic_detector import _cosine
 
 # Feedback igual o por debajo de esto cuenta como señal. Sobre 5, un 2 ya es «no me sirve».
 UMBRAL_FEEDBACK = 2
@@ -66,6 +67,15 @@ class EmbeddingService(Protocol):
     async def embed(self, text: str) -> list[float]: ...
 
 
+def _cosine(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return dot / (na * nb)
+
+
 @dataclass(frozen=True)
 class SenalDeFallo:
     """Una interacción que salió mal, con por qué se sabe que salió mal."""
@@ -73,6 +83,23 @@ class SenalDeFallo:
     query: str
     motivo: str
     cuando: datetime
+
+
+@dataclass(frozen=True)
+class GapFinding:
+    """Espejo mínimo de `ContentFinding`, el contrato del módulo de curación, para el hueco
+    de un chatbot: este módulo no puede importar del otro lado de la frontera (CUR.1), y aquí
+    el sujeto es siempre un chatbot, nunca un sitio, así que el validador de «exactamente un
+    sujeto» de `ContentFinding` no hace falta — queda irrepresentable por construcción.
+    """
+
+    id: uuid.UUID
+    chatbot_id: uuid.UUID
+    finding_type: str
+    severity: str
+    confidence: float
+    detected_at: datetime
+    signal: dict[str, Any] = field(default_factory=dict)
 
 
 async def recoger_senales(
@@ -164,7 +191,7 @@ def _severidad(recuento: int) -> str:
 class HuecoDetectado:
     """Un cluster que ya merece hallazgo, con su centroide para poder deduplicar."""
 
-    finding: ContentFinding
+    finding: GapFinding
     centroide: list[float]
 
 
@@ -175,7 +202,7 @@ async def detectar_huecos(
     dias: int = VENTANA_DIAS,
     min_cluster_size: int = MIN_TAMANO_CLUSTER,
     umbral_similitud: float = UMBRAL_SIMILITUD,
-) -> list[ContentFinding]:
+) -> list[GapFinding]:
     """Los huecos del chatbot, sin escribir nada. Es lo que se puede mirar antes de guardar."""
     return [h.finding for h in await _detectar(
         session, chatbot_id, embedding_service, dias, min_cluster_size, umbral_similitud
@@ -211,9 +238,8 @@ async def _detectar(
         ]
 
         huecos.append(HuecoDetectado(
-            finding=ContentFinding(
+            finding=GapFinding(
                 id=uuid.uuid4(),
-                site_id=None,
                 chatbot_id=chatbot_id,
                 finding_type="content_gap",
                 severity=_severidad(len(grupo)),  # type: ignore[arg-type]
@@ -301,7 +327,7 @@ def _mismo_hueco(
     return None
 
 
-def render_huecos(huecos: list[ContentFinding]) -> str:
+def render_huecos(huecos: list[GapFinding]) -> str:
     """Informe legible para la consola del comando."""
     if not huecos:
         return "  sin huecos por encima del umbral"
