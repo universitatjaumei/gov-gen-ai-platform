@@ -147,7 +147,7 @@ class TestDetectorDeCaducidad:
     async def test_should_emit_finding_for_document_past_its_review_date(
         self, tmp_path, db_session
     ):
-        from server.app.modules.agents_hub.ingestion.quality.staleness_detector import (
+        from server.app.modules.curation.staleness_detector import (
             analizar_caducidad,
         )
 
@@ -170,7 +170,7 @@ class TestDetectorDeCaducidad:
     async def test_should_not_emit_for_document_within_review_window(
         self, tmp_path, db_session
     ):
-        from server.app.modules.agents_hub.ingestion.quality.staleness_detector import (
+        from server.app.modules.curation.staleness_detector import (
             analizar_caducidad,
         )
 
@@ -189,7 +189,7 @@ class TestDetectorDeCaducidad:
         self, tmp_path, db_session
     ):
         """El detector corre periódicamente: sin deduplicar, la cola muere en una semana."""
-        from server.app.modules.agents_hub.ingestion.quality.staleness_detector import (
+        from server.app.modules.curation.staleness_detector import (
             analizar_caducidad,
         )
 
@@ -212,7 +212,7 @@ class TestDetectorDeCaducidad:
         Mismo criterio que RAG.14. Lo contrario convierte «resolved» en un silenciador
         permanente sobre un documento que nadie ha revisado.
         """
-        from server.app.modules.agents_hub.ingestion.quality.staleness_detector import (
+        from server.app.modules.curation.staleness_detector import (
             analizar_caducidad,
         )
 
@@ -232,7 +232,7 @@ class TestDetectorDeCaducidad:
         self, tmp_path, db_session
     ):
         """Lo que no se indexa no caduca: avisaría de algo que nadie va a leer."""
-        from server.app.modules.agents_hub.ingestion.quality.staleness_detector import (
+        from server.app.modules.curation.staleness_detector import (
             analizar_caducidad,
         )
 
@@ -247,7 +247,7 @@ class TestDetectorDeCaducidad:
 
     @pytest.mark.asyncio
     async def test_should_scope_findings_by_chatbot(self, tmp_path, db_session):
-        from server.app.modules.agents_hub.ingestion.quality.staleness_detector import (
+        from server.app.modules.curation.staleness_detector import (
             analizar_caducidad,
         )
 
@@ -266,7 +266,7 @@ class TestDetectorDeCaducidad:
         self, tmp_path, db_session
     ):
         """Una semana de retraso y tres años no son el mismo problema."""
-        from server.app.modules.agents_hub.ingestion.quality.staleness_detector import (
+        from server.app.modules.curation.staleness_detector import (
             analizar_caducidad,
         )
 
@@ -291,7 +291,7 @@ class TestColaDeRevision:
     @pytest.mark.asyncio
     async def test_should_keep_existing_9q_finding_tests_green(self):
         """`revisio_vencuda` entra en el contrato sin desplazar a los que ya estaban."""
-        from server.app.modules.agents_hub.ingestion.quality.contracts import (
+        from server.app.modules.curation.contracts import (
             ContentFinding,
             FindingType,
         )
@@ -318,7 +318,7 @@ class TestColaDeRevision:
         from server.app.modules.agents_hub.database.operational_models import (
             HubContentFinding,
         )
-        from server.app.modules.agents_hub.ingestion.quality.staleness_detector import (
+        from server.app.modules.curation.staleness_detector import (
             analizar_caducidad,
             listar_caducados,
         )

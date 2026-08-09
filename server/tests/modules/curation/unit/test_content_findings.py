@@ -14,7 +14,7 @@ _NOW = datetime.now(timezone.utc)
 
 
 def _make_finding(**overrides):
-    from server.app.modules.agents_hub.ingestion.quality.contracts import ContentFinding
+    from server.app.modules.curation.contracts import ContentFinding
 
     defaults = dict(
         id=uuid.uuid4(),
@@ -36,7 +36,7 @@ def _make_finding(**overrides):
 class TestContentFindingContract:
 
     def test_content_finding_is_frozen(self) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.contracts import ContentFinding
+        from server.app.modules.curation.contracts import ContentFinding
 
         finding = _make_finding()
         with pytest.raises(Exception):
@@ -63,7 +63,7 @@ class TestContentFindingContract:
             _make_finding(confidence=1.01)
 
     def test_all_finding_types_accepted(self) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.contracts import ContentFinding
+        from server.app.modules.curation.contracts import ContentFinding
 
         types = [
             "superseded", "duplicate", "contradiction", "empty",
@@ -90,35 +90,35 @@ class TestContentFindingContract:
 class TestFindingTransitions:
 
     def test_new_can_go_to_confirmed_or_dismissed(self) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.contracts import (
+        from server.app.modules.curation.contracts import (
             _VALID_FINDING_TRANSITIONS,
         )
 
         assert _VALID_FINDING_TRANSITIONS["new"] == {"confirmed", "dismissed"}
 
     def test_confirmed_can_go_to_resolved_or_dismissed(self) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.contracts import (
+        from server.app.modules.curation.contracts import (
             _VALID_FINDING_TRANSITIONS,
         )
 
         assert _VALID_FINDING_TRANSITIONS["confirmed"] == {"resolved", "dismissed"}
 
     def test_dismissed_can_go_back_to_new(self) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.contracts import (
+        from server.app.modules.curation.contracts import (
             _VALID_FINDING_TRANSITIONS,
         )
 
         assert _VALID_FINDING_TRANSITIONS["dismissed"] == {"new"}
 
     def test_resolved_is_terminal(self) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.contracts import (
+        from server.app.modules.curation.contracts import (
             _VALID_FINDING_TRANSITIONS,
         )
 
         assert _VALID_FINDING_TRANSITIONS["resolved"] == set()
 
     def test_invalid_transition_new_to_resolved_not_allowed(self) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.contracts import (
+        from server.app.modules.curation.contracts import (
             _VALID_FINDING_TRANSITIONS,
         )
 
@@ -199,7 +199,7 @@ class TestContentFindingRepo:
 
     @pytest.mark.asyncio
     async def test_upsert_creates_new_finding_when_not_exists(self) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.findings_repo import (
+        from server.app.modules.curation.findings_repo import (
             ContentFindingRepo,
         )
 
@@ -214,7 +214,7 @@ class TestContentFindingRepo:
 
     @pytest.mark.asyncio
     async def test_upsert_updates_existing_finding_not_duplicate(self) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.findings_repo import (
+        from server.app.modules.curation.findings_repo import (
             ContentFindingRepo,
         )
         from server.app.modules.agents_hub.database.operational_models import HubContentFinding
@@ -241,7 +241,7 @@ class TestContentFindingRepo:
 
     @pytest.mark.asyncio
     async def test_list_by_site_returns_results(self) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.findings_repo import (
+        from server.app.modules.curation.findings_repo import (
             ContentFindingRepo,
         )
         from server.app.modules.agents_hub.database.operational_models import HubContentFinding
@@ -262,7 +262,7 @@ class TestContentFindingRepo:
 
     @pytest.mark.asyncio
     async def test_list_by_site_filters_by_status(self) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.findings_repo import (
+        from server.app.modules.curation.findings_repo import (
             ContentFindingRepo,
         )
 
@@ -277,7 +277,7 @@ class TestContentFindingRepo:
 
     @pytest.mark.asyncio
     async def test_list_by_site_filters_by_finding_type(self) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.findings_repo import (
+        from server.app.modules.curation.findings_repo import (
             ContentFindingRepo,
         )
 
@@ -292,7 +292,7 @@ class TestContentFindingRepo:
 
     @pytest.mark.asyncio
     async def test_transition_valid_updates_reviewed_fields(self) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.findings_repo import (
+        from server.app.modules.curation.findings_repo import (
             ContentFindingRepo,
         )
         from server.app.modules.agents_hub.database.operational_models import HubContentFinding
@@ -316,10 +316,10 @@ class TestContentFindingRepo:
 
     @pytest.mark.asyncio
     async def test_transition_invalid_raises_error(self) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.findings_repo import (
+        from server.app.modules.curation.findings_repo import (
             ContentFindingRepo,
         )
-        from server.app.modules.agents_hub.ingestion.quality.contracts import (
+        from server.app.modules.curation.contracts import (
             InvalidFindingTransitionError,
         )
         from server.app.modules.agents_hub.database.operational_models import HubContentFinding
@@ -337,10 +337,10 @@ class TestContentFindingRepo:
 
     @pytest.mark.asyncio
     async def test_transition_resolved_terminal_raises_error(self) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.findings_repo import (
+        from server.app.modules.curation.findings_repo import (
             ContentFindingRepo,
         )
-        from server.app.modules.agents_hub.ingestion.quality.contracts import (
+        from server.app.modules.curation.contracts import (
             InvalidFindingTransitionError,
         )
         from server.app.modules.agents_hub.database.operational_models import HubContentFinding

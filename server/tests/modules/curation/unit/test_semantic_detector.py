@@ -113,7 +113,7 @@ class _FakeLLM:
 
 
 def _detector(session, llm, emb, **kwargs):
-    from server.app.modules.agents_hub.ingestion.quality.semantic_detector import (
+    from server.app.modules.curation.semantic_detector import (
         SemanticContradictionDetector,
     )
 

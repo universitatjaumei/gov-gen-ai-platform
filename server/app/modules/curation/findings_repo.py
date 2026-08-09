@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.modules.agents_hub.database.operational_models import HubContentFinding
-from server.app.modules.agents_hub.ingestion.quality.contracts import (
+from server.app.modules.curation.contracts import (
     ContentFinding,
     InvalidFindingTransitionError,
     _VALID_FINDING_TRANSITIONS,

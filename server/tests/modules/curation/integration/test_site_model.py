@@ -20,7 +20,7 @@ class TestWebSiteRepo:
     @pytest.mark.asyncio
     async def test_create_get_list_by_organizacion(self, db_session) -> None:
         from server.app.modules.agents_hub.database.operational_models import HubWebSite
-        from server.app.modules.agents_hub.ingestion.quality.site_repo import WebSiteRepo
+        from server.app.modules.curation.site_repo import WebSiteRepo
 
         repo = WebSiteRepo(db_session)
         organizacion_id = uuid.uuid4()
@@ -55,7 +55,7 @@ class TestWebSiteRepo:
 
     @pytest.mark.asyncio
     async def test_audit_semantic_scope_default_ingested(self, db_session) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.site_repo import WebSiteRepo
+        from server.app.modules.curation.site_repo import WebSiteRepo
 
         repo = WebSiteRepo(db_session)
         site = await repo.create(
@@ -75,7 +75,7 @@ class TestWebSiteRepo:
             HubCorpusSelection,
             HubCrawledPage,
         )
-        from server.app.modules.agents_hub.ingestion.quality.site_repo import (
+        from server.app.modules.curation.site_repo import (
             CorpusSelectionRepo,
             CrawledPageRepo,
             WebSiteRepo,
@@ -124,7 +124,7 @@ class TestCrawledPageRepo:
     @pytest.mark.asyncio
     async def test_upsert_respects_unique_constraint(self, db_session) -> None:
         from server.app.modules.agents_hub.database.operational_models import HubCrawledPage
-        from server.app.modules.agents_hub.ingestion.quality.site_repo import (
+        from server.app.modules.curation.site_repo import (
             CrawledPageRepo,
             WebSiteRepo,
         )
@@ -164,7 +164,7 @@ class TestCrawledPageRepo:
 
     @pytest.mark.asyncio
     async def test_page_defaults(self, db_session) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.site_repo import (
+        from server.app.modules.curation.site_repo import (
             CrawledPageRepo,
             WebSiteRepo,
         )
@@ -187,7 +187,7 @@ class TestCrawledPageRepo:
 
     @pytest.mark.asyncio
     async def test_list_by_site_filtered_by_status(self, db_session) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.site_repo import (
+        from server.app.modules.curation.site_repo import (
             CrawledPageRepo,
             WebSiteRepo,
         )
@@ -213,7 +213,7 @@ class TestCrawledPageRepo:
 
     @pytest.mark.asyncio
     async def test_mark_gone_updates_status_in_bulk(self, db_session) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.site_repo import (
+        from server.app.modules.curation.site_repo import (
             CrawledPageRepo,
             WebSiteRepo,
         )
@@ -239,7 +239,7 @@ class TestCrawledPageRepo:
 
     @pytest.mark.asyncio
     async def test_get_by_canonical(self, db_session) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.site_repo import (
+        from server.app.modules.curation.site_repo import (
             CrawledPageRepo,
             WebSiteRepo,
         )
@@ -274,7 +274,7 @@ class TestCorpusSelectionRepo:
 
     @pytest.mark.asyncio
     async def test_create_list_by_chatbot_and_by_site(self, db_session) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.site_repo import (
+        from server.app.modules.curation.site_repo import (
             CorpusSelectionRepo,
             WebSiteRepo,
         )
@@ -317,7 +317,7 @@ class TestCorpusSelectionRepo:
 
     @pytest.mark.asyncio
     async def test_matches_path_prefix_yes_and_no(self, db_session) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.site_repo import (
+        from server.app.modules.curation.site_repo import (
             CorpusSelectionRepo,
             WebSiteRepo,
         )
@@ -339,7 +339,7 @@ class TestCorpusSelectionRepo:
 
     @pytest.mark.asyncio
     async def test_matches_manual_always_false(self, db_session) -> None:
-        from server.app.modules.agents_hub.ingestion.quality.site_repo import (
+        from server.app.modules.curation.site_repo import (
             CorpusSelectionRepo,
             WebSiteRepo,
         )
@@ -387,7 +387,7 @@ class TestHubDocumentCrawledPageFK:
     @pytest.mark.asyncio
     async def test_fk_set_null_on_page_delete(self, db_session) -> None:
         from server.app.modules.agents_hub.database.operational_models import HubDocument
-        from server.app.modules.agents_hub.ingestion.quality.site_repo import (
+        from server.app.modules.curation.site_repo import (
             CrawledPageRepo,
             WebSiteRepo,
         )

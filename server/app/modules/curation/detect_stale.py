@@ -1,6 +1,6 @@
 """Comando de detección de revisiones vencidas (SYNC.2). Deploy: edge.
 
-    uv run python -m server.app.modules.agents_hub.ingestion.quality.detect_stale \
+    uv run python -m server.app.modules.curation.detect_stale \
         --chatbot-id <uuid> [--dry-run]
 
 **No se engancha al scheduler periódico de 9Q**, igual que RAG.14 y SYNC.1. Cada cuánto se
@@ -19,7 +19,7 @@ async def _main(args: argparse.Namespace) -> None:
         create_session_factory,
         get_engine,
     )
-    from server.app.modules.agents_hub.ingestion.quality.staleness_detector import (
+    from server.app.modules.curation.staleness_detector import (
         analizar_caducidad,
         detectar_caducados,
         render_caducados,

@@ -12,7 +12,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Sequence
 
-from server.app.modules.agents_hub.ingestion.quality.report_contracts import (
+from server.app.modules.curation.report_contracts import (
     ContentFindingView,
     FindingTypeSection,
     WebQualityReport,

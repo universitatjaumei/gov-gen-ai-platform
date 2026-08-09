@@ -77,10 +77,10 @@ def _start_quality_scheduler():
             create_async_engine,
             create_session_factory,
         )
-        from server.app.modules.agents_hub.ingestion.quality.quality_job import (
+        from server.app.modules.curation.quality_job import (
             SiteQualityAnalysisJob,
         )
-        from server.app.modules.agents_hub.ingestion.quality.quality_scheduler import (
+        from server.app.modules.curation.quality_scheduler import (
             create_quality_scheduler,
         )
 
@@ -123,7 +123,7 @@ class _NullCrawler:
     """Crawl stub para el arranque sin configuración completa."""
 
     async def crawl_site(self, site_id):  # noqa: ANN001
-        from server.app.modules.agents_hub.ingestion.quality.site_crawler import SiteCrawlSummary
+        from server.app.modules.curation.site_crawler import SiteCrawlSummary
         return SiteCrawlSummary(errors=["no spider configured"])
 
 

@@ -77,7 +77,7 @@ class _FakeSiteRepo:
 
 
 def _make_builder(findings, site_name="Sitio Test"):
-    from server.app.modules.agents_hub.ingestion.quality.report_builder import (
+    from server.app.modules.curation.report_builder import (
         WebQualityReportBuilder,
     )
 

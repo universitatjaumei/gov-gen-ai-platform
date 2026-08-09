@@ -102,7 +102,7 @@ class _FakeSpider:
         self._fetch_errors = fetch_errors or {}
 
     async def crawl(self, source):  # noqa: ANN001
-        from server.app.modules.agents_hub.ingestion.spider import CrawlResult, CrawlStatus
+        from server.app.modules.curation.spider import CrawlResult, CrawlStatus
 
         return CrawlResult(
             crawled_urls=list(self._crawled_urls),
@@ -140,7 +140,7 @@ class _FakeSignals:
 
 
 def _make_crawler(site, page_repo, spider, signals):
-    from server.app.modules.agents_hub.ingestion.quality.site_crawler import SiteCrawler
+    from server.app.modules.curation.site_crawler import SiteCrawler
 
     return SiteCrawler(
         session=_FakeSession(site),

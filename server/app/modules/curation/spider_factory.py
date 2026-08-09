@@ -2,9 +2,9 @@
 
 Deploy: edge
 """
-from server.app.modules.agents_hub.ingestion.spider import GenericSpider
-from server.app.modules.agents_hub.ingestion.spiders.normativa_spider import NormativaSpider
-from server.app.modules.agents_hub.ingestion.spiders.procedimientos_spider import ProcedimientosSpider
+from server.app.modules.curation.spider import GenericSpider
+from server.app.modules.curation.spiders.normativa_spider import NormativaSpider
+from server.app.modules.curation.spiders.procedimientos_spider import ProcedimientosSpider
 
 _NORMATIVA_SOURCE_TYPES = frozenset({"boe", "dogv", "uji"})
 

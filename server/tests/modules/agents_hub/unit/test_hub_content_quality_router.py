@@ -139,7 +139,7 @@ def test_patch_finding_transitions_status():
 
 def test_patch_finding_invalid_transition_returns_422():
     """PATCH con transición inválida → 422."""
-    from server.app.modules.agents_hub.ingestion.quality.contracts import (
+    from server.app.modules.curation.contracts import (
         InvalidFindingTransitionError,
     )
 
@@ -166,7 +166,7 @@ def test_patch_finding_invalid_transition_returns_422():
 
 def test_get_report_returns_200_with_report_structure():
     """GET /hub/sites/{id}/report → 200 con estructura WebQualityReport."""
-    from server.app.modules.agents_hub.ingestion.quality.report_contracts import (
+    from server.app.modules.curation.report_contracts import (
         WebQualityReport,
     )
 
@@ -197,7 +197,7 @@ def test_get_report_returns_200_with_report_structure():
 
 def test_get_report_export_docx_returns_bytes():
     """GET /hub/sites/{id}/report/export?format=docx → binario DOCX."""
-    from server.app.modules.agents_hub.ingestion.quality.report_contracts import (
+    from server.app.modules.curation.report_contracts import (
         WebQualityReport,
     )
     from server.app.routers.hub_content_quality_router import get_report_exporter

@@ -99,7 +99,7 @@ def test_create_site_returns_201(monkeypatch):
     # mock instalado para el resto del proceso, y todo test posterior que creara un
     # sitio de verdad recibía este objeto desanclado sin ejecutar ni un INSERT — el
     # origen de los 10 fallos de test_site_model.py en ejecución conjunta (TST.1).
-    from server.app.modules.agents_hub.ingestion.quality.site_repo import WebSiteRepo
+    from server.app.modules.curation.site_repo import WebSiteRepo
     monkeypatch.setattr(WebSiteRepo, "create", AsyncMock(return_value=site))
 
     client = TestClient(_build_app(session_mock=session))
@@ -226,7 +226,7 @@ def test_create_selection_returns_201(monkeypatch):
     session.refresh = AsyncMock()
 
     # monkeypatch, no asignación a la clase: ver el comentario de test_create_site.
-    from server.app.modules.agents_hub.ingestion.quality.site_repo import CorpusSelectionRepo
+    from server.app.modules.curation.site_repo import CorpusSelectionRepo
     monkeypatch.setattr(CorpusSelectionRepo, "create", AsyncMock(return_value=sel))
 
     client = TestClient(_build_app(session_mock=session))
@@ -282,7 +282,7 @@ def test_list_candidates_returns_200():
     chatbot_id = uuid.uuid4()
     session = AsyncMock()
 
-    from server.app.modules.agents_hub.ingestion.quality.selection_contracts import CandidatePageView
+    from server.app.modules.curation.selection_contracts import CandidatePageView
     candidate = CandidatePageView(
         page_id=uuid.uuid4(),
         url="https://ej.es/temas/agua",

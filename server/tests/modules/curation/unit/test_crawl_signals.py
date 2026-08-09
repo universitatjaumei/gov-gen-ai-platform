@@ -13,7 +13,7 @@ import pytest
 
 
 def _extractor():
-    from server.app.modules.agents_hub.ingestion.quality.signal_extractor import (
+    from server.app.modules.curation.signal_extractor import (
         CrawlSignalExtractor,
     )
 

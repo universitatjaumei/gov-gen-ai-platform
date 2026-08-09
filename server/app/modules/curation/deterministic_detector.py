@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 from urllib.parse import urlparse
 
-from server.app.modules.agents_hub.ingestion.quality.contracts import ContentFinding
+from server.app.modules.curation.contracts import ContentFinding
 
 _YEAR_SEG = re.compile(r"/((?:19|20)\d{2})(?=/|$)")
 

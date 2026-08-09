@@ -28,7 +28,7 @@ from server.app.modules.agents_hub.database.operational_models import (
     HubDocumentChunk,
     HubWebSite,
 )
-from server.app.modules.agents_hub.ingestion.quality.contracts import ContentFinding
+from server.app.modules.curation.contracts import ContentFinding
 from server.app.modules.redaccion.services.llm_spec_service import _extract_json
 
 _TEXT_LIMIT = 2000  # chars enviados al juez por documento

@@ -40,7 +40,7 @@ class CorpusSelectionService:
         la página no está cubierta por ninguna regla de selección activa.
         """
         from server.app.modules.agents_hub.database.operational_models import HubDocument
-        from server.app.modules.agents_hub.ingestion.quality.selection_contracts import (
+        from server.app.modules.curation.selection_contracts import (
             CandidatePageView,
         )
 

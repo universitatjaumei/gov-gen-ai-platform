@@ -7,7 +7,7 @@ Deploy: edge
 """
 from __future__ import annotations
 
-from server.app.modules.agents_hub.agent.language_detector import (
+from server.app.modules.agents_hub.services.language_detector import (
     detect_language as _detect_language,
 )
 from server.app.modules.agents_hub.agent.public_graphs.strategies.protocols import (

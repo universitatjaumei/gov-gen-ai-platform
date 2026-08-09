@@ -97,7 +97,7 @@ class _FakeFindingRepo:
         self._by_key: dict[tuple, Any] = {}
 
     def _key(self, finding: Any) -> tuple:
-        from server.app.modules.agents_hub.ingestion.quality.contracts import ContentFinding
+        from server.app.modules.curation.contracts import ContentFinding
 
         return (
             finding.site_id,
@@ -119,7 +119,7 @@ class _FakeFindingRepo:
 
 
 def _make_detector(pages: list[_FakePage], documents: list[_FakeDocument] | None = None, **kwargs: Any):
-    from server.app.modules.agents_hub.ingestion.quality.deterministic_detector import (
+    from server.app.modules.curation.deterministic_detector import (
         DeterministicQualityDetector,
     )
 

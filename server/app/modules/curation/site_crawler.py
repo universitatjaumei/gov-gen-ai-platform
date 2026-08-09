@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
-from server.app.modules.agents_hub.agent.language_detector import detect_language
+from server.app.modules.agents_hub.services.language_detector import detect_language
 from server.app.modules.agents_hub.database.operational_models import HubWebSite
 from server.app.modules.agents_hub.ingestion.hasher import hash_content
 from server.app.modules.agents_hub.ingestion.markdown_utils import (

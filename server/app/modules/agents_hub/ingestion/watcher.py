@@ -12,7 +12,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.modules.agents_hub.agent.language_detector import detect_language
+from server.app.modules.agents_hub.services.language_detector import detect_language
 from server.app.modules.agents_hub.ingestion.bilingual_bridge import terminos_bilingues
 from server.app.modules.agents_hub.database.operational_models import (
     HubDocument,

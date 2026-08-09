@@ -159,7 +159,7 @@ def _make_service(
     ingested_page_ids: set[uuid.UUID] | None = None,
     docs: list[_FakeOrmDoc] | None = None,
 ):
-    from server.app.modules.agents_hub.ingestion.quality.selection_service import (
+    from server.app.modules.curation.selection_service import (
         CorpusSelectionService,
     )
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 import io
 from typing import Any
 
-from server.app.modules.agents_hub.ingestion.quality.report_contracts import WebQualityReport
+from server.app.modules.curation.report_contracts import WebQualityReport
 
 
 class WebQualityReportExporter:

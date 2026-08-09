@@ -1,8 +1,10 @@
-"""Router de auditoría de calidad de contenido web (9Q.8).
+"""Router de curación — auditoría de calidad de contenido web (9Q.8, re-etiquetado en CUR.1).
 
 Deploy: edge.
 
-Endpoints de cola de revisión de hallazgos, informe por sitio y descarga.
+Endpoints de cola de revisión de hallazgos, informe por sitio y descarga. Los huecos de
+corpus (RAG.14) y las caducidades (SYNC.2) cuelgan de un chatbot, no de un sitio, y viven en
+`agents_hub` — ver la nota de frontera en `modules/curation/__init__.py`.
 """
 from __future__ import annotations
 
@@ -24,16 +26,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from server.app.api.deps import get_current_user
 from server.app.core.auth.models import UserInfo
 from server.app.modules.agents_hub.database.connection import get_async_session
-from server.app.modules.agents_hub.ingestion.quality.contracts import (
+from server.app.modules.curation.contracts import (
     InvalidFindingTransitionError,
 )
-from server.app.modules.agents_hub.ingestion.quality.findings_repo import (
+from server.app.modules.curation.findings_repo import (
     ContentFindingRepo,
 )
 from server.app.modules.agents_hub.services.embedding_resolver import (
     resolve_embedding_service,
 )
-from server.app.modules.agents_hub.ingestion.quality.report_contracts import (
+from server.app.modules.curation.report_contracts import (
     WebQualityReport,
 )
 
@@ -65,10 +67,10 @@ def get_findings_repo(
 def get_report_builder(
     session: AsyncSession = Depends(get_async_session),
 ) -> Any:
-    from server.app.modules.agents_hub.ingestion.quality.report_builder import (
+    from server.app.modules.curation.report_builder import (
         WebQualityReportBuilder,
     )
-    from server.app.modules.agents_hub.ingestion.quality.site_repo import (
+    from server.app.modules.curation.site_repo import (
         WebSiteRepo,
     )
 
@@ -78,7 +80,7 @@ def get_report_builder(
 
 
 def get_report_exporter() -> Any:
-    from server.app.modules.agents_hub.ingestion.quality.report_exporter import (
+    from server.app.modules.curation.report_exporter import (
         WebQualityReportExporter,
     )
 
@@ -277,7 +279,7 @@ async def analyze_content_gaps(
     quien lo lanza quiere ver el número. Devolverlo en 202 obligaría a inventar un job para
     consultar algo que ya se sabe al terminar.
     """
-    from server.app.modules.agents_hub.ingestion.quality.gap_detector import (
+    from server.app.modules.agents_hub.ingestion.gap_detector import (
         analizar_huecos,
     )
 
@@ -311,7 +313,7 @@ async def analyze_stale_documents(
     Deploy: edge. Síncrono: es una comparación de fechas en SQL, sin embeddings ni modelo,
     así que devolver un 202 y un job obligaría a consultar algo que ya se sabe al terminar.
     """
-    from server.app.modules.agents_hub.ingestion.quality.staleness_detector import (
+    from server.app.modules.curation.staleness_detector import (
         analizar_caducidad,
     )
 
@@ -337,7 +339,7 @@ async def list_stale_documents(
     RAG.14 y las retiradas de SYNC.1. Sin este endpoint, el detector escribiría hallazgos
     que no vería nadie, que es la forma más cara de no hacer nada.
     """
-    from server.app.modules.agents_hub.ingestion.quality.staleness_detector import (
+    from server.app.modules.curation.staleness_detector import (
         listar_caducados,
     )
 

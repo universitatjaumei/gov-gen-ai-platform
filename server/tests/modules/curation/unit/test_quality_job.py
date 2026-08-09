@@ -217,7 +217,7 @@ def _make_job(
     pages: dict[uuid.UUID, _FakePage] | None = None,
     run_semantic: bool = True,
 ):
-    from server.app.modules.agents_hub.ingestion.quality.quality_job import SiteQualityAnalysisJob
+    from server.app.modules.curation.quality_job import SiteQualityAnalysisJob
 
     session = _FakeSession(pages or {})
 
@@ -439,7 +439,7 @@ async def test_run_for_site_crawl_failure_returns_errors():
 @pytest.mark.asyncio
 async def test_scheduler_get_due_sites_by_interval():
     """_get_due_sites retorna solo sitios cuyo crawl_interval_hours ha vencido."""
-    from server.app.modules.agents_hub.ingestion.quality.quality_scheduler import _get_due_sites
+    from server.app.modules.curation.quality_scheduler import _get_due_sites
 
     site_due = _FakeSiteModel(
         crawl_interval_hours=24,
@@ -460,7 +460,7 @@ async def test_scheduler_get_due_sites_by_interval():
 @pytest.mark.asyncio
 async def test_scheduler_get_due_sites_never_crawled():
     """_get_due_sites retorna sitios que nunca han sido rastreados (last_crawled_at=None)."""
-    from server.app.modules.agents_hub.ingestion.quality.quality_scheduler import _get_due_sites
+    from server.app.modules.curation.quality_scheduler import _get_due_sites
 
     site_new = _FakeSiteModel(crawl_interval_hours=24, last_crawled_at=None)
     session = _FakeSchedulerSession([site_new])

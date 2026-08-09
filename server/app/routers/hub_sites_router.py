@@ -1,4 +1,4 @@
-"""Gestión de sitios rastreados, selecciones y candidatas (9Q.7).
+"""Router de curación — sitios rastreados, selecciones y candidatas (9Q.7, re-etiquetado en CUR.1).
 
 Deploy: edge.
 """
@@ -15,7 +15,7 @@ from server.app.api.deps import get_current_user
 from server.app.core.auth.models import UserInfo
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.operational_models import HubCrawledPage
-from server.app.modules.agents_hub.ingestion.quality.selection_contracts import (
+from server.app.modules.curation.selection_contracts import (
     CandidatePageView,
     PageView,
     SelectionCreate,
@@ -24,7 +24,7 @@ from server.app.modules.agents_hub.ingestion.quality.selection_contracts import 
     SitePatch,
     SiteView,
 )
-from server.app.modules.agents_hub.ingestion.quality.site_repo import (
+from server.app.modules.curation.site_repo import (
     CorpusSelectionRepo,
     CrawledPageRepo,
     WebSiteRepo,
@@ -59,7 +59,7 @@ async def get_selection_service(
     Para operaciones que necesiten watcher real (ingest_page), el endpoint
     construye el watcher directamente.
     """
-    from server.app.modules.agents_hub.ingestion.quality.selection_service import (
+    from server.app.modules.curation.selection_service import (
         CorpusSelectionService,
     )
 

@@ -80,7 +80,7 @@ class TestRecogidaDeSenales:
 
     @pytest.mark.asyncio
     async def test_should_collect_low_feedback_interactions_as_signals(self, db_session):
-        from server.app.modules.agents_hub.ingestion.quality.gap_detector import (
+        from server.app.modules.agents_hub.ingestion.gap_detector import (
             recoger_senales,
         )
 
@@ -98,7 +98,7 @@ class TestRecogidaDeSenales:
     @pytest.mark.asyncio
     async def test_should_collect_citation_and_gate_fallbacks_as_signals(self, db_session):
         """La señal gratuita: el chatbot ya dijo «no encontré nada» y quedó registrado."""
-        from server.app.modules.agents_hub.ingestion.quality.gap_detector import (
+        from server.app.modules.agents_hub.ingestion.gap_detector import (
             recoger_senales,
         )
 
@@ -115,7 +115,7 @@ class TestRecogidaDeSenales:
 
     @pytest.mark.asyncio
     async def test_should_scope_analysis_by_chatbot_and_time_window(self, db_session):
-        from server.app.modules.agents_hub.ingestion.quality.gap_detector import (
+        from server.app.modules.agents_hub.ingestion.gap_detector import (
             recoger_senales,
         )
 
@@ -135,7 +135,7 @@ class TestAgrupacion:
 
     @pytest.mark.asyncio
     async def test_should_cluster_similar_queries_into_one_gap(self, db_session):
-        from server.app.modules.agents_hub.ingestion.quality.gap_detector import (
+        from server.app.modules.agents_hub.ingestion.gap_detector import (
             detectar_huecos,
         )
 
@@ -154,7 +154,7 @@ class TestAgrupacion:
     async def test_should_ignore_clusters_below_min_size(self, db_session):
         """Dos preguntas parecidas son casualidad; el umbral es lo que separa una señal de
         un hueco. Sin él, la cola de revisión se llena de ruido y deja de mirarse."""
-        from server.app.modules.agents_hub.ingestion.quality.gap_detector import (
+        from server.app.modules.agents_hub.ingestion.gap_detector import (
             detectar_huecos,
         )
 
@@ -169,7 +169,7 @@ class TestAgrupacion:
     async def test_should_create_content_gap_finding_with_representative_queries(
         self, db_session
     ):
-        from server.app.modules.agents_hub.ingestion.quality.gap_detector import (
+        from server.app.modules.agents_hub.ingestion.gap_detector import (
             MAX_QUERIES_REPRESENTATIVAS,
             detectar_huecos,
         )
@@ -197,7 +197,7 @@ class TestAgrupacion:
 
     @pytest.mark.asyncio
     async def test_should_separate_unrelated_topics(self, db_session):
-        from server.app.modules.agents_hub.ingestion.quality.gap_detector import (
+        from server.app.modules.agents_hub.ingestion.gap_detector import (
             detectar_huecos,
         )
 
@@ -227,7 +227,7 @@ class TestPersistenciaYDeduplicacion:
         from server.app.modules.agents_hub.database.operational_models import (
             HubContentFinding,
         )
-        from server.app.modules.agents_hub.ingestion.quality.gap_detector import (
+        from server.app.modules.agents_hub.ingestion.gap_detector import (
             analizar_huecos,
         )
 
@@ -266,7 +266,7 @@ class TestPersistenciaYDeduplicacion:
         from server.app.modules.agents_hub.database.operational_models import (
             HubContentFinding,
         )
-        from server.app.modules.agents_hub.ingestion.quality.gap_detector import (
+        from server.app.modules.agents_hub.ingestion.gap_detector import (
             analizar_huecos,
         )
 
@@ -363,7 +363,7 @@ class TestEndpointYComando:
         from server.app.api.deps import get_current_user
         from server.app.core.auth.models import UserInfo
         from server.app.modules.agents_hub.database.connection import get_async_session
-        from server.app.modules.agents_hub.ingestion.quality.gap_detector import (
+        from server.app.modules.agents_hub.ingestion.gap_detector import (
             analizar_huecos,
         )
         from server.app.routers.hub_content_quality_router import router
@@ -396,7 +396,7 @@ class TestEndpointYComando:
         assert huecos[0]["top_terms"]
 
     def test_the_cli_exists_and_declares_its_scope(self):
-        from server.app.modules.agents_hub.ingestion.quality import detect_gaps
+        from server.app.modules.agents_hub.ingestion import detect_gaps
 
         assert "Deploy: edge" in (detect_gaps.__doc__ or "")
         assert hasattr(detect_gaps, "main")
