@@ -12,7 +12,6 @@ import {
   getListSitesQueryKey,
 } from '@/shared/api/generated/hub-sites/hub-sites'
 import type { SiteView } from '@/shared/api/generated/model'
-import { SiteMappingPanel } from './SiteMappingPanel'
 
 const siteSchema = z.object({
   name: z.string().min(1),
@@ -26,11 +25,10 @@ type SiteFormInput = z.input<typeof siteSchema>
 type SiteFormValues = z.output<typeof siteSchema>
 
 export function SitesPage() {
-  const { t } = useTranslation('contentQuality')
+  const { t } = useTranslation('curation')
   const { t: tc } = useTranslation('common')
   const qc = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [selectedSite, setSelectedSite] = useState<SiteView | null>(null)
 
   const { data: sites = [], isLoading } = useListSites()
   const createMutation = useCreateSite({
@@ -96,11 +94,7 @@ export function SitesPage() {
             </thead>
             <tbody>
               {(sites as SiteView[]).map((site) => (
-                <tr
-                  key={site.id}
-                  className={`border-b cursor-pointer hover:bg-accent/30 ${selectedSite?.id === site.id ? 'bg-accent/50' : ''}`}
-                  onClick={() => setSelectedSite(selectedSite?.id === site.id ? null : site)}
-                >
+                <tr key={site.id} className="border-b hover:bg-accent/30">
                   <td className="py-2 pr-4 font-medium">{site.name}</td>
                   <td className="py-2 pr-4 text-xs text-muted-foreground truncate max-w-xs">{site.root_url}</td>
                   <td className="py-2 pr-4 text-xs">
@@ -113,7 +107,7 @@ export function SitesPage() {
                       {site.status}
                     </span>
                   </td>
-                  <td className="py-2 space-x-2" onClick={(e) => e.stopPropagation()}>
+                  <td className="py-2 space-x-2">
                     <button
                       className="text-xs px-2 py-1 rounded border hover:bg-accent"
                       onClick={() => handleCrawl(site.id)}
@@ -134,10 +128,6 @@ export function SitesPage() {
             </tbody>
           </table>
         </div>
-      )}
-
-      {selectedSite && (
-        <SiteMappingPanel siteId={selectedSite.id} siteName={selectedSite.name} />
       )}
 
       {dialogOpen && (

@@ -1,6 +1,7 @@
 {
   "nav": {
     "hub": "Hub",
+    "curation": "Curation",
     "automation": "Automation",
     "platform": "Platform",
     "main": "Main navigation"

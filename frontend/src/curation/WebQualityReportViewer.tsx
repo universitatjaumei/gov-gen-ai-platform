@@ -9,7 +9,7 @@ interface Props {
 const API_BASE = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_API_URL ?? ''
 
 export function WebQualityReportViewer({ siteId }: Props) {
-  const { t } = useTranslation('contentQuality')
+  const { t } = useTranslation('curation')
   const { t: tc } = useTranslation('common')
 
   const { data: report, isLoading } = useGetSiteQualityReport(siteId)

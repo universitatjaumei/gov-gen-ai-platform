@@ -255,7 +255,7 @@ describe('CAL.3 — subcomponentes de documentos', () => {
     expect(
       existe,
       'SourcesPanel resucitaría el endpoint /hub/ingestion/{id}/sources, retirado en 0196ff5. ' +
-        'Su sustituto vivo es SitesPage + SiteMappingPanel.',
+        'Su sustituto vivo es curation/SitesPage + curation/PublicationPage (CUR.2).',
     ).toBe(false)
   })
 

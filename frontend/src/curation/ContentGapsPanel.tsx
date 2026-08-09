@@ -37,7 +37,7 @@ type Gap = {
 }
 
 export function ContentGapsPanel() {
-  const { t } = useTranslation('contentQuality')
+  const { t } = useTranslation('curation')
   const qc = useQueryClient()
   const [chatbotId, setChatbotId] = useState('')
 

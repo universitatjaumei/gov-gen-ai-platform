@@ -4,6 +4,7 @@ import { useAuth } from '@/shared/auth'
 
 const NAV_SECTIONS = [
   { key: 'hub', path: '/hub' },
+  { key: 'curation', path: '/curation' },
   { key: 'automation', path: '/automation' },
   { key: 'platform', path: '/platform' },
 ] as const

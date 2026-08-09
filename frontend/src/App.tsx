@@ -4,6 +4,7 @@ import { Suspense, lazy } from 'react'
 import { AuthProvider, PrivateRoute } from '@/shared/auth'
 import { AppLayout } from '@/admin/AppLayout'
 import { HubLayout } from '@/admin/HubLayout'
+import { CurationLayout } from '@/curation/CurationLayout'
 import { ThemeProvider } from './themes/ThemeProvider'
 import './index.css'
 import './themes/base.css'
@@ -34,8 +35,10 @@ const LLMConfigsPage = lazy(() => import('@/admin/pages/LLMConfigsPage').then(m 
 const PromptsPage = lazy(() => import('@/admin/pages/PromptsPage').then(m => ({ default: m.PromptsPage })))
 const PlaceholderPage = lazy(() => import('@/admin/pages/PlaceholderPage').then(m => ({ default: m.PlaceholderPage })))
 const AIBrainPage = lazy(() => import('@/admin/pages/AIBrainPage').then(m => ({ default: m.AIBrainPage })))
-const SitesPage = lazy(() => import('@/admin/pages/SitesPage').then(m => ({ default: m.SitesPage })))
-const ContentQualityPage = lazy(() => import('@/admin/pages/ContentQualityPage').then(m => ({ default: m.ContentQualityPage })))
+const CurationSitesPage = lazy(() => import('@/curation/SitesPage').then(m => ({ default: m.SitesPage })))
+const CurationAuditPage = lazy(() => import('@/curation/AuditPage').then(m => ({ default: m.AuditPage })))
+const CurationFindingsPage = lazy(() => import('@/curation/FindingsPage').then(m => ({ default: m.FindingsPage })))
+const CurationPublicationPage = lazy(() => import('@/curation/PublicationPage').then(m => ({ default: m.PublicationPage })))
 const TestScenariosPage = lazy(() => import('@/admin/pages/TestScenariosPage').then(m => ({ default: m.TestScenariosPage })))
 const ReportTemplateBuilderPage = lazy(() => import('@/redaccion/pages/ReportTemplateBuilderPage').then(m => ({ default: m.ReportTemplateBuilderPage })))
 const GenericReportWizard = lazy(() => import('@/redaccion/pages/GenericReportWizard').then(m => ({ default: m.GenericReportWizard })))
@@ -95,10 +98,15 @@ function App() {
                     <Route path="llm-configs" element={<LLMConfigsPage />} />
                     <Route path="prompts" element={<PromptsPage />} />
                     <Route path="brain" element={<AIBrainPage />} />
-                    <Route path="sites" element={<SitesPage />} />
-                    <Route path="content-quality" element={<ContentQualityPage />} />
                     <Route path="test-scenarios" element={<TestScenariosPage />} />
                     <Route path="access-tokens" element={<AccessTokensPage />} />
+                  </Route>
+                  <Route path="/curation" element={<CurationLayout />}>
+                    <Route index element={<Navigate to="/curation/sites" replace />} />
+                    <Route path="sites" element={<CurationSitesPage />} />
+                    <Route path="audit" element={<CurationAuditPage />} />
+                    <Route path="findings" element={<CurationFindingsPage />} />
+                    <Route path="publish" element={<CurationPublicationPage />} />
                   </Route>
                   <Route path="/redaccion/builder" element={<ReportTemplateBuilderPage />} />
                   <Route path="/redaccion/wizard" element={<GenericReportWizard />} />

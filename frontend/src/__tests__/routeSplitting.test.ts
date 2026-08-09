@@ -16,7 +16,7 @@ import { resolve } from 'node:path'
 const APP = readFileSync(resolve(__dirname, '../App.tsx'), 'utf-8')
 
 /** Envoltorios presentes en todas las rutas: partirlos añade espera y no ahorra nada. */
-const ESTATICOS_ESPERADOS = ['AppLayout', 'HubLayout', 'PrivateRoute']
+const ESTATICOS_ESPERADOS = ['AppLayout', 'HubLayout', 'CurationLayout', 'PrivateRoute']
 
 describe('CAL.5 — carga por ruta', () => {
   it('should_lazy_load_route_chunks', () => {
