@@ -95,4 +95,33 @@ describe('SitesPage (curation)', () => {
     await waitFor(() => screen.getByText('Portal Institucional'))
     expect(screen.queryByText(/chatbot/i)).not.toBeInTheDocument()
   })
+
+  it('al eliminar un sitio, invalida la lista para que se refresque sola (MAN.1)', async () => {
+    // Hallazgo de MAN.1: el DELETE funcionaba en el servidor (204) pero la fila se
+    // quedaba en la tabla porque useDeleteSite no invalidaba getListSitesQueryKey al
+    // terminar. Sin esto el usuario ve el sitio "borrado" seguir en pantalla hasta
+    // que recarga a mano.
+    const { useDeleteSite, getListSitesQueryKey } = await import('@/shared/api/generated/hub-sites/hub-sites')
+    let onSuccess: (() => void) | undefined
+    ;(useDeleteSite as ReturnType<typeof vi.fn>).mockImplementation((opts?: { mutation?: { onSuccess?: () => void } }) => {
+      onSuccess = opts?.mutation?.onSuccess
+      return { mutate: vi.fn(), isPending: false }
+    })
+
+    mockSites.list = [SITE]
+    const { SitesPage } = await import('../SitesPage')
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries')
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter><SitesPage /></MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await waitFor(() => screen.getByText('Portal Institucional'))
+
+    expect(onSuccess).toBeTypeOf('function')
+    onSuccess!()
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: getListSitesQueryKey() })
+  })
 })

@@ -40,7 +40,11 @@ export function SitesPage() {
       },
     },
   })
-  const deleteMutation = useDeleteSite()
+  const deleteMutation = useDeleteSite({
+    mutation: {
+      onSuccess: () => qc.invalidateQueries({ queryKey: getListSitesQueryKey() }),
+    },
+  })
   const crawlMutation = useTriggerSiteCrawl()
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<SiteFormInput, unknown, SiteFormValues>({
