@@ -37,7 +37,7 @@ export function RechunkControls({
         disabled={isRecalculating}
         className="flex items-center gap-2 text-xs px-3 py-1.5 border rounded hover:bg-accent transition-colors disabled:opacity-50"
       >
-        <RefreshCw className="w-3 h-3" />{t('hub.recalculate_corpus', 'Recalcular corpus')}
+        <RefreshCw className="w-3 h-3" />{t('hub.recalculate_corpus')}
       </button>
       <button
         type="button"
@@ -45,7 +45,7 @@ export function RechunkControls({
         disabled={isClearing}
         className="flex items-center gap-2 text-xs px-3 py-1.5 text-destructive border border-destructive/30 rounded hover:bg-destructive/10 transition-colors disabled:opacity-50"
       >
-        <Trash2 className="w-3 h-3" />{t('hub.clear_collection', 'Limpiar colección')}
+        <Trash2 className="w-3 h-3" />{t('hub.clear_collection')}
       </button>
     </>
   )
@@ -76,23 +76,23 @@ export function RechunkConfirmDialog({
 
   return (
     <ConfirmDialog
-      title={t('hub.recalculate_title', '¿Recalcular corpus?')}
+      title={t('hub.recalculate_title')}
       description={
         retrievalMode === 'RAG'
           ? (
             <>
-              {t('hub.recalculate_vector_text', 'Se re-generarán embeddings para todos los documentos.')}{' '}
+              {t('hub.recalculate_vector_text')}{' '}
               <strong>{documentCount}</strong> docs · ~{formatTokens(totalTokens)} tokens · ~{estimatedMinutes} min.
             </>
           )
           : (
             <>
-              {t('hub.recalculate_non_vector_text', 'Se eliminarán los chunks vectoriales; los documentos markdown se mantienen.')}{' '}
+              {t('hub.recalculate_non_vector_text')}{' '}
               <strong>{documentCount}</strong> docs.
             </>
           )
       }
-      confirmLabel={t('hub.recalculate_confirm', 'Sí, recalcular')}
+      confirmLabel={t('hub.recalculate_confirm')}
       isPending={isPending}
       onConfirm={onConfirm}
       onCancel={onCancel}
@@ -117,7 +117,7 @@ export function RechunkStatus({
       {isRecalculating && (
         <div className="rounded-md border p-3 bg-muted/20">
           <p className="text-xs text-muted-foreground mb-2">
-            {t('hub.recalculate_in_progress', 'Recalculando corpus...')}
+            {t('hub.recalculate_in_progress')}
           </p>
           <Progress value={null} className="h-2" />
         </div>

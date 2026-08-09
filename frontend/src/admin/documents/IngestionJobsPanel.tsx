@@ -37,7 +37,7 @@ export function IngestionJobsPanel({
         onClick={onToggle}
         className="w-full flex items-center justify-between p-4 bg-muted/10 text-sm font-medium hover:bg-muted/20 transition-colors"
       >
-        <span>{t('hub.jobs_technical', 'Jobs (técnico)')}</span>
+        <span>{t('hub.jobs_technical')}</span>
         {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
       </button>
       {open && (
@@ -47,17 +47,17 @@ export function IngestionJobsPanel({
           </div>
         ) : jobs.length === 0 ? (
           <div className="p-6 text-center text-muted-foreground text-sm">
-            {t('hub.no_jobs', 'No hay jobs de ingestión registrados.')}
+            {t('hub.no_jobs')}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/10 text-left text-muted-foreground">
-                  <th className="px-4 py-3 font-medium">{t('hub.job_file', 'Archivo')}</th>
-                  <th className="px-4 py-3 font-medium">{t('hub.job_status', 'Estado')}</th>
-                  <th className="px-4 py-3 font-medium">{t('hub.job_chunks', 'Chunks')}</th>
-                  <th className="px-4 py-3 font-medium">{t('hub.job_date', 'Fecha')}</th>
+                  <th className="px-4 py-3 font-medium">{t('hub.job_file')}</th>
+                  <th className="px-4 py-3 font-medium">{t('hub.job_status')}</th>
+                  <th className="px-4 py-3 font-medium">{t('hub.job_chunks')}</th>
+                  <th className="px-4 py-3 font-medium">{t('hub.job_date')}</th>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
@@ -80,7 +80,7 @@ export function IngestionJobsPanel({
                         onClick={() => onDeleteJob(job.id)}
                         disabled={job.status === 'pending' || job.status === 'running'}
                         className="p-1 text-muted-foreground hover:text-destructive disabled:opacity-30 transition-colors"
-                        title={t('hub.delete_job', 'Eliminar job')}
+                        title={t('hub.delete_job')}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

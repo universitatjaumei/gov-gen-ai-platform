@@ -139,6 +139,26 @@ describe('CAL.4 — i18n del panel admin', () => {
     expect(constantes).toMatch(/labelKey/)
   })
 
+  it('should_not_keep_admin_keys_only_as_inline_default', () => {
+    // CAL.4.1 — el test de paridad no caza esto por construcción: una clave que sólo vive
+    // como segundo argumento de la llamada a t() con un texto por defecto nunca falta en
+    // es/admin.json porque nunca llegó a estar ahí. Aquí se barre el código en busca de ese
+    // patrón exacto.
+    const kEs = new Set(claves(es as Diccionario))
+    const patron = /t\(\s*'(hub\.[\w.]+)'\s*,\s*'/g
+
+    const huerfanas = new Set<string>()
+    for (const fuente of codigo.matchAll(patron)) {
+      const clave = fuente[1]
+      if (!kEs.has(clave)) huerfanas.add(clave)
+    }
+
+    expect(
+      [...huerfanas].sort(),
+      `Claves usadas como t('clave', 'default') que no están en es/admin.json:\n  ${[...huerfanas].join('\n  ')}`,
+    ).toEqual([])
+  })
+
   it('should_associate_labels_with_inputs', () => {
     // Un <label> sin `htmlFor` no nombra a nada: el lector de pantalla lee el campo como
     // «cuadro de edición» y quien navega con teclado no puede pulsar la etiqueta para

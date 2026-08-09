@@ -43,16 +43,16 @@ export function DocumentsTable({
   return (
     <div className="bg-card rounded-lg border overflow-hidden">
       <div className="flex items-center justify-between p-4 border-b bg-muted/20 gap-3 flex-wrap">
-        <h2 className="text-base font-medium">{t('hub.documents_table_title', 'Documentos del corpus')}</h2>
+        <h2 className="text-base font-medium">{t('hub.documents_table_title')}</h2>
         <div className="flex items-center gap-2 ml-auto">
           {presentLanguages.length > 1 && (
             <select
               value={langFilter}
               onChange={e => onLangFilterChange(e.target.value)}
               className="px-2 py-1 text-xs border rounded-md bg-background"
-              aria-label={t('hub.filter_by_language', 'Filtrar por idioma')}
+              aria-label={t('hub.filter_by_language')}
             >
-              <option value="">{t('hub.all_languages', 'Todos los idiomas')}</option>
+              <option value="">{t('hub.all_languages')}</option>
               {presentLanguages.map(l => (
                 <option key={l} value={l}>{l.toUpperCase()}</option>
               ))}
@@ -68,18 +68,18 @@ export function DocumentsTable({
         </div>
       ) : documents.length === 0 ? (
         <div className="p-8 text-center text-muted-foreground text-sm">
-          {t('hub.no_documents', 'No hay documentos ingestados para este chatbot.')}
+          {t('hub.no_documents')}
         </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/10 text-left text-muted-foreground">
-                <th className="px-4 py-3 font-medium">{t('hub.doc_title', 'Título')}</th>
-                <th className="px-4 py-3 font-medium">{t('hub.doc_source', 'Fuente')}</th>
-                <th className="px-4 py-3 font-medium">{t('hub.doc_language', 'Idioma')}</th>
-                <th className="px-4 py-3 font-medium">{t('hub.doc_tokens', 'Tokens')}</th>
-                <th className="px-4 py-3 font-medium">{t('hub.doc_date', 'Fecha')}</th>
+                <th className="px-4 py-3 font-medium">{t('hub.doc_title')}</th>
+                <th className="px-4 py-3 font-medium">{t('hub.doc_source')}</th>
+                <th className="px-4 py-3 font-medium">{t('hub.doc_language')}</th>
+                <th className="px-4 py-3 font-medium">{t('hub.doc_tokens')}</th>
+                <th className="px-4 py-3 font-medium">{t('hub.doc_date')}</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -121,7 +121,7 @@ export function DocumentsTable({
                       <button
                         type="button"
                         onClick={() => onPreview(doc.id)}
-                        title={t('hub.preview_doc', 'Ver contenido')}
+                        title={t('hub.preview_doc')}
                         className="p-1 text-muted-foreground hover:text-primary transition-colors"
                       >
                         <Eye className="w-4 h-4" />
@@ -129,7 +129,7 @@ export function DocumentsTable({
                       <button
                         type="button"
                         onClick={() => onSubstitute(doc)}
-                        title={t('hub.substitute_doc', 'Sustituir documento')}
+                        title={t('hub.substitute_doc')}
                         className="p-1 text-muted-foreground hover:text-primary transition-colors"
                       >
                         <FileUp className="w-4 h-4" />
@@ -137,7 +137,7 @@ export function DocumentsTable({
                       <button
                         type="button"
                         onClick={() => onDelete(doc)}
-                        title={t('hub.delete_doc', 'Eliminar documento')}
+                        title={t('hub.delete_doc')}
                         className="p-1 text-muted-foreground hover:text-destructive transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />

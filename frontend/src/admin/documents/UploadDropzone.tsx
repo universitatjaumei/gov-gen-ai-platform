@@ -51,7 +51,7 @@ export function UploadDropzone({
             type="url"
             value={canonicalUrl}
             onChange={e => onCanonicalUrlChange(e.target.value)}
-            placeholder={t('hub.canonical_url_placeholder', 'URL pública del documento (opcional)')}
+            placeholder={t('hub.canonical_url_placeholder')}
             className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
@@ -59,7 +59,7 @@ export function UploadDropzone({
           value={uploadLanguage}
           onChange={e => onUploadLanguageChange(e.target.value)}
           className="w-full sm:w-40 px-3 py-2 text-sm border rounded-md bg-background"
-          aria-label={t('hub.language_label', 'Idioma')}
+          aria-label={t('hub.language_label')}
         >
           {LANGUAGE_OPTIONS.map(o => (
             <option key={o.value} value={o.value}>{t(o.labelKey)}</option>
@@ -70,7 +70,7 @@ export function UploadDropzone({
       {substituteDoc && (
         <div className="flex items-center gap-2 p-3 text-sm bg-yellow-50 border border-yellow-200 rounded-md">
           <Upload className="w-4 h-4 text-yellow-600 shrink-0" />
-          <span>{t('hub.substituting', 'Sustituyendo')}:</span>
+          <span>{t('hub.substituting')}:</span>
           <strong className="truncate">{substituteDoc.title}</strong>
           <button
             type="button"
@@ -88,8 +88,8 @@ export function UploadDropzone({
       >
         <input {...getInputProps()} />
         <UploadCloud className="w-10 h-10 text-muted-foreground mb-4" />
-        <p className="text-sm font-medium mb-1">{t('hub.drag_drop', 'Arrastra y suelta tus archivos PDF aquí')}</p>
-        <p className="text-xs text-muted-foreground">{t('hub.max_size_10mb', 'Tamaño máximo: 10 MB por archivo. Solo formato PDF.')}</p>
+        <p className="text-sm font-medium mb-1">{t('hub.drag_drop')}</p>
+        <p className="text-xs text-muted-foreground">{t('hub.max_size_10mb')}</p>
       </div>
 
       {uploadError && (

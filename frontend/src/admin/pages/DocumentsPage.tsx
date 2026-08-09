@@ -187,8 +187,8 @@ export function DocumentsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">{t('hub.documents_title', 'Documentos e Ingestión')}</h1>
-          <p className="text-sm text-muted-foreground">{t('hub.documents_desc', 'Gestiona la base de conocimiento del chatbot.')}</p>
+          <h1 className="text-xl font-semibold">{t('hub.documents_title')}</h1>
+          <p className="text-sm text-muted-foreground">{t('hub.documents_desc')}</p>
         </div>
         {chatbots.length > 0 && (
           <select
@@ -203,7 +203,7 @@ export function DocumentsPage() {
 
       {!selectedChatbotId ? (
         <div className="p-8 text-center border border-dashed rounded-lg text-muted-foreground">
-          {isLoadingChatbots ? tc('loading') : t('hub.select_chatbot_first', 'Crea o selecciona un chatbot primero')}
+          {isLoadingChatbots ? tc('loading') : t('hub.select_chatbot_first')}
         </div>
       ) : (
         <div className="space-y-4">
@@ -270,9 +270,9 @@ export function DocumentsPage() {
           texto —hablando de un chatbot— en el botón de borrar un documento. */}
       {deleteDocTarget && (
         <ConfirmDialog
-          title={t('hub.delete_doc_title', '¿Eliminar documento?')}
-          description={<>{t('hub.delete_doc_text', 'Se eliminarán el documento y todos sus chunks indexados.')}{' '}<strong>{deleteDocTarget.title}</strong></>}
-          confirmLabel={t('hub.delete_doc_confirm', 'Sí, eliminar')}
+          title={t('hub.delete_doc_title')}
+          description={<>{t('hub.delete_doc_text')}{' '}<strong>{deleteDocTarget.title}</strong></>}
+          confirmLabel={t('hub.delete_doc_confirm')}
           isPending={deleteDocMutation.isPending}
           onConfirm={() => deleteDocMutation.mutate({ chatbotId: selectedChatbotId, documentId: deleteDocTarget.id })}
           onCancel={() => setDeleteDocTarget(null)}
