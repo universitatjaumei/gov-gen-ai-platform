@@ -97,7 +97,7 @@ echo.
 echo ------------------------------------------------------------
 echo  5/5  EN LA INTERFAZ (SEC.4.1)
 echo ------------------------------------------------------------
-echo  a) Entra en http://localhost:5173/admin/chatbots
+echo  a) Entra en http://localhost:5173/hub/chatbots
 echo  b) La tabla debe tener una columna Disponibilidad. Con la
 echo     configuracion actual todos salen como Disponible (verde).
 echo  c) Pulsa un chatbot para editarlo. Abajo, sobre el boton de

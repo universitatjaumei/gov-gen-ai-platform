@@ -91,8 +91,8 @@ echo.
 echo ------------------------------------------------------------
 echo  COMPROBACION 4 - Huecos de corpus (RAG.14)
 echo ------------------------------------------------------------
-echo  Abre http://localhost:5173/hub/content-quality y baja del todo,
-echo  a la seccion "Huecos de corpus".
+echo  Abre http://localhost:5173/curation/findings (CUR.2 lo movio fuera
+echo  del Hub) y baja del todo, a la seccion "Huecos de corpus".
 echo.
 echo  a) Elige el mismo chatbot con el que has estado probando.
 echo  b) Pulsa "Buscar huecos".
