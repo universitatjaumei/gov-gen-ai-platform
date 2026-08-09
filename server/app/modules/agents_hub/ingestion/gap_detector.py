@@ -88,9 +88,11 @@ class SenalDeFallo:
 @dataclass(frozen=True)
 class GapFinding:
     """Espejo mínimo de `ContentFinding`, el contrato del módulo de curación, para el hueco
-    de un chatbot: este módulo no puede importar del otro lado de la frontera (CUR.1), y aquí
-    el sujeto es siempre un chatbot, nunca un sitio, así que el validador de «exactamente un
-    sujeto» de `ContentFinding` no hace falta — queda irrepresentable por construcción.
+    de un chatbot: este módulo no puede importar del otro lado de la frontera (CUR.1). `site_id`
+    y `page_id` se conservan siempre a `None` —un hueco no cuelga de ningún sitio ni de ninguna
+    página, sólo de un chatbot— porque los tests de 9Q ya comprueban esa invariante contra el
+    propio hallazgo; el validador de «exactamente un sujeto» de `ContentFinding` no hace falta,
+    eso sí: la tabla sólo admite un hueco de chatbot por esta vía.
     """
 
     id: uuid.UUID
@@ -100,6 +102,8 @@ class GapFinding:
     confidence: float
     detected_at: datetime
     signal: dict[str, Any] = field(default_factory=dict)
+    site_id: uuid.UUID | None = None
+    page_id: uuid.UUID | None = None
 
 
 async def recoger_senales(
