@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, beforeAll, afterEach } from 'vitest'
+import { describe, test, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
 import { act } from '@testing-library/react'
 import { readConfig, mountWidget } from '../main'
 import i18n from '@/shared/i18n'
@@ -10,9 +10,16 @@ beforeAll(async () => {
 describe('Widget main', () => {
   let changeLanguageSpy: any
 
+  beforeEach(() => {
+    // mountWidget dispara applyChatbotTheme (fetch al tema del chatbot) sin esperarlo:
+    // sin este stub, cada test golpearía la red de verdad -- lento y no determinista.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
+  })
+
   afterEach(() => {
     document.body.innerHTML = ''
     changeLanguageSpy?.mockRestore()
+    vi.unstubAllGlobals()
   })
 
   test('should_mount_widget_from_data_attributes', async () => {

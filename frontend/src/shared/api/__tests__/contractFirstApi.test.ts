@@ -10,9 +10,13 @@
  * única manera de que un módulo nuevo escrito a mano dentro de seis meses no pase
  * desapercibido: un test de render solo ve la pantalla que renderiza.
  *
- * Exento: el streaming SSE del chat del widget (`widget/hooks/useChat.ts`). Orval
- * no genera clientes para SSE y `customInstance` va sobre axios, que no expone el
- * cuerpo incremental. Ese fetch se queda, y lo que se le exige es que sea el ÚNICO.
+ * Exento: el widget público (`widget/`), que deliberadamente no importa el cliente
+ * generado — el bundle es un IIFE independiente (`vite.config.widget.ts`) y arrastrar
+ * react-query + axios ahí infla un script pensado para pesar poco. Dos ficheros hacen
+ * `fetch` a mano por eso: `hooks/useChat.ts` (streaming SSE; Orval no genera clientes
+ * para eso y `customInstance` va sobre axios, que no expone el cuerpo incremental) y
+ * `main.tsx` (tema del chatbot para pintar el widget). Lo que se exige es que la lista
+ * de excepciones no crezca sin que alguien la mire.
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
@@ -31,10 +35,11 @@ const MANUAL_API_MODULES = [
 ]
 
 /**
- * Único punto donde se permite construir `Authorization` a mano: el consumidor de
- * SSE. Todo lo demás pasa por el interceptor de `shared/api/client.ts`.
+ * Únicos puntos donde se permite construir `Authorization` a mano, fuera del
+ * interceptor de `shared/api/client.ts`: el widget público, que no usa el cliente
+ * generado a propósito (ver comentario de cabecera).
  */
-const SSE_EXEMPT = 'widget/hooks/useChat.ts'
+const WIDGET_RAW_FETCH_EXEMPT = ['widget/hooks/useChat.ts', 'widget/main.tsx']
 
 function sourceFiles(): string[] {
   const out: string[] = []
@@ -99,17 +104,21 @@ describe('CAL.2 — capa API generada desde el contrato', () => {
     expect(client).toMatch(/interceptors\.request\.use/)
     expect(client).toMatch(/Authorization/)
 
+    // Los ficheros de test solo *comprueban* la cabecera (fixtures, aserciones): no
+    // son el código de producción que este guardarraíl vigila.
+    const esFicheroDeTest = (f: string) => f.split('/').includes('__tests__')
+
     const construyenAuth = sourceFiles()
       .filter((f) => /Authorization/.test(readFileSync(f, 'utf-8')))
       .map(rel)
-      .filter((f) => !f.endsWith('__tests__/contractFirstApi.test.ts'))
+      .filter((f) => !esFicheroDeTest(f))
       .sort()
 
     expect(
       construyenAuth,
       'La cabecera Authorization solo puede construirse en client.ts (interceptor) y en ' +
-        'el consumidor de SSE, que Orval no cubre.',
-    ).toEqual(['shared/api/client.ts', SSE_EXEMPT].sort())
+        'las excepciones del widget público, que Orval no cubre.',
+    ).toEqual(['shared/api/client.ts', ...WIDGET_RAW_FETCH_EXEMPT].sort())
   })
 
   it('should_type_ingestion_job_from_generated_model', () => {

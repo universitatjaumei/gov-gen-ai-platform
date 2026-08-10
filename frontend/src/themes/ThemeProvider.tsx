@@ -111,13 +111,16 @@ function generateCSSVariables(theme: ThemeConfig): string {
       if (widget.height) variables.push(`--widget-height: ${widget.height};`);
       if (widget.borderRadius) variables.push(`--widget-radius: ${widget.borderRadius};`);
       if (widget.shadow) variables.push(`--widget-shadow: ${widget.shadow};`);
+      if (widget.position?.bottom) variables.push(`--widget-bottom: ${widget.position.bottom};`);
+      if (widget.position?.right) variables.push(`--widget-right: ${widget.position.right};`);
+      if (widget.position?.left) variables.push(`--widget-left: ${widget.position.left};`);
     }
   }
 
   return variables.join('\n');
 }
 
-function injectThemeCSS(theme: ThemeConfig): void {
+export function injectThemeCSS(theme: ThemeConfig): void {
   const cssVariables = generateCSSVariables(theme);
 
   let styleElement = document.getElementById('chatbot-theme-vars');

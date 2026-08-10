@@ -1,6 +1,8 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import i18n from '@/shared/i18n'
+import { injectThemeCSS } from '@/themes/ThemeProvider'
+import { DEFAULT_THEME, mergeThemes } from '@/themes/types'
 import { ChatWidget } from './components/ChatWidget'
 
 export interface WidgetConfig {
@@ -21,8 +23,27 @@ export function readConfig(container: Element): WidgetConfig | null {
   }
 }
 
+export async function applyChatbotTheme(config: WidgetConfig): Promise<void> {
+  try {
+    const headers: Record<string, string> = {}
+    if (config.token) headers['Authorization'] = `Bearer ${config.token}`
+
+    const response = await fetch(
+      `${config.apiUrl}/hub/themes/for-chatbot/${config.chatbotId}`,
+      { headers },
+    )
+    if (!response.ok) return
+
+    const { config: partialTheme } = await response.json()
+    injectThemeCSS(mergeThemes(DEFAULT_THEME, partialTheme ?? {}))
+  } catch {
+    // Sin tema o sin red: el widget se queda con los colores por defecto de ChatWidget.
+  }
+}
+
 export function mountWidget(container: Element, config: WidgetConfig): () => void {
   i18n.changeLanguage(config.lang)
+  void applyChatbotTheme(config)
 
   const handleMessage = (event: MessageEvent) => {
     if (event.data?.type === 'govgenai:setLang' && typeof event.data.lang === 'string') {

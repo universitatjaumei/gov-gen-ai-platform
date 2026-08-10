@@ -31,9 +31,9 @@ function SourcePills({ sources }: SourcePillsProps) {
           target="_blank"
           rel="noopener noreferrer"
           style={{
-            background: 'var(--source-pill-bg, #e0f2fe)',
-            color: 'var(--source-pill-fg, #0369a1)',
-            border: '1px solid var(--source-pill-border, #7dd3fc)',
+            background: 'var(--source-pill-bg, var(--color-primary-light, #e0f2fe))',
+            color: 'var(--source-pill-fg, var(--color-primary, #0369a1))',
+            border: '1px solid var(--source-pill-border, var(--color-primary, #7dd3fc))',
             borderRadius: '999px',
             padding: '0.2rem 0.65rem',
             fontSize: '0.8rem',

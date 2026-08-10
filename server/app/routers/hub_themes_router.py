@@ -1,6 +1,13 @@
 """Router para gestión de temas del chatbot.
 
 Deploy: cloud
+
+`get_theme_for_chatbot` es la excepción: la consume el widget público, que es tráfico
+edge (mismo consumidor que `hub_chat_router`). Se queda aquí porque hoy `DEPLOY_MODE=all`
+registra los dos bloques igual y el almacén de temas (`THEMES_DIR`, `_load_theme`) es
+propiedad de este router -- moverlo exigiría extraer ese almacén a un módulo compartido,
+que es más de lo que pide este arreglo. **Pendiente si se llega a desplegar `edge` sin
+`cloud`**: hoy ese endpoint 404earía porque este router no se registra en `_register_edge`.
 """
 import json
 import re
@@ -8,13 +15,16 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.api.deps import require_role
+from server.app.api.deps import get_current_user, require_role
+from server.app.core.auth.chatbot_access import assert_chatbot_access
+from server.app.core.auth.delegated_actor import resolve_effective_actor
 from server.app.core.auth.models import UserInfo
 from server.app.core.auth.tenancy import assert_org_access, puede_acceder
+from server.app.modules.agents_hub.database.config_models import HubChatbot
 from server.app.modules.agents_hub.database.connection import get_async_session
 
 router = APIRouter(prefix="/hub/themes", tags=["hub-themes"])
@@ -102,6 +112,12 @@ class ThemeResponse(BaseModel):
     is_default: bool
     created_at: str
     updated_at: str
+
+
+class ChatbotThemeOut(BaseModel):
+    """Solo `config` -- sin owner_id/theme_id/name: ver `get_theme_for_chatbot`."""
+
+    config: dict = Field(default_factory=dict)
 
 
 # ============================================
@@ -211,6 +227,36 @@ async def get_themes(
     return themes
 
 
+@router.get("/for-chatbot/{chatbot_id}", response_model=ChatbotThemeOut)
+async def get_theme_for_chatbot(
+    chatbot_id: uuid.UUID,
+    http_request: Request,
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> ChatbotThemeOut:
+    """Tema resuelto de un chatbot, para pintar el widget público.
+
+    SEC.5 cerró `GET /{theme_id}` porque un tema lleva `organizacion_id`: servido sin más
+    era un censo de qué organizaciones existen. Este endpoint no reabre ese hueco -- solo
+    devuelve `config` (colores/tipografía), nunca el `theme_id`, el `organizacion_id` ni el
+    nombre del tema -- y exige el mismo acceso que conversar con el chatbot (SEC.2.1): quien
+    no podría abrir el chat tampoco ve de qué color lo pintarían.
+    """
+    chatbot = await session.get(HubChatbot, chatbot_id)
+    if chatbot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chatbot not found")
+
+    actor = resolve_effective_actor(http_request, user)
+    assert_chatbot_access(actor, chatbot, via="session")
+
+    theme_id = (chatbot.theme_config or {}).get("theme_id")
+    if theme_id:
+        theme = _load_theme(theme_id)
+        if theme:
+            return ChatbotThemeOut(config=theme.get("config", {}))
+    return ChatbotThemeOut(config={})
+
+
 @router.get("/{theme_id}", response_model=ThemeResponse)
 async def get_theme(
     theme_id: str,
@@ -309,13 +355,22 @@ async def delete_theme(
 @router.post("/{theme_id}/apply/{chatbot_id}")
 async def apply_theme_to_chatbot(
     theme_id: str,
-    chatbot_id: str,
+    chatbot_id: uuid.UUID,
     user: UserInfo = Depends(_require_superadmin),
     session: AsyncSession = Depends(get_async_session),
 ) -> dict:
-    """Aplica un tema a un chatbot específico."""
+    """Aplica un tema a un chatbot específico.
+
+    `HubChatbot.theme_config` no llevaba lector ni escritor en ningún sitio: se reutiliza
+    como puntero (`{"theme_id": ...}`) al tema real en `data/themes/`, en vez de duplicar la
+    configuración de colores en dos sitios. `get_theme_for_chatbot` es quien lo resuelve.
+    """
     theme = _load_theme(theme_id)
     if not theme:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Theme {theme_id} not found")
-    # TODO: actualizar configuración del chatbot en BD cuando se implemente
+    chatbot = await session.get(HubChatbot, chatbot_id)
+    if not chatbot:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chatbot not found")
+    chatbot.theme_config = {"theme_id": theme_id}
+    await session.commit()
     return {"message": f"Theme {theme_id} applied to chatbot {chatbot_id}", "theme_name": theme["name"]}
