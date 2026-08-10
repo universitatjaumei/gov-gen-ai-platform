@@ -1,0 +1,332 @@
+# Auditoría pre-deploy — Gov Gen AI Platform
+
+> **Fecha:** 2026-08-10 · **Alcance:** backend `server/app/`, frontend `frontend/src/`,
+> corpus normativo (`Descarregar_pdf/normativa_propia/publicacio_transparencia_2026-07`),
+> y arquitectura de modelos/retrieval. · **Método:** cuatro auditorías de solo lectura en
+> paralelo con lectura directa del código (referencias `fichero:línea`), más verificación
+> de la validación del corpus ejecutando el pipeline real en seco.
+>
+> Este documento es la fuente de verdad del estado pre-deploy. Los bloques de remediación
+> se planifican como **SEC.8** en `PROJECT_STATE.md`.
+
+## Veredicto
+
+El **núcleo está bien construido** y verificado: autenticación (JWT, PAT, SAML), cuotas,
+CORS, cabeceras, `StorageService`, embeddings/reranker locales, contract-first donde importa,
+Alembic con un solo head. **No se puede desplegar de cara al público todavía** por dos clases
+de fallo: (1) una credencial de superadmin sembrada en todos los entornos —**ya arreglada**,
+ver CR-1—, y (2) un IDOR horizontal sistémico en los routers añadidos después del bloque SEC.
+El corpus está muy cerca: el bloqueante mecánico de ingesta **ya está resuelto**. El modelo
+local encaja en la redacción de informes, no en los chatbots.
+
+**Estado de remediación al cierre de esta auditoría:**
+
+| Hallazgo | Estado |
+|---|---|
+| CR-1 · SuperAdmin sembrado en producción | ✅ **Arreglado** (gate a `ENVIRONMENT=development`) |
+| Bloqueante de ingesta del corpus (`us_assistents`) | ✅ **Arreglado** (generador + regeneración) |
+| CR-2 y familia IDOR (routers post-SEC) | ⏳ SEC.8 |
+| Resto de ALTO/MEDIO de seguridad | ⏳ SEC.8 |
+| Bloqueantes funcionales (temas en disco, crawler nulo, tests rotos) | ⏳ SEC.8 |
+
+---
+
+## 1. Seguridad
+
+### CRÍTICO
+
+**CR-1 · SuperAdmin con credencial pública sembrada en producción — ✅ ARREGLADO**
+`server/app/database/seeds.py` + `server/app/main.py:161`.
+`seed_all()` corría en el `lifespan` en cualquier `ENVIRONMENT` y `seed_multitenancy_defaults()`
+sembraba `fabra@uji.es` / `admin1234` (hash bcrypt válido; credencial en el repo). En el primer
+arranque en producción se creaba un SuperAdmin comodín (acceso a todos los tenants) con
+credencial conocida.
+**Arreglo aplicado:** `seed_multitenancy_defaults()` retorna sin sembrar cuando
+`ENVIRONMENT != "development"`. La provisión de producción la hace
+`python -m server.app.scripts.bootstrap` (invocado por `setup.sh`), que toma la credencial de
+`SUPERADMIN_EMAIL`/`SUPERADMIN_PASSWORD` y no hardcodea ninguna. Tests:
+`server/tests/unit/test_seed_environment_gate.py`.
+
+**CR-2 · IDOR horizontal sistémico en los routers "edge" (sin capa de tenancy) — ⏳**
+Solo 6 ficheros importan `assert_org_access`/`scope_query_to_orgs`. Los routers añadidos tras
+SEC.2 se conformaron con `_require_admin`/`get_current_user` y **nunca resuelven
+`chatbot_id`/`site_id`/`organizacion_id` a su organización dueña**. Verificado por lectura:
+
+- `hub_organizaciones_router.py:103-193` — `list_organizaciones` devuelve todas las
+  organizaciones a cualquier admin; `update`/`delete_organizacion` operan por `organizacion_id`
+  sin comprobar pertenencia → un admin de A **borra** (CASCADE sobre chatbots) o renombra la
+  organización de B.
+- `hub_test_scenarios_router.py:211-258` — `run_scenario` ejecuta el `CoreGraph` completo contra
+  el `chatbot_id` de la ruta con solo `_require_admin` → un admin de A **extrae el corpus
+  completo de B**, consume su presupuesto LLM y recibe la respuesta.
+- `hub_sites_router.py` (curation) — CRUD cross-org completo (`create_site` toma
+  `organizacion_id` de query sin `assert_org_access`; `list_sites` sin `scope_query_to_orgs`).
+- `hub_content_quality_router.py:268-293` — `analyze_content_gaps` por `chatbot_id` de query lee
+  **las conversaciones de ciudadanos** de ese chatbot.
+- `hub_prompt_templates_router.py` — `list`/`create`/`update`/`delete` por `template_id` sin
+  resolver la org del chatbot dueño → se altera/borra el prompt de sistema de un chatbot ajeno.
+
+**Patrón de arreglo (ya existe en el repo):** resolver el recurso y `assert_org_access(user,
+recurso.organizacion_id)` (o `scope_query_to_orgs` en listados). Extender el guardarraíl de test
+que ya prohíbe `session.get(HubChatbot,...)` directo en `hub_chatbots_router` a estos routers.
+
+### ALTO
+
+- **AL-1 · `api/v1/hub_tasks.py:49-63` `export_task`** — barrera "dueño **o** admin" sin resolver
+  `chatbot_id→org`: cualquier admin descarga en Markdown/PDF la conversación (dato personal) de
+  otra organización con solo el `run_id`.
+- **AL-2 · `api/v1/hub_feedback.py:53-65` `submit_feedback` (POST)** — sin comprobación de org; el
+  servicio hace `UPDATE HubInteraction WHERE id == interaction_id` a ciegas. Cualquier usuario
+  autenticado sobrescribe el feedback de cualquier interacción. Sin rate limit.
+- **AL-3 · `routers/redaccion/`** — `manifests_router.py:31-64` devuelve el `payload_json` de
+  cualquier UUID sin comprobar owner; `hub_redaccion_router.py:276-344` tiene el parámetro
+  `_user` **sin usar** (lee/muta bloques de cualquier workspace); `get_template_version:472-486`
+  devuelve la `spec` de plantillas privadas ajenas.
+- **AL-4 · `core/sandbox_client.py:488` `SANDBOX_MODE=local`** — sin gate de producción: ejecuta
+  scripts de usuario en el host heredando `os.environ` (JWT, DATABASE_URL, GOOGLE_API_KEY).
+  Recomendación: que `get_settings()` rechace `local` en producción.
+- **AL-5 · `script_auditor.py`** — la auditoría AST es evadible (`__builtins__['eval'](...)`,
+  traversal de dunders, `getattr`). Contenida por Docker en prod; encadenada con AL-4 es RCE.
+- **AL-6 · El widget embebe un Bearer privilegiado real** — `frontend/src/widget/main.tsx:22` +
+  `hooks/useChat.ts:50` envían un JWT/PAT completo visible en el HTML embebido, con rol/orgs del
+  dueño. El mecanismo `widget_api_key` (`chatbot_access.py:34,68-72`) está diseñado pero **no
+  cableado**. (Coincide con el hallazgo funcional I7.)
+- **AL-7 · Path traversal en subida de inputs de workspace** —
+  `workspaces_router.py:336-339` interpola `file.filename` del cliente sin sanitizar y **sin
+  `validate_upload`** (ni límite de tamaño ni tipo). Usar `basename`/clave `uuid4`.
+
+### MEDIO
+
+- **ME-1 · `core/rate_limit.py:89-92`** — `X-Forwarded-For` se toma por la izquierda (valor
+  controlable por el cliente), lo que **anula el límite de fuerza bruta de login** falsificando
+  la cabecera. En Cloud Run la IP real la añade la infraestructura al final.
+- **ME-2 · SAML** (`core/auth/saml/settings.py:85,51-57`) — `validate_cert=False` en el fetch de
+  metadata (MITM) y `wantAssertionsSigned: False`. La firma sí se valida vía `OneLogin_Saml2_Auth`.
+- **ME-3 · `api/v1/ingestion.py` `user_upload`** — sin `assert_chatbot_access`: inyecta documentos
+  y consume embeddings contra el chatbot de cualquier org.
+- **ME-4 · `routers/redaccion/anonymization_router.py:73-86`** — el bypass admin cruza tenants.
+- **ME-5 · Subidas de test-data sin `validate_upload`** (`scripts_router.py:267-305`) — DoS por
+  memoria en `file.read()` sin límite.
+- **ME-6 · `JWT_SECRET_KEY`** — exige que exista (bien) pero no rechaza el placeholder
+  `change-me-in-production` ni una longitud mínima en producción.
+- **ME-7 · Contenedor sandbox sin `pids_limit`** (`docker-compose.prod.yml:112-117`).
+
+### BAJO / INFO
+
+- Feedback y `/hub/themes/for-chatbot/{id}` sin rate limit.
+- `hub_themes_router.py:230-257` distingue 404/403 (oráculo de existencia; UUID difícil de
+  enumerar, sin fuga de metadatos de org).
+- `api/v1/edge_sync.py` — hoy 501 (stubs); resolver autenticación edge↔cloud y aislamiento por
+  org **antes** de implementarlos.
+- `hub_llm_configs_router.py` — providers/LLM configs globales; `_require_admin` deja que un
+  admin (no solo superadmin) toque config que afecta a todas las orgs.
+- bcrypt trunca a 72 bytes (`core/security.py`).
+
+### Verificado correcto (evidencia de auditoría)
+
+JWT sin default en código y sin `alg=none` (`jwt_handler.py:37-78`, `config.py:59-61`); PAT con
+hash SHA-256 y `hmac.compare_digest` (`pat/service.py:115`); login con hash señuelo
+anti-enumeración y mensaje uniforme (`auth_router.py`); identidad delegada solo con PAT + scope
++ `aud` + ventana de 5 min (`delegated_actor.py:104-139`); tenancy con asimetría vacío→todas
+(superadmin) / ninguna (resto) (`tenancy.py`); `assert_chatbot_access` deny-by-default
+(`chatbot_access.py`); **sin SQL crudo con interpolación en todo `server/app`** — retriever con
+`websearch_to_tsquery` y `cosine_distance` como bind params; cuotas con UPSERT atómico
+(`quotas.py`); subidas correctas en `hub_ingestion_router.py:329-350` y `api/v1/ingestion.py`;
+CORS sin `*` en producción y `allow_credentials=False`; cabeceras nosniff/X-Frame-Options
+DENY/CSP `frame-ancestors 'none'`/HSTS/docs off en producción; dependencias sin CVEs críticos
+conocidos (pyjwt 2.10.1, python-multipart 0.0.21, cryptography 46.0.3; no se usa python-jose).
+
+---
+
+## 2. Integridad funcional
+
+### BLOQUEANTE PARA DEPLOY
+
+- **B1 · Temas en disco local relativo** — `hub_themes_router.py:127` (`THEMES_DIR =
+  Path("data/themes")`, con `# en producción usar BD` escrito por el propio código). En Cloud Run
+  los temas desaparecen al reciclar la instancia y no se comparten entre instancias. **Tumba el
+  arreglo del hallazgo #3 de MAN.2** (el widget con tema): `apply_theme_to_chatbot` guarda en BD
+  solo el puntero `{theme_id}` y resuelve leyendo el JSON local. Mover los temas a tabla
+  (`HubConfigBase`, sincronizable) o al menos a `StorageService`.
+- **B2 · La curación no puede rastrear en el despliegue estándar** — `main.py:94-99` construye el
+  job con `_NullCrawler()` y `detectors=[]`, y no existe mecanismo real de inyección
+  (`SpiderFactory`/`SiteCrawler` sin ningún llamante de producción). `POST /hub/sites/{id}/crawl`
+  siempre acaba en `"no spider configured"`. O se cablea, o se asume que la curación web queda
+  fuera del v1 (decisión de alcance).
+- **B3 · 14 tests rotos/sin colectar en la raíz `tests/`** — 12 fallan porque importan rutas que
+  CUR.1 movió a `modules/curation` sin actualizar los tests (**los spiders quedaron sin ningún
+  test en la suite canónica**), y 2 errores de colección importan
+  `partner_billing_service`/`partner_scripts_service` ya inexistentes. CI no lo ve (corre solo
+  sobre `server/tests`); cualquier `pytest tests` desde la raíz sale en rojo. Viola el checklist
+  propio ("grep -r a cero al retirar legacy").
+
+### IMPORTANTE
+
+- **I2 · `hub_ingestion_router` clasificado `cloud` siendo edge** (`:3`, `main.py:234`): importa
+  modelos operacionales solo-edge y el `IngestionWatcher`. En `DEPLOY_MODE=cloud` se serviría
+  contra tablas inexistentes.
+- **I3 · Servicios/grafos edge leen modelos de config directamente** — `config_resolver.py:110-118`
+  (`session.get(HubChatbot)`/`HubOrganizacion`), `long_context_strategy.py:13`, `reranker.py:33`,
+  `embedding_resolver.py:28`, `corpus/load.py:57`, `corpus/sync.py:70`. La regla es leer config vía
+  `ConfigProvider`.
+- **I4 · La sync API edge es un stub 501** (`api/v1/edge_sync.py:60-69`); solo hay
+  `LocalConfigProvider`. `edge` y `cloud` separados hoy no son desplegables (el primer deploy será
+  `DEPLOY_MODE=all`). Los DTOs conservan nombres pre-ROL (`partner_id`, `client_id`).
+- **I5 · `PUBLIC_PORTAL_AGGREGATOR` con UUIDs nulos** (`graph_factory.py:156-171,204`): si un
+  chatbot selecciona este perfil, la recuperación consulta un `chatbot_id` nulo y devuelve vacío
+  en silencio.
+- **I6 · `modules/automation` es código muerto sin superficie** — sin router ni
+  `frontend/src/automation/`; único consumidor `_legacy_nicegui`. Arrastra `token_service`/
+  `api_key_service`. La "Fase 1 con automation" no tiene hoy ni API ni UI.
+- **I7 · El widget esquiva el contrato** (`widget/main.tsx:31`, `useChat.ts:51`, `ChatWidget.tsx:57`
+  usan `fetch` a mano). `GET /hub/themes/for-chatbot/{chatbot_id}` no está en los `openapi.json`
+  presentes; **nada en CI verifica los endpoints que el widget consume por fetch**. (Los
+  `openapi.json`/`generated/` están en `.gitignore` a propósito; CI regenera + valida con tsc.)
+- **I8 · `useAnonymizationApi.ts:7-28`** — capa API paralela a mano (fetch + interfaces propias)
+  que esquiva Orval y pierde el interceptor de auth de CAL.2.
+
+### MENOR
+
+- **M1** · stubs post-MVP documentados sin llamantes (`anonymization/service.py:231-237`
+  `save_state`/`load_state`; `library_router.py:201` `key_id: "default"`).
+- **M2** · `ThemeEditor.tsx` es componente muerto (0 consumidores) y sus 16 claves `themeEditor.*`
+  no existen en ningún locale (default inline en castellano). Es el "editor aparcado".
+- **M3** · el guardarraíl anti-"clave solo como default" del namespace admin solo caza `hub.*`
+  (`adminI18nCoverage.test.ts:148`); `curation` sí tiene el guardarraíl completo. Paridad es/ca/en
+  medida completa en los 7 namespaces.
+- **M4** · DSN con fallback hardcodeado a credenciales dev (`database/db.py:15`,
+  `agents_hub/database/connection.py:19`). En prod es mejor fallar que conectar en silencio.
+- **M5** · acciones decididas por estado en el frontend de curación (`FindingsPage.tsx:142-148`);
+  presentacional (el backend valida), pero es el patrón que la regla HATEOAS proscribe.
+- **M6** · residuos versionados (`server/my_errores.txt`, scripts sueltos en `tests/`).
+- **M7** · `agent_service.py`, `knowledge_orchestrator_service.py`, `scheduler_service.py` sin
+  llamantes de producción (solo `test_imports.py`).
+- **M8** · `create_all` en cada arranque (`main.py:50-61`) conviviendo con Alembic → puede
+  enmascarar drift modelos↔migraciones.
+
+### Verificado correcto
+
+`StorageService` existe (`core/storage.py`, fsspec) y se usa en las subidas de negocio; sin
+`relationship()` cross-base; frontera de aplicación limpia (ningún `modules/` importa `routers/`
+ni billing; los 30 routers llevan etiqueta `Deploy:` y están registrados); Alembic con un solo
+head (`s6b7c8d9e0f1`, 49 revisiones); contract-first donde importa (38 ficheros consumen
+`shared/api/generated`; SDUI de redacción real); CI sólido (suite `-n0` + gate multi-tenant +
+gate de retrieval + job de contrato + a11y); i18n con paridad es/ca/en en los 7 namespaces.
+
+---
+
+## 3. Corpus normativo — estado y plan de ingesta
+
+**Calidad estructural alta y mejor que la instantánea del contrato:** 262 documentos, 0 anclas
+duplicadas, las 8 unidades sin cuerpo resueltas, los 3 documentos con pérdida real (ALT-065,
+ALT-034, REG-030) recuperados o consolidados, 52/52 tablas con texto, consolidación aplicada
+(487 clases + 86 notas de vigencia dentro del chunk), front-matter en el 100%, vocabulario
+(`vocabulari/*.csv`) cargable tal cual.
+
+**Bloqueante de ingesta — ✅ ARREGLADO.** El generador emitía `us_assistents: 'True'/'False'`; el
+pipeline exige `Literal["si","restringit","no"]` (`manifest.py:98`) y `LocalDirectorySource`
+aborta el paquete entero a la primera entrada inválida (`source.py:119-126`) → 0/262. Corregido
+en `genera_frontmatter.py` (normalización + `motiu_exclusio` derivado del estado de vigencia para
+los 3 `no`) y regenerado `md_contracte/` (solo cambió el front-matter; cuerpos intactos).
+**Verificado: 262/262 pasan la validación real del pipeline.**
+
+**Revisiones del pipeline — estricto vs silencioso:**
+
+- *Estricto (aborta):* `Literal` de `us_assistents`/`nivell_acces`/`content_class`;
+  `relative_path` absoluta o con `..`; `content_class: regulation` sin `revisat_per`+`revisat_el`
+  (`manifest.py:134`); `us_assistents: no` sin `motiu_exclusio` (`:139`); rutas repetidas;
+  códigos de vocabulario no vigentes (`assert_vocabulary`, reporta todos con su fichero).
+- *Silencioso (entra igual):* la guarda "una sola canónica por norma" (VIS.3) **solo corre con
+  manifiesto** (`manifest.py:172`); en modo carpeta **no se ejecuta** → las parejas bilingües
+  entran duplicadas. `versio_idiomatica_de` solo se enlaza si viene en el front-matter
+  (`reconciler.py:308-326`). `content_class` ausente → default `generic` → la puerta de revisión
+  humana nunca salta. `assert_vocabulary` solo valida lo presente (ámbitos/submaterias vacíos →
+  pasa trivialmente). 34 documentos sin `url_oficial` (cita degradada, no rompe).
+
+**Cambios de documento pendientes (proyecto del corpus), por impacto en el RAG:**
+
+1. Emitir `canonica`/`versio_idiomatica_de` en las 29 parejas bilingües (elimina duplicados en el
+   top-k). Hoy se usa `relacionada_amb`, que el pipeline guarda como metadato pero no enlaza.
+2. Decidir `content_class` (si `regulation`, exige `revisat_per`+`revisat_el`).
+3. `termes_bilingues` (puente léxico RAG.4): hoy 0 documentos.
+4. `ambit_principal`/`submateries`: cuando SG valide el vocabulario (Hito B); es regenerar y
+   recargar **sin re-embeber**.
+
+**Decisiones del lado del pipeline (repo):** `desplacat` fuera de `ESTADOS_CONSOLIDACION`
+(`chunker.py:46`) parece **deliberado** (es *lex superior*, no una consolidación hecha *a* la
+norma; `classes` conserva `.desplacat` y la nota viaja en el chunk) — decisión, no fix. La guarda
+VIS.3 solo en modo manifiesto: para la prueba en carpeta, generar un manifiesto mínimo o aceptar
+duplicados hasta emitir `canonica`.
+
+**Publicación HTML:** tiene pendientes propios (correcciones de SG, dashboards, paquetes) que
+**no bloquean el RAG**.
+
+---
+
+## 4. Arquitectura LLM/retrieval y el modelo local
+
+**Chatbots de fase 1 (sin datos sensibles): API (Gemini/Vertex).** Un 7B local aquí no aporta y
+rompe el retrieval: el presupuesto de contexto por defecto es 128.000 tokens y `MD_LONG_CONTEXT`
+inyecta documentos enteros (~25k tokens); con ventana de 8k el código **inyecta aunque no quepa**
+(`long_context_strategy.py:64-70`). `MD_AGENT_SELECTOR`/router usan function-calling, débil en 7B.
+
+**Redacción de informes (datos personales): el modelo local sí aporta, y llega en el momento
+justo.** El motor LLM de redacción **todavía no está enchufado** — `llm_drafts_router`,
+`scripts_router`, `copilot_router` son stubs 503 y `WorkspaceRunService` se instancia sin servicio
+LLM (`workspaces_router.py:397`). Se cablea de todas formas → se cablea ya apuntando a un endpoint
+local. Encaja porque la cadena de redacción es **texto y JSON-en-texto, sin function calling**
+(perfil de baja exigencia de tooling). Cautelas: contexto por bloque hasta ~7,5k tokens
+(`ai_assist_draft.py:16` `_MARKDOWN_LIMIT=30_000`) casi llena 8k; `LLMSpecService` es el único
+consumidor JSON sin bucle de refinamiento (`llm_spec_service.py:90`).
+
+**Implicación de retrieval:** ninguna directa. Embeddings (BGE-M3) y reranker
+(`bge-reranker-v2-m3`) ya son locales tras protocolo, **independientes del LLM de generación**. El
+único ajuste es el presupuesto de contexto, configurable por chatbot con un UPDATE.
+
+**Implicación de deployment (transversal):** la guarda `assert_embedding_space_matches` compara la
+procedencia del embedding en cada consulta y devuelve 409 si no coincide (`embedding_space.py`,
+`hub_chat.py:260`). **Decidir el proveedor de embeddings ANTES de ingerir**: si se ingiere con
+BGE-M3 local y se despliega con Vertex, hay que **re-embeber** el corpus (GPU + horas). El LLM de
+generación sí puede diferir entre entornos (API en cloud, local en edge) sin re-ingerir.
+
+**Cambios mínimos para enchufar un modelo local OpenAI-compatible:** el `model_factory` ya habla
+`google_genai`, `openai_compatible` (con `base_url`) y `ollama`; el modelo de datos
+(`HubProvider.base_url` + `HubLLMConfig`) admite un proveedor local por INSERT/UI; presupuesto de
+contexto configurable por chatbot. Falta: (1) cablear el LLM de redacción al factory (sustituir
+los stubs 503); (2) declarar `langchain-community`/`langchain-ollama` como dependencia directa (hoy
+transitiva de ragas) o usar el endpoint `/v1` por la rama `openai_compatible`; (3) permitir key
+dummy en `openai_compatible` para endpoints sin auth; (4) `UPDATE` de `context_token_budget`/
+`max_tokens` y decidir `MD_LONG_CONTEXT` para 8k; (5) filtrar `purpose='chat'` en
+`get_llm_config_for_tier` (`config_provider.py:54-64`); (6) robustecer `LLMSpecService` sobre 7B.
+
+**Hardware:** `docker-compose.prod.yml:74-89` tiene servicio `ollama` sin límite ni reserva de
+GPU. Un edge con 7B q4 + BGE-M3 + reranker pide ~12-16 GB de RAM/GPU; el deploy estándar "con
+recursos reducidos" es coherente con embeddings+LLM de Vertex (sin 7B), reservando el modelo local
+para el modo edge/redacción con datos sensibles.
+
+---
+
+## 5. Plan de remediación pre-deploy (SEC.8) y prueba local
+
+**Ya hecho hoy:** CR-1 (gate del superadmin) y el bloqueante de ingesta del corpus.
+
+**SEC.8 — antes de exponer la plataforma** (orden por severidad):
+1. CR-2 y familia IDOR: `assert_org_access`/`scope_query_to_orgs` en test-scenarios, curation
+   (sites + content-quality), prompt-templates y organizaciones; + AL-1/AL-2/AL-3 (hub_tasks,
+   feedback POST, redaccion manifests/workspace).
+2. AL-4 + AL-5: prohibir `SANDBOX_MODE=local` en producción y endurecer el auditor AST.
+3. AL-6: credencial de sitio para el widget en vez de Bearer privilegiado.
+4. AL-7 / ME-5: sanitizar nombres de fichero y enrutar todas las subidas por `validate_upload`.
+5. ME-1, ME-2, ME-6: `X-Forwarded-For`, hardening SAML, rechazo de `JWT_SECRET_KEY` placeholder.
+6. Bloqueantes funcionales: B1 (temas a BD/StorageService), B2 (decisión sobre el crawler),
+   B3 (limpiar los tests rotos de la raíz `tests/`).
+
+**Prueba local (antes de decidir el deployment):**
+1. Decidir el proveedor de embeddings (ver §4: la guarda de procedencia obliga a fijarlo antes de
+   ingerir).
+2. Cargar el vocabulario (2 CSV) y `corpus.load --dir md_contracte --chatbot-id <uuid> --dry-run`,
+   luego sin `--dry-run`.
+3. Probar el chat con API (Gemini) sobre el corpus — camino de fase 1.
+4. Cablear el LLM de redacción a un endpoint local (Ollama/vLLM con un 7B q4) y probar la
+   generación de un informe end-to-end.
+5. Con eso, decidir el deployment (estándar Vertex vs edge con local para redacción).
