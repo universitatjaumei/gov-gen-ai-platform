@@ -13,6 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user
 from server.app.core.auth.models import UserInfo
+from server.app.core.auth.tenancy import (
+    assert_chatbot_org_access,
+    assert_org_access,
+    assert_site_org_access,
+    scope_query_to_orgs,
+)
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.operational_models import HubCrawledPage
 from server.app.modules.curation.selection_contracts import (
@@ -92,7 +98,21 @@ async def create_site(
     """Crea un nuevo sitio rastreado.
 
     Deploy: edge. organizacion_id se provee como query param; no va en el body.
+
+    SEC.8.1: el parámetro lo elige quien llama, así que se valida contra el token. Sin
+    organización el sitio quedaría fuera de toda cascada —y de todo listado acotado—, de
+    modo que crear uno así queda reservado al superadministrador, igual que los temas de
+    plataforma.
     """
+    if organizacion_id is None:
+        if not current_user.is_superadmin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Indica la organización del sitio",
+            )
+    else:
+        assert_org_access(current_user, organizacion_id)
+
     repo = WebSiteRepo(session)
     site = await repo.create(
         organizacion_id=organizacion_id,
@@ -118,14 +138,17 @@ async def list_sites(
 ):
     """Lista sitios, opcionalmente filtrados por organizacion_id.
 
-    Deploy: edge.
+    Deploy: edge. SEC.8.1: el filtro por organización dejó de ser opcional. Antes acotaba
+    solo si el cliente pasaba el parámetro —o sea, el filtro lo elegía quien preguntaba— y
+    sin parámetro devolvía los sitios de todas las administraciones.
     """
     from server.app.modules.agents_hub.database.operational_models import HubWebSite
 
-    stmt = select(HubWebSite).order_by(HubWebSite.created_at.desc())
+    stmt = scope_query_to_orgs(select(HubWebSite), current_user, HubWebSite)
     if organizacion_id is not None:
+        assert_org_access(current_user, organizacion_id)
         stmt = stmt.where(HubWebSite.organizacion_id == organizacion_id)
-    result = await session.execute(stmt)
+    result = await session.execute(stmt.order_by(HubWebSite.created_at.desc()))
     return result.scalars().all()
 
 
@@ -144,6 +167,7 @@ async def patch_site(
 
     Deploy: edge.
     """
+    await assert_site_org_access(session, site_id, current_user)
     repo = WebSiteRepo(session)
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     site = await repo.update(site_id, **updates)
@@ -167,6 +191,7 @@ async def delete_site(
 
     Deploy: edge.
     """
+    await assert_site_org_access(session, site_id, current_user)
     repo = WebSiteRepo(session)
     await repo.delete(site_id)
     await session.commit()
@@ -191,11 +216,7 @@ async def trigger_crawl(
 
     Deploy: edge. Responde 202 Accepted inmediatamente.
     """
-    from server.app.modules.agents_hub.database.operational_models import HubWebSite
-
-    site = await session.get(HubWebSite, site_id)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    await assert_site_org_access(session, site_id, current_user)
 
     if quality_job is not None:
         background_tasks.add_task(quality_job.run_for_site, site_id)
@@ -221,6 +242,7 @@ async def list_site_pages(
 
     Deploy: edge.
     """
+    await assert_site_org_access(session, site_id, current_user)
     stmt = select(HubCrawledPage).where(HubCrawledPage.site_id == site_id)
     if page_status is not None:
         stmt = stmt.where(HubCrawledPage.status == page_status)
@@ -248,6 +270,8 @@ async def create_selection(
 
     Deploy: edge.
     """
+    await assert_chatbot_org_access(session, chatbot_id, current_user)
+    await assert_site_org_access(session, body.site_id, current_user)
     repo = CorpusSelectionRepo(session)
     sel = await repo.create(
         chatbot_id=chatbot_id,
@@ -274,6 +298,7 @@ async def list_selections(
 
     Deploy: edge.
     """
+    await assert_chatbot_org_access(session, chatbot_id, current_user)
     from server.app.modules.agents_hub.database.operational_models import HubCorpusSelection
 
     stmt = (
@@ -300,6 +325,7 @@ async def delete_selection(
 
     Deploy: edge.
     """
+    await assert_chatbot_org_access(session, chatbot_id, current_user)
     repo = CorpusSelectionRepo(session)
     await repo.delete(selection_id)
     await session.commit()
@@ -318,11 +344,14 @@ async def list_candidates(
     chatbot_id: uuid.UUID = Query(...),
     current_user: UserInfo = Depends(_require_admin),
     svc: Any = Depends(get_selection_service),
+    session: AsyncSession = Depends(get_async_session),
 ):
     """Páginas candidatas a ingerir: activas, no ingeridas aún para el chatbot.
 
     Deploy: edge.
     """
+    await assert_site_org_access(session, site_id, current_user)
+    await assert_chatbot_org_access(session, chatbot_id, current_user)
     return await svc.candidates(site_id, chatbot_id)
 
 
@@ -337,11 +366,13 @@ async def ingest_page(
     background_tasks: BackgroundTasks,
     current_user: UserInfo = Depends(_require_admin),
     svc: Any = Depends(get_selection_service),
+    session: AsyncSession = Depends(get_async_session),
 ):
     """Ingesta manual de una página concreta en un chatbot (idempotente).
 
     Deploy: edge. Encola la ingestión en background y responde 202.
     """
+    await assert_chatbot_org_access(session, chatbot_id, current_user)
     background_tasks.add_task(svc.ingest_page, chatbot_id, page_id)
     return {"status": "queued", "chatbot_id": str(chatbot_id), "page_id": str(page_id)}
 
@@ -355,10 +386,12 @@ async def retire_page(
     page_id: uuid.UUID,
     current_user: UserInfo = Depends(_require_admin),
     svc: Any = Depends(get_selection_service),
+    session: AsyncSession = Depends(get_async_session),
 ):
     """Retira todos los documentos de una página para un chatbot.
 
     Deploy: edge. Devuelve el número de documentos eliminados.
     """
+    await assert_chatbot_org_access(session, chatbot_id, current_user)
     count = await svc.retire_page(chatbot_id, page_id)
     return {"documents_removed": count}

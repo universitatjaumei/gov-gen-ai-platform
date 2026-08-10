@@ -21,8 +21,13 @@ from server.app.modules.redaccion.contracts.manifest import (
     UploadedDocumentInfo,
 )
 from server.app.modules.redaccion.contracts.runtime import ApprovalRecord
-from server.app.modules.redaccion.database.models import HubRunManifest
+from server.app.modules.redaccion.database.models import HubRunManifest, HubWorkspace
 from server.app.api.deps import get_session
+
+# SEC.8.1: el manifest solo se sirve a quien es dueño del workspace, así que el usuario del
+# token y el `owner_id` del workspace tienen que ser el mismo; antes el token llevaba un
+# uuid nuevo en cada llamada porque a nadie le importaba quién preguntaba.
+_USER_ID = uuid.uuid4()
 
 # ---------------------------------------------------------------------------
 # JWT helpers (shared pattern)
@@ -40,7 +45,7 @@ def _make_token(role: str = "user") -> str:
     os.environ.update(_JWT_ENV)
     from server.app.core.auth import UserInfo, create_token
     return create_token(UserInfo(
-        user_id=str(uuid.uuid4()),
+        user_id=str(_USER_ID),
         email="user@test.com",
         role=role,
     ))
@@ -92,13 +97,23 @@ def _build_app(session_mock) -> FastAPI:
     return app
 
 
-def _make_session(*, by_id: HubRunManifest | None = None, by_workspace: HubRunManifest | None = None) -> AsyncMock:
+def _make_session(
+    *,
+    by_id: HubRunManifest | None = None,
+    by_workspace: HubRunManifest | None = None,
+    owner_id: uuid.UUID | None = None,
+) -> AsyncMock:
     session = AsyncMock()
     session.commit = AsyncMock()
+
+    workspace = MagicMock(spec=HubWorkspace)
+    workspace.owner_id = _USER_ID if owner_id is None else owner_id
 
     async def _get(model, pk):
         if model is HubRunManifest:
             return by_id
+        if model is HubWorkspace:
+            return workspace
         return None
 
     session.get = AsyncMock(side_effect=_get)
@@ -257,6 +272,25 @@ def test_run_manifest_endpoint_returns_full_payload():
     assert resp.status_code == 200
     data2 = resp.json()
     assert data2["workspace_id"] == str(workspace_id)
+
+
+def test_run_manifest_is_denied_to_a_non_owner():
+    """SEC.8.1: el `payload_json` lleva lo extraído del expediente, así que leerlo por
+    UUID sin ser el dueño era una fuga de contenido, no un detalle de permisos."""
+    workspace_id = uuid.uuid4()
+    manifest = _make_manifest(workspace_id=workspace_id)
+    orm = _make_orm_manifest(manifest)
+    session = _make_session(by_id=orm, by_workspace=orm, owner_id=uuid.uuid4())
+
+    client = TestClient(_build_app(session))
+
+    por_workspace = client.get(
+        f"/api/v1/redaccion/workspaces/{workspace_id}/manifest", headers=_auth()
+    )
+    por_id = client.get(f"/api/v1/redaccion/manifests/{manifest.id}", headers=_auth())
+
+    assert por_workspace.status_code == 403
+    assert por_id.status_code == 403
 
 
 def test_run_manifest_is_immutable():

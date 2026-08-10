@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user
 from server.app.core.auth import UserInfo
+from server.app.core.auth.tenancy import assert_chatbot_org_access
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.operational_models import HubInteraction
 
@@ -56,11 +57,17 @@ async def export_task(
             detail=f"Task {run_id} not found",
         )
 
-    if interaction.user_id != user.user_id and user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
-        )
+    # SEC.8.1: «eres el dueño o eres admin» no bastaba. Un admin es admin *de una
+    # organización*, y la conversación exportada es un dato personal de un ciudadano que
+    # habló con OTRA administración. Quien no es el dueño tiene que pertenecer, además, a
+    # la organización del chatbot.
+    if interaction.user_id != user.user_id:
+        if user.role not in ("superadmin", "admin"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied",
+            )
+        await assert_chatbot_org_access(session, interaction.chatbot_id, user)
 
     markdown_text = _render_markdown(interaction)
 

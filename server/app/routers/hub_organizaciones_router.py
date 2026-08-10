@@ -12,6 +12,7 @@ from sqlalchemy import func, select, delete as sql_delete
 
 from server.app.api.deps import require_role
 from server.app.core.auth.models import UserInfo
+from server.app.core.auth.tenancy import assert_org_access, scope_query_to_orgs
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion
 
@@ -102,16 +103,18 @@ _count_sq = (
 
 @router.get("", response_model=list[OrganizacionRead])
 async def list_organizaciones(
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
-    rows = (
-        await session.execute(
-            select(HubOrganizacion, _count_sq.label("chatbot_count")).order_by(
-                HubOrganizacion.created_at.desc()
-            )
-        )
-    ).all()
+    # SEC.8.1: la organización ES la entidad, así que se acota por su propia clave y no
+    # por una columna `organizacion_id` que aquí no existe.
+    consulta = scope_query_to_orgs(
+        select(HubOrganizacion, _count_sq.label("chatbot_count")),
+        user,
+        HubOrganizacion,
+        columna="id",
+    ).order_by(HubOrganizacion.created_at.desc())
+    rows = (await session.execute(consulta)).all()
     return [
         OrganizacionRead.model_validate(o).model_copy(update={"chatbot_count": count})
         for o, count in rows
@@ -156,7 +159,7 @@ async def create_organizacion(
 async def update_organizacion(
     organizacion_id: uuid.UUID,
     body: OrganizacionUpdate,
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
     organizacion = await session.get(HubOrganizacion, organizacion_id)
@@ -164,6 +167,7 @@ async def update_organizacion(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Organización not found"
         )
+    assert_org_access(user, organizacion.id)
 
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(organizacion, field, value)
@@ -179,7 +183,7 @@ async def update_organizacion(
 @router.delete("/{organizacion_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_organizacion(
     organizacion_id: uuid.UUID,
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
     organizacion = await session.get(HubOrganizacion, organizacion_id)
@@ -187,6 +191,9 @@ async def delete_organizacion(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Organización not found"
         )
+    # El borrado arrastra los chatbots por CASCADE: sin esta línea, un admin destruye los
+    # datos de otra administración con un solo DELETE.
+    assert_org_access(user, organizacion.id)
     await session.execute(
         sql_delete(HubOrganizacion).where(HubOrganizacion.id == organizacion_id)
     )

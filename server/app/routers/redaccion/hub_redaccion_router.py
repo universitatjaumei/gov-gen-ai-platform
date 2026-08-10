@@ -22,7 +22,7 @@ from server.app.api.deps import (
     require_scopes,
 )
 from server.app.core.auth.models import UserInfo
-from server.app.routers.redaccion._actor import user_to_uuid
+from server.app.routers.redaccion._actor import es_propietario, user_to_uuid
 from server.app.modules.redaccion.contracts.template import ReportTemplateSpec
 from server.app.modules.redaccion.contracts.ui import ReportUIContract
 from server.app.modules.redaccion.database.models import (
@@ -275,13 +275,17 @@ async def get_template_ui_contract(
 )
 async def get_workspace_by_id(
     workspace_id: uuid.UUID,
-    _user: UserInfo = Depends(get_current_user),
+    user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> WorkspaceOut:
     """Devuelve el workspace con todos sus bloques."""
     workspace = await WorkspaceRepo(session).get(workspace_id)
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
+    # SEC.8.1: el usuario llegaba declarado y sin usar, así que cualquiera con el UUID leía
+    # los bloques del expediente ajeno.
+    if not es_propietario(user.user_id, workspace.owner_id):
+        raise HTTPException(status_code=403, detail="Not the workspace owner")
     blocks = await WorkspaceBlockRepo(session).list(workspace_id)
     return WorkspaceOut(
         id=workspace.id,
@@ -314,10 +318,17 @@ async def patch_workspace_block(
     workspace_id: uuid.UUID,
     block_id: str,
     body: BlockPatchRequest,
-    _user: UserInfo = Depends(get_current_user),
+    user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> BlockStateOut:
     """Aprueba, rechaza o solicita regeneración de un bloque."""
+    workspace = await WorkspaceRepo(session).get(workspace_id)
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    # Aprobar un bloque es una decisión con firma: sin esta comprobación la tomaba
+    # cualquiera sobre el expediente de otro.
+    if not es_propietario(user.user_id, workspace.owner_id):
+        raise HTTPException(status_code=403, detail="Not the workspace owner")
     stmt = select(HubWorkspaceBlock).where(
         and_(
             HubWorkspaceBlock.workspace_id == workspace_id,
@@ -471,12 +482,18 @@ async def get_template_schema(
 )
 async def get_template_version(
     version_id: uuid.UUID,
-    _user: UserInfo = Depends(require_scopes("redaccion:templates:read")),
+    user: UserInfo = Depends(require_scopes("redaccion:templates:read")),
     session: AsyncSession = Depends(get_session),
 ) -> TemplateVersionOut:
     """Devuelve la spec completa de una versión de plantilla."""
     version = await ReportTemplateVersionRepo(session).get(version_id)
     if version is None:
+        raise HTTPException(status_code=404, detail="Template version not found")
+    # SEC.8.1: el listado de plantillas ya filtra por `owner_id`, pero esta lectura por
+    # id no lo hacía, así que la `spec` completa de una plantilla privada ajena se servía
+    # a cualquiera con el UUID de la versión.
+    plantilla = await session.get(HubReportTemplate, version.template_id)
+    if plantilla is None or not es_propietario(user.user_id, plantilla.owner_id):
         raise HTTPException(status_code=404, detail="Template version not found")
     return TemplateVersionOut(
         id=version.id,

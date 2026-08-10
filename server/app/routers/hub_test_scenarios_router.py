@@ -22,6 +22,7 @@ from sqlalchemy import select
 
 from server.app.api.deps import require_role
 from server.app.core.auth.models import UserInfo
+from server.app.core.auth.tenancy import assert_chatbot_org_access
 from server.app.modules.agents_hub.agent.public_graphs.core.graph_factory import GraphFactory
 from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_pipeline_protocol import (
     GraphDeps,
@@ -37,9 +38,31 @@ from server.app.modules.agents_hub.services.embedding_resolver import (
 )
 from server.app.modules.agents_hub.services.model_factory import get_model
 
-router = APIRouter(prefix="/hub/chatbots", tags=["hub-test-scenarios"])
-
 _require_admin = require_role("superadmin", "admin")
+
+
+async def _guarda_del_chatbot(
+    chatbot_id: uuid.UUID,
+    user: UserInfo = Depends(_require_admin),
+    session=Depends(get_async_session),
+) -> UserInfo:
+    """SEC.8.1: todas las rutas de este router cuelgan de `/{chatbot_id}`, así que la
+    pertenencia se comprueba **una vez, en el router**, y no endpoint por endpoint.
+
+    Puesta aquí, cubre también el endpoint que alguien añada mañana. Endpoint por endpoint
+    era exactamente la forma del agujero: `run_scenario` ejecutaba el grafo completo contra
+    cualquier `chatbot_id` —o sea, devolvía el corpus ajeno— porque exigía rol de admin y
+    nunca miró de quién era el chatbot.
+    """
+    await assert_chatbot_org_access(session, chatbot_id, user)
+    return user
+
+
+router = APIRouter(
+    prefix="/hub/chatbots",
+    tags=["hub-test-scenarios"],
+    dependencies=[Depends(_guarda_del_chatbot)],
+)
 
 Verdict = Literal["good", "bad", "mixed"]
 

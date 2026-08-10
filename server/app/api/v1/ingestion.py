@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user
 from server.app.core.auth import UserInfo
+from server.app.core.auth.tenancy import assert_chatbot_org_access
 from server.app.core.uploads import UploadKind, validate_upload
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
@@ -31,6 +32,12 @@ async def user_upload(
 
     Los chunks creados son visibles únicamente para el usuario que los subió.
     """
+    # SEC.8.1: el `chatbot_id` venía del formulario y no se comprobaba, así que se podían
+    # inyectar documentos —y gastar el servicio de embeddings— contra el chatbot de
+    # cualquier organización. Los chunks quedan acotados al usuario, pero el trabajo y el
+    # coste los pagaba el dueño del chatbot.
+    await assert_chatbot_org_access(session, chatbot_id, current_user)
+
     # Validación compartida (SEC.6): extensión + magic bytes + corte por tamaño
     # durante la lectura. No se mira content_type: lo fija el cliente.
     validado = await validate_upload(file, kind=UploadKind.PDF)

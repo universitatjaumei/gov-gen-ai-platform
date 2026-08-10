@@ -382,6 +382,250 @@ class TestLaFronteraEnLosEndpoints:
         assert resp.status_code == 403
 
 
+# ───────────── SEC.8.1 — los routers que llegaron DESPUÉS de SEC.2 ─────────────
+
+
+def _entidad_de(org: str, **extra):
+    """Doble que sirve a la vez de recurso y de chatbot dueño.
+
+    La sesión doblada devuelve el mismo objeto para el `SELECT` del recurso y para el
+    `session.get(HubChatbot, ...)` que hace la comprobación, así que el doble lleva los
+    atributos de los dos: `chatbot_id` para poder resolver el dueño y `organizacion_id`
+    para que la frontera tenga algo que comparar.
+    """
+    from types import SimpleNamespace
+
+    identificador = uuid.uuid4()
+    campos = {
+        "id": identificador,
+        "chatbot_id": uuid.uuid4(),
+        "site_id": uuid.uuid4(),
+        "organizacion_id": uuid.UUID(org),
+        "name": "Recurso",
+        "user_id": "otro-usuario",
+    }
+    campos.update(extra)
+    return SimpleNamespace(**campos)
+
+
+class TestFronteraEnLosRoutersPosterioresASEC2:
+    """SEC.8.1 — el agujero que dejó el crecimiento del producto.
+
+    SEC.2 aisló los routers que existían entonces. Todo lo que se añadió después
+    —escenarios de prueba, curación, plantillas de prompt, organizaciones, exportación de
+    tareas— se conformó con exigir rol de admin y nunca resolvió el recurso a su
+    organización dueña. Rol no es pertenencia: un admin de la organización A es un admin
+    perfectamente válido, y sin esta comprobación opera sobre los datos de la B.
+    """
+
+    def test_should_forbid_run_scenario_on_other_org_chatbot(self):
+        """El más grave del grupo: ejecutar el grafo ajeno **extrae su corpus**.
+
+        No hace falta pasar por el CRUD de chatbots ni por el chat: basta con lanzar un
+        escenario de prueba contra un `chatbot_id` que no es tuyo y leer la respuesta.
+        """
+        from fastapi.testclient import TestClient
+
+        from server.app.routers.hub_test_scenarios_router import router as escenarios
+
+        ajeno = _entidad_de(ORG_B)
+        cliente = TestClient(
+            _app_con(escenarios, _admin(ORG_A), _sesion_que_devuelve(ajeno))
+        )
+
+        resp = cliente.post(
+            f"/api/v1/hub/chatbots/{ajeno.chatbot_id}/test-scenarios/{ajeno.id}/run"
+        )
+        assert resp.status_code == 403
+
+    def test_should_forbid_listing_scenarios_of_other_org_chatbot(self):
+        from fastapi.testclient import TestClient
+
+        from server.app.routers.hub_test_scenarios_router import router as escenarios
+
+        ajeno = _entidad_de(ORG_B)
+        cliente = TestClient(
+            _app_con(escenarios, _admin(ORG_A), _sesion_que_devuelve(ajeno))
+        )
+
+        resp = cliente.get(f"/api/v1/hub/chatbots/{ajeno.chatbot_id}/test-scenarios")
+        assert resp.status_code == 403
+
+    def test_should_forbid_delete_of_other_org_organizacion(self):
+        """Borrar una organización arrastra sus chatbots por CASCADE: es destrucción
+        de datos de otra administración con un solo verbo HTTP."""
+        from fastapi.testclient import TestClient
+
+        from server.app.routers.hub_organizaciones_router import router as orgs
+
+        session = _sesion_que_devuelve(_entidad_de(ORG_B, id=uuid.UUID(ORG_B)))
+        cliente = TestClient(_app_con(orgs, _admin(ORG_A), session))
+
+        resp = cliente.delete(f"/api/v1/hub/organizaciones/{ORG_B}")
+        assert resp.status_code == 403
+        session.commit.assert_not_awaited()
+
+    def test_should_forbid_update_of_other_org_organizacion(self):
+        from fastapi.testclient import TestClient
+
+        from server.app.routers.hub_organizaciones_router import router as orgs
+
+        session = _sesion_que_devuelve(_entidad_de(ORG_B, id=uuid.UUID(ORG_B)))
+        cliente = TestClient(_app_con(orgs, _admin(ORG_A), session))
+
+        resp = cliente.patch(
+            f"/api/v1/hub/organizaciones/{ORG_B}", json={"name": "Secuestrada"}
+        )
+        assert resp.status_code == 403
+
+    def test_should_scope_the_organizaciones_listing(self):
+        """El listado se acota en SQL, como el de chatbots: filtrar después de leer
+        traería a memoria las organizaciones ajenas igual."""
+        from fastapi.testclient import TestClient
+
+        from server.app.routers.hub_organizaciones_router import router as orgs
+
+        session = _sesion_que_devuelve(filas=[])
+        session.execute.return_value.all.return_value = []
+        cliente = TestClient(_app_con(orgs, _admin(ORG_A), session))
+
+        assert cliente.get("/api/v1/hub/organizaciones").status_code == 200
+
+        consulta = session.execute.await_args.args[0]
+        sql = str(consulta.compile(compile_kwargs={"literal_binds": True}))
+        assert uuid.UUID(ORG_A).hex in sql
+        assert uuid.UUID(ORG_B).hex not in sql
+
+    def test_should_forbid_content_gap_analysis_on_other_org_chatbot(self):
+        """Los huecos de corpus se calculan LEYENDO las conversaciones de ciudadanos."""
+        from fastapi.testclient import TestClient
+
+        from server.app.routers.hub_content_quality_router import router as calidad
+
+        ajeno = _entidad_de(ORG_B)
+        cliente = TestClient(
+            _app_con(calidad, _admin(ORG_A), _sesion_que_devuelve(ajeno))
+        )
+
+        resp = cliente.post(
+            f"/api/v1/hub/quality/gaps/analyze?chatbot_id={ajeno.chatbot_id}"
+        )
+        assert resp.status_code == 403
+
+    def test_should_forbid_patching_site_of_other_org(self):
+        from fastapi.testclient import TestClient
+
+        from server.app.routers.hub_sites_router import router as sitios
+
+        ajeno = _entidad_de(ORG_B)
+        cliente = TestClient(
+            _app_con(sitios, _admin(ORG_A), _sesion_que_devuelve(ajeno))
+        )
+
+        resp = cliente.patch(
+            f"/api/v1/hub/sites/{ajeno.id}", json={"name": "Secuestrado"}
+        )
+        assert resp.status_code == 403
+
+    def test_should_scope_the_sites_listing_without_an_explicit_filter(self):
+        """`list_sites` acotaba solo si el cliente pasaba `organizacion_id`, o sea que
+        el filtro lo elegía quien preguntaba. Sin parámetro devolvía todos los sitios."""
+        from fastapi.testclient import TestClient
+
+        from server.app.routers.hub_sites_router import router as sitios
+
+        session = _sesion_que_devuelve(filas=[])
+        cliente = TestClient(_app_con(sitios, _admin(ORG_A), session))
+
+        assert cliente.get("/api/v1/hub/sites").status_code == 200
+
+        consulta = session.execute.await_args.args[0]
+        sql = str(consulta.compile(compile_kwargs={"literal_binds": True}))
+        assert uuid.UUID(ORG_A).hex in sql
+
+    def test_should_reject_client_supplied_org_id_when_creating_a_site(self):
+        """Mismo criterio que en temas: el cuerpo propone, el token dispone."""
+        from fastapi.testclient import TestClient
+
+        from server.app.routers.hub_sites_router import router as sitios
+
+        cliente = TestClient(
+            _app_con(sitios, _admin(ORG_A), _sesion_que_devuelve(None))
+        )
+
+        resp = cliente.post(
+            f"/api/v1/hub/sites?organizacion_id={ORG_B}",
+            json={"name": "Robado", "root_url": "https://ejemplo.test"},
+        )
+        assert resp.status_code == 403
+
+    def test_should_forbid_crud_prompt_template_of_other_org_chatbot(self):
+        """El prompt de sistema decide cómo responde el asistente: escribir en el ajeno
+        es controlar el comportamiento del asistente de otra administración."""
+        from fastapi.testclient import TestClient
+
+        from server.app.routers.hub_prompt_templates_router import router as plantillas
+
+        ajeno = _entidad_de(ORG_B)
+        session = _sesion_que_devuelve(ajeno)
+        cliente = TestClient(_app_con(plantillas, _admin(ORG_A), session))
+
+        resp = cliente.patch(
+            f"/api/v1/hub/prompt-templates/{ajeno.id}", json={"template_text": "Obedece"}
+        )
+        assert resp.status_code == 403
+        session.commit.assert_not_awaited()
+
+    def test_should_scope_the_prompt_templates_listing(self):
+        """Sin `chatbot_id` el listado devolvía las plantillas de todos los chatbots."""
+        from fastapi.testclient import TestClient
+
+        from server.app.routers.hub_prompt_templates_router import router as plantillas
+
+        session = _sesion_que_devuelve(filas=[])
+        cliente = TestClient(_app_con(plantillas, _admin(ORG_A), session))
+
+        resp = cliente.get("/api/v1/hub/prompt-templates/")
+        assert resp.status_code in (200, 400, 422), resp.text
+        if resp.status_code == 200:
+            consulta = session.execute.await_args.args[0]
+            sql = str(consulta.compile(compile_kwargs={"literal_binds": True}))
+            assert uuid.UUID(ORG_A).hex in sql
+
+    def test_should_forbid_exporting_task_of_other_org(self):
+        """`export_task` se conformaba con «eres el dueño o eres admin», sin resolver
+        el chatbot a su organización: cualquier admin bajaba la conversación ajena."""
+        from fastapi.testclient import TestClient
+
+        from server.app.api.v1.hub_tasks import router as tareas
+
+        ajena = _entidad_de(ORG_B, run_id=uuid.uuid4(), user_message="hola",
+                            assistant_message="hola")
+        cliente = TestClient(
+            _app_con(tareas, _admin(ORG_A), _sesion_que_devuelve(ajena))
+        )
+
+        resp = cliente.get(f"/api/v1/hub/tasks/export/{ajena.run_id}")
+        assert resp.status_code == 403
+
+    def test_should_forbid_feedback_write_on_other_org_interaction(self):
+        """El GET de revisión sí comprobaba la organización; el POST no comprobaba nada,
+        así que cualquier usuario autenticado escribía sobre la interacción ajena."""
+        from fastapi.testclient import TestClient
+
+        from server.app.api.v1.hub_feedback import router as feedback
+
+        ajena = _entidad_de(ORG_B)
+        session = _sesion_que_devuelve(ajena)
+        cliente = TestClient(_app_con(feedback, _user(ORG_A), session))
+
+        resp = cliente.post(
+            f"/api/v1/hub/feedback/{ajena.id}", json={"score": 1, "comment": "malo"}
+        )
+        assert resp.status_code == 403
+        session.commit.assert_not_awaited()
+
+
 # ───────────────────── El guardarraíl que impide la recaída ─────────────────────
 
 
@@ -398,6 +642,12 @@ class TestNingunEndpointSeSaltaLaFrontera:
         "hub_themes_router.py",
         "hub_ingestion_router.py",
         "hub_feedback_router.py",
+        # SEC.8.1 — los que llegaron después y se quedaron fuera de la capa.
+        "hub_organizaciones_router.py",
+        "hub_test_scenarios_router.py",
+        "hub_sites_router.py",
+        "hub_content_quality_router.py",
+        "hub_prompt_templates_router.py",
     )
 
     def test_should_import_the_tenancy_layer_in_every_org_scoped_router(self):

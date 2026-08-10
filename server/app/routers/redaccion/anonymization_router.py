@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, get_session
 from server.app.core.auth.models import UserInfo
+from server.app.routers.redaccion._actor import es_propietario
 from server.app.modules.redaccion.database.models import (
     HubRunManifest,
     HubWorkspace,
@@ -75,13 +76,18 @@ async def _get_workspace_checked(
     user: UserInfo,
     session: AsyncSession,
 ) -> HubWorkspace:
-    """Carga el workspace y verifica permisos: owner o admin/superadmin."""
+    """Carga el workspace y verifica que quien pregunta es su dueño.
+
+    SEC.8.1: antes bastaba con ser admin *de cualquier organización*. Los workspaces de
+    redacción son por usuario y contienen datos personales del expediente —lo que este
+    router expone es precisamente el resumen de PII detectada y el modo de anonimización—,
+    así que un bypass por rol convertía a cualquier admin en lector del expediente ajeno.
+    El resumen NER no se comparte por jerarquía: se comparte con quien lo generó.
+    """
     workspace = await session.get(HubWorkspace, workspace_id)
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    is_admin = user.role in ("superadmin", "admin")
-    is_owner = str(workspace.owner_id) == user.user_id
-    if not is_admin and not is_owner:
+    if not es_propietario(user.user_id, workspace.owner_id):
         raise HTTPException(status_code=403, detail="Forbidden")
     return workspace
 

@@ -81,3 +81,43 @@ def scope_query_to_orgs(stmt, sujeto: Any, model, columna: str = "organizacion_i
     if getattr(principal, "is_superadmin", False):
         return stmt
     return stmt.where(getattr(model, columna).in_(orgs_del_principal(principal)))
+
+
+# ─────────────── Resolución del dueño (SEC.8.1) ───────────────
+#
+# SEC.2 dejó las dos operaciones de arriba, que bastan cuando el endpoint YA tiene delante
+# la organización. El agujero de SEC.8.1 fue otro: los routers que llegaron después reciben
+# un `chatbot_id` o un `site_id` por la ruta y **la organización no está a la vista**, así
+# que comprobarla exigía un paso previo que cada endpoint tenía que recordar hacer. Nadie lo
+# recordó. Estos dos resolvedores son ese paso previo, escrito una vez.
+
+
+async def assert_chatbot_org_access(session, chatbot_id: Any, sujeto: Any):
+    """Carga el chatbot, 404 si no existe, y exige su organización al principal.
+
+    Distinto de `chatbot_access.assert_chatbot_access`, que decide el **modo de acceso**
+    (público/autenticado/restringido) de un chatbot que ya se ha resuelto. Esto decide lo
+    anterior: si el principal puede siquiera mirar ese chatbot.
+    """
+    from server.app.modules.agents_hub.database.config_models import HubChatbot
+
+    chatbot = await session.get(HubChatbot, chatbot_id)
+    if chatbot is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Chatbot no encontrado"
+        )
+    assert_org_access(sujeto, chatbot.organizacion_id)
+    return chatbot
+
+
+async def assert_site_org_access(session, site_id: Any, sujeto: Any):
+    """Lo mismo para un sitio rastreado de curación (`HubWebSite`)."""
+    from server.app.modules.agents_hub.database.operational_models import HubWebSite
+
+    sitio = await session.get(HubWebSite, site_id)
+    if sitio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Sitio no encontrado"
+        )
+    assert_org_access(sujeto, sitio.organizacion_id)
+    return sitio

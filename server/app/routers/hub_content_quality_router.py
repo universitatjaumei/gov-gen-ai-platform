@@ -25,6 +25,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user
 from server.app.core.auth.models import UserInfo
+from server.app.core.auth.tenancy import (
+    assert_chatbot_org_access,
+    assert_site_org_access,
+)
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.curation.contracts import (
     InvalidFindingTransitionError,
@@ -126,11 +130,13 @@ async def list_site_findings(
     finding_type: str | None = Query(default=None, alias="type"),
     current_user: UserInfo = Depends(_require_admin),
     findings_repo: ContentFindingRepo = Depends(get_findings_repo),
+    session: AsyncSession = Depends(get_async_session),
 ):
     """Lista hallazgos de un sitio (cola de revisión).
 
     Deploy: edge.
     """
+    await assert_site_org_access(session, site_id, current_user)
     return await findings_repo.list_by_site(
         site_id,
         status=finding_status,
@@ -149,11 +155,13 @@ async def transition_finding(
     body: _TransitionIn,
     current_user: UserInfo = Depends(_require_admin),
     findings_repo: ContentFindingRepo = Depends(get_findings_repo),
+    session: AsyncSession = Depends(get_async_session),
 ):
     """Transiciona el estado de un hallazgo (confirm/dismiss/resolve).
 
     Deploy: edge. Devuelve 422 si la transición no es válida.
     """
+    await assert_site_org_access(session, site_id, current_user)
     try:
         updated = await findings_repo.transition(
             finding_id=finding_id,
@@ -189,11 +197,13 @@ async def get_site_report(
     site_id: uuid.UUID,
     current_user: UserInfo = Depends(_require_admin),
     builder: Any = Depends(get_report_builder),
+    session: AsyncSession = Depends(get_async_session),
 ):
     """Genera y devuelve el informe de auditoría de calidad de un sitio.
 
     Deploy: edge.
     """
+    await assert_site_org_access(session, site_id, current_user)
     return await builder.build(site_id)
 
 
@@ -207,12 +217,14 @@ async def export_site_report(
     current_user: UserInfo = Depends(_require_admin),
     builder: Any = Depends(get_report_builder),
     exporter: Any = Depends(get_report_exporter),
+    session: AsyncSession = Depends(get_async_session),
 ):
     """Descarga el informe como DOCX o PDF.
 
     Deploy: edge. Si LibreOffice no está disponible, PDF devuelve DOCX
     (Content-Type: application/vnd.openxmlformats…).
     """
+    await assert_site_org_access(session, site_id, current_user)
     report = await builder.build(site_id)
 
     if report_format.lower() == "pdf":
@@ -244,11 +256,13 @@ async def analyze_site(
     background_tasks: BackgroundTasks,
     current_user: UserInfo = Depends(_require_admin),
     quality_job: Any = Depends(get_quality_job),
+    session: AsyncSession = Depends(get_async_session),
 ):
     """Dispara un análisis de calidad completo del sitio en background.
 
     Deploy: edge. Responde 202 Accepted inmediatamente.
     """
+    await assert_site_org_access(session, site_id, current_user)
     if quality_job is not None:
         background_tasks.add_task(quality_job.run_for_site, site_id)
     return {"status": "queued", "site_id": str(site_id)}
@@ -269,7 +283,7 @@ async def analyze_content_gaps(
     chatbot_id: uuid.UUID = Query(..., description="Chatbot cuyas conversaciones se leen"),
     dias: int = Query(30, ge=1, le=365),
     min_cluster: int = Query(3, ge=2, le=100),
-    _: UserInfo = Depends(_require_admin),
+    current_user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Busca huecos de corpus en las conversaciones que salieron mal (RAG.14).
@@ -283,6 +297,9 @@ async def analyze_content_gaps(
         analizar_huecos,
     )
 
+    # Los huecos se calculan LEYENDO las conversaciones del chatbot, que son preguntas de
+    # ciudadanos: sin esta comprobación, cualquier admin las agrupaba y las leía.
+    await assert_chatbot_org_access(session, chatbot_id, current_user)
     servicio = await resolve_embedding_service(session, chatbot_id)
     encontrados = await analizar_huecos(
         session, chatbot_id, servicio, dias=dias, min_cluster_size=min_cluster
@@ -305,7 +322,7 @@ class StaleAnalysisOut(BaseModel):
 )
 async def analyze_stale_documents(
     chatbot_id: uuid.UUID = Query(..., description="Chatbot cuyo corpus se revisa"),
-    _: UserInfo = Depends(_require_admin),
+    current_user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Busca documentos con la revisión prevista vencida (SYNC.2).
@@ -317,6 +334,7 @@ async def analyze_stale_documents(
         analizar_caducidad,
     )
 
+    await assert_chatbot_org_access(session, chatbot_id, current_user)
     encontrados = await analizar_caducidad(session, chatbot_id)
     await session.commit()
     return StaleAnalysisOut(chatbot_id=chatbot_id, stale_found=encontrados)
@@ -330,7 +348,7 @@ async def analyze_stale_documents(
 async def list_stale_documents(
     chatbot_id: uuid.UUID = Query(...),
     status_filter: str | None = Query(None, alias="status"),
-    _: UserInfo = Depends(_require_admin),
+    current_user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Cola de revisión de las caducidades de un chatbot (SYNC.2).
@@ -343,6 +361,7 @@ async def list_stale_documents(
         listar_caducados,
     )
 
+    await assert_chatbot_org_access(session, chatbot_id, current_user)
     filas = await listar_caducados(session, chatbot_id, status=status_filter)
     return [
         {
@@ -370,7 +389,7 @@ async def list_stale_documents(
 async def list_content_gaps(
     chatbot_id: uuid.UUID = Query(...),
     status_filter: str | None = Query(None, alias="status"),
-    _: UserInfo = Depends(_require_admin),
+    current_user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Cola de revisión de los huecos de un chatbot (RAG.14).
@@ -383,6 +402,7 @@ async def list_content_gaps(
 
     from server.app.modules.agents_hub.database.operational_models import HubContentFinding
 
+    await assert_chatbot_org_access(session, chatbot_id, current_user)
     consulta = (
         select(HubContentFinding)
         .where(HubContentFinding.chatbot_id == chatbot_id)

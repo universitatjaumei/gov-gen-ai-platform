@@ -15,3 +15,16 @@ def user_to_uuid(user_id: str) -> uuid.UUID:
         return uuid.UUID(user_id)
     except ValueError:
         return uuid.uuid5(uuid.NAMESPACE_DNS, user_id)
+
+
+def es_propietario(user_id: str, owner_id) -> bool:
+    """¿Este `user_id` es el dueño de una fila con este `owner_id`?
+
+    Admite las dos formas en que la propiedad quedó escrita: el `user_id` tal cual y su
+    uuid5 determinista. SEC.8.1 la necesita porque varios endpoints de redacción recibían
+    el usuario y **no lo miraban** —el parámetro estaba declarado y sin usar—, así que
+    cualquiera con el UUID leía el contenido del workspace ajeno.
+    """
+    if owner_id is None:
+        return False
+    return str(owner_id) in (str(user_id), str(user_to_uuid(user_id)))

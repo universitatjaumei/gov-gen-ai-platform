@@ -77,6 +77,9 @@ def test_get_template_version_returns_spec():
     version_mock.template_id = template_id
     version_mock.version = 3
     version_mock.spec_json = spec
+    # SEC.8.1: la lectura por id exige ser dueño de la plantilla. El mismo doble hace de
+    # versión y de plantilla porque la sesión mockeada devuelve lo mismo para todo `get`.
+    version_mock.owner_id = _OWNER_ID
 
     session_mock = AsyncMock()
     session_mock.get = AsyncMock(return_value=version_mock)
@@ -90,6 +93,26 @@ def test_get_template_version_returns_spec():
     assert body["version"] == 3
     assert body["template_id"] == str(template_id)
     assert body["spec"] == spec
+
+
+def test_get_template_version_is_denied_to_a_non_owner():
+    """La `spec` es el contenido de la plantilla: servirla por UUID a quien no es su
+    dueño convertía el listado filtrado por `owner_id` en una barrera decorativa."""
+    version_mock = MagicMock()
+    version_mock.id = uuid.uuid4()
+    version_mock.template_id = uuid.uuid4()
+    version_mock.version = 1
+    version_mock.spec_json = _valid_spec_json()
+    version_mock.owner_id = uuid.uuid4()  # de otra persona
+
+    session_mock = AsyncMock()
+    session_mock.get = AsyncMock(return_value=version_mock)
+
+    app = _build_app(session_mock, role="user")
+    with TestClient(app) as client:
+        resp = client.get(f"/api/v1/hub/redaccion/template-versions/{version_mock.id}")
+
+    assert resp.status_code == 404, resp.text
 
 
 def test_get_template_version_404():

@@ -20,9 +20,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user
 from server.app.core.auth import UserInfo
-from server.app.core.auth.tenancy import assert_org_access
+from server.app.core.auth.tenancy import assert_chatbot_org_access, assert_org_access
 from server.app.modules.agents_hub.database.config_models import HubChatbot
 from server.app.modules.agents_hub.database.connection import get_async_session
+from server.app.modules.agents_hub.database.operational_models import HubInteraction
 from server.app.modules.agents_hub.services.feedback_service import FeedbackService
 
 router = APIRouter(prefix="/hub/feedback", tags=["hub-feedback"])
@@ -57,6 +58,18 @@ async def submit_feedback(
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> None:
+    # SEC.8.1: el GET de revisión comprobaba la organización desde SEC.2; este POST no
+    # comprobaba nada y el servicio hace `UPDATE ... WHERE id = :id` a ciegas, así que
+    # cualquier usuario autenticado —de cualquier organización— escribía sobre la
+    # valoración de una conversación ajena, y de ahí pasaba a LangFuse.
+    interaccion = await session.get(HubInteraction, interaction_id)
+    if interaccion is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Interaction not found"
+        )
+    if interaccion.user_id != user.user_id:
+        await assert_chatbot_org_access(session, interaccion.chatbot_id, user)
+
     service = FeedbackService(session)
     await service.submit_feedback(
         interaction_id=interaction_id,
