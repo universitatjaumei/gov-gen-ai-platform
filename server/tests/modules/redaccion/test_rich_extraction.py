@@ -1,4 +1,4 @@
-"""Extracción Docling enriquecida — 9R.5.9 (RED → GREEN).
+"""Extracción enriquecida de PDF — 9R.5.9 (RED → GREEN), sobre pdfplumber desde EXT.2.
 
 Cubre:
   1-4.  Nuevos modelos ExtractedCell / ExtractedTableRich / ExtractedPage / ExtractedDocument.
@@ -215,103 +215,88 @@ def test_extraction_result_document_roundtrip():
     dumped = result.model_dump()
     assert dumped["document"]["extraction_strategy"] == "text_linear"
     assert dumped["document"]["pages"][0]["page_num"] == 1
-
-
 # ---------------------------------------------------------------------------
-# 6. PDFTextExtractionPipeline builds ExtractedDocument
+# 6-9. PDFTextExtractionPipeline sobre PDFs REALES (EXT.2)
 # ---------------------------------------------------------------------------
+#
+# Estos cuatro tests doblaban el `DocumentConverter` de Docling y le hacian devolver un
+# documento inventado: lo que comprobaban, en realidad, era el doble. Al pasar el pipeline a
+# pdfplumber (EXT.2) el doble dejo de tener sentido, y la sustitucion honesta es ejercitar el
+# pipeline contra PDFs de verdad — que ademas es lo unico que puede cazar un cambio de
+# comportamiento de la libreria.
 
-def test_pdf_pipeline_builds_extracted_document():
-    grid = [
-        [_make_cell_mock("Header A"), _make_cell_mock("Header B")],
-        [_make_cell_mock("Row1A"), _make_cell_mock("Row1B")],
-    ]
-    mock_table = _make_table_mock(page_no=1, grid=grid)
-    conv = _make_conv_result(num_pages=1, markdown="# Report\n\nSome text.", tables=[mock_table])
 
-    pipeline = PDFTextExtractionPipeline.__new__(PDFTextExtractionPipeline)
-    pipeline._converter = MagicMock()
-    pipeline._converter.convert.return_value = conv
+def _pdf(texto: str, paginas: int = 1) -> bytes:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+    import io as _io
 
-    inp = ExtractionInput(
-        source_kind="pdf_text",
-        file_ref=StorageRef(bucket="bucket", key="report.pdf"),
+    buffer = _io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    for _ in range(paginas):
+        y = 800
+        for trozo in [texto[i : i + 90] for i in range(0, len(texto), 90)]:
+            c.drawString(50, y, trozo)
+            y -= 14
+            if y < 50:
+                break
+        c.showPage()
+    c.save()
+    return buffer.getvalue()
+
+
+def _extraer(datos: bytes, tmp_path):
+    fichero = tmp_path / "report.pdf"
+    fichero.write_bytes(datos)
+    pipeline = PDFTextExtractionPipeline()
+    return pipeline.extract(
+        ExtractionInput(
+            source_kind="pdf_text",
+            file_ref=StorageRef(bucket=str(tmp_path), key="report.pdf"),
+        )
     )
-    result = pipeline.extract(inp)
+
+
+def test_pdf_pipeline_builds_extracted_document(tmp_path):
+    result = _extraer(_pdf("Informe de prueba. " * 20, paginas=2), tmp_path)
 
     assert result.document is not None
-    assert result.document.markdown == "# Report\n\nSome text."
-    assert len(result.document.pages) == 1
-    page = result.document.pages[0]
-    assert page.page_num == 1
-    assert len(page.tables) == 1
+    assert "Informe de prueba" in result.document.markdown
+    assert len(result.document.pages) == 2
+    assert result.document.pages[0].page_num == 1
 
 
-# ---------------------------------------------------------------------------
-# 7. Heuristic: text_linear when < 3 tables and low ratio
-# ---------------------------------------------------------------------------
+def test_pdf_pipeline_strategy_text_linear(tmp_path):
+    """Sin tablas, la estrategia es lineal: es lo que orienta al AIAssistDraftNode."""
+    result = _extraer(_pdf("Texto corrido sin tablas. " * 20), tmp_path)
 
-def test_pdf_pipeline_strategy_text_linear():
-    conv = _make_conv_result(
-        num_pages=1,
-        markdown="A" * 1000,
-        tables=[
-            _make_table_mock(1, [[_make_cell_mock("x")]]),
-        ],
-    )
-    pipeline = PDFTextExtractionPipeline.__new__(PDFTextExtractionPipeline)
-    pipeline._converter = MagicMock()
-    pipeline._converter.convert.return_value = conv
-
-    inp = ExtractionInput(
-        source_kind="pdf_text",
-        file_ref=StorageRef(bucket="b", key="f.pdf"),
-    )
-    result = pipeline.extract(inp)
-    assert result.document is not None
     assert result.document.extraction_strategy == "text_linear"
 
 
-# ---------------------------------------------------------------------------
-# 8. Heuristic: complex_tables when ≥ 3 tables
-# ---------------------------------------------------------------------------
+def test_pdf_pipeline_reports_provenance_pages(tmp_path):
+    result = _extraer(_pdf("Contenido. " * 20, paginas=3), tmp_path)
 
-def test_pdf_pipeline_strategy_complex_tables_by_count():
-    tables = [
-        _make_table_mock(1, [[_make_cell_mock("a")]]),
-        _make_table_mock(1, [[_make_cell_mock("b")]]),
-        _make_table_mock(1, [[_make_cell_mock("c")]]),
-    ]
-    conv = _make_conv_result(num_pages=1, markdown="Short text.", tables=tables)
-
-    pipeline = PDFTextExtractionPipeline.__new__(PDFTextExtractionPipeline)
-    pipeline._converter = MagicMock()
-    pipeline._converter.convert.return_value = conv
-
-    inp = ExtractionInput(source_kind="pdf_text", file_ref=StorageRef(bucket="b", key="f.pdf"))
-    result = pipeline.extract(inp)
-    assert result.document is not None
-    assert result.document.extraction_strategy == "complex_tables"
+    assert result.provenance.pages == [1, 2, 3]
+    assert result.provenance.pipeline_id == "pdf_text_pipeline_v1"
 
 
-# ---------------------------------------------------------------------------
-# 9. Heuristic: complex_tables when table char ratio > 0.5
-# ---------------------------------------------------------------------------
+def test_pdf_pipeline_warns_on_a_pdf_without_text_layer(tmp_path):
+    """El pipeline AVISA en vez de lanzar: un informe puede tener otras fuentes, y quien lo
+    revisa necesita ver cual fallo en lugar de perder la ejecucion entera."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+    import io as _io
 
-def test_pdf_pipeline_strategy_complex_tables_by_ratio():
-    big_table_text = "X" * 600
-    grid = [[_make_cell_mock(big_table_text)]]
-    tables = [_make_table_mock(1, grid)]
-    conv = _make_conv_result(num_pages=1, markdown="Y" * 1000, tables=tables)
+    buffer = _io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    c.showPage()
+    c.save()
 
-    pipeline = PDFTextExtractionPipeline.__new__(PDFTextExtractionPipeline)
-    pipeline._converter = MagicMock()
-    pipeline._converter.convert.return_value = conv
+    result = _extraer(buffer.getvalue(), tmp_path)
 
-    inp = ExtractionInput(source_kind="pdf_text", file_ref=StorageRef(bucket="b", key="f.pdf"))
-    result = pipeline.extract(inp)
-    assert result.document is not None
-    assert result.document.extraction_strategy == "complex_tables"
+    assert [w.code for w in result.warnings] == ["NON_EXTRACTABLE_PDF"]
+    assert result.free_text is None
+
 
 
 # ---------------------------------------------------------------------------

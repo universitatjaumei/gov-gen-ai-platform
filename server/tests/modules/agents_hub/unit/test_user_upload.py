@@ -16,8 +16,11 @@ class TestUserUploadIngestion:
         user_b = uuid.uuid4()
         chatbot_id = uuid.uuid4()
 
-        with patch('server.app.modules.agents_hub.ingestion.watcher.DoclingProcessor') as mock_docling:
-            mock_docling.return_value.process.return_value = "# Doc A\n\nContenido privado."
+        # EXT.2: el contexto temporal se extrae con pdfplumber, no con Docling.
+        with patch(
+            'server.app.core.pdf_text.extraer_texto_de_pdf',
+            return_value="# Doc A\n\nContenido privado.",
+        ):
 
             mock_session = AsyncMock()
             mock_session.execute = AsyncMock(

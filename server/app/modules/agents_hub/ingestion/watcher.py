@@ -20,7 +20,6 @@ from server.app.modules.agents_hub.database.operational_models import (
     HubIngestionJob,
 )
 from server.app.modules.agents_hub.ingestion.chunker import MarkdownChunker
-from server.app.modules.agents_hub.ingestion.docling_processor import DoclingProcessor
 from server.app.modules.agents_hub.ingestion.hasher import hash_content
 from server.app.modules.agents_hub.ingestion.job_progress import (
     ProgressCallback,
@@ -86,7 +85,6 @@ class IngestionWatcher:
         self._embedding = embedding_service
         self._storage = storage
         self._chatbot_provider = chatbot_provider
-        self._processor: DoclingProcessor | None = None
         # RAG.8: el chunker por defecto es el de plataforma. `_chunker_para` lo sustituye
         # por el resuelto en la cascada cuando hay chatbot; se conserva este para los
         # caminos que no lo tienen (subidas temporales) y para no romper a quien lo use.
@@ -94,11 +92,6 @@ class IngestionWatcher:
         # Keep legacy attribute for backward compatibility
         self.session = session
         self.embedding_service = embedding_service
-
-    async def _get_processor(self) -> DoclingProcessor:
-        if self._processor is None:
-            self._processor = await asyncio.to_thread(DoclingProcessor)
-        return self._processor
 
     async def process_source(
         self,
@@ -348,13 +341,21 @@ class IngestionWatcher:
         owner_id: uuid.UUID,
         progress_callback: ProgressCallback | None = None,
     ) -> list[HubDocumentChunk]:
-        """Procesa un documento subido por un usuario (siempre re-procesa, marca como temporal)."""
+        """Procesa un documento subido por un usuario (siempre re-procesa, marca como temporal).
+
+        EXT.2: la extracción es `pdfplumber` y no Docling. Aquí sí vale: la persona tiene el
+        documento delante y ve en la respuesta si salió regular. Un PDF escaneado levanta
+        `PdfSinCapaDeTexto`, que el endpoint traduce a un 422 con un mensaje que se entiende
+        — ingerir un documento vacío en silencio es la avería que nadie ve.
+        """
+        from server.app.core.pdf_text import extraer_texto_de_pdf
+
         seg = SeguimientoDeJob(progress_callback)
 
         def _process() -> str:
-            return DoclingProcessor().process(source_url)
+            return extraer_texto_de_pdf(source_url)
 
-        async with seg.etapa("convert", "docling"):
+        async with seg.etapa("extract", "pdfplumber"):
             content = await asyncio.to_thread(_process)
         language = detect_language(content)
         async with seg.etapa("chunk"):

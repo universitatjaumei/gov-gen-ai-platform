@@ -5,12 +5,13 @@ Deploy: edge
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user
 from server.app.core.auth import UserInfo
 from server.app.core.auth.tenancy import assert_chatbot_org_access
+from server.app.core.pdf_text import PdfSinCapaDeTexto
 from server.app.core.uploads import UploadKind, validate_upload
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
@@ -56,11 +57,21 @@ async def user_upload(
             session=session,
             embedding_service=await resolve_embedding_service(session, chatbot_id),
         )
-        chunks = await watcher.process_user_upload(
-            source_url=tmp_path,
-            chatbot_id=chatbot_id,
-            owner_id=uuid.UUID(current_user.user_id),
-        )
+        try:
+            chunks = await watcher.process_user_upload(
+                source_url=tmp_path,
+                chatbot_id=chatbot_id,
+                owner_id=uuid.UUID(current_user.user_id),
+            )
+        except PdfSinCapaDeTexto as escaneado:
+            # EXT.2: sin OCR, un escaneado no da texto. Se rechaza diciéndolo, en vez de
+            # ingerir un documento vacío que luego nadie relaciona con esta subida: el
+            # usuario preguntaría y el asistente no encontraría nada, sin ningún error
+            # a la vista.
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"code": "PDF_WITHOUT_TEXT_LAYER", "message": str(escaneado)},
+            ) from escaneado
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 

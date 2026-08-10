@@ -1,11 +1,19 @@
-"""PDFTextExtractionPipeline — extracción de texto de PDFs digitales con Docling (9R.5.2 / 9R.5.9).
+"""PDFTextExtractionPipeline — extracción de texto de PDFs digitales (9R.5.2 / 9R.5.9).
 
-Usa Docling sin OCR: detecta PDFs sin capa de texto (escaneados o imagen)
-emitiendo NON_EXTRACTABLE_PDF. Para PDFs escaneados con OCR, usar en el
-futuro un pipeline específico (PDFOCRExtractionPipeline).
+Deploy: edge.
 
-9R.5.9: ahora produce ExtractedDocument con páginas ricas (bbox por tabla y celda)
-y heurística extraction_strategy (text_linear | complex_tables).
+**EXT.2**: usa `pdfplumber`. Antes usaba Docling **sin OCR**, así que el alcance no cambia
+—PDFs con capa de texto— y el contrato de salida tampoco: mismo `ExtractionResult`, mismas
+páginas, mismas tablas con bbox y la misma heurística `extraction_strategy`. Lo que se va son
+los modelos de layout, que en una máquina sin GPU eran la parte cara del arranque.
+
+Un PDF escaneado sigue produciendo `NON_EXTRACTABLE_PDF`, y **avisa en vez de fallar**: un
+informe puede tener otras fuentes, y perder la ejecución entera por una sola sería peor que
+señalar cuál falló. La vía que sí falla en alto es el contexto temporal del usuario, que
+ingiere el documento y no tiene nada más de donde tirar.
+
+9R.5.9: produce ExtractedDocument con páginas ricas (bbox por tabla y celda) y heurística
+extraction_strategy (text_linear | complex_tables).
 """
 from __future__ import annotations
 
@@ -13,10 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.document_converter import DocumentConverter, PdfFormatOption
-
+from server.app.core.pdf_text import extraer_paginas, hay_capa_de_texto
 from server.app.modules.redaccion.pipelines.contracts import (
     ExtractedCell,
     ExtractedDocument,
@@ -30,23 +35,9 @@ from server.app.modules.redaccion.pipelines.contracts import (
 
 
 class PDFTextExtractionPipeline:
-    """Extrae texto de PDFs con capa de texto usando Docling (sin OCR).
-
-    9R.5.9: produce un ExtractedDocument con tablas ricas (bbox) y
-    heurística extraction_strategy para orientar al AIAssistDraftNode.
-    """
+    """Extrae texto y tablas de PDFs con capa de texto usando pdfplumber."""
 
     pipeline_id = "pdf_text_pipeline_v1"
-
-    def __init__(self) -> None:
-        opts = PdfPipelineOptions()
-        opts.do_ocr = False
-        opts.do_table_structure = True
-        opts.do_picture_classification = False
-        opts.generate_page_images = False
-        self._converter = DocumentConverter(
-            format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)}
-        )
 
     def supports(self, source_kind: str) -> bool:
         return source_kind == "pdf_text"
@@ -56,16 +47,15 @@ class PDFTextExtractionPipeline:
             raise ValueError("PDFTextExtractionPipeline requiere file_ref en ExtractionInput.")
 
         file_path = Path(inp.file_ref.bucket) / inp.file_ref.key
-        conv = self._converter.convert(str(file_path))
-        doc = conv.document
+        datos = file_path.read_bytes()
 
-        num_pages: int = doc.num_pages()
-        full_markdown: str = doc.export_to_markdown()
+        textos = extraer_paginas(datos)
+        pages, all_rich_tables = self._build_pages(datos, textos)
+        num_pages = len(textos)
 
-        # Build per-page and rich-table structures
-        pages, all_rich_tables = self._build_pages(doc, num_pages)
+        full_markdown = "\n\n".join(p.markdown for p in pages if p.markdown.strip())
 
-        # Heuristic: complex_tables if ≥3 tables or table char / total > 0.5
+        # Heurística: complex_tables si ≥3 tablas o si el texto de tabla domina el documento.
         total_table_chars = sum(len(h) for tbl in all_rich_tables for h in tbl.headers) + sum(
             len(cell.text)
             for tbl in all_rich_tables
@@ -83,7 +73,7 @@ class PDFTextExtractionPipeline:
         )
 
         warnings: list[ExtractionWarning] = []
-        if not full_markdown.strip():
+        if not hay_capa_de_texto(textos):
             warnings.append(
                 ExtractionWarning(
                     code="NON_EXTRACTABLE_PDF",
@@ -114,109 +104,83 @@ class PDFTextExtractionPipeline:
     # ------------------------------------------------------------------
 
     def _build_pages(
-        self,
-        doc: Any,
-        num_pages: int,
+        self, datos: bytes, textos: list[str]
     ) -> tuple[list[ExtractedPage], list[ExtractedTableRich]]:
+        """Una pasada por el PDF: texto y tablas de cada página.
+
+        `pdfplumber` da la bbox de la tabla y la de cada celda, que es lo que
+        `AIAssistDraftNode` usa para situar un dato en el original.
+        """
+        import io
+
+        import pdfplumber
+
         all_rich_tables: list[ExtractedTableRich] = []
         pages: list[ExtractedPage] = []
 
-        for page_no in range(1, num_pages + 1):
-            page_tables: list[ExtractedTableRich] = []
+        with pdfplumber.open(io.BytesIO(datos)) as pdf:
+            for indice, pagina in enumerate(pdf.pages):
+                page_no = indice + 1
+                page_tables: list[ExtractedTableRich] = []
 
-            for tbl_idx, table_item in enumerate(doc.tables):
-                prov_list = getattr(table_item, "prov", None) or []
-                if not prov_list:
-                    continue
-                prov = prov_list[0]
-                if getattr(prov, "page_no", None) != page_no:
-                    continue
+                for tbl_idx, tabla in enumerate(pagina.find_tables()):
+                    rica = self._tabla_rica(tabla, page_no, tbl_idx)
+                    if rica is None:
+                        continue
+                    page_tables.append(rica)
+                    all_rich_tables.append(rica)
 
-                tbl_bbox = self._extract_bbox(prov)
-                grid = getattr(getattr(table_item, "data", None), "grid", []) or []
-                headers, rich_rows = self._parse_grid(grid)
-
-                rich_tbl = ExtractedTableRich(
-                    name=f"table_{tbl_idx + 1}",
-                    headers=headers,
-                    rows=rich_rows,
-                    source_page=page_no,
-                    bbox=tbl_bbox,
+                texto = textos[indice] if indice < len(textos) else ""
+                pages.append(
+                    ExtractedPage(
+                        page_num=page_no,
+                        markdown=texto.strip(),
+                        tables=page_tables,
+                    )
                 )
-                page_tables.append(rich_tbl)
-                all_rich_tables.append(rich_tbl)
-
-            page_md = self._page_markdown(doc, page_no)
-            pages.append(ExtractedPage(
-                page_num=page_no,
-                markdown=page_md,
-                tables=page_tables,
-            ))
 
         return pages, all_rich_tables
 
     @staticmethod
-    def _extract_bbox(prov: Any) -> tuple[float, float, float, float] | None:
-        bbox_obj = getattr(prov, "bbox", None)
-        if bbox_obj is None:
-            return None
-        try:
-            return (
-                float(bbox_obj.l),
-                float(bbox_obj.t),
-                float(bbox_obj.r),
-                float(bbox_obj.b),
-            )
-        except (AttributeError, TypeError, ValueError):
+    def _tabla_rica(tabla: Any, page_no: int, tbl_idx: int) -> ExtractedTableRich | None:
+        filas = tabla.extract() or []
+        if not filas:
             return None
 
-    @staticmethod
-    def _parse_grid(
-        grid: list[list[Any]],
-    ) -> tuple[list[str], list[list[ExtractedCell]]]:
-        headers: list[str] = []
-        rich_rows: list[list[ExtractedCell]] = []
+        # La primera fila hace de cabecera, que es la convención con la que se venía
+        # trabajando; `pdfplumber` no distingue cabeceras por sí solo.
+        cabeceras = [str(c or "") for c in filas[0]]
 
-        for row_idx, row in enumerate(grid):
-            cells_in_row: list[ExtractedCell] = []
-            for cell in row:
-                cell_text = str(getattr(cell, "text", "") or "")
-                bbox_obj = getattr(cell, "bbox", None)
-                cell_bbox: tuple[float, float, float, float] | None = None
-                if bbox_obj is not None:
+        celdas_por_fila: list[list[ExtractedCell]] = []
+        # `tabla.rows` trae la geometría; `tabla.extract()` el texto. Se recorren en
+        # paralelo para no perder la bbox de cada celda.
+        geometria = list(getattr(tabla, "rows", []) or [])
+        for indice_fila, fila in enumerate(filas[1:], start=1):
+            bboxes = []
+            if indice_fila < len(geometria):
+                bboxes = list(getattr(geometria[indice_fila], "cells", []) or [])
+            celdas: list[ExtractedCell] = []
+            for indice_col, valor in enumerate(fila):
+                bbox = None
+                if indice_col < len(bboxes) and bboxes[indice_col]:
                     try:
-                        cell_bbox = (
-                            float(bbox_obj.l),
-                            float(bbox_obj.t),
-                            float(bbox_obj.r),
-                            float(bbox_obj.b),
-                        )
-                    except (AttributeError, TypeError, ValueError):
-                        cell_bbox = None
-                col_span = int(getattr(cell, "col_span", None) or 1)
-                row_span = int(getattr(cell, "row_span", None) or 1)
-                cells_in_row.append(ExtractedCell(
-                    text=cell_text,
-                    bbox=cell_bbox,
-                    col_span=col_span,
-                    row_span=row_span,
-                ))
-            if row_idx == 0:
-                headers = [c.text for c in cells_in_row]
-            else:
-                rich_rows.append(cells_in_row)
+                        izq, arriba, der, abajo = bboxes[indice_col]
+                        bbox = (float(izq), float(arriba), float(der), float(abajo))
+                    except (TypeError, ValueError):
+                        bbox = None
+                celdas.append(ExtractedCell(text=str(valor or ""), bbox=bbox))
+            celdas_por_fila.append(celdas)
 
-        return headers, rich_rows
+        try:
+            izq, arriba, der, abajo = tabla.bbox
+            bbox_tabla = (float(izq), float(arriba), float(der), float(abajo))
+        except (AttributeError, TypeError, ValueError):
+            bbox_tabla = None
 
-    @staticmethod
-    def _page_markdown(doc: Any, page_no: int) -> str:
-        try:
-            return doc.export_to_markdown(from_page=page_no, to_page=page_no)
-        except TypeError:
-            pass
-        # Fallback: single-page doc → return full markdown; multi-page → empty
-        try:
-            total = doc.num_pages()
-            return doc.export_to_markdown() if total == 1 else ""
-        except Exception:
-            return ""
+        return ExtractedTableRich(
+            name=f"table_{tbl_idx + 1}",
+            headers=cabeceras,
+            rows=celdas_por_fila,
+            source_page=page_no,
+            bbox=bbox_tabla,
+        )

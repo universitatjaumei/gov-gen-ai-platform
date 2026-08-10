@@ -130,10 +130,11 @@ class TestProcedenciaObligatoria:
             chatbot_provider=AsyncMock(),
         )
 
+        # EXT.2: el contexto temporal se extrae con pdfplumber, no con Docling.
         with patch(
-            "server.app.modules.agents_hub.ingestion.watcher.DoclingProcessor"
-        ) as docling:
-            docling.return_value.process.return_value = "# Adjunt\n\nContingut."
+            "server.app.core.pdf_text.extraer_texto_de_pdf",
+            return_value="# Adjunt\n\nContingut.",
+        ):
             creados = await watcher.process_user_upload(
                 source_url="file://adjunt.pdf",
                 chatbot_id=uuid.uuid4(),
