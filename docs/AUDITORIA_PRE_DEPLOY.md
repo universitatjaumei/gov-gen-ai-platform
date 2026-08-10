@@ -19,6 +19,14 @@ ver CR-1—, y (2) un IDOR horizontal sistémico en los routers añadidos despu�
 El corpus está muy cerca: el bloqueante mecánico de ingesta **ya está resuelto**. El modelo
 local encaja en la redacción de informes, no en los chatbots.
 
+> **Actualización 2026-08-10 — el bloque SEC.8 se ejecutó entero.** Los nueve hallazgos
+> bloqueantes de este informe están cerrados (suite backend 1782 passed / 0 failed, frontend
+> 276 passed). Dos decisiones de arquitectura posteriores, en
+> `docs/DECISION_EXTRACCION_Y_DESPLIEGUE.md`, cambian el contexto de algunas conclusiones de
+> §4 y §5: **el despliegue pasa a una VM** (el scheduler y el rastreo necesitan proceso vivo)
+> y **Docling se retira del servidor** (al corpus solo entra `.md` del pipeline de curación),
+> lo que reduce la huella de memoria muy por debajo de lo que este informe estimaba.
+
 **Estado de remediación al cierre de esta auditoría:**
 
 | Hallazgo | Estado |

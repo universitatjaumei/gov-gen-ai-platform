@@ -9052,11 +9052,178 @@ TESTS REQUERIDOS (Vitest):
 
 ---
 
+## Bloque EXT — Frontera de la extracción: qué entra al corpus y qué es contexto (PENDIENTE, va ANTES de Deploy)
+
+> **Contexto**: `docs/DECISION_EXTRACCION_Y_DESPLIEGUE.md` (2026-08-10). «Subir un documento»
+> significaba lo mismo para dos cosas distintas y se separan: el **corpus** —lo que el
+> asistente cita ante un ciudadano— solo entra como `.md` conforme a `CONTRATO_MD_CORPUS.md`;
+> el **contexto temporal** —un documento que alguien aporta para preguntarle cosas, o una
+> entrada de un informe— se extrae con pdfplumber.
+>
+> La asimetría tiene razón: en el contexto la persona tiene el documento delante y ve si la
+> extracción salió mal; en el corpus, una extracción mala es una **cita errónea** que no
+> detecta nadie y que sale con la autoridad de una norma.
+>
+> **Va antes de Deploy** porque retira Docling, y la huella que quede es la que dimensiona la
+> VM en D.4.
+
+---
+
+### Prompt EXT.1 (RED/GREEN) — Al corpus solo entra `.md` conforme al contrato
+
+**Modelo sugerido**: **Sonnet** — retirada acotada con verificación por grep; el contrato del
+`.md` ya existe y el cargador ya lo consume.
+
+**Objetivo**: `hub_ingestion_router` acepta hoy PDF y lo convierte con Docling dentro de la
+petición. Eso produce documentos sin front-matter, sin anclas de artículo y sin estado de
+vigencia — es decir, contenido que el asistente **no puede citar** como norma, entrando por la
+misma puerta que el corpus curado.
+
+```
+# PROMPT EXT.1 (RED/GREEN) — El corpus se alimenta del pipeline, no del navegador
+# Deploy: edge
+
+## Cambios
+- hub_ingestion_router: la subida al corpus acepta SOLO .md/.markdown (UploadKind.TEXT, que ya
+  existe desde SEC.6). Un PDF se rechaza con 415 y un mensaje que diga a dónde ir: el
+  documento se convierte en el pipeline de curación, no aquí.
+- Validar el front-matter en la subida con `entry_from_frontmatter` (el mismo que usa
+  `corpus.load`), para que un .md sin los campos del contrato se rechace en el momento y no
+  aparezca a medias en el corpus. Reportar TODOS los campos que faltan, no el primero.
+- watcher.py: la ruta de conversión con Docling del corpus deja de usarse (la retirada del
+  paquete es EXT.3, aquí solo se deja de llamar).
+- frontend DocumentsPage/UploadDropzone: el formato aceptado y el mensaje de error reflejan
+  la regla. i18n en es/ca/en, sin cadenas sueltas.
+
+## FUERA DE ALCANCE
+- `api/v1/ingestion.py::user_upload` (contexto temporal del usuario) — es EXT.2.
+- Los pipelines de redacción — son EXT.2.
+
+## Tests (RED primero)
+# should_reject_a_pdf_upload_to_the_corpus_with_415
+# should_accept_a_markdown_that_conforms_to_the_contract
+# should_reject_a_markdown_without_frontmatter_listing_every_missing_field
+# should_not_call_docling_from_the_corpus_path
+
+## Cierre
+- [ ] `grep -rn "docling" server/app/modules/agents_hub/ingestion/watcher.py` = 0
+- [ ] La pantalla de documentos dice qué formato acepta y por qué (i18n es/ca/en)
+```
+
+---
+
+### Prompt EXT.2 (RED/GREEN) — El contexto temporal se extrae con pdfplumber, y un escaneado falla en alto
+
+**Modelo sugerido**: **Sonnet** — sustitución de una librería por otra con contrato de salida
+conocido; la guarda de documento vacío es la única decisión, y está cerrada en el prompt.
+
+**Objetivo**: las dos vías de contexto —el PDF que sube una persona para preguntarle cosas y
+el PDF que entra como fuente de un informe de redacción— usan Docling. `pdfplumber` **ya es
+dependencia directa** (`server/pyproject.toml:44`), así que el cambio no añade nada y quita
+los modelos de layout y RapidOCR.
+
+```
+# PROMPT EXT.2 (RED/GREEN) — pdfplumber en las dos vías de contexto
+# Deploy: edge
+
+## Cambios
+- api/v1/ingestion.py::user_upload → extracción con pdfplumber en vez de IngestionWatcher/Docling.
+- modules/redaccion/pipelines/pdf_text_pipeline.py → pdfplumber. Ya usaba Docling SIN OCR, así
+  que el contrato de salida no cambia: texto de PDFs con capa de texto.
+- Extractor compartido y no dos copias: el troceado y el aviso de documento vacío son los
+  mismos para las dos vías.
+
+## La guarda que hace aceptable perder OCR
+- Sin capa de texto, pdfplumber devuelve poco o nada. Ingerir eso en silencio produce un
+  documento VACÍO que no ve nadie — la avería muda que esta auditoría ya encontró tres veces.
+- Umbral por página (no absoluto: un PDF de 80 páginas con 200 caracteres está tan vacío como
+  uno de 1 con 0). Por debajo → 422 con un mensaje que diga que el documento parece escaneado
+  y que hace falta pasarlo por el pipeline de curación, que sí tiene OCR.
+- El mensaje es para una persona, no para un log: nada de "extraction failed".
+
+## Tests (RED primero)
+# should_extract_text_from_a_digital_pdf
+# should_reject_a_scanned_pdf_with_an_explicit_message
+# should_use_a_per_page_threshold_not_an_absolute_one
+# should_share_the_extractor_between_user_upload_and_redaccion
+# should_preserve_the_redaccion_pipeline_output_contract   (regresión: mismo contrato que Docling sin OCR)
+
+## Cierre
+- [ ] Los tests de redacción que cubrían el pipeline de PDF siguen verdes sin cambiar sus aserciones
+- [ ] `origen_del_text` sigue siendo el único sitio donde se declara que un texto viene de OCR
+```
+
+---
+
+### Prompt EXT.3 — Retirada de Docling y medición de la huella
+
+**Modelo sugerido**: **Sonnet** — retirada mecánica + medición. La cifra que salga es la que
+dimensiona la VM en D.4, así que se mide, no se estima.
+
+```
+# PROMPT EXT.3 — Fuera del árbol, y cuánto ocupa lo que queda
+# Deploy: n/a
+
+## Retirada (Caso B: borrado directo, no hay migración en curso)
+- Borrar `modules/agents_hub/ingestion/docling_processor.py` y sus llamantes muertos.
+- Quitar `docling` de `server/pyproject.toml` y regenerar el lock.
+- Barrido: `grep -rn "docling\|Docling\|rapidocr" server/` = 0 fuera de comentarios históricos.
+- Ojo a `test_data_anonymizer.py` y `pipelines/{contracts,factory}.py`, que también lo nombran.
+
+## Medición (el dato que necesita D.4)
+- Arrancar la aplicación con el compose de producción y medir, SIN Docling:
+    - memoria residente en reposo y durante una subida de contexto,
+    - tiempo de arranque hasta el primer 200,
+    - tamaño de la imagen.
+- Repetir con una ingesta de corpus real (`corpus.load` sobre md_contracte) para ver el pico.
+- Anotar las cifras en `docs/DECISION_EXTRACCION_Y_DESPLIEGUE.md` §Dimensionado, que hoy dice
+  explícitamente que están sin medir.
+
+## Cierre
+- [ ] Suite backend completa en verde tras la retirada
+- [ ] La imagen construye sin docling y arranca
+- [ ] Las cifras están escritas, con el método con que se midieron
+```
+
+---
+
 ## Fase Deploy — Despliegue Staging GCP (Subfase 1.B, PENDIENTE)
 
 > Nota: El Prompt D.6 (Edge node híbrido) pertenece a la Fase 3 y se detalla en Plan_TDD_Fase3.md.
 
 ## Fase Deploy — Paso a producción en GCP
+
+> ## ⚠️ BLOQUE REESCRITO EL 2026-08-10 — el destino es una **VM**, no Cloud Run
+>
+> Decisión y razones en `docs/DECISION_EXTRACCION_Y_DESPLIEGUE.md` §2. En resumen: el
+> planificador de calidad es un APScheduler dentro del `lifespan` y el rastreo de curación se
+> encola con `BackgroundTasks`; **en Cloud Run con escalado a cero el scheduler no dispara y
+> un rastreo largo muere a media ejecución**. Con CPU siempre asignada se arregla, pero
+> entonces se paga lo mismo que una VM con más restricciones — o sea que el descuento que
+> justificaba Cloud Run no era cobrable aquí.
+>
+> **Forma del despliegue**: VM con `docker-compose.prod.yml` (que ya describe la aplicación,
+> el sandbox aislado y el resto), **Cloud SQL** para Postgres y **GCS** para documentos. El
+> estado sigue gestionado: lo que hay en la base es el corpus curado y conversaciones de
+> ciudadanos, y ahí las copias y el *point-in-time recovery* se pagan solos.
+>
+> **Lo que cambia respecto a lo que sigue escrito abajo**, prompt a prompt:
+>
+> | Prompt | Estado |
+> |---|---|
+> | **D.0** | Vigente, con la **lista de servicios recortada** (ver nota dentro) |
+> | **D.1** | ✅ **YA HECHO** — lo resolvió **SEC.8.5** con la credencial de sitio (`HubWidgetKey`), que además es mejor que la API key por chatbot que este prompt describía: se guarda con hash, es revocable y no abre nada que no sea `public_anon`. **No ejecutar**; queda como registro |
+> | **D.2** | Vigente. Secret Manager sigue siendo el sitio; cambia **quién los lee** (la VM al arrancar, no el servicio de Cloud Run) |
+> | **D.3** | Vigente casi sin cambios. Cloud SQL se conserva; la conexión es por Auth Proxy **desde la VM** |
+> | **D.4** | **REESCRITO** — era «tres servicios en Cloud Run» (API + embedding-service + docling-service). Con embeddings por API y **Docling retirado en EXT.3**, es **una sola máquina**. Ver D.4-VM |
+> | **D.5** | **REESCRITO** — CI/CD que despliega a la VM, no a Cloud Run. Ver D.5-VM |
+> | **D.6** | **NUEVO** — lo que una VM sí te hace dueño: copias, arranque tras reinicio y vigilancia. Ver D.6-VM |
+>
+> **Deja de existir como problema**: el ejecutor de trabajos duradero que SEC.8.8 aplazó para
+> el rastreo. En una VM el proceso vive y no hace falta.
+>
+> **Prerrequisito**: el bloque **EXT** va antes. D.4 necesita la huella medida en EXT.3 para
+> dimensionar la máquina, y ese número se mide — no se estima.
 
 Esta fase no añade funcionalidad nueva: convierte la pila de desarrollo (Docker Compose local) en un sistema desplegado en Google Cloud Platform. El codebase ya está diseñado para ello (ver sección "Infraestructura objetivo" en CLAUDE.md); estos prompts completan la configuración y documentan el proceso operativo.
 
@@ -9078,6 +9245,16 @@ Fase Deploy
 ### Prompt D.0 — Habilitación de servicios del proyecto GCP
 
 **Modelo sugerido**: **Sonnet** — script idempotente y lista versionada; sin decisiones abiertas.
+
+> **Ajuste 2026-08-10 (VM).** La lista de abajo se recorta y se amplía:
+> - **Fuera**: `run.googleapis.com` y `artifactregistry.googleapis.com` si la imagen se
+>   construye en la propia VM. Si el CI la publica (D.5), Artifact Registry **se queda**.
+> - **Dentro**: `compute.googleapis.com` (la VM) y `oslogin.googleapis.com` (acceso por SSH
+>   gobernado por IAM en vez de claves sueltas en metadatos).
+> - **Se quedan** `sqladmin`, `secretmanager`, `storage`, y los de modelo —`aiplatform`,
+>   `generativelanguage`— más `discoveryengine` para el Ranking API de RAG.6b.
+> - **Ya no hace falta** ningún servicio para embeddings locales ni para Docling: EXT.3 lo
+>   retira y MOD.2 deja los embeddings por API.
 
 > **Añadido el 2026-08-01**, a petición del usuario: habilitar todos los servicios de una vez
 > durante el despliegue en vez de irlos encendiendo a mano según hagan falta. Hasta ahora esto
@@ -9118,7 +9295,23 @@ Fase Deploy
 
 ---
 
-### Prompt D.1 — Autenticación pública del widget: API key por chatbot
+### Prompt D.1 ✅ — Autenticación pública del widget: API key por chatbot
+
+> **HECHO EL 2026-08-10 POR SEC.8.5. No ejecutar este prompt.**
+>
+> El agujero que lo motivaba era peor de lo que este prompt suponía: el widget no es que
+> careciera de credencial propia, es que embebía un **JWT de sesión o un PAT completo** en el
+> HTML de la página (`data-token`), con el rol y las organizaciones de su dueño detrás.
+>
+> Lo resuelto en SEC.8.5 es un superconjunto de lo que aquí se pedía: `HubWidgetKey` es por
+> chatbot, se guarda con **hash SHA-256**, se compara en tiempo constante, es **revocable**, y
+> —por `assert_chatbot_access` con `via=VIA_WIDGET`, que SEC.2.1 ya había dejado escrito sin
+> llamante— **solo abre chatbots `public_anon`**. La cabecera es `X-Widget-Key`. Alta, listado
+> y revocación en `/hub/chatbots/{id}/widget-keys`.
+>
+> Lo único que este prompt aportaba y no está: la **documentación de incrustación** para quien
+> publique el widget en una web (el `<script>` y el `data-widget-key`). Va a D.6-VM, con el
+> resto de lo operativo.
 
 **Modelo sugerido**: **Sonnet** — auth con X-Api-Key header; decisiones de diseño documentadas en el prompt.
 
@@ -9339,7 +9532,66 @@ gcloud sql backups create --instance=govgenai-prod --async
 
 ---
 
-### Prompt D.4 — Imágenes Docker: Artifact Registry y Cloud Run
+### Prompt D.4-VM (REESCRITO) — La máquina: aprovisionamiento, Compose y TLS
+
+**Modelo sugerido**: **Sonnet** — infraestructura con pasos conocidos; la única decisión
+abierta (el tamaño) la cierra la medición de EXT.3.
+
+**Objetivo**: una VM que sirva la aplicación de forma estable, con el estado fuera de ella.
+Sustituye al despliegue de tres servicios en Cloud Run: con embeddings por API y Docling
+retirado en EXT.3, no hay nada que escalar por separado.
+
+**Dependencias**: EXT.3 (la huella medida), D.2 (secretos), D.3 (Cloud SQL).
+
+```
+# PROMPT D.4-VM — Una máquina, el estado fuera
+# Deploy: cloud (infraestructura)
+
+## Tamaño
+- Partir de las cifras REALES de EXT.3, no de una estimación. Regla: memoria en reposo más el
+  pico medido durante una ingesta de corpus, con margen. Documentar de dónde sale el número.
+- Disco: solo sistema, imágenes y logs. Los documentos van a GCS y la base a Cloud SQL, así
+  que el disco de la VM no guarda nada que duela perder — y eso es deliberado.
+
+## Aprovisionamiento (script idempotente, versionado; nada de clics)
+- VM en europe-southwest1 (misma región que Cloud SQL: la latencia de cada consulta del
+  retriever la paga el usuario esperando).
+- SIN IP pública para la base: Cloud SQL Auth Proxy como servicio en la VM.
+- Cuenta de servicio propia con lo mínimo: cliente de Cloud SQL, lectura de los secretos que
+  necesita y acceso al bucket. No la cuenta por defecto de Compute, que viene con más de lo
+  que hace falta.
+- Cortafuegos: 80/443 abiertos; SSH por IAP u OS Login, nunca 22 abierto al mundo.
+
+## Servicio
+- `docker compose -f docker-compose.prod.yml up -d` gobernado por una unidad **systemd** con
+  `Restart=always`, para que un reinicio de la máquina levante el sistema solo. Sin esto, la
+  VM tiene una avería que Cloud Run no tenía.
+- Proxy inverso (Caddy o nginx) con TLS y renovación automática. Caddy si se quiere el
+  certificado sin ceremonia.
+- ENVIRONMENT=production. Recordar que a partir de SEC.8.3/SEC.8.4 el arranque FALLA —a
+  propósito— si SANDBOX_MODE=local o si JWT_SECRET_KEY es el de ejemplo o mide menos de 32
+  caracteres. Es la comprobación funcionando, no un problema del despliegue.
+- TRUSTED_PROXY_HOPS=1 (SEC.8.4): hay un proxy inverso delante, así que la IP con la que se
+  limita el login se cuenta un salto desde la derecha. Con 0 se ignoraría la cabecera y todo
+  el tráfico compartiría cubo.
+
+## Verificación de cierre
+- [ ] `curl https://<dominio>/health` responde por TLS válido
+- [ ] `/docs` NO responde (SEC.7 lo apaga en producción)
+- [ ] Reiniciar la VM y comprobar que el sistema vuelve solo
+- [ ] El scheduler de calidad dispara (es la razón de elegir VM: verificarlo, no suponerlo)
+- [ ] Un rastreo de sitio termina y deja páginas — lo que moría en Cloud Run
+```
+
+---
+
+### Prompt D.4-CR (SUPERSEDIDO) — Imágenes Docker: Artifact Registry y Cloud Run
+
+> **No ejecutar.** Reemplazado por D.4-VM. Se conserva porque su `Dockerfile` multi-stage y la
+> configuración de Artifact Registry siguen sirviendo si el CI construye la imagen (D.5-VM);
+> lo que ya no aplica es el despliegue a Cloud Run y los tres servicios —`embedding-service`
+> y `docling-service` no existen: los embeddings van por API desde MOD.2 y Docling se retira
+> en EXT.3—.
 
 **Modelo sugerido**: **Sonnet** — Dockerfiles multi-stage + Artifact Registry + Cloud Run config (3 servicios).
 
@@ -9418,7 +9670,87 @@ El `widget.iife.js` se publica en `https://cdn.govgenai.com/widget/widget.iife.j
 
 ---
 
-### Prompt D.5 — CI/CD: pipeline GitHub Actions → Cloud Run
+### Prompt D.5-VM (REESCRITO) — CI/CD: GitHub Actions → la VM
+
+**Modelo sugerido**: **Sonnet** — workflow con pasos conocidos; la decisión de autenticación
+(Workload Identity) está cerrada en el prompt.
+
+```
+# PROMPT D.5-VM — Desplegar sin claves de larga vida ni migraciones a ciegas
+# Deploy: cloud (CI)
+
+## Autenticación
+- **Workload Identity Federation**, no una clave de cuenta de servicio en los secretos de
+  GitHub: una clave JSON en un repositorio es una credencial permanente que nadie rota.
+
+## Flujo
+- Construir la imagen en CI y publicarla en Artifact Registry con el SHA del commit como
+  etiqueta. `latest` no sirve para saber qué está corriendo ni para volver atrás.
+- Desplegar por SSH (IAP): `docker compose pull` + `up -d` con la etiqueta nueva.
+- **Migraciones antes de cambiar la imagen**, en un paso propio y visible. Alembic aplicado
+  desde el contenedor nuevo contra Cloud SQL, con la salida en el log del workflow: una
+  migración que falla dentro del arranque deja el sistema a medias sin decir por qué.
+- Comprobación posterior: `/health` y una consulta real al retriever. Si falla, revertir a la
+  etiqueta anterior.
+
+## Lo que NO se hace
+- Desplegar solo con `git pull` en la VM: eso hace que lo que corre dependa del estado del
+  disco de la máquina y no de un artefacto identificable.
+- Ejecutar la suite en el despliegue. Corre en CI antes; repetirla aquí alarga el despliegue
+  sin añadir información.
+
+## Cierre
+- [ ] Un push a main despliega y la versión servida es la del commit
+- [ ] Un despliegue con migración deja constancia de qué revisión se aplicó
+- [ ] Existe y está probado el camino de vuelta a la etiqueta anterior
+```
+
+---
+
+### Prompt D.6-VM (NUEVO) — De lo que una VM te hace dueño: copias, vigilancia y publicación
+
+**Modelo sugerido**: **Sonnet** — operativa con decisiones cerradas.
+
+**Objetivo**: Cloud Run traía gratis el reinicio, el registro y la salud. En una VM eso hay
+que ponerlo, y es la contrapartida honesta de la decisión. Recoge además la documentación de
+incrustación del widget que D.1 dejó pendiente.
+
+```
+# PROMPT D.6-VM — Que sobrevivir a un incidente no dependa de acordarse
+# Deploy: cloud (operación)
+
+## Copias
+- Cloud SQL: copias automáticas + point-in-time recovery. **Y una restauración de prueba**:
+  una copia que nadie ha restaurado nunca es una hipótesis, no una copia.
+- GCS: versionado en el bucket de documentos.
+- La VM NO se respalda a propósito: no guarda nada que no se pueda reconstruir con el script
+  de aprovisionamiento y la imagen. Si algo de la VM hiciera falta respaldar, es que se ha
+  colado estado donde no debía.
+
+## Vigilancia
+- Uptime check contra /health con aviso.
+- Alertas de memoria y disco: el disco lleno por logs es la avería más aburrida y más común
+  de una VM.
+- Logs de los contenedores a Cloud Logging con rotación local.
+
+## Publicación del widget (lo que quedó de D.1)
+- Documentar la incrustación: `<script>` + `data-chatbot-id` + `data-widget-key`, con el
+  aviso de que la credencial es de SITIO: aparece en el HTML de quien la publique, y por eso
+  no abre nada que no sea un chatbot `public_anon`.
+- Documentar la revocación y la rotación.
+
+## Cierre
+- [ ] Restauración de la base probada de verdad, con el tiempo que costó anotado
+- [ ] El aviso de caída llega a alguien (probarlo apagando el servicio)
+- [ ] La guía de incrustación permite a alguien de fuera publicar el widget sin preguntar
+```
+
+---
+
+### Prompt D.5-CR (SUPERSEDIDO) — CI/CD: pipeline GitHub Actions → Cloud Run
+
+> **No ejecutar.** Reemplazado por D.5-VM. Se conserva por los pasos de build y autenticación,
+> que siguen valiendo; lo que cambia es el destino del despliegue.
 
 **Modelo sugerido**: **Sonnet** — GitHub Actions workflow + secrets + deploy steps. Patrón conocido.
 
