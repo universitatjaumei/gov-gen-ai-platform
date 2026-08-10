@@ -22,6 +22,7 @@ from server.app.api.deps import (
     require_scopes,
 )
 from server.app.core.auth.models import UserInfo
+from server.app.routers.redaccion._actor import user_to_uuid
 from server.app.modules.redaccion.contracts.template import ReportTemplateSpec
 from server.app.modules.redaccion.contracts.ui import ReportUIContract
 from server.app.modules.redaccion.database.models import (
@@ -151,7 +152,7 @@ async def list_templates(
     stmt = select(HubReportTemplate).where(
         or_(
             HubReportTemplate.is_global.is_(True),
-            HubReportTemplate.owner_id == uuid.UUID(user.user_id),
+            HubReportTemplate.owner_id == user_to_uuid(user.user_id),
         )
     )
     result = await session.execute(stmt)
@@ -191,7 +192,7 @@ async def create_template(
         description=body.description,
         report_profile=body.report_profile,
         owner_kind=body.owner_kind,
-        owner_id=uuid.UUID(user.user_id),
+        owner_id=user_to_uuid(user.user_id),
         is_global=(body.owner_kind == "platform"),
     )
     template_repo = ReportTemplateRepo(session)
@@ -201,7 +202,7 @@ async def create_template(
         template_id=template.id,
         version=1,
         spec_json=body.spec_json,
-        created_by=uuid.UUID(user.user_id),
+        created_by=user_to_uuid(user.user_id),
     )
     version_repo = ReportTemplateVersionRepo(session)
     version = await version_repo.save(version)
@@ -240,7 +241,7 @@ async def create_workspace_endpoint(
 
     workspace = HubWorkspace(
         template_version_id=body.template_version_id,
-        owner_id=uuid.UUID(user.user_id),
+        owner_id=user_to_uuid(user.user_id),
         status="draft",
     )
     workspace = await WorkspaceRepo(session).save(workspace)
@@ -407,7 +408,7 @@ async def migrate_workspace(
         new_workspace = await service.migrate_workspace(
             workspace_id,
             body.target_version_id,
-            uuid.UUID(user.user_id),
+            user_to_uuid(user.user_id),
         )
     except WorkspaceNotFoundError:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -529,7 +530,7 @@ async def publish_template_version(
         template_id=template_id,
         version=next_version,
         spec_json=body.spec_json,
-        created_by=uuid.UUID(user.user_id),
+        created_by=user_to_uuid(user.user_id),
     )
     await version_repo.save(new_version)
     await ReportTemplateRepo(session).update_status(template_id, new_version_id)

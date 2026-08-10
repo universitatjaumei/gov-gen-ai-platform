@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, get_session, require_role
 from server.app.core.auth.models import UserInfo
+from server.app.routers.redaccion._actor import user_to_uuid as _user_to_uuid
 from server.app.modules.redaccion.contracts.drafts import (
     ReportTemplateDraft,
     ReportTemplateDraftValidationResult,
@@ -34,13 +35,6 @@ from server.app.modules.redaccion.services.llm_spec_service import LLMSpecServic
 router = APIRouter(prefix="/redaccion/llm-drafts", tags=["redaccion-llm-drafts"])
 
 _require_admin = require_role("superadmin", "admin")
-
-
-def _user_to_uuid(user_id: str) -> uuid.UUID:
-    try:
-        return uuid.UUID(user_id)
-    except ValueError:
-        return uuid.uuid5(uuid.NAMESPACE_DNS, user_id)
 
 
 # ---------------------------------------------------------------------------

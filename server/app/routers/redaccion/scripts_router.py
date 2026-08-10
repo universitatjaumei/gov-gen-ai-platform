@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, get_session
 from server.app.core.auth.models import UserInfo
+from server.app.routers.redaccion._actor import user_to_uuid as _user_to_uuid
 from server.app.core.sandbox_client import SandboxClient, get_sandbox_client
 from server.app.core.storage import StorageService, get_storage_service
 from server.app.modules.redaccion.database.models import (
@@ -74,13 +75,6 @@ def get_test_data_anonymizer(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _user_to_uuid(user_id: str) -> uuid.UUID:
-    try:
-        return uuid.UUID(user_id)
-    except ValueError:
-        return uuid.uuid5(uuid.NAMESPACE_DNS, user_id)
-
 
 async def _load_proposal(
     proposal_id: uuid.UUID,

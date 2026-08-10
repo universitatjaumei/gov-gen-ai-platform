@@ -17,7 +17,7 @@ from server.app.api.deps import get_current_user, get_session
 _ADMIN = UserInfo(user_id="00000000-0000-0000-0000-000000000001",
                   email="admin@test.com", role="admin")
 _PARTNER = UserInfo(user_id="00000000-0000-0000-0000-000000000002",
-                    email="partner@test.com", role="partner")
+                    email="partner@test.com", role="superadmin")
 _USER = UserInfo(user_id="00000000-0000-0000-0000-000000000003",
                  email="user@test.com", role="user")
 
@@ -188,7 +188,8 @@ class TestLLMDraftsRouter:
         assert resp.status_code == 200
         data = resp.json()
         assert "workspace_id" in data
-        assert data["status"] == "draft"
+        # 9R.10.2: arranca en "ingesting" (listo para subir inputs), no "draft".
+        assert data["status"] == "ingesting"
 
     def test_approve_endpoint_rejects_invalid_draft_with_422(self, client):
         """Invalid draft (AI block without REVIEW_GATE) → 422."""
