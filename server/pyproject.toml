@@ -28,7 +28,10 @@ dependencies = [
     "torch",
     "torchvision",
     "langfuse>=2.0.0",
-    "docling>=2.0.0",
+    # EXT.3: Docling retirado. Al corpus solo entra `.md` del pipeline de curación (EXT.1) y
+    # el contexto se extrae con pdfplumber (EXT.2), así que aquí no quedaba nada que
+    # convertir. Se lleva consigo sus modelos de layout y RapidOCR — que era la parte cara
+    # del arranque en una máquina sin GPU.
     "langdetect>=1.0.9",
     "langgraph>=1.1.0",
     "ragas>=0.2.0",

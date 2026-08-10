@@ -122,9 +122,14 @@ echo  CAMINO 2 - Corpus -^> consulta -^> cita -^> feedback -^> hueco
 echo ============================================================
 echo.
 echo  a) Abre http://localhost:5173/hub/documents, elige un chatbot
-echo     con modo Vectorial (RAG) y arrastra un PDF real (con texto,
-echo     no solo imagenes escaneadas: la carpeta
-echo     data\utilities\input\ tiene varios de prueba).
+echo     con modo Vectorial (RAG) y arrastra un fichero .md.
+echo     OJO - CAMBIO DE EXT.1: al corpus YA NO se sube un PDF. Solo
+echo     entra Markdown conforme al contrato, porque lo que el
+echo     asistente cita ante un ciudadano tiene que venir del pipeline
+echo     de curacion, donde la conversion se revisa. Un PDF ahora da
+echo     415 con un mensaje que lo explica: probarlo tambien vale.
+echo     Coge un .md de la carpeta md_contracte del proyecto de
+echo     curacion del corpus.
 echo     QUE DEBES VER: aparece en "Jobs (tecnico)" como "Procesando"
 echo     y luego pasa a la tabla "Documentos del corpus" con su
 echo     recuento de tokens.
@@ -140,12 +145,10 @@ echo     nada. Usa el chat de verdad: el widget (ver Camino 1d) o,
 echo     si tienes Postman/curl con tu token de sesion, un POST a
 echo       /api/v1/hub/chat/{chatbot_id}
 echo.
-echo  c) Pregunta algo relacionado con el PDF cargado.
+echo  c) Pregunta algo relacionado con la norma cargada.
 echo     QUE DEBES VER: la respuesta cita el documento (fuente
-echo     enlazada). Si el PDF es sobre todo imagenes/diagramas, la
-echo     extraccion de texto puede ser pobre y el chatbot respondera
-echo     "no tengo informacion suficiente" - prueba con un PDF con
-echo     texto real si te pasa esto.
+echo     enlazada). Al venir de un .md curado el texto es limpio, asi
+echo     que la cita deberia salir con su articulo.
 echo.
 echo  d) Repite una pregunta MUY parecida 3 veces (o mas) SIN corpus
 echo     que la responda, para forzar un hueco real.

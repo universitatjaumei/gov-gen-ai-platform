@@ -157,7 +157,7 @@ Si no se usa ahora, no existe.
 
 ```
 server/app/modules/automation/   ← lógica de flows, ETL, PDF, scripts (migrado desde client_app)
-server/app/modules/agents_hub/   ← RAG, LangGraph, chatbots, Docling
+server/app/modules/agents_hub/   ← RAG, LangGraph, chatbots, ingesta del corpus
 server/app/core/                 ← servicios compartidos: LLM gateway, auth, tenancy, MCP
 frontend/src/automation/         ← UI de flujos y scripts (reemplaza vistas NiceGUI)
 frontend/src/widget/             ← chatbot público embebible
@@ -489,46 +489,35 @@ postgresql+asyncpg:///govgenai?host=/cloudsql/PROJECT:REGION:INSTANCE
 
 ---
 
-## Servicios de computación pesada: microservicios separados
+## Servicios de computación pesada
 
-BGE-M3 (~1.1 GB de modelo) y Docling (CPU-intensivo) **no deben ejecutarse in-process
-dentro del servidor FastAPI principal** cuando se despliegue en Cloud Run. Los motivos:
+> **Actualizado el 2026-08-11 (bloque EXT + decisión de despliegue).** Esta sección decía que
+> Docling y BGE-M3 debían extraerse a servicios separados de Cloud Run. **Docling ya no
+> existe** en el servidor y **el despliegue ya no es Cloud Run**, así que la mitad del
+> problema desapareció en vez de resolverse. Ver `docs/DECISION_EXTRACCION_Y_DESPLIEGUE.md`.
 
-- Cold start de 30–90 s al cargar el modelo → inaceptable para el chatbot.
-- 3–4 GB de RAM por instancia → coste 3–4× mayor en Cloud Run.
-- Escala conjunta: si el chat tiene picos, también se escalan las instancias con el modelo cargado.
+**Docling: retirado (EXT.3).** Al corpus solo entra `.md` conforme a
+`docs/CONTRATO_MD_CORPUS.md`, producido por el pipeline de curación que vive **fuera** de la
+aplicación; el contexto temporal —el PDF que alguien aporta para preguntarle cosas, o la
+fuente de un informe— se extrae con **pdfplumber**. No reintroduzcas un conversor de
+documentos en el servidor: si algo hay que convertir, se convierte antes de llegar.
 
-### Arquitectura objetivo
+**Lo que pesa hoy es `torch`**, no la extracción. Medido en EXT.3: la aplicación en reposo
+son 627 MB y el arranque lo dominan `transformers` (142 s), `sentence-transformers` (75 s /
+216 MB) y `torch` (52 s / 172 MB) — todo ello por `LocalEmbeddingService` (BGE-M3) y
+`LocalReranker`. `pdfplumber` cuesta 0,09 s y 5 MB.
 
-```
-Cloud Run: govgenai-api   →  HTTP  →  Cloud Run: embedding-service  (min 1 instancia)
-(FastAPI, ~512 MB RAM)    →  HTTP  →  Cloud Run: docling-service    (escala a 0)
-          │
-          └──────────────────────────→  Cloud SQL
-          └──────────────────────────→  GCS (via StorageService / fsspec)
-```
+### Regla vigente
 
-### Reglas de implementación
-
-- **`EmbeddingService`** ya es un protocolo con `LocalEmbeddingService` y `GoogleEmbeddingService`.
-  Cuando se implemente el microservicio, añade `HttpEmbeddingService` que llame a
-  `POST /embed` del servicio separado. El resto del código no cambia.
-- **`DoclingProcessor`** se extrae a su propio servicio con un endpoint
-  `POST /process-pdf` que devuelve Markdown. El cliente HTTP queda en `ingestion/`.
-- **Mientras tanto** (fase de desarrollo sin Cloud Run real): `LocalEmbeddingService` y
-  `DoclingProcessor` in-process siguen siendo válidos. La abstracción ya existe;
-  solo se cambia la implementación concreta que inyecta `Depends`.
+- **`EmbeddingService`** sigue siendo un protocolo con `LocalEmbeddingService` y
+  `GoogleEmbeddingService`. Con embeddings por API (el plan de despliegue) la pila local no
+  se usa en ejecución pero se paga entera en memoria y arranque: **hacerla un extra de
+  instalación opcional está anotado como candidato en D.4**, no hecho.
 - **No mezcles**: si un servicio llama al embedding service via HTTP, no puede también
   importar `LocalEmbeddingService` como fallback silencioso. El fallback se configura
   en el `Depends`, no en la lógica de negocio.
-
-### Cuándo extraer a microservicio (criterio)
-
-Extrae a microservicio separado en el sprint en que cualquiera de estas condiciones se cumpla:
-
-1. El cold start del servidor API supera 15 s en Cloud Run.
-2. La memoria del contenedor principal supera 2 GB.
-3. Se necesita escalar embedding/Docling de forma independiente al API.
+- **El modo edge sigue necesitando los modelos locales**: lo que se decida sobre el
+  empaquetado no puede quitar esa capacidad, solo hacerla opcional.
 
 Hasta entonces, la abstracción existente es suficiente. **No anticipes la extracción**
 antes de que el problema aparezca en métricas reales.

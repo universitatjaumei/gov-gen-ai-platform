@@ -52,7 +52,7 @@ Con `docker compose up -d db`, backend en `:8000` y frontend en `:5173`, sesión
 |---|---|---|
 | Organización nueva | `POST /hub/organizaciones` → "Organización MAN.2" | 201, aparece en la lista con 0 chatbots |
 | Dos chatbots bajo la misma organización | "Chatbot MAN Uno" y "Chatbot MAN Dos" | 201 × 2, ambos Vectorial RAG / Activo |
-| Ingesta de un PDF real | `ARQUITECTURA GEN-GOV.pdf` (240 KB) subido a "Chatbot MAN Uno" vía dropzone | Job pasa de "Procesando" a documento en el corpus, 4,8 k tokens, Docling + RapidOCR en los logs |
+| Ingesta de un PDF real | `ARQUITECTURA GEN-GOV.pdf` (240 KB) subido a "Chatbot MAN Uno" vía dropzone | Job pasa de "Procesando" a documento en el corpus, 4,8 k tokens, Docling + RapidOCR en los logs. **Obsoleto desde EXT.1 (2026-08-11)**: al corpus solo entra `.md` conforme al contrato; un PDF da 415. La conversión vive en el pipeline de curación, y con ella el OCR |
 | Consulta real contra el LLM (Gemini, clave real configurada) | 3 preguntas sobre la arquitectura de despliegue vía Escenarios de prueba | El chatbot respondió (sin alucinar) "no tengo información suficiente… con citas verificables" las 3 veces — el PDF elegido es sobre todo diagramas, poco texto extraíble; ver hallazgo #4 sobre por qué esto NO alimentó la detección de huecos |
 | `POST /hub/quality/gaps/analyze` contra el `GapFinding` corregido en CUR.1 | Ejecutado desde Curación → Hallazgos | 200 OK, 0 huecos (esperado, ver hallazgo #4) — confirma que el fix de CUR.1 no rompió el camino feliz con datos reales |
 | Organización + 2 chatbots + 1 documento **se dejan sembrados** en la BD de desarrollo, por si quieres continuar la verificación de RAG.14 tú mismo repitiendo el paso de consulta desde el widget en vez de Escenarios de prueba | — | — |

@@ -207,38 +207,24 @@ class TestDataAnonymizerService:
         )
 
     # ------------------------------------------------------------------
-    # Internals: extracción de markdown vía Docling
+    # Internals: extracción del texto del PDF
     # ------------------------------------------------------------------
 
     async def _extract_pdf_markdown(self, file_ref: StorageRef) -> str:
-        """Convierte el PDF a markdown con Docling (CPU-bound; ejecutado in-process)."""
+        """Texto del PDF para buscarle PII (EXT.2: pdfplumber, no Docling).
+
+        Docling ya se usaba aquí **sin OCR**, así que el alcance no cambia: PDFs con capa de
+        texto. Lo que se va son sus modelos y el fichero temporal que hacía falta porque
+        Docling lee desde una ruta — pdfplumber acepta los bytes directamente.
+
+        Devuelve `""` si no hay capa de texto en vez de levantar: esto es una **previsualización**
+        de qué datos personales se detectan, y quien la pide ve la lista vacía y entiende que
+        ahí no había nada que leer. Rechazar sería más ruidoso de lo que el caso pide.
+        """
+        from server.app.core.pdf_text import extraer_paginas, hay_capa_de_texto
+
         data = await self._storage.get(file_ref.key)
-        # Persistimos temporalmente en disco porque Docling lee desde path.
-        import tempfile
-
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as fh:
-            fh.write(data)
-            tmp_path = fh.name
-
-        try:
-            from docling.datamodel.base_models import InputFormat
-            from docling.datamodel.pipeline_options import PdfPipelineOptions
-            from docling.document_converter import DocumentConverter, PdfFormatOption
-
-            opts = PdfPipelineOptions()
-            opts.do_ocr = False
-            opts.do_table_structure = False
-            opts.do_picture_classification = False
-            opts.generate_page_images = False
-            converter = DocumentConverter(
-                format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)}
-            )
-            conv = converter.convert(tmp_path)
-            return conv.document.export_to_markdown().strip()
-        finally:
-            import os
-
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
+        paginas = extraer_paginas(data)
+        if not hay_capa_de_texto(paginas):
+            return ""
+        return "\n\n".join(p.strip() for p in paginas if p.strip()).strip()

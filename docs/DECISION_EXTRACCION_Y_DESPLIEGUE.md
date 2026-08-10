@@ -88,15 +88,51 @@ pérdida del disco — y lo que hay dentro es el corpus curado y las conversacio
 ciudadanos. Es la pieza donde el servicio gestionado se paga solo. Igual con **GCS** para los
 documentos: `StorageService` ya lo abstrae y sobrevive a que la VM se pierda.
 
-### Dimensionado
+### Dimensionado — MEDIDO el 2026-08-11 (EXT.3)
 
-Con embeddings y LLM por API, el reranker apagado por defecto y **Docling retirado**, en la
-máquina solo queda FastAPI, pdfplumber y el contenedor del sandbox. Eso baja el requisito de
-forma sustancial respecto a los 3-4 GB que citaba `DECISION_MODELOS_EMBEDDING_RERANKER.md`
-para BGE-M3 + reranker.
+Medido tras retirar Docling, con `uv sync` aplicado (Docling y RapidOCR **ausentes** del
+entorno), sobre Windows con el intérprete del proyecto. Método: `psutil.Process().memory_info().rss`
+antes y después de importar `server.app.main`, y de nuevo tras extraer un PDF de 40 páginas.
 
-**La cifra se mide, no se estima**: el prompt EXT.3 mide la huella real tras la retirada y ese
-número es el que dimensiona la VM en D.4. Anotarlo aquí antes de medirlo sería inventarlo.
+> **Los tiempos de esta medición NO son trasladables a la VM.** Se tomaron en Windows con la
+> caché de disco fría y con el antivirus de por medio; un import de `torch` de 52 s no es lo
+> que se verá en Linux, donde suelen ser segundos. **Lo que sí es trasladable es la memoria**,
+> y el **orden relativo** entre librerías —que es lo que decide dónde mirar—. El tiempo de
+> arranque real hay que volver a medirlo en la máquina, en D.4.
+
+| Medida | Valor |
+|---|---|
+| RSS tras importar la aplicación | **627 MB** |
+| Pico extrayendo un PDF de 40 páginas | **968 MB** (+341 MB sobre el reposo) |
+| Tiempo de import de la aplicación | ~131 s (frío) |
+| Extracción de 40 páginas con pdfplumber | 17 s / 168.000 caracteres |
+
+**El hallazgo importante: Docling ya no manda, manda `torch`.** Coste de import medido por
+librería:
+
+| Librería | Tiempo | RSS |
+|---|---|---|
+| `transformers` | 142 s | 25 MB |
+| `sentence_transformers` | 75 s | 216 MB |
+| `torch` | 52 s | 172 MB |
+| `pdfplumber` | 0,09 s | 5 MB |
+
+O sea que **pdfplumber es gratis** y lo que queda pesando es la pila de modelos locales
+—`torch` + `transformers` + `sentence-transformers`—, que está ahí por `LocalEmbeddingService`
+(BGE-M3) y `LocalReranker`, no por la extracción de documentos.
+
+**Consecuencia para D.4, y decisión que queda abierta.** Si el despliegue usa embeddings de
+Vertex y el reranker sigue apagado —que es el plan—, esa pila **no se usa en ejecución** pero
+se paga entera en memoria y, sobre todo, en tiempo de arranque. Hacerla opcional (extra de
+instalación `[local-models]`, con `LocalEmbeddingService` y `LocalReranker` importados de
+forma perezosa y fallando con un mensaje claro si no está) dejaría la aplicación en torno a
+**150-250 MB** y un arranque de segundos, sin renunciar al modo edge con modelos locales — que
+seguiría instalándose con el extra.
+
+Eso **no lo hace EXT.3**: es un cambio de empaquetado con su propia decisión de alcance, y el
+bloque EXT venía a separar la extracción. Queda anotado como candidato para D.4, donde el
+número importa. Con la pila incluida, la VM necesita **~2 GB para la aplicación** más lo suyo
+para el sandbox y el sistema; sin ella, bastaría bastante menos.
 
 ---
 

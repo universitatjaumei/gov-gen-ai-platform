@@ -9547,9 +9547,21 @@ retirado en EXT.3, no hay nada que escalar por separado.
 # PROMPT D.4-VM — Una máquina, el estado fuera
 # Deploy: cloud (infraestructura)
 
-## Tamaño
-- Partir de las cifras REALES de EXT.3, no de una estimación. Regla: memoria en reposo más el
-  pico medido durante una ingesta de corpus, con margen. Documentar de dónde sale el número.
+## Tamaño — MEDIDO en EXT.3 (2026-08-11)
+- Aplicación en reposo: **627 MB**. Pico extrayendo un PDF de 40 páginas: **968 MB**.
+- **La memoria es trasladable; los TIEMPOS de aquella medición no** —se tomaron en Windows con
+  caché fría—. Volver a medir el arranque en la propia máquina antes de fijar nada.
+- **Docling ya no manda: manda `torch`.** Medido por librería, `pdfplumber` cuesta 0,09 s y
+  5 MB, mientras que `transformers` (142 s), `sentence-transformers` (75 s / 216 MB) y
+  `torch` (52 s / 172 MB) se llevan el arranque entero. Están por `LocalEmbeddingService`
+  (BGE-M3) y `LocalReranker`, no por la extracción.
+- **Decisión pendiente que cambia el tamaño a la mitad**: con embeddings de Vertex y el
+  reranker apagado —el plan— esa pila no se usa en ejecución pero se paga entera. Hacerla un
+  extra de instalación (`[local-models]`, con importación perezosa y un error claro si falta)
+  dejaría la aplicación en ~150-250 MB y el arranque en segundos, sin renunciar al modo edge.
+  Decidirlo ANTES de fijar el tamaño: con la pila, ~2 GB para la aplicación; sin ella, mucho
+  menos.
+- El disco no guarda nada que duela perder (ver abajo), así que el margen se pone en memoria.
 - Disco: solo sistema, imágenes y logs. Los documentos van a GCS y la base a Cloud SQL, así
   que el disco de la VM no guarda nada que duela perder — y eso es deliberado.
 
