@@ -444,3 +444,52 @@ class HubPersonalAccessToken(HubConfigBase):
     revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class HubTheme(HubConfigBase):
+    """Tema de identidad visual (SEC.8.6).
+
+    Vivían como ficheros `.json` bajo `data/themes`, ruta relativa al directorio de
+    trabajo del proceso. En Cloud Run el contenedor es efímero y hay varias instancias:
+    un tema creado en una desaparecía al reciclarse y no existía para las demás. El widget
+    lo heredaba —resuelve el contenido desde el puntero `theme_config`— y volvía a quedarse
+    sin tema en producción, con el puntero intacto.
+
+    Es **configuración institucional**, no dato operacional del cliente: va en
+    `HubConfigBase` y por tanto se sincroniza cloud→edge.
+
+    `organizacion_id` nulo = tema **de plataforma**, que hereda la cascada entera; crearlo
+    está reservado al superadministrador (SEC.2).
+    """
+
+    __tablename__ = "hub_themes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    organizacion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_organizaciones.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    chatbot_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_chatbots.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )

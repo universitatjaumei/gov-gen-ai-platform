@@ -15,7 +15,7 @@ configuracion del chatbot en BD` sin persistir nada: ahora guarda `{"theme_id": 
 """
 from __future__ import annotations
 
-import json
+
 import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -33,7 +33,7 @@ import server.app.main  # noqa: F401
 from server.app.api.deps import get_current_user
 from server.app.core.auth.models import UserInfo
 from server.app.modules.agents_hub.database.connection import get_async_session
-from server.app.routers.hub_themes_router import THEMES_DIR, router
+from server.app.routers.hub_themes_router import router
 
 ORG_A = uuid.UUID("00000000-0000-0000-0000-0000000000a1")
 ORG_B = uuid.UUID("00000000-0000-0000-0000-0000000000b2")
@@ -50,9 +50,16 @@ def _app_con(principal: UserInfo, session):
     return TestClient(app, raise_server_exceptions=False)
 
 
-def _sesion_que_devuelve(entidad=None):
+def _sesion_que_devuelve(entidad=None, tema=None):
+    """SEC.8.6: el tema ya no se lee del disco, así que la sesión tiene que servir dos
+    cosas distintas —el chatbot y su tema— y despachar por modelo."""
+    from server.app.modules.agents_hub.database.config_models import HubTheme
+
+    async def _get(model, _pk):
+        return tema if model is HubTheme else entidad
+
     session = MagicMock()
-    session.get = AsyncMock(return_value=entidad)
+    session.get = AsyncMock(side_effect=_get)
     session.commit = AsyncMock()
     return session
 
@@ -80,27 +87,22 @@ def _anonimo() -> UserInfo:
 
 @pytest.fixture
 def tema_en_disco():
-    """Un tema real en disco (colores/tipografia), igual que `tema_de_org_b` en
-    test_themes_security.py. Se borra al terminar."""
-    theme_id = str(uuid.uuid4())
-    ruta = THEMES_DIR / f"{theme_id}.json"
-    ruta.write_text(
-        json.dumps(
-            {
-                "id": theme_id,
-                "name": "Tema del chatbot",
-                "organizacion_id": str(ORG_A),
-                "chatbot_id": None,
-                "is_default": False,
-                "config": {"name": "chatbot-theme", "colors": {"primary": "#123456"}},
-                "created_at": "2026-08-10T00:00:00+00:00",
-                "updated_at": "2026-08-10T00:00:00+00:00",
-            }
-        ),
-        encoding="utf-8",
+    """El tema del chatbot. Desde SEC.8.6 es una fila, no un fichero (el nombre de la
+    fixture se conserva para no tocar los diez tests que la usan)."""
+    from datetime import datetime, timezone
+
+    from server.app.modules.agents_hub.database.config_models import HubTheme
+
+    return HubTheme(
+        id=uuid.uuid4(),
+        name="Tema del chatbot",
+        organizacion_id=ORG_A,
+        chatbot_id=None,
+        is_default=False,
+        config={"name": "chatbot-theme", "colors": {"primary": "#123456"}},
+        created_at=datetime(2026, 8, 10, tzinfo=timezone.utc),
+        updated_at=datetime(2026, 8, 10, tzinfo=timezone.utc),
     )
-    yield theme_id
-    ruta.unlink(missing_ok=True)
 
 
 class TestGetThemeForChatbot:
@@ -122,9 +124,9 @@ class TestGetThemeForChatbot:
 
     def test_should_resolve_the_applied_theme_config(self, tema_en_disco):
         chatbot = _chatbot(
-            access_mode="public_anon", theme_config={"theme_id": tema_en_disco}
+            access_mode="public_anon", theme_config={"theme_id": str(tema_en_disco.id)}
         )
-        cliente = _app_con(_anonimo(), _sesion_que_devuelve(chatbot))
+        cliente = _app_con(_anonimo(), _sesion_que_devuelve(chatbot, tema=tema_en_disco))
 
         resp = cliente.get(f"/api/v1/hub/themes/for-chatbot/{chatbot.id}")
 
@@ -134,9 +136,9 @@ class TestGetThemeForChatbot:
     def test_should_not_leak_theme_id_or_organizacion_id(self, tema_en_disco):
         """El disenio existe justo para no reabrir el censo de organizaciones de SEC.5."""
         chatbot = _chatbot(
-            access_mode="public_anon", theme_config={"theme_id": tema_en_disco}
+            access_mode="public_anon", theme_config={"theme_id": str(tema_en_disco.id)}
         )
-        cliente = _app_con(_anonimo(), _sesion_que_devuelve(chatbot))
+        cliente = _app_con(_anonimo(), _sesion_que_devuelve(chatbot, tema=tema_en_disco))
 
         resp = cliente.get(f"/api/v1/hub/themes/for-chatbot/{chatbot.id}")
 
@@ -185,33 +187,33 @@ class TestApplyThemeToChatbot:
     def test_should_404_when_chatbot_does_not_exist(self, tema_en_disco):
         cliente = _app_con(
             UserInfo(user_id="root", email="root@test.com", role="superadmin"),
-            _sesion_que_devuelve(None),
+            _sesion_que_devuelve(None, tema=tema_en_disco),
         )
 
-        resp = cliente.post(f"/api/v1/hub/themes/{tema_en_disco}/apply/{uuid.uuid4()}")
+        resp = cliente.post(f"/api/v1/hub/themes/{tema_en_disco.id}/apply/{uuid.uuid4()}")
 
         assert resp.status_code == 404
 
     def test_should_persist_the_applied_theme_id_on_the_chatbot(self, tema_en_disco):
         chatbot = _chatbot(theme_config={})
-        session = _sesion_que_devuelve(chatbot)
+        session = _sesion_que_devuelve(chatbot, tema=tema_en_disco)
         cliente = _app_con(
             UserInfo(user_id="root", email="root@test.com", role="superadmin"), session
         )
 
-        resp = cliente.post(f"/api/v1/hub/themes/{tema_en_disco}/apply/{chatbot.id}")
+        resp = cliente.post(f"/api/v1/hub/themes/{tema_en_disco.id}/apply/{chatbot.id}")
 
         assert resp.status_code == 200
-        assert chatbot.theme_config == {"theme_id": tema_en_disco}
+        assert chatbot.theme_config == {"theme_id": str(tema_en_disco.id)}
         session.commit.assert_awaited_once()
 
     def test_should_require_superadmin(self, tema_en_disco):
         chatbot = _chatbot()
         cliente = _app_con(
             UserInfo(user_id="a", email="a@test.com", role="admin"),
-            _sesion_que_devuelve(chatbot),
+            _sesion_que_devuelve(chatbot, tema=tema_en_disco),
         )
 
-        resp = cliente.post(f"/api/v1/hub/themes/{tema_en_disco}/apply/{chatbot.id}")
+        resp = cliente.post(f"/api/v1/hub/themes/{tema_en_disco.id}/apply/{chatbot.id}")
 
         assert resp.status_code == 403

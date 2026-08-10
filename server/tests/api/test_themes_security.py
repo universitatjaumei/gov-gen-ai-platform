@@ -9,14 +9,14 @@ El segundo es menos aparatoso y más incómodo de explicar: `GET /hub/themes/{id
 nombre de la organización a la que pertenece, así que servía un censo de clientes sin pedir
 nada a cambio.
 
-**La validación es doble a propósito**: la forma del identificador *y* el destino resuelto.
-Comprobar solo la cadena es apostar a haber pensado en todas las codificaciones —`..%2f`,
-`....//`, rutas absolutas de Windows—; comprobar dónde acaba la ruta es no tener que
-acertar.
+**SEC.8.6 cambió el almacén, no el criterio.** Los temas son filas y ya no hay ruta que
+recorrer, así que la comprobación del destino resuelto desapareció con el fichero. La
+validación de **forma** del identificador se conserva y estos tests la siguen exigiendo:
+sigue siendo la primera barrera, y lo que no tiene forma de identificador ni llega a
+consultarse.
 """
 from __future__ import annotations
 
-import json
 import uuid
 
 import pytest
@@ -26,44 +26,71 @@ from fastapi.testclient import TestClient
 import server.app.main  # noqa: F401 — fija el orden de carga; ver test_chatbot_availability
 from server.app.api.deps import get_current_user
 from server.app.core.auth.models import UserInfo
-from server.app.routers.hub_themes_router import THEMES_DIR, router
+from server.app.modules.agents_hub.database.connection import get_async_session
+from server.app.routers.hub_themes_router import router
 
 ORG_A = str(uuid.UUID("00000000-0000-0000-0000-0000000000a1"))
 ORG_B = str(uuid.UUID("00000000-0000-0000-0000-0000000000b2"))
 
 
-def _app(rol: str = "admin", orgs: tuple[str, ...] = (ORG_A,), anonimo: bool = False):
+def _sesion_con(tema=None):
+    """Sesión doblada que devuelve este tema para cualquier `get` (SEC.8.6).
+
+    Los temas vivían en disco y estos tests los escribían allí; ahora son filas, así que
+    lo que hay que doblar es la sesión.
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    session = MagicMock()
+    session.get = AsyncMock(return_value=tema)
+    resultado = MagicMock()
+    resultado.scalars.return_value.all.return_value = [tema] if tema else []
+    session.execute = AsyncMock(return_value=resultado)
+    session.commit = AsyncMock()
+    session.refresh = AsyncMock()
+    session.delete = AsyncMock()
+    return session
+
+
+def _app(
+    rol: str = "admin",
+    orgs: tuple[str, ...] = (ORG_A,),
+    anonimo: bool = False,
+    tema=None,
+):
     app = FastAPI()
     if not anonimo:
         app.dependency_overrides[get_current_user] = lambda: UserInfo(
             user_id="admin-1", email="a@uji.es", role=rol, organizacion_ids=orgs
         )
+
+    sesion = _sesion_con(tema)
+
+    async def _sesion():
+        yield sesion
+
+    app.dependency_overrides[get_async_session] = _sesion
     app.include_router(router, prefix="/api/v1")
     return TestClient(app, raise_server_exceptions=False)
 
 
 @pytest.fixture
 def tema_de_org_b():
-    """Un tema real en disco, de una organización ajena. Se borra al terminar."""
-    theme_id = str(uuid.uuid4())
-    ruta = THEMES_DIR / f"{theme_id}.json"
-    ruta.write_text(
-        json.dumps(
-            {
-                "id": theme_id,
-                "name": "Tema ajeno",
-                "organizacion_id": ORG_B,
-                "chatbot_id": None,
-                "is_default": False,
-                "config": {"name": "ajeno", "version": "1.0.0"},
-                "created_at": "2026-08-02T00:00:00+00:00",
-                "updated_at": "2026-08-02T00:00:00+00:00",
-            }
-        ),
-        encoding="utf-8",
+    """Un tema de una organización ajena, como fila y no como fichero."""
+    from datetime import datetime, timezone
+
+    from server.app.modules.agents_hub.database.config_models import HubTheme
+
+    return HubTheme(
+        id=uuid.uuid4(),
+        name="Tema ajeno",
+        organizacion_id=uuid.UUID(ORG_B),
+        chatbot_id=None,
+        is_default=False,
+        config={"name": "ajeno", "version": "1.0.0"},
+        created_at=datetime(2026, 8, 2, tzinfo=timezone.utc),
+        updated_at=datetime(2026, 8, 2, tzinfo=timezone.utc),
     )
-    yield theme_id
-    ruta.unlink(missing_ok=True)
 
 
 class TestRutasQueNoSalenDelDirectorio:
@@ -82,30 +109,20 @@ class TestRutasQueNoSalenDelDirectorio:
         ],
     )
     def test_should_reject_theme_id_with_path_traversal(self, identificador):
-        from server.app.routers.hub_themes_router import _theme_path
+        """SEC.8.6: ya no hay ruta que recorrer —los temas son filas—, pero la validación
+        de forma se conserva y sigue siendo la primera barrera: lo que no tiene forma de
+        identificador no llega a consultarse."""
+        from server.app.routers.hub_themes_router import _assert_id_de_tema
 
         with pytest.raises(HTTPException) as exc:
-            _theme_path(identificador)
+            _assert_id_de_tema(identificador)
         assert exc.value.status_code == 400
 
     def test_should_accept_a_uuid_shaped_identifier(self):
-        from server.app.routers.hub_themes_router import _theme_path
+        from server.app.routers.hub_themes_router import _assert_id_de_tema
 
-        destino = _theme_path(str(uuid.uuid4()))
-        assert destino.is_relative_to(THEMES_DIR.resolve())
-
-    def test_should_not_read_files_outside_themes_dir(self, tmp_path):
-        """Aunque exista el fichero, la ruta que sale del directorio no se abre."""
-        from server.app.routers.hub_themes_router import _load_theme
-
-        senuelo = THEMES_DIR.parent / "senuelo.json"
-        senuelo.write_text(json.dumps({"secreto": True}), encoding="utf-8")
-        try:
-            with pytest.raises(HTTPException) as exc:
-                _load_theme("../senuelo")
-            assert exc.value.status_code == 400
-        finally:
-            senuelo.unlink(missing_ok=True)
+        identificador = uuid.uuid4()
+        assert _assert_id_de_tema(str(identificador)) == identificador
 
     def test_should_reject_traversal_over_http_on_every_verb(self):
         cliente = _app(rol="superadmin")
@@ -125,24 +142,24 @@ class TestRutasQueNoSalenDelDirectorio:
 class TestAutenticacionEnLaLectura:
 
     def test_should_require_auth_on_get_theme(self, tema_de_org_b):
-        anonimo = _app(anonimo=True)
+        anonimo = _app(anonimo=True, tema=tema_de_org_b)
 
-        respuesta = anonimo.get(f"/api/v1/hub/themes/{tema_de_org_b}")
+        respuesta = anonimo.get(f"/api/v1/hub/themes/{tema_de_org_b.id}")
 
         assert respuesta.status_code == 401
 
     def test_should_forbid_reading_a_theme_of_another_org(self, tema_de_org_b):
         """SEC.2 llega también aquí: el tema lleva el nombre de su organización."""
-        cliente = _app(orgs=(ORG_A,))
+        cliente = _app(orgs=(ORG_A,), tema=tema_de_org_b)
 
-        respuesta = cliente.get(f"/api/v1/hub/themes/{tema_de_org_b}")
+        respuesta = cliente.get(f"/api/v1/hub/themes/{tema_de_org_b.id}")
 
         assert respuesta.status_code == 403
 
     def test_should_allow_reading_a_theme_of_your_own_org(self, tema_de_org_b):
-        cliente = _app(orgs=(ORG_B,))
+        cliente = _app(orgs=(ORG_B,), tema=tema_de_org_b)
 
-        respuesta = cliente.get(f"/api/v1/hub/themes/{tema_de_org_b}")
+        respuesta = cliente.get(f"/api/v1/hub/themes/{tema_de_org_b.id}")
 
         assert respuesta.status_code == 200
         assert respuesta.json()["name"] == "Tema ajeno"

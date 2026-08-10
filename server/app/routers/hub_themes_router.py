@@ -4,19 +4,18 @@ Deploy: cloud
 
 `get_theme_for_chatbot` es la excepción: la consume el widget público, que es tráfico
 edge (mismo consumidor que `hub_chat_router`). Se queda aquí porque hoy `DEPLOY_MODE=all`
-registra los dos bloques igual y el almacén de temas (`THEMES_DIR`, `_load_theme`) es
-propiedad de este router -- moverlo exigiría extraer ese almacén a un módulo compartido,
-que es más de lo que pide este arreglo. **Pendiente si se llega a desplegar `edge` sin
-`cloud`**: hoy ese endpoint 404earía porque este router no se registra en `_register_edge`.
+registra los dos bloques igual. **Pendiente si se llega a desplegar `edge` sin `cloud`**:
+hoy ese endpoint 404earía porque este router no se registra en `_register_edge`. Desde
+SEC.8.6 el obstáculo es menor de lo que era —los temas viven en `hub_themes`, una tabla de
+`HubConfigBase` que se sincroniza cloud→edge, y no en un almacén propiedad de este módulo—.
 """
-import json
 import re
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, require_role
@@ -24,7 +23,7 @@ from server.app.core.auth.chatbot_access import assert_chatbot_access
 from server.app.core.auth.delegated_actor import resolve_effective_actor
 from server.app.core.auth.models import UserInfo
 from server.app.core.auth.tenancy import assert_org_access, puede_acceder
-from server.app.modules.agents_hub.database.config_models import HubChatbot
+from server.app.modules.agents_hub.database.config_models import HubChatbot, HubTheme
 from server.app.modules.agents_hub.database.connection import get_async_session
 
 router = APIRouter(prefix="/hub/themes", tags=["hub-themes"])
@@ -121,66 +120,61 @@ class ChatbotThemeOut(BaseModel):
 
 
 # ============================================
-# Almacenamiento simplificado (en producción usar BD)
+# Almacenamiento en base de datos (SEC.8.6)
 # ============================================
-
-THEMES_DIR = Path("data/themes")
-THEMES_DIR.mkdir(parents=True, exist_ok=True)
-
+#
+# Antes eran ficheros `.json` bajo `data/themes`, una ruta relativa al directorio de
+# trabajo. En Cloud Run el contenedor es efímero y hay varias instancias, así que el tema
+# creado en una no existía para las demás y desaparecía al reciclarse — arrastrando al
+# widget, que resuelve su contenido desde el puntero `theme_config`.
+#
+# La validación de forma del identificador se conserva: ya no protege una ruta, pero un
+# `theme_id` que no es un UUID no puede corresponder a ningún tema, y rechazarlo antes de
+# consultar es más claro que un 404 desde la capa de datos.
 
 _ID_DE_TEMA = re.compile(r"^[a-z0-9-]{1,64}$")
 
 
-def _theme_path(theme_id: str) -> Path:
-    """La ruta del fichero del tema, o 400 si el identificador no es un identificador.
-
-    SEC.5: esto construía una ruta concatenando lo que llegara en la URL. Con `../` bastaba
-    para leer —y con DELETE, para borrar— cualquier `.json` del servidor. Dos cierres, y los
-    dos hacen falta:
-
-    - **La forma**: solo minúsculas, dígitos y guiones. Los identificadores reales son UUID,
-      así que la regla no aprieta nada; deja fuera `..`, `/`, `%2f` decodificado y las rutas
-      absolutas de Windows de una vez.
-    - **El destino resuelto**: aunque la forma pase, la ruta final tiene que caer dentro de
-      `THEMES_DIR`. Comprobar solo la cadena es apostar a que uno ha pensado en todas las
-      codificaciones posibles; comprobar el destino es no tener que acertar.
-    """
+def _assert_id_de_tema(theme_id: str) -> uuid.UUID:
     if not _ID_DE_TEMA.match(theme_id or ""):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Identificador de tema inválido",
         )
-
-    destino = (THEMES_DIR / f"{theme_id}.json").resolve()
-    if not destino.is_relative_to(THEMES_DIR.resolve()):
+    try:
+        return uuid.UUID(theme_id)
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Identificador de tema inválido",
-        )
-    return destino
+        ) from None
 
 
-def _load_theme(theme_id: str) -> dict | None:
-    path = _theme_path(theme_id)
-    if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
-    return None
+def _a_dict(tema: HubTheme) -> dict:
+    """La forma que ya devolvía el router, para no tocar el contrato de la API."""
+    return {
+        "id": str(tema.id),
+        "name": tema.name,
+        # Cadenas y no UUID: es lo que declara `ThemeResponse` y con lo que comparan los
+        # filtros del listado, que reciben el id por query.
+        "organizacion_id": str(tema.organizacion_id) if tema.organizacion_id else None,
+        "chatbot_id": str(tema.chatbot_id) if tema.chatbot_id else None,
+        "config": tema.config or {},
+        "is_default": tema.is_default,
+        "created_at": tema.created_at.isoformat() if tema.created_at else None,
+        "updated_at": tema.updated_at.isoformat() if tema.updated_at else None,
+        "created_by": tema.created_by,
+    }
 
 
-def _save_theme(theme_id: str, data: dict) -> None:
-    _theme_path(theme_id).write_text(
-        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+async def _load_theme(session, theme_id: str) -> dict | None:
+    tema = await session.get(HubTheme, _assert_id_de_tema(theme_id))
+    return _a_dict(tema) if tema is not None else None
 
 
-def _list_themes() -> list[dict]:
-    themes = []
-    for path in THEMES_DIR.glob("*.json"):
-        try:
-            themes.append(json.loads(path.read_text(encoding="utf-8")))
-        except (json.JSONDecodeError, IOError):
-            continue
-    return themes
+async def _list_themes(session) -> list[dict]:
+    filas = (await session.execute(select(HubTheme))).scalars().all()
+    return [_a_dict(t) for t in filas]
 
 
 # ============================================
@@ -203,12 +197,13 @@ async def get_themes(
     organizacion_id: str | None = None,
     chatbot_id: str | None = None,
     user: UserInfo = Depends(_require_admin),
+    session: AsyncSession = Depends(get_async_session),
 ) -> list[dict]:
     """Lista los temas disponibles para el partner.
 
     Cascada de resolución: plataforma (defaults) → cliente → chatbot.
     """
-    themes = _list_themes()
+    themes = await _list_themes(session)
     # SEC.2: el listado se acota a lo que el principal gestiona. Los temas de
     # plataforma (`is_default`) los ve todo el mundo: son la base de la cascada.
     themes = [
@@ -251,7 +246,7 @@ async def get_theme_for_chatbot(
 
     theme_id = (chatbot.theme_config or {}).get("theme_id")
     if theme_id:
-        theme = _load_theme(theme_id)
+        theme = await _load_theme(session, theme_id)
         if theme:
             return ChatbotThemeOut(config=theme.get("config", {}))
     return ChatbotThemeOut(config={})
@@ -261,6 +256,7 @@ async def get_theme_for_chatbot(
 async def get_theme(
     theme_id: str,
     user: UserInfo = Depends(_require_admin),
+    session: AsyncSession = Depends(get_async_session),
 ) -> dict:
     """Obtiene un tema específico por ID.
 
@@ -271,7 +267,7 @@ async def get_theme(
     Los temas de plataforma (`is_default`) los ve cualquier administrador: son la base de la
     cascada y no pertenecen a nadie. Los de una organización, solo quien la gestiona.
     """
-    theme = _load_theme(theme_id)
+    theme = await _load_theme(session, theme_id)
     if not theme:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Theme {theme_id} not found")
     if not theme.get("is_default") and theme.get("organizacion_id"):
@@ -283,6 +279,7 @@ async def get_theme(
 async def create_theme(
     data: ThemeCreate,
     user: UserInfo = Depends(_require_admin),
+    session: AsyncSession = Depends(get_async_session),
 ) -> dict:
     """Crea un nuevo tema para un cliente o chatbot del partner."""
     # SEC.2: la organización viene del CUERPO de la petición, así que sin esto un admin
@@ -303,21 +300,24 @@ async def create_theme(
             )
     else:
         assert_org_access(user, data.organizacion_id)
-    theme_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
-    theme = {
-        "id": theme_id,
-        "name": data.name,
-        "organizacion_id": data.organizacion_id,
-        "chatbot_id": data.chatbot_id,
-        "config": data.config.model_dump(),
-        "is_default": False,
-        "created_at": now,
-        "updated_at": now,
-        "created_by": user.user_id,
-    }
-    _save_theme(theme_id, theme)
-    return theme
+    ahora = datetime.now(timezone.utc)
+    tema = HubTheme(
+        id=uuid.uuid4(),
+        name=data.name,
+        organizacion_id=uuid.UUID(data.organizacion_id) if data.organizacion_id else None,
+        chatbot_id=uuid.UUID(data.chatbot_id) if data.chatbot_id else None,
+        config=data.config.model_dump(),
+        is_default=False,
+        created_by=user.user_id,
+        # Explícitas y no delegadas al default de la columna: el objeto queda completo
+        # antes del INSERT, así que la respuesta no depende de que el `refresh` recargue.
+        created_at=ahora,
+        updated_at=ahora,
+    )
+    session.add(tema)
+    await session.commit()
+    await session.refresh(tema)
+    return _a_dict(tema)
 
 
 @router.put("/{theme_id}", response_model=ThemeResponse)
@@ -325,31 +325,35 @@ async def update_theme(
     theme_id: str,
     data: ThemeUpdate,
     user: UserInfo = Depends(_require_superadmin),
+    session: AsyncSession = Depends(get_async_session),
 ) -> dict:
     """Actualiza un tema existente."""
-    theme = _load_theme(theme_id)
-    if not theme:
+    tema = await session.get(HubTheme, _assert_id_de_tema(theme_id))
+    if tema is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Theme {theme_id} not found")
-    if theme.get("is_default"):
+    if tema.is_default:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot modify default themes")
-    theme["config"] = data.config.model_dump()
-    theme["updated_at"] = datetime.now(timezone.utc).isoformat()
-    _save_theme(theme_id, theme)
-    return theme
+    tema.config = data.config.model_dump()
+    tema.updated_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(tema)
+    return _a_dict(tema)
 
 
 @router.delete("/{theme_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_theme(
     theme_id: str,
     user: UserInfo = Depends(_require_superadmin),
+    session: AsyncSession = Depends(get_async_session),
 ) -> None:
     """Elimina un tema personalizado."""
-    theme = _load_theme(theme_id)
-    if not theme:
+    tema = await session.get(HubTheme, _assert_id_de_tema(theme_id))
+    if tema is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Theme {theme_id} not found")
-    if theme.get("is_default"):
+    if tema.is_default:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete default themes")
-    _theme_path(theme_id).unlink()
+    await session.delete(tema)
+    await session.commit()
 
 
 @router.post("/{theme_id}/apply/{chatbot_id}")
@@ -362,10 +366,10 @@ async def apply_theme_to_chatbot(
     """Aplica un tema a un chatbot específico.
 
     `HubChatbot.theme_config` no llevaba lector ni escritor en ningún sitio: se reutiliza
-    como puntero (`{"theme_id": ...}`) al tema real en `data/themes/`, en vez de duplicar la
+    como puntero (`{"theme_id": ...}`) a la fila de `hub_themes`, en vez de duplicar la
     configuración de colores en dos sitios. `get_theme_for_chatbot` es quien lo resuelve.
     """
-    theme = _load_theme(theme_id)
+    theme = await _load_theme(session, theme_id)
     if not theme:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Theme {theme_id} not found")
     chatbot = await session.get(HubChatbot, chatbot_id)

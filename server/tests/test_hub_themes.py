@@ -134,21 +134,36 @@ class TestThemeAPI:
 
         test_app.dependency_overrides[get_current_user] = mock_user
 
+        # SEC.8.6: el tema se escribe en la BD, no en `THEMES_DIR`, así que lo que hay
+        # que doblar es la sesión.
+        from unittest.mock import AsyncMock, MagicMock
+
+        from server.app.modules.agents_hub.database.connection import get_async_session
+
+        sesion = MagicMock()
+        sesion.add = MagicMock()
+        sesion.commit = AsyncMock()
+        sesion.refresh = AsyncMock()
+
+        async def _sesion():
+            yield sesion
+
+        test_app.dependency_overrides[get_async_session] = _sesion
+
         try:
-            with patch("server.app.routers.hub_themes_router.THEMES_DIR", tmp_path):
-                async with AsyncClient(
-                    transport=ASGITransport(app=test_app), base_url="http://test"
-                ) as client:
-                    response = await client.post(
-                        "/api/v1/hub/themes",
-                        json={
-                            "name": "new-theme",
-                            "config": sample_theme_config,
-                            # SEC.2: un tema sin organizacion es de plataforma y solo
-                            # lo crea un superadmin. Este test crea uno de organizacion.
-                            "organizacion_id": ORG_PRUEBA,
-                        },
-                    )
+            async with AsyncClient(
+                transport=ASGITransport(app=test_app), base_url="http://test"
+            ) as client:
+                response = await client.post(
+                    "/api/v1/hub/themes",
+                    json={
+                        "name": "new-theme",
+                        "config": sample_theme_config,
+                        # SEC.2: un tema sin organizacion es de plataforma y solo
+                        # lo crea un superadmin. Este test crea uno de organizacion.
+                        "organizacion_id": ORG_PRUEBA,
+                    },
+                )
         finally:
             test_app.dependency_overrides.clear()
 
@@ -158,23 +173,9 @@ class TestThemeAPI:
         assert "id" in data
 
 
-class TestThemeStorage:
-    """Tests para las funciones de almacenamiento de temas."""
-
-    def test_save_and_load_theme(self, sample_theme_config, tmp_path):
-        from server.app.routers.hub_themes_router import _save_theme, _load_theme
-
-        theme_id = "test-theme-123"
-        theme_data = {
-            "id": theme_id,
-            "name": "Test Theme",
-            "config": sample_theme_config,
-        }
-
-        with patch("server.app.routers.hub_themes_router.THEMES_DIR", tmp_path):
-            _save_theme(theme_id, theme_data)
-            loaded = _load_theme(theme_id)
-
-        assert loaded is not None
-        assert loaded["name"] == "Test Theme"
-        assert loaded["config"]["colors"]["primary"] == "#ff0000"
+# SEC.8.6: `TestThemeStorage` probaba `_save_theme`/`_load_theme` sobre ficheros con
+# `THEMES_DIR` parcheado a un `tmp_path`. Ese almacén ya no existe —los temas son filas—, y
+# la persistencia se prueba ahora contra Postgres real en
+# `tests/modules/agents_hub/integration/test_theme_persistence.py`, que es donde puede
+# comprobarse de verdad. Probarlo con un directorio temporal era, precisamente, la razón por
+# la que el fallo de Cloud Run no lo cazaba ningún test: en el test siempre había disco.
