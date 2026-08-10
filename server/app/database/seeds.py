@@ -15,6 +15,7 @@ La clave de licencia de desarrollo es: DEV_LICENSE_KEY_12345
 """
 
 import hashlib
+import os
 from datetime import datetime, timedelta
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -48,7 +49,21 @@ async def seed_multitenancy_defaults():
     - 1 AdminAccount (partner_dev, ex-partner)
     - 1 ClientAccount (client_dev)
     - 1 License (lic_dev) con 10M tokens de cuota
+
+    **Solo en desarrollo.** La credencial del SuperAdmin de desarrollo es pública
+    (está en este mismo módulo), así que sembrarla en producción crearía una cuenta
+    con acceso a todos los tenants y contraseña conocida. En producción el SuperAdmin
+    se provisiona con `python -m server.app.scripts.bootstrap` (lo llama setup.sh),
+    que toma la credencial de SUPERADMIN_EMAIL/SUPERADMIN_PASSWORD y no hardcodea nada.
     """
+    if os.getenv("ENVIRONMENT", "development") != "development":
+        print(
+            "[SEED] Entorno no-desarrollo: se omiten los datos de desarrollo "
+            "(SuperAdmin/admin/cliente/licencia de prueba). Provisiona el SuperAdmin "
+            "con `python -m server.app.scripts.bootstrap`."
+        )
+        return
+
     async with AsyncSession(server_engine) as session:
         # 0. Crear SuperAdmin de desarrollo
         await _seed_dev_superadmin(session)
