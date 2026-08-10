@@ -118,7 +118,7 @@ class TestModeloDeEscenarios:
 
 class TestEndpoints:
 
-    def _cliente(self, session, rol="admin"):
+    def _cliente(self, session, rol="admin", *orgs):
         """`AsyncClient` + `ASGITransport`, no `TestClient`.
 
         `TestClient` levanta su propio event loop, y la fixture `db_session` vive en el de
@@ -139,8 +139,16 @@ class TestEndpoints:
 
         app = FastAPI()
         app.dependency_overrides[get_async_session] = _sesion
+        # SEC.8.1: el router resuelve el chatbot a su organización antes de nada, así que
+        # el actor tiene que gestionarla. Se conceden las organizaciones de los chatbots
+        # del test en vez de usar un superadministrador: con el comodín, la guarda no se
+        # ejercitaría aquí y el aislamiento POR CHATBOT —que es lo que este fichero mide—
+        # quedaría probado sobre un actor que se salta la frontera anterior.
         app.dependency_overrides[get_current_user] = lambda: UserInfo(
-            user_id="a1", email="admin@uji.es", role=rol
+            user_id="a1",
+            email="admin@uji.es",
+            role=rol,
+            organizacion_ids=tuple(str(o) for o in orgs),
         )
         app.include_router(router, prefix="/api/v1")
         return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
@@ -153,7 +161,11 @@ class TestEndpoints:
         chatbot_b = await _chatbot(db_session)
         await db_session.commit()
 
-        cliente = self._cliente(db_session)
+        # Las DOS organizaciones: el actor puede llegar a los dos chatbots, así que lo que
+        # este test mide sigue siendo el aislamiento por chatbot y no el de organización.
+        cliente = self._cliente(
+            db_session, "admin", chatbot_a.organizacion_id, chatbot_b.organizacion_id
+        )
 
         creado = await cliente.post(
             f"/api/v1/hub/chatbots/{chatbot_a.id}/test-scenarios",
@@ -193,7 +205,7 @@ class TestEndpoints:
         chatbot = await _chatbot(db_session)
         await db_session.commit()
 
-        cliente = self._cliente(db_session, rol="user")
+        cliente = self._cliente(db_session, "user", chatbot.organizacion_id)
 
         assert (await cliente.get(
             f"/api/v1/hub/chatbots/{chatbot.id}/test-scenarios"
@@ -223,7 +235,7 @@ class TestEndpoints:
         })
         grafo.compile = MagicMock(return_value=compilado)
 
-        cliente = self._cliente(db_session)
+        cliente = self._cliente(db_session, "admin", chatbot.organizacion_id)
         with patch(
             "server.app.routers.hub_test_scenarios_router.GraphFactory",
             return_value=MagicMock(build=AsyncMock(return_value=grafo)),
@@ -268,7 +280,7 @@ class TestEndpoints:
         })
         grafo.compile = MagicMock(return_value=compilado)
 
-        cliente = self._cliente(db_session)
+        cliente = self._cliente(db_session, "admin", chatbot.organizacion_id)
         with patch(
             "server.app.routers.hub_test_scenarios_router.GraphFactory",
             return_value=MagicMock(build=AsyncMock(return_value=grafo)),
@@ -303,7 +315,7 @@ class TestEndpoints:
         db_session.add(run)
         await db_session.commit()
 
-        cliente = self._cliente(db_session)
+        cliente = self._cliente(db_session, "admin", chatbot.organizacion_id)
         resp = await cliente.patch(
             f"/api/v1/hub/chatbots/{chatbot.id}/test-scenarios/runs/{run.id}/verdict",
             json={"verdict": "mixed", "verdict_note": "Cita bien pero se enrolla."},
@@ -336,7 +348,7 @@ class TestEndpoints:
         ])
         await db_session.commit()
 
-        cliente = self._cliente(db_session)
+        cliente = self._cliente(db_session, "admin", chatbot.organizacion_id)
         runs = (await cliente.get(
             f"/api/v1/hub/chatbots/{chatbot.id}/test-scenarios/{escenario.id}/runs"
         )).json()

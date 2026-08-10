@@ -18,15 +18,28 @@ os.environ.setdefault("JWT_ALGORITHM", "HS256")
 os.environ.setdefault("JWT_EXPIRATION_MINUTES", "60")
 
 
+# SEC.8.1: estos endpoints resuelven ahora el sitio (o el chatbot) a su organización antes
+# de operar, así que el actor tiene que pertenecer a alguna. Antes el token no llevaba
+# ninguna y daba igual: el router solo miraba el rol.
+ORG = uuid.UUID("00000000-0000-0000-0000-0000000000a1")
+
+
 def _make_token(role: str = "admin") -> str:
     from server.app.core.auth import UserInfo, create_token
-    return create_token(UserInfo(user_id="admin-1", email="admin@test.com", role=role))
+    return create_token(
+        UserInfo(
+            user_id="admin-1",
+            email="admin@test.com",
+            role=role,
+            organizacion_ids=(str(ORG),),
+        )
+    )
 
 
 def _fake_site(**kw):
     m = MagicMock()
     m.id = kw.get("id", uuid.uuid4())
-    m.organizacion_id = kw.get("organizacion_id", None)
+    m.organizacion_id = kw.get("organizacion_id", ORG)
     m.name = kw.get("name", "Sitio Test")
     m.root_url = kw.get("root_url", "https://ej.es")
     m.sitemap_url = kw.get("sitemap_url", None)
@@ -71,6 +84,15 @@ def _build_app(session_mock=None, site_repo_mock=None, selection_service_mock=No
 
     _session = session_mock or AsyncMock()
 
+    # SEC.8.1: `assert_site_org_access` / `assert_chatbot_org_access` cargan el recurso con
+    # `session.get` para resolver su organización. Sin esto, un `AsyncMock` devuelve un
+    # `organizacion_id` que no es el del token y todos los endpoints darían 403.
+    #
+    # Devuelve un sitio COMPLETO y no un objeto con solo la organización: varios endpoints
+    # (`patch_site`) acaban sirviendo lo que salga de `session.get`, y un doble a medias
+    # pasaría la frontera para caer después en la validación de la respuesta.
+    _session.get = AsyncMock(return_value=_fake_site())
+
     async def _session_override():
         yield _session
 
@@ -103,8 +125,11 @@ def test_create_site_returns_201(monkeypatch):
     monkeypatch.setattr(WebSiteRepo, "create", AsyncMock(return_value=site))
 
     client = TestClient(_build_app(session_mock=session))
+    # SEC.8.1: la organización se declara y se valida contra el token. Sin ella el sitio
+    # sería de plataforma —fuera de toda cascada y de todo listado acotado—, y crear uno
+    # así queda reservado al superadministrador.
     resp = client.post(
-        "/api/v1/hub/sites",
+        f"/api/v1/hub/sites?organizacion_id={ORG}",
         json={"name": "Mi Sitio", "root_url": "https://ej.es"},
         headers={"Authorization": f"Bearer {_make_token()}"},
     )
@@ -299,6 +324,8 @@ def test_list_candidates_returns_200():
 
     app = FastAPI()
     from server.app.modules.agents_hub.database.connection import get_async_session
+    # SEC.8.1: la guarda de organización resuelve el recurso con `session.get`.
+    session.get = AsyncMock(return_value=_fake_site())
     app.dependency_overrides[get_async_session] = lambda: session
     app.dependency_overrides[get_selection_service] = lambda: mock_svc
     app.include_router(router, prefix="/api/v1")
@@ -331,6 +358,8 @@ def test_ingest_page_returns_202():
     from server.app.routers.hub_sites_router import router
     app = FastAPI()
     from server.app.modules.agents_hub.database.connection import get_async_session
+    # SEC.8.1: la guarda de organización resuelve el recurso con `session.get`.
+    session.get = AsyncMock(return_value=_fake_site())
     app.dependency_overrides[get_async_session] = lambda: session
     app.dependency_overrides[get_selection_service] = lambda: mock_svc
     app.include_router(router, prefix="/api/v1")
@@ -356,6 +385,8 @@ def test_retire_page_returns_200_with_count():
     from server.app.routers.hub_sites_router import router
     app = FastAPI()
     from server.app.modules.agents_hub.database.connection import get_async_session
+    # SEC.8.1: la guarda de organización resuelve el recurso con `session.get`.
+    session.get = AsyncMock(return_value=_fake_site())
     app.dependency_overrides[get_async_session] = lambda: session
     app.dependency_overrides[get_selection_service] = lambda: mock_svc
     app.include_router(router, prefix="/api/v1")

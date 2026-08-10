@@ -334,7 +334,11 @@ class TestEndpointYComando:
         app = FastAPI()
         app.dependency_overrides[get_async_session] = _sesion
         app.dependency_overrides[get_current_user] = lambda: UserInfo(
-            user_id="a1", email="admin@uji.es", role="admin"
+            user_id="a1",
+            email="admin@uji.es",
+            role="admin",
+            # SEC.8.1: leer los huecos de un chatbot exige pertenecer a su organización.
+            organizacion_ids=(str(chatbot.organizacion_id),),
         )
         app.include_router(router, prefix="/api/v1")
 
@@ -381,7 +385,11 @@ class TestEndpointYComando:
         app = FastAPI()
         app.dependency_overrides[get_async_session] = _sesion
         app.dependency_overrides[get_current_user] = lambda: UserInfo(
-            user_id="a1", email="admin@uji.es", role="admin"
+            user_id="a1",
+            email="admin@uji.es",
+            role="admin",
+            # SEC.8.1: leer los huecos de un chatbot exige pertenecer a su organización.
+            organizacion_ids=(str(chatbot.organizacion_id),),
         )
         app.include_router(router, prefix="/api/v1")
 

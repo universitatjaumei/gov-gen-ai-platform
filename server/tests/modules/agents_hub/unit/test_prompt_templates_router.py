@@ -19,11 +19,24 @@ _JWT_ENV = {
 }
 
 
+# SEC.8.1: la plantilla no tiene organización propia —cuelga del chatbot—, así que el
+# router resuelve el chatbot dueño antes de leer o escribir. Escribir en la plantilla ajena
+# es controlar el prompt de sistema del asistente de otra administración.
+ORG = uuid.UUID("00000000-0000-0000-0000-0000000000a1")
+
+
 def _make_token(role: str = "admin") -> str:
     import os
     os.environ.update(_JWT_ENV)
     from server.app.core.auth import UserInfo, create_token
-    return create_token(UserInfo(user_id="admin-1", email="admin@test.com", role=role))
+    return create_token(
+        UserInfo(
+            user_id="admin-1",
+            email="admin@test.com",
+            role=role,
+            organizacion_ids=(str(ORG),),
+        )
+    )
 
 
 def _make_template(**kwargs) -> HubPromptTemplate:
@@ -46,6 +59,12 @@ def _make_template(**kwargs) -> HubPromptTemplate:
 
 def _build_app(session_mock) -> FastAPI:
     from server.app.routers.hub_prompt_templates_router import router
+    from types import SimpleNamespace
+
+    # El chatbot dueño, que es a quien se le pregunta la organización.
+    session_mock.get = AsyncMock(
+        return_value=SimpleNamespace(id=uuid.uuid4(), organizacion_id=ORG)
+    )
 
     async def _override():
         yield session_mock

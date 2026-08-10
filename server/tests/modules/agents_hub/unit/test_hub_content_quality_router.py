@@ -21,9 +21,29 @@ os.environ.setdefault("JWT_EXPIRATION_MINUTES", "60")
 NOW = datetime(2026, 6, 6, 12, 0, 0, tzinfo=timezone.utc)
 
 
+# SEC.8.1: los endpoints resuelven el sitio (o el chatbot) a su organización antes de
+# operar. `analyze_content_gaps` es el caso que lo motiva: lee las conversaciones de
+# ciudadanos del chatbot, así que el rol de admin no basta — hay que ser de su organización.
+ORG = uuid.UUID("00000000-0000-0000-0000-0000000000a1")
+
+
 def _make_token(role: str = "admin") -> str:
     from server.app.core.auth import UserInfo, create_token
-    return create_token(UserInfo(user_id="admin-1", email="admin@test.com", role=role))
+    return create_token(
+        UserInfo(
+            user_id="admin-1",
+            email="admin@test.com",
+            role=role,
+            organizacion_ids=(str(ORG),),
+        )
+    )
+
+
+def _duenio_de_la_org():
+    """Lo que devuelve `session.get` al resolver el dueño del recurso."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(id=uuid.uuid4(), organizacion_id=ORG)
 
 
 def _fake_orm_finding(**kw):
@@ -50,6 +70,8 @@ def _build_app_with_session(session_mock):
     from server.app.routers.hub_content_quality_router import router
     from server.app.modules.agents_hub.database.connection import get_async_session
 
+    session_mock.get = AsyncMock(return_value=_duenio_de_la_org())
+
     async def _session_override():
         yield session_mock
 
@@ -68,6 +90,7 @@ def _build_app_with_overrides(session_mock=None, findings_repo_mock=None, report
     from server.app.modules.agents_hub.database.connection import get_async_session
 
     _session = session_mock or AsyncMock()
+    _session.get = AsyncMock(return_value=_duenio_de_la_org())
 
     async def _session_override():
         yield _session
@@ -239,6 +262,8 @@ def test_post_analyze_returns_202():
 
     site_id = uuid.uuid4()
     session = AsyncMock()
+    # SEC.8.1: la guarda resuelve el sitio a su organización antes de encolar nada.
+    session.get = AsyncMock(return_value=_duenio_de_la_org())
 
     quality_job = MagicMock()
     quality_job.run_for_site = AsyncMock()
