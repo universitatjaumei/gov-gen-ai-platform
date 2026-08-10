@@ -87,14 +87,23 @@ def _start_quality_scheduler():
         engine = create_async_engine()
         hub_session_factory = create_session_factory(engine)
 
-        # El job se construye con listas vacías de detectores y sin watcher para el
-        # arranque inicial: los detectores completos (con LLM y embedding) se inyectan
-        # en producción a través de la configuración de cada entorno. En este arranque
-        # básico el scheduler solo realiza crawls y consolidaciones deterministas.
+        # SEC.8.8: el rastreo real. Antes iba un `_NullCrawler` con la promesa de que los
+        # componentes reales «se inyectan en producción a través de la configuración de
+        # cada entorno» — mecanismo que no existía, así que el botón de rastrear de la
+        # interfaz respondía 202 y no hacía nada. El rastreo es la ENTRADA del flujo de
+        # curación: sin él no hay páginas que auditar, ni hallazgos, ni candidatas.
+        #
+        # Los detectores deterministas se enchufan aquí; el semántico sigue detrás de su
+        # flag porque cuesta embeddings y modelo por página.
+        from server.app.modules.curation.site_crawler_dispatcher import (
+            DeterministicDetectorDispatcher,
+            SiteCrawlerDispatcher,
+        )
+
         job = SiteQualityAnalysisJob(
             session_factory=hub_session_factory,
-            site_crawler=_NullCrawler(),
-            detectors=[],
+            site_crawler=SiteCrawlerDispatcher(hub_session_factory),
+            detectors=[DeterministicDetectorDispatcher(hub_session_factory)],
             watcher=None,
             selection_repo=_NullSelectionRepo(),
             run_semantic=settings.content_quality_semantic_enabled,
@@ -117,14 +126,6 @@ def _start_quality_scheduler():
     except Exception as exc:
         print(f"[STARTUP] Content quality scheduler failed to start: {exc}")
         return None
-
-
-class _NullCrawler:
-    """Crawl stub para el arranque sin configuración completa."""
-
-    async def crawl_site(self, site_id):  # noqa: ANN001
-        from server.app.modules.curation.site_crawler import SiteCrawlSummary
-        return SiteCrawlSummary(errors=["no spider configured"])
 
 
 class _NullSelectionRepo:

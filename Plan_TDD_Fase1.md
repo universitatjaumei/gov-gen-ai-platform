@@ -12325,17 +12325,35 @@ y no existe mecanismo real de inyección (`SpiderFactory`/`SiteCrawler` sin llam
 # PROMPT SEC.8.8 — Curación web: cablear el crawler real O acotar el v1
 # Deploy: edge
 
-## Decisión (usuario) — una de:
-# (A) El v1 incluye rastreo web: cablear SpiderFactory/SiteCrawler + detectores reales en el
-#     arranque (config por entorno), no _NullCrawler.
-# (B) El v1 NO incluye rastreo automático (coherente con DECISION_CURACION_SEPARADA: una página
-#     nueva es señal para el curador, no disparador): el endpoint /crawl devuelve 501/desactivado
-#     explícito y la UI lo refleja, en vez de fallar en silencio con "no spider configured".
+## Decisión tomada (usuario, 2026-08-10): camino (A), cablear.
+# El rastreo es la ENTRADA del flujo de curación —descubrir, auditar, seleccionar,
+# publicar—, así que desactivarlo no dejaba "una funcionalidad menos": vaciaba la
+# herramienta que CUR.2 acababa de construir. Cablearlo NO contradice
+# DECISION_CURACION_SEPARADA: el rastreo llena la bandeja del curador y la publicación al
+# corpus sigue siendo un botón por candidata. No hay ingesta automática.
+#
+# Decisión hermana: UNA sola aplicación, ejecución aparte. Curación y asistente comparten
+# auth, tenencia, organizaciones, almacenamiento y corpus; partirlos en dos servicios
+# duplicaría todo eso y chocaría con la regla de un codebase para ambos modos de
+# despliegue. Lo que se separa es el PROCESO que rastrea, no el producto.
 
-## Tests (RED primero) — según el camino elegido
-# (A) should_crawl_site_with_real_spider ; should_produce_findings_from_detectors
-# (B) should_return_explicit_unavailable_for_crawl_in_v1 ; UI muestra el estado, no un error mudo
+## Tests (RED primero)
+# should_select_the_spider_declared_by_the_site
+# should_fall_back_to_the_generic_spider
+# should_report_an_error_for_an_unknown_site
+# should_report_an_error_for_an_unknown_spider_type   (no cae al genérico: rastrear el DOGV
+#                                                      con el spider equivocado produce
+#                                                      páginas basura que revisar a mano)
+# should_not_keep_a_null_crawler_in_main              (guardarraíl anti-recaída)
 ```
+
+> **Pendiente que SEC.8.8 deja abierto y va al bloque Deploy (D.x): el ejecutor de trabajos.**
+> El rastreo se encola hoy con `BackgroundTasks`, o sea **dentro del proceso web**. En Cloud
+> Run la instancia escala a cero cuando termina de atender peticiones, así que un rastreo
+> largo muere a media ejecución sin dejar rastro —responde 202 y no acaba nunca—. En local,
+> en Docker y en un edge con contenedor persistente funciona tal cual, que es lo que hace
+> falta para probar la curación antes del despliegue. El paso a un ejecutor duradero (Cloud
+> Run Jobs / Cloud Tasks) se planifica como prompt propio de Deploy.
 
 ---
 

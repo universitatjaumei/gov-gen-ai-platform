@@ -19,6 +19,12 @@ def test_config_base_contains_only_config_models() -> None:
         # configuración institucional, no dato operacional del cliente: se
         # sincronizan cloud→edge y los módulos edge los leen vía ConfigProvider.
         "hub_vocabulary_terms",
+        # Temas de identidad visual (SEC.8.6) — colores, tipografía y logotipo de la
+        # institución. Es configuración, del mismo lado que los prompts: no contiene
+        # dato del cliente final y el edge la necesita para pintar el widget, así que
+        # viaja cloud→edge. Vivían como ficheros locales, que en Cloud Run desaparecían
+        # al reciclarse el contenedor.
+        "hub_themes",
     }
 
 def test_operational_base_contains_only_operational_models() -> None:
