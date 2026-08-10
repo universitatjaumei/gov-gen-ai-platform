@@ -21,6 +21,19 @@ _DANGEROUS_ATTRS: frozenset[str] = frozenset({
     "system", "popen", "rmtree", "remove", "unlink", "chmod", "spawn",
 })
 
+# SEC.8.3 — la evasión de manual no llama a `eval` por su nombre.
+#
+# El auditor miraba `ast.Name` y `ast.Attribute`, así que `eval(...)` se veía pero
+# `__builtins__['eval'](...)` no: ahí `eval` es una cadena dentro de un Subscript. Lo mismo
+# con el paseo `().__class__.__bases__[0].__subclasses__()`, que llega a cualquier clase
+# cargada sin nombrar nada prohibido, y con `getattr(o, 'ev' + 'al')`, donde el nombre ni
+# siquiera existe como literal. Se bloquean los tres por su forma, no por su nombre.
+_NOMBRES_PROHIBIDOS: frozenset[str] = frozenset({
+    "__builtins__", "__globals__", "__subclasses__", "__bases__", "__class__",
+    "__mro__", "__code__", "__closure__", "__dict__", "__loader__", "__module__",
+    "globals", "locals", "vars", "getattr", "setattr", "delattr",
+})
+
 # Módulos permitidos (lista blanca)
 WHITELIST_MODULES: frozenset[str] = frozenset({
     "pandas", "json", "re", "math", "datetime", "collections",
@@ -67,6 +80,18 @@ class ScriptSecurityAuditor:
                     findings.append(f"CRITICO: llamada peligrosa '{node.func.id}()'")
                 elif isinstance(node.func, ast.Attribute) and node.func.attr in _DANGEROUS_ATTRS:
                     findings.append(f"CRITICO: llamada peligrosa '.{node.func.attr}()'")
+
+            # SEC.8.3: la introspección que lleva al intérprete, mirada por su forma.
+            # `__builtins__` como nombre suelto, `.__class__` como atributo, `getattr`
+            # como llamada: cualquiera de las tres abre el camino, se use como se use.
+            if isinstance(node, ast.Name) and node.id in _NOMBRES_PROHIBIDOS:
+                findings.append(
+                    f"CRITICO: acceso a '{node.id}', que da alcance al intérprete"
+                )
+            if isinstance(node, ast.Attribute) and node.attr in _NOMBRES_PROHIBIDOS:
+                findings.append(
+                    f"CRITICO: acceso a '.{node.attr}', que da alcance al intérprete"
+                )
 
             # Importaciones de módulos fuera de la lista blanca
             if isinstance(node, ast.Import):

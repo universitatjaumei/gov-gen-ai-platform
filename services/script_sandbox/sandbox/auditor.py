@@ -22,6 +22,17 @@ _DANGEROUS_ATTRS: frozenset[str] = frozenset({
     "system", "popen", "rmtree", "remove", "unlink", "chmod", "spawn",
 })
 
+# SEC.8.3 — introspección que alcanza al intérprete sin nombrar nada prohibido:
+# `__builtins__['eval']` (Subscript, no Name), `().__class__.__bases__[0].__subclasses__()`
+# y `getattr(o, 'ev' + 'al')`. Debe ir en las dos copias del auditor: esta es la barrera
+# que se ejecuta justo antes del exec, y el contrato de este fichero es ser MÁS estricta
+# que la del API, nunca menos.
+_NOMBRES_PROHIBIDOS: frozenset[str] = frozenset({
+    "__builtins__", "__globals__", "__subclasses__", "__bases__", "__class__",
+    "__mro__", "__code__", "__closure__", "__dict__", "__loader__", "__module__",
+    "globals", "locals", "vars", "getattr", "setattr", "delattr",
+})
+
 # Módulos permitidos (lista blanca). Debe contener TODO lo que los wrappers
 # del sandbox importan al ejecutar scripts de usuario; cualquier módulo fuera
 # de esta lista es rechazado.
@@ -66,6 +77,15 @@ class ScriptSecurityAuditor:
                     findings.append(f"CRITICO: llamada peligrosa '{node.func.id}()'")
                 elif isinstance(node.func, ast.Attribute) and node.func.attr in _DANGEROUS_ATTRS:
                     findings.append(f"CRITICO: llamada peligrosa '.{node.func.attr}()'")
+
+            if isinstance(node, ast.Name) and node.id in _NOMBRES_PROHIBIDOS:
+                findings.append(
+                    f"CRITICO: acceso a '{node.id}', que da alcance al intérprete"
+                )
+            if isinstance(node, ast.Attribute) and node.attr in _NOMBRES_PROHIBIDOS:
+                findings.append(
+                    f"CRITICO: acceso a '.{node.attr}', que da alcance al intérprete"
+                )
 
             if isinstance(node, ast.Import):
                 for alias in node.names:

@@ -61,7 +61,7 @@ def get_settings() -> Settings:
         raise RuntimeError("JWT_SECRET_KEY environment variable is required")
     # sandbox_mode defaults to "local" when TESTING=1 to avoid Docker dependency in CI.
     default_sandbox_mode = "local" if os.getenv("TESTING") == "1" else "http"
-    return Settings(
+    ajustes = Settings(
         jwt_secret_key=secret,
         jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
         jwt_expiration_minutes=int(os.getenv("JWT_EXPIRATION_MINUTES", "60")),
@@ -95,3 +95,24 @@ def get_settings() -> Settings:
         max_upload_mb=int(os.getenv("MAX_UPLOAD_MB", "10")),
         max_documents_per_chatbot=int(os.getenv("MAX_DOCUMENTS_PER_CHATBOT", "0")),
     )
+    _assert_configuracion_de_produccion(ajustes)
+    return ajustes
+
+
+def _assert_configuracion_de_produccion(ajustes: Settings) -> None:
+    """Combinaciones que en producción son un fallo de configuración, no una opción.
+
+    Fallar al arrancar es deliberado: `SANDBOX_MODE=local` no da ningún síntoma visible
+    —los scripts se ejecutan y devuelven su resultado— mientras corre en el host del
+    servidor, con su red y heredando `os.environ`: `JWT_SECRET_KEY`, `DATABASE_URL` y las
+    claves de los proveedores quedan al alcance del script. Un despliegue así funciona
+    perfectamente hasta que alguien lo aprovecha.
+    """
+    if ajustes.environment != "production":
+        return
+    if ajustes.sandbox_mode == "local":
+        raise RuntimeError(
+            "SANDBOX_MODE=local ejecuta los scripts en el host del servidor y les entrega "
+            "las variables de entorno del proceso. En producción usa el sandbox aislado "
+            "(SANDBOX_MODE=http, servicio script-sandbox)."
+        )

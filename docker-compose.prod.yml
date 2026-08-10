@@ -109,6 +109,9 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    # SEC.8.3: los límites de CPU y memoria no acotan el número de procesos, así que una
+    # fork-bomb agota los PID del host sin salirse de su presupuesto de memoria.
+    pids_limit: 128
     deploy:
       resources:
         limits:
