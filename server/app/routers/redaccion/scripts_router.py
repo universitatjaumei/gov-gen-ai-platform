@@ -21,6 +21,7 @@ from server.app.core.auth.models import UserInfo
 from server.app.routers.redaccion._actor import user_to_uuid as _user_to_uuid
 from server.app.core.sandbox_client import SandboxClient, get_sandbox_client
 from server.app.core.storage import StorageService, get_storage_service
+from server.app.core.uploads import UploadKind, read_within_limit, validate_upload
 from server.app.modules.redaccion.database.models import (
     HubReportTemplate,
     HubReportTemplateVersion,
@@ -264,7 +265,8 @@ async def describe_test_data(
     if proposal.proposer_user_id != _user_to_uuid(user.user_id):
         raise HTTPException(status_code=403, detail="Not the proposer of this proposal")
 
-    content = await file.read()
+    # SEC.8.2: la clave ya era un uuid4 (sin traversal), pero la lectura no tenía tope.
+    content = await read_within_limit(file)
     suffix = (file.filename or "").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "xlsx"
     if suffix not in ("xlsx", "csv"):
         raise HTTPException(status_code=422, detail="Only .xlsx and .csv supported")
@@ -299,7 +301,11 @@ async def preview_pdf_spans(
     if proposal.proposer_user_id != _user_to_uuid(user.user_id):
         raise HTTPException(status_code=403, detail="Not the proposer of this proposal")
 
-    content = await file.read()
+    # SEC.8.2: este endpoint guardaba como `.pdf` cualquier binario que le mandaran y sin
+    # límite de tamaño. Aquí el tipo SÍ está cerrado, así que vale la validación de SEC.6.
+    validado = await validate_upload(file, kind=UploadKind.PDF)
+    content = validado.read()
+    validado.close()
     storage_key = f"test-data/uploads/{proposal_id}/{uuid.uuid4()}.pdf"
     await storage.put(storage_key, content)
     file_ref = StorageRef(bucket="test-data", key=storage_key)

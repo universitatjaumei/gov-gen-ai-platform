@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from server.app.api.deps import get_current_user, get_session
 from server.app.core.auth.models import UserInfo
 from server.app.core.storage import StorageService, get_storage_service
+from server.app.core.uploads import read_within_limit, sanitizar_nombre
 from server.app.modules.redaccion.contracts.runtime import BlockState, InvalidBlockTransitionError
 from server.app.modules.redaccion.database.models import (
     HubWorkspace,
@@ -333,8 +334,11 @@ async def upload_workspace_input(
     """
     workspace = await _get_workspace(workspace_id, user, session)
 
-    content = await file.read()
-    filename = file.filename or f"{slot_id}.bin"
+    # SEC.8.2: el `filename` viene del cliente y se interpolaba en la clave tal cual, así
+    # que un `../` escribía fuera del bucket; y `file.read()` sin tope se traga en memoria
+    # lo que le manden.
+    content = await read_within_limit(file)
+    filename = sanitizar_nombre(file.filename) if file.filename else f"{slot_id}.bin"
     storage_path = f"redaccion/{workspace_id}/inputs/{slot_id}/{filename}"
     await storage.put(storage_path, content)
 

@@ -13,7 +13,10 @@ Deploy: edge
 """
 from __future__ import annotations
 
+import posixpath
+import re
 import tempfile
+import unicodedata
 from enum import Enum
 from typing import IO
 
@@ -22,6 +25,11 @@ from fastapi import HTTPException, UploadFile, status
 from server.app.core.config import get_settings
 
 MAGIC_PDF = b"%PDF-"
+
+_NOMBRE_POR_DEFECTO = "fichero"
+# Todo lo que un sistema de ficheros —o una clave de objeto— puede interpretar como
+# separador o como salto de nivel.
+_PELIGROSOS = re.compile(r"[\\/\x00-\x1f:*?\"<>|]+")
 
 # Tamaño de lectura y umbral a partir del cual el buffer temporal pasa de RAM a
 # disco. Mantiene el consumo acotado sea cual sea el tamaño del fichero.
@@ -51,6 +59,61 @@ _REGLAS: dict[UploadKind, dict] = {
 
 def default_max_bytes() -> int:
     return get_settings().max_upload_mb * 1024 * 1024
+
+
+def sanitizar_nombre(filename: str | None) -> str:
+    """Nombre de fichero utilizable como **último** segmento de una clave (SEC.8.2).
+
+    El nombre lo elige quien sube, así que interpolarlo en una ruta es dejarle escribir
+    donde quiera: con el backend `file` de desarrollo, un `../../../..` sale del bucket.
+    Aquí se reduce a un nombre plano —sin separadores, sin niveles, sin caracteres de
+    control— conservando lo que un humano reconoce, porque el nombre se le muestra luego
+    en la interfaz.
+
+    NO sustituye a `validate_upload`: esto es la ruta, aquello es el contenido.
+    """
+    bruto = (filename or "").strip()
+    # Un %2f no es un separador para el sistema de ficheros, pero sí lo es para quien
+    # decodifique la clave más tarde. Se normaliza antes de decidir.
+    bruto = bruto.replace("%2f", "/").replace("%2F", "/").replace("%5c", "\\")
+    bruto = unicodedata.normalize("NFC", bruto)
+
+    # Quedarse con el último segmento, mirando las dos convenciones: el cliente puede ser
+    # Windows y el servidor POSIX, o al revés.
+    ultimo = posixpath.basename(bruto.replace("\\", "/"))
+    limpio = _PELIGROSOS.sub("", ultimo).strip(" .")
+
+    if not limpio or limpio in (".", ".."):
+        return _NOMBRE_POR_DEFECTO
+    return limpio[:200]
+
+
+async def read_within_limit(file: UploadFile, *, max_bytes: int | None = None) -> bytes:
+    """Lee el contenido cortando en cuanto supera el límite (SEC.8.2).
+
+    Para las subidas cuyo tipo no está cerrado —los inputs de un workspace admiten hoja
+    de cálculo, PDF o CSV según el bloque—, donde `validate_upload` no aplica pero el
+    tope de tamaño sí. Devuelve `bytes` porque quien llama ya los persiste enteros.
+    """
+    limite = max_bytes if max_bytes is not None else default_max_bytes()
+    trozos: list[bytes] = []
+    escritos = 0
+
+    while True:
+        trozo = await file.read(_CHUNK_BYTES)
+        if not trozo:
+            break
+        escritos += len(trozo)
+        if escritos > limite:
+            # Se corta aquí y no después: leer el fichero entero para luego rechazarlo
+            # deja el DoS de memoria intacto.
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail=f"El fichero supera el límite de {limite // (1024 * 1024)} MB.",
+            )
+        trozos.append(trozo)
+
+    return b"".join(trozos)
 
 
 def assert_within_document_quota(documentos_actuales: int) -> None:
