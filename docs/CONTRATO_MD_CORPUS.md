@@ -49,16 +49,17 @@ queda en `##` y no pasa nada.
 **3. Lo que sí es obligatorio es que el contenido esté completo.** Un artículo cuyo cuerpo se
 perdió en la conversión falla en **todos** los modos de recuperación —inyección, RAG y cita— y es
 el fallo que hunde un piloto en silencio, porque nadie descubre que falta hasta que el asistente
-responde mal a alguien. En la medición actual son **11 unidades citables sin cuerpo**, de las cuales
-**3 son pérdida real de contenido**, más el artículo 19 del Convenio ausente del DOGV castellano
-(Anexo A). **Ese es el trabajo que paga**, por delante de cualquier refinamiento de la taxonomía de
-encabezados.
+responde mal a alguien. En la medición actual son **8 unidades citables sin cuerpo** —5 con rúbrica
+y 3 que además la han perdido— y, en una categoría aparte, **3 documentos con pérdida real de
+articulado**: ALT-065, ALT-034 y REG-030 (Anexo A). **Ese es el trabajo que paga**, por delante de
+cualquier refinamiento de la taxonomía de encabezados.
 
-Conviene medirlo **sobre la salida convertida y no sobre la entrada**: sobre `md/` salen 40, porque
-una división estructural interpuesta entre el artículo y su cuerpo hace que el artículo parezca
-vacío, y la conversión la degrada precisamente por eso. Y conviene **clasificar por causa antes de
-abrir un PDF**: los artículos suprimidos no tienen cuerpo porque no deben tenerlo, y desde el §8.3 lo
-declaran con la clase `.suprimit` en vez de deducirse de una nota al pie.
+Conviene medirlo **sobre la salida convertida y no sobre la entrada**, y con una definición escrita:
+en `md/` el recuento no mide lo mismo, porque una división estructural interpuesta entre el artículo
+y su cuerpo hace que el artículo parezca vacío y la conversión la degrada precisamente por eso. La
+definición que se usa está en el Anexo A. Y conviene **clasificar por causa antes de abrir un PDF**:
+los artículos suprimidos no tienen cuerpo porque no deben tenerlo, y desde el §8.3 lo declaran con la
+clase `.suprimit` en vez de deducirse de una nota al pie.
 
 **4. Para BOE y DOGV no se escribe `.md` a mano.** Se genera desde el XML consolidado.
 
@@ -589,7 +590,8 @@ no bloquea**.
 - [ ] *(Enmienda 4.)* Ningún ancla de artículo derivada de un `Artículo N.M`.
 - [ ] *(Enmienda 14.)* **Ninguna unidad citable sin cuerpo.** Detecta el contenido perdido en la
       conversión, que es el defecto que importa (§0.3). Se mide **sobre la salida**, no sobre la
-      entrada. Hoy son **11**, y solo 3 son pérdida real.
+      entrada, y con la definición del Anexo A. Hoy son **8**. La pérdida real de articulado se
+      cuenta aparte y son 3 documentos, no 3 de estas 8.
 - [ ] *(Enmienda 14.)* **Ninguna unidad citable repetida con cuerpo** (índice mal degradado, §2.3).
 - [ ] Ningún artículo marcado con negrita en lugar de encabezado.
 - [ ] Ningún `<!-- TABLE-IMG -->` sin su bloque `TABLA-TEXT` al lado.
@@ -626,6 +628,125 @@ todo o nada.
 
 ---
 
+## 8. Consolidación y desplazamiento
+
+> **Estado de esta sección (2026-08-01).** El contrato venía citando el **§8.3** en su Anexo A
+> y el **§8.13** en el §7, pero el §8 no existía en el documento: las clases de consolidación
+> se estaban aplicando sin sección normativa que las definiera. Lo que sigue redacta lo que
+> está **implementado y en uso**. Los apartados §8.1 a §8.12 —el régimen general de la
+> consolidación: qué acto la origina, cómo se registra, cómo se numeran las notas al pie de
+> las que se extrae— **siguen pendientes de redacción**, y hasta que se escriban la referencia
+> del Anexo A al «§8.3» hay que leerla como una referencia a esta sección en su conjunto.
+
+### 8.3 Clases de estado (las que hay en uso)
+
+Se aplican al encabezado de la unidad citable, junto al ancla:
+`##### Article 9. Mandat {#art-9 .desplacat}`.
+
+| Clase | Qué afirma | Qué acto la origina |
+|---|---|---|
+| `.suprimit` | el texto fue **suprimido** por un acto posterior | un acto que modifica la norma |
+| `.modificat` | el texto fue **modificado** por un acto posterior | un acto que modifica la norma |
+| `.afegit` | el texto fue **añadido** por un acto posterior | un acto que modifica la norma |
+| `.desplacat` | el texto **sigue siendo el aprobado**, pero su contenido ha quedado desplazado por una norma posterior de rango superior | **ninguno**: es *lex superior* (§8.13) |
+
+Las tres primeras describen cambios hechos **a** la norma. La cuarta no: nadie ha tocado la
+norma. Esa es la frontera que separa el §8.13 del resto de la sección.
+
+**Las clases son acumulables, y `.modificat` con `.desplacat` es el caso normal.** Un artículo
+puede haber sido modificado por un acuerdo de 2019 y estar desplazado hoy por los Estatutos de
+2025: son dos hechos distintos y los dos son ciertos. Suprimir uno para poder anotar el otro
+falsearía la historia del artículo. Se escriben las dos:
+`{#art-6 .modificat .desplacat}`.
+
+La única combinación que hay que mirar antes de escribirla es `.suprimit` con `.desplacat`: un
+artículo suprimido no tiene contenido que pueda quedar desplazado, así que ahí lo más probable
+es que una de las dos anotaciones esté mal.
+
+### 8.3.1 Cuándo el desplazamiento deja de ser un caso y pasa a ser una familia
+
+El §5 fija el criterio general —por debajo de unas pocas docenas de casos, registrar sale mejor
+que generalizar— y el desplazamiento por los Estatutos de 2025 lo desborda: **no es un caso, es
+una categoría**. Los reglamentos de departamento dicen todos lo mismo y todos chocan con el
+mismo artículo de los Estatutos.
+
+La **familia es el artículo de los Estatutos que desplaza**, no una etiqueta temática. Es un
+criterio objetivo y tiene la propiedad que importa: si lo que desplaza es lo mismo, la nota
+debe decir lo mismo. Un artículo de la norma superior con **tres o más documentos afectados**
+forma familia y comparte el texto de la nota; por debajo va individual.
+
+Lo que **no** cambia al agrupar: la nota sigue yendo **dentro de cada artículo**. Agrupar sirve
+para no escribir la misma frase cuarenta veces —y para no tener una errata en la trigésima
+séptima—, no para ahorrarse la nota en el chunk. La razón del §8.13 no se debilita porque haya
+muchos casos: es justamente al contrario.
+
+### 8.13 Artículo desplazado por norma superior posterior
+
+**El supuesto.** Un artículo **vigente**, cuyo texto **nadie ha modificado**, cuyo contenido ha
+quedado desplazado por una norma **posterior y de rango superior**. No hay acto modificativo:
+no existe acuerdo, resolución ni disposición que haya tocado la norma. Es *lex superior*.
+
+El caso que lo motiva: el `art-9.1` del Reglamento de la Sindicatura de Greuges (REG-048) fija
+el mandato en cinco años; el `art-128.4` de los Estatutos de 2025 lo fija en seis. El
+reglamento sigue vigente y su artículo 9 sigue diciendo cinco.
+
+**Por qué necesita clase propia.** Etiquetarlo `.modificat` afirmaría que alguien modificó la
+norma, que es falso, e invitaría a buscar el acuerdo inexistente. Etiquetarlo `.suprimit`
+afirmaría que el artículo no está en vigor, que también es falso: está en vigor y es aplicable
+en todo lo que no contradiga la norma superior. Clase: `.desplacat`. Relación en el front
+matter: `desplacat_per`, con la norma superior, su ancla, su apartado y su fecha.
+
+**Dónde va la nota, y por qué no solo en el front matter.** La nota editorial va **dentro del
+cuerpo del artículo**. El front matter es de **documento** y el chunk del RAG es de
+**artículo**: un agente que recupere `art-9` no ve la cabecera del documento, y responde
+«cinco años» con total seguridad y sin ninguna señal de que la respuesta está desplazada. La
+nota tiene que viajar **dentro del trozo** que el buscador devuelve.
+
+Forma: un bloque delimitado (`::: nota-vigencia` … `:::`) tras la rúbrica, **en la lengua del
+documento** —cada versión lingüística recibe su propia redacción—, marcado como editorial para
+que el lector humano vea que no es texto aprobado.
+
+**Consecuencia para el §7.** La nota es texto que el conversor **añade**, así que la
+comprobación de «el cuerpo no ha perdido nada» debe excluirla. La primera implementación no lo
+hacía y abortó dos documentos por una pérdida de texto inexistente.
+
+**Consecuencia para los bilingües (§10).** El bloque `desplacat_per` se emite en **las dos**
+versiones. La declaración lleva un `slug` y un `versio_castellana.slug`; leer solo el primero
+deja la versión castellana con la clase en el cuerpo y sin el bloque en la cabecera, que es la
+incoherencia más difícil de detectar porque cada capa, por separado, parece correcta.
+
+**Lo que NO se hace: buscarlo por patrón.** De las 229 normas propias, 199 son anteriores a los
+Estatutos de 2025-12-18 y 149 los citan en su texto. Es una categoría, no un caso aislado. Y
+aun así no se busca automáticamente: decidir que un artículo está desplazado exige leer las dos
+normas y comparar el contenido, no detectar una cita. Un falso positivo publica una advertencia
+de vigencia **falsa** sobre un artículo correcto, que es peor que no advertir nada. Cada
+desplazamiento se **declara**, con su motivo escrito. Es el modelo del §5: por debajo de unas
+pocas docenas de casos, registrar sale mejor que generalizar.
+
+### 8.14 Anclas declaradas a mano
+
+**El supuesto.** La rúbrica de la disposición transitoria segunda de los Estatutos ha perdido
+la «S» inicial en el PDF oficial y en el cuerpo dice «egunda. Continuidad de cargos» (en el
+índice del propio PDF sí figura completa). El conversor no puede reconocerla, y sin
+reconocerla no hay ancla.
+
+El texto **no se toca**: la errata es del original y se publica como está. El ancla sí se pone,
+porque el §4.1 exige que las anclas sean **idénticas entre las dos versiones lingüísticas**, y
+la versión valenciana sí tiene su `dt-2`. Sin esto, una cita de la transitoria segunda funciona
+en valenciano y falla en castellano.
+
+**Verificaciones, las tres obligatorias.** El texto declarado coincide con **exactamente un**
+encabezado del documento; ese encabezado **no** tiene ya ancla; el ancla **no** existe ya en el
+documento. Si falla cualquiera, no se pone y se avisa.
+
+**Límite deliberado.** Solo cuando la causa es un defecto del documento **original**. Si el
+ancla falta porque nuestro patrón es corto, se arregla el patrón: un ancla declarada para un
+caso que se repetirá es un apaño que caduca. Precedente: los apartados `I.-` / `II.-` de las
+circulares no se declararon uno a uno, se añadió la serie romana al reconocimiento del número
+(§4.5), y el arreglo sirvió para todo el corpus.
+
+---
+
 ## Anexo A — Cifras de referencia
 
 > *(Enmienda 15.)* Las cifras del cuerpo del contrato eran una instantánea y quedaron obsoletas al
@@ -648,7 +769,8 @@ del DOGV los 6 documentos que se publicaron a dos columnas:
 | Familias de regla decididas por el contrato | **12 de 12** |
 | Bloques `TABLA-TEXT` | 52 |
 | Clases de consolidación en uso (§8.3) | `.suprimit` 4 |
-| Unidades citables sin cuerpo (**a corregir**) | **10** |
+| Unidades citables sin cuerpo (**a corregir**) | **8** |
+| Documentos con pérdida real de articulado (**a corregir**) | **3** |
 
 ### La importación desde el DOGV (2026-07-30)
 
@@ -702,21 +824,37 @@ Las tres decisiones de prefijo de la versión 2 —`res-`, `norma-`, `div-`— a
 ordinales que caen dentro de un grupo de disposiciones resuelven por contexto a su propio prefijo
 (§4.3): `da` +10, `dt` +3, `df` +1 respecto de la medición anterior.
 
-**Sobre las unidades sin cuerpo.** La cifra depende de dónde se mida, y conviene decirlo porque
-la versión anterior de este anexo daba 40. Contadas sobre la entrada (`md/`) son 40; sobre la salida
-convertida son 14. La diferencia no es un criterio más laxo: cuando una división estructural queda
-interpuesta entre el artículo y su cuerpo, la conversión la degrada y el artículo recupera su cuerpo.
-Clasificadas por causa, solo **3** son pérdida real de contenido que exija volver al PDF:
+**Sobre las unidades sin cuerpo: son 8, y la definición importa tanto como la cifra.**
+Una discrepancia anterior de este documento (10 en un sitio, 11 en otro) venía de contar de dos
+maneras distintas, así que la definición queda enunciada aquí: **encabezado `#####` con ancla y sin
+ninguna línea de cuerpo hasta el siguiente encabezado**, excluyendo la nota editorial del §8.13.
+Medido sobre `md_contracte` con el corpus al día, después de la importación del DOGV, las
+promociones y la corrección del scope de anexo del Reglamento del Consell Social.
 
-| Causa | n | Qué necesita |
+No se da la cifra sobre la entrada (`md/`) porque no es comparable: allí casi todo encabezado va
+seguido de otro —los pares título/rúbrica que el conversor fusiona— y el recuento no mide lo mismo.
+
+**Las 8 no son todas la misma cosa:**
+
+| Caso | n | Qué necesita |
 |---|---|---|
-| Artículo suprimido (la «rúbrica» es la llamada a una nota al pie que dice «Suprimido por Acuerdo…») | 2 | Nada. No es defecto: §5 |
-| Entrada de índice promovida, delante del preámbulo | 2 | Retirar el ancla falsa (§4.6) |
-| División interpuesta entre el artículo y su cuerpo | 2 | Mover la división; el texto está |
-| Disposición cuyo ancla queda una línea desplazada | 5 | Cosmético; no falta texto |
-| **Pérdida real** | **3** | PDF |
+| Sin cuerpo, con rúbrica correcta | 5 | Comparar con el PDF y recuperar el texto |
+| Sin cuerpo **y sin rúbrica**: solo conservan el número de página (`Artículo 2. 12`) | 3 | Recuperar enunciado y cuerpo. Los tres del Reglamento del Comité de Ética de la Investigación |
 
-El detalle por documento y línea está en `publicacio_transparencia_2026-07/articles_sense_cos.csv`.
+Ninguna de las 8 es pérdida real en el sentido de que el texto no exista en el original: son fallos
+de extracción con el PDF disponible.
+
+**Pérdida real de contenido: tres documentos, no tres unidades.** Es una categoría distinta y el
+trabajo que exige también: aquí no falta un artículo, falta el articulado.
+
+| Documento | Qué falta |
+|---|---|
+| **ALT-065** Reglamento de selección del PDI | 32.179 caracteres y **cero anclas de artículo**: solo están el Anexo I y el II de baremos |
+| **ALT-034** Pedagogía | Empieza en el Títol II, artículo 5: faltan el preámbulo y los artículos 1 a 4 |
+| **REG-030** Instituto López Piñero | Cortado en el artículo 12: faltan régimen económico, reforma y disposiciones |
+
+El detalle por documento y línea de las 8 está en
+`publicacio_transparencia_2026-07/articles_sense_cos.csv`.
 
 ---
 
@@ -745,8 +883,8 @@ El detalle por documento y línea está en `publicacio_transparencia_2026-07/art
 artículo como unidad atómica (§2.3), la sintaxis `{#ancla}` de Pandoc (§4.1), el ancla derivada del
 número e idéntica entre lenguas (§4.1), y que el hub tolere un `.md` imperfecto (§7).
 
-**Fuera del contrato porque es contenido y no formato**: las 11 unidades citables sin cuerpo —de las
-que 3 son pérdida real (Anexo A)— y el artículo 19 del Convenio ausente del DOGV castellano.
+**Fuera del contrato porque es contenido y no formato**: las 8 unidades citables sin cuerpo y los 3
+documentos con pérdida real de articulado —ALT-065, ALT-034 y REG-030— (Anexo A).
 
 Los 35 encabezados propios del DOCENTIA (`NORMA TÈCNICA 1..4`, `Dimensió I..III`) **ya no necesitan
 una regla para ese documento**: no eran un caso especial, eran una regla mal puesta. La familia J
