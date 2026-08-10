@@ -101,15 +101,14 @@ def _build_signed_response(
     if attributes is None:
         attributes = {"mail": [email]}
     attr_xml = "".join(_attribute(n, *vs) for n, vs in attributes.items())
-    xml = (
-        '<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" '
-        'xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" '
-        'ID="_resp_id_12345" Version="2.0" '
-        f'IssueInstant="{_saml_time()}" Destination="{destination}">'
-        f"<saml:Issuer>{IDP_ENTITY_ID}</saml:Issuer>"
-        "<samlp:Status><samlp:StatusCode "
-        'Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>'
-        '<saml:Assertion ID="_assert_id_12345" Version="2.0" '
+
+    # SEC.8.4: el SP exige ahora `wantAssertionsSigned`, así que la aserción se firma
+    # aparte y ya firmada se mete en la Response, que se firma a su vez. Antes solo se
+    # firmaba la raíz, que es justo la configuración que el hallazgo señalaba: con binding
+    # HTTP-POST la identidad viaja en la aserción, y sin firma propia no se verifica.
+    assertion_xml = (
+        '<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" '
+        'ID="_assert_id_12345" Version="2.0" '
         f'IssueInstant="{_saml_time()}">'
         f"<saml:Issuer>{IDP_ENTITY_ID}</saml:Issuer>"
         "<saml:Subject>"
@@ -128,12 +127,35 @@ def _build_signed_response(
         "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport"
         "</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement>"
         f"<saml:AttributeStatement>{attr_xml}</saml:AttributeStatement>"
-        "</saml:Assertion></samlp:Response>"
+        "</saml:Assertion>"
     )
-    signed = OneLogin_Saml2_Utils.add_sign(xml, sign_key_pem, sign_cert_pem)
-    if isinstance(signed, bytes):
-        signed = signed.decode("utf-8")
+    assertion_firmada = _sin_declaracion(
+        OneLogin_Saml2_Utils.add_sign(assertion_xml, sign_key_pem, sign_cert_pem)
+    )
+
+    xml = (
+        '<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" '
+        'xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" '
+        'ID="_resp_id_12345" Version="2.0" '
+        f'IssueInstant="{_saml_time()}" Destination="{destination}">'
+        f"<saml:Issuer>{IDP_ENTITY_ID}</saml:Issuer>"
+        "<samlp:Status><samlp:StatusCode "
+        'Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>'
+        f"{assertion_firmada}</samlp:Response>"
+    )
+    signed = _sin_declaracion(
+        OneLogin_Saml2_Utils.add_sign(xml, sign_key_pem, sign_cert_pem)
+    )
     return base64.b64encode(signed.encode("utf-8")).decode("ascii")
+
+
+def _sin_declaracion(xml) -> str:
+    """`add_sign` puede devolver bytes y anteponer la declaración XML; incrustar eso
+    dentro de otro documento lo deja mal formado."""
+    texto = xml.decode("utf-8") if isinstance(xml, bytes) else xml
+    if texto.lstrip().startswith("<?xml"):
+        texto = texto.split("?>", 1)[1]
+    return texto.strip()
 
 
 # --------------------------------------------------------------------------- #

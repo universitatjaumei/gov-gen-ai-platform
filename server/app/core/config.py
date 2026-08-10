@@ -99,6 +99,14 @@ def get_settings() -> Settings:
     return ajustes
 
 
+_SECRETOS_DE_EJEMPLO = frozenset({
+    "change-me-in-production",
+    "changeme",
+    "secret",
+    "test-secret-key",
+})
+
+
 def _assert_configuracion_de_produccion(ajustes: Settings) -> None:
     """Combinaciones que en producción son un fallo de configuración, no una opción.
 
@@ -110,6 +118,17 @@ def _assert_configuracion_de_produccion(ajustes: Settings) -> None:
     """
     if ajustes.environment != "production":
         return
+
+    # SEC.8.4: la variable era obligatoria desde SEC.1, pero nada impedía desplegar con el
+    # valor de ejemplo del `.env.example`, que está publicado en el repositorio. Un secreto
+    # conocido permite firmar tokens de cualquier rol y organización.
+    secreto = ajustes.jwt_secret_key or ""
+    if secreto.lower() in _SECRETOS_DE_EJEMPLO or len(secreto) < 32:
+        raise RuntimeError(
+            "JWT_SECRET_KEY no puede ser el valor de ejemplo ni tener menos de 32 "
+            "caracteres en producción: con él se firman los tokens de todos los roles."
+        )
+
     if ajustes.sandbox_mode == "local":
         raise RuntimeError(
             "SANDBOX_MODE=local ejecuta los scripts en el host del servidor y les entrega "

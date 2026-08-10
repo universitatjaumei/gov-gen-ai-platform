@@ -115,8 +115,15 @@ class TestEnElLogin:
 
         Sin mirar `X-Forwarded-For`, el primer usuario que gastara su cupo dejaría fuera a
         todo el mundo, y el límite sería un fallo de disponibilidad en vez de una defensa.
+
+        **SEC.8.4**: la cabecera solo se mira si hay proxies de confianza declarados, y la
+        IP se cuenta desde la derecha. Por eso el test declara ahora `TRUSTED_PROXY_HOPS`:
+        el despliegue tiene que decir cuántos saltos son suyos, porque de lo contrario el
+        valor lo elige quien llama. Cada petición trae aquí un solo elemento en la cadena,
+        que es lo que añadiría un único proxy.
         """
         monkeypatch.setenv("RATE_LIMIT_LOGIN", "2/minute")
+        monkeypatch.setenv("TRUSTED_PROXY_HOPS", "1")
         cliente = TestClient(self._app_de_login())
 
         for _ in range(2):
@@ -127,6 +134,25 @@ class TestEnElLogin:
 
         assert agotado.status_code == 429
         assert otro.status_code == 200
+
+    def test_should_not_let_a_spoofed_forwarded_for_reset_the_bucket(self, monkeypatch):
+        """El agujero que cerró SEC.8.4: con la IP tomada del primer valor de la cadena,
+        añadir uno falso por delante daba un cubo nuevo en cada intento y el límite de
+        fuerza bruta no llegaba a aplicarse nunca."""
+        monkeypatch.setenv("RATE_LIMIT_LOGIN", "2/minute")
+        monkeypatch.setenv("TRUSTED_PROXY_HOPS", "1")
+        cliente = TestClient(self._app_de_login())
+
+        for numero in range(2):
+            cliente.post(
+                "/login", headers={"X-Forwarded-For": f"9.9.9.{numero}, 10.0.0.1"}
+            )
+
+        # Otro valor inventado por delante, misma IP real puesta por el proxy.
+        respuesta = cliente.post(
+            "/login", headers={"X-Forwarded-For": "1.1.1.1, 10.0.0.1"}
+        )
+        assert respuesta.status_code == 429
 
 
 class TestEnElChat:

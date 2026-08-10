@@ -49,11 +49,15 @@ def _build_sp_settings() -> dict:
 
 
 def _security_settings() -> dict:
+    # SEC.8.4: con binding HTTP-POST la aserción viaja dentro de la respuesta, así que
+    # exigir firma solo en el mensaje deja sin verificar la pieza que porta la identidad.
+    # Y aceptar respuestas no solicitadas —sin `InResponseTo` que casar con una petición
+    # nuestra— convierte una aserción capturada en reutilizable.
     return {
         "wantMessagesSigned": True,
-        "wantAssertionsSigned": False,
+        "wantAssertionsSigned": True,
         "requestedAuthnContext": False,
-        "rejectUnsolicitedResponsesWithInResponseTo": False,
+        "rejectUnsolicitedResponsesWithInResponseTo": True,
     }
 
 
@@ -82,8 +86,11 @@ def build_saml_settings(*, sp_only: bool = False) -> dict:
             settings.saml_idp_metadata_xml
         )
     elif settings.saml_idp_metadata_url:
+        # SEC.8.4: la metadata trae el certificado con el que se verifican TODAS las
+        # aserciones. Descargarla sin validar TLS deja que un intermediario sustituya esa
+        # clave y firme identidades a su gusto; el resto de la cadena seguiría cuadrando.
         idp_data = OneLogin_Saml2_IdPMetadataParser.parse_remote(
-            settings.saml_idp_metadata_url, validate_cert=False
+            settings.saml_idp_metadata_url, validate_cert=True
         )
     else:
         raise InvalidSamlConfigError(

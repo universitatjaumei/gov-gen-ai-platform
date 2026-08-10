@@ -80,16 +80,38 @@ limitador = LimitadorEnMemoria()
 
 
 def ip_de(request: Request) -> str:
-    """La IP del cliente, respetando `X-Forwarded-For` cuando hay proxy delante.
+    """La IP del cliente, contando desde el proxy y no desde el cliente (SEC.8.4).
 
-    Se toma **el primer** valor de la cadena, que es el cliente original. Es falsificable si
-    la aplicación estuviera expuesta directamente a internet, pero en ese caso no habría
-    cabecera; detrás de Cloud Run o de un balanceador, la pone la infraestructura.
+    `X-Forwarded-For` se lee de izquierda a derecha: el primer valor es el que dice el
+    cliente y **cada proxy añade el suyo al final**. Tomar el primero, que es lo que se
+    hacía, significa tomar el valor que el atacante escribe: cambiándolo en cada petición
+    se obtiene un cubo distinto y el límite de fuerza bruta del login deja de aplicarse.
+
+    Se cuenta por tanto desde la derecha, tantos saltos como proxies de confianza haya
+    declarados en `TRUSTED_PROXY_HOPS` (1 detrás de Cloud Run o de un balanceador). Con 0
+    —expuesto directamente— la cabecera se ignora entera, porque ahí no la pone nadie de
+    fiar.
     """
+    try:
+        saltos = int(os.getenv("TRUSTED_PROXY_HOPS", "0"))
+    except ValueError:
+        saltos = 0
+
+    socket = getattr(getattr(request, "client", None), "host", None) or "desconocida"
+    if saltos <= 0:
+        return socket
+
     reenviada = request.headers.get("X-Forwarded-For")
-    if reenviada:
-        return reenviada.split(",")[0].strip()
-    return getattr(getattr(request, "client", None), "host", None) or "desconocida"
+    if not reenviada:
+        return socket
+
+    cadena = [trozo.strip() for trozo in reenviada.split(",") if trozo.strip()]
+    if not cadena:
+        return socket
+    # El último valor lo pone el proxy más cercano; con N proxies de confianza, la IP real
+    # del cliente es la que está N posiciones desde el final.
+    indice = max(len(cadena) - saltos, 0)
+    return cadena[indice]
 
 
 def _regla(variable: str, por_defecto: str) -> str:
