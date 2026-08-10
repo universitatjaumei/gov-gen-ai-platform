@@ -22,18 +22,19 @@ class TestIngestionWatcher:
         mock_session.commit = AsyncMock()
         mock_session.add = Mock()
 
-        with patch('server.app.modules.agents_hub.ingestion.watcher.DoclingProcessor') as mock_docling:
-            mock_docling.return_value.process.return_value = "# Test\n\nContent"
+        # EXT.1: `process_source` ya no convierte nada. Al corpus entra Markdown que ya
+        # produjo el pipeline de curación, así que el contenido se le pasa — no había que
+        # doblar el conversor porque no hay conversor al que llamar.
+        watcher = IngestionWatcher(
+            session=mock_session,
+            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
+        )
 
-            watcher = IngestionWatcher(
-                session=mock_session,
-                embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
-            )
-
-            doc, n_chunks = await watcher.process_source(
-                source_url="https://example.com",
-                chatbot_id=uuid.uuid4(),
-            )
+        doc, n_chunks = await watcher.process_source(
+            source_url="https://example.com",
+            chatbot_id=uuid.uuid4(),
+            prefetched_content="# Test\n\nContent",
+        )
 
         assert isinstance(doc, HubDocument)
         assert n_chunks >= 1
@@ -57,17 +58,15 @@ class TestIngestionWatcher:
         mock_session.commit = AsyncMock()
         mock_session.add = Mock()
 
-        with patch('server.app.modules.agents_hub.ingestion.watcher.DoclingProcessor') as mock_docling:
-            mock_docling.return_value.process.return_value = "# Test\n\nContent"
+        watcher = IngestionWatcher(
+            session=mock_session,
+            embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
+        )
 
-            watcher = IngestionWatcher(
-                session=mock_session,
-                embedding_service=AsyncMock(embed=AsyncMock(return_value=[0.1] * 1024)),
-            )
-
-            doc, _ = await watcher.process_source(
-                source_url="https://example.com",
-                chatbot_id=uuid.uuid4(),
-            )
+        doc, _ = await watcher.process_source(
+            source_url="https://example.com",
+            chatbot_id=uuid.uuid4(),
+            prefetched_content="# Test\n\nContent",
+        )
 
         assert doc is existing_doc

@@ -158,7 +158,10 @@ describe('DocumentsPage en catalán (CAL.4.1)', () => {
     expect(await screen.findByText('Documents i Ingestió')).toBeInTheDocument()
     expect(screen.getByText('Gestiona la base de coneixement del chatbot.')).toBeInTheDocument()
     expect(screen.getByText('Documents del corpus')).toBeInTheDocument()
-    expect(screen.getByText('Arrossega i deixa anar els teus fitxers PDF ací')).toBeInTheDocument()
+    // EXT.1: al corpus solo entra Markdown del pipeline de curación, no PDF.
+    expect(
+      screen.getByText('Arrossega i deixa anar els teus fitxers Markdown (.md) ací'),
+    ).toBeInTheDocument()
     expect(screen.getByText('Jobs (tècnic)')).toBeInTheDocument()
     expect(screen.getByText('Recalcula el corpus')).toBeInTheDocument()
   })

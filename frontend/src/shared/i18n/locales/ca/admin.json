@@ -257,7 +257,8 @@
     "retrieval_mode_label": "Mode de recuperació",
     "canonical_url_placeholder": "URL pública del document (opcional)",
     "substituting": "Substituint",
-    "drag_drop": "Arrossega i deixa anar els teus fitxers PDF ací",
+    "drag_drop": "Arrossega i deixa anar els teus fitxers Markdown (.md) ací",
+    "corpus_markdown_only": "Al corpus només entra Markdown del pipeline de curació. Els originals (PDF i altres) es converteixen abans allà, que és on es revisa la conversió.",
     "max_size_10mb": "Mida màxima: 10 MB per fitxer. Només format PDF.",
     "kind_crawler": "Web",
     "kind_upload": "PDF"

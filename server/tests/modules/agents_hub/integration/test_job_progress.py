@@ -83,7 +83,10 @@ class TestProgresoDuranteElJob:
 
     @pytest.mark.asyncio
     async def test_should_update_progress_per_stage(self, db_session):
-        """Las cuatro etapas se anuncian: convertir, trocear, embeber, persistir."""
+        """Las etapas se anuncian: trocear, embeber, persistir.
+
+        Eran cuatro: EXT.1 quitó la de convertir, porque al corpus entra Markdown que ya
+        produjo el pipeline de curación."""
         from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
 
         chatbot_id = uuid.uuid4()
@@ -100,7 +103,11 @@ class TestProgresoDuranteElJob:
         )
 
         etapas = [m for _, _, m in vistos]
-        assert any("convert" in e for e in etapas), etapas
+        # EXT.1: la etapa "convert" desapareció con la conversión. Al corpus entra Markdown
+        # ya producido por el pipeline de curación, así que el job empieza a trocear.
+        assert not any("convert" in e for e in etapas), (
+            f"sigue habiendo una etapa de conversión en la ingesta del corpus: {etapas}"
+        )
         assert any("chunk" in e for e in etapas), etapas
         assert any("embed" in e for e in etapas), etapas
         assert any("persist" in e for e in etapas), etapas
@@ -148,7 +155,7 @@ class TestProgresoDuranteElJob:
         assert stats["n_batches"] >= 1
         assert stats["embedding_model"] == "BAAI/bge-m3"
         # Duraciones por etapa, en ms: es el dato con el que se decide dónde optimizar.
-        for etapa in ("convert", "chunk", "embed", "persist"):
+        for etapa in ("chunk", "embed", "persist"):
             assert etapa in stats["stage_ms"], stats["stage_ms"]
             assert stats["stage_ms"][etapa] >= 0
         assert job.processing_started_at is not None

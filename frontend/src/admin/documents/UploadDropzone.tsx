@@ -9,8 +9,13 @@ import { LANGUAGE_OPTIONS } from './constants'
  * Entrada del corpus: URL canónica, idioma y zona de arrastre.
  *
  * La URL y el idioma se piden **antes** de soltar el fichero porque son metadatos del
- * documento, no del fichero: el PDF no los trae. Cuando se está sustituyendo un documento
+ * documento y el fichero puede no traerlos. Cuando se está sustituyendo un documento
  * existente, los dos vienen rellenos de él y el banner lo deja claro.
+ *
+ * **EXT.1**: al corpus solo entra Markdown conforme al contrato, no PDF. Lo que se cita ante
+ * un ciudadano tiene que venir del pipeline de curación —que es donde está el OCR y donde la
+ * conversión se revisa—, porque una extracción mala aquí es una cita errónea que no detecta
+ * nadie. Para aportar un documento como contexto de una consulta, esa es otra vía.
  *
  * No conoce la mutación de subida: entrega los ficheros aceptados y ya.
  */
@@ -38,7 +43,7 @@ export function UploadDropzone({
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'application/pdf': ['.pdf'] },
+    accept: { 'text/markdown': ['.md', '.markdown'] },
     multiple: true,
   })
 
@@ -90,6 +95,10 @@ export function UploadDropzone({
         <UploadCloud className="w-10 h-10 text-muted-foreground mb-4" />
         <p className="text-sm font-medium mb-1">{t('hub.drag_drop')}</p>
         <p className="text-xs text-muted-foreground">{t('hub.max_size_10mb')}</p>
+        {/* EXT.1: decir por qué solo Markdown, y no dejar que se descubra con un 415. */}
+        <p className="text-xs text-muted-foreground mt-2 max-w-md">
+          {t('hub.corpus_markdown_only')}
+        </p>
       </div>
 
       {uploadError && (

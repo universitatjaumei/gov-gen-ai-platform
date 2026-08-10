@@ -118,12 +118,18 @@ class IngestionWatcher:
         """
         seg = seguimiento or SeguimientoDeJob()
 
-        async with seg.etapa("convert", "docling"):
-            if prefetched_content is not None:
-                content = prefetched_content
-            else:
-                processor = await self._get_processor()
-                content = await asyncio.to_thread(processor.process, source_url)
+        # EXT.1: al corpus entra Markdown ya convertido, nunca un original que haya que
+        # interpretar aquí. Los cuatro llamantes —reconciliador, curación, publicación de
+        # páginas y la subida del panel— pasan el cuerpo; que esto sea una condición y no
+        # un `if` es lo que impide que mañana alguien reabra la vía de conversión en
+        # caliente sin darse cuenta de lo que reabre.
+        if prefetched_content is None:
+            raise ValueError(
+                "process_source exige el contenido ya convertido: al corpus solo entra "
+                "Markdown del pipeline de curación (EXT.1). Para extraer texto de un "
+                "documento aportado como contexto, usa el extractor de contexto."
+            )
+        content = prefetched_content
         seg.total_chars = len(content)
 
         if language is None:
@@ -413,24 +419,26 @@ class IngestionWatcher:
         tmp_path: str | None = None
         error: Exception | None = None
         try:
-            source_for_docling = job.source_url
+            fuente = job.source_url
             citation_url = job.canonical_url
+            cuerpo = prefetched_content
 
             if self._storage and not job.source_url.startswith(("http://", "https://")):
-                pdf_bytes = await self._storage.get(job.source_url)
-                with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                    tmp.write(pdf_bytes)
-                    tmp_path = tmp.name
-                source_for_docling = tmp_path
+                # EXT.1: lo que hay en el almacén es el `.md` que subió el panel, ya
+                # convertido por el pipeline de curación. Se lee como texto y se pasa como
+                # contenido: por aquí ya no se convierte nada, así que no hay fichero
+                # temporal que escribir ni conversor al que llamar.
+                crudo = await self._storage.get(job.source_url)
+                cuerpo = crudo.decode("utf-8") if isinstance(crudo, bytes) else crudo
                 if not citation_url:
                     citation_url = job.source_url  # storage key como identificador canónico
 
             filename_hint = Path(job.original_filename).stem if job.original_filename else None
             doc, n_chunks = await self.process_source(
-                source_for_docling,
+                fuente,
                 job.chatbot_id,
                 citation_url=citation_url,
-                prefetched_content=prefetched_content,
+                prefetched_content=cuerpo,
                 language=job.language,
                 title=filename_hint,
                 seguimiento=seguimiento,

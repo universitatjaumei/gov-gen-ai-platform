@@ -2,10 +2,15 @@
 
 Verifica que:
   - IngestionWatcher descarga de storage cuando source_url no es HTTP
-  - El endpoint /upload persiste el PDF vía StorageService (no en /tmp)
+  - El endpoint /upload persiste el documento vía StorageService (no en /tmp)
   - El job.source_url apunta a la clave de storage
-  - El PDF permanece en storage tras el procesamiento (no se borra)
+  - El documento permanece en storage tras el procesamiento (no se borra)
   - El endpoint /delete borra de storage para claves de storage
+
+**EXT.1**: lo que sube y se almacena es un `.md` conforme al contrato del corpus, no un PDF.
+La conversión vive fuera, en el pipeline de curación. El cambio se nota aquí en dos sitios:
+la clave termina en `.md`, y `run_job` ya no escribe un fichero temporal para que un
+conversor lo abra — lee el contenido del almacén y lo pasa como texto.
 """
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch, call
@@ -32,6 +37,19 @@ def _make_token(role: str = "admin") -> str:
     os.environ.update(_JWT_ENV)
     from server.app.core.auth import UserInfo, create_token
     return create_token(UserInfo(user_id="admin-1", email="admin@test.com", role=role, organizacion_ids=(ORG_PRUEBA,)))
+
+
+# EXT.1: al corpus solo entra Markdown conforme al contrato, así que lo que estos tests
+# suben es la salida del pipeline de curación y no el original. `language` es el único campo
+# del front-matter sin default en `CorpusDocumentEntry`.
+MD_DE_CORPUS = b"""---
+language: va
+id_publicacio: REG-999
+title: Norma de prueba
+---
+
+# Norma de prueba
+"""
 
 
 def _make_job(source_url: str, status: str = "pending"):
@@ -82,7 +100,7 @@ class TestWatcherStorageIntegration:
         """run_job descarga desde storage cuando source_url es una clave (no HTTP)."""
         from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
 
-        storage_key = "ingestion/chatbot-1/job-1.pdf"
+        storage_key = "ingestion/chatbot-1/job-1.md"
         job = _make_job(source_url=storage_key)
         pdf_bytes = b"%PDF-1.4 test content"
 
@@ -106,14 +124,14 @@ class TestWatcherStorageIntegration:
 
     @pytest.mark.asyncio
     async def test_run_job_passes_local_path_to_process_source_not_storage_key(self) -> None:
-        """El argumento source_url que llega a process_source es una ruta local, no la clave de storage."""
+        """EXT.1: lo que llega a process_source es el CONTENIDO del `.md`, no una ruta que abrir."""
         from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
 
-        storage_key = "ingestion/chatbot-1/job-1.pdf"
+        storage_key = "ingestion/chatbot-1/job-1.md"
         job = _make_job(source_url=storage_key)
 
         mock_storage = AsyncMock()
-        mock_storage.get = AsyncMock(return_value=b"%PDF-1.4 content")
+        mock_storage.get = AsyncMock(return_value=b"# Norma de prueba\n")
 
         mock_session = AsyncMock()
         mock_session.get = AsyncMock(return_value=job)
@@ -124,20 +142,23 @@ class TestWatcherStorageIntegration:
             storage=mock_storage,
         )
 
-        captured_source_url = []
+        capturado = {}
 
         async def capture_source(*args, **kwargs):
-            captured_source_url.append(kwargs.get("source_url") or args[0])
+            capturado["source_url"] = kwargs.get("source_url") or args[0]
+            capturado["prefetched_content"] = kwargs.get("prefetched_content")
             return (MagicMock(), 0)
 
         with patch.object(watcher, "process_source", side_effect=capture_source):
             await watcher.run_job(job.id)
 
-        assert len(captured_source_url) == 1
-        # La ruta local no debe ser la storage key
-        assert captured_source_url[0] != storage_key
-        # Debe ser un path de fichero local (no HTTP, no storage key)
-        assert not captured_source_url[0].startswith("ingestion/")
+        # EXT.1: ya no se escribe un fichero temporal para que un conversor lo abra. Lo que
+        # hay en el almacén es el `.md` que produjo el pipeline de curación, así que se lee
+        # como texto y se pasa como contenido — la conversión no ocurre aquí.
+        assert capturado["prefetched_content"] == "# Norma de prueba\n"
+        # Y la clave de almacenamiento sigue siendo el identificador canónico, no una ruta
+        # local que dejaría de existir en cuanto terminara el job.
+        assert capturado["source_url"] == storage_key
 
     @pytest.mark.asyncio
     async def test_run_job_skips_storage_download_for_http_url(self) -> None:
@@ -170,11 +191,11 @@ class TestWatcherStorageIntegration:
         import os
         from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
 
-        storage_key = "ingestion/chatbot-1/job-1.pdf"
+        storage_key = "ingestion/chatbot-1/job-1.md"
         job = _make_job(source_url=storage_key)
 
         mock_storage = AsyncMock()
-        mock_storage.get = AsyncMock(return_value=b"%PDF-1.4 content")
+        mock_storage.get = AsyncMock(return_value=b"# Norma de prueba\n")
 
         mock_session = AsyncMock()
         mock_session.get = AsyncMock(return_value=job)
@@ -207,11 +228,11 @@ class TestWatcherStorageIntegration:
         """Cuando no hay canonical_url, la storage key se pasa como citation_url a process_source."""
         from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
 
-        storage_key = "ingestion/chatbot-1/job-1.pdf"
+        storage_key = "ingestion/chatbot-1/job-1.md"
         job = _make_job(source_url=storage_key)  # canonical_url = None
 
         mock_storage = AsyncMock()
-        mock_storage.get = AsyncMock(return_value=b"%PDF-1.4 content")
+        mock_storage.get = AsyncMock(return_value=b"# Norma de prueba\n")
 
         mock_session = AsyncMock()
         mock_session.get = AsyncMock(return_value=job)
@@ -289,14 +310,14 @@ class TestUploadEndpointStorageIntegration:
         response = client.post(
             "/api/v1/hub/ingestion/upload",
             data={"chatbot_id": str(chatbot_id)},
-            files={"file": ("test.pdf", b"%PDF-1.4 content", "application/pdf")},
+            files={"file": ("norma.md", MD_DE_CORPUS, "text/markdown")},
             headers={"Authorization": f"Bearer {token}"},
         )
 
         assert response.status_code == 202
         mock_storage.put.assert_called_once()
         storage_key = mock_storage.put.call_args[0][0]
-        assert storage_key.endswith(".pdf")
+        assert storage_key.endswith(".md")
         assert storage_key.startswith("ingestion/")
 
     def test_upload_job_source_url_is_same_key_passed_to_storage(self) -> None:
@@ -324,7 +345,7 @@ class TestUploadEndpointStorageIntegration:
         response = client.post(
             "/api/v1/hub/ingestion/upload",
             data={"chatbot_id": str(chatbot_id)},
-            files={"file": ("test.pdf", b"%PDF-1.4 content", "application/pdf")},
+            files={"file": ("norma.md", MD_DE_CORPUS, "text/markdown")},
             headers={"Authorization": f"Bearer {token}"},
         )
 
@@ -354,7 +375,7 @@ class TestUploadEndpointStorageIntegration:
             client.post(
                 "/api/v1/hub/ingestion/upload",
                 data={"chatbot_id": str(chatbot_id)},
-                files={"file": ("test.pdf", b"%PDF-1.4 content", "application/pdf")},
+                files={"file": ("norma.md", MD_DE_CORPUS, "text/markdown")},
                 headers={"Authorization": f"Bearer {token}"},
             )
             # El handler de upload no debe crear ficheros temporales en /tmp

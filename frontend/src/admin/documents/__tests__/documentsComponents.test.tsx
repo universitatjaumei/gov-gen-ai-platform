@@ -88,7 +88,10 @@ describe('CAL.3 — subcomponentes de documentos', () => {
       />,
     )
 
-    expect(screen.getByText('Arrastra y suelta tus archivos PDF aquí')).toBeInTheDocument()
+    // EXT.1: al corpus solo entra Markdown del pipeline de curación, no PDF.
+    expect(
+      screen.getByText('Arrastra y suelta tus archivos Markdown (.md) aquí'),
+    ).toBeInTheDocument()
     expect(screen.getByPlaceholderText('URL pública del documento (opcional)')).toBeInTheDocument()
     expect(screen.getByLabelText('Idioma')).toBeInTheDocument()
   })

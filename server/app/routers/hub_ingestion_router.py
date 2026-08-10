@@ -308,6 +308,72 @@ async def delete_document(
     return {"message": "Documento eliminado."}
 
 
+def _assert_cumple_el_contrato(content: bytes, filename: str | None) -> None:
+    """El `.md` tiene que ser una entrada válida de corpus, no un Markdown cualquiera.
+
+    Se usa el **mismo** validador que `corpus.load` (`entry_from_frontmatter`), para que subir
+    por el panel y cargar por consola no admitan cosas distintas — dos definiciones del
+    contrato acaban divergiendo, y la que se relaja gana.
+
+    Se reportan **todos** los campos que fallan, no el primero: quien prepara un documento
+    necesita la lista completa para corregirla de una pasada. Es el criterio que
+    `assert_vocabulary` ya aplica en la carga masiva.
+    """
+    from pydantic import ValidationError
+
+    from server.app.modules.agents_hub.ingestion.corpus.frontmatter import (
+        parse_frontmatter,
+    )
+    from server.app.modules.agents_hub.ingestion.corpus.manifest import (
+        entry_from_frontmatter,
+    )
+
+    try:
+        texto = content.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El fichero no es texto UTF-8.",
+        ) from None
+
+    metadatos, _cuerpo = parse_frontmatter(texto)
+    nombre = filename or "documento.md"
+
+    try:
+        entry_from_frontmatter(
+            metadatos,
+            relative_path=nombre,
+            source_url=str(metadatos.get("url_oficial") or nombre),
+        )
+    except ValidationError as exc:
+        problemas = [
+            {
+                "campo": ".".join(str(p) for p in e["loc"]) or "(documento)",
+                "problema": e["msg"],
+            }
+            for e in exc.errors()
+        ]
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "CORPUS_CONTRACT_VIOLATION",
+                "message": (
+                    "El front-matter no cumple el contrato del corpus. Regenera el "
+                    "documento con el pipeline de curación y vuelve a subirlo."
+                ),
+                "problemas": problemas,
+            },
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "CORPUS_CONTRACT_VIOLATION",
+                "message": str(exc),
+            },
+        ) from exc
+
+
 @router.post(
     "/upload", status_code=status.HTTP_202_ACCEPTED, response_model=UploadDocumentOut
 )
@@ -321,14 +387,45 @@ async def upload_document(
     current_user: UserInfo = Depends(get_current_user),
     storage: FsspecStorageService = Depends(get_storage_service),
 ):
-    """Sube un documento y lanza su ingestión en background."""
+    """Sube al corpus un `.md` conforme al contrato y lanza su ingestión en background.
+
+    EXT.1: aquí entraba un PDF y se convertía con Docling **dentro de la petición**. Lo que
+    salía no tiene front-matter, ni anclas de artículo, ni estado de vigencia: contenido que
+    el asistente no puede citar como norma, entrando por la misma puerta que el corpus
+    curado y quedando indistinguible de él.
+
+    La conversión vive fuera, en el pipeline de curación —que además es donde está el OCR, con
+    `origen_del_text` para declarar lo transcrito automáticamente—. Aquí solo entra su salida.
+    Ver `docs/DECISION_EXTRACCION_Y_DESPLIEGUE.md`.
+    """
     await _chatbot_autorizado(session, chatbot_id, current_user)
-    # Validación compartida (SEC.6): extensión + magic bytes + corte por tamaño
-    # durante la lectura. No se mira content_type: lo fija el cliente y es
-    # spoofeable. El límite sale de MAX_UPLOAD_MB.
-    validado = await validate_upload(file, kind=UploadKind.PDF)
+
+    # El 415 se da aquí y no en `validate_upload` para poder decir A DÓNDE ir. `UploadKind.
+    # TEXT` admite además `.txt`, que para el corpus no vale: lo que se ingiere es la salida
+    # del conversor, y esa es Markdown.
+    nombre = (file.filename or "").lower()
+    if not nombre.endswith((".md", ".markdown")):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail={
+                "code": "CORPUS_ACCEPTS_MARKDOWN_ONLY",
+                "message": (
+                    "Al corpus solo entra Markdown (.md) conforme al contrato. Un PDF u otro "
+                    "original se convierte antes en el pipeline de curación —que es donde "
+                    "está el OCR y donde la conversión se revisa—, y se sube su salida."
+                ),
+            },
+        )
+
+    # Validación compartida (SEC.6): extensión + contenido + corte por tamaño durante la
+    # lectura. `TEXT` y no `PDF`: el corpus se alimenta de Markdown.
+    validado = await validate_upload(file, kind=UploadKind.TEXT)
     content = validado.read()
     validado.close()
+
+    # El contrato se comprueba AQUÍ, con la persona delante y sabiendo qué subió. Validarlo
+    # al procesar en background significaría enterarse por un job fallido.
+    _assert_cumple_el_contrato(content, file.filename)
 
     documentos_actuales = await session.scalar(
         select(func.count())
@@ -340,7 +437,7 @@ async def upload_document(
     # Generar el UUID explícitamente para poder construir la storage key antes del commit
     # (mapped_column default= es un default SQL, no Python; job.id sería None hasta el flush)
     job_id = uuid.uuid4()
-    storage_key = f"ingestion/{chatbot_id}/{job_id}.pdf"
+    storage_key = f"ingestion/{chatbot_id}/{job_id}.md"
     await storage.put(storage_key, content)
 
     job = HubIngestionJob(
