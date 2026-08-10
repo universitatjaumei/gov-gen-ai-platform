@@ -218,6 +218,17 @@ async def chat_stream(
     session: AsyncSession = Depends(get_async_session),
 ):
     """Chat con streaming SSE, o inspección del prompt final si `debug_bypass` (RAG.11)."""
+    # SEC.8.5: sin sesión Y sin credencial de sitio no se sigue. Va antes de resolver el
+    # chatbot a propósito: comprobarlo después convertiría el 401 en un 404 para quien no
+    # está autenticado, o sea en un oráculo de qué chatbots existen.
+    cabecera_widget = http_request.headers.get(CABECERA_WIDGET)
+    if user is None and not cabecera_widget:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Authorization header. Use: Bearer <token>",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     if request.debug_bypass and not puede_depurar(http_request, user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -249,7 +260,7 @@ async def chat_stream(
     # que `assert_chatbot_access` con `via=VIA_WIDGET` solo la deja pasar a un chatbot
     # `public_anon`. Antes esta ruta exigía sesión siempre, y por eso el widget acababa
     # embebiendo un JWT o un PAT completo en el HTML de la página.
-    clave = await resolver_widget_key(session, http_request.headers.get(CABECERA_WIDGET))
+    clave = await resolver_widget_key(session, cabecera_widget)
     es_widget = clave is not None and clave.chatbot_id == chatbot_id
 
     if es_widget:
@@ -257,10 +268,14 @@ async def chat_stream(
         actor = actor_anonimo_de_widget(chatbot_id)
     else:
         if user is None:
+            # Traía credencial de sitio, pero no vale para este chatbot: es un 403 y no un
+            # 401, porque identificarse mejor no arreglaría nada.
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Missing Authorization header. Use: Bearer <token>",
-                headers={"WWW-Authenticate": "Bearer"},
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "ACCESS_MODE_FORBIDDEN",
+                    "reason": "the widget credential does not belong to this chatbot",
+                },
             )
         actor = resolve_effective_actor(http_request, user)
         assert_chatbot_access(actor, chatbot, via="session")

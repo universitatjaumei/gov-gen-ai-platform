@@ -271,11 +271,19 @@ class TestEndpointDeBypass:
         async def _sesion():
             yield session
 
+        from server.app.api.deps import get_current_user_optional
+
+        principal = UserInfo(
+            user_id="u1", email="u@test.com", role=rol, organizacion_ids=(ORG_PRUEBA,)
+        )
+
         app = FastAPI()
         app.dependency_overrides[get_async_session] = _sesion
-        app.dependency_overrides[get_current_user] = lambda: UserInfo(
-            user_id="u1", email="u@test.com", role=rol
-        , organizacion_ids=(ORG_PRUEBA,))
+        app.dependency_overrides[get_current_user] = lambda: principal
+        # SEC.8.5: el chat admite sesión o credencial de sitio, así que depende de la
+        # variante opcional; sin doblarla, la petición muere en un 401 antes de llegar al
+        # bypass, que es lo que estos tests miden.
+        app.dependency_overrides[get_current_user_optional] = lambda: principal
         app.include_router(chat_router, prefix="/api/v1")
         return TestClient(app, raise_server_exceptions=False), session
 

@@ -20,11 +20,20 @@ _OWNER_ID = "owner-user-1"
 _OTHER_ID = "other-user-2"
 
 
-def _make_token(role: str = "user", user_id: str = _OWNER_ID) -> str:
+def _make_token(
+    role: str = "user", user_id: str = _OWNER_ID, orgs: tuple[str, ...] = ()
+) -> str:
     import os
     os.environ.update(_JWT_ENV)
     from server.app.core.auth import UserInfo, create_token
-    return create_token(UserInfo(user_id=user_id, email=f"{user_id}@test.com", role=role))
+    return create_token(
+        UserInfo(
+            user_id=user_id,
+            email=f"{user_id}@test.com",
+            role=role,
+            organizacion_ids=orgs,
+        )
+    )
 
 
 def _make_interaction(user_id: str = _OWNER_ID):
@@ -36,7 +45,13 @@ def _make_interaction(user_id: str = _OWNER_ID):
     return interaction
 
 
-def _build_export_app(interaction_mock) -> FastAPI:
+_ORG_DEL_CHATBOT = "00000000-0000-0000-0000-0000000000a1"
+
+
+def _build_export_app(interaction_mock, org_del_chatbot: str = _ORG_DEL_CHATBOT) -> FastAPI:
+    from types import SimpleNamespace
+    import uuid as _uuid
+
     from server.app.api.v1.hub_tasks import router as tasks_router
     from server.app.modules.agents_hub.database.connection import get_async_session
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,6 +60,13 @@ def _build_export_app(interaction_mock) -> FastAPI:
     mock_scalar = MagicMock()
     mock_scalar.scalar_one_or_none = MagicMock(return_value=interaction_mock)
     mock_session.execute = AsyncMock(return_value=mock_scalar)
+    # SEC.8.1: quien no es el dueño de la conversación tiene que pertenecer a la
+    # organización del chatbot, así que el endpoint resuelve el chatbot con `session.get`.
+    mock_session.get = AsyncMock(
+        return_value=SimpleNamespace(
+            id=_uuid.uuid4(), organizacion_id=_uuid.UUID(org_del_chatbot)
+        )
+    )
 
     async def _mock_session():
         yield mock_session
@@ -101,11 +123,13 @@ class TestExportEndpointSecurity:
         assert response.status_code == 403
 
     @patch.dict("os.environ", _JWT_ENV)
-    def test_export_allowed_for_admin(self) -> None:
-        """Admin puede exportar cualquier tarea."""
+    def test_export_allowed_for_an_admin_of_the_same_organization(self) -> None:
+        """Un admin exporta la conversación de SU organización."""
         interaction = _make_interaction(user_id=_OWNER_ID)
         app = _build_export_app(interaction)
-        token = _make_token(role="admin", user_id="admin-1")
+        token = _make_token(
+            role="admin", user_id="admin-1", orgs=(_ORG_DEL_CHATBOT,)
+        )
 
         with TestClient(app, raise_server_exceptions=False) as client:
             response = client.get(
@@ -113,6 +137,28 @@ class TestExportEndpointSecurity:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert response.status_code == 200
+
+    def test_export_forbidden_for_an_admin_of_another_organization(self) -> None:
+        """SEC.8.1: este test sustituye a uno que afirmaba «admin puede exportar
+        cualquier tarea», que era literalmente el agujero.
+
+        La conversación exportada es un dato personal de un ciudadano que habló con OTRA
+        administración: ser admin no basta, hay que ser admin **de su organización**.
+        """
+        interaction = _make_interaction(user_id=_OWNER_ID)
+        app = _build_export_app(interaction)
+        token = _make_token(
+            role="admin",
+            user_id="admin-1",
+            orgs=("00000000-0000-0000-0000-0000000000b2",),
+        )
+
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.get(
+                f"/api/v1/hub/tasks/export/{interaction.run_id}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert response.status_code == 403
 
 
 class TestExportEndpointContent:

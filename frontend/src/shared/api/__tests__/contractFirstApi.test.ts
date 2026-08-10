@@ -35,9 +35,12 @@ const MANUAL_API_MODULES = [
 ]
 
 /**
- * Únicos puntos donde se permite construir `Authorization` a mano, fuera del
- * interceptor de `shared/api/client.ts`: el widget público, que no usa el cliente
- * generado a propósito (ver comentario de cabecera).
+ * Ficheros del widget público que hacen `fetch` crudo a propósito: no usan el cliente
+ * generado porque Orval no cubre SSE (ver comentario de cabecera).
+ *
+ * SEC.8.5: ya NO son excepción para `Authorization`. Dejaron de construir esa cabecera
+ * cuando el widget pasó a mandar `X-Widget-Key`, una credencial de sitio que solo abre su
+ * propio chatbot y solo si es público — antes embebían un JWT o un PAT completo en el HTML.
  */
 const WIDGET_RAW_FETCH_EXEMPT = ['widget/hooks/useChat.ts', 'widget/main.tsx']
 
@@ -114,11 +117,14 @@ describe('CAL.2 — capa API generada desde el contrato', () => {
       .filter((f) => !esFicheroDeTest(f))
       .sort()
 
+    // SEC.8.5: el widget deja de ser una excepción. Embebía un JWT o un PAT completo en
+    // el HTML de la página —visible para cualquiera y con el rol de su dueño detrás— y
+    // ahora manda `X-Widget-Key`, una credencial de sitio que solo abre su propio chatbot
+    // si es público. Así que ya no queda más sitio que el interceptor.
     expect(
       construyenAuth,
-      'La cabecera Authorization solo puede construirse en client.ts (interceptor) y en ' +
-        'las excepciones del widget público, que Orval no cubre.',
-    ).toEqual(['shared/api/client.ts', ...WIDGET_RAW_FETCH_EXEMPT].sort())
+      'La cabecera Authorization solo puede construirse en client.ts (interceptor).',
+    ).toEqual(['shared/api/client.ts'])
   })
 
   it('should_type_ingestion_job_from_generated_model', () => {
