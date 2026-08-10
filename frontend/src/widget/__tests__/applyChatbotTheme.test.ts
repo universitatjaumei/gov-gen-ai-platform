@@ -6,8 +6,9 @@ import { applyChatbotTheme, type WidgetConfig } from '../main'
  *
  * `applyChatbotTheme` es la unica pieza de logica nueva en `main.tsx` -- el resto es
  * `injectThemeCSS`, ya cubierto donde vive (`ThemeProvider.tsx`). Lo que hace falta fijar
- * aqui es el contrato con el backend: cabecera `Authorization` solo si hay token, y que un
- * 403/404/red caida deja el widget con los colores por defecto en vez de romper el montaje.
+ * aqui es el contrato con el backend: cabecera `X-Widget-Key` solo si hay credencial de
+ * sitio (SEC.8.5), y que un 403/404/red caida deja el widget con los colores por defecto
+ * en vez de romper el montaje.
  */
 
 const CONFIG: WidgetConfig = {
@@ -28,7 +29,7 @@ afterEach(() => {
 })
 
 describe('applyChatbotTheme', () => {
-  it('calls the resolved-theme endpoint for this chatbot without an Authorization header when there is no token', async () => {
+  it('calls the resolved-theme endpoint for this chatbot without credentials when none was configured', async () => {
     const fetchMock = mockFetchOnce({ ok: true, json: async () => ({ config: {} }) })
 
     await applyChatbotTheme(CONFIG)
@@ -39,13 +40,13 @@ describe('applyChatbotTheme', () => {
     )
   })
 
-  it('sends a Bearer Authorization header when the widget was embedded with a token', async () => {
+  it('sends the site credential header when the widget was embedded with one', async () => {
     const fetchMock = mockFetchOnce({ ok: true, json: async () => ({ config: {} }) })
 
-    await applyChatbotTheme({ ...CONFIG, token: 'tok-123' })
+    await applyChatbotTheme({ ...CONFIG, widgetKey: 'wk-123' })
 
     expect(fetchMock).toHaveBeenCalledWith(expect.any(String), {
-      headers: { Authorization: 'Bearer tok-123' },
+      headers: { 'X-Widget-Key': 'wk-123' },
     })
   })
 

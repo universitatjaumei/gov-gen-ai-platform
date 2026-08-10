@@ -7,7 +7,7 @@ interface Props {
   chatbotId: string
   apiUrl: string
   lang: string
-  token?: string
+  widgetKey?: string
 }
 
 interface StarRatingProps {
@@ -79,7 +79,7 @@ function StarRating({ interactionId, apiUrl }: StarRatingProps) {
   )
 }
 
-export function ChatWidget({ chatbotId, apiUrl, lang, token }: Props) {
+export function ChatWidget({ chatbotId, apiUrl, lang, widgetKey }: Props) {
   const [open, setOpen] = useState(true)
   const [input, setInput] = useState('')
   const { t } = useTranslation('chat')
@@ -91,7 +91,7 @@ export function ChatWidget({ chatbotId, apiUrl, lang, token }: Props) {
     sources,
     interactionId,
     sendMessage,
-  } = useChat(chatbotId, apiUrl, lang, token)
+  } = useChat(chatbotId, apiUrl, lang, widgetKey)
 
   const lastAssistantIdx = [...messages].map((m, i) => ({ m, i })).reverse().find(({ m }) => m.role === 'assistant')?.i ?? -1
   const showRating = !isStreaming && interactionId !== null && lastAssistantIdx !== -1

@@ -22,7 +22,7 @@ export interface UseChatReturn {
   sendMessage: (text: string) => Promise<void>
 }
 
-export function useChat(chatbotId: string, apiUrl: string, lang: string, token?: string): UseChatReturn {
+export function useChat(chatbotId: string, apiUrl: string, lang: string, widgetKey?: string): UseChatReturn {
   const [messages, setMessages] = useState<Message[]>([])
   const [currentNodeStatus, setCurrentNodeStatus] = useState<string | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
@@ -47,7 +47,7 @@ export function useChat(chatbotId: string, apiUrl: string, lang: string, token?:
 
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (widgetKey) headers['X-Widget-Key'] = widgetKey
       const response = await fetch(`${apiUrl}/hub/chat/${chatbotId}`, {
         method: 'POST',
         headers,
@@ -118,7 +118,7 @@ export function useChat(chatbotId: string, apiUrl: string, lang: string, token?:
       setIsStreaming(false)
       setCurrentNodeStatus(null)
     }
-  }, [chatbotId, apiUrl, lang, token])
+  }, [chatbotId, apiUrl, lang, widgetKey])
 
   return { messages, currentNodeStatus, isStreaming, translationWarning, sources, interactionId, sendMessage }
 }

@@ -18,8 +18,16 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.api.deps import get_current_user, require_role
-from server.app.core.auth.chatbot_access import assert_chatbot_access
+from server.app.api.deps import (
+    get_current_user,
+    get_current_user_optional,
+    require_role,
+)
+from server.app.core.auth.chatbot_access import VIA_WIDGET, assert_chatbot_access
+from server.app.core.auth.widget_key import (
+    CABECERA as CABECERA_WIDGET,
+    resolver_widget_key,
+)
 from server.app.core.auth.delegated_actor import resolve_effective_actor
 from server.app.core.auth.models import UserInfo
 from server.app.core.auth.tenancy import assert_org_access, puede_acceder
@@ -226,7 +234,7 @@ async def get_themes(
 async def get_theme_for_chatbot(
     chatbot_id: uuid.UUID,
     http_request: Request,
-    user: UserInfo = Depends(get_current_user),
+    user: UserInfo | None = Depends(get_current_user_optional),
     session: AsyncSession = Depends(get_async_session),
 ) -> ChatbotThemeOut:
     """Tema resuelto de un chatbot, para pintar el widget público.
@@ -241,8 +249,20 @@ async def get_theme_for_chatbot(
     if chatbot is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chatbot not found")
 
-    actor = resolve_effective_actor(http_request, user)
-    assert_chatbot_access(actor, chatbot, via="session")
+    # SEC.8.5: dos vías, y la diferencia la marca `via`. Con sesión decide la identidad;
+    # con credencial de sitio no hay identidad ninguna, así que `assert_chatbot_access`
+    # solo deja pasar `public_anon`. Antes el widget mandaba un Bearer privilegiado por
+    # esta misma ruta, que es lo que se viene a quitar.
+    clave = await resolver_widget_key(session, http_request.headers.get(CABECERA_WIDGET))
+    if clave is not None and clave.chatbot_id == chatbot_id:
+        assert_chatbot_access(None, chatbot, via=VIA_WIDGET)
+    else:
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+            )
+        actor = resolve_effective_actor(http_request, user)
+        assert_chatbot_access(actor, chatbot, via="session")
 
     theme_id = (chatbot.theme_config or {}).get("theme_id")
     if theme_id:

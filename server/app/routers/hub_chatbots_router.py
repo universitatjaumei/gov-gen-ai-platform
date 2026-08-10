@@ -607,3 +607,105 @@ async def unassign_child(
     child_cb.parent_chatbot_id = None
     child_cb.updated_at = datetime.now(timezone.utc)
     await session.commit()
+
+
+# ─────────────────── Credenciales de sitio del widget (SEC.8.5) ───────────────────
+
+
+class WidgetKeyOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    created_at: datetime
+    revoked_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class WidgetKeyCreated(WidgetKeyOut):
+    """La clave EN CLARO viaja una sola vez, en la respuesta de creación.
+
+    Después solo queda su hash, así que no hay endpoint que la devuelva: quien la pierda
+    crea otra y revoca la anterior. Es el mismo trato que un PAT.
+    """
+
+    key: str
+
+
+class WidgetKeyCreate(BaseModel):
+    name: str
+
+
+@router.post(
+    "/{chatbot_id}/widget-keys",
+    response_model=WidgetKeyCreated,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_widget_key(
+    chatbot_id: uuid.UUID,
+    body: WidgetKeyCreate,
+    user: UserInfo = Depends(_require_admin),
+    session=Depends(get_async_session),
+):
+    """Emite una credencial de sitio para incrustar el widget de este chatbot."""
+    from server.app.core.auth.widget_key import crear_widget_key
+
+    chatbot = await _get_chatbot_or_404(session, chatbot_id, user)
+    clave, fila = await crear_widget_key(
+        session, chatbot_id=chatbot.id, name=body.name, created_by=user.user_id
+    )
+    await session.commit()
+    await session.refresh(fila)
+    return WidgetKeyCreated(
+        id=fila.id,
+        name=fila.name,
+        created_at=fila.created_at,
+        revoked_at=fila.revoked_at,
+        key=clave,
+    )
+
+
+@router.get("/{chatbot_id}/widget-keys", response_model=list[WidgetKeyOut])
+async def list_widget_keys(
+    chatbot_id: uuid.UUID,
+    user: UserInfo = Depends(_require_admin),
+    session=Depends(get_async_session),
+):
+    from server.app.modules.agents_hub.database.config_models import HubWidgetKey
+
+    await _get_chatbot_or_404(session, chatbot_id, user)
+    filas = (
+        await session.execute(
+            select(HubWidgetKey)
+            .where(HubWidgetKey.chatbot_id == chatbot_id)
+            .order_by(HubWidgetKey.created_at.desc())
+        )
+    ).scalars().all()
+    return list(filas)
+
+
+@router.delete(
+    "/{chatbot_id}/widget-keys/{key_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def revoke_widget_key(
+    chatbot_id: uuid.UUID,
+    key_id: uuid.UUID,
+    user: UserInfo = Depends(_require_admin),
+    session=Depends(get_async_session),
+):
+    """Revoca en vez de borrar: la fila deja constancia de que la credencial existió."""
+    from server.app.modules.agents_hub.database.config_models import HubWidgetKey
+
+    await _get_chatbot_or_404(session, chatbot_id, user)
+    fila = (
+        await session.execute(
+            select(HubWidgetKey).where(
+                HubWidgetKey.id == key_id, HubWidgetKey.chatbot_id == chatbot_id
+            )
+        )
+    ).scalar_one_or_none()
+    if fila is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Widget key not found"
+        )
+    fila.revoked_at = datetime.now(timezone.utc)
+    await session.commit()

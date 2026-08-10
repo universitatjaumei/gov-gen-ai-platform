@@ -43,8 +43,13 @@ def _app_con(principal: UserInfo, session):
     async def _sesion():
         yield session
 
+    from server.app.api.deps import get_current_user_optional
+
     app = FastAPI()
     app.dependency_overrides[get_current_user] = lambda: principal
+    # SEC.8.5: el endpoint admite dos vías (sesión o credencial de sitio), así que depende
+    # de la variante opcional; sin este override caería al 401 antes de mirar nada.
+    app.dependency_overrides[get_current_user_optional] = lambda: principal
     app.dependency_overrides[get_async_session] = _sesion
     app.include_router(router, prefix="/api/v1")
     return TestClient(app, raise_server_exceptions=False)

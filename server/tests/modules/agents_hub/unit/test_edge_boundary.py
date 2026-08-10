@@ -25,6 +25,10 @@ def test_config_base_contains_only_config_models() -> None:
         # viaja cloud→edge. Vivían como ficheros locales, que en Cloud Run desaparecían
         # al reciclarse el contenedor.
         "hub_themes",
+        # Credencial de sitio del widget (SEC.8.5) — sustituye al Bearer privilegiado que
+        # el widget embebía en el HTML. Es configuración de publicación del chatbot, no
+        # identidad ni dato del cliente final: no lleva rol ni organizaciones.
+        "hub_widget_keys",
     }
 
 def test_operational_base_contains_only_operational_models() -> None:

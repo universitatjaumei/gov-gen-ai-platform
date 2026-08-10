@@ -9,7 +9,7 @@ export interface WidgetConfig {
   chatbotId: string
   lang: string
   apiUrl: string
-  token?: string
+  widgetKey?: string
 }
 
 export function readConfig(container: Element): WidgetConfig | null {
@@ -19,14 +19,14 @@ export function readConfig(container: Element): WidgetConfig | null {
     chatbotId,
     lang: container.getAttribute('data-lang') ?? 'es',
     apiUrl: container.getAttribute('data-api-url') ?? '/api/v1',
-    token: container.getAttribute('data-token') ?? undefined,
+    widgetKey: container.getAttribute('data-widget-key') ?? undefined,
   }
 }
 
 export async function applyChatbotTheme(config: WidgetConfig): Promise<void> {
   try {
     const headers: Record<string, string> = {}
-    if (config.token) headers['Authorization'] = `Bearer ${config.token}`
+    if (config.widgetKey) headers['X-Widget-Key'] = config.widgetKey
 
     const response = await fetch(
       `${config.apiUrl}/hub/themes/for-chatbot/${config.chatbotId}`,
@@ -59,7 +59,7 @@ export function mountWidget(container: Element, config: WidgetConfig): () => voi
         chatbotId={config.chatbotId}
         apiUrl={config.apiUrl}
         lang={config.lang}
-        token={config.token}
+        widgetKey={config.widgetKey}
       />
     </StrictMode>,
   )

@@ -192,7 +192,7 @@ def _app_con(router, principal: UserInfo, session, prefijo: str = "/api/v1"):
     """
     from fastapi import FastAPI
 
-    from server.app.api.deps import get_current_user
+    from server.app.api.deps import get_current_user, get_current_user_optional
     from server.app.modules.agents_hub.database.connection import get_async_session
 
     async def _sesion():
@@ -200,6 +200,10 @@ def _app_con(router, principal: UserInfo, session, prefijo: str = "/api/v1"):
 
     app = FastAPI()
     app.dependency_overrides[get_current_user] = lambda: principal
+    # SEC.8.5: chat y temas admiten sesión o credencial de sitio, así que dependen de la
+    # variante opcional. Se sobrescriben las dos para que el gate siga midiendo la
+    # frontera de organización y no un 401 por dependencia sin doblar.
+    app.dependency_overrides[get_current_user_optional] = lambda: principal
     app.dependency_overrides[get_async_session] = _sesion
     app.include_router(router, prefix=prefijo)
     return app

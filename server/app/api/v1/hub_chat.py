@@ -24,9 +24,19 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.api.deps import get_current_user, require_scopes
+from server.app.api.deps import (
+    get_current_user,
+    get_current_user_optional,
+    require_scopes,
+    require_scopes_allowing_widget,
+)
 from server.app.core.auth import UserInfo
-from server.app.core.auth.chatbot_access import assert_chatbot_access
+from server.app.core.auth.chatbot_access import VIA_WIDGET, assert_chatbot_access
+from server.app.core.auth.widget_key import (
+    CABECERA as CABECERA_WIDGET,
+    actor_anonimo_de_widget,
+    resolver_widget_key,
+)
 from server.app.core.auth.delegated_actor import resolve_effective_actor
 from server.app.core.auth.models import UserRole
 from server.app.core.auth.pat.scopes import CHAT_DEBUG
@@ -198,13 +208,13 @@ def _source_to_dict(source) -> dict:
 @router.post(
     "/{chatbot_id}",
     status_code=200,
-    dependencies=[Depends(require_scopes("chat:test"))],
+    dependencies=[Depends(require_scopes_allowing_widget("chat:test"))],
 )
 async def chat_stream(
     chatbot_id: uuid.UUID,
     request: ChatRequest,
     http_request: Request,
-    user: UserInfo = Depends(get_current_user),
+    user: UserInfo | None = Depends(get_current_user_optional),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Chat con streaming SSE, o inspección del prompt final si `debug_bypass` (RAG.11)."""
@@ -235,8 +245,25 @@ async def chat_stream(
     # El actor efectivo, y no el principal: cuando la peticion llega por un cliente de
     # confianza con `chat:onbehalf`, quien pregunta es la persona que la cabecera declara,
     # y es su rol y sus grupos lo que decide, no los del dueño del PAT.
-    actor = resolve_effective_actor(http_request, user)
-    assert_chatbot_access(actor, chatbot, via="session")
+    # SEC.8.5: dos vías. La credencial de sitio identifica un sitio, no a una persona, así
+    # que `assert_chatbot_access` con `via=VIA_WIDGET` solo la deja pasar a un chatbot
+    # `public_anon`. Antes esta ruta exigía sesión siempre, y por eso el widget acababa
+    # embebiendo un JWT o un PAT completo en el HTML de la página.
+    clave = await resolver_widget_key(session, http_request.headers.get(CABECERA_WIDGET))
+    es_widget = clave is not None and clave.chatbot_id == chatbot_id
+
+    if es_widget:
+        assert_chatbot_access(None, chatbot, via=VIA_WIDGET)
+        actor = actor_anonimo_de_widget(chatbot_id)
+    else:
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Missing Authorization header. Use: Bearer <token>",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        actor = resolve_effective_actor(http_request, user)
+        assert_chatbot_access(actor, chatbot, via="session")
 
     # SEC.4.1: ¿está abierto? Va **después** del acceso y **antes** de la cuota: contarle a
     # alguien que el plazo se cerró es contarle que el trámite existe, y eso solo se le dice

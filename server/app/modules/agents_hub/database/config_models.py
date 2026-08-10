@@ -493,3 +493,48 @@ class HubTheme(HubConfigBase):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
+
+
+class HubWidgetKey(HubConfigBase):
+    """Credencial de **sitio** para el widget público (SEC.8.5).
+
+    El widget se incrustaba con `data-token`, y ese token era un JWT de sesión o un PAT
+    completo: visible en el HTML de la página y con el rol y las organizaciones de su dueño
+    detrás. SEC.2.1 ya había previsto la alternativa —`assert_chatbot_access` con
+    `via='widget_api_key'` solo abre chatbots `public_anon`— pero no existía credencial que
+    la usara.
+
+    Tres propiedades, y las tres importan:
+
+    - **Identifica un sitio, no a una persona.** No lleva rol ni organizaciones: lo único
+      que autoriza es conversar con SU chatbot, y solo si es público.
+    - **Vale para un chatbot.** `chatbot_id` no es un filtro que el endpoint aplique: es de
+      dónde sale el chatbot, así que no hay forma de apuntarla a otro.
+    - **Se guarda con hash**, como los PAT. El plano se enseña una vez al crearla.
+    """
+
+    __tablename__ = "hub_widget_keys"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    chatbot_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_chatbots.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
