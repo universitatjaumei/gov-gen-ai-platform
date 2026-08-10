@@ -14,7 +14,7 @@ class TestGenericSpider:
     @pytest.mark.asyncio
     async def test_spider_respects_crawl_depth_zero(self) -> None:
         """Con crawl_depth=0 solo procesa la URL raíz, sin seguir ningún link."""
-        from server.app.modules.agents_hub.ingestion.spider import GenericSpider
+        from server.app.modules.curation.spider import GenericSpider
 
         fetched_urls: list[str] = []
 
@@ -35,7 +35,7 @@ class TestGenericSpider:
     @pytest.mark.asyncio
     async def test_spider_respects_crawl_depth_one(self) -> None:
         """Con crawl_depth=1 procesa raíz + links de primer nivel, sin bajar más."""
-        from server.app.modules.agents_hub.ingestion.spider import GenericSpider
+        from server.app.modules.curation.spider import GenericSpider
 
         pages = {
             "https://ejemplo.uji.es": '<html><a href="/a">A</a><a href="/b">B</a></html>',
@@ -62,7 +62,7 @@ class TestGenericSpider:
     @pytest.mark.asyncio
     async def test_spider_url_regex_filter_excludes_non_matching_urls(self) -> None:
         """Con url_regex_filter, solo se indexan las URLs que machan la expresión."""
-        from server.app.modules.agents_hub.ingestion.spider import GenericSpider
+        from server.app.modules.curation.spider import GenericSpider
 
         pages = {
             "https://ejemplo.uji.es": (
@@ -89,7 +89,7 @@ class TestGenericSpider:
     @pytest.mark.asyncio
     async def test_spider_stops_at_max_pages_and_marks_partial(self) -> None:
         """Al alcanzar max_pages, el resultado se marca COMPLETED_PARTIAL."""
-        from server.app.modules.agents_hub.ingestion.spider import GenericSpider, CrawlStatus
+        from server.app.modules.curation.spider import GenericSpider, CrawlStatus
 
         async def fake_fetch(url: str) -> tuple[str, dict]:
             links = "".join(f'<a href="/p{i}">p{i}</a>' for i in range(20))
@@ -109,7 +109,7 @@ class TestGenericSpider:
     @pytest.mark.asyncio
     async def test_spider_does_not_revisit_urls(self) -> None:
         """Una URL no se procesa dos veces aunque aparezca en múltiples páginas."""
-        from server.app.modules.agents_hub.ingestion.spider import GenericSpider
+        from server.app.modules.curation.spider import GenericSpider
 
         call_counts: dict[str, int] = {}
 

@@ -30,7 +30,7 @@ SAMPLE_PROCEDIMIENTO_HTML = """
 class TestNormativaSpider:
 
     def test_normativa_spider_extracts_titulo_and_fecha_from_boe_html(self) -> None:
-        from server.app.modules.agents_hub.ingestion.spiders.normativa_spider import NormativaSpider
+        from server.app.modules.curation.spiders.normativa_spider import NormativaSpider
 
         spider = NormativaSpider(source_type="boe")
         doc = spider.extract_document(url="https://boe.es/doc", html=SAMPLE_BOE_HTML)
@@ -41,7 +41,7 @@ class TestNormativaSpider:
         assert "Artículo 1" in doc.texto
 
     def test_normativa_spider_skips_documents_before_date_from(self) -> None:
-        from server.app.modules.agents_hub.ingestion.spiders.normativa_spider import NormativaSpider
+        from server.app.modules.curation.spiders.normativa_spider import NormativaSpider
 
         spider = NormativaSpider(source_type="boe", date_from=date(2026, 1, 1))
         doc = spider.extract_document(url="https://boe.es/doc", html=SAMPLE_BOE_HTML)
@@ -49,7 +49,7 @@ class TestNormativaSpider:
         assert doc is None
 
     def test_normativa_spider_builds_hub_document_with_metadata(self) -> None:
-        from server.app.modules.agents_hub.ingestion.spiders.normativa_spider import NormativaSpider
+        from server.app.modules.curation.spiders.normativa_spider import NormativaSpider
 
         spider = NormativaSpider(source_type="boe")
         doc = spider.extract_document(url="https://boe.es/doc", html=SAMPLE_BOE_HTML)
@@ -62,7 +62,7 @@ class TestNormativaSpider:
 class TestProcedimientosSpider:
 
     def test_procedimientos_spider_extracts_ficha_completa(self) -> None:
-        from server.app.modules.agents_hub.ingestion.spiders.procedimientos_spider import ProcedimientosSpider
+        from server.app.modules.curation.spiders.procedimientos_spider import ProcedimientosSpider
 
         spider = ProcedimientosSpider()
         doc = spider.extract_document(url="https://procedimientos.uji.es/proc/042", html=SAMPLE_PROCEDIMIENTO_HTML)
@@ -72,7 +72,7 @@ class TestProcedimientosSpider:
         assert "DNI" in doc.documentacion_requerida
 
     def test_procedimientos_spider_builds_hub_document_with_type(self) -> None:
-        from server.app.modules.agents_hub.ingestion.spiders.procedimientos_spider import ProcedimientosSpider
+        from server.app.modules.curation.spiders.procedimientos_spider import ProcedimientosSpider
 
         spider = ProcedimientosSpider()
         doc = spider.extract_document(url="https://procedimientos.uji.es/proc/042", html=SAMPLE_PROCEDIMIENTO_HTML)
@@ -85,10 +85,10 @@ class TestProcedimientosSpider:
 class TestSpiderFactory:
 
     def test_spider_factory_returns_correct_spider_by_source_type(self) -> None:
-        from server.app.modules.agents_hub.ingestion.spider_factory import SpiderFactory
-        from server.app.modules.agents_hub.ingestion.spiders.normativa_spider import NormativaSpider
-        from server.app.modules.agents_hub.ingestion.spiders.procedimientos_spider import ProcedimientosSpider
-        from server.app.modules.agents_hub.ingestion.spider import GenericSpider
+        from server.app.modules.curation.spider_factory import SpiderFactory
+        from server.app.modules.curation.spiders.normativa_spider import NormativaSpider
+        from server.app.modules.curation.spiders.procedimientos_spider import ProcedimientosSpider
+        from server.app.modules.curation.spider import GenericSpider
 
         factory = SpiderFactory()
         assert isinstance(factory.get_spider("boe"), NormativaSpider)
@@ -97,7 +97,7 @@ class TestSpiderFactory:
         assert isinstance(factory.get_spider("generic"), GenericSpider)
 
     def test_spider_factory_raises_for_unknown_type(self) -> None:
-        from server.app.modules.agents_hub.ingestion.spider_factory import SpiderFactory
+        from server.app.modules.curation.spider_factory import SpiderFactory
 
         factory = SpiderFactory()
         with pytest.raises(ValueError, match="Unknown spider type"):

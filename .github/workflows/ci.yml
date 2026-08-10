@@ -91,6 +91,18 @@ jobs:
             --cov-report=term-missing \
             -v
 
+      # SEC.8.7 — el árbol `tests/` de la RAÍZ del repo, que este job no ejecuta.
+      #
+      # CI corre con `working-directory: server`, así que solo ve `server/tests`. El árbol
+      # de la raíz mezcla tests vivos (`tests/redaccion`, `tests/public_graphs`) con
+      # huérfanos, y durante meses acumuló 12 rojos y 2 errores de colección —imports a
+      # rutas que CUR.1 movió y a servicios ya borrados— sin que ningún check se pusiera
+      # rojo. Colectar es barato y caza exactamente eso: un import a un módulo que ya no
+      # existe. Ejecutarlos aquí no: dependen de otra configuración y de otra BD.
+      - name: Collect root tests (catches imports to modules that no longer exist)
+        working-directory: ${{ github.workspace }}
+        run: uv run --project server pytest tests --collect-only -q --no-cov
+
       # Gate de aislamiento entre organizaciones (SEC.2, hallazgo A2). Paso PROPIO y no
       # una carpeta más del paso anterior, a propósito: si esto se pone en rojo hay acceso
       # horizontal entre organizaciones —un admin viendo chatbots y conversaciones de otra
