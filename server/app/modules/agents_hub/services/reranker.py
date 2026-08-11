@@ -97,7 +97,16 @@ class LocalReranker:
 
     def _get_model(self):
         if self._model is None:
-            from sentence_transformers import CrossEncoder
+            from server.app.modules.agents_hub.services.embedding_service import (
+                FALTA_EL_EXTRA,
+            )
+
+            try:
+                from sentence_transformers import CrossEncoder
+            except ImportError as falta:
+                raise RuntimeError(
+                    FALTA_EL_EXTRA.format(para="el reranker local")
+                ) from falta
 
             self._model = CrossEncoder(self._model_name)
         return self._model

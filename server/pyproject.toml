@@ -25,8 +25,6 @@ dependencies = [
     "playwright>=1.40.0",
     "pgvector>=0.3.0",
     "langchain-text-splitters>=0.3.0",
-    "torch",
-    "torchvision",
     "langfuse>=2.0.0",
     # EXT.3: Docling retirado. Al corpus solo entra `.md` del pipeline de curación (EXT.1) y
     # el contexto se extrae con pdfplumber (EXT.2), así que aquí no quedaba nada que
@@ -37,7 +35,6 @@ dependencies = [
     "ragas>=0.2.0",
     "datasets>=3.0.0",
     "reportlab>=4.0.0",
-    "sentence-transformers>=3.0.0",
     "apscheduler>=3.10.4",
     "fsspec>=2024.6.0",
     "gcsfs>=2024.6.0",
@@ -81,6 +78,20 @@ torchvision = { index = "pytorch-cpu" }
 
 [project.optional-dependencies]
 shared = ["automatia-shared"]
+# D.4.0: la pila de modelos locales. Está aquí y no en las dependencias base porque solo la
+# usan `LocalEmbeddingService` (BGE-M3) y `LocalReranker`: con embeddings por API y el
+# reranker apagado —el despliegue estándar— no se ejecuta nada de esto, pero se pagaba
+# entero. Medido en EXT.3: `sentence-transformers` 216 MB, `torch` 172 MB, y entre los tres
+# se llevaban casi todo el tiempo de arranque.
+#
+# NO retira la capacidad: un despliegue edge con modelos locales instala el extra
+#     uv sync --extra local-models
+# y funciona igual. Sin él, los dos servicios fallan con un mensaje que dice qué instalar.
+local-models = [
+    "torch",
+    "torchvision",
+    "sentence-transformers>=3.0.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

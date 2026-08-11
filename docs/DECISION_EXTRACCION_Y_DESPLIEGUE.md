@@ -121,18 +121,32 @@ O sea que **pdfplumber es gratis** y lo que queda pesando es la pila de modelos 
 —`torch` + `transformers` + `sentence-transformers`—, que está ahí por `LocalEmbeddingService`
 (BGE-M3) y `LocalReranker`, no por la extracción de documentos.
 
-**Consecuencia para D.4, y decisión que queda abierta.** Si el despliegue usa embeddings de
-Vertex y el reranker sigue apagado —que es el plan—, esa pila **no se usa en ejecución** pero
-se paga entera en memoria y, sobre todo, en tiempo de arranque. Hacerla opcional (extra de
-instalación `[local-models]`, con `LocalEmbeddingService` y `LocalReranker` importados de
-forma perezosa y fallando con un mensaje claro si no está) dejaría la aplicación en torno a
-**150-250 MB** y un arranque de segundos, sin renunciar al modo edge con modelos locales — que
-seguiría instalándose con el extra.
+**Consecuencia para D.4.** Si el despliegue usa embeddings de Vertex y el reranker sigue
+apagado —que es el plan—, esa pila **no se usa en ejecución** pero se paga entera. Se anotó
+como candidato y **se hizo en D.4.0 (2026-08-11)**.
 
-Eso **no lo hace EXT.3**: es un cambio de empaquetado con su propia decisión de alcance, y el
-bloque EXT venía a separar la extracción. Queda anotado como candidato para D.4, donde el
-número importa. Con la pila incluida, la VM necesita **~2 GB para la aplicación** más lo suyo
-para el sandbox y el sistema; sin ella, bastaría bastante menos.
+### Resultado de D.4.0 — MEDIDO
+
+`torch`, `torchvision` y `sentence-transformers` pasan al extra `[local-models]`. Además se
+descubrió que **`langchain_text_splitters` arrastraba la pila entera**: su `__init__.py`
+importa de forma ansiosa un splitter basado en `sentence_transformers` que este proyecto no
+usa, y no hay forma de cargar un submódulo sin ejecutar el `__init__` del paquete. El chunker
+lo importa ahora dentro del constructor.
+
+| | RSS al importar la app | Arranque | Pila cargada |
+|---|---|---|---|
+| Antes de D.4.0 | 627 MB | — | `torch`, `transformers`, `sentence_transformers` |
+| Con el extra instalado (como corre CI) | **559 MB** | 31,6 s | `torch`, `transformers` |
+| **Sin el extra (el despliegue estándar)** | **345 MB** | **9,4 s** | **ninguna** |
+
+**Del arranque estándar se va el 45 % de la memoria.** Y con el extra instalado siguen
+cargándose `torch` y `transformers`, pero no por nuestro código: `langchain_core` hace
+`try: from transformers import GPT2TokenizerFast / except ImportError` para decidir si sabe
+contar tokens. Sin el extra esos paquetes no están, el `except` salta y no se carga nada.
+
+**Para la VM**: con ~345 MB de aplicación más el sandbox y el sistema, **`e2-small` (2 GB) es
+holgado**; `e2-medium` solo haría falta si se instalara el extra —o sea, en un edge con
+modelos locales—.
 
 ---
 

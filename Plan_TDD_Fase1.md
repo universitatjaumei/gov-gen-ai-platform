@@ -9844,10 +9844,16 @@ retirado en EXT.3, no hay nada que escalar por separado.
 # PROMPT D.4-VM — Una máquina, el estado fuera
 # Deploy: cloud (infraestructura)
 
-## Tamaño — MEDIDO en EXT.3 (2026-08-11)
-- Aplicación en reposo: **627 MB**. Pico extrayendo un PDF de 40 páginas: **968 MB**.
-- **La memoria es trasladable; los TIEMPOS de aquella medición no** —se tomaron en Windows con
-  caché fría—. Volver a medir el arranque en la propia máquina antes de fijar nada.
+## Tamaño — MEDIDO (EXT.3 y D.4.0, 2026-08-11)
+- **Sin el extra `local-models`, que es este despliegue: 345 MB y 9,4 s de arranque**, con la
+  pila de modelos sin cargar. Eran 627 MB antes de D.4.0.
+- Pico extrayendo un PDF de 40 páginas (medido antes de D.4.0): **968 MB**. Conviene volver a
+  medirlo, porque parte de ese pico venía de la pila que ya no está.
+- Con el extra instalado (edge con modelos locales): 559 MB.
+- **`e2-small` (2 GB) es holgado** para el despliegue estándar. `e2-medium` solo si se
+  instala el extra.
+- **La memoria es trasladable; los TIEMPOS no del todo** —Windows, caché de disco y
+  antivirus—. Volver a medir el arranque en la propia máquina.
 - **Docling ya no manda: manda `torch`.** Medido por librería, `pdfplumber` cuesta 0,09 s y
   5 MB, mientras que `transformers` (142 s), `sentence-transformers` (75 s / 216 MB) y
   `torch` (52 s / 172 MB) se llevan el arranque entero. Están por `LocalEmbeddingService`

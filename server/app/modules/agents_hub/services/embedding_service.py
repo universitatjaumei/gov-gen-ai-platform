@@ -17,6 +17,17 @@ import os
 
 DIMENSION_PLATAFORMA = 1024
 
+# D.4.0: la pila de modelos locales (`torch`, `transformers`, `sentence-transformers`) es un
+# extra de instalación. Un `ModuleNotFoundError: torch` en mitad de una ingesta no le dice a
+# nadie qué instalar, así que se traduce a esto.
+FALTA_EL_EXTRA = (
+    "Este despliegue está configurado para usar {para}, pero la pila de modelos locales no "
+    "está instalada. Instálala con:\n"
+    "    uv sync --extra local-models\n"
+    "O cambia la configuración para usar el proveedor por API, que es lo previsto en el "
+    "despliegue estándar (ver docs/DECISION_MODELOS_EMBEDDING_RERANKER.md)."
+)
+
 
 def _l2_normalize(vector: list[float]) -> list[float]:
     norma = math.sqrt(sum(v * v for v in vector))
@@ -46,7 +57,10 @@ class LocalEmbeddingService:
 
     def _get_model(self):
         if self._model is None:
-            from sentence_transformers import SentenceTransformer
+            try:
+                from sentence_transformers import SentenceTransformer
+            except ImportError as falta:
+                raise RuntimeError(FALTA_EL_EXTRA.format(para="embeddings locales")) from falta
             self._model = SentenceTransformer(self.MODEL_NAME)
         return self._model
 

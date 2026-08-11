@@ -380,16 +380,18 @@ dependencies = [
     { name = "reportlab" },
     { name = "s3fs" },
     { name = "seaborn" },
-    { name = "sentence-transformers" },
     { name = "spacy" },
     { name = "sqlmodel" },
+]
+
+[package.optional-dependencies]
+local-models = [
+    { name = "sentence-transformers" },
     { name = "torch", version = "2.11.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
     { name = "torch", version = "2.11.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
     { name = "torchvision", version = "0.26.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
     { name = "torchvision", version = "0.26.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
 ]
-
-[package.optional-dependencies]
 shared = [
     { name = "automatia-shared" },
 ]
@@ -448,13 +450,13 @@ requires-dist = [
     { name = "reportlab", specifier = ">=4.0.0" },
     { name = "s3fs", specifier = ">=2024.6.0" },
     { name = "seaborn", specifier = ">=0.13.2" },
-    { name = "sentence-transformers", specifier = ">=3.0.0" },
+    { name = "sentence-transformers", marker = "extra == 'local-models'", specifier = ">=3.0.0" },
     { name = "spacy", specifier = ">=3.7" },
     { name = "sqlmodel", specifier = ">=0.0.14" },
-    { name = "torch", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "torchvision", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torch", marker = "extra == 'local-models'", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torchvision", marker = "extra == 'local-models'", index = "https://download.pytorch.org/whl/cpu" },
 ]
-provides-extras = ["shared"]
+provides-extras = ["shared", "local-models"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -27,10 +27,16 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
-from langchain_text_splitters import (
-    MarkdownHeaderTextSplitter,
-    RecursiveCharacterTextSplitter,
-)
+# D.4.0: `langchain_text_splitters` se importa DENTRO del constructor, no aquí.
+#
+# Su `__init__.py` importa `langchain_text_splitters.sentence_transformers` de forma ansiosa,
+# y ese módulo arrastra `sentence_transformers` → `transformers` → `torch`: unos 600 MB y casi
+# todo el tiempo de arranque, por un splitter que este proyecto no usa. Como no hay forma de
+# importar un submódulo sin ejecutar el `__init__` del paquete, la única salida es no
+# importarlo al cargar el módulo.
+#
+# El coste se paga al construir un `MarkdownChunker`, o sea al ingerir. El proceso que solo
+# atiende chat nunca lo paga.
 
 # Ancla de atributos Pandoc/kramdown al final del encabezado: '{#art-14}'.
 # Bloque de atributos Pandoc/kramdown al final del encabezado. Admite clases junto al
@@ -139,6 +145,11 @@ class MarkdownChunker:
         strategy: str = "structural",
         chunk_size_child: int = 400,
     ):
+        from langchain_text_splitters import (
+            MarkdownHeaderTextSplitter,
+            RecursiveCharacterTextSplitter,
+        )
+
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.table_chunk_size = table_chunk_size
