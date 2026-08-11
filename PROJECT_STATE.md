@@ -58,16 +58,32 @@
 | Bloque MOD — Modelos de embedding y reranker: local en edge, API en cloud | MOD.2 ✅ | — | — | ✅ Completo — **añadido el 2026-08-01** a petición del usuario, antes de RAG.6 y **antes de cargar el corpus v1**. Decisión en `docs/DECISION_MODELOS_EMBEDDING_RERANKER.md`. 2 prompts: ~~MOD.1 propósito en la configuración + procedencia en el vector~~ ✅, MOD.2 selección del servicio por la cascada (`get_embedding_service` deja de devolver el local a pelo; `HttpEmbeddingService` para el microservicio) |
 | Bloque RAG — Refuerzo del retrieval y calidad RAG | RAG.14 ✅ | — | — | ✅ **Completo (2026-08-02)** — planificado 2026-07-15 desde `docs/COMPARATIVA_RAG_LAMB.md`. 14 prompts (RAG.1-RAG.14), 13 ejecutados aquí + RAG.6b fuera del bloque: ~~dataset dorado+CI~~ ✅, ~~consolidación de grafos~~ ✅, ~~HNSW~~ ✅, ~~tsvector~~ ✅, ~~umbral+presupuesto~~ ✅, **reranker RAG.6 → partido en 6a/6b el 2026-08-01**, ~~contextual retrieval~~ ✅, ~~parent-child~~ ✅, ~~metadato embeddings~~ ✅, ~~query rewriting~~ ✅, ~~bypass~~ ✅, ~~progreso jobs~~ ✅, ~~test scenarios~~ ✅, ~~feedback→huecos~~ ✅. **RAG.6b salió de este bloque y va detrás de Deploy** —ver su fila propia—. RAG.9 llegó muy solapado con MOD.1 y se redujo a hacer obligatoria la procedencia, poner la guarda en la consulta y escribir la CLI |
 
-## 👉 EMPEZAR AQUÍ EL PRÓXIMO DÍA: **cerrar MAN.2**
+## 👉 EMPEZAR AQUÍ EL PRÓXIMO DÍA (actualizado 2026-08-11)
 
-**MAN.1 completo. MAN.2 con el `.bat` escrito y el recorrido en vivo de los caminos 1 y 2
-hecho por el agente**, pero el criterio de cierre exige que **el usuario** lo ejecute de
-principio a fin — eso no ha pasado todavía. **Los dos hallazgos ya están arreglados
-(2026-08-10)**: el 500 de `/hub/redaccion/templates` (hallazgo #2) y el widget sin tema
-(hallazgo #3, con `GET /hub/themes/for-chatbot/{chatbot_id}` nuevo). Ningún camino de MAN.2
-sigue bloqueado por código. Lo único que falta es que el usuario ejecute
-`pruebas_manuales_plataforma.bat` de principio a fin.
-**Modelo sugerido: Sonnet** para lo que quede de MAN.2.
+**Cerrados desde la última revisión del cursor**: SEC.8 (los 8 prompts), EXT (los 3) y FAQ
+(los 2). Suite backend **1819 passed, 3 skipped, 0 failed**; frontend 281; `tsc` limpio.
+
+**El usuario está extrayendo los XML consolidados del BOE**, que es el prerrequisito de la
+base documental de Gerencia. Mientras tanto, lo que se puede avanzar en la aplicación **sin
+depender del corpus**, por orden de valor:
+
+1. **D.4.0** — `torch`, `transformers` y `sentence-transformers` a extra `[local-models]`.
+   Independiente de todo, **fija el tamaño de la VM** (de ~2 GB a ~150-250 MB esperados) y de
+   paso acelera cada arranque en local, que es tiempo que se paga en todos los ciclos.
+2. **REV.1** — el veredicto del revisor sobre conversaciones reales. Es lo que hace que el
+   piloto de Gerencia sirva para algo: sin él se puede probar el asistente, pero no la
+   revisión, que es lo que Gerencia pidió.
+3. **Arreglo de `PUBLIC_PORTAL_AGGREGATOR`** (hallazgo I5 de la auditoría, sin bloque
+   asignado): está registrado como perfil seleccionable con `uuid.UUID(int=0)` en los dos
+   `chatbot_id`, así que quien lo elija obtiene recuperación vacía **en silencio**. Es
+   pequeño y toca justo ahora, porque el siguiente paso es configurar chatbots.
+
+**Pendiente de acción del usuario, no de código**: MAN.2 (ejecutar
+`pruebas_manuales_plataforma.bat` de principio a fin; el paso de subir un PDF al corpus ya se
+actualizó a `.md` tras EXT.1). Y **D.0/D.2/D.3** esperan datos de GCP (proyecto, región,
+credenciales), no al corpus.
+
+**Modelo sugerido: Sonnet** para D.4.0 y REV.1.
 
 ---
 
