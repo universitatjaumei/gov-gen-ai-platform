@@ -195,6 +195,13 @@ uv run python -m server.app.modules.agents_hub.ingestion.corpus.load \
 #    (el subconjunto sale de cruzar la carpeta del piloto con md_contracte)
 uv run python -m ...corpus.load --dir <dir_gerencia> --chatbot-id <UUID_GERENCIA>
 
+#    DER.1: si una carpeta va a los DOS asistentes, --chatbot-id es repetible y el
+#    corpus se lee, parsea y valida una sola vez. Es lo que garantiza que ambos
+#    reciben exactamente lo mismo; dos ejecuciones seguidas no lo garantizan si
+#    alguien toca un fichero entremedias. Han de ser de la misma organización.
+uv run python -m ...corpus.load --dir <dir_comun> \
+    --chatbot-id <UUID_PUBLICO> --chatbot-id <UUID_GERENCIA>
+
 # 5. Credencial de sitio del chatbot público (para el widget)
 #    POST /hub/chatbots/<UUID_PUBLICO>/widget-keys  -> se muestra UNA vez
 ```

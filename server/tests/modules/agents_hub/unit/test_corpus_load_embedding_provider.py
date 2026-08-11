@@ -163,7 +163,7 @@ class TestLaCargaUsaElServicioResuelto:
         reconciliador.reconcile = AsyncMock(return_value=informe)
 
         args = argparse.Namespace(
-            dir=Path("corpus"), manifest=None, chatbot_id=chatbot_id, dry_run=True,
+            dir=Path("corpus"), manifest=None, chatbot_ids=[chatbot_id], dry_run=True,
             census=False, prune=False, force_prune=False, prune_threshold=0.10,
             verbose=False,
         )
@@ -235,7 +235,7 @@ class TestLaCargaUsaElServicioResuelto:
         reconciliador.reconcile = AsyncMock()
 
         args = argparse.Namespace(
-            dir=Path("corpus"), manifest=None, chatbot_id=uuid.uuid4(), dry_run=False,
+            dir=Path("corpus"), manifest=None, chatbot_ids=[uuid.uuid4()], dry_run=False,
             census=False, prune=False, force_prune=False, prune_threshold=0.10,
             verbose=False,
         )

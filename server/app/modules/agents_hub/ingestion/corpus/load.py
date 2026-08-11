@@ -2,7 +2,16 @@
 
 Uso:
     uv run python -m server.app.modules.agents_hub.ingestion.corpus.load \
-        --dir <carpeta de .md> --chatbot-id <uuid> [--dry-run]
+        --dir <carpeta de .md> --chatbot-id <uuid> [--chatbot-id <uuid> ...] [--dry-run]
+
+**`--chatbot-id` es repetible** (DER.1): el mismo corpus se carga en varios asistentes en una
+sola pasada. Se lee, parsea y valida **una vez** —lo que garantiza que todos reciben
+exactamente lo mismo, cosa que dos ejecuciones seguidas no garantizan si alguien toca un
+fichero a mitad—; lo que se repite es la reconciliación, que es lo único que depende del
+destino. Cada asistente embebe con **su** modelo, que es la libertad por la que se descartó
+compartir el corpus entre chatbots (bloque COR).
+
+Todos han de ser de la misma organización, y se comprueba antes de escribir nada.
 
 **No es una carga inicial: es el mecanismo de mantenimiento del corpus** mientras no exista
 el pipeline de publicación. La misma orden sobre la misma carpeta omite lo no cambiado,
@@ -91,10 +100,31 @@ async def _run(args: argparse.Namespace) -> int:
     session_factory = create_session_factory(engine)
     try:
         async with session_factory() as session:
-            chatbot = await session.get(HubChatbot, args.chatbot_id)
-            if chatbot is None:
-                print(f"ERROR: no existe el chatbot {args.chatbot_id}", file=sys.stderr)
+            # ── Fase 1: comprobar. Nada de esto escribe. ──────────────────────────────
+            #
+            # DER.1: todas las comprobaciones van ANTES de la primera carga, y no una por
+            # una justo antes de cada asistente. Si el segundo tiene el corpus en otro
+            # espacio vectorial, descubrirlo con el primero ya cargado deja una pasada que
+            # no se puede repetir limpia: hay que deshacer a mano.
+            chatbots = {}
+            for chatbot_id in args.chatbot_ids:
+                chatbot = await session.get(HubChatbot, chatbot_id)
+                if chatbot is None:
+                    print(f"ERROR: no existe el chatbot {chatbot_id}", file=sys.stderr)
+                    return 1
+                chatbots[chatbot_id] = chatbot
+
+            organizaciones = {c.organizacion_id for c in chatbots.values()}
+            if len(organizaciones) > 1:
+                print(
+                    "ERROR: los chatbots indicados son de organizaciones distintas "
+                    f"({', '.join(str(o) for o in sorted(map(str, organizaciones)))}). "
+                    "Una misma carga no puede repartir corpus curado entre "
+                    "administraciones: revisa los --chatbot-id.",
+                    file=sys.stderr,
+                )
                 return 1
+            organizacion_id = organizaciones.pop()
 
             try:
                 entradas = await fuente.list_entries()
@@ -103,10 +133,12 @@ async def _run(args: argparse.Namespace) -> int:
                 return 1
             print(f"{len(entradas)} entradas leidas de {args.dir}")
 
-            # Vocabulario: el error enumera TODOS los códigos malos, no el primero.
+            # Vocabulario: el error enumera TODOS los códigos malos, no el primero. Se
+            # valida una sola vez porque el vocabulario es de la organización, que ya
+            # sabemos que es una.
             provider = LocalConfigProvider(session)
             vocabulario = VocabularyService(
-                source=provider, organizacion_id=chatbot.organizacion_id
+                source=provider, organizacion_id=organizacion_id
             )
             try:
                 await assert_vocabulary(entradas, vocabulario)
@@ -118,60 +150,70 @@ async def _run(args: argparse.Namespace) -> int:
             # Cablear aquí el local significaba embeber el corpus con BGE-M3 aunque el
             # despliegue estuviera configurado con Google —y descubrirlo en la primera
             # consulta de chat, cuando la guarda de RAG.9 comparase espacios vectoriales—.
-            embedding_service = await resolve_embedding_service(session, args.chatbot_id)
-            print(f"embeddings: {embedding_service.model_name}")
+            #
+            # Se resuelve por chatbot: que cada asistente pueda elegir su modelo es
+            # exactamente la libertad por la que se descartó compartir el corpus (COR).
+            servicios = {}
+            for chatbot_id in args.chatbot_ids:
+                servicio = await resolve_embedding_service(session, chatbot_id)
+                servicios[chatbot_id] = servicio
+                print(f"embeddings de {chatbot_id}: {servicio.model_name}")
+                try:
+                    await assert_embedding_space_matches(session, chatbot_id, servicio)
+                except EmbeddingSpaceMismatch as exc:
+                    print(f"ERROR: {exc}", file=sys.stderr)
+                    return 3
 
-            # La guarda de RAG.9, aquí y no solo en el chat: si el corpus ya tiene vectores
-            # de otro modelo, esta carga los mezclaría. El coseno entre dos espacios no da
-            # error, da resultados malos — y para cuando se nota, la ingesta está pagada.
-            try:
-                await assert_embedding_space_matches(
-                    session, args.chatbot_id, embedding_service
-                )
-            except EmbeddingSpaceMismatch as exc:
-                print(f"ERROR: {exc}", file=sys.stderr)
-                return 3
-
-            reconciler = CorpusReconciler(
-                session,
-                IngestionWatcher(
+            # ── Fase 2: cargar, un asistente cada vez. ────────────────────────────────
+            #
+            # Se confirma por asistente y no al final: la reconciliación es incremental, así
+            # que conservar lo que sí funcionó hace que repetir la pasada solo rehaga lo que
+            # falta. Tirarlo todo por un fallo en el último obligaría a re-embeber corpus ya
+            # embebido, que es la parte cara.
+            primer_fallo = 0
+            for chatbot_id in args.chatbot_ids:
+                print(f"--- {chatbot_id} ---")
+                reconciler = CorpusReconciler(
                     session,
-                    embedding_service,
-                    chatbot_provider=provider,
-                ),
-            )
-            try:
-                informe = await reconciler.reconcile(
-                    fuente,
-                    args.chatbot_id,
-                    dry_run=args.dry_run,
-                    prune=args.prune,
-                    force_prune=args.force_prune,
-                    prune_threshold=args.prune_threshold,
+                    IngestionWatcher(
+                        session,
+                        servicios[chatbot_id],
+                        chatbot_provider=provider,
+                    ),
                 )
-            except PruneThresholdExceeded as exc:
-                print(f"ERROR: {exc}", file=sys.stderr)
-                return 2
+                try:
+                    informe = await reconciler.reconcile(
+                        fuente,
+                        chatbot_id,
+                        dry_run=args.dry_run,
+                        prune=args.prune,
+                        force_prune=args.force_prune,
+                        prune_threshold=args.prune_threshold,
+                    )
+                except PruneThresholdExceeded as exc:
+                    print(f"ERROR en {chatbot_id}: {exc}", file=sys.stderr)
+                    primer_fallo = primer_fallo or 2
+                    continue
 
-            if args.verbose:
-                for linea in informe.detalle:
-                    print(f"  {linea}")
-            for motivo in informe.motivos_omision:
-                print(f"  omitido: {motivo}")
-            if informe.poda_omitida_por_no_censo:
-                print(
-                    "  aviso: --prune ignorado porque la fuente no declara censo "
-                    "(anade --census si estas cargando el corpus completo)"
-                )
+                if args.verbose:
+                    for linea in informe.detalle:
+                        print(f"  {linea}")
+                for motivo in informe.motivos_omision:
+                    print(f"  omitido: {motivo}")
+                if informe.poda_omitida_por_no_censo:
+                    print(
+                        "  aviso: --prune ignorado porque la fuente no declara censo "
+                        "(anade --census si estas cargando el corpus completo)"
+                    )
 
-            if args.dry_run:
-                print(f"[dry-run] {informe.render()} (nada escrito)")
-            else:
-                await session.commit()
-                print(informe.render())
+                if args.dry_run:
+                    print(f"[dry-run] {informe.render()} (nada escrito)")
+                else:
+                    await session.commit()
+                    print(informe.render())
     finally:
         await engine.dispose()
-    return 0
+    return primer_fallo
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -183,7 +225,17 @@ def main(argv: list[str] | None = None) -> int:
         "--manifest", type=Path, help="Manifiesto (opcional si hay front-matter)"
     )
     parser.add_argument(
-        "--chatbot-id", required=True, type=uuid.UUID, dest="chatbot_id"
+        "--chatbot-id",
+        required=True,
+        type=uuid.UUID,
+        action="append",
+        dest="chatbot_ids",
+        metavar="UUID",
+        help=(
+            "Chatbot destino. Repetible: --chatbot-id A --chatbot-id B carga el mismo "
+            "corpus en los dos en una sola pasada. Todos han de ser de la misma "
+            "organizacion"
+        ),
     )
     parser.add_argument("--dry-run", action="store_true", help="Plan sin escribir")
     parser.add_argument(

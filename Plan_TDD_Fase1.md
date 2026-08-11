@@ -9690,7 +9690,23 @@ deja de ser cierto.
 
 ---
 
-### Prompt DER.1 (RED/GREEN) — Una carga, varios chatbots
+### Prompt DER.1 (RED/GREEN) — Una carga, varios chatbots ✅ HECHO el 2026-08-11
+
+> **Resultado**: 8 tests en `test_corpus_load_multi_chatbot.py`. Dos decisiones que el prompt
+> no cerraba y se tomaron al implementarlo:
+>
+> - **Todas las comprobaciones van antes de la primera carga**, no una por una justo antes de
+>   cada asistente. Incluida la guarda de espacio vectorial de FIX.4: descubrir con el primero
+>   ya cargado que el segundo tiene el corpus en otro espacio deja una pasada que no se puede
+>   repetir limpia.
+> - **Se confirma por asistente, no al final.** La reconciliación es incremental, así que
+>   conservar lo que sí funcionó hace que repetir la pasada solo rehaga lo que falta; tirarlo
+>   todo por un fallo en el último obligaría a re-embeber corpus ya embebido, que es la parte
+>   cara. El código de salida es no-cero igualmente.
+>
+> **Fuera de alcance, deliberado**: `corpus/sync.py` sigue con un solo chatbot. Su fuente es el
+> servicio MCP de publicación y su caso de uso es otro; hacerlo repetible ahí sería una
+> funcionalidad no pedida.
 
 **Modelo sugerido**: **Sonnet** — el reconciliador ya hace el trabajo; esto es recorrerlo.
 
