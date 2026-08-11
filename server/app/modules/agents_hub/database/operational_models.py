@@ -387,6 +387,16 @@ class HubInteraction(HubOperationalBase):
     """Conversación usuario–asistente."""
 
     __tablename__ = "hub_interactions"
+    __table_args__ = (
+        # REV.1: mismos tres valores que `ck_test_run_verdict`, a propósito. Dos vocabularios
+        # distintos para la misma idea acaban divergiendo, y entonces un informe que cruce
+        # escenarios de prueba con conversaciones reales deja de poder escribirse.
+        # Admite NULL porque NULL es "sin revisar", no valor inválido.
+        CheckConstraint(
+            "review_verdict IS NULL OR review_verdict IN ('good', 'bad', 'mixed')",
+            name="ck_interaction_review_verdict",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -423,6 +433,19 @@ class HubInteraction(HubOperationalBase):
     interaction_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    # --- Veredicto de quien revisa (REV.1) ---
+    # Distinto de `feedback_score`/`feedback_text`, que son la valoración del USUARIO FINAL.
+    # Esto es lo que dice quien audita: si la respuesta era adecuada y, sobre todo, por qué
+    # no lo era — que es lo único que permite reformular la FAQ que la produjo.
+    #
+    # NULL = sin revisar, y es el estado por defecto: es lo que alimenta la cola. Un texto
+    # 'pending' sería un veredicto más, y habría que acordarse de excluirlo en cada consulta.
+    review_verdict: Mapped[str | None] = mapped_column(String(10), nullable=True, index=True)
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    review_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    review_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
 

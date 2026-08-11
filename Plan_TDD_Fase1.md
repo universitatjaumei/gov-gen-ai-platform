@@ -9615,6 +9615,137 @@ precedente.
 
 ---
 
+## Prompt FIX.4 (RED/GREEN) — La carga del corpus no puede exigir los modelos locales (BLOQUEANTE de la primera ingesta)
+
+**Modelo sugerido**: **Sonnet** — el mecanismo correcto ya existe (MOD.2); esto es cablearlo
+donde no se cableó.
+
+> **Hallazgo del 2026-08-11**, al preparar el bloque DER. `corpus/load.py:109` y
+> `corpus/sync.py:130` construyen **`LocalEmbeddingService()` a pelo**. Eso ya contradecía
+> MOD.2 —que precisamente quitó `get_embedding_service` devolviendo el local por defecto para
+> que el modelo saliera de la cascada del chatbot—, pero desde **D.4.0 es peor**: `torch` y
+> `sentence-transformers` son un extra opcional, así que **la carga del corpus falla en una
+> instalación estándar**, que es justo la del despliegue previsto con embeddings de Vertex.
+>
+> Falla en alto y con un mensaje que dice qué instalar (D.4.0 lo dejó así), o sea que no es
+> una avería muda. Pero es un muro justo en el camino que toca ahora.
+
+```
+# PROMPT FIX.4 (RED/GREEN) — El corpus se embebe con el modelo del chatbot
+# Deploy: edge
+
+- `corpus/load.py` y `corpus/sync.py` resuelven el servicio de embedding **por la cascada
+  del chatbot**, como el resto del sistema (MOD.2), en vez de instanciar el local.
+- La guarda de procedencia de MOD.1/RAG.9 sigue corriendo: si el corpus ya está embebido con
+  otro modelo, se dice antes de escribir, no después.
+- Si la cascada resuelve al servicio local y el extra `[local-models]` no está instalado, el
+  error de D.4.0 ya explica qué instalar. **No se añade fallback**: elegir otro modelo en
+  silencio es exactamente lo que la guarda de espacio vectorial existe para impedir.
+
+## Tests (RED primero)
+# should_use_the_embedding_service_resolved_from_the_chatbot_cascade
+# should_not_import_the_local_stack_when_the_chatbot_uses_an_api_model
+# should_refuse_when_the_corpus_was_embedded_with_another_model
+```
+
+---
+
+## Bloque DER — Deriva entre copias del corpus (PENDIENTE, sustituye al descartado COR)
+
+> **Origen**: decisión de descartar COR (ver arriba). Se conserva la duplicación por chatbot
+> —porque conserva la libertad de elegir modelo de embedding por asistente— y se ataca **lo
+> único que esa duplicación cuesta de verdad**: que dos copias de la misma norma diverjan
+> porque alguien recargó un asistente y no el otro.
+>
+> ### La clave de identidad es `canonical_url`, no `content_hash`
+>
+> Importante, porque cambia el diseño respecto a como se planteó la petición. `content_hash`
+> igual significa **contenido idéntico**; dos copias que han derivado tienen hashes
+> **distintos**, así que agrupar por hash es justo lo que **no** encuentra la deriva. Lo que
+> identifica «la misma norma en dos asistentes» es `canonical_url`.
+>
+> De ahí sale, además, que la detección **no dependa del momento de la actualización**: un
+> chequeo continuo sobre `(organización, canonical_url)` encuentra la deriva aunque se haya
+> producido hace tres meses por un camino que nadie previó. Avisar solo al actualizar
+> protegería únicamente del descuido que ya se sospecha.
+>
+> **Lo de los documentos nuevos, confirmado**: no hay nada que comparar, así que no hay aviso
+> posible. Lo que sí lo evita es cargarlos de una vez a los dos asistentes — que es DER.1.
+
+---
+
+### Prompt DER.1 (RED/GREEN) — Una carga, varios chatbots
+
+**Modelo sugerido**: **Sonnet** — el reconciliador ya hace el trabajo; esto es recorrerlo.
+
+```
+# PROMPT DER.1 (RED/GREEN) — Cargar el mismo corpus en dos asistentes en una pasada
+# Deploy: edge
+
+- `--chatbot-id` pasa a ser **repetible**: `--chatbot-id A --chatbot-id B`.
+- Los `.md` se leen, se parsean y se validan contra el vocabulario **una sola vez**; lo que
+  se repite es la reconciliación por chatbot, que es lo único que depende del destino.
+- **Todos los chatbots deben ser de la misma organización.** Si no, se aborta antes de
+  escribir nada: cargar corpus curado de una administración en otra es el error que no se
+  puede permitir que ocurra a medias.
+- El informe final es **por chatbot**, no agregado: «12 nuevos, 3 actualizados» sin decir en
+  cuál no sirve para nada.
+- Si un chatbot falla a mitad, se dice cuál y **no se da por buena la pasada entera**.
+- Las recetas de embedding pueden diferir entre los chatbots y eso es correcto: cada uno
+  embebe con el suyo. Se anota en el informe cuál usó cada uno.
+
+## Tests (RED primero)
+# should_parse_the_source_once_for_several_chatbots
+# should_report_results_per_chatbot
+# should_refuse_chatbots_from_different_organizations
+# should_not_mark_the_run_successful_when_one_chatbot_fails
+```
+
+---
+
+### Prompt DER.2 (RED/GREEN) — Avisar cuando una norma vive en varios asistentes
+
+**Modelo sugerido**: **Sonnet** — se apoya en la maquinaria de hallazgos de curación que ya
+existe; sin decisiones abiertas.
+
+```
+# PROMPT DER.2 (RED/GREEN) — Que borrar o actualizar una copia no deje las otras a medias
+# Deploy: edge
+
+## Detección continua (lo que de verdad encuentra la deriva)
+- Hallazgo nuevo `copia_divergent`, junto a `revisio_vencuda` (SYNC.2), en la maquinaria de
+  curación: dentro de una organización, **mismo `canonical_url` con `content_hash` distinto**
+  en dos o más chatbots. Dice en cuáles y con qué fecha de carga cada uno, para que se vea
+  cuál es la vieja.
+- No se resuelve solo ni borra nada: propone recargar, que es DER.1.
+
+## Avisos en el momento de la operación
+- **Al borrar un documento**: si su `canonical_url` está en más chatbots de la organización,
+  la respuesta lo dice y ofrece borrarlo en todos (`?en_todos_los_chatbots=true`). **Sin ese
+  parámetro se borra solo el suyo** — un borrado en cascada implícito sobre corpus normativo
+  no puede ser el comportamiento por defecto.
+- **Al actualizar un documento** cuya `canonical_url` está en más chatbots: la respuesta
+  avisa de cuáles quedan con la versión anterior. No se propagan cambios automáticamente:
+  cada asistente puede tener su receta y su calendario, y propagar en silencio es cómo se
+  reembebe un corpus sin que nadie lo haya pedido.
+
+## Frontend
+- El aviso se ve **antes** de confirmar el borrado, con el número y los nombres.
+- El hallazgo `copia_divergent` aparece en la pantalla de hallazgos como los demás.
+- i18n es/ca/en.
+
+## Tests (RED primero)
+# should_flag_the_same_norm_with_different_content_across_chatbots
+# should_not_flag_identical_copies
+# should_warn_how_many_chatbots_hold_the_document_before_deleting
+# should_delete_only_in_this_chatbot_by_default
+# should_delete_in_all_chatbots_when_explicitly_asked
+# should_warn_which_chatbots_keep_the_previous_version_after_an_update
+# should_scope_all_of_this_to_the_organization        (gate SEC.8.1)
+```
+
+---
+
 ## Bloque EXT — Frontera de la extracción: qué entra al corpus y qué es contexto (PENDIENTE, va ANTES de Deploy)
 
 > **Contexto**: `docs/DECISION_EXTRACCION_Y_DESPLIEGUE.md` (2026-08-10). «Subir un documento»

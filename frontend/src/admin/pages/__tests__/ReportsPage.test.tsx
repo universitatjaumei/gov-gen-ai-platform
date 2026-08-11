@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReportsPage } from '../ReportsPage'
-import { useGetInteractionsForReviewApiV1HubFeedbackChatbotIdReviewGet } from '@/shared/api/generated/hub-feedback/hub-feedback'
+import {
+  useGetInteractionsForReviewApiV1HubFeedbackChatbotIdReviewGet,
+  useReviewInteractionApiV1HubFeedbackInteractionsInteractionIdReviewPatch,
+} from '@/shared/api/generated/hub-feedback/hub-feedback'
 import { useListChatbotsApiV1HubChatbotsGet } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
 import type { InteractionReviewOut } from '@/shared/api/generated/model'
 
@@ -40,6 +43,10 @@ vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
 }))
 vi.mock('@/shared/api/generated/hub-feedback/hub-feedback', () => ({
   useGetInteractionsForReviewApiV1HubFeedbackChatbotIdReviewGet: vi.fn(),
+  useReviewInteractionApiV1HubFeedbackInteractionsInteractionIdReviewPatch: vi.fn(),
+  getGetInteractionsForReviewApiV1HubFeedbackChatbotIdReviewGetQueryKey: vi.fn(() => [
+    '/api/v1/hub/feedback/c-1/review',
+  ]),
 }))
 
 const SAMPLE_INTERACTIONS: InteractionReviewOut[] = [
@@ -84,6 +91,9 @@ describe('ReportsPage', () => {
       data: SAMPLE_INTERACTIONS,
       isLoading: false,
     } as any)
+    vi.mocked(useReviewInteractionApiV1HubFeedbackInteractionsInteractionIdReviewPatch).mockReturnValue(
+      { mutate: vi.fn(), isPending: false } as any,
+    )
   })
 
   it('should_display_interactions_table', async () => {
@@ -141,5 +151,101 @@ describe('ReportsPage', () => {
       // Average of scores 4 and 2 = 3.0
       expect(screen.getByTestId('avg-score')).toHaveTextContent('3.0')
     })
+  })
+})
+
+// ─────────────────────────── REV.1 — veredicto del revisor ───────────────────────────
+//
+// Distinto de las estrellas de arriba: eso es lo que opinó el usuario final. Esto es lo que
+// dice quien audita, y es lo que Gerencia pidió para decidir si hay que reformular una FAQ.
+
+describe('ReportsPage — revisión (REV.1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(useListChatbotsApiV1HubChatbotsGet).mockReturnValue({ data: SAMPLE_CHATBOTS } as any)
+    vi.mocked(useGetInteractionsForReviewApiV1HubFeedbackChatbotIdReviewGet).mockReturnValue({
+      data: SAMPLE_INTERACTIONS,
+      isLoading: false,
+    } as any)
+    vi.mocked(useReviewInteractionApiV1HubFeedbackInteractionsInteractionIdReviewPatch).mockReturnValue(
+      { mutate: vi.fn(), isPending: false } as any,
+    )
+  })
+
+  it('should_ask_the_backend_for_pending_interactions_by_default', async () => {
+    renderPage()
+    // La cola de revisión es lo que falta por mirar, no el historial entero. Y el filtro
+    // viaja al backend: filtrarlo aquí daría lo mismo con 50 filas y nada con 50.000.
+    await waitFor(() => {
+      expect(useGetInteractionsForReviewApiV1HubFeedbackChatbotIdReviewGet).toHaveBeenCalledWith(
+        'c-1',
+        expect.objectContaining({ review_status: 'pending' }),
+        expect.anything(),
+      )
+    })
+  })
+
+  it('should_show_the_pending_count', async () => {
+    renderPage()
+    // Las dos de la muestra están sin revisar (review_verdict ausente).
+    await waitFor(() => {
+      expect(screen.getByTestId('pending-count')).toHaveTextContent('2')
+    })
+  })
+
+  it('should_send_the_verdict_when_the_reviewer_marks_an_answer_as_good', async () => {
+    const mutate = vi.fn()
+    vi.mocked(useReviewInteractionApiV1HubFeedbackInteractionsInteractionIdReviewPatch).mockReturnValue(
+      { mutate, isPending: false } as any,
+    )
+
+    renderPage()
+    await waitFor(() => screen.getByText('How does Python work?'))
+
+    fireEvent.click(screen.getAllByRole('button', { name: /adecuada/i })[0])
+
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        interactionId: 'i-1',
+        data: expect.objectContaining({ verdict: 'good' }),
+      }),
+      expect.anything(),
+    )
+  })
+
+  it('should_not_send_a_bad_verdict_without_a_note', async () => {
+    const mutate = vi.fn()
+    vi.mocked(useReviewInteractionApiV1HubFeedbackInteractionsInteractionIdReviewPatch).mockReturnValue(
+      { mutate, isPending: false } as any,
+    )
+
+    renderPage()
+    await waitFor(() => screen.getByText('How does Python work?'))
+
+    // Un «mal» sin motivo no reformula nada; el backend lo rechaza con 422 y la pantalla
+    // no debe llegar a pedírselo.
+    fireEvent.click(screen.getAllByRole('button', { name: /inadecuada/i })[0])
+
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
+  it('should_export_the_verdict_columns_to_csv', async () => {
+    let exportado: Blob | null = null
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+      exportado = blob as Blob
+      return 'blob:mock'
+    })
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+
+    renderPage()
+    await waitFor(() => screen.getByText('How does Python work?'))
+    fireEvent.click(screen.getByRole('button', { name: /csv/i }))
+
+    // Es lo que Gerencia se lleva a una reunión: si el veredicto no viaja en el CSV, la
+    // revisión se queda dentro de la aplicación.
+    expect(exportado).not.toBeNull()
+    const contenido = await (exportado as unknown as Blob).text()
+    expect(contenido).toContain('review_verdict')
+    expect(contenido).toContain('review_note')
   })
 })

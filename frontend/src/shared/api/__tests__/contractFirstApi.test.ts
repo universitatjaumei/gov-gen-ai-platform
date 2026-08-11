@@ -34,16 +34,6 @@ const MANUAL_API_MODULES = [
   'shared/layout/copilot/copilotApi.ts',
 ]
 
-/**
- * Ficheros del widget público que hacen `fetch` crudo a propósito: no usan el cliente
- * generado porque Orval no cubre SSE (ver comentario de cabecera).
- *
- * SEC.8.5: ya NO son excepción para `Authorization`. Dejaron de construir esa cabecera
- * cuando el widget pasó a mandar `X-Widget-Key`, una credencial de sitio que solo abre su
- * propio chatbot y solo si es público — antes embebían un JWT o un PAT completo en el HTML.
- */
-const WIDGET_RAW_FETCH_EXEMPT = ['widget/hooks/useChat.ts', 'widget/main.tsx']
-
 function sourceFiles(): string[] {
   const out: string[] = []
   const walk = (dir: string) => {

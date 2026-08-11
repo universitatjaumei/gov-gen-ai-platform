@@ -13,9 +13,10 @@ Deploy: edge
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user
@@ -34,6 +35,31 @@ class FeedbackRequest(BaseModel):
     comment: str | None = Field(None, max_length=2000)
 
 
+class ReviewVerdictRequest(BaseModel):
+    """Veredicto de quien revisa (REV.1).
+
+    Mismos tres valores que `HubTestRun.verdict`, a propósito: dos vocabularios distintos
+    para la misma idea acabarían divergiendo.
+    """
+
+    verdict: Literal["good", "bad", "mixed"]
+    note: str | None = Field(None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _exigir_motivo_cuando_es_malo(self) -> "ReviewVerdictRequest":
+        """Un «mal» sin motivo no reformula nada.
+
+        El propósito entero de la revisión es saber **qué** había que cambiar. Un veredicto
+        negativo sin texto deja a quien reescribe la FAQ exactamente donde estaba, y encima
+        con la apariencia de que el trabajo está hecho.
+        """
+        if self.verdict == "bad" and not (self.note or "").strip():
+            raise ValueError(
+                "Un veredicto 'bad' necesita una nota que diga qué había que cambiar"
+            )
+        return self
+
+
 class InteractionReviewOut(BaseModel):
     """Interacción servida a la revisión humana (CAL.2).
 
@@ -49,6 +75,11 @@ class InteractionReviewOut(BaseModel):
     feedback_text: str | None = None
     run_id: str | None = None
     created_at: datetime
+    # REV.1. Distinto de `feedback_*`, que es la valoración del usuario final.
+    review_verdict: str | None = None
+    review_note: str | None = None
+    review_by: str | None = None
+    review_at: datetime | None = None
 
 
 @router.post("/{interaction_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -78,11 +109,45 @@ async def submit_feedback(
     )
 
 
+@router.patch(
+    "/interactions/{interaction_id}/review", response_model=InteractionReviewOut
+)
+async def review_interaction(
+    interaction_id: uuid.UUID,
+    request: ReviewVerdictRequest,
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> HubInteraction:
+    """Anota el veredicto de quien revisa sobre una conversación real (REV.1).
+
+    Deploy: edge.
+    """
+    interaccion = await session.get(HubInteraction, interaction_id)
+    if interaccion is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Interaction not found"
+        )
+    # SEC.8.1: estas conversaciones llevan preguntas de personas identificadas. Leerlas sin
+    # ser de su organización ya era el caso más grave del hallazgo A2; anotarlas lo es igual,
+    # y además deja rastro atribuido a alguien que no debería estar ahí.
+    await assert_chatbot_org_access(session, interaccion.chatbot_id, user)
+
+    service = FeedbackService(session)
+    return await service.record_review(
+        interaction=interaccion,
+        verdict=request.verdict,
+        note=request.note,
+        reviewer=user.email,
+    )
+
+
 @router.get("/{chatbot_id}/review", response_model=list[InteractionReviewOut])
 async def get_interactions_for_review(
     chatbot_id: uuid.UUID,
     limit: int = Query(50, ge=1, le=200),
     only_low_scores: bool = Query(False),
+    review_status: Literal["pending", "reviewed", "all"] = Query("pending"),
+    verdict: Literal["good", "bad", "mixed"] | None = Query(None),
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[dict]:
@@ -104,6 +169,8 @@ async def get_interactions_for_review(
         chatbot_id=chatbot_id,
         limit=limit,
         only_low_scores=only_low_scores,
+        review_status=review_status,
+        verdict=verdict,
     )
     return [
         {
@@ -114,6 +181,10 @@ async def get_interactions_for_review(
             "feedback_text": i.feedback_text,
             "run_id": str(i.run_id) if i.run_id else None,
             "created_at": i.created_at.isoformat(),
+            "review_verdict": i.review_verdict,
+            "review_note": i.review_note,
+            "review_by": i.review_by,
+            "review_at": i.review_at.isoformat() if i.review_at else None,
         }
         for i in interactions
     ]
