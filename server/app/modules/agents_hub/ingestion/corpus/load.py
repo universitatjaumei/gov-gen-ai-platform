@@ -71,6 +71,8 @@ def progreso_por_consola(actual: int, total: int | None, mensaje: str) -> None:
 
 
 async def _run(args: argparse.Namespace) -> int:
+    from sqlalchemy import select
+
     from server.app.modules.agents_hub.database.config_models import HubChatbot
     from server.app.modules.agents_hub.database.connection import (
         create_async_engine,
@@ -89,6 +91,10 @@ async def _run(args: argparse.Namespace) -> int:
     )
     from server.app.modules.agents_hub.services.vocabulary_service import (
         VocabularyService,
+    )
+    from server.app.modules.agents_hub.ingestion.divergence_detector import (
+        detectar_divergencias,
+        render_divergencias,
     )
 
     manifiesto = load_manifest(args.manifest) if args.manifest else None
@@ -211,6 +217,31 @@ async def _run(args: argparse.Namespace) -> int:
                 else:
                     await session.commit()
                     print(informe.render())
+
+            # DER.2: cargar en A no toca a B. Si B se quedó con la versión anterior de una
+            # norma, este es el momento en que se puede decir —y el único en que alguien
+            # está mirando—. Se compara contra TODOS los chatbots de la organización, no
+            # solo contra los de esta pasada: los que faltan son precisamente el problema.
+            #
+            # No se propaga nada automáticamente: cada asistente tiene su receta de embedding
+            # y su calendario, y propagar en silencio es cómo se reembebe un corpus sin que
+            # nadie lo haya pedido.
+            de_la_organizacion = list(
+                (
+                    await session.execute(
+                        select(HubChatbot.id).where(
+                            HubChatbot.organizacion_id == organizacion_id
+                        )
+                    )
+                ).scalars().all()
+            )
+            divergencias = await detectar_divergencias(session, de_la_organizacion)
+            if divergencias:
+                print(render_divergencias(divergencias))
+                print(
+                    "  (recarga los chatbots atrasados con --chatbot-id; nada se propaga "
+                    "solo)"
+                )
     finally:
         await engine.dispose()
     return primer_fallo

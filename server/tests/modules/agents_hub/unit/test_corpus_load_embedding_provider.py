@@ -147,6 +147,10 @@ class TestLaCargaUsaElServicioResuelto:
 
         session = AsyncMock()
         session.get = AsyncMock(return_value=MagicMock(organizacion_id=uuid.uuid4()))
+        # DER.2: `_run` consulta los chatbots de la organización para el aviso de deriva.
+        sin_hermanos = MagicMock()
+        sin_hermanos.scalars.return_value.all.return_value = []
+        session.execute = AsyncMock(return_value=sin_hermanos)
 
         fabrica = MagicMock()
         fabrica.return_value.__aenter__ = AsyncMock(return_value=session)
@@ -190,6 +194,11 @@ class TestLaCargaUsaElServicioResuelto:
                 "server.app.modules.agents_hub.services.embedding_space."
                 "assert_embedding_space_matches",
                 AsyncMock(),
+            ),
+            patch(
+                "server.app.modules.agents_hub.ingestion.divergence_detector."
+                "detectar_divergencias",
+                AsyncMock(return_value=[]),
             ),
             patch(
                 "server.app.modules.agents_hub.ingestion.watcher.IngestionWatcher"

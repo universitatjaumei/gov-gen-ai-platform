@@ -9,7 +9,6 @@ import {
 import {
   useListDocumentsApiV1HubIngestionChatbotIdDocumentsGet,
   useGetDocumentApiV1HubIngestionChatbotIdDocumentsDocumentIdGet,
-  useDeleteDocumentApiV1HubIngestionChatbotIdDocumentsDocumentIdDelete,
   useGetIngestionJobsApiV1HubIngestionChatbotIdJobsGet,
   useDeleteIngestionJobApiV1HubIngestionChatbotIdJobsJobIdDelete,
   useUploadDocumentApiV1HubIngestionUploadPost,
@@ -23,13 +22,14 @@ import type {
   HubDocumentOut,
 } from '@/shared/api/generated/model'
 
-import { ConfirmDialog } from '@/admin/documents/ConfirmDialog'
+import { DeleteDocumentDialog } from '@/admin/documents/DeleteDocumentDialog'
 import { DocumentPreviewModal } from '@/admin/documents/DocumentPreviewModal'
 import { DocumentsTable } from '@/admin/documents/DocumentsTable'
 import { IngestionJobsPanel } from '@/admin/documents/IngestionJobsPanel'
 import { RechunkConfirmDialog, RechunkControls, RechunkStatus } from '@/admin/documents/RechunkControls'
 import { RetrievalBanner } from '@/admin/documents/RetrievalBanner'
 import { UploadDropzone } from '@/admin/documents/UploadDropzone'
+import { useBorradoDeDocumento } from '@/admin/documents/useBorradoDeDocumento'
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
@@ -49,7 +49,6 @@ export function DocumentsPage() {
   const [jobsOpen, setJobsOpen] = useState(false)
   const [langFilter, setLangFilter] = useState<string>('')
   const [previewDoc, setPreviewDoc] = useState<string | null>(null)
-  const [deleteDocTarget, setDeleteDocTarget] = useState<HubDocumentOut | null>(null)
   const [substituteDoc, setSubstituteDoc] = useState<HubDocumentOut | null>(null)
   const [uploadError, setUploadError] = useState<string>('')
   const [recalculateConfirmOpen, setRecalculateConfirmOpen] = useState(false)
@@ -97,14 +96,7 @@ export function DocumentsPage() {
       { query: { enabled: !!previewDoc } },
     )
 
-  const deleteDocMutation = useDeleteDocumentApiV1HubIngestionChatbotIdDocumentsDocumentIdDelete({
-    mutation: {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: documentsQueryKey })
-        setDeleteDocTarget(null)
-      },
-    },
-  })
+  const borrado = useBorradoDeDocumento(selectedChatbotId, documentsQueryKey)
 
   const presentLanguages = Array.from(new Set(documents.map(d => d.language))).sort()
   const filteredDocs = langFilter ? documents.filter(d => d.language === langFilter) : documents
@@ -236,7 +228,7 @@ export function DocumentsPage() {
             presentLanguages={presentLanguages}
             onPreview={setPreviewDoc}
             onSubstitute={handleSubstitute}
-            onDelete={setDeleteDocTarget}
+            onDelete={borrado.elegir}
             headerActions={documents.length > 0 && (
               <RechunkControls
                 onRecalculate={() => { setRecalculateError(''); setRecalculateConfirmOpen(true) }}
@@ -268,14 +260,15 @@ export function DocumentsPage() {
       {/* `hub.delete_doc_confirm` y no `hub.delete_confirm`: esa otra es la *pregunta*
           «¿Eliminar este chatbot?» de la pantalla de chatbots, y reutilizarla ponía ese
           texto —hablando de un chatbot— en el botón de borrar un documento. */}
-      {deleteDocTarget && (
-        <ConfirmDialog
-          title={t('hub.delete_doc_title')}
-          description={<>{t('hub.delete_doc_text')}{' '}<strong>{deleteDocTarget.title}</strong></>}
-          confirmLabel={t('hub.delete_doc_confirm')}
-          isPending={deleteDocMutation.isPending}
-          onConfirm={() => deleteDocMutation.mutate({ chatbotId: selectedChatbotId, documentId: deleteDocTarget.id })}
-          onCancel={() => setDeleteDocTarget(null)}
+      {borrado.objetivo && (
+        <DeleteDocumentDialog
+          documento={borrado.objetivo}
+          copiasEnOtrosChatbots={borrado.copiasEnOtrosChatbots}
+          borrarEnTodos={borrado.borrarEnTodos}
+          onBorrarEnTodosChange={borrado.setBorrarEnTodos}
+          isPending={borrado.isPending}
+          onConfirm={borrado.confirmar}
+          onCancel={borrado.cancelar}
         />
       )}
 

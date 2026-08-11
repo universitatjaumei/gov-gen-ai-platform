@@ -9735,7 +9735,26 @@ deja de ser cierto.
 
 ---
 
-### Prompt DER.2 (RED/GREEN) — Avisar cuando una norma vive en varios asistentes
+### Prompt DER.2 (RED/GREEN) — Avisar cuando una norma vive en varios asistentes ✅ HECHO el 2026-08-11
+
+> **Resultado**: 19 tests backend + 4 vitest. Tres cosas que aparecieron al ejecutarlo:
+>
+> - **El detector vive en `agents_hub`, no en `curation`.** Escribirlo en `curation/` violaba
+>   la frontera de CUR.1 y lo cazó `test_frontera_curacion.py`. El criterio correcto ya estaba
+>   escrito en esa guarda para `gap_detector`: su sujeto es un chatbot y su señal nace del
+>   corpus del asistente, no de auditar páginas — es algo que el asistente **emite** hacia la
+>   curación.
+> - **`severity` crítica cuando las copias no coinciden en `estat_vigencia`.** No estaba en el
+>   prompt y es el peor caso real: no es que una respuesta esté desactualizada, es que dos
+>   asistentes de la misma casa contestan lo contrario sobre si una norma sigue en vigor.
+> - **Cuando no se puede saber cuál es la vigente** —mismas fechas, distinto contenido— se
+>   avisa a todos con `indeterminat: true` en vez de elegir una: el aviso llevaría implícita
+>   una afirmación falsa.
+>
+> Y dos guardarraíles ajenos que saltaron y se atendieron en vez de rodearse: CAL.3 (la página
+> de documentos pasó de 300 líneas → el diálogo y el borrado salen a
+> `DeleteDocumentDialog` + `useBorradoDeDocumento`) y CAL.4 (las formas plurales de i18next no
+> aparecen literales en el código → la guarda de claves muertas aprende a buscar la clave base).
 
 **Modelo sugerido**: **Sonnet** — se apoya en la maquinaria de hallazgos de curación que ya
 existe; sin decisiones abiertas.
@@ -9774,6 +9793,71 @@ existe; sin decisiones abiertas.
 # should_delete_in_all_chatbots_when_explicitly_asked
 # should_warn_which_chatbots_keep_the_previous_version_after_an_update
 # should_scope_all_of_this_to_the_organization        (gate SEC.8.1)
+```
+
+---
+
+### Prompt DER.3a (PENDIENTE, **no bloqueado**) — Qué necesitamos de la publicación: metadatos y opciones de notificación
+
+**Modelo sugerido**: **Opus** — es un documento que va a una reunión con otra unidad y del que
+sale una decisión difícil de revertir; el criterio pesa más que el código (aquí no hay código).
+
+> **Origen**: el usuario, el 2026-08-11: la forma de publicar y notificar no está definida y
+> hay que acordarla con la unidad de desarrollo, así que conviene llevarles **la relación de
+> metadatos y un abanico de alternativas de notificación** para que elijan la que les encaje.
+>
+> **Va separado de DER.3 y NO está bloqueado, a propósito.** Meterlo dentro de DER.3 lo dejaría
+> en circular: este entregable es justamente **lo que desbloquea DER.3**. Sale antes de la
+> reunión; DER.3 se escribe después, con la opción ya elegida.
+
+```
+# PROMPT DER.3a (ENTREGABLE) — docs/REQUISITOS_PUBLICACION_PLATAFORMA.md
+# Deploy: n/a (documento)
+
+## Audiencia
+La unidad de desarrollo de la UJI. Gente que no conoce este codebase: nada de nombres de
+clase, de tabla ni de prompt. Se habla de normas, documentos y avisos.
+
+## Parte 1 — Metadatos que la plataforma necesita por documento
+Se derivan de `docs/CONTRATO_MD_CORPUS.md`, que ya es la fuente de verdad; **este documento
+no inventa un vocabulario nuevo**, lo traduce a lo que hay que emitir. Por cada campo:
+que significa, si es obligatorio, y **que se rompe si falta o llega mal**. Esa tercera
+columna es la que hace que se respete; sin ella, «obligatorio» es una opinion.
+
+Como minimo: `id_publicacio`, `title`, `url_oficial`, `language`, `estat_vigencia`,
+`ambit_principal`, `submateries`, `content_class`, `us_assistents`, `nivell_acces`, y el
+hash o la fecha de modificacion que permita saber que ha cambiado sin traerse el cuerpo.
+
+Dos cosas que hay que decir explicitamente, porque son las que se olvidan:
+- **`us_assistents` es una prohibicion, no una preferencia** cuando vale 'no'.
+- **El identificador tiene que ser estable entre versiones de la misma norma.** Sin eso no
+  se puede distinguir «norma nueva» de «norma modificada», y la ingesta duplica.
+
+## Parte 2 — Alternativas de notificacion, con su coste para ELLOS
+Cuatro, y para cada una: que tiene que construir la unidad de desarrollo, que construimos
+nosotros, que pasa si se cae una parte, y si permite saber que se ha retirado una norma
+(que es lo que habilita la poda del censo, y no todas lo permiten).
+
+  A. **Sondeo de un indice** — publican un listado consultable; la plataforma pregunta cada
+     N horas. Lo mas simple para ellos, y **es censo**, asi que habilita la poda. Latencia
+     de horas, que para normativa es irrelevante.
+  B. **Webhook** — nos avisan al publicar. Inmediato y barato en reposo, pero **no es
+     censo** (un aviso perdido no se recupera solo) y obliga a autenticacion y reintentos.
+  C. **Cola de mensajes** (Pub/Sub) — como B pero con reintentos y sin perder avisos.
+     Mas infraestructura para ellos.
+  D. **Deposito de ficheros** (bucket) — dejan los `.md` conformes al contrato en una
+     carpeta. Es censo, es lo mas parecido a lo que hacemos hoy a mano, y encaja con que el
+     pipeline de conversion viva fuera (`DECISION_EXTRACCION_Y_DESPLIEGUE.md`).
+
+**Recomendacion explicita, no un menu neutro**: A o D, porque son censo y la poda es lo que
+mantiene el corpus honesto cuando una norma se deroga. B y C sirven como *complemento* para
+bajar la latencia, nunca como unica via. Un documento que presenta cuatro opciones sin
+mojarse traslada la decision a quien tiene menos informacion para tomarla.
+
+## Parte 3 — Lo que NO les pedimos
+Que digan que chatbots consumen cada norma. Explicar por que en dos frases —los
+identificadores son internos y esa relacion cambia mucho mas que la norma— para que la
+pregunta no vuelva en la reunion siguiente.
 ```
 
 ---
@@ -9817,8 +9901,8 @@ es difícil de deshacer una vez que el servicio de publicación empiece a emitir
 > suscripciones declarativas conviven sin estorbarse, igual que hoy conviven la subida manual y
 > el rastreo automático.
 >
-> **Disparador**: cuando el servicio de publicación esté especificado y se sepa qué metadatos
-> emite y cómo notifica (pull periódico, webhook, cola).
+> **Disparador**: cuando la unidad de desarrollo responda al entregable de **DER.3a** y quede
+> elegida la vía de notificación. DER.3a es el paso previo y **no está bloqueado**.
 
 ```
 # PROMPT DER.3 (BLOQUEADO) — La suscripcion vive en la plataforma, no en la publicacion

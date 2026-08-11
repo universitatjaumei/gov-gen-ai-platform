@@ -116,6 +116,27 @@ class MessageOut(BaseModel):
     message: str
 
 
+class CopiasDocumentoOut(BaseModel):
+    """Dónde más vive esta norma, para avisar antes de borrar (DER.2)."""
+
+    copias_en_otros_chatbots: int = 0
+    chatbots_afectados: list[str] = []
+
+
+class DeleteDocumentOut(BaseModel):
+    """Resultado de borrar un documento, con lo que ha quedado sin borrar (DER.2).
+
+    `copias_en_otros_chatbots` no es información decorativa: es la diferencia entre «he
+    quitado esta norma del asistente» y «he retirado esta norma del corpus», que quien pulsa
+    el botón necesita saber **después** de pulsarlo aunque no lo supiera antes.
+    """
+
+    message: str
+    copias_en_otros_chatbots: int = 0
+    chatbots_afectados: list[str] = []
+    documentos_eliminados: int = 1
+
+
 class UploadDocumentOut(BaseModel):
     job: IngestionJob
     message: str
@@ -281,31 +302,128 @@ async def get_document(
     }
 
 
-@router.delete(
-    "/{chatbot_id}/documents/{document_id}",
+async def _copias_en_otros_chatbots(session, doc, organizacion_id) -> list[HubDocument]:
+    """Copias de la misma norma en los demás chatbots de la organización (DER.2).
+
+    **Se busca por `canonical_url`, no por `content_hash`.** Si una copia ha derivado, su
+    hash es distinto y buscar por hash no la encontraría — justo el caso en el que más
+    importa avisar.
+    """
+    from server.app.modules.agents_hub.database.config_models import HubChatbot
+
+    hermanos_ids = list(
+        (
+            await session.execute(
+                select(HubChatbot.id).where(HubChatbot.organizacion_id == organizacion_id)
+            )
+        ).scalars().all()
+    )
+    return [
+        c
+        for c in (
+            await session.execute(
+                select(HubDocument)
+                .where(HubDocument.canonical_url == doc.canonical_url)
+                .where(HubDocument.chatbot_id.in_(hermanos_ids))
+            )
+        ).scalars().all()
+        if c.chatbot_id != doc.chatbot_id
+    ]
+
+
+@router.get(
+    "/{chatbot_id}/documents/{document_id}/copias",
     status_code=status.HTTP_200_OK,
-    response_model=MessageOut,
+    response_model=CopiasDocumentoOut,
 )
-async def delete_document(
+async def get_document_copies(
     chatbot_id: uuid.UUID,
     document_id: uuid.UUID,
     session: AsyncSession = Depends(get_async_session),
     current_user: UserInfo = Depends(get_current_user),
 ):
-    """Elimina un documento ingestado y todos sus chunks."""
-    await _chatbot_autorizado(session, chatbot_id, current_user)
+    """En qué otros chatbots de la organización vive esta norma (DER.2).
+
+    Existe para que el aviso salga **antes** de confirmar el borrado. Decirlo después
+    convierte la información en un lamento: quien la lee ya ha borrado.
+    """
+    chatbot = await _chatbot_autorizado(session, chatbot_id, current_user)
+
+    doc = await session.get(HubDocument, document_id)
+    if not doc or doc.chatbot_id != chatbot_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado."
+        )
+
+    copias = await _copias_en_otros_chatbots(session, doc, chatbot.organizacion_id)
+    return {
+        "copias_en_otros_chatbots": len(copias),
+        "chatbots_afectados": [str(c.chatbot_id) for c in copias],
+    }
+
+
+@router.delete(
+    "/{chatbot_id}/documents/{document_id}",
+    status_code=status.HTTP_200_OK,
+    response_model=DeleteDocumentOut,
+)
+async def delete_document(
+    chatbot_id: uuid.UUID,
+    document_id: uuid.UUID,
+    en_todos_los_chatbots: bool = Query(
+        False,
+        description=(
+            "Borra también la copia de esta norma en los demás chatbots de la "
+            "organización. Por defecto solo se borra la de este chatbot"
+        ),
+    ),
+    session: AsyncSession = Depends(get_async_session),
+    current_user: UserInfo = Depends(get_current_user),
+):
+    """Elimina un documento ingestado y todos sus chunks.
+
+    DER.2: con el documento duplicado por chatbot, «borrar la norma» es ambiguo — puede
+    significar quitarla de este asistente o retirarla del corpus de la organización. La
+    respuesta dice en cuántos asistentes más está, para que quien borra sepa lo que **no** ha
+    hecho; y el borrado en cascada hay que pedirlo, porque hacerlo por defecto sobre corpus
+    normativo es cómo se pierde una norma sin que nadie lo haya pedido.
+    """
+    chatbot = await _chatbot_autorizado(session, chatbot_id, current_user)
     from sqlalchemy import delete as sa_delete
+
+    from server.app.modules.agents_hub.database.config_models import HubChatbot
 
     doc = await session.get(HubDocument, document_id)
     if not doc or doc.chatbot_id != chatbot_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado.")
 
-    await session.execute(
-        sa_delete(HubDocumentChunk).where(HubDocumentChunk.document_id == document_id)
-    )
-    await session.delete(doc)
+    copias = await _copias_en_otros_chatbots(session, doc, chatbot.organizacion_id)
+
+    a_borrar = [doc, *copias] if en_todos_los_chatbots else [doc]
+    for documento in a_borrar:
+        await session.execute(
+            sa_delete(HubDocumentChunk).where(HubDocumentChunk.document_id == documento.id)
+        )
+        await session.delete(documento)
     await session.commit()
-    return {"message": "Documento eliminado."}
+
+    if en_todos_los_chatbots:
+        mensaje = f"Documento eliminado en {len(a_borrar)} chatbot(s)."
+    elif copias:
+        mensaje = (
+            f"Documento eliminado en este chatbot. Sigue en {len(copias)} chatbot(s) mas "
+            "de la organizacion: para retirarlo del corpus entero, repite con "
+            "en_todos_los_chatbots=true."
+        )
+    else:
+        mensaje = "Documento eliminado."
+
+    return {
+        "message": mensaje,
+        "copias_en_otros_chatbots": len(copias),
+        "chatbots_afectados": [str(c.chatbot_id) for c in copias],
+        "documentos_eliminados": len(a_borrar),
+    }
 
 
 def _assert_cumple_el_contrato(content: bytes, filename: str | None) -> None:

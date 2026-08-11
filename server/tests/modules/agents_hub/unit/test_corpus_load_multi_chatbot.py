@@ -53,9 +53,15 @@ def _args(chatbot_ids, **kw):
 class _Escenario:
     """Monta los dobles de `_run` y deja a mano lo que cada test quiere mirar."""
 
-    def __init__(self, chatbots, *, entradas=(), reconcile=None, embedding=None):
+    def __init__(self, chatbots, *, entradas=(), reconcile=None, embedding=None,
+                 divergencias=()):
         self.session = AsyncMock()
         self.session.get = AsyncMock(side_effect=list(chatbots))
+        # `_run` consulta los chatbots de la organización para el aviso de deriva (DER.2).
+        # Sin esto, un AsyncMock devuelve corrutinas encadenadas en vez de filas.
+        chatbots_org = MagicMock()
+        chatbots_org.scalars.return_value.all.return_value = []
+        self.session.execute = AsyncMock(return_value=chatbots_org)
 
         self.fabrica = MagicMock()
         self.fabrica.return_value.__aenter__ = AsyncMock(return_value=self.session)
@@ -71,6 +77,8 @@ class _Escenario:
             return_value=MagicMock(model_name="BAAI/bge-m3")
         )
         self.guarda = AsyncMock()
+        # DER.2: la comprobación de deriva del final tiene sus propios tests.
+        self.divergencias = AsyncMock(return_value=list(divergencias))
 
     def parches(self, load):
         return (
@@ -94,6 +102,10 @@ class _Escenario:
                 "server.app.modules.agents_hub.services.embedding_space."
                 "assert_embedding_space_matches",
                 self.guarda,
+            ),
+            patch(
+                "server.app.modules.agents_hub.ingestion.divergence_detector.detectar_divergencias",
+                self.divergencias,
             ),
             patch("server.app.modules.agents_hub.ingestion.watcher.IngestionWatcher"),
         )
@@ -228,6 +240,48 @@ class TestElInformeEsPorChatbot:
         assert codigo != 0
         salida = capsys.readouterr().out + capsys.readouterr().err
         assert str(segundo) in salida
+
+
+class TestElAvisoDeDeriva:
+    """DER.2 — cargar en A no toca a B, y este es el único momento en que alguien mira."""
+
+    @pytest.mark.asyncio
+    async def test_should_warn_about_chatbots_left_with_the_previous_version(self, capsys):
+        from server.app.modules.agents_hub.ingestion.divergence_detector import Divergencia
+
+        atrasado = uuid.uuid4()
+        divergencia = Divergencia(
+            chatbot_id=atrasado,
+            canonical_url="https://uji.es/instruccio-1-2019",
+            title="Instrucció 1/2019",
+            id_publicacio="UJI-GER-2019-1",
+            document_id=uuid.uuid4(),
+            content_hash="hash-viejo",
+            hash_vigent="hash-nuevo",
+            actualitzat=None,
+            actualitzat_vigent=None,
+            chatbots_afectats=(atrasado,),
+            indeterminat=False,
+            vigencia_en_disputa=False,
+        )
+        esc = _Escenario([_chatbot()], divergencias=[divergencia])
+
+        await _ejecutar(esc, _args([uuid.uuid4()], dry_run=False))
+
+        salida = capsys.readouterr().out
+        assert str(atrasado) in salida
+        assert "UJI-GER-2019-1" in salida
+        # No se propaga solo: cada asistente tiene su receta y su calendario.
+        assert "nada se propaga solo" in salida
+
+    @pytest.mark.asyncio
+    async def test_should_check_against_every_chatbot_of_the_organization(self):
+        """Y no solo contra los de esta pasada: los que faltan son el problema."""
+        esc = _Escenario([_chatbot()])
+
+        await _ejecutar(esc, _args([uuid.uuid4()], dry_run=False))
+
+        esc.divergencias.assert_awaited()
 
 
 class TestElCaminoDeUnSoloChatbot:

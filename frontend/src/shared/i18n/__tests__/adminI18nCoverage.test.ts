@@ -78,13 +78,22 @@ describe('CAL.4 — i18n del panel admin', () => {
       'hub.test_scenarios.verdict_',
     ]
 
+    // Las formas plurales de i18next (`x_one` / `x_other`) tampoco aparecen literales: el
+    // código llama a `t('x', { count })` y es i18next quien elige el sufijo. Se busca la
+    // clave base, que es el consumidor real — y así una forma huérfana, sin `t('x')` en
+    // ningún sitio, sigue saltando.
+    const usada = (clave: string) => {
+      const sufijo = clave.replace(/^hub\./, '')
+      return codigo.includes(`'${clave}'`)
+        || codigo.includes(`"${clave}"`)
+        || codigo.includes(`admin:${clave}`)
+        || codigo.includes(`'hub.${sufijo}'`)
+    }
+
     const muertas = claves(es as Diccionario).filter((k) => {
       if (PREFIJOS_DINAMICOS.some((p) => k.startsWith(p))) return false
-      const sufijo = k.replace(/^hub\./, '')
-      return !codigo.includes(`'${k}'`)
-        && !codigo.includes(`"${k}"`)
-        && !codigo.includes(`admin:${k}`)
-        && !codigo.includes(`'hub.${sufijo}'`)
+      const base = k.replace(/_(one|other|zero|two|few|many)$/, '')
+      return !usada(k) && !(base !== k && usada(base))
     })
 
     expect(

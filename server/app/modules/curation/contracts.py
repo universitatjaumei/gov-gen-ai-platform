@@ -24,6 +24,10 @@ FindingType = Literal[
     # auditar paginas: sale de que pase el tiempo. El sync detecta lo que cambia en origen,
     # y una norma que nadie toca durante tres anos no emite ninguna senal.
     "revisio_vencuda",
+    # DER.2: la misma norma con contenidos distintos en dos chatbots de la organización.
+    # Es la factura de haber descartado compartir el documento (COR): filas separadas
+    # conservan que cada asistente elija su modelo de embedding, y a cambio pueden derivar.
+    "copia_divergent",
 ]
 
 FindingSeverity = Literal["info", "warning", "critical"]

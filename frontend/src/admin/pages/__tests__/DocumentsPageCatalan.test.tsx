@@ -10,6 +10,7 @@ import {
   useDeleteIngestionJobApiV1HubIngestionChatbotIdJobsJobIdDelete,
   useUploadDocumentApiV1HubIngestionUploadPost,
   useClearChatbotCollectionApiV1HubIngestionChatbotIdChunksDelete,
+  useGetDocumentCopiesApiV1HubIngestionChatbotIdDocumentsDocumentIdCopiasGet,
 } from '@/shared/api/generated/hub-ingestion/hub-ingestion'
 import {
   useListChatbotsApiV1HubChatbotsGet,
@@ -79,6 +80,7 @@ vi.mock('@/shared/api/generated/hub-ingestion/hub-ingestion', () => ({
   useDeleteIngestionJobApiV1HubIngestionChatbotIdJobsJobIdDelete: vi.fn(),
   useUploadDocumentApiV1HubIngestionUploadPost: vi.fn(),
   useClearChatbotCollectionApiV1HubIngestionChatbotIdChunksDelete: vi.fn(),
+  useGetDocumentCopiesApiV1HubIngestionChatbotIdDocumentsDocumentIdCopiasGet: vi.fn(),
   getListDocumentsApiV1HubIngestionChatbotIdDocumentsGetQueryKey: vi.fn(
     (id: string) => [`/api/v1/hub/ingestion/${id}/documents`],
   ),
@@ -150,6 +152,8 @@ describe('DocumentsPage en catalán (CAL.4.1)', () => {
     vi.mocked(useUploadDocumentApiV1HubIngestionUploadPost).mockReturnValue(mutationDouble())
     vi.mocked(useClearChatbotCollectionApiV1HubIngestionChatbotIdChunksDelete)
       .mockReturnValue(mutationDouble())
+    vi.mocked(useGetDocumentCopiesApiV1HubIngestionChatbotIdDocumentsDocumentIdCopiasGet)
+      .mockReturnValue({ data: undefined, isLoading: false } as any)
   })
 
   it('should_render_documents_screen_in_catalan', async () => {

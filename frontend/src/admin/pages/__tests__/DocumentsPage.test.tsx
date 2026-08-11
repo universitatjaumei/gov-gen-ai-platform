@@ -10,6 +10,7 @@ import {
   useDeleteIngestionJobApiV1HubIngestionChatbotIdJobsJobIdDelete,
   useUploadDocumentApiV1HubIngestionUploadPost,
   useClearChatbotCollectionApiV1HubIngestionChatbotIdChunksDelete,
+  useGetDocumentCopiesApiV1HubIngestionChatbotIdDocumentsDocumentIdCopiasGet,
 } from '@/shared/api/generated/hub-ingestion/hub-ingestion'
 import {
   useListChatbotsApiV1HubChatbotsGet,
@@ -24,9 +25,19 @@ vi.mock('react-i18next', async () => {
   const es = (await import('@/shared/i18n/locales/es/admin.json')).default as Record<string, unknown>
   const resolver = (clave: string) =>
     clave.split('.').reduce<unknown>((o, p) => (o as Record<string, unknown>)?.[p], es)
+  // Resuelve también plurales (`_one`/`_other`) e interpolación de `{{count}}`: i18next real
+  // lo hace, y un doble que no lo hiciera obligaría a escribir el producto para el doble.
+  const traducir = (key: string, arg?: string | { count?: number }) => {
+    if (arg && typeof arg === 'object' && typeof arg.count === 'number') {
+      const sufijo = arg.count === 1 ? '_one' : '_other'
+      const plantilla = (resolver(`${key}${sufijo}`) ?? resolver(key)) as string | undefined
+      return plantilla?.replace('{{count}}', String(arg.count)) ?? key
+    }
+    return (resolver(key) as string) ?? (arg as string | undefined) ?? key
+  }
   return {
     useTranslation: () => ({
-      t: (key: string, defaultText?: string) => (resolver(key) as string) ?? defaultText ?? key,
+      t: traducir,
       i18n: { changeLanguage: vi.fn() },
     }),
   }
@@ -72,6 +83,7 @@ vi.mock('@/shared/api/generated/hub-ingestion/hub-ingestion', () => ({
   useDeleteIngestionJobApiV1HubIngestionChatbotIdJobsJobIdDelete: vi.fn(),
   useUploadDocumentApiV1HubIngestionUploadPost: vi.fn(),
   useClearChatbotCollectionApiV1HubIngestionChatbotIdChunksDelete: vi.fn(),
+  useGetDocumentCopiesApiV1HubIngestionChatbotIdDocumentsDocumentIdCopiasGet: vi.fn(),
   getListDocumentsApiV1HubIngestionChatbotIdDocumentsGetQueryKey: vi.fn(
     (id: string) => [`/api/v1/hub/ingestion/${id}/documents`],
   ),
@@ -165,6 +177,8 @@ describe('DocumentsPage', () => {
     vi.mocked(useUploadDocumentApiV1HubIngestionUploadPost).mockReturnValue(mutationDouble())
     vi.mocked(useClearChatbotCollectionApiV1HubIngestionChatbotIdChunksDelete)
       .mockReturnValue(mutationDouble())
+    vi.mocked(useGetDocumentCopiesApiV1HubIngestionChatbotIdDocumentsDocumentIdCopiasGet)
+      .mockReturnValue({ data: undefined, isLoading: false } as any)
   })
 
   it('should_list_documents_with_language_badge', async () => {
@@ -250,8 +264,13 @@ describe('DocumentsPage', () => {
     fireEvent.click(screen.getByText('Sí, eliminar'))
 
     // Las variables del hook generado son las del contrato, no una firma propia.
+    // DER.2 añadió `params`: el borrado en cascada se pide, no se hereda.
     await waitFor(() => {
-      expect(deleteDocMutate).toHaveBeenCalledWith({ chatbotId: 'bot-1', documentId: 'doc-es' })
+      expect(deleteDocMutate).toHaveBeenCalledWith({
+        chatbotId: 'bot-1',
+        documentId: 'doc-es',
+        params: { en_todos_los_chatbots: false },
+      })
     })
   })
 
@@ -278,6 +297,85 @@ describe('DocumentsPage', () => {
 
     await waitFor(() => {
       expect(recalculateMutate).toHaveBeenCalledWith({ chatbotId: 'bot-1' })
+    })
+  })
+
+  // ───────────────────── DER.2 — borrar una norma que vive en varios ─────────────────────
+  //
+  // Con el documento duplicado por chatbot, «borrar la norma» es ambiguo: puede significar
+  // quitarla de este asistente o retirarla del corpus de la organización. El aviso sale
+  // ANTES de confirmar — decirlo después convierte la información en un lamento.
+
+  it('should_warn_how_many_chatbots_hold_the_document_before_deleting', async () => {
+    vi.mocked(useGetDocumentCopiesApiV1HubIngestionChatbotIdDocumentsDocumentIdCopiasGet)
+      .mockReturnValue({
+        data: { copias_en_otros_chatbots: 2, chatbots_afectados: ['bot-2', 'bot-3'] },
+        isLoading: false,
+      } as any)
+
+    render(<DocumentsPage />, { wrapper: createWrapper() })
+    await screen.findByText('Normativa Española')
+
+    fireEvent.click(screen.getAllByRole('button', { name: /eliminar documento/i })[0])
+
+    expect(await screen.findByTestId('copias-aviso')).toHaveTextContent('2')
+  })
+
+  it('should_not_warn_when_no_other_chatbot_holds_it', async () => {
+    vi.mocked(useGetDocumentCopiesApiV1HubIngestionChatbotIdDocumentsDocumentIdCopiasGet)
+      .mockReturnValue({
+        data: { copias_en_otros_chatbots: 0, chatbots_afectados: [] },
+        isLoading: false,
+      } as any)
+
+    render(<DocumentsPage />, { wrapper: createWrapper() })
+    await screen.findByText('Normativa Española')
+
+    fireEvent.click(screen.getAllByRole('button', { name: /eliminar documento/i })[0])
+
+    await screen.findByText(/eliminar documento/i)
+    expect(screen.queryByTestId('copias-aviso')).not.toBeInTheDocument()
+  })
+
+  it('should_delete_only_in_this_chatbot_by_default', async () => {
+    vi.mocked(useGetDocumentCopiesApiV1HubIngestionChatbotIdDocumentsDocumentIdCopiasGet)
+      .mockReturnValue({
+        data: { copias_en_otros_chatbots: 1, chatbots_afectados: ['bot-2'] },
+        isLoading: false,
+      } as any)
+
+    render(<DocumentsPage />, { wrapper: createWrapper() })
+    await screen.findByText('Normativa Española')
+
+    fireEvent.click(screen.getAllByRole('button', { name: /eliminar documento/i })[0])
+    fireEvent.click(await screen.findByRole('button', { name: /sí, eliminar/i }))
+
+    // Un borrado en cascada implícito sobre corpus normativo no puede ser el defecto.
+    await waitFor(() => {
+      expect(deleteDocMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ params: { en_todos_los_chatbots: false } }),
+      )
+    })
+  })
+
+  it('should_delete_in_all_chatbots_when_explicitly_asked', async () => {
+    vi.mocked(useGetDocumentCopiesApiV1HubIngestionChatbotIdDocumentsDocumentIdCopiasGet)
+      .mockReturnValue({
+        data: { copias_en_otros_chatbots: 1, chatbots_afectados: ['bot-2'] },
+        isLoading: false,
+      } as any)
+
+    render(<DocumentsPage />, { wrapper: createWrapper() })
+    await screen.findByText('Normativa Española')
+
+    fireEvent.click(screen.getAllByRole('button', { name: /eliminar documento/i })[0])
+    fireEvent.click(await screen.findByRole('checkbox', { name: /todos los chatbots/i }))
+    fireEvent.click(screen.getByRole('button', { name: /sí, eliminar/i }))
+
+    await waitFor(() => {
+      expect(deleteDocMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ params: { en_todos_los_chatbots: true } }),
+      )
     })
   })
 
