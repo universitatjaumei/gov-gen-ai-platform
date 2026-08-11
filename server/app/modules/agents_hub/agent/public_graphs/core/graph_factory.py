@@ -153,50 +153,67 @@ def _make_public_kb_rich(cfg: Any, deps: Any, llm: Any = None) -> CoreGraph:
     )
 
 
-def _make_public_portal_aggregator(cfg: Any, deps: Any, llm: Any = None) -> CoreGraph:
-    """Stub: usa UUID nulo como placeholder; los IDs reales se configuran por tenant."""
-    from server.app.modules.agents_hub.agent.public_graphs.profiles.public_kb_rich import (
-        DefaultLanguagePolicy,
-    )
-    from server.app.modules.agents_hub.agent.public_graphs.profiles.public_portal_aggregator import (
-        UjiAnswerTemplateStrategy,
-        UjiDualSourceRetrievalStrategy,
-        UjiMergeStrategy,
-    )
+#: Perfiles registrados como seleccionables cuya factoría **no está implementada**: se ofrecen
+#: en la lista, pero no hay dónde declarar los chatbots de los que dependen. Sus factorías
+#: lanzan `NotImplementedError` en vez de construir un grafo que recuperaría vacío en silencio
+#: (hallazgo I5 de `docs/AUDITORIA_PRE_DEPLOY.md`).
+#:
+#: Es la fuente única de verdad de esa distinción: el contrato de perfiles
+#: (`tests/public_graphs/test_profile_contract.py`) exige compilar y ejecutar a todo perfil que
+#: NO esté aquí. Implementar uno se cierra sacándolo de este conjunto, y entonces el contrato
+#: pasa a exigírselo.
+PERFILES_SIN_CONFIGURAR = frozenset(
+    {
+        PublicGraphProfile.PUBLIC_PORTAL_AGGREGATOR.value,
+        PublicGraphProfile.PUBLIC_PORTAL_ROUTER.value,
+    }
+)
 
-    return CoreGraph(
-        retrieval_strategy=UjiDualSourceRetrievalStrategy(
-            procedimientos_chatbot_id=uuid.UUID(int=0),
-            normativa_chatbot_id=uuid.UUID(int=0),
-        ),
-        merge_strategy=UjiMergeStrategy(),
-        template_strategy=UjiAnswerTemplateStrategy(),
-        language_policy=DefaultLanguagePolicy(),
-        cfg=cfg,
-        deps=deps,
-        llm=llm,
+_SIN_CONFIGURAR = (
+    "El perfil de grafo '{perfil}' está registrado pero **no está configurado**: {falta}. "
+    "Tal como está, la recuperación no devolvería nada y el asistente respondería que no "
+    "encuentra información, sin ningún error a la vista.\n"
+    "Usa PUBLIC_KB_RICH, que es el perfil operativo, o implementa la configuración de este "
+    "antes de seleccionarlo."
+)
+
+
+def _make_public_portal_aggregator(cfg: Any, deps: Any, llm: Any = None) -> CoreGraph:
+    """Perfil sin configurar: agrega dos chatbots cuyos identificadores nadie fija.
+
+    Hallazgo I5 de `docs/AUDITORIA_PRE_DEPLOY.md`. Estaba registrado como seleccionable con
+    `uuid.UUID(int=0)` en los dos identificadores, así que la recuperación consultaba un
+    chatbot inexistente y devolvía vacío **en silencio**: sin traza, sin log y con el corpus
+    perfectamente cargado. Quien lo eligiera no tendría forma de averiguar por qué su
+    asistente no encuentra nada.
+
+    Falla en alto en vez de construirse. Implementarlo es una funcionalidad con su propio
+    alcance —hacen falta campos de configuración para los dos chatbots de origen—; lo que no
+    puede seguir es que se ofrezca como si funcionara.
+    """
+    raise NotImplementedError(
+        _SIN_CONFIGURAR.format(
+            perfil="PUBLIC_PORTAL_AGGREGATOR",
+            falta=(
+                "no hay dónde declarar de qué dos chatbots agrega (procedimientos y "
+                "normativa)"
+            ),
+        )
     )
 
 
 def _make_public_portal_router(cfg: Any, deps: Any, llm: Any = None) -> CoreGraph:
-    """Stub: sin chatbots hijos; la lista se configura por tenant."""
-    from server.app.modules.agents_hub.agent.public_graphs.profiles.public_kb_rich import (
-        DefaultLanguagePolicy,
-        GenericAnswerTemplateStrategy,
-        PassthroughMergeStrategy,
-    )
-    from server.app.modules.agents_hub.agent.public_graphs.profiles.public_portal_router import (
-        PortalRouterRetrievalStrategy,
-    )
+    """Perfil sin configurar: enruta a chatbots hijos que nadie declara.
 
-    return CoreGraph(
-        retrieval_strategy=PortalRouterRetrievalStrategy(child_chatbot_ids=[]),
-        merge_strategy=PassthroughMergeStrategy(),
-        template_strategy=GenericAnswerTemplateStrategy(),
-        language_policy=DefaultLanguagePolicy(),
-        cfg=cfg,
-        deps=deps,
-        llm=llm,
+    Mismo caso que el agregador de arriba: `child_chatbot_ids=[]` produce una lista de
+    candidatos vacía y, con ella, una respuesta de «no encuentro información» indistinguible
+    de un corpus mal cargado.
+    """
+    raise NotImplementedError(
+        _SIN_CONFIGURAR.format(
+            perfil="PUBLIC_PORTAL_ROUTER",
+            falta="no hay dónde declarar la lista de chatbots hijos a los que enruta",
+        )
     )
 
 

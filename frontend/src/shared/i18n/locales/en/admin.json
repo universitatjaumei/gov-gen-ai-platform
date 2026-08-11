@@ -74,7 +74,6 @@
     "chatbot_graph_section": "Public graph",
     "chatbot_graph_profile": "Graph profile",
     "chatbot_graph_profile_rich": "Rich knowledge base (PUBLIC_KB_RICH)",
-    "chatbot_graph_profile_aggregator": "Portal aggregator (PUBLIC_PORTAL_AGGREGATOR)",
     "chatbot_language_mode": "Language mode",
     "chatbot_language_prefer": "Prefer corpus language",
     "chatbot_language_strict": "Strict (corpus language only)",

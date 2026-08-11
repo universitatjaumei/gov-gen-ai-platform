@@ -180,9 +180,14 @@ conocidos (pyjwt 2.10.1, python-multipart 0.0.21, cryptography 46.0.3; no se usa
 - **I4 · La sync API edge es un stub 501** (`api/v1/edge_sync.py:60-69`); solo hay
   `LocalConfigProvider`. `edge` y `cloud` separados hoy no son desplegables (el primer deploy será
   `DEPLOY_MODE=all`). Los DTOs conservan nombres pre-ROL (`partner_id`, `client_id`).
-- **I5 · `PUBLIC_PORTAL_AGGREGATOR` con UUIDs nulos** (`graph_factory.py:156-171,204`): si un
+- ~~**I5 · `PUBLIC_PORTAL_AGGREGATOR` con UUIDs nulos** (`graph_factory.py:156-171,204`): si un
   chatbot selecciona este perfil, la recuperación consulta un `chatbot_id` nulo y devuelve vacío
-  en silencio.
+  en silencio.~~ **Resuelto el 2026-08-11.** El alcance real era mayor: `PUBLIC_PORTAL_ROUTER`
+  tenía el mismo defecto con `child_chatbot_ids=[]`, y el test de contrato de perfiles
+  *certificaba* que ambos compilaban. Ahora las dos factorías lanzan `NotImplementedError`
+  diciendo qué falta y qué usar en su lugar, ninguno de los dos se ofrece ya en los selectores
+  del panel, y el contrato se aplica solo a los perfiles de `PERFILES_SIN_CONFIGURAR` hacia
+  fuera. Implementarlos sigue siendo una funcionalidad pendiente con su propio alcance.
 - **I6 · `modules/automation` es código muerto sin superficie** — sin router ni
   `frontend/src/automation/`; único consumidor `_legacy_nicegui`. Arrastra `token_service`/
   `api_key_service`. La "Fase 1 con automation" no tiene hoy ni API ni UI.

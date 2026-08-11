@@ -280,7 +280,6 @@ export function OrganizacionesPage() {
                       <label htmlFor="org-default-graph-profile" className="text-xs font-medium text-muted-foreground">{t('hub.organizacion_default_graph_profile')}</label>
                       <select id="org-default-graph-profile" {...register('default_public_graph_profile')} className="w-full mt-1 px-2 py-1.5 border rounded-md text-sm bg-background">
                         <option value="PUBLIC_KB_RICH">{t('hub.chatbot_graph_profile_rich')}</option>
-                        <option value="PUBLIC_PORTAL_AGGREGATOR">{t('hub.chatbot_graph_profile_aggregator')}</option>
                       </select>
                     </div>
                     <div>

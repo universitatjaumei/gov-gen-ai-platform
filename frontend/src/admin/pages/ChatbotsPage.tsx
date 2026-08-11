@@ -700,7 +700,6 @@ export function ChatbotsPage() {
                             className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                           >
                             <option value="PUBLIC_KB_RICH">{t('hub.chatbot_graph_profile_rich')}</option>
-                            <option value="PUBLIC_PORTAL_AGGREGATOR">{t('hub.chatbot_graph_profile_aggregator')}</option>
                           </select>
                         </div>
                         <div>

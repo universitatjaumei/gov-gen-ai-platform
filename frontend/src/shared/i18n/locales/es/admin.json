@@ -131,7 +131,6 @@
     "chatbot_graph_section": "Grafo público",
     "chatbot_graph_profile": "Perfil de grafo",
     "chatbot_graph_profile_rich": "Base de conocimiento rica (PUBLIC_KB_RICH)",
-    "chatbot_graph_profile_aggregator": "Portal agregador (PUBLIC_PORTAL_AGGREGATOR)",
     "chatbot_language_mode": "Modo de idioma",
     "chatbot_language_prefer": "Preferir idioma del corpus",
     "chatbot_language_strict": "Estricto (sólo idioma del corpus)",

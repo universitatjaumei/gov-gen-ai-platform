@@ -1,9 +1,15 @@
 """Tests de contrato de perfiles — 9B.14.
 
-Todo perfil registrado en GraphProfileRegistry debe:
+Todo perfil registrado en GraphProfileRegistry **y configurado** debe:
 - producir un CoreGraph con strategies no nulas
 - compilar el grafo sin errores
 - poder ejecutarse (smoke) con cada retrieval_mode
+
+Los perfiles de `PERFILES_SIN_CONFIGURAR` quedan fuera a propósito: no tienen implementación
+y su factoría lanza `NotImplementedError` en vez de construir un grafo que recuperaría vacío
+en silencio. Que aquí se comprobara lo contrario es lo que mantuvo vivo el hallazgo I5 de la
+auditoría — el contrato certificaba como «compila» un perfil que no servía para nada. Lo que
+se les exige está en `tests/modules/agents_hub/unit/test_stub_profiles_fail_loudly.py`.
 
 La importación de graph_factory dispara el registro de los tres perfiles en
 _default_registry, por lo que list_profiles() ya está poblado al evaluar
@@ -16,7 +22,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # Trigger profile registration in _default_registry
-import server.app.modules.agents_hub.agent.public_graphs.core.graph_factory  # noqa: F401
+from server.app.modules.agents_hub.agent.public_graphs.core.graph_factory import (
+    PERFILES_SIN_CONFIGURAR,
+)
 
 from server.app.modules.agents_hub.agent.public_graphs.core.config_resolver import (
     PublicGraphConfig,
@@ -63,7 +71,25 @@ def _smoke_pipeline(mode: str) -> MagicMock:
     return pipeline
 
 
-@pytest.mark.parametrize("profile_name", _default_registry.list_profiles())
+_PERFILES_CONFIGURADOS = [
+    nombre
+    for nombre in _default_registry.list_profiles()
+    if nombre not in PERFILES_SIN_CONFIGURAR
+]
+
+
+def test_should_keep_at_least_one_profile_under_contract():
+    """Excluir perfiles no puede dejar el contrato vacío.
+
+    Sin esto, meter todos los perfiles en `PERFILES_SIN_CONFIGURAR` haría que toda la clase de
+    abajo pasara sin ejecutar una sola comprobación — verde por ausencia de casos.
+    """
+    assert _PERFILES_CONFIGURADOS, (
+        "Ningún perfil queda bajo el contrato: revisa PERFILES_SIN_CONFIGURAR en graph_factory"
+    )
+
+
+@pytest.mark.parametrize("profile_name", _PERFILES_CONFIGURADOS)
 class TestProfileContract:
 
     def test_profile_compiles_with_non_null_strategies(self, profile_name):
