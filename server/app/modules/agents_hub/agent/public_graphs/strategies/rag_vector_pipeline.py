@@ -23,9 +23,16 @@ from server.app.modules.agents_hub.services.retrieval.vector_strategy import (
 
 
 def _source_to_evidence(source: Source) -> EvidenceItem:
+    # FAQ.2: si el fragmento sale de una FAQ, el aviso va DENTRO del texto que ve el modelo.
+    # Marcarlo solo en el JSON dejaría que la respuesta presentara la sugerencia como si
+    # fuera la norma, con una etiqueta al lado que la contradice.
+    from server.app.modules.agents_hub.services.retrieval.citations import (
+        marcar_autoridad,
+    )
+
     return EvidenceItem(
         source_id=str(source.document_id),
-        content=source.excerpt,
+        content=marcar_autoridad(source.excerpt, source.metadata),
         source_url=source.url,
         title=source.title,
         language=source.metadata.get("language"),

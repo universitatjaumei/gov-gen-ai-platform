@@ -9142,19 +9142,27 @@ norma. `content_class` ya lo modela; falta que llegue hasta la salida.
 - Plantilla de respuesta: cuando la evidencia dominante es `faq`, el texto debe decir que es
   orientativa. Sin inventar un aviso legal: una frase, y el enlace a la norma.
 
-## Regalo gratis (hacerlo aquí, es media hora)
-- **Sembrar el dataset dorado desde el fichero de FAQ**: cada pregunta con su fuente esperada
-  es una entrada válida de RAG.1. Mide recuperación sobre las preguntas que la gente hace de
-  verdad, que es mejor dorado que uno redactado a mano.
-- **Alimentar el detector de huecos (RAG.14)**: una FAQ que el corpus no sabe responder es un
-  hueco documentado, no una sospecha.
+## Lo que se anunció como «regalo gratis» y NO lo era (comprobado al ejecutar)
+- **Sembrar el dataset dorado desde el fichero de FAQ**: **descartado, no es gratis.** Un
+  `GoldenQuery` es consulta + documentos que deberían salir. Si el objetivo de la pregunta de
+  una FAQ es **la propia FAQ**, la entrada es circular y no mide nada: el documento que
+  contiene literalmente esa frase la recupera siempre. Lo que sí valdría —pregunta de FAQ →
+  **la norma** que la sostiene— exige mapear la referencia de respaldo a un identificador de
+  documento, y eso no existe al escribir la FAQ. Queda como candidato cuando el respaldo se
+  declare de forma estructurada, no como texto.
+- **Alimentar el detector de huecos (RAG.14)**: no hace falta código. El detector ya trabaja
+  sobre las conversaciones con `fallback_reason`; una FAQ que el corpus no sabe responder
+  aparece sola en cuanto alguien la pregunta. Era una observación operativa disfrazada de
+  tarea.
 
 ## Tests (RED primero)
 # should_label_a_faq_source_as_orientative_in_the_citation
 # should_not_present_a_faq_with_the_same_shape_as_an_article_citation
 # should_link_to_the_backing_regulation_when_the_faq_declares_one
 # should_carry_content_class_from_document_to_chunk_metadata
-# should_seed_golden_dataset_entries_from_a_faq_file
+# should_mark_faq_evidence_in_the_packed_context   (el aviso va DENTRO del texto que ve el
+#     modelo: marcarlo solo en el JSON deja que la respuesta presente la sugerencia como
+#     norma, con una etiqueta al lado que la contradice)
 
 ## Cierre
 - [ ] Una respuesta apoyada en FAQ es distinguible de una apoyada en norma **leyéndola**,

@@ -194,15 +194,33 @@ def _source_to_dict(source) -> dict:
     también el dialecto `Source` (document_id/url) porque los tools y las estrategias de
     `services/retrieval/` siguen hablándolo por debajo de los pipelines.
     """
+    from server.app.modules.agents_hub.services.retrieval.citations import (
+        etiqueta_de_autoridad,
+    )
+
     document_id = getattr(source, "source_id", None) or getattr(source, "document_id", None)
     url = getattr(source, "source_url", None) or getattr(source, "url", None)
     score = getattr(source, "score", None)
-    return {
+    metadata = getattr(source, "metadata", None) or {}
+
+    salida = {
         "document_id": str(document_id),
         "title": source.title,
         "url": url,
         "score": round(score, 3) if score is not None else None,
     }
+
+    # FAQ.2: la autoridad del texto sale en el JSON para que el frontend pueda pintarla
+    # distinta. `None` cuando es normativa, así que el shape de CAL.2 no cambia para lo que
+    # ya había: se añaden claves, no se alteran las existentes.
+    autoridad = etiqueta_de_autoridad(metadata)
+    if autoridad:
+        salida["authority"] = autoridad
+        respaldo = metadata.get("norma_de_respaldo")
+        if respaldo:
+            salida["backing_url"] = respaldo
+
+    return salida
 
 
 @router.post(

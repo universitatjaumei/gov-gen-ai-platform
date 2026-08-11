@@ -287,6 +287,11 @@ class IngestionWatcher:
                 metadata={
                     "document_id": str(doc.id),
                     "source_url": doc.canonical_url,
+                    # FAQ.2: la autoridad del texto viaja con el fragmento. Sin esto, al
+                    # recuperar una respuesta de FAQ nadie sabe ya que no era una norma.
+                    # Es metadato del chunk, no texto embebido: reclasificar sigue siendo
+                    # un UPDATE y no obliga a re-embeber.
+                    "content_class": doc.content_class,
                 },
                 # RAG.7: el título encabeza el texto que se embebe, no el que se almacena.
                 document_title=doc.title,
