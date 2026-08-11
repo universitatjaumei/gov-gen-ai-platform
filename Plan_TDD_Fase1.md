@@ -9052,6 +9052,117 @@ TESTS REQUERIDOS (Vitest):
 
 ---
 
+## Bloque FAQ — Preguntas frecuentes como contenido citable (PENDIENTE)
+
+> **Contexto**: decisión del 2026-08-11. Algunos chatbots deben responder a partir de un
+> documento de **preguntas frecuentes con respuesta sugerida**. Se descartaron las otras dos
+> vías que se plantearon:
+>
+> - **Como ejemplos en el prompt**: no escala —cien FAQ no caben en un prompt de sistema— y
+>   además invita al modelo a parafrasear una respuesta institucional, que es justo lo que no
+>   debe hacer con un texto que alguien redactó con cuidado.
+> - **Como dataset dorado**: el dorado mide **recuperación**; es un artefacto de prueba, no
+>   de contenido. (Pero ver FAQ.2: el mismo fichero puede sembrarlo, y eso es gratis.)
+>
+> **Se ingieren como documentos**, con `content_class: faq` —valor que el contrato ya admite—.
+> La razón de fondo no es la comodidad: **el texto de la pregunta de una FAQ es un objetivo de
+> embedding casi perfecto**, porque se parece mucho más a lo que el ciudadano escribe que el
+> artículo que la fundamenta. Una FAQ recupera mejor que su propia norma.
+>
+> **El riesgo que este bloque tiene que cerrar**: una respuesta sugerida **no es una norma**.
+> Si se cita con la misma autoridad que un artículo, se habrá publicado una respuesta no
+> revisada como si fuera normativa.
+
+---
+
+### Prompt FAQ.1 (RED/GREEN) — Formato del `.md` de preguntas frecuentes y su troceado
+
+**Modelo sugerido**: **Sonnet** — extiende un contrato que ya existe; el troceador ya es por
+encabezados y no hay que tocarlo si el formato se define bien.
+
+**Objetivo**: fijar cómo se escribe un `.md` de FAQ para que cada pregunta y su respuesta
+acaben en **el mismo fragmento**, y ni una pregunta se separe de su respuesta ni se mezcle con
+la de al lado.
+
+```
+# PROMPT FAQ.1 (RED/GREEN) — Una pregunta, un encabezado, un fragmento
+# Deploy: edge
+
+## El formato (se añade como sección propia a docs/CONTRATO_MD_CORPUS.md)
+- Front-matter con `content_class: faq` y el resto de campos del contrato como cualquier
+  documento (`language`, `id_publicacio`, `title`, `estat_vigencia`...).
+- **Un encabezado de unidad citable por pregunta**, con su ancla: la pregunta ES el
+  encabezado. Ancla estable con prefijo propio, `{#faq-N}`, para que una cita apunte a la
+  pregunta y no al documento entero.
+- La respuesta sugerida, en el cuerpo de esa unidad.
+- **Referencia a la norma que la sostiene**, cuando la haya: es lo que permite que la
+  respuesta remita al artículo en vez de sustituirlo.
+
+## Por qué así, y no con negritas o listas
+El troceador parte por encabezados (5 niveles + anclas). Si las preguntas van en negrita o en
+una lista, el documento entero cae en uno o dos fragmentos y la recuperación devuelve un
+bloque con veinte preguntas, de las que diecinueve no vienen a cuento. Peor todavía: un corte
+en mitad de la lista deja media pregunta con la respuesta de otra, y **eso se cita mal sin que
+se note**.
+
+## Tests (RED primero)
+# should_chunk_one_question_and_its_answer_together
+# should_not_merge_two_consecutive_questions_in_one_chunk
+# should_keep_the_faq_anchor_in_the_chunk_metadata
+# should_reject_a_faq_document_whose_questions_are_bold_instead_of_headings
+#     (con un aviso que diga por qué: es el error que se va a cometer)
+# should_accept_a_faq_document_that_conforms   (extremo a extremo: sube, trocea, recupera)
+
+## Cierre
+- [ ] La sección del formato está en `docs/CONTRATO_MD_CORPUS.md`, con un ejemplo completo
+- [ ] Un `.md` de FAQ de ejemplo, ingerible, en el repositorio o en el proyecto de curación
+```
+
+---
+
+### Prompt FAQ.2 (RED/GREEN) — Una FAQ se cita como FAQ, nunca como norma
+
+**Modelo sugerido**: **Opus** — toca el contrato de citas y la plantilla de respuesta, que es
+donde se decide qué autoridad se le atribuye a un texto ante un ciudadano. Equivocarse aquí no
+produce un error visible.
+
+**Objetivo**: que la respuesta y la cita distingan una respuesta sugerida de un artículo de
+norma. `content_class` ya lo modela; falta que llegue hasta la salida.
+
+```
+# PROMPT FAQ.2 (RED/GREEN) — La autoridad del texto viaja con el fragmento
+# Deploy: edge
+
+## Cambios
+- El `content_class` del documento llega al metadato del fragmento y de ahí a la evidencia
+  que consume el grafo. Hoy el troceador ya propaga `estat` y `classes`; es el mismo camino.
+- Contrato de citas (P6): una fuente `faq` se presenta como **respuesta orientativa**, con su
+  etiqueta, y —si la declara— con el enlace a la norma que la sostiene. Nunca con la misma
+  forma que una cita de artículo.
+- Plantilla de respuesta: cuando la evidencia dominante es `faq`, el texto debe decir que es
+  orientativa. Sin inventar un aviso legal: una frase, y el enlace a la norma.
+
+## Regalo gratis (hacerlo aquí, es media hora)
+- **Sembrar el dataset dorado desde el fichero de FAQ**: cada pregunta con su fuente esperada
+  es una entrada válida de RAG.1. Mide recuperación sobre las preguntas que la gente hace de
+  verdad, que es mejor dorado que uno redactado a mano.
+- **Alimentar el detector de huecos (RAG.14)**: una FAQ que el corpus no sabe responder es un
+  hueco documentado, no una sospecha.
+
+## Tests (RED primero)
+# should_label_a_faq_source_as_orientative_in_the_citation
+# should_not_present_a_faq_with_the_same_shape_as_an_article_citation
+# should_link_to_the_backing_regulation_when_the_faq_declares_one
+# should_carry_content_class_from_document_to_chunk_metadata
+# should_seed_golden_dataset_entries_from_a_faq_file
+
+## Cierre
+- [ ] Una respuesta apoyada en FAQ es distinguible de una apoyada en norma **leyéndola**,
+      no solo inspeccionando el JSON
+```
+
+---
+
 ## Bloque EXT — Frontera de la extracción: qué entra al corpus y qué es contexto (PENDIENTE, va ANTES de Deploy)
 
 > **Contexto**: `docs/DECISION_EXTRACCION_Y_DESPLIEGUE.md` (2026-08-10). «Subir un documento»
@@ -9532,6 +9643,65 @@ gcloud sql backups create --instance=govgenai-prod --async
 
 ---
 
+### Prompt D.4.0 (RED/GREEN) — Los modelos locales pasan a ser un extra de instalación
+
+**Modelo sugerido**: **Sonnet** — cambio de empaquetado con criterio cerrado; la parte fina
+(importación perezosa y mensaje de error) está especificada abajo.
+
+**Objetivo**: `torch`, `transformers` y `sentence-transformers` son dependencias obligatorias
+y están ahí por `LocalEmbeddingService` (BGE-M3) y `LocalReranker`. Con embeddings de Vertex y
+el reranker apagado —el plan de despliegue— **no se usan en ejecución, pero se pagan enteros**
+en memoria y arranque.
+
+Medido en EXT.3: `sentence-transformers` 216 MB, `torch` 172 MB, y entre los tres se llevan
+prácticamente todo el tiempo de import; `pdfplumber`, que es lo que sí se usa, cuesta 5 MB.
+La aplicación en reposo son 627 MB, y la mayor parte es esa pila.
+
+**Va antes de D.4-VM** porque cambia el tamaño de la máquina a la mitad, y ese es el número
+que D.4 tiene que fijar.
+
+```
+# PROMPT D.4.0 (RED/GREEN) — Instalar los modelos locales solo cuando se van a usar
+# Deploy: shared (empaquetado)
+
+## Lo que NO cambia, y es la condición del prompt
+- **El modo edge sigue pudiendo usar modelos locales.** Esto no retira una capacidad: la
+  hace opcional. `LocalEmbeddingService` y `LocalReranker` se conservan íntegros, y un
+  despliegue edge los instala con el extra.
+- La cascada de selección (`resolve_embedding_service`, `resolve_reranker`) no cambia: se
+  sigue eligiendo por fila de configuración, no por lo que haya instalado.
+
+## Cambios
+- `server/pyproject.toml`: mover `torch`, `torchvision`, `transformers` y
+  `sentence-transformers` de las dependencias base a un extra `[project.optional-dependencies]`
+  llamado `local-models`. Regenerar el lock.
+- Importación **perezosa** en `LocalEmbeddingService` y `LocalReranker`: el import va dentro
+  del método que lo necesita, no en la cabecera del módulo. Hoy `reranker.py` ya lo hace
+  ("import perezoso"); replicar el patrón en el servicio de embeddings.
+- **El fallo tiene que explicarse.** Si se resuelve un proveedor `local` sin el extra
+  instalado, el error debe decir QUÉ falta y CÓMO instalarlo (`uv sync --extra local-models`),
+  no un `ModuleNotFoundError: torch` a secas. Es el mismo criterio que
+  `EmbeddingProviderNotSupported`, que ya falla con un mensaje que se entiende.
+- Documentar el extra en el README de despliegue y en `.env.example`, junto a la elección de
+  proveedor de embeddings.
+
+## Tests (RED primero)
+# should_not_import_torch_at_module_import_time      (importar la app no carga torch)
+# should_explain_how_to_install_the_extra_when_local_embedding_is_selected
+# should_explain_how_to_install_the_extra_when_local_reranker_is_selected
+# should_still_resolve_google_embeddings_without_the_extra
+# should_keep_local_services_working_when_the_extra_IS_installed   (no se retira capacidad)
+
+## Cierre
+- [ ] `python -c "import server.app.main; import sys; assert 'torch' not in sys.modules"`
+- [ ] Medir de nuevo el RSS en reposo y anotarlo en
+      `docs/DECISION_EXTRACCION_Y_DESPLIEGUE.md` §Dimensionado, junto a la cifra de 627 MB
+      que sustituye
+- [ ] Suite completa en verde CON el extra instalado (es como corre CI hoy)
+```
+
+---
+
 ### Prompt D.4-VM (REESCRITO) — La máquina: aprovisionamiento, Compose y TLS
 
 **Modelo sugerido**: **Sonnet** — infraestructura con pasos conocidos; la única decisión
@@ -9555,12 +9725,12 @@ retirado en EXT.3, no hay nada que escalar por separado.
   5 MB, mientras que `transformers` (142 s), `sentence-transformers` (75 s / 216 MB) y
   `torch` (52 s / 172 MB) se llevan el arranque entero. Están por `LocalEmbeddingService`
   (BGE-M3) y `LocalReranker`, no por la extracción.
-- **Decisión pendiente que cambia el tamaño a la mitad**: con embeddings de Vertex y el
-  reranker apagado —el plan— esa pila no se usa en ejecución pero se paga entera. Hacerla un
-  extra de instalación (`[local-models]`, con importación perezosa y un error claro si falta)
-  dejaría la aplicación en ~150-250 MB y el arranque en segundos, sin renunciar al modo edge.
-  Decidirlo ANTES de fijar el tamaño: con la pila, ~2 GB para la aplicación; sin ella, mucho
-  menos.
+- **D.4.0 lo resuelve y hay que ejecutarlo ANTES**: mueve esa pila a un extra
+  `[local-models]`. Con ella, la aplicación pide ~2 GB; sin ella, se espera ~150-250 MB. El
+  tamaño se fija con la cifra que D.4.0 vuelva a medir, no con la de 627 MB.
+- Si el despliegue usa embeddings de Vertex y el reranker apagado —el plan—, la VM **no
+  instala el extra**. Un edge con modelos locales sí, y entonces vuelve a hacer falta el
+  presupuesto grande.
 - El disco no guarda nada que duela perder (ver abajo), así que el margen se pone en memoria.
 - Disco: solo sistema, imágenes y logs. Los documentos van a GCS y la base a Cloud SQL, así
   que el disco de la VM no guarda nada que duela perder — y eso es deliberado.
@@ -15276,9 +15446,45 @@ RAG.14 y SYNC.1).
 
 ---
 
-## Bloque OWUI — Carcasa de chat desechable: adaptador compatible-OpenAI + Pipe (post-deploy, PENDIENTE)
+## Bloque OWUI — ❌ DESCARTADO (2026-08-11)
 
-> **Contexto**: derivado de `docs/DECISION_OPENWEBUI_CARCASA_CHAT.md`. Open WebUI se adopta como carcasa de chat **desechable e intercambiable** para la capa conversacional; el backend sigue siendo la fuente de verdad. Regla de acoplamiento: **OWUI llama HACIA el backend (API compatible-OpenAI); la gobernanza NUNCA vive en OWUI.** No aplica a expedientes (Fase 3) ni a informes formales, que mantienen interfaz propia.
+> ## No ejecutar. El bloque se descarta entero; lo que sigue queda como registro.
+>
+> **Decisión del usuario, tras la conversación de arquitectura del 2026-08-11.** Cuatro
+> razones, y la cuarta es la que inclina:
+>
+> 1. **Se pierde la identidad institucional.** No es un detalle estético: SEC.8.6 y el
+>    hallazgo #3 de MAN.2 acaban de construir el sistema de temas —tabla `hub_themes`,
+>    cascada plataforma→organización→chatbot, resolución en el widget— precisamente para
+>    que el chat público se vea de la institución. Poner OWUI delante tira ese trabajo.
+> 2. **Actualizar OWUI cuesta.** Es una aplicación de terceros con su propio ciclo de
+>    versiones, y cada salto hay que probarlo contra el adaptador.
+> 3. **Consume recursos de la VM.** Con el despliegue en una sola máquina
+>    (`docs/DECISION_EXTRACCION_Y_DESPLIEGUE.md` §2), OWUI y su base propia compiten por
+>    la memoria que se acaba de medir en EXT.3.
+> 4. **El público al que servía ya está servido de otra forma.** OWUI aportaba una UX de
+>    chat rica —historial, adjuntos, cambio de modelo— que tiene sentido para **personal
+>    interno**, no para el ciudadano. Para la superficie pública nunca fue la respuesta, y
+>    el propio nombre del bloque lo admitía: «carcasa **desechable**».
+>
+> **Qué se pierde, dicho sin adornos**: el historial de conversaciones y una UX de chat más
+> rica para quien use el asistente como herramienta de trabajo. Es real. La alternativa es
+> añadirlo al frontend propio cuando haga falta, conservando identidad y una pieza menos que
+> mantener.
+>
+> **Y el adaptador compatible-OpenAI también se aparca.** Tiene valor *independiente* de
+> OWUI —permite que cualquier herramienta hable con el asistente— pero solo si aparece un
+> consumidor concreto que lo pida. Sin él es código especulativo, que es lo que proscribe la
+> norma de «sin código muerto especulativo» de `CLAUDE.md`. Si mañana alguien lo necesita, se
+> hace entonces: es pequeño y el andamiaje (scope `chat:completions`, PAT, identidad
+> delegada) ya está puesto desde SEC.2.1.
+>
+> `docs/DECISION_OPENWEBUI_CARCASA_CHAT.md` se conserva: su análisis de qué NO usar de OWUI
+> sigue siendo válido si algún día se reabre.
+
+---
+
+> **Contexto original (2026-07-24)**: derivado de `docs/DECISION_OPENWEBUI_CARCASA_CHAT.md`. Open WebUI se adopta como carcasa de chat **desechable e intercambiable** para la capa conversacional; el backend sigue siendo la fuente de verdad. Regla de acoplamiento: **OWUI llama HACIA el backend (API compatible-OpenAI); la gobernanza NUNCA vive en OWUI.** No aplica a expedientes (Fase 3) ni a informes formales, que mantienen interfaz propia.
 >
 > **Posición en el orden de ejecución** (acordada 2026-07-24): **tras Deploy GCP**, como spike/comparación para el piloto de septiembre. El frontend React de chat ya existe y es la línea de comparación; este bloque levanta la carcasa OWUI sobre el MISMO backend desplegado. (La decisión §9 contempla adelantarlo si se quisiera descartar trabajo de chat-UI en CAL; el orden acordado aquí es post-deploy.)
 >
