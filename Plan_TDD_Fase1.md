@@ -9290,7 +9290,45 @@ SEC.4.
 
 ---
 
-## Bloque COR — Un documento, muchos chatbots (PENDIENTE, va ANTES de la primera ingesta real)
+## Bloque COR — Un documento, muchos chatbots (❌ DESCARTADO el 2026-08-11, el mismo día que se planificó)
+
+> **Decisión: no se hace.** Los prompts se conservan porque el análisis sirve, pero **no se
+> ejecutan**. Motivo del descarte, tras la contraargumentación del usuario:
+>
+> 1. **La deduplicación casi nunca se dispararía.** COR.2 solo comparte fragmentos cuando
+>    coinciden `embedding_model`, `embedding_dim` y `chunking_strategy`. El piloto **varía la
+>    estrategia a propósito** para comparar configuraciones, así que se pagaría la migración
+>    de la tabla más caliente del sistema por un ahorro que en el caso real no llega.
+> 2. **El problema de mantenimiento se resuelve fuera del esquema.** Un solo `.md` en disco y
+>    dos cargas apuntando ahí. El reconciliador es incremental por hash, así que una
+>    derogación es editar el fichero una vez y ejecutar un comando dos veces — no mantener
+>    dos copias a mano.
+> 3. **Filas separadas conservan una libertad que se quiere**: cada asistente elige su modelo
+>    de embedding, que es exactamente el conmutador que la guarda de RAG.9 existe para hacer
+>    seguro. Y admiten `nivell_acces`/`us_assistents` distintos por asistente sin mover la
+>    política a una tabla de asociación.
+> 4. **El coste de duplicar es pequeño**: decenas de MB de disco y céntimos de embeddings por
+>    recarga completa. No compra una migración de esquema y de consultas.
+>
+> **Dos argumentos de la planificación original eran incorrectos y se anotan como tales**,
+> para que nadie los reutilice:
+>
+> - *«El censo y la poda son de la organización y evaluarlos por chatbot debilita la
+>   salvaguarda del 10 %»*: **falso**. Cada corpus se evalúa contra su propio tamaño, que es
+>   lo que la salvaguarda quiere decir. Por chatbot es la granularidad correcta.
+> - *«Una derogación hay que aplicarla N veces»*: cierto en el sentido literal, pero son N
+>   ejecuciones de un comando incremental, no N ediciones. El riesgo que queda es operativo,
+>   no de modelo de datos.
+>
+> ### Lo único que sí queda pendiente de decidir (candidato, 1 prompt)
+>
+> El riesgo real que la duplicación deja abierto es la **deriva**: que alguien recargue un
+> asistente y no el otro, y la misma norma quede con dos contenidos distintos sin que nada
+> avise. No necesita migración — es agrupar por `canonical_url` dentro de la organización y
+> contar `content_hash` distintos — y encaja en la maquinaria de hallazgos de curación que ya
+> existe (junto a `revisio_vencuda` de SYNC.2). **Sin planificar hasta que el usuario lo pida.**
+
+---
 
 > **Origen**: pregunta del usuario el 2026-08-11. Hoy `HubDocument` lleva `chatbot_id` y una
 > unicidad `(chatbot_id, content_hash)`: **la misma norma usada en dos chatbots son dos filas,
