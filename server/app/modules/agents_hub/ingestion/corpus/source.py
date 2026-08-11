@@ -15,6 +15,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from server.app.modules.agents_hub.ingestion.corpus.faq import (
+    FaqFormatoInvalido,
+    assert_formato_faq,
+    debe_validarse_como_faq,
+)
 from server.app.modules.agents_hub.ingestion.corpus.frontmatter import parse_frontmatter
 from server.app.modules.agents_hub.ingestion.corpus.manifest import (
     CorpusDocumentEntry,
@@ -99,9 +104,21 @@ class LocalDirectorySource:
             if not fichero.is_file():
                 errores.append(f"  {ruta}: el manifiesto lo declara y no existe")
                 continue
-            metadata, _ = parse_frontmatter(
+            metadata, cuerpo = parse_frontmatter(
                 fichero.read_text(encoding="utf-8-sig", errors="replace")
             )
+
+            # FAQ.1: una FAQ mal formateada se ingiere sin protestar y responde peor a
+            # partir de entonces. Se comprueba aquí, con el resto del contrato, para que el
+            # paquete falle ENTERO y con la lista completa de lo que hay que corregir —el
+            # mismo criterio que el resto de este método.
+            if debe_validarse_como_faq(metadata):
+                try:
+                    assert_formato_faq(cuerpo)
+                except FaqFormatoInvalido as mal_formada:
+                    errores.append(f"  {ruta}: {mal_formada}")
+                    continue
+
             try:
                 base = del_manifiesto.get(ruta)
                 if base is not None:

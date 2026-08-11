@@ -747,6 +747,77 @@ circulares no se declararon uno a uno, se añadió la serie romana al reconocimi
 
 ---
 
+## 9. Preguntas frecuentes (`content_class: faq`)
+
+> **Añadido en FAQ.1 (2026-08-11).** Hasta aquí el contrato describe **normas**, cuya unidad
+> citable es el artículo. Un documento de preguntas frecuentes es otra cosa y necesita su
+> propia regla, porque **su unidad citable es la pregunta**.
+
+### 9.1 Por qué las FAQ se ingieren y no van en el prompt
+
+El texto de una pregunta frecuente es un **objetivo de embedding casi perfecto**: se parece
+muchísimo más a lo que la persona escribe que el artículo que la fundamenta. Una FAQ recupera
+mejor que su propia norma. Meterlas como ejemplos en el prompt del sistema no escala —cien
+preguntas no caben— y además invita al modelo a parafrasear una respuesta que alguien redactó
+con cuidado.
+
+### 9.2 La regla: una pregunta, un encabezado, un fragmento
+
+**La pregunta ES el encabezado**, con su ancla:
+
+```markdown
+---
+language: es
+id_publicacio: FAQ-UGITJ
+title: Preguntas frecuentes de la UGITJ
+content_class: faq
+---
+
+# Preguntas frecuentes de la UGITJ
+
+##### ¿Cómo se justifica una dieta por asistencia a un curso? {#faq-1}
+
+Se justifica con el formulario de la unidad y el certificado de asistencia. El importe
+máximo es el del grupo que corresponda al puesto.
+
+Norma que lo sostiene: Decreto 80/2025 de indemnizaciones.
+
+##### ¿Qué plazo hay para presentar la justificación? {#faq-2}
+
+Un mes desde la finalización del curso. Pasado el plazo hay que motivar el retraso.
+```
+
+Tres exigencias, y las tres salen de lo mismo —que pregunta y respuesta acaben juntas—:
+
+1. **Al menos una pregunta como encabezado con ancla `faq-`.**
+2. **Ninguna pregunta suelta en negrita o en lista.**
+3. **Todo encabezado por debajo del título lleva ancla**, para que la cita apunte a la
+   pregunta y no al documento entero.
+
+### 9.3 Por qué no vale escribirlas en negrita, que es lo natural
+
+El troceador parte por encabezados. Con las preguntas en negrita o en lista, el documento
+entero cae en uno o dos fragmentos, y pasan dos cosas:
+
+- La recuperación devuelve **un bloque con veinte preguntas** de las que diecinueve no vienen
+  a cuento, y el modelo tiene que adivinar cuál responder.
+- Si el bloque supera el tamaño de fragmento, el corte cae donde toque y deja **media
+  pregunta con la respuesta de otra**. Esto es lo grave: **no se ve leyendo la respuesta**, se
+  ve cuando alguien actúa según ella.
+
+Por eso la comprobación es automática y rechaza el documento
+(`ingestion/corpus/faq.py`), en las dos vías de entrada —la subida del panel y el CLI de
+carga—. Un `.md` de FAQ mal formateado se ingeriría sin protestar y respondería peor a partir
+de entonces.
+
+### 9.4 La referencia a la norma
+
+Cuando la respuesta se apoye en una norma, **cítala en el cuerpo**. No es adorno: una
+respuesta sugerida **no es una norma**, y lo que la hace defendible es poder ir al artículo.
+Cómo se presenta esa diferencia ante quien pregunta lo fija **FAQ.2**.
+
+---
+
 ## Anexo A — Cifras de referencia
 
 > *(Enmienda 15.)* Las cifras del cuerpo del contrato eran una instantánea y quedaron obsoletas al

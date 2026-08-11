@@ -321,6 +321,11 @@ def _assert_cumple_el_contrato(content: bytes, filename: str | None) -> None:
     """
     from pydantic import ValidationError
 
+    from server.app.modules.agents_hub.ingestion.corpus.faq import (
+        FaqFormatoInvalido,
+        assert_formato_faq,
+        debe_validarse_como_faq,
+    )
     from server.app.modules.agents_hub.ingestion.corpus.frontmatter import (
         parse_frontmatter,
     )
@@ -336,8 +341,23 @@ def _assert_cumple_el_contrato(content: bytes, filename: str | None) -> None:
             detail="El fichero no es texto UTF-8.",
         ) from None
 
-    metadatos, _cuerpo = parse_frontmatter(texto)
+    metadatos, cuerpo = parse_frontmatter(texto)
     nombre = filename or "documento.md"
+
+    # FAQ.1: si se declara FAQ, tiene que tener forma de FAQ. Se comprueba aquí y no al
+    # trocear porque el fallo es mudo: una FAQ en negritas se ingiere sin protestar y
+    # responde peor a partir de entonces.
+    if debe_validarse_como_faq(metadatos):
+        try:
+            assert_formato_faq(cuerpo)
+        except FaqFormatoInvalido as mal_formada:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "FAQ_FORMAT_INVALID",
+                    "message": str(mal_formada),
+                },
+            ) from mal_formada
 
     try:
         entry_from_frontmatter(
