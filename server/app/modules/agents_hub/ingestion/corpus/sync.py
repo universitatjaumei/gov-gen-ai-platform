@@ -28,9 +28,9 @@ import os
 import sys
 import uuid
 
-# `langchain_text_splitters` arrastra torch, y en Windows cargarlo DESPUÉS de abrir una
-# conexión asyncpg aborta el proceso. Mismo orden forzado que en `load.py`.
-from server.app.modules.agents_hub.ingestion.chunker import MarkdownChunker  # noqa: F401
+# Mismo orden forzado que en `load.py`, y por el mismo motivo: importar el chunker dejó de
+# bastar en D.4.0. Ver el comentario largo de allí.
+import langchain_text_splitters  # noqa: F401
 
 from server.app.modules.agents_hub.ingestion.corpus.manifest import (
     CorpusValidationError,
@@ -74,8 +74,12 @@ async def _run(args: argparse.Namespace) -> int:
     )
     from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
     from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
-    from server.app.modules.agents_hub.services.embedding_service import (
-        LocalEmbeddingService,
+    from server.app.modules.agents_hub.services.embedding_resolver import (
+        resolve_embedding_service,
+    )
+    from server.app.modules.agents_hub.services.embedding_space import (
+        EmbeddingSpaceMismatch,
+        assert_embedding_space_matches,
     )
     from server.app.modules.agents_hub.services.vocabulary_service import VocabularyService
 
@@ -124,10 +128,25 @@ async def _run(args: argparse.Namespace) -> int:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 1
 
+            # FIX.4: mismo motivo que en `load.py` — el servicio sale de la configuración
+            # vigente (MOD.2). Aquí importa incluso más: una sincronización corre sola y sin
+            # nadie mirando, así que embeber con el modelo equivocado no se nota hasta que
+            # alguien pregunta.
+            embedding_service = await resolve_embedding_service(session, args.chatbot_id)
+            print(f"embeddings: {embedding_service.model_name}")
+
+            try:
+                await assert_embedding_space_matches(
+                    session, args.chatbot_id, embedding_service
+                )
+            except EmbeddingSpaceMismatch as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 3
+
             reconciler = CorpusReconciler(
                 session,
                 IngestionWatcher(
-                    session, LocalEmbeddingService(), chatbot_provider=provider
+                    session, embedding_service, chatbot_provider=provider
                 ),
             )
             try:

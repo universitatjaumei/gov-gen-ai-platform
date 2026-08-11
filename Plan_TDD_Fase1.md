@@ -9615,20 +9615,27 @@ precedente.
 
 ---
 
-## Prompt FIX.4 (RED/GREEN) — La carga del corpus no puede exigir los modelos locales (BLOQUEANTE de la primera ingesta)
+## Prompt FIX.4 (RED/GREEN) — La carga del corpus embebe con el modelo configurado ✅ HECHO el 2026-08-11
 
 **Modelo sugerido**: **Sonnet** — el mecanismo correcto ya existe (MOD.2); esto es cablearlo
 donde no se cableó.
 
-> **Hallazgo del 2026-08-11**, al preparar el bloque DER. `corpus/load.py:109` y
-> `corpus/sync.py:130` construyen **`LocalEmbeddingService()` a pelo**. Eso ya contradecía
-> MOD.2 —que precisamente quitó `get_embedding_service` devolviendo el local por defecto para
-> que el modelo saliera de la cascada del chatbot—, pero desde **D.4.0 es peor**: `torch` y
-> `sentence-transformers` son un extra opcional, así que **la carga del corpus falla en una
-> instalación estándar**, que es justo la del despliegue previsto con embeddings de Vertex.
+> **Hallazgo del 2026-08-11**, al preparar el bloque DER. **Ejecutado el mismo día**; lo que
+> sigue es lo que resultó ser, que era más de lo que el hallazgo decía.
 >
-> Falla en alto y con un mensaje que dice qué instalar (D.4.0 lo dejó así), o sea que no es
-> una avería muda. Pero es un muro justo en el camino que toca ahora.
+> `corpus/load.py` y `corpus/sync.py` construían **`LocalEmbeddingService()` a pelo**,
+> contradiciendo MOD.2 —que existe para que el modelo salga de la cascada y no de un
+> `import`—. El efecto no era «falla sin el extra», como decía la primera redacción: era que
+> **la carga ignoraba la configuración**. Con el extra instalado, el corpus quedaba embebido
+> con BGE-M3 aunque el despliegue estuviera configurado con Google, y la guarda de RAG.9 lo
+> descubría en la primera consulta de chat — con la ingesta entera ya pagada.
+>
+> **Y al ejecutarlo apareció algo peor, introducido por D.4.0**: las dos CLIs morían con
+> SIGSEGV en Windows. El comentario de cabecera decía que importar `MarkdownChunker` arriba
+> forzaba la carga de torch antes de que asyncpg abriera conexión; D.4.0 movió el import de
+> `langchain_text_splitters` dentro del constructor del chunker y dejó esa precarga sin
+> efecto, **sin que el comentario dejara de afirmar que funcionaba**. La carga del corpus
+> estaba rota de punta a punta y nadie lo sabía, porque ningún test ejecuta la CLI.
 
 ```
 # PROMPT FIX.4 (RED/GREEN) — El corpus se embebe con el modelo del chatbot
@@ -9646,7 +9653,16 @@ donde no se cableó.
 # should_use_the_embedding_service_resolved_from_the_chatbot_cascade
 # should_not_import_the_local_stack_when_the_chatbot_uses_an_api_model
 # should_refuse_when_the_corpus_was_embedded_with_another_model
+# should_preload_the_splitter_before_touching_the_database   (anadido al ejecutarlo)
 ```
+
+**Resultado**: 10 tests en `test_corpus_load_embedding_provider.py`. La guarda de espacio
+vectorial **se añadió a la carga**, donde no estaba: hasta ahora solo corría en el chat y en
+`recalculate-corpus`, así que una carga podía meter un segundo espacio vectorial en un corpus
+existente y no se detectaba hasta que alguien preguntaba. Ahora aborta con código 3 antes de
+escribir. Y la precarga del splitter pasa a comprobarse con dos tests sobre el AST —presencia
+y **orden respecto al import de la conexión de BD**—, porque un comentario no falla cuando
+deja de ser cierto.
 
 ---
 

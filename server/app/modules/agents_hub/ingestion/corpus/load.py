@@ -25,10 +25,18 @@ import sys
 import uuid
 from pathlib import Path
 
-# `langchain_text_splitters` arrastra torch, y en Windows cargarlo DESPUÉS de abrir una
-# conexión asyncpg aborta el proceso con un access violation. Importar el chunker aquí
-# arriba fuerza el orden correcto antes de que se cree el motor de BD.
-from server.app.modules.agents_hub.ingestion.chunker import MarkdownChunker  # noqa: F401
+# `langchain_text_splitters` arrastra torch cuando el extra [local-models] está instalado, y
+# en Windows cargarlo DESPUÉS de abrir una conexión asyncpg aborta el proceso con un access
+# violation. `IngestionWatcher` construye un chunker con la sesión ya abierta, así que el
+# orden hay que forzarlo aquí.
+#
+# **Se importa el splitter y no el chunker**: hasta D.4.0 bastaba con importar
+# `MarkdownChunker`, porque el módulo cargaba el splitter al importarse. D.4.0 movió ese
+# import dentro del constructor —para que un despliegue sin modelos locales no pague la
+# pila— y con ello dejó esta precarga sin efecto, sin que el comentario lo dijera: la CLI
+# volvió a morir con SIGSEGV. Importar aquí lo que de verdad arrastra torch es lo que hace
+# la garantía comprobable, y `test_corpus_load_embedding_provider.py` la fija.
+import langchain_text_splitters  # noqa: F401
 
 from server.app.modules.agents_hub.ingestion.corpus.manifest import (
     CorpusValidationError,
@@ -63,8 +71,12 @@ async def _run(args: argparse.Namespace) -> int:
     from server.app.modules.agents_hub.services.config_provider import (
         LocalConfigProvider,
     )
-    from server.app.modules.agents_hub.services.embedding_service import (
-        LocalEmbeddingService,
+    from server.app.modules.agents_hub.services.embedding_resolver import (
+        resolve_embedding_service,
+    )
+    from server.app.modules.agents_hub.services.embedding_space import (
+        EmbeddingSpaceMismatch,
+        assert_embedding_space_matches,
     )
     from server.app.modules.agents_hub.services.vocabulary_service import (
         VocabularyService,
@@ -102,11 +114,29 @@ async def _run(args: argparse.Namespace) -> int:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 1
 
+            # FIX.4: el servicio sale de la configuración vigente (MOD.2), no de un import.
+            # Cablear aquí el local significaba embeber el corpus con BGE-M3 aunque el
+            # despliegue estuviera configurado con Google —y descubrirlo en la primera
+            # consulta de chat, cuando la guarda de RAG.9 comparase espacios vectoriales—.
+            embedding_service = await resolve_embedding_service(session, args.chatbot_id)
+            print(f"embeddings: {embedding_service.model_name}")
+
+            # La guarda de RAG.9, aquí y no solo en el chat: si el corpus ya tiene vectores
+            # de otro modelo, esta carga los mezclaría. El coseno entre dos espacios no da
+            # error, da resultados malos — y para cuando se nota, la ingesta está pagada.
+            try:
+                await assert_embedding_space_matches(
+                    session, args.chatbot_id, embedding_service
+                )
+            except EmbeddingSpaceMismatch as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 3
+
             reconciler = CorpusReconciler(
                 session,
                 IngestionWatcher(
                     session,
-                    LocalEmbeddingService(),
+                    embedding_service,
                     chatbot_provider=provider,
                 ),
             )
