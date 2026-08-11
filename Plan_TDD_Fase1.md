@@ -9778,6 +9778,87 @@ existe; sin decisiones abiertas.
 
 ---
 
+### Prompt DER.3 (BLOQUEADO — requiere que el pipeline de publicación esté definido) — Cada asistente declara qué porción del corpus consume
+
+**Modelo sugerido**: **Opus** — decide dónde vive el mapa documento→chatbots, y esa decisión
+es difícil de deshacer una vez que el servicio de publicación empiece a emitir.
+
+> **Origen**: pregunta del usuario el 2026-08-11. «Cuando definamos el pipeline de publicación,
+> el mantenimiento será automatizado. ¿No deberíamos prever que en el momento de publicación se
+> indique el número de chatbots que consumen la norma, para sincronizar la ingesta?»
+>
+> **La necesidad es real; el sitio propuesto, no.** Poner el mapa documento→chatbots en la
+> publicación invierte la autoridad por tres motivos:
+>
+> 1. **El servicio de publicación no conoce los chatbots**, ni debe: sus identificadores son
+>    internos de la plataforma. Publicar es un acto de transparencia sobre una norma, no una
+>    decisión sobre la configuración de un asistente.
+> 2. **No es una propiedad de la norma.** Que el asistente de Gerencia la consuma lo decide
+>    quien configura ese asistente, y cambia mucho más a menudo que la norma.
+> 3. **Viola CLAUDE.md §5**: si el mapa vive en el documento publicado, añadir un tercer
+>    asistente obliga a **volver a publicar documentos**. Reclasificar debe costar un `UPDATE`.
+>    Es el mismo mecanismo por el que una taxonomía deja de revisarse, aplicado a otra cosa.
+>
+> **El reparto correcto ya está en el contrato del `.md`**: la publicación aporta *propiedades
+> de la norma* —`ambit_principal`, `submateries`, `nivell_acces` y `us_assistents`
+> (`si|restringit|no`)—. Nótese que `us_assistents` **ya es** la señal de publicación sobre
+> consumo por asistentes, y está bien acotada: dice «¿es apropiada para asistentes?», no «¿para
+> cuáles?». Esa frontera no se cruza.
+>
+> **Y el patrón de este lado ya existe, para la otra fuente automatizada.**
+> `HubCorpusSelection` (`operational_models.py:131`) es una selección N:M chatbot→sitio con
+> `rule_type`, `rule_value` y `auto_ingest_new`: el rastreo web ya resuelve «cuando aparezca
+> contenido nuevo, quién lo consume», declarativamente y del lado de la plataforma. Esto es lo
+> mismo con otra fuente, y **si se implementa reinventando el mecanismo, está mal**.
+>
+> **Por qué está BLOQUEADO y no pendiente**: el pipeline de publicación no está definido.
+> Escribir suscripciones contra un servicio cuya forma aún no se conoce es especular, que es lo
+> que este proyecto no hace. **Nada de DER.1 lo cierra**: `--chatbot-id` imperativo y
+> suscripciones declarativas conviven sin estorbarse, igual que hoy conviven la subida manual y
+> el rastreo automático.
+>
+> **Disparador**: cuando el servicio de publicación esté especificado y se sepa qué metadatos
+> emite y cómo notifica (pull periódico, webhook, cola).
+
+```
+# PROMPT DER.3 (BLOQUEADO) — La suscripcion vive en la plataforma, no en la publicacion
+# Deploy: edge
+
+## Modelo — mismo patron que HubCorpusSelection, otra fuente
+- Suscripcion chatbot -> corpus publicado, con una regla sobre los metadatos que el
+  contrato YA define. Nada de listas de identificadores de documento: una regla sobre
+  `ambit_principal` / `submateries` / `rang` sobrevive a que se publiquen normas nuevas,
+  y una lista no.
+- `auto_ingest_new`, como en el rastreo: publicar algo que casa con la regla lo ingiere
+  solo; sin el interruptor, se propone y decide una persona.
+- **`us_assistents: 'no'` manda sobre cualquier regla.** Es la unica señal de la
+  publicacion sobre este eje y es una prohibicion, no una preferencia.
+
+## Sincronizacion
+- `corpus/sync.py` deja de recibir `--chatbot-id` y resuelve los destinos de las
+  suscripciones. Ahi si es repetible por naturaleza, y por eso DER.1 no lo toco.
+- Cada chatbot embebe con su modelo, igual que en DER.1: la guarda de espacio vectorial
+  corre por chatbot antes de escribir.
+- El informe es por chatbot. Una sincronizacion automatica que resume en una linea es
+  una sincronizacion que nadie audita.
+
+## Lo que NO se hace
+- **No se añade al `.md` ni al payload de publicacion ningun campo con chatbots**, ni un
+  recuento. Si aparece la tentacion otra vez, releer los tres motivos de arriba.
+- No se propaga automaticamente a asistentes sin suscripcion: no tener regla significa
+  no querer el documento, no «querer todo».
+
+## Tests (RED primero)
+# should_resolve_destinations_from_subscriptions_not_from_arguments
+# should_ingest_a_newly_published_norm_into_every_matching_chatbot
+# should_never_ingest_a_norm_marked_us_assistents_no
+# should_only_propose_when_auto_ingest_is_off
+# should_report_per_chatbot
+# should_scope_subscriptions_to_the_organization        (gate SEC.8.1)
+```
+
+---
+
 ## Bloque EXT — Frontera de la extracción: qué entra al corpus y qué es contexto (PENDIENTE, va ANTES de Deploy)
 
 > **Contexto**: `docs/DECISION_EXTRACCION_Y_DESPLIEGUE.md` (2026-08-10). «Subir un documento»
