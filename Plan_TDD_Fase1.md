@@ -9797,7 +9797,22 @@ existe; sin decisiones abiertas.
 
 ---
 
-### Prompt DER.3a (PENDIENTE, **no bloqueado**) — Qué necesitamos de la publicación: metadatos y opciones de notificación
+### Prompt DER.3a ✅ HECHO el 2026-08-11 — Qué necesitamos de la publicación: metadatos y opciones de notificación
+
+> **Entregable**: `docs/REQUISITOS_PUBLICACION_PLATAFORMA.md`. Dos cosas que aparecieron al
+> escribirlo y mejoran el prompt original:
+>
+> - **Los campos se parten en dos tablas siguiendo los dos hitos que el contrato ya
+>   distingue** (§«Dos hitos, no uno»): lo que no depende de la validación de Secretaría
+>   General va primero y se puede acordar ya; lo que sí depende va después. Eso convierte el
+>   documento en algo accionable —dice qué construir primero— en vez de una lista plana.
+> - **Se añade la señal de cambio del contenido** como requisito propio, con la regla de que
+>   debe cambiar con el texto y **no** con las etiquetas. Sin decirlo, cada revisión de
+>   vocabulario obligaría a reprocesar el corpus entero.
+>
+> Las tres reglas duras que rechazan el paquete se verificaron contra el código antes de
+> prometerlas a otra unidad (`manifest.py:136-141`, `metadata_filter.py:73`), no contra el
+> contrato solo.
 
 **Modelo sugerido**: **Opus** — es un documento que va a una reunión con otra unidad y del que
 sale una decisión difícil de revertir; el criterio pesa más que el código (aquí no hay código).
