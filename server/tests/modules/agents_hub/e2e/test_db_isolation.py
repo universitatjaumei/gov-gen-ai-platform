@@ -43,12 +43,22 @@ async def test_should_leave_no_rows_in_the_dev_database_after_e2e(setup_chatbot,
     dev = create_async_engine()  # DATABASE_URL
     try:
         async with dev.connect() as conn:
-            fila = (
-                await conn.execute(
-                    text("select count(*) from hub_chatbots where id = :i"),
-                    {"i": str(setup_chatbot.id)},
-                )
+            # CI levanta un Postgres vacío como `DATABASE_URL` y no le aplica las
+            # migraciones, así que ahí la tabla ni existe. Preguntar por ella
+            # primero evita el UndefinedTableError; sin esquema del hub, el
+            # criterio se cumple por construcción.
+            existe = (
+                await conn.execute(text("select to_regclass('public.hub_chatbots')"))
             ).scalar()
+            if existe is None:
+                fila = 0
+            else:
+                fila = (
+                    await conn.execute(
+                        text("select count(*) from hub_chatbots where id = :i"),
+                        {"i": str(setup_chatbot.id)},
+                    )
+                ).scalar()
     finally:
         await dev.dispose()
     assert fila == 0, "el chatbot del test e2e ha aterrizado en la BD de desarrollo"

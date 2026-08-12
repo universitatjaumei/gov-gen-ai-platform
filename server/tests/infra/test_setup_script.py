@@ -8,16 +8,24 @@ test_bootstrap_seed.py.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
 _ROOT = Path(__file__).parent.parent.parent.parent
 _SCRIPT = _ROOT / "scripts" / "setup.sh"
 
+# Ruta absoluta al intérprete, resuelta con el PATH real del proceso de tests.
+# Los tests que simulan "docker no instalado" pasan un PATH vacío al hijo, y en
+# POSIX es ese PATH —no el del padre— el que `exec` usa para localizar el
+# ejecutable: con `["bash", ...]` el propio bash dejaba de encontrarse y el test
+# moría con FileNotFoundError antes de ejercer nada del script.
+_BASH = shutil.which("bash") or "bash"
+
 
 def _run(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(
-        ["bash", str(_SCRIPT), *args],
+        [_BASH, str(_SCRIPT), *args],
         cwd=_ROOT,
         capture_output=True,
         text=True,
