@@ -25,9 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import (
-    get_current_user,
     get_current_user_optional,
-    require_scopes,
     require_scopes_allowing_widget,
 )
 from server.app.core.auth import UserInfo

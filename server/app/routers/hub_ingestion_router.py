@@ -391,8 +391,6 @@ async def delete_document(
     chatbot = await _chatbot_autorizado(session, chatbot_id, current_user)
     from sqlalchemy import delete as sa_delete
 
-    from server.app.modules.agents_hub.database.config_models import HubChatbot
-
     doc = await session.get(HubDocument, document_id)
     if not doc or doc.chatbot_id != chatbot_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado.")
