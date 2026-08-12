@@ -397,15 +397,19 @@ async def chat_stream(
 
     interaction_id = uuid.uuid4()
 
+    # `user` es `None` en el widget público (SEC.8.5): ahí no hay sesión, solo la
+    # credencial de sitio. `actor.subject_id` es lo único identificativo que existe en
+    # ese caso -- ya es lo que usa `HubInteraction.user_id` más abajo -- así que es
+    # también lo que debe viajar a Langfuse.
     langfuse_handler = create_callback_handler(
-        session_id=str(interaction_id), user_id=user.user_id
+        session_id=str(interaction_id), user_id=actor.subject_id
     )
     stream_config = (
         {
             "callbacks": [langfuse_handler],
             "metadata": {
                 "langfuse_session_id": str(interaction_id),
-                "langfuse_user_id": user.user_id,
+                "langfuse_user_id": actor.subject_id,
             },
         }
         if langfuse_handler

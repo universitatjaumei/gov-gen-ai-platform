@@ -400,3 +400,46 @@ class TestNoCitationFallback:
         assert "interaction_id" in done
         uuid.UUID(done["interaction_id"])
         assert done["language_fallback"] is False
+
+
+class TestWidgetKeyAuth:
+    """SEC.8.5 — el widget público se autentica con `X-Widget-Key`, sin sesión."""
+
+    def test_anonymous_widget_chat_does_not_crash_without_a_session_user(self) -> None:
+        """Sin `Authorization`, `user` es `None`: el manejador de Langfuse leía
+        `user.user_id` sin comprobarlo antes (AttributeError -> 500), así que **todo**
+        chat anónimo por widget reventaba. El actor efectivo (`actor.subject_id`) es lo
+        que ya usa `HubInteraction.user_id` unas líneas más abajo -- es también lo que
+        debe usar el manejador de Langfuse, porque para el anónimo no hay otra cosa."""
+        chatbot = MagicMock(spec=HubChatbot)
+        chatbot.organizacion_id = uuid.UUID(ORG_PRUEBA)
+        chatbot.id = uuid.uuid4()
+        chatbot.access_mode = "public_anon"
+        _con_acceso(chatbot)
+
+        widget_key_row = MagicMock()
+        widget_key_row.chatbot_id = chatbot.id
+
+        app = _build_test_app(chatbot)
+        with (
+            patch(
+                "server.app.api.v1.hub_chat.GraphFactory",
+                return_value=MagicMock(
+                    build=AsyncMock(return_value=_make_mock_graph_with_sources([]))
+                ),
+            ),
+            patch("server.app.api.v1.hub_chat.resolve_embedding_service", new_callable=AsyncMock),
+            patch("server.app.api.v1.hub_chat.get_model", new_callable=AsyncMock),
+            patch(
+                "server.app.api.v1.hub_chat.resolver_widget_key",
+                new=AsyncMock(return_value=widget_key_row),
+            ),
+        ):
+            with TestClient(app, raise_server_exceptions=False) as client:
+                response = client.post(
+                    f"/api/v1/hub/chat/{chatbot.id}",
+                    json={"message": "hola"},
+                    headers={"X-Widget-Key": "clave-de-prueba"},
+                )
+
+        assert response.status_code == 200, response.text
