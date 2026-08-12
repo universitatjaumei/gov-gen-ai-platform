@@ -274,7 +274,7 @@
     "substituting": "Sustituyendo",
     "drag_drop": "Arrastra y suelta tus archivos Markdown (.md) aquí",
     "corpus_markdown_only": "Al corpus solo entra Markdown del pipeline de curación. Los originales (PDF y otros) se convierten antes allí, que es donde se revisa la conversión.",
-    "max_size_10mb": "Tamaño máximo: 10 MB por archivo. Solo formato PDF.",
+    "max_size_10mb": "Tamaño máximo: 10 MB por archivo. Solo formato Markdown (.md).",
     "kind_crawler": "Web",
     "kind_upload": "PDF"
   },
