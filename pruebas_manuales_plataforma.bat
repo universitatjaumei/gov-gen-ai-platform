@@ -81,9 +81,10 @@ echo.
 echo  a) Abre http://localhost:5173/hub/organizaciones
 echo     Pulsa "Nueva organizacion". Nombre: "Organizacion Camino 1".
 echo     Admin ID: cualquier texto, p.ej. "admin_camino1".
-echo     En "Configuracion de tema (JSON)" pega:
-echo       {"colors":{"primary":"#c026d3"}}
-echo     Guarda.
+echo     Deja "Configuracion de tema (JSON)" como esta: ese campo
+echo     escribe HubOrganizacion.theme_config, que MAN.2 descubrio que
+echo     es una columna huerfana - nadie la lee. El tema de verdad se
+echo     crea y se aplica en el paso (c).
 echo     QUE DEBES VER: la organizacion aparece en la lista con 0 chatbots.
 echo.
 echo  b) Ve a http://localhost:5173/hub/chatbots -^> "Nuevo chatbot".
@@ -91,26 +92,41 @@ echo     Crea DOS chatbots bajo "Organizacion Camino 1":
 echo       "Chatbot Camino1 A" y "Chatbot Camino1 B".
 echo     QUE DEBES VER: ambos en la lista, modo Vectorial RAG, Activo.
 echo.
-echo  c) OJO - LIMITACION CONOCIDA (destapada en MAN.2, sin arreglar):
-echo     el tema de la organizacion NO llega al widget publico.
-echo     ThemeProvider solo esta cableado en frontend/src/App.tsx (el
-echo     panel de administracion); frontend/src/widget/ no lo importa
-echo     en ningun sitio. Cambiar el tema de la organizacion NO cambia
-echo     el aspecto del widget de sus chatbots todavia.
-echo     Lo unico que puedes comprobar hoy: que el JSON del tema se
-echo     guarda y se relee sin error al reabrir el formulario de la
-echo     organizacion. El "widget con la identidad de su organizacion"
-echo     es trabajo pendiente, no un caso de prueba.
+echo  c) CAMBIO DESDE MAN.2: el widget YA aplica el tema del chatbot.
+echo     El hallazgo #3 se arreglo el 2026-08-10 y SEC.8.6 movio los
+echo     temas del disco a la BD. Todavia NO hay pantalla de temas en
+echo     el panel (queda para un prompt propio), asi que va por API.
+echo     Necesitas el chatbot_id (copialo de la URL al editar el
+echo     chatbot) y tu token de sesion (F12 -^> Application -^>
+echo     Local Storage). Luego, sustituyendo TOKEN y los ids:
 echo.
-echo  d) Para ver el widget en si (sin tema), necesitas el chatbot_id:
-echo     copialo de la URL al editar el chatbot, o de la respuesta de
-echo     POST /api/v1/hub/chatbots. Luego:
-echo       cd frontend ^&^& npm run build:widget
-echo     Abre frontend/widget.html, cambia data-chatbot-id por el tuyo,
-echo     y abrelo con http://localhost:5173/widget.html
-echo     QUE DEBES VER: el cuadro de chat carga. Si el chatbot no tiene
-echo     el modo de acceso publico configurado (API key), preguntar
-echo     dara 401 - eso es SEC.2.1 funcionando, no un fallo.
+echo   curl -X POST http://127.0.0.1:8000/api/v1/hub/themes -H "Authorization: Bearer TOKEN" -H "Content-Type: application/json" -d "{\"name\":\"Tema Camino 1\",\"organizacion_id\":\"ORG_ID\",\"config\":{\"colors\":{\"primary\":\"#c026d3\"}}}"
+echo.
+echo   curl -X POST -H "Authorization: Bearer TOKEN" http://127.0.0.1:8000/api/v1/hub/themes/THEME_ID/apply/CHATBOT_ID
+echo.
+echo     QUE DEBES VER: 201 al crear y 200 al aplicar. El apply guarda
+echo     {"theme_id":...} en HubChatbot.theme_config, que es el puntero
+echo     que lee el widget.
+echo.
+echo  d) El widget necesita una credencial de sitio, no un token de
+echo     admin. SEC.8.5 retiro el Bearer privilegiado: el widget manda
+echo     la cabecera X-Widget-Key y el atributo data-token de
+echo     widget.html YA NO SE LEE. Emite la credencial:
+echo.
+echo   curl -X POST -H "Authorization: Bearer TOKEN" http://127.0.0.1:8000/api/v1/hub/chatbots/CHATBOT_ID/widget-keys
+echo.
+echo     Copia la clave que devuelve (se muestra una sola vez). Luego,
+echo     desde frontend\ y en dos pasos (^&^& no existe en PowerShell):
+echo       cd frontend
+echo       npm run build:widget
+echo     Abre frontend/widget.html y pon TU chatbot_id en
+echo     data-chatbot-id y la clave en data-widget-key. Sirvelo con
+echo     http://localhost:5173/widget.html
+echo     QUE DEBES VER: el cuadro de chat carga Y sale pintado con el
+echo     color del paso (c) - comprueba en F12 -^> Elements que :root
+echo     tiene --color-primary: #c026d3. Sin credencial valida,
+echo     preguntar da 401: eso es SEC.8.5 funcionando, no un fallo.
+echo     OJO: el chatbot debe tener access_mode public_anon.
 echo.
 pause
 goto MENU

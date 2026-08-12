@@ -84,9 +84,9 @@ salir un `^>` literal en vez de `->`).
 
 ### `modules/redaccion` (plantillas, borrador LLM, anonimización, exportación)
 
-> ⚠️ **Bloqueado de raíz** (hallazgo #2 de la tabla de arriba): `GET /hub/redaccion/templates`
-> devuelve 500 para cualquier sesión de desarrollo (SuperAdmin o Admin), así que ninguna fila
-> de esta tabla se puede recorrer todavía sin arreglar antes ese endpoint.
+> ✅ **Desbloqueado el 2026-08-10** (hallazgo #2 de la tabla de arriba): el 500 de
+> `GET /hub/redaccion/templates` para sesiones con `user_id` no-UUID está arreglado, así que
+> las filas de esta tabla ya se pueden recorrer.
 
 | Qué se prueba | Por qué NO lo hace el agente en navegador | Quién |
 |---|---|---|
@@ -99,14 +99,15 @@ salir un `^>` literal en vez de `->`).
 | Qué se prueba | Por qué NO lo hace el agente en navegador | Quién |
 |---|---|---|
 | El widget embebido en una página real de la UJI (no `widget.html` de laboratorio) | Requiere publicar el script en un dominio real de la universidad | Alguien con acceso a publicar en un sitio de la UJI |
-| `pruebas_manuales_prompt9CBis11.bat` (citas como pills) contra un chatbot con corpus real | `widget.html` apunta a un `chatbot_id` de fixture (`E2E Bot`) que no existe en el seed de desarrollo actual — de ahí el 401 al preguntar. Hace falta un chatbot con API key pública y corpus cargado | Alguien que configure ese chatbot de prueba con datos reales |
+| Citas como pills (lo que probaba el difunto `prompt9CBis11.bat`) contra un chatbot con corpus real | `widget.html` sigue apuntando a un `chatbot_id` de fixture (`E2E Bot`) inexistente **y** autentica con el `data-token` que SEC.8.5 dejó de leer. Hace falta un chatbot `public_anon` con credencial de sitio y corpus cargado: los pasos están en `pruebas_manuales_plataforma.bat` CAMINO 1(c)-(d) | Alguien que configure ese chatbot de prueba con datos reales |
 
 ### `themes` (identidad visual)
 
-> ⚠️ **El widget no aplica ningún tema todavía** (hallazgo #3 de la tabla de arriba): esto no es
-> "irreducible" en el sentido de MAN.1 — no es que el agente no pueda juzgarlo, es que el código
-> que lo haría posible no existe aún fuera del panel admin. Las dos filas de abajo son las que
-> serán irreducibles **una vez** exista esa pieza.
+> ✅ **El widget ya aplica el tema del chatbot** desde el 2026-08-10 (hallazgo #3 de la tabla de
+> arriba), y SEC.8.6 movió los temas del disco a la BD. Las dos filas de abajo pasan por tanto a
+> ser irreducibles de verdad: la pieza que faltaba existe. Lo que **sigue** sin existir es la
+> pantalla de temas del panel admin —queda para un prompt propio—, así que crear y aplicar un
+> tema va por API; el CAMINO 1(c) de `pruebas_manuales_plataforma.bat` lleva los `curl` exactos.
 
 | Qué se prueba | Por qué NO lo hace el agente en navegador | Quién |
 |---|---|---|
@@ -157,7 +158,7 @@ salir un `^>` literal en vez de `->`).
 | `pruebas_manuales_bloqueFASE11.bat` | Vigente | Instalación one-click; `bootstrap.py` sigue creando "Chatbot de Ejemplo" con 3 prompts tal como describe |
 | `pruebas_manuales_bloqueRAG.bat` | Vigente (corregido) | La sección de huecos de corpus apuntaba a `/hub/content-quality`, retirado por CUR.2; corregido a `/curation/findings` |
 | `pruebas_manuales_bloqueSEC.bat` | Vigente (corregido) | El paso 5 apuntaba a `/admin/chatbots`, una ruta que nunca existió (siempre fue `/hub/chatbots`); corregido. Migración `s6b7c8d9e0f1` sigue siendo head |
-| `pruebas_manuales_prompt9CBis11.bat` | Vigente | El widget y sus pills de citas no los ha tocado ningún bloque desde 9CBis.11 |
+| `pruebas_manuales_prompt9CBis11.bat` | **Borrado (2026-08-12)** | Inejecutable desde SEC.8.5. Su banco de pruebas, `frontend/widget.html`, autentica con `data-token` (un JWT de rol `admin` incrustado y caducado), y el widget **ya no lee ese atributo**: SEC.8.5 retiró el Bearer privilegiado y ahora manda `X-Widget-Key` desde `data-widget-key`. Sumado al `chatbot_id` de fixture que MAN.1 ya había señalado (`9d6eed7d…`, «E2E Bot», ausente de todo sembrado), el paso 2 del guion da 401 haga lo que haga quien lo ejecute. La comprobación de las pills sobrevive en `pruebas_manuales_plataforma.bat` CAMINO 1(d), que sí emite credencial de sitio |
 | `pruebas_manuales_prompt9CBis8.bat` | **Borrado** | Describía subir un PDF desde una pestaña "Documentos" dentro de la edición del chatbot; esa UI la sustituyó por completo la página `/hub/documents` independiente (CAL.1-CAL.4) |
 | `pruebas_manuales_prompt9CBis9.bat` | **Borrado** | Describe la tab "Fuentes web" dentro de Documentos, retirada por CAL.2, y el layout de la tabla que CAL.3/CAL.4 rehicieron |
 | `pruebas_manuales_prompt9Q_9.bat` | **Borrado** | Rutas `/hub/sites` y `/hub/content-quality` movidas por CUR.2 a `/curation/*`; el "panel de mapeo" anidado bajo una fila de sitio ya no existe, ahora es la página `Publicación` independiente. Su contenido queda cubierto por la tabla de "ya verificado" de arriba |
