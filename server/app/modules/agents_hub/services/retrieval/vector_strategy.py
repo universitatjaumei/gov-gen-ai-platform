@@ -16,9 +16,17 @@ from server.app.modules.agents_hub.services.retrieval.citations import with_anch
 from server.app.modules.agents_hub.services.retrieval.metadata_filter import MetadataFilter
 from server.app.modules.agents_hub.services.retrieval.types import RetrievalContext, Source
 from server.app.modules.agents_hub.services.retrieval.vigencia import marca_de_vigencia
-from server.app.modules.agents_hub.services.retriever import HybridRetriever
+from server.app.modules.agents_hub.services.retriever import RRF_K, HybridRetriever
 
 logger = logging.getLogger(__name__)
+
+# Techo teorico de la fusion RRF (retriever.py): un fragmento que sale primero en las dos
+# ramas suma vector_weight/(k+1) + (1-vector_weight)/(k+1) = 1/(k+1). Sin reranker, el
+# quality gate del CoreGraph compara `EvidenceItem.score` contra `quality_threshold` en
+# escala [0,1] (ver los mocks de score=0.9 en test_core_graph.py) -- sin dividir por este
+# techo, ni la mejor coincidencia posible (~0.016) se acerca al umbral por defecto (0.6), y
+# el gate cae a fallback siempre, por buena que sea la recuperacion real.
+RRF_MAX_SCORE = 1.0 / (RRF_K + 1)
 
 
 class VectorRetrievalStrategy:
@@ -104,12 +112,21 @@ class VectorRetrievalStrategy:
             # emitir una entrada por padre duplicaría documentos en el `sources` del evento
             # SSE `done`, contrato que RAG.2 fijó por snapshot.
             excerpt = best.parent_content or best.content
+            # Sin reranker, `best.score` es la fusion RRF de HybridRetriever (escala
+            # ~1/60, no [0,1]): normalizar aqui es lo que hace comparable el score contra
+            # `quality_threshold`. Con reranker el score YA esta en [0,1] (RAG.6a lo
+            # sustituye en `_aplicar_reranker`) y normalizarlo otra vez lo desfiguraria.
+            score = (
+                best.score
+                if self._reranker is not None
+                else min(1.0, best.score / RRF_MAX_SCORE)
+            )
             sources.append(Source(
                 document_id=doc.id if doc else uuid.uuid4(),
                 title=title,
                 url=url,
                 excerpt=excerpt,
-                score=best.score,
+                score=score,
                 metadata={
                     "chunks_matched": len(chunks),
                     "ancora": best.metadata.get("ancora"),

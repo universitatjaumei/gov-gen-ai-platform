@@ -201,10 +201,13 @@ class TestIntegracionConLaEstrategia:
 
     @pytest.mark.asyncio
     async def test_should_replace_fusion_score_with_rerank_score(self, db_session):
-        """El score que sale es el del reranker, no el de la fusión RRF.
+        """El score que sale es el del reranker, no el de la fusión RRF: son dos mecanismos
+        distintos aunque en este corpus los dos elijan el mismo documento (buen solapamiento
+        léxico + empate vectorial) y por eso terminen en una magnitud parecida.
 
-        Importa porque el packer de RAG.5 corta por score y el quality gate promedia: si
-        conviven dos escalas, los dos controles deciden sobre números incomparables.
+        Antes de normalizar en `vector_strategy.py`, sin reranker el score llegaba en escala
+        RRF pura (techo ~0,016, ver `RRF_MAX_SCORE`), incomparable con el [0,1] del
+        reranker — que es justo lo que este test existe para impedir que se cuele.
         """
         from server.app.modules.agents_hub.services.retrieval.vector_strategy import (
             VectorRetrievalStrategy,
@@ -220,8 +223,12 @@ class TestIntegracionConLaEstrategia:
             db_session, _Emb(), top_k=2, reranker=RerankerDeterminista()
         ).get_context(query="import dieta", chatbot_id=cb)
 
-        # La fusión RRF da scores diminutos (1/(60+rank)); el determinista, solapamiento
-        assert max(s.score for s in sin_rerank.sources) < 0.05
+        # 0,7 = vector_weight normalizado: los 5 chunks comparten embedding (empatan a
+        # coseno 1.0) y "L'import" con apostrofe no cruza como lexema con "import" en el
+        # tsvector, asi que el ganador llega solo por la rama vectorial (rank 0 ahi, ausente
+        # en la lexica). Lo importante no es el 0,7 exacto sino que ya esta en [0,1] y no en
+        # la escala RRF (~0,016) de antes de normalizar.
+        assert max(s.score for s in sin_rerank.sources) == pytest.approx(0.7)
         assert max(s.score for s in con_rerank.sources) > 0.4
         assert "dieta" in con_rerank.sources[0].excerpt
 

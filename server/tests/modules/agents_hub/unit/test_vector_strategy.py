@@ -143,6 +143,74 @@ class TestVectorRetrievalStrategy:
         assert src.title == "reglamento.pdf"
         assert src.url == "https://servidor.com/reglamento.pdf"
 
+    async def test_normalizes_rrf_score_to_0_1_scale_without_reranker(self):
+        """Sin reranker, `hybrid_search` devuelve escala RRF (techo 1/(k+1) ~= 0.0164): el
+        quality gate del CoreGraph compara contra `quality_threshold` en escala [0,1] (ver
+        los mocks de `test_core_graph.py`, que usan score=0.9), así que un score en escala
+        RRF sin normalizar nunca alcanzaria el umbral por defecto (0.6) por buena que sea
+        la coincidencia real. Antes de este test, `Source.score` pasaba el valor RRF tal
+        cual: un match perfecto (rank 1 en las dos ramas) llegaba como ~0.016, no ~1.0."""
+        from server.app.modules.agents_hub.services.retrieval.vector_strategy import (
+            VectorRetrievalStrategy,
+        )
+        from server.app.modules.agents_hub.services.retriever import RRF_K
+
+        doc_id = uuid.uuid4()
+        rrf_max = 1.0 / (RRF_K + 1)  # techo teorico: rank 1 en ambas ramas
+        chunks = [_make_chunk(doc_id, rrf_max, "fragmento perfecto")]
+
+        scalars_mock = MagicMock()
+        scalars_mock.all.return_value = []
+        exec_result = MagicMock()
+        exec_result.scalars.return_value = scalars_mock
+        session = AsyncMock()
+        session.execute = AsyncMock(return_value=exec_result)
+
+        embedding_svc = AsyncMock()
+        embedding_svc.embed.return_value = [0.0] * 1024
+
+        with patch(
+            "server.app.modules.agents_hub.services.retrieval.vector_strategy.HybridRetriever"
+        ) as MockRetriever:
+            MockRetriever.return_value.hybrid_search = AsyncMock(return_value=chunks)
+            strategy = VectorRetrievalStrategy(session, embedding_svc)
+            ctx = await strategy.get_context("consulta", uuid.uuid4())
+
+        assert ctx.sources[0].score == pytest.approx(1.0)
+
+    async def test_does_not_renormalize_reranker_scores(self):
+        """Con reranker, el score YA está en [0,1] (RAG.6a lo sustituye); normalizarlo
+        otra vez lo desfiguraría."""
+        from server.app.modules.agents_hub.services.retrieval.vector_strategy import (
+            VectorRetrievalStrategy,
+        )
+
+        doc_id = uuid.uuid4()
+        chunks = [_make_chunk(doc_id, 0.016393442622950821, "fragmento")]
+
+        scalars_mock = MagicMock()
+        scalars_mock.all.return_value = []
+        exec_result = MagicMock()
+        exec_result.scalars.return_value = scalars_mock
+        session = AsyncMock()
+        session.execute = AsyncMock(return_value=exec_result)
+
+        embedding_svc = AsyncMock()
+        embedding_svc.embed.return_value = [0.0] * 1024
+        reranker = AsyncMock()
+        reranker.rerank = AsyncMock(return_value=[
+            type("R", (), {"index": 0, "score": 0.016393442622950821})()
+        ])
+
+        with patch(
+            "server.app.modules.agents_hub.services.retrieval.vector_strategy.HybridRetriever"
+        ) as MockRetriever:
+            MockRetriever.return_value.hybrid_search = AsyncMock(return_value=chunks)
+            strategy = VectorRetrievalStrategy(session, embedding_svc, reranker=reranker)
+            ctx = await strategy.get_context("consulta", uuid.uuid4())
+
+        assert ctx.sources[0].score == pytest.approx(0.016393442622950821)
+
     async def test_get_agent_tools_returns_empty_list(self):
         from server.app.modules.agents_hub.services.retrieval.vector_strategy import (
             VectorRetrievalStrategy,

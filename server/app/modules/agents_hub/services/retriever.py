@@ -22,6 +22,12 @@ from server.app.modules.agents_hub.database.operational_models import (
 from server.app.modules.agents_hub.services.retrieval.metadata_filter import MetadataFilter
 
 
+# Exportada porque `vector_strategy.py` necesita normalizar este score a la escala [0,1]
+# que el quality gate del CoreGraph espera (ver RRF_MAX_SCORE ahí): duplicar el número a
+# mano dejaría la normalización rota en silencio si este k cambiara alguna vez.
+RRF_K = 60
+
+
 def _fts_config(language: str | None) -> str:
     """Configuración de full-text search para un idioma.
 
@@ -199,6 +205,14 @@ class HybridRetriever:
         coseno de 0,3, y filtrar ambas con el mismo número sería comparar magnitudes
         distintas. El quality gate del CoreGraph es otro control y no se solapa con este:
         aquel decide por-respuesta sobre la media de evidencias, este por-chunk.
+
+        El score que devuelve esta función está en escala RRF (máximo teórico 1/(k+1),
+        aquí ~0,0164): a propósito, es el contrato que ya fija
+        `test_should_keep_rrf_fusion_contract_unchanged`. Quien consuma este score para
+        decidir "¿es una buena respuesta?" —el quality gate, vía `EvidenceItem.score`—
+        necesita la escala [0,1] con la que se diseñó `quality_threshold` (los tests de
+        `core_graph` ya mockean scores en ese rango), y esa conversión se hace en
+        `vector_strategy.py` (`RRF_MAX_SCORE`), no aquí.
         """
         vector_results = await self.vector_search(
             query_embedding, chatbot_id, top_k * 2, language, owner_id,
