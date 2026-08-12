@@ -37,6 +37,13 @@ class TestSubmitFeedback:
 
     @pytest.mark.asyncio
     async def test_sends_score_to_langfuse_when_run_id_present(self) -> None:
+        """`spec=Langfuse` y no un `MagicMock()` a pelo: un mock sin spec inventa
+        cualquier atributo que se le pida, así que `client.score(...)` pasaba el test
+        aunque el SDK instalado (4.5.0) hubiera renombrado el método a `create_score` --
+        en producción reventaba con AttributeError en cuanto alguien puntuaba una
+        respuesta, y ningún test lo vio nunca."""
+        from langfuse import Langfuse
+
         from server.app.modules.agents_hub.services.feedback_service import FeedbackService
 
         interaction_id = uuid.uuid4()
@@ -48,7 +55,7 @@ class TestSubmitFeedback:
         mock_session = AsyncMock()
         mock_session.get = AsyncMock(return_value=mock_interaction)
 
-        mock_client = MagicMock()
+        mock_client = MagicMock(spec=Langfuse)
 
         with patch(
             "server.app.modules.agents_hub.services.feedback_service.get_langfuse_client",
@@ -61,7 +68,7 @@ class TestSubmitFeedback:
                 comment="Buena respuesta",
             )
 
-        mock_client.score.assert_called_once_with(
+        mock_client.create_score.assert_called_once_with(
             trace_id=str(run_id),
             name="user_feedback",
             value=4,

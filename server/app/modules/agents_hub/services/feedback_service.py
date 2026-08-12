@@ -31,7 +31,7 @@ class FeedbackService:
         if client:
             interaction = await self.session.get(HubInteraction, interaction_id)
             if interaction and interaction.run_id:
-                client.score(
+                client.create_score(
                     trace_id=str(interaction.run_id),
                     name="user_feedback",
                     value=score,
