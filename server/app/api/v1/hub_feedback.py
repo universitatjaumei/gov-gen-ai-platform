@@ -133,11 +133,29 @@ async def review_interaction(
     await assert_chatbot_org_access(session, interaccion.chatbot_id, user)
 
     service = FeedbackService(session)
-    return await service.record_review(
+    revisada = await service.record_review(
         interaction=interaccion,
         verdict=request.verdict,
         note=request.note,
         reviewer=user.email,
+    )
+    # `run_id` es UUID en la fila y `str` en el contrato (mismo shape que el GET de más
+    # abajo): devolver la fila del ORM tal cual dejaba que FastAPI intentara servir un UUID
+    # donde el contrato promete un string, y la respuesta reventaba en 500 -- después de
+    # escribir ya el veredicto, así que quien revisaba veía un error por una conversación
+    # que sí había quedado anotada.
+    return InteractionReviewOut(
+        id=revisada.id,
+        user_message=revisada.user_message,
+        assistant_message=revisada.assistant_message,
+        feedback_score=revisada.feedback_score,
+        feedback_text=revisada.feedback_text,
+        run_id=str(revisada.run_id) if revisada.run_id else None,
+        created_at=revisada.created_at,
+        review_verdict=revisada.review_verdict,
+        review_note=revisada.review_note,
+        review_by=revisada.review_by,
+        review_at=revisada.review_at,
     )
 
 

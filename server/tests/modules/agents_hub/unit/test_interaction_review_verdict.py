@@ -162,6 +162,31 @@ class TestElEndpointDeRevision:
         assert resp.status_code == 422, resp.text
         assert interaccion.review_verdict is None
 
+    def test_should_serialize_run_id_when_the_interaction_has_one(self):
+        """Toda conversación real tiene `run_id` (es el `interaction_id` del chat, RAG.2);
+        los tests anteriores lo dejan en `None` por defecto y por eso no vieron esto.
+
+        `HubInteraction.run_id` es UUID en la base de datos; `InteractionReviewOut.run_id`
+        es `str` (mismo contrato que el GET, que hace `str(i.run_id)` a mano). Sin esa
+        conversión, FastAPI intenta servir un UUID donde promete un string y la
+        serialización de la respuesta revienta con 500 -- después de escribir ya el
+        veredicto en la fila, que es lo que hace este fallo especialmente traicionero: la
+        revisión SÍ queda grabada aunque quien revisa vea un error.
+        """
+        interaccion = _interaccion(run_id=uuid.uuid4())
+        session = AsyncMock()
+        session.get = AsyncMock(side_effect=[interaccion, _chatbot()])
+
+        client = TestClient(_app(session))
+        resp = client.patch(
+            f"/api/v1/hub/feedback/interactions/{interaccion.id}/review",
+            json={"verdict": "good"},
+            headers={"Authorization": f"Bearer {_token()}"},
+        )
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["run_id"] == str(interaccion.run_id)
+
     def test_should_forbid_reviewing_an_interaction_of_another_organization(self):
         """La guarda de SEC.8.1. Estas conversaciones llevan preguntas de personas
         identificadas: leerlas ya era grave, anotarlas lo es igual."""
