@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Laboratorio Widget - Prompt 9CBis.11</title>
+    <title>Laboratorio Widget</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { font-family: sans-serif; }
@@ -19,31 +19,31 @@
 <body class="bg-slate-50 min-h-screen">
 
     <div class="test-card mt-12 text-center">
-        <h1 class="text-2xl font-bold text-slate-800 mb-2">Modo Test: Prompt 9CBis.11</h1>
-        <p class="text-slate-500 mb-6 text-sm">Probando citas como pills clicables y markdown en mensajes.</p>
+        <h1 class="text-2xl font-bold text-slate-800 mb-2">Laboratorio del widget</h1>
+        <p class="text-slate-500 mb-6 text-sm">Banco de pruebas manual: pon aquí el chatbot y la credencial que quieras probar.</p>
 
         <div class="text-left bg-slate-100 p-4 rounded-lg text-xs font-mono text-slate-600">
             <p><strong>Configuración activa:</strong></p>
-            <p class="mt-1 text-blue-600 italic">Chatbot: E2E Bot (9d6eed7d...)</p>
-            <p>Lang: Catalán (ca)</p>
+            <p class="mt-1 text-blue-600 italic">Chatbot: sustituye data-chatbot-id abajo</p>
+            <p>Lang: Español (es)</p>
             <p>API: http://localhost:8000</p>
         </div>
         <div class="mt-4 text-left bg-amber-50 p-3 rounded text-xs text-amber-800">
-            <strong>Que verificar:</strong>
+            <strong>Cómo usarlo (SEC.8.5 -- credencial de sitio, no token de sesión):</strong>
             <ul class="mt-1 list-disc pl-4 space-y-1">
-                <li>Las respuestas del asistente renderizan Markdown (negrita, listas...)</li>
-                <li>Aparecen pills azules con los títulos de los documentos citados</li>
-                <li>Cada pill abre el documento en una nueva pestaña</li>
-                <li>Si no hay fuentes, no aparece ninguna pill</li>
+                <li>El chatbot debe tener <code>access_mode: public_anon</code>.</li>
+                <li>Emite una clave: <code>POST /api/v1/hub/chatbots/{chatbot_id}/widget-keys</code> con sesión de admin.</li>
+                <li>Pon el <code>chatbot_id</code> en <code>data-chatbot-id</code> y la clave en <code>data-widget-key</code> (no <code>data-token</code>: esa cabecera ya no se lee, SEC.8.5).</li>
+                <li>Sin credencial válida, el chat da 401: es SEC.8.5 funcionando, no un fallo.</li>
             </ul>
         </div>
     </div>
 
     <div id="govgenai-widget"
-         data-chatbot-id="9d6eed7d-c667-4538-a240-ab1caf358153"
-         data-lang="ca"
+         data-chatbot-id="PON_AQUI_EL_CHATBOT_ID"
+         data-lang="es"
          data-api-url="http://localhost:8000/api/v1"
-         data-token="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZW1haWwiOiJmYWJyYUB1amkuZXMiLCJyb2xlIjoiYWRtaW4iLCJleHAiOjE3Nzc1NzEyNjcsImlhdCI6MTc3NzU2NzY2N30.mc1-IbpBWaCJOf8nb4q9JsmASgn8CBXjdbmUS3tyYC4">
+         data-widget-key="PON_AQUI_LA_CLAVE_DE_WIDGET">
     </div>
 
     <script>

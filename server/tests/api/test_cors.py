@@ -97,6 +97,18 @@ class TestMetodosYCabeceras:
         assert "x-govgenai-actor" in cabeceras
         assert "*" not in politica["allow_headers"]
 
+    def test_should_declare_the_widget_key_header(self):
+        """SEC.8.5: el widget público vive por definición en el origen de un tercero --
+        el mismo `localhost:5173` del panel no cuenta como prueba, porque Vite lo sirve
+        por proxy y el navegador nunca ve una petición cruzada de verdad. Sin declarar
+        `X-Widget-Key` aquí, el preflight real (`Origin` distinto del backend) responde
+        400 "Disallowed CORS headers" y el widget no puede hablar con la API desde
+        ninguna página que lo incruste, que es su único caso de uso."""
+        politica = _politica("production", "https://panel.uji.es")
+
+        cabeceras = {h.lower() for h in politica["allow_headers"]}
+        assert "x-widget-key" in cabeceras
+
 
 class TestLaAppRealLaUsa:
 

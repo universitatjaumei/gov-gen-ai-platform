@@ -30,7 +30,12 @@ METODOS = ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"]
 
 # `X-GovGenAI-Actor` es de SEC.2.1: sin declararla aquí, el preflight tumbaría la identidad
 # delegada en cuanto un cliente delegante hablara desde un navegador.
-CABECERAS = ["Authorization", "Content-Type", "Accept", "X-GovGenAI-Actor"]
+#
+# `X-Widget-Key` es de SEC.8.5: el widget público vive por definición en el origen de un
+# tercero, y sin declararla el preflight responde 400 "Disallowed CORS headers" en cuanto el
+# `Origin` no es el propio backend -- que es su único caso de uso real. `localhost:5173` no lo
+# detecta porque Vite lo sirve por proxy y el navegador nunca ve ahí una petición cruzada.
+CABECERAS = ["Authorization", "Content-Type", "Accept", "X-GovGenAI-Actor", "X-Widget-Key"]
 
 PRODUCCION = "production"
 
