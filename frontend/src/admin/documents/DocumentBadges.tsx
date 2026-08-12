@@ -9,7 +9,7 @@ export function SourceKindIcon({ kind }: { kind: string }) {
   return <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
 }
 
-/** Distintivo del origen: rastreado de la web o subido como PDF. */
+/** Distintivo del origen: rastreado de la web o subido como Markdown (EXT.1). */
 export function SourceKindBadge({ kind }: { kind: string }) {
   const { t } = useTranslation('admin')
   if (kind === 'crawler')

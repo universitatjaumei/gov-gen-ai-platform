@@ -276,7 +276,7 @@
     "corpus_markdown_only": "Al corpus només entra Markdown del pipeline de curació. Els originals (PDF i altres) es converteixen abans allà, que és on es revisa la conversió.",
     "max_size_10mb": "Mida màxima: 10 MB per fitxer. Només format Markdown (.md).",
     "kind_crawler": "Web",
-    "kind_upload": "PDF"
+    "kind_upload": "Markdown"
   },
   "login": {
     "title": "Inicia la sessió",

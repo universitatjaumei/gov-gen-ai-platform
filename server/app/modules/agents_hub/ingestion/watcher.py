@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.modules.agents_hub.services.language_detector import detect_language
 from server.app.modules.agents_hub.ingestion.bilingual_bridge import terminos_bilingues
+from server.app.modules.agents_hub.ingestion.corpus.frontmatter import parse_frontmatter
 from server.app.modules.agents_hub.database.operational_models import (
     HubDocument,
     HubDocumentChunk,
@@ -438,13 +439,25 @@ class IngestionWatcher:
                 if not citation_url:
                     citation_url = job.source_url  # storage key como identificador canónico
 
+            # El CLI de curación (`corpus/source.py`) separa front-matter y cuerpo con
+            # `parse_frontmatter` antes de ingerir; esta vía leía el fichero entero y lo
+            # pasaba tal cual, así que el bloque YAML se troceaba y se embebía como si fuera
+            # contenido (CLAUDE.md §5) y el `language:` declarado nunca llegaba a leerse. Es
+            # no-op si no hay front-matter: `parse_frontmatter` devuelve `({}, texto)`. Solo
+            # se toca si hay `cuerpo`: `None` sigue cayendo en el `ValueError` explícito de
+            # `process_source` en vez de convertirse en una cadena vacía silenciosa.
+            metadatos_frontmatter: dict = {}
+            if cuerpo is not None:
+                metadatos_frontmatter, cuerpo = parse_frontmatter(cuerpo)
+            idioma_efectivo = job.language or metadatos_frontmatter.get("language")
+
             filename_hint = Path(job.original_filename).stem if job.original_filename else None
             doc, n_chunks = await self.process_source(
                 fuente,
                 job.chatbot_id,
                 citation_url=citation_url,
                 prefetched_content=cuerpo,
-                language=job.language,
+                language=idioma_efectivo,
                 title=filename_hint,
                 seguimiento=seguimiento,
             )
