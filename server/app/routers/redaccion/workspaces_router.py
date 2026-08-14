@@ -17,6 +17,7 @@ from server.app.api.deps import get_current_user, get_session
 from server.app.core.auth.models import UserInfo
 from server.app.core.storage import StorageService, get_storage_service
 from server.app.core.uploads import read_within_limit, sanitizar_nombre
+from server.app.routers.redaccion._actor import es_propietario
 from server.app.modules.redaccion.contracts.runtime import BlockState, InvalidBlockTransitionError
 from server.app.modules.redaccion.database.models import (
     HubWorkspace,
@@ -130,7 +131,7 @@ async def _get_workspace(
     workspace = await session.get(HubWorkspace, workspace_id)
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    if str(workspace.owner_id) != user.user_id:
+    if not es_propietario(user.user_id, workspace.owner_id):
         raise HTTPException(status_code=403, detail="Not the workspace owner")
     return workspace
 
