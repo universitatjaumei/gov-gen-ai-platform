@@ -23,10 +23,24 @@
 - **Sigue pendiente de Camino 3**: un borrador real con bloques `AI_ASSISTED_TEXT`
   (vía `/redaccion/llm-drafts/approve-as-workspace`), la anonimización con datos
   sintéticos, y abrir el export en Word/Adobe real.
-- **Camino 4 sin empezar**: exige `docker-compose.prod.yml` (stack "one-click"
-  completo), que choca con la sesión de desarrollo actual. Mejor en una sesión
-  dedicada, parando antes la BD de desarrollo — mismo aviso que ya llevaba
-  `pruebas_manuales_bloqueFASE11.bat` más abajo.
+- **Camino 4 verificado (b) y (c) contra `docker-compose.prod.yml` real**, el mismo
+  día. El paso (a) es un stub 503 documentado en el código (motor LLM sin
+  enchufar, no un bug); se sembró una propuesta directo en BD para poder probar
+  el resto. Tres hallazgos más, los tres arreglados con TDD y verificados en
+  vivo contra el stack de producción real: (9) **sistémico** — el mismo patrón
+  del hallazgo 7 (leer un atributo ORM tras `commit()` ya expirado) repetido en
+  los ocho endpoints de `scripts_router.py`; (10) **el hash de reproducibilidad
+  de `admin-retest` nunca podía coincidir** porque incluía la marca de tiempo de
+  cada ejecución — ningún script podía aprobarse jamás por esta vía; (11) el
+  botón «Aprobar» del panel real no tenía ningún campo para elegir la plantilla
+  destino y mandaba una cadena vacía (422 siempre). Detalle completo en el
+  historial de `PROJECT_STATE.md` (2026-08-14).
+- **Sigue pendiente de Camino 4**: el paso (d) — arrancar `client_app` en local y
+  comprobar que ejecuta la orden por WebSocket contra `http://localhost:8000` —
+  es del usuario, de escritorio local.
+- **Sigue pendiente de Camino 3**: un borrador real con bloques `AI_ASSISTED_TEXT`
+  (vía `/redaccion/llm-drafts/approve-as-workspace`), la anonimización con datos
+  sintéticos, y abrir el export en Word/Adobe real.
 - **Aviso de entorno**: si `curl`/el navegador dan respuestas inconsistentes contra
   el backend tras reiniciarlo, comprueba `Get-NetTCPConnection -LocalPort 8000` —
   puede haber un "uvicorn zombi" en `0.0.0.0:8000` sirviendo código viejo con un
