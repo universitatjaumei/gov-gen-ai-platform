@@ -49,7 +49,9 @@
     "no_proposals": "No pending proposals",
     "proposer": "Proposer",
     "prompt": "Description",
-    "hash_match": "Hash verified"
+    "hash_match": "Hash verified",
+    "target_template_label": "Target global template",
+    "target_template_placeholder": "Template UUID"
   },
   "anonymize": {
     "title": "Configure anonymization",

@@ -49,7 +49,9 @@
     "no_proposals": "No hay propuestas pendientes",
     "proposer": "Proposer",
     "prompt": "Descripción",
-    "hash_match": "Hash verificado"
+    "hash_match": "Hash verificado",
+    "target_template_label": "Plantilla global de destino",
+    "target_template_placeholder": "UUID de la plantilla"
   },
   "anonymize": {
     "title": "Configurar anonimización",

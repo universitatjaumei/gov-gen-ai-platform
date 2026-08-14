@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -21,9 +22,10 @@ function ProposalCard({ proposal }: ProposalCardProps) {
   const retestHook = useAdminRetestScript()
   const approveHook = useApproveScriptProposal()
   const rejectHook = useRejectScriptProposal()
+  const [targetTemplateId, setTargetTemplateId] = useState('')
 
   const retestResult = retestHook.data as unknown as AdminRetestResponse | undefined
-  const canApprove = !!retestResult
+  const canApprove = !!retestResult && targetTemplateId.trim().length > 0
 
   function handleRetest() {
     retestHook.mutate({ proposalId: proposal.proposal_id })
@@ -33,7 +35,7 @@ function ProposalCard({ proposal }: ProposalCardProps) {
     if (!canApprove) return
     approveHook.mutate({
       proposalId: proposal.proposal_id,
-      data: { target_global_template_id: '' },
+      data: { target_global_template_id: targetTemplateId.trim() },
     })
   }
 
@@ -68,6 +70,20 @@ function ProposalCard({ proposal }: ProposalCardProps) {
           <span className="text-muted-foreground">{t('test_result.hash')}: {retestResult.hash}</span>
         </div>
       )}
+
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground" htmlFor={`target-template-${proposal.proposal_id}`}>
+          {t('admin.target_template_label')}
+        </label>
+        <input
+          id={`target-template-${proposal.proposal_id}`}
+          type="text"
+          value={targetTemplateId}
+          onChange={e => setTargetTemplateId(e.target.value)}
+          placeholder={t('admin.target_template_placeholder')}
+          className="w-full text-xs border rounded px-2 py-1"
+        />
+      </div>
 
       <div className="flex gap-2">
         <button
