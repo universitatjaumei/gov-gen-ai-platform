@@ -206,8 +206,9 @@ async def create_template(
     )
     version_repo = ReportTemplateVersionRepo(session)
     version = await version_repo.save(version)
+    version_id = version.id  # antes del commit: expire_on_commit lo dejaría expirado
 
-    await template_repo.update_status(template.id, version.id)
+    await template_repo.update_status(template.id, version_id)
     await session.commit()
     await session.refresh(template)
 
@@ -218,7 +219,7 @@ async def create_template(
         report_profile=template.report_profile,
         owner_kind=template.owner_kind,
         is_global=template.is_global,
-        current_version_id=version.id,
+        current_version_id=version_id,
         created_at=template.created_at,
     )
 
