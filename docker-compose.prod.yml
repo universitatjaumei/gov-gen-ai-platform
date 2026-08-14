@@ -117,6 +117,7 @@ services:
         limits:
           cpus: '1.0'
           memory: 512M
+          pids: 128
     restart: unless-stopped
 
   migrate:
