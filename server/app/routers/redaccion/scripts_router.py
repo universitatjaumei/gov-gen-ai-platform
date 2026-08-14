@@ -92,6 +92,17 @@ def _hash_dict(payload: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _hash_extraction_result(result_payload: dict[str, Any]) -> str:
+    """Hash de reproducibilidad de una extracción, sin la procedencia.
+
+    `provenance.extracted_at` es la hora real de cada ejecución: distinta siempre,
+    aunque el script y los datos sean idénticos. Incluirla en el hash hacía que
+    `hash_matches` en admin-retest fuera `False` en todas las ejecuciones reales,
+    así que ningún script podía llegar nunca a aprobarse por esta vía.
+    """
+    return _hash_dict({k: v for k, v in result_payload.items() if k != "provenance"})
+
+
 # ---------------------------------------------------------------------------
 # DTOs
 # ---------------------------------------------------------------------------
@@ -219,8 +230,9 @@ async def propose_script(
         owner_kind=body.target_owner_kind,
     )
 
+    proposal_id = uuid.uuid4()
     proposal = HubScriptProposal(
-        id=uuid.uuid4(),
+        id=proposal_id,
         proposer_user_id=_user_to_uuid(user.user_id),
         target_owner_kind=body.target_owner_kind,
         target_template_id=body.target_template_id,
@@ -235,7 +247,7 @@ async def propose_script(
     await session.commit()
 
     return ProposeResponse(
-        proposal_id=proposal.id,
+        proposal_id=proposal_id,
         code=result.code,
         audit_result=result.audit_result,
         model_used=result.model_used,
@@ -470,16 +482,17 @@ async def test_proposal(
     pipeline = AdminScriptExtractionPipeline(client=sandbox)
     extraction = await pipeline.extract_async(inp)
     result_payload = extraction.model_dump(mode="json")
-    result_hash = _hash_dict(result_payload)
+    result_hash = _hash_extraction_result(result_payload)
 
     proposal.test_result_json = result_payload
     proposal.test_result_hash = result_hash
     proposal.status = "tested"
+    proposal_id = proposal.id  # antes del commit: expire_on_commit lo dejaría expirado
     await session.commit()
 
     return TestProposalResponse(
-        proposal_id=proposal.id,
-        status=proposal.status,
+        proposal_id=proposal_id,
+        status="tested",
         result=result_payload,
         hash=result_hash,
     )
@@ -517,7 +530,7 @@ async def validate_test_result(
     await session.commit()
 
     return ValidateTestResultResponse(
-        proposal_id=proposal.id,
+        proposal_id=proposal_id,
         test_validated_by_proposer_at=now,
     )
 
@@ -570,12 +583,15 @@ async def save_to_private_template(
     proposal.status = "approved"
     proposal.reviewer_user_id = proposer_uuid
     proposal.reviewed_at = datetime.now(timezone.utc)
+    # antes del commit: expire_on_commit dejaría estos atributos expirados
+    template_id = template.id
+    new_version_id = new_version.id
     await session.commit()
 
     return SaveToPrivateTemplateResponse(
-        proposal_id=proposal.id,
-        template_id=template.id,
-        new_version_id=new_version.id,
+        proposal_id=proposal_id,
+        template_id=template_id,
+        new_version_id=new_version_id,
     )
 
 
@@ -622,7 +638,7 @@ async def submit_for_review(
     proposal.status = "pending_review"
     await session.commit()
 
-    return SubmitForReviewResponse(proposal_id=proposal.id, status=proposal.status)
+    return SubmitForReviewResponse(proposal_id=proposal_id, status="pending_review")
 
 
 # ---------------------------------------------------------------------------
@@ -687,7 +703,7 @@ async def admin_retest(
     pipeline = AdminScriptExtractionPipeline(client=sandbox)
     extraction = await pipeline.extract_async(inp)
     result_payload = extraction.model_dump(mode="json")
-    result_hash = _hash_dict(result_payload)
+    result_hash = _hash_extraction_result(result_payload)
 
     hash_matches = result_hash == proposal.test_result_hash
     now = datetime.now(timezone.utc)
@@ -701,7 +717,7 @@ async def admin_retest(
     await session.commit()
 
     return AdminRetestResponse(
-        proposal_id=proposal.id,
+        proposal_id=proposal_id,
         result=result_payload,
         hash=result_hash,
         hash_matches=hash_matches,
@@ -752,12 +768,15 @@ async def approve_script_proposal(
     proposal.reviewed_at = datetime.now(timezone.utc)
     if body.review_note:
         proposal.review_note = body.review_note
+    # antes del commit: expire_on_commit dejaría estos atributos expirados
+    template_id = template.id
+    new_version_id = new_version.id
     await session.commit()
 
     return ApproveResponse(
-        proposal_id=proposal.id,
-        template_id=template.id,
-        new_version_id=new_version.id,
+        proposal_id=proposal_id,
+        template_id=template_id,
+        new_version_id=new_version_id,
     )
 
 
@@ -793,7 +812,7 @@ async def reject_script_proposal(
     await session.commit()
 
     return RejectResponse(
-        proposal_id=proposal.id,
+        proposal_id=proposal_id,
         status="rejected",
         review_note=body.review_note,
     )
