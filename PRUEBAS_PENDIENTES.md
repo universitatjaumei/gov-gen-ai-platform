@@ -7,6 +7,35 @@
 
 ---
 
+## 2026-08-14 — actualización: DER.2 y Camino 3 verificados, dos hallazgos más
+
+- **DER.2 verificado en la interfaz** (antes solo por SQL directo): aviso de copia
+  compartida al borrar, cascada opcional desmarcada por defecto, copia hermana
+  intacta. Sin hallazgos.
+- **Camino 3 (redacción)** verificado hasta donde da una plantilla vacía. Dos
+  hallazgos nuevos, ambos arreglados con TDD y verificados en vivo: (7) `POST
+  /hub/redaccion/templates` daba 500 por leer `version.id` tras `session.commit()`
+  con el objeto ya expirado; (8) **cualquier SuperAdmin o Admin de desarrollo
+  recibía 403 al leer su propio workspace** — los seis endpoints de
+  `workspaces_router.py` comparaban el `user_id` crudo contra el `owner_id` en
+  UUID sin pasar por `es_propietario()`. Detalle completo en el historial de
+  `PROJECT_STATE.md` (2026-08-14).
+- **Sigue pendiente de Camino 3**: un borrador real con bloques `AI_ASSISTED_TEXT`
+  (vía `/redaccion/llm-drafts/approve-as-workspace`), la anonimización con datos
+  sintéticos, y abrir el export en Word/Adobe real.
+- **Camino 4 sin empezar**: exige `docker-compose.prod.yml` (stack "one-click"
+  completo), que choca con la sesión de desarrollo actual. Mejor en una sesión
+  dedicada, parando antes la BD de desarrollo — mismo aviso que ya llevaba
+  `pruebas_manuales_bloqueFASE11.bat` más abajo.
+- **Aviso de entorno**: si `curl`/el navegador dan respuestas inconsistentes contra
+  el backend tras reiniciarlo, comprueba `Get-NetTCPConnection -LocalPort 8000` —
+  puede haber un "uvicorn zombi" en `0.0.0.0:8000` sirviendo código viejo con un
+  PID que ni `Get-Process` ni `tasklist` resuelven (recurrente, ya visto el
+  2026-08-02). Arrancar el backend explícitamente en `--host 127.0.0.1` lo
+  esquiva sin tener que localizar ni matar el zombi.
+
+---
+
 ## 0. Antes de nada: hay un commit sin subir
 
 ```
