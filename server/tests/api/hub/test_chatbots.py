@@ -228,6 +228,44 @@ class TestDeleteChatbot:
         finally:
             app.dependency_overrides.pop(get_async_session, None)
 
+    def test_should_purge_the_corpus_before_deleting_the_chatbot(self, client, monkeypatch):
+        """PIL.2: el endpoint no puede borrar la fila y dejar el corpus huerfano.
+
+        Lo que hace la purga se prueba contra BD real en
+        `test_chatbot_deletion_purges_corpus.py`; aqui se fija que el endpoint la llama, y
+        que la llama ANTES de borrar el chatbot: al reves, un fallo a mitad dejaria un
+        corpus sin dueno y sin forma de encontrarlo.
+        """
+        import server.app.routers.hub_chatbots_router as router_mod
+
+        orden: list[str] = []
+        chatbot = _make_chatbot()
+        session = _session_with([chatbot])
+
+        async def _purga_espia(_session, chatbot_id):
+            orden.append(f"purga:{chatbot_id}")
+            return router_mod.CorpusRetirado(documentos=3, fragmentos=12)
+
+        ejecutar_original = session.execute
+
+        async def _execute_espia(stmt, *a, **kw):
+            if "hub_chatbots" in str(stmt).lower() and str(stmt).lower().startswith("delete"):
+                orden.append("borra_chatbot")
+            return await ejecutar_original(stmt, *a, **kw)
+
+        monkeypatch.setattr(router_mod, "purgar_corpus_del_chatbot", _purga_espia)
+        session.execute = _execute_espia
+        app.dependency_overrides[get_async_session] = _override_session(session)
+        try:
+            resp = client.delete(f"/api/v1/hub/chatbots/{DEV_CHATBOT_ID}")
+
+            assert resp.status_code == 204
+            assert orden and orden[0] == f"purga:{DEV_CHATBOT_ID}", (
+                f"la purga no se llamo primero: {orden}"
+            )
+        finally:
+            app.dependency_overrides.pop(get_async_session, None)
+
 
 class TestChatbotRetrievalMode:
     def _mount_session_for_stats(self, chatbot, *, total_docs=2, total_tokens=120000, by_language=None):
