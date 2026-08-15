@@ -52,6 +52,7 @@ dependencies = [
     # Front-matter del corpus curado (ING.0.3). Estaba disponible como dependencia
     # transitiva; se declara porque la ingesta la importa en producción.
     "PyYAML>=6.0",
+    "langchain-google-vertexai>=2.0.0",
 ]
 
 [dependency-groups]

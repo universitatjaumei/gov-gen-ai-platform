@@ -38,6 +38,8 @@ async def seed_hub_defaults() -> None:
 
 
 _DEFAULT_PROVIDERS = [
+    # PIL.1: el proveedor del despliegue. Autentica por ADC, sin clave de API que repartir.
+    HubProvider(id="vertex", name="Google Vertex AI", provider_type="google_vertexai"),
     HubProvider(id="google", name="Google AI (Gemini)", provider_type="google_genai"),
     HubProvider(id="openrouter", name="OpenRouter", provider_type="openai_compatible"),
     HubProvider(id="ollama", name="Ollama (Local)", provider_type="openai_compatible"),

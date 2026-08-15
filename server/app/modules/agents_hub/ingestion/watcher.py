@@ -40,13 +40,16 @@ class EmbeddingService(Protocol):
     async def embed(self, text: str) -> list[float]: ...
 
 
-def _procedencia(embedding_service: Any) -> tuple[str, int]:
-    """Modelo y dimension del servicio, o error explicito (RAG.9).
+def _procedencia(embedding_service: Any) -> tuple[str, int, str | None]:
+    """Modelo, dimension y tipo de tarea del servicio, o error explicito (RAG.9 + PIL.1).
 
     Antes esto era un `getattr(..., None)` y escribia NULL cuando el servicio no lo
     declaraba, que es exactamente el vector anonimo que la columna vino a impedir. Ahora
     la columna es NOT NULL, asi que sin esto el sintoma seria un NotNullViolation de
     Postgres en mitad de una ingesta, sin decir cual de los dos datos falta ni de quien.
+
+    El tipo de tarea SI admite None, y no es una excepcion a la regla anterior: el modelo
+    local no distingue documento de consulta, y declararlo asi es informacion, no un hueco.
     """
     modelo = getattr(embedding_service, "model_name", None)
     dimension = getattr(embedding_service, "dimensions", None)
@@ -56,7 +59,8 @@ def _procedencia(embedding_service: Any) -> tuple[str, int]:
             "`model_name` y `dimensions`, y sin ellos el vector queda sin procedencia: "
             "cambiar de modelo dejaria de ser detectable."
         )
-    return str(modelo), int(dimension)
+    tarea = getattr(embedding_service, "embedding_task_type", None)
+    return str(modelo), int(dimension), (str(tarea) if tarea else None)
 
 
 class StorageService(Protocol):
@@ -264,13 +268,17 @@ class IngestionWatcher:
         return _anotar
 
     async def _embed_en_lote(self, textos: list[str]) -> list[list[float]]:
-        """Embebe una lista, usando el lote del servicio si lo expone."""
-        if not textos:
-            return []
-        en_lote = getattr(self._embedding, "embed_batch", None)
-        if en_lote is not None:
-            return await en_lote(textos)
-        return [await self._embedding.embed(t) for t in textos]
+        """Embebe una lista PARA INDEXAR, usando el lote del servicio si lo expone.
+
+        La logica vive en `embed_para_indexar` (PIL.1) porque el re-embebido necesita
+        exactamente la misma: dos copias de esta decision es como se acaba con medio corpus
+        embebido con un proposito y medio con otro.
+        """
+        from server.app.modules.agents_hub.services.embedding_service import (
+            embed_para_indexar,
+        )
+
+        return await embed_para_indexar(self._embedding, textos)
 
     async def _regenerate_chunks_for_document(
         self, doc: HubDocument, seguimiento: SeguimientoDeJob | None = None
@@ -303,7 +311,7 @@ class IngestionWatcher:
         terminos = terminos_bilingues(doc)
         # MOD.1: la procedencia se graba CON el vector. Sin ella, cambiar de modelo es una
         # avería silenciosa; con ella, `assert_embedding_space_matches` puede detectarla.
-        modelo, dimension = _procedencia(self._embedding)
+        modelo, dimension, tarea = _procedencia(self._embedding)
         # RAG.7: se embebe `embedding_text` —jerarquía + contenido—, no el contenido crudo.
         # Y por LOTES cuando el servicio lo soporta: el watcher iba chunk a chunk, o sea una
         # llamada por fragmento, que con un proveedor por API es una ida y vuelta de red por
@@ -314,11 +322,13 @@ class IngestionWatcher:
         seg.n_batches += 1
 
         async with seg.etapa("persist", actual=len(chunks)):
-            self._persistir_chunks(doc, chunks, vectores, terminos, modelo, dimension)
+            self._persistir_chunks(
+                doc, chunks, vectores, terminos, modelo, dimension, tarea
+            )
         return len(chunks)
 
     def _persistir_chunks(
-        self, doc: HubDocument, chunks, vectores, terminos, modelo, dimension
+        self, doc: HubDocument, chunks, vectores, terminos, modelo, dimension, tarea=None
     ) -> None:
         for ch, embedding in zip(chunks, vectores):
             self._session.add(HubDocumentChunk(
@@ -333,6 +343,7 @@ class IngestionWatcher:
                 bilingual_terms=terminos,
                 embedding_model=modelo,
                 embedding_dim=dimension,
+                embedding_task_type=tarea,
                 # RAG.9: se guarda el texto que se embebio, no solo el que se muestra. Es lo
                 # que permite que un re-embed produzca el mismo vector que produjo la ingesta.
                 embedding_text=ch.embedding_text,
@@ -373,7 +384,7 @@ class IngestionWatcher:
         # procedencia. Hacian ninguna de las dos cosas: mientras la columna fue opcional el
         # hueco era invisible, y el vector de un adjunto salia de un texto distinto del que
         # habria salido si el mismo documento hubiera entrado por la ingesta normal.
-        modelo, dimension = _procedencia(self._embedding)
+        modelo, dimension, tarea = _procedencia(self._embedding)
         async with seg.etapa("embed", f"{len(chunks)} fragmentos en 1 lote"):
             vectores = await self._embed_en_lote([ch.embedding_text for ch in chunks])
 
@@ -389,6 +400,7 @@ class IngestionWatcher:
                 language=language,
                 embedding_model=modelo,
                 embedding_dim=dimension,
+                embedding_task_type=tarea,
                 embedding_text=chunk.embedding_text,
                 is_temporary=True,
                 owner_id=owner_id,

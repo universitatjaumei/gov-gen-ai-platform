@@ -64,10 +64,18 @@ class ReembedPlan:
         return "\n".join(lineas)
 
 
-def _es_de_otro_espacio(modelo: str, dimension: int):
+def _es_de_otro_espacio(modelo: str, dimension: int, tarea: str | None = None):
+    """PIL.1: el tipo de tarea es parte del espacio, no un adorno del registro.
+
+    `IS DISTINCT FROM` y no `!=` porque la columna admite NULL —el modelo local no
+    distingue propósito— y con `!=` un NULL da NULL, que en un WHERE se comporta como
+    falso: los chunks sin tipo declarado quedarían fuera del re-embebido justo cuando son
+    los que hay que rehacer.
+    """
     return or_(
         HubDocumentChunk.embedding_model != modelo,
         HubDocumentChunk.embedding_dim != dimension,
+        HubDocumentChunk.embedding_task_type.is_distinct_from(tarea),
     )
 
 
@@ -77,6 +85,7 @@ async def planificar_reembed(
     """Cuenta sin tocar nada. Es lo que ejecuta `--dry-run`."""
     modelo = str(embedding_service.model_name)
     dimension = int(embedding_service.dimensions)
+    tarea = getattr(embedding_service, "embedding_task_type", None)
 
     base = select(func.count(HubDocumentChunk.id)).where(
         HubDocumentChunk.chatbot_id == chatbot_id
@@ -84,7 +93,9 @@ async def planificar_reembed(
     total = int((await session.execute(base)).scalar_one() or 0)
     ajenos = int(
         (
-            await session.execute(base.where(_es_de_otro_espacio(modelo, dimension)))
+            await session.execute(
+                base.where(_es_de_otro_espacio(modelo, dimension, tarea))
+            )
         ).scalar_one()
         or 0
     )
@@ -125,6 +136,7 @@ async def reembeber_chatbot(
     """
     modelo = str(embedding_service.model_name)
     dimension = int(embedding_service.dimensions)
+    tarea = getattr(embedding_service, "embedding_task_type", None)
 
     procesados = 0
     ultimo_id: uuid.UUID | None = None
@@ -138,7 +150,7 @@ async def reembeber_chatbot(
             .limit(batch_size)
         )
         if not force:
-            consulta = consulta.where(_es_de_otro_espacio(modelo, dimension))
+            consulta = consulta.where(_es_de_otro_espacio(modelo, dimension, tarea))
         if ultimo_id is not None:
             consulta = consulta.where(HubDocumentChunk.id > ultimo_id)
 
@@ -151,6 +163,7 @@ async def reembeber_chatbot(
             chunk.embedding = vector
             chunk.embedding_model = modelo
             chunk.embedding_dim = dimension
+            chunk.embedding_task_type = tarea
         await session.flush()
 
         procesados += len(lote)
@@ -161,10 +174,12 @@ async def reembeber_chatbot(
 
 
 async def _embeber(embedding_service: Any, textos: list[str]) -> list[list[float]]:
-    en_lote = getattr(embedding_service, "embed_batch", None)
-    if en_lote is not None:
-        return await en_lote(textos)
-    return [await embedding_service.embed(t) for t in textos]
+    """Re-embeber es indexar: mismo propósito y mismo camino que la ingesta (PIL.1)."""
+    from server.app.modules.agents_hub.services.embedding_service import (
+        embed_para_indexar,
+    )
+
+    return await embed_para_indexar(embedding_service, textos)
 
 
 async def _chatbots_con_corpus(session: AsyncSession) -> list[uuid.UUID]:

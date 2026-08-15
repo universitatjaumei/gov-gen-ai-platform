@@ -99,3 +99,47 @@ que revisarla, al precio de romper la compatibilidad de esquema con BGE-M3 en ed
 El corpus v1 está sin cargar. Cargarlo con BGE-M3 y cambiar después cuesta re-embeber las
 ~380 normas con su índice detrás. Es el momento más barato que va a existir para decidirlo, y
 por eso se altera la planificación en vez de arrastrarlo.
+
+---
+
+## Ampliación PIL.1 (2026-08-15) — el tercer adaptador es Vertex, y el propósito es parte del espacio
+
+Esta decisión daba por buena la API de AI Studio (`GoogleEmbeddingService`, clave en
+`GOOGLE_API_KEY`) como «la API». Al preparar el piloto se vio que eso no es lo que una
+administración pone en producción: la clave hay que repartirla, rotarla y custodiarla. **El
+despliegue va por Vertex**, que autentica con las credenciales por defecto de la aplicación
+(ADC) y no tiene secreto que gestionar.
+
+`VertexEmbeddingService` se suma a los otros dos y se elige igual, por
+`HubProvider.provider_type` (`google_vertexai`). `GoogleEmbeddingService` se conserva para
+desarrollo sin proyecto de GCP.
+
+### Lo que se midió contra la API real, y por qué importa
+
+Verificado el 2026-08-15 contra el proyecto `uji-teclab`:
+
+| Qué | Medido | Consecuencia |
+|---|---|---|
+| Regiones que sirven `gemini-embedding-001` a 1024 dim | `europe-southwest1`, `europe-west1`, `europe-west4`, `europe-west9` | Se elige **Madrid**: el texto normativo no sale de España |
+| Instancias por petición | **250** | Los ~21.400 fragmentos del piloto pasan de 21.400 llamadas a ~86 |
+| Norma L2 del vector devuelto | **0,6225** | La normalización del adaptador deja de ser una precaución leída en la documentación y pasa a ser un requisito medido |
+| `task_type` | `RETRIEVAL_DOCUMENT` y `RETRIEVAL_QUERY` aceptados | Ver abajo |
+
+### El propósito del embedding entra en la procedencia
+
+MOD.1 grabó modelo y dimensión con cada vector para que cambiar de modelo fuese detectable.
+`task_type` abre el mismo agujero un nivel más abajo: **el mismo modelo, con la misma
+dimensión, produce vectores distintos según para qué se vaya a usar el texto**. Indexar con
+`RETRIEVAL_DOCUMENT` y preguntar sin declarar nada compara dos espacios distintos, y eso no
+da error — da un retriever que «funciona regular», que es la avería que MOD.1 vino a impedir.
+
+Por eso `hub_document_chunks` gana `embedding_task_type` y
+`assert_embedding_space_matches` compara la **tripleta** (modelo, dimensión, tipo de tarea).
+`NULL` es legítimo y significa «este espacio no distingue propósito»: es lo que declara
+BGE-M3, que no tiene tipos de tarea. Se compara como un valor más y no como un comodín,
+así que un corpus anterior a PIL.1 se señala como espacio distinto — que es lo correcto:
+hay que re-embeberlo, no darlo por bueno.
+
+**Se adopta en los dos lados o en ninguno**, y la decisión de indexado vive en una sola
+función (`embed_para_indexar`) que comparten la ingesta y el re-embebido. Dos copias de esa
+decisión es como se acaba con medio corpus embebido de una forma y medio de otra.

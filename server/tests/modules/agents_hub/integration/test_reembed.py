@@ -224,7 +224,11 @@ class TestReembeddingMasivo:
         from server.app.modules.agents_hub.services.embedding_space import (
             describe_corpus_embedding_space,
         )
-        assert await describe_corpus_embedding_space(db_session, cb) == {(MODELO, DIMENSION)}
+        # PIL.1: el espacio es una TRIPLETA. `None` es lo que declara un servicio sin tipos
+        # de tarea —el local—, y es informacion, no un hueco.
+        assert await describe_corpus_embedding_space(db_session, cb) == {
+            (MODELO, DIMENSION, None)
+        }
 
     @pytest.mark.asyncio
     async def test_should_skip_chunks_already_on_active_model(self, db_session):

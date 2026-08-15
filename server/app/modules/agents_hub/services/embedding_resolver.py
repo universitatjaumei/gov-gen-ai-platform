@@ -34,6 +34,7 @@ from server.app.modules.agents_hub.services.embedding_service import (
     DIMENSION_PLATAFORMA,
     GoogleEmbeddingService,
     LocalEmbeddingService,
+    VertexEmbeddingService,
     get_embedding_service,
 )
 
@@ -83,6 +84,13 @@ async def resolve_embedding_service(
     proveedor = await session.get(HubProvider, config.provider)
     tipo = getattr(proveedor, "provider_type", None)
 
+    if tipo == "google_vertexai":
+        return VertexEmbeddingService(
+            model_name=config.model_name,
+            output_dimensionality=config.output_dimensionality or DIMENSION_PLATAFORMA,
+            client=client_factory() if client_factory else None,
+        )
+
     if tipo == "google_genai":
         return GoogleEmbeddingService(
             model_name=config.model_name,
@@ -96,6 +104,7 @@ async def resolve_embedding_service(
     raise EmbeddingProviderNotSupported(
         f"El proveedor '{config.provider}' es de tipo '{tipo}', y no hay adaptador de "
         "embeddings para ese tipo. Configura un proveedor soportado "
-        "('google_genai' o 'local') o añade el adaptador: degradar a local en silencio "
-        "dejaría el corpus repartido entre dos espacios vectoriales incompatibles."
+        "('google_vertexai', 'google_genai' o 'local') o añade el adaptador: degradar a "
+        "local en silencio dejaría el corpus repartido entre dos espacios vectoriales "
+        "incompatibles."
     )

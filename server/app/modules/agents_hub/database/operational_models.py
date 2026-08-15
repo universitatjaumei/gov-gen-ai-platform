@@ -304,11 +304,15 @@ class HubDocumentChunk(HubOperationalBase):
         # chunks del chatbot. Con este indice es un recorrido solo-indice de entradas
         # estrechas; sin el, el caso bueno (no hay desajuste) obliga a leer el heap entero
         # por pregunta, que es la forma mas cara posible de responder "no pasa nada".
+        # PIL.1 añade `embedding_task_type` a la tripleta que la guarda pregunta. Si se
+        # quedara fuera del indice, el DISTINCT volveria al heap y la guarda dejaria de ser
+        # barata justo despues de haberla hecho mas estricta.
         Index(
             "ix_hub_document_chunks_embedding_space",
             "chatbot_id",
             "embedding_model",
             "embedding_dim",
+            "embedding_task_type",
         ),
     )
 
@@ -347,6 +351,11 @@ class HubDocumentChunk(HubOperationalBase):
     # averia que la columna vino a impedir. Rellenables => obligatorias.
     embedding_model: Mapped[str] = mapped_column(String(255), nullable=False)
     embedding_dim: Mapped[int] = mapped_column(Integer, nullable=False)
+    # PIL.1. Nullable a propósito: el modelo local no distingue propósito y `None` es su
+    # declaración honesta, no un dato que falte. Lo que NO puede pasar es que un corpus
+    # embebido como consulta se sirva como documento sin que nadie lo note — de eso se
+    # ocupa `assert_embedding_space_matches`, que compara la tripleta completa.
+    embedding_task_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     # El texto que SE EMBEBIO, que desde RAG.7 no es `content`: lleva delante titulo y
     # jerarquia. Se guarda para que re-embeber sea fiel — reconstruirlo desde `content`
     # produciria vectores que la ingesta nunca genero, y la incoherencia no daria error.
