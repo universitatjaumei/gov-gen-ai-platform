@@ -16581,8 +16581,13 @@ código el 2026-08-15):
 - **`hub_documents.chatbot_id` no tiene FK** (se cayó con el split edge/cloud), así que
   borrar un chatbot no borra su corpus. Los fragmentos sí cascadean desde el documento.
 
-**Prerrequisitos externos** (los aporta el usuario, no el código): proyecto y región de GCP
-con la Vertex AI API habilitada, y credenciales ADC en la máquina de desarrollo.
+**Prerrequisitos externos**: ✅ **resueltos el 2026-08-15.** Proyecto `uji-teclab`
+(618806480921), facturación activa, `aiplatform.googleapis.com` **ya estaba habilitada**, y
+ADC escrito en `%APPDATA%\gcloud\application_default_credentials.json` con `uji-teclab` como
+proyecto de cuota. Medidas contra la API real en el cuadro de PIL.1.
+
+`discoveryengine.googleapis.com` **no** está habilitada: es la del Ranking API que necesita
+RAG.6b, que va detrás del bloque Deploy. No se habilita hasta que haga falta.
 
 ---
 
@@ -16603,6 +16608,22 @@ Studio (clave de API en el entorno), que no es lo que una universidad despliega 
 proyecto de GCP: Vertex autentica con ADC / cuenta de servicio, respeta la región y no
 obliga a repartir una clave.
 
+## Medido contra la API real (2026-08-15, proyecto uji-teclab)
+No hay que volver a averiguarlo, y dos de estos datos cambian el diseño:
+
+| Qué | Medido |
+|---|---|
+| Regiones que sirven `gemini-embedding-001` | `europe-southwest1` (Madrid), `europe-west1`, `europe-west4`, `europe-west9` — las cuatro con 1024 dimensiones |
+| Tamaño de lote | **250 instancias por petición, sin error**. Probado 1, 2, 16, 64 y 250 |
+| ¿La API normaliza a 1024 dim? | **NO.** Norma L2 medida = **0,6225**. Normalizar en el adaptador es obligatorio, y su ausencia NO da error: da un umbral de RAG.5 que compara números incomparables |
+| `task_type` | Aceptado: `RETRIEVAL_DOCUMENT` y `RETRIEVAL_QUERY` responden los dos |
+
+**Aviso para quien pruebe a mano desde PowerShell**: `Invoke-RestMethod` de PS 5.1 manda
+`Expect: 100-continue` y el endpoint contesta **HTTP 417 con una página anti-bot de Google**,
+que se lee como «la región no existe» y no lo es. Se desactiva con
+`[System.Net.ServicePointManager]::Expect100Continue = $false`. Costó dar por no disponible
+una región que sí lo estaba.
+
 ## Alcance 1 — el adaptador
 - `VertexEmbeddingService` en `services/embedding_service.py`, junto a los otros dos.
 - Modelo por defecto `gemini-embedding-001`, `output_dimensionality=1024`
@@ -16614,6 +16635,10 @@ obliga a repartir una clave.
 - Cliente: `langchain_google_vertexai.VertexAIEmbeddings` (dependencia nueva en
   `server/pyproject.toml`). Proyecto y región de `GOOGLE_CLOUD_PROJECT` y
   `GOOGLE_CLOUD_LOCATION`; credenciales por ADC.
+- **Región: `europe-southwest1` (Madrid)**, decidida el 2026-08-15. El texto normativo no
+  sale de España, que es el argumento que sostiene la frontera edge-cloud ante protección de
+  datos. Verificada sirviendo el modelo a 1024 dimensiones. **La región del embedding no
+  ata a las demás**: el modelo de chat y el Ranking API de RAG.6b eligen la suya.
 - **Sin fallback silencioso**: si falta el proyecto o la credencial, error explícito que diga
   qué falta y cómo se pone. Degradar a local dejaría medio corpus en otro espacio vectorial.
 
@@ -16621,12 +16646,31 @@ obliga a repartir una clave.
 - `embed_batch` en `VertexEmbeddingService` y en `GoogleEmbeddingService`, sobre
   `aembed_documents`. Hoy ninguno lo expone y `watcher.py` cae, por `getattr`, a una llamada
   por fragmento: para este corpus son ~15.100 + ~6.300 llamadas secuenciales.
-- Trocear la lista antes de llamar (la API tiene tope de instancias y de tokens por
-  petición). El tamaño de lote es constante del módulo, no parámetro de negocio.
+- Trocear la lista antes de llamar: **250 instancias por petición, medido** (arriba). El
+  tamaño de lote es constante del módulo, no parámetro de negocio. Con eso, los ~21.400
+  fragmentos del piloto caben en ~86 peticiones en vez de 21.400.
 - **El orden de salida es el de entrada**, y eso se testea: un lote reordenado asigna
   vectores al fragmento equivocado y NO da error — da respuestas malas.
 
-## Alcance 3 — la selección por configuración
+## Alcance 3 — el propósito del embedding (task_type asimétrico)
+Decidido el 2026-08-15, y es lo único de este prompt que toca un protocolo compartido.
+
+- **Al ingerir, `RETRIEVAL_DOCUMENT`; al preguntar, `RETRIEVAL_QUERY`.** Para eso existe el
+  parámetro: sin él, el vector de una pregunta y el de un artículo tienen que parecerse por
+  casualidad, y en un corpus normativo —donde el ciudadano no usa las palabras de la norma—
+  es justo donde más se pierde.
+- El protocolo hoy es `embed(text)` / `embed_batch(texts)`, sin noción de propósito. Se le
+  añade el propósito **con default explícito**, y `LocalEmbeddingService` lo acepta y lo
+  ignora: BGE-M3 no tiene tipos de tarea y no se le va a inventar uno.
+- **El propósito viaja con la procedencia del vector** (MOD.1), junto a modelo y dimensiones.
+  Sin eso, re-ingerir con otro tipo de tarea corrompe el índice **en silencio**:
+  `assert_embedding_space_matches` compara modelo y dimensiones, que seguirían coincidiendo.
+  Es el mismo fallo que MOD.1 vino a impedir, un nivel más abajo.
+- **Los dos lados o ninguno.** Si la rama de consulta no adopta `RETRIEVAL_QUERY`, ingerir
+  con `RETRIEVAL_DOCUMENT` es peor que no hacer nada: se comparan dos espacios distintos sin
+  que nadie lo note. El test de extremo a extremo es el que cierra este alcance.
+
+## Alcance 4 — la selección por configuración
 - `provider_type = "google_vertexai"` en `embedding_resolver.resolve_embedding_service`.
 - `HubProvider` sembrado para Vertex en `database/seeds.py`.
 - El mensaje de `EmbeddingProviderNotSupported` enumera los tres tipos soportados.
@@ -16636,9 +16680,14 @@ obliga a repartir una clave.
 # should_normalize_l2_the_returned_vector
 # should_default_to_platform_dimension_1024
 # should_fail_with_actionable_error_when_project_missing
-# should_split_a_large_batch_into_api_sized_requests
+# should_split_a_large_batch_into_api_sized_requests      (tope medido: 250)
 # should_preserve_input_order_across_batch_boundaries
 # should_expose_embed_batch_on_both_api_adapters
+# should_send_retrieval_document_task_type_when_ingesting
+# should_send_retrieval_query_task_type_when_querying
+# should_accept_and_ignore_the_purpose_in_the_local_adapter
+# should_record_the_task_type_in_the_vector_provenance
+# should_reject_a_corpus_embedded_with_a_different_task_type
 # tests/modules/agents_hub/unit/test_embedding_resolver.py (ampliar)
 # should_return_vertex_adapter_for_google_vertexai_provider_type
 # should_name_all_supported_types_in_the_unsupported_error
@@ -16649,7 +16698,9 @@ obliga a repartir una clave.
 - [ ] Suite de `tests/modules/agents_hub` verde
 - [ ] `docs/DECISION_MODELOS_EMBEDDING_RERANKER.md` menciona el tercer adaptador y sus
       variables de entorno
-- [ ] `.env.example` con GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION y la nota de ADC
+- [ ] `.env.example` con GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION=europe-southwest1 y la
+      nota de ADC (`gcloud auth application-default login`, NO una clave de API)
+- [ ] Ingesta y consulta usan tipos de tarea distintos, verificado de extremo a extremo
 - [ ] grep: ningún módulo de negocio importa VertexEmbeddingService directamente (se resuelve
       por configuración, MOD.2)
 ```
