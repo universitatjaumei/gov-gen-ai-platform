@@ -1,256 +1,181 @@
-# Plan de configuración e ingesta de los dos chatbots (pruebas en local)
+# Los dos asistentes del piloto: análisis, configuración e ingesta en local
 
-> **Fecha**: 2026-08-11. **Objetivo**: dejar montados en local el **chatbot público de
-> normativa** y el **asistente de Gerencia**, cada uno con su base documental, para probar el
-> sistema antes de decidir el despliegue.
+> **Reescrito el 2026-08-15.** La versión del 2026-08-11 daba por pendiente casi todo lo que
+> ahora está hecho —el corpus ya viene desdoblado en dos paquetes, la FAQ ya está convertida,
+> la clasificación ya se emite— y daba por resuelto lo único que no lo está: **Vertex**. Se
+> conserva el nombre del fichero porque el asunto es el mismo; el contenido está verificado
+> contra el código y contra las carpetas reales el 2026-08-15.
 >
-> Todo lo que sigue está comprobado contra el código y contra las carpetas reales. Donde algo
-> está pendiente, se dice que lo está y qué falta exactamente.
+> El plan ejecutable vive en `Plan_TDD_Fase1.md` §Bloque PIL. Esto es el análisis que lo
+> sostiene.
 
 ---
 
-## 0. Una decisión que hay que tomar ANTES de la primera ingesta
+## 1. Qué hay, exactamente
 
-**Con qué proveedor de embeddings se ingiere.** No es un detalle de configuración: el sistema
-guarda la procedencia del vector en cada fragmento y `assert_embedding_space_matches` devuelve
-**409 en cada consulta** si el corpus se embebió con un modelo y se pregunta con otro. Cambiar
-después obliga a **re-embeber el corpus entero**.
+**El corpus ya está empaquetado para dos asistentes.** Lo hace el pipeline de curación
+(`passa_el_pipeline.py`, paso 8) y la pertenencia vive en su `assistents.json`, no en el
+`.md`: los identificadores de los asistentes son internos y esa relación cambia más a menudo
+que las normas.
 
-**Recomendación: ingerir ya con el proveedor de la API (Google/Vertex)**, el mismo que usará
-el despliegue. Razones:
+| Paquete | Documentos | Tamaño | Qué contiene |
+|---|---|---|---|
+| `generat/ingesta/normatiu` | **298** `.md` | ~16,9 MB (~4,2M tokens) | Todo: `md_contracte` + el paquete de Gerencia + los 27 sin ficha |
+| `generat/ingesta/gerencia` | **124** `.md` | ~10,5 MB (~2,6M tokens) | Subconjunto por materia: gestión económica, RRHH, contratación, convenios, cátedras |
 
-- El ensayo local se parece a producción, que es para lo que sirve un ensayo.
-- No hay que re-embeber después.
-- Para ~400 documentos el coste de embedding es trivial.
-- Encaja con **D.4.0**: si los embeddings van por API, la pila local (`torch`,
-  `transformers`, `sentence-transformers`) no hace falta ni en local.
+No son corpus disjuntos: `gerencia` es un subconjunto orientado por materia del mismo fondo.
+Pesa más de lo que su recuento sugiere porque se lleva los documentos gordos —presupuesto,
+bases de ejecución, plan antifraude, PES—.
 
-La alternativa —BGE-M3 en local— solo tiene sentido si quieres probar el **modo edge sin
-red**. Es un escenario legítimo, pero entonces asúmelo: ese corpus no vale para el despliegue.
+Comprobado en los dos paquetes: **los 422 ficheros llevan `ambit_principal` y `submateries`
+en campos reales** (ya no en `extra`), **2 documentos con `content_class: faq`** en cada uno,
+1 derogado, y 33 / 7 versiones no canónicas de parejas bilingües.
 
----
+Las instrucciones vivas de ingesta son
+`Descarregar_pdf/normativa_propia/publicacio_transparencia_2026-07/INGESTA.md`, revisión del
+14-08-2026.
 
-## 1. Los dos chatbots
+## 2. Cuatro hallazgos que hay que resolver antes de ingerir
 
-|  | **Público — normativa** | **Gerencia — asistente económico-administrativo** |
+### 2.1 El vocabulario dejó de ser opcional
+
+`docs/CARGA_VOCABULARIO.md` promete que «hoy los documentos aún no emiten esos campos, así que
+la validación pasa trivialmente». **Ya no.** Con `ambit_principal` y `submateries` emitidos en
+los 422 ficheros, `assert_vocabulary` valida de verdad contra `hub_vocabulary_terms` y
+**aborta la ingesta entera** si falta un código. Cargar el vocabulario (5 ámbitos, 58
+submaterias, en ese orden) pasa de recomendación a prerrequisito. El documento hay que
+corregirlo: hoy engaña a quien lo siga.
+
+### 2.2 No existe adaptador de Vertex
+
+`GoogleEmbeddingService` (`services/embedding_service.py:86`) construye
+`GoogleGenerativeAIEmbeddings` con `GOOGLE_API_KEY`: eso es la API de AI Studio, no Vertex.
+`embedding_resolver.py:86-94` solo conoce `google_genai` y `local`, y
+`langchain-google-vertexai` no está en `server/pyproject.toml`.
+
+**Configurar Vertex es desarrollo**, no una fila de configuración: dependencia, adaptador,
+`provider_type`, credenciales ADC y proyecto/región. Es PIL.1, y va antes de cualquier carga
+porque el proveedor con que se embebe manda durante toda la vida del corpus:
+`assert_embedding_space_matches` devuelve 409 en cada consulta si luego no coincide.
+
+### 2.3 Ningún adaptador por API embebe por lotes
+
+`watcher.py:270` hace `getattr(self._embedding, "embed_batch", None)` y cae, si no existe, a
+una llamada por fragmento. `LocalEmbeddingService` lo expone; **el de Google no**. Con la
+medida del corpus (~50 fragmentos por documento) son **~15.100 + ~6.300 llamadas
+secuenciales**. El coste en dinero es despreciable —~6,8M tokens, del orden de un euro—; el
+problema es el tiempo de pared y el límite de tasa. El lote entra en PIL.1 con el resto.
+
+### 2.4 Borrar un chatbot no borra su corpus
+
+`hub_documents.chatbot_id` **no tiene FK** (`operational_models.py:212`): se cayó al separar
+`HubConfigBase` de `HubOperationalBase`, y la frontera edge-cloud pide que no vuelva.
+`hub_document_chunks → hub_documents` sí cascadea (`fk_chunk_document_id`, ING.0.2). Resultado:
+`DELETE /hub/chatbots/{id}` deja documentos y embeddings sin dueño. Se descubre justo al
+limpiar los chatbots de prueba, y se arregla con un borrado explícito en la misma transacción
+(PIL.2). Las interacciones **no** se borran: son registro de lo que se contestó, y con REV.1
+encima son material de revisión.
+
+## 3. Un defecto del corpus que se resuelve de nuestro lado
+
+45 documentos tienen artículos **vigentes cuyo contenido está desplazado** por los Estatutos
+de 2025. El corpus lo marca con `::: nota-vigencia` dentro del texto del artículo, pero un
+artículo se parte en 3-6 fragmentos y la nota cae físicamente en uno: **de 86 unidades
+desplazadas, 83 tienen trozos sin el aviso**. Quien recupere uno de esos trozos contesta un
+texto que no se aplica, sin ninguna señal.
+
+La curación no puede arreglarlo sin escribir el aviso en la rúbrica del artículo, que es texto
+aprobado. Sí nos da todo lo necesario: `desplacat_per` por ancla en el front-matter, y
+`desplacat` en las `classes` de los 290 fragmentos afectados. **La nota se hidrata al montar
+la evidencia** (PIL.3): no depende de dónde cayó el texto, vive en un solo sitio, y es texto
+de la evidencia y no una instrucción al modelo —que es lo que CRITERIS §1.4 prohíbe para algo
+resoluble antes de llegar al modelo—.
+
+Entra antes de las pruebas por una razón de método: si durante el piloto sale una respuesta
+con texto desplazado, con el fallo sin arreglar no se puede distinguir de uno nuevo.
+
+## 4. Los dos asistentes
+
+|  | **Normativa UJI** (público) | **Gerència** (interno) |
 |---|---|---|
-| A quién sirve | Ciudadanía y comunidad universitaria, sin identificar | Personal de Gerencia y unidades administrativas, **identificado** |
-| Qué se le pregunta | «¿Cuántos años dura el mandato del Síndic?» | «¿Cómo justifico una dieta de un curso con ingresos externos?» |
-| Coste de equivocarse | **Alto**: una cita errónea sale con autoridad de norma ante un tercero | Medio: el funcionario tiene criterio y puede contrastar |
-| Superficie | Widget público embebido en la web institucional | Panel interno (frontend propio) |
-| Revisión | Detector de huecos (RAG.14) | **Revisión humana de respuestas (REV.1)** — es el motivo del asistente |
+| A quién sirve | Ciudadanía y comunidad universitaria, sin identificar | Personal de Gerencia, identificado |
+| Corpus | `ingesta/normatiu`, 298 documentos | `ingesta/gerencia`, 124 documentos |
+| Coste de equivocarse | **Alto**: una cita errónea sale con autoridad de norma ante un tercero | Medio: quien lee tiene criterio y contrasta |
+| Superficie | Widget embebido, con credencial de sitio | Panel interno |
+| Revisión | Detector de huecos (RAG.14) | **REV.1**, el veredicto humano sobre respuestas reales |
 
-La diferencia de fondo, y la que explica casi toda la configuración: **ante el ciudadano es
-preferible «no lo sé» a una respuesta plausible mal citada**; ante el funcionario, una
-respuesta parcial con su fuente ya es útil.
+### Configuración
 
----
+| Campo | Público | Gerencia | Por qué |
+|---|---|---|---|
+| `access_mode` | `public_anon` | `authenticated` en local, **`restricted` + `allowed_saml_groups` al desplegar** | En local no hay IdP; la pertenencia al grupo es lo único que queda sin probar, y es configuración pura |
+| `retrieval_mode` | `RAG` | `RAG` | Ver §5 |
+| `public_graph_profile` | `PUBLIC_KB_RICH` | `PUBLIC_KB_RICH` | El perfil genérico con KB enriquecida es el que corresponde a los dos |
+| `chunking_strategy` | `structural` | `structural` | El `.md` ya trae jerarquía y anclas de artículo; el troceador las respeta |
+| `language_mode` | `prefer` | `prefer` | Corpus bilingüe (193 val / 78 es) |
+| `quality_threshold` | **0,7** | **0,5** | El mando que decide cuándo el asistente dice que no sabe |
+| `min_retrieval_score` | **0,3** | **0,25** | El default (0,0) acepta lo que devuelva la búsqueda, por flojo que sea |
+| `min_retrieval_results` | 2 | 1 | Una sola fuente para una respuesta normativa ante un tercero es poco margen; una FAQ que responde sola, no |
+| `reranker_enabled` | `false` | `false` | RAG.6b va detrás del bloque Deploy; el reranker local se fue con D.4.0 |
+| `query_rewriting_enabled` | `false`, y medir | `false` | El ciudadano no usa las palabras de la norma: candidato claro, pero cuesta latencia y una llamada |
+| `anon_ip_daily_token_quota` | fijado | — | Es público y anónimo: el sujeto de la cuota es la IP |
 
-## 2. Configuración recomendada
+**La asimetría de umbrales es la decisión de fondo, no un ajuste fino**: ante el ciudadano,
+callar cuesta menos que citar mal; ante el funcionario, una respuesta parcial con su fuente ya
+es útil.
 
-Todos los campos existen y se resuelven en cascada plataforma → organización → chatbot, así
-que lo que sigue se fija **en el chatbot** salvo que se diga otra cosa.
+## 5. Estrategia de recuperación
 
-### 2.1 Chatbot público de normativa
+Para los dos, **`RAG` con troceado estructural en la primera pasada**. El corpus está partido
+por encabezado con anclas de artículo, que es exactamente lo que la búsqueda vectorial
+aprovecha, y usar la misma configuración en ambos hace comparables las dos pruebas: si una va
+mejor, se sabrá que es por el corpus y el umbral, no por el mecanismo.
 
-| Campo | Valor | Por qué |
-|---|---|---|
-| `access_mode` | `public_anon` | Sin sesión. **Exige emitir una credencial de sitio** (`/hub/chatbots/{id}/widget-keys`, SEC.8.5) y ponerla en `data-widget-key` del `<script>` |
-| `retrieval_mode` | `RAG` | Corpus grande y troceado; el modo de documento entero no cabe |
-| `public_graph_profile` | `PUBLIC_KB_RICH` | **No usar `PUBLIC_PORTAL_AGGREGATOR`**: hoy está registrado con UUIDs nulos (stub) y devolvería vacío en silencio |
-| `language_mode` | `prefer` | El corpus es bilingüe (188 val / 74 es): la respuesta sigue el idioma de la pregunta y cae al otro si no hay fuente |
-| `quality_threshold` | **subir a ~0,7** (default 0,6) | Es el mando que decide cuándo el asistente dice que no sabe. Ante un ciudadano, callar cuesta menos que citar mal |
-| `min_retrieval_score` | **subir por encima de 0,0** | El default acepta lo que devuelva la búsqueda vectorial, por flojo que sea. Empieza en 0,3 y ajusta con el dorado |
-| `min_retrieval_results` | 2 | Una sola fuente para una respuesta normativa es poco margen |
-| `reranker_enabled` | `false` | RAG.6b (Ranking API de Vertex) está pendiente y el reranker local desaparece con D.4.0 |
-| `chunking_strategy` | `structural` | Encaja con el contrato: el `.md` ya trae jerarquía y anclas de artículo, y el troceado las respeta |
-| `context_token_budget` | heredar (128.000) | Con Gemini por API sobra. **Si algún día se usa un modelo local de 8k, hay que bajarlo aquí** |
-| `query_rewriting_enabled` | `false` de entrada | Candidato claro a activar y **medir**: el ciudadano pregunta con sus palabras, no con las de la norma. Pero añade latencia y una llamada |
-| `answer_template` | el que exija cita | La advertencia de vigencia y la cita del artículo son el producto, no un adorno |
+Lo interesante viene después y **solo en Gerencia**: `MD_AGENT_SELECTOR` (VIS.2, nivel 1) es
+ahí un candidato serio y en el público no. Con 124 documentos el índice de submaterias cabe en
+~2.300 tokens —el catálogo de fichas entero son ~72k y no cabría—, el front-matter trae
+`resum_router` y `preguntes_tipus` escritos justo para que un encaminador decida, y el
+funcionario pregunta por procedimiento («cómo justifico una dieta de un curso con ingresos
+externos»), donde leer el documento entero responde mejor que ocho fragmentos sueltos.
 
-### 2.2 Asistente de Gerencia
+Lo que hace la comparación barata: **cambiar de modo es una columna del chatbot, no una
+reingesta**. Se ingiere una vez y se miden las dos configuraciones con el mismo dorado.
 
-| Campo | Valor | Por qué |
-|---|---|---|
-| `access_mode` | `restricted` | Exige sesión **y** pertenencia. Es configuración pura, no desarrollo |
-| `allowed_saml_groups` | el grupo de Gerencia | Sobre el SSO SAML del bloque AUTH |
-| `retrieval_mode` | `RAG` | Igual |
-| `public_graph_profile` | `PUBLIC_KB_RICH` | Igual |
-| `language_mode` | `prefer` | BOE en castellano, normativa propia bilingüe |
-| `quality_threshold` | **bajar a ~0,5** | Al revés que el público: aquí una pista con su fuente ya ayuda, y quien lee sabe contrastar |
-| `min_retrieval_score` | ~0,25 | Más permisivo, mismo motivo |
-| `reranker_enabled` | `false` | Igual |
-| `chunking_strategy` | `structural` | Igual — y **crítico para las FAQ**: un encabezado por pregunta (FAQ.1) |
-| `query_rewriting_enabled` | `false` | El personal usa el vocabulario correcto; aquí aporta menos que en el público |
-| Revisión | **REV.1** | El veredicto de Gerencia sobre respuestas reales, con cola de pendientes |
+## 6. Orden de ejecución
 
----
+| # | Qué | Prompt | Bloquea a |
+|---|---|---|---|
+| 1 | Adaptador de Vertex + lote por API | PIL.1 | Toda la ingesta |
+| 2 | Borrar chatbot retira su corpus | PIL.2 | La limpieza de los de prueba |
+| 3 | Aviso de vigencia desplazada | PIL.3 | La validez de las pruebas |
+| 4 | Vocabulario + validación de los dos paquetes | PIL.4 | La ingesta |
+| 5 | Alta de los dos asistentes + credencial de widget | PIL.5 | La ingesta |
+| 6 | Carga real, con medición | PIL.6 | Las pruebas |
+| 7 | Pruebas, ajuste y decisión de modo | PIL.7 | — |
 
-## 3. Bases documentales
+**Prerrequisitos externos**, que aporta el usuario: Docker arrancado, migraciones al día, y
+proyecto/región de GCP con la Vertex AI API habilitada y credenciales ADC en la máquina.
 
-**No comparten corpus.** `HubDocument` tiene unicidad `(chatbot_id, content_hash)`: cada
-chatbot lleva su copia de los documentos y de sus embeddings. Lo compartido es el `.md` de
-origen.
+## 7. Lo que este piloto NO cubre
 
-### 3.1 Público — normativa propia
+- **La pertenencia al grupo SAML de Gerencia**: sin IdP en local, `restricted` se prueba al
+  desplegar. Lo demás de la cadena de identidad sí se ejercita con `authenticated`.
+- **El reranker**: RAG.6b necesita el Ranking API de Vertex, que habilita D.0.
+- **La vigencia validada jurídicamente**: 43 de los 298 no llevan `vigencia_validada_per`, y
+  219 defectos siguen pendientes de Secretaría General. No impiden la ingesta —son desfases
+  del texto normativo, no de la conversión— pero el asistente avisará en esas respuestas.
+- **Las 5 tablas de tarifas de `PRE-001` que siguen como texto corrido**: llevan importes y el
+  texto no dice cuál es con IVA y cuál sin.
 
-**Fuente**: `Descarregar_pdf/normativa_propia/publicacio_transparencia_2026-07/md_contracte/`
-— **262 documentos**, 188 en valenciano y 74 en castellano; sobre todo Reglaments (162) e
-Instruccions (35).
+## 8. Dónde viven los datos, comprobado
 
-**Estado**: ✅ **listo para ingerir**. Los 262 pasan la validación del pipeline desde que se
-corrigió `us_assistents` (2026-08-10). Los defectos que quedan (29 parejas bilingües sin
-`canonica`, `content_class` ausente) **no bloquean** una prueba, pero conviene saber que las
-parejas entrarán duplicadas y competirán en el top-k.
+- El contenedor de la aplicación **no monta ningún volumen** en `docker-compose.prod.yml`: es
+  desechable por diseño.
+- Los datos viven en volúmenes con nombre —`postgres_data_prod`, `minio_data_prod`— que
+  sobreviven a `docker compose down`, al `pull` y a la reconstrucción de imágenes.
+- Los documentos no tocan el disco del contenedor: `StorageService` (fsspec) escribe en MinIO
+  en local y en GCS en producción.
 
-### 3.2 Gerencia — la carpeta del piloto ya es la curación
-
-**Hallazgo que simplifica el plan**: la carpeta
-`openwebui-gerencia/UJI_normativa_piloto_asistente_eco/` **ya es una selección hecha a mano
-para este asistente**. No hay que derivar el subconjunto del catálogo de transparencia — y de
-hecho **no se podría**: la clasificación nueva (`ambit_principal`, `submateries`) todavía no
-existe ni en el front-matter ni en el catálogo (espera a Secretaría General), y el eje viejo
-`materia` es el que el contrato prohíbe usar automáticamente por incoherente.
-
-| Carpeta | Contenido | Origen y estado |
-|---|---|---|
-| `Normativa_general/` | 22 PDF: leyes estatales (`E_`) y de la Generalitat (`GV_`) | **Pendiente**: se generan del XML consolidado, no se convierten del PDF |
-| `Normativa_UJI/` | 121 PDF de normativa propia | **Mayormente ya curado**: cruzar con `md_contracte` y reutilizar |
-| `Manuales/` | 5 PDF, incluida `Preguntas_frecuentes_UGITJ.pdf` | **Pendiente**: la FAQ necesita el formato de FAQ.1 |
-| `Delegaciones_competencias_firmas/` | 5 PDF | Pendiente de decidir si entran |
-| `Nombramientos/` | 3 PDF | Probablemente **no**: son actos, no normativa consultable |
-
----
-
-## 4. Lo que falta por fuente, y qué hacer
-
-### 4.1 Normas del BOE y del DOGV (22 documentos) — PENDIENTE
-
-El contrato es explícito: **«Para BOE y DOGV no se escribe el `.md` a mano. Se genera desde el
-XML consolidado.»** Y hay una razón práctica además de la formal: el consolidado trae el texto
-**vigente hoy**, con sus modificaciones aplicadas. Convertir el PDF daría la versión del día
-en que se publicó, que para la Ley de Contratos o la LPAC está desfasada — y ese es
-exactamente el error que un asistente normativo no puede cometer.
-
-**Lo pendiente**: la descarga del XML/TXT consolidado. Reparto real de la carpeta:
-
-- **12 estatales (`E_`)** → BOE, API de legislación consolidada.
-- **8 de la Generalitat (`GV_`)** → DOGV.
-- **2 casos especiales**: `Carta_europea_investigador.pdf` (no es BOE ni DOGV) y
-  `Criterios para la gestión de ingresos en la UJI.pdf` (normativa propia → va por el pipeline
-  de curación, no por aquí).
-
-**Para la prueba en local no hace falta esperar a las 22.** Con **tres o cuatro** —la LCSP, la
-LPAC, el RD de indemnizaciones y la Ley de subvenciones— ya se puede medir si el asistente
-responde bien a preguntas de gestión económica.
-
-### 4.2 La FAQ de UGITJ — PENDIENTE, y es un PDF
-
-`Preguntas_frecuentes_UGITJ.pdf` (117 KB) **no se puede subir tal cual**: desde EXT.1 al corpus
-solo entra `.md`. Y además necesita el formato de **FAQ.1**: `content_class: faq` y **un
-encabezado por pregunta** con su ancla, para que cada pregunta y su respuesta caigan en el
-mismo fragmento. Si va en negritas o en lista, un corte deja media pregunta con la respuesta
-de otra, y eso se cita mal sin que se note.
-
-Dos caminos:
-
-1. **Ejecutar FAQ.1 primero** y convertir siguiendo el formato que fije. Es lo correcto.
-2. **Escribir el `.md` a mano** siguiendo el formato ya descrito en el prompt FAQ.1. Para un
-   PDF de 117 KB es asumible y desbloquea la prueba sin esperar.
-
-En los dos casos, **la FAQ es lo que más va a lucir** en el asistente: el texto de la pregunta
-es un objetivo de embedding casi perfecto, porque se parece a lo que el funcionario escribe
-mucho más que el artículo que la fundamenta.
-
-### 4.3 Los manuales (GRE, Kalendas, presupuesto, identidad visual)
-
-Son manuales de procedimiento, no normativa. **Recomendación**: entran, pero como
-`content_class: generic`, y **no** el de identidad visual corporativa (6,8 MB, es una guía de
-diseño; no responde preguntas de gestión y solo añade ruido al índice).
-
-Convertirlos exige el pipeline de curación. Para la primera prueba **pueden esperar**: con la
-FAQ y las normas generales ya hay material suficiente para juzgar el asistente.
-
----
-
-## 5. Procedimiento de ingesta, en orden
-
-```
-# 0. Prerrequisitos
-docker compose up -d          # BD arriba
-cd server; uv run alembic upgrade head
-
-# 1. Vocabulario (una vez por organización) — ver docs/CARGA_VOCABULARIO.md
-#    Primero ambit, luego submateria: el orden importa.
-
-# 2. Crear los dos chatbots por el panel, con la configuración de la sección 2.
-#    Anotar sus UUID.
-
-# 3. Corpus del público (262 normas propias)
-uv run python -m server.app.modules.agents_hub.ingestion.corpus.load \
-    --dir <...>/md_contracte --chatbot-id <UUID_PUBLICO> --dry-run
-#    y luego sin --dry-run
-
-# 4. Corpus de Gerencia: MISMO comando, subconjunto distinto y otro chatbot
-#    (el subconjunto sale de cruzar la carpeta del piloto con md_contracte)
-uv run python -m ...corpus.load --dir <dir_gerencia> --chatbot-id <UUID_GERENCIA>
-
-#    DER.1: si una carpeta va a los DOS asistentes, --chatbot-id es repetible y el
-#    corpus se lee, parsea y valida una sola vez. Es lo que garantiza que ambos
-#    reciben exactamente lo mismo; dos ejecuciones seguidas no lo garantizan si
-#    alguien toca un fichero entremedias. Han de ser de la misma organización.
-uv run python -m ...corpus.load --dir <dir_comun> \
-    --chatbot-id <UUID_PUBLICO> --chatbot-id <UUID_GERENCIA>
-
-# 5. Credencial de sitio del chatbot público (para el widget)
-#    POST /hub/chatbots/<UUID_PUBLICO>/widget-keys  -> se muestra UNA vez
-```
-
-**Comprobación después de cada ingesta**: que el recuento de documentos y fragmentos cuadre, y
-una consulta real que devuelva cita con su artículo.
-
----
-
-## 6. Imágenes y datos: comprobado
-
-Lo que preguntabas está bien resuelto, y lo he verificado:
-
-- **El contenedor de la aplicación no monta ningún volumen** en `docker-compose.prod.yml`. Es
-  desechable por diseño: se puede reconstruir y reemplazar sin perder nada.
-- **Los datos viven en volúmenes con nombre**: `postgres_data_prod` (base) y `minio_data_prod`
-  (documentos). Los volúmenes con nombre **sobreviven** a `docker compose down`, a
-  `docker compose pull` y a la reconstrucción de imágenes.
-- **Los documentos no tocan el disco del contenedor**: `StorageService` (fsspec) los escribe
-  en MinIO en local y en GCS en producción.
-
-**Un aviso y una confirmación:**
-
-⚠️ `docker compose down -v` **sí borra los volúmenes**. Es la única forma de perder los datos
-por accidente, y basta con no usar `-v`.
-
-✅ En el despliegue en VM el problema desaparece del todo: la base va a **Cloud SQL** y los
-documentos a **GCS**, así que la máquina no guarda nada que duela perder. Eso es deliberado —
-D.4-VM lo dice explícitamente— y es lo que permite reaprovisionar la VM entera sin plan de
-recuperación.
-
-**Y una prueba de que el principio se vigila**: la auditoría encontró que los temas visuales se
-escribían en `data/themes`, una ruta local del contenedor. En Cloud Run habrían desaparecido al
-reciclarse la instancia, llevándose por delante el tema del widget. **SEC.8.6 lo movió a la
-base de datos.** No era teoría: era un caso real de dato colado dentro de la imagen.
-
----
-
-## 7. Qué bloquea qué
-
-| Para... | Hace falta | Estado |
-|---|---|---|
-| Probar el chatbot **público** | Vocabulario + `md_contracte` + chatbot creado + credencial de sitio | ✅ **Se puede hacer ya** |
-| Probar el asistente de **Gerencia** con normativa propia | Subconjunto del piloto cruzado con `md_contracte` | ✅ Se puede hacer ya |
-| Que Gerencia responda con **FAQ** | `.md` de FAQ en formato FAQ.1 | ⏳ FAQ.1, o `.md` a mano |
-| Que Gerencia cite **BOE/DOGV** | XML consolidado descargado y convertido | ⏳ Descarga pendiente |
-| Que Gerencia **revise** las respuestas | REV.1 | ⏳ Pendiente |
-| Fijar el tamaño de la VM | D.4.0 | ⏳ Pendiente |
-
-**Camino más corto a una prueba útil**: público con las 262 normas + Gerencia con el
-subconjunto propio y la FAQ escrita a mano. Eso ya permite comparar dos configuraciones sobre
-material real, que es lo que la prueba tiene que responder.
+⚠️ `docker compose down -v` **sí** borra los volúmenes. Es la única forma de perder el corpus
+por accidente, y basta con no usar `-v`. Reingerirlo cuesta el tiempo y el coste de embedding
+de §2.3, no una restauración.
