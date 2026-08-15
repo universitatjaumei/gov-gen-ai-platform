@@ -76,7 +76,17 @@ Salida esperada de cada pasada: `NN términos leídos` y `creados=… actualizad
 
 La validación de la ingesta (`assert_vocabulary`) comprueba que los códigos
 `ambit_principal`/`submateries` del front-matter de los documentos existan y estén vigentes en
-este vocabulario. Hoy los documentos aún **no** emiten esos campos (esperan al Hito B de SG), así
-que la validación pasa trivialmente; cuando SG valide y se emitan, esta carga es lo que permite
-que los documentos se acepten. Ver `docs/AUDITORIA_PRE_DEPLOY.md` §3 y el bloque ING.0 del plan.
-```
+este vocabulario.
+
+> **Corregido el 2026-08-15 (PIL.4).** Esto decía que los documentos «aún no emiten esos
+> campos» y que por tanto «la validación pasa trivialmente». **Ya los emiten**: los 298 del
+> paquete `normatiu` y los 124 del de `gerencia` traen `ambit_principal` y `submateries` en
+> campos reales. La consecuencia es la contraria de la que prometía este documento: **sin el
+> vocabulario cargado, la ingesta aborta entera** —y lo hace antes de escribir nada,
+> enumerando todos los códigos desconocidos, no el primero—. Cargar el vocabulario dejó de
+> ser un paso preparatorio y es un prerrequisito.
+
+Verificado el 2026-08-15 sobre los dos paquetes del piloto, con el vocabulario ya cargado
+(5 ámbitos + 58 submaterias): 298 y 124 entradas válidas, vocabulario OK en ambas.
+
+Ver `docs/AUDITORIA_PRE_DEPLOY.md` §3 y el bloque ING.0 del plan.
