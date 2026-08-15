@@ -44,6 +44,37 @@ def _nombres_importados(ruta: Path) -> set[str]:
     }
 
 
+class TestLasCLIsCarganElEntorno:
+    """PIL.6: la CLI no pasa por FastAPI, así que nadie carga `server/.env` por ella.
+
+    Sin esto, la carga aborta diciendo que falta `GOOGLE_CLOUD_PROJECT` **cuando está
+    definida en el fichero que la aplicación sí lee**: un error a la vez cierto y engañoso,
+    que manda a buscar el problema donde no está. Costó una vuelta entera descubrirlo.
+    """
+
+    def test_should_load_the_dotenv_the_application_reads(self):
+        ruta = _raiz_del_repo() / "server/app/modules/agents_hub/ingestion/corpus/load.py"
+
+        assert "from server.app.core import config" in ruta.read_text(encoding="utf-8"), (
+            "la CLI no carga `server/.env`: quien la use vera 'falta GOOGLE_CLOUD_PROJECT' "
+            "aunque la variable este puesta"
+        )
+
+    def test_should_load_it_before_resolving_the_embedding_service(self):
+        """El orden importa: el servicio se construye leyendo el entorno.
+
+        Comprobado sobre el fuente y no ejecutando, porque una comprobación de verdad
+        dependería del `.env` de quien la corra —y ese fichero no existe en CI—.
+        """
+        fuente = (
+            _raiz_del_repo() / "server/app/modules/agents_hub/ingestion/corpus/load.py"
+        ).read_text(encoding="utf-8")
+
+        assert fuente.index("from server.app.core import config") < fuente.index(
+            "resolve_embedding_service"
+        ), "el entorno se carga despues de resolver el servicio, que es tarde"
+
+
 class TestLasCLIsNoCableanElServicioLocal:
 
     @pytest.mark.parametrize("modulo", MODULOS_DE_CARGA)

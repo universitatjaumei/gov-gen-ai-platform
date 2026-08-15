@@ -71,6 +71,11 @@ def progreso_por_consola(actual: int, total: int | None, mensaje: str) -> None:
 
 
 async def _run(args: argparse.Namespace) -> int:
+    # La CLI no pasa por FastAPI, así que nadie ha cargado `server/.env`: sólo lo hace
+    # `core.config`, al importarse. Sin esta línea la orden aborta diciendo que falta
+    # `GOOGLE_CLOUD_PROJECT` **cuando está definida en el fichero que la aplicación sí lee**
+    # —un error a la vez cierto y engañoso, que manda a buscar el problema donde no está—.
+    from server.app.core import config  # noqa: F401
     from sqlalchemy import select
 
     from server.app.modules.agents_hub.database.config_models import HubChatbot
