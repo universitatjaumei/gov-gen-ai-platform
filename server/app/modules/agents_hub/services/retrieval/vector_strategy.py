@@ -15,7 +15,10 @@ from server.app.modules.agents_hub.services.reranker import pool_size
 from server.app.modules.agents_hub.services.retrieval.citations import with_anchor
 from server.app.modules.agents_hub.services.retrieval.metadata_filter import MetadataFilter
 from server.app.modules.agents_hub.services.retrieval.types import RetrievalContext, Source
-from server.app.modules.agents_hub.services.retrieval.vigencia import marca_de_vigencia
+from server.app.modules.agents_hub.services.retrieval.vigencia import (
+    hidratar_desplazamiento,
+    marca_de_vigencia,
+)
 from server.app.modules.agents_hub.services.retriever import RRF_K, HybridRetriever
 
 logger = logging.getLogger(__name__)
@@ -112,6 +115,16 @@ class VectorRetrievalStrategy:
             # emitir una entrada por padre duplicaría documentos en el `sources` del evento
             # SSE `done`, contrato que RAG.2 fijó por snapshot.
             excerpt = best.parent_content or best.content
+            # PIL.3: el aviso de que este artículo está DESPLAZADO por una norma posterior.
+            #
+            # El corpus lo escribe dentro del texto del artículo, pero un artículo se parte
+            # en 3-6 fragmentos y la nota cae físicamente en uno: 83 de 86 unidades
+            # desplazadas tienen trozos sin ella. Se hidrata aquí, desde `desplacat_per` del
+            # documento, que lo declara POR ANCLA — así no depende de dónde cayó el texto.
+            #
+            # Va delante del contenido y es texto de la evidencia, no una instrucción al
+            # modelo: CRITERIS §1.4 pide resolver antes del modelo lo que se pueda resolver.
+            excerpt = hidratar_desplazamiento(excerpt, doc, best.metadata)
             # Sin reranker, `best.score` es la fusion RRF de HybridRetriever (escala
             # ~1/60, no [0,1]): normalizar aqui es lo que hace comparable el score contra
             # `quality_threshold`. Con reranker el score YA esta en [0,1] (RAG.6a lo

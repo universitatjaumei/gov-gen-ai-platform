@@ -48,6 +48,77 @@ def marca_de_vigencia(documento: Any) -> dict[str, bool]:
     }
 
 
+CLASE_DESPLACAT = "desplacat"
+
+
+def _entrada_de_desplazamiento(documento: Any, ancora: str | None) -> dict | None:
+    """La entrada de `desplacat_per` que corresponde a esta ancla, si la hay."""
+    if documento is None or not ancora:
+        return None
+    metadatos = getattr(documento, "doc_metadata", None) or {}
+    for entrada in metadatos.get("desplacat_per") or ():
+        if isinstance(entrada, dict) and entrada.get("ancora") == ancora:
+            return entrada
+    return None
+
+
+def aviso_de_desplazamiento(entrada: dict) -> str:
+    """Redacta el aviso a partir de lo que declara el corpus. No añade juicio propio."""
+    quien = entrada.get("desplacat_per") or {}
+    partes = [
+        "AVISO DE VIGENCIA: el texto de este articulo sigue aprobado y sin modificar, pero "
+        "su contenido esta DESPLAZADO por una norma posterior, asi que no se aplica tal "
+        "como se lee."
+    ]
+    apartado = entrada.get("apartat_afectat")
+    if apartado:
+        partes.append(f"Apartado afectado: {apartado}.")
+
+    norma = quien.get("norma") or quien.get("id_norma")
+    if norma:
+        referencia = f"Lo desplaza: {norma}"
+        if quien.get("ancora"):
+            referencia += f" ({quien['ancora']}"
+            if quien.get("apartat"):
+                referencia += f", apartado {quien['apartat']}"
+            referencia += ")"
+        if quien.get("data"):
+            referencia += f", de {quien['data']}"
+        partes.append(referencia + ".")
+
+    if entrada.get("motiu"):
+        partes.append(f"Motivo: {entrada['motiu']}")
+    return " ".join(partes)
+
+
+def hidratar_desplazamiento(
+    texto: str, documento: Any, metadatos_del_fragmento: dict | None
+) -> str:
+    """Antepone el aviso de desplazamiento al texto del fragmento, si le corresponde.
+
+    **Por qué aquí y no en el troceado** (las tres alternativas se evaluaron):
+
+    - La nota `::: nota-vigencia` del corpus cae en UNO de los trozos del artículo. Hidratar
+      al montar la evidencia no depende de dónde cayó; las demás soluciones sí.
+    - La nota vive en un solo sitio. Reescribirla no obliga a reindexar 290 fragmentos.
+    - Propagarla al trocear metería 400-700 caracteres en cada trozo, **y esos caracteres
+      entrarían al embedding**: cambiaría el vector de todo artículo desplazado.
+    - `parent_child` sólo ayudaría si la respuesta se hace con el padre, y cambiaría el
+      troceado de todo el corpus para resolver el caso de 45 documentos.
+
+    Lo que NO resuelve nada, y por eso no se hizo: añadir `desplacat` a
+    `ESTADOS_CONSOLIDACION`. Saber el estado no es mostrar el aviso, y hoy nadie consume
+    `estat`.
+    """
+    metadatos = metadatos_del_fragmento or {}
+    if CLASE_DESPLACAT not in (metadatos.get("classes") or ()):
+        return texto
+    entrada = _entrada_de_desplazamiento(documento, metadatos.get("ancora"))
+    if entrada is None:
+        return texto
+    return f"{aviso_de_desplazamiento(entrada)}\n\n{texto}"
+
+
 def aviso_para(items: list[Any]) -> str | None:
     """Bloque de aviso para la respuesta, o None si no hay nada que advertir.
 
