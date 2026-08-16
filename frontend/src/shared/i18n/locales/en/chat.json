@@ -1,7 +1,7 @@
 {
   "placeholder": "Ask your question...",
   "send": "Send",
-  "thinking": "Thinking...",
+  "thinking": "Preparing the query…",
   "feedback_prompt": "Was this response helpful?",
   "feedback_sent": "Thank you for your feedback",
   "widget_open": "Open chat",
@@ -16,5 +16,7 @@
     "retrieve": "Searching the document base...",
     "generate_answer": "Writing the answer..."
   },
-  "widget_title": "Assistant"
+  "widget_title": "Assistant",
+  "ai_disclaimer": "Assistant built with artificial intelligence. Answers may contain errors: always check against the regulation cited.",
+  "ai_disclaimer_model": "Assistant built with artificial intelligence ({{model}}). Answers may contain errors: always check against the regulation cited."
 }

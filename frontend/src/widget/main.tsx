@@ -10,6 +10,8 @@ export interface WidgetConfig {
   lang: string
   apiUrl: string
   widgetKey?: string
+  /** Modelo que responde, para el aviso del pie. Lo declara la pagina anfitriona. */
+  model?: string
 }
 
 export function readConfig(container: Element): WidgetConfig | null {
@@ -20,6 +22,7 @@ export function readConfig(container: Element): WidgetConfig | null {
     lang: container.getAttribute('data-lang') ?? 'es',
     apiUrl: container.getAttribute('data-api-url') ?? '/api/v1',
     widgetKey: container.getAttribute('data-widget-key') ?? undefined,
+    model: container.getAttribute('data-model') ?? undefined,
   }
 }
 
@@ -60,6 +63,7 @@ export function mountWidget(container: Element, config: WidgetConfig): () => voi
         apiUrl={config.apiUrl}
         lang={config.lang}
         widgetKey={config.widgetKey}
+        model={config.model}
       />
     </StrictMode>,
   )

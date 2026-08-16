@@ -1,7 +1,7 @@
 {
   "placeholder": "Escriu la teua pregunta...",
   "send": "Enviar",
-  "thinking": "Pensant...",
+  "thinking": "Preparant la consulta…",
   "feedback_prompt": "Esta resposta ha sigut útil?",
   "feedback_sent": "Gràcies per la teua valoració",
   "widget_open": "Obri el xat",
@@ -16,5 +16,7 @@
     "retrieve": "Cercant en la base documental...",
     "generate_answer": "Redactant la resposta..."
   },
-  "widget_title": "Assistent"
+  "widget_title": "Assistent",
+  "ai_disclaimer": "Assistent creat amb intel·ligència artificial. Les respostes poden contindre errors: contrasta sempre amb la norma citada.",
+  "ai_disclaimer_model": "Assistent creat amb intel·ligència artificial ({{model}}). Les respostes poden contindre errors: contrasta sempre amb la norma citada."
 }

@@ -1,7 +1,7 @@
 {
   "placeholder": "Escribe tu pregunta...",
   "send": "Enviar",
-  "thinking": "Pensando...",
+  "thinking": "Preparando la consulta…",
   "feedback_prompt": "¿Fue útil esta respuesta?",
   "feedback_sent": "Gracias por tu valoración",
   "widget_open": "Abrir chat",
@@ -16,5 +16,7 @@
     "retrieve": "Buscando en la base documental...",
     "generate_answer": "Redactando la respuesta..."
   },
-  "widget_title": "Asistente"
+  "widget_title": "Asistente",
+  "ai_disclaimer": "Asistente creado con inteligencia artificial. Las respuestas pueden contener errores: contrasta siempre con la norma citada.",
+  "ai_disclaimer_model": "Asistente creado con inteligencia artificial ({{model}}). Las respuestas pueden contener errores: contrasta siempre con la norma citada."
 }

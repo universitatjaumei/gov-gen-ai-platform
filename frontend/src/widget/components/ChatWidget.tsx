@@ -20,6 +20,9 @@ interface Props {
   apiUrl: string
   lang: string
   widgetKey?: string
+  /** Modelo que responde, para decirlo en el aviso. Lo declara la página que incrusta el
+   *  widget (`data-model`): es información de quien despliega, no del visitante. */
+  model?: string
 }
 
 interface StarRatingProps {
@@ -125,7 +128,7 @@ function IconoChatbot({ tamano = 22, color = '#ffffff' }: { tamano?: number; col
   )
 }
 
-export function ChatWidget({ chatbotId, apiUrl, lang, widgetKey }: Props) {
+export function ChatWidget({ chatbotId, apiUrl, lang, widgetKey, model }: Props) {
   // UX.1: arranca CERRADO. Un widget embebido enseña su botón y el visitante decide; que
   // se despliegue solo se come la página que lo aloja.
   const [open, setOpen] = useState(false)
@@ -321,12 +324,23 @@ export function ChatWidget({ chatbotId, apiUrl, lang, widgetKey }: Props) {
         <div ref={finDelHilo} />
       </div>
 
-      {isStreaming && currentNodeStatus && (
+      {isStreaming && (
         <p aria-live="polite" style={{ margin: 0, padding: '0 0.75rem 0.4rem', color: GRIS, fontSize: '0.8rem' }}>
-          {/* UX.3: se traduce el NODO. El texto del servidor solo se usa si ese nodo aún
-              no tiene traducción; venía siempre en castellano y se colaba en un widget
-              en valenciano. */}
-          <em>{t(`status.${currentNodeStatus.node}`, { defaultValue: currentNodeStatus.msg })}</em>
+          {currentNodeStatus ? (
+            /* UX.3: se traduce el NODO. El texto del servidor solo se usa si ese nodo aún
+               no tiene traducción; venía siempre en castellano y se colaba en un widget
+               en valenciano. */
+            <em>{t(`status.${currentNodeStatus.node}`, { defaultValue: currentNodeStatus.msg })}</em>
+          ) : (
+            /* UX.7: el primer `status` del servidor tarda unos segundos —hay que resolver
+               configuración, detectar idioma y embeber la pregunta antes de poder decir
+               nada—. Hasta que llega, quien pregunta no tenía ninguna señal de que se
+               hubiera enviado, que es cuando la gente vuelve a pulsar Enviar. */
+            <em data-testid="widget-pensando">
+              {t('thinking')}
+              <span style={{ animation: 'govgenai-parpadeo 1.2s ease-in-out infinite' }}>…</span>
+            </em>
+          )}
         </p>
       )}
 
@@ -395,6 +409,25 @@ export function ChatWidget({ chatbotId, apiUrl, lang, widgetKey }: Props) {
           {t('send')}
         </button>
       </div>
+
+      {/* UX.7: quien pregunta tiene que saber que le contesta una máquina y que puede
+          equivocarse. Va al pie y siempre visible, no en un aviso que se cierra: si sólo
+          se ve una vez, la mitad de las visitas no lo ve nunca. */}
+      <p
+        data-testid="widget-aviso-ia"
+        style={{
+          margin: 0,
+          padding: '0 0.75rem 0.6rem',
+          color: GRIS,
+          fontSize: '0.7rem',
+          lineHeight: 1.35,
+        }}
+      >
+        {model ? t('ai_disclaimer_model', { model }) : t('ai_disclaimer')}
+      </p>
+
+      {/* La animación necesita `@keyframes`, que un `style` en línea no puede declarar. */}
+      <style>{'@keyframes govgenai-parpadeo{0%,100%{opacity:.25}50%{opacity:1}}'}</style>
     </div>
   )
 }

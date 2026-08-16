@@ -150,6 +150,63 @@ describe('ChatWidget — comportamiento de widget (UX.1)', () => {
   })
 })
 
+describe('ChatWidget — señal inmediata y aviso de IA (UX.7)', () => {
+  test('should_acknowledge_the_question_before_the_server_says_anything', async () => {
+    // El primer `status` del servidor tarda unos segundos: hasta que llegaba, quien
+    // preguntaba no tenía ninguna señal de que su pregunta se hubiera enviado.
+    const deferred = makeDeferredStream()
+    fetchMock.mockResolvedValueOnce(deferred.response)
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    // Sin ningún evento del servidor todavía.
+    await waitFor(() => expect(screen.getByTestId('widget-pensando')).toBeInTheDocument())
+  })
+
+  test('should_replace_the_placeholder_with_the_real_progress', async () => {
+    const deferred = makeDeferredStream()
+    fetchMock.mockResolvedValueOnce(deferred.response)
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    await screen.findByTestId('widget-pensando')
+
+    await act(async () => {
+      deferred.send('status', { node: 'retrieve', msg: 'Buscando…' })
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('widget-pensando')).not.toBeInTheDocument()
+      expect(screen.getByText(/Buscando en la base documental/)).toBeInTheDocument()
+    })
+  })
+
+  test('should_warn_that_the_answers_come_from_ai_and_may_be_wrong', () => {
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    const aviso = screen.getByTestId('widget-aviso-ia')
+
+    expect(aviso.textContent).toMatch(/inteligencia artificial/i)
+    expect(aviso.textContent).toMatch(/errores/i)
+  })
+
+  test('should_name_the_model_when_the_page_declares_it', () => {
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} model="Gemini 2.5 Flash" />)
+
+    expect(screen.getByTestId('widget-aviso-ia').textContent).toContain('(Gemini 2.5 Flash)')
+  })
+
+  test('should_not_show_empty_parentheses_without_a_model', () => {
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    expect(screen.getByTestId('widget-aviso-ia').textContent).not.toContain('()')
+  })
+})
+
 describe('ChatWidget — la cita dice qué artículo (UX.6)', () => {
   test('should_show_the_anchor_next_to_the_document_title', async () => {
     fetchMock.mockResolvedValueOnce(
