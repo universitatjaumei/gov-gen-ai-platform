@@ -58,6 +58,10 @@ _COLUMNAS = (
 _COLUMNAS_ARRAY = ("ambits_secundaris", "submateries", "submateries_internes")
 # Campos de la entrada que van a doc_metadata y no a columna.
 _A_METADATA = (
+    # PUB.3: el nombre del `.md` es el slug de su página en el sitio publicado, y es la
+    # única forma de construir `html/<slug>.html#<ancla>`. No se puede derivar de
+    # `canonical_url`, que para los documentos publicados es la URL del PDF del portal.
+    "relative_path",
     "motiu_exclusio",
     "vigencia_validada_per",
     "original_pdf_sha256",

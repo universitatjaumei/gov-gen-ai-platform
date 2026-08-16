@@ -7,6 +7,52 @@ que sale la respuesta, no el documento de 40 páginas.
 """
 from __future__ import annotations
 
+import os
+
+# ── Cita al sitio publicado (PUB.3) ───────────────────────────────────────────────────
+#
+# El PDF oficial no tiene anclas: se abre por la primera página y quien pregunta ha de
+# buscar el artículo a mano. El sitio de publicación **sí** las tiene —`html/<slug>.html#art-9`
+# abre el artículo—, y es lo que convierte el esfuerzo de generar 6.571 anclas en algo que
+# el ciudadano nota.
+#
+# Se configura por entorno porque la URL depende del despliegue, y **vacía significa
+# desactivado**: sin sitio publicado se cita el PDF, como hasta ahora. Nada que decidir
+# hasta que exista de verdad.
+BASE_DEL_SITIO = "CORPUS_SITE_BASE_URL"
+
+
+def _slug_de(documento) -> str | None:
+    """Nombre del `.md` del que salió el documento, que es el slug de su página.
+
+    Viaja en `doc_metadata['relative_path']` desde la ingesta. No se deriva de
+    `canonical_url` porque para los 234 documentos publicados esa URL es la del PDF del
+    portal, que no dice nada del nombre de la página.
+    """
+    metadatos = getattr(documento, "doc_metadata", None) or {}
+    ruta = metadatos.get("relative_path")
+    if not ruta:
+        return None
+    nombre = str(ruta).replace("\\", "/").rsplit("/", 1)[-1]
+    return nombre[:-3] if nombre.endswith(".md") else nombre
+
+
+def url_de_cita(documento, metadata: dict | None) -> str | None:
+    """URL a la que apunta la cita: la del sitio publicado si lo hay, y si no el PDF.
+
+    El ancla manda en los dos casos; lo que cambia es a qué documento se le pega.
+    """
+    base = (os.getenv(BASE_DEL_SITIO) or "").strip().rstrip("/")
+    slug = _slug_de(documento) if base else None
+    if base and slug:
+        return f"{base}/html/{slug}.html{_fragmento(metadata)}"
+    return with_anchor(getattr(documento, "canonical_url", None), metadata)
+
+
+def _fragmento(metadata: dict | None) -> str:
+    ancora = (metadata or {}).get("ancora")
+    return f"#{ancora}" if ancora else ""
+
 
 def with_anchor(url: str | None, metadata: dict | None) -> str | None:
     """Añade el fragmento del ancla a la URL, si el fragmento existe.

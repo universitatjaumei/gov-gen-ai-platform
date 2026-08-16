@@ -12,7 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.modules.agents_hub.database.operational_models import HubDocument
 from server.app.modules.agents_hub.services.reranker import pool_size
-from server.app.modules.agents_hub.services.retrieval.citations import with_anchor
+from server.app.modules.agents_hub.services.retrieval.citations import (
+    url_de_cita,
+    with_anchor,
+)
 from server.app.modules.agents_hub.services.retrieval.metadata_filter import MetadataFilter
 from server.app.modules.agents_hub.services.retrieval.types import RetrievalContext, Source
 from server.app.modules.agents_hub.services.retrieval.vigencia import (
@@ -105,7 +108,10 @@ class VectorRetrievalStrategy:
             base_url = doc.canonical_url if doc else best.source_url
             # La cita apunta al artículo del que sale la evidencia, no al documento
             # entero: el ancla viene del chunk mejor puntuado (ING.0.4).
-            url = with_anchor(base_url, best.metadata)
+            #
+            # PUB.3: si hay sitio publicado, la cita va a su página —que tiene anclas— en vez
+            # de al PDF, que se abre por la primera hoja. Sin sitio configurado, lo de antes.
+            url = url_de_cita(doc, best.metadata) if doc else with_anchor(base_url, best.metadata)
             # RAG.8 (small-to-big): si el fragmento tiene padre, la evidencia es el padre.
             # Se busca con el hijo —vector más específico, se encuentra mejor— y se responde
             # con la sección entera, que trae el contexto que al hijo le falta.
