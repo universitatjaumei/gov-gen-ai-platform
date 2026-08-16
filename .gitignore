@@ -105,3 +105,8 @@ frontend/openapi.json
 
 # Generado por Orval — no editar manualmente. Regenerar: npm run generate:api
 frontend/src/shared/api/generated/
+
+# Paginas de prueba del widget con credenciales reales (PIL.7). Llevan secretos
+# del entorno local dentro: no se comparten.
+frontend/widget-normativa.html
+frontend/widget-gerencia.html

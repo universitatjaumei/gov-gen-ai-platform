@@ -95,9 +95,32 @@ echo  5. LO QUE NO SE PUEDE PROBAR EN LOCAL
 echo ============================================================
 echo.
 echo  Queda para el despliegue, y esta dicho a proposito:
-echo    - Gerencia en modo restricted con el grupo SAML real. En local
-echo      esta como authenticated porque no hay IdP.
+echo    - Gerencia en modo restricted con el grupo SAML real. En local no hay IdP.
 echo    - El widget incrustado en la web institucional de verdad.
+echo.
+pause
+
+echo.
+echo ============================================================
+echo  6. AVISO - CONFIGURACION TEMPORAL QUE HAY QUE REVERTIR
+echo ============================================================
+echo.
+echo  El asistente de GERENCIA esta en access_mode = public_anon, y su
+echo  modo real es restricted con el grupo SAML de Gerencia.
+echo.
+echo  Se cambio el 2026-08-15 solo para poder probarlo desde
+echo  widget-gerencia.html, porque la credencial de sitio no abre ningun
+echo  otro modo (SEC.8.5). Mientras siga asi, cualquiera con esa pagina
+echo  consulta el corpus de Gerencia SIN IDENTIFICARSE.
+echo.
+echo  Para devolverlo a su sitio cuando termines las pruebas:
+echo.
+echo    PATCH /api/v1/hub/chatbots/722aaa10-d7eb-4b7d-b623-a53603d3a777
+echo    {"access_mode": "authenticated"}
+echo.
+echo  Y revoca su credencial desde el panel del chatbot.
+echo.
+echo  NO SE DESPLIEGA ASI.
 echo.
 pause
 
