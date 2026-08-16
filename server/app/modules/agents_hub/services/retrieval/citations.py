@@ -8,6 +8,7 @@ que sale la respuesta, no el documento de 40 páginas.
 from __future__ import annotations
 
 import os
+import re
 
 # ── Cita al sitio publicado (PUB.3) ───────────────────────────────────────────────────
 #
@@ -37,11 +38,51 @@ def _slug_de(documento) -> str | None:
     return nombre[:-3] if nombre.endswith(".md") else nombre
 
 
-def url_de_cita(documento, metadata: dict | None) -> str | None:
-    """URL a la que apunta la cita: la del sitio publicado si lo hay, y si no el PDF.
+# ── Normas externas (BOE, DOGV) ───────────────────────────────────────────────────────
+#
+# El sitio de publicación tiene página para las normas **propias** de la Universidad. La Ley
+# de Contratos, la LPAC y las de la Generalitat no: viven en su diario oficial. Citarlas
+# como si tuvieran página daba un 404, que es lo que se vio al probar el asistente.
+#
+# La señal es explícita en el corpus y no hay que deducirla de la URL ni del título.
+TIPO_EXTERNA = "norma_externa"
 
-    El ancla manda en los dos casos; lo que cambia es a qué documento se le pega.
+# El BOE ancla los artículos de su texto consolidado como `#a118`. Sólo se traduce eso:
+# para disposiciones adicionales o transitorias usa otra forma, y **un ancla inventada es
+# peor que ninguna** —lleva a un punto que no existe sin que se note—.
+_ARTICULO = re.compile(r"^art-(\d+)$")
+
+
+def _es_externa(documento) -> bool:
+    metadatos = getattr(documento, "doc_metadata", None) or {}
+    return metadatos.get("tipus_document") == TIPO_EXTERNA
+
+
+def _url_en_el_diario_oficial(documento, metadata: dict | None) -> str:
+    metadatos = getattr(documento, "doc_metadata", None) or {}
+    base = (
+        metadatos.get("url_oficial")
+        or metadatos.get("url_eli")
+        or getattr(documento, "canonical_url", None)
+        or ""
+    )
+    ancora = (metadata or {}).get("ancora") or ""
+    articulo = _ARTICULO.match(str(ancora))
+    if articulo and "boe.es" in base:
+        return f"{base.split('#', 1)[0]}#a{articulo.group(1)}"
+    return base.split("#", 1)[0]
+
+
+def url_de_cita(documento, metadata: dict | None) -> str | None:
+    """URL a la que apunta la cita, en este orden de preferencia.
+
+    1. **Diario oficial**, si es una norma externa: no tiene página en nuestro sitio.
+    2. **Nuestro sitio publicado**, si está configurado: es el único que tiene anclas.
+    3. **El PDF**, que es lo que había antes de PUB.3.
     """
+    if _es_externa(documento):
+        return _url_en_el_diario_oficial(documento, metadata)
+
     base = (os.getenv(BASE_DEL_SITIO) or "").strip().rstrip("/")
     slug = _slug_de(documento) if base else None
     if base and slug:
