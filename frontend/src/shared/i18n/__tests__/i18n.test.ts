@@ -46,7 +46,7 @@ describe('i18n configuration', () => {
 
   it('should_load_admin_namespace', async () => {
     await i18n.changeLanguage('es')
-    expect(i18n.t('nav.hub', { ns: 'admin' })).toBe('Hub')
+    expect(i18n.t('nav.chatbots', { ns: 'admin' })).toBe('Chatbots')
     expect(i18n.t('login.title', { ns: 'admin' })).toBe('Iniciar sesión')
   })
 

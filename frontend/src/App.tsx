@@ -33,8 +33,8 @@ const DocumentsPage = lazy(() => import('@/admin/pages/DocumentsPage').then(m =>
 const ReportsPage = lazy(() => import('@/admin/pages/ReportsPage').then(m => ({ default: m.ReportsPage })))
 const LLMConfigsPage = lazy(() => import('@/admin/pages/LLMConfigsPage').then(m => ({ default: m.LLMConfigsPage })))
 const PromptsPage = lazy(() => import('@/admin/pages/PromptsPage').then(m => ({ default: m.PromptsPage })))
-const PlaceholderPage = lazy(() => import('@/admin/pages/PlaceholderPage').then(m => ({ default: m.PlaceholderPage })))
 const AIBrainPage = lazy(() => import('@/admin/pages/AIBrainPage').then(m => ({ default: m.AIBrainPage })))
+const RedaccionLayout = lazy(() => import('@/redaccion/RedaccionLayout').then(m => ({ default: m.RedaccionLayout })))
 const CurationSitesPage = lazy(() => import('@/curation/SitesPage').then(m => ({ default: m.SitesPage })))
 const CurationAuditPage = lazy(() => import('@/curation/AuditPage').then(m => ({ default: m.AuditPage })))
 const CurationFindingsPage = lazy(() => import('@/curation/FindingsPage').then(m => ({ default: m.FindingsPage })))
@@ -108,14 +108,18 @@ function App() {
                     <Route path="findings" element={<CurationFindingsPage />} />
                     <Route path="publish" element={<CurationPublicationPage />} />
                   </Route>
-                  <Route path="/redaccion/builder" element={<ReportTemplateBuilderPage />} />
-                  <Route path="/redaccion/wizard" element={<GenericReportWizard />} />
-                  <Route path="/redaccion/draft" element={<LLMDraftPreviewPage />} />
-                  <Route path="/redaccion/scripts/wizard" element={<ScriptProposalWizardPage />} />
-                  <Route path="/redaccion/scripts/review" element={<AdminScriptReviewQueuePage />} />
+                  {/* Informes: las pantallas existían pero sus rutas estaban sueltas y
+                      fuera de todo menú, así que sólo se llegaba escribiendo la URL. */}
+                  <Route path="/redaccion" element={<RedaccionLayout />}>
+                    <Route index element={<Navigate to="/redaccion/builder" replace />} />
+                    <Route path="builder" element={<ReportTemplateBuilderPage />} />
+                    <Route path="wizard" element={<GenericReportWizard />} />
+                    <Route path="draft" element={<LLMDraftPreviewPage />} />
+                    <Route path="scripts/wizard" element={<ScriptProposalWizardPage />} />
+                    <Route path="scripts/review" element={<AdminScriptReviewQueuePage />} />
+                  </Route>
+                  {/* Fuera del layout: es una vista de impresión, sin navegación. */}
                   <Route path="/redaccion/workspaces/:id/preview" element={<WorkspacePreview />} />
-                  <Route path="/automation" element={<PlaceholderPage section="Automatización" />} />
-                  <Route path="/platform" element={<PlaceholderPage section="Plataforma" />} />
                 </Route>
               </Route>
               <Route path="*" element={<Navigate to="/hub" replace />} />

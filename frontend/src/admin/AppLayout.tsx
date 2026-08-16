@@ -1,17 +1,32 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/shared/auth'
+import { SUPPORTED_LANGUAGES } from '@/shared/i18n'
 import logoUji from '@/assets/logo-uji.png'
 
+/** El nombre de cada idioma EN ese idioma: quien busca su lengua la reconoce escrita así. */
+const IDIOMAS: Record<string, string> = {
+  es: 'Castellano',
+  ca: 'Valencià',
+  en: 'English',
+}
+
+/** Las tres cosas que la plataforma sabe hacer hoy.
+ *
+ * «Automatización» y «Plataforma» eran `PlaceholderPage`: entradas de menú que llevaban a
+ * una pantalla vacía. Un menú que promete lo que no hay es peor que un menú corto.
+ *
+ * «Informes» apunta a `/redaccion`, que estaba construido —plantillas, asistente, borrador
+ * con LLM— y no figuraba en ningún menú: sólo se llegaba escribiendo la URL.
+ */
 const NAV_SECTIONS = [
-  { key: 'hub', path: '/hub' },
+  { key: 'chatbots', path: '/hub' },
+  { key: 'reports', path: '/redaccion' },
   { key: 'curation', path: '/curation' },
-  { key: 'automation', path: '/automation' },
-  { key: 'platform', path: '/platform' },
 ] as const
 
 export function AppLayout() {
-  const { t } = useTranslation('admin')
+  const { t, i18n } = useTranslation('admin')
   const { t: tc } = useTranslation('common')
   const { user, logout } = useAuth()
 
@@ -47,6 +62,22 @@ export function AppLayout() {
         ))}
 
         <div className="mt-auto pt-4 border-t border-sidebar-border text-xs text-sidebar-foreground/80">
+          {/* El panel se traducía a tres idiomas y no había forma de cambiarlo: dependías
+              de lo que el navegador dijera. El detector de i18next guarda la elección, así
+              que basta con ofrecerla. */}
+          <label htmlFor="idioma" className="block mb-1">
+            {t('nav.language')}
+          </label>
+          <select
+            id="idioma"
+            value={i18n.resolvedLanguage ?? 'es'}
+            onChange={e => void i18n.changeLanguage(e.target.value)}
+            className="w-full mb-3 px-2 py-1 rounded-md bg-sidebar-accent text-sidebar-accent-foreground border border-sidebar-border"
+          >
+            {SUPPORTED_LANGUAGES.map(l => (
+              <option key={l} value={l}>{IDIOMAS[l]}</option>
+            ))}
+          </select>
           <p className="truncate mb-2">{user?.email}</p>
           <button
             type="button"

@@ -1,10 +1,21 @@
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Eye, FileUp, Link, Loader2, Trash2 } from 'lucide-react'
 
 import type { HubDocumentOut } from '@/shared/api/generated/model'
 import { LanguageBadge, SourceKindBadge, SourceKindIcon } from './DocumentBadges'
 import { formatTokens } from './format'
+
+/** Filas por página.
+ *
+ * La tabla pintaba el corpus entero: con los 297 documentos del piloto son ~4.500 nodos y
+ * unos 1.500 SVG de una vez, y el navegador se quedaba bloqueado entre 30 y 60 segundos.
+ * Medido: con 124 documentos iba fina, con 297 se clavaba. La API responde en 0,55 s, así
+ * que el problema era el pintado y no los datos.
+ *
+ * 50 y no 25: cabe una pantalla larga de trabajo sin que paginar moleste.
+ */
+const POR_PAGINA = 50
 
 /**
  * Tabla de las unidades citables del corpus.
@@ -39,6 +50,15 @@ export function DocumentsTable({
 }) {
   const { t } = useTranslation('admin')
   const { t: tc } = useTranslation('common')
+  const [pagina, setPagina] = useState(0)
+
+  // Volver a la primera al cambiar el conjunto: filtrar desde la página 4 dejaba la tabla
+  // vacía y parecía que el filtro no había encontrado nada.
+  useEffect(() => setPagina(0), [documents.length, langFilter])
+
+  const paginas = Math.max(1, Math.ceil(documents.length / POR_PAGINA))
+  const actual = Math.min(pagina, paginas - 1)
+  const visibles = documents.slice(actual * POR_PAGINA, (actual + 1) * POR_PAGINA)
 
   return (
     <div className="bg-card rounded-lg border overflow-hidden">
@@ -84,7 +104,7 @@ export function DocumentsTable({
               </tr>
             </thead>
             <tbody>
-              {documents.map(doc => (
+              {visibles.map(doc => (
                 <tr key={doc.id} className="border-b last:border-0 hover:bg-accent/20">
                   <td className="px-4 py-3 max-w-[220px]">
                     <div className="flex items-center gap-2">
@@ -148,6 +168,38 @@ export function DocumentsTable({
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {!isLoading && documents.length > POR_PAGINA && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-t bg-muted/10 text-sm">
+          <span className="text-muted-foreground">
+            {t('hub.documents_range', {
+              desde: actual * POR_PAGINA + 1,
+              hasta: Math.min((actual + 1) * POR_PAGINA, documents.length),
+              total: documents.length,
+            })}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="documentos-anterior"
+              onClick={() => setPagina(p => Math.max(0, p - 1))}
+              disabled={actual === 0}
+              className="px-2 py-1 border rounded-md disabled:opacity-40"
+            >
+              {t('hub.documents_prev')}
+            </button>
+            <button
+              type="button"
+              data-testid="documentos-siguiente"
+              onClick={() => setPagina(p => Math.min(paginas - 1, p + 1))}
+              disabled={actual >= paginas - 1}
+              className="px-2 py-1 border rounded-md disabled:opacity-40"
+            >
+              {t('hub.documents_next')}
+            </button>
+          </div>
         </div>
       )}
     </div>

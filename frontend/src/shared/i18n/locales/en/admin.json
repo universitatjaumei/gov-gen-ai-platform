@@ -1,16 +1,16 @@
 {
   "nav": {
-    "hub": "Hub",
+    "chatbots": "Chatbots",
+    "reports": "Reports",
     "curation": "Curation",
-    "automation": "Automation",
-    "platform": "Platform",
-    "main": "Main navigation"
+    "main": "Main navigation",
+    "language": "Language"
   },
   "hub": {
     "chatbots": "Chatbots",
     "organizaciones": "Organizations",
     "documents": "Documents",
-    "reports": "Reports",
+    "reports": "Review",
     "new_chatbot": "New chatbot",
     "chatbot_name": "Name",
     "chatbot_prompt": "System prompt",
@@ -281,7 +281,10 @@
     "chatbot_daily_token_quota": "Tokens/day for the chatbot",
     "anon_ip_daily_token_quota": "Tokens/day per anonymous IP",
     "quota_inherit": "Inherit",
-    "quota_hint": "Empty = inherit from the organisation · 0 = no limit. The per-IP quota is only for the anonymous widget and is not inherited."
+    "quota_hint": "Empty = inherit from the organisation · 0 = no limit. The per-IP quota is only for the anonymous widget and is not inherited.",
+    "documents_range": "{{desde}}–{{hasta}} of {{total}}",
+    "documents_prev": "Previous",
+    "documents_next": "Next"
   },
   "login": {
     "title": "Sign in",

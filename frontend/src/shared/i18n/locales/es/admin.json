@@ -1,16 +1,16 @@
 {
   "nav": {
-    "hub": "Hub",
+    "chatbots": "Chatbots",
+    "reports": "Informes",
     "curation": "Curación",
-    "automation": "Automatización",
-    "platform": "Plataforma",
-    "main": "Navegación principal"
+    "main": "Navegación principal",
+    "language": "Idioma"
   },
   "hub": {
     "chatbots": "Chatbots",
     "organizaciones": "Organizaciones",
     "documents": "Documentos",
-    "reports": "Informes",
+    "reports": "Revisión",
     "new_chatbot": "Nuevo chatbot",
     "chatbot_name": "Nombre",
     "chatbot_prompt": "Prompt del sistema",
@@ -281,7 +281,10 @@
     "chatbot_daily_token_quota": "Tokens/día del chatbot",
     "anon_ip_daily_token_quota": "Tokens/día por IP anónima",
     "quota_inherit": "Heredar",
-    "quota_hint": "Vacío = heredar de la organización · 0 = sin límite. La cuota por IP es solo para el widget anónimo y no hereda."
+    "quota_hint": "Vacío = heredar de la organización · 0 = sin límite. La cuota por IP es solo para el widget anónimo y no hereda.",
+    "documents_range": "{{desde}}–{{hasta}} de {{total}}",
+    "documents_prev": "Anterior",
+    "documents_next": "Siguiente"
   },
   "login": {
     "title": "Iniciar sesión",

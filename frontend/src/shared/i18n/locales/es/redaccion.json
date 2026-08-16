@@ -102,5 +102,9 @@
   },
   "editor": {
     "block_region": "Bloque {{type}}: {{id}}"
-  }
+  },
+  "nav_templates": "Plantillas",
+  "nav_new_report": "Nuevo informe",
+  "nav_scripts_review": "Revisión de scripts",
+  "nav_aria": "Navegación de informes"
 }

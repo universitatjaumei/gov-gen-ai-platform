@@ -1,16 +1,16 @@
 {
   "nav": {
-    "hub": "Hub",
+    "chatbots": "Chatbots",
+    "reports": "Informes",
     "curation": "Curació",
-    "automation": "Automatització",
-    "platform": "Plataforma",
-    "main": "Navegació principal"
+    "main": "Navegació principal",
+    "language": "Idioma"
   },
   "hub": {
     "chatbots": "Chatbots",
     "organizaciones": "Organitzacions",
     "documents": "Documents",
-    "reports": "Informes",
+    "reports": "Revisió",
     "new_chatbot": "Nou chatbot",
     "chatbot_name": "Nom",
     "chatbot_prompt": "Prompt del sistema",
@@ -281,7 +281,10 @@
     "chatbot_daily_token_quota": "Tokens/dia del chatbot",
     "anon_ip_daily_token_quota": "Tokens/dia per IP anònima",
     "quota_inherit": "Heretar",
-    "quota_hint": "Buit = heretar de l'organització · 0 = sense límit. La quota per IP és només per al widget anònim i no s'hereta."
+    "quota_hint": "Buit = heretar de l'organització · 0 = sense límit. La quota per IP és només per al widget anònim i no s'hereta.",
+    "documents_range": "{{desde}}–{{hasta}} de {{total}}",
+    "documents_prev": "Anterior",
+    "documents_next": "Següent"
   },
   "login": {
     "title": "Inicia la sessió",

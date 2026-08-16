@@ -142,6 +142,88 @@ describe('CAL.3 — subcomponentes de documentos', () => {
     expect(onPreview).toHaveBeenCalledWith('doc-es')
   })
 
+  it('should_not_render_the_whole_corpus_at_once', () => {
+    // El corpus real son 297 documentos y la tabla los pintaba todos: ~4.500 nodos y unos
+    // 1.500 SVG de golpe, que bloqueaban el navegador entre 30 y 60 segundos. Medido con
+    // el corpus del piloto: con 124 iba fina y con 297 se quedaba clavada.
+    const muchos = Array.from({ length: 297 }, (_, i) => ({
+      ...DOC,
+      id: `doc-${i}`,
+      title: `Norma numero ${i}`,
+    }))
+
+    render(
+      <DocumentsTable
+        documents={muchos}
+        isLoading={false}
+        langFilter=""
+        onLangFilterChange={vi.fn()}
+        presentLanguages={['ca', 'es']}
+        onPreview={vi.fn()}
+        onSubstitute={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    )
+
+    const filas = screen.getAllByRole('row')
+    // -1 por la fila de encabezados.
+    expect(filas.length - 1).toBeLessThanOrEqual(50)
+    expect(screen.getByText('Norma numero 0')).toBeInTheDocument()
+    expect(screen.queryByText('Norma numero 296')).not.toBeInTheDocument()
+  })
+
+  it('should_reach_the_rest_of_the_corpus_by_paging', () => {
+    const muchos = Array.from({ length: 297 }, (_, i) => ({
+      ...DOC,
+      id: `doc-${i}`,
+      title: `Norma numero ${i}`,
+    }))
+
+    render(
+      <DocumentsTable
+        documents={muchos}
+        isLoading={false}
+        langFilter=""
+        onLangFilterChange={vi.fn()}
+        presentLanguages={[]}
+        onPreview={vi.fn()}
+        onSubstitute={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByTestId('documentos-siguiente'))
+
+    // Paginar sin poder volver sería peor que no paginar: se comprueban las dos direcciones.
+    expect(screen.queryByText('Norma numero 0')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('documentos-anterior'))
+    expect(screen.getByText('Norma numero 0')).toBeInTheDocument()
+  })
+
+  it('should_go_back_to_the_first_page_when_the_filter_changes', () => {
+    // Si no, filtrar desde la página 4 deja la tabla vacía y parece que no hay resultados.
+    const muchos = Array.from({ length: 297 }, (_, i) => ({
+      ...DOC, id: `doc-${i}`, title: `Norma numero ${i}`,
+    }))
+    const { rerender } = render(
+      <DocumentsTable
+        documents={muchos} isLoading={false} langFilter="" onLangFilterChange={vi.fn()}
+        presentLanguages={[]} onPreview={vi.fn()} onSubstitute={vi.fn()} onDelete={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('documentos-siguiente'))
+
+    rerender(
+      <DocumentsTable
+        documents={muchos.slice(0, 30)} isLoading={false} langFilter="es"
+        onLangFilterChange={vi.fn()} presentLanguages={[]} onPreview={vi.fn()}
+        onSubstitute={vi.fn()} onDelete={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Norma numero 0')).toBeInTheDocument()
+  })
+
   it('should_render_empty_state_in_documents_table', () => {
     render(
       <DocumentsTable

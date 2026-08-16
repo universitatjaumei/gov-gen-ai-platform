@@ -102,5 +102,9 @@
   },
   "editor": {
     "block_region": "Block {{type}}: {{id}}"
-  }
+  },
+  "nav_templates": "Templates",
+  "nav_new_report": "New report",
+  "nav_scripts_review": "Script review",
+  "nav_aria": "Reports navigation"
 }
