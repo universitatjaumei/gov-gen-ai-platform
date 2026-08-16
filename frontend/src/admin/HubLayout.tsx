@@ -5,6 +5,7 @@ const HUB_SUBNAV = [
   { key: 'hub.chatbots', path: '/hub/chatbots' },
   { key: 'hub.organizaciones', path: '/hub/organizaciones' },
   { key: 'hub.documents', path: '/hub/documents' },
+  { key: 'hub.vigencia', path: '/hub/vigencia' },
   { key: 'hub.reports', path: '/hub/reports' },
   { key: 'hub.llm_configs', path: '/hub/llm-configs' },
   { key: 'hub.prompt_templates', path: '/hub/prompts' },

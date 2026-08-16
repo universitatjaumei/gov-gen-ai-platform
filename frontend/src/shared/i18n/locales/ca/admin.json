@@ -284,7 +284,20 @@
     "quota_hint": "Buit = heretar de l'organització · 0 = sense límit. La quota per IP és només per al widget anònim i no s'hereta.",
     "documents_range": "{{desde}}–{{hasta}} de {{total}}",
     "documents_prev": "Anterior",
-    "documents_next": "Següent"
+    "documents_next": "Següent",
+    "vigencia": "Vigència",
+    "vigencia_title": "Validació de vigència",
+    "vigencia_desc": "Documents que l'assistent cita amb advertiment perquè ningú no ha comprovat si continuen en vigor.",
+    "vigencia_resumen": "{{pendents}} de {{total}} documents del corpus estan pendents de validar.",
+    "vigencia_all_ok": "Tot el corpus té la vigència validada.",
+    "vigencia_table_title": "Pendents de validar",
+    "vigencia_motiu": "Motiu",
+    "vigencia_all_motius": "Tots els motius",
+    "vigencia_motiu_sense_validar": "Sense validar",
+    "vigencia_motiu_estat_no_vigent": "Estat no vigent",
+    "vigencia_col_estat": "Estat",
+    "vigencia_col_revisio": "Revisió prevista",
+    "vigencia_col_revisat": "Revisat per"
   },
   "login": {
     "title": "Inicia la sessió",

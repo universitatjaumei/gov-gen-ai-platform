@@ -284,7 +284,20 @@
     "quota_hint": "Vacío = heredar de la organización · 0 = sin límite. La cuota por IP es solo para el widget anónimo y no hereda.",
     "documents_range": "{{desde}}–{{hasta}} de {{total}}",
     "documents_prev": "Anterior",
-    "documents_next": "Siguiente"
+    "documents_next": "Siguiente",
+    "vigencia": "Vigencia",
+    "vigencia_title": "Validación de vigencia",
+    "vigencia_desc": "Documentos que el asistente cita con advertencia porque nadie ha comprobado si siguen en vigor.",
+    "vigencia_resumen": "{{pendents}} de {{total}} documentos del corpus están pendientes de validar.",
+    "vigencia_all_ok": "Todo el corpus tiene la vigencia validada.",
+    "vigencia_table_title": "Pendientes de validar",
+    "vigencia_motiu": "Motivo",
+    "vigencia_all_motius": "Todos los motivos",
+    "vigencia_motiu_sense_validar": "Sin validar",
+    "vigencia_motiu_estat_no_vigent": "Estado no vigente",
+    "vigencia_col_estat": "Estado",
+    "vigencia_col_revisio": "Revisión prevista",
+    "vigencia_col_revisat": "Revisado por"
   },
   "login": {
     "title": "Iniciar sesión",

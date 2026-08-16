@@ -4,7 +4,7 @@ Deploy: cloud
 """
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from fastapi import (
@@ -110,6 +110,30 @@ class HubDocumentDetailOut(HubDocumentOut):
 
 class HubDocumentsOut(BaseModel):
     documents: list[HubDocumentOut]
+
+
+class DocumentVigenciaOut(BaseModel):
+    """Documento en la cola de validación de vigencia (A7)."""
+
+    id: uuid.UUID
+    title: str
+    language: str
+    canonical_url: str
+    id_publicacio: str | None = None
+    estat_vigencia: str | None = None
+    vigencia_validada_el: datetime | None = None
+    data_revisio_prevista: date | None = None
+    revisat_per: str | None = None
+    # Por qué está en la cola. Se calcula aquí y no en el cliente porque es la misma regla
+    # que decide el aviso del asistente: duplicarla en React es garantizar que un día digan
+    # cosas distintas.
+    motiu: str
+
+
+class VigenciaPendentOut(BaseModel):
+    total: int
+    pendents: int
+    documents: list[DocumentVigenciaOut]
 
 
 class MessageOut(BaseModel):
@@ -274,6 +298,76 @@ async def list_documents(
             for d in docs
         ]
     }
+
+
+@router.get("/{chatbot_id}/vigencia", response_model=VigenciaPendentOut)
+async def list_pending_vigencia(
+    chatbot_id: uuid.UUID,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: UserInfo = Depends(get_current_user),
+):
+    """Documentos cuya vigencia nadie ha validado, que son los que provocan el aviso (A7).
+
+    El criterio sale de `vigencia_no_validada` —la misma función que usa la capa de
+    recuperación para decidir si advierte—, traducida a SQL para no traerse el corpus entero
+    a memoria. Si esta condición y aquella función divergen, la pantalla dirá que faltan N y
+    el asistente advertirá por M sin que nadie lo note.
+
+    Deploy: edge.
+    """
+    from server.app.modules.agents_hub.services.retrieval.vigencia import ESTAT_VIGENT
+
+    await _chatbot_autorizado(session, chatbot_id, current_user)
+
+    total = await session.scalar(
+        select(func.count())
+        .select_from(HubDocument)
+        .where(HubDocument.chatbot_id == chatbot_id)
+    )
+
+    stmt = (
+        select(HubDocument)
+        .where(HubDocument.chatbot_id == chatbot_id)
+        .where(
+            HubDocument.vigencia_validada_el.is_(None)
+            | HubDocument.estat_vigencia.is_distinct_from(ESTAT_VIGENT)
+        )
+        # Lo que ya tenía fecha de revisión y se pasó va primero: es lo único de la cola con
+        # un plazo que alguien fijó. El resto ordena por título para que la lista sea estable
+        # entre recargas y se pueda ir tachando.
+        .order_by(
+            HubDocument.data_revisio_prevista.asc().nullslast(),
+            HubDocument.title.asc(),
+        )
+    )
+    docs = (await session.execute(stmt)).scalars().all()
+
+    return VigenciaPendentOut(
+        total=total or 0,
+        pendents=len(docs),
+        documents=[
+            DocumentVigenciaOut(
+                id=d.id,
+                title=d.title,
+                language=d.language,
+                canonical_url=d.canonical_url,
+                id_publicacio=d.id_publicacio,
+                estat_vigencia=d.estat_vigencia,
+                vigencia_validada_el=d.vigencia_validada_el,
+                data_revisio_prevista=d.data_revisio_prevista,
+                revisat_per=d.revisat_per,
+                # El estado manda sobre la falta de validación: un documento derogado que
+                # además nadie validó pide retirarlo, no revisarlo, y meterlo en el montón
+                # de «sólo hay que mirarlo» es donde se queda sin hacer.
+                motiu=(
+                    "estat_no_vigent"
+                    if d.estat_vigencia != ESTAT_VIGENT
+                    else "sense_validar"
+                ),
+            )
+            for d in docs
+        ],
+    )
 
 
 @router.get("/{chatbot_id}/documents/{document_id}", response_model=HubDocumentDetailOut)

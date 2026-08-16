@@ -284,7 +284,20 @@
     "quota_hint": "Empty = inherit from the organisation · 0 = no limit. The per-IP quota is only for the anonymous widget and is not inherited.",
     "documents_range": "{{desde}}–{{hasta}} of {{total}}",
     "documents_prev": "Previous",
-    "documents_next": "Next"
+    "documents_next": "Next",
+    "vigencia": "Validity",
+    "vigencia_title": "Validity review",
+    "vigencia_desc": "Documents the assistant cites with a warning because nobody has checked whether they are still in force.",
+    "vigencia_resumen": "{{pendents}} of {{total}} corpus documents are pending validation.",
+    "vigencia_all_ok": "The whole corpus has its validity validated.",
+    "vigencia_table_title": "Pending validation",
+    "vigencia_motiu": "Reason",
+    "vigencia_all_motius": "All reasons",
+    "vigencia_motiu_sense_validar": "Not validated",
+    "vigencia_motiu_estat_no_vigent": "Not in force",
+    "vigencia_col_estat": "Status",
+    "vigencia_col_revisio": "Review due",
+    "vigencia_col_revisat": "Reviewed by"
   },
   "login": {
     "title": "Sign in",

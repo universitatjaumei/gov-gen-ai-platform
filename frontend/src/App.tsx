@@ -30,6 +30,7 @@ const AccessTokensPage = lazy(() => import('@/admin/pages/AccessTokensPage').the
 const ChatbotsPage = lazy(() => import('@/admin/pages/ChatbotsPage').then(m => ({ default: m.ChatbotsPage })))
 const OrganizacionesPage = lazy(() => import('@/admin/pages/OrganizacionesPage').then(m => ({ default: m.OrganizacionesPage })))
 const DocumentsPage = lazy(() => import('@/admin/pages/DocumentsPage').then(m => ({ default: m.DocumentsPage })))
+const VigenciaPage = lazy(() => import('@/admin/pages/VigenciaPage').then(m => ({ default: m.VigenciaPage })))
 const ReportsPage = lazy(() => import('@/admin/pages/ReportsPage').then(m => ({ default: m.ReportsPage })))
 const LLMConfigsPage = lazy(() => import('@/admin/pages/LLMConfigsPage').then(m => ({ default: m.LLMConfigsPage })))
 const PromptsPage = lazy(() => import('@/admin/pages/PromptsPage').then(m => ({ default: m.PromptsPage })))
@@ -94,6 +95,7 @@ function App() {
                     <Route path="chatbots" element={<ChatbotsPage />} />
                     <Route path="organizaciones" element={<OrganizacionesPage />} />
                     <Route path="documents" element={<DocumentsPage />} />
+                    <Route path="vigencia" element={<VigenciaPage />} />
                     <Route path="reports" element={<ReportsPage />} />
                     <Route path="llm-configs" element={<LLMConfigsPage />} />
                     <Route path="prompts" element={<PromptsPage />} />
