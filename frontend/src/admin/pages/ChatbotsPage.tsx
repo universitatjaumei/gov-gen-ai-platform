@@ -74,6 +74,18 @@ function etiquetaModelo(config: LlmConfigOption): string {
   return config.is_default ? `${conEtiqueta} (por defecto)` : conEtiqueta
 }
 
+/** Cadena vacia = heredar de la organizacion (null); si no, el numero.
+ *
+ * Los tres estados importan: `null` hereda, `0` es sin limite y un numero es el techo.
+ * Mandar `0` donde el usuario dejo el campo vacio le pondria "sin limite" sin pedirlo.
+ */
+function aCuota(valor: string): number | null {
+  const limpio = valor.trim()
+  if (limpio === '') return null
+  const numero = Number(limpio)
+  return Number.isFinite(numero) && numero >= 0 ? Math.trunc(numero) : null
+}
+
 export function ChatbotsPage() {
   const { t } = useTranslation('admin')
   const { t: tc } = useTranslation('common')
@@ -159,6 +171,9 @@ export function ChatbotsPage() {
       valid_from: '',
       valid_until: '',
       total_token_budget: 0,
+      user_daily_token_quota: '',
+      chatbot_daily_token_quota: '',
+      anon_ip_daily_token_quota: '',
       unavailable_message: '',
     },
   })
@@ -225,6 +240,9 @@ export function ChatbotsPage() {
       valid_from: '',
       valid_until: '',
       total_token_budget: 0,
+      user_daily_token_quota: '',
+      chatbot_daily_token_quota: '',
+      anon_ip_daily_token_quota: '',
       unavailable_message: '',
     })
     setDialogOpen(true)
@@ -261,6 +279,9 @@ export function ChatbotsPage() {
       valid_from: paraCampoDeFecha(c.valid_from),
       valid_until: paraCampoDeFecha(c.valid_until),
       total_token_budget: c.total_token_budget ?? 0,
+      user_daily_token_quota: c.user_daily_token_quota?.toString() ?? '',
+      chatbot_daily_token_quota: c.chatbot_daily_token_quota?.toString() ?? '',
+      anon_ip_daily_token_quota: c.anon_ip_daily_token_quota?.toString() ?? '',
       unavailable_message: c.unavailable_message ?? '',
     })
     setDialogOpen(true)
@@ -332,6 +353,9 @@ export function ChatbotsPage() {
           valid_from: paraElContrato(values.valid_from),
           valid_until: paraElContrato(values.valid_until),
           total_token_budget: values.total_token_budget,
+        user_daily_token_quota: aCuota(values.user_daily_token_quota),
+        chatbot_daily_token_quota: aCuota(values.chatbot_daily_token_quota),
+        anon_ip_daily_token_quota: aCuota(values.anon_ip_daily_token_quota),
           unavailable_message: values.unavailable_message,
           llm_config_id: values.llm_config_id,
         },
@@ -361,6 +385,9 @@ export function ChatbotsPage() {
           valid_from: paraElContrato(values.valid_from),
           valid_until: paraElContrato(values.valid_until),
           total_token_budget: values.total_token_budget,
+        user_daily_token_quota: aCuota(values.user_daily_token_quota),
+        chatbot_daily_token_quota: aCuota(values.chatbot_daily_token_quota),
+        anon_ip_daily_token_quota: aCuota(values.anon_ip_daily_token_quota),
           unavailable_message: values.unavailable_message,
         },
       })
@@ -899,6 +926,53 @@ export function ChatbotsPage() {
                       </p>
                     )}
                   </div>
+                  {/* SEC.4: los tres techos diarios. Existian en la base de datos y los
+                      aplicaba el servidor desde SEC.4, pero no habia forma de fijarlos que no
+                      fuera un UPDATE a mano, asi que en la practica quedaban sin poner. */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label htmlFor="user_daily_token_quota" className="block text-sm mb-1">
+                        {t('hub.user_daily_token_quota')}
+                      </label>
+                      <input
+                        type="number"
+                        id="user_daily_token_quota"
+                        min={0}
+                        {...register('user_daily_token_quota')}
+                        className="w-full px-2 py-1 border rounded-md text-sm"
+                        placeholder={t('hub.quota_inherit')}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="chatbot_daily_token_quota" className="block text-sm mb-1">
+                        {t('hub.chatbot_daily_token_quota')}
+                      </label>
+                      <input
+                        type="number"
+                        id="chatbot_daily_token_quota"
+                        min={0}
+                        {...register('chatbot_daily_token_quota')}
+                        className="w-full px-2 py-1 border rounded-md text-sm"
+                        placeholder={t('hub.quota_inherit')}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="anon_ip_daily_token_quota" className="block text-sm mb-1">
+                        {t('hub.anon_ip_daily_token_quota')}
+                      </label>
+                      <input
+                        type="number"
+                        id="anon_ip_daily_token_quota"
+                        min={0}
+                        {...register('anon_ip_daily_token_quota')}
+                        className="w-full px-2 py-1 border rounded-md text-sm"
+                        placeholder={t('hub.quota_inherit')}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground -mt-1">
+                    {t('hub.quota_hint')}
+                  </p>
                   <div>
                     <label htmlFor="unavailable_message" className="block text-sm mb-1">
                       {t('hub.unavailable_message')}

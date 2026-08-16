@@ -276,7 +276,12 @@
     "corpus_markdown_only": "Al corpus només entra Markdown del pipeline de curació. Els originals (PDF i altres) es converteixen abans allà, que és on es revisa la conversió.",
     "max_size_10mb": "Mida màxima: 10 MB per fitxer. Només format Markdown (.md).",
     "kind_crawler": "Web",
-    "kind_upload": "Markdown"
+    "kind_upload": "Markdown",
+    "user_daily_token_quota": "Tokens/dia per persona",
+    "chatbot_daily_token_quota": "Tokens/dia del chatbot",
+    "anon_ip_daily_token_quota": "Tokens/dia per IP anònima",
+    "quota_inherit": "Heretar",
+    "quota_hint": "Buit = heretar de l'organització · 0 = sense límit. La quota per IP és només per al widget anònim i no s'hereta."
   },
   "login": {
     "title": "Inicia la sessió",

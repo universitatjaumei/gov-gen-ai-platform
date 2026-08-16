@@ -75,6 +75,17 @@ class ChatbotRead(BaseModel):
     total_token_budget: int | None
     unavailable_message: str
     no_answer_message: str | None = None
+    # SEC.4: los tres techos de consumo. NULL = heredar de la organizacion; 0 = sin limite.
+    # `anon_ip_daily_token_quota` NO hereda: un chatbot publico y uno interno no comparten
+    # criterio sobre lo que es razonable para un anonimo.
+    #
+    # Estaban en la base de datos y los aplicaba `core/quotas.py` desde SEC.4, pero **no los
+    # exponia ni la API ni la interfaz**: solo se podian fijar por SQL, asi que en la practica
+    # se quedaban en NULL. Para un chatbot `public_anon` eso significa sin limite por IP, que
+    # es justo el sujeto para el que se construyo la cuenta.
+    user_daily_token_quota: int | None = None
+    chatbot_daily_token_quota: int | None = None
+    anon_ip_daily_token_quota: int | None = None
     availability: "DisponibilidadOut | None" = None
     public_graph_profile: str
     language_mode: str
@@ -121,6 +132,9 @@ class ChatbotCreate(BaseModel):
     total_token_budget: int | None = None
     unavailable_message: str = ""
     no_answer_message: str | None = None
+    user_daily_token_quota: int | None = None
+    chatbot_daily_token_quota: int | None = None
+    anon_ip_daily_token_quota: int | None = None
     public_graph_profile: str = "PUBLIC_KB_RICH"
     language_mode: str = "prefer"
     quality_threshold: float = 0.6
@@ -167,6 +181,9 @@ class ChatbotUpdate(BaseModel):
     total_token_budget: int | None = None
     unavailable_message: str | None = None
     no_answer_message: str | None = None
+    user_daily_token_quota: int | None = None
+    chatbot_daily_token_quota: int | None = None
+    anon_ip_daily_token_quota: int | None = None
     public_graph_profile: str | None = None
     language_mode: str | None = None
     quality_threshold: float | None = None
@@ -310,6 +327,9 @@ async def create_chatbot(
         total_token_budget=body.total_token_budget,
         unavailable_message=body.unavailable_message,
         no_answer_message=body.no_answer_message,
+        user_daily_token_quota=body.user_daily_token_quota,
+        chatbot_daily_token_quota=body.chatbot_daily_token_quota,
+        anon_ip_daily_token_quota=body.anon_ip_daily_token_quota,
         public_graph_profile=body.public_graph_profile,
         language_mode=body.language_mode,
         quality_threshold=body.quality_threshold,
@@ -348,7 +368,9 @@ async def update_chatbot(
     # venía, que es la diferencia que hace falta aquí y que `exclude_none` no puede ver. No
     # se cambia el criterio del resto de campos —donde `None` sí es «heredar»— porque ahí el
     # comportamiento actual es el correcto.
-    for campo in ("valid_from", "valid_until", "total_token_budget", "no_answer_message"):
+    for campo in ("valid_from", "valid_until", "total_token_budget", "no_answer_message",
+              "user_daily_token_quota", "chatbot_daily_token_quota",
+              "anon_ip_daily_token_quota"):
         if campo in body.model_fields_set:
             payload[campo] = getattr(body, campo)
 

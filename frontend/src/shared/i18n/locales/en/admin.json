@@ -276,7 +276,12 @@
     "corpus_markdown_only": "The corpus only accepts Markdown from the curation pipeline. Originals (PDF and others) are converted there first, which is where the conversion gets reviewed.",
     "max_size_10mb": "Maximum size: 10 MB per file. Markdown (.md) format only.",
     "kind_crawler": "Web",
-    "kind_upload": "Markdown"
+    "kind_upload": "Markdown",
+    "user_daily_token_quota": "Tokens/day per person",
+    "chatbot_daily_token_quota": "Tokens/day for the chatbot",
+    "anon_ip_daily_token_quota": "Tokens/day per anonymous IP",
+    "quota_inherit": "Inherit",
+    "quota_hint": "Empty = inherit from the organisation · 0 = no limit. The per-IP quota is only for the anonymous widget and is not inherited."
   },
   "login": {
     "title": "Sign in",

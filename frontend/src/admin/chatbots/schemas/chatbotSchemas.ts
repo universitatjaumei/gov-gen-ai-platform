@@ -31,6 +31,12 @@ export const chatbotCreateSchema = z.object({
   valid_from: z.string(),
   valid_until: z.string(),
   total_token_budget: z.number().int().min(0),
+  // SEC.4: los tres techos diarios. Cadena vacia = heredar de la organizacion; 0 = sin
+  // limite. Son cadenas y no numeros porque hay TRES estados y un `number` solo puede
+  // expresar dos: un campo vacio tiene que poder significar "heredar".
+  user_daily_token_quota: z.string(),
+  chatbot_daily_token_quota: z.string(),
+  anon_ip_daily_token_quota: z.string(),
   unavailable_message: z.string().max(500),
 })
 
