@@ -74,6 +74,7 @@ class ChatbotRead(BaseModel):
     valid_until: datetime | None
     total_token_budget: int | None
     unavailable_message: str
+    no_answer_message: str | None = None
     availability: "DisponibilidadOut | None" = None
     public_graph_profile: str
     language_mode: str
@@ -119,6 +120,7 @@ class ChatbotCreate(BaseModel):
     valid_until: datetime | None = None
     total_token_budget: int | None = None
     unavailable_message: str = ""
+    no_answer_message: str | None = None
     public_graph_profile: str = "PUBLIC_KB_RICH"
     language_mode: str = "prefer"
     quality_threshold: float = 0.6
@@ -164,6 +166,7 @@ class ChatbotUpdate(BaseModel):
     valid_until: datetime | None = None
     total_token_budget: int | None = None
     unavailable_message: str | None = None
+    no_answer_message: str | None = None
     public_graph_profile: str | None = None
     language_mode: str | None = None
     quality_threshold: float | None = None
@@ -306,6 +309,7 @@ async def create_chatbot(
         valid_until=body.valid_until,
         total_token_budget=body.total_token_budget,
         unavailable_message=body.unavailable_message,
+        no_answer_message=body.no_answer_message,
         public_graph_profile=body.public_graph_profile,
         language_mode=body.language_mode,
         quality_threshold=body.quality_threshold,
@@ -344,7 +348,7 @@ async def update_chatbot(
     # venía, que es la diferencia que hace falta aquí y que `exclude_none` no puede ver. No
     # se cambia el criterio del resto de campos —donde `None` sí es «heredar»— porque ahí el
     # comportamiento actual es el correcto.
-    for campo in ("valid_from", "valid_until", "total_token_budget"):
+    for campo in ("valid_from", "valid_until", "total_token_budget", "no_answer_message"):
         if campo in body.model_fields_set:
             payload[campo] = getattr(body, campo)
 

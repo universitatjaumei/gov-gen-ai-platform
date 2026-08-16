@@ -64,22 +64,29 @@
     --input: oklch(0.922 0 0);
     --radius: 0.625rem;
 
-    /* ── UJI brand — turquoise #2ba6cb ─────────────────────────── */
-    --primary: oklch(0.64 0.105 211);
-    --primary-foreground: oklch(1 0 0);
-    --accent: oklch(0.95 0.025 211);
-    --accent-foreground: oklch(0.18 0.07 244);
-    --ring: oklch(0.64 0.105 211);
+    /* ── Identidad del proyecto (UX.5) — azul #0b5394 ──────────────
+     *
+     * Es la paleta de los documentos y paneles de esta misma casa. Antes había aquí un
+     * turquesa que **no llegaba a verse**: `AppLayout` pintaba el lateral con `bg-card`
+     * —blanco— en vez de `bg-sidebar`, así que la identidad estaba declarada y sin aplicar.
+     *
+     * En hexadecimal y no en oklch a propósito: estos valores se comparan a ojo contra el
+     * proyecto del que salen, y en oklch nadie puede hacer esa comprobación. */
+    --primary: #0b5394;
+    --primary-foreground: #ffffff;
+    --accent: #e8f0f8;
+    --accent-foreground: #0b5394;
+    --ring: #0b5394;
 
-    /* ── UJI brand — navy #002744 (sidebar) ────────────────────── */
-    --sidebar: oklch(0.18 0.07 244);
-    --sidebar-foreground: oklch(0.92 0 0);
-    --sidebar-primary: oklch(0.64 0.105 211);
-    --sidebar-primary-foreground: oklch(1 0 0);
-    --sidebar-accent: oklch(0.23 0.07 244);
-    --sidebar-accent-foreground: oklch(0.95 0 0);
-    --sidebar-border: oklch(0.27 0.065 244);
-    --sidebar-ring: oklch(0.64 0.105 211);
+    /* ── Lateral: el mismo azul, que es lo que da unidad al panel ─── */
+    --sidebar: #0b5394;
+    --sidebar-foreground: #eaf1f8;
+    --sidebar-primary: #ffffff;
+    --sidebar-primary-foreground: #0b5394;
+    --sidebar-accent: #1266b3;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #2a6fae;
+    --sidebar-ring: #ffffff;
 
     /* ── Charts — brand palette ────────────────────────────────── */
     --chart-1: oklch(0.64 0.105 211);

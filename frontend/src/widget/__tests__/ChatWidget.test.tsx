@@ -67,6 +67,214 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
+// UX.1: el widget arranca CERRADO, que es la convención de un widget de chat. Los tests
+// que ejercitan la conversación necesitan abrirlo antes, y lo hacen por el lanzador —no
+// por un prop de conveniencia—, así que prueban también el camino que recorre el visitante.
+function renderOpen(ui: React.ReactElement) {
+  const resultado = render(ui)
+  fireEvent.click(screen.getByTestId('widget-launcher'))
+  return resultado
+}
+
+describe('ChatWidget — comportamiento de widget (UX.1)', () => {
+  test('should_start_closed_showing_only_the_launcher', () => {
+    render(<ChatWidget {...DEFAULT_PROPS} />)
+
+    expect(screen.getByTestId('widget-launcher')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  test('should_open_when_the_launcher_is_clicked', () => {
+    render(<ChatWidget {...DEFAULT_PROPS} />)
+
+    fireEvent.click(screen.getByTestId('widget-launcher'))
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.queryByTestId('widget-launcher')).not.toBeInTheDocument()
+  })
+
+  test('should_bring_its_own_box_instead_of_inheriting_the_host_page', () => {
+    // El defecto que lo motiva: el panel se renderizaba con `height: 100%` dentro del
+    // contenedor y heredaba lo que le diera la página, así que en un `<div>` pelado se
+    // estiraba a ancho completo al final del documento.
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    const caja = screen.getByRole('dialog')
+
+    expect(caja).toHaveStyle({ position: 'fixed' })
+    expect(caja.style.width).not.toBe('')
+    expect(caja.style.borderTop).toContain('#0b5394')
+  })
+
+  test('should_use_a_growing_textarea_not_a_single_line_input', () => {
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    const campo = screen.getByRole('textbox')
+
+    expect(campo.tagName).toBe('TEXTAREA')
+    expect(campo).toHaveStyle({ resize: 'none' })
+    expect(campo.style.overflowY).not.toBe('scroll')
+  })
+
+  test('should_grow_the_textarea_as_the_question_gets_longer', () => {
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+    const campo = screen.getByRole('textbox') as HTMLTextAreaElement
+    // jsdom no calcula `scrollHeight`, así que se simula: lo que se comprueba es que el
+    // componente REACCIONA al contenido, no la altura exacta que pintaría un navegador.
+    Object.defineProperty(campo, 'scrollHeight', { value: 92, configurable: true })
+
+    fireEvent.change(campo, { target: { value: 'Una pregunta prou llarga '.repeat(6) } })
+
+    expect(campo.style.height).toBe('92px')
+  })
+
+  test('should_scroll_to_the_answer_without_the_user_doing_it', async () => {
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', {
+      value: scrollIntoView,
+      writable: true,
+      configurable: true,
+    })
+    fetchMock.mockResolvedValueOnce(
+      makeSseResponse([
+        { event: 'token', data: { delta: 'Resposta llarga.' } },
+        { event: 'done', data: DONE_EVENT },
+      ]),
+    )
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
+  })
+})
+
+describe('ChatWidget — la cita dice qué artículo (UX.6)', () => {
+  test('should_show_the_anchor_next_to_the_document_title', async () => {
+    fetchMock.mockResolvedValueOnce(
+      makeSseResponse([
+        { event: 'token', data: { delta: 'Sis anys.' } },
+        {
+          event: 'done',
+          data: {
+            ...DONE_EVENT,
+            sources: [{
+              document_id: 'doc-1',
+              title: 'Reglament de la Sindicatura de Greuges',
+              url: 'https://www.uji.es/reglament.pdf#art-9',
+              score: 0.9,
+            }],
+          },
+        },
+      ]),
+    )
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    // El ancla viajaba en el enlace pero no se veía: la píldora solo pintaba el título.
+    await waitFor(() => expect(screen.getByText(/art-9/)).toBeInTheDocument())
+  })
+
+  test('should_not_invent_an_anchor_when_the_source_has_none', async () => {
+    fetchMock.mockResolvedValueOnce(
+      makeSseResponse([
+        { event: 'token', data: { delta: 'Resposta.' } },
+        { event: 'done', data: DONE_WITH_SOURCES },
+      ]),
+    )
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    await screen.findByText('Estatuts UJI')
+    expect(screen.queryByText(/·/)).not.toBeInTheDocument()
+  })
+})
+
+describe('ChatWidget — el progreso habla el idioma de la página (UX.3)', () => {
+  test('should_translate_the_node_status_instead_of_showing_the_server_text', async () => {
+    await i18n.changeLanguage('ca')
+    const deferred = makeDeferredStream()
+    fetchMock.mockResolvedValueOnce(deferred.response)
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} lang="ca" />)
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    await act(async () => {
+      // El servidor manda el texto en castellano; el widget no lo debe pintar.
+      deferred.send('status', { node: 'retrieve', msg: 'Buscando en la base de conocimiento...' })
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(/Cercant en la base documental/)).toBeInTheDocument()
+      expect(screen.queryByText(/Buscando en la base de conocimiento/)).not.toBeInTheDocument()
+    })
+    await i18n.changeLanguage('es')
+  })
+
+  test('should_fall_back_to_the_server_text_for_an_untranslated_node', async () => {
+    const deferred = makeDeferredStream()
+    fetchMock.mockResolvedValueOnce(deferred.response)
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    await act(async () => {
+      deferred.send('status', { node: 'un_nodo_futuro', msg: 'Haciendo algo nuevo...' })
+      await Promise.resolve()
+    })
+
+    // Un nodo sin traducción enseña lo que diga el servidor: mejor eso que un hueco.
+    await waitFor(() =>
+      expect(screen.getByText('Haciendo algo nuevo...')).toBeInTheDocument(),
+    )
+  })
+})
+
+describe('ChatWidget — pregunta y respuesta se distinguen (UX.2)', () => {
+  test('should_frame_the_user_question_in_light_blue', async () => {
+    fetchMock.mockResolvedValueOnce(
+      makeSseResponse([
+        { event: 'token', data: { delta: 'Resposta.' } },
+        { event: 'done', data: DONE_EVENT },
+      ]),
+    )
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    const turno = await screen.findByTestId('turn-user')
+    // jsdom normaliza el hexadecimal a rgb(): #e8f0f8 -> rgb(232, 240, 248).
+    expect(turno).toHaveStyle({ background: 'rgb(232, 240, 248)' })
+  })
+
+  test('should_separate_a_question_from_the_previous_answer', async () => {
+    fetchMock.mockResolvedValueOnce(
+      makeSseResponse([
+        { event: 'token', data: { delta: 'Resposta.' } },
+        { event: 'done', data: DONE_EVENT },
+      ]),
+    )
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    const turno = await screen.findByTestId('turn-user')
+    expect(turno.style.marginTop).not.toBe('')
+    const respuesta = await screen.findByTestId('turn-assistant')
+    expect(respuesta.style.marginTop).not.toBe('')
+  })
+})
+
 describe('ChatWidget', () => {
   test('should_display_user_and_assistant_messages', async () => {
     fetchMock.mockResolvedValueOnce(
@@ -76,7 +284,7 @@ describe('ChatWidget', () => {
       ]),
     )
 
-    render(<ChatWidget {...DEFAULT_PROPS} />)
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Hola' } })
     fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
@@ -96,7 +304,7 @@ describe('ChatWidget', () => {
       ]),
     )
 
-    render(<ChatWidget {...DEFAULT_PROPS} />)
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Hola' } })
     fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
@@ -110,7 +318,7 @@ describe('ChatWidget', () => {
     const deferred = makeDeferredStream()
     fetchMock.mockResolvedValueOnce(deferred.response)
 
-    render(<ChatWidget {...DEFAULT_PROPS} />)
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Hola' } })
     fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
@@ -133,7 +341,7 @@ describe('ChatWidget', () => {
     const deferred = makeDeferredStream()
     fetchMock.mockResolvedValueOnce(deferred.response)
 
-    render(<ChatWidget {...DEFAULT_PROPS} />)
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Hola' } })
     fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
@@ -173,7 +381,7 @@ describe('ChatWidget', () => {
       ]),
     )
 
-    render(<ChatWidget {...DEFAULT_PROPS} lang="ca" />)
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} lang="ca" />)
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Hola' } })
     fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
@@ -192,7 +400,7 @@ describe('ChatWidget', () => {
       ]),
     )
 
-    render(<ChatWidget {...DEFAULT_PROPS} />)
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
     fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
@@ -212,7 +420,7 @@ describe('ChatWidget', () => {
       )
       .mockResolvedValueOnce(new Response('{}', { status: 200 }))
 
-    render(<ChatWidget {...DEFAULT_PROPS} />)
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
     fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
@@ -243,7 +451,7 @@ describe('ChatWidget', () => {
       ]),
     )
 
-    render(<ChatWidget {...DEFAULT_PROPS} />)
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
     fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
@@ -262,7 +470,7 @@ describe('ChatWidget', () => {
       ]),
     )
 
-    render(<ChatWidget {...DEFAULT_PROPS} />)
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
     fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
@@ -283,7 +491,7 @@ describe('ChatWidget', () => {
       ]),
     )
 
-    render(<ChatWidget {...DEFAULT_PROPS} />)
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
     fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
@@ -303,7 +511,7 @@ describe('ChatWidget', () => {
       ]),
     )
 
-    render(<ChatWidget {...DEFAULT_PROPS} />)
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
     fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
@@ -321,7 +529,7 @@ describe('ChatWidget', () => {
       ]),
     )
 
-    render(<ChatWidget {...DEFAULT_PROPS} />)
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
     fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
@@ -335,7 +543,7 @@ describe('ChatWidget', () => {
     let resolveFetch!: (r: Response) => void
     fetchMock.mockReturnValueOnce(new Promise<Response>(r => { resolveFetch = r }))
 
-    render(<ChatWidget {...DEFAULT_PROPS} />)
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Hola' } })
 

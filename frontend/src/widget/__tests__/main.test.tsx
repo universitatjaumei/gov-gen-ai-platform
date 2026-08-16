@@ -36,7 +36,10 @@ describe('Widget main', () => {
       mountWidget(container, config!)
     })
 
-    expect(container.querySelector('[role="dialog"]')).not.toBeNull()
+    // UX.1: recién montado el widget está CERRADO, así que lo que prueba que ha montado
+    // es su lanzador, no el diálogo. Antes arrancaba abierto y se desplegaba solo sobre
+    // la página anfitriona.
+    expect(container.querySelector('[data-testid="widget-launcher"]')).not.toBeNull()
   })
 
   test('should_use_lang_from_data_attribute', async () => {

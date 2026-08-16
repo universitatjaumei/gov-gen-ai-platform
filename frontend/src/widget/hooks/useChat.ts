@@ -12,9 +12,22 @@ export interface SourceRef {
   score: number
 }
 
+/** Progreso del grafo: el NODO, y el texto del servidor solo como red de seguridad.
+ *
+ * UX.3: el servidor mandaba el mensaje ya escrito en castellano y el widget lo pintaba tal
+ * cual, así que «Buscando en la base de conocimiento...» salía en castellano dentro de un
+ * widget en valenciano. El idioma de una interfaz lo decide la interfaz: el servidor dice
+ * *qué* está pasando —el nodo, que ya mandaba— y aquí se traduce. `msg` se conserva para
+ * un nodo que todavía no tenga traducción: mejor el texto del servidor que un hueco.
+ */
+export interface NodeStatus {
+  node: string
+  msg: string
+}
+
 export interface UseChatReturn {
   messages: Message[]
-  currentNodeStatus: string | null
+  currentNodeStatus: NodeStatus | null
   isStreaming: boolean
   translationWarning: string | null
   sources: SourceRef[]
@@ -24,7 +37,7 @@ export interface UseChatReturn {
 
 export function useChat(chatbotId: string, apiUrl: string, lang: string, widgetKey?: string): UseChatReturn {
   const [messages, setMessages] = useState<Message[]>([])
-  const [currentNodeStatus, setCurrentNodeStatus] = useState<string | null>(null)
+  const [currentNodeStatus, setCurrentNodeStatus] = useState<NodeStatus | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
   const [translationWarning, setTranslationWarning] = useState<string | null>(null)
   const [sources, setSources] = useState<SourceRef[]>([])
@@ -84,7 +97,7 @@ export function useChat(chatbotId: string, apiUrl: string, lang: string, widgetK
           } else if (field === 'data') {
             const payload = JSON.parse(sseValue) as Record<string, unknown>
             if (currentEvent === 'status') {
-              setCurrentNodeStatus(payload.msg as string)
+              setCurrentNodeStatus({ node: String(payload.node ?? ''), msg: String(payload.msg ?? '') })
             } else if (currentEvent === 'token') {
               setMessages(prev => {
                 const last = prev[prev.length - 1]

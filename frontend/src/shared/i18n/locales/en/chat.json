@@ -10,5 +10,11 @@
   "feedback_rate": "Rate response",
   "feedback_stars": "stars",
   "sources": "Sources",
-  "no_sources": "No sources cited"
+  "no_sources": "No sources cited",
+  "status": {
+    "detect_language": "Detecting the language...",
+    "retrieve": "Searching the document base...",
+    "generate_answer": "Writing the answer..."
+  },
+  "widget_title": "Assistant"
 }

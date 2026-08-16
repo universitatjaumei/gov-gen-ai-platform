@@ -25,6 +25,10 @@ class PublicGraphConfig:
     # efectiva del chatbot. Así la TemplateStrategy —única fuente del system prompt— lo
     # recibe por el mismo camino que el resto de la config, sin parámetros paralelos.
     system_prompt: str | None = None
+    # UX.4: qué se contesta cuando no hay fundamento suficiente. `None` = el texto genérico
+    # de `citation_validator`. Se configura por chatbot porque el destino al que se remite
+    # depende de a quién sirve: Infocampus atiende al público, no al personal de gestión.
+    no_answer_message: str | None = None
     # VIS.2: presupuesto de contexto para la inyección de documentos. Mismo argumento que
     # el system_prompt para entrar por aquí.
     #
@@ -138,6 +142,7 @@ async def get_effective_public_graph_config(
         "profile":               chatbot.public_graph_profile,
         "retrieval_mode":        chatbot.retrieval_mode,
         "system_prompt":         chatbot.system_prompt,
+        "no_answer_message":     chatbot.no_answer_message,
         "language_mode":         chatbot.language_mode,
         "quality_threshold":     chatbot.quality_threshold,
         "min_retrieval_results": chatbot.min_retrieval_results,

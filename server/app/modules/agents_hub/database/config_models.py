@@ -293,6 +293,13 @@ class HubChatbot(HubConfigBase):
     # del frontend: «el plazo de matrícula terminó el 30 de septiembre» lo escribe quien
     # gestiona el trámite, no un catálogo de errores.
     unavailable_message: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    # UX.4. Qué se contesta cuando NO hay fundamento suficiente, que es distinto de
+    # `unavailable_message` —ese es cuando el chatbot está cerrado— y por eso es columna
+    # propia y no un segundo significado de la misma. NULL = el texto genérico.
+    #
+    # Existe porque «no lo sé» a secas deja al ciudadano donde estaba, y a quién hay que
+    # remitirlo depende del asistente: Infocampus atiende al público, no a gestión.
+    no_answer_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     # --- Cuotas de consumo (SEC.4). NULL = heredar de la organización; 0 = sin límite ---
     user_daily_token_quota: Mapped[int | None] = mapped_column(Integer, nullable=True)
     chatbot_daily_token_quota: Mapped[int | None] = mapped_column(Integer, nullable=True)

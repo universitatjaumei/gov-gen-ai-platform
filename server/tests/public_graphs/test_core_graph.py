@@ -95,6 +95,54 @@ class TestCoreGraph:
         assert result["answer"] == NO_CITATION_FALLBACK
         assert result["fallback_reason"] == "quality_gate"
 
+    async def test_should_use_the_configured_no_answer_message(self):
+        """UX.4: «no lo sé» a secas deja a quien pregunta donde estaba.
+
+        A quién hay que remitirlo depende del asistente —Infocampus atiende al público, no
+        al personal de gestión—, así que es configuración del chatbot y no una constante.
+        """
+        from dataclasses import replace
+
+        A_INFOCAMPUS = (
+            "No he trobat fonament suficient. Contacta amb Infocampus: "
+            "https://www.uji.es/serveis/infocampus/"
+        )
+        retrieval, merge, template, language = _mock_strategies(merge_return=[])
+        deps = GraphDeps(session=AsyncMock(), embedder=AsyncMock())
+
+        graph = CoreGraph(
+            retrieval_strategy=retrieval,
+            merge_strategy=merge,
+            template_strategy=template,
+            language_policy=language,
+            cfg=replace(_CFG, no_answer_message=A_INFOCAMPUS),
+            deps=deps,
+        )
+        result = await graph.run("¿qué es esto?", str(uuid.uuid4()))
+
+        assert result["answer"] == A_INFOCAMPUS
+        assert result["fallback_used"] is True
+
+    async def test_should_keep_the_generic_text_when_no_message_is_configured(self):
+        """Sin configurar, el texto de siempre: no se obliga a nadie a rellenar el campo."""
+        from server.app.modules.agents_hub.agent.citation_validator import (
+            NO_CITATION_FALLBACK,
+        )
+
+        retrieval, merge, template, language = _mock_strategies(merge_return=[])
+        graph = CoreGraph(
+            retrieval_strategy=retrieval,
+            merge_strategy=merge,
+            template_strategy=template,
+            language_policy=language,
+            cfg=_CFG,
+            deps=GraphDeps(session=AsyncMock(), embedder=AsyncMock()),
+        )
+
+        result = await graph.run("¿qué es esto?", str(uuid.uuid4()))
+
+        assert result["answer"] == NO_CITATION_FALLBACK
+
     async def test_core_graph_runs_with_each_retrieval_mode_using_generic_profile(self):
         """Con 2 items de score 0.9, el grafo produce una respuesta en cada retrieval_mode."""
         for mode in ("RAG", "MD_LONG_CONTEXT", "MD_AGENT_SELECTOR"):

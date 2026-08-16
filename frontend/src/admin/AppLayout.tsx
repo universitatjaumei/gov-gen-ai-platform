@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/shared/auth'
+import logoUji from '@/assets/logo-uji.png'
 
 const NAV_SECTIONS = [
   { key: 'hub', path: '/hub' },
@@ -16,7 +17,19 @@ export function AppLayout() {
 
   return (
     <div className="flex h-screen">
-      <nav aria-label={t('nav.main')} className="flex flex-col w-56 shrink-0 border-r bg-card p-4 gap-1">
+      {/* UX.5: el lateral usa `bg-sidebar`, no `bg-card`. Las variables del azul llevaban
+          definidas desde el principio y no las aplicaba nadie, así que el panel salía
+          blanco y sin identidad. */}
+      <nav
+        aria-label={t('nav.main')}
+        className="flex flex-col w-56 shrink-0 bg-sidebar text-sidebar-foreground p-4 gap-1"
+      >
+        <img
+          src={logoUji}
+          alt="Universitat Jaume I"
+          className="h-8 w-auto self-start mb-5 mt-1"
+        />
+
         {NAV_SECTIONS.map(({ key, path }) => (
           <NavLink
             key={key}
@@ -24,8 +37,8 @@ export function AppLayout() {
             className={({ isActive }) =>
               `px-3 py-2 rounded-md text-sm transition-colors ${
                 isActive
-                  ? 'bg-accent text-accent-foreground font-medium'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                  : 'text-sidebar-foreground/80 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/60'
               }`
             }
           >
@@ -33,12 +46,12 @@ export function AppLayout() {
           </NavLink>
         ))}
 
-        <div className="mt-auto pt-4 border-t text-xs text-muted-foreground">
+        <div className="mt-auto pt-4 border-t border-sidebar-border text-xs text-sidebar-foreground/80">
           <p className="truncate mb-2">{user?.email}</p>
           <button
             type="button"
             onClick={logout}
-            className="w-full text-left hover:text-foreground transition-colors"
+            className="w-full text-left hover:text-sidebar-accent-foreground transition-colors"
           >
             {tc('logout')}
           </button>

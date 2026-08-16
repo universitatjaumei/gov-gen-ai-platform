@@ -258,8 +258,13 @@ class CoreGraph:
         async def fallback_node(state: CoreGraphState) -> dict:
             # El fallback EMITE el mensaje, no deja answer=None: el endpoint lo manda por
             # SSE como una respuesta normal y el usuario ve una explicación en vez de nada.
+            #
+            # UX.4: el mensaje es configurable por chatbot. «No lo sé» a secas deja al
+            # ciudadano en el mismo sitio en el que estaba; decirle a quién preguntar es el
+            # servicio. Y a quién preguntar depende del asistente —Infocampus atiende al
+            # público, no al personal de Gerencia—, así que no puede ser una constante.
             return {
-                "answer": NO_CITATION_FALLBACK,
+                "answer": getattr(self.cfg, "no_answer_message", None) or NO_CITATION_FALLBACK,
                 "fallback_used": True,
                 "fallback_reason": "quality_gate",
                 "sources": [],
