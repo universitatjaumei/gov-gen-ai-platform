@@ -1,16 +1,21 @@
 """Tool: devuelve el markdown completo de un documento."""
 
 import uuid
-from typing import Protocol
+from typing import Annotated, Any, Protocol
+
+from langchain_core.tools import InjectedToolArg
 
 
 class DocumentReaderProtocol(Protocol):
     async def read(self, document_id: uuid.UUID) -> dict | None: ...
 
 
+# `reader` va como argumento **inyectado**: lo pone el AgenticLoop, no el modelo. Sin la
+# marca, `bind_tools` intenta construir un validador para el Protocol y muere con
+# `SchemaError`, así que el modo selector no llegaba a ejecutar ni una vuelta.
 async def read_document(
     document_id: str,
-    reader: DocumentReaderProtocol,
+    reader: Annotated[Any, InjectedToolArg] = None,
 ) -> str:
     """Devuelve el markdown completo del documento solicitado para que el LLM lo cite.
 

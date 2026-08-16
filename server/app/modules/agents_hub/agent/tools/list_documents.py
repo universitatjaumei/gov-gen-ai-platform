@@ -6,7 +6,9 @@ indice esta en el prompt, asi que preguntarlo seria una llamada de mas.
 """
 
 import uuid
-from typing import Protocol
+from typing import Annotated, Any, Protocol
+
+from langchain_core.tools import InjectedToolArg
 
 
 class DocumentIndexProtocol(Protocol):
@@ -18,10 +20,13 @@ class DocumentIndexProtocol(Protocol):
     ) -> list[dict]: ...
 
 
+# `chatbot_id`, `index` e `language` van **inyectados**: los pone el AgenticLoop y el modelo
+# no tiene forma de saberlos. Pedírselos en el esquema era, además del ruido, lo que hacía
+# morir a `bind_tools` con `SchemaError` al intentar validar el Protocol.
 async def list_documents(
-    chatbot_id: str,
-    index: DocumentIndexProtocol,
-    language: str | None = None,
+    chatbot_id: Annotated[str, InjectedToolArg] = "",
+    index: Annotated[Any, InjectedToolArg] = None,
+    language: Annotated[str | None, InjectedToolArg] = None,
     submateries: list[str] | None = None,
 ) -> str:
     """Devuelve las fichas de los documentos de las submaterias pedidas.

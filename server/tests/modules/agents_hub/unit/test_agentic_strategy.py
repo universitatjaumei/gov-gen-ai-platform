@@ -46,8 +46,9 @@ class TestAgenticStrategyCore:
             AgenticRetrievalStrategy,
         )
         strategy = AgenticRetrievalStrategy(AsyncMock())
-        tools = strategy.get_agent_tools()
-        tool_names = [t.__name__ for t in tools]
+        # Desde el arreglo del esquema, los tools son declaraciones de LangChain —lo que
+        # `bind_tools` acepta— y no las funciones desnudas, así que el nombre es `.name`.
+        tool_names = [t.name for t in strategy.get_agent_tools()]
         assert "list_documents" in tool_names
         assert "read_document" in tool_names
 

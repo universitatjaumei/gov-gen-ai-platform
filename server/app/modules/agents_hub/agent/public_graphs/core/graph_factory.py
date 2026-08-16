@@ -101,7 +101,61 @@ def build_agentic_loop_if_needed(cfg: Any, deps: Any):
     return AgenticLoop(
         reader=_ReaderDesdeEstrategia(estrategia),
         tools=estrategia.get_agent_tools(),
+        searcher=_buscador_de_fragmentos(cfg, deps),
     )
+
+
+def _buscador_de_fragmentos(cfg: Any, deps: Any):
+    """Búsqueda vectorial para el `search_knowledge` del agente, o None si no hay embedder.
+
+    Es lo que permite el híbrido que pide el corpus de Gerencia: el agente **lee entera** la
+    normativa propia —la más larga son 51.032 tokens— y **busca fragmentos** en la externa,
+    donde la Ley de Contratos sola son 279.425 y las 22 normas externas suman 1.745.337.
+
+    Sin embedder no se monta y el tool se lo dice al modelo: un asistente sin embeddings
+    sigue funcionando con índice y lectura, que es como funcionaba hasta ahora.
+    """
+    embedder = getattr(deps, "embedder", None)
+    if embedder is None:
+        return None
+
+    from server.app.modules.agents_hub.services.retrieval.vector_strategy import (
+        VectorRetrievalStrategy,
+    )
+
+    return _BuscadorVectorial(
+        VectorRetrievalStrategy(
+            session=deps.session,
+            embedding_service=embedder,
+            top_k=getattr(cfg, "min_retrieval_results", 5) or 5,
+        )
+    )
+
+
+class _BuscadorVectorial:
+    """Adapta VectorRetrievalStrategy al protocolo FragmentSearcher del AgenticLoop."""
+
+    def __init__(self, estrategia: Any) -> None:
+        self._estrategia = estrategia
+
+    async def search(self, query: str, chatbot_id: str, language: str | None = None) -> list:
+        """`language` se recibe y **no se usa**, igual que hace el pipeline RAG.
+
+        Filtrar por él dejaba la búsqueda vacía siempre: los chunks del corpus llevan `val`
+        y `es`, y el grafo resuelve la lengua de la conversación como `ca`. Ningún fragmento
+        coincidía, así que el agente repetía `search_knowledge` hasta agotar las iteraciones
+        y respondía en blanco. La búsqueda vectorial cruza idiomas por sí sola —los
+        embeddings son multilingües— y la política de lengua actúa al redactar.
+        """
+        from server.app.modules.agents_hub.agent.public_graphs.strategies.rag_vector_pipeline import (  # noqa: E501
+            _source_to_evidence,
+        )
+
+        contexto = await self._estrategia.get_context(
+            query=query,
+            chatbot_id=uuid.UUID(chatbot_id) if isinstance(chatbot_id, str) else chatbot_id,
+        )
+        return [_source_to_evidence(s) for s in contexto.sources]
 
 
 class _ReaderDesdeEstrategia:

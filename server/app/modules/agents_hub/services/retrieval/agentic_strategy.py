@@ -16,11 +16,13 @@ El retroceso ensancha el TEMA, nunca el PERMISO: `nivell_acces`, `us_assistents`
 import uuid
 from dataclasses import replace
 
+from langchain_core.tools import tool
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.modules.agents_hub.agent.tools.list_documents import list_documents
 from server.app.modules.agents_hub.agent.tools.read_document import read_document
+from server.app.modules.agents_hub.agent.tools.search_knowledge import search_knowledge
 from server.app.modules.agents_hub.database.operational_models import HubDocument
 from server.app.modules.agents_hub.services.retrieval.metadata_filter import MetadataFilter
 from server.app.modules.agents_hub.services.retrieval.types import RetrievalContext
@@ -121,6 +123,9 @@ class AgenticRetrievalStrategy:
             "url": doc.canonical_url,
             "markdown_content": doc.markdown_content,
             "language": doc.language,
+            # Lo que cuesta leerlo entero. El loop lo necesita para no volcar en la
+            # conversación una norma que no cabe (la LCSP son 279.425 tokens).
+            "token_count": doc.token_count,
             "estat_vigencia": doc.estat_vigencia,
             "canonica": doc.canonica,
             # La canonica declara donde esta su hermana; sin esto, pedir la cita literal en
@@ -148,4 +153,13 @@ class AgenticRetrievalStrategy:
         return RetrievalContext(sources=[], mode=self.mode, total_tokens=0)
 
     def get_agent_tools(self) -> list:
-        return [list_documents, read_document]
+        """Lo que el modelo puede llamar, ya envuelto como tool de LangChain.
+
+        `tool()` es lo que filtra los argumentos inyectados del esquema; pasar las funciones
+        desnudas hacía morir a `bind_tools` con `SchemaError` sobre los Protocol.
+
+        `search_knowledge` está aquí porque la normativa **externa** no cabe: las 22 del
+        corpus de Gerencia suman 1.745.337 tokens y la Ley de Contratos sola son 279.425.
+        Sin búsqueda por fragmentos, la única forma de consultarla es cargarla entera.
+        """
+        return [tool(list_documents), tool(read_document), tool(search_knowledge)]

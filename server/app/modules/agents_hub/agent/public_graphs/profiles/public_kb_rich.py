@@ -62,9 +62,16 @@ REGLAS DE RANGO Y VIGENCIA (obligatorias):
 
 _INSTRUCCION_TOOLS = (
     "Usa la tool `list_documents(submateries=[...])` con 1-3 submaterias del indice de "
-    "materias para ver las fichas de las normas de esos temas, y `read_document(id=...)` "
-    "para cargar el texto completo de cada documento que necesites antes de responder. "
-    "Si ninguna submateria encaja, llama a `list_documents` sin submaterias."
+    "materias para ver las fichas de las normas de esos temas, y "
+    "`read_document(document_id=...)` para cargar el texto completo de cada documento que "
+    "necesites antes de responder. "
+    "Si ninguna submateria encaja, llama a `list_documents` sin submaterias. "
+    # La ficha del indice trae el tamano en tokens, asi que el modelo puede decidir antes
+    # de pedir la lectura. Sin esta instruccion pedia igualmente la ley entera y recibia
+    # solo el principio, que es peor que buscar dentro.
+    "Cuando la ficha diga que un documento es muy largo —las normas externas como la Ley "
+    "de Contratos lo son— no lo leas entero: usa `search_knowledge(query=...)` para traer "
+    "los fragmentos que responden a la pregunta, con las palabras de la norma."
 )
 
 

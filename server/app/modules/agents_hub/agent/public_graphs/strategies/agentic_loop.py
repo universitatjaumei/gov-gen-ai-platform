@@ -27,6 +27,32 @@ from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_cont
 MAX_ITERACIONES = 10
 EXCERPT_MAX = 500
 
+#: Por encima de esto, `read_document` no vuelca el documento en la conversación.
+#:
+#: Medido sobre el corpus del piloto: la normativa **propia** más larga son 51.032 tokens,
+#: así que con este techo se sigue leyendo entera —que es lo que permite citar el artículo
+#: exacto—. Las **externas** son otra cosa: las 22 del corpus de Gerencia suman 1.745.337
+#: tokens y la Ley de Contratos sola son 279.425. Esas se consultan por fragmentos.
+LIMITE_LECTURA_TOKENS = 60_000
+
+#: Cuánto del principio se conserva cuando hay que truncar: lo justo para que el modelo vea
+#: de qué norma se trata y cómo está organizada antes de ir a buscar dentro.
+CABECERA_AL_TRUNCAR = 4_000
+
+_AVISO_TRUNCADO = (
+    "\n\n[...]\n\n[El documento son ~{tokens} tokens y no cabe entero en el contexto. "
+    "Arriba está solo el principio. Para el contenido concreto usa "
+    "`search_knowledge(query=...)`, que trae los fragmentos que respondan a la pregunta.]"
+)
+
+
+class FragmentSearcher(Protocol):
+    """Búsqueda por fragmentos para el tool `search_knowledge`."""
+
+    async def search(
+        self, query: str, chatbot_id: str, language: str | None = None
+    ) -> list[EvidenceItem]: ...
+
 
 class DocumentReader(Protocol):
     """Acceso a documentos para los tools del modo selector."""
@@ -45,6 +71,26 @@ class DocumentReader(Protocol):
         ...
 
 
+def _texto(contenido: Any) -> str:
+    """El contenido del mensaje como texto plano.
+
+    Gemini devuelve `content` como **lista de bloques** en cuanto hay más de una parte.
+    Devolverla tal cual reventaba el validador de citas con `TypeError: expected string or
+    bytes-like object, got 'list'`, así que la respuesta no llegaba a salir del grafo.
+    """
+    if isinstance(contenido, str):
+        return contenido
+    if isinstance(contenido, list):
+        partes = []
+        for bloque in contenido:
+            if isinstance(bloque, str):
+                partes.append(bloque)
+            elif isinstance(bloque, dict) and bloque.get("type") == "text":
+                partes.append(bloque.get("text") or "")
+        return "".join(partes)
+    return str(contenido or "")
+
+
 class AgenticLoop:
     """Ejecuta el ciclo LLM ↔ tools hasta que el modelo responde sin pedir tools.
 
@@ -58,10 +104,12 @@ class AgenticLoop:
         reader: DocumentReader,
         tools: list[Any],
         max_iterations: int = MAX_ITERACIONES,
+        searcher: FragmentSearcher | None = None,
     ) -> None:
         self._reader = reader
         self._tools = tools
         self._max_iterations = max_iterations
+        self._searcher = searcher
 
     async def run(
         self,
@@ -83,9 +131,13 @@ class AgenticLoop:
             respuesta = await llm_con_tools.ainvoke(mensajes)
             tool_calls = getattr(respuesta, "tool_calls", None)
             if not tool_calls:
-                return leidas, respuesta.content
+                return leidas, _texto(respuesta.content)
 
-            mensajes.append({"role": "assistant", "content": respuesta.content or ""})
+            # El mensaje entero, no un dict con solo el texto: el `ToolMessage` que va
+            # detrás se casa por `tool_call_id` con los `tool_calls` de ESTE turno. Sin
+            # ellos queda huérfano, el modelo no ve el resultado y vuelve a pedir la misma
+            # tool hasta agotar las iteraciones, devolviendo una respuesta en blanco.
+            mensajes.append(respuesta)
             for llamada in tool_calls:
                 salida = await self._ejecutar(llamada, chatbot_id, language, leidas)
                 mensajes.append(ToolMessage(content=salida, tool_call_id=llamada["id"]))
@@ -112,10 +164,13 @@ class AgenticLoop:
             documento = await self._reader.read(uuid.UUID(doc_id)) if doc_id else None
             if documento is None:
                 return f"Documento {doc_id} no encontrado."
+            texto = documento["markdown_content"]
+            tokens = int(documento.get("token_count") or 0)
+            truncada = tokens > LIMITE_LECTURA_TOKENS
             leidas.append(
                 EvidenceItem(
                     source_id=doc_id,
-                    content=documento["markdown_content"][:EXCERPT_MAX],
+                    content=texto[:EXCERPT_MAX],
                     source_url=documento["url"],
                     title=documento["title"],
                     language=documento.get("language"),
@@ -126,10 +181,41 @@ class AgenticLoop:
                     metadata={
                         "index_fallback_level": getattr(
                             self._reader, "last_index_level", None
-                        )
+                        ),
+                        "lectura_truncada": truncada,
                     },
                 )
             )
-            return documento["markdown_content"]
+            if truncada:
+                return texto[:CABECERA_AL_TRUNCAR] + _AVISO_TRUNCADO.format(tokens=tokens)
+            return texto
+
+        if nombre == "search_knowledge":
+            return await self._buscar(args.get("query", ""), chatbot_id, language, leidas)
 
         return f"Tool {nombre} no reconocida."
+
+    async def _buscar(
+        self,
+        consulta: str,
+        chatbot_id: str,
+        language: str | None,
+        leidas: list[EvidenceItem],
+    ) -> str:
+        """Fragmentos que respondan a la consulta, para lo que no cabe entero.
+
+        Sin buscador —un chatbot sin embeddings— se lo dice al modelo en la salida del tool
+        en vez de reventar el turno: el modelo puede seguir con `read_document`.
+        """
+        if self._searcher is None:
+            return (
+                "La búsqueda por fragmentos no está disponible en este asistente. "
+                "Usa `list_documents` y `read_document`."
+            )
+        encontrados = await self._searcher.search(consulta, chatbot_id, language)
+        if not encontrados:
+            return f"Sin fragmentos para «{consulta}»."
+        leidas.extend(encontrados)
+        return "\n\n".join(
+            f"[{item.title}]({item.source_url})\n{item.content}" for item in encontrados
+        )

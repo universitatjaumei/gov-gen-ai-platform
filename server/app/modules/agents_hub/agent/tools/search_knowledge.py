@@ -1,7 +1,9 @@
 """Herramienta de búsqueda en la base de conocimiento."""
 
 import uuid
-from typing import Protocol
+from typing import Annotated, Any, Protocol
+
+from langchain_core.tools import InjectedToolArg
 
 
 class RetrieverProtocol(Protocol):
@@ -19,23 +21,24 @@ class EmbeddingProtocol(Protocol):
     async def embed(self, text: str) -> list[float]: ...
 
 
+# Todo lo que no es la consulta va **inyectado**: el chatbot, el retriever, los embeddings
+# y el idioma los pone quien orquesta. El modelo solo aporta lo que solo él sabe.
 async def search_knowledge(
     query: str,
-    chatbot_id: str,
-    retriever: RetrieverProtocol,
-    embedding_service: EmbeddingProtocol,
+    chatbot_id: Annotated[str, InjectedToolArg] = "",
+    retriever: Annotated[Any, InjectedToolArg] = None,
+    embedding_service: Annotated[Any, InjectedToolArg] = None,
     top_k: int = 5,
-    language: str | None = None,
+    language: Annotated[str | None, InjectedToolArg] = None,
 ) -> str:
-    """Busca información relevante en la base de conocimiento.
+    """Busca fragmentos concretos dentro del corpus, sin cargar los documentos enteros.
+
+    Es la vía para consultar las normas externas —la Ley de Contratos y similares—, que son
+    demasiado largas para leerlas completas con `read_document`.
 
     Args:
-        query: Consulta de búsqueda
-        chatbot_id: ID del chatbot
-        retriever: Servicio de recuperación
-        embedding_service: Servicio de embeddings
-        top_k: Número de resultados
-        language: Filtro de idioma
+        query: Qué se busca, con las palabras de la norma
+        top_k: Número de fragmentos a traer
 
     Returns:
         Texto formateado con los resultados
