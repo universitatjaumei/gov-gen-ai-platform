@@ -80,7 +80,12 @@ class TestVectorRetrievalStrategy:
         assert len(ctx.sources) == 1
         assert ctx.sources[0].document_id == doc_id
 
-    async def test_uses_document_title_and_canonical_url_when_available(self):
+    async def test_uses_document_title_and_canonical_url_when_available(self, monkeypatch):
+        # PUB.3: sin sitio publicado, la cita va a la URL canónica del documento. Se limpia
+        # la variable a propósito: `server/.env` la define en la máquina de quien desarrolla,
+        # y sin esto el resultado de este test dependía de un fichero que no está en el
+        # repositorio —verde en CI y rojo en local, o al revés—.
+        monkeypatch.delenv("CORPUS_SITE_BASE_URL", raising=False)
         from server.app.modules.agents_hub.services.retrieval.vector_strategy import (
             VectorRetrievalStrategy,
         )

@@ -184,11 +184,21 @@ class IngestionWatcher:
                 token_count=token_count,
                 crawled_page_id=crawled_page_id,
             )
-            self._session.add(doc)
             try:
                 # Savepoint: si falla por clave duplicada solo se revierte el savepoint,
                 # no la transacción exterior (que mantiene el job válido).
+                #
+                # **El `add` va DENTRO.** Estaba fuera, y con eso el objeto entraba en la
+                # transacción exterior: al fallar el flush, la sesión quedaba marcada para
+                # deshacer y el `SELECT` de aquí abajo —el que busca el documento que ya
+                # existe— moría con `PendingRollbackError`. El trabajo terminaba en «falló»
+                # con una traza de SQLAlchemy, en vez de reutilizar el documento.
+                #
+                # Sólo se veía con **dos trabajos a la vez**, que es el caso que este bloque
+                # dice cubrir: en secuencial el savepoint ya absorbía el choque. Reproducido
+                # en `test_subida_duplicada.py::TestDosTrabajosALaVez`.
                 async with self._session.begin_nested():
+                    self._session.add(doc)
                     await self._session.flush()
             except IntegrityError:
                 # Dos jobs concurrentes procesaron el mismo contenido: usar el existente.

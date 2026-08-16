@@ -595,7 +595,11 @@ async def upload_document(
         async for bg_session in get_async_session():
             watcher = IngestionWatcher(
                 session=bg_session,
-                embedding_service=await resolve_embedding_service(session, chatbot_id),
+                # `bg_session` y no `session`: la sesión de la petición ya está cerrada
+                # cuando corre la tarea de fondo —`BackgroundTasks` se ejecuta después de
+                # enviar la respuesta—, así que resolver el servicio con ella es usar algo
+                # que el ciclo de vida de FastAPI ya dio por terminado.
+                embedding_service=await resolve_embedding_service(bg_session, chatbot_id),
                 storage=get_storage_service(),
             )
             await watcher.run_job(job_id)

@@ -204,12 +204,15 @@ class TestLLMConfigsRouter:
         config_provider = AsyncMock()
         config_provider.get_llm_config_for_tier = AsyncMock(return_value=cfg)
 
+        # `asyncio.run` y no `get_event_loop().run_until_complete()`: el segundo reutiliza
+        # el bucle que haya dejado el test anterior, así que este test pasaba o fallaba
+        # según lo que se hubiera ejecutado antes en el mismo proceso. Lo destapó un test
+        # nuevo que usa `asyncio.gather` con su propio motor; el fallo era de aquí, no de
+        # allí. Es la clase de acoplamiento invisible que TST.1 vino a perseguir.
         import asyncio
         with patch(
             "server.app.modules.agents_hub.services.model_factory._build_model",
             return_value=MagicMock(),
         ) as mock_build:
-            asyncio.get_event_loop().run_until_complete(
-                get_model_for_tier(1, config_provider)
-            )
+            asyncio.run(get_model_for_tier(1, config_provider))
             mock_build.assert_called_once_with(cfg)
