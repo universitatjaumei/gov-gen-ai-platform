@@ -179,3 +179,52 @@ proyecto/región de GCP con la Vertex AI API habilitada y credenciales ADC en la
 ⚠️ `docker compose down -v` **sí** borra los volúmenes. Es la única forma de perder el corpus
 por accidente, y basta con no usar `-v`. Reingerirlo cuesta el tiempo y el coste de embedding
 de §2.3, no una restauración.
+
+---
+
+## 9. Resultado del piloto (2026-08-15, bloque PIL completo)
+
+| | Normativa UJI (público) | Gerència (interno) |
+|---|---|---|
+| Documentos | **297** (1 omitido por `us_assistents: no`) | **124** |
+| Fragmentos | **23.306** | **14.198** |
+| Embeddings | `gemini-embedding-001` a 1024 dim, `RETRIEVAL_DOCUMENT`, vía Vertex (`europe-southwest1`) | ídem |
+| `quality_threshold` | 0,7 → **0,6** (recalibrado con medida) | 0,5 |
+| `min_retrieval_results` | 2 → **1** (recalibrado) | 1 |
+
+37.504 fragmentos en total, los 37.504 con procedencia completa y ninguno sin vector. Con
+lotes de 250, ~150 peticiones a Vertex en vez de 37.504.
+
+### Lo que la calibración enseñó, y que no se sabía al planificar
+
+La puntuación del *quality gate* sólo toma tres valores —**0,350, ~0,694 y 0,700**— y la razón
+es estructural: **la rama léxica devuelve 0 resultados para una pregunta natural**, porque
+`websearch_to_tsquery` exige que aparezcan **todos** los términos de la consulta. El híbrido
+es, en la práctica, vectorial puro, y la puntuación normalizada queda topada en
+`vector_weight` = 0,700.
+
+Consecuencias:
+
+1. `quality_threshold: 0.7` era **inalcanzable por construcción**. No era un umbral exigente:
+   era un umbral imposible.
+2. El 0,350 es 0,700 con la penalización `*0.5` de `min_retrieval_results = 2`, que exige
+   **dos documentos distintos**. Una pregunta bien dirigida a una norma devuelve uno, así que
+   el ajuste penalizaba justo los casos buenos.
+3. **Hoy la puerta no gradúa calidad: decide si la recuperación devolvió algo.** Mover el
+   umbral entre 0,4 y 0,7 no cambia nada mientras la rama léxica no funcione.
+
+Medido sobre 24 preguntas del dorado (`preguntes_tipus` del front matter): el público
+recuperaba el documento correcto en **11 de 12** y sólo **3** pasaban la puerta.
+
+**El dorado no salió de donde decía el plan.** `PREGUNTES_GERENCIA.md` son preguntas *para* el
+personal de Gerencia sobre vigencia práctica, con la respuesta vacía a propósito: justo lo que
+el corpus no puede contestar. `preguntes_tipus`, que llevan los 422 documentos, sí sirve.
+
+### Lo que queda abierto
+
+| Hallazgo | Efecto | Dónde |
+|---|---|---|
+| `websearch_to_tsquery` con semántica **Y** | La rama léxica de RAG.4 no dispara nunca con preguntas naturales; media recuperación desaprovechada | `retriever.keyword_search` |
+| Las cuotas de SEC.4 no tienen superficie | Sólo se fijan por SQL; un chatbot `public_anon` queda **sin límite por IP** | ningún router ni pantalla las expone |
+| La página de documentos no escala | Bloquea el navegador ~30-60 s con 297 documentos (con 124 va fina). La API responde en 0,55 s: es renderizado | `DocumentsPage` |
+| Deriva falsa entre parejas bilingües | 13 avisos de DER.2 que son falsos positivos; el detector agrupa por `canonical_url` y no mira `canonica`/`versio_idiomatica_de` | `divergence_detector` |
