@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -68,9 +69,16 @@ class SelectionView(BaseModel):
     model_config = {"from_attributes": True}
 
 
+#: Los tipos de regla que `SelectionRepo.matches` sabe evaluar. Cualquier otro se guardaba
+#: con un 201 y no casaba nunca: en la pantalla, una selección activa y ninguna página
+#: seleccionada, sin nada que explicara por qué (VER.8). Mismo criterio que el spider
+#: desconocido del dispatcher: fallar donde se ve, no caer a algo que parece funcionar.
+TiposDeRegla = Literal["path_prefix", "sitemap_section", "manual"]
+
+
 class SelectionCreate(BaseModel):
     site_id: uuid.UUID
-    rule_type: str
+    rule_type: TiposDeRegla
     rule_value: str | None = None
     auto_ingest_new: bool = True
 
