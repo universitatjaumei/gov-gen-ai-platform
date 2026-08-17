@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from server.app.modules.redaccion.services.charts.chart_factory import ChartFactory
 from server.app.modules.redaccion.services.copilot import (
     CopilotService,
     DocsRetriever,
@@ -125,12 +126,18 @@ async def test_should_answer_question_with_source_refs() -> None:
 
 @pytest.mark.asyncio
 async def test_should_translate_nl_to_chart_config_when_target_is_chart() -> None:
+    """PRO.8 — esto exigía `generate_script`, o sea que el `target_kind` mentía: se pedía una
+    configuración y se devolvía código, con su auditoría y su sandbox detrás.
+
+    El mock lleva `spec=ChartFactory` a propósito: sin él, un `MagicMock` responde a cualquier
+    método y este test seguiría verde con una factoría que ya no tuviera el que llama.
+    """
     chart_result = MagicMock()
     chart_result.model_dump = MagicMock(
-        return_value={"code": "plt.bar(...)", "model_used": "gpt-4o"}
+        return_value={"mode": "configuration", "configuration": {"chart_type": "bar"}}
     )
-    mock_chart_factory = MagicMock()
-    mock_chart_factory.generate_script = AsyncMock(return_value=chart_result)
+    mock_chart_factory = MagicMock(spec=ChartFactory)
+    mock_chart_factory.generate_chart_from_nl = AsyncMock(return_value=chart_result)
 
     service = CopilotService(
         llm=MagicMock(),
@@ -145,9 +152,9 @@ async def test_should_translate_nl_to_chart_config_when_target_is_chart() -> Non
     )
 
     assert response.kind == "chart_config"
-    assert response.payload == {"code": "plt.bar(...)", "model_used": "gpt-4o"}
-    mock_chart_factory.generate_script.assert_awaited_once()
-    call_kwargs = mock_chart_factory.generate_script.await_args.kwargs
+    assert response.payload == {"mode": "configuration", "configuration": {"chart_type": "bar"}}
+    mock_chart_factory.generate_chart_from_nl.assert_awaited_once()
+    call_kwargs = mock_chart_factory.generate_chart_from_nl.await_args.kwargs
     assert call_kwargs["nl_prompt"] == "Gráfico de barras del total por región"
     assert call_kwargs["schema"] == {"columns": ["region", "total"]}
 

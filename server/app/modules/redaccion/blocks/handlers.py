@@ -238,9 +238,24 @@ class ChartHandler:
             color_column=cfg.color_by,
             label_column=cfg.label_column,
             value_column=cfg.value_column,
+            size_column=cfg.size_column,
             aggregation=cfg.aggregation,
+            sort=cfg.sort,
             palette=cfg.palette,
             output_format=cfg.output_format,
+            # PRO.8 — la presentación se perdía aquí: el bloque no la tenía, y lo que el
+            # bloque no tiene el renderizador no puede recibir.
+            title=cfg.title,
+            x_label=cfg.x_label,
+            y_label=cfg.y_label,
+            show_values=cfg.show_values,
+            show_legend=cfg.show_legend,
+            show_grid=cfg.show_grid,
+            bins=cfg.bins,
+            size=cfg.size,
+            style=cfg.style,
+            value_format=cfg.value_format,
+            number_format=cfg.number_format,
         )
 
 

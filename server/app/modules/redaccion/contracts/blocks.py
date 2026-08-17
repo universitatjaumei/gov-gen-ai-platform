@@ -10,6 +10,10 @@ from typing import Annotated, Any, Literal, Union
 from pydantic import BaseModel, Field, model_validator
 
 from server.app.modules.redaccion.contracts.block_io import BlockReference
+from server.app.modules.redaccion.services.charts.chart_configuration import (
+    OrdenDeCategorias,
+    TipoDeGrafico,
+)
 from server.app.modules.redaccion.services.transformation.operations import Operation
 
 
@@ -47,19 +51,41 @@ class TableBlock(_BlockBase):
 
 
 class ChartBlockConfig(BaseModel):
-    """Configuración de visualización para un ChartBlock."""
+    """Configuración de visualización para un ChartBlock.
+
+    PRO.8 — esto es **lo que una plantilla puede pedir**, y hasta aquí no podía pedir ni un
+    título: el renderizador sabía ponerlo, pero este contrato sólo pasaba tipo, columnas,
+    paleta, agregación y formato. Un gráfico con `credito_inicial` como etiqueta de eje no es
+    publicable, y arreglarlo exigía generar un script. Ahora la presentación completa es
+    declarativa.
+    """
 
     mode: Literal["deterministic", "ai"] = "deterministic"
-    chart_type: Literal["bar", "line", "pie", "scatter", "histogram"] = "bar"
+    chart_type: TipoDeGrafico = "bar"
     x_axis: str | None = None
     y_axis: str | None = None
     color_by: str | None = None
     label_column: str | None = None
     value_column: str | None = None
+    size_column: str | None = None
     nl_prompt: str | None = None
     palette: str = "viridis"
     aggregation: Literal["sum", "mean", "count", "min", "max", "none"] = "none"
+    sort: OrdenDeCategorias = "none"
     output_format: Literal["png", "svg"] = "png"
+
+    # Presentación
+    title: str | None = None
+    x_label: str | None = None
+    y_label: str | None = None
+    show_values: bool = False
+    show_legend: bool = True
+    show_grid: bool = True
+    bins: int | None = None
+    size: tuple[float, float] = (10, 6)
+    style: str = "whitegrid"
+    value_format: str = "{:,.2f}"
+    number_format: Literal["es", "en"] = "es"
 
 
 class ChartBlock(_BlockBase):

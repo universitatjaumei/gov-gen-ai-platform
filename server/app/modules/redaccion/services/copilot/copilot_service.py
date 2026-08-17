@@ -84,7 +84,10 @@ class CopilotService:
         if target_kind == "chart_config":
             if self._chart_factory is None:
                 raise ValueError("ChartFactory no configurada en este CopilotService")
-            result = await self._chart_factory.generate_script(
+            # PRO.8 — esto llamaba a `generate_script`, así que el `target_kind` mentía: pedía
+            # una configuración y devolvía código. Ahora devuelve configuración cuando la
+            # petición cabe en el catálogo, y baja al script sólo cuando no cabe.
+            result = await self._chart_factory.generate_chart_from_nl(
                 nl_prompt=instruction, schema=schema
             )
             return CopilotTranslateResponse(

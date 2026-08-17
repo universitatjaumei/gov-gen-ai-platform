@@ -19,9 +19,9 @@ Dos reglas que hacen esto revisable, y que los tests defienden:
 - **El texto por defecto no se copia a la base de datos.** Copiarlo congela el prompt: a
   partir de ahí, mejorarlo aquí no llegaría a quien ya lo abrió en la pantalla.
 
-El catálogo crece **cuando se cablea un consumidor**, no antes. Hoy están las dos actividades
-de PRO.2; ETL (PRO.4), gráficos (PRO.5) y copiloto (PRO.6) entran con su prompt cuando su
-consumidor pase por aquí.
+El catálogo crece **cuando se cablea un consumidor**, no antes. Hoy están las dos actividades de
+PRO.2, el ETL (PRO.4) y la configuración de gráfico (PRO.8). El copiloto sigue fuera: responde
+con su propio prompt de síntesis y no rellena ningún contrato.
 """
 from __future__ import annotations
 
@@ -41,6 +41,7 @@ class ActividadLLM(StrEnum):
     PROPUESTA_DE_SCRIPT = "propuesta_de_script"
     AUDITORIA_DE_SCRIPT = "auditoria_de_script"
     TRANSFORMACION_ETL = "transformacion_etl"
+    CONFIGURACION_DE_GRAFICO = "configuracion_de_grafico"
 
 
 #: Nivel por defecto de cada actividad. Los niveles son 1 (rápido), 2 (lógica) y 3 (supervisión).
@@ -53,6 +54,9 @@ TIER_POR_ACTIVIDAD: dict[ActividadLLM, int] = {
     # Traducir «quita los duplicados y agrupa por capítulo» a operaciones también es
     # programar, aunque el resultado sea JSON y no Python: nivel 2.
     ActividadLLM.TRANSFORMACION_ETL: 2,
+    # Elegir el gráfico y su presentación es la misma tarea que la anterior: rellenar un
+    # contrato cerrado a partir de una frase. Nivel 2.
+    ActividadLLM.CONFIGURACION_DE_GRAFICO: 2,
 }
 
 
@@ -62,6 +66,7 @@ PARA_QUE_SIRVE: dict[ActividadLLM, str] = {
     ActividadLLM.PROPUESTA_DE_SCRIPT: "escribe el script de extracción",
     ActividadLLM.AUDITORIA_DE_SCRIPT: "audita el script escrito",
     ActividadLLM.TRANSFORMACION_ETL: "traduce a operaciones lo que hay que transformar",
+    ActividadLLM.CONFIGURACION_DE_GRAFICO: "elige el gráfico y su presentación",
 }
 
 
@@ -137,9 +142,46 @@ REGLAS:
 fallar la transformación**: no la inventes ni la adivines.
   - Primero limpiar y después analizar. Un fichero real llega con columnas que no se usan, \
 fechas en varios formatos, filas duplicadas y celdas vacías.
+  - **Antes de sumar, agrupar o calcular nada, comprueba el tipo de las columnas de importes.** \
+Si una columna numérica llega como texto (`object`, `str`), pon `to_number` sobre ella la \
+primera: sumar texto no da error, da una cifra mal.
+  - Para una columna derivada usa `compute_column`, y si el cálculo tiene más de dos operandos \
+**encadena varias**: no existe ningún campo de fórmula.
   - En `format_dates`, si conoces el formato de origen decláralo: `01/03/2026` es ambiguo.
+  - Si la tabla es ancha —un mes o un año por columna— y hay que agrupar o dibujar, `unpivot` \
+antes.
   - No inventes operaciones nuevas. Si la petición no encaja en el catálogo, devuelve \
 {"mode": "operations", "operations": []}.
+
+ESQUEMA DE LOS DATOS:
+{esquema_de_datos}"""
+
+
+_PROMPT_GRAFICO = """\
+Eres un especialista en visualización de datos institucionales. Dado un esquema de datos y una \
+petición en lenguaje natural, rellenas una configuración declarativa de gráfico.
+
+DEVUELVE ÚNICAMENTE JSON VÁLIDO sin texto adicional, sin markdown, sin fences.
+
+FORMATO:
+{"mode": "configuration", "configuration": { ... }}
+
+LA CONFIGURACIÓN ADMITE EXACTAMENTE ESTOS CAMPOS:
+{esquema_de_configuracion}
+
+REGLAS:
+  - Usa sólo columnas presentes en el esquema de datos. Una columna que no existe deja el \
+gráfico vacío sin dar error, que es lo peor que puede pasar.
+  - Elige el tipo por lo que se quiere ver, no por lo que suene mejor: comparar categorías es \
+`bar` (`barh` si las etiquetas son largas), la evolución en el tiempo es `line`, el reparto de \
+un total es `pie` o `donut`, la composición por categoría es `bar_stacked`, la relación entre \
+dos magnitudes es `scatter` (`bubble` si hay una tercera), la distribución es `histogram` o \
+`boxplot`, y una matriz de dos dimensiones —capítulo × año— es `heatmap`.
+  - Pon `title` siempre, y `x_label`/`y_label` cuando el nombre de la columna no sea legible \
+para quien lee el informe: `credito_inicial` no es una etiqueta de eje.
+  - En un informe con importes, `show_values: true` y `sort: "desc"` es lo habitual.
+  - Si la petición pide algo que estos campos no pueden expresar, devuelve \
+{"mode": "configuration", "configuration": {}} y se resolverá por otra vía.
 
 ESQUEMA DE LOS DATOS:
 {esquema_de_datos}"""
@@ -149,6 +191,7 @@ PROMPT_POR_ACTIVIDAD: dict[ActividadLLM, str] = {
     ActividadLLM.PROPUESTA_DE_SCRIPT: _PROMPT_PROPUESTA,
     ActividadLLM.AUDITORIA_DE_SCRIPT: _PROMPT_AUDITORIA,
     ActividadLLM.TRANSFORMACION_ETL: _PROMPT_ETL,
+    ActividadLLM.CONFIGURACION_DE_GRAFICO: _PROMPT_GRAFICO,
 }
 
 
@@ -165,6 +208,7 @@ VARIABLES_POR_ACTIVIDAD: dict[ActividadLLM, tuple[str, ...]] = {
     ),
     ActividadLLM.AUDITORIA_DE_SCRIPT: (),
     ActividadLLM.TRANSFORMACION_ETL: ("esquema_de_operaciones", "esquema_de_datos"),
+    ActividadLLM.CONFIGURACION_DE_GRAFICO: ("esquema_de_configuracion", "esquema_de_datos"),
 }
 
 

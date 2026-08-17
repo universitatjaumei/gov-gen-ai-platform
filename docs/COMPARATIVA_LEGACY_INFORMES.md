@@ -17,6 +17,7 @@
 | `focus_manager.py` + `drawer_hub.py` | El copiloto en un **cajón lateral** con pestañas, abierto mientras se trabaja | Replicado en **PRO.6**: botón en la pantalla del informe, cajón con las pestañas y el copiloto, y **arranca cerrado** |
 | Biblioteca de prompts (`SystemPrompt`, `admin_prompts.py`) | `name`/`version`/`content`/**`tier`**, con el defecto por tarea **en código** y sólo el override en base de datos, y un editor con radio de cuatro opciones y variables detectadas | Replicada en **PRO.2.1** para las actividades de plataforma (`/hub/activity-prompts`). Lo de chatbot ya existía (`/hub/prompts`, `/hub/brain`) |
 | Dos niveles de modelo | Tareas distintas, modelos distintos | **PRO.2**: nivel 2 escribe el script, nivel 3 lo audita. El mapa actividad→nivel es catálogo en código, sobreescribible desde la pantalla |
+| `chart_configuration.py` (198 l.) | Configuración de gráfico mucho más rica: título y etiquetas de eje, valores encima, orden, leyenda, tamaño, `bins`, `donut_ratio`, y **quince tipos** frente a cinco | Portado en **PRO.8**, y **PRO.5 se equivocó al dejarlo fuera**. Su razón —«diez tipos que nadie ha pedido es código especulativo»— juzgaba los tipos sin comprobar cuál es la alternativa cuando faltan, y la alternativa es **generar código**: `translate_nl_to_config("chart_config")` no devolvía ninguna configuración, llamaba a `generate_script()`. Además el hueco mayor no eran los tipos: **una plantilla no podía pedir ni un título**, y `show_values` estaba declarado en el contrato y el renderizador lo ignoraba. Detalle abajo |
 
 ## Lo que se dejó fuera, y por qué
 
@@ -25,9 +26,26 @@
 | `script_ingestion_service` + `script_adaptation_service` | Subir un script de fuera y adaptarlo al contrato. En un informe el contrato es estrecho y comprobable por máquina, y cualquier código que lo cumpla **ya entra** por la cola de aprobación; un formulario de subida añadiría una puerta, no una capacidad. Su valor aparece cuando lo que llega es cualquier cosa —RPA, carpetas vigiladas, ERP—: eso es **automatizaciones** |
 | `generate_script()` del servicio determinista de ETL | Genera el Python equivalente a las operaciones. Aquí las operaciones se ejecutan con pandas en proceso; un generador de scripts para lo que ya sabemos ejecutar sería una segunda vía **sin auditoría** |
 | El orquestador `etl_factory.py` (leer → generar → auditar → sandbox) | Ese papel lo hacen el grafo (`FileNormalizationNode` materializa, el nodo de extracción lee) y `ETLService`. Portarlo sería duplicar la orquestación |
-| `chart_configuration.py` completo (198 l.) | Su configuración es más rica: **15 tipos** de gráfico frente a 5, título y etiquetas de eje, estilo, tamaño, leyenda, valores encima, orientación, `bins`, `explode`, `donut_ratio`, `sort_values`. **PRO.5 no lo porta a propósito**: el criterio era que el gráfico llegue al informe, y añadir diez tipos que nadie ha pedido es código especulativo. Queda anotado para cuando alguien pida un `boxplot` |
+| `violin` y `pairplot` de `chart_configuration.py` | Son gráficos de **exploración estadística**, no de informe, y `pairplot` devuelve un grid de ejes que no cabe en el `fig, ax` de este servicio. El resto de ese fichero **sí se portó en PRO.8**: ver la fila de arriba |
 | `extraction_service.py` (163 KB) | El usuario lo señala como el módulo más probado del legacy, y aquí `pdf_text_pipeline` + `pdf_table_pipeline` ya extrajeron bien un Excel real en VER.4 y un Excel por script en PRO.2. No se toca sin un caso que falle: reemplazar lo que funciona por 163 KB de otro sitio no es portar, es apostar |
 | La UI de ETL paso a paso | El bloque `DATA_TRANSFORM` de una plantilla es la superficie equivalente y no necesita asistente propio |
+
+## Gráficos: qué quedó tras PRO.8
+
+Once tipos, y **seis de ellos eran un parámetro de lo que ya se hacía**, que es lo que hacía
+absurdo pagar un script por ellos: `barh` son los ejes cruzados, `bar_grouped` y `line_multi` ya
+existían como `color_by`, `bar_stacked` es un pivot y una llamada, `donut` es un `wedgeprops`, y
+`bubble` es `scatter` con `size=`. Los dos verdaderamente nuevos son `boxplot` y `heatmap` —y el
+heatmap es la forma más institucional que hay: capítulo × año—.
+
+Con la presentación completa expresable desde la plantilla (título, etiquetas, cifras encima,
+orden, leyenda, rejilla, tamaño, `bins`) y `translate_nl_to_config` devolviendo **configuración**
+en vez de código cuando la petición cabe en el catálogo.
+
+Un defecto que no cazó ningún test y apareció **mirando el PNG**: las cifras salían en formato
+inglés —`128,340.55`— en un informe de una institución española. Los tests comprobaban que la
+cifra estaba, y estaba. Ahora `number_format` por defecto es `es` y también separa los millares
+del eje.
 
 ## Lo que había aquí y el legacy no tenía
 

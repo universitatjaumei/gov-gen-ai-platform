@@ -18,10 +18,11 @@ PRO.4 porta las diez que faltaban. La comparación completa está en
 """
 from __future__ import annotations
 
-import types
-from typing import Annotated, Any, Literal, Union, get_args, get_origin
+from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field, TypeAdapter
+
+from server.app.modules.redaccion.services.contrato_legible import tipo_legible
 
 
 # ---------------------------------------------------------------------------
@@ -164,24 +165,110 @@ class DropNullRowsOp(BaseModel):
     how: Literal["any", "all"] = "any"
 
 
+# ---------------------------------------------------------------------------
+# PRO.9 — lo que una hoja de cálculo necesita para llegar a un informe
+#
+# Estas cuatro no vienen del legacy: allí tampoco existían. Son el hueco que quedaba entre
+# «limpiar una tabla» y «tener los datos que el informe necesita».
+# ---------------------------------------------------------------------------
+
+
+class ToNumberOp(BaseModel):
+    """Convierte a número una columna que llega como texto.
+
+    **Es la operación más importante de las cuatro, y la que menos se ve.** Cualquier
+    aplicación de gestión de aquí exporta `1.234,56 €`, y sobre texto `sum()` concatena o
+    revienta: el informe sale con una cifra mal y **sin un error que mirar**. Va antes que
+    cualquier cálculo o agregación.
+
+    Los defectos son los de aquí (`,` decimal y `.` de millares); una hoja en inglés los
+    declara al revés.
+    """
+
+    op: Literal["to_number"] = "to_number"
+    columns: list[str]
+    decimal_separator: str = ","
+    thousands_separator: str = "."
+    strip: list[str] = Field(
+        default_factory=lambda: ["€", "%", "$", "EUR", "eur"],
+        description="Símbolos que se quitan antes de convertir",
+    )
+
+
+OperadorAritmetico = Literal["+", "-", "*", "/"]
+
+
+class ComputeColumnOp(BaseModel):
+    """Una columna calculada a partir de dos operandos.
+
+    `pct = obligaciones / credito * 100` es *la* transformación de un informe presupuestario.
+
+    **Sin campo de fórmula y sin `eval`**, a propósito: el auditor de PRO.1 prohíbe
+    exactamente eso en un script, y admitirlo aquí sería una puerta trasera a lo mismo por otra
+    vía. Lo compuesto se consigue **encadenando** operaciones —`t = a + b`, `pct = t / c`,
+    `drop t`—: más verboso, auditable, y se puede pintar en una pantalla.
+
+    Un operando de texto es **siempre** un nombre de columna; si no existe, falla. Tomarlo por
+    una constante de texto daría una columna de basura sin avisar.
+    """
+
+    op: Literal["compute_column"] = "compute_column"
+    target: str
+    left: str | float
+    operator: OperadorAritmetico
+    right: str | float
+    scale: float = Field(default=1.0, description="Multiplica el resultado; 100 para un %")
+    round_to: int | None = None
+
+
+class SortRowsOp(BaseModel):
+    """Ordena las filas. Una tabla de informe se lee ordenada."""
+
+    op: Literal["sort_rows"] = "sort_rows"
+    by: list[str]
+    ascending: bool = True
+
+
+class UnpivotOp(BaseModel):
+    """De ancho a largo: las cabeceras `ene feb mar` pasan a ser valores de una columna.
+
+    El inverso de `pivot`, que ya existía. Las hojas institucionales son anchas —un mes o un año
+    por columna— y un informe necesita largo para agrupar y para dibujar.
+
+    `value_columns` vacío = todas las que no sean identificador.
+    """
+
+    op: Literal["unpivot"] = "unpivot"
+    id_columns: list[str]
+    value_columns: list[str] | None = None
+    variable_name: str = "variable"
+    value_name: str = "value"
+
+
 Operation = Annotated[
     Union[
         FilterOp, AggregateOp, JoinOp, PivotOp, NormalizeOp, GroupByOp,
         DropColumnsOp, RenameColumnsOp, MergeColumnsOp, ReorderColumnsOp,
         FormatDatesOp, ReplaceValuesOp, NormalizeTextOp, FillNullsOp,
         RemoveDuplicatesOp, DropNullRowsOp,
+        ToNumberOp, ComputeColumnOp, SortRowsOp, UnpivotOp,
     ],
     Field(discriminator="op"),
 ]
 
 _OPERATION_LIST_ADAPTER: TypeAdapter[list[Operation]] = TypeAdapter(list[Operation])
 
-#: El orden en que se le enseñan al modelo: primero limpiar, después analizar.
+#: El orden en que se le enseñan al modelo: primero limpiar, después calcular, después analizar
+#: y por último remodelar. `to_number` abre la lista porque sin ella todo lo que viene después
+#: opera sobre texto.
 _MODELOS_DE_OPERACION = (
+    ToNumberOp,
     DropColumnsOp, RenameColumnsOp, MergeColumnsOp, ReorderColumnsOp,
     FormatDatesOp, ReplaceValuesOp, NormalizeTextOp, FillNullsOp,
     RemoveDuplicatesOp, DropNullRowsOp,
-    FilterOp, AggregateOp, GroupByOp, PivotOp, NormalizeOp, JoinOp,
+    ComputeColumnOp,
+    FilterOp, AggregateOp, GroupByOp, PivotOp, UnpivotOp, NormalizeOp, JoinOp,
+    SortRowsOp,
 )
 
 
@@ -198,28 +285,10 @@ def catalogo_de_operaciones() -> str:
         for nombre, campo in modelo.model_fields.items():
             if nombre == "op":
                 continue
-            campos.append(f'"{nombre}": {_tipo_legible(campo.annotation)}')
+            campos.append(f'"{nombre}": {tipo_legible(campo.annotation)}')
         nombre_op = modelo.model_fields["op"].default
         lineas.append('  {"op": "%s"%s}' % (nombre_op, ", " + ", ".join(campos) if campos else ""))
     return "\n".join(lineas)
-
-
-def _tipo_legible(anotacion: Any) -> str:
-    """Los valores admitidos si son cerrados, y el nombre del tipo si no."""
-    origen = get_origin(anotacion)
-    if origen is Literal:
-        return "|".join(str(v) for v in get_args(anotacion))
-    # `Optional[x]` y `x | None` son la misma cosa con dos orígenes distintos: sin las dos, el
-    # catálogo le enseña al modelo `list[str] | None` en vez de `[str]`.
-    if origen is Union or origen is types.UnionType:
-        partes = [a for a in get_args(anotacion) if a is not type(None)]
-        return "|".join(_tipo_legible(p) for p in partes)
-    if origen in (list, set):
-        interno = get_args(anotacion)
-        return f"[{_tipo_legible(interno[0])}]" if interno else "[]"
-    if origen is dict:
-        return "{...}"
-    return getattr(anotacion, "__name__", str(anotacion))
 
 
 def parse_operations(payload: list[dict]) -> list[Operation]:
