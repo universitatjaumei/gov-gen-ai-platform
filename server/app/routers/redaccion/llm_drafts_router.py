@@ -29,6 +29,7 @@ from server.app.modules.redaccion.database.repos import (
     ReportTemplateVersionRepo,
     WorkspaceRepo,
 )
+from server.app.modules.agents_hub.services.model_factory import get_model_for_tier
 from server.app.modules.redaccion.services.draft_validator import DraftValidator
 from server.app.modules.redaccion.services.llm_spec_service import LLMSpecService
 
@@ -76,12 +77,30 @@ class ApproveAsWorkspaceResponse(BaseModel):
 # LLM service dependency — override in production via app.dependency_overrides
 # ---------------------------------------------------------------------------
 
-async def get_llm_spec_service() -> LLMSpecService:
-    """Stub: connect to model_factory in 9R.6.x. Override this dependency."""
-    raise HTTPException(
-        status_code=503,
-        detail="LLM spec service not configured.",
-    )
+async def get_llm_spec_service(
+    session: AsyncSession = Depends(get_session),
+) -> LLMSpecService:
+    """El servicio de propuesta de plantillas, con el modelo de la cascada (VER.2).
+
+    Era un stub que devolvía 503 siempre, así que la puerta de entrada natural del módulo
+    —describir el informe y que la plantilla se proponga sola— estaba cerrada aunque
+    `LLMSpecService` llevara escrito y probado desde 9R.
+
+    El 503 se conserva para el caso que de verdad lo merece —no hay modelo configurado— y
+    **con el motivo dentro**: es la diferencia entre «esto no está montado» y «esto está
+    roto», y sin ella hay que ir al log del servidor para distinguirlas.
+    """
+    from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
+
+    try:
+        modelo = await get_model_for_tier(1, LocalConfigProvider(session))
+    except Exception as fallo:  # noqa: BLE001
+        raise HTTPException(
+            status_code=503,
+            detail=f"No hay modelo de redacción disponible: {fallo}",
+        ) from fallo
+
+    return LLMSpecService(modelo, getattr(modelo, "model_name", None) or "desconocido")
 
 
 # ---------------------------------------------------------------------------
