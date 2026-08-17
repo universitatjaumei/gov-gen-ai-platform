@@ -227,13 +227,19 @@ async def export_site_report(
     await assert_site_org_access(session, site_id, current_user)
     report = await builder.build(site_id)
 
+    DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
     if report_format.lower() == "pdf":
         data = await exporter.to_pdf(report)
-        media_type = "application/pdf"
-        filename = f"informe_calidad_{site_id}.pdf"
+        # `to_pdf` cae a DOCX cuando no hay LibreOffice, y hasta aquí la respuesta seguía
+        # diciendo `application/pdf` con extensión `.pdf`: quien lo descargaba se llevaba un
+        # ZIP que Adobe no abre y que no dice por qué. El fallback tiene que verse.
+        es_pdf = data[:4] == b"%PDF"
+        media_type = "application/pdf" if es_pdf else DOCX
+        filename = f"informe_calidad_{site_id}." + ("pdf" if es_pdf else "docx")
     else:
         data = await exporter.to_docx(report)
-        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        media_type = DOCX
         filename = f"informe_calidad_{site_id}.docx"
 
     return Response(
