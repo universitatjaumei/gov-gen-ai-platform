@@ -13,6 +13,7 @@ import pandas as pd
 
 from server.app.modules.redaccion.services.transformation.operations import (
     AggregateOp,
+    ComputeColumnOp,
     DropColumnsOp,
     DropNullRowsOp,
     FillNullsOp,
@@ -29,11 +30,24 @@ from server.app.modules.redaccion.services.transformation.operations import (
     RenameColumnsOp,
     ReorderColumnsOp,
     ReplaceValuesOp,
+    SortRowsOp,
+    ToNumberOp,
+    UnpivotOp,
 )
 
 
 class UnknownOperationError(TypeError):
     pass
+
+
+class TransformacionImposibleError(ValueError):
+    """La operación está bien escrita pero no puede dar un resultado con estos datos.
+
+    PRO.9 — se distingue de `ColumnaInexistenteError` porque el arreglo es distinto: aquí la
+    columna existe y la configuración es la que está mal. El caso que la motiva es `to_number`
+    sobre una columna en la que **nada** se convierte: los separadores están al revés, y
+    dejarlo pasar vacía la tabla en silencio.
+    """
 
 
 class ColumnaInexistenteError(KeyError):
@@ -59,6 +73,65 @@ def _exigir_columnas(df: pd.DataFrame, columnas: list[str], operacion: str) -> N
         raise ColumnaInexistenteError(
             f"{operacion}: la tabla no tiene {faltan}. Columnas disponibles: {list(df.columns)}"
         )
+
+
+#: Espacios que separan millares en una hoja real, incluido el irrompible que pega Excel.
+_ESPACIOS = (" ", " ", " ", "\t")
+
+
+def _limpiar_numero(valor: str, op: ToNumberOp) -> str:
+    """`"(1.234,56 €)"` → `"-1234.56"`, listo para `pd.to_numeric`."""
+    texto = valor.strip()
+    for simbolo in op.strip:
+        texto = texto.replace(simbolo, "")
+    for espacio in _ESPACIOS:
+        texto = texto.replace(espacio, "")
+    # En contabilidad, un importe entre paréntesis es negativo.
+    negativo = texto.startswith("(") and texto.endswith(")")
+    if negativo:
+        texto = texto[1:-1]
+    if op.thousands_separator:
+        texto = texto.replace(op.thousands_separator, "")
+    if op.decimal_separator and op.decimal_separator != ".":
+        texto = texto.replace(op.decimal_separator, ".")
+    return f"-{texto}" if negativo and texto else texto
+
+
+def _exigir_separadores_coherentes(texto: pd.Series, columna: str, op: ToNumberOp) -> None:
+    """Los separadores declarados al revés dan **otro número**, no un hueco.
+
+    `1,234.56` leído con la coma como decimal sale 1,23456: convierte, no falla, y el informe se
+    publica con la cifra mal. Lo que delata la contradicción es la posición: el separador de
+    millares nunca va **después** del decimal.
+    """
+    if not op.thousands_separator or not op.decimal_separator:
+        return
+    if op.thousands_separator == op.decimal_separator:
+        raise TransformacionImposibleError(
+            f"to_number: el separador decimal y el de millares no pueden ser el mismo "
+            f"({op.decimal_separator!r})"
+        )
+    for valor in texto:
+        decimal = valor.rfind(op.decimal_separator)
+        millares = valor.rfind(op.thousands_separator)
+        if decimal >= 0 and millares > decimal:
+            raise TransformacionImposibleError(
+                f"to_number: en {columna!r} el valor {valor!r} lleva el separador de millares "
+                f"({op.thousands_separator!r}) después del decimal ({op.decimal_separator!r}). "
+                f"Los separadores están declarados al revés: convertirlo daría otra cifra."
+            )
+
+
+def _operando(df: pd.DataFrame, valor: str | float, operacion: str) -> "pd.Series | float":
+    """Una columna si es texto, una constante si es número.
+
+    Un texto es **siempre** un nombre de columna: si no existe, falla. Tomarlo por una constante
+    de texto daría una columna de basura sin decir nada.
+    """
+    if isinstance(valor, (int, float)) and not isinstance(valor, bool):
+        return float(valor)
+    _exigir_columnas(df, [str(valor)], operacion)
+    return pd.to_numeric(df[str(valor)], errors="coerce")
 
 
 JoinableResolver = Callable[[str], pd.DataFrame]
@@ -118,6 +191,16 @@ class DeterministicETLService:
                 if op.subset:
                     _exigir_columnas(result, op.subset, "drop_null_rows")
                 result = result.dropna(subset=op.subset, how=op.how)
+            # PRO.9 — lo que una hoja de cálculo necesita para llegar a un informe.
+            elif isinstance(op, ToNumberOp):
+                result = self._to_number(result, op)
+            elif isinstance(op, ComputeColumnOp):
+                result = self._compute_column(result, op)
+            elif isinstance(op, SortRowsOp):
+                _exigir_columnas(result, op.by, "sort_rows")
+                result = result.sort_values(op.by, ascending=op.ascending).reset_index(drop=True)
+            elif isinstance(op, UnpivotOp):
+                result = self._unpivot(result, op)
             else:
                 raise UnknownOperationError(f"Unknown operation type: {type(op).__name__}")
         return result
@@ -181,6 +264,72 @@ class DeterministicETLService:
             elif op.mode == "snake_case":
                 salida[col] = texto.map(_a_snake_case)
         return salida
+
+    # ------------------------------------------------------------------
+    # De una hoja de cálculo a los datos del informe (PRO.9)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _to_number(df: pd.DataFrame, op: ToNumberOp) -> pd.DataFrame:
+        """Texto con formato de aquí → número.
+
+        Callarse cuando **nada** se convierte sería lo peor: la tabla saldría vacía y el
+        informe con ella. Una celda suelta ilegible sí es un dato ausente, y se ve.
+        """
+        _exigir_columnas(df, op.columns, "to_number")
+        salida = df.copy()
+        for col in op.columns:
+            if pd.api.types.is_numeric_dtype(salida[col]):
+                continue
+            texto = salida[col].astype(str)
+            _exigir_separadores_coherentes(texto, col, op)
+            tenia_valor = texto.str.strip().str.lower().isin(["", "nan", "none", "<na>"]).eq(False)
+            convertida = pd.to_numeric(
+                texto.map(lambda v: _limpiar_numero(v, op)), errors="coerce"
+            )
+            if tenia_valor.any() and convertida.notna().sum() == 0:
+                raise TransformacionImposibleError(
+                    f"to_number: no se ha podido convertir ni un valor de {col!r} con "
+                    f"decimal={op.decimal_separator!r} y millares={op.thousands_separator!r}. "
+                    f"Ejemplo del contenido: {texto.iloc[0]!r}"
+                )
+            salida[col] = convertida
+        return salida
+
+    @staticmethod
+    def _compute_column(df: pd.DataFrame, op: ComputeColumnOp) -> pd.DataFrame:
+        salida = df.copy()
+        izquierda = _operando(salida, op.left, "compute_column")
+        derecha = _operando(salida, op.right, "compute_column")
+        if op.operator == "+":
+            valores = izquierda + derecha
+        elif op.operator == "-":
+            valores = izquierda - derecha
+        elif op.operator == "*":
+            valores = izquierda * derecha
+        else:
+            valores = izquierda / derecha
+        valores = valores * op.scale
+        # Un `inf` en una tabla de informe es basura publicada; un hueco se ve y se pregunta.
+        valores = pd.to_numeric(valores, errors="coerce").replace(
+            [float("inf"), float("-inf")], pd.NA
+        )
+        if op.round_to is not None:
+            valores = valores.round(op.round_to)
+        salida[op.target] = valores
+        return salida
+
+    @staticmethod
+    def _unpivot(df: pd.DataFrame, op: UnpivotOp) -> pd.DataFrame:
+        _exigir_columnas(df, op.id_columns, "unpivot")
+        valores = op.value_columns or [c for c in df.columns if c not in op.id_columns]
+        _exigir_columnas(df, valores, "unpivot")
+        return df.melt(
+            id_vars=op.id_columns,
+            value_vars=valores,
+            var_name=op.variable_name,
+            value_name=op.value_name,
+        )
 
     # ------------------------------------------------------------------
     # Operadores

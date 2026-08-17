@@ -1,8 +1,13 @@
 # ETL: qué se portó del legacy y qué se dejó
 
-> Escrito en **PRO.4** (2026-08-17). El legacy es `C:\Users\fabra\Documents\AutomatIA`, la
-> aplicación NiceGUI de la que sale este módulo. Esto existe para que nadie tenga que volver a
-> leer 1.143 líneas de allí para averiguar lo mismo.
+> Escrito en **PRO.4** (2026-08-17) y ampliado en **PRO.9** el mismo día. El legacy es
+> `C:\Users\fabra\Documents\AutomatIA`, la aplicación NiceGUI de la que sale este módulo. Esto
+> existe para que nadie tenga que volver a leer 1.143 líneas de allí para averiguar lo mismo.
+>
+> **Respuesta corta a «¿queda algo por migrar del legacy?»: no.** Su catálogo de modelos
+> (`client_app/app/models/transform_operations.py`) son exactamente las once operaciones que
+> PRO.4 portó, y `etl_page.py` y `data_contract_service.py` no añaden ninguna transformación más.
+> Lo que faltaba —y motivó **PRO.9**— es un hueco que allí tampoco estaba cubierto.
 
 Lo leído: `client_app/app/services/deterministic_etl_service.py` (350 l.),
 `client_app/app/services/etl_service.py` (424 l.) y `client_app/app/modules/factory/etl_factory.py`
@@ -33,6 +38,47 @@ informe se quedaba en agrupar lo que ya estuviera limpio — que casi nunca lo e
 | `RemoveDuplicates` | `remove_duplicates` | |
 | `RemoveNullRows` | `drop_null_rows` | Renombrada: «quitar filas nulas» describe mejor lo que hace |
 | `FilterRows` | ya existía como `filter` | El nuestro tiene además `in`, `isnull` y `notnull` |
+
+## Lo que ni el legacy ni nosotros teníamos (PRO.9)
+
+El legacy sabía **limpiar** una tabla. Ni él ni nosotros sabíamos convertirla en **los datos que
+un informe necesita**. Cuatro operaciones, y hasta PRO.9 cada una costaba un script generado por
+un modelo, auditado y ejecutado en el sandbox.
+
+| Operación | Para qué | Por qué no podía esperar |
+|---|---|---|
+| `to_number` | `"1.234,56 €"` → `1234.56` | **La más importante y la que menos se ve.** Cualquier aplicación de gestión de aquí exporta los importes así, y sobre texto `sum()` **concatena**: medido en la verificación de PRO.9, sumar la columna de obligaciones daba la cadena `'128.340,55 €45.120,00 €12.890,75 €(1.500,00)'`. Sin error, sin aviso, y un informe con la cifra mal |
+| `compute_column` | `pct = obligaciones / credito * 100` | Es *la* transformación de un informe presupuestario |
+| `sort_rows` | Ordenar la tabla | Una tabla de informe se lee ordenada, y ordenarla no es programar |
+| `unpivot` | Cabeceras `ene feb mar` → columna `mes` | Las hojas institucionales son anchas y un informe necesita largo. `pivot` ya estaba; el inverso, no |
+
+Tres decisiones dentro de esas cuatro:
+
+**`compute_column` no admite fórmulas, y no es un descuido.** No hay campo `formula`, ni
+`expression`, ni nada que se evalúe: el auditor de PRO.1 prohíbe `eval` y `exec` en un script, y
+admitir una expresión aquí sería la misma capacidad por otra puerta, esta vez sin auditor
+delante. La forma es declarativa —operando, operador de un conjunto cerrado, operando, factor— y
+lo compuesto se **encadena**: `t = a + b`, `pct = t / c`, `drop t`. Más verboso, auditable, y se
+puede pintar en una pantalla. Un operando de texto es **siempre** una columna: si no existe,
+falla, porque tomarlo por una constante de texto daría una columna de basura sin avisar.
+
+**Dividir por cero deja un hueco, no un infinito.** Un `inf` en una tabla publicada es basura; un
+hueco se ve y se pregunta.
+
+**`to_number` falla en dos casos, y los dos son de configuración, no de datos.** Si no se
+convierte **ni un valor** de la columna, y si los separadores están declarados al revés —lo
+delata que el de millares aparezca *después* del decimal—. El segundo se descubrió escribiendo el
+test: se esperaba que `"1,234.56"` en configuración española no se convirtiera, y sí se convierte,
+**a 1,23456**. Una cifra distinta es peor que una columna vacía, porque la columna vacía se ve.
+Una celda suelta ilegible sí es un dato ausente y queda en blanco, igual que en `format_dates`.
+
+## Un derroche que se arregló de paso (PRO.9)
+
+El prompt le pide al modelo que devuelva `operations: []` cuando la petición no cabe en el
+catálogo. Esa respuesta **deliberada** se trataba como un plan inválido y se reintentaba dos veces
+más: tres llamadas para volver a oír lo mismo, y sólo entonces el script. Ahora se distingue lo
+que el modelo puede corregir —un JSON roto, un campo mal— de lo que ha decidido. Mismo arreglo en
+`ChartFactory`.
 
 ## Divergencias deliberadas
 

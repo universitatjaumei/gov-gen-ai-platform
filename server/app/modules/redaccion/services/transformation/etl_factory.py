@@ -39,33 +39,15 @@ from server.app.modules.redaccion.services.transformation.operations import (
 
 MAX_REFINEMENT_ITERATIONS = 3
 
+
+class _NoEncajaEnElCatalogo(Exception):
+    """El modelo ha dicho, a propósito, que la petición no cabe en las operaciones.
+
+    No se reintenta: reintentar una respuesta deliberada quema dos llamadas para volver a oír lo
+    mismo. Sólo se reintenta lo que el modelo puede corregir —un JSON roto, un campo mal—.
+    """
+
 _PROMPT_VERSION = "etl_operations_v1"
-
-_SYSTEM_PROMPT = """\
-Eres un planificador de transformaciones tabulares. Dado un esquema y una
-instrucción en lenguaje natural, produces un plan declarativo en JSON.
-
-DEVUELVE ÚNICAMENTE JSON VÁLIDO sin texto adicional, sin markdown, sin fences.
-
-FORMATO:
-{
-  "mode": "operations",
-  "operations": [ ... ]
-}
-
-CADA OPERACIÓN DEBE SER UNA DE ESTAS:
-  {"op": "filter",    "col": <str>, "comparator": "==|!=|>|<|>=|<=|contains|not_contains|in|isnull|notnull", "value": <any>}
-  {"op": "aggregate", "col": <str>, "function": "sum|mean|min|max|count|median|std"}
-  {"op": "join",      "other_block_ref": <str>, "on": <str|list[str]>, "how": "inner|left|right|outer"}
-  {"op": "pivot",     "index": <str|list[str]>, "columns": <str>, "values": <str>, "aggfunc": "sum|mean|min|max|count"}
-  {"op": "normalize", "cols": [<str>], "method": "min_max|z_score"}
-  {"op": "groupby",   "cols": [<str>], "agg_dict": {<col>: "sum|mean|min|max|count|median|std"}}
-
-REGLAS:
-  - Usa solo columnas presentes en el esquema.
-  - No inventes operaciones nuevas; si la petición no encaja, devuelve {"mode": "operations", "operations": []}.
-  - El campo "mode" es siempre "operations".
-"""
 
 _FALLBACK_SCRIPT_SYSTEM_PROMPT = """\
 La petición no encaja en el catálogo de operaciones declarativas. Genera un
@@ -137,6 +119,8 @@ class ETLFactory:
                     model_used=self._model_name,
                     refinement_iterations=iterations,
                 )
+            except _NoEncajaEnElCatalogo:
+                break
             except (ValidationError, ValueError, json.JSONDecodeError) as exc:
                 last_error = str(exc)[:500]
                 iterations += 1
@@ -163,7 +147,7 @@ class ETLFactory:
             script_code=code,
             script_audit=audit,
             model_used=self._model_name,
-            refinement_iterations=MAX_REFINEMENT_ITERATIONS,
+            refinement_iterations=iterations,
         )
 
     # ------------------------------------------------------------------
@@ -221,7 +205,9 @@ class ETLFactory:
             raise ValueError(f"Unexpected mode in response: {data.get('mode')!r}")
         ops_payload = data.get("operations")
         if not isinstance(ops_payload, list) or not ops_payload:
-            raise ValueError("Response contains no operations")
+            # PRO.9 — el prompt le pide al modelo que devuelva la lista vacía cuando la petición
+            # no encaja en el catálogo, así que esto es una **respuesta**, no un plan inválido.
+            raise _NoEncajaEnElCatalogo("la respuesta no trae ninguna operación")
         return parse_operations(ops_payload)
 
     @staticmethod

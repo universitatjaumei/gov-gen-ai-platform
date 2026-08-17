@@ -151,3 +151,55 @@ class TestETLFactoryOperations:
         assert plan.mode == "script"
         assert plan.script_audit is not None
         assert plan.script_audit.approved is False
+
+
+# ──────────────────────────────────────────────────────────────────
+# PRO.9 — «no encaja» es una respuesta, no un fallo que reintentar
+# ──────────────────────────────────────────────────────────────────
+
+
+class _LLMContado:
+    def __init__(self, *respuestas: str) -> None:
+        self._respuestas = list(respuestas)
+        self.llamadas = 0
+
+    async def ainvoke(self, messages):  # noqa: ANN001, ANN201
+        self.llamadas += 1
+        if not self._respuestas:
+            raise AssertionError("el modelo se ha llamado más veces de las previstas")
+        return type("R", (), {"content": self._respuestas.pop(0)})()
+
+
+@pytest.mark.asyncio
+async def test_una_lista_vacia_baja_al_script_a_la_primera() -> None:
+    """El prompt le dice al modelo que devuelva `operations: []` cuando la petición no encaja.
+
+    Hasta PRO.9 esa respuesta deliberada se trataba como un plan inválido y se reintentaba dos
+    veces más: tres llamadas para volver a oír lo mismo, y sólo entonces el script. Se reintenta
+    lo que el modelo puede corregir; no lo que ha decidido.
+    """
+    llm = _LLMContado(
+        json.dumps({"mode": "operations", "operations": []}),
+        "def transform(df):\n    return df\n",
+    )
+    plan = await ETLFactory(llm, "m").generate_operations_from_nl(
+        nl_prompt="haz un análisis de series temporales con ARIMA", schema={"columns": ["a"]}
+    )
+
+    assert plan.mode == "script"
+    assert llm.llamadas == 2
+
+
+@pytest.mark.asyncio
+async def test_un_json_roto_si_se_reintenta() -> None:
+    llm = _LLMContado(
+        "esto no es JSON",
+        json.dumps({"mode": "operations", "operations": [{"op": "sort_rows", "by": ["a"]}]}),
+    )
+    plan = await ETLFactory(llm, "m").generate_operations_from_nl(
+        nl_prompt="ordena por a", schema={"columns": ["a"]}
+    )
+
+    assert plan.mode == "operations"
+    assert plan.refinement_iterations == 1
+    assert llm.llamadas == 2
