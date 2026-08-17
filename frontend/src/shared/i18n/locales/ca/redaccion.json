@@ -104,6 +104,7 @@
     "block_region": "Bloc {{type}}: {{id}}"
   },
   "nav_templates": "Plantilles",
+  "nav_llm_draft": "Proposar amb IA",
   "nav_new_report": "Nou informe",
   "nav_scripts_review": "Revisió de scripts",
   "nav_aria": "Navegació d'informes"

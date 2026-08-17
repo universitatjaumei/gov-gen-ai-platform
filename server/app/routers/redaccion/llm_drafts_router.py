@@ -14,7 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, get_session, require_role
 from server.app.core.auth.models import UserInfo
-from server.app.routers.redaccion._actor import user_to_uuid as _user_to_uuid
+from server.app.routers.redaccion._actor import (
+    nombre_del_modelo,
+    user_to_uuid as _user_to_uuid,
+)
 from server.app.modules.redaccion.contracts.drafts import (
     ReportTemplateDraft,
     ReportTemplateDraftValidationResult,
@@ -31,7 +34,11 @@ from server.app.modules.redaccion.database.repos import (
 )
 from server.app.modules.agents_hub.services.model_factory import get_model_for_tier
 from server.app.modules.redaccion.services.draft_validator import DraftValidator
-from server.app.modules.redaccion.services.llm_spec_service import LLMSpecService
+from server.app.modules.redaccion.services.llm_spec_service import (
+    LLMSpecService,
+    PropuestaInvalidaError,
+)
+from server.app.modules.redaccion.services.spec_builder import spec_desde_borrador
 
 router = APIRouter(prefix="/redaccion/llm-drafts", tags=["redaccion-llm-drafts"])
 
@@ -100,7 +107,7 @@ async def get_llm_spec_service(
             detail=f"No hay modelo de redacción disponible: {fallo}",
         ) from fallo
 
-    return LLMSpecService(modelo, getattr(modelo, "model_name", None) or "desconocido")
+    return LLMSpecService(modelo, nombre_del_modelo(modelo))
 
 
 # ---------------------------------------------------------------------------
@@ -117,7 +124,15 @@ async def propose(
     owner_kind: Literal["admin", "user"] = (
         "admin" if user.role in ("superadmin", "admin") else "user"
     )
-    return await service.propose_template(body.prompt_nl, owner_kind)
+    try:
+        return await service.propose_template(body.prompt_nl, owner_kind)
+    except PropuestaInvalidaError as fallo:
+        # 422 y no 500: la propuesta la hizo el modelo, y quien pidió el informe necesita
+        # saber que puede reformular, no ver un error del servidor.
+        raise HTTPException(
+            status_code=422,
+            detail=f"La propuesta del modelo no encaja con el contrato de plantilla: {fallo}",
+        ) from fallo
 
 
 @router.post("/validate", response_model=ReportTemplateDraftValidationResult, operation_id="validateLlmDraft")
@@ -167,7 +182,9 @@ async def approve_as_template(
         id=version_id,
         template_id=template_id,
         version=1,
-        spec_json=normalized.model_dump(mode="json"),
+        # La plantilla se guarda como plantilla, no como borrador: son formas distintas y
+        # guardar el borrador dejaba la version inservible (VER.3).
+        spec_json=spec_desde_borrador(normalized).model_dump(mode="json"),
         created_by=owner_uuid,
     )
 
@@ -219,7 +236,9 @@ async def approve_as_workspace(
         id=version_id,
         template_id=template_id,
         version=1,
-        spec_json=normalized.model_dump(mode="json"),
+        # La plantilla se guarda como plantilla, no como borrador: son formas distintas y
+        # guardar el borrador dejaba la version inservible (VER.3).
+        spec_json=spec_desde_borrador(normalized).model_dump(mode="json"),
         created_by=owner_uuid,
     )
     # 9R.10.2: arrancamos en `ingesting` para que la UI sepa que el workspace

@@ -17,6 +17,21 @@ def user_to_uuid(user_id: str) -> uuid.UUID:
         return uuid.uuid5(uuid.NAMESPACE_DNS, user_id)
 
 
+def nombre_del_modelo(modelo) -> str:
+    """El nombre del modelo, se llame como se llame el atributo en cada cliente.
+
+    Se guarda en la plantilla propuesta y en cada bloque redactado (`model_used`), que es lo
+    que permite saber con qué modelo se escribió un informe meses después. `ChatGoogleGenerativeAI`
+    lo expone como `model` y no como `model_name`, así que mirar solo uno dejaba «desconocido»
+    escrito en la pantalla y en el manifiesto.
+    """
+    for atributo in ("model_name", "model"):
+        valor = getattr(modelo, atributo, None)
+        if isinstance(valor, str) and valor:
+            return valor
+    return "desconocido"
+
+
 def es_propietario(user_id: str, owner_id) -> bool:
     """¿Este `user_id` es el dueño de una fila con este `owner_id`?
 

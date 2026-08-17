@@ -25,7 +25,7 @@ from server.app.api.deps import get_current_user, get_session
 from server.app.core.auth.models import UserInfo
 from server.app.core.storage import StorageService, get_storage_service
 from server.app.core.uploads import read_within_limit, sanitizar_nombre
-from server.app.routers.redaccion._actor import es_propietario
+from server.app.routers.redaccion._actor import es_propietario, nombre_del_modelo
 from server.app.modules.redaccion.contracts.runtime import BlockState, InvalidBlockTransitionError
 from server.app.modules.redaccion.database.models import (
     HubWorkspace,
@@ -470,7 +470,7 @@ async def _redactor_de_bloques(session: AsyncSession):
     from server.app.modules.redaccion.services.redactor_de_bloques import RedactorDeBloques
 
     modelo = await get_model_for_tier(1, LocalConfigProvider(session))
-    return RedactorDeBloques(modelo, getattr(modelo, "model_name", None) or "desconocido")
+    return RedactorDeBloques(modelo, nombre_del_modelo(modelo))
 
 
 @router.patch(

@@ -9,8 +9,16 @@ import { useTranslation } from 'react-i18next'
  * menú**: sólo se llegaba escribiendo la URL a mano, así que en la práctica la funcionalidad
  * estaba construida y no existía para quien usa el panel.
  */
+/**
+ * `nav_llm_draft` entra en VER.3 y no es cosmética: el constructor de plantillas guarda
+ * `spec_json: {}` —una plantilla sin secciones ni bloques, que no genera nada—, así que
+ * proponerla con el modelo es hoy la única vía para obtener una plantilla utilizable desde la
+ * interfaz. La pantalla existía entera desde 9R con su ruta fuera de todo menú, y desde VER.2
+ * el endpoint que la sostiene ya no devuelve 503.
+ */
 const REDACCION_SUBNAV = [
   { key: 'nav_templates', path: '/redaccion/builder' },
+  { key: 'nav_llm_draft', path: '/redaccion/draft' },
   { key: 'nav_new_report', path: '/redaccion/wizard' },
   { key: 'nav_scripts_review', path: '/redaccion/scripts/review' },
 ] as const
