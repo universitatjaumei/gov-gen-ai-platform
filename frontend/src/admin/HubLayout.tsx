@@ -9,6 +9,9 @@ const HUB_SUBNAV = [
   { key: 'hub.reports', path: '/hub/reports' },
   { key: 'hub.llm_configs', path: '/hub/llm-configs' },
   { key: 'hub.prompt_templates', path: '/hub/prompts' },
+  // PRO.2.1 — los prompts de las actividades de plataforma, que no cuelgan de ningún chatbot
+  // y por eso no caben en la pantalla de al lado.
+  { key: 'hub.activity_prompts.nav', path: '/hub/activity-prompts' },
   { key: 'hub.ai_brain', path: '/hub/brain' },
   { key: 'admin:hub.test_scenarios.title', path: '/hub/test-scenarios' },
   { key: 'auth:nav_access_tokens', path: '/hub/access-tokens' },

@@ -1,6 +1,7 @@
 """Proveedor de configuración (Costura Edge-Cloud)."""
 
 import uuid
+from dataclasses import dataclass
 from typing import Protocol
 
 from sqlalchemy import select
@@ -8,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.modules.agents_hub.database.config_models import (
+    HubActivityPrompt,
     HubChatbot,
     HubLLMConfig,
 )
@@ -16,12 +18,28 @@ from server.app.modules.agents_hub.services.vocabulary_service import (
 )
 
 
+@dataclass(frozen=True)
+class ActivityPromptOverride:
+    """La excepción guardada para una actividad — PRO.2.1.
+
+    Sale de aquí y no del modelo ORM porque **los módulos edge no importan modelos de
+    configuración**: la frontera dice que el acceso pasa por el `ConfigProvider`, y devolver
+    la fila obligaría a `modules/redaccion` a conocer `HubActivityPrompt`.
+
+    Los dos campos pueden ser None o vacío, y eso significa «usa lo que dice el código».
+    """
+
+    template_text: str | None
+    override_tier: int | None
+
+
 class ConfigProvider(Protocol):
     """Protocolo para acceder a la configuración desde módulos edge."""
 
     async def get_chatbot(self, chatbot_id: uuid.UUID) -> HubChatbot | None: ...
     async def get_llm_config(self, llm_config_id: uuid.UUID) -> HubLLMConfig | None: ...
     async def get_llm_config_for_tier(self, tier: int) -> HubLLMConfig | None: ...
+    async def get_activity_prompt(self, activity: str) -> ActivityPromptOverride | None: ...
     async def list_active_chatbots(self, organizacion_id: uuid.UUID) -> list[HubChatbot]: ...
     async def get_retrieval_mode(self, chatbot_id: uuid.UUID) -> str: ...
     async def list_vocabulary(
@@ -71,6 +89,22 @@ class LocalConfigProvider:
             )
         )
         return result.scalars().first()
+
+    async def get_activity_prompt(self, activity: str) -> ActivityPromptOverride | None:
+        """El override de una actividad de plataforma, si alguien lo ha guardado (PRO.2.1).
+
+        `None` es el caso normal: qué actividades existen y con qué nivel y prompt corren lo
+        dice el código, y esta tabla sólo guarda excepciones.
+        """
+        result = await self.session.execute(
+            select(HubActivityPrompt).where(HubActivityPrompt.activity == activity)
+        )
+        fila = result.scalars().first()
+        if fila is None:
+            return None
+        return ActivityPromptOverride(
+            template_text=fila.template_text, override_tier=fila.override_tier
+        )
 
     async def list_active_chatbots(self, organizacion_id: uuid.UUID) -> list[HubChatbot]:
         """Obtiene los chatbots activos de una organización."""

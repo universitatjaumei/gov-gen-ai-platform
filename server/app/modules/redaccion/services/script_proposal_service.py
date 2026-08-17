@@ -15,6 +15,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from server.app.modules.redaccion.services.actividades_llm import (
+    ActividadLLM,
+    PROMPT_POR_ACTIVIDAD,
+    rellenar,
+)
 from server.app.modules.redaccion.services.script_auditor import (
     AuditResult,
     MODULOS_PROHIBIDOS,
@@ -28,70 +33,39 @@ from server.app.modules.redaccion.services.script_auditor import (
 PROMPT_VERSION = "script_proposal_v1"
 
 
-def _build_system_prompt(sample_schema: dict[str, Any] | None) -> str:
+def _build_system_prompt(
+    sample_schema: dict[str, Any] | None, plantilla: str | None = None
+) -> str:
+    """El prompt del sistema, con sus variables rellenas.
+
+    PRO.2.1 — la plantilla puede venir de la biblioteca de prompts; por defecto es la del
+    catálogo de código. Las listas de módulos y de nombres **se leen del auditor**, porque un
+    prompt que enumera a mano lo que otro fichero bloquea divergen en el primer cambio, y el
+    síntoma es una propuesta rechazada sin motivo entendible.
+    """
     schema_hint = ""
     if sample_schema:
         schema_hint = (
             "\n\nSCHEMA DE LOS DATOS DE ENTRADA (informativo):\n"
             f"{sample_schema}\n"
         )
-    # PRO.2 — las listas se leen del auditor, no se reescriben aquí. Un prompt que enumera a
-    # mano lo que otro fichero bloquea divergen en el primer cambio, y el síntoma es una
-    # propuesta rechazada sin motivo entendible.
-    whitelist = sorted(WHITELIST_MODULES)
-    prohibidos = sorted(MODULOS_PROHIBIDOS)
-    por_forma = sorted(n for n in NOMBRES_PROHIBIDOS if not n.startswith("__"))
-    dunders = sorted(n for n in NOMBRES_PROHIBIDOS if n.startswith("__"))
-    return (
-        "Eres un asistente experto en escribir scripts de extracción de datos en Python.\n"
-        "\n"
-        "REGLAS DURAS:\n"
-        f"- Sólo puedes importar de esta lista blanca: {whitelist}.\n"
-        "  Importar cualquier otro módulo es una ADVERTENCIA: el script no se ejecuta hasta "
-        "que una persona la acepta, así que no lo hagas sin necesidad.\n"
-        f"- Estos módulos están PROHIBIDOS y son un rechazo inmediato: {prohibidos}.\n"
-        "- Está PROHIBIDO usar eval, exec, __import__, compile, open.\n"
-        "- Está PROHIBIDO usar estos nombres, incluso de la forma más inocente: "
-        f"{por_forma}. Dan alcance al intérprete y el auditor los marca como CRÍTICO "
-        "aunque los uses para algo razonable (`getattr(df, metodo)` también cuenta).\n"
-        f"- Está PROHIBIDO tocar estos atributos: {dunders}.\n"
-        "- Está PROHIBIDO escribir una ruta absoluta —ni `C:\\...`, ni `C:/...`, ni "
-        "`/etc/...`, `/home/...`, `/tmp/...`—, ni siquiera en un comentario: es CRÍTICO. "
-        "El único fichero que puedes leer es el que llega en `file_path`.\n"
-        "- El script DEBE asignar la variable `result` (dict) con las claves:\n"
-        "    tables   : list[dict]  → cada dict: name, headers, rows, source_page\n"
-        "    metrics  : list[dict]  → cada dict: name, value, unit (opcional)\n"
-        "    free_text: str | None\n"
-        "- Variables disponibles para tu script: file_path (str), raw_text (str), options (dict).\n"
-        "- Usa preferentemente pandas y openpyxl para Excel; pdfplumber para PDFs.\n"
-        "- Devuelve SÓLO código Python, sin explicaciones ni markdown."
-        f"{schema_hint}"
+    return rellenar(
+        plantilla or PROMPT_POR_ACTIVIDAD[ActividadLLM.PROPUESTA_DE_SCRIPT],
+        {
+            "lista_blanca": sorted(WHITELIST_MODULES),
+            "modulos_prohibidos": sorted(MODULOS_PROHIBIDOS),
+            "nombres_prohibidos": sorted(
+                n for n in NOMBRES_PROHIBIDOS if not n.startswith("__")
+            ),
+            "atributos_prohibidos": sorted(
+                n for n in NOMBRES_PROHIBIDOS if n.startswith("__")
+            ),
+            "schema": schema_hint,
+        },
     )
 
 
 AUDITOR_PROMPT_VERSION = "script_audit_v1"
-
-_AUDITOR_SYSTEM_PROMPT = (
-    "Eres un revisor de seguridad y de calidad de scripts de extracción de datos.\n"
-    "\n"
-    "El script que vas a leer **ya ha pasado un análisis estático** que bloquea por su forma "
-    "las llamadas peligrosas, la introspección del intérprete, los módulos prohibidos y las "
-    "rutas absolutas. Tu trabajo NO es repetir ese análisis: es mirar lo que un AST no puede "
-    "ver.\n"
-    "\n"
-    "Fíjate en:\n"
-    "- Si el script hace lo que el usuario pidió, o algo parecido pero distinto.\n"
-    "- Si asume nombres de columna, hojas o formatos que no consten en la petición.\n"
-    "- Si puede devolver datos vacíos o basura sin fallar, que es peor que fallar.\n"
-    "- Si mete en `free_text` información que no debería salir del fichero de entrada.\n"
-    "\n"
-    "Responde SÓLO con este JSON, sin markdown ni explicaciones alrededor:\n"
-    '{"veredicto": "acepta|duda|rechaza", "motivos": ["...", "..."]}\n'
-    "\n"
-    "`acepta` es «hace lo pedido y no veo riesgo»; `duda` es «funciona pero asume algo»; "
-    "`rechaza` es «no hace lo pedido o es peligroso por lo que hace, no por cómo está "
-    "escrito». Sé concreto y breve: cada motivo, una frase."
-)
 
 
 _FEW_SHOT_EXAMPLES: list[dict[str, str]] = [
@@ -226,6 +200,8 @@ class ScriptProposalService:
         prompt_version: str = PROMPT_VERSION,
         auditor_llm: Any = None,
         auditor_model_name: str = "",
+        system_prompt: str | None = None,
+        auditor_system_prompt: str | None = None,
     ) -> None:
         self._llm = llm
         self._auditor = script_auditor or ScriptSecurityAuditor()
@@ -233,6 +209,9 @@ class ScriptProposalService:
         self._prompt_version = prompt_version
         self._auditor_llm = auditor_llm
         self._auditor_model_name = auditor_model_name
+        # PRO.2.1 — los dos prompts pueden venir de la biblioteca; None = el del catálogo.
+        self._system_prompt = system_prompt
+        self._auditor_system_prompt = auditor_system_prompt
 
     async def propose(
         self,
@@ -240,7 +219,7 @@ class ScriptProposalService:
         sample_schema: dict[str, Any] | None = None,
         owner_kind: Literal["user", "platform"] = "user",
     ) -> ProposalResult:
-        system_prompt = _build_system_prompt(sample_schema)
+        system_prompt = _build_system_prompt(sample_schema, self._system_prompt)
         if owner_kind == "platform":
             system_prompt += (
                 "\n\nCONTEXTO: este script será propuesto para una plantilla GLOBAL "
@@ -287,8 +266,11 @@ class ScriptProposalService:
             f"PETICIÓN DEL USUARIO:\n{prompt_nl}\n\n"
             f"SCRIPT PROPUESTO:\n```python\n{code}\n```"
         )
+        instrucciones = self._auditor_system_prompt or PROMPT_POR_ACTIVIDAD[
+            ActividadLLM.AUDITORIA_DE_SCRIPT
+        ]
         respuesta = await self._auditor_llm.ainvoke([
-            {"role": "system", "content": _AUDITOR_SYSTEM_PROMPT},
+            {"role": "system", "content": instrucciones},
             {"role": "user", "content": peticion},
         ])
         texto = respuesta.content if hasattr(respuesta, "content") else str(respuesta)

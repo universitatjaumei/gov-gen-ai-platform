@@ -373,6 +373,44 @@ class HubPromptTemplate(HubConfigBase):
     chatbot: Mapped["HubChatbot"] = relationship(back_populates="prompt_templates")
 
 
+class HubActivityPrompt(HubConfigBase):
+    """Override del prompt y del nivel de una **actividad de plataforma** — PRO.2.1.
+
+    `HubPromptTemplate` cuelga de un chatbot (`chatbot_id` NOT NULL), así que sirve a los
+    prompts de un asistente y no a los de una actividad del módulo de Informes —escribir un
+    script, auditarlo, transformar datos—, que no pertenecen a ningún chatbot.
+
+    **No se resolvió haciendo `chatbot_id` nullable**: en Postgres una restricción unique con
+    NULL no colisiona, así que `(chatbot_id, slug, language)` dejaría de ser única justo para
+    las filas nuevas —dos overrides de la misma actividad conviviendo—, y la pantalla que
+    filtra por chatbot perdería el sentido. Son dos claves distintas y dos audiencias
+    distintas.
+
+    Qué actividades existen, con qué nivel corren y qué se les dice lo dice el **código**
+    (`modules/redaccion/services/actividades_llm.py`). Esta tabla guarda sólo la excepción:
+
+    - `template_text` vacío o NULL = usa el texto del código. No se copia el texto por
+      defecto al abrir la pantalla: copiarlo congelaría el prompt, y mejorarlo en el código
+      no llegaría a quien ya lo abrió.
+    - `override_tier` NULL = usa el nivel del código.
+    """
+
+    __tablename__ = "hub_activity_prompts"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # La clave estable de la actividad (`ActividadLLM.value`). Única: una actividad, un override.
+    activity: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    template_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    override_tier: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class HubSsoUser(HubConfigBase):
     """Usuario aprovisionado vía SSO SAML (AUTH.2).
 

@@ -35,6 +35,7 @@ const ReportsPage = lazy(() => import('@/admin/pages/ReportsPage').then(m => ({ 
 const LLMConfigsPage = lazy(() => import('@/admin/pages/LLMConfigsPage').then(m => ({ default: m.LLMConfigsPage })))
 const PromptsPage = lazy(() => import('@/admin/pages/PromptsPage').then(m => ({ default: m.PromptsPage })))
 const AIBrainPage = lazy(() => import('@/admin/pages/AIBrainPage').then(m => ({ default: m.AIBrainPage })))
+const ActivityPromptsPage = lazy(() => import('@/admin/pages/ActivityPromptsPage').then(m => ({ default: m.ActivityPromptsPage })))
 const RedaccionLayout = lazy(() => import('@/redaccion/RedaccionLayout').then(m => ({ default: m.RedaccionLayout })))
 const CurationSitesPage = lazy(() => import('@/curation/SitesPage').then(m => ({ default: m.SitesPage })))
 const CurationAuditPage = lazy(() => import('@/curation/AuditPage').then(m => ({ default: m.AuditPage })))
@@ -100,6 +101,7 @@ function App() {
                     <Route path="reports" element={<ReportsPage />} />
                     <Route path="llm-configs" element={<LLMConfigsPage />} />
                     <Route path="prompts" element={<PromptsPage />} />
+                    <Route path="activity-prompts" element={<ActivityPromptsPage />} />
                     <Route path="brain" element={<AIBrainPage />} />
                     <Route path="test-scenarios" element={<TestScenariosPage />} />
                     <Route path="access-tokens" element={<AccessTokensPage />} />

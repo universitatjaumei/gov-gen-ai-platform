@@ -23,7 +23,7 @@ from server.app.modules.agents_hub.services.model_factory import get_model_for_t
 from server.app.modules.redaccion.services.actividades_llm import (
     ActividadLLM,
     PARA_QUE_SIRVE,
-    tier_de,
+    resolver_actividad,
 )
 from server.app.routers.redaccion._actor import (
     nombre_del_modelo,
@@ -74,23 +74,27 @@ router = APIRouter(prefix="/redaccion/scripts", tags=["redaccion-scripts"])
 # ---------------------------------------------------------------------------
 
 async def _modelo_de(actividad: ActividadLLM, proveedor: Any):
-    """El modelo del nivel que el catálogo asigna a esta actividad.
+    """El modelo y el prompt de una actividad, resueltos (PRO.2 + PRO.2.1).
 
-    El 503 nombra **el nivel y para qué servía**: «falta el nivel 2» no le dice nada a quien
-    lo lee, y con dos niveles en juego —uno escribe y otro audita— saber cuál de los dos falta
-    es la diferencia entre configurar un modelo y configurar el equivocado.
+    El nivel sale del catálogo de código y la biblioteca de prompts puede sobreescribirlo, así
+    que aquí no hay ningún número escrito.
+
+    El 503 nombra **el nivel y para qué servía**: «falta el nivel 2» no le dice nada a quien lo
+    lee, y con dos niveles en juego —uno escribe y otro audita— saber cuál de los dos falta es
+    la diferencia entre configurar un modelo y configurar el equivocado.
     """
-    nivel = tier_de(actividad)
+    resuelta = await resolver_actividad(actividad, proveedor)
     try:
-        return await get_model_for_tier(nivel, proveedor)
+        modelo = await get_model_for_tier(resuelta.tier, proveedor)
     except Exception as fallo:  # noqa: BLE001
         raise HTTPException(
             status_code=503,
             detail=(
-                f"No hay modelo configurado para el nivel {nivel}, que es el que "
+                f"No hay modelo configurado para el nivel {resuelta.tier}, que es el que "
                 f"{PARA_QUE_SIRVE[actividad]}. Asígnale uno en Modelos IA ({fallo})."
             ),
         ) from fallo
+    return modelo, resuelta
 
 
 async def get_script_proposal_service(
@@ -103,14 +107,16 @@ async def get_script_proposal_service(
     encima de la determinista de PRO.1, nunca en su lugar.
     """
     proveedor = LocalConfigProvider(session)
-    redactor = await _modelo_de(ActividadLLM.PROPUESTA_DE_SCRIPT, proveedor)
-    auditor = await _modelo_de(ActividadLLM.AUDITORIA_DE_SCRIPT, proveedor)
+    redactor, propuesta = await _modelo_de(ActividadLLM.PROPUESTA_DE_SCRIPT, proveedor)
+    auditor, auditoria = await _modelo_de(ActividadLLM.AUDITORIA_DE_SCRIPT, proveedor)
 
     return ScriptProposalService(
         llm=redactor,
         model_name=nombre_del_modelo(redactor),
         auditor_llm=auditor,
         auditor_model_name=nombre_del_modelo(auditor),
+        system_prompt=propuesta.template_text,
+        auditor_system_prompt=auditoria.template_text,
     )
 
 

@@ -29,6 +29,10 @@ def test_config_base_contains_only_config_models() -> None:
         # el widget embebía en el HTML. Es configuración de publicación del chatbot, no
         # identidad ni dato del cliente final: no lleva rol ni organizaciones.
         "hub_widget_keys",
+        # Override del prompt y del nivel de una actividad de plataforma (PRO.2.1) — del
+        # mismo lado que `hub_prompt_templates`: es lo que se le dice a un modelo y con qué
+        # nivel corre, no dato del cliente final. El edge lo lee vía ConfigProvider.
+        "hub_activity_prompts",
     }
 
 def test_operational_base_contains_only_operational_models() -> None:

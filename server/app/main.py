@@ -32,6 +32,7 @@ from server.app.routers.hub_organizaciones_router import router as hub_organizac
 from server.app.routers.hub_ingestion_router import router as hub_ingestion_router
 from server.app.routers.hub_llm_configs_router import router as hub_llm_configs_router
 from server.app.routers.hub_prompt_templates_router import router as hub_prompt_templates_router
+from server.app.routers.hub_activity_prompts_router import router as hub_activity_prompts_router
 from server.app.routers.redaccion.llm_drafts_router import router as llm_drafts_router
 from server.app.routers.redaccion.hub_redaccion_router import router as hub_redaccion_router
 from server.app.routers.redaccion.workspaces_router import router as redaccion_workspaces_router
@@ -235,6 +236,7 @@ def _register_cloud(app: FastAPI) -> None:
     app.include_router(hub_ingestion_router, prefix="/api/v1")
     app.include_router(hub_llm_configs_router, prefix="/api/v1")
     app.include_router(hub_prompt_templates_router, prefix="/api/v1")
+    app.include_router(hub_activity_prompts_router, prefix="/api/v1")  # Deploy: cloud
     app.include_router(hub_themes_router, prefix="/api/v1")  # Deploy: cloud
     app.include_router(edge_sync_router, prefix="/api/v1")  # servido por cloud
 

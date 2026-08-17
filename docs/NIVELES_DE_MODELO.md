@@ -16,12 +16,24 @@ Los niveles 2 y 3 son de PRO.2 y responden a una petición explícita: **escribi
 juzgar si es peligroso son tareas distintas**, así que no las hace el mismo modelo. El 3 es el
 superior de los dos.
 
-## Qué actividad usa qué nivel
+## Qué actividad usa qué nivel, y cómo se cambia
 
 El mapa vive en **código**, en `server/app/modules/redaccion/services/actividades_llm.py`, y
-es también la lista de actividades que existen. La base de datos sólo guarda excepciones
-(PRO.2.1). Es la forma que tenía la aplicación NiceGUI: `DEFAULT_TIER_MAPPING` en código y
-`tier_override` en la tabla.
+es también la lista de actividades que existen. Es la forma que tenía la aplicación NiceGUI:
+`DEFAULT_TIER_MAPPING` en código y `tier_override` en la tabla.
+
+Desde PRO.2.1 se puede **sobreescribir desde el panel**, en **Prompts de actividad**
+(`/hub/activity-prompts`): para cada actividad, su nivel y el texto de su prompt. La tabla
+`hub_activity_prompts` guarda **sólo la excepción**:
+
+- Nivel «por defecto» = usa el del código (y el selector dice cuál es, no deja un hueco).
+- Texto vacío = usa el del código, **y así sigue mejorando cuando el código mejora**. Por eso
+  el texto por defecto se muestra como marcador y no se copia a la caja: copiarlo lo
+  congelaría.
+
+Una actividad **no se puede inventar** desde la pantalla (422 `UNKNOWN_ACTIVITY`): si no está
+en el catálogo, nada la consumiría. Y un `{variable}` que la actividad no declara se rechaza al
+guardar (422 `UNKNOWN_VARIABLE`), en vez de aparecer como un hueco dentro del prompt.
 
 ## Qué pasa si falta un nivel
 
