@@ -52,13 +52,22 @@ class LocalConfigProvider:
         return result.scalars().first()
 
     async def get_llm_config_for_tier(self, tier: int) -> HubLLMConfig | None:
-        """Obtiene la configuración LLM marcada como default para un tier."""
+        """Configuración de **conversación** marcada como default para un tier.
+
+        El filtro por `purpose` no es defensivo: sin él, la configuración de embeddings del
+        piloto —marcada por defecto en el nivel 1 al montar Vertex— se devolvía a quien pedía
+        un modelo para redactar, y el fallo salía mucho más lejos y acusando al proveedor
+        (`ValueError: Provider type desconocido: google_vertexai`). Lo comparten todos los
+        que resuelven modelo por nivel: el analizador de HTML de la ingesta y la redacción
+        de bloques.
+        """
         result = await self.session.execute(
             select(HubLLMConfig)
             .options(selectinload(HubLLMConfig.provider_rel))
             .where(
                 HubLLMConfig.tier == tier,
                 HubLLMConfig.is_default.is_(True),
+                HubLLMConfig.purpose == "chat",
             )
         )
         return result.scalars().first()

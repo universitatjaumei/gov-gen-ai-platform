@@ -8,7 +8,15 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -387,15 +395,16 @@ async def upload_workspace_input(
 )
 async def run_workspace(
     workspace_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> RunStartedOut:
     """Encola la ejecución del DraftingCoreGraph para el workspace.
 
-    Transiciona `workspace.status` de `draft|ingesting` a `drafting`. La
-    ejecución real del grafo se enchufa a un background task en follow-ups; el
-    endpoint devuelve un `run_id` inmediato con `status='queued'` para que el
-    frontend pueda consultar el manifest cuando esté disponible.
+    Transiciona `workspace.status` de `draft|ingesting` a `drafting` y **dispara el grafo en
+    segundo plano** (VER.1). Hasta aquí solo hacía lo primero: devolvía un `run_id` que no
+    identificaba nada y el informe no se generaba nunca, lo que desde el panel es
+    indistinguible de un informe que tarda.
     """
     workspace = await _get_workspace(workspace_id, user, session)
 
@@ -420,11 +429,48 @@ async def run_workspace(
     session.add(audit_event)
     await session.commit()
 
+    background_tasks.add_task(generar_borrador_en_segundo_plano, workspace_id)
+
     return RunStartedOut(
         run_id=result.run_id,
         workspace_id=workspace_id,
         status=result.status,
     )
+
+
+async def generar_borrador_en_segundo_plano(workspace_id: uuid.UUID) -> None:
+    """Ejecuta el grafo con **su propia sesión y su propio modelo**.
+
+    La sesión de la petición ya está cerrada cuando corre esto —`BackgroundTasks` se ejecuta
+    después de enviar la respuesta—, así que reutilizarla es usar algo que el ciclo de vida de
+    FastAPI dio por terminado. Mismo patrón que la ingesta de documentos.
+
+    Si el modelo no se puede construir, el fallo acaba en el workspace como cualquier otro:
+    `ejecutar_borrador` no lanza, deja `status='error'` con el motivo. Un asistente sin modelo
+    configurado tiene que decirlo en la pantalla, no en el log del servidor.
+    """
+    from server.app.modules.redaccion.services.drafting_runner import (
+        ejecutar_borrador,
+        marcar_error,
+    )
+
+    async for bg_session in get_session():
+        try:
+            redactor = await _redactor_de_bloques(bg_session)
+        except Exception as fallo:  # noqa: BLE001
+            await marcar_error(workspace_id, bg_session, f"modelo no disponible: {fallo}")
+            return
+        await ejecutar_borrador(workspace_id, bg_session, llm_service=redactor)
+
+
+async def _redactor_de_bloques(session: AsyncSession):
+    """Modelo de la cascada, adaptado al protocolo que espera el nodo de redacción."""
+    from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
+    from server.app.modules.agents_hub.services.model_factory import get_model_for_tier
+    from server.app.modules.redaccion.services.redactor_de_bloques import RedactorDeBloques
+
+    modelo = await get_model_for_tier(1, LocalConfigProvider(session))
+    return RedactorDeBloques(modelo, getattr(modelo, "model_name", None) or "desconocido")
 
 
 @router.patch(

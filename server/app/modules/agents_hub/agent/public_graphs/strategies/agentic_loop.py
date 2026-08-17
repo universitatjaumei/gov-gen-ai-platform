@@ -20,6 +20,8 @@ from typing import Any, Protocol
 
 from langchain_core.messages import ToolMessage
 
+from server.app.core.llm_text import texto_de
+
 from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_contract import (
     EvidenceItem,
 )
@@ -71,24 +73,9 @@ class DocumentReader(Protocol):
         ...
 
 
-def _texto(contenido: Any) -> str:
-    """El contenido del mensaje como texto plano.
-
-    Gemini devuelve `content` como **lista de bloques** en cuanto hay más de una parte.
-    Devolverla tal cual reventaba el validador de citas con `TypeError: expected string or
-    bytes-like object, got 'list'`, así que la respuesta no llegaba a salir del grafo.
-    """
-    if isinstance(contenido, str):
-        return contenido
-    if isinstance(contenido, list):
-        partes = []
-        for bloque in contenido:
-            if isinstance(bloque, str):
-                partes.append(bloque)
-            elif isinstance(bloque, dict) and bloque.get("type") == "text":
-                partes.append(bloque.get("text") or "")
-        return "".join(partes)
-    return str(contenido or "")
+#: El contenido de una respuesta de modelo, como texto plano. Vive en `core/` desde VER.1:
+#: el mismo problema mordió en redacción, así que dejó de ser de este módulo.
+_texto = texto_de
 
 
 class AgenticLoop:

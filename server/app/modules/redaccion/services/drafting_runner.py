@@ -1,0 +1,191 @@
+"""Raíz de composición del DraftingCoreGraph y persistencia de lo que produce (VER.1).
+
+Deploy: edge.
+
+El grafo ya existía entero —14 nodos, con sus tests— pero **nadie lo ejecutaba**:
+`POST /workspaces/{id}/run` cambiaba el estado a `drafting`, devolvía un `run_id` sintético y
+ahí acababa. Aquí vive lo que faltaba, que son tres cosas y ninguna es el grafo:
+
+1. **Quién le pasa sus dependencias**: repositorio de versiones, almacenamiento, factoría de
+   extracción y modelo. Va aquí y no en el router por la misma razón que
+   `build_agentic_loop_if_needed` no vive dentro del CoreGraph del chatbot: es una decisión
+   de composición, y meterla en el router ata el módulo a HTTP.
+2. **Cómo se convierte un workspace en `WorkspaceState`** y al revés. Hasta hoy nadie
+   escribía nunca una fila en `hub_workspace_blocks`, así que un informe generado no existía
+   en ningún sitio al terminar la petición.
+3. **Qué pasa cuando falla.** Un workspace atascado en `drafting` para siempre es peor que
+   uno que dice que falló: el primero se lee como «va lento» y nadie lo mira nunca.
+"""
+from __future__ import annotations
+
+import logging
+import uuid
+from datetime import datetime, timezone
+from typing import Any
+
+from sqlalchemy import select
+
+from server.app.modules.redaccion.contracts.runtime import BlockState, WorkspaceState
+from server.app.modules.redaccion.contracts.template import ReportTemplateSpec
+from server.app.modules.redaccion.database.models import HubWorkspace, HubWorkspaceBlock
+from server.app.modules.redaccion.database.repos import (
+    ReportTemplateVersionRepo,
+    RunManifestRepo,
+    WorkspaceRepo,
+)
+
+_log = logging.getLogger(__name__)
+
+ESTADO_EN_REVISION = "in_review"
+ESTADO_ERROR = "error"
+
+
+def construir_grafo(session: Any, llm_service: Any, storage_service: Any = None):
+    """El `DraftingCoreGraph` con sus dependencias resueltas contra esta sesión.
+
+    `pii_detector` y `faker_generator` se dejan sin inyectar a propósito: sin ellos el nodo
+    de anonimización es un no-op declarado (modo OFF), que es el comportamiento vigente. El
+    cableado del NER reversible es la Fase 13 y tiene su propia superficie de configuración.
+    """
+    from server.app.core.storage import get_storage_service
+    from server.app.modules.redaccion.graph.core_graph import build_core_graph
+    from server.app.modules.redaccion.pipelines.factory import build_default_factory
+
+    return build_core_graph(
+        template_version_repo=ReportTemplateVersionRepo(session),
+        storage_service=storage_service or get_storage_service(),
+        extraction_factory=build_default_factory(),
+        llm_service=llm_service,
+        manifest_repo=RunManifestRepo(session),
+    )
+
+
+def _estado_inicial(workspace: HubWorkspace, spec: ReportTemplateSpec) -> WorkspaceState:
+    """El estado con el que arranca el grafo, con un bloque por bloque de la plantilla.
+
+    Los bloques salen de la **spec** y no de la base: `hub_workspace_blocks` está vacía hasta
+    que una ejecución termina, así que la plantilla es la única fuente de qué hay que generar.
+    """
+    ahora = datetime.now(timezone.utc)
+    return WorkspaceState(
+        workspace_id=workspace.id,
+        template_version_id=workspace.template_version_id,
+        report_profile=_perfil_de(spec),
+        inputs={},
+        blocks={
+            contrato.id: BlockState(
+                block_id=contrato.id,
+                kind=contrato.kind,
+                status="draft",
+                last_updated_by="system",
+                updated_at=ahora,
+            )
+            for contrato in spec.blocks
+        },
+        status="drafting",
+        warnings=[],
+        spec=spec,
+        anonymization_mode=workspace.anonymization_mode,
+    )
+
+
+def _perfil_de(spec: ReportTemplateSpec) -> str:
+    """El perfil no viaja en la spec; se deduce del contrato de UI o cae al genérico."""
+    return getattr(spec, "report_profile", None) or "GENERIC_REPORT"
+
+
+async def _persistir_bloques(session: Any, workspace_id: uuid.UUID, estado: Any) -> None:
+    """Vuelca los bloques del estado final a `hub_workspace_blocks`, creando o actualizando.
+
+    Se hace por `block_id` y no por clave primaria porque el identificador estable es el de
+    la plantilla: una segunda ejecución del mismo workspace tiene que pisar sus bloques, no
+    duplicarlos —hay un UNIQUE(workspace_id, block_id) que lo impediría con un 500—.
+    """
+    existentes = {
+        fila.block_id: fila
+        for fila in (await session.execute(
+            select(HubWorkspaceBlock).where(HubWorkspaceBlock.workspace_id == workspace_id)
+        )).scalars().all()
+    }
+
+    for block_id, bloque in (estado.blocks or {}).items():
+        fila = existentes.get(block_id)
+        if fila is None:
+            fila = HubWorkspaceBlock(workspace_id=workspace_id, block_id=block_id, kind=bloque.kind)
+            session.add(fila)
+        fila.kind = bloque.kind
+        fila.status = bloque.status
+        fila.content_json = bloque.content
+        fila.citations_json = (
+            [c.model_dump(mode="json") for c in bloque.citations] if bloque.citations else None
+        )
+        fila.failure_kind = bloque.failure_kind
+        fila.last_error_message = bloque.last_error_message
+        fila.retry_attempts = bloque.retry_attempts
+
+
+def _bloques_del(estado: Any) -> dict:
+    """El grafo devuelve `WorkspaceState` o un dict, según cómo lo invoque LangGraph."""
+    if isinstance(estado, dict):
+        return estado
+    return estado.model_dump()
+
+
+async def ejecutar_borrador(
+    workspace_id: uuid.UUID,
+    session: Any,
+    llm_service: Any,
+    storage_service: Any = None,
+) -> None:
+    """Ejecuta el grafo sobre un workspace y persiste lo que salga.
+
+    No lanza: cualquier fallo se convierte en `status='error'` con el motivo en el workspace.
+    Corre en segundo plano, y una excepción ahí no llega a ninguna parte —ni a la respuesta,
+    que ya se envió, ni a quien mira la pantalla—.
+    """
+    repo = WorkspaceRepo(session)
+    workspace = await repo.get(workspace_id)
+    if workspace is None:
+        _log.warning("Workspace %s no existe: no hay nada que generar", workspace_id)
+        return
+
+    try:
+        version = await ReportTemplateVersionRepo(session).get(workspace.template_version_id)
+        if version is None:
+            raise LookupError(f"Template version not found: {workspace.template_version_id}")
+
+        spec = ReportTemplateSpec.model_validate(version.spec_json)
+        grafo = construir_grafo(session, llm_service, storage_service)
+        final = await grafo.ainvoke(_estado_inicial(workspace, spec))
+
+        estado = WorkspaceState.model_validate(_bloques_del(final))
+        await _persistir_bloques(session, workspace_id, estado)
+
+        workspace.status = estado.status or ESTADO_EN_REVISION
+        workspace.run_manifest_id = estado.run_manifest_id
+        workspace.warnings_json = [a.model_dump(mode="json") for a in estado.warnings]
+        await session.commit()
+
+    except Exception as fallo:  # noqa: BLE001
+        # Se traga a propósito: ver el docstring. Lo que no puede pasar es que el workspace
+        # se quede en `drafting` sin que nadie sepa por qué.
+        _log.exception("Falló la generación del workspace %s", workspace_id)
+        await marcar_error(workspace_id, session, str(fallo))
+
+
+async def marcar_error(workspace_id: uuid.UUID, session: Any, motivo: str) -> None:
+    """Deja el workspace en error con el motivo a la vista.
+
+    Vive fuera del `except` porque hay fallos **anteriores** a la ejecución —el modelo que no
+    se puede construir es el caso real— y también tienen que acabar aquí: si no, el workspace
+    se queda en `drafting` y el motivo solo existe en el log del servidor.
+    """
+    await session.rollback()
+    workspace = await WorkspaceRepo(session).get(workspace_id)
+    if workspace is None:
+        return
+    workspace.status = ESTADO_ERROR
+    workspace.warnings_json = list(workspace.warnings_json or []) + [
+        {"kind": "run_error", "message": motivo[:500]}
+    ]
+    await session.commit()
