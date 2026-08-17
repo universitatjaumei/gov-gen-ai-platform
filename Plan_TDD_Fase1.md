@@ -17438,6 +17438,23 @@ un script que abra `C:\Users\...` pasa su auditoria.
 
 **Modelo sugerido**: **Sonnet** — alcance cerrado en cuanto PRO.1 fija los niveles.
 
+> **Ampliado el 2026-08-17, a mitad del bloque**, a peticion del usuario: «la asignacion del
+> modelo por TIER se debe poder hacer desde frontend. El tipo de tier para cada actividad se
+> puede preasignar en el codigo aunque en la aplicacion legacy existia una biblioteca de
+> prompts desde la que se podia sobreescribir».
+>
+> Comprobado contra el codigo: **las dos mitades ya existen aqui**. `/hub/llm-configs` asigna
+> `tier` y `is_default` por modelo desde el formulario, y `/hub/prompts` + `/hub/brain` son el
+> editor del legacy ya portado —texto con `{variables}` resaltadas, chips de tier y
+> `default_tier` + `override_tier` editables—. Lo que falta es la frontera:
+> `hub_prompt_templates.chatbot_id` es NOT NULL, asi que la biblioteca solo ve prompts **de
+> chatbot**, y los de las actividades de Informes viven en Python.
+>
+> Consecuencia para este prompt: el mapa actividad->tier **no se escribe como literales
+> sueltos** en el router, sino como **catalogo en codigo**, que es lo que PRO.2.1 podra
+> sobreescribir. Es la forma del legacy: `DEFAULT_TIER_MAPPING` en codigo y `tier_override`
+> en base de datos.
+
 ```
 # PROMPT PRO.2 (RED/GREEN) — Tier 2 escribe, Tier 3 audita
 # Deploy: edge (routers/redaccion/scripts_router.py) + configuracion
@@ -17458,14 +17475,91 @@ datos.
    cual**, porque el nivel no dice nada por si mismo.
 5. El prompt del sistema nombra tambien los prohibidos por forma —`getattr`, `globals`,
    `locals`, `vars`, `setattr`, `__class__`, `__dict__`— que el auditor marca como CRITICO y
-   que hoy no aparecen en el prompt.
+   que hoy no aparecen en el prompt. Y los **modulos de denegacion explicita** que PRO.1
+   separo de la lista blanca.
 6. `/redaccion/scripts/wizard` entra en el menu de Informes: existe desde 9R y solo se llega
    escribiendo la URL.
+7. El mapa **actividad -> tier por defecto** es un **catalogo en codigo** en un solo sitio,
+   no un `2` y un `3` escritos en la raiz de composicion. Sin eso, PRO.2.1 no tiene nada que
+   sobreescribir y el usuario no puede ver que actividades hay.
 
 ## Criterio de done
 - [ ] Una peticion real produce un script que la auditoria acepta
 - [ ] En navegador: describir -> proponer -> sandbox -> revision -> aprobar
 - [ ] Sin nivel 2 o sin nivel 3, el 503 dice cual falta
+- [ ] En navegador: asignar un modelo al nivel 2 y al 3 desde `/hub/llm-configs`
+```
+
+---
+
+### Prompt PRO.2.1 (RED/GREEN + navegador) — La biblioteca de prompts llega a las actividades
+
+**Modelo sugerido**: **Opus** — decide donde vive la configuracion de una actividad de
+plataforma sin romper la frontera edge/cloud ni la tabla que ya sirve a los chatbots.
+
+```
+# PROMPT PRO.2.1 (RED/GREEN) — Actividad, prompt y tier: preasignado en codigo, sobreescribible
+# Deploy: shared (modelo de configuracion) + edge (quien lo consume)
+
+## Por que
+Los prompts de las actividades del modulo —generar un script, auditarlo con modelo, ETL,
+graficos, proponer una plantilla, redactar un bloque, copiloto— estan **escritos en Python**.
+Eso significa dos cosas malas a la vez: nadie puede afinar el texto sin desplegar, y nadie
+puede decidir con **que nivel de modelo** corre cada actividad, que es justo lo que PRO.2
+acaba de hacer relevante.
+
+El legacy lo tenia resuelto y el usuario pide replicarlo:
+`AutomatIA/server/app/database/models.py:SystemPrompt` (name / version / content /
+context_type / **tier**) y `server/app/ui/admin_prompts.py`, un editor con buscador, filtros
+por tarea y fase, **radio de tier con cuatro opciones** —«por defecto (usa Tier N)», 1, 2, 3—
+y las variables `{...}` detectadas en vivo. El defecto por tarea (`DEFAULT_TIER_MAPPING`)
+estaba **en codigo**; la base de datos solo guardaba el override.
+
+Y aqui esta casi todo hecho: `/hub/llm-configs` asigna modelo por tier, y `/hub/prompts` +
+`/hub/brain` ya son ese editor sobre `hub_prompt_templates`, que **ya tiene `default_tier` y
+`override_tier`**. Lo que no encaja es la clave: `chatbot_id` es NOT NULL, asi que una
+actividad de plataforma no cabe en esa tabla.
+
+## Que leer antes de escribir
+`AutomatIA/server/app/database/seeds_prompts.py` (579 l.) y `server/app/ui/admin_prompts.py`
+(295 l.). Del primero interesa la forma de la entrada —nombre estable, version, contenido,
+tier opcional, activo— y del segundo que el defecto vive en codigo y la pantalla lo **dice**
+(«Por defecto: Tier 2»), en vez de dejar un hueco que nadie sabe interpretar.
+
+## Que hacer
+1. RED: una actividad **sin fila en base de datos** resuelve al prompt y al tier del catalogo
+   de codigo; con fila y `override_tier`, resuelve al override; con fila y texto vacio,
+   resuelve al texto del codigo y al tier del override. El texto del codigo es la fuente de
+   verdad de **que actividades existen**: la base de datos solo sobreescribe.
+2. GREEN: modelo de configuracion propio para la actividad —**no** reutilizar
+   `hub_prompt_templates` haciendo `chatbot_id` nullable: en Postgres una restriccion unica
+   con NULL no colisiona, asi que la clave dejaria de ser unica justo para las filas nuevas, y
+   la pantalla que filtra por chatbot dejaria de tener sentido—. Va en `HubConfigBase`
+   (configuracion, se sincroniza cloud->edge) y se lee por `ConfigProvider`, como manda la
+   frontera.
+3. GREEN: migracion aplicada, y las actividades del catalogo **no se siembran**: existir en
+   codigo ya es existir.
+4. GREEN: quien consume —`ScriptProposalService`, la auditoria con modelo, `ETLFactory`,
+   `ChartFactory`, `LLMSpecService`, `RedactorDeBloques`— pide su prompt y su tier al
+   resolvedor en vez de llevarlos dentro.
+5. GREEN: superficie y pantalla. La biblioteca que ya existe gana la vista de actividades,
+   con el tier efectivo visible y de donde viene (codigo u override), las variables detectadas
+   y el aviso de que un texto vacio significa «usa el del codigo».
+6. Verificar en navegador: cambiar el tier de «generar script» de 2 a 3 y comprobar que la
+   siguiente propuesta la escribe el modelo del nivel 3.
+
+## Restricciones
+- **Una actividad no puede inventarse desde la pantalla.** Si no esta en el catalogo de
+  codigo, no hay nada que la consuma: seria configuracion muerta que parece funcionar.
+- El texto por defecto **no se copia** a la base de datos al abrir la pantalla. Copiarlo
+  congela el prompt: a partir de ahi, mejorarlo en el codigo no llega a quien ya lo abrio.
+- Sin variables nuevas en los prompts: portar el texto tal como esta.
+
+## Criterio de done
+- [ ] Sin fila en base de datos, todo sigue funcionando igual que antes del prompt
+- [ ] El tier de una actividad se cambia desde la pantalla y se nota en la peticion siguiente
+- [ ] El texto de una actividad se edita desde la pantalla y llega al modelo
+- [ ] La frontera edge/cloud intacta: el consumidor edge no importa modelos de configuracion
 ```
 
 ---
