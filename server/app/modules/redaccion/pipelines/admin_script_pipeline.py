@@ -91,7 +91,7 @@ class AdminScriptExtractionPipeline:
         file_name = ""
         if inp.file_ref:
             try:
-                file_bytes = await self._leer_fichero(inp.file_ref.key)
+                file_bytes = await self._leer_fichero(inp.file_ref)
             except FileNotFoundError:
                 return ExtractionResult(
                     warnings=[ExtractionWarning(
@@ -104,7 +104,9 @@ class AdminScriptExtractionPipeline:
                     )],
                     provenance=self._provenance(),
                 )
-            file_name = inp.file_ref.key.rsplit("/", 1)[-1]
+            # El nombre importa porque pandas elige el motor por la extensión, y la clave
+            # puede venir con separadores de cualquiera de los dos sistemas.
+            file_name = inp.file_ref.key.replace("\\", "/").rsplit("/", 1)[-1]
 
         return await self._client.execute_extraction_script(
             code=code,
@@ -116,13 +118,28 @@ class AdminScriptExtractionPipeline:
             file_name=file_name,
         )
 
-    async def _leer_fichero(self, key: str) -> bytes:
+    async def _leer_fichero(self, file_ref) -> bytes:
+        """El contenido del fichero, del disco si ya está bajado y del almacén si no.
+
+        `bucket` vacío con la ruta entera en `key` es la convención que VER.4 dejó para un
+        artefacto **ya materializado** por `FileNormalizationNode`: dentro de una generación de
+        informe el fichero está en un temporal de la ejecución y volver a pedirlo al almacén
+        sería pagarlo dos veces —y en GCS, dos veces de verdad—.
+
+        En el asistente de scripts (`/test`) no hay nada materializado: la referencia es la
+        clave del almacén y de ahí se lee.
+        """
+        from pathlib import Path
+
+        if not file_ref.bucket and Path(file_ref.key).is_file():
+            return Path(file_ref.key).read_bytes()
+
         almacen = self._storage
         if almacen is None:
             from server.app.core.storage import get_storage_service
 
             almacen = get_storage_service()
-        return await almacen.get(key)
+        return await almacen.get(file_ref.key)
 
     def _provenance(self) -> ExtractionProvenance:
         return ExtractionProvenance(

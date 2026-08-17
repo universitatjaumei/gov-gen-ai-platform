@@ -499,30 +499,153 @@ def _is_recent_retest(retested_at_str: str | None) -> bool:
         return False
 
 
-def _embed_script_block(spec_json: dict, code: str, block_id: str) -> dict:
+#: El tipo de slot que corresponde al fichero con el que se probó el script. El script se
+#: probó contra algo concreto, así que eso es lo que la plantilla tiene que pedir.
+_SLOT_POR_TIPO_DE_PRUEBA: dict[str, str] = {
+    "xlsx": "excel",
+    "csv": "csv",
+    "pdf_text": "pdf",
+}
+_SLOT_DEL_SCRIPT = "datos_del_script"
+
+
+def _embed_script_block(
+    spec_json: dict,
+    code: str,
+    block_id: str,
+    *,
+    test_data_kind: str | None = None,
+) -> dict:
+    """Incrusta el script aprobado como bloque determinista de la plantilla.
+
+    PRO.3 — dos cosas que estaban mal, y ninguna se veía al aprobar:
+
+    1. **El bloque no tenía la forma que lee el contrato**: `label` donde `BlockContract`
+       espera `title` y `source_kind` donde espera `source_pipeline`, y un `options` que el
+       contrato no declaraba. Una plantilla con un script aprobado no validaba, así que el
+       grafo no podía cargarla y el script no se ejecutaba nunca. Mismo patrón que el hallazgo
+       #6 de VER.3: lo que se guarda tiene que ser lo que se lee.
+    2. **Sobre una plantilla con `spec_json: {}`** —lo que guarda el constructor, anotado en
+       VER.3— el resultado era un spec sin secciones, sin contrato de entrada, sin contrato de
+       UI y sin políticas. El fallo salía lejos: un 500 al pedir el contrato de UI de esa
+       versión. Y sin contrato de entrada el script **no tendría fichero que leer**, porque el
+       artefacto se busca por los slots que declara la plantilla.
+
+    Lo que falte se completa; lo que la plantilla ya tenga no se toca.
+    """
     new_spec = copy.deepcopy(spec_json)
     script_block: dict[str, Any] = {
         "id": block_id,
         "kind": "DETERMINISTIC_DATA",
-        "label": "Script de extracción",
-        "source_kind": "admin_script",
+        "title": "Script de extracción",
+        "source_pipeline": "admin_script",
         "options": {"code": code, "approved": True},
         "depends_on": [],
     }
+    # `blocks` es una **lista** en el contrato. Aquí se escribía un diccionario cuando la
+    # plantilla no traía ninguno, y eso ya no valida: era otra forma de dejar la plantilla
+    # ilegible. Un diccionario heredado se normaliza a lista, que es lo único que se lee.
     blocks = new_spec.get("blocks")
     if isinstance(blocks, dict):
-        blocks[block_id] = script_block
+        new_spec["blocks"] = list(blocks.values()) + [script_block]
     elif isinstance(blocks, list):
         new_spec["blocks"] = blocks + [script_block]
     else:
-        new_spec["blocks"] = {block_id: script_block}
-    sections = new_spec.get("sections", [])
-    if sections:
-        section = sections[0]
-        ids = section.get("block_ids", [])
-        if block_id not in ids:
-            section["block_ids"] = ids + [block_id]
+        new_spec["blocks"] = [script_block]
+
+    sections = new_spec.get("sections") or []
+    if not sections:
+        sections = [{"id": "principal", "title": "Datos extraídos", "order": 0, "block_ids": []}]
+        new_spec["sections"] = sections
+    section = sections[0]
+    ids = section.get("block_ids", [])
+    if block_id not in ids:
+        section["block_ids"] = ids + [block_id]
+
+    _completar_lo_que_falte(new_spec, test_data_kind)
     return new_spec
+
+
+def _completar_lo_que_falte(spec: dict, test_data_kind: str | None) -> None:
+    """Rellena contrato de entrada, contrato de UI y políticas si la plantilla no los traía."""
+    slot_kind = _SLOT_POR_TIPO_DE_PRUEBA.get(test_data_kind or "", "excel")
+    etiqueta = {"es": "Fichero de datos", "ca": "Fitxer de dades", "en": "Data file"}
+
+    slots = spec.get("input_contract") or {}
+    if not (slots.get("required_slots") or slots.get("optional_slots")):
+        spec["input_contract"] = {
+            "required_slots": [
+                {"slot_id": _SLOT_DEL_SCRIPT, "kind": slot_kind, "label": etiqueta}
+            ],
+            "optional_slots": [],
+        }
+
+    ui = spec.get("ui_contract") or {}
+    if not ui.get("dropzones"):
+        primer_slot = spec["input_contract"]["required_slots"][0]
+        spec["ui_contract"] = {
+            "wizard_steps": ui.get("wizard_steps")
+            or [
+                {
+                    "id": s.get("id", "principal"),
+                    "title": s.get("title", "Datos extraídos"),
+                    "order": s.get("order", 0),
+                    "block_ids": list(s.get("block_ids", [])),
+                }
+                for s in spec["sections"]
+            ],
+            "dropzones": [
+                {
+                    "slot_id": primer_slot["slot_id"],
+                    "label": primer_slot["label"],
+                    "accept": _ACEPTA_POR_SLOT.get(primer_slot["kind"], []),
+                    "multiple": False,
+                    "max_size_mb": 25,
+                }
+            ],
+            "manual_fields": ui.get("manual_fields") or [],
+            "block_editor_enabled": ui.get("block_editor_enabled", True),
+            "ai_review_panel_enabled": ui.get("ai_review_panel_enabled", False),
+            "preview_layout": ui.get("preview_layout", "markdown"),
+        }
+
+    # Un script no escribe prosa ni necesita revisión de IA: las políticas de una plantilla
+    # que sólo extrae datos son las mínimas. Si la plantilla ya las traía, se respetan.
+    spec.setdefault("ai_block_policy", "disabled")
+    spec.setdefault("review_policy", "none")
+    spec.setdefault("export_policy", "docx")
+
+
+_ACEPTA_POR_SLOT: dict[str, list[str]] = {
+    "excel": [".xlsx", ".xls"],
+    "csv": [".csv"],
+    "pdf": [".pdf"],
+}
+
+
+def _validar_spec(spec: dict) -> None:
+    """La versión guardada tiene que ser una `ReportTemplateSpec` legible.
+
+    Sin esto, aprobar sobre una plantilla rara dejaba la propuesta en `approved` y la plantilla
+    inservible, y el 500 salía días después al abrirla. Es mejor un 422 aquí, con el motivo.
+    """
+    from pydantic import ValidationError
+
+    from server.app.modules.redaccion.contracts.template import ReportTemplateSpec
+
+    try:
+        ReportTemplateSpec.model_validate(spec)
+    except ValidationError as fallo:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "TEMPLATE_SPEC_INVALID",
+                "message": (
+                    "La plantilla de destino no puede alojar el script: la versión resultante "
+                    f"no valida ({fallo.error_count()} errores). Revisa la plantilla."
+                ),
+            },
+        ) from fallo
 
 
 async def _create_template_version(
@@ -530,6 +653,7 @@ async def _create_template_version(
     template: HubReportTemplate,
     code: str,
     created_by_uuid: uuid.UUID,
+    test_data_kind: str | None = None,
 ) -> HubReportTemplateVersion:
     current_version: HubReportTemplateVersion | None = None
     if template.current_version_id:
@@ -537,7 +661,12 @@ async def _create_template_version(
     base_spec: dict = current_version.spec_json if current_version else {}
     next_version_num = (current_version.version + 1) if current_version else 1
     new_block_id = str(uuid.uuid4())
-    new_spec = _embed_script_block(base_spec, code, new_block_id)
+    new_spec = _embed_script_block(
+        base_spec, code, new_block_id, test_data_kind=test_data_kind
+    )
+    # La versión que se guarda tiene que poder leerse: si no valida, el fallo aparecería lejos
+    # —un 500 al abrir la plantilla— y con la propuesta ya marcada como aprobada.
+    _validar_spec(new_spec)
     new_version_id = uuid.uuid4()
     new_version = HubReportTemplateVersion(
         id=new_version_id,
@@ -685,7 +814,9 @@ async def save_to_private_template(
     if template.owner_id != proposer_uuid:
         raise HTTPException(status_code=403, detail="Not the owner of the target template")
 
-    new_version = await _create_template_version(session, template, proposal.code, proposer_uuid)
+    new_version = await _create_template_version(
+        session, template, proposal.code, proposer_uuid, proposal.test_data_kind
+    )
 
     proposal.status = "approved"
     proposal.reviewer_user_id = proposer_uuid
@@ -874,7 +1005,9 @@ async def approve_script_proposal(
         raise HTTPException(status_code=404, detail="Target global template not found")
 
     admin_uuid = _user_to_uuid(user.user_id)
-    new_version = await _create_template_version(session, template, proposal.code, admin_uuid)
+    new_version = await _create_template_version(
+        session, template, proposal.code, admin_uuid, proposal.test_data_kind
+    )
 
     proposal.status = "approved"
     proposal.reviewer_user_id = admin_uuid

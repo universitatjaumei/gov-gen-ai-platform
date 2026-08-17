@@ -104,9 +104,25 @@ def _seed_template_and_version(
         id=version_id,
         template_id=template_id,
         version=1,
+        # PRO.3 — un spec que valida contra `ReportTemplateSpec`. Este `spec_json` tenía
+        # `blocks` como diccionario y `label` en vez de `title`, así que era una plantilla que
+        # el grafo no podía leer; desde que aprobar valida la versión resultante, una plantilla
+        # así se rechaza con 422 en vez de quedarse guardada e inservible.
         spec_json={
-            "sections": [{"id": "s1", "title": "Main", "block_ids": ["b1"]}],
-            "blocks": {"b1": {"id": "b1", "kind": "STATIC_TEXT", "label": "Intro"}},
+            "sections": [{"id": "s1", "title": "Main", "order": 0, "block_ids": ["b1"]}],
+            "blocks": [{"id": "b1", "kind": "STATIC_TEXT", "title": "Intro", "content": ""}],
+            "input_contract": {"required_slots": [], "optional_slots": []},
+            "ui_contract": {
+                "wizard_steps": [],
+                "dropzones": [],
+                "manual_fields": [],
+                "block_editor_enabled": True,
+                "ai_review_panel_enabled": False,
+                "preview_layout": "markdown",
+            },
+            "ai_block_policy": "disabled",
+            "review_policy": "none",
+            "export_policy": "docx",
         },
         created_by=owner_id,
     )

@@ -133,10 +133,62 @@ def _extract_sections(spec_json: dict) -> list[SectionContract]:
 
 
 def _block_content_to_html(content: dict | None) -> str:
+    """El HTML de un bloque para la vista previa y la impresión.
+
+    PRO.3 — miraba sólo `text` y `value`, y el contenido de **cualquier extracción** es
+    `{tables, metrics, free_text}`: ninguna tabla extraída se había visto nunca en la vista
+    previa, ni por script ni por Excel ni por PDF. El bloque quedaba `extracted` con sus datos
+    dentro y el informe salía en blanco.
+
+    Todo se escapa: los datos vienen de un fichero que sube cualquiera.
+    """
     if not content:
         return ""
-    text = content.get("text") or content.get("value") or ""
-    return f"<p>{_html.escape(str(text))}</p>" if text else ""
+
+    texto = content.get("text") or content.get("value") or ""
+    if texto:
+        return f"<p>{_html.escape(str(texto))}</p>"
+
+    partes: list[str] = []
+
+    for tabla in content.get("tables") or []:
+        partes.append(_tabla_a_html(tabla))
+
+    metricas = content.get("metrics") or []
+    if metricas:
+        filas = "".join(
+            "<li><strong>{nombre}</strong>: {valor}{unidad}</li>".format(
+                nombre=_html.escape(str(m.get("name", ""))),
+                valor=_html.escape(str(m.get("value", ""))),
+                unidad=f" {_html.escape(str(m['unit']))}" if m.get("unit") else "",
+            )
+            for m in metricas
+        )
+        partes.append(f'<ul class="metricas">{filas}</ul>')
+
+    libre = content.get("free_text")
+    if libre:
+        partes.append(f"<p>{_html.escape(str(libre))}</p>")
+
+    return "".join(partes)
+
+
+def _tabla_a_html(tabla: dict) -> str:
+    nombre = tabla.get("name")
+    cabeceras = tabla.get("headers") or []
+    filas = tabla.get("rows") or []
+
+    cabecera_html = ""
+    if cabeceras:
+        celdas = "".join(f"<th>{_html.escape(str(c))}</th>" for c in cabeceras)
+        cabecera_html = f"<thead><tr>{celdas}</tr></thead>"
+
+    cuerpo = "".join(
+        "<tr>" + "".join(f"<td>{_html.escape(str(v))}</td>" for v in fila) + "</tr>"
+        for fila in filas
+    )
+    titulo = f"<caption>{_html.escape(str(nombre))}</caption>" if nombre else ""
+    return f"<table>{titulo}{cabecera_html}<tbody>{cuerpo}</tbody></table>"
 
 
 def _extract_citation_uuids(citations_json: list | None) -> list[UUID]:

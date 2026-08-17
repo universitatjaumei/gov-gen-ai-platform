@@ -5,7 +5,7 @@ obligatorios para ese tipo de bloque; los campos comunes viven en _BlockBase.
 """
 from __future__ import annotations
 
-from typing import Annotated, Literal, Union
+from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -34,6 +34,11 @@ class UserInputBlock(_BlockBase):
 class DeterministicDataBlock(_BlockBase):
     kind: Literal["DETERMINISTIC_DATA"] = "DETERMINISTIC_DATA"
     source_pipeline: str
+    # PRO.3 — lo que el pipeline necesita además del fichero. Para `admin_script` es el
+    # código aprobado (`{"code": ..., "approved": True}`), que la cola de aprobación incrusta
+    # aquí: sin un sitio en el contrato, el bloque que escribía `approve` no validaba y la
+    # plantilla quedaba ilegible para el grafo.
+    options: dict[str, Any] = Field(default_factory=dict)
 
 
 class TableBlock(_BlockBase):

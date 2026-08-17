@@ -31,6 +31,53 @@ def _entra_en_el_informe(kind: str, status: str, tiene_contenido: bool) -> bool:
     return status not in ("failed",) and tiene_contenido
 
 
+def contenido_a_markdown(content: dict | None) -> str:
+    """El Markdown de un bloque para el documento final.
+
+    PRO.3 — aquí había `content.get("text") or str(content)`, así que un bloque de datos
+    volcaba el **diccionario de Python** en el informe: `{'tables': [{'name': …`. Las tablas
+    van como tabla de Markdown y las métricas como lista, que es lo que la exportación
+    convierte en tabla y en viñetas.
+    """
+    if not content:
+        return ""
+
+    texto = content.get("text") or content.get("value")
+    if texto:
+        return str(texto)
+
+    partes: list[str] = []
+
+    for tabla in content.get("tables") or []:
+        partes.append(_tabla_a_markdown(tabla))
+
+    for metrica in content.get("metrics") or []:
+        unidad = f" {metrica['unit']}" if metrica.get("unit") else ""
+        partes.append(f"- **{metrica.get('name', '')}**: {metrica.get('value', '')}{unidad}")
+
+    if content.get("free_text"):
+        partes.append(str(content["free_text"]))
+
+    return "\n\n".join(p for p in partes if p)
+
+
+def _tabla_a_markdown(tabla: dict) -> str:
+    cabeceras = [str(c) for c in (tabla.get("headers") or [])]
+    filas = tabla.get("rows") or []
+    if not cabeceras and not filas:
+        return ""
+
+    lineas: list[str] = []
+    if tabla.get("name"):
+        lineas.append(f"**{tabla['name']}**\n")
+    if cabeceras:
+        lineas.append("| " + " | ".join(cabeceras) + " |")
+        lineas.append("|" + "|".join(" --- " for _ in cabeceras) + "|")
+    for fila in filas:
+        lineas.append("| " + " | ".join(str(v) for v in fila) + " |")
+    return "\n".join(lineas)
+
+
 class FinalAssemblerNode:
     """Renderiza el Markdown ensamblado solo con bloques en estado approved/locked.
 
@@ -78,11 +125,9 @@ class FinalAssemblerNode:
                 ):
                     continue
 
-                text = ""
-                if block_state.content:
-                    text = block_state.content.get("text") or str(block_state.content)
+                texto = contenido_a_markdown(block_state.content)
 
-                section_parts.append(f"### {block_contract.title}\n\n{text}")
+                section_parts.append(f"### {block_contract.title}\n\n{texto}")
 
             if section_parts:
                 parts.append(f"## {section.title}\n\n" + "\n\n".join(section_parts))

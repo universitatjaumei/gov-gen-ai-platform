@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,18 +17,44 @@ _SLOT_KIND_TO_SOURCE: dict[str, set[str]] = {
     "csv":   {"excel"},
 }
 
+#: PRO.3 — pipelines que sirven a **cualquier** tipo de slot.
+#:
+#: Los demás sirven a un tipo concreto —`excel` para hojas de cálculo, `pdf_text` para PDF—,
+#: pero un script de extracción es genérico por definición: lee el fichero que la plataforma
+#: le pase. Sin esto, un bloque con `source_pipeline='admin_script'` no encontraba artefacto y
+#: se quedaba sin fichero que leer.
+_PIPELINES_GENERICOS: frozenset[str] = frozenset({"admin_script"})
+
 
 def _find_artifact_for_pipeline(source_pipeline: str, spec, artifacts_normalized: dict[str, str]) -> StorageRef | None:
     all_slots = list(spec.input_contract.required_slots) + list(spec.input_contract.optional_slots)
     for slot in all_slots:
         matched_pipelines = _SLOT_KIND_TO_SOURCE.get(slot.kind, set())
-        if source_pipeline in matched_pipelines and slot.slot_id in artifacts_normalized:
+        acepta = source_pipeline in matched_pipelines or source_pipeline in _PIPELINES_GENERICOS
+        if acepta and slot.slot_id in artifacts_normalized:
             # `bucket` vacío y la ruta entera en `key`: los pipelines componen
             # `Path(bucket) / key`, y desde que la normalización materializa el fichero la
             # ruta es absoluta. Partirla por la primera barra daba `Path("C:") / "Users/…"`,
             # que en Windows es una ruta relativa al directorio actual de esa unidad.
             return StorageRef(bucket="", key=artifacts_normalized[slot.slot_id])
     return None
+
+
+async def _extraer(pipeline, inp):
+    """Ejecuta el pipeline por la vía que tenga.
+
+    `AdminScriptExtractionPipeline` sólo expone `extract_async` —habla con el sandbox por
+    HTTP—, así que llamarlo por `extract` en un hilo daba `AttributeError` y el bloque acababa
+    en `failed` acusando al script de un fallo del cableado.
+
+    La pregunta es si el método es **de verdad** awaitable, no si el nombre existe: un
+    `MagicMock` tiene todos los atributos, así que un `hasattr` mandaría a la vía asíncrona a
+    cualquier doble de test y el fallo sería «object MagicMock can't be used in 'await'».
+    """
+    asincrono = getattr(pipeline, "extract_async", None)
+    if inspect.iscoroutinefunction(asincrono):
+        return await asincrono(inp)
+    return await asyncio.to_thread(pipeline.extract, inp)
 
 
 class DeterministicExtractionNode:
@@ -68,11 +95,18 @@ class DeterministicExtractionNode:
                 ))
                 continue
 
-            inp = ExtractionInput(source_kind=source_kind, file_ref=file_ref, options={})
+            # PRO.3 — las opciones del bloque viajan al pipeline. Iba `options={}`, así que el
+            # código del script aprobado no llegaba nunca y el pipeline respondía
+            # `SCRIPT_NOT_APPROVED`: el síntoma acusaba a la aprobación, que estaba bien.
+            inp = ExtractionInput(
+                source_kind=source_kind,
+                file_ref=file_ref,
+                options=dict(getattr(block_contract, "options", {}) or {}),
+            )
 
             try:
                 pipeline = self._factory.get(source_kind)
-                result = await asyncio.to_thread(pipeline.extract, inp)
+                result = await _extraer(pipeline, inp)
             except Exception as exc:
                 new_warnings.append(ExtractionWarning(
                     block_id=block_id, message=str(exc), kind="extraction_error",
