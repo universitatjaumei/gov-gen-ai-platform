@@ -93,6 +93,18 @@ async def _propuesta_platform(session, proposer_user_id: str) -> uuid.UUID:
     return proposal.id
 
 
+class _AlmacenDePrueba:
+    """El fichero de prueba, en memoria.
+
+    PRO.2 — desde que el contenido del fichero viaja al sandbox (y no su ruta, que dentro
+    del contenedor no existía), la tubería lo lee por `StorageService`. Antes este test
+    pasaba `key="fake.pdf"` y colaba porque nadie miraba el fichero.
+    """
+
+    async def get(self, key: str) -> bytes:
+        return b"contenido de prueba"
+
+
 async def test_ciclo_completo_propuesta_hasta_aprobada_en_bd_real(db_url):
     """SuperAdmin de desarrollo (user_id no-UUID) propone, prueba y un admin aprueba."""
     engine = create_async_engine(db_url)
@@ -101,6 +113,7 @@ async def test_ciclo_completo_propuesta_hasta_aprobada_en_bd_real(db_url):
             proposer = UserInfo(user_id="1", email="fabra@uji.es", role="superadmin")
             admin = UserInfo(user_id="1", email="fabra@uji.es", role="superadmin")
             sandbox = LocalSandboxClient()
+            almacen = _AlmacenDePrueba()
 
             proposal_id = await _propuesta_platform(session, proposer.user_id)
             await session.commit()
@@ -114,6 +127,7 @@ async def test_ciclo_completo_propuesta_hasta_aprobada_en_bd_real(db_url):
                 user=proposer,
                 session=session,
                 sandbox=sandbox,
+                storage=almacen,
             )
             assert test_out.proposal_id == proposal_id
             assert test_out.status == "tested"
@@ -135,7 +149,11 @@ async def test_ciclo_completo_propuesta_hasta_aprobada_en_bd_real(db_url):
             assert submit_out.status == "pending_review"
 
             retest_out = await _admin_retest(
-                proposal_id=proposal_id, user=admin, session=session, sandbox=sandbox
+                proposal_id=proposal_id,
+                user=admin,
+                session=session,
+                sandbox=sandbox,
+                storage=almacen,
             )
             assert retest_out.hash_matches is True
 

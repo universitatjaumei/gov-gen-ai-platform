@@ -12,6 +12,15 @@ class ExecuteExtractionRequest(BaseModel):
     raw_text: str = ""
     options: dict[str, Any] = Field(default_factory=dict)
     timeout_seconds: int = 30
+    # PRO.2 — el contenido del fichero, no su ruta.
+    #
+    # `file_path` era una ruta del host de la API, y dentro de este contenedor no existe
+    # ningún fichero ahí: `pd.read_excel(file_path)` fallaba siempre. `/execute-chart` y
+    # `/execute-etl` ya recibían el contenido (`data_csv`) y lo escribían en su temporal;
+    # la extracción hace lo mismo. El nombre viaja porque pandas elige el motor por la
+    # extensión.
+    file_bytes_b64: str = ""
+    file_name: str = ""
 
 
 class ExtractionPayload(BaseModel):

@@ -13,6 +13,7 @@ La factoría `get_sandbox_client()` selecciona la implementación según
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
 import subprocess
@@ -55,8 +56,15 @@ class SandboxClient(Protocol):
         raw_text: str | None,
         options: dict[str, Any],
         timeout_seconds: int | None = None,
+        file_bytes: bytes | None = None,
+        file_name: str = "",
     ) -> ExtractionResult:
         """Ejecuta un script de extracción y devuelve ExtractionResult.
+
+        `file_bytes` es el **contenido** del fichero (PRO.2): `file_path` sólo servía cuando
+        el sandbox compartía sistema de archivos con la API, que no es el caso ni en Docker
+        ni con `StorageService` sobre GCS. Con contenido, el sandbox lo materializa en su
+        propio temporal y le pasa esa ruta al script.
 
         Errores del sandbox → ExtractionResult con warnings (nunca lanza excepciones).
         Error de red (ConnectError tras reintentos) → SandboxUnavailableError.
@@ -171,6 +179,8 @@ class HttpSandboxClient:
         raw_text: str | None,
         options: dict[str, Any],
         timeout_seconds: int | None = None,
+        file_bytes: bytes | None = None,
+        file_name: str = "",
     ) -> ExtractionResult:
         t = timeout_seconds or self._default_timeout
         payload = {
@@ -179,6 +189,10 @@ class HttpSandboxClient:
             "raw_text": raw_text or "",
             "options": options,
             "timeout_seconds": t,
+            "file_bytes_b64": (
+                base64.b64encode(file_bytes).decode("ascii") if file_bytes else ""
+            ),
+            "file_name": file_name,
         }
         resp = await self._post_with_retry("/execute-extraction", payload, script_timeout=t)
 
@@ -304,33 +318,35 @@ class LocalSandboxClient:
         raw_text: str | None,
         options: dict[str, Any],
         timeout_seconds: int | None = None,
+        file_bytes: bytes | None = None,
+        file_name: str = "",
     ) -> ExtractionResult:
         if not code or not code.strip():
             return _extraction_with_warning(
                 "SCRIPT_EMPTY", "El código de script está vacío.", self._PIPELINE_ID
             )
 
-        wrapper = _build_local_extraction_wrapper(code, file_path or "", raw_text or "", options)
         timeout = timeout_seconds or 30
 
-        try:
-            sub = await asyncio.to_thread(_run_sync, wrapper, timeout)
-        except TimeoutError:
-            return _extraction_with_warning(
-                "SCRIPT_TIMEOUT", f"Timeout tras {timeout}s.", self._PIPELINE_ID
-            )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Mismo contrato que el sandbox HTTP: con contenido, el fichero se materializa
+            # y el script recibe esa ruta.
+            ruta = file_path or ""
+            if file_bytes is not None:
+                destino = Path(tmpdir) / (Path(file_name or "entrada.bin").name or "entrada.bin")
+                destino.write_bytes(file_bytes)
+                ruta = str(destino)
 
-        if sub["returncode"] != 0:
-            return _extraction_with_warning(
-                "SCRIPT_EXECUTION_ERROR", sub["stderr"][:500], self._PIPELINE_ID
-            )
+            wrapper = _build_local_extraction_wrapper(code, ruta, raw_text or "", options)
 
-        try:
-            data = json.loads(sub["stdout"])
-        except (json.JSONDecodeError, ValueError):
-            data = {}
+            try:
+                sub = await asyncio.to_thread(_run_sync, wrapper, timeout)
+            except TimeoutError:
+                return _extraction_with_warning(
+                    "SCRIPT_TIMEOUT", f"Timeout tras {timeout}s.", self._PIPELINE_ID
+                )
 
-        return _parse_extraction_json({"result": data}, self._PIPELINE_ID)
+            return _resultado_local(sub, self._PIPELINE_ID)
 
     async def execute_chart_script(
         self,
@@ -411,6 +427,20 @@ _t(df.copy()).to_csv({str(out_csv)!r}, index=False)
 # ---------------------------------------------------------------------------
 # Helpers locales de subprocess
 # ---------------------------------------------------------------------------
+
+def _resultado_local(sub: dict, pipeline_id: str) -> ExtractionResult:
+    if sub["returncode"] != 0:
+        return _extraction_with_warning(
+            "SCRIPT_EXECUTION_ERROR", sub["stderr"][:500], pipeline_id
+        )
+
+    try:
+        data = json.loads(sub["stdout"])
+    except (json.JSONDecodeError, ValueError):
+        data = {}
+
+    return _parse_extraction_json({"result": data}, pipeline_id)
+
 
 def _build_local_extraction_wrapper(
     code: str, file_path: str, raw_text: str, options: dict

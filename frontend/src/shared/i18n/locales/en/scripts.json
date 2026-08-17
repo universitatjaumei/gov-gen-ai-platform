@@ -7,7 +7,11 @@
     "step4": "Anonymization",
     "step5": "PDF preview",
     "step6": "Run test",
-    "step7": "Validate and save"
+    "step7": "Validate and save",
+    "prompt_placeholder": "Describe what the script should extract and from which file…",
+    "test_data_ready": "Uploaded file: {{key}}",
+    "test_data_missing": "Upload a test file in step 3: without one the script would run with nothing to read.",
+    "step5_no_aplica": "Only applies to PDFs; a spreadsheet has no personal data to preview."
   },
   "target": {
     "label": "Script destination",
@@ -26,6 +30,14 @@
     },
     "findings": "Findings",
     "confidence": "Confidence"
+  },
+  "model_audit": {
+    "title": "Auditor model review",
+    "verdict": {
+      "acepta": "does what was asked",
+      "duda": "works, but assumes something",
+      "rechaza": "does not do what was asked"
+    }
   },
   "btn": {
     "propose": "Generate script",

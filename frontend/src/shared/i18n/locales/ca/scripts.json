@@ -7,7 +7,11 @@
     "step4": "Anonimització",
     "step5": "Previsualització PDF",
     "step6": "Executar prova",
-    "step7": "Validar i desar"
+    "step7": "Validar i desar",
+    "prompt_placeholder": "Descriu quines dades ha d'extraure l'script i de quin fitxer…",
+    "test_data_ready": "Fitxer pujat: {{key}}",
+    "test_data_missing": "Puja un fitxer de prova al pas 3: sense ell l'script s'executaria sense res a llegir.",
+    "step5_no_aplica": "Només s'aplica a PDF; amb un fitxer de full de càlcul no hi ha dades personals que previsualitzar."
   },
   "target": {
     "label": "Destinació de l'script",
@@ -26,6 +30,14 @@
     },
     "findings": "Troballes",
     "confidence": "Confiança"
+  },
+  "model_audit": {
+    "title": "Revisió del model auditor",
+    "verdict": {
+      "acepta": "fa el que s'ha demanat",
+      "duda": "funciona, però assumeix alguna cosa",
+      "rechaza": "no fa el que s'ha demanat"
+    }
   },
   "btn": {
     "propose": "Generar script",

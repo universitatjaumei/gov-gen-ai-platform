@@ -51,7 +51,7 @@ _DANGEROUS_ATTRS: frozenset[str] = frozenset({
 # con el paseo `().__class__.__bases__[0].__subclasses__()`, que llega a cualquier clase
 # cargada sin nombrar nada prohibido, y con `getattr(o, 'ev' + 'al')`, donde el nombre ni
 # siquiera existe como literal. Se bloquean los tres por su forma, no por su nombre.
-_NOMBRES_PROHIBIDOS: frozenset[str] = frozenset({
+NOMBRES_PROHIBIDOS: frozenset[str] = frozenset({
     "__builtins__", "__globals__", "__subclasses__", "__bases__", "__class__",
     "__mro__", "__code__", "__closure__", "__dict__", "__loader__", "__module__",
     "globals", "locals", "vars", "getattr", "setattr", "delattr",
@@ -63,7 +63,7 @@ _NOMBRES_PROHIBIDOS: frozenset[str] = frozenset({
 # aceptar una persona; un `import os`, `socket` o `requests` es una capacidad —sistema
 # operativo, red, deserialización— y no se acepta mirándola. Portado de
 # `automatia_shared/core/security.py:FORBIDDEN_IMPORTS`.
-_MODULOS_PROHIBIDOS: frozenset[str] = frozenset({
+MODULOS_PROHIBIDOS: frozenset[str] = frozenset({
     "os", "sys", "subprocess", "shutil", "platform",
     "importlib", "socket", "ssl", "http", "urllib", "requests", "httpx",
     "ctypes", "cffi", "pickle", "marshal", "shelve",
@@ -170,14 +170,14 @@ class ScriptSecurityAuditor:
             # SEC.8.3: la introspección que lleva al intérprete, mirada por su forma.
             # `__builtins__` como nombre suelto, `.__class__` como atributo, `getattr`
             # como llamada: cualquiera de las tres abre el camino, se use como se use.
-            if isinstance(node, ast.Name) and node.id in _NOMBRES_PROHIBIDOS:
+            if isinstance(node, ast.Name) and node.id in NOMBRES_PROHIBIDOS:
                 findings.append(_critico(
                     rule="interpreter-access",
                     detail=node.id,
                     line=linea,
                     texto=f"acceso a '{node.id}', que da alcance al intérprete",
                 ))
-            if isinstance(node, ast.Attribute) and node.attr in _NOMBRES_PROHIBIDOS:
+            if isinstance(node, ast.Attribute) and node.attr in NOMBRES_PROHIBIDOS:
                 findings.append(_critico(
                     rule="interpreter-access",
                     detail=node.attr,
@@ -230,7 +230,7 @@ def _critico(*, rule: str, detail: str, line: int, texto: str) -> AuditFinding:
 
 
 def _hallazgo_de_modulo(module: str, line: int) -> AuditFinding:
-    if module in _MODULOS_PROHIBIDOS:
+    if module in MODULOS_PROHIBIDOS:
         return _critico(
             rule="forbidden-module",
             detail=module,

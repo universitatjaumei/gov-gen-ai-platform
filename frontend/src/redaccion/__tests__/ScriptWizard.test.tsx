@@ -344,6 +344,226 @@ describe('ScriptProposalWizardPage', () => {
     expect(hallazgos[0].textContent).toContain('csv')
   })
 
+  it('should_traducir_el_texto_de_ayuda_de_la_descripcion', () => {
+    // Visto en navegador con la interfaz en valenciano: el marcador de la caja donde se
+    // describe el script estaba escrito en inglés dentro del componente. Es el primer texto
+    // que lee quien entra por el menú nuevo de PRO.2.
+    wrap(<ScriptProposalWizardPage />)
+
+    const caja = screen.getByTestId('input-prompt-nl')
+    // Resuelto por i18next, no escrito en el componente: sale el texto del catálogo.
+    expect(caja.getAttribute('placeholder')).toBe(
+      'Describe qué datos debe extraer el script y de qué fichero…',
+    )
+  })
+
+  it('should_mostrar_el_veredicto_del_modelo_auditor_aparte_de_la_auditoria', () => {
+    // PRO.2 — la revisión del modelo se pinta en su propio cuadro: es una segunda opinión,
+    // no una puerta, y confundirla con la auditoría determinista haría leer un «acepta» del
+    // modelo como si aprobara algo.
+    vi.mocked(useProposeScript).mockReturnValue({
+      mutate: mockProposeScript,
+      data: {
+        ...SAMPLE_PROPOSE_APPROVED,
+        revision_del_modelo: {
+          veredicto: 'duda',
+          motivos: ['Asume que los datos están en la primera hoja.'],
+          model_used: 'gemini-2.5-pro',
+          prompt_version: 'script_audit_v1',
+        },
+      } as unknown as ReturnType<typeof useProposeScript>['data'],
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      reset: vi.fn(),
+    } as unknown as ReturnType<typeof useProposeScript>)
+
+    wrap(<ScriptProposalWizardPage />)
+
+    const veredicto = screen.getByTestId('model-audit-verdict')
+    expect(veredicto.getAttribute('data-veredicto')).toBe('duda')
+    expect(screen.getByTestId('model-audit-reason').textContent).toContain('primera hoja')
+    // El cuadro de la auditoría determinista sigue siendo otro, y sigue diciendo SAFE.
+    expect(screen.getByTestId('audit-summary').getAttribute('data-risk-level')).toBe('SAFE')
+  })
+
+  it('should_no_mostrar_veredicto_cuando_no_hubo_revision_del_modelo', () => {
+    vi.mocked(useProposeScript).mockReturnValue({
+      mutate: mockProposeScript,
+      data: SAMPLE_PROPOSE_APPROVED as unknown as ReturnType<typeof useProposeScript>['data'],
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      reset: vi.fn(),
+    } as unknown as ReturnType<typeof useProposeScript>)
+
+    wrap(<ScriptProposalWizardPage />)
+
+    expect(screen.queryByTestId('model-audit-verdict')).toBeNull()
+  })
+
+  // ------------------------------------------------------------------------
+  // PRO.2 — el fichero de prueba tiene que llegar al sandbox
+  //
+  // Visto en navegador: de la fase 3 en adelante el asistente era un esqueleto. La subida
+  // mandaba `new Blob()` en vez del fichero elegido, la anonimización mandaba
+  // `file_ref: {bucket:'', key:''}` y la prueba en sandbox lo mismo, así que el script se
+  // ejecutaba **sin fichero** y `pd.read_excel(file_path)` no tenía nada que leer. La
+  // pantalla parecía funcionar: cada paso avanzaba y ninguno decía nada.
+  // ------------------------------------------------------------------------
+
+  function _mockDescribe(mutate: ReturnType<typeof vi.fn>, data?: unknown) {
+    vi.mocked(useDescribeTestData).mockReturnValue({
+      mutate,
+      data,
+      isPending: false,
+      isSuccess: !!data,
+      isError: false,
+    } as unknown as ReturnType<typeof useDescribeTestData>)
+  }
+
+  function _proposalListo() {
+    vi.mocked(useProposeScript).mockReturnValue({
+      mutate: mockProposeScript,
+      data: SAMPLE_PROPOSE_APPROVED as unknown as ReturnType<typeof useProposeScript>['data'],
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      reset: vi.fn(),
+    } as unknown as ReturnType<typeof useProposeScript>)
+  }
+
+  it('should_subir_el_fichero_elegido_y_no_un_blob_vacio', () => {
+    const mutate = vi.fn()
+    _proposalListo()
+    _mockDescribe(mutate)
+
+    wrap(<ScriptProposalWizardPage />)
+    fireEvent.click(screen.getByTestId('btn-next-step-2'))
+
+    const fichero = new File(['a,b\n1,2\n'], 'ejecucion.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    fireEvent.change(screen.getByTestId('input-test-data-file'), {
+      target: { files: [fichero] },
+    })
+
+    expect(mutate).toHaveBeenCalledTimes(1)
+    const enviado = mutate.mock.calls[0][0]
+    expect(enviado.data.file).toBe(fichero)
+  })
+
+  it('should_llevar_al_sandbox_la_referencia_del_fichero_subido', () => {
+    _proposalListo()
+    _mockDescribe(vi.fn(), {
+      file_ref: { bucket: 'test-data', key: 'test-data/uploads/p1/f.xlsx' },
+      columns: [],
+    })
+
+    wrap(<ScriptProposalWizardPage />)
+    fireEvent.click(screen.getByTestId('btn-next-step-2'))
+    fireEvent.change(screen.getByTestId('input-test-data-file'), {
+      target: { files: [new File(['x'], 'ejecucion.xlsx')] },
+    })
+    fireEvent.click(screen.getByTestId('btn-next-step-3'))
+    fireEvent.click(screen.getByTestId('btn-skip-anonymization'))
+    fireEvent.click(screen.getByTestId('btn-next-step-5'))
+    fireEvent.click(screen.getByTestId('btn-run-test'))
+
+    expect(mockTestScriptProposal).toHaveBeenCalledTimes(1)
+    const enviado = mockTestScriptProposal.mock.calls[0][0]
+    expect(enviado.data.test_data_ref).toEqual({
+      bucket: 'test-data',
+      key: 'test-data/uploads/p1/f.xlsx',
+    })
+    // Se omitió la anonimización, así que son datos reales y hay que declararlo: el
+    // servidor lo prohíbe para plantilla global y con esto puede aplicarlo.
+    expect(enviado.data.use_real_data).toBe(true)
+  })
+
+  it('should_no_dejar_ejecutar_la_prueba_sin_fichero', () => {
+    // Antes el botón estaba habilitado y mandaba una referencia vacía: el script corría
+    // sin fichero y devolvía una tabla vacía sin que nada lo explicara.
+    _proposalListo()
+    _mockDescribe(vi.fn())
+
+    wrap(<ScriptProposalWizardPage />)
+    fireEvent.click(screen.getByTestId('btn-next-step-2'))
+    fireEvent.click(screen.getByTestId('btn-next-step-3'))
+    fireEvent.click(screen.getByTestId('btn-skip-anonymization'))
+    fireEvent.click(screen.getByTestId('btn-next-step-5'))
+
+    const boton = screen.getByTestId('btn-run-test')
+    expect(boton.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(boton)
+    expect(mockTestScriptProposal).not.toHaveBeenCalled()
+  })
+
+  it('should_anonimizar_la_referencia_subida_con_su_tipo_real', () => {
+    const anonimizar = vi.fn()
+    _proposalListo()
+    _mockDescribe(vi.fn(), {
+      file_ref: { bucket: 'test-data', key: 'test-data/uploads/p1/f.xlsx' },
+      columns: [],
+    })
+    vi.mocked(useAnonymizeTestData).mockReturnValue({
+      mutate: anonimizar,
+      data: undefined,
+      isPending: false,
+      isSuccess: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useAnonymizeTestData>)
+
+    wrap(<ScriptProposalWizardPage />)
+    fireEvent.click(screen.getByTestId('btn-next-step-2'))
+    fireEvent.change(screen.getByTestId('input-test-data-file'), {
+      target: { files: [new File(['x'], 'ejecucion.xlsx')] },
+    })
+    fireEvent.click(screen.getByTestId('btn-next-step-3'))
+    fireEvent.click(screen.getByTestId('btn-next-step-4'))
+
+    expect(anonimizar).toHaveBeenCalledTimes(1)
+    const enviado = anonimizar.mock.calls[0][0]
+    expect(enviado.data.file_ref).toEqual({
+      bucket: 'test-data',
+      key: 'test-data/uploads/p1/f.xlsx',
+    })
+    // `kind` era 'csv' fijo: un .xlsx anonimizado como CSV se lee mal o no se lee.
+    expect(enviado.data.kind).toBe('xlsx')
+  })
+
+  it('should_usar_el_fichero_sintetico_cuando_se_ha_anonimizado', () => {
+    _proposalListo()
+    _mockDescribe(vi.fn(), {
+      file_ref: { bucket: 'test-data', key: 'original.xlsx' },
+      columns: [],
+    })
+    vi.mocked(useAnonymizeTestData).mockReturnValue({
+      mutate: vi.fn(),
+      data: {
+        synthetic_ref: { bucket: 'test-data', key: 'sintetico.xlsx' },
+        anonymization_map: {},
+      },
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+    } as unknown as ReturnType<typeof useAnonymizeTestData>)
+
+    wrap(<ScriptProposalWizardPage />)
+    fireEvent.click(screen.getByTestId('btn-next-step-2'))
+    fireEvent.change(screen.getByTestId('input-test-data-file'), {
+      target: { files: [new File(['x'], 'ejecucion.xlsx')] },
+    })
+    fireEvent.click(screen.getByTestId('btn-next-step-3'))
+    fireEvent.click(screen.getByTestId('btn-next-step-4'))
+    fireEvent.click(screen.getByTestId('btn-next-step-5'))
+    fireEvent.click(screen.getByTestId('btn-run-test'))
+
+    const enviado = mockTestScriptProposal.mock.calls[0][0]
+    expect(enviado.data.test_data_ref.key).toBe('sintetico.xlsx')
+    expect(enviado.data.use_real_data).toBe(false)
+  })
+
   it('should_block_save_button_until_test_validated', () => {
     vi.mocked(useProposeScript).mockReturnValue({
       mutate: mockProposeScript,

@@ -14,6 +14,7 @@ import type {
   TemplateOut,
 } from '@/shared/api/generated/model'
 import { useAuth } from '@/shared/auth'
+import { ModelAuditVerdict } from '../components/ModelAuditVerdict'
 
 interface ProposalCardProps {
   proposal: PendingProposalOut
@@ -64,6 +65,10 @@ function ProposalCard({ proposal }: ProposalCardProps) {
           {proposal.code_preview}
         </pre>
       </div>
+
+      {/* PRO.2 — lo que el modelo auditor vio y el AST no puede ver. Va antes del re-test:
+          es lo que ayuda a decidir si merece la pena volver a ejecutarlo. */}
+      {proposal.model_review && <ModelAuditVerdict revision={proposal.model_review} />}
 
       {/* Retest result */}
       {retestResult && (

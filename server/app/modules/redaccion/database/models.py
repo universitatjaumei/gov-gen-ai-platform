@@ -205,6 +205,11 @@ class HubScriptProposal(HubOperationalBase):
     prompt_nl: Mapped[str] = mapped_column(Text, nullable=False)
     code: Mapped[str] = mapped_column(Text, nullable=False)
     audit_result_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    # PRO.2 — el veredicto del modelo auditor (nivel 3), aparte del resultado determinista.
+    # Columna propia y no una clave dentro de `audit_result_json`: son dos cosas con dos
+    # autoridades distintas, y mezclarlas invita a que un consumidor lea la opinión del
+    # modelo creyendo que lee la auditoría que de verdad bloquea.
+    model_review_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     test_data_ref: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     test_data_is_anonymized: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False

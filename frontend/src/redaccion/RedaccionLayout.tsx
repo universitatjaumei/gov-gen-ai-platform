@@ -16,10 +16,19 @@ import { useTranslation } from 'react-i18next'
  * interfaz. La pantalla existía entera desde 9R con su ruta fuera de todo menú, y desde VER.2
  * el endpoint que la sostiene ya no devuelve 503.
  */
+/**
+ * `nav_scripts_new` entra en PRO.2 por la misma razón que `nav_llm_draft` en VER.3: la
+ * pantalla existe entera desde 9R y sólo se llegaba escribiendo la URL. Hasta PRO.2 daba
+ * igual, porque `POST /scripts/propose` devolvía 503; ahora es la única forma de que alguien
+ * pida un script de extracción sin sembrar la propuesta en la base de datos a mano.
+ *
+ * Va **antes** de la cola de revisión, que es el paso siguiente y no el primero.
+ */
 const REDACCION_SUBNAV = [
   { key: 'nav_templates', path: '/redaccion/builder' },
   { key: 'nav_llm_draft', path: '/redaccion/draft' },
   { key: 'nav_new_report', path: '/redaccion/wizard' },
+  { key: 'nav_scripts_new', path: '/redaccion/scripts/wizard' },
   { key: 'nav_scripts_review', path: '/redaccion/scripts/review' },
 ] as const
 

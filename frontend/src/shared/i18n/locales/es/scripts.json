@@ -7,7 +7,11 @@
     "step4": "Anonimización",
     "step5": "Vista previa PDF",
     "step6": "Ejecutar prueba",
-    "step7": "Validar y guardar"
+    "step7": "Validar y guardar",
+    "prompt_placeholder": "Describe qué datos debe extraer el script y de qué fichero…",
+    "test_data_ready": "Fichero subido: {{key}}",
+    "test_data_missing": "Sube un fichero de prueba en el paso 3: sin él el script se ejecutaría sin nada que leer.",
+    "step5_no_aplica": "Sólo aplica a PDF; con un fichero de hoja de cálculo no hay datos personales que previsualizar."
   },
   "target": {
     "label": "Destino del script",
@@ -26,6 +30,14 @@
     },
     "findings": "Hallazgos",
     "confidence": "Confianza"
+  },
+  "model_audit": {
+    "title": "Revisión del modelo auditor",
+    "verdict": {
+      "acepta": "hace lo pedido",
+      "duda": "funciona, pero asume algo",
+      "rechaza": "no hace lo pedido"
+    }
   },
   "btn": {
     "propose": "Generar script",

@@ -18,7 +18,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, get_session
 from server.app.core.auth.models import UserInfo
-from server.app.routers.redaccion._actor import user_to_uuid as _user_to_uuid
+from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
+from server.app.modules.agents_hub.services.model_factory import get_model_for_tier
+from server.app.modules.redaccion.services.actividades_llm import (
+    ActividadLLM,
+    PARA_QUE_SIRVE,
+    tier_de,
+)
+from server.app.routers.redaccion._actor import (
+    nombre_del_modelo,
+    user_to_uuid as _user_to_uuid,
+)
 from server.app.core.sandbox_client import SandboxClient, get_sandbox_client
 from server.app.core.storage import StorageService, get_storage_service
 from server.app.core.uploads import UploadKind, read_within_limit, validate_upload
@@ -43,6 +53,7 @@ from server.app.modules.redaccion.services.anonymization.pii_detector import (
 )
 from server.app.modules.redaccion.services.script_proposal_service import (
     ProposalResult,
+    RevisionDelModelo,
     ScriptProposalService,
 )
 from server.app.modules.redaccion.services.script_auditor import AuditResult
@@ -62,9 +73,45 @@ router = APIRouter(prefix="/redaccion/scripts", tags=["redaccion-scripts"])
 # DI overrides
 # ---------------------------------------------------------------------------
 
-async def get_script_proposal_service() -> ScriptProposalService:
-    """Stub. Conectar a model_factory cuando se enchufe el motor LLM real."""
-    raise HTTPException(status_code=503, detail="Script proposal service not configured.")
+async def _modelo_de(actividad: ActividadLLM, proveedor: Any):
+    """El modelo del nivel que el catálogo asigna a esta actividad.
+
+    El 503 nombra **el nivel y para qué servía**: «falta el nivel 2» no le dice nada a quien
+    lo lee, y con dos niveles en juego —uno escribe y otro audita— saber cuál de los dos falta
+    es la diferencia entre configurar un modelo y configurar el equivocado.
+    """
+    nivel = tier_de(actividad)
+    try:
+        return await get_model_for_tier(nivel, proveedor)
+    except Exception as fallo:  # noqa: BLE001
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"No hay modelo configurado para el nivel {nivel}, que es el que "
+                f"{PARA_QUE_SIRVE[actividad]}. Asígnale uno en Modelos IA ({fallo})."
+            ),
+        ) from fallo
+
+
+async def get_script_proposal_service(
+    session: AsyncSession = Depends(get_session),
+) -> ScriptProposalService:
+    """El servicio de propuesta, con dos modelos de dos niveles distintos (PRO.2).
+
+    Era un stub que devolvía 503 siempre. Escribir código y juzgar si es peligroso son tareas
+    distintas: **nivel 2 escribe** y **nivel 3, superior, audita**. La auditoría con modelo va
+    encima de la determinista de PRO.1, nunca en su lugar.
+    """
+    proveedor = LocalConfigProvider(session)
+    redactor = await _modelo_de(ActividadLLM.PROPUESTA_DE_SCRIPT, proveedor)
+    auditor = await _modelo_de(ActividadLLM.AUDITORIA_DE_SCRIPT, proveedor)
+
+    return ScriptProposalService(
+        llm=redactor,
+        model_name=nombre_del_modelo(redactor),
+        auditor_llm=auditor,
+        auditor_model_name=nombre_del_modelo(auditor),
+    )
 
 
 def get_test_data_anonymizer(
@@ -120,6 +167,7 @@ class ProposeResponse(BaseModel):
     audit_result: AuditResult
     model_used: str | None = None
     prompt_version: str | None = None
+    revision_del_modelo: RevisionDelModelo | None = None
 
 
 class DescribeColumnsResponse(BaseModel):
@@ -180,6 +228,10 @@ class PendingProposalOut(BaseModel):
     prompt_nl: str
     code_preview: str
     audit_result: dict[str, Any]
+    # PRO.2 — el veredicto del modelo auditor viaja a la cola: es lo que el administrador no
+    # puede deducir del AST, y es la mitad del valor de haber pagado un modelo superior.
+    # Tipado, no `dict`: el contrato es lo que la pantalla usa para saber qué pintar.
+    model_review: RevisionDelModelo | None = None
     test_result_hash: str | None = None
     test_data_ref: dict[str, Any] | None = None
 
@@ -239,6 +291,11 @@ async def propose_script(
         prompt_nl=body.prompt_nl,
         code=result.code,
         audit_result_json=result.audit_result.model_dump(),
+        model_review_json=(
+            result.revision_del_modelo.model_dump()
+            if result.revision_del_modelo is not None
+            else None
+        ),
         status="proposed",
         model_used=result.model_used,
         prompt_version=result.prompt_version,
@@ -252,6 +309,7 @@ async def propose_script(
         audit_result=result.audit_result,
         model_used=result.model_used,
         prompt_version=result.prompt_version,
+        revision_del_modelo=result.revision_del_modelo,
     )
 
 
@@ -499,6 +557,7 @@ async def test_proposal(
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
     sandbox: SandboxClient = Depends(get_sandbox_client),
+    storage: StorageService = Depends(get_storage_service),
 ) -> TestProposalResponse:
     """Ejecuta el script en el mismo sandbox que AdminScriptExtractionPipeline."""
     proposal = await _load_proposal(proposal_id, session)
@@ -521,7 +580,7 @@ async def test_proposal(
         file_ref=body.test_data_ref,
         options={"code": proposal.code, "approved": True},
     )
-    pipeline = AdminScriptExtractionPipeline(client=sandbox)
+    pipeline = AdminScriptExtractionPipeline(client=sandbox, storage=storage)
     extraction = await pipeline.extract_async(inp)
     result_payload = extraction.model_dump(mode="json")
     result_hash = _hash_extraction_result(result_payload)
@@ -703,6 +762,11 @@ async def list_pending_scripts(
             prompt_nl=p.prompt_nl,
             code_preview=(p.code or "")[:500],
             audit_result=p.audit_result_json or {},
+            model_review=(
+                RevisionDelModelo.model_validate(p.model_review_json)
+                if p.model_review_json
+                else None
+            ),
             test_result_hash=p.test_result_hash,
             test_data_ref=p.test_data_ref,
         )
@@ -724,6 +788,7 @@ async def admin_retest(
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
     sandbox: SandboxClient = Depends(get_sandbox_client),
+    storage: StorageService = Depends(get_storage_service),
 ) -> AdminRetestResponse:
     """El admin re-ejecuta el script contra el mismo test_data_ref y verifica el hash."""
     _require_admin(user)
@@ -739,7 +804,7 @@ async def admin_retest(
         file_ref=file_ref,
         options={"code": proposal.code, "approved": True},
     )
-    pipeline = AdminScriptExtractionPipeline(client=sandbox)
+    pipeline = AdminScriptExtractionPipeline(client=sandbox, storage=storage)
     extraction = await pipeline.extract_async(inp)
     result_payload = extraction.model_dump(mode="json")
     result_hash = _hash_extraction_result(result_payload)

@@ -49,7 +49,16 @@ async def test_admin_script_pipeline_uses_sandbox_client_and_propagates_warnings
 
     class _StubClient:
         async def execute_extraction_script(
-            self, *, code: str, file_path: Any, raw_text: Any, options: Any, timeout_seconds: Any = None
+            self,
+            *,
+            code: str,
+            file_path: Any,
+            raw_text: Any,
+            options: Any,
+            timeout_seconds: Any = None,
+            # PRO.2 — el contenido del fichero viaja al sandbox; la ruta del host no servía.
+            file_bytes: bytes | None = None,
+            file_name: str = "",
         ) -> ExtractionResult:
             return expected
 

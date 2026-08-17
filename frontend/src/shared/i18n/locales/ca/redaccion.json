@@ -106,6 +106,7 @@
   "nav_templates": "Plantilles",
   "nav_llm_draft": "Proposar amb IA",
   "nav_new_report": "Nou informe",
+  "nav_scripts_new": "Demanar un script",
   "nav_scripts_review": "Revisió de scripts",
   "nav_aria": "Navegació d'informes",
   "workspace_not_found": "No es troba aquest informe.",

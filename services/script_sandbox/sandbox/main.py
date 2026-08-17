@@ -9,12 +9,15 @@ Endpoints:
 Códigos de error normalizados (body: {"code": "<CODE>", ...}):
   - 422 SCRIPT_AUDIT_FAILED  (con findings: list[str])
   - 422 SCRIPT_EMPTY
+  - 422 FILE_NOT_BASE64       (solo /execute-extraction)
   - 422 ETL_NO_TRANSFORM      (solo /execute-etl)
   - 504 SCRIPT_TIMEOUT
   - 500 SCRIPT_EXECUTION_ERROR (con stderr_truncated: str ≤ 500 chars)
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
 import sys
@@ -97,7 +100,25 @@ def execute_extraction(req: ExecuteExtractionRequest):
     if (err := _audit_or_error(req.code)) is not None:
         return err
 
-    wrapper_code = build_extraction_wrapper(req.code, req.file_path, req.raw_text, req.options)
+    # PRO.2 — con contenido, el fichero se materializa **aquí dentro** y el script lee esa
+    # ruta. La que trae el caller es del host de la API y aquí no existe.
+    with tempfile.TemporaryDirectory(dir=str(_TMP_DIR)) as tmpdir:
+        ruta_del_fichero = req.file_path
+        if req.file_bytes_b64:
+            try:
+                contenido = base64.b64decode(req.file_bytes_b64, validate=True)
+            except (ValueError, binascii.Error):
+                return _err(422, "FILE_NOT_BASE64")
+            nombre = Path(req.file_name or "entrada.bin").name or "entrada.bin"
+            destino = Path(tmpdir) / nombre
+            destino.write_bytes(contenido)
+            ruta_del_fichero = str(destino)
+
+        return _ejecutar_extraccion(req, ruta_del_fichero)
+
+
+def _ejecutar_extraccion(req: ExecuteExtractionRequest, file_path: str):
+    wrapper_code = build_extraction_wrapper(req.code, file_path, req.raw_text, req.options)
     wrapper_path = _write_script(wrapper_code)
     try:
         try:

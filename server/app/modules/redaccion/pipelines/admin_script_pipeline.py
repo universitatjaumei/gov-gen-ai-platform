@@ -14,6 +14,7 @@ Protocolo del script de usuario:
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 from server.app.core.sandbox_client import LocalSandboxClient, SandboxClient
 from server.app.modules.redaccion.pipelines.contracts import (
@@ -33,8 +34,10 @@ class AdminScriptExtractionPipeline:
 
     pipeline_id = "admin_script_pipeline_v1"
 
-    def __init__(self, client: SandboxClient | None = None) -> None:
+    def __init__(self, client: SandboxClient | None = None, storage: Any = None) -> None:
         self._client: SandboxClient = client or LocalSandboxClient()
+        # PRO.2 — el fichero se lee por `StorageService`, no del disco. Ver `_leer_fichero`.
+        self._storage = storage
 
     def supports(self, source_kind: str) -> bool:
         return source_kind == "admin_script"
@@ -77,18 +80,49 @@ class AdminScriptExtractionPipeline:
                 provenance=self._provenance(),
             )
 
-        file_path: str | None = None
+        # PRO.2 — el contenido del fichero, no su ruta.
+        #
+        # Aquí se construía `Path(file_ref.bucket) / file_ref.key` y se mandaba esa cadena
+        # como `file_path`. Es una ruta del host de la API —y con `StorageService` sobre GCS
+        # no es ni una ruta—, así que dentro del contenedor del sandbox no existía ningún
+        # fichero ahí y `pd.read_excel(file_path)` fallaba **siempre**. Ningún script de
+        # extracción había leído nunca su fichero por esta vía.
+        file_bytes: bytes | None = None
+        file_name = ""
         if inp.file_ref:
-            from pathlib import Path
-            file_path = str(Path(inp.file_ref.bucket) / inp.file_ref.key)
+            try:
+                file_bytes = await self._leer_fichero(inp.file_ref.key)
+            except FileNotFoundError:
+                return ExtractionResult(
+                    warnings=[ExtractionWarning(
+                        code="TEST_DATA_NOT_FOUND",
+                        message=(
+                            f"El fichero '{inp.file_ref.key}' no está en el almacenamiento: "
+                            "vuelve a subirlo."
+                        ),
+                        severity="error",
+                    )],
+                    provenance=self._provenance(),
+                )
+            file_name = inp.file_ref.key.rsplit("/", 1)[-1]
 
         return await self._client.execute_extraction_script(
             code=code,
-            file_path=file_path,
+            file_path=None,
             raw_text=inp.raw_text,
             options=inp.options,
             timeout_seconds=timeout,
+            file_bytes=file_bytes,
+            file_name=file_name,
         )
+
+    async def _leer_fichero(self, key: str) -> bytes:
+        almacen = self._storage
+        if almacen is None:
+            from server.app.core.storage import get_storage_service
+
+            almacen = get_storage_service()
+        return await almacen.get(key)
 
     def _provenance(self) -> ExtractionProvenance:
         return ExtractionProvenance(

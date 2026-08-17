@@ -10,15 +10,35 @@ import {
   useSaveScriptToPrivateTemplate,
   useSubmitScriptForReview,
 } from '@/shared/api/generated/redaccion-scripts/redaccion-scripts'
-import type { ProposeResponse, TestProposalResponse, ValidateTestResultResponse } from '@/shared/api/generated/model'
+import type {
+  AnonymizeTestDataResponse,
+  DescribeColumnsResponse,
+  ProposeResponse,
+  StorageRef,
+  TestProposalResponse,
+  ValidateTestResultResponse,
+} from '@/shared/api/generated/model'
 import { ScriptCodePreview } from '../components/ScriptCodePreview'
+import { ModelAuditVerdict } from '../components/ModelAuditVerdict'
 import { TestDataAnonymizerForm } from '../components/TestDataAnonymizerForm'
 import { SandboxTestResultViewer } from '../components/SandboxTestResultViewer'
 
 type TargetOwnerKind = 'user' | 'platform'
 type WizardStep = 1 | 2 | 3 | 4 | 5 | 6 | 7
+type TestDataKind = 'xlsx' | 'csv' | 'pdf_text'
 
 const STEP_COUNT = 7
+
+/** El tipo con el que la plataforma trata el fichero de prueba, por su extensión.
+ *
+ * `kind` iba fijo a `'csv'` en la llamada de anonimización, así que un `.xlsx` se
+ * anonimizaba como si fuera texto separado por comas. */
+function tipoDeFichero(nombre: string): TestDataKind {
+  const extension = nombre.toLowerCase().split('.').pop() ?? ''
+  if (extension === 'pdf') return 'pdf_text'
+  if (extension === 'csv') return 'csv'
+  return 'xlsx'
+}
 
 export function ScriptProposalWizardPage() {
   const { t } = useTranslation('scripts')
@@ -27,6 +47,11 @@ export function ScriptProposalWizardPage() {
   const [targetOwnerKind, setTargetOwnerKind] = useState<TargetOwnerKind>('user')
   const [promptNl, setPromptNl] = useState('')
   const [activeProposalId, setActiveProposalId] = useState<string | null>(null)
+  // PRO.2 — el fichero de prueba y su tipo, que hasta aquí no se guardaban en ninguna
+  // parte: la subida devolvía su `file_ref` y se tiraba, así que los pasos siguientes
+  // mandaban `{bucket:'', key:''}` y el script se ejecutaba sin fichero.
+  const [testDataKind, setTestDataKind] = useState<TestDataKind | null>(null)
+  const [pdfElegido, setPdfElegido] = useState<File | null>(null)
 
   const proposeHook = useProposeScript()
   const describeHook = useDescribeTestData()
@@ -40,6 +65,15 @@ export function ScriptProposalWizardPage() {
   const proposal = proposeHook.data as unknown as ProposeResponse | undefined
   const testResult = testHook.data as unknown as TestProposalResponse | undefined
   const validated = validateHook.data as unknown as ValidateTestResultResponse | undefined
+  const subida = describeHook.data as unknown as DescribeColumnsResponse | undefined
+  const anonimizado = anonymizeHook.data as unknown as AnonymizeTestDataResponse | undefined
+  const spansPdf = previewHook.data as unknown as { file_ref: StorageRef } | undefined
+
+  // El fichero original sale de la subida tabular o de la vista previa del PDF; el que se
+  // ejecuta es el sintético si se ha anonimizado, y el original si se omitió.
+  const refOriginal: StorageRef | undefined = subida?.file_ref ?? spansPdf?.file_ref
+  const refDePrueba: StorageRef | undefined = anonimizado?.synthetic_ref ?? refOriginal
+  const hayFicheroDePrueba = !!refDePrueba?.key
 
   const auditPassed = proposal?.audit_result?.approved === true
   const canSave = !!validated
@@ -73,11 +107,35 @@ export function ScriptProposalWizardPage() {
   }
 
   function handleTest() {
-    if (!activeProposalId) return
+    if (!activeProposalId || !refDePrueba) return
     testHook.mutate({
       proposalId: activeProposalId,
-      data: { test_data_ref: { bucket: '', key: '' } },
+      data: {
+        test_data_ref: refDePrueba,
+        // Si no se anonimizó, lo que se va a leer son los datos de verdad. Decirlo es lo
+        // que permite al servidor prohibirlo cuando el destino es una plantilla global.
+        use_real_data: !anonimizado,
+      },
     })
+  }
+
+  /** El fichero de prueba, por la vía que le corresponde a su tipo.
+   *
+   * Mandaba `new Blob()` —un blob vacío— en vez del fichero elegido, y el `file_ref` que
+   * devolvía la subida no se guardaba. Los dos endpoints existen desde 9R.5.5: uno describe
+   * columnas de un tabular y el otro detecta datos personales en un PDF. */
+  function handleFicheroDePrueba(fichero: File | undefined) {
+    if (!fichero || !activeProposalId) return
+    const kind = tipoDeFichero(fichero.name)
+    setTestDataKind(kind)
+
+    if (kind === 'pdf_text') {
+      setPdfElegido(fichero)
+      previewHook.mutate({ proposalId: activeProposalId, data: { file: fichero } })
+      return
+    }
+    setPdfElegido(null)
+    describeHook.mutate({ proposalId: activeProposalId, data: { file: fichero } })
   }
 
   function handleValidate() {
@@ -138,7 +196,7 @@ export function ScriptProposalWizardPage() {
             value={promptNl}
             onChange={e => setPromptNl(e.target.value)}
             rows={4}
-            placeholder="Describe what the script should extract…"
+            placeholder={t('wizard.prompt_placeholder')}
             className="w-full border rounded p-2 text-sm resize-none"
           />
           <button
@@ -157,6 +215,9 @@ export function ScriptProposalWizardPage() {
       {step === 2 && proposal && (
         <div className="space-y-4">
           <ScriptCodePreview code={proposal.code} auditResult={proposal.audit_result} />
+          {proposal.revision_del_modelo && (
+            <ModelAuditVerdict revision={proposal.revision_del_modelo} />
+          )}
           <div className="flex gap-2">
             <button
               type="button"
@@ -186,16 +247,15 @@ export function ScriptProposalWizardPage() {
           <input
             type="file"
             data-testid="input-test-data-file"
-            accept=".csv,.xlsx,.json"
-            onChange={() => {
-              if (!activeProposalId) return
-              describeHook.mutate({
-                proposalId: activeProposalId,
-                data: { file: new Blob() },
-              })
-            }}
+            accept=".csv,.xlsx,.pdf"
+            onChange={e => handleFicheroDePrueba(e.target.files?.[0])}
             className="text-sm"
           />
+          {hayFicheroDePrueba && (
+            <p data-testid="test-data-ready" className="text-xs text-muted-foreground">
+              {t('wizard.test_data_ready', { key: refOriginal?.key ?? '' })}
+            </p>
+          )}
           <button
             type="button"
             data-testid="btn-next-step-3"
@@ -226,10 +286,10 @@ export function ScriptProposalWizardPage() {
               type="button"
               data-testid="btn-next-step-4"
               onClick={() => {
-                if (activeProposalId) {
+                if (activeProposalId && refOriginal && testDataKind) {
                   anonymizeHook.mutate({
                     proposalId: activeProposalId,
-                    data: { file_ref: { bucket: '', key: '' }, kind: 'csv' },
+                    data: { file_ref: refOriginal, kind: testDataKind },
                   })
                 }
                 setStep(5)
@@ -246,24 +306,28 @@ export function ScriptProposalWizardPage() {
       {step === 5 && (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            {t('wizard.step5')}
+            {pdfElegido ? t('wizard.step5') : t('wizard.step5_no_aplica')}
           </p>
           <div className="flex gap-2">
-            <button
-              type="button"
-              data-testid="btn-preview-pdf"
-              onClick={() => {
-                if (activeProposalId) {
-                  previewHook.mutate({
-                    proposalId: activeProposalId,
-                    data: { file: new Blob() },
-                  })
-                }
-              }}
-              className="px-3 py-1.5 text-sm border rounded"
-            >
-              {t('wizard.step5')}
-            </button>
+            {/* El botón sólo existe con un PDF delante: mandaba un blob vacío, y con un
+                fichero tabular no hay nada que previsualizar. */}
+            {pdfElegido && (
+              <button
+                type="button"
+                data-testid="btn-preview-pdf"
+                onClick={() => {
+                  if (activeProposalId) {
+                    previewHook.mutate({
+                      proposalId: activeProposalId,
+                      data: { file: pdfElegido },
+                    })
+                  }
+                }}
+                className="px-3 py-1.5 text-sm border rounded"
+              >
+                {t('wizard.step5')}
+              </button>
+            )}
             <button
               type="button"
               data-testid="btn-next-step-5"
@@ -282,12 +346,18 @@ export function ScriptProposalWizardPage() {
           <button
             type="button"
             data-testid="btn-run-test"
-            disabled={testHook.isPending || !activeProposalId}
+            aria-disabled={!hayFicheroDePrueba || !activeProposalId}
+            disabled={testHook.isPending || !activeProposalId || !hayFicheroDePrueba}
             onClick={handleTest}
             className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded disabled:opacity-50"
           >
             {testHook.isPending ? t('btn.test') + '…' : t('btn.test')}
           </button>
+          {!hayFicheroDePrueba && (
+            <p data-testid="test-data-missing" className="text-xs text-amber-700">
+              {t('wizard.test_data_missing')}
+            </p>
+          )}
         </div>
       )}
 

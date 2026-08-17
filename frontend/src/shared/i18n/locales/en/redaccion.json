@@ -106,6 +106,7 @@
   "nav_templates": "Templates",
   "nav_llm_draft": "Propose with AI",
   "nav_new_report": "New report",
+  "nav_scripts_new": "Request a script",
   "nav_scripts_review": "Script review",
   "nav_aria": "Reports navigation",
   "workspace_not_found": "This report could not be found.",
