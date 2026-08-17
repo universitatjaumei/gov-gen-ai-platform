@@ -14,6 +14,9 @@ import {
 } from '@/shared/api/generated/redaccion-workspaces/redaccion-workspaces'
 import type { ReportUIContract, WorkspaceOut } from '@/shared/api/generated/model'
 
+import { apiBaseUrl } from '@/shared/api/client'
+import { FocusLayout } from '@/shared/layout/FocusLayout'
+import { useFocusStore } from '@/shared/layout/useFocusStore'
 import { AIBlockReviewPanel } from '../components/AIBlockReviewPanel'
 import { DataQualityPanel } from '../components/DataQualityPanel'
 import { ReportUIContractRenderer } from '../components/ReportUIContractRenderer'
@@ -38,6 +41,15 @@ const CON_CONTENIDO = new Set(['in_review', 'assembled', 'exported'])
 export function WorkspacePage() {
   const { id = '' } = useParams()
   const { t } = useTranslation('redaccion')
+  const cajonAbierto = useFocusStore((s) => s.drawerVisible)
+  const alternarCajon = useFocusStore((s) => s.toggleDrawer)
+  const irAlCopiloto = useFocusStore((s) => s.setActiveTab)
+
+  /** Abre el cajón directamente en la pestaña del copiloto, que es lo que se ha pedido. */
+  function abrirCopiloto() {
+    if (!cajonAbierto) irAlCopiloto('copilot')
+    alternarCajon()
+  }
   const { t: tc } = useTranslation('common')
   const qc = useQueryClient()
   const [errorDeSubida, setErrorDeSubida] = useState('')
@@ -88,8 +100,9 @@ export function WorkspacePage() {
   }
 
   return (
-    <div className="space-y-4 p-4">
-      <WorkspaceStatusBar workspaceId={id} />
+    <FocusLayout context={{ type: 'informe', entityId: id }}>
+      <div className="space-y-4 p-4">
+        <WorkspaceStatusBar workspaceId={id} />
 
       {workspace.status === 'error' && (
         <p data-testid="workspace-error" className="p-3 border rounded-md text-sm bg-destructive/10 text-destructive">
@@ -121,18 +134,44 @@ export function WorkspacePage() {
         </button>
 
         {CON_CONTENIDO.has(workspace.status) && (
-          <Link
-            to={`/redaccion/workspaces/${id}/preview`}
-            className="px-4 py-2 text-sm border rounded-md hover:bg-accent"
-          >
-            {t('workspace_preview')}
-          </Link>
+          <>
+            <Link
+              to={`/redaccion/workspaces/${id}/preview`}
+              className="px-4 py-2 text-sm border rounded-md hover:bg-accent"
+            >
+              {t('workspace_preview')}
+            </Link>
+            {/* PRO.5 — el informe se puede descargar: el servicio existía y ninguna ruta lo
+                servía, así que no había de dónde bajarlo. */}
+            <a
+              data-testid="enlace-exportar"
+              href={`${apiBaseUrl}/api/v1/redaccion/workspaces/${id}/export`}
+              className="px-4 py-2 text-sm border rounded-md hover:bg-accent"
+            >
+              {t('workspace_export')}
+            </a>
+          </>
         )}
-      </div>
 
-      <DataQualityPanel workspaceId={id} />
-      <WorkspaceEditor workspace={{ blocks: workspace.blocks, status: workspace.status }} />
-      {contrato?.ai_review_panel_enabled && <AIBlockReviewPanel workspaceId={id} />}
-    </div>
+        {/* PRO.6 — el copiloto se abre desde aquí. Su panel existía y ninguna ruta montaba el
+            layout que lo contiene, así que era inalcanzable. Va en un cajón lateral y arranca
+            cerrado, como en la aplicación NiceGUI: un panel que nadie ha pedido tapa media
+            pantalla. */}
+        <button
+          type="button"
+          data-testid="btn-abrir-copiloto"
+          aria-expanded={cajonAbierto}
+          onClick={abrirCopiloto}
+          className="px-4 py-2 text-sm border rounded-md hover:bg-accent ml-auto"
+        >
+          {t('workspace_copilot')}
+        </button>
+        </div>
+
+        <DataQualityPanel workspaceId={id} />
+        <WorkspaceEditor workspace={{ blocks: workspace.blocks, status: workspace.status }} />
+        {contrato?.ai_review_panel_enabled && <AIBlockReviewPanel workspaceId={id} />}
+      </div>
+    </FocusLayout>
   )
 }

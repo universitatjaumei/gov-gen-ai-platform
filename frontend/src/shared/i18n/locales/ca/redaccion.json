@@ -114,5 +114,7 @@
   "workspace_inputs": "Dades de partida",
   "workspace_generate": "Generar informe",
   "workspace_generating": "Generant…",
-  "workspace_preview": "Vista prèvia"
+  "workspace_preview": "Vista prèvia",
+  "workspace_export": "Exportar a Word",
+  "workspace_copilot": "Copilot"
 }

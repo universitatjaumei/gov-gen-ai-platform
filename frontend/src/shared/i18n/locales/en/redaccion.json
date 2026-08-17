@@ -114,5 +114,7 @@
   "workspace_inputs": "Input data",
   "workspace_generate": "Generate report",
   "workspace_generating": "Generating…",
-  "workspace_preview": "Preview"
+  "workspace_preview": "Preview",
+  "workspace_export": "Export to Word",
+  "workspace_copilot": "Copilot"
 }
