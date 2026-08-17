@@ -25,7 +25,15 @@ class CrawlResult:
 
 
 class _WebSource(Protocol):
-    url: str
+    """El sitio a rastrear, tal y como lo guarda la base.
+
+    Decía `url`, y el modelo se llama `root_url` desde que `HubWebSource` pasó a ser
+    `HubWebSite`: el rastreo fallaba **siempre** con `'HubWebSite' object has no attribute
+    'url'` y el sitio quedaba en `status='error'`. No lo cazó ningún test porque todos doblan
+    el spider, y el doble del sitio ya usaba `root_url`.
+    """
+
+    root_url: str
     config_json: dict
 
 
@@ -65,11 +73,11 @@ class GenericSpider:
         max_pages: int = config.get("max_pages", 50)
 
         regex = re.compile(url_regex_filter) if url_regex_filter else None
-        base_netloc = urlparse(source.url).netloc
+        base_netloc = urlparse(source.root_url).netloc
 
         # Cola BFS: pares (url, profundidad)
-        queue: deque[tuple[str, int]] = deque([(source.url, 0)])
-        visited: set[str] = {source.url}
+        queue: deque[tuple[str, int]] = deque([(source.root_url, 0)])
+        visited: set[str] = {source.root_url}
 
         crawled_urls: list[str] = []
         pages_skipped = 0

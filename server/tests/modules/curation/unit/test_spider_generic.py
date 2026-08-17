@@ -5,7 +5,10 @@ from dataclasses import dataclass, field
 
 @dataclass
 class FakeWebSource:
-    url: str
+    """`root_url` y no `url`: es como se llama el campo en `HubWebSite` desde el renombrado
+    de `HubWebSource`, y el desajuste hacía que el rastreo real fallara siempre (VER.6)."""
+
+    root_url: str
     config_json: dict = field(default_factory=dict)
 
 
@@ -24,7 +27,7 @@ class TestGenericSpider:
 
         spider = GenericSpider(fetch_fn=fake_fetch)
         source = FakeWebSource(
-            url="https://ejemplo.uji.es",
+            root_url="https://ejemplo.uji.es",
             config_json={"crawl_depth": 0, "max_pages": 10},
         )
         result = await spider.crawl(source)
@@ -48,7 +51,7 @@ class TestGenericSpider:
 
         spider = GenericSpider(fetch_fn=fake_fetch)
         source = FakeWebSource(
-            url="https://ejemplo.uji.es",
+            root_url="https://ejemplo.uji.es",
             config_json={"crawl_depth": 1, "max_pages": 50},
         )
         result = await spider.crawl(source)
@@ -78,7 +81,7 @@ class TestGenericSpider:
 
         spider = GenericSpider(fetch_fn=fake_fetch)
         source = FakeWebSource(
-            url="https://ejemplo.uji.es",
+            root_url="https://ejemplo.uji.es",
             config_json={"crawl_depth": 1, "url_regex_filter": r"/normativa/", "max_pages": 50},
         )
         result = await spider.crawl(source)
@@ -97,7 +100,7 @@ class TestGenericSpider:
 
         spider = GenericSpider(fetch_fn=fake_fetch)
         source = FakeWebSource(
-            url="https://ejemplo.uji.es",
+            root_url="https://ejemplo.uji.es",
             config_json={"crawl_depth": 2, "max_pages": 3},
         )
         result = await spider.crawl(source)
@@ -119,7 +122,7 @@ class TestGenericSpider:
 
         spider = GenericSpider(fetch_fn=fake_fetch)
         source = FakeWebSource(
-            url="https://ejemplo.uji.es",
+            root_url="https://ejemplo.uji.es",
             config_json={"crawl_depth": 1, "max_pages": 10},
         )
         await spider.crawl(source)
