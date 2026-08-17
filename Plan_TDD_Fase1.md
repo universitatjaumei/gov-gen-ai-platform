@@ -17724,3 +17724,121 @@ fragmentos**, o sea 387 llamadas de embedding por indice.
 ```
 
 ---
+
+### Prompt PRO.8 (RED/GREEN + navegador) — Gráficos deterministas: lo usual sin programarlo
+
+**Modelo sugerido**: **Sonnet** — alcance cerrado; las decisiones abiertas están tomadas abajo.
+
+> **Añadido el 2026-08-17 al cerrar PRO**, a petición del usuario: «la idea de tenerlos
+> preparados era que los más usuales se elegían de forma determinista sin tener que
+> programarlos». Al medirlo, tiene razón y mi razón en PRO.5 estaba incompleta: juzgué «diez
+> tipos que nadie ha pedido» sin comprobar **cuál es la alternativa cuando faltan**.
+>
+> La alternativa es generar código. `translate_nl_to_config(target_kind="chart_config")` **no
+> devuelve una configuración**: llama a `chart_factory.generate_script()`. O sea que «un gráfico
+> de barras horizontales» pedido al copiloto cuesta hoy modelo + auditoría + sandbox para lo que
+> es `orient="h"`.
+
+```
+# PROMPT PRO.8 (RED/GREEN) — El catalogo determinista cubre el grafico de un informe
+# Deploy: edge (services/charts/, contracts/blocks.py, services/copilot/)
+
+## Por que
+Tres huecos, en este orden de importancia:
+
+1. **Una plantilla no puede pedir un titulo.** El renderizador sabe poner titulo y etiquetas de
+   eje —`ChartConfiguration` los tiene— pero `ChartBlockConfig`, que es lo que una plantilla
+   expresa, solo pasa tipo, columnas, paleta, agregacion y formato. Un grafico de informe con
+   `credito_inicial` como etiqueta del eje Y no es publicable, y ponerle titulo hoy exige
+   generar codigo.
+2. **`show_values` esta declarado y el renderizador no lo implementa.** En un informe
+   presupuestario, las cifras encima de las barras son la norma. Un campo del contrato que no
+   hace nada es peor que no tenerlo.
+3. **Faltan tipos, y seis de los diez del legacy son parametros de lo que ya hacemos**: `barh`
+   (ejes cambiados), `bar_grouped` (ya es `bar` con `color_by`), `line_multi` (ya es `line` con
+   `color_by`), `bar_stacked` (pivot + una llamada), `donut` (un `wedgeprops`), `bubble`
+   (`scatter` con `size=`). Dos son familia nueva y estandar: `boxplot` y `heatmap` —el heatmap
+   es la forma mas institucional que hay: capitulo x anyo—.
+
+## Que hacer
+1. RED: un bloque CHART con titulo, etiquetas de eje, cifras encima y orden descendente sale
+   con las cuatro cosas; y un `barh`, un `bar_stacked`, un `donut`, un `boxplot` y un `heatmap`
+   se renderizan sin pasar por ningun modelo.
+2. GREEN: `ChartBlockConfig` expone lo que el renderizador ya sabe hacer (titulo, etiquetas,
+   leyenda, rejilla, tamanyo, bins, orden) y `ChartHandler._to_chart_config` lo mapea. Nada de
+   campos nuevos en el servicio que la plantilla no pueda pedir: es el hueco que crea esto.
+3. GREEN: `show_values` implementado.
+4. GREEN: los ocho tipos. `violin` y `pairplot` **se quedan fuera**: son graficos de
+   exploracion estadistica, y `pairplot` devuelve un grid que no encaja en `fig, ax`.
+5. GREEN, y aqui esta el ahorro: `translate_nl_to_config("chart_config")` devuelve
+   **configuracion declarativa** cuando la peticion cabe en el catalogo, y baja al script solo
+   cuando no cabe. Mismo patron que PRO.4 aplico al ETL: JSON primero, script como ultimo
+   recurso.
+
+## Restricciones
+- El script de grafico sigue pasando por el mismo auditor. Un camino con auditoria y otro sin
+  ella es no tener auditoria.
+- Sin pantalla de configuracion de graficos: quien elige el tipo es la plantilla o el modelo.
+  Que una persona lo elija de una lista es otra decision y otra pantalla.
+
+## Criterio de done
+- [ ] Un informe con un grafico titulado, con etiquetas y cifras, y ordenado
+- [ ] Los ocho tipos renderizan sin modelo
+- [ ] Una peticion en lenguaje natural que cabe en el catalogo **no** genera script
+```
+
+---
+
+### Prompt PRO.9 (RED/GREEN) — El ETL cubre lo que una hoja de cálculo necesita
+
+**Modelo sugerido**: **Opus** — decide qué es expresable sin abrir una puerta a `eval`.
+
+> **Añadido el 2026-08-17**, a petición del usuario: «el módulo ETL tiene sentido para
+> transformar una hoja de cálculo en los datos que necesita el informe».
+>
+> Comprobado antes de planificar: **lo determinista del legacy está portado al 100%** en PRO.4
+> —su catálogo de modelos son las once operaciones que ya están—. Lo que falta no es migración,
+> es **cobertura**: ni el legacy ni nosotros cubrimos cuatro cosas que una hoja real necesita, y
+> hoy cada una de ellas cuesta **tres intentos fallidos del modelo** (el prompt le dice que
+> devuelva lista vacía si no cabe, y una lista vacía es un reintento) **más un script generado,
+> auditado y ejecutado en el sandbox**.
+
+```
+# PROMPT PRO.9 (RED/GREEN) — Columna calculada, numeros de verdad, orden y unpivot
+# Deploy: edge (services/transformation/)
+
+## Por que
+| Falta | Por que importa | Que pasa hoy |
+|---|---|---|
+| Columna calculada (`pct = obligaciones / credito * 100`) | Es **la** transformacion de un informe presupuestario | 3 reintentos + script |
+| Numeros en formato espanyol (`"1.234,56 EUR"` llega como texto) | `groupby.sum()` sobre texto **concatena o revienta**: el informe sale con una cifra mal **y sin error** | 3 reintentos + script |
+| Ordenar | Una tabla de informe se lee ordenada | 3 reintentos + script |
+| Unpivot (cabeceras `ene feb mar` -> columna `mes`) | Las hojas institucionales son anchas y un informe necesita largo. Tenemos `pivot`, no el inverso | 3 reintentos + script |
+
+La segunda es la peor porque **es silenciosa**: no hay error que mirar.
+
+## Que hacer
+1. RED: las cuatro operaciones, y en la de numeros un caso con `"1.234,56 EUR"` que despues
+   suma bien.
+2. GREEN: `compute_column` **sin evaluar expresiones**. Nada de `eval`, ni de `df.eval`, ni de
+   un campo `formula`: el auditor de PRO.1 prohibe exactamente eso en un script, y un campo de
+   formula seria una puerta trasera a lo mismo. Forma declarativa: columna o constante,
+   operador de un conjunto cerrado, columna o constante, y un factor opcional. Lo compuesto se
+   consigue **encadenando** —`t = a + b`, `pct = t / c`, `drop t`—, que es mas verboso y es
+   auditable, y se puede pintar en una pantalla.
+3. GREEN: `to_number` con separador decimal y de millares configurables (por defecto los de
+   aqui: `,` y `.`) y simbolos a quitar. Lo que no se puede convertir queda vacio **y se ve**,
+   como en `format_dates`; pero si **toda** la columna queda vacia eso es un error de
+   configuracion, no un dato ausente: falla.
+4. GREEN: `sort_values` (varias columnas, ascendente o descendente) y `unpivot`.
+5. GREEN: el catalogo del prompt se genera solo (PRO.4 ya lo hace), asi que el modelo ve las
+   nuevas sin tocar el prompt. Comprobarlo.
+
+## Criterio de done
+- [ ] Una hoja con importes como texto suma bien tras `to_number`
+- [ ] `pct` calculada y visible en el informe, sin script generado
+- [ ] Una instruccion en lenguaje natural con las cuatro **no** baja al script
+- [ ] Cero `eval` en el camino
+```
+
+---
