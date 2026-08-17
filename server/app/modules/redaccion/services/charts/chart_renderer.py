@@ -35,7 +35,8 @@ async def render_chart_from_script(
     audit = _AUDITOR.audit(code)
     if not audit.approved:
         raise ChartRenderError(
-            f"Auditoría de seguridad rechazó el script: {audit.findings}"
+            "Auditoría de seguridad rechazó el script: "
+            + "; ".join(f.message for f in audit.findings)
         )
 
     client: SandboxClient = sandbox_client or LocalSandboxClient()

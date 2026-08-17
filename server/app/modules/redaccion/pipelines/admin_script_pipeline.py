@@ -67,7 +67,7 @@ class AdminScriptExtractionPipeline:
         # Defensa en profundidad: re-auditar antes de enviar al sandbox.
         audit = _AUDITOR.audit(code)
         if not audit.approved:
-            summary = "; ".join(audit.findings[:3])
+            summary = "; ".join(f.message for f in audit.findings[:3])
             return ExtractionResult(
                 warnings=[ExtractionWarning(
                     code="SCRIPT_SECURITY_VIOLATION",

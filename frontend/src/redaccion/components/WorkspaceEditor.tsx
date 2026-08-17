@@ -3,17 +3,17 @@ import { useTranslation } from 'react-i18next'
 import { BlockStateAnnouncer } from './BlockStateAnnouncer'
 import { StatusBadge } from '@/shared/components/StatusBadge'
 import { mapBlockStatusToUserLabel } from '../utils/statusLabels'
+import type { BlockStateOut } from '@/shared/api/generated/model'
 
-interface WorkspaceBlock {
-  block_id: string
-  kind: string
-  status: string
-  failure_kind?: string | null
-  [key: string]: unknown
-}
-
+/** El bloque es el del contrato, no una copia a mano.
+ *
+ * Había aquí una interfaz propia con `[key: string]: unknown`, y ese comodín hacía que
+ * `BlockStateOut` —una `interface` generada, sin firma de índice— **no fuera asignable**:
+ * `tsc` daba TS2322 en `WorkspacePage` en cuanto se regeneraba el cliente desde
+ * `openapi.json`. Usar el tipo generado lo arregla y cumple la regla de contrato: el tipo
+ * del componente no puede divergir del servidor porque sale de él. */
 export interface WorkspaceData {
-  blocks: WorkspaceBlock[]
+  blocks: BlockStateOut[]
   status?: string
 }
 

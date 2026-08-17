@@ -383,6 +383,48 @@ def _require_admin(user: UserInfo) -> None:
         raise HTTPException(status_code=403, detail="Admin access required")
 
 
+def _require_revisable(proposal: HubScriptProposal) -> None:
+    """PRO.1 — a una revisión humana solo llega lo que una persona puede aceptar.
+
+    `approved` sigue significando «sin hallazgos» y es lo que gobierna la ejecución. Aquí
+    la pregunta es otra: si hay un hallazgo crítico —`eval()`, la introspección del
+    intérprete, una ruta absoluta— no hay nada que revisar, porque la auditoría
+    determinista no se puede convencer. Un módulo fuera de la lista blanca sí: eso es un
+    hueco en una lista, y para eso está la cola.
+    """
+    if not (proposal.audit_result_json or {}).get("puede_revisarse"):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "AUDIT_CRITICAL",
+                "message": "La auditoría encontró hallazgos críticos: no hay revisión posible.",
+            },
+        )
+
+
+def _require_test_sin_errores(proposal: HubScriptProposal) -> None:
+    """El test guardado tiene que haber extraído algo.
+
+    `/test` persiste el `ExtractionResult` pase lo que pase, y un script que el sandbox
+    rechaza devuelve un resultado con un aviso de severidad `error` y cero datos. Su hash
+    es perfectamente estable, así que el retest del admin coincidiría y la propuesta
+    llegaría a aprobarse sin haber extraído nada nunca.
+    """
+    warnings = (proposal.test_result_json or {}).get("warnings") or []
+    fallos = [w for w in warnings if w.get("severity") == "error"]
+    if fallos:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "TEST_FAILED",
+                "message": (
+                    "La prueba no extrajo datos: "
+                    + "; ".join(str(w.get("message", w.get("code"))) for w in fallos[:3])
+                ),
+            },
+        )
+
+
 def _is_recent_retest(retested_at_str: str | None) -> bool:
     if not retested_at_str:
         return False
@@ -619,16 +661,13 @@ async def submit_for_review(
             status_code=422,
             detail={"code": "WRONG_TARGET", "message": "submit-for-review es solo para target_owner_kind='platform'."},
         )
-    if not proposal.audit_result_json.get("approved"):
-        raise HTTPException(
-            status_code=422,
-            detail={"code": "AUDIT_FAILED", "message": "El script no ha superado la auditoría."},
-        )
+    _require_revisable(proposal)
     if proposal.test_validated_by_proposer_at is None:
         raise HTTPException(
             status_code=422,
             detail={"code": "TEST_NOT_VALIDATED", "message": "El test no ha sido validado."},
         )
+    _require_test_sin_errores(proposal)
     if not proposal.test_data_is_anonymized:
         raise HTTPException(
             status_code=422,
@@ -748,6 +787,9 @@ async def approve_script_proposal(
             status_code=422,
             detail={"code": "WRONG_STATUS", "message": f"La propuesta está en status='{proposal.status}', no en 'pending_review'."},
         )
+
+    # Un crítico no lo puede aprobar nadie, ni un admin con la nota más razonada del mundo.
+    _require_revisable(proposal)
 
     retest = proposal.admin_retest_json or {}
     if not (retest.get("hash_matches") and _is_recent_retest(retest.get("retested_at"))):

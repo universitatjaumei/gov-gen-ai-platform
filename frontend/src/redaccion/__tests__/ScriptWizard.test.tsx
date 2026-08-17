@@ -64,17 +64,47 @@ import { useAuth } from '@/shared/auth'
 // Fixtures
 // --------------------------------------------------------------------------
 
+// PRO.1 — la auditoría tiene tres niveles y cada hallazgo lleva su línea.
+interface AuditFindingStub {
+  severity: 'WARNING' | 'CRITICAL'
+  rule: string
+  detail: string
+  line: number
+  message: string
+}
+
 const APPROVED_AUDIT = {
   approved: true,
-  risk_level: 'low',
-  findings: [] as string[],
+  risk_level: 'SAFE' as const,
+  puede_revisarse: true,
+  findings: [] as AuditFindingStub[],
   confidence: 1.0,
 }
 const REJECTED_AUDIT = {
   approved: false,
-  risk_level: 'high',
-  findings: ['Forbidden import: os'],
+  risk_level: 'CRITICAL' as const,
+  puede_revisarse: false,
+  findings: [{
+    severity: 'CRITICAL' as const,
+    rule: 'forbidden-module',
+    detail: 'os',
+    line: 1,
+    message: "CRITICO (línea 1): módulo 'os' prohibido",
+  }],
   confidence: 0.0,
+}
+const REVISABLE_AUDIT = {
+  approved: false,
+  risk_level: 'WARNING' as const,
+  puede_revisarse: true,
+  findings: [{
+    severity: 'WARNING' as const,
+    rule: 'module-not-whitelisted',
+    detail: 'csv',
+    line: 3,
+    message: "ADVERTENCIA (línea 3): módulo 'csv' no está en la lista blanca",
+  }],
+  confidence: 0.5,
 }
 
 const SAMPLE_PROPOSE_APPROVED = {
@@ -286,6 +316,32 @@ describe('ScriptProposalWizardPage', () => {
     if (nextBtn) {
       expect(nextBtn.getAttribute('aria-disabled')).toBe('true')
     }
+  })
+
+  it('should_mostrar_el_nivel_warning_como_revisable_con_la_linea_del_hallazgo', () => {
+    // PRO.1 — una advertencia no es un fallo: la pantalla tiene que decirlo, y decir
+    // en qué línea está, que es lo que el administrador va a mirar.
+    vi.mocked(useProposeScript).mockReturnValue({
+      mutate: mockProposeScript,
+      data: {
+        ...SAMPLE_PROPOSE_APPROVED,
+        audit_result: REVISABLE_AUDIT,
+      } as unknown as ReturnType<typeof useProposeScript>['data'],
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      reset: vi.fn(),
+    } as unknown as ReturnType<typeof useProposeScript>)
+
+    wrap(<ScriptProposalWizardPage />)
+
+    const resumen = screen.getByTestId('audit-summary')
+    expect(resumen.getAttribute('data-risk-level')).toBe('WARNING')
+
+    const hallazgos = screen.getAllByTestId('audit-finding')
+    expect(hallazgos).toHaveLength(1)
+    expect(hallazgos[0].textContent).toContain('línea 3')
+    expect(hallazgos[0].textContent).toContain('csv')
   })
 
   it('should_block_save_button_until_test_validated', () => {

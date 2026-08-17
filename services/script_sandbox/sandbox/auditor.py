@@ -10,6 +10,7 @@ es porque el sandbox debe ser MÁS estricto que el API, no menos.
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass, field
 
 # Llamadas a funciones o builtins que bloquean la aprobación.
@@ -44,12 +45,37 @@ WHITELIST_MODULES: frozenset[str] = frozenset({
 })
 
 
+# PRO.1 — rutas absolutas, portado de `audit_code()` del legacy y añadido aquí a la vez
+# que en la copia de la API: el script recibe su fichero en `file_path` y no tiene por qué
+# nombrar ninguna ruta del sistema. Si esta comprobación solo estuviera en la API, esta
+# copia —la que se ejecuta justo antes del `exec`— sería la más laxa de las dos.
+# La letra de unidad exige un carácter no alfanumérico delante: dentro de `https://` hay
+# un `s:/`, y el legacy marcaba cualquier URL como ruta de Windows.
+_RUTA_WINDOWS = re.compile(r"(?<![A-Za-z0-9_])([A-Za-z]:[\\/])")
+_RUTA_SISTEMA = re.compile(r"""['"](/(?:home|etc|usr|var|root|tmp|proc|sys)(?:/|['"]))""")
+
+
 @dataclass(frozen=True)
 class AuditResult:
     approved: bool
     risk_level: str  # "low" | "medium" | "high"
     findings: list[str] = field(default_factory=list)
     confidence: float = 1.0
+
+
+def _modulo_no_permitido(module: str, linea: int) -> str:
+    return f"ADVERTENCIA (línea {linea}): módulo '{module}' no está en la lista blanca"
+
+
+def _rutas_absolutas(code: str) -> list[str]:
+    hallazgos: list[str] = []
+    for patron, que in ((_RUTA_WINDOWS, "de Windows"), (_RUTA_SISTEMA, "de sistema Linux")):
+        for m in patron.finditer(code):
+            linea = code.count("\n", 0, m.start(1)) + 1
+            hallazgos.append(
+                f"CRITICO (línea {linea}): ruta absoluta {que} ('{m.group(1)}')"
+            )
+    return hallazgos
 
 
 class ScriptSecurityAuditor:
@@ -59,7 +85,7 @@ class ScriptSecurityAuditor:
     """
 
     def audit(self, code: str) -> AuditResult:
-        findings: list[str] = []
+        findings: list[str] = _rutas_absolutas(code)
 
         try:
             tree = ast.parse(code)
@@ -67,40 +93,44 @@ class ScriptSecurityAuditor:
             return AuditResult(
                 approved=False,
                 risk_level="high",
-                findings=[f"SyntaxError: {exc}"],
+                findings=[*findings, f"SyntaxError: {exc}"],
                 confidence=0.0,
             )
 
         for node in ast.walk(tree):
+            linea = getattr(node, "lineno", 0)
+
             if isinstance(node, ast.Call):
                 if isinstance(node.func, ast.Name) and node.func.id in _DANGEROUS_CALLS:
-                    findings.append(f"CRITICO: llamada peligrosa '{node.func.id}()'")
+                    findings.append(
+                        f"CRITICO (línea {linea}): llamada peligrosa '{node.func.id}()'"
+                    )
                 elif isinstance(node.func, ast.Attribute) and node.func.attr in _DANGEROUS_ATTRS:
-                    findings.append(f"CRITICO: llamada peligrosa '.{node.func.attr}()'")
+                    findings.append(
+                        f"CRITICO (línea {linea}): llamada peligrosa '.{node.func.attr}()'"
+                    )
 
             if isinstance(node, ast.Name) and node.id in _NOMBRES_PROHIBIDOS:
                 findings.append(
-                    f"CRITICO: acceso a '{node.id}', que da alcance al intérprete"
+                    f"CRITICO (línea {linea}): acceso a '{node.id}', "
+                    "que da alcance al intérprete"
                 )
             if isinstance(node, ast.Attribute) and node.attr in _NOMBRES_PROHIBIDOS:
                 findings.append(
-                    f"CRITICO: acceso a '.{node.attr}', que da alcance al intérprete"
+                    f"CRITICO (línea {linea}): acceso a '.{node.attr}', "
+                    "que da alcance al intérprete"
                 )
 
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     module = alias.name.split(".")[0]
                     if module not in WHITELIST_MODULES:
-                        findings.append(
-                            f"ADVERTENCIA: módulo '{module}' no está en la lista blanca"
-                        )
+                        findings.append(_modulo_no_permitido(module, linea))
 
             if isinstance(node, ast.ImportFrom):
                 module = (node.module or "").split(".")[0]
                 if module and module not in WHITELIST_MODULES:
-                    findings.append(
-                        f"ADVERTENCIA: módulo '{module}' no está en la lista blanca"
-                    )
+                    findings.append(_modulo_no_permitido(module, linea))
 
         critical = [f for f in findings if f.startswith("CRITICO")]
         risk_level = "high" if critical else ("medium" if findings else "low")

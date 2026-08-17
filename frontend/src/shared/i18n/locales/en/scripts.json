@@ -16,8 +16,14 @@
   },
   "audit": {
     "approved": "Audit passed",
+    "revisable": "With warnings: a reviewer can accept it",
     "rejected": "Audit failed",
     "risk_level": "Risk level",
+    "level": {
+      "SAFE": "no findings",
+      "WARNING": "warning",
+      "CRITICAL": "critical"
+    },
     "findings": "Findings",
     "confidence": "Confidence"
   },

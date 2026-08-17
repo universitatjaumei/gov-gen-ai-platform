@@ -16,8 +16,14 @@
   },
   "audit": {
     "approved": "Auditoria superada",
+    "revisable": "Amb advertiments: ho pot acceptar una revisió",
     "rejected": "Auditoria fallida",
     "risk_level": "Nivell de risc",
+    "level": {
+      "SAFE": "sense troballes",
+      "WARNING": "advertiment",
+      "CRITICAL": "crític"
+    },
     "findings": "Troballes",
     "confidence": "Confiança"
   },

@@ -16,8 +16,14 @@
   },
   "audit": {
     "approved": "Auditoría superada",
+    "revisable": "Con advertencias: puede aceptarlo una revisión",
     "rejected": "Auditoría fallida",
     "risk_level": "Nivel de riesgo",
+    "level": {
+      "SAFE": "sin hallazgos",
+      "WARNING": "advertencia",
+      "CRITICAL": "crítico"
+    },
     "findings": "Hallazgos",
     "confidence": "Confianza"
   },

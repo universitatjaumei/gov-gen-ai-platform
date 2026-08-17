@@ -19,8 +19,27 @@ import pytest
 # Helpers de estado y fixture compartida
 # ---------------------------------------------------------------------------
 
-def _make_audit_result(approved: bool = True) -> dict[str, Any]:
-    return {"approved": approved, "risk_level": "low", "findings": [], "confidence": 1.0}
+def _make_audit_result(
+    approved: bool = True,
+    *,
+    puede_revisarse: bool | None = None,
+) -> dict[str, Any]:
+    """PRO.1 — el resultado de auditoría lleva nivel y `puede_revisarse`.
+
+    Por defecto `puede_revisarse` acompaña a `approved`: un script sin hallazgos es
+    revisable trivialmente, y el `audit_approved=False` de los tests anteriores sigue
+    significando «no puede pasar de aquí».
+    """
+    if puede_revisarse is None:
+        puede_revisarse = approved
+    nivel = "SAFE" if approved else ("WARNING" if puede_revisarse else "CRITICAL")
+    return {
+        "approved": approved,
+        "risk_level": nivel,
+        "puede_revisarse": puede_revisarse,
+        "findings": [],
+        "confidence": 1.0 if approved else (0.5 if puede_revisarse else 0.0),
+    }
 
 
 def _seed_proposal(
@@ -31,9 +50,11 @@ def _seed_proposal(
     target_template_id: uuid.UUID | None = None,
     status: str = "tested",
     audit_approved: bool = True,
+    audit_puede_revisarse: bool | None = None,
     has_validated_test: bool = True,
     is_anonymized: bool = True,
     admin_retest_json: dict | None = None,
+    test_result_json: dict | None = None,
 ) -> Any:
     from server.app.modules.redaccion.database.models import HubScriptProposal
 
@@ -44,11 +65,17 @@ def _seed_proposal(
         target_template_id=target_template_id,
         prompt_nl="dummy",
         code="result = {'tables': [], 'metrics': [], 'free_text': 'ok'}\n",
-        audit_result_json=_make_audit_result(audit_approved),
+        audit_result_json=_make_audit_result(
+            audit_approved, puede_revisarse=audit_puede_revisarse
+        ),
         status=status,
         test_data_ref={"bucket": "bucket", "key": "dummy.xlsx"},
         test_data_is_anonymized=is_anonymized,
-        test_result_json={"tables": [], "metrics": [], "free_text": "ok"},
+        test_result_json=(
+            test_result_json
+            if test_result_json is not None
+            else {"tables": [], "metrics": [], "free_text": "ok"}
+        ),
         test_result_hash="abc123deadbeef",
         admin_retest_json=admin_retest_json,
     )
@@ -282,6 +309,120 @@ def test_submit_for_review_requires_anonymized_test_data(approval_app) -> None:
     response = client.post(f"/api/v1/redaccion/scripts/{proposal.id}/submit-for-review")
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "NOT_ANONYMIZED"
+
+
+# ---------------------------------------------------------------------------
+# PRO.1 — quien decide si algo pasa a revisión mira `puede_revisarse`
+# ---------------------------------------------------------------------------
+
+def test_submit_for_review_admite_un_warning_revisable(approval_app) -> None:
+    """Un módulo fuera de la lista blanca deja de tumbar la propuesta.
+
+    Es exactamente el caso que hacía inusable el módulo: el modelo escribe un script
+    razonable con un `import` que no está en la lista, y hasta PRO.1 nadie podía ni
+    mirarlo. La cola de revisión existe justo para que una persona lo mire.
+    """
+    client, state, user_holder = approval_app
+    from server.app.core.auth.models import UserInfo
+
+    user_uuid = uuid.uuid4()
+    user_holder["user"] = UserInfo(user_id=str(user_uuid), email="u@t.com", role="user")
+
+    proposal = _seed_proposal(
+        state, user_uuid,
+        target_owner_kind="platform",
+        audit_approved=False,
+        audit_puede_revisarse=True,
+    )
+
+    response = client.post(f"/api/v1/redaccion/scripts/{proposal.id}/submit-for-review")
+    assert response.status_code == 200, response.json()
+    assert response.json()["status"] == "pending_review"
+
+
+def test_submit_for_review_rechaza_un_hallazgo_critico(approval_app) -> None:
+    client, state, user_holder = approval_app
+    from server.app.core.auth.models import UserInfo
+
+    user_uuid = uuid.uuid4()
+    user_holder["user"] = UserInfo(user_id=str(user_uuid), email="u@t.com", role="user")
+
+    proposal = _seed_proposal(
+        state, user_uuid,
+        target_owner_kind="platform",
+        audit_approved=False,
+        audit_puede_revisarse=False,
+    )
+
+    response = client.post(f"/api/v1/redaccion/scripts/{proposal.id}/submit-for-review")
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "AUDIT_CRITICAL"
+
+
+def test_submit_for_review_rechaza_un_test_que_no_extrajo_nada(approval_app) -> None:
+    """El hueco que abre admitir warnings: un test que falló también tiene hash.
+
+    `/test` guarda el `ExtractionResult` pase lo que pase, y un script rechazado por el
+    sandbox devuelve un resultado con un aviso de severidad `error` y cero datos. Su hash
+    es estable, así que el retest del admin coincidiría y la propuesta llegaría a
+    aprobarse sin haber extraído nunca nada.
+    """
+    client, state, user_holder = approval_app
+    from server.app.core.auth.models import UserInfo
+
+    user_uuid = uuid.uuid4()
+    user_holder["user"] = UserInfo(user_id=str(user_uuid), email="u@t.com", role="user")
+
+    proposal = _seed_proposal(
+        state, user_uuid,
+        target_owner_kind="platform",
+        test_result_json={
+            "tables": [],
+            "metrics": [],
+            "free_text": None,
+            "warnings": [{
+                "code": "SCRIPT_SECURITY_VIOLATION",
+                "message": "El script no supera la auditoría de seguridad",
+                "severity": "error",
+            }],
+        },
+    )
+
+    response = client.post(f"/api/v1/redaccion/scripts/{proposal.id}/submit-for-review")
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "TEST_FAILED"
+
+
+def test_approve_rechaza_un_hallazgo_critico(approval_app) -> None:
+    """El admin no puede aprobar un crítico ni queriendo: la determinista no se convence."""
+    client, state, user_holder = approval_app
+    from server.app.core.auth.models import UserInfo
+
+    admin_uuid = uuid.uuid4()
+    user_holder["user"] = UserInfo(user_id=str(admin_uuid), email="admin@t.com", role="admin")
+
+    template, _ = _seed_template_and_version(state, admin_uuid, is_global=True)
+
+    proposal = _seed_proposal(
+        state, uuid.uuid4(),
+        status="pending_review",
+        target_owner_kind="platform",
+        audit_approved=False,
+        audit_puede_revisarse=False,
+        admin_retest_json={
+            "hash": "abc",
+            "hash_matches": True,
+            "retested_at": datetime.now(timezone.utc).isoformat(),
+            "retester_user_id": str(admin_uuid),
+        },
+    )
+
+    response = client.post(
+        f"/api/v1/redaccion/scripts/{proposal.id}/approve",
+        json={"target_global_template_id": str(template.id)},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "AUDIT_CRITICAL"
 
 
 # ---------------------------------------------------------------------------

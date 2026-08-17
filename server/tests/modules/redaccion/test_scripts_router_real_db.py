@@ -79,7 +79,13 @@ async def _propuesta_platform(session, proposer_user_id: str) -> uuid.UUID:
         target_owner_kind="platform",
         prompt_nl="Extrae el total de una factura",
         code=_CODE_VALIDO,
-        audit_result_json={"approved": True, "risk_level": "low", "findings": [], "confidence": 1.0},
+        audit_result_json={
+            "approved": True,
+            "risk_level": "SAFE",
+            "puede_revisarse": True,
+            "findings": [],
+            "confidence": 1.0,
+        },
         status="proposed",
     )
     session.add(proposal)

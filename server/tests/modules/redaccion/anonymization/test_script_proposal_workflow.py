@@ -86,7 +86,11 @@ async def test_propose_rejects_when_llm_outputs_forbidden_import() -> None:
     service = ScriptProposalService(llm=llm, model_name="test-model")
     result = await service.propose("Descarga datos remotos.")
     assert result.audit_result.approved is False
-    assert any("requests" in f for f in result.audit_result.findings)
+    assert any(f.detail == "requests" for f in result.audit_result.findings)
+    # PRO.1 — `requests` no es un hueco en una lista: es la red. Está en la denegación
+    # explícita que el legacy ya tenía, así que es CRITICAL y nadie lo acepta mirándolo.
+    assert result.audit_result.risk_level == "CRITICAL"
+    assert result.audit_result.puede_revisarse is False
 
 
 # ---------------------------------------------------------------------------
