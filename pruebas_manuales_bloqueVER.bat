@@ -1,9 +1,9 @@
 @echo off
 chcp 65001 > nul
-title Pruebas manuales - Bloque VER (Informes y Curacion)
+title Pruebas manuales - Bloques VER y PRO (Informes y Curacion)
 
 echo ============================================================
-echo  PRUEBAS MANUALES - BLOQUE VER
+echo  PRUEBAS MANUALES - BLOQUES VER y PRO
 echo  Informes y Curacion, lo que el agente NO puede comprobar
 echo ============================================================
 echo.
@@ -12,6 +12,12 @@ echo   - plantilla propuesta con IA y contrato de UI
 echo   - informe de punta a punta (Excel -^> extraccion -^> IA -^> revision -^> ensamblado)
 echo   - cola de aprobacion de scripts contra el sandbox real
 echo   - sitios, rastreo, hallazgos, informe de calidad y publicacion
+echo Y en el bloque PRO recorrio, con modelos reales:
+echo   - script escrito por el modelo, auditado y ejecutado en el sandbox
+echo   - script aprobado extrayendo datos dentro de un informe
+echo   - transformacion de datos (determinista y por IA) y grafico en el informe
+echo   - exportacion a DOCX con tablas e imagenes de verdad
+echo   - el copiloto respondiendo con citas a ficheros reales de docs\
 echo Nada de eso se repite aqui. Ver docs\PRUEBAS_MANUALES.md.
 echo.
 echo Lo que queda es criterio humano y entornos que aqui no hay.
@@ -79,8 +85,12 @@ echo.
 echo  El agente comprueba que el fichero baja y que no esta vacio.
 echo  Que se VEA bien solo lo puede decir alguien con Office instalado.
 echo.
-echo  1. En el informe ensamblado, pulsa Vista previa y luego exporta.
-echo  2. Abre el DOCX en Word: cabeceras, tablas, saltos de pagina.
+echo  1. En la pantalla del informe pulsa "Exportar a Word". Desde PRO.5 la
+echo     descarga existe de verdad; antes no habia de donde bajar nada.
+echo     Tambien vale a mano:
+echo       GET /api/v1/redaccion/workspaces/ID_DEL_INFORME/export
+echo  2. Abre el DOCX en Word: cabeceras, tablas (tienen que ser TABLAS, no
+echo     texto), la imagen del grafico y los saltos de pagina.
 echo  3. Si tienes LibreOffice instalado, exporta tambien a PDF y abrelo
 echo     en Adobe. Sin LibreOffice, la aplicacion devuelve un DOCX y lo
 echo     dice en el nombre del fichero: eso es correcto, no un fallo.
@@ -143,6 +153,59 @@ echo  QUE VALORAR:
 echo   - Si el gemelo agentico busca en las normas externas en vez de
 echo     intentar leerlas enteras.
 echo   - Si las citas abren el articulo correcto.
+echo.
+pause
+
+echo.
+echo ============================================================
+echo  PRUEBA F - Calidad del script sobre un fichero real de la UJI
+echo ============================================================
+echo.
+echo  ESTA ES LA IMPORTANTE DEL BLOQUE PRO.
+echo.
+echo  El agente comprobo que el modelo escribe un script, que la auditoria
+echo  lo acepta, que el sandbox lo ejecuta y que devuelve una tabla. Lo que
+echo  NO puede comprobar es si esa tabla es la que se pedia: sus pruebas van
+echo  con un Excel sintetico cuyas columnas invento el propio agente.
+echo.
+echo  1. Coge un fichero REAL de tu unidad: ejecucion presupuestaria, un
+echo     listado de gasto, lo que uses de verdad. Con sus cabeceras en dos
+echo     filas, sus totales intercalados y sus celdas combinadas.
+echo  2. Ve a Informes -^> "Pedir un script".
+echo  3. Describe con tus palabras que hay que extraer.
+echo  4. Sube ESE fichero como datos de prueba y ejecuta la prueba.
+echo.
+echo  QUE VALORAR (y esto es lo que nadie mas puede decir):
+echo   - Si las cifras de la tabla son las correctas.
+echo   - Si el script se ha comido una fila de totales creyendo que es un dato.
+echo   - Si la revision del modelo auditor te avisa de algo real ("asume que
+echo     las columnas se llaman asi") o si es palabreria.
+echo   - Si el codigo que ves es el que le ensenarias a un colega.
+echo.
+echo  Si el script se equivoca, anota QUE pediste y QUE salio: eso es lo que
+echo  afina el prompt, y el prompt se edita sin desplegar en
+echo  /hub/activity-prompts.
+echo.
+pause
+
+echo.
+echo ============================================================
+echo  PRUEBA G - Si el copiloto es util o solo correcto
+echo ============================================================
+echo.
+echo  El agente comprobo que cita ficheros reales de docs\ y que la cita
+echo  sostiene la frase. Si la respuesta RESUELVE tu duda, lo dices tu.
+echo.
+echo  1. Abre un informe y pulsa el boton "Copiloto" (a la derecha).
+echo  2. Pregunta algo que te haga falta de verdad, no una prueba.
+echo  3. La primera pregunta tarda ~1 minuto: construye el indice de docs\.
+echo     Las siguientes van en segundos. Si la primera tarda siempre, eso
+echo     es un fallo y hay que anotarlo.
+echo.
+echo  QUE VALORAR:
+echo   - Si te responde o te recita el documento.
+echo   - Si la cita que da es donde tu habrias buscado.
+echo   - Si cuando no sabe algo lo dice, en vez de inventarlo.
 echo.
 pause
 

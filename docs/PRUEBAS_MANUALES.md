@@ -88,6 +88,34 @@ Detalle en `PROJECT_STATE.md`, entradas VER.1–VER.8.
 
 ---
 
+## Ya verificado por el agente en navegador y por API (2026-08-17, Bloque PRO) — no repetir
+
+Backend en `:8001`, frontend de desarrollo en `:5173`, sandbox en `:5099`, sesión real como
+`fabra@uji.es`. Modelos reales: `gemini-2.5-flash` en el nivel 2 y `gemini-2.5-pro` en el 3.
+
+| Camino | Qué se comprobó, con evidencia |
+|---|---|
+| Modelos por nivel desde la pantalla | Las dos configuraciones creadas **desde `/hub/llm-configs`** (nivel 2 → `gemini-2.5-flash`, nivel 3 → `gemini-2.5-pro`), con su marca de «por defecto» y el relevo de FIX.1 |
+| Script escrito por el modelo | «Describir → generar» produce un script que la auditoría determinista deja en **SAFE**, y el **nivel 3 lo devuelve como `duda`** con dos objeciones que un AST no puede ver: asume los nombres de columna y asume la primera hoja |
+| Script ejecutado en el sandbox | Excel real subido desde el asistente → sandbox Docker → tabla con `capítulo`/`credito_inicial`/`obligaciones_reconocidas` y métrica `porcentaje_ejecucion: 68,52 %` (166.500/243.000, comprobado a mano) → validación **200** |
+| Script aprobado dentro de un informe | Propuesta `platform` → anonimización → sandbox → cola → re-test con `hash_matches` → **aprobado** en una plantilla global nueva → workspace → Excel subido → **`assembled`** con el bloque `extracted` y su tabla en la vista previa |
+| Transformación de datos | Bloque `DATA_TRANSFORM` determinista: renombra `capitulo`→`seccion` y quita una columna, y **las dos tablas** salen en la vista previa. En modo IA, `gemini-2.5-flash` traduce «renombra capitulo a seccion y quita obligaciones_reconocidas» a las dos operaciones (`model_used` registrado en el bloque) |
+| Gráfico en el informe | Bloque `CHART` determinista → PNG de matplotlib guardado en el almacén y servido en la vista previa como data URI (35 KB) |
+| Exportación del informe | `GET /redaccion/workspaces/{id}/export` → DOCX de 56 KB con **2 tablas reales, 1 imagen y 0 párrafos con HTML** |
+| Biblioteca de prompts de actividad | `/hub/activity-prompts` muestra las actividades con su nivel y su origen; puesto el nivel 3 a «generar script», **la propuesta siguiente la escribe `gemini-2.5-pro`**; borrado el override, vuelve a `flash` |
+| Copiloto | Se abre desde el botón de la pantalla del informe, en su pestaña. Primera pregunta **56 s** (construye el índice sobre los `docs/` reales), segunda **3,3 s**; respuestas correctas citando `docs\DECISION_EXTRACCION_Y_DESPLIEGUE.md` y `docs\CONTRATO_MD_CORPUS.md` |
+
+**Lo que este recorrido dejó por el camino**: la auditoría era binaria y no veía rutas
+absolutas; el fichero de prueba **no llegaba nunca al sandbox** (se mandaba una ruta del host);
+el asistente de scripts era un esqueleto de la fase 3 en adelante; un script aprobado dejaba la
+plantilla **ilegible**; los datos extraídos **no se veían** en ningún informe (ni por script, ni
+por Excel, ni por PDF); el ETL no tenía modelo y no encontraba su tabla de origen; el bloque
+CHART **no dibujaba nada**; el informe **no se podía exportar**; y el copiloto contestaba «no
+tengo esa información» a preguntas cuya respuesta está en `docs/`. Todo arreglado con TDD;
+detalle en `PROJECT_STATE.md`, entradas PRO.1–PRO.6.
+
+---
+
 ## Matriz de lo irreducible
 
 ### `agents_hub` (RAG, ingesta de conversación, LangGraph)
@@ -115,7 +143,9 @@ Detalle en `PROJECT_STATE.md`, entradas VER.1–VER.8.
 |---|---|---|
 | Calidad de la anonimización sobre un documento con datos personales reales | El agente no debe procesar PII real; los tests usan datos sintéticos | Alguien con un documento de prueba ya anonimizado por otra vía, o con autorización expresa para usar uno real |
 | Fidelidad del borrador LLM generado frente a lo que un redactor humano esperaría | Juicio de calidad editorial, no verificable por regla. **Ahora sí hay algo que juzgar**: desde VER.1/VER.4 el informe se genera de verdad y el texto sale de los datos extraídos | Persona con criterio de redacción institucional |
-| Exportación final (DOCX/PDF) abierta en Word/Adobe reales, con la maquetación institucional | El agente puede comprobar que el fichero se descarga y su tamaño; no que "se vea bien" en el lector real | Cualquiera con Office/Adobe instalado |
+| **Calidad del script que escribe el modelo sobre un documento real de la UJI** (PRO) | El agente comprueba que el script pasa la auditoría, se ejecuta y devuelve una tabla; **no si esa tabla es la que se pedía**. Con un Excel sintético las columnas son las que el propio agente inventó: la prueba de verdad es un fichero institucional real, con sus cabeceras en dos filas, sus totales intercalados y sus celdas combinadas | Quien conoce el dato: alguien de gestión económica o de la unidad que produce ese fichero |
+| **Si la respuesta del copiloto es útil o sólo correcta** (PRO.6) | El agente puede comprobar que cita un fichero real de `docs/` y que la cita sostiene la frase. Que la respuesta **resuelva la duda de quien la hizo** —en vez de recitar el documento— es juicio de quien pregunta | Cualquiera que trabaje con la plataforma y tenga una duda de verdad |
+| Exportación final (DOCX/PDF) abierta en Word/Adobe reales, con la maquetación institucional | Desde PRO.5 el informe **se descarga de verdad** (`GET /redaccion/workspaces/{id}/export`, DOCX con tablas e imágenes), y el agente comprueba estructura y tamaño; que "se vea bien" en Word y que la maquetación sea la institucional, no | Cualquiera con Office/Adobe instalado |
 | PDF **real** del informe de calidad de curación | En esta máquina no hay LibreOffice, así que la exportación cae a DOCX —y desde VER.7 lo dice en el tipo y la extensión en vez de mentir—. Verificar el PDF exige un entorno con LibreOffice instalado | Alguien con LibreOffice, o el despliegue donde vaya a correr |
 | Rastreo de un sitio con enlaces servidos en HTML (p. ej. `www.uji.es`) | El sitio local del corpus pinta sus fichas con JavaScript, así que un rastreador estático sólo alcanza el índice y el buscador. La profundidad real no se puede medir contra él | Cualquiera, apuntando un sitio nuevo a una web institucional real |
 
