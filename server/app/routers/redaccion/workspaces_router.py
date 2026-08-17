@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import (
     APIRouter,
@@ -14,6 +15,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Response,
     UploadFile,
     status,
 )
@@ -565,6 +567,7 @@ async def get_workspace_preview(
     workspace_id: uuid.UUID,
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
 ) -> PreviewPayload:
     """Devuelve el PreviewPayload para vista previa e impresión.
 
@@ -573,12 +576,7 @@ async def get_workspace_preview(
     """
     await _get_workspace(workspace_id, user, session)
 
-    builder = PreviewBuilderService(
-        workspace_repo=WorkspaceRepo(session),
-        block_repo=WorkspaceBlockRepo(session),
-        template_version_repo=ReportTemplateVersionRepo(session),
-        manifest_repo=RunManifestRepo(session),
-    )
+    builder = _constructor_de_vista_previa(session, storage)
     try:
         return await builder.build_payload(workspace_id)
     except PendingBlocksError as exc:
@@ -586,3 +584,66 @@ async def get_workspace_preview(
             status_code=409,
             detail={"pending_block_ids": exc.pending_block_ids},
         ) from exc
+
+
+def _constructor_de_vista_previa(session: AsyncSession, storage: Any):
+    return PreviewBuilderService(
+        workspace_repo=WorkspaceRepo(session),
+        block_repo=WorkspaceBlockRepo(session),
+        template_version_repo=ReportTemplateVersionRepo(session),
+        manifest_repo=RunManifestRepo(session),
+        # PRO.5 — la imagen de los gráficos vive en el almacén, no en la base de datos.
+        storage_service=storage,
+    )
+
+
+_TIPO_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+@router.get(
+    "/{workspace_id}/export",
+    operation_id="exportWorkspace",
+    responses={
+        200: {"content": {_TIPO_DOCX: {}}, "description": "El informe en DOCX"},
+        409: {"description": "Blocks pending review"},
+        404: {"description": "Workspace not found"},
+    },
+)
+async def export_workspace(
+    workspace_id: uuid.UUID,
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> Response:
+    """Descarga el informe como DOCX.
+
+    Deploy: edge
+
+    PRO.5 — `ExportService` existía con sus tests desde 1C.3 y **ninguna ruta lo servía**, así
+    que el informe no se podía exportar: la prueba manual del bloque VER —«abrir la exportación
+    en Word y en Adobe»— no tenía de dónde descargar nada.
+
+    Se sirve el DOCX y no un PDF a propósito: convertir a PDF necesita LibreOffice en la
+    máquina, y VER.7 ya enseñó lo que pasa cuando se promete un PDF y se entrega un DOCX
+    disfrazado.
+    """
+    await _get_workspace(workspace_id, user, session)
+
+    from server.app.modules.redaccion.services.export_service import ExportService
+
+    builder = _constructor_de_vista_previa(session, storage)
+    try:
+        contenido = await ExportService(builder=builder).export(workspace_id, format="docx")
+    except PendingBlocksError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"pending_block_ids": exc.pending_block_ids},
+        ) from exc
+
+    return Response(
+        content=contenido,
+        media_type=_TIPO_DOCX,
+        headers={
+            "Content-Disposition": f'attachment; filename="informe_{workspace_id}.docx"'
+        },
+    )

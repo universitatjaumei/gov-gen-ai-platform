@@ -213,13 +213,21 @@ class ChartHandler:
     # ------------------------------------------------------------------
 
     def _resolve_data(self, block: ChartBlock, state: WorkspaceState) -> pd.DataFrame:
+        """Los datos del bloque de origen, vengan como `rows` o como `tables`.
+
+        PRO.5 — buscaba sólo `rows`, igual que el nodo de transformación antes de PRO.4, así
+        que un gráfico colgado de un bloque de **extracción** —que expone `tables`— se quedaba
+        sin datos y dibujaba un lienzo vacío.
+        """
+        from server.app.modules.redaccion.graph.nodes.data_transformation import (
+            _df_de_contenido,
+        )
+
         source = state.blocks.get(block.data_block_ref)
-        if source is None:
+        if source is None or not source.content:
             return pd.DataFrame()
-        rows = source.content.get("rows", []) if source.content else []
-        if isinstance(rows, list) and rows:
-            return pd.DataFrame(rows)
-        return pd.DataFrame()
+        df = _df_de_contenido(source.content)
+        return df if df is not None else pd.DataFrame()
 
     @staticmethod
     def _to_chart_config(cfg: ChartBlockConfig) -> ChartConfiguration:

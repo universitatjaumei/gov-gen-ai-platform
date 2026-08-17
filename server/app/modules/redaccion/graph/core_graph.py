@@ -19,6 +19,7 @@ from server.app.modules.redaccion.graph.nodes.data_quality_check import (
     DataQualityCheckNode,
     data_quality_router,
 )
+from server.app.modules.redaccion.graph.nodes.chart_render import ChartRenderNode
 from server.app.modules.redaccion.graph.nodes.data_transformation import DataTransformationNode
 from server.app.modules.redaccion.graph.nodes.deterministic_extraction import DeterministicExtractionNode
 from server.app.modules.redaccion.graph.nodes.file_normalization import FileNormalizationNode
@@ -68,6 +69,13 @@ def build_core_graph(
         model_name=etl_model_name,
         system_prompt=etl_system_prompt,
     )
+    # PRO.5 — el nodo que dibuja los bloques CHART. No existía: `ChartHandler` estaba escrito
+    # y probado, y sólo lo importaban los tests, así que un bloque CHART no dibujaba nada.
+    chart_node = ChartRenderNode(
+        storage_service=storage_service,
+        llm_service=etl_llm,
+        model_name=etl_model_name,
+    )
     quality_node = DataQualityCheckNode()
     missing_node = MissingDataQuestionNode()
     init_anon_node = _build_init_anonymization_node(pii_detector, faker_generator)
@@ -87,6 +95,7 @@ def build_core_graph(
     graph.add_node("file_normalization",      _t(normalize_node, "file_normalization"))
     graph.add_node("deterministic_extraction",_t(extract_node,     "deterministic_extraction"))
     graph.add_node("data_transformation",     _t(transform_node,  "data_transformation"))
+    graph.add_node("chart_render",            _t(chart_node,     "chart_render"))
     graph.add_node("data_quality_check",      _t(quality_node,   "data_quality_check"))
     graph.add_node("missing_data_question",   _t(missing_node,   "missing_data_question"))
     graph.add_node("init_anonymization",      _t(init_anon_node, "init_anonymization"))
@@ -102,7 +111,9 @@ def build_core_graph(
     graph.add_edge("validate_inputs", "file_normalization")
     graph.add_edge("file_normalization", "deterministic_extraction")
     graph.add_edge("deterministic_extraction", "data_transformation")
-    graph.add_edge("data_transformation", "data_quality_check")
+    # El gráfico va después de la transformación: dibuja los datos ya limpios.
+    graph.add_edge("data_transformation", "chart_render")
+    graph.add_edge("chart_render", "data_quality_check")
     graph.add_conditional_edges(
         "data_quality_check",
         data_quality_router,

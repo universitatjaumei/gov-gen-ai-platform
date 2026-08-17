@@ -13,7 +13,7 @@ from __future__ import annotations
 import io
 
 from docx import Document
-from docx.shared import RGBColor
+from docx.shared import Inches, RGBColor
 
 from server.app.modules.redaccion.contracts.manifest import DraftingRunManifest
 
@@ -41,13 +41,20 @@ class ExportService:
         return self._payload_to_docx(payload)
 
     def _payload_to_docx(self, payload) -> bytes:
-        """Genera DOCX a partir de un PreviewPayload."""
+        """Genera DOCX a partir de un PreviewPayload.
+
+        PRO.5 — esto hacía `doc.add_paragraph(block.html)`, o sea que metía el HTML **como
+        texto**: desde PRO.3, cuando la vista previa empezó a pintar las tablas extraídas, el
+        documento exportado llevaba dentro `<table><thead><tr><th>capitulo…` escrito a mano.
+        Con el contenido estructurado del bloque, una tabla se escribe como tabla y un gráfico
+        se incrusta como imagen; el HTML queda para el navegador.
+        """
         doc = Document()
         doc.add_heading(payload.cover.title, level=0)
         for section in payload.body:
             doc.add_heading(section.title, level=1)
             for block in section.blocks:
-                doc.add_paragraph(block.html)
+                self._escribir_bloque(doc, block)
         if payload.audit_annex:
             doc.add_page_break()
             doc.add_heading("Anexo de Auditoría", level=1)
@@ -100,6 +107,60 @@ class ExportService:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _escribir_bloque(self, doc: Document, block) -> None:
+        """Un bloque del informe en el documento, según lo que sea.
+
+        Sin contenido estructurado se cae al HTML como texto, que es el comportamiento
+        anterior: un bloque viejo no puede impedir la exportación.
+        """
+        contenido = getattr(block, "content", None)
+        if not isinstance(contenido, dict):
+            if block.html:
+                doc.add_paragraph(block.html)
+            return
+
+        texto = contenido.get("text") or contenido.get("value")
+        if texto:
+            doc.add_paragraph(str(texto))
+
+        grafico = contenido.get("chart")
+        if isinstance(grafico, dict):
+            imagen = (getattr(block, "images", None) or {}).get(grafico.get("storage_key", ""))
+            if imagen:
+                doc.add_picture(io.BytesIO(imagen), width=Inches(6))
+
+        for tabla in contenido.get("tables") or []:
+            self._escribir_tabla(doc, tabla)
+
+        for metrica in contenido.get("metrics") or []:
+            unidad = f" {metrica['unit']}" if metrica.get("unit") else ""
+            doc.add_paragraph(
+                f"{metrica.get('name', '')}: {metrica.get('value', '')}{unidad}",
+                style="List Bullet",
+            )
+
+        if contenido.get("free_text"):
+            doc.add_paragraph(str(contenido["free_text"]))
+
+    @staticmethod
+    def _escribir_tabla(doc: Document, tabla: dict) -> None:
+        cabeceras = [str(c) for c in (tabla.get("headers") or [])]
+        filas = tabla.get("rows") or []
+        if not cabeceras and not filas:
+            return
+        if tabla.get("name"):
+            doc.add_paragraph(str(tabla["name"]))
+        columnas = len(cabeceras) or max((len(f) for f in filas), default=1)
+        tabla_docx = doc.add_table(rows=1 if cabeceras else 0, cols=columnas)
+        tabla_docx.style = "Table Grid"
+        if cabeceras:
+            for i, cabecera in enumerate(cabeceras):
+                tabla_docx.rows[0].cells[i].text = cabecera
+        for fila in filas:
+            celdas = tabla_docx.add_row().cells
+            for i, valor in enumerate(fila[:columnas]):
+                celdas[i].text = str(valor)
 
     def _write_content(self, doc: Document, content: str) -> None:
         doc.add_heading("Informe Generado", level=0)
