@@ -23,12 +23,48 @@ from server.app.modules.redaccion.services.transformation.etl_service import (
 )
 
 
+def _df_de_contenido(contenido: dict) -> pd.DataFrame | None:
+    """Un DataFrame del contenido de un bloque, en cualquiera de las dos formas.
+
+    `rows` es lo que deja una transformación (lista de diccionarios) y `tables` lo que deja
+    una extracción (cabeceras y filas). Sin la segunda, encadenar extracción → transformación
+    no funcionaba.
+    """
+    filas = contenido.get("rows")
+    if isinstance(filas, list) and filas:
+        return pd.DataFrame(filas)
+
+    tablas = contenido.get("tables")
+    if isinstance(tablas, list) and tablas:
+        tabla = tablas[0] or {}
+        cabeceras = tabla.get("headers") or []
+        datos = tabla.get("rows") or []
+        if cabeceras and datos:
+            return pd.DataFrame(datos, columns=cabeceras)
+    return None
+
+
+def _tabla_de(nombre: str, df: pd.DataFrame) -> dict:
+    return {
+        "name": nombre,
+        "headers": [str(c) for c in df.columns],
+        "rows": df.astype(str).values.tolist(),
+        "source_page": None,
+    }
+
+
 class DataTransformationNode:
     """Nodo del DraftingCoreGraph que procesa bloques DATA_TRANSFORM."""
 
-    def __init__(self, llm_service: Any = None, model_name: str = "") -> None:
+    def __init__(
+        self,
+        llm_service: Any = None,
+        model_name: str = "",
+        system_prompt: str | None = None,
+    ) -> None:
         self._llm = llm_service
         self._model_name = model_name
+        self._system_prompt = system_prompt
 
     async def __call__(self, state: WorkspaceState) -> dict:
         if state.spec is None:
@@ -54,7 +90,11 @@ class DataTransformationNode:
             def _resolver(bid: str) -> pd.DataFrame:
                 return self._resolve_df(bid, updated_blocks, new_block_outputs)
 
-            svc = ETLService(llm=self._llm, model_name=self._model_name)
+            svc = ETLService(
+                llm=self._llm,
+                model_name=self._model_name,
+                system_prompt=self._system_prompt,
+            )
             try:
                 if cfg.mode == "deterministic":
                     result: ETLServiceResult = await svc.run(
@@ -90,6 +130,10 @@ class DataTransformationNode:
             rows = result.dataframe.to_dict(orient="records")
             content = {
                 "rows": rows,
+                # PRO.4 — la tabla, en la forma que el informe sabe pintar. El contenido era
+                # sólo `rows`, y el renderizador de PRO.3 busca `tables`: la tabla
+                # transformada no salía ni en la vista previa ni en el documento final.
+                "tables": [_tabla_de(block_contract.title, result.dataframe)],
                 "operations_applied": [op.model_dump() for op in result.operations_applied],
                 "model_used": result.model_used,
                 "mode": cfg.mode,
@@ -118,13 +162,21 @@ class DataTransformationNode:
         blocks: dict,
         block_outputs: dict,
     ) -> pd.DataFrame:
+        """El DataFrame de origen, venga de una extracción o de otra transformación.
+
+        PRO.4 — sólo buscaba `content["rows"]`, y el contenido de una **extracción** es
+        `{tables, metrics, free_text}`: sin `rows`. O sea que un bloque de transformación
+        colgado de un bloque de extracción —el caso normal, y el único que tiene sentido—
+        recibía un DataFrame vacío y «transformaba» la nada sin decir nada.
+        """
         block_state = blocks.get(block_id)
-        if block_state and block_state.content:
-            rows = block_state.content.get("rows")
-            if isinstance(rows, list) and rows:
-                return pd.DataFrame(rows)
-        output = block_outputs.get(block_id) or {}
-        rows = output.get("rows") if isinstance(output, dict) else None
-        if isinstance(rows, list) and rows:
-            return pd.DataFrame(rows)
+        for contenido in (
+            block_state.content if block_state else None,
+            block_outputs.get(block_id),
+        ):
+            if not isinstance(contenido, dict):
+                continue
+            df = _df_de_contenido(contenido)
+            if df is not None:
+                return df
         return pd.DataFrame()

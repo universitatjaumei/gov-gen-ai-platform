@@ -6,23 +6,59 @@ DataFrame (típicamente desde `WorkspaceState.block_outputs`).
 """
 from __future__ import annotations
 
+import re
 from typing import Callable
 
 import pandas as pd
 
 from server.app.modules.redaccion.services.transformation.operations import (
     AggregateOp,
+    DropColumnsOp,
+    DropNullRowsOp,
+    FillNullsOp,
     FilterOp,
+    FormatDatesOp,
     GroupByOp,
     JoinOp,
+    MergeColumnsOp,
     NormalizeOp,
+    NormalizeTextOp,
     Operation,
     PivotOp,
+    RemoveDuplicatesOp,
+    RenameColumnsOp,
+    ReorderColumnsOp,
+    ReplaceValuesOp,
 )
 
 
 class UnknownOperationError(TypeError):
     pass
+
+
+class ColumnaInexistenteError(KeyError):
+    """Una operación nombra una columna que la tabla no tiene.
+
+    PRO.4 — el legacy devolvía el DataFrame intacto (`return df`) cuando la columna no
+    existía. En una interfaz donde ves el resultado al momento eso es cómodo; en un informe que
+    se genera en segundo plano es un renombrado que se pierde y una tabla que sale sin tocar y
+    sin decirlo. El nodo convierte esto en un bloque `failed` con su motivo, que es visible.
+    """
+
+
+def _a_snake_case(texto: str) -> str:
+    """`Importe Total` → `importe_total`, `creditoInicial` → `credito_inicial`."""
+    con_guiones = re.sub(r"[\s\-]+", "_", texto)
+    separado = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", con_guiones)
+    return separado.lower()
+
+
+def _exigir_columnas(df: pd.DataFrame, columnas: list[str], operacion: str) -> None:
+    faltan = [c for c in columnas if c not in df.columns]
+    if faltan:
+        raise ColumnaInexistenteError(
+            f"{operacion}: la tabla no tiene {faltan}. Columnas disponibles: {list(df.columns)}"
+        )
 
 
 JoinableResolver = Callable[[str], pd.DataFrame]
@@ -49,9 +85,102 @@ class DeterministicETLService:
                 result = self._normalize(result, op)
             elif isinstance(op, GroupByOp):
                 result = self._groupby(result, op)
+            # PRO.4 — limpieza, portada del legacy.
+            elif isinstance(op, DropColumnsOp):
+                _exigir_columnas(result, op.columns, "drop_columns")
+                result = result.drop(columns=op.columns)
+            elif isinstance(op, RenameColumnsOp):
+                _exigir_columnas(result, list(op.mapping), "rename_columns")
+                result = result.rename(columns=op.mapping)
+            elif isinstance(op, MergeColumnsOp):
+                result = self._merge_columns(result, op)
+            elif isinstance(op, ReorderColumnsOp):
+                _exigir_columnas(result, op.columns, "reorder_columns")
+                resto = [c for c in result.columns if c not in op.columns]
+                result = result[op.columns + resto]
+            elif isinstance(op, FormatDatesOp):
+                result = self._format_dates(result, op)
+            elif isinstance(op, ReplaceValuesOp):
+                _exigir_columnas(result, [op.column], "replace_values")
+                result = result.copy()
+                result[op.column] = result[op.column].replace(op.replacements)
+            elif isinstance(op, NormalizeTextOp):
+                result = self._normalize_text(result, op)
+            elif isinstance(op, FillNullsOp):
+                _exigir_columnas(result, op.columns, "fill_nulls")
+                result = result.copy()
+                result[op.columns] = result[op.columns].fillna(op.value)
+            elif isinstance(op, RemoveDuplicatesOp):
+                if op.subset:
+                    _exigir_columnas(result, op.subset, "remove_duplicates")
+                result = result.drop_duplicates(subset=op.subset, keep=op.keep)
+            elif isinstance(op, DropNullRowsOp):
+                if op.subset:
+                    _exigir_columnas(result, op.subset, "drop_null_rows")
+                result = result.dropna(subset=op.subset, how=op.how)
             else:
                 raise UnknownOperationError(f"Unknown operation type: {type(op).__name__}")
         return result
+
+    # ------------------------------------------------------------------
+    # Limpieza (PRO.4)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _merge_columns(df: pd.DataFrame, op: MergeColumnsOp) -> pd.DataFrame:
+        _exigir_columnas(df, op.source_columns, "merge_columns")
+        valores = df[op.source_columns].apply(
+            lambda fila: op.separator.join(fila.astype(str)), axis=1
+        )
+        if not op.drop_source:
+            salida = df.copy()
+            salida[op.target_column] = valores
+            return salida
+
+        # La posición de la primera columna fusionada se conserva: si la referencia acabara al
+        # final de la tabla, habría que reordenar después en otra operación.
+        posicion = min(list(df.columns).index(c) for c in op.source_columns)
+        salida = df.drop(columns=op.source_columns)
+        salida.insert(posicion, op.target_column, valores)
+        return salida
+
+    @staticmethod
+    def _format_dates(df: pd.DataFrame, op: FormatDatesOp) -> pd.DataFrame:
+        _exigir_columnas(df, [op.column], "format_dates")
+        salida = df.copy()
+        # `errors="coerce"`: lo que no se entiende como fecha queda vacío, y eso **se ve** en la
+        # tabla del informe. El legacy dejaba la columna entera intacta y escribía un `print`,
+        # así que una fecha sin convertir pasaba desapercibida.
+        #
+        # `dayfirst=True` en la detección automática: `01/03/2026` es ambiguo y pandas lo lee
+        # como **3 de enero** (convención de EE. UU.). En un fichero de esta institución es el
+        # 1 de marzo, y equivocarse ahí no da error: da un informe con las fechas cambiadas.
+        # Con `source_format` explícito manda el formato, que es lo inequívoco.
+        if op.source_format:
+            fechas = pd.to_datetime(salida[op.column], format=op.source_format, errors="coerce")
+        else:
+            fechas = pd.to_datetime(salida[op.column], errors="coerce", dayfirst=True)
+        formato = "%Y-%m-%d" if op.target_format.upper() == "ISO8601" else op.target_format
+        salida[op.column] = fechas.dt.strftime(formato)
+        return salida
+
+    @staticmethod
+    def _normalize_text(df: pd.DataFrame, op: NormalizeTextOp) -> pd.DataFrame:
+        _exigir_columnas(df, op.columns, "normalize_text")
+        salida = df.copy()
+        for col in op.columns:
+            texto = salida[col].astype(str)
+            if op.mode == "upper":
+                salida[col] = texto.str.upper()
+            elif op.mode == "lower":
+                salida[col] = texto.str.lower()
+            elif op.mode == "title":
+                salida[col] = texto.str.title()
+            elif op.mode == "strip":
+                salida[col] = texto.str.strip()
+            elif op.mode == "snake_case":
+                salida[col] = texto.map(_a_snake_case)
+        return salida
 
     # ------------------------------------------------------------------
     # Operadores

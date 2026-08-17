@@ -40,6 +40,7 @@ def build_core_graph(
     tracing_service: Any = None,
     etl_llm: Any = None,
     etl_model_name: str = "",
+    etl_system_prompt: str | None = None,
     pii_detector: Any = None,
     faker_generator: Any = None,
 ):
@@ -62,7 +63,11 @@ def build_core_graph(
     validate_node = ValidateInputContractNode()
     normalize_node = FileNormalizationNode(storage_service)
     extract_node = DeterministicExtractionNode(extraction_factory)
-    transform_node = DataTransformationNode(llm_service=etl_llm, model_name=etl_model_name)
+    transform_node = DataTransformationNode(
+        llm_service=etl_llm,
+        model_name=etl_model_name,
+        system_prompt=etl_system_prompt,
+    )
     quality_node = DataQualityCheckNode()
     missing_node = MissingDataQuestionNode()
     init_anon_node = _build_init_anonymization_node(pii_detector, faker_generator)

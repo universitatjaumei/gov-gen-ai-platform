@@ -46,12 +46,24 @@ ESTADO_EN_REVISION = "in_review"
 ESTADO_ERROR = "error"
 
 
-def construir_grafo(session: Any, llm_service: Any, storage_service: Any = None):
+def construir_grafo(
+    session: Any,
+    llm_service: Any,
+    storage_service: Any = None,
+    etl_llm: Any = None,
+    etl_model_name: str = "",
+    etl_system_prompt: str | None = None,
+):
     """El `DraftingCoreGraph` con sus dependencias resueltas contra esta sesión.
 
     `pii_detector` y `faker_generator` se dejan sin inyectar a propósito: sin ellos el nodo
     de anonimización es un no-op declarado (modo OFF), que es el comportamiento vigente. El
     cableado del NER reversible es la Fase 13 y tiene su propia superficie de configuración.
+
+    `etl_llm` sí se inyecta desde PRO.4: sin él, `DataTransformationNode` se construía con
+    `llm_service=None` y un bloque de transformación en modo IA fallaba con «ai mode requires
+    an injected llm». Es un modelo distinto del de redacción porque la tarea es distinta:
+    transformar datos es **programar**, así que va con el nivel 2.
     """
     from server.app.core.storage import get_storage_service
     from server.app.modules.redaccion.graph.core_graph import build_core_graph
@@ -63,7 +75,41 @@ def construir_grafo(session: Any, llm_service: Any, storage_service: Any = None)
         extraction_factory=build_default_factory(),
         llm_service=llm_service,
         manifest_repo=RunManifestRepo(session),
+        etl_llm=etl_llm,
+        etl_model_name=etl_model_name,
+        etl_system_prompt=etl_system_prompt,
     )
+
+
+async def resolver_modelo_de_etl(session: Any) -> tuple[Any, str, str]:
+    """El modelo de la actividad de transformación, con su nivel y su nombre.
+
+    El nivel sale del catálogo de actividades (nivel 2, porque transformar es programar) y la
+    biblioteca de prompts puede sobreescribirlo. Si no hay modelo configurado se devuelve
+    `None`: **el modo determinista tiene que seguir funcionando sin modelo**, y un informe que
+    sólo aplica operaciones declarativas no tiene por qué depender de que haya un LLM.
+    """
+    from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
+    from server.app.modules.agents_hub.services.model_factory import get_model_for_tier
+    from server.app.modules.redaccion.services.actividades_llm import (
+        ActividadLLM,
+        resolver_actividad,
+    )
+    from server.app.routers.redaccion._actor import nombre_del_modelo
+
+    proveedor = LocalConfigProvider(session)
+    resuelta = await resolver_actividad(ActividadLLM.TRANSFORMACION_ETL, proveedor)
+    try:
+        modelo = await get_model_for_tier(resuelta.tier, proveedor)
+    except Exception as fallo:  # noqa: BLE001
+        _log.warning(
+            "Sin modelo para el nivel %s: los bloques de transformación en modo IA fallarán "
+            "con su motivo, el modo determinista sigue funcionando (%s)",
+            resuelta.tier,
+            fallo,
+        )
+        return None, "", resuelta.template_text
+    return modelo, nombre_del_modelo(modelo), resuelta.template_text
 
 
 def _estado_inicial(
@@ -202,7 +248,15 @@ async def ejecutar_borrador(
             select(HubWorkspaceBlock).where(HubWorkspaceBlock.workspace_id == workspace_id)
         )).scalars().all()
 
-        grafo = construir_grafo(session, llm_service, storage_service)
+        etl_llm, etl_model_name, etl_prompt = await resolver_modelo_de_etl(session)
+        grafo = construir_grafo(
+            session,
+            llm_service,
+            storage_service,
+            etl_llm=etl_llm,
+            etl_model_name=etl_model_name,
+            etl_system_prompt=etl_prompt,
+        )
         final = await grafo.ainvoke(_estado_inicial(workspace, spec, list(existentes)))
 
         estado = WorkspaceState.model_validate(_bloques_del(final))

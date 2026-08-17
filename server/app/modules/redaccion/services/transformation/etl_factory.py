@@ -26,8 +26,14 @@ from server.app.modules.redaccion.services.script_auditor import (
     AuditResult,
     ScriptSecurityAuditor,
 )
+from server.app.modules.redaccion.services.actividades_llm import (
+    ActividadLLM,
+    PROMPT_POR_ACTIVIDAD,
+    rellenar,
+)
 from server.app.modules.redaccion.services.transformation.operations import (
     Operation,
+    catalogo_de_operaciones,
     parse_operations,
 )
 
@@ -93,10 +99,15 @@ class ETLPlan(BaseModel):
 class ETLFactory:
     """Convierte instrucciones en lenguaje natural en planes ETL auditables."""
 
-    def __init__(self, llm: Any, model_name: str = "") -> None:
+    def __init__(
+        self, llm: Any, model_name: str = "", system_prompt: str | None = None
+    ) -> None:
         self._llm = llm
         self._model_name = model_name
         self._auditor = ScriptSecurityAuditor()
+        # PRO.4 — el prompt puede venir de la biblioteca (PRO.2.1); por defecto, el del
+        # catálogo de actividades.
+        self._system_prompt = system_prompt
 
     async def generate_operations_from_nl(
         self,
@@ -176,9 +187,25 @@ class ETLFactory:
                 "Devuelve un JSON corregido que cumpla el esquema."
             )
         return [
-            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "system", "content": self._prompt_del_sistema(schema)},
             {"role": "user", "content": user_msg},
         ]
+
+    def _prompt_del_sistema(self, schema: dict[str, Any]) -> str:
+        """El prompt con el catálogo de operaciones **generado del contrato**.
+
+        PRO.4 — aquí había una lista escrita a mano con las seis operaciones de 9R.5.8. Al
+        portar las diez de limpieza del legacy, una lista a mano se queda corta en el primer
+        cambio y el síntoma es un modelo que no usa la mitad del catálogo. Es el mismo arreglo
+        que VER.3 hizo con el borrador de plantillas: el esquema real, no una copia.
+        """
+        return rellenar(
+            self._system_prompt or PROMPT_POR_ACTIVIDAD[ActividadLLM.TRANSFORMACION_ETL],
+            {
+                "esquema_de_operaciones": catalogo_de_operaciones(),
+                "esquema_de_datos": json.dumps(schema, ensure_ascii=False),
+            },
+        )
 
     async def _invoke(self, messages: list[dict[str, str]]) -> str:
         response = await self._llm.ainvoke(messages)

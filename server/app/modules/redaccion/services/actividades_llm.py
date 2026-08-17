@@ -40,6 +40,7 @@ class ActividadLLM(StrEnum):
 
     PROPUESTA_DE_SCRIPT = "propuesta_de_script"
     AUDITORIA_DE_SCRIPT = "auditoria_de_script"
+    TRANSFORMACION_ETL = "transformacion_etl"
 
 
 #: Nivel por defecto de cada actividad. Los niveles son 1 (rápido), 2 (lógica) y 3 (supervisión).
@@ -49,6 +50,9 @@ TIER_POR_ACTIVIDAD: dict[ActividadLLM, int] = {
     # Juzgar el código de otro pide el modelo superior, y va **encima** de la auditoría
     # determinista de PRO.1, nunca en su lugar.
     ActividadLLM.AUDITORIA_DE_SCRIPT: 3,
+    # Traducir «quita los duplicados y agrupa por capítulo» a operaciones también es
+    # programar, aunque el resultado sea JSON y no Python: nivel 2.
+    ActividadLLM.TRANSFORMACION_ETL: 2,
 }
 
 
@@ -57,6 +61,7 @@ TIER_POR_ACTIVIDAD: dict[ActividadLLM, int] = {
 PARA_QUE_SIRVE: dict[ActividadLLM, str] = {
     ActividadLLM.PROPUESTA_DE_SCRIPT: "escribe el script de extracción",
     ActividadLLM.AUDITORIA_DE_SCRIPT: "audita el script escrito",
+    ActividadLLM.TRANSFORMACION_ETL: "traduce a operaciones lo que hay que transformar",
 }
 
 
@@ -115,9 +120,35 @@ Responde SÓLO con este JSON, sin markdown ni explicaciones alrededor:
 Sé concreto y breve: cada motivo, una frase."""
 
 
+_PROMPT_ETL = """\
+Eres un planificador de transformaciones tabulares. Dado un esquema de datos y una instrucción \
+en lenguaje natural, produces un plan declarativo en JSON.
+
+DEVUELVE ÚNICAMENTE JSON VÁLIDO sin texto adicional, sin markdown, sin fences.
+
+FORMATO:
+{"mode": "operations", "operations": [ ... ]}
+
+CADA OPERACIÓN TIENE QUE SER UNA DE ESTAS, con exactamente estos campos:
+{esquema_de_operaciones}
+
+REGLAS:
+  - Usa sólo columnas presentes en el esquema de datos. Una columna que no existe **hace \
+fallar la transformación**: no la inventes ni la adivines.
+  - Primero limpiar y después analizar. Un fichero real llega con columnas que no se usan, \
+fechas en varios formatos, filas duplicadas y celdas vacías.
+  - En `format_dates`, si conoces el formato de origen decláralo: `01/03/2026` es ambiguo.
+  - No inventes operaciones nuevas. Si la petición no encaja en el catálogo, devuelve \
+{"mode": "operations", "operations": []}.
+
+ESQUEMA DE LOS DATOS:
+{esquema_de_datos}"""
+
+
 PROMPT_POR_ACTIVIDAD: dict[ActividadLLM, str] = {
     ActividadLLM.PROPUESTA_DE_SCRIPT: _PROMPT_PROPUESTA,
     ActividadLLM.AUDITORIA_DE_SCRIPT: _PROMPT_AUDITORIA,
+    ActividadLLM.TRANSFORMACION_ETL: _PROMPT_ETL,
 }
 
 
@@ -133,6 +164,7 @@ VARIABLES_POR_ACTIVIDAD: dict[ActividadLLM, tuple[str, ...]] = {
         "schema",
     ),
     ActividadLLM.AUDITORIA_DE_SCRIPT: (),
+    ActividadLLM.TRANSFORMACION_ETL: ("esquema_de_operaciones", "esquema_de_datos"),
 }
 
 

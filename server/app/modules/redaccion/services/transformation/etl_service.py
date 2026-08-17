@@ -39,10 +39,13 @@ class ETLService:
         llm: Any = None,
         model_name: str = "",
         sandbox_client: SandboxClient | None = None,
+        system_prompt: str | None = None,
     ) -> None:
         self._llm = llm
         self._model_name = model_name
         self._sandbox_client: SandboxClient = sandbox_client or LocalSandboxClient()
+        # PRO.4 — el prompt del planificador, resuelto por la biblioteca de prompts.
+        self._system_prompt = system_prompt
 
     async def run(
         self,
@@ -71,7 +74,9 @@ class ETLService:
         if not nl_instruction:
             raise ValueError("nl_instruction is required in ai mode")
 
-        factory = ETLFactory(self._llm, model_name=self._model_name)
+        factory = ETLFactory(
+            self._llm, model_name=self._model_name, system_prompt=self._system_prompt
+        )
         schema = self._schema_of(df)
         plan = await factory.generate_operations_from_nl(nl_instruction, schema)
 
