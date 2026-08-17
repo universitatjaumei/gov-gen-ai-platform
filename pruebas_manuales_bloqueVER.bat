@@ -12,10 +12,12 @@ echo   - plantilla propuesta con IA y contrato de UI
 echo   - informe de punta a punta (Excel -^> extraccion -^> IA -^> revision -^> ensamblado)
 echo   - cola de aprobacion de scripts contra el sandbox real
 echo   - sitios, rastreo, hallazgos, informe de calidad y publicacion
-echo Y en el bloque PRO recorrio, con modelos reales:
+echo Y en los bloques PRO (1-9) recorrio, con modelos reales:
 echo   - script escrito por el modelo, auditado y ejecutado en el sandbox
 echo   - script aprobado extrayendo datos dentro de un informe
 echo   - transformacion de datos (determinista y por IA) y grafico en el informe
+echo   - los once tipos de grafico, con titulo, cifras encima y orden
+echo   - importes en texto convertidos a numero y una columna calculada
 echo   - exportacion a DOCX con tablas e imagenes de verdad
 echo   - el copiloto respondiendo con citas a ficheros reales de docs\
 echo Nada de eso se repite aqui. Ver docs\PRUEBAS_MANUALES.md.
@@ -206,6 +208,48 @@ echo  QUE VALORAR:
 echo   - Si te responde o te recita el documento.
 echo   - Si la cita que da es donde tu habrias buscado.
 echo   - Si cuando no sabe algo lo dice, en vez de inventarlo.
+echo.
+pause
+
+echo.
+echo ============================================================
+echo  PRUEBA H - Una hoja de calculo tuya, de verdad
+echo ============================================================
+echo.
+echo  ESTA ES LA OTRA IMPORTANTE, y es nueva de PRO.9.
+echo.
+echo  Lo que el agente comprobo: que una hoja con importes escritos como
+echo  "1.234,56 EUR" se convierte a numero y se puede sumar, que una columna
+echo  calculada (pct = obligaciones / credito * 100) sale bien, que la tabla
+echo  se ordena y que una hoja ancha (ene feb mar en cabeceras) se pone en
+echo  largo. Con hojas que se invento el.
+echo.
+echo  Lo que NO puede comprobar: si TUS hojas tienen alguna forma que esto no
+echo  cubre. Es el mismo limite que en la PRUEBA F.
+echo.
+echo  1. Coge una hoja REAL: ejecucion presupuestaria, un listado de gasto,
+echo     lo que uses. Sin arreglarla antes.
+echo  2. Ve a Informes, crea un informe con un bloque de transformacion y
+echo     escribe con tus palabras que hay que hacer con ella. Por ejemplo:
+echo       "convierte los importes a numero, calcula el porcentaje de
+echo        ejecucion sobre el credito y ordena de mayor a menor"
+echo  3. Mira las operaciones que propone ANTES de aplicarlas.
+echo.
+echo  QUE VALORAR:
+echo   - Si ha puesto to_number sobre las columnas de importes. Si NO lo ha
+echo     hecho y luego suma, la cifra saldra mal SIN dar ningun error: es
+echo     justo el fallo silencioso que este bloque venia a cerrar.
+echo   - Si las cifras de la tabla cuadran con las de tu hoja. Comprueba al
+echo     menos un total a mano.
+echo   - Si te dice claramente que no puede hacer algo, en vez de dejarte una
+echo     columna vacia sin explicacion.
+echo   - Si te propone un script en vez de operaciones, anota QUE pediste:
+echo     eso es un hueco del catalogo y se cierra sin generar codigo.
+echo.
+echo  AVISO sobre los separadores: si tu hoja viene en formato ingles
+echo  (1,234.56), la conversion tiene que FALLAR diciendolo, no darte otra
+echo  cifra. Si te da una cifra distinta sin avisar, es un fallo grave y hay
+echo  que anotarlo.
 echo.
 pause
 
