@@ -51,7 +51,7 @@
     "prompt": "Description",
     "hash_match": "Hash verified",
     "target_template_label": "Target global template",
-    "target_template_placeholder": "Template UUID"
+    "target_template_placeholder": "Choose a template"
   },
   "anonymize": {
     "title": "Configure anonymization",

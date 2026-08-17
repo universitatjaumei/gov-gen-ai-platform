@@ -51,7 +51,7 @@
     "prompt": "Descripción",
     "hash_match": "Hash verificado",
     "target_template_label": "Plantilla global de destino",
-    "target_template_placeholder": "UUID de la plantilla"
+    "target_template_placeholder": "Elige una plantilla"
   },
   "anonymize": {
     "title": "Configurar anonimización",

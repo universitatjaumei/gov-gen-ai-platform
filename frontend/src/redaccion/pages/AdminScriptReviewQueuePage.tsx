@@ -7,9 +7,11 @@ import {
   useApproveScriptProposal,
   useRejectScriptProposal,
 } from '@/shared/api/generated/redaccion-scripts/redaccion-scripts'
+import { useListTemplates } from '@/shared/api/generated/hub-redaccion/hub-redaccion'
 import type {
   PendingProposalOut,
   AdminRetestResponse,
+  TemplateOut,
 } from '@/shared/api/generated/model'
 import { useAuth } from '@/shared/auth'
 
@@ -23,6 +25,11 @@ function ProposalCard({ proposal }: ProposalCardProps) {
   const approveHook = useApproveScriptProposal()
   const rejectHook = useRejectScriptProposal()
   const [targetTemplateId, setTargetTemplateId] = useState('')
+
+  const { data: plantillasRaw } = useListTemplates()
+  const plantillasGlobales = (
+    (plantillasRaw as unknown as TemplateOut[] | undefined) ?? []
+  ).filter(tmpl => tmpl.is_global)
 
   const retestResult = retestHook.data as unknown as AdminRetestResponse | undefined
   const canApprove = !!retestResult && targetTemplateId.trim().length > 0
@@ -71,18 +78,25 @@ function ProposalCard({ proposal }: ProposalCardProps) {
         </div>
       )}
 
+      {/* Desplegable y no texto libre (VER.5): pedía el **UUID** de la plantilla, que nadie
+          sabe de memoria, y un UUID mal escrito da un 404 después de haber pulsado aprobar.
+          Solo las globales: el script aprobado se incrusta en una plantilla de plataforma. */}
       <div className="space-y-1">
         <label className="text-xs text-muted-foreground" htmlFor={`target-template-${proposal.proposal_id}`}>
           {t('admin.target_template_label')}
         </label>
-        <input
+        <select
           id={`target-template-${proposal.proposal_id}`}
-          type="text"
+          data-testid={`target-template-${proposal.proposal_id}`}
           value={targetTemplateId}
           onChange={e => setTargetTemplateId(e.target.value)}
-          placeholder={t('admin.target_template_placeholder')}
-          className="w-full text-xs border rounded px-2 py-1"
-        />
+          className="w-full text-xs border rounded px-2 py-1 bg-background"
+        >
+          <option value="">{t('admin.target_template_placeholder')}</option>
+          {plantillasGlobales.map(tmpl => (
+            <option key={tmpl.id} value={tmpl.id}>{tmpl.name}</option>
+          ))}
+        </select>
       </div>
 
       <div className="flex gap-2">
