@@ -65,6 +65,29 @@ salir un `^>` literal en vez de `->`).
 
 ---
 
+## Ya verificado por el agente en navegador (2026-08-17, Bloque VER) — no repetir
+
+Backend en `:8001`, frontend de desarrollo en `:5174`, sitio del corpus en `:4174` y una
+instancia aparte del sandbox en `:5099`. Sesión real como `fabra@uji.es`.
+
+| Camino | Qué se comprobó, con evidencia |
+|---|---|
+| Informes — plantilla con IA | Descripción en lenguaje natural → propuesta con 4 secciones y bloques `DETERMINISTIC_DATA` + `TABLE` + `AI_ASSISTED_TEXT` + `REVIEW_GATE` → validación `ok=true` → aprobación **200** → contrato de UI **200** con una zona de arrastre y dos campos derivados |
+| Informes — informe completo | Workspace desde plantilla → formulario construido **desde el contrato** → Excel sintético de ejecución presupuestaria subido → generación → bloque determinista `extracted` con la tabla real → el bloque de IA redacta **citando las cifras extraídas** (120.000, 96.000, 80 %) → aprobar → reanudar → `assembled` → vista previa **200** |
+| Informes — scripts | Propuesta → `test` en el sandbox real → validación → `pending_review` → re-test con `hash_matches=True` → **aprobado**, confirmado en la base |
+| Curación — sitios | Alta desde la pantalla → rastreo **202** → sitio `active` con `last_crawled_at` → 2 páginas guardadas → las mismas como candidatas |
+| Curación — hallazgos | Análisis **202**, informe de calidad **200**, y las tres transiciones: confirmar **200**, `confirmed → new` **422** con el motivo, resolver **200** |
+| Curación — publicación | Selección `path_prefix` creada, candidatas marcadas con su regla, y la selección **sólo** en el chatbot destino |
+| Curación — huecos y caducidad | `gaps/analyze` **200** y `stale/analyze` **200**. No contradicen a la pantalla de Vigencia: aquélla cuenta lo que **nadie ha validado** (50), ésta lo que **ya venció** (0, porque las fechas del corpus están en 2027) |
+
+**Lo que este recorrido dejó por el camino**: la generación de informes **no existía** —el
+endpoint devolvía un `run_id` sintético sin ejecutar el grafo—, no había pantalla donde abrir
+un workspace, la subida de ficheros no se persistía, el rastreo de sitios fallaba siempre y el
+«PDF» del informe de calidad era un DOCX. Diecinueve hallazgos, todos arreglados con TDD.
+Detalle en `PROJECT_STATE.md`, entradas VER.1–VER.8.
+
+---
+
 ## Matriz de lo irreducible
 
 ### `agents_hub` (RAG, ingesta de conversación, LangGraph)
@@ -91,8 +114,10 @@ salir un `^>` literal en vez de `->`).
 | Qué se prueba | Por qué NO lo hace el agente en navegador | Quién |
 |---|---|---|
 | Calidad de la anonimización sobre un documento con datos personales reales | El agente no debe procesar PII real; los tests usan datos sintéticos | Alguien con un documento de prueba ya anonimizado por otra vía, o con autorización expresa para usar uno real |
-| Fidelidad del borrador LLM generado frente a lo que un redactor humano esperaría | Juicio de calidad editorial, no verificable por regla | Persona con criterio de redacción institucional |
+| Fidelidad del borrador LLM generado frente a lo que un redactor humano esperaría | Juicio de calidad editorial, no verificable por regla. **Ahora sí hay algo que juzgar**: desde VER.1/VER.4 el informe se genera de verdad y el texto sale de los datos extraídos | Persona con criterio de redacción institucional |
 | Exportación final (DOCX/PDF) abierta en Word/Adobe reales, con la maquetación institucional | El agente puede comprobar que el fichero se descarga y su tamaño; no que "se vea bien" en el lector real | Cualquiera con Office/Adobe instalado |
+| PDF **real** del informe de calidad de curación | En esta máquina no hay LibreOffice, así que la exportación cae a DOCX —y desde VER.7 lo dice en el tipo y la extensión en vez de mentir—. Verificar el PDF exige un entorno con LibreOffice instalado | Alguien con LibreOffice, o el despliegue donde vaya a correr |
+| Rastreo de un sitio con enlaces servidos en HTML (p. ej. `www.uji.es`) | El sitio local del corpus pinta sus fichas con JavaScript, así que un rastreador estático sólo alcanza el índice y el buscador. La profundidad real no se puede medir contra él | Cualquiera, apuntando un sitio nuevo a una web institucional real |
 
 ### `frontend/widget` (chatbot público embebible)
 
