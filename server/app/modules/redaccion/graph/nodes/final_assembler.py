@@ -10,6 +10,26 @@ from server.app.modules.redaccion.contracts.runtime import (
 
 _INCLUDABLE_STATUSES = frozenset({"approved", "locked"})
 
+#: Los bloques cuyo texto lo escribió un modelo. Son los únicos que exigen que un humano los
+#: apruebe antes de salir en el informe.
+_TIPOS_DE_IA = frozenset({"AI_ASSISTED_TEXT", "AI_SUMMARY", "AI_REWRITE"})
+
+
+def _entra_en_el_informe(kind: str, status: str, tiene_contenido: bool) -> bool:
+    """Si este bloque debe aparecer en el documento ensamblado.
+
+    Antes se exigía `approved`/`locked` a **todos**, y como nada transiciona un `STATIC_TEXT`
+    o un `DETERMINISTIC_DATA` a `approved`, el informe salía con la mitad de IA y sin la mitad
+    determinista —que es justamente la que sale de los ficheros que subió el usuario—.
+
+    La puerta de revisión es sobre el **texto de IA**: es lo que `UserReviewGateNode`
+    implementa, y lo que tiene sentido revisar. Un bloque determinista no lo aprueba nadie
+    porque no lo escribió nadie.
+    """
+    if kind in _TIPOS_DE_IA:
+        return status in _INCLUDABLE_STATUSES
+    return status not in ("failed",) and tiene_contenido
+
 
 class FinalAssemblerNode:
     """Renderiza el Markdown ensamblado solo con bloques en estado approved/locked.
@@ -51,7 +71,11 @@ class FinalAssemblerNode:
 
             for block_contract in ordered_blocks:
                 block_state = state.blocks.get(block_contract.id)
-                if block_state is None or block_state.status not in _INCLUDABLE_STATUSES:
+                if block_state is None:
+                    continue
+                if not _entra_en_el_informe(
+                    block_state.kind, block_state.status, bool(block_state.content)
+                ):
                     continue
 
                 text = ""

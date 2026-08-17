@@ -107,5 +107,11 @@
   "nav_llm_draft": "Proponer con IA",
   "nav_new_report": "Nuevo informe",
   "nav_scripts_review": "Revisión de scripts",
-  "nav_aria": "Navegación de informes"
+  "nav_aria": "Navegación de informes",
+  "workspace_not_found": "No se encuentra este informe.",
+  "workspace_error": "La generación falló. Revisa los avisos de abajo y vuelve a intentarlo.",
+  "workspace_inputs": "Datos de partida",
+  "workspace_generate": "Generar informe",
+  "workspace_generating": "Generando…",
+  "workspace_preview": "Vista previa"
 }

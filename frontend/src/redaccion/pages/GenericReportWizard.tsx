@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import {
   useListTemplates,
   useCreateWorkspace,
@@ -7,6 +8,7 @@ import type { TemplateOut } from '@/shared/api/generated/model'
 
 export function GenericReportWizard() {
   const { t } = useTranslation('common')
+  const navigate = useNavigate()
   const { data: templatesRaw, isLoading } = useListTemplates()
   const templates = (templatesRaw as unknown as TemplateOut[] | undefined) ?? []
   const { mutate: createWorkspace, isPending } = useCreateWorkspace()
@@ -15,7 +17,12 @@ export function GenericReportWizard() {
 
   function handleCreate(template: TemplateOut) {
     if (!template.current_version_id) return
-    createWorkspace({ data: { template_version_id: template.current_version_id } })
+    createWorkspace(
+      { data: { template_version_id: template.current_version_id } },
+      // Sin esto, el informe se creaba en la base y en pantalla no cambiaba nada:
+      // indistinguible de un botón roto (VER.4).
+      { onSuccess: (creado) => navigate(`/redaccion/workspaces/${creado.workspace_id}`) },
+    )
   }
 
   return (

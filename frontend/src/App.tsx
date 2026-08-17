@@ -47,6 +47,7 @@ const LLMDraftPreviewPage = lazy(() => import('@/redaccion/pages/LLMDraftPreview
 const ScriptProposalWizardPage = lazy(() => import('@/redaccion/pages/ScriptProposalWizardPage').then(m => ({ default: m.ScriptProposalWizardPage })))
 const AdminScriptReviewQueuePage = lazy(() => import('@/redaccion/pages/AdminScriptReviewQueuePage').then(m => ({ default: m.AdminScriptReviewQueuePage })))
 const WorkspacePreview = lazy(() => import('@/redaccion/preview/WorkspacePreview').then(m => ({ default: m.WorkspacePreview })))
+const WorkspacePage = lazy(() => import('@/redaccion/pages/WorkspacePage').then(m => ({ default: m.WorkspacePage })))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -122,6 +123,9 @@ function App() {
                   </Route>
                   {/* Fuera del layout: es una vista de impresión, sin navegación. */}
                   <Route path="/redaccion/workspaces/:id/preview" element={<WorkspacePreview />} />
+                  {/* La pantalla donde se trabaja un informe. Existían todos sus componentes
+                      desde 9R y ninguna ruta los montaba (VER.4). */}
+                  <Route path="/redaccion/workspaces/:id" element={<WorkspacePage />} />
                 </Route>
               </Route>
               <Route path="*" element={<Navigate to="/hub" replace />} />

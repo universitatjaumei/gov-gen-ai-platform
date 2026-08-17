@@ -192,6 +192,92 @@ class TestLaGeneracionProduceAlgo:
             await engine.dispose()
 
 
+class TestLosDatosDePartida:
+
+    @pytest.mark.asyncio
+    async def test_should_hand_the_uploaded_inputs_to_the_graph(self, db_url):
+        """Visto en vivo en VER.4: se sube el Excel, se genera, y los bloques deterministas
+        siguen en `draft` porque el ejecutor arrancaba el grafo con `inputs={}`. El informe
+        salía sin datos y el bloque de IA decía, con razón, que no tenía con qué redactar."""
+        from server.app.modules.redaccion.services import drafting_runner
+
+        engine = create_async_engine(db_url)
+        try:
+            async with AsyncSession(engine) as session:
+                workspace_id = await _sembrar(session)
+                workspace = await session.get(HubWorkspace, workspace_id)
+                workspace.inputs_json = {
+                    "datos_excel": {
+                        "slot_id": "datos_excel",
+                        "filename": "datos.xlsx",
+                        "storage_path": "redaccion/x/inputs/datos_excel/datos.xlsx",
+                        "size_bytes": 10,
+                        "uploaded_at": "2026-08-17T00:00:00+00:00",
+                    }
+                }
+                await session.commit()
+
+                # Se relee tras el commit: `expire_on_commit` deja el objeto anterior con
+                # los atributos expirados y leerlos dispara una recarga síncrona.
+                workspace = await session.get(HubWorkspace, workspace_id)
+                version = await session.get(
+                    HubReportTemplateVersion, workspace.template_version_id
+                )
+                estado = drafting_runner._estado_inicial(
+                    workspace, ReportTemplateSpec.model_validate(version.spec_json)
+                )
+
+                assert "datos_excel" in estado.inputs
+                assert estado.inputs["datos_excel"].filename == "datos.xlsx"
+        finally:
+            await engine.dispose()
+
+
+class TestReanudar:
+
+    @pytest.mark.asyncio
+    async def test_should_keep_what_a_human_already_approved(self, db_url):
+        """Reanudar arrancaba el grafo de cero, así que continuar tras aprobar el texto de
+        IA borraba esa aprobación y lo volvía a generar: lo contrario de lo que pide quien
+        pulsa continuar."""
+        from server.app.modules.redaccion.database.models import HubWorkspaceBlock
+        from server.app.modules.redaccion.services import drafting_runner
+
+        engine = create_async_engine(db_url)
+        try:
+            async with AsyncSession(engine) as session:
+                workspace_id = await _sembrar(session)
+                session.add(HubWorkspaceBlock(
+                    workspace_id=workspace_id,
+                    block_id="b_resumen",
+                    kind="AI_ASSISTED_TEXT",
+                    status="approved",
+                    content_json={"text": "Lo aprobó una persona."},
+                ))
+                await session.commit()
+
+                workspace = await session.get(HubWorkspace, workspace_id)
+                version = await session.get(
+                    HubReportTemplateVersion, workspace.template_version_id
+                )
+                filas = (await session.execute(
+                    select(HubWorkspaceBlock).where(
+                        HubWorkspaceBlock.workspace_id == workspace_id
+                    )
+                )).scalars().all()
+
+                estado = drafting_runner._estado_inicial(
+                    workspace,
+                    ReportTemplateSpec.model_validate(version.spec_json),
+                    list(filas),
+                )
+
+                assert estado.blocks["b_resumen"].status == "approved"
+                assert estado.blocks["b_resumen"].content == {"text": "Lo aprobó una persona."}
+        finally:
+            await engine.dispose()
+
+
 class TestCuandoLaGeneracionFalla:
 
     @pytest.mark.asyncio

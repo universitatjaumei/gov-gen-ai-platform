@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 import i18n from '@/shared/i18n'
 
 import { ReportTemplateBuilderPage } from '../pages/ReportTemplateBuilderPage'
@@ -57,7 +58,13 @@ function makeTemplate(id: string, name: string, profile = 'GENERIC_REPORT') {
 
 function wrap(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>)
+  // `MemoryRouter` desde VER.4: el asistente navega al informe recién creado, así que ya
+  // no se puede montar fuera de un router.
+  return render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </QueryClientProvider>
+  )
 }
 
 beforeAll(async () => {
@@ -155,8 +162,11 @@ describe('GenericReportWizard', () => {
 
     fireEvent.click(screen.getByTestId('btn-create-workspace-t1'))
 
+    // El segundo argumento son las opciones de la mutación: desde VER.4 lleva el
+    // `onSuccess` que abre el informe recién creado.
     expect(mockCreateWorkspace).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ template_version_id: 'ver-t1' }) }),
+      expect.anything(),
     )
   })
 })

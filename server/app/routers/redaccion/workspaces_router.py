@@ -191,6 +191,11 @@ async def _apply_transition(
     )
     session.add(audit_event)
     await session.commit()
+    # `expire_on_commit` acaba de expirar los atributos del bloque, y construir la respuesta
+    # leyéndolos dispara una recarga perezosa síncrona que revienta con `MissingGreenlet`.
+    # Rompía las cuatro transiciones —aprobar, rechazar, regenerar y editar—, es decir, la
+    # revisión entera. Tercera aparición del mismo patrón en este módulo.
+    await session.refresh(block)
 
     return _block_out(block)
 
@@ -277,6 +282,9 @@ async def edit_block(
     block.updated_at = datetime.now(timezone.utc)
 
     await session.commit()
+    # Mismo motivo que en `_apply_transition`: sin refrescar, leer los atributos del bloque
+    # para la respuesta dispara una recarga síncrona y da 500.
+    await session.refresh(block)
     return _block_out(block)
 
 
@@ -287,10 +295,16 @@ async def edit_block(
 )
 async def resume_workspace(
     workspace_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> ResumeOut:
-    """Reanuda el grafo de redacción desde la review gate."""
+    """Reanuda el grafo de redacción desde la review gate.
+
+    Cambiaba el estado a `drafting` y **no reanudaba nada** —el mismo hueco que tenía `/run`
+    antes de VER.1—, así que aprobar los bloques y pulsar continuar dejaba el informe sin
+    ensamblar y el workspace colgado.
+    """
     workspace = await _get_workspace(workspace_id, user, session)
 
     if workspace.status != "in_review":
@@ -311,6 +325,8 @@ async def resume_workspace(
     )
     session.add(audit_event)
     await session.commit()
+
+    background_tasks.add_task(generar_borrador_en_segundo_plano, workspace_id)
 
     return ResumeOut(workspace_id=workspace_id, status="drafting")
 
@@ -360,11 +376,13 @@ async def upload_workspace_input(
         "uploaded_at": uploaded_at.isoformat(),
     }
 
-    inputs = workspace.inputs_json
-    if not isinstance(inputs, dict):
-        inputs = {}
-    inputs[slot_id] = entry
-    workspace.inputs_json = inputs
+    # Diccionario **nuevo**, no el mismo mutado: SQLAlchemy detecta cambios por identidad
+    # del atributo, así que mutar el JSONB en sitio y reasignar el mismo objeto no marca la
+    # columna como sucia y **no emite UPDATE**. El endpoint devolvía 200 con la ruta del
+    # fichero y `inputs_json` se quedaba vacío para siempre; visto en VER.4 cuando la
+    # extracción no encontraba el Excel que se acababa de subir.
+    previos = workspace.inputs_json if isinstance(workspace.inputs_json, dict) else {}
+    workspace.inputs_json = {**previos, slot_id: entry}
 
     audit_event = HubWorkspaceAuditEvent(
         workspace_id=workspace_id,
@@ -407,6 +425,12 @@ async def run_workspace(
     indistinguible de un informe que tarda.
     """
     workspace = await _get_workspace(workspace_id, user, session)
+    # El estado se lee **antes**: `start_run` hace `commit()`, que con `expire_on_commit`
+    # expira los atributos de todos los objetos de la sesión, y leerlo después dispara una
+    # recarga perezosa síncrona que revienta con `MissingGreenlet`. Es el mismo patrón que
+    # tumbó `create_template` y ocho endpoints de `scripts_router` el 2026-08-14; aquí
+    # convertía el 202 en un 500 y la generación no llegaba a encolarse nunca.
+    estado_previo = workspace.status
 
     svc = WorkspaceRunService(session=session)
     try:
@@ -421,7 +445,7 @@ async def run_workspace(
         workspace_id=workspace_id,
         block_id=None,
         event="run_started",
-        from_status=workspace.status,
+        from_status=estado_previo,
         to_status="drafting",
         actor=user.user_id,
         metadata_json={"run_id": str(result.run_id)},
@@ -449,18 +473,28 @@ async def generar_borrador_en_segundo_plano(workspace_id: uuid.UUID) -> None:
     `ejecutar_borrador` no lanza, deja `status='error'` con el motivo. Un asistente sin modelo
     configurado tiene que decirlo en la pantalla, no en el log del servidor.
     """
+    import logging
+
     from server.app.modules.redaccion.services.drafting_runner import (
         ejecutar_borrador,
         marcar_error,
     )
 
-    async for bg_session in get_session():
-        try:
-            redactor = await _redactor_de_bloques(bg_session)
-        except Exception as fallo:  # noqa: BLE001
-            await marcar_error(workspace_id, bg_session, f"modelo no disponible: {fallo}")
-            return
-        await ejecutar_borrador(workspace_id, bg_session, llm_service=redactor)
+    # Nada de lo que pase aquí puede propagar: la respuesta ya se envió y una excepción en
+    # una tarea de fondo no llega a ninguna parte salvo al log —o, con `TestClient`, al
+    # resultado de una petición que no tiene nada que ver—.
+    try:
+        async for bg_session in get_session():
+            try:
+                redactor = await _redactor_de_bloques(bg_session)
+            except Exception as fallo:  # noqa: BLE001
+                await marcar_error(workspace_id, bg_session, f"modelo no disponible: {fallo}")
+                return
+            await ejecutar_borrador(workspace_id, bg_session, llm_service=redactor)
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception(
+            "No se pudo generar el borrador del workspace %s", workspace_id
+        )
 
 
 async def _redactor_de_bloques(session: AsyncSession):

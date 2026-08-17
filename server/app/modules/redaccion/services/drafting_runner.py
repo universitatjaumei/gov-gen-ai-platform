@@ -25,7 +25,13 @@ from typing import Any
 
 from sqlalchemy import select
 
-from server.app.modules.redaccion.contracts.runtime import BlockState, WorkspaceState
+from pydantic import ValidationError
+
+from server.app.modules.redaccion.contracts.runtime import (
+    BlockState,
+    InputArtifact,
+    WorkspaceState,
+)
 from server.app.modules.redaccion.contracts.template import ReportTemplateSpec
 from server.app.modules.redaccion.database.models import HubWorkspace, HubWorkspaceBlock
 from server.app.modules.redaccion.database.repos import (
@@ -60,33 +66,70 @@ def construir_grafo(session: Any, llm_service: Any, storage_service: Any = None)
     )
 
 
-def _estado_inicial(workspace: HubWorkspace, spec: ReportTemplateSpec) -> WorkspaceState:
-    """El estado con el que arranca el grafo, con un bloque por bloque de la plantilla.
+def _estado_inicial(
+    workspace: HubWorkspace,
+    spec: ReportTemplateSpec,
+    existentes: list[HubWorkspaceBlock] | None = None,
+) -> WorkspaceState:
+    """El estado con el que arranca el grafo.
 
-    Los bloques salen de la **spec** y no de la base: `hub_workspace_blocks` está vacía hasta
-    que una ejecución termina, así que la plantilla es la única fuente de qué hay que generar.
+    Qué bloques hay lo dice la **plantilla**; en qué estado están, lo que ya haya en la base.
+    Esa distinción es lo que hace que reanudar signifique algo: si se arrancara siempre de
+    cero, continuar tras aprobar el texto de IA borraría esa aprobación y lo volvería a
+    generar, que es justo lo contrario de lo que pide quien pulsa continuar.
     """
     ahora = datetime.now(timezone.utc)
+    guardados = {fila.block_id: fila for fila in (existentes or [])}
+
+    def _bloque(contrato) -> BlockState:
+        fila = guardados.get(contrato.id)
+        if fila is None:
+            return BlockState(
+                block_id=contrato.id, kind=contrato.kind, status="draft",
+                last_updated_by="system", updated_at=ahora,
+            )
+        return BlockState(
+            block_id=fila.block_id,
+            kind=fila.kind,
+            status=fila.status,
+            content=fila.content_json,
+            last_updated_by="system",
+            updated_at=fila.updated_at or ahora,
+            failure_kind=fila.failure_kind,
+            last_error_message=fila.last_error_message,
+            retry_attempts=fila.retry_attempts,
+        )
+
     return WorkspaceState(
         workspace_id=workspace.id,
         template_version_id=workspace.template_version_id,
         report_profile=_perfil_de(spec),
-        inputs={},
-        blocks={
-            contrato.id: BlockState(
-                block_id=contrato.id,
-                kind=contrato.kind,
-                status="draft",
-                last_updated_by="system",
-                updated_at=ahora,
-            )
-            for contrato in spec.blocks
-        },
+        inputs=_artefactos_de(workspace),
+        blocks={contrato.id: _bloque(contrato) for contrato in spec.blocks},
         status="drafting",
         warnings=[],
         spec=spec,
         anonymization_mode=workspace.anonymization_mode,
     )
+
+
+def _artefactos_de(workspace: HubWorkspace) -> dict[str, InputArtifact]:
+    """Los ficheros ya subidos, en la forma que el grafo espera.
+
+    Sin esto el grafo arrancaba con `inputs={}` y la extracción determinista no tenía de
+    dónde extraer: los bloques de datos se quedaban en `draft` y el de IA respondía —con
+    razón— que no tenía con qué redactar. Visto en vivo al subir el Excel en VER.4.
+    """
+    artefactos: dict[str, InputArtifact] = {}
+    for slot_id, entrada in (workspace.inputs_json or {}).items():
+        if not isinstance(entrada, dict):
+            continue
+        try:
+            artefactos[slot_id] = InputArtifact.model_validate(entrada)
+        except ValidationError:
+            # Una entrada corrupta no puede impedir que se genere el resto del informe.
+            _log.warning("Input %s del workspace %s no valida", slot_id, workspace.id)
+    return artefactos
 
 
 def _perfil_de(spec: ReportTemplateSpec) -> str:
@@ -155,8 +198,12 @@ async def ejecutar_borrador(
             raise LookupError(f"Template version not found: {workspace.template_version_id}")
 
         spec = ReportTemplateSpec.model_validate(version.spec_json)
+        existentes = (await session.execute(
+            select(HubWorkspaceBlock).where(HubWorkspaceBlock.workspace_id == workspace_id)
+        )).scalars().all()
+
         grafo = construir_grafo(session, llm_service, storage_service)
-        final = await grafo.ainvoke(_estado_inicial(workspace, spec))
+        final = await grafo.ainvoke(_estado_inicial(workspace, spec, list(existentes)))
 
         estado = WorkspaceState.model_validate(_bloques_del(final))
         await _persistir_bloques(session, workspace_id, estado)
@@ -171,6 +218,24 @@ async def ejecutar_borrador(
         # se quede en `drafting` sin que nadie sepa por qué.
         _log.exception("Falló la generación del workspace %s", workspace_id)
         await marcar_error(workspace_id, session, str(fallo))
+    finally:
+        _limpiar_temporales()
+
+
+def _limpiar_temporales() -> None:
+    """Borra los ficheros que la normalización bajó del almacén para esta ejecución.
+
+    `//tmp` solo está permitido como buffer dentro de una tarea, y esta es la tarea: si no se
+    borran, cada informe deja copias de los documentos del cliente en el disco de la máquina.
+    """
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    from server.app.modules.redaccion.graph.nodes.file_normalization import PREFIJO_TEMPORAL
+
+    for carpeta in Path(tempfile.gettempdir()).glob(f"{PREFIJO_TEMPORAL}*"):
+        shutil.rmtree(carpeta, ignore_errors=True)
 
 
 async def marcar_error(workspace_id: uuid.UUID, session: Any, motivo: str) -> None:

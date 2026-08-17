@@ -107,5 +107,11 @@
   "nav_llm_draft": "Propose with AI",
   "nav_new_report": "New report",
   "nav_scripts_review": "Script review",
-  "nav_aria": "Reports navigation"
+  "nav_aria": "Reports navigation",
+  "workspace_not_found": "This report could not be found.",
+  "workspace_error": "Generation failed. Check the warnings below and try again.",
+  "workspace_inputs": "Input data",
+  "workspace_generate": "Generate report",
+  "workspace_generating": "Generating…",
+  "workspace_preview": "Preview"
 }

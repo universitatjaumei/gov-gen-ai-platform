@@ -26,6 +26,25 @@ _NIL_UUID = UUID("00000000-0000-0000-0000-000000000000")
 _section_adapter: TypeAdapter[list[SectionContract]] = TypeAdapter(list[SectionContract])
 
 
+#: Los bloques cuyo texto lo escribió un modelo: los únicos que esperan una aprobación.
+_TIPOS_DE_IA = frozenset({"AI_ASSISTED_TEXT", "AI_SUMMARY", "AI_REWRITE"})
+
+
+def bloques_pendientes(bloques: list[Any]) -> list[str]:
+    """Los que impiden la vista previa, que son solo los de IA sin aprobar.
+
+    Exigirla a **todos** la hacía inalcanzable por construcción: nada transiciona un
+    `STATIC_TEXT` o un `DETERMINISTIC_DATA` a `approved`, así que la pantalla respondía 409
+    para siempre. Misma regla que el ensamblado final, y por el mismo motivo: lo que se
+    revisa es lo que escribió el modelo.
+    """
+    return [
+        b.block_id
+        for b in bloques
+        if b.kind in _TIPOS_DE_IA and b.status not in _APPROVED_STATES
+    ]
+
+
 class PendingBlocksError(Exception):
     """Raised when blocks are not yet approved or locked."""
 
@@ -58,7 +77,7 @@ class PreviewBuilderService:
 
         blocks = await self._block_repo.list(workspace_id)
 
-        pending = [b.block_id for b in blocks if b.status not in _APPROVED_STATES]
+        pending = bloques_pendientes(blocks)
         if pending:
             raise PendingBlocksError(pending)
 

@@ -171,14 +171,24 @@ class TestValidateInputContractNode:
 class TestFileNormalizationNode:
 
     @pytest.mark.asyncio
-    async def test_maps_slot_ids_to_storage_paths(self) -> None:
+    async def test_maps_slot_ids_to_local_paths(self) -> None:
+        """Desde VER.4 el nodo **materializa** el artefacto: publica la ruta del fichero
+        local que acaba de escribir, no el `storage_path`. Los pipelines de extracción abren
+        una ruta del sistema de archivos, y con el almacén en GCS no habría nada que abrir.
+        """
+        from pathlib import Path
+
         from server.app.modules.redaccion.graph.nodes.file_normalization import FileNormalizationNode
 
         storage = AsyncMock()
+        storage.get = AsyncMock(return_value=b"%PDF-1.4 contenido")
         artifact = _make_artifact(storage_path="bucket/reports/2026/report.pdf")
         state = _make_state(inputs={"doc_principal": artifact})
 
         node = FileNormalizationNode(storage)
         patch = await node(state)
 
-        assert patch["artifacts_normalized"]["doc_principal"] == "bucket/reports/2026/report.pdf"
+        ruta = Path(patch["artifacts_normalized"]["doc_principal"])
+        storage.get.assert_awaited_once_with("bucket/reports/2026/report.pdf")
+        assert ruta.exists()
+        assert ruta.read_bytes() == b"%PDF-1.4 contenido"

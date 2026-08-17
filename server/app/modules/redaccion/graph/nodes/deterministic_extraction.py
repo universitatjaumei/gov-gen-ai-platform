@@ -22,10 +22,11 @@ def _find_artifact_for_pipeline(source_pipeline: str, spec, artifacts_normalized
     for slot in all_slots:
         matched_pipelines = _SLOT_KIND_TO_SOURCE.get(slot.kind, set())
         if source_pipeline in matched_pipelines and slot.slot_id in artifacts_normalized:
-            path = artifacts_normalized[slot.slot_id]
-            parts = path.split("/", 1)
-            bucket, key = (parts[0], parts[1]) if len(parts) == 2 else (path, "")
-            return StorageRef(bucket=bucket, key=key)
+            # `bucket` vacío y la ruta entera en `key`: los pipelines componen
+            # `Path(bucket) / key`, y desde que la normalización materializa el fichero la
+            # ruta es absoluta. Partirla por la primera barra daba `Path("C:") / "Users/…"`,
+            # que en Windows es una ruta relativa al directorio actual de esa unidad.
+            return StorageRef(bucket="", key=artifacts_normalized[slot.slot_id])
     return None
 
 
