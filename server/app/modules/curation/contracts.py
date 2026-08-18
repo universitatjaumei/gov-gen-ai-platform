@@ -14,6 +14,10 @@ FindingType = Literal[
     "contradiction",
     "empty",
     "thin",
+    # RAS.2: la pagina no se ha podido leer sin renderizar. Es lo unico que el sistema sabe de
+    # verdad cuando el contenido lo pinta JavaScript, y sustituye al `empty` critico que
+    # afirmaba lo contrario: que la pagina esta vacia. Aviso, no acusacion.
+    "needs_javascript",
     "stale",
     "crawl_error",
     "orphan_page",

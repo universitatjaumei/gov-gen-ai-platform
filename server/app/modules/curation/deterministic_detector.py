@@ -141,6 +141,26 @@ class DeterministicQualityDetector:
             or page.token_count == 0
         )
 
+        # RAS.2 — si la página no se pudo leer sin renderizar, ni «vacía» ni «pobre» son
+        # afirmaciones sostenibles: las dos hablan de la página, y lo que pasó es que el
+        # rastreador no la vio. Lo único cierto es que hace falta un navegador para leerla.
+        senales_de_render = list(getattr(page, "render_signals", None) or [])
+        if senales_de_render and (
+            empty
+            or (page.token_count is not None and page.token_count < self._thin_threshold)
+        ):
+            return [self._finding(
+                site_id=site_id,
+                finding_type="needs_javascript",
+                severity="warning",
+                confidence=1.0,
+                page_id=page.id,
+                source_url=page.url,
+                signal={"render_signals": senales_de_render,
+                        "token_count": page.token_count},
+                now=now,
+            )] + self._otros_hallazgos(page, site_id, now, orphan_page_ids)
+
         if empty:
             results.append(self._finding(
                 site_id=site_id,
@@ -163,6 +183,19 @@ class DeterministicQualityDetector:
                 signal={"token_count": page.token_count, "threshold": self._thin_threshold},
                 now=now,
             ))
+
+        results.extend(self._otros_hallazgos(page, site_id, now, orphan_page_ids))
+        return results
+
+    def _otros_hallazgos(
+        self,
+        page: Any,
+        site_id: uuid.UUID,
+        now: datetime,
+        orphan_page_ids: set[uuid.UUID],
+    ) -> list[ContentFinding]:
+        """Lo que no depende de si la página se pudo leer: error de rastreo, antigüedad, huérfana."""
+        results: list[ContentFinding] = []
 
         if page.status == "error":
             results.append(self._finding(

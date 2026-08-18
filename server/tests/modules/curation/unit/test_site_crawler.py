@@ -179,7 +179,10 @@ class TestSiteCrawlerHappyPath:
         assert summary.pages_error == 0
 
         page_a = page_repo.pages[(site.id, "https://uji.es/a")]
-        assert page_a.markdown_content == bodies["https://uji.es/a"]
+        # RAS.2 — de una página HTML se guarda su texto, no su marcado: con el marcado dentro,
+        # `token_count` medía plantillas y al corpus llegaban `<div>`. El hash sigue siendo del
+        # cuerpo servido, que es lo que permite detectar que la página cambió.
+        assert page_a.markdown_content == "Contenido A en español, informativo."
         assert page_a.content_hash == hash_content(bodies["https://uji.es/a"])
         assert page_a.http_etag == '"a1"'
         assert page_a.status == "active"

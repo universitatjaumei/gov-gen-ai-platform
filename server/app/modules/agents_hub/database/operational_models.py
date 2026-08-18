@@ -90,6 +90,14 @@ class HubCrawledPage(HubOperationalBase):
     language: Mapped[str | None] = mapped_column(String(10), nullable=True)
     markdown_content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # RAS.2 — por qué esta página no se puede leer sin renderizar, si es el caso. La evidencia se
+    # recoge al rastrear (es el único momento en que existe el HTML) y la lee el detector, que
+    # corre después: con señales, la página se avisa como `needs_javascript` en vez de acusarla
+    # de estar vacía. Lista vacía = se leyó bien.
+    render_signals: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSONB, nullable=True, default=list
+    )
+
     # embedding de página para auditoría semántica en modo "full" (9Q.4).
     # Misma dimensión que HubDocumentChunk.embedding (BGE-M3 = 1024) para que cruce coseno.
     # None = sin embedding (no auditada en modo full todavía).

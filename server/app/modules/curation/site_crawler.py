@@ -20,7 +20,9 @@ from server.app.modules.agents_hub.ingestion.markdown_utils import (
     estimate_tokens,
     extract_title_from_markdown,
 )
+from server.app.modules.curation.contenido_web import parece_html, texto_visible, titulo_de
 from server.app.modules.curation.cortesia import RutaProhibidaPorRobots
+from server.app.modules.curation.sondeo_dinamico import senales_de_dinamismo
 
 
 @dataclass
@@ -194,14 +196,28 @@ class SiteCrawler:
         return discovered | set(sitemap_map.keys()), sitemap_map, crawl_result
 
     def _page_fields(self, url: str, body: str, headers: dict) -> dict[str, Any]:
-        """Campos de contenido + señales para el upsert de una página."""
+        """Campos de contenido + señales para el upsert de una página.
+
+        RAS.2 — de una página HTML se guarda **su texto**, no su marcado: con el marcado dentro,
+        `token_count` medía plantillas (51 KB de HTML para 4 KB de texto en el portal real), el
+        umbral de `thin` era inalcanzable y a la ingesta del asistente llegaban `<div>`. La
+        evidencia de que la página necesita un navegador se guarda aquí porque el detector corre
+        después y ya no tiene el HTML.
+        """
         header_signals = self._signals.extract_from_headers(headers)
         declared_canonical = self._signals.extract_canonical(body)
+
+        es_html = parece_html(body)
+        contenido = texto_visible(body) if es_html else body
+        titulo = titulo_de(body) if es_html else extract_title_from_markdown(body)
+        senales = [s.como_dict() for s in senales_de_dinamismo(body)] if es_html else []
+
         return {
-            "markdown_content": body,
-            "title": extract_title_from_markdown(body),
-            "token_count": estimate_tokens(body),
-            "language": detect_language(body),
+            "markdown_content": contenido,
+            "title": titulo,
+            "token_count": estimate_tokens(contenido),
+            "language": detect_language(contenido),
+            "render_signals": senales,
             "http_last_modified": header_signals["http_last_modified"],
             "http_etag": header_signals["http_etag"],
             "declared_canonical_url": declared_canonical,
