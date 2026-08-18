@@ -20,10 +20,7 @@ from server.app.modules.agents_hub.database.config_models import HubChatbot, Hub
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.operational_models import HubDocument
 from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
-from server.app.modules.agents_hub.services.corpus_purge import (
-    CorpusRetirado,
-    purgar_corpus_del_chatbot,
-)
+from server.app.modules.agents_hub.services.corpus_purge import purgar_corpus_del_chatbot
 from server.app.modules.agents_hub.services.corpus_recalculator import recalculate_corpus
 from server.app.modules.agents_hub.services.corpus_recommender import recommend_retrieval_mode
 from server.app.modules.agents_hub.services.embedding_resolver import (

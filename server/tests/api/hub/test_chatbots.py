@@ -238,13 +238,18 @@ class TestDeleteChatbot:
         """
         import server.app.routers.hub_chatbots_router as router_mod
 
+        # El tipo se importa de su propio modulo, no del router: el router no lo usa -solo
+        # llama a la purga y descarta lo que devuelve-, asi que alcanzarlo por su namespace
+        # obligaba a mantener alli un import muerto que el linter tumba.
+        from server.app.modules.agents_hub.services.corpus_purge import CorpusRetirado
+
         orden: list[str] = []
         chatbot = _make_chatbot()
         session = _session_with([chatbot])
 
         async def _purga_espia(_session, chatbot_id):
             orden.append(f"purga:{chatbot_id}")
-            return router_mod.CorpusRetirado(documentos=3, fragmentos=12)
+            return CorpusRetirado(documentos=3, fragmentos=12)
 
         ejecutar_original = session.execute
 
