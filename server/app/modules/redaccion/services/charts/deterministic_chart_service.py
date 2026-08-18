@@ -28,6 +28,16 @@ _SIN_EJES = frozenset({"pie", "donut"})
 _CON_EJE_DE_VALORES = frozenset({"bar", "barh", "bar_stacked", "line", "histogram", "boxplot"})
 
 
+def _columna_de_valor(config: ChartConfiguration) -> str | None:
+    """La columna que lleva el número, según el eje en que la pone el tipo de gráfico.
+
+    En `barh` las barras son horizontales, así que el valor va en el eje X; en el resto, en el Y.
+    """
+    if config.chart_type == "barh":
+        return config.x_column or config.value_column
+    return config.y_column or config.value_column
+
+
 def formatear_cifra(valor: float, config: ChartConfiguration) -> str:
     """La cifra con los separadores de aquí: `128.340,55`, no `128,340.55`.
 
@@ -79,7 +89,7 @@ class DeterministicChartService:
         }
         renderizadores[config.chart_type](plot_df, ax, config)
 
-        self._apply_styling(fig, ax, config)
+        self._apply_styling(fig, ax, config, plot_df)
         return fig
 
     # ------------------------------------------------------------------
@@ -106,10 +116,13 @@ class DeterministicChartService:
         """Orden de las categorías por su valor.
 
         Una tabla de informe se lee ordenada, y ordenarla no es un tipo de gráfico nuevo.
+
+        GUI.4 — ordenaba siempre por `y_column`, que en un `barh` es la **categoría**: «de mayor
+        a menor» acababa siendo un orden alfabético por el nombre del capítulo.
         """
         if config.sort == "none":
             return df
-        columna = config.y_column or config.value_column
+        columna = _columna_de_valor(config)
         if not columna or columna not in df.columns:
             return df
         return df.sort_values(columna, ascending=config.sort == "asc").reset_index(drop=True)
@@ -119,11 +132,15 @@ class DeterministicChartService:
     # ------------------------------------------------------------------
 
     def _render_bar(self, df: pd.DataFrame, ax, config: ChartConfiguration) -> None:
-        """`bar` y `barh` son el mismo gráfico con los ejes cruzados."""
-        horizontal = config.chart_type == "barh"
-        categoria, valor = config.x_column, config.y_column
-        eje_x, eje_y = (valor, categoria) if horizontal else (categoria, valor)
-        comun = {"data": df, "x": eje_x, "y": eje_y, "ax": ax}
+        """`bar` y `barh` son el mismo gráfico; lo que cambia es qué columna va en cada eje.
+
+        GUI.4 — aquí se cruzaban los ejes por detrás, tratando `x_column` como «la categoría».
+        Con eso, quien rellena el contrato leyendo los nombres —el modelo, o una persona— pone
+        el valor en `x_axis` porque su `x_label` habla del eje X, y **los dos cruces se anulan**:
+        se pidió un barh de conceptos y salió un gráfico vertical con el índice en el eje. Ahora
+        `x_column` es el eje X y `y_column` el Y, sin más.
+        """
+        comun = {"data": df, "x": config.x_column, "y": config.y_column, "ax": ax}
         if config.color_column and config.color_column in df.columns:
             sns.barplot(**comun, hue=config.color_column, palette=config.palette)
         else:
@@ -273,11 +290,11 @@ class DeterministicChartService:
     # Styling / output
     # ------------------------------------------------------------------
 
-    def _apply_styling(self, fig, ax, config: ChartConfiguration) -> None:
+    def _apply_styling(self, fig, ax, config: ChartConfiguration, df: pd.DataFrame) -> None:
         if config.title:
             ax.set_title(config.title, fontsize=14, fontweight="bold", pad=15)
         self._etiquetar_ejes(ax, config)
-        self._formatear_eje_de_valores(ax, config)
+        self._formatear_eje_de_valores(ax, config, df)
         if not config.show_grid:
             ax.grid(False)
         if not config.show_legend:
@@ -287,11 +304,22 @@ class DeterministicChartService:
         plt.tight_layout()
 
     @staticmethod
-    def _formatear_eje_de_valores(ax, config: ChartConfiguration) -> None:
-        """`120.000` en el eje, no `120000`. Es lo que separa un gráfico de un boceto."""
+    def _formatear_eje_de_valores(ax, config: ChartConfiguration, df: pd.DataFrame) -> None:
+        """`120.000` en el eje, no `120000`. Es lo que separa un gráfico de un boceto.
+
+        GUI.4 — decidía cuál es el eje numérico **por el tipo de gráfico**, así que en cuanto las
+        columnas no seguían la convención interna escribía `0, 1, 2, 3` **encima de los nombres
+        de las categorías**: el gráfico salía ilegible y sin nada que delatara por qué. Ahora se
+        decide por los datos, que es lo único que no puede mentir.
+        """
         if config.chart_type not in _CON_EJE_DE_VALORES:
             return
-        eje = ax.xaxis if config.chart_type == "barh" else ax.yaxis
+        columna = _columna_de_valor(config)
+        if not columna or columna not in df.columns:
+            return
+        if not pd.api.types.is_numeric_dtype(df[columna]):
+            return
+        eje = ax.xaxis if columna == config.x_column else ax.yaxis
         eje.set_major_formatter(
             FuncFormatter(
                 lambda valor, _: formatear_cifra(
@@ -304,18 +332,14 @@ class DeterministicChartService:
     def _etiquetar_ejes(ax, config: ChartConfiguration) -> None:
         """La etiqueta explícita manda; si falta, el nombre de la columna que va en ese eje.
 
-        En `barh` la categoría está en el eje Y y el valor en el X, así que el defecto se
-        cruza con ellos.
+        GUI.4 — cruzaba los defectos en `barh`, coherente con el cruce del renderizador. Ya no
+        hay cruce en ninguno de los dos sitios: `x_label` es la etiqueta del eje X.
         """
         if config.chart_type in _SIN_EJES:
             return
-        if config.chart_type == "barh":
-            defecto_x, defecto_y = config.y_column, config.x_column
-        else:
-            defecto_x, defecto_y = config.x_column, config.y_column
-        if etiqueta := (config.x_label or defecto_x):
+        if etiqueta := (config.x_label or config.x_column):
             ax.set_xlabel(etiqueta)
-        if etiqueta := (config.y_label or defecto_y):
+        if etiqueta := (config.y_label or config.y_column):
             ax.set_ylabel(etiqueta)
 
     def _to_bytes(self, fig, output_format: str) -> bytes:

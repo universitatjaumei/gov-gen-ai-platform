@@ -21,6 +21,8 @@ _BLOCK_ADAPTER: TypeAdapter[BlockContract] = TypeAdapter(BlockContract)
 
 _AI_KINDS = frozenset({"AI_ASSISTED_TEXT", "AI_SUMMARY", "AI_REWRITE"})
 _DATA_REF_KINDS = frozenset({"CHART", "TABLE"})
+#: Bloques que producen una tabla de la que otro puede tirar.
+_DATA_SOURCE_KINDS = frozenset({"DETERMINISTIC_DATA", "DATA_TRANSFORM"})
 _VALID_PROFILES = frozenset({
     "GENERIC_REPORT",
     "ANNUAL_REPORT",
@@ -45,8 +47,14 @@ class DraftValidator:
             ))
 
         block_by_id: dict[str, BlockContract] = {b.id: b for b in draft.proposed_blocks}
+        # GUI.3 — un bloque de transformación también da datos, y de hecho es el que los da
+        # **utilizables**: la cadena de una hoja real es extraer → limpiar → dibujar. Exigir que
+        # un CHART apuntara a un `DETERMINISTIC_DATA` tumbaba la propuesta entera en cuanto se
+        # metía la limpieza en medio, que es justo cuando el gráfico vale algo.
         deterministic_ids = {
-            b.id for b in draft.proposed_blocks if b.kind == "DETERMINISTIC_DATA"  # type: ignore[union-attr]
+            b.id  # type: ignore[union-attr]
+            for b in draft.proposed_blocks
+            if b.kind in _DATA_SOURCE_KINDS  # type: ignore[union-attr]
         }
 
         for block in draft.proposed_blocks:
@@ -72,8 +80,28 @@ class DraftValidator:
                 elif ref_id not in deterministic_ids:
                     errors.append(DraftValidationError(
                         field=f"blocks[{bid}].data_block_ref",
-                        message=f"{kind} block {bid!r} must reference a DETERMINISTIC_DATA block, "
+                        message=f"{kind} block {bid!r} must reference a block that produces data "
+                                f"({', '.join(sorted(_DATA_SOURCE_KINDS))}), "
                                 f"got {block_by_id[ref_id].kind!r}",  # type: ignore[union-attr]
+                    ))
+
+            # GUI.3 — la transformación apunta a su origen por `config.source_block_ref`. Sin
+            # comprobarlo, una referencia inventada deja el bloque sin datos en tiempo de
+            # ejecución y sin nada que explique por qué.
+            if kind == "DATA_TRANSFORM":
+                origen = getattr(getattr(block, "config", None), "source_block_ref", None)
+                origen_id = getattr(origen, "block_id", None)
+                if not origen_id or origen_id not in block_by_id:
+                    errors.append(DraftValidationError(
+                        field=f"blocks[{bid}].config.source_block_ref",
+                        message=f"DATA_TRANSFORM block {bid!r} reads from unknown block "
+                                f"{origen_id!r}",
+                    ))
+                elif origen_id not in deterministic_ids:
+                    errors.append(DraftValidationError(
+                        field=f"blocks[{bid}].config.source_block_ref",
+                        message=f"DATA_TRANSFORM block {bid!r} must read from a block that "
+                                f"produces data, got {block_by_id[origen_id].kind!r}",  # type: ignore[union-attr]
                     ))
 
         # 4. REVIEW_GATE obligatoria si hay bloques AI

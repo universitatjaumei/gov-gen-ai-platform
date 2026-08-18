@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import re
 from functools import lru_cache
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from pydantic import TypeAdapter
 
@@ -17,11 +17,19 @@ from server.app.modules.redaccion.contracts.blocks import BlockContract
 from server.app.modules.redaccion.contracts.drafts import ReportTemplateDraft
 from server.app.modules.redaccion.contracts.inputs import InputContract
 from server.app.modules.redaccion.contracts.template import SectionContract
+from server.app.modules.redaccion.services.charts.chart_configuration import TipoDeGrafico
+from server.app.modules.redaccion.services.transformation.operations import (
+    catalogo_de_operaciones,
+)
 
 _BLOCK_KINDS = [
     "STATIC_TEXT",
     "USER_INPUT",
     "DETERMINISTIC_DATA",
+    # GUI.3 — faltaba, y detrás llevaba un «Do NOT use any block kind not in this list»: el ETL
+    # entero (PRO.4 y PRO.9) era inalcanzable para una persona, porque tampoco hay ninguna
+    # pantalla que configure bloques. Los bloques sólo entran por aquí.
+    "DATA_TRANSFORM",
     "TABLE",
     "CHART",
     "AI_ASSISTED_TEXT",
@@ -38,21 +46,41 @@ PROMPT_VERSION = "llm_spec_v2"
 #: Cada bloque tiene campos propios y obligatorios. Sin esto en el prompt, el modelo propone
 #: estructuras razonables que el contrato rechaza, y el usuario ve un error del servidor por
 #: algo que no hizo mal.
-_CAMPOS_OBLIGATORIOS = (
+#:
+#: GUI.3 — lo que era una constante pasa a ser una función, porque dos de sus listas **se
+#: generan del contrato**: los tipos de gráfico y las operaciones de transformación. Escritas a
+#: mano divergen en el primer cambio, y eso ya pasó: PRO.8 dejó once tipos de gráfico y este
+#: prompt seguía ofreciendo cinco.
+def _campos_obligatorios() -> str:
+    return (
     "Every block needs: id, title, order. Additionally, by kind:\n"
     "- STATIC_TEXT: content (the literal text).\n"
     "- USER_INPUT: field_type (text | number | date).\n"
     "- DETERMINISTIC_DATA: source_pipeline (excel | pdf_text | pdf_table | manual |"
     " admin_script).\n"
-    "- TABLE: data_block_ref (the id of a DETERMINISTIC_DATA block in this same template).\n"
-    "- CHART: data_block_ref, and optionally config with chart_type"
-    " (bar | line | pie | scatter | histogram).\n"
+    "- DATA_TRANSFORM: config with source_block_ref ({\"block_id\": \"<id>\"}) plus EITHER"
+    ' mode="deterministic" and operations (a list, see the catalogue below), OR mode="ai" and'
+    " nl_instruction (what to do, in words). Prefer deterministic when you can express it.\n"
+    "- TABLE: data_block_ref (the id of a DETERMINISTIC_DATA or DATA_TRANSFORM block in this"
+    " same template).\n"
+    "- CHART: data_block_ref (same rule as TABLE), and optionally config with chart_type"
+    f" ({' | '.join(get_args(TipoDeGrafico))}), title, x_label, y_label, show_values, sort"
+    " (none | asc | desc). x_axis is the column on the X axis and y_axis the one on the Y axis,"
+    " exactly as their labels say: for a plain bar chart the category goes in x_axis, and for"
+    " barh (horizontal bars, use it when the category names are long) the category goes in"
+    " y_axis and the number in x_axis.\n"
     "- AI_ASSISTED_TEXT, AI_SUMMARY, AI_REWRITE: ai_prompt_template_id and review_policy_id."
     " Use 'generic_report_v1' and 'required' unless the request says otherwise.\n"
     "- CITATION_BLOCK: source_block_refs (list of block ids).\n"
     "- REVIEW_GATE: review_policy_id.\n"
-    "A TABLE or CHART without a DETERMINISTIC_DATA block to point at is invalid: add the"
-    " data block first.\n"
+    "A TABLE or CHART without a data block to point at is invalid: add the data block first.\n"
+    # Es el fallo silencioso de PRO.9: sumar texto no da error, da una cifra mal. Si el prompt
+    # no lo dice, el modelo pondrá el groupby y no la conversión.
+    "When a spreadsheet holds amounts written as text (\"1.234,56 EUR\" is how applications"
+    " here export them), any sum or group-by over that column is WRONG WITHOUT AN ERROR."
+    " Put a DATA_TRANSFORM with to_number first, before any calculation.\n"
+    "Catalogue of operations for DATA_TRANSFORM (use these and no others):\n"
+    f"{catalogo_de_operaciones()}\n"
     # Sin esto, `DraftValidator` devuelve ok=False en toda propuesta con IA y el botón de
     # aprobar —que exige ok=true— no se habilita nunca. Es decir: la pantalla entera era
     # inutilizable para el caso normal.
@@ -68,7 +96,7 @@ _CAMPOS_OBLIGATORIOS = (
     " with the three languages, never a plain string. Do not add fields like `id` or"
     " `block_ref`: a slot does not point at a block; a DETERMINISTIC_DATA block declares"
     " which pipeline reads it.\n"
-)
+    )
 
 
 class PropuestaInvalidaError(ValueError):
@@ -104,7 +132,7 @@ def _build_system_prompt(owner_kind: Literal["admin", "user"]) -> str:
         # Enumerar los tipos sin decir qué exige cada uno producía propuestas que no
         # validaban y salían como 500. Visto en la primera petición real (VER.3): un bloque
         # TABLE sin `data_block_ref`, que es obligatorio.
-        + _CAMPOS_OBLIGATORIOS
+        + _campos_obligatorios()
         + _esquema_del_contrato()
         + "Respond ONLY with valid JSON — no markdown, no explanation."
         + admin_note

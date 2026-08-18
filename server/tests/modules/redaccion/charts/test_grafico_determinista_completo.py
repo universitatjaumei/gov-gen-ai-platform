@@ -148,15 +148,24 @@ def test_la_plantilla_puede_pedir_cualquiera_de_los_tipos(tipo: str) -> None:
     assert ChartBlockConfig(chart_type=tipo).chart_type == tipo
 
 
-def test_barh_cruza_los_ejes_respecto_a_bar(datos: pd.DataFrame) -> None:
-    """`barh` no es un tipo nuevo: es `bar` con los ejes cambiados. Que se note."""
+def test_barh_pone_la_categoria_en_el_eje_y(datos: pd.DataFrame) -> None:
+    """`barh` es `bar` con las columnas en el otro eje, y **quien lo dice es la configuración**.
+
+    GUI.4 — este test exigía lo contrario: que `x_column` fuera la categoría en los dos tipos y
+    que el renderizador cruzara los ejes por detrás. Esa convención se cayó en la primera
+    petición real: el modelo puso el valor en `x_axis` —porque su `x_label` habla del eje X, que
+    es lo que dice el nombre— y los dos cruces se anularon. El gráfico salió vertical, con el
+    índice en el eje y las etiquetas al revés.
+    """
     svc = DeterministicChartService()
     vertical = svc.render_figure(
         datos, ChartConfiguration(chart_type="bar", x_column="capitulo", y_column="importe")
     )
     horizontal = svc.render_figure(
-        datos, ChartConfiguration(chart_type="barh", x_column="capitulo", y_column="importe")
+        datos, ChartConfiguration(chart_type="barh", x_column="importe", y_column="capitulo")
     )
+    vertical.canvas.draw()
+    horizontal.canvas.draw()
     assert [t.get_text() for t in vertical.axes[0].get_xticklabels()][0] == "Cap. 1"
     assert [t.get_text() for t in horizontal.axes[0].get_yticklabels()][0] == "Cap. 1"
 
