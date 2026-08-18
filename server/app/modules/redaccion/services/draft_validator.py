@@ -16,6 +16,7 @@ from server.app.modules.redaccion.contracts.drafts import (
     ReportTemplateDraft,
     ReportTemplateDraftValidationResult,
 )
+from server.app.modules.redaccion.services.estructura_del_informe import bloques_sin_seccion
 
 _BLOCK_ADAPTER: TypeAdapter[BlockContract] = TypeAdapter(BlockContract)
 
@@ -121,6 +122,16 @@ class DraftValidator:
                         message=f"DATA_TRANSFORM block {bid!r} must read from a block that "
                                 f"produces data, got {block_by_id[origen_id].kind!r}",  # type: ignore[union-attr]
                     ))
+
+        # 3.bis. Todo bloque tiene que estar en alguna sección o no se pinta (SEG.5).
+        # La vista previa y el ensamblado recorren las secciones; un bloque que ninguna
+        # enumera se ejecuta, se revisa y no sale en el informe, sin error ni aviso.
+        for huerfano in bloques_sin_seccion(draft.proposed_sections, draft.proposed_blocks):
+            errors.append(DraftValidationError(
+                field=f"sections.block_ids[{huerfano}]",
+                message=f"Block {huerfano!r} is in no section: it would not appear in the "
+                        f"report. Add it to the block_ids of the section where it belongs.",
+            ))
 
         # 4. REVIEW_GATE obligatoria si hay bloques AI
         has_ai = any(b.kind in _AI_KINDS for b in draft.proposed_blocks)  # type: ignore[union-attr]

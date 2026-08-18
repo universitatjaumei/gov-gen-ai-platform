@@ -35,6 +35,17 @@ _SEPARADORA = re.compile(r"^[\s|:\-]+$")
 _PIE_DE_TABLA = re.compile(r"^\s*(Tabla|Taula|Table)\s+[\d.]+", re.IGNORECASE)
 
 
+def _sin_decoracion(linea: str) -> str:
+    """El texto del pie, quitando el adorno de Markdown que lo envuelve.
+
+    En el informe real, quince de las cuarenta y dos tablas —las del plan de acciones de mejora—
+    llevan su código en un encabezado con negritas: `### **Tabla 8.4.1. Acción 2711866**`. Sin
+    quitar eso, se quedaban como «Tabla sin código», y una tabla sin código no se puede
+    referenciar desde una plantilla ni reproducir con su numeración original.
+    """
+    return linea.strip().lstrip("#").strip().strip("*").strip()
+
+
 def _celdas(linea: str) -> list[str]:
     """Parte una fila de Markdown por `|`, sin comerse el contenido de las celdas.
 
@@ -113,17 +124,25 @@ class MarkdownTableExtractionPipeline:
 
     @staticmethod
     def _es_la_pedida(nombre: str, pedida: str) -> bool:
-        """Compara por prefijo, respetando el punto de la numeración.
+        """Compara por prefijo, respetando la numeración.
 
         El pie completo es «Tabla 1.2 Evolución de la Matrícula» y la plantilla dice «Tabla 1.2»,
         así que la igualdad no sirve. Pero un prefijo a secas haría que «Tabla 1.4» arrastrara
-        «Tabla 1.4.2», que es otra tabla: el siguiente carácter tiene que no ser dígito ni punto.
+        «Tabla 1.4.2», que es otra tabla.
+
+        La distinción está en lo que sigue al punto: un dígito es numeración más profunda —otra
+        tabla— y un espacio o el final es puntuación del pie, como en «Tabla 8.4.1. Acción
+        2711866», que es la forma de las quince tablas del plan de acciones de mejora.
         """
         objetivo = pedida.strip()
         if not nombre.startswith(objetivo):
             return False
         resto = nombre[len(objetivo):]
-        return not resto[:1].isdigit() and not resto.startswith(".")
+        if resto[:1].isdigit():
+            return False
+        if resto.startswith("."):
+            return not resto[1:2].isdigit()
+        return True
 
     @staticmethod
     def _ruta_de(inp: ExtractionInput) -> Path:
@@ -181,7 +200,7 @@ class MarkdownTableExtractionPipeline:
             posicion = indice + salto
             if posicion >= len(lineas):
                 break
-            candidata = lineas[posicion].strip()
+            candidata = _sin_decoracion(lineas[posicion])
             if _PIE_DE_TABLA.match(candidata):
                 return candidata
         return f"Tabla sin código ({num_filas} filas)"

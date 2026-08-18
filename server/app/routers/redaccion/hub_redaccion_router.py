@@ -37,6 +37,7 @@ from server.app.modules.redaccion.database.repos import (
     WorkspaceBlockRepo,
     WorkspaceRepo,
 )
+from server.app.modules.redaccion.services.estructura_del_informe import bloques_sin_seccion
 from server.app.modules.redaccion.services.template_migration_service import (
     CompatibilityConflictError,
     NewVersionNotice,
@@ -664,9 +665,23 @@ async def publish_template_version(
         raise HTTPException(status_code=404, detail="Template not found")
 
     try:
-        ReportTemplateSpec.model_validate(body.spec_json)
+        spec = ReportTemplateSpec.model_validate(body.spec_json)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=json.loads(exc.json()))
+
+    # SEG.5 — un bloque que ninguna sección enumera no se pinta. Se rechaza aquí porque es el
+    # único momento en que avisar sirve de algo: después, el informe sale con las secciones
+    # vacías y sin nada que lo explique.
+    huerfanos = bloques_sin_seccion(spec.sections, spec.blocks)
+    if huerfanos:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Estos bloques no están en ninguna sección y no aparecerían en el informe: "
+                f"{', '.join(huerfanos)}. Añádelos al `block_ids` de la sección "
+                f"correspondiente."
+            ),
+        )
 
     version_repo = ReportTemplateVersionRepo(session)
     existing = await version_repo.list(template_id)

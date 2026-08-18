@@ -78,6 +78,31 @@ def test_la_instruccion_deja_la_reflexion_cualitativa_a_quien_firma() -> None:
     assert "quien firma" in instruccion or "responsable" in instruccion
 
 
+@pytest.mark.parametrize(
+    "identificador",
+    [PROMPT_VALORACION_DE_TENDENCIA, PROMPT_RESUMEN_DE_RESULTADOS],
+)
+def test_las_dos_instrucciones_piden_prosa_y_no_markdown(identificador: str) -> None:
+    """SEG.5 — visto en el informe real: el modelo devolvía `**Producción vegetal:**` y viñetas
+    con asteriscos, y el informe los imprimía tal cual, con los asteriscos a la vista.
+    """
+    instruccion = instruccion_para(identificador).lower()
+    assert "markdown" in instruccion
+    assert "asterisco" in instruccion
+
+
+@pytest.mark.parametrize(
+    "identificador",
+    [PROMPT_VALORACION_DE_TENDENCIA, PROMPT_RESUMEN_DE_RESULTADOS],
+)
+def test_las_dos_instrucciones_acotan_la_extension(identificador: str) -> None:
+    """La valoración de una tabla son unas frases. Sin acotarlo salía un ensayo por tabla, con
+    apartados propios («Conclusión», «Sugerencias de mejora»), que nadie revisa nueve veces.
+    """
+    instruccion = instruccion_para(identificador).lower()
+    assert "párrafo" in instruccion
+
+
 def test_el_resumen_de_resultados_admite_varias_tablas() -> None:
     """Los apartados que agregan tablas necesitan otra instrucción, no la de una sola."""
     instruccion = instruccion_para(PROMPT_RESUMEN_DE_RESULTADOS).lower()

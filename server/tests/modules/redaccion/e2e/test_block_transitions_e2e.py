@@ -210,7 +210,13 @@ def test_e2e_user_edits_ai_block_content_and_original_preserved():
         headers=headers,
     )
     assert resp.status_code == 200
-    assert block.content_json == new_content
+    # SEG.4 — la edición ya no borra el rastro: el texto queda sobrescrito, y junto a él quién
+    # editó, cuándo y qué había propuesto el modelo. Antes esa evidencia vivía sólo en el
+    # registro de auditoría, que ninguna pantalla enseña.
+    assert block.content_json["text"] == new_content["text"]
+    assert block.content_json["original_ai_text"] == original_text
+    assert block.content_json["edited_by"] == "user@test.com"
+    assert block.content_json["edited_at"]
 
     # Verify audit event preserves original content
     added_objects = [c.args[0] for c in session.add.call_args_list]
@@ -230,7 +236,7 @@ def test_e2e_user_edits_ai_block_content_and_original_preserved():
     assert resp.json()["status"] == "approved"
     assert block.status == "approved"
     # Final content is the user-edited version, not original AI text
-    assert block.content_json == new_content
+    assert block.content_json["text"] == new_content["text"]
 
 
 def test_e2e_user_with_missing_input_resumes_after_upload():

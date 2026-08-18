@@ -233,3 +233,56 @@ def test_un_bloque_md_table_encuentra_el_fichero_del_hueco_markdown() -> None:
     )
 
     assert "md_table" in _SLOT_KIND_TO_SOURCE.get("markdown", set())
+
+
+# ----------------------------------------------------------------------
+# El pie decorado de la sección B (SEG.5)
+# ----------------------------------------------------------------------
+
+#: Formato literal de las tablas del «Plan de acciones de mejora» del informe real: el pie va
+#: envuelto en un encabezado con negritas, y el código lleva punto final.
+_SECCION_B = """\
+| ACC2711866 | Tipo: Millora | Inicio: 04-05-2017 | Fin: 30-07-2020 |
+| :---- | :---- | :---- | :---- |
+| **Autor** | Correa Sanz, María De Las Mercedes |  |  |
+| **Título** | Traducción de la página web de la Escuela de Doctorado |  |  |
+
+### **Tabla 8.4.1. Acción 2711866**
+
+| NOT2734130 | Tipo: Recomanació agència externa | Inicio: 12-05-2021 | Fin: |
+| :---- | :---- | :---- | :---- |
+| **Autor** | Belloso Saura, María Ola |  |  |
+
+### **Tabla 8.3.1. Notificación 2734130**
+"""
+
+
+@pytest.fixture
+def seccion_b(tmp_path: Path) -> StorageRef:
+    destino = tmp_path / "plan_de_mejora.md"
+    destino.write_text(_SECCION_B, encoding="utf-8")
+    return StorageRef(bucket="", key=str(destino))
+
+
+def test_el_pie_envuelto_en_un_encabezado_tambien_es_un_pie(seccion_b: StorageRef) -> None:
+    """Quince de las cuarenta y dos tablas del informe real llevan el código así.
+
+    Descubierto al inventariar el fichero para SEG.5: se quedaban como «Tabla sin código», y una
+    tabla sin código no se puede referenciar desde una plantilla ni reproducir con su numeración
+    original, que es justo lo que el informe exige.
+    """
+    nombres = [t.name for t in _extraer(seccion_b).tables]
+    assert any(n.startswith("Tabla 8.4.1") for n in nombres), nombres
+    assert any(n.startswith("Tabla 8.3.1") for n in nombres), nombres
+
+
+def test_ninguna_tabla_de_la_seccion_b_queda_sin_codigo(seccion_b: StorageRef) -> None:
+    for tabla in _extraer(seccion_b).tables:
+        assert not tabla.name.startswith("Tabla sin código"), tabla.name
+
+
+def test_se_puede_pedir_una_tabla_cuyo_codigo_lleva_punto_final(seccion_b: StorageRef) -> None:
+    """El pie es «Tabla 8.4.1. Acción 2711866» y la plantilla dice «Tabla 8.4.1»."""
+    resultado = _extraer(seccion_b, table="Tabla 8.4.1")
+    assert len(resultado.tables) == 1
+    assert "Acción 2711866" in resultado.tables[0].name

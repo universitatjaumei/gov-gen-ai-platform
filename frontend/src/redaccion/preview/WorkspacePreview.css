@@ -50,6 +50,40 @@
   margin-bottom: 2rem;
 }
 
+/* SEG.5 — las tablas del cuerpo del informe. Hasta ahora ningún bloque del cuerpo llegaba a
+   producir una tabla (los bloques TABLE salían vacíos), así que sólo estaba vestido el anexo de
+   auditoría: las nueve tablas del informe de seguimiento aparecían sin bordes y con las celdas
+   pegadas unas a otras. Un informe institucional se lee en la tabla o no se lee. */
+.preview-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.preview-body th,
+.preview-body td {
+  border: 1px solid #bbb;
+  padding: 0.375rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.preview-body th {
+  background: #f0f0f0;
+  font-weight: 600;
+}
+
+/* Las cifras se comparan en columna: alineadas a la derecha y con dígitos de ancho fijo. */
+.preview-body td + td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.preview-body table tr {
+  break-inside: avoid;
+}
+
 .preview-audit table {
   width: 100%;
   border-collapse: collapse;

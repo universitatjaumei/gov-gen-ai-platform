@@ -37,7 +37,10 @@ def _borrador() -> ReportTemplateDraft:
     return ReportTemplateDraft(
         proposed_profile="GENERIC_REPORT",
         proposed_sections=[
-            SectionContract(id="s1", title="Datos", order=1, block_ids=["b_datos"]),
+            # SEG.5 — el resumen tiene que estar enumerado o no se pinta: la vista previa y
+            # el ensamblado recorren las secciones, no la lista de bloques.
+            SectionContract(id="s1", title="Datos", order=1,
+                            block_ids=["b_datos", "b_resumen"]),
         ],
         proposed_blocks=[
             DeterministicDataBlock(

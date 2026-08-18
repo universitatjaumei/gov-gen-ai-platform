@@ -144,6 +144,12 @@ def _build_system_prompt(owner_kind: Literal["admin", "user"]) -> str:
         "}\n"
         f"Valid 'kind' values for blocks: {_BLOCK_KINDS}.\n"
         "Do NOT use any block kind not in this list.\n"
+        # SEG.5 — la vista previa y el ensamblado recorren las secciones. Un bloque que
+        # ninguna sección enumera se ejecuta y no sale en el informe, y eso no daba error:
+        # el informe salía con las secciones vacías y aspecto de estar bien.
+        "EVERY block id you create MUST appear in the block_ids of exactly one section, in "
+        "the order it should be printed. A block listed by no section does not appear in the "
+        "report at all.\n"
         # Enumerar los tipos sin decir qué exige cada uno producía propuestas que no
         # validaban y salían como 500. Visto en la primera petición real (VER.3): un bloque
         # TABLE sin `data_block_ref`, que es obligatorio.

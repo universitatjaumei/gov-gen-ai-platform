@@ -168,8 +168,10 @@ class TestBlockTransitionEndpoints:
         )
 
         assert resp.status_code == 200
-        # Block content updated
-        assert block.content_json == new_content
+        # Block content updated. SEG.4 — junto al texto queda quién editó y qué propuso el
+        # modelo, que es lo que hace la edición supervisable y no un borrado silencioso.
+        assert block.content_json["text"] == new_content["text"]
+        assert block.content_json["edited_by"]
         # Audit event saved with original content
         added_objects = [c.args[0] for c in session.add.call_args_list]
         from server.app.modules.redaccion.database.models import HubWorkspaceAuditEvent

@@ -54,6 +54,15 @@ _VALORACION_DE_TENDENCIA = (
     "marcándola explícitamente como hipótesis, nunca como causa demostrada.\n"
     "- Cierra dejando claro que la reflexión cualitativa corresponde a quien firma el informe.\n"
     "\n"
+    # SEG.5 — las dos reglas de forma salen de leer el informe montado con las nueve tablas
+    # reales: el modelo devolvía un ensayo por tabla, con sus propios apartados, y con markdown
+    # que el informe imprimía literalmente («**Producción vegetal:**»).
+    "Forma del texto, y también son reglas:\n"
+    "- Escribe **prosa corrida**, uno o dos párrafos cortos. Es un apartado de un informe, no "
+    "un análisis independiente: nadie va a leer nueve ensayos seguidos.\n"
+    "- Sin markdown: ni asteriscos, ni almohadillas, ni viñetas, ni negritas, ni apartados con "
+    "título propio. El informe imprime tu texto tal cual, así que un asterisco sale impreso.\n"
+    "\n"
     "No reproduzcas la tabla: ya está en el informe. Interprétala."
 )
 
@@ -70,6 +79,11 @@ _RESUMEN_DE_RESULTADOS = (
     "frase en vez de omitirla en silencio. Dejar fuera una tabla sin avisar es el fallo más "
     "difícil de detectar de un resumen.\n"
     "- Sin conclusiones que las cifras no sostengan, y sin adjetivos valorativos.\n"
+    "\n"
+    "Forma del texto, y también son reglas:\n"
+    "- Escribe **prosa corrida**, dos o tres párrafos cortos como máximo.\n"
+    "- Sin markdown: ni asteriscos, ni almohadillas, ni viñetas, ni negritas, ni apartados con "
+    "título propio. El informe imprime tu texto tal cual.\n"
     "\n"
     "Cierra dejando claro que la valoración cualitativa corresponde a quien firma el informe."
 )

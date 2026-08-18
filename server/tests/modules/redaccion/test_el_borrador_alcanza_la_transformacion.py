@@ -105,7 +105,16 @@ def _borrador(*bloques: dict) -> ReportTemplateDraft:
     return ReportTemplateDraft.model_validate(
         {
             "proposed_profile": "GENERIC_REPORT",
-            "proposed_sections": [{"id": "s1", "title": "Datos", "order": 1}],
+            # SEG.5 — la sección enumera los bloques que se imprimen; los que sólo producen
+            # datos (extracción, transformación) no van en ninguna.
+            "proposed_sections": [
+                {
+                    "id": "s1",
+                    "title": "Datos",
+                    "order": 1,
+                    "block_ids": [b["id"] for b in bloques],
+                }
+            ],
             "proposed_blocks": list(bloques),
             "proposed_inputs": {
                 "required_slots": [

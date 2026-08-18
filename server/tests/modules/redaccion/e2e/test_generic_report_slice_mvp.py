@@ -67,7 +67,10 @@ def _minimal_generic_report_draft() -> ReportTemplateDraft:
     return ReportTemplateDraft(
         proposed_profile="GENERIC_REPORT",
         proposed_sections=[
-            SectionContract(id="s_intro", title="Introducción", order=0)
+            # SEG.5 — la sección enumera lo que se imprime. Sin `block_ids`, el informe salía
+            # con la introducción vacía y el análisis en ninguna parte.
+            SectionContract(id="s_intro", title="Introducción", order=0,
+                            block_ids=["b_intro", "b_analysis"])
         ],
         proposed_blocks=[
             StaticTextBlock(id="b_intro", title="Texto inicial", order=0),
