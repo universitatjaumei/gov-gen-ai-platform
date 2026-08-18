@@ -21,8 +21,14 @@ from server.app.modules.agents_hub.ingestion.markdown_utils import (
     extract_title_from_markdown,
 )
 from server.app.modules.curation.contenido_web import parece_html, texto_visible, titulo_de
-from server.app.modules.curation.cortesia import RutaProhibidaPorRobots
+from server.app.modules.curation.cortesia import RutaProhibidaPorRobots, clasificar_fallo
 from server.app.modules.curation.sondeo_dinamico import senales_de_dinamismo
+
+
+#: Lo que se guarda de la cola para reanudar. Con URLs de ~120 caracteres, cinco mil son unos
+#: 600 KB de JSON en la fila del sitio: suficiente para un apartado y acotado para un portal.
+_MAX_COLA_GUARDADA = 5_000
+_MAX_VISITADAS_GUARDADAS = 20_000
 
 
 @dataclass
@@ -124,11 +130,18 @@ class SiteCrawler:
                 summary.stop_reason = summary.stop_reason or "robots"
                 continue
             except Exception as exc:
+                # RAS.3 — un 404 y un `timeout` no dicen lo mismo: el primero es una respuesta
+                # («esto ya no está», información útil) y el segundo un fallo del que no se
+                # puede concluir nada sobre la página. Los dos producían el mismo hallazgo
+                # crítico, así que un rastreo con mala red llenaba el informe de acusaciones.
+                causa = getattr(exc, "causa", exc)
                 await self._pages.upsert(
                     site_id=site_id,
                     url=url,
                     status="error",
                     error_message=str(exc),
+                    error_kind=clasificar_fallo(causa),
+                    error_attempts=getattr(exc, "intentos", 1),
                     last_crawled_at=now,
                 )
                 summary.pages_error += 1
@@ -171,13 +184,39 @@ class SiteCrawler:
                 summary.pages_gone = await self._pages.mark_gone(gone_ids)
                 summary.gone_page_ids = gone_ids
 
-        # 4. Cierre del sitio.
+        # 4. Cierre del sitio, guardando la cola si quedó algo por ver (RAS.3).
         site.last_crawled_at = now
         site.status = "active"
         site.error_message = None
+        site.crawl_frontier = self._cola_a_guardar(recorrido, summary)
         await self._session.flush()
 
         return summary
+
+    @staticmethod
+    def _cola_a_guardar(recorrido: Any, summary: SiteCrawlSummary) -> dict[str, Any] | None:
+        """La cola pendiente que hay que guardar, o `None` si no hay nada que reanudar.
+
+        Se acota lo que se persiste —una cola de cien mil URLs no cabe en una fila— y **se dice**
+        cuánto se ha dejado fuera: un tope silencioso haría que la reanudación pareciera completa.
+        """
+        pendientes = list(getattr(recorrido, "frontier", None) or [])
+        if not pendientes:
+            return None
+
+        visitadas = list(getattr(recorrido, "visited", None) or [])
+        recortadas = max(0, len(pendientes) - _MAX_COLA_GUARDADA)
+        if recortadas:
+            summary.errors.append(
+                f"la cola pendiente se ha guardado recortada: {recortadas} URLs quedan fuera "
+                f"de la reanudación"
+            )
+
+        return {
+            "pending": [[u, d] for u, d in pendientes[:_MAX_COLA_GUARDADA]],
+            "visited": visitadas[:_MAX_VISITADAS_GUARDADAS],
+            "dropped": recortadas,
+        }
 
     async def _discover_urls(
         self, site: HubWebSite

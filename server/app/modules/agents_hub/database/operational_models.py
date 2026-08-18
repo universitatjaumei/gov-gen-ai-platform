@@ -43,6 +43,10 @@ class HubWebSite(HubOperationalBase):
     spider_type: Mapped[str] = mapped_column(String(50), nullable=False, default="generic")
     config_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     crawl_interval_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
+    # RAS.3 — la cola pendiente de una ejecución interrumpida, con lo ya visitado. Vivía sólo en
+    # memoria: un corte en la página 8.000 obligaba a empezar de cero, y con la pausa de cortesía
+    # eso son horas de peticiones repetidas contra el mismo servidor.
+    crawl_frontier: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     audit_semantic_scope: Mapped[str] = mapped_column(
         String(20), nullable=False, default="ingested"
     )
@@ -134,6 +138,13 @@ class HubCrawledPage(HubOperationalBase):
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # RAS.3 — de qué fallo se trata y cuántas veces se intentó. Un 404 es una respuesta («esto ya
+    # no está») y un timeout es un fallo del que no se concluye nada sobre la página; sin
+    # distinguirlos, los dos salían como hallazgo crítico y un rastreo con mala red se llenaba de
+    # acusaciones falsas.
+    error_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    error_attempts: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class HubCorpusSelection(HubOperationalBase):

@@ -39,6 +39,52 @@ PRESUPUESTO_POR_DEFECTO_SEGUNDOS = 1800
 _VERSION = "1.0"
 
 
+#: Tres intentos. Un `timeout` de red se recupera casi siempre al segundo; si tres fallan
+#: seguidos con espera creciente, ya no es la red pasajera.
+REINTENTOS_POR_DEFECTO = 3
+
+#: Espera del primer reintento, que se duplica en cada vuelta.
+ESPERA_INICIAL_DE_REINTENTO = 1.0
+
+
+class FalloTrasReintentos(Exception):
+    """La URL falló todas las veces. Sólo esto llega a ser un hallazgo, y con su recuento."""
+
+    def __init__(self, url: str, intentos: int, causa: BaseException) -> None:
+        super().__init__(f"«{url}» falló {intentos} veces; la última: {causa}")
+        self.url = url
+        self.intentos = intentos
+        self.causa = causa
+
+
+def es_transitorio(fallo: BaseException) -> bool:
+    """`True` si merece otro intento.
+
+    Un 404 **no** es transitorio: es una respuesta, y significa que esa página ya no está.
+    Reintentarla es tráfico inútil contra un servidor que ya ha contestado. Un 5xx, un `timeout`
+    o un fallo de conexión sí: de ellos no se puede concluir nada sobre la página.
+    """
+    codigo = getattr(getattr(fallo, "response", None), "status_code", None)
+    if codigo is not None:
+        return codigo >= 500 or codigo == 429
+    if isinstance(fallo, (TimeoutError, ConnectionError, OSError)):
+        return True
+    nombre = type(fallo).__name__.lower()
+    return "timeout" in nombre or "connect" in nombre or "read" in nombre
+
+
+def clasificar_fallo(fallo: BaseException) -> str:
+    """`not_found`, `transient` o `unknown`: lo que el informe puede afirmar de la causa."""
+    codigo = getattr(getattr(fallo, "response", None), "status_code", None)
+    if codigo == 404 or codigo == 410:
+        return "not_found"
+    if es_transitorio(fallo):
+        return "transient"
+    if codigo is not None:
+        return "client_error"
+    return "unknown"
+
+
 class RutaProhibidaPorRobots(Exception):
     """La URL está excluida por el `robots.txt` del sitio. No se pide, y no es un error del sitio."""
 
@@ -67,6 +113,7 @@ class CortesiaDeRastreo:
         respect_robots: bool = True,
         contacto: str = "",
         max_concurrency: int = CONCURRENCIA_POR_DEFECTO,
+        max_retries: int = REINTENTOS_POR_DEFECTO,
         sleep_fn: Callable[[float], Awaitable[None]] | None = None,
         clock_fn: Callable[[], float] | None = None,
     ) -> None:
@@ -74,6 +121,7 @@ class CortesiaDeRastreo:
         self.respetar_robots = bool(respect_robots)
         self.user_agent = user_agent_de_rastreo(contacto)
         self.concurrencia = max(1, int(max_concurrency))
+        self.reintentos = max(1, int(max_retries))
 
         self._dormir = sleep_fn or asyncio.sleep
         self._reloj = clock_fn or (lambda: asyncio.get_event_loop().time())
@@ -162,6 +210,33 @@ class CortesiaDeRastreo:
                 ahora = self._reloj()
         self._ultima_peticion[host] = ahora
 
+    async def con_reintentos(
+        self, url: str, descargar: Callable[[str], Awaitable[tuple[str, dict]]]
+    ) -> tuple[str, dict]:
+        """Intenta la descarga, reintentando sólo lo que puede recuperarse.
+
+        Sin esto, un `timeout` de diez segundos se convertía en un `crawl_error` crítico: en un
+        rastreo grande, decenas de falsos positivos por causas de red mezclados con los hallazgos
+        de verdad.
+        """
+        espera = ESPERA_INICIAL_DE_REINTENTO
+        ultimo: BaseException | None = None
+
+        for intento in range(1, self.reintentos + 1):
+            try:
+                return await descargar(url)
+            except Exception as fallo:  # noqa: BLE001 — la clasificación decide qué hacer
+                ultimo = fallo
+                if not es_transitorio(fallo):
+                    raise
+                if intento == self.reintentos:
+                    break
+                await self._dormir(espera)
+                espera *= 2
+
+        assert ultimo is not None
+        raise FalloTrasReintentos(url, self.reintentos, ultimo) from ultimo
+
     def turno_de(self, url: str) -> asyncio.Semaphore:
         host = self.host_de(url)
         if host not in self._semaforos:
@@ -182,6 +257,7 @@ def cortesia_desde_config(
         respect_robots=config.get("respect_robots", True),
         contacto=contacto,
         max_concurrency=config.get("max_concurrency", CONCURRENCIA_POR_DEFECTO),
+        max_retries=config.get("max_retries", REINTENTOS_POR_DEFECTO),
         sleep_fn=sleep_fn,
         clock_fn=clock_fn,
     )

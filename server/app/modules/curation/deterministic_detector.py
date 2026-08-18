@@ -20,6 +20,14 @@ from server.app.modules.curation.contracts import ContentFinding
 
 _YEAR_SEG = re.compile(r"/((?:19|20)\d{2})(?=/|$)")
 
+#: Qué se puede afirmar según la causa del fallo de rastreo (RAS.3). Lo que no se clasificó —las
+#: páginas rastreadas antes de esto— conserva la severidad de antes: no se le atribuye una causa.
+_SEVERIDAD_DEL_ERROR: dict[str | None, str] = {
+    "not_found": "warning",     # el enlace apunta a algo que ya no está: hay que depurarlo
+    "client_error": "warning",  # 403, 401: el servidor contesta, pero no sirve la página
+    "transient": "info",        # red o servidor caído: no dice nada de la página
+}
+
 
 def _strip_year_segments(path: str) -> str:
     """Quita todos los segmentos de año de un path URL."""
@@ -198,14 +206,23 @@ class DeterministicQualityDetector:
         results: list[ContentFinding] = []
 
         if page.status == "error":
+            # RAS.3 — la severidad depende de qué se puede concluir. Un 404 es una respuesta del
+            # servidor: el enlace apunta a algo que ya no está, y eso hay que depurarlo. Un 5xx o
+            # un `timeout` tras varios intentos no dice nada de la página, así que no puede ser
+            # crítico ni mezclarse con los hallazgos de contenido.
+            clase = getattr(page, "error_kind", None)
             results.append(self._finding(
                 site_id=site_id,
                 finding_type="crawl_error",
-                severity="critical",
+                severity=_SEVERIDAD_DEL_ERROR.get(clase, "critical"),
                 confidence=1.0,
                 page_id=page.id,
                 source_url=page.url,
-                signal={"error_message": page.error_message or ""},
+                signal={
+                    "error_message": page.error_message or "",
+                    "kind": clase,
+                    "attempts": getattr(page, "error_attempts", None),
+                },
                 now=now,
             ))
 
