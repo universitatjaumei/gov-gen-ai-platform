@@ -121,6 +121,32 @@ def test_should_have_no_test_creating_tables_on_the_dev_database():
     )
 
 
+# ──────────── LEG.3: ningún test abre sesión sobre la BD del desarrollador ────────────
+
+#: Abrir una sesión o una conexión sobre `server_engine` es escribir en la base de datos del
+#: desarrollador, que es lo que hacía `tests/test_prompts.py`: pasaba aislado y fallaba en la
+#: suite paralela, y el servidor sembrando al arrancar completaba la colisión. **Importar** el
+#: símbolo sí se permite: hay un test-smoke que sólo comprueba que el motor existe, y prohibirlo
+#: sería un falso positivo, que es como se desactivan los guardarraíles.
+_SESION_SOBRE_EL_MOTOR_REAL = re.compile(
+    r"(?:AsyncSession|Session)\s*\(\s*server_engine|server_engine\s*\.\s*(?:begin|connect)\s*\("
+)
+
+
+def test_should_have_no_test_opening_a_session_on_the_developer_database():
+    infractores = []
+    for path in _ficheros_de_test():
+        texto = path.read_text(encoding="utf-8", errors="replace")
+        for m in _SESION_SOBRE_EL_MOTOR_REAL.finditer(texto):
+            linea = texto[: m.start()].count("\n") + 1
+            infractores.append(f"{path.relative_to(SERVER)}:{linea}: {m.group(0).strip()}")
+    assert infractores == [], (
+        "tests abriendo sesión sobre `server_engine` —la BD del desarrollador—; usa las "
+        "fixtures db_url/db_session, que trabajan sobre una base desechable:\n  "
+        + "\n  ".join(infractores)
+    )
+
+
 # ───────────────────────── TST.3: sin tests de módulos que ya no existen ─────────────────────────
 
 _IMPORT_DE_MODULO = re.compile(
