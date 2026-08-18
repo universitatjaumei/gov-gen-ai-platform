@@ -122,22 +122,34 @@ class DataTransformBlock(_BlockBase):
     config: DataTransformBlockConfig
 
 
-class AIAssistedTextBlock(_BlockBase):
+class _BloqueDeIA(_BlockBase):
+    """Lo común a los tres bloques que escriben texto con un modelo.
+
+    SEG.1 — `data_block_refs` es lo que permite decir «valora **esta** tabla». Sin él, el nodo
+    entregaba a cada apartado un contexto con **todos** los bloques extraídos del informe: con
+    treinta tablas, cada valoración recibía las treinta y el encargo de «redacta esta sección»,
+    que es la receta del resumen que mezcla y omite.
+
+    Vacío significa «todo el informe», que es el comportamiento anterior: hay plantillas vivas
+    que dependen de él. Pero el alcance usado queda registrado en el bloque, porque una
+    valoración cuya fuente no consta no se puede auditar.
+    """
+
+    ai_prompt_template_id: str
+    review_policy_id: str
+    data_block_refs: list[str] = []
+
+
+class AIAssistedTextBlock(_BloqueDeIA):
     kind: Literal["AI_ASSISTED_TEXT"] = "AI_ASSISTED_TEXT"
-    ai_prompt_template_id: str
-    review_policy_id: str
 
 
-class AISummaryBlock(_BlockBase):
+class AISummaryBlock(_BloqueDeIA):
     kind: Literal["AI_SUMMARY"] = "AI_SUMMARY"
-    ai_prompt_template_id: str
-    review_policy_id: str
 
 
-class AIRewriteBlock(_BlockBase):
+class AIRewriteBlock(_BloqueDeIA):
     kind: Literal["AI_REWRITE"] = "AI_REWRITE"
-    ai_prompt_template_id: str
-    review_policy_id: str
 
 
 class CitationBlock(_BlockBase):

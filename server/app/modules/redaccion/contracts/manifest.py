@@ -54,6 +54,11 @@ class AIBlockSummary(BaseModel):
     status: str
     model_used: str | None = None
     prompt_version: str | None = None
+    #: SEG.1 — de qué se apoyó el modelo para escribir esto. `anchored` = sólo las tablas que el
+    #: apartado declara; `full` = todo el informe, que es el alcance de las plantillas antiguas.
+    #: Una valoración cuya fuente no consta no se puede auditar, así que consta.
+    context_scope: str | None = None
+    context_block_ids: list[str] = Field(default_factory=list)
 
 
 class DraftingRunManifest(BaseModel):

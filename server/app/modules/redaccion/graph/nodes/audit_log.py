@@ -5,9 +5,15 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from server.app.modules.redaccion.contracts.manifest import DraftingRunManifest, FailedBlockInfo
+from server.app.modules.redaccion.contracts.manifest import (
+    AIBlockSummary,
+    DraftingRunManifest,
+    FailedBlockInfo,
+)
 from server.app.modules.redaccion.contracts.runtime import WorkspaceState
 from server.app.modules.redaccion.database.models import HubRunManifest
+
+_KINDS_DE_IA = frozenset({"AI_ASSISTED_TEXT", "AI_SUMMARY", "AI_REWRITE"})
 
 
 class AuditLogNode:
@@ -50,11 +56,30 @@ class AuditLogNode:
             if b.status == "failed" and b.failure_kind is not None
         ]
 
+        # SEG.1 — `ai_blocks` estaba declarado en el contrato del manifiesto y este nodo lo
+        # dejaba vacío: el modelo y la versión de instrucciones de cada apartado vivían sólo en
+        # el bloque y no llegaban a la evidencia de la ejecución, que es donde los busca quien
+        # audita el informe. Con ellos viaja el alcance del contexto.
+        ai_blocks = [
+            AIBlockSummary(
+                block_id=b.block_id,
+                kind=b.kind,
+                status=b.status,
+                model_used=(b.content or {}).get("model_used"),
+                prompt_version=(b.content or {}).get("prompt_version"),
+                context_scope=(b.content or {}).get("context_scope"),
+                context_block_ids=(b.content or {}).get("context_block_ids") or [],
+            )
+            for b in state.blocks.values()
+            if b.kind in _KINDS_DE_IA
+        ]
+
         manifest = DraftingRunManifest(
             id=manifest_id,
             workspace_id=state.workspace_id,
             template_version_id=state.template_version_id,
             report_profile=state.report_profile,
+            ai_blocks=ai_blocks,
             warnings=list(state.warnings),
             user_approvals=approvals,
             failed_blocks=failed_blocks,

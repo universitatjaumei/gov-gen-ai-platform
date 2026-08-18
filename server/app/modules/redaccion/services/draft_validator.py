@@ -85,6 +85,24 @@ class DraftValidator:
                                 f"got {block_by_id[ref_id].kind!r}",  # type: ignore[union-attr]
                     ))
 
+            # SEG.1 — un apartado de IA declara de qué tablas habla. Si la referencia no existe
+            # o no produce datos, en ejecución el bloque falla y el informe sale con un apartado
+            # menos; comprobarlo al validar convierte eso en un error de la propuesta, que es
+            # donde se puede corregir.
+            if kind in _AI_KINDS:
+                for ref in getattr(block, "data_block_refs", []) or []:
+                    if ref not in block_by_id:
+                        errors.append(DraftValidationError(
+                            field=f"blocks[{bid}].data_block_refs",
+                            message=f"{kind} block {bid!r} valora un bloque inexistente {ref!r}",
+                        ))
+                    elif ref not in deterministic_ids:
+                        errors.append(DraftValidationError(
+                            field=f"blocks[{bid}].data_block_refs",
+                            message=f"{kind} block {bid!r} valora {ref!r}, que no produce datos "
+                                    f"({block_by_id[ref].kind!r})",  # type: ignore[union-attr]
+                        ))
+
             # GUI.3 — la transformación apunta a su origen por `config.source_block_ref`. Sin
             # comprobarlo, una referencia inventada deja el bloque sin datos en tiempo de
             # ejecución y sin nada que explique por qué.

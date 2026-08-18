@@ -42,12 +42,40 @@ def _block_text(content: dict) -> str:
     return str(content)
 
 
+_VALIDADOS = ("extracted", "approved")
+
+
+class SinDatosParaValorar(ValueError):
+    """El apartado declara de qué tabla habla y esa tabla no ha producido datos.
+
+    Se trata como fallo del bloque, no como contexto vacío: una valoración redactada sin sus
+    datos parece fundamentada y no lo está, que es peor que un apartado que falta.
+    """
+
+
 def _build_context(blocks: dict) -> str:
-    """Solo incluye bloques en estado `extracted` o `approved`."""
+    """Todos los bloques validados. Es el alcance de las plantillas que no declaran anclaje."""
     parts = []
     for bid, bstate in sorted(blocks.items()):
-        if bstate.status in ("extracted", "approved") and bstate.content:
+        if bstate.status in _VALIDADOS and bstate.content:
             parts.append(f"[{bid}]\n{_block_text(bstate.content)}")
+    return "\n\n".join(parts)
+
+
+def _contexto_anclado(blocks: dict, refs: list[str]) -> str:
+    """Solo las tablas que el apartado declara, **en el orden en que las declara**.
+
+    SEG.1 — el orden es de la plantilla y no alfabético: quien redacta la plantilla sabe si la
+    tabla de matrícula va antes que la de tasas, y esa secuencia es parte de lo que se valora.
+    """
+    parts = []
+    for ref in refs:
+        bstate = blocks.get(ref)
+        if bstate is None or bstate.status not in _VALIDADOS or not bstate.content:
+            raise SinDatosParaValorar(
+                f"el apartado se apoya en «{ref}», que no ha producido datos"
+            )
+        parts.append(f"[{ref}]\n{_block_text(bstate.content)}")
     return "\n\n".join(parts)
 
 
@@ -64,10 +92,10 @@ class AIAssistDraftNode:
         if state.spec is None:
             return {}
 
-        context = _build_context(state.blocks)
         anon_ctx = state.anonymization_context
-        # PRE-HOOK (Fase 13): sustituimos PII en el contexto antes de cualquier LLM call.
-        llm_context = apply_pre_llm(context, anon_ctx)
+        # El contexto de todo el informe se calcula una vez y sirve a los apartados **sin**
+        # anclaje. Los anclados se construyen uno a uno más abajo: es la razón de ser de SEG.1.
+        contexto_completo = apply_pre_llm(_build_context(state.blocks), anon_ctx)
         updated_blocks = dict(state.blocks)
         new_warnings = list(state.warnings)
         now = datetime.now(timezone.utc)
@@ -84,10 +112,18 @@ class AIAssistDraftNode:
             if block_state.status in _SKIP_STATUSES:
                 continue
 
+            refs = list(getattr(block_contract, "data_block_refs", []) or [])
             try:
+                if refs:
+                    contexto = apply_pre_llm(
+                        _contexto_anclado(updated_blocks, refs), anon_ctx
+                    )
+                else:
+                    contexto = contexto_completo
+
                 raw_text = await self._llm.generate(
                     prompt=block_contract.ai_prompt_template_id,
-                    context=llm_context,
+                    context=contexto,
                 )
                 # POST-HOOK (Fase 13): revertimos sintético → original en el output.
                 text = apply_post_llm(raw_text, anon_ctx)
@@ -109,6 +145,10 @@ class AIAssistDraftNode:
                     "text": text,
                     "model_used": self._llm.model_name,
                     "prompt_version": block_contract.ai_prompt_template_id,
+                    # De dónde salió lo que el modelo leyó. Va en el estado porque el estado es
+                    # el registro (P6), y de aquí lo recoge el manifiesto.
+                    "context_scope": "anchored" if refs else "full",
+                    "context_block_ids": refs,
                 },
                 "status": "ai_generated",
                 "last_updated_by": "ai",
