@@ -25,7 +25,6 @@ from server.app.database.models import (
     AdminAccount,
     ClientAccount,
     License,
-    ExtractionServiceConfig,
 )
 from server.app.core.security import hash_password
 from automatia_shared.enums import LicenseStatus
@@ -169,37 +168,6 @@ async def _seed_dev_license(session: AsyncSession):
         print("[SEED] Licencia de desarrollo ya existe.")
 
 
-async def seed_prompt_tiers():
-    """Asigna tiers iniciales a los prompts del sistema conocidos."""
-    TIER_MAPPING = {
-        # Tier 1: Extracción PDF (Flash)
-        "sys_phase0_discovery": 1,
-        "sys_phase1_extraction": 1,
-        "sys_fallback_snippet": 1,
-        "sys_pdf_extraction": 1,
-        # Tier 2: Lógica/Navegación (Flash/Standard)
-        "sys_phase1_refinement": 2,
-        "sys_rpa_analysis": 2,
-        "sys_rpa_vision": 2,
-        "sys_utility_noise_filter": 2,
-        # Tier 3: Supervisión (Pro)
-        "sys_phase3_factory_gen": 2,  # Cambiado de 3 a 2 para programación (Tier 2: Lógica)
-        "sys_phase3_refinement": 3,
-        "sys_phase3_audit_forensic": 3,
-    }
-
-    async with AsyncSession(server_engine) as session:
-        print("[SEED] Aplicando migración de Tiers a Prompts...")
-        for service_id, tier in TIER_MAPPING.items():
-            prompt = await session.get(ExtractionServiceConfig, service_id)
-            if prompt:
-                if prompt.tier_override is None:  # Solo si no tiene tier
-                    prompt.tier_override = tier
-                    session.add(prompt)
-                    print(f"  -> Asignado Tier {tier} a {service_id}")
-
-        await session.commit()
-
 
 async def seed_all():
     """
@@ -217,16 +185,13 @@ async def seed_all():
     # 2. Seeds de multitenancy
     await seed_multitenancy_defaults()
 
-    # 3. Seeds de Prompts del Sistema (Nuevos Phase 4)
-    from server.app.database.seeds_prompts import (
-        seed_system_prompts,
-        seed_v12_system_prompts,
-    )
-
-    await seed_system_prompts()
-    await seed_v12_system_prompts()
-
-    # 4. Migración de Tiers (Legacy)
-    await seed_prompt_tiers()
+    # LEG.2 — aquí se sembraban en **cada arranque** los ocho prompts de la época de AutomatIA en
+    # `extraction_service_config` y `system_prompt`. Escribir en la base de datos al arrancar es
+    # lo que choca con la suite: el servidor siembra mientras los tests reinicializan, y salta
+    # cualquiera de los dos. Los prompts vivos son `HubPromptTemplate` (por asistente) y
+    # `HubActivityPrompt` (por actividad), que no se siembran al arrancar.
+    #
+    # Lo que decían esos ocho prompts, y qué se salvó de ellos, está en
+    # `docs/COMPARATIVA_PROMPTS_LEGACY.md`.
 
     print("[SEED] Todos los seeds del servidor completados.")
