@@ -3,6 +3,7 @@
 Deploy: cloud
 """
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Literal
@@ -30,6 +31,8 @@ from server.app.modules.agents_hub.services.embedding_space import (
     EmbeddingSpaceMismatch,
     assert_embedding_space_matches,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/hub/chatbots", tags=["hub-chatbots"])
 
@@ -423,9 +426,24 @@ async def delete_chatbot(
     #
     # El orden importa: purgar después del `DELETE` del chatbot dejaría, ante un fallo a
     # mitad, exactamente el corpus huérfano que esto viene a impedir.
-    await purgar_corpus_del_chatbot(session, chatbot_id)
+    retirado = await purgar_corpus_del_chatbot(session, chatbot_id)
     await session.execute(sql_delete(HubChatbot).where(HubChatbot.id == chatbot_id))
     await session.commit()
+
+    # Lo que se llevó por delante queda dicho. La purga siempre lo contaba y lo devolvía —su
+    # docstring pedía «poder decirlo en voz alta»— y aquí se descartaba: un borrado
+    # irreversible del que no quedaba constancia de cuánto destruyó. Tres meses después, «se
+    # perdieron cuántos documentos» no tenía respuesta.
+    #
+    # Se registra después del commit, a propósito: antes se anunciaría un borrado que aún puede
+    # no ocurrir.
+    logger.info(
+        "Chatbot %s eliminado por %s; corpus retirado: %d documentos, %d fragmentos",
+        chatbot_id,
+        user.email,
+        retirado.documentos,
+        retirado.fragmentos,
+    )
 
 
 @router.get("/{chatbot_id}/corpus-stats", response_model=CorpusStatsOut)
