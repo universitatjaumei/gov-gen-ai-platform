@@ -135,5 +135,19 @@
     "archive_warning": "Deixarà d’aparèixer a les llistes i no es podran crear informes nous amb ella. Els informes ja generats amb aquesta plantilla es conserven i es podran continuar obrint i exportant. Podràs recuperar-la des de «Mostra també les retirades».",
     "archive_confirm": "Sí, retira-la"
   },
-  "preview_pending": "Abans de veure l’informe cal aprovar {{count}} bloc(s) escrit(s) per la IA. Torna a la pantalla de l’informe i aprova’l(s) al panell de revisió."
+  "preview_pending": "Abans de veure l’informe cal aprovar {{count}} bloc(s) escrit(s) per la IA. Torna a la pantalla de l’informe i aprova’l(s) al panell de revisió.",
+  "review": {
+    "pending": "{{count}} apartat(s) pendent(s) de revisió",
+    "all_approved": "Tots els apartats aprovats — a punt per a assemblar",
+    "source_anchored": "Valora: {{tables}}",
+    "source_full": "Sense ancorar: ha llegit tot l’informe",
+    "approve": "Aprova",
+    "edit": "Edita",
+    "reject": "Rebutja",
+    "regenerate": "Regenera",
+    "save": "Guarda",
+    "edit_label": "Text de l’apartat",
+    "edited_by": "Editat per {{who}}",
+    "show_original": "Veure què va proposar la IA"
+  }
 }

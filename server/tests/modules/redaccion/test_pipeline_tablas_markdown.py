@@ -181,3 +181,55 @@ def test_el_borrador_conoce_el_hueco_de_markdown() -> None:
     assert "markdown" in texto
     for otro in ("pdf", "excel", "csv", "selector"):
         assert otro in texto, f"se ha perdido {otro}"
+
+
+# ----------------------------------------------------------------------
+# Elegir UNA tabla del documento
+# ----------------------------------------------------------------------
+
+
+def test_una_plantilla_puede_pedir_una_sola_tabla_por_su_codigo(fichero: StorageRef) -> None:
+    """Descubierto verificando SEG.4 en el navegador, y sin esto SEG.5 no existe.
+
+    La forma de estos informes es «una tabla, una valoración» treinta veces. Si el bloque de
+    datos devuelve las cuarenta y dos tablas del documento, no hay nada que anclar: cada
+    valoración volvería a recibirlo todo, que es justo lo que SEG.1 vino a impedir.
+    """
+    resultado = _extraer(fichero, table="Tabla 1.2")
+
+    assert len(resultado.tables) == 1
+    assert resultado.tables[0].name.startswith("Tabla 1.2")
+
+
+def test_pedir_una_tabla_que_no_esta_no_devuelve_otra(fichero: StorageRef) -> None:
+    """Devolver «la más parecida» sería lo peor: el informe saldría con la tabla equivocada."""
+    resultado = _extraer(fichero, table="Tabla 9.9")
+
+    assert resultado.tables == []
+    assert any(a.code == "TABLE_NOT_FOUND" for a in resultado.warnings)
+
+
+def test_el_codigo_se_compara_por_prefijo_y_no_por_igualdad(fichero: StorageRef) -> None:
+    """El pie completo es «Tabla 1.2 Evolución de la Matrícula»; la plantilla dice «Tabla 1.2»."""
+    resultado = _extraer(fichero, table="Tabla 1.2")
+    assert "Evolución de la Matrícula" in resultado.tables[0].name
+
+
+def test_pedir_1_4_no_arrastra_1_4_2(fichero: StorageRef) -> None:
+    """«Tabla 1.4» y «Tabla 1.4.2» son tablas distintas: el prefijo tiene que respetar el punto."""
+    resultado = _extraer(fichero, table="Tabla 1.4.2")
+    assert len(resultado.tables) == 1
+    assert resultado.tables[0].name.startswith("Tabla 1.4.2")
+
+
+def test_un_bloque_md_table_encuentra_el_fichero_del_hueco_markdown() -> None:
+    """Sin este mapeo el bloque no encuentra artefacto y se queda sin fichero que leer.
+
+    Es el mismo hueco que PRO.3 destapó con `admin_script`. Y varios bloques pueden apoyarse en
+    el MISMO fichero, que es la forma de estos informes: un documento, cuarenta y dos tablas.
+    """
+    from server.app.modules.redaccion.graph.nodes.deterministic_extraction import (
+        _SLOT_KIND_TO_SOURCE,
+    )
+
+    assert "md_table" in _SLOT_KIND_TO_SOURCE.get("markdown", set())

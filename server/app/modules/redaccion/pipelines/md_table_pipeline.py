@@ -68,7 +68,28 @@ class MarkdownTableExtractionPipeline:
         tablas = self._tablas_de(texto)
 
         warnings: list[ExtractionWarning] = []
-        if not tablas:
+
+        # Una plantilla puede pedir UNA tabla por su código. Es lo que hace posible la forma real
+        # de estos informes —una tabla, una valoración, treinta veces—: si el bloque devolviera
+        # las cuarenta y dos tablas del documento, no habría nada que anclar y cada valoración
+        # volvería a recibirlo todo.
+        pedida = inp.options.get("table")
+        if pedida:
+            elegidas = [t for t in tablas if self._es_la_pedida(t.name, str(pedida))]
+            if not elegidas:
+                # No se devuelve «la más parecida»: el informe saldría con la tabla equivocada y
+                # con aspecto de estar bien.
+                warnings.append(ExtractionWarning(
+                    code="TABLE_NOT_FOUND",
+                    message=(
+                        f"«{pedida}» no está en «{ruta.name}». Encontradas: "
+                        f"{', '.join(t.name.split()[0] + ' ' + t.name.split()[1] for t in tablas[:8]) or 'ninguna'}"
+                    ),
+                    severity="warning",
+                ))
+            tablas = elegidas
+
+        if not tablas and not pedida:
             # Cero tablas no es un resultado neutro: casi siempre significa que el fichero no es
             # el que se creía, o que el formato cambió. Callarlo produce un informe vacío sin
             # explicación.
@@ -89,6 +110,20 @@ class MarkdownTableExtractionPipeline:
                 extracted_at=datetime.now(timezone.utc),
             ),
         )
+
+    @staticmethod
+    def _es_la_pedida(nombre: str, pedida: str) -> bool:
+        """Compara por prefijo, respetando el punto de la numeración.
+
+        El pie completo es «Tabla 1.2 Evolución de la Matrícula» y la plantilla dice «Tabla 1.2»,
+        así que la igualdad no sirve. Pero un prefijo a secas haría que «Tabla 1.4» arrastrara
+        «Tabla 1.4.2», que es otra tabla: el siguiente carácter tiene que no ser dígito ni punto.
+        """
+        objetivo = pedida.strip()
+        if not nombre.startswith(objetivo):
+            return False
+        resto = nombre[len(objetivo):]
+        return not resto[:1].isdigit() and not resto.startswith(".")
 
     @staticmethod
     def _ruta_de(inp: ExtractionInput) -> Path:

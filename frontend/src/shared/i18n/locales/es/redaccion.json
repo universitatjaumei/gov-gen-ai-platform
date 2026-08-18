@@ -135,5 +135,19 @@
     "archive_warning": "Dejará de aparecer en las listas y no se podrán crear informes nuevos con ella. Los informes ya generados con esta plantilla se conservan y se siguen pudiendo abrir y exportar. Podrás recuperarla desde «Ver también las retiradas».",
     "archive_confirm": "Sí, retirarla"
   },
-  "preview_pending": "Antes de ver el informe hay que aprobar {{count}} bloque(s) escrito(s) por la IA. Vuelve a la pantalla del informe y apruébalo(s) en el panel de revisión."
+  "preview_pending": "Antes de ver el informe hay que aprobar {{count}} bloque(s) escrito(s) por la IA. Vuelve a la pantalla del informe y apruébalo(s) en el panel de revisión.",
+  "review": {
+    "pending": "{{count}} apartado(s) pendiente(s) de revisión",
+    "all_approved": "Todos los apartados aprobados — listo para ensamblar",
+    "source_anchored": "Valora: {{tables}}",
+    "source_full": "Sin anclar: ha leído todo el informe",
+    "approve": "Aprobar",
+    "edit": "Editar",
+    "reject": "Rechazar",
+    "regenerate": "Regenerar",
+    "save": "Guardar",
+    "edit_label": "Texto del apartado",
+    "edited_by": "Editado por {{who}}",
+    "show_original": "Ver lo que propuso la IA"
+  }
 }

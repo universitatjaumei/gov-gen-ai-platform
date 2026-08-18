@@ -32,6 +32,8 @@ vi.mock('@/shared/api/generated/redaccion-workspaces/redaccion-workspaces', () =
   useRunWorkspace: vi.fn(),
   useUploadWorkspaceInput: vi.fn(),
   useApproveBlock: vi.fn(),
+  // SEG.4 — el panel de revisión ya edita, y editar es una mutación más de este módulo.
+  useEditBlock: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useRejectBlock: vi.fn(),
   useRegenerateBlock: vi.fn(),
 }))

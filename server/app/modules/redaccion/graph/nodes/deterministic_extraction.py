@@ -15,6 +15,9 @@ _SLOT_KIND_TO_SOURCE: dict[str, set[str]] = {
     "pdf":   {"pdf_text", "pdf_table"},
     "text":  {"manual"},
     "csv":   {"excel"},
+    # SEG.3 — un documento Markdown con sus tablas hechas. Varios bloques pueden apoyarse en el
+    # MISMO fichero: es la forma de estos informes, cuarenta y dos tablas en un documento.
+    "markdown": {"md_table"},
 }
 
 #: PRO.3 — pipelines que sirven a **cualquier** tipo de slot.

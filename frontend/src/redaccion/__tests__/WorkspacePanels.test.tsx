@@ -135,8 +135,12 @@ describe('AIBlockReviewPanel', () => {
 
     fireEvent.click(screen.getByTestId('btn-regenerate-b_ai'))
 
+    // SEG.4 — el segundo argumento son las opciones de la mutacion: desde ahora la accion
+    // invalida la consulta del informe. Antes no lo hacia, asi que aprobar un apartado dejaba
+    // el panel ensenandolo como pendiente hasta que alguien recargaba.
     expect(mockPatchMutate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ action: 'regenerate' }) }),
+      expect.anything(),
     )
   })
 })

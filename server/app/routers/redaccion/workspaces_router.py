@@ -263,11 +263,26 @@ async def edit_block(
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> BlockTransitionOut:
-    """Sobreescribe el contenido de un bloque; registra el original en auditoría."""
+    """Sobreescribe el contenido de un bloque; registra el original en auditoría.
+
+    SEG.4 — el evento de auditoría es el registro autoritativo, pero **ninguna superficie lo
+    expone**, así que sin lo de abajo quien edita no puede consultar lo que la IA había
+    propuesto ni volver atrás. Lo que se conserva en el contenido es una copia para la pantalla:
+
+    - `original_ai_text`: lo que escribió **la IA**, no la edición anterior. Se fija la primera
+      vez y no se vuelve a tocar.
+    - `edited_by` / `edited_at`: sin autoría, una edición es un cambio anónimo y no la
+      supervisión efectiva que exige P3.
+    - La procedencia del modelo (`model_used`, `prompt_version`, alcance del contexto) sobrevive
+      a la edición: es la evidencia de cómo se redactó, y se perdería al sobreescribir el
+      contenido con lo que manda el cliente.
+
+    El estado **no se toca**: editar no aprueba.
+    """
     await _get_workspace(workspace_id, user, session)
     block = await _get_block(workspace_id, block_id, session)
 
-    original_content = block.content_json
+    original_content = block.content_json or {}
 
     audit_event = HubWorkspaceAuditEvent(
         workspace_id=workspace_id,
@@ -280,8 +295,22 @@ async def edit_block(
     )
     session.add(audit_event)
 
-    block.content_json = body.content
-    block.updated_at = datetime.now(timezone.utc)
+    ahora = datetime.now(timezone.utc)
+    procedencia = {
+        clave: original_content[clave]
+        for clave in ("model_used", "prompt_version", "context_scope", "context_block_ids")
+        if clave in original_content
+    }
+    original_de_la_ia = original_content.get("original_ai_text") or original_content.get("text")
+
+    block.content_json = {
+        **procedencia,
+        **body.content,
+        **({"original_ai_text": original_de_la_ia} if original_de_la_ia else {}),
+        "edited_by": user.email,
+        "edited_at": ahora.isoformat(),
+    }
+    block.updated_at = ahora
 
     await session.commit()
     # Mismo motivo que en `_apply_transition`: sin refrescar, leer los atributos del bloque
