@@ -98,6 +98,12 @@ scripts/clickhouse/
 *.jpg
 *.jpeg
 *.png
+# ...pero los assets de la interfaz NO son capturas: son código fuente. Sin ellos, el import no
+# resuelve y la compilación falla en integración continua, donde solo existe lo versionado.
+# Vigilado por `frontend/src/__tests__/assetsVersionados.test.ts`.
+!frontend/src/assets/*.png
+!frontend/src/assets/*.jpg
+!frontend/src/assets/*.jpeg
 
 # Contrato OpenAPI — generado por server/export_openapi.py, no editar manualmente
 server/openapi.json
