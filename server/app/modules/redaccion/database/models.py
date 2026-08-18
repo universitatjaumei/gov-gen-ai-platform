@@ -46,6 +46,11 @@ class HubReportTemplate(HubOperationalBase):
     current_version_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True
     )
+    # GUI.1 — retirar una plantilla es archivarla, no borrarla: un informe firmado no puede
+    # quedarse sin la plantilla con la que se hizo. Nula = vigente.
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now
     )

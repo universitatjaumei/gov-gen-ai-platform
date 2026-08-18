@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -109,6 +109,8 @@ class TemplateOut(BaseModel):
     is_global: bool
     current_version_id: uuid.UUID | None = None
     created_at: datetime
+    #: GUI.1 — retirada. La pantalla necesita distinguir «no está» de «está retirada».
+    archived: bool = False
 
 
 class TemplateCreateIn(BaseModel):
@@ -117,6 +119,28 @@ class TemplateCreateIn(BaseModel):
     report_profile: str = "GENERIC_REPORT"
     owner_kind: str = "platform"
     spec_json: dict = Field(default_factory=dict)
+
+
+class TemplatePatchIn(BaseModel):
+    """Lo que se puede cambiar de una plantilla **sin publicar una versión**.
+
+    GUI.2 — el nombre y la descripción son de la plantilla; el contenido es de la versión, y las
+    versiones son append-only. Renombrar no puede tocar los informes ya hechos.
+    """
+
+    name: str | None = Field(default=None, min_length=1)
+    description: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _nombre_con_algo_dentro(cls, valor: str | None) -> str | None:
+        """Un nombre en blanco deja una fila que nadie puede identificar en la lista."""
+        if valor is None:
+            return None
+        limpio = valor.strip()
+        if not limpio:
+            raise ValueError("el nombre no puede estar en blanco")
+        return limpio
 
 
 class WorkspaceCreateIn(BaseModel):
@@ -147,29 +171,124 @@ class MigrateResponse(BaseModel):
 async def list_templates(
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
+    include_archived: bool = False,
 ) -> list[TemplateOut]:
-    """Lista plantillas globales + propias del usuario."""
-    stmt = select(HubReportTemplate).where(
+    """Lista plantillas globales + propias del usuario.
+
+    GUI.1 — las archivadas quedan fuera por defecto. Esa es la razón de ser del archivado:
+    quitarlas de la vista sin quitarlas de los informes que las usaron.
+    """
+    condiciones = [
         or_(
             HubReportTemplate.is_global.is_(True),
             HubReportTemplate.owner_id == user_to_uuid(user.user_id),
         )
-    )
-    result = await session.execute(stmt)
-    templates = list(result.scalars().all())
-    return [
-        TemplateOut(
-            id=t.id,
-            name=t.name,
-            description=t.description,
-            report_profile=t.report_profile,
-            owner_kind=t.owner_kind,
-            is_global=t.is_global,
-            current_version_id=t.current_version_id,
-            created_at=t.created_at,
-        )
-        for t in templates
     ]
+    if not include_archived:
+        condiciones.append(HubReportTemplate.archived_at.is_(None))
+    result = await session.execute(select(HubReportTemplate).where(and_(*condiciones)))
+    return [_template_out(t) for t in result.scalars().all()]
+
+
+def _template_out(t: HubReportTemplate) -> TemplateOut:
+    return TemplateOut(
+        id=t.id,
+        name=t.name,
+        description=t.description,
+        report_profile=t.report_profile,
+        owner_kind=t.owner_kind,
+        is_global=t.is_global,
+        current_version_id=t.current_version_id,
+        created_at=t.created_at,
+        archived=t.archived_at is not None,
+    )
+
+
+async def _plantilla_o_404(session: AsyncSession, template_id: uuid.UUID) -> HubReportTemplate:
+    plantilla = await session.get(HubReportTemplate, template_id)
+    if plantilla is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return plantilla
+
+
+def _exigir_admin(user: UserInfo) -> None:
+    if user.role not in ("superadmin", "admin"):
+        raise HTTPException(status_code=403, detail="Only admin can manage templates")
+
+
+@router.patch(
+    "/templates/{template_id}",
+    response_model=TemplateOut,
+    operation_id="patchTemplate",
+)
+async def patch_template(
+    template_id: uuid.UUID,
+    body: TemplatePatchIn,
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> TemplateOut:
+    """Renombra una plantilla o cambia su descripción (GUI.2).
+
+    No publica versión: el contenido de una plantilla vive en sus versiones, que son
+    append-only, y renombrar no puede alterar un informe ya generado.
+    """
+    _exigir_admin(user)
+    plantilla = await _plantilla_o_404(session, template_id)
+
+    if body.name is not None:
+        plantilla.name = body.name
+    if body.description is not None:
+        plantilla.description = body.description
+    await session.commit()
+
+    # Los valores se leen tras un refresh explícito: `expire_on_commit` dejaría los atributos
+    # expirados y leerlos aquí dispararía una recarga síncrona sobre asyncpg (MissingGreenlet,
+    # el fallo de MAN.2 en el alta de plantillas).
+    await session.refresh(plantilla)
+    return _template_out(plantilla)
+
+
+@router.delete(
+    "/templates/{template_id}",
+    status_code=204,
+    operation_id="archiveTemplate",
+)
+async def archive_template(
+    template_id: uuid.UUID,
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Retira una plantilla de las listas **sin borrarla** (GUI.1).
+
+    Decisión del usuario, y es la correcta: un informe firmado no puede quedarse sin la
+    plantilla con la que se hizo. Archivar es idempotente — quien pulsa dos veces no merece un
+    error.
+    """
+    _exigir_admin(user)
+    plantilla = await _plantilla_o_404(session, template_id)
+    if plantilla.archived_at is None:
+        plantilla.archived_at = datetime.now(UTC)
+        await session.commit()
+    return Response(status_code=204)
+
+
+@router.post(
+    "/templates/{template_id}/restore",
+    response_model=TemplateOut,
+    operation_id="restoreTemplate",
+)
+async def restore_template(
+    template_id: uuid.UUID,
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> TemplateOut:
+    """Devuelve a las listas una plantilla archivada por error."""
+    _exigir_admin(user)
+    plantilla = await _plantilla_o_404(session, template_id)
+    plantilla.archived_at = None
+    await session.commit()
+    await session.refresh(plantilla)
+    return _template_out(plantilla)
 
 
 @router.post(
@@ -239,6 +358,22 @@ async def create_workspace_endpoint(
     version = await ReportTemplateVersionRepo(session).get(body.template_version_id)
     if version is None:
         raise HTTPException(status_code=404, detail="Template version not found")
+
+    # GUI.1 — retirada es retirada: una plantilla archivada sirve para consultar lo que se hizo
+    # con ella, no para empezar algo nuevo. Sin esto, archivar sólo la escondería de la lista y
+    # cualquier enlace guardado seguiría creando informes con ella.
+    plantilla = await session.get(HubReportTemplate, version.template_id)
+    if plantilla is not None and plantilla.archived_at is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "TEMPLATE_ARCHIVED",
+                "message": (
+                    f"La plantilla «{plantilla.name}» está retirada: no se pueden crear "
+                    "informes nuevos con ella. Recupérala si la necesitas."
+                ),
+            },
+        )
 
     workspace = HubWorkspace(
         template_version_id=body.template_version_id,

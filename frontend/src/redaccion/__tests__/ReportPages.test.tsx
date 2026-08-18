@@ -15,13 +15,15 @@ import { GenericReportWizard } from '../pages/GenericReportWizard'
 // Mock Orval hooks
 // --------------------------------------------------------------------------
 
-const mockCreateTemplate = vi.fn()
 const mockCreateWorkspace = vi.fn()
 
 vi.mock('@/shared/api/generated/hub-redaccion/hub-redaccion', () => ({
   useListTemplates: vi.fn(),
-  useCreateTemplate: vi.fn(),
   useCreateWorkspace: vi.fn(),
+  usePatchTemplate: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useArchiveTemplate: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useRestoreTemplate: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  getListTemplatesQueryKey: vi.fn(() => ['templates']),
 }))
 
 vi.mock('@/shared/auth', async () => {
@@ -34,7 +36,6 @@ vi.mock('@/shared/auth', async () => {
 
 import {
   useListTemplates,
-  useCreateTemplate,
   useCreateWorkspace,
 } from '@/shared/api/generated/hub-redaccion/hub-redaccion'
 import { useAuth } from '@/shared/auth'
@@ -72,15 +73,7 @@ beforeAll(async () => {
 })
 
 beforeEach(() => {
-  mockCreateTemplate.mockClear()
   mockCreateWorkspace.mockClear()
-
-  vi.mocked(useCreateTemplate).mockReturnValue({
-    mutate: mockCreateTemplate,
-    isPending: false,
-    isError: false,
-    isSuccess: false,
-  } as unknown as ReturnType<typeof useCreateTemplate>)
 
   vi.mocked(useCreateWorkspace).mockReturnValue({
     mutate: mockCreateWorkspace,
@@ -101,26 +94,23 @@ beforeEach(() => {
 // ReportTemplateBuilderPage
 // --------------------------------------------------------------------------
 
+/**
+ * GUI.1 — aquí había un `should_allow_admin_to_save_template_version` que exigía el alta con
+ * `spec_json: {}`. Ese alta **producía basura**: una plantilla sin bloques da un informe vacío y
+ * no hay editor de bloques con el que arreglarla después, así que la mitad de lo que ensuciaba
+ * la lista de plantillas lo generaba ese botón. Se crea describiendo el informe.
+ *
+ * El resto de la gestión (renombrar, retirar, recuperar) vive en `GestionDePlantillas.test.tsx`.
+ */
 describe('ReportTemplateBuilderPage', () => {
-  it('should_allow_admin_to_save_template_version', () => {
+  it('should_redirect_non_admin_away_from_builder_page', () => {
+    // Los hooks se llaman antes de comprobar el rol, como exige React: sin stub, el render
+    // revienta al desestructurar y el test pasaría a medir otra cosa.
     vi.mocked(useListTemplates).mockReturnValue({
       data: [],
       isLoading: false,
     } as unknown as ReturnType<typeof useListTemplates>)
 
-    wrap(<ReportTemplateBuilderPage />)
-
-    fireEvent.change(screen.getByTestId('input-template-name'), {
-      target: { value: 'Test Template' },
-    })
-    fireEvent.click(screen.getByTestId('btn-save-template'))
-
-    expect(mockCreateTemplate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ name: 'Test Template' }) }),
-    )
-  })
-
-  it('should_redirect_non_admin_away_from_builder_page', () => {
     vi.mocked(useAuth).mockReturnValue({
       user: { user_id: 'u2', email: 'user@test.com', role: 'user' },
       isAuthenticated: true,

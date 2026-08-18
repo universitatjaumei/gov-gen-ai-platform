@@ -116,5 +116,20 @@
   "workspace_generating": "Generating…",
   "workspace_preview": "Preview",
   "workspace_export": "Export to Word",
-  "workspace_copilot": "Copilot"
+  "workspace_copilot": "Copilot",
+  "templates": {
+    "no_permission": "This screen is for administrators only.",
+    "show_archived": "Also show retired ones",
+    "create_by_describing": "Create by describing the report",
+    "empty": "No templates yet. Create the first one by describing the report you need.",
+    "name_label": "Template name",
+    "rename": "Rename",
+    "save_name": "Save",
+    "archive": "Retire",
+    "restore": "Restore",
+    "archived_badge": "Retired",
+    "archive_title": "Retire template “{{name}}”",
+    "archive_warning": "It will stop appearing in the lists and no new reports can be created from it. Reports already generated from this template are kept and can still be opened and exported. You can bring it back from “Also show retired ones”.",
+    "archive_confirm": "Yes, retire it"
+  }
 }

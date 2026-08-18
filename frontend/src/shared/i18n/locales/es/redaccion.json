@@ -116,5 +116,20 @@
   "workspace_generating": "Generando…",
   "workspace_preview": "Vista previa",
   "workspace_export": "Exportar a Word",
-  "workspace_copilot": "Copiloto"
+  "workspace_copilot": "Copiloto",
+  "templates": {
+    "no_permission": "Esta pantalla es solo para administradores.",
+    "show_archived": "Ver también las retiradas",
+    "create_by_describing": "Crear describiendo el informe",
+    "empty": "No hay plantillas. Crea la primera describiendo el informe que necesitas.",
+    "name_label": "Nombre de la plantilla",
+    "rename": "Renombrar",
+    "save_name": "Guardar",
+    "archive": "Retirar",
+    "restore": "Recuperar",
+    "archived_badge": "Retirada",
+    "archive_title": "Retirar la plantilla «{{name}}»",
+    "archive_warning": "Dejará de aparecer en las listas y no se podrán crear informes nuevos con ella. Los informes ya generados con esta plantilla se conservan y se siguen pudiendo abrir y exportar. Podrás recuperarla desde «Ver también las retiradas».",
+    "archive_confirm": "Sí, retirarla"
+  }
 }

@@ -116,5 +116,20 @@
   "workspace_generating": "Generant…",
   "workspace_preview": "Vista prèvia",
   "workspace_export": "Exportar a Word",
-  "workspace_copilot": "Copilot"
+  "workspace_copilot": "Copilot",
+  "templates": {
+    "no_permission": "Aquesta pantalla és només per a administradors.",
+    "show_archived": "Mostra també les retirades",
+    "create_by_describing": "Crear descrivint l’informe",
+    "empty": "No hi ha plantilles. Crea la primera descrivint l’informe que necessites.",
+    "name_label": "Nom de la plantilla",
+    "rename": "Reanomena",
+    "save_name": "Guarda",
+    "archive": "Retira",
+    "restore": "Recupera",
+    "archived_badge": "Retirada",
+    "archive_title": "Retirar la plantilla «{{name}}»",
+    "archive_warning": "Deixarà d’aparèixer a les llistes i no es podran crear informes nous amb ella. Els informes ja generats amb aquesta plantilla es conserven i es podran continuar obrint i exportant. Podràs recuperar-la des de «Mostra també les retirades».",
+    "archive_confirm": "Sí, retira-la"
+  }
 }
