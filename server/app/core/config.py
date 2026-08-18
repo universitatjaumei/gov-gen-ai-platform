@@ -26,6 +26,9 @@ class Settings:
     content_quality_enabled: bool = True
     content_quality_interval_hours: int = 24
     content_quality_semantic_enabled: bool = True
+    # Cortesía del rastreo (RAS.1) — quien vea el tráfico en sus registros tiene que poder
+    # saber quién es y a quién escribir. Va en el User-Agent de cada petición.
+    crawler_contact: str = ""
     # SSO SAML (AUTH.1) — Service Provider genérico SAML 2.0
     saml_enabled: bool = False
     saml_sp_entity_id: str = ""
@@ -76,6 +79,7 @@ def get_settings() -> Settings:
         content_quality_enabled=os.getenv("CONTENT_QUALITY_ENABLED", "true").lower() != "false",
         content_quality_interval_hours=int(os.getenv("CONTENT_QUALITY_INTERVAL_HOURS", "24")),
         content_quality_semantic_enabled=os.getenv("CONTENT_QUALITY_SEMANTIC_ENABLED", "true").lower() != "false",
+        crawler_contact=os.getenv("CRAWLER_CONTACT", ""),
         saml_enabled=os.getenv("SAML_ENABLED", "false").lower() == "true",
         saml_sp_entity_id=os.getenv("SAML_SP_ENTITY_ID", ""),
         saml_sp_acs_url=os.getenv("SAML_SP_ACS_URL", ""),

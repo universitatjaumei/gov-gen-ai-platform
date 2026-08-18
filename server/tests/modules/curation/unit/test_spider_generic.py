@@ -32,7 +32,10 @@ class TestGenericSpider:
         )
         result = await spider.crawl(source)
 
-        assert fetched_urls == ["https://ejemplo.uji.es"]
+        # RAS.1 — la cortesía añade una petición por host, la del `robots.txt`, y es la única
+        # que no es una página: se descuenta para comprobar lo que este test comprueba.
+        paginas_pedidas = [u for u in fetched_urls if not u.endswith("/robots.txt")]
+        assert paginas_pedidas == ["https://ejemplo.uji.es"]
         assert result.pages_crawled == 1
 
     @pytest.mark.asyncio

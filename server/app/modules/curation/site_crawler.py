@@ -20,6 +20,7 @@ from server.app.modules.agents_hub.ingestion.markdown_utils import (
     estimate_tokens,
     extract_title_from_markdown,
 )
+from server.app.modules.curation.cortesia import RutaProhibidaPorRobots
 
 
 @dataclass
@@ -32,6 +33,13 @@ class SiteCrawlSummary:
     pages_error: int = 0
     pages_total: int = 0
     errors: list[str] = field(default_factory=list)
+    #: El rastreo no vio el sitio entero (RAS.1). Mientras sea `True`, **no se declaran bajas**:
+    #: una página no visitada no es una página desaparecida.
+    truncated: bool = False
+    stop_reason: str | None = None
+    pages_pending: int = 0
+    #: URLs que el `robots.txt` del sitio excluye. No son errores.
+    pages_forbidden: int = 0
     # IDs de páginas del diff — usados por SiteQualityAnalysisJob para auto-ingesta (9Q.5)
     new_page_ids: list[uuid.UUID] = field(default_factory=list)
     changed_page_ids: list[uuid.UUID] = field(default_factory=list)
@@ -80,7 +88,7 @@ class SiteCrawler:
 
         # 1. Conjunto de URLs objetivo: unión(sitemap, enlaces descubiertos por el spider).
         try:
-            target_urls, sitemap_map = await self._discover_urls(site)
+            target_urls, sitemap_map, recorrido = await self._discover_urls(site)
         except Exception as exc:  # fallo global del crawl → el sitio queda en error
             site.status = "error"
             site.error_message = str(exc)
@@ -92,6 +100,12 @@ class SiteCrawler:
         existing_by_url = {p.url: p for p in existing_pages}
 
         summary = SiteCrawlSummary(pages_total=len(target_urls))
+        # El recorrido del spider ya puede venir truncado por páginas o por presupuesto de
+        # tiempo (RAS.1). Eso viaja hasta aquí porque cambia lo que se puede concluir.
+        summary.truncated = getattr(recorrido, "stop_reason", None) is not None
+        summary.stop_reason = getattr(recorrido, "stop_reason", None)
+        summary.pages_pending = getattr(recorrido, "pages_skipped", 0) if summary.truncated else 0
+        summary.pages_forbidden = getattr(recorrido, "urls_prohibidas", 0)
         seen_urls: set[str] = set()
 
         # 2. Por cada URL: fetch + señales + upsert. Un fallo de página no aborta el crawl.
@@ -99,6 +113,14 @@ class SiteCrawler:
             seen_urls.add(url)
             try:
                 body, headers = await self._spider._fetch(url)
+            except RutaProhibidaPorRobots:
+                # El servidor ha dicho que no. No es un error de la página, así que no se
+                # registra como tal: contarlo como error la acusaría de estar rota.
+                summary.pages_forbidden += 1
+                seen_urls.discard(url)
+                summary.truncated = True
+                summary.stop_reason = summary.stop_reason or "robots"
+                continue
             except Exception as exc:
                 await self._pages.upsert(
                     site_id=site_id,
@@ -136,10 +158,16 @@ class SiteCrawler:
                 summary.changed_page_ids.append(upserted.id)
 
         # 3. Diff de sitemap: bajas (páginas activas que ya no aparecen).
-        gone_ids = [p.id for p in existing_pages if p.url not in seen_urls]
-        if gone_ids:
-            summary.pages_gone = await self._pages.mark_gone(gone_ids)
-            summary.gone_page_ids = gone_ids
+        #
+        # Sólo si el rastreo vio el sitio entero. Con un rastreo truncado —por `max_pages`, por
+        # presupuesto de tiempo o porque el `robots.txt` excluye parte— «no apareció» significa
+        # «no se llegó a mirar», y una baja no es un contador: es la señal de «esto ya no está»
+        # que alimenta los hallazgos y las decisiones de retirada del corpus.
+        if not summary.truncated:
+            gone_ids = [p.id for p in existing_pages if p.url not in seen_urls]
+            if gone_ids:
+                summary.pages_gone = await self._pages.mark_gone(gone_ids)
+                summary.gone_page_ids = gone_ids
 
         # 4. Cierre del sitio.
         site.last_crawled_at = now
@@ -151,8 +179,8 @@ class SiteCrawler:
 
     async def _discover_urls(
         self, site: HubWebSite
-    ) -> tuple[set[str], dict[str, datetime | None]]:
-        """Unión de URLs del spider y del sitemap; devuelve también el mapa de lastmod."""
+    ) -> tuple[set[str], dict[str, datetime | None], Any]:
+        """Unión de URLs del spider y del sitemap; el mapa de lastmod y el recorrido en bruto."""
         crawl_result = await self._spider.crawl(site)
         discovered = set(crawl_result.crawled_urls)
 
@@ -163,7 +191,7 @@ class SiteCrawler:
         sitemap_map = await self._signals.fetch_sitemap(
             site.sitemap_url or site.root_url, _fetch_text
         )
-        return discovered | set(sitemap_map.keys()), sitemap_map
+        return discovered | set(sitemap_map.keys()), sitemap_map, crawl_result
 
     def _page_fields(self, url: str, body: str, headers: dict) -> dict[str, Any]:
         """Campos de contenido + señales para el upsert de una página."""

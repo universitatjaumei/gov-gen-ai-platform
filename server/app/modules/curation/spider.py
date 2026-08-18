@@ -1,6 +1,10 @@
 """Spider genérico BFS con control de profundidad, filtros regex y límite de páginas.
 
 Deploy: edge
+
+**Cortesía (RAS.1)**: la pausa por host, el `robots.txt` y el `User-Agent` identificable viven en
+`_fetch`, que es por donde pasan los dos bucles —el BFS de aquí y el recorrido por URL de
+`SiteCrawler`—. La configuración del sitio puede relajarla, nunca al revés por descuido.
 """
 
 import re
@@ -9,6 +13,13 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Awaitable, Callable, Protocol
 from urllib.parse import urljoin, urlparse
+
+from server.app.modules.curation.cortesia import (
+    PRESUPUESTO_POR_DEFECTO_SEGUNDOS,
+    CortesiaDeRastreo,
+    RutaProhibidaPorRobots,
+    cortesia_desde_config,
+)
 
 
 class CrawlStatus(Enum):
@@ -22,6 +33,12 @@ class CrawlResult:
     pages_crawled: int
     pages_skipped: int
     status: CrawlStatus
+    #: Por qué se paró antes de agotar la cola: `max_pages`, `time_budget` o nada.
+    #: Sin esto, un rastreo truncado y uno completo se cuentan igual, y las páginas que no se
+    #: llegaron a visitar acaban declaradas desaparecidas (ver `SiteCrawler`).
+    stop_reason: str | None = None
+    #: URLs excluidas por el `robots.txt` del sitio. No son errores: son decisiones del servidor.
+    urls_prohibidas: int = 0
 
 
 class _WebSource(Protocol):
@@ -41,19 +58,68 @@ class GenericSpider:
     """Spider BFS que respeta crawl_depth, url_regex_filter y max_pages leídos de config_json."""
 
     def __init__(
-        self, fetch_fn: Callable[[str], Awaitable[tuple[str, dict]]] | None = None
+        self,
+        fetch_fn: Callable[[str], Awaitable[tuple[str, dict]]] | None = None,
+        *,
+        sleep_fn: Callable[[float], Awaitable[None]] | None = None,
+        clock_fn: Callable[[], float] | None = None,
+        contacto: str | None = None,
     ) -> None:
         self._fetch_fn = fetch_fn
+        self._sleep_fn = sleep_fn
+        self._clock_fn = clock_fn
+        self._contacto = contacto
+        # Cortesía por defecto hasta que un sitio diga otra cosa: si alguien llama a `_fetch`
+        # antes de `crawl`, se rastrea despacio, no a toda velocidad.
+        self._cortesia = self._nueva_cortesia({})
 
-    async def _fetch(self, url: str) -> tuple[str, dict]:
-        """Descarga una URL y devuelve (cuerpo, cabeceras HTTP)."""
+    # -- configuración -------------------------------------------------------
+
+    def _nueva_cortesia(self, config: dict) -> CortesiaDeRastreo:
+        if self._contacto is None:
+            from server.app.core.config import get_settings
+
+            try:
+                contacto = get_settings().crawler_contact
+            except Exception:  # noqa: BLE001 — sin configuración cargada seguimos, sin contacto
+                contacto = ""
+        else:
+            contacto = self._contacto
+        return cortesia_desde_config(
+            config, contacto=contacto, sleep_fn=self._sleep_fn, clock_fn=self._clock_fn
+        )
+
+    def configurar_cortesia(self, config: dict) -> None:
+        """Aplica la cortesía que declara la configuración de un sitio."""
+        self._cortesia = self._nueva_cortesia(config)
+
+    def pausa_efectiva_para(self, url: str) -> float:
+        return self._cortesia.pausa_efectiva_para(url)
+
+    # -- descarga ------------------------------------------------------------
+
+    async def _descargar(self, url: str) -> tuple[str, dict]:
+        """La descarga a secas, sin cortesía: la usan `_fetch` y la lectura del `robots.txt`."""
         if self._fetch_fn is not None:
             return await self._fetch_fn(url)
         import httpx
-        async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=10.0,
+            headers={"User-Agent": self._cortesia.user_agent},
+        ) as client:
             resp = await client.get(url)
             resp.raise_for_status()
             return resp.text, dict(resp.headers)
+
+    async def _fetch(self, url: str) -> tuple[str, dict]:
+        """Descarga una URL respetando `robots.txt`, la pausa y la concurrencia del host."""
+        if not await self._cortesia.permitido(url, self._descargar):
+            raise RutaProhibidaPorRobots(url)
+
+        async with self._cortesia.turno_de(url):
+            await self._cortesia.esperar_turno(url)
+            return await self._descargar(url)
 
     def _extract_links(self, html: str, base_url: str) -> list[str]:
         links: list[str] = []
@@ -66,11 +132,19 @@ class GenericSpider:
                 links.append(absolute)
         return links
 
+    # -- recorrido -----------------------------------------------------------
+
     async def crawl(self, source: _WebSource) -> CrawlResult:
         config: dict = source.config_json
         crawl_depth: int = config.get("crawl_depth", 1)
         url_regex_filter: str | None = config.get("url_regex_filter")
         max_pages: int = config.get("max_pages", 50)
+        max_seconds: float = float(
+            config.get("max_seconds", PRESUPUESTO_POR_DEFECTO_SEGUNDOS)
+        )
+
+        self.configurar_cortesia(config)
+        empezado = self._cortesia._reloj()
 
         regex = re.compile(url_regex_filter) if url_regex_filter else None
         base_netloc = urlparse(source.root_url).netloc
@@ -81,14 +155,30 @@ class GenericSpider:
 
         crawled_urls: list[str] = []
         pages_skipped = 0
+        prohibidas = 0
+        stop_reason: str | None = None
 
         while queue:
             if len(crawled_urls) >= max_pages:
+                stop_reason = "max_pages"
+                pages_skipped += len(queue)
+                break
+            if self._cortesia._reloj() - empezado >= max_seconds:
+                # El presupuesto es de tiempo además de páginas porque el coste real de un
+                # rastreo cortés es el tiempo: con pausa de un segundo, mil páginas son veinte
+                # minutos. Parar y decirlo es mejor que no terminar nunca.
+                stop_reason = "time_budget"
                 pages_skipped += len(queue)
                 break
 
             url, depth = queue.popleft()
-            html, _headers = await self._fetch(url)
+            try:
+                html, _headers = await self._fetch(url)
+            except RutaProhibidaPorRobots:
+                # No es un error del sitio ni nuestro: el servidor ha dicho que no. Se cuenta y
+                # se sigue; convertirlo en `crawl_error` llenaría el informe de acusaciones.
+                prohibidas += 1
+                continue
             crawled_urls.append(url)
 
             # No encolar hijos si hemos alcanzado la profundidad máxima
@@ -102,15 +192,22 @@ class GenericSpider:
                     continue
                 if regex and not regex.search(link):
                     continue
+                # Comprobar la exclusión **antes de encolar**: si sólo se viera al pedir, cada
+                # ruta prohibida costaría una vuelta de la cola y una excepción.
+                if not await self._cortesia.permitido(link, self._descargar):
+                    prohibidas += 1
+                    continue
                 visited.add(link)
                 queue.append((link, depth + 1))
 
         status = (
-            CrawlStatus.COMPLETED_PARTIAL if pages_skipped > 0 else CrawlStatus.COMPLETED
+            CrawlStatus.COMPLETED_PARTIAL if stop_reason is not None else CrawlStatus.COMPLETED
         )
         return CrawlResult(
             crawled_urls=crawled_urls,
             pages_crawled=len(crawled_urls),
             pages_skipped=pages_skipped,
             status=status,
+            stop_reason=stop_reason,
+            urls_prohibidas=prohibidas,
         )
