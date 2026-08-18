@@ -52,6 +52,9 @@ def build_default_factory() -> ExtractionPipelineFactory:
     )
     from server.app.modules.redaccion.pipelines.excel_pipeline import ExcelExtractionPipeline
     from server.app.modules.redaccion.pipelines.manual_pipeline import ManualInputPipeline
+    from server.app.modules.redaccion.pipelines.md_table_pipeline import (
+        MarkdownTableExtractionPipeline,
+    )
     from server.app.modules.redaccion.pipelines.pdf_table_pipeline import (
         PDFTableExtractionPipeline,
     )
@@ -65,4 +68,5 @@ def build_default_factory() -> ExtractionPipelineFactory:
     factory.register(PDFTableExtractionPipeline())
     factory.register(ManualInputPipeline())
     factory.register(AdminScriptExtractionPipeline())
+    factory.register(MarkdownTableExtractionPipeline())
     return factory

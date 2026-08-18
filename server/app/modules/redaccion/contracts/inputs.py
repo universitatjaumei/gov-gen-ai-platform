@@ -9,7 +9,11 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-InputSlotKind = Literal["pdf", "excel", "csv", "text", "number", "date", "selector"]
+# SEG.3 — `markdown` es el formato en que ya existen los datos de los informes de seguimiento:
+# un documento con sus tablas hechas, uno por titulacion o programa.
+InputSlotKind = Literal[
+    "pdf", "excel", "csv", "markdown", "text", "number", "date", "selector",
+]
 
 
 class InputSlot(BaseModel):

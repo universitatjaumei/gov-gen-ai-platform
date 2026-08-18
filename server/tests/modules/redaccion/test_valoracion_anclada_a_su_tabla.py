@@ -367,3 +367,17 @@ def test_una_referencia_a_un_bloque_de_texto_tampoco_vale() -> None:
     })
 
     assert not DraftValidator().validate(borrador).ok
+
+
+def test_el_borrador_sabe_que_puede_anclar_la_valoracion() -> None:
+    """SEG.1 hizo posible el anclaje; si el prompt no lo menciona, el modelo nunca lo usa.
+
+    Es el mismo patrón que GUI.3 destapó con los tipos de gráfico: la capacidad existía en el
+    contrato y la puerta de entrada no la ofrecía.
+    """
+    from server.app.modules.redaccion.services.llm_spec_service import _campos_obligatorios
+
+    texto = _campos_obligatorios()
+    assert "data_block_refs" in texto
+    # Y dice para qué sirve, no solo que existe.
+    assert "table" in texto.lower()

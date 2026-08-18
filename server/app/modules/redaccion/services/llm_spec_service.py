@@ -15,9 +15,14 @@ from pydantic import TypeAdapter
 
 from server.app.modules.redaccion.contracts.blocks import BlockContract
 from server.app.modules.redaccion.contracts.drafts import ReportTemplateDraft
-from server.app.modules.redaccion.contracts.inputs import InputContract
+from server.app.modules.redaccion.contracts.inputs import InputContract, InputSlotKind
 from server.app.modules.redaccion.contracts.template import SectionContract
+from server.app.modules.redaccion.pipelines.contracts import ExtractionSourceKind
 from server.app.modules.redaccion.services.charts.chart_configuration import TipoDeGrafico
+from server.app.modules.redaccion.services.redactor_de_bloques import (
+    PROMPT_RESUMEN_DE_RESULTADOS,
+    PROMPT_VALORACION_DE_TENDENCIA,
+)
 from server.app.modules.redaccion.services.transformation.operations import (
     catalogo_de_operaciones,
 )
@@ -56,8 +61,9 @@ def _campos_obligatorios() -> str:
     "Every block needs: id, title, order. Additionally, by kind:\n"
     "- STATIC_TEXT: content (the literal text).\n"
     "- USER_INPUT: field_type (text | number | date).\n"
-    "- DETERMINISTIC_DATA: source_pipeline (excel | pdf_text | pdf_table | manual |"
-    " admin_script).\n"
+    # SEG.3 — la lista estaba escrita a mano y se quedó corta en cuanto entró `md_table`. Es la
+    # tercera vez que pasa (tipos de gráfico y operaciones de ETL en GUI.3): sale del contrato.
+    f"- DETERMINISTIC_DATA: source_pipeline ({' | '.join(get_args(ExtractionSourceKind))}).\n"
     "- DATA_TRANSFORM: config with source_block_ref ({\"block_id\": \"<id>\"}) plus EITHER"
     ' mode="deterministic" and operations (a list, see the catalogue below), OR mode="ai" and'
     " nl_instruction (what to do, in words). Prefer deterministic when you can express it.\n"
@@ -70,7 +76,16 @@ def _campos_obligatorios() -> str:
     " barh (horizontal bars, use it when the category names are long) the category goes in"
     " y_axis and the number in x_axis.\n"
     "- AI_ASSISTED_TEXT, AI_SUMMARY, AI_REWRITE: ai_prompt_template_id and review_policy_id."
-    " Use 'generic_report_v1' and 'required' unless the request says otherwise.\n"
+    " Use 'required' as review_policy_id unless the request says otherwise, and pick the"
+    f" instruction: '{PROMPT_VALORACION_DE_TENDENCIA}' to comment on the trend of ONE table,"
+    f" '{PROMPT_RESUMEN_DE_RESULTADOS}' to summarise several, 'generic_report_v1' for anything"
+    " else.\n"
+    # SEG.1 — sin esto el modelo nunca ancla, y una valoración que recibe las treinta tablas del
+    # informe mezcla y omite. Es lo que hizo fracasar el intento anterior con una gema.
+    "  **data_block_refs** (list of block ids): the table or tables this passage is about. USE"
+    " IT. A passage that comments on one table must reference that table and no other: giving"
+    " the model every table of the report produces a blended summary that leaves things out."
+    " One AI block per table is the normal shape for a monitoring report.\n"
     "- CITATION_BLOCK: source_block_refs (list of block ids).\n"
     "- REVIEW_GATE: review_policy_id.\n"
     "A TABLE or CHART without a data block to point at is invalid: add the data block first.\n"
@@ -92,7 +107,7 @@ def _campos_obligatorios() -> str:
     "Each entry of proposed_inputs.required_slots / optional_slots is:\n"
     '  {"slot_id": "budget_data", "kind": "excel",'
     ' "label": {"es": "...", "ca": "...", "en": "..."}}\n'
-    "kind is one of: pdf, excel, csv, text, number, date, selector. `label` is an object"
+    f"kind is one of: {' | '.join(get_args(InputSlotKind))}. `label` is an object"
     " with the three languages, never a plain string. Do not add fields like `id` or"
     " `block_ref`: a slot does not point at a block; a DETERMINISTIC_DATA block declares"
     " which pipeline reads it.\n"

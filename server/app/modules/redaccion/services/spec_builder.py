@@ -38,6 +38,7 @@ _ACEPTA = {
     "pdf": [".pdf"],
     "excel": [".xlsx", ".xls"],
     "csv": [".csv"],
+    "markdown": [".md", ".markdown"],
 }
 
 

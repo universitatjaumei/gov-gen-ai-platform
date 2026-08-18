@@ -16,7 +16,11 @@ from pydantic import BaseModel, Field
 # Tipos de fuente
 # ---------------------------------------------------------------------------
 
-ExtractionSourceKind = Literal["excel", "pdf_text", "pdf_table", "manual", "admin_script"]
+ExtractionSourceKind = Literal[
+    "excel", "pdf_text", "pdf_table", "manual", "admin_script",
+    # SEG.3 — los informes de seguimiento llegan como Markdown con sus tablas ya hechas.
+    "md_table",
+]
 
 ExtractionPipelineId = str
 
