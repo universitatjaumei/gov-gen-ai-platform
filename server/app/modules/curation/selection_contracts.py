@@ -4,11 +4,50 @@ Deploy: edge.
 """
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+class CrawlConfig(BaseModel):
+    """Cómo se rastrea un apartado (RAS.5).
+
+    El spider ya leía todo esto de `config_json`, pero **no había forma de fijarlo**: ni al crear
+    ni al modificar un sitio. Sin `url_regex_filter` la decisión operativa del bloque —un sitio por
+    apartado, porque cada apartado tiene un responsable distinto— era inalcanzable desde la
+    interfaz, y el rastreo salía con los valores por defecto contra todo el dominio.
+
+    Los defectos son los conservadores de RAS.1: la cortesía no se pide, se hereda.
+    """
+
+    crawl_depth: int = Field(default=1, ge=0, le=10)
+    #: Expresión regular que acota el apartado. Se valida al guardar: una que no compila rompería
+    #: todos los rastreos del sitio, y el fallo saldría lejos del formulario donde se escribió.
+    url_regex_filter: str | None = None
+    max_pages: int = Field(default=50, ge=1, le=100_000)
+    #: Presupuesto de tiempo por ejecución, en segundos. Con pausa de cortesía, el coste real de un
+    #: rastreo es el tiempo: mil páginas a un segundo son veinte minutos.
+    max_seconds: int = Field(default=1800, ge=10, le=86_400)
+    delay_seconds: float = Field(default=1.0, ge=0.0, le=60.0)
+    respect_robots: bool = True
+    max_concurrency: int = Field(default=1, ge=1, le=8)
+    max_retries: int = Field(default=3, ge=1, le=10)
+
+    @field_validator("url_regex_filter")
+    @classmethod
+    def _debe_compilar(cls, valor: str | None) -> str | None:
+        if valor is None or not valor.strip():
+            return None
+        try:
+            re.compile(valor)
+        except re.error as fallo:
+            raise ValueError(
+                f"«{valor}» no es una expresión regular válida: {fallo}"
+            ) from fallo
+        return valor
 
 
 class SiteView(BaseModel):
@@ -23,8 +62,28 @@ class SiteView(BaseModel):
     last_crawled_at: datetime | None
     status: str
     created_at: datetime
+    #: RAS.5 — quien mira la lista tiene que poder ver con qué cortesía y con qué filtro se está
+    #: rastreando cada apartado. Antes no salía, así que no había forma de revisarlo.
+    crawl_config: CrawlConfig | None = None
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _desde_config_json(cls, datos: Any) -> Any:
+        """La configuración vive en `config_json` en la base; aquí se sirve tipada."""
+        if isinstance(datos, dict) or not hasattr(datos, "config_json"):
+            return datos
+        crudo = getattr(datos, "config_json", None) or {}
+        campos = {k: v for k, v in crudo.items() if k in CrawlConfig.model_fields}
+        return {
+            **{
+                nombre: getattr(datos, nombre, None)
+                for nombre in cls.model_fields
+                if nombre != "crawl_config"
+            },
+            "crawl_config": CrawlConfig(**campos) if campos else None,
+        }
 
 
 class SiteCreate(BaseModel):
@@ -33,6 +92,7 @@ class SiteCreate(BaseModel):
     sitemap_url: str | None = None
     audit_semantic_scope: str = "ingested"
     crawl_interval_hours: int = 24
+    crawl_config: CrawlConfig | None = None
 
 
 class SitePatch(BaseModel):
@@ -41,6 +101,7 @@ class SitePatch(BaseModel):
     sitemap_url: str | None = None
     audit_semantic_scope: str | None = None
     crawl_interval_hours: int | None = None
+    crawl_config: CrawlConfig | None = None
 
 
 class PageView(BaseModel):

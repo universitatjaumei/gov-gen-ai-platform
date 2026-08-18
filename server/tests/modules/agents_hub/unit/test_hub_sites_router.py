@@ -345,8 +345,15 @@ def test_list_candidates_returns_200():
 # ───────────────────────── Tests ingest / retire ─────────────────────────
 
 
-def test_ingest_page_returns_202():
-    """POST /hub/chatbots/{id}/pages/{pid}/ingest → 202."""
+def test_ingest_page_returns_202(monkeypatch):
+    """POST /hub/chatbots/{id}/pages/{pid}/ingest → 202.
+
+    RAS.5 — el endpoint ya no usa el servicio inyectado, que venía **sin watcher** y hacía que la
+    ingestión reventara en background mientras la respuesta decía «queued». Aquí se dobla el
+    servicio que sí puede ingerir para que este test siga hablando del contrato HTTP; que el
+    cableado real lleva watcher lo comprueba
+    `tests/modules/curation/integration/test_ingerir_una_pagina_al_corpus.py`.
+    """
     chatbot_id = uuid.uuid4()
     page_id = uuid.uuid4()
     session = AsyncMock()
@@ -354,6 +361,13 @@ def test_ingest_page_returns_202():
     from server.app.routers.hub_sites_router import get_selection_service
     mock_svc = MagicMock()
     mock_svc.ingest_page = AsyncMock(return_value=MagicMock(id=uuid.uuid4()))
+
+    async def _servicio_doble(sesion, cid):
+        return mock_svc
+
+    monkeypatch.setattr(
+        "server.app.routers.hub_sites_router._servicio_que_puede_ingerir", _servicio_doble
+    )
 
     from server.app.routers.hub_sites_router import router
     app = FastAPI()

@@ -11,13 +11,14 @@ import re
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Awaitable, Callable, Protocol
-from urllib.parse import urljoin, urlparse
+from typing import Any, Awaitable, Callable, Protocol
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse
 
 from server.app.modules.curation.cortesia import (
     PRESUPUESTO_POR_DEFECTO_SEGUNDOS,
     CortesiaDeRastreo,
     RutaProhibidaPorRobots,
+    clasificar_fallo,
     cortesia_desde_config,
 )
 
@@ -25,6 +26,91 @@ from server.app.modules.curation.cortesia import (
 #: Tope de páginas que se guardan en memoria para no volver a pedirlas. Con ~50 KB de HTML por
 #: página, quinientas son unos 25 MB; por encima se vuelve a pedir, que es lento pero acotado.
 _PAGINAS_RECORDADAS = 500
+
+#: Lo que un rastreador de páginas no debe tratar como página. Un PDF del portal puede ser
+#: contenido valioso, pero no por esta vía: `httpx` decodifica sus bytes como texto y lo que se
+#: guarda es basura —26.872 «tokens» de cabecera binaria e idioma «bengalí», medido en el rastreo
+#: real— que además lleva bytes nulos y Postgres rechaza la fila entera.
+_EXTENSIONES_NO_LEGIBLES = (
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp",
+    ".zip", ".rar", ".7z", ".tar", ".gz", ".jpg", ".jpeg", ".png", ".gif", ".svg",
+    ".webp", ".ico", ".mp3", ".mp4", ".avi", ".mov", ".wmv", ".exe", ".dmg", ".woff",
+    ".woff2", ".ttf", ".eot", ".css", ".js", ".xml", ".rss", ".csv", ".json",
+)
+
+#: Los tipos que sí se leen. La extensión no siempre está —`/descarrega` sirve un PDF—, así que
+#: la verdad la dice la cabecera de la respuesta.
+_TIPOS_LEGIBLES = ("text/html", "application/xhtml", "text/plain", "text/markdown")
+
+
+def _parece_descarga(url: str) -> bool:
+    ruta = urlparse(url).path.lower()
+    return ruta.endswith(_EXTENSIONES_NO_LEGIBLES)
+
+
+#: Ninguna página de contenido necesita una URL así de larga. Es la red de seguridad contra las
+#: trampas de rastreador que no se dejen ver por sus parámetros.
+_LARGO_MAXIMO_DE_URL = 400
+
+
+def url_de_pagina(url: str) -> str | None:
+    """La URL que identifica **la página**, sin los parámetros de navegación. `None` si hay que
+    descartarla.
+
+    Medido en el segundo rastreo real del apartado: el conmutador de idioma del portal construye
+    enlaces que llevan la URL actual dentro (`?urlRedirect=https://…&url=/centres/…`), así que cada
+    página rastreada generaba una variante más larga de sí misma —espacio de URLs infinito, mismo
+    contenido— y el detector las agrupaba después declarando 107 supersesiones falsas.
+
+    La regla: un parámetro cuyo valor **es una URL o una ruta** es un ayudante de navegación, no
+    identidad de página. Un parámetro de verdad (`?pagina=3`, `?id=42`) sí distingue contenido y se
+    conserva.
+    """
+    if len(url) > _LARGO_MAXIMO_DE_URL:
+        return None
+
+    partes = urlparse(url)
+    if not partes.query:
+        return url
+
+    conservados = [
+        (clave, valor)
+        for clave, valor in parse_qsl(partes.query, keep_blank_values=True)
+        if not _parece_una_direccion(valor)
+    ]
+    if len(conservados) == len(parse_qsl(partes.query, keep_blank_values=True)):
+        return url
+    return partes._replace(query=urlencode(conservados)).geturl()
+
+
+def _parece_una_direccion(valor: str) -> bool:
+    limpio = valor.strip()
+    return limpio.startswith(("http://", "https://", "/"))
+
+
+def _mismo_esquema_que_la_raiz(url: str, raiz: str) -> str:
+    """La URL con el esquema del sitio, si es el mismo host.
+
+    El portal responde por `http://` y por `https://` y su HTML enlaza a los dos, así que el
+    rastreo pedía cada página **dos veces** —la mitad del presupuesto y de la paciencia del
+    servidor— y el detector emitía después «hay una versión nueva y la vieja sigue ahí» entre las
+    dos. Normalizar antes de encolar es gratis: no cuesta ni una petición.
+    """
+    partes = urlparse(url)
+    raiz_partes = urlparse(raiz)
+    if partes.netloc != raiz_partes.netloc or partes.scheme == raiz_partes.scheme:
+        return url
+    if partes.scheme not in ("http", "https") or raiz_partes.scheme not in ("http", "https"):
+        return url
+    return partes._replace(scheme=raiz_partes.scheme).geturl()
+
+
+def _es_legible(cabeceras: dict) -> bool:
+    tipo = str(cabeceras.get("content-type") or cabeceras.get("Content-Type") or "").lower()
+    if not tipo:
+        # Sin cabecera no se puede afirmar que no lo sea; se intenta leer.
+        return True
+    return any(tipo.startswith(t) for t in _TIPOS_LEGIBLES)
 
 
 class CrawlStatus(Enum):
@@ -51,6 +137,13 @@ class CrawlResult:
     visited: list[str] = field(default_factory=list)
     #: `True` si esta ejecución arrancó de una cola guardada y no de `root_url`.
     resumed: bool = False
+    #: Las páginas que fallaron, con su causa e intentos. Antes una sola tumbaba el rastreo
+    #: completo: la excepción subía hasta el `except` global y el sitio quedaba en error sin
+    #: ninguna página guardada.
+    fallos: list[dict[str, Any]] = field(default_factory=list)
+    #: Recursos que no son páginas —PDF, imágenes, hojas de cálculo— descartados por su extensión
+    #: o por su `Content-Type`. No son fallos, y contarlos evita que parezca que no estaban.
+    no_legibles: int = 0
 
 
 class _WebSource(Protocol):
@@ -124,7 +217,12 @@ class GenericSpider:
         ) as client:
             resp = await client.get(url)
             resp.raise_for_status()
-            return resp.text, dict(resp.headers)
+            cabeceras = dict(resp.headers)
+            # La URL final tras las redirecciones es la única que dice qué página se ha leído de
+            # verdad. Se estaba tirando, y con ella se perdía que `http://x` y `https://x` son la
+            # misma. Viaja como cabecera sintética para no cambiar la forma de la respuesta.
+            cabeceras["x-final-url"] = str(resp.url)
+            return resp.text, cabeceras
 
     async def _fetch(self, url: str) -> tuple[str, dict]:
         """Descarga una URL respetando `robots.txt`, la pausa, la concurrencia y los reintentos.
@@ -202,6 +300,8 @@ class GenericSpider:
         crawled_urls: list[str] = []
         pages_skipped = 0
         prohibidas = 0
+        fallos: list[dict[str, Any]] = []
+        no_legibles = 0
         stop_reason: str | None = None
 
         while queue:
@@ -219,24 +319,65 @@ class GenericSpider:
 
             url, depth = queue.popleft()
             try:
-                html, _headers = await self._fetch(url)
+                html, cabeceras = await self._fetch(url)
             except RutaProhibidaPorRobots:
                 # No es un error del sitio ni nuestro: el servidor ha dicho que no. Se cuenta y
                 # se sigue; convertirlo en `crawl_error` llenaría el informe de acusaciones.
                 prohibidas += 1
                 continue
+            except Exception as fallo:  # noqa: BLE001
+                # Una página que falla **no puede tumbar el rastreo**. Así estaba: la excepción
+                # subía por `crawl()` hasta el `except` global de `crawl_site`, el sitio quedaba en
+                # error y no se guardaba ni una página. Medido con el primer rastreo real del
+                # apartado: un 404 en una página cualquiera devolvió **cero páginas**. Y todo
+                # portal real tiene enlaces rotos: son justo lo que este módulo busca.
+                fallos.append({
+                    "url": url,
+                    "kind": clasificar_fallo(getattr(fallo, "causa", fallo)),
+                    "attempts": getattr(fallo, "intentos", 1),
+                    "message": str(fallo)[:500],
+                })
+                continue
+
+            if not _es_legible(cabeceras):
+                # La extensión no lo delataba, pero la respuesta sí: no es una página.
+                no_legibles += 1
+                continue
+
+            # Lo que se ha leído es la URL final, no la pedida. Si ya se había leído, la página no
+            # es nueva: es la misma servida por otra dirección.
+            final = str(cabeceras.get("x-final-url") or url)
+            if final != url:
+                if final in crawled_urls:
+                    continue
+                visited.add(final)
+                self._recordar(final, (html, cabeceras))
+                url = final
+
             crawled_urls.append(url)
 
             # No encolar hijos si hemos alcanzado la profundidad máxima
             if depth >= crawl_depth:
                 continue
 
-            for link in self._extract_links(html, url):
+            for enlace in self._extract_links(html, url):
+                # El mismo esquema que la raíz del sitio: el portal enlaza a http y a https.
+                # Y sin los parámetros de navegación, que multiplican la misma página.
+                normalizado = url_de_pagina(_mismo_esquema_que_la_raiz(enlace, source.root_url))
+                if normalizado is None:
+                    no_legibles += 1
+                    continue
+                link = normalizado
                 if link in visited:
                     continue
                 if urlparse(link).netloc != base_netloc:
                     continue
                 if regex and not regex.search(link):
+                    continue
+                if _parece_descarga(link):
+                    # Se ve en la URL, así que ni se pide: es tráfico que no aporta nada y, si se
+                    # pidiera, lo que se guardaría sería un binario decodificado como texto.
+                    no_legibles += 1
                     continue
                 # Comprobar la exclusión **antes de encolar**: si sólo se viera al pedir, cada
                 # ruta prohibida costaría una vuelta de la cola y una excepción.
@@ -262,4 +403,6 @@ class GenericSpider:
             frontier=list(queue) if stop_reason is not None else [],
             visited=sorted(visited),
             resumed=reanudado,
+            fallos=fallos,
+            no_legibles=no_legibles,
         )

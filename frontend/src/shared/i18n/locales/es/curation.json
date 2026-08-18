@@ -84,5 +84,16 @@
   "gaps_none": "No hay huecos detectados para este chatbot.",
   "gaps_count": "consultas sin respuesta",
   "gaps_terms": "Términos",
-  "gaps_range": "Entre"
+  "gaps_range": "Entre",
+  "site_crawl_section": "Rastreo del apartado",
+  "site_url_filter": "Filtro de URL del apartado",
+  "site_url_filter_help": "Expresión regular: solo se rastrean las URLs que la contienen. Un apartado por sitio.",
+  "site_url_filter_invalid": "No es una expresión regular válida",
+  "site_depth": "Profundidad",
+  "site_max_pages": "Máx. páginas",
+  "site_delay": "Pausa (s)",
+  "site_respect_robots": "Respetar robots.txt del sitio",
+  "site_courtesy_help": "La pausa y el respeto a robots.txt vienen puestos. Bajarlos es una decisión que queda registrada aquí.",
+  "type_needs_javascript": "No legible sin JavaScript",
+  "type_content_updated": "Actualizada en el portal"
 }

@@ -45,7 +45,11 @@ def texto_visible(contenido: str) -> str:
     sin_script = _SCRIPT_O_ESTILO.sub(" ", contenido)
     sin_comentarios = _COMENTARIO.sub(" ", sin_script)
     sin_etiquetas = _ETIQUETA.sub(" ", sin_comentarios)
-    return _ESPACIOS.sub(" ", _html.unescape(sin_etiquetas)).strip()
+    limpio = _ESPACIOS.sub(" ", _html.unescape(sin_etiquetas)).strip()
+    # Cinturón: cualquier respuesta puede traer bytes nulos —un binario servido como si fuera
+    # página— y Postgres rechaza la fila entera con «invalid byte sequence for encoding UTF8».
+    # Pasó con un PDF del portal y se llevó por delante el rastreo completo.
+    return limpio.replace("\x00", "")
 
 
 def titulo_de(contenido: str) -> str | None:

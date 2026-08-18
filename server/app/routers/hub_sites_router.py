@@ -23,6 +23,7 @@ from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.operational_models import HubCrawledPage
 from server.app.modules.curation.selection_contracts import (
     CandidatePageView,
+    CrawlConfig,
     PageView,
     SelectionCreate,
     SelectionView,
@@ -74,6 +75,27 @@ async def get_selection_service(
     return CorpusSelectionService(session, page_repo, sel_repo, watcher=None)
 
 
+async def _servicio_que_puede_ingerir(session: AsyncSession, chatbot_id: uuid.UUID) -> Any:
+    """El servicio de selección **con watcher**, que es el único que puede ingerir.
+
+    El embedding lo resuelve la cascada del chatbot: ingerir con otro modelo del que usa su
+    corpus dejaría vectores que no se pueden comparar con los que ya hay.
+    """
+    from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+    from server.app.modules.agents_hub.services.embedding_resolver import (
+        resolve_embedding_service,
+    )
+    from server.app.modules.curation.selection_service import CorpusSelectionService
+
+    watcher = IngestionWatcher(
+        session=session,
+        embedding_service=await resolve_embedding_service(session, chatbot_id),
+    )
+    return CorpusSelectionService(
+        session, CrawledPageRepo(session), CorpusSelectionRepo(session), watcher=watcher
+    )
+
+
 async def _require_admin(user: UserInfo = Depends(get_current_user)) -> UserInfo:
     if not (user.is_superadmin or user.is_admin):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role")
@@ -121,6 +143,10 @@ async def create_site(
         sitemap_url=body.sitemap_url,
         crawl_interval_hours=body.crawl_interval_hours,
         audit_semantic_scope=body.audit_semantic_scope,
+        # RAS.5 — la configuración del rastreo se podía leer pero no fijar, así que el filtro por
+        # apartado (`url_regex_filter`) era inalcanzable desde la interfaz. Sin ella se guardan
+        # los defectos conservadores de RAS.1, no un rastreo sin límites.
+        config_json=(body.crawl_config or CrawlConfig()).model_dump(),
     )
     await session.commit()
     return site
@@ -170,6 +196,9 @@ async def patch_site(
     await assert_site_org_access(session, site_id, current_user)
     repo = WebSiteRepo(session)
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    # La configuración del rastreo se guarda en `config_json`, que es como la lee el spider.
+    if "crawl_config" in updates:
+        updates["config_json"] = updates.pop("crawl_config")
     site = await repo.update(site_id, **updates)
     if site is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
@@ -371,9 +400,16 @@ async def ingest_page(
     """Ingesta manual de una página concreta en un chatbot (idempotente).
 
     Deploy: edge. Encola la ingestión en background y responde 202.
+
+    RAS.5 — el servicio inyectado se construye **sin watcher** (lo dice su propio docstring: para
+    esta operación había que construirlo aquí, y no se hacía), así que `ingest_page` reventaba con
+    `AttributeError` **dentro del `BackgroundTask`**: la respuesta era 202 «queued» y la página no
+    llegaba nunca al corpus. Sin esto, la curación termina en una bandeja que no lleva a ningún
+    sitio, que es justo el circuito que el módulo existe para cerrar.
     """
     await assert_chatbot_org_access(session, chatbot_id, current_user)
-    background_tasks.add_task(svc.ingest_page, chatbot_id, page_id)
+    servicio = await _servicio_que_puede_ingerir(session, chatbot_id)
+    background_tasks.add_task(servicio.ingest_page, chatbot_id, page_id)
     return {"status": "queued", "chatbot_id": str(chatbot_id), "page_id": str(page_id)}
 
 

@@ -14,6 +14,10 @@ FindingType = Literal[
     "contradiction",
     "empty",
     "thin",
+    # RAS.5: una pagina que ya estaba en el corpus de un asistente ha cambiado en el portal y se
+    # ha reingerido. No es un defecto: es el aviso de que lo que el asistente responde sobre esa
+    # pagina ha cambiado, para poder revisarlo. Antes el cambio se detectaba y no se propagaba.
+    "content_updated",
     # RAS.2: la pagina no se ha podido leer sin renderizar. Es lo unico que el sistema sabe de
     # verdad cuando el contenido lo pinta JavaScript, y sustituye al `empty` critico que
     # afirmaba lo contrario: que la pagina esta vacia. Aviso, no acusacion.

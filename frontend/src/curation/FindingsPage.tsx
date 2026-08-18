@@ -98,7 +98,11 @@ export function FindingsPage() {
               aria-label={t('filter_type')}
             >
               <option value="">{t('filter_type')}</option>
-              {['superseded','duplicate','contradiction','empty','thin','stale','crawl_error','orphan_page'].map((ft) => (
+              {/* RAS.5 — `needs_javascript` y `content_updated` los emite el backend desde RAS.2
+                  y RAS.5. Sin estar aquí no se podían filtrar y su columna «Tipo» habría salido
+                  con la clave de traducción en crudo: un hallazgo que la pantalla no sabe nombrar
+                  no existe para quien cura. */}
+              {['superseded','duplicate','contradiction','empty','thin','stale','crawl_error','orphan_page','needs_javascript','content_updated'].map((ft) => (
                 <option key={ft} value={ft}>{t(`type_${ft}` as Parameters<typeof t>[0])}</option>
               ))}
             </select>

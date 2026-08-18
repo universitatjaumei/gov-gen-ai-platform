@@ -19,6 +19,30 @@ const siteSchema = z.object({
   sitemap_url: z.string().url().optional().or(z.literal('')),
   crawl_interval_hours: z.coerce.number().int().min(1).default(24),
   audit_semantic_scope: z.enum(['ingested', 'full']).default('ingested'),
+  // RAS.5 — el rastreo se acota por apartado, que es como tiene sentido usarlo: cada apartado
+  // del portal tiene un responsable distinto y un informe del portal completo no lo lee nadie.
+  // El spider ya leía esto; lo que no había era forma de fijarlo desde ninguna pantalla.
+  url_regex_filter: z
+    .string()
+    .optional()
+    .refine(
+      (valor) => {
+        if (!valor) return true
+        try {
+          new RegExp(valor)
+          return true
+        } catch {
+          return false
+        }
+      },
+      { message: 'regex' },
+    ),
+  crawl_depth: z.coerce.number().int().min(0).max(10).default(1),
+  max_pages: z.coerce.number().int().min(1).max(100000).default(50),
+  // La cortesía viene puesta: rastrear despacio y respetar robots.txt es el defecto, y quitarlo
+  // exige decirlo aquí, donde queda a la vista de quien da de alta el apartado.
+  delay_seconds: z.coerce.number().min(0).max(60).default(1),
+  respect_robots: z.boolean().default(true),
 })
 
 type SiteFormInput = z.input<typeof siteSchema>
@@ -49,7 +73,14 @@ export function SitesPage() {
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<SiteFormInput, unknown, SiteFormValues>({
     resolver: zodResolver(siteSchema),
-    defaultValues: { crawl_interval_hours: 24, audit_semantic_scope: 'ingested' },
+    defaultValues: {
+      crawl_interval_hours: 24,
+      audit_semantic_scope: 'ingested',
+      crawl_depth: 1,
+      max_pages: 50,
+      delay_seconds: 1,
+      respect_robots: true,
+    },
   })
 
   const onSubmit = (data: SiteFormValues) => {
@@ -60,6 +91,13 @@ export function SitesPage() {
         sitemap_url: data.sitemap_url || undefined,
         crawl_interval_hours: data.crawl_interval_hours,
         audit_semantic_scope: data.audit_semantic_scope,
+        crawl_config: {
+          url_regex_filter: data.url_regex_filter || undefined,
+          crawl_depth: data.crawl_depth,
+          max_pages: data.max_pages,
+          delay_seconds: data.delay_seconds,
+          respect_robots: data.respect_robots,
+        },
       },
     })
   }
@@ -74,6 +112,7 @@ export function SitesPage() {
         <h1 className="text-2xl font-semibold">{t('sites_title')}</h1>
         <button
           className="px-3 py-1.5 rounded bg-primary text-primary-foreground text-sm"
+          data-testid="btn-nuevo-sitio"
           onClick={() => setDialogOpen(true)}
         >
           {t('new_site')}
@@ -138,15 +177,15 @@ export function SitesPage() {
         <div role="dialog" aria-modal="true" aria-label={t('new_site')} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-background rounded-lg shadow-lg p-6 w-full max-w-md space-y-4">
             <h2 className="text-lg font-semibold">{t('new_site')}</h2>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-3" noValidate>
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-3" noValidate data-testid="form-sitio">
               <div>
                 <label className="text-sm font-medium">{t('site_name')}</label>
-                <input {...register('name')} className="w-full border rounded px-2 py-1.5 text-sm mt-1" />
+                <input {...register('name')} data-testid="campo-nombre" className="w-full border rounded px-2 py-1.5 text-sm mt-1" />
                 {errors.name && <p className="text-xs text-destructive mt-0.5">{tc('required')}</p>}
               </div>
               <div>
                 <label className="text-sm font-medium">{t('site_root_url')}</label>
-                <input {...register('root_url')} className="w-full border rounded px-2 py-1.5 text-sm mt-1" type="url" />
+                <input {...register('root_url')} data-testid="campo-url" className="w-full border rounded px-2 py-1.5 text-sm mt-1" type="url" />
                 {errors.root_url && <p className="text-xs text-destructive mt-0.5">{tc('invalid_url')}</p>}
               </div>
               <div>
@@ -164,6 +203,55 @@ export function SitesPage() {
                   <option value="full">{t('scope_full')}</option>
                 </select>
               </div>
+              {/* El apartado y la cortesía: lo que convierte «rastrear un portal» en «rastrear
+                  este apartado, despacio y por donde el servidor deja». */}
+              <fieldset className="border-t pt-3 space-y-3">
+                <legend className="text-sm font-medium">{t('site_crawl_section')}</legend>
+                <div>
+                  <label className="text-sm font-medium" htmlFor="url_regex_filter">
+                    {t('site_url_filter')}
+                  </label>
+                  <input
+                    {...register('url_regex_filter')}
+                    id="url_regex_filter"
+                    data-testid="campo-url-regex"
+                    placeholder="/centres/escola-doctorat/"
+                    className="w-full border rounded px-2 py-1.5 text-sm mt-1 font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground mt-0.5">{t('site_url_filter_help')}</p>
+                  {errors.url_regex_filter && (
+                    <p data-testid="error-url-regex" className="text-xs text-destructive mt-0.5">
+                      {t('site_url_filter_invalid')}
+                    </p>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-sm font-medium" htmlFor="crawl_depth">
+                      {t('site_depth')}
+                    </label>
+                    <input {...register('crawl_depth')} id="crawl_depth" data-testid="campo-profundidad" type="number" min={0} max={10} className="w-full border rounded px-2 py-1.5 text-sm mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium" htmlFor="max_pages">
+                      {t('site_max_pages')}
+                    </label>
+                    <input {...register('max_pages')} id="max_pages" data-testid="campo-max-paginas" type="number" min={1} className="w-full border rounded px-2 py-1.5 text-sm mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium" htmlFor="delay_seconds">
+                      {t('site_delay')}
+                    </label>
+                    <input {...register('delay_seconds')} id="delay_seconds" data-testid="campo-pausa" type="number" min={0} step={0.5} className="w-full border rounded px-2 py-1.5 text-sm mt-1" />
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input {...register('respect_robots')} data-testid="campo-robots" type="checkbox" />
+                  {t('site_respect_robots')}
+                </label>
+                <p className="text-xs text-muted-foreground">{t('site_courtesy_help')}</p>
+              </fieldset>
+
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => { setDialogOpen(false); reset() }} className="px-3 py-1.5 rounded border text-sm">{tc('cancel')}</button>
                 <button type="submit" disabled={createMutation.isPending} className="px-3 py-1.5 rounded bg-primary text-primary-foreground text-sm">{tc('save')}</button>

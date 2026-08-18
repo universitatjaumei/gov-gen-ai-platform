@@ -210,12 +210,21 @@ class TestStale:
         assert repo.of_type("stale")
 
     @pytest.mark.asyncio
-    async def test_stale_by_content_year(self) -> None:
-        # content_year=2020 con now=2026 → más de 365 días viejo
-        page = _FakePage(self.SITE, "https://u.es/x", content_year=2020)
+    async def test_stale_by_content_year_in_the_url(self) -> None:
+        # RAS.5 — el año tiene que estar **en la URL**. Cuando bastaba con que estuviera en el
+        # texto, el primer rastreo real marcó 303 de 400 páginas: el portal no declara ninguna
+        # fecha y la «fecha del contenido» salía del año más reciente citado en el cuerpo.
+        page = _FakePage(self.SITE, "https://u.es/x/2020/", content_year=2020)
         detector, repo = _make_detector([page], stale_days=365)
         await detector.analyze(self.SITE)
         assert repo.of_type("stale")
+
+    @pytest.mark.asyncio
+    async def test_a_year_only_mentioned_in_the_text_is_not_a_date(self) -> None:
+        page = _FakePage(self.SITE, "https://u.es/x", content_year=2020)
+        detector, repo = _make_detector([page], stale_days=365)
+        await detector.analyze(self.SITE)
+        assert not repo.of_type("stale")
 
     @pytest.mark.asyncio
     async def test_recent_signal_not_stale(self) -> None:

@@ -8,6 +8,7 @@ diff (nuevas / cambiadas / desaparecidas). El cloud orquesta, el edge ejecuta.
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -24,6 +25,8 @@ from server.app.modules.curation.contenido_web import parece_html, texto_visible
 from server.app.modules.curation.cortesia import RutaProhibidaPorRobots, clasificar_fallo
 from server.app.modules.curation.sondeo_dinamico import senales_de_dinamismo
 
+
+_log = logging.getLogger(__name__)
 
 #: Lo que se guarda de la cola para reanudar. Con URLs de ~120 caracteres, cinco mil son unos
 #: 600 KB de JSON en la fila del sitio: suficiente para un apartado y acotado para un portal.
@@ -153,16 +156,26 @@ class SiteCrawler:
             # mismo objeto identity-mapped y mutarlo, invalidando la comparación.
             prev_hash = prev.content_hash if prev is not None else None
 
-            upserted = await self._pages.upsert(
-                site_id=site_id,
-                url=url,
-                last_crawled_at=now,
-                status="active",
-                error_message=None,
-                sitemap_lastmod=sitemap_map.get(url),
-                **self._page_fields(url, body, headers),
-                content_hash=content_hash,
-            )
+            try:
+                upserted = await self._pages.upsert(
+                    site_id=site_id,
+                    url=url,
+                    last_crawled_at=now,
+                    status="active",
+                    error_message=None,
+                    sitemap_lastmod=sitemap_map.get(url),
+                    **self._page_fields(url, body, headers),
+                    content_hash=content_hash,
+                )
+            except Exception as exc:  # noqa: BLE001
+                # Guardar una página tampoco puede tumbar el rastreo. Ocurrió en el rastreo real:
+                # un PDF servido como si fuera página trajo bytes nulos, Postgres rechazó la fila
+                # y el sitio quedó en error **con cero páginas**. Segunda cara del mismo patrón
+                # que el enlace roto, esta vez en la escritura.
+                _log.warning("No se pudo guardar %s: %s", url, exc)
+                summary.pages_error += 1
+                summary.errors.append(f"{url}: {exc}"[:500])
+                continue
 
             # 3. Diff de sitemap: alta / cambio.
             if prev is None:
@@ -171,6 +184,26 @@ class SiteCrawler:
             elif prev_hash != content_hash:
                 summary.pages_changed += 1
                 summary.changed_page_ids.append(upserted.id)
+
+        # 2.bis. Las páginas que el recorrido no pudo leer. Antes ni llegaban aquí: la excepción
+        # tumbaba el rastreo entero. Se registran con su causa —un 404 es contenido que ya no
+        # está, y eso es lo que hay que depurar— y se cuentan como vistas para que no se sumen
+        # además como bajas.
+        for fallo in getattr(recorrido, "fallos", None) or []:
+            url = fallo.get("url", "")
+            if not url or url in seen_urls:
+                continue
+            seen_urls.add(url)
+            await self._pages.upsert(
+                site_id=site_id,
+                url=url,
+                status="error",
+                error_message=fallo.get("message", ""),
+                error_kind=fallo.get("kind"),
+                error_attempts=fallo.get("attempts", 1),
+                last_crawled_at=now,
+            )
+            summary.pages_error += 1
 
         # 3. Diff de sitemap: bajas (páginas activas que ya no aparecen).
         #

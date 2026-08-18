@@ -35,6 +35,18 @@ def _strip_year_segments(path: str) -> str:
     return normalized.rstrip("/") or "/"
 
 
+def _identidad_de_pagina(url: str) -> str:
+    """La URL sin los parámetros que sólo son navegación (RAS.5).
+
+    El conmutador de idioma del portal genera variantes de cada página que llevan la URL actual
+    dentro (`?urlRedirect=…&url=…`). Sin quitarlas, todas comparten path y el agrupador las tomaba
+    por versiones de un mismo recurso: 107 supersesiones falsas sobre una sola página.
+    """
+    from server.app.modules.curation.spider import url_de_pagina
+
+    return url_de_pagina(url) or url
+
+
 def _process_key(canonical_url: str | None, url: str) -> str:
     """Clave de proceso para agrupar versiones temporales de un mismo recurso.
 
@@ -42,12 +54,18 @@ def _process_key(canonical_url: str | None, url: str) -> str:
     explícito (/2023/, /2024/…). URLs sin año reciben una clave única que
     no colisiona con ninguna versión con año del mismo path.
     """
-    base = canonical_url or url
+    base = _identidad_de_pagina(canonical_url or url)
     parsed = urlparse(base)
     path = parsed.path
     if not _YEAR_SEG.search(path):
-        # Sin año en la URL: clave única, no participa en grupos de supersesión
-        return f"__no_year__{path.rstrip('/') or '/'}"
+        # Sin año en la URL: clave única, no participa en grupos de supersesión.
+        #
+        # RAS.5 — decía «única» y no lo era: sólo llevaba el path, así que `http://…/normestudi/`
+        # y `https://…/normestudi/` —la misma página servida por los dos esquemas— caían en el
+        # mismo grupo y una salía «superseded» por la otra. 191 avisos falsos en el primer
+        # rastreo real. Con el esquema y el host dentro, dos URLs distintas nunca se agrupan si
+        # no comparten un año.
+        return f"__no_year__{parsed.scheme}://{parsed.netloc}{path.rstrip('/') or '/'}"
     return _strip_year_segments(path)
 
 
@@ -65,16 +83,22 @@ def _effective_date(page: Any, now: datetime) -> datetime:
     return max(candidates) if candidates else datetime.min.replace(tzinfo=timezone.utc)
 
 
-def _content_date(page: Any) -> datetime | None:
-    """Fecha de contenido para evaluar stale (excluye last_crawled_at)."""
-    candidates: list[datetime] = []
+def _content_date(page: Any) -> tuple[datetime | None, str | None]:
+    """Fecha de contenido para evaluar `stale`, y **de dónde sale** (RAS.5).
+
+    Un año mencionado en el texto **no es** una fecha de publicación. Medido en el primer rastreo
+    real: el portal no declara `Last-Modified`, ni `ETag`, ni publica `sitemap.xml`, así que la
+    fecha salía del año más reciente citado en el cuerpo —una página menciona 1925, 2010, 2016,
+    2021, 2024 y 2071— y eso marcaba como antiguas **303 de 400 páginas**. Un año en la URL sí es
+    una señal del portal: así versiona sus documentos (`/2019/`, `/pext/19-20/`).
+    """
     if page.sitemap_lastmod:
-        candidates.append(page.sitemap_lastmod)
+        return page.sitemap_lastmod, "sitemap_lastmod"
     if page.http_last_modified:
-        candidates.append(page.http_last_modified)
-    if page.content_year:
-        candidates.append(datetime(page.content_year, 1, 1, tzinfo=timezone.utc))
-    return max(candidates) if candidates else None
+        return page.http_last_modified, "http_last_modified"
+    if page.content_year and _YEAR_SEG.search(urlparse(page.url or "").path):
+        return datetime(page.content_year, 1, 1, tzinfo=timezone.utc), "url_year"
+    return None, None
 
 
 class DeterministicQualityDetector:
@@ -143,6 +167,13 @@ class DeterministicQualityDetector:
         orphan_page_ids: set[uuid.UUID],
     ) -> list[ContentFinding]:
         results: list[ContentFinding] = []
+
+        # RAS.5 — una página que no se pudo descargar no tiene contenido **porque no se leyó**, y
+        # eso ya lo dice `crawl_error`. En el primer rastreo real, los tres 404 salían además como
+        # `empty` **crítico**: dos afirmaciones sobre el mismo hecho, y la segunda falsa.
+        if page.status == "error":
+            return self._otros_hallazgos(page, site_id, now, orphan_page_ids)
+
         empty = (
             page.markdown_content is None
             or not page.markdown_content.strip()
@@ -226,7 +257,7 @@ class DeterministicQualityDetector:
                 now=now,
             ))
 
-        content_date = _content_date(page)
+        content_date, origen = _content_date(page)
         if content_date is not None:
             age_days = (now - content_date).days
             if age_days > self._stale_days:
@@ -237,7 +268,13 @@ class DeterministicQualityDetector:
                     confidence=1.0,
                     page_id=page.id,
                     source_url=page.url,
-                    signal={"date": content_date.isoformat(), "age_days": age_days},
+                    # De dónde sale la fecha: quien revisa tiene que poder distinguir «lo declara
+                    # el servidor» de «lo dice la URL», que no valen lo mismo.
+                    signal={
+                        "date": content_date.isoformat(),
+                        "age_days": age_days,
+                        "source": origen,
+                    },
                     now=now,
                 ))
 
@@ -263,6 +300,12 @@ class DeterministicQualityDetector:
     ) -> list[ContentFinding]:
         groups: dict[str, list] = defaultdict(list)
         for page in pages:
+            # RAS.5 — una página que no se pudo leer no puede ser «la versión vigente». Sin fecha
+            # de nada, el orden cae en `first_seen_at` —de hace un instante— y quedaba como la más
+            # nueva del grupo: en el rastreo real, un acuerdo de 2017 que falló por un problema de
+            # red declaraba superados los de 2023, 2024 y 2025.
+            if getattr(page, "status", "active") == "error":
+                continue
             key = _process_key(page.canonical_url, page.url)
             groups[key].append(page)
 

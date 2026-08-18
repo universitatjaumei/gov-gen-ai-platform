@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 import logging
 import os
 import traceback
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -103,6 +104,21 @@ def _start_quality_scheduler():
             SiteCrawlerDispatcher,
         )
 
+        # RAS.5 — la fábrica de watchers y el repo de hallazgos. Iban a `None`, así que el
+        # rastreo detectaba que una página del corpus había cambiado, lo contaba… y el
+        # asistente seguía respondiendo con el texto viejo. Ahora la página se reingiere con
+        # el modelo de embeddings de **su** chatbot y queda el aviso `content_updated`.
+        async def _watcher_para(session: Any, chatbot_id: Any) -> Any:
+            from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+            from server.app.modules.agents_hub.services.embedding_resolver import (
+                resolve_embedding_service,
+            )
+
+            return IngestionWatcher(
+                session=session,
+                embedding_service=await resolve_embedding_service(session, chatbot_id),
+            )
+
         job = SiteQualityAnalysisJob(
             session_factory=hub_session_factory,
             site_crawler=SiteCrawlerDispatcher(hub_session_factory),
@@ -110,6 +126,8 @@ def _start_quality_scheduler():
             watcher=None,
             selection_repo=_NullSelectionRepo(),
             run_semantic=settings.content_quality_semantic_enabled,
+            watcher_factory=_watcher_para,
+            finding_repo=_RepoDeHallazgosDelJob(hub_session_factory),
         )
 
         scheduler = create_quality_scheduler(
@@ -129,6 +147,26 @@ def _start_quality_scheduler():
     except Exception as exc:
         print(f"[STARTUP] Content quality scheduler failed to start: {exc}")
         return None
+
+
+class _RepoDeHallazgosDelJob:
+    """Escribe los avisos del job de calidad en su propia transacción (RAS.5).
+
+    El aviso de que una página del corpus se ha actualizado no puede depender de que la
+    transacción del job termine bien: es información sobre algo que **ya pasó** —la página se
+    reingirió— y perderla dejaría el corpus cambiado sin rastro en la bandeja.
+    """
+
+    def __init__(self, session_factory: Any) -> None:
+        self._session_factory = session_factory
+
+    async def upsert(self, finding: Any) -> Any:
+        from server.app.modules.curation.findings_repo import ContentFindingRepo
+
+        async with self._session_factory() as session:
+            resultado = await ContentFindingRepo(session).upsert(finding)
+            await session.commit()
+            return resultado
 
 
 class _NullSelectionRepo:

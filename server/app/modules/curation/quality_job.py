@@ -58,6 +58,9 @@ class SiteQualitySummary:
     findings_by_type: dict[str, int] = field(default_factory=dict)
     pages_marked_superseded: int = 0
     documents_auto_ingested: int = 0
+    #: RAS.5 — páginas del corpus que cambiaron en el portal y se han vuelto a ingerir. El rastreo
+    #: ya detectaba el cambio y nadie lo propagaba: el asistente seguía citando el texto viejo.
+    documents_reingested: int = 0
     errors: list[str] = field(default_factory=list)
 
 
@@ -94,6 +97,8 @@ class SiteQualityAnalysisJob:
         selection_repo: _SelectionRepo,
         *,
         run_semantic: bool = True,
+        finding_repo: Any = None,
+        watcher_factory: Any = None,
     ) -> None:
         self._session_factory = session_factory
         self._site_crawler = site_crawler
@@ -101,6 +106,100 @@ class SiteQualityAnalysisJob:
         self._watcher = watcher
         self._selection_repo = selection_repo
         self._run_semantic = run_semantic
+        # Para avisar de las páginas del corpus que se han actualizado (RAS.5). Opcional: sin él
+        # la reingesta sigue ocurriendo, pero sin dejar aviso en la bandeja.
+        self._finding_repo = finding_repo
+        # RAS.5 — el watcher necesita el servicio de embeddings **del chatbot**, así que una única
+        # instancia no puede servir a varios: ingerir con otro modelo del que usa su corpus deja
+        # vectores incomparables. Con fábrica, cada ingesta usa el suyo. Sin ella se usa el
+        # watcher fijo, que es lo que hacen los tests que doblan esta pieza.
+        self._watcher_factory = watcher_factory
+
+    async def _watcher_para(self, session: Any, chatbot_id: uuid.UUID) -> Any:
+        """El watcher que ingiere para ese chatbot, con su servicio de embeddings."""
+        if self._watcher_factory is not None:
+            return await self._watcher_factory(session, chatbot_id)
+        return self._watcher
+
+    async def _reingerir_lo_que_cambio(
+        self,
+        session: Any,
+        site_id: uuid.UUID,
+        changed_page_ids: list,
+        summary: SiteQualitySummary,
+    ) -> None:
+        """Vuelve a ingerir las páginas del corpus que han cambiado, y avisa de cada una."""
+        if not changed_page_ids or (self._watcher is None and self._watcher_factory is None):
+            return
+
+        from sqlalchemy import select
+
+        from server.app.modules.agents_hub.database.operational_models import (
+            HubCrawledPage,
+            HubDocument,
+        )
+
+        for page_id in changed_page_ids:
+            page = await session.get(HubCrawledPage, page_id)
+            if page is None:
+                continue
+
+            documentos = (
+                await session.execute(
+                    select(HubDocument).where(HubDocument.crawled_page_id == page_id)
+                )
+            ).scalars().all()
+            # Un asistente puede tener la página una vez; varios pueden tenerla cada uno.
+            chatbots = {doc.chatbot_id for doc in documentos}
+            if not chatbots:
+                continue
+
+            actualizados = 0
+            for chatbot_id in chatbots:
+                try:
+                    watcher = await self._watcher_para(session, chatbot_id)
+                    await watcher.process_source(
+                        source_url=page.url,
+                        chatbot_id=chatbot_id,
+                        prefetched_content=page.markdown_content,
+                        title=page.title,
+                        crawled_page_id=page.id,
+                    )
+                    actualizados += 1
+                    summary.documents_reingested += 1
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception(
+                        "Reingesta fallida de %s para el chatbot %s", page.url, chatbot_id
+                    )
+                    summary.errors.append(f"reingesta {page.url}: {exc}")
+
+            if actualizados and self._finding_repo is not None:
+                await self._avisar_de_la_actualizacion(site_id, page, actualizados)
+
+    async def _avisar_de_la_actualizacion(
+        self, site_id: uuid.UUID, page: Any, chatbots_actualizados: int
+    ) -> None:
+        from datetime import datetime, timezone
+
+        from server.app.modules.curation.contracts import ContentFinding
+
+        try:
+            await self._finding_repo.upsert(ContentFinding(
+                id=uuid.uuid4(),
+                site_id=site_id,
+                finding_type="content_updated",
+                severity="info",
+                confidence=1.0,
+                detected_at=datetime.now(timezone.utc),
+                page_id=page.id,
+                source_url=page.url,
+                signal={
+                    "chatbots_actualizados": chatbots_actualizados,
+                    "title": page.title,
+                },
+            ))
+        except Exception:  # noqa: BLE001 — el aviso no puede tumbar el job de calidad
+            logger.exception("No se pudo registrar el aviso de actualización de %s", page.url)
 
     async def run_for_site(self, site_id: uuid.UUID) -> SiteQualitySummary:
         """Ejecuta el ciclo completo de calidad para un sitio.
@@ -173,6 +272,19 @@ class SiteQualityAnalysisJob:
                     page.quality_score = _compute_quality_score(page_findings)
 
             await session.flush()
+
+            # ── 3.bis. REINGESTA DE LO QUE CAMBIÓ (RAS.5) ─────────────────────
+            #
+            # El rastreo ya detectaba el cambio —compara `content_hash` y llena
+            # `changed_page_ids`—, pero nadie lo consumía: una página ya publicada se
+            # actualizaba en el portal y el asistente seguía respondiendo con el texto viejo.
+            #
+            # Se reingiere **sólo donde ya estaba**: actualizar lo que alguien aprobó una vez no
+            # es publicar lo que nadie ha aprobado. Y no en silencio: queda el aviso
+            # `content_updated` para poder revisar qué cambió.
+            await self._reingerir_lo_que_cambio(
+                session, site_id, getattr(crawl_summary, "changed_page_ids", []), summary
+            )
 
             # ── 4. AUTO-INGESTA (páginas nuevas del diff) ──────────────────────
             new_page_ids: list[uuid.UUID] = getattr(crawl_summary, "new_page_ids", [])

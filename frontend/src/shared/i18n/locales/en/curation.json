@@ -84,5 +84,16 @@
   "gaps_none": "No gaps detected for this chatbot.",
   "gaps_count": "unanswered queries",
   "gaps_terms": "Terms",
-  "gaps_range": "Between"
+  "gaps_range": "Between",
+  "site_crawl_section": "Section crawl",
+  "site_url_filter": "Section URL filter",
+  "site_url_filter_help": "Regular expression: only URLs matching it are crawled. One section per site.",
+  "site_url_filter_invalid": "Not a valid regular expression",
+  "site_depth": "Depth",
+  "site_max_pages": "Max. pages",
+  "site_delay": "Delay (s)",
+  "site_respect_robots": "Respect the site's robots.txt",
+  "site_courtesy_help": "The delay and robots.txt compliance are on by default. Lowering them is a decision recorded here.",
+  "type_needs_javascript": "Not readable without JavaScript",
+  "type_content_updated": "Updated on the portal"
 }

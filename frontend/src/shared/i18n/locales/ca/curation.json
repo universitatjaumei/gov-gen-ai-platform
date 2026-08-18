@@ -84,5 +84,16 @@
   "gaps_none": "No hi ha buits detectats per a aquest chatbot.",
   "gaps_count": "consultes sense resposta",
   "gaps_terms": "Termes",
-  "gaps_range": "Entre"
+  "gaps_range": "Entre",
+  "site_crawl_section": "Rastreig de l'apartat",
+  "site_url_filter": "Filtre d'URL de l'apartat",
+  "site_url_filter_help": "Expressió regular: només es rastregen les URL que la contenen. Un apartat per lloc.",
+  "site_url_filter_invalid": "No és una expressió regular vàlida",
+  "site_depth": "Profunditat",
+  "site_max_pages": "Màx. pàgines",
+  "site_delay": "Pausa (s)",
+  "site_respect_robots": "Respectar el robots.txt del lloc",
+  "site_courtesy_help": "La pausa i el respecte al robots.txt venen posats. Abaixar-los és una decisió que queda registrada ací.",
+  "type_needs_javascript": "No llegible sense JavaScript",
+  "type_content_updated": "Actualitzada al portal"
 }
