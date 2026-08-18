@@ -229,11 +229,20 @@ echo  cubre. Es el mismo limite que en la PRUEBA F.
 echo.
 echo  1. Coge una hoja REAL: ejecucion presupuestaria, un listado de gasto,
 echo     lo que uses. Sin arreglarla antes.
-echo  2. Ve a Informes, crea un informe con un bloque de transformacion y
-echo     escribe con tus palabras que hay que hacer con ella. Por ejemplo:
-echo       "convierte los importes a numero, calcula el porcentaje de
-echo        ejecucion sobre el credito y ordena de mayor a menor"
-echo  3. Mira las operaciones que propone ANTES de aplicarlas.
+echo  2. Ve a Informes -^> "Proponer con IA" y describe el informe. Por ejemplo:
+echo       "Informe de ejecucion presupuestaria a partir de una hoja de
+echo        calculo. Los importes vienen como texto, hay que convertirlos a
+echo        numero, calcular el porcentaje de ejecucion sobre el credito
+echo        inicial y ordenar de mayor a menor. Una tabla, un grafico de
+echo        barras horizontales con las cifras, y un resumen redactado."
+echo     NO menciones los nombres de las columnas: el fichero llega despues.
+echo  3. Pulsa "Generar propuesta", deja "Crear workspace", ponle nombre y
+echo     pulsa "Aprobar y crear". Te lleva al informe.
+echo  4. En el informe, sube TU hoja en "Datos de partida" y pulsa
+echo     "Generar informe". Cuando el resumen pida revision, apruebalo.
+echo  5. Pulsa "Vista previa".
+echo.
+echo  Hay una guia con capturas de cada pantalla; te la he dado en el chat.
 echo.
 echo  QUE VALORAR:
 echo   - Si ha puesto to_number sobre las columnas de importes. Si NO lo ha

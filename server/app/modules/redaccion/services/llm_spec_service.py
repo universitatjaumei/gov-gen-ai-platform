@@ -134,7 +134,11 @@ def _build_system_prompt(owner_kind: Literal["admin", "user"]) -> str:
         # TABLE sin `data_block_ref`, que es obligatorio.
         + _campos_obligatorios()
         + _esquema_del_contrato()
-        + "Respond ONLY with valid JSON — no markdown, no explanation."
+        + "Respond ONLY with valid JSON — no markdown, no explanation.\n"
+        # GUI.6 — el `rationale` se le muestra a la persona que pidió el informe, así que salía
+        # en inglés en una pantalla institucional en castellano. Los títulos de sección sí
+        # llegaban en el idioma de la petición; el razonamiento, no.
+        + "Write `rationale` and all section/block titles in the SAME LANGUAGE as the request."
         + admin_note
     )
 

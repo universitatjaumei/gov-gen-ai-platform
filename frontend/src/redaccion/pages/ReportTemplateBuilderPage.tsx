@@ -183,13 +183,17 @@ export function ReportTemplateBuilderPage() {
         ))}
       </ul>
 
-      {/* Confirmación: nada se retira de un solo clic, y el aviso dice qué NO se pierde. */}
+      {/* Confirmación: nada se retira de un solo clic, y el aviso dice qué NO se pierde.
+          Va **encima** de la página y no al final: con diecisiete plantillas en la lista, un
+          cuadro al final del documento queda fuera de pantalla y pulsar «Retirar» parece no
+          hacer nada. Visto en el navegador al capturar la guía. */}
       {aRetirar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
         <div
           role="dialog"
           aria-modal="true"
           aria-label={t('templates.archive_title')}
-          className="border rounded-lg p-4 bg-card space-y-3"
+          className="border rounded-lg p-4 bg-card space-y-3 max-w-lg w-full shadow-lg"
         >
           <h2 className="text-sm font-medium">
             {t('templates.archive_title', { name: aRetirar.name })}
@@ -216,6 +220,7 @@ export function ReportTemplateBuilderPage() {
               {tc('cancel', 'Cancelar')}
             </button>
           </div>
+        </div>
         </div>
       )}
     </div>
