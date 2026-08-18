@@ -6,7 +6,9 @@ completa la migración de su capa de servicio (AIBrainService).
 """
 
 from contextlib import asynccontextmanager
+import logging
 import os
+import traceback
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -153,8 +155,61 @@ async def _fail_zombie_jobs() -> None:
         await session.commit()
 
 
+logger = logging.getLogger(__name__)
+
+
+def _resumen_del_fallo(exc: BaseException) -> str:
+    """La causa de un fallo de arranque, en pocas líneas y apuntando a nuestro código.
+
+    FastAPI fusiona un `lifespan` por cada router incluido, así que con unas cuarenta superficies
+    HTTP el traceback llega con ~40 marcos idénticos de `merged_lifespan` **antes** de la
+    excepción real. Cualquier captura de log lo corta por el medio y se pierde justo el mensaje
+    que importa: en los logs que motivaron esto, la traza terminaba a media palabra y lo único
+    legible era «Application startup failed».
+
+    Aquí se descartan los marcos de librería y se conserva la cadena de causas, porque un
+    `ImportError` envuelto en otro error no dice nada si se pierde el original.
+    """
+    lineas: list[str] = []
+    actual: BaseException | None = exc
+    visitadas: set[int] = set()
+
+    while actual is not None and id(actual) not in visitadas and len(lineas) < 10:
+        visitadas.add(id(actual))
+        prefijo = "causado por: " if lineas else ""
+        lineas.append(f"{prefijo}{type(actual).__name__}: {actual}")
+
+        nuestros = [
+            marco
+            for marco in traceback.extract_tb(actual.__traceback__)
+            if "site-packages" not in marco.filename and "contextlib" not in marco.filename
+        ]
+        if nuestros:
+            ultimo = nuestros[-1]
+            fichero = ultimo.filename.replace("\\", "/").split("/")[-1]
+            lineas.append(f"    en {fichero}:{ultimo.lineno} ({ultimo.name})")
+
+        actual = actual.__cause__ or actual.__context__
+
+    return "\n".join(lineas)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    try:
+        async with _arranque(app):
+            yield
+    except BaseException as exc:
+        # Se registra y **se vuelve a lanzar**: tragarse el error dejaría la aplicación en pie
+        # y a medio construir, que es peor que no arrancar.
+        logger.critical(
+            "El arranque ha fallado. Causa:\n%s", _resumen_del_fallo(exc)
+        )
+        raise
+
+
+@asynccontextmanager
+async def _arranque(app: FastAPI):
     await init_server_db()
     await _init_hub_db()
     await _fail_zombie_jobs()
