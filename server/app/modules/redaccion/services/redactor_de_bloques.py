@@ -23,6 +23,58 @@ _SISTEMA = (
     "en vez de inventarlo. El tono es sobrio y administrativo, sin adjetivos valorativos."
 )
 
+#: Identificadores estables: van al bloque como `prompt_version` y al manifiesto, así que
+#: **no se renombran** sin asumir que los informes ya generados dejan de ser reconstruibles.
+PROMPT_VALORACION_DE_TENDENCIA = "valoracion_de_tendencia_v1"
+PROMPT_RESUMEN_DE_RESULTADOS = "resumen_de_resultados_v1"
+
+
+# SEG.2 — las reglas de las dos instrucciones siguientes se portan del prompt que el usuario ya
+# usaba con una gema de Gemini. Allí iban en mayúsculas porque era lo único que había para
+# defenderlas; cada una viene de un fallo observado —tablas inventadas, resúmenes que omitían—
+# y no de una preferencia de estilo.
+_VALORACION_DE_TENDENCIA = (
+    "Valora la evolución de los indicadores de la tabla del contexto, comparando el último "
+    "curso o ejercicio con los anteriores.\n"
+    "\n"
+    "Reglas, y son duras:\n"
+    "- Apóyate ÚNICAMENTE en las cifras de esta tabla. Un dato que no esté en ella no se "
+    "menciona, ni siquiera si lo sabes por otra vía.\n"
+    "- **No calcules** nada que no venga dado: ni medias, ni totales, ni porcentajes, ni "
+    "agregados. Si una cifra que haría falta no está, dilo.\n"
+    "- Una celda sin dato —«No hay valor», vacía o equivalente— es una AUSENCIA: se dice que "
+    "ese curso no tiene medición y no se rellena, ni se interpola, ni se sustituye por cero. "
+    "La diferencia entre «no hay dato» y «el dato es cero» es información.\n"
+    "- Di si la tendencia de cada indicador crece, decrece o se mantiene, con las cifras "
+    "delante.\n"
+    "- Cuando un indicador empeore, puedes sugerir acciones de mejora, pero **no uses "
+    "imperativos**: son sugerencias para que quien firma el informe las considere, con tono "
+    "neutro y sin atribuir responsabilidades.\n"
+    "- Si observas una relación entre dos variables de la misma tabla, puedes señalarla "
+    "marcándola explícitamente como hipótesis, nunca como causa demostrada.\n"
+    "- Cierra dejando claro que la reflexión cualitativa corresponde a quien firma el informe.\n"
+    "\n"
+    "No reproduzcas la tabla: ya está en el informe. Interprétala."
+)
+
+_RESUMEN_DE_RESULTADOS = (
+    "Resume los resultados que muestran las tablas del contexto, que pueden ser varias tablas "
+    "de un mismo apartado.\n"
+    "\n"
+    "Reglas, y son las mismas de siempre:\n"
+    "- Cada afirmación se apoya en una cifra de las tablas, y sólo en ellas.\n"
+    "- **No calcules** agregados que no vengan dados, ni compares magnitudes que midan cosas "
+    "distintas.\n"
+    "- Una celda sin dato —«No hay valor»— es una ausencia y se dice; no se rellena.\n"
+    "- Menciona TODAS las tablas del contexto: si una no aporta nada al resumen, dilo en una "
+    "frase en vez de omitirla en silencio. Dejar fuera una tabla sin avisar es el fallo más "
+    "difícil de detectar de un resumen.\n"
+    "- Sin conclusiones que las cifras no sostengan, y sin adjetivos valorativos.\n"
+    "\n"
+    "Cierra dejando claro que la valoración cualitativa corresponde a quien firma el informe."
+)
+
+
 CATALOGO_DE_PROMPTS: dict[str, str] = {
     "generic_report_v1": (
         "Redacta esta sección del informe a partir de los datos extraídos que figuran en el "
@@ -30,6 +82,8 @@ CATALOGO_DE_PROMPTS: dict[str, str] = {
         "afirmación en un dato del contexto y cierra sin conclusiones que los datos no "
         "sostengan. No repitas las tablas: interprétalas."
     ),
+    PROMPT_VALORACION_DE_TENDENCIA: _VALORACION_DE_TENDENCIA,
+    PROMPT_RESUMEN_DE_RESULTADOS: _RESUMEN_DE_RESULTADOS,
 }
 
 _SIN_CATALOGO = (
