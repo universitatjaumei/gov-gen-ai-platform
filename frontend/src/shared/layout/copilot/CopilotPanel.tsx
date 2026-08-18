@@ -32,7 +32,6 @@ const FLUJO_PILLS: ReadonlyArray<{ key: string; fallback: string }> = [
 export function CopilotPanel() {
   const { t } = useTranslation('redaccion')
   const context = useFocusStore((s) => s.context)
-  const dispatchAction = useFocusStore((s) => s.dispatchCopilotAction)
 
   const [mode, setMode] = useState<Mode>('ask')
   const [input, setInput] = useState('')
@@ -40,6 +39,7 @@ export function CopilotPanel() {
   const [askResponse, setAskResponse] = useState<CopilotAnswer | null>(null)
   const [translateResponse, setTranslateResponse] = useState<CopilotTranslateResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [copiado, setCopiado] = useState(false)
 
   const pills = context?.type === 'flujo' ? FLUJO_PILLS : INFORME_PILLS
 
@@ -72,11 +72,10 @@ export function CopilotPanel() {
     }
   }
 
-  const handleApply = () => {
+  const handleCopy = async () => {
     if (!translateResponse) return
-    dispatchAction({ kind: translateResponse.kind, payload: translateResponse.payload })
-    setTranslateResponse(null)
-    setInput('')
+    await navigator.clipboard.writeText(JSON.stringify(translateResponse.payload, null, 2))
+    setCopiado(true)
   }
 
   return (
@@ -157,13 +156,26 @@ export function CopilotPanel() {
           <pre className="text-xs bg-muted p-2 rounded overflow-x-auto max-h-48">
             {JSON.stringify(translateResponse.payload, null, 2)}
           </pre>
+          {/* GUI.5 — aquí había un botón «Aplicar» que **no hacía nada**: escribía la propuesta
+              en `pendingAction` del store y `useCopilotAction`, el único que la lee, no lo usa
+              ninguna pantalla. Un botón que no hace nada es peor que no tener botón, porque
+              quien lo pulsa cree que ya está hecho. La propuesta se lee y se copia; aplicarla
+              exige una pantalla que la reciba, y esa pantalla no existe todavía. */}
           <button
-            data-testid="copilot-apply"
-            className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm"
-            onClick={handleApply}
+            data-testid="copilot-copy"
+            className="px-3 py-1.5 rounded-md border text-sm hover:bg-accent"
+            onClick={handleCopy}
           >
-            {t('copilot.apply', 'Aplicar')}
+            {copiado
+              ? t('copilot.copied', 'Copiado')
+              : t('copilot.copy', 'Copiar la propuesta')}
           </button>
+          <p className="text-xs text-muted-foreground">
+            {t(
+              'copilot.translate_hint',
+              'Esta propuesta es una sugerencia para que la leas: los bloques del informe se crean desde la descripción, en «Proponer con IA».',
+            )}
+          </p>
         </div>
       )}
     </div>

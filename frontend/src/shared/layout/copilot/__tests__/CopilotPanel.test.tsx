@@ -45,36 +45,37 @@ describe('CopilotPanel', () => {
     expect(screen.queryByText(/rechazo/i)).not.toBeInTheDocument()
   })
 
-  it('should_dispatch_action_to_active_wizard_when_apply_clicked', async () => {
+  /**
+   * GUI.5 — este test exigia que 'Aplicar' escribiera la propuesta en 'pendingAction' del
+   * store, y lo hacia. Lo que nadie comprobo es que **nadie lo lee**: 'useCopilotAction', el
+   * unico consumidor, no lo usa ninguna pantalla. Un boton verde que no hace nada es peor que
+   * no tener boton, porque quien lo pulsa cree que ya esta hecho.
+   *
+   * La propuesta ahora se copia, que es algo que de verdad ocurre.
+   */
+  it('should_copiar_la_propuesta_en_vez_de_prometer_aplicarla', async () => {
     vi.mocked(translateCopilotApiV1RedaccionCopilotTranslatePost).mockResolvedValue({
       kind: 'chart_config',
       payload: { chart_type: 'bar', x_column: 'mes', y_column: 'importe' },
     } as any)
+    const escribir = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText: escribir } })
 
     act(() => useFocusStore.getState().setContext({ type: 'informe', entityId: 'ws-1' }))
     render(<CopilotPanel />)
 
-    // Cambiamos al modo "chart"
     fireEvent.click(screen.getByTestId('copilot-mode-chart'))
-
-    // Escribimos instrucción y enviamos
     fireEvent.change(screen.getByTestId('copilot-input'), {
-      target: { value: 'Gráfico de barras por mes' },
+      target: { value: 'Grafico de barras por mes' },
     })
     fireEvent.click(screen.getByTestId('copilot-send'))
 
-    // Esperamos a la respuesta estructurada
-    const applyBtn = await screen.findByTestId('copilot-apply')
-    expect(applyBtn).toBeInTheDocument()
-
-    // Al pulsar Aplicar, se dispatchea la acción al store
+    expect(screen.queryByTestId('copilot-apply')).not.toBeInTheDocument()
+    const copiar = await screen.findByTestId('copilot-copy')
     await act(async () => {
-      fireEvent.click(applyBtn)
+      fireEvent.click(copiar)
     })
 
-    expect(useFocusStore.getState().pendingAction).toEqual({
-      kind: 'chart_config',
-      payload: { chart_type: 'bar', x_column: 'mes', y_column: 'importe' },
-    })
+    expect(escribir).toHaveBeenCalledWith(expect.stringContaining('chart_type'))
   })
 })

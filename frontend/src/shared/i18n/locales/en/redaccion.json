@@ -34,7 +34,10 @@
         "connect_slack": "Connect this flow to Slack",
         "suggest_transform": "Suggest a data transformation"
       }
-    }
+    },
+    "copy": "Copy the proposal",
+    "copied": "Copied",
+    "translate_hint": "This proposal is a suggestion for you to read: the report blocks are created from the description, in “Propose with AI”."
   },
   "status": {
     "missing_data": "Data pending",
@@ -131,5 +134,6 @@
     "archive_title": "Retire template “{{name}}”",
     "archive_warning": "It will stop appearing in the lists and no new reports can be created from it. Reports already generated from this template are kept and can still be opened and exported. You can bring it back from “Also show retired ones”.",
     "archive_confirm": "Yes, retire it"
-  }
+  },
+  "preview_pending": "Before you can see the report, {{count}} AI-written block(s) must be approved. Go back to the report screen and approve them in the review panel."
 }

@@ -34,7 +34,10 @@
         "connect_slack": "Connecta aquest flux amb Slack",
         "suggest_transform": "Suggereix una transformació de dades"
       }
-    }
+    },
+    "copy": "Copia la proposta",
+    "copied": "Copiat",
+    "translate_hint": "Aquesta proposta és un suggeriment per a llegir-la: els blocs de l’informe es creen des de la descripció, a «Proposar amb IA»."
   },
   "status": {
     "missing_data": "Dades pendents",
@@ -131,5 +134,6 @@
     "archive_title": "Retirar la plantilla «{{name}}»",
     "archive_warning": "Deixarà d’aparèixer a les llistes i no es podran crear informes nous amb ella. Els informes ja generats amb aquesta plantilla es conserven i es podran continuar obrint i exportant. Podràs recuperar-la des de «Mostra també les retirades».",
     "archive_confirm": "Sí, retira-la"
-  }
+  },
+  "preview_pending": "Abans de veure l’informe cal aprovar {{count}} bloc(s) escrit(s) per la IA. Torna a la pantalla de l’informe i aprova’l(s) al panell de revisió."
 }
