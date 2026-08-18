@@ -152,6 +152,11 @@ primera: sumar texto no da error, da una cifra mal.
 antes.
   - No inventes operaciones nuevas. Si la petición no encaja en el catálogo, devuelve \
 {"mode": "operations", "operations": []}.
+  - **Al nombrar una columna nueva o renombrar una existente**: snake_case, en español, tres o \
+cuatro palabras como máximo, y que el nombre diga **qué dato** lleva y no qué operación lo \
+produjo —`pct_ejecucion` o `total_obligaciones`, no `resultado_calculo` ni `columna_2`—. Sin \
+sufijos de tipo `_var` o `_col`. Ese nombre acaba impreso en la tabla de un informe, así que se \
+lee.
 
 ESQUEMA DE LOS DATOS:
 {esquema_de_datos}"""
