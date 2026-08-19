@@ -86,7 +86,7 @@ vi.mock('@/shared/api/generated/hub-sites/hub-sites', () => ({
 }))
 
 vi.mock('@/shared/api/generated/hub-content-quality/hub-content-quality', () => ({
-  useListSiteFindings: () => ({ data: HALLAZGOS, isLoading: false }),
+  useListSiteFindings: vi.fn(() => ({ data: HALLAZGOS, isLoading: false })),
   useTransitionFinding: () => ({ mutate: vi.fn() }),
   getListSiteFindingsQueryKey: () => ['findings'],
   useListContentGaps: () => ({ data: [], isLoading: false }),
@@ -177,5 +177,32 @@ describe('cada hallazgo dice por qué lo es', () => {
     expect(razonDelHallazgo({ finding_type: 'stale', signal: {} }, (k: string) => k)).not.toContain(
       'undefined',
     )
+  })
+})
+
+describe('la cola enseña lo que sigue pidiendo trabajo (CUR.9)', () => {
+  /**
+   * La reconciliación retira los hallazgos que ya no se detectan, pero si la pantalla los sigue
+   * listando con la etiqueta «Resuelto» no hemos resuelto nada: en el apartado real serían 109 filas
+   * caducadas entre las vivas. La cola por defecto es lo **abierto**, y lo cerrado se elige.
+   */
+  it('pide solo los abiertos si nadie ha elegido estado', async () => {
+    const { useListSiteFindings } = await import(
+      '@/shared/api/generated/hub-content-quality/hub-content-quality'
+    )
+    await pantalla()
+
+    const parametros = (useListSiteFindings as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)
+    expect(parametros?.[1]).toEqual(expect.objectContaining({ status: 'open' }))
+  })
+
+  it('ofrece ver los retirados, que no es lo mismo que esconderlos', async () => {
+    await pantalla()
+
+    const opciones = [...(screen.getAllByRole('combobox')[1] as HTMLSelectElement).options].map(
+      (o) => o.value,
+    )
+    expect(opciones).toContain('resolved')
+    expect(opciones).toContain('')  // «todos», para poder auditar el histórico
   })
 })

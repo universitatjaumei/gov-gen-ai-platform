@@ -11,7 +11,13 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Protocol
+
+from server.app.modules.curation.reconciliacion import (
+    reconciliar_hallazgos,
+    tipos_a_reconciliar,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +67,9 @@ class SiteQualitySummary:
     #: RAS.5 — páginas del corpus que cambiaron en el portal y se han vuelto a ingerir. El rastreo
     #: ya detectaba el cambio y nadie lo propagaba: el asistente seguía citando el texto viejo.
     documents_reingested: int = 0
+    #: CUR.9 — hallazgos retirados porque este análisis ya no los emite. Sin esta cifra, «41 nuevos»
+    #: y «41 nuevos y 300 retirados» se leerían igual, y son dos noticias muy distintas.
+    findings_retired: int = 0
     errors: list[str] = field(default_factory=list)
 
 
@@ -223,16 +232,24 @@ class SiteQualityAnalysisJob:
 
         # ── 2. DETECCIÓN (cada detector aislado) ──────────────────────────────
         all_findings: list = []
+        # CUR.9 — quién ha mirado de verdad y quién no. La reconciliación de abajo sólo puede
+        # retirar los tipos de los detectores que **han corrido**: un detector que se saltó, o que
+        # falló, no autoriza a retirar nada suyo.
+        ejecutados: list = []
+        omitidos: list = []
         for detector in self._detectors:
             is_sem = getattr(detector, "_is_semantic", False)
             if is_sem and not self._run_semantic:
+                omitidos.append(detector)
                 continue
             try:
                 findings = await detector.analyze(site_id)
                 all_findings.extend(findings)
+                ejecutados.append(detector)
             except Exception as exc:
                 logger.exception("Detector failed for site %s", site_id)
                 summary.errors.append(f"detector: {exc}")
+                omitidos.append(detector)
 
         # Conteo por tipo de hallazgo
         for f in all_findings:
@@ -244,6 +261,27 @@ class SiteQualityAnalysisJob:
             from server.app.modules.agents_hub.database.operational_models import (
                 HubCrawledPage,
             )
+
+            # ── 3.pre. RECONCILIACIÓN (CUR.9) ─────────────────────────────────
+            #
+            # El detector sólo sabía añadir: afirmaba y nunca dejaba de afirmar. Medido tras CUR.7:
+            # 241 hallazgos `stale` guardados donde el detector emitía 207, porque las páginas que
+            # pasaron a agruparse como serie dejaron de producir aviso y su fila vieja seguía ahí.
+            # Del usuario: «no tiene sentido que haya filas que ya no sean ciertas».
+            #
+            # Va antes de calcular `quality_score` a propósito: la nota de una página no puede
+            # seguir castigada por hallazgos que ya se han retirado.
+            try:
+                summary.findings_retired = await reconciliar_hallazgos(
+                    session,
+                    site_id,
+                    tipos=tipos_a_reconciliar(ejecutados=ejecutados, omitidos=omitidos),
+                    emitidos=all_findings,
+                    now=datetime.now(timezone.utc),
+                )
+            except Exception as exc:  # noqa: BLE001 — retirar de más es peor que no retirar
+                logger.exception("Reconciliation failed for site %s", site_id)
+                summary.errors.append(f"reconciliation: {exc}")
 
             # Flags de supersesión sobre HubCrawledPage
             for f in all_findings:

@@ -16,6 +16,16 @@ from server.app.modules.curation.contracts import (
 )
 
 
+#: Los estados de un hallazgo que **siguen pidiendo trabajo**. Lo demás está cerrado: descartado por
+#: una persona o retirado por la reconciliación de CUR.9.
+ESTADOS_ABIERTOS = ("new", "confirmed")
+
+#: Valor del filtro que significa «los dos estados abiertos». Existe porque la cola por defecto es
+#: lo abierto, y sin esto la pantalla tendría que pedir dos veces y unir, o mostrar 109 hallazgos
+#: retirados con la etiqueta «Resuelto» —que es justo lo que el usuario pidió que dejara de pasar—.
+FILTRO_ABIERTOS = "open"
+
+
 class ContentFindingRepo:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -66,7 +76,9 @@ class ContentFindingRepo:
         finding_type: Optional[str] = None,
     ) -> list[HubContentFinding]:
         stmt = select(HubContentFinding).where(HubContentFinding.site_id == site_id)
-        if status is not None:
+        if status == FILTRO_ABIERTOS:
+            stmt = stmt.where(HubContentFinding.status.in_(ESTADOS_ABIERTOS))
+        elif status is not None:
             stmt = stmt.where(HubContentFinding.status == status)
         if finding_type is not None:
             stmt = stmt.where(HubContentFinding.finding_type == finding_type)

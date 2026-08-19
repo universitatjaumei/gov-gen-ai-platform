@@ -155,5 +155,8 @@
   "reason_updated_short": "El portal la va canviar i s’ha reingerit",
   "ingest_sent": "{{count}} pàgina(es) enviades a ingerir. Tarda uns segons: la ingesta va en segon pla.",
   "refresh_candidates": "Actualitzar",
-  "pdf_unavailable": "Aquest servidor no té LibreOffice, així que no pot generar PDF: l’informe es descarrega en Word. Instal·lant LibreOffice al servidor apareixerà el botó de PDF."
+  "pdf_unavailable": "Aquest servidor no té LibreOffice, així que no pot generar PDF: l’informe es descarrega en Word. Instal·lant LibreOffice al servidor apareixerà el botó de PDF.",
+  "status_open": "Pendents",
+  "status_all": "Tots els estats",
+  "findings_retired": "{{count}} troballa(es) retirades en l’últim anàlisi perquè ja no es detecten"
 }

@@ -155,5 +155,8 @@
   "reason_updated_short": "El portal la cambió y se reingirió",
   "ingest_sent": "{{count}} página(s) enviadas a ingerir. Tarda unos segundos: la ingesta corre en segundo plano.",
   "refresh_candidates": "Actualizar",
-  "pdf_unavailable": "Este servidor no tiene LibreOffice, así que no puede generar PDF: el informe se descarga en Word. Instalando LibreOffice en el servidor aparecerá el botón de PDF."
+  "pdf_unavailable": "Este servidor no tiene LibreOffice, así que no puede generar PDF: el informe se descarga en Word. Instalando LibreOffice en el servidor aparecerá el botón de PDF.",
+  "status_open": "Pendientes",
+  "status_all": "Todos los estados",
+  "findings_retired": "{{count}} hallazgo(s) retirados en el último análisis porque ya no se detectan"
 }

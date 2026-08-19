@@ -83,6 +83,16 @@ class DeterministicDetectorDispatcher:
     despachador de rastreo de arriba.
     """
 
+    #: CUR.9 — lo que este detector puede afirmar, y por tanto lo que puede dejar de afirmar. La
+    #: reconciliación sólo retira los tipos de los detectores que han corrido.
+    #: `duplicate` está aquí **y** en el semántico: el determinista lo emite por `content_hash`
+    #: exacto (CUR.2) y el otro por significado. Ese solape es lo que hace que un tipo compartido
+    #: sólo se reconcilie cuando los dos han pasado.
+    finding_types = frozenset({
+        "empty", "thin", "stale", "crawl_error", "orphan_page",
+        "needs_javascript", "superseded", "version_series", "duplicate",
+    })
+
     def __init__(self, session_factory: Any) -> None:
         self._session_factory = session_factory
 
@@ -135,6 +145,9 @@ class SemanticDetectorDispatcher:
     """
 
     _is_semantic = True
+
+    #: CUR.9 — lo que juzga el modelo. `duplicate` lo comparte con el determinista.
+    finding_types = frozenset({"duplicate", "contradiction"})
 
     def __init__(
         self,

@@ -56,7 +56,10 @@ export function FindingsPage() {
   const qc = useQueryClient()
 
   const [selectedSiteId, setSelectedSiteId] = useState<string>('')
-  const [statusFilter, setStatusFilter] = useState<string>('')
+  // CUR.9 — la cola arranca en lo **abierto**. La reconciliación retira los hallazgos que ya no se
+  // detectan, y listarlos con la etiqueta «Resuelto» sería no haber resuelto nada: en el apartado
+  // real son 109 filas caducadas entre las vivas. Lo cerrado se sigue pudiendo ver eligiéndolo.
+  const [statusFilter, setStatusFilter] = useState<string>('open')
   const [typeFilter, setTypeFilter] = useState<string>('')
   // CUR.4 — qué grupo está desplegado y qué página se está leyendo.
   const [desplegado, setDesplegado] = useState<string | null>(null)
@@ -114,7 +117,10 @@ export function FindingsPage() {
               className="border rounded px-2 py-1.5 text-sm"
               aria-label={t('filter_status')}
             >
-              <option value="">{t('filter_status')}</option>
+              {/* CUR.9 — «Pendientes» es el defecto, y «Todos» sigue estando para auditar el
+                  histórico: retirar no es esconder. */}
+              <option value="open">{t('status_open')}</option>
+              <option value="">{t('status_all')}</option>
               <option value="new">{t('status_new')}</option>
               <option value="confirmed">{t('status_confirmed')}</option>
               <option value="dismissed">{t('status_dismissed')}</option>

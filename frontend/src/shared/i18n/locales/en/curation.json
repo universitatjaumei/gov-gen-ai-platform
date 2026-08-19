@@ -155,5 +155,8 @@
   "reason_updated_short": "The portal changed it and it was re-ingested",
   "ingest_sent": "{{count}} page(s) sent for ingestion. It takes a few seconds: ingestion runs in the background.",
   "refresh_candidates": "Refresh",
-  "pdf_unavailable": "This server has no LibreOffice, so it cannot generate PDF: the report downloads as Word. Installing LibreOffice on the server brings the PDF button back."
+  "pdf_unavailable": "This server has no LibreOffice, so it cannot generate PDF: the report downloads as Word. Installing LibreOffice on the server brings the PDF button back.",
+  "status_open": "Open",
+  "status_all": "All statuses",
+  "findings_retired": "{{count}} finding(s) retired in the last analysis because they are no longer detected"
 }
