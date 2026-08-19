@@ -192,8 +192,15 @@ async def test_candidates_returns_matching_not_ingested():
 
 
 @pytest.mark.asyncio
-async def test_candidates_excludes_already_ingested():
-    """candidates no incluye páginas cuya ingestión ya existe para este chatbot."""
+async def test_una_pagina_ya_ingerida_se_ve_y_dice_que_lo_esta():
+    """CUR.5 — «que se vea lo que ya está ingerido, para no volver a publicarlo».
+
+    Hasta aquí una página ingerida **desaparecía** de la lista. Cumplía la mitad del objetivo —no
+    se ofrecía dos veces— y rompía la otra: quien publica no puede distinguir «ya está en el
+    corpus» de «nunca fue candidata», y al pulsar «Ingerir» la fila se esfumaba sin decir si
+    había funcionado. La lista pasa a ser el estado del sitio frente al corpus del asistente, y
+    quien decide lo ve.
+    """
     site_id = uuid.uuid4()
     chatbot_id = uuid.uuid4()
 
@@ -207,7 +214,22 @@ async def test_candidates_excludes_already_ingested():
     )
     result = await svc.candidates(site_id, chatbot_id)
 
-    assert result == []
+    assert len(result) == 1
+    assert result[0].page_id == page.id
+    assert result[0].is_ingested is True
+
+
+@pytest.mark.asyncio
+async def test_una_pagina_sin_ingerir_dice_que_no_lo_esta():
+    """El estado tiene que ser afirmativo en los dos sentidos, no la ausencia de una fila."""
+    site_id = uuid.uuid4()
+    chatbot_id = uuid.uuid4()
+    page = _FakePage(site_id, "https://ej.es/temas/agua")
+
+    svc, _, _ = _make_service(pages=[page])
+    result = await svc.candidates(site_id, chatbot_id)
+
+    assert result[0].is_ingested is False
 
 
 @pytest.mark.asyncio

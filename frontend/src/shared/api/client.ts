@@ -8,7 +8,15 @@ import axios, { AxiosError } from 'axios';
  */
 export const apiBaseUrl: string = import.meta.env.VITE_API_URL ?? '';
 
-const axiosInstance = axios.create({ baseURL: apiBaseUrl });
+/**
+ * El cliente con el token puesto. Se exporta porque hay una petición que no encaja en el
+ * `customInstance` de Orval y no puede salirse del cliente: la **descarga de un fichero**, que
+ * necesita `responseType: 'blob'` y la respuesta entera para leer el nombre del servidor. Ver
+ * `download.ts`.
+ */
+export const apiClient = axios.create({ baseURL: apiBaseUrl });
+
+const axiosInstance = apiClient;
 
 axiosInstance.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');

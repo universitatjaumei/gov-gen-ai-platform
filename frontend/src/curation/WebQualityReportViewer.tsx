@@ -2,12 +2,11 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useGetSiteQualityReport } from '@/shared/api/generated/hub-content-quality/hub-content-quality'
 import type { WebQualityReport, FindingTypeSection } from '@/shared/api/generated/model'
+import { descargarConAutorizacion } from '@/shared/api/download'
 
 interface Props {
   siteId: string
 }
-
-const API_BASE = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_API_URL ?? ''
 
 export function WebQualityReportViewer({ siteId }: Props) {
   const { t } = useTranslation('curation')
@@ -16,6 +15,8 @@ export function WebQualityReportViewer({ siteId }: Props) {
   const { data: report, isLoading } = useGetSiteQualityReport(siteId)
   // CUR.4 — que secciones del informe se estan viendo enteras.
   const [desplegadas, setDesplegadas] = useState<Set<string>>(new Set())
+  // CUR.5 — un fallo de descarga tiene que verse en la pantalla, no en la consola.
+  const [errorDeDescarga, setErrorDeDescarga] = useState<string | null>(null)
   const alternar = (tipo: string) =>
     setDesplegadas((previas) => {
       const siguiente = new Set(previas)
@@ -29,8 +30,24 @@ export function WebQualityReportViewer({ siteId }: Props) {
 
   const typedReport = report as WebQualityReport
 
-  const downloadUrl = (format: 'docx' | 'pdf') =>
-    `${API_BASE}/api/v1/hub/sites/${siteId}/report/export?format=${format}`
+  /**
+   * CUR.5 — la descarga se pide con el token puesto.
+   *
+   * Era un `<a href download>`, o sea una navegación del navegador: sin cabecera de autorización,
+   * 401, y el error de descarga de Chrome —«el fitxer no es troba disponible»—, que no menciona el
+   * 401 y parece que el informe no exista.
+   */
+  const descargar = async (formato: 'docx' | 'pdf') => {
+    setErrorDeDescarga(null)
+    try {
+      await descargarConAutorizacion(
+        `/api/v1/hub/sites/${siteId}/report/export?format=${formato}`,
+        `informe_calidad_${siteId}.${formato}`,
+      )
+    } catch (e) {
+      setErrorDeDescarga(e instanceof Error ? e.message : String(e))
+    }
+  }
 
   return (
     <div className="border rounded-lg p-4 space-y-4 bg-muted/20" aria-label={t('report_title')}>
@@ -42,22 +59,30 @@ export function WebQualityReportViewer({ siteId }: Props) {
           </p>
         </div>
         <div className="flex gap-2">
-          <a
-            href={downloadUrl('docx')}
-            download
+          <button
+            type="button"
+            data-testid="btn-descargar-docx"
+            onClick={() => descargar('docx')}
             className="text-xs px-3 py-1.5 rounded border hover:bg-accent"
           >
             {t('download_docx')}
-          </a>
-          <a
-            href={downloadUrl('pdf')}
-            download
+          </button>
+          <button
+            type="button"
+            data-testid="btn-descargar-pdf"
+            onClick={() => descargar('pdf')}
             className="text-xs px-3 py-1.5 rounded border hover:bg-accent"
           >
             {t('download_pdf')}
-          </a>
+          </button>
         </div>
       </div>
+
+      {errorDeDescarga && (
+        <p data-testid="error-descarga" className="text-xs text-destructive">
+          {t('download_failed')}: {errorDeDescarga}
+        </p>
+      )}
 
       {/* Totals */}
       {Object.keys(typedReport.totals_by_type).length === 0 ? (

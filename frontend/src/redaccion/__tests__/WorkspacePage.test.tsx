@@ -28,6 +28,9 @@ vi.mock('@/shared/api/generated/hub-redaccion/hub-redaccion', () => ({
   useGetWorkspaceWarnings: vi.fn(() => ({ data: [], isLoading: false })),
   usePatchWorkspaceBlock: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }))
+vi.mock('@/shared/api/download', () => ({
+  descargarConAutorizacion: vi.fn().mockResolvedValue(undefined),
+}))
 vi.mock('@/shared/api/generated/redaccion-workspaces/redaccion-workspaces', () => ({
   useRunWorkspace: vi.fn(),
   useUploadWorkspaceInput: vi.fn(),
@@ -145,5 +148,28 @@ describe('WorkspacePage', () => {
     renderPage()
 
     expect(screen.queryByRole('link', { name: /vista previa/i })).toBeNull()
+  })
+
+  /**
+   * CUR.5, encontrado de rebote: la exportación del informe tenía **el mismo defecto** que los
+   * botones de descarga del informe de auditoría que el usuario reportó. Era un `<a href>` a
+   * `/export`, o sea una navegación sin cabecera de autorización, y el endpoint depende de
+   * `get_current_user`: 401 y el error de descarga del navegador. PRO.5 dio el informe por
+   * «descargable» y la descarga no podía funcionar.
+   */
+  it('la exportación se pide con el token, no como una navegación del navegador', async () => {
+    const { descargarConAutorizacion } = await import('@/shared/api/download')
+    renderPage({ ...WORKSPACE, status: 'in_review' })
+
+    expect(screen.queryByRole('link', { name: /exportar|descargar/i })).toBeNull()
+
+    fireEvent.click(await screen.findByTestId('btn-exportar'))
+
+    await waitFor(() =>
+      expect(descargarConAutorizacion).toHaveBeenCalledWith(
+        `/api/v1/redaccion/workspaces/${WORKSPACE_ID}/export`,
+        expect.stringContaining('.docx'),
+      ),
+    )
   })
 })

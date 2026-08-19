@@ -14,7 +14,7 @@ import {
 } from '@/shared/api/generated/redaccion-workspaces/redaccion-workspaces'
 import type { ReportUIContract, WorkspaceOut } from '@/shared/api/generated/model'
 
-import { apiBaseUrl } from '@/shared/api/client'
+import { descargarConAutorizacion } from '@/shared/api/download'
 import { FocusLayout } from '@/shared/layout/FocusLayout'
 import { useFocusStore } from '@/shared/layout/useFocusStore'
 import { AIBlockReviewPanel } from '../components/AIBlockReviewPanel'
@@ -99,6 +99,19 @@ export function WorkspacePage() {
     })
   }
 
+  /** CUR.5 — el DOCX se pide con el token; un `<a href>` a la API se lleva un 401. */
+  async function exportar() {
+    setErrorDeSubida('')
+    try {
+      await descargarConAutorizacion(
+        `/api/v1/redaccion/workspaces/${id}/export`,
+        `informe_${id}.docx`,
+      )
+    } catch (fallo) {
+      setErrorDeSubida((fallo as Error).message)
+    }
+  }
+
   return (
     <FocusLayout context={{ type: 'informe', entityId: id }}>
       <div className="space-y-4 p-4">
@@ -142,14 +155,18 @@ export function WorkspacePage() {
               {t('workspace_preview')}
             </Link>
             {/* PRO.5 — el informe se puede descargar: el servicio existía y ninguna ruta lo
-                servía, así que no había de dónde bajarlo. */}
-            <a
-              data-testid="enlace-exportar"
-              href={`${apiBaseUrl}/api/v1/redaccion/workspaces/${id}/export`}
+                servía, así que no había de dónde bajarlo. CUR.5 — y pedirlo con un `<a href>` es
+                una navegación sin cabecera de autorización: el endpoint depende de
+                `get_current_user`, así que devolvía 401 y el navegador enseñaba su propio error de
+                descarga. */}
+            <button
+              type="button"
+              data-testid="btn-exportar"
+              onClick={() => exportar()}
               className="px-4 py-2 text-sm border rounded-md hover:bg-accent"
             >
               {t('workspace_export')}
-            </a>
+            </button>
           </>
         )}
 

@@ -115,5 +115,12 @@
   "page_content_note": "Aquest és el text que aniria al corpus de l'assistent, sense el menú ni la plantilla del portal. No és la pàgina original.",
   "page_content_empty": "Aquesta pàgina no té text guardat.",
   "page_content_needs_js": "Aquesta pàgina no s'ha pogut llegir sense renderitzar, així que el seu text pot estar incomplet.",
-  "show_rest": "més (veure tots)"
+  "show_rest": "més (veure tots)",
+  "download_failed": "No s’ha pogut descarregar l’informe",
+  "ingest_selected": "Ingerir les marcades ({{count}})",
+  "select_all": "Marcar-ho tot",
+  "candidate_corpus_state": "Al corpus",
+  "candidate_ingested": "Ja ingerida",
+  "candidate_not_ingested": "Sense ingerir",
+  "candidates_summary": "{{publicables}} per publicar · {{ingeridas}} ja al corpus"
 }

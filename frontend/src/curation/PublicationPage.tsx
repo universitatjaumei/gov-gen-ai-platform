@@ -46,6 +46,9 @@ export function PublicationPage() {
   const [selDialogOpen, setSelDialogOpen] = useState(false)
   // CUR.4 — la pagina cuyo texto guardado se esta leyendo antes de decidir si se publica.
   const [paginaAbierta, setPaginaAbierta] = useState<string | null>(null)
+  // CUR.5 — las paginas marcadas para publicar. Del usuario: «no pueden desmarcarse algunas.
+  // Convenria que se pudiera elegir».
+  const [marcadas, setMarcadas] = useState<Set<string>>(new Set())
   const [selectedSiteId, setSelectedSiteId] = useState<string>('')
   const [selectedChatbotId, setSelectedChatbotId] = useState<string>('')
 
@@ -93,6 +96,36 @@ export function PublicationPage() {
   const handleIngest = (pageId: string) => {
     if (!selectedChatbotId) return
     ingestMutation.mutate({ chatbotId: selectedChatbotId, pageId })
+  }
+
+  /**
+   * CUR.5 — marcar, desmarcar e ingerir lo marcado.
+   *
+   * Sigue sin haber «ingerir todo el sitio»: cada página entra al corpus porque alguien la marcó.
+   * Lo que desaparece es tener que pulsar trescientas cuarenta y nueve veces para publicar un
+   * apartado. Una página que ya está en el corpus no se puede marcar — para eso está `is_ingested`.
+   */
+  const publicables = (candidates as CandidatePageView[]).filter((c) => !c.is_ingested)
+
+  const alternarMarca = (pageId: string) =>
+    setMarcadas((previas) => {
+      const siguiente = new Set(previas)
+      if (siguiente.has(pageId)) siguiente.delete(pageId)
+      else siguiente.add(pageId)
+      return siguiente
+    })
+
+  const marcarTodo = () =>
+    setMarcadas((previas) =>
+      previas.size === publicables.length
+        ? new Set()
+        : new Set(publicables.map((c) => String(c.page_id))),
+    )
+
+  const ingerirLoMarcado = () => {
+    if (!selectedChatbotId) return
+    marcadas.forEach((pageId) => ingestMutation.mutate({ chatbotId: selectedChatbotId, pageId }))
+    setMarcadas(new Set())
   }
 
   return (
@@ -162,24 +195,65 @@ export function PublicationPage() {
             )}
           </section>
 
-          {/* Candidates: cada fila publica por su cuenta, sin acción masiva */}
+          {/* Candidatas: cada fila publica por su cuenta, y CUR.5 añade marcar varias */}
           <section>
-            <h3 className="text-sm font-semibold mb-2">{t('candidates_title')}</h3>
+            <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
+              <h3 className="text-sm font-semibold">{t('candidates_title')}</h3>
+              {(candidates as CandidatePageView[]).length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground" data-testid="resumen-corpus">
+                    {t('candidates_summary', {
+                      publicables: publicables.length,
+                      ingeridas: (candidates as CandidatePageView[]).length - publicables.length,
+                    })}
+                  </span>
+                  <button
+                    type="button"
+                    data-testid="btn-ingerir-marcadas"
+                    disabled={marcadas.size === 0 || ingestMutation.isPending}
+                    onClick={ingerirLoMarcado}
+                    className="text-xs px-2 py-1 rounded border disabled:opacity-50"
+                  >
+                    {t('ingest_selected', { count: marcadas.size })}
+                  </button>
+                </div>
+              )}
+            </div>
             {(candidates as CandidatePageView[]).length === 0 ? (
               <p className="text-xs text-muted-foreground">{t('no_candidates')}</p>
             ) : (
               <table className="w-full text-xs border-collapse" aria-label={t('candidates_title')}>
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
+                    <th className="py-1 pr-2">
+                      <input
+                        type="checkbox"
+                        data-testid="marca-todo"
+                        aria-label={t('select_all')}
+                        checked={publicables.length > 0 && marcadas.size === publicables.length}
+                        onChange={marcarTodo}
+                      />
+                    </th>
                     <th className="py-1 pr-2">{t('candidate_url')}</th>
                     <th className="py-1 pr-2">{t('candidate_matched_rule')}</th>
                     <th className="py-1 pr-2">{t('candidate_is_new')}</th>
+                    <th className="py-1 pr-2">{t('candidate_corpus_state')}</th>
                     <th className="py-1" />
                   </tr>
                 </thead>
                 <tbody>
                   {(candidates as CandidatePageView[]).map((c) => (
                     <tr key={String(c.page_id)} className="border-b">
+                      <td className="py-1 pr-2">
+                        <input
+                          type="checkbox"
+                          data-testid={`marca-${c.page_id}`}
+                          aria-label={c.url}
+                          disabled={!!c.is_ingested}
+                          checked={marcadas.has(String(c.page_id))}
+                          onChange={() => alternarMarca(String(c.page_id))}
+                        />
+                      </td>
                       {/* CUR.4 — para decidir si una página merece entrar en el corpus hay que
                           poder abrirla y, sobre todo, leer **el texto que se guardó**, que es lo
                           que el asistente va a citar y no lo que se ve en el portal. */}
@@ -196,6 +270,16 @@ export function PublicationPage() {
                       </td>
                       <td className="py-1 pr-2">{c.matched_rule ?? '—'}</td>
                       <td className="py-1 pr-2">{c.is_new ? '✓' : '—'}</td>
+                      {/* CUR.5 — «que se vea lo que ya está ingerido, para no volver a publicarlo».
+                          Antes la fila desaparecía, y una fila que se va no dice si la ingesta
+                          funcionó o si la página nunca fue candidata. */}
+                      <td className="py-1 pr-2" data-testid={`estado-corpus-${c.page_id}`}>
+                        {c.is_ingested ? (
+                          <span className="text-green-700">{t('candidate_ingested')}</span>
+                        ) : (
+                          <span className="text-muted-foreground">{t('candidate_not_ingested')}</span>
+                        )}
+                      </td>
                       <td className="py-1 space-x-1">
                         <button
                           type="button"
@@ -208,7 +292,7 @@ export function PublicationPage() {
                         <button
                           className="px-2 py-0.5 rounded border text-xs"
                           onClick={() => handleIngest(String(c.page_id))}
-                          disabled={ingestMutation.isPending}
+                          disabled={ingestMutation.isPending || !!c.is_ingested}
                         >
                           {t('ingest')}
                         </button>

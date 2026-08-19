@@ -33,11 +33,16 @@ class CorpusSelectionService:
     async def candidates(
         self, site_id: uuid.UUID, chatbot_id: uuid.UUID
     ) -> list:
-        """Páginas activas del sitio no ingeridas aún para este chatbot.
+        """Páginas activas del sitio, con su estado frente al corpus de este chatbot.
 
         Incluye tanto las que casan una selección path_prefix como las que
         son nuevas (sin regla que las case). El campo is_new=True indica que
         la página no está cubierta por ninguna regla de selección activa.
+
+        CUR.5 — las ya ingeridas **también se devuelven**, marcadas con `is_ingested`. Antes se
+        descartaban, y esconder la fila no es lo mismo que decir que ya está en el corpus: quien
+        publica no distinguía «ingerida» de «nunca fue candidata», y al pulsar «Ingerir» la fila
+        desaparecía sin confirmar nada. La pantalla es quien decide no volver a ofrecerla.
         """
         from server.app.modules.agents_hub.database.operational_models import HubDocument
         from server.app.modules.curation.selection_contracts import (
@@ -63,9 +68,6 @@ class CorpusSelectionService:
         # 4. Construir candidatas
         candidates = []
         for page in pages:
-            if page.id in ingested_ids:
-                continue
-
             matched_rule: str | None = None
             for sel in site_sels:
                 if self._selection_repo.matches(sel, page.url):
@@ -79,6 +81,7 @@ class CorpusSelectionService:
                     title=getattr(page, "title", None),
                     matched_rule=matched_rule,
                     is_new=(matched_rule is None),
+                    is_ingested=(page.id in ingested_ids),
                 )
             )
 

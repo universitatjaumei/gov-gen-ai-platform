@@ -216,8 +216,16 @@ class SelectionCreate(BaseModel):
 
 
 class CandidatePageView(BaseModel):
+    """Una página activa del sitio, con su estado frente al corpus del asistente.
+
+    `is_ingested` existe porque «que se vea lo que ya está ingerido» (CUR.5) no se puede resolver
+    ocultando la fila: la ausencia no distingue «ya está en el corpus» de «nunca fue candidata», y
+    tras ingerir una página desaparecía sin decir si había funcionado.
+    """
+
     page_id: uuid.UUID
     url: str
     title: str | None
     matched_rule: str | None
     is_new: bool
+    is_ingested: bool = False

@@ -115,5 +115,12 @@
   "page_content_note": "This is the text that would go into the assistant's corpus, without the portal's menu or template. It is not the original page.",
   "page_content_empty": "This page has no stored text.",
   "page_content_needs_js": "This page could not be read without rendering, so its text may be incomplete.",
-  "show_rest": "more (show all)"
+  "show_rest": "more (show all)",
+  "download_failed": "The report could not be downloaded",
+  "ingest_selected": "Ingest selected ({{count}})",
+  "select_all": "Select all",
+  "candidate_corpus_state": "In corpus",
+  "candidate_ingested": "Already ingested",
+  "candidate_not_ingested": "Not ingested",
+  "candidates_summary": "{{publicables}} to publish · {{ingeridas}} already in corpus"
 }
