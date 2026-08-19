@@ -18510,6 +18510,49 @@ lista de trabajo con la misma pagina dos veces no se usa.
 - [ ] Dos URLs con el mismo contenido salen juntas, con sus fechas
 ```
 
+### Prompt CUR.2.1 (RED/GREEN) — El criterio es dato, no código
+
+**Añadido el 2026-08-19, a mitad del bloque**, por una pregunta del usuario: la aplicación se
+instala en la UJI pero está diseñada multiorganización, y varios ajustes de curación estaban
+entrando **en el código** a partir de cómo es un portal concreto.
+
+**Modelo sugerido**: **Opus** — decide qué es criterio de un cliente y qué es honestidad del sistema.
+
+```
+# PROMPT CUR.2.1 (RED/GREEN) — Los criterios de curacion, por sitio
+# Deploy: edge (modules/curation/) + frontend
+
+## Por que
+Comprobado: el aislamiento de datos si es por organizacion -cada sitio cuelga de
+`organizacion_id` y los routers lo verifican- y todo lo del rastreo ya era configuracion del
+sitio. Pero **los criterios de juicio eran globales**:
+
+- `stale_days=365` y `thin_token_threshold=120` los ponia el constructor del detector y
+  **nadie los pasaba**: `DeterministicDetectorDispatcher` lo instanciaba con los defectos.
+- CUR.2 acababa de fijar **global** que una serie por anos no supersede. Para la UJI es cierto
+  -lo aporto quien conoce el contenido-, pero un portal que versiona convocatorias hace lo
+  contrario. Una suposicion global cambiada por otra.
+
+Es la misma regla que el proyecto ya aplica al vocabulario del corpus: **el criterio es dato, no
+codigo**.
+
+## Que hacer
+1. `CrawlConfig` gana `stale_days`, `thin_min_tokens` y `version_series_policy`
+   (`series` | `superseded` | `off`), con los valores de hoy como defecto: desplegar esto no
+   puede cambiarle el informe a quien no ha tocado nada.
+2. El despachador se los pasa al detector, que hoy los ignora por completo.
+3. El formulario del sitio los ofrece, en su propio bloque «criterios de curacion».
+4. **Escribir la frontera** en `docs/CURACION_MULTIORGANIZACION.md`: que es dato (criterio de un
+   portal) y que es codigo y **no debe poder desactivarse** (cortesia, no acusar de lo que no se
+   pudo leer, 404 != timeout, un fallo no tumba el rastreo, la identidad de una URL).
+
+## Criterio de done
+- [ ] Dos sitios con criterios distintos, sobre paginas identicas, dan hallazgos distintos
+- [ ] Un sitio que no declara nada conserva el criterio de hoy
+- [ ] Lo que no es criterio sino honestidad **no** aparece en la configuracion
+- [ ] La frontera, escrita
+```
+
 ### Prompt CUR.3 (RED/GREEN) — Al corpus solo el contenido
 
 **Modelo sugerido**: **Opus** — quitar el menú sin comerse contenido es un juicio, y se afina

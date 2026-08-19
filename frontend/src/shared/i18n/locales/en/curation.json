@@ -98,5 +98,14 @@
   "type_content_updated": "Updated on the portal",
   "site_date_selector": "Date CSS selector",
   "site_date_format": "Date format",
-  "site_date_help": "If the portal publishes a date on each page, where it is. On www.uji.es it is .clockBarDate, with the owning unit next to it. Without this, age is inferred from the year in the URL."
+  "site_date_help": "If the portal publishes a date on each page, where it is. On www.uji.es it is .clockBarDate, with the owning unit next to it. Without this, age is inferred from the year in the URL.",
+  "type_version_series": "Yearly series",
+  "site_criteria_section": "Curation criteria for this site",
+  "site_stale_days": "Staleness (days)",
+  "site_thin_tokens": "Minimum content (tokens)",
+  "site_series_policy": "Several versions per year",
+  "series_policy_series": "Series: all remain valid",
+  "series_policy_superseded": "The new one supersedes the old",
+  "series_policy_off": "The year means nothing here",
+  "site_series_help": "How this portal publishes. UJI publishes yearly agreements and minutes that all remain valid; another portal versions calls for applications, where the new one replaces the old."
 }

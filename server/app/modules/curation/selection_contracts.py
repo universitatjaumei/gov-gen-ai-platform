@@ -42,6 +42,21 @@ class CrawlConfig(BaseModel):
     content_date_selector: str | None = None
     content_date_format: str = "%d/%m/%Y"
 
+    # CUR.2.1 — los **criterios de juicio**, por sitio y por tanto por organización. Estaban en el
+    # código: `stale_days` y el umbral de contenido pobre los ponía el constructor del detector y
+    # nadie los pasaba, y la semántica de una serie por años se fijó global a partir de cómo publica
+    # un portal concreto. Un portal de normativa y uno de noticias no envejecen igual, y donde la
+    # UJI publica series vigentes otro versiona convocatorias. Es la misma regla que el proyecto ya
+    # aplica al vocabulario del corpus: **el criterio es dato, no código**.
+    #
+    # Los defectos son los de hoy, para no cambiarle el criterio a nadie al desplegar esto.
+    stale_days: int = Field(default=365, ge=1, le=36_500)
+    thin_min_tokens: int = Field(default=120, ge=0, le=100_000)
+    #: `series` — varias versiones por año y **todas vigentes** (la UJI: acuerdos y actas).
+    #: `superseded` — la nueva deroga a la vieja (un portal que versiona convocatorias).
+    #: `off` — el año de la URL no significa nada aquí; agrupar sólo daría ruido.
+    version_series_policy: Literal["series", "superseded", "off"] = "series"
+
     @field_validator("content_date_format")
     @classmethod
     def _debe_ser_un_formato_de_fecha(cls, valor: str) -> str:

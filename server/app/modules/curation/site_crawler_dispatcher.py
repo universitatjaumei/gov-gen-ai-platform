@@ -93,8 +93,20 @@ class DeterministicDetectorDispatcher:
         from server.app.modules.curation.findings_repo import ContentFindingRepo
 
         async with self._session_factory() as session:
+            # CUR.2.1 — los criterios de juicio son **de cada sitio**, y por tanto de cada
+            # organización. Aquí se construía el detector con los valores por defecto del
+            # constructor y nadie le pasaba nada, así que todas las organizaciones compartían
+            # umbral de antigüedad y la misma idea de qué significa una serie por años. Un portal
+            # de normativa y uno de noticias no envejecen igual.
+            sitio = await session.get(HubWebSite, site_id)
+            criterios = (getattr(sitio, "config_json", None) or {}) if sitio else {}
+
             detector = DeterministicQualityDetector(
-                session, finding_repo=ContentFindingRepo(session)
+                session,
+                finding_repo=ContentFindingRepo(session),
+                thin_token_threshold=criterios.get("thin_min_tokens", 120),
+                stale_days=criterios.get("stale_days", 365),
+                version_series_policy=criterios.get("version_series_policy", "series"),
             )
             hallazgos = await detector.analyze(site_id)
             await session.commit()

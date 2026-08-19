@@ -98,5 +98,14 @@
   "type_content_updated": "Actualitzada al portal",
   "site_date_selector": "Selector CSS de la data",
   "site_date_format": "Format de la data",
-  "site_date_help": "Si el portal publica la data en cada pàgina, on és. A www.uji.es és .clockBarDate, amb la unitat responsable al costat. Sense això, l'antiguitat es dedueix de l'any de l'URL."
+  "site_date_help": "Si el portal publica la data en cada pàgina, on és. A www.uji.es és .clockBarDate, amb la unitat responsable al costat. Sense això, l'antiguitat es dedueix de l'any de l'URL.",
+  "type_version_series": "Sèrie per anys",
+  "site_criteria_section": "Criteris de curació d'aquest lloc",
+  "site_stale_days": "Antiguitat (dies)",
+  "site_thin_tokens": "Mínim de contingut (tokens)",
+  "site_series_policy": "Diverses versions per any",
+  "series_policy_series": "Sèrie: totes segueixen vigents",
+  "series_policy_superseded": "La nova deroga l'anterior",
+  "series_policy_off": "L'any no significa res ací",
+  "site_series_help": "Com publica aquest portal. La UJI publica acords i actes per any que segueixen vigents; un altre portal versiona convocatòries i la nova substitueix la vella."
 }

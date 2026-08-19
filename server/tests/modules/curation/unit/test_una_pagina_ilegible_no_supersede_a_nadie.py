@@ -91,17 +91,21 @@ async def test_una_pagina_que_fallo_al_descargarse_no_supersede_a_las_demas():
 
 
 @pytest.mark.asyncio
-async def test_entre_las_que_si_se_leyeron_la_supersesion_sigue_funcionando():
-    """El arreglo no puede desactivar el hallazgo: es el que el módulo existe para dar."""
+async def test_entre_las_que_si_se_leyeron_el_grupo_sigue_detectandose():
+    """El arreglo no puede desactivar el hallazgo: es el que el módulo existe para dar.
+
+    Desde CUR.2 el grupo por años se dice como **serie** y no como supersesión, porque en este
+    portal las versiones antiguas siguen vigentes.
+    """
     paginas = [
         _Pagina(url=f"{_BASE}/2024/", content_year=2024),
         _Pagina(url=f"{_BASE}/2025/", content_year=2025),
     ]
 
-    supersesiones = [h for h in await _hallazgos(paginas) if h.finding_type == "superseded"]
+    series = [h for h in await _hallazgos(paginas) if h.finding_type == "version_series"]
 
-    assert len(supersesiones) == 1
-    assert supersesiones[0].signal["superseded_by"].endswith("/2025/")
+    assert len(series) == 1
+    assert series[0].signal["versions"][0]["url"].endswith("/2025/")
 
 
 @pytest.mark.asyncio

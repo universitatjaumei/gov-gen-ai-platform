@@ -9,6 +9,12 @@ from pydantic import BaseModel, Field, model_validator
 
 
 FindingType = Literal[
+    # CUR.2: hay varias versiones **por ano** del mismo recurso. Sustituye a `superseded` para este
+    # caso, porque el usuario aporto el dato del dominio que lo tumbaba: el portal publica acuerdos
+    # y actas por ano y **todos siguen vigentes**, asi que decir que la de 2017 esta "superada" por
+    # la de 2025 es falso. Lo unico cierto es que la serie existe, y eso es informativo: un hallazgo
+    # por grupo, con sus URLs y sus fechas, para que una persona decida si sobran las antiguas.
+    "version_series",
     "superseded",
     "duplicate",
     "contradiction",

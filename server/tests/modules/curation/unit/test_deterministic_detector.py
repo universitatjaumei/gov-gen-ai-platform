@@ -322,8 +322,13 @@ class TestSuperseded:
     SITE = uuid.uuid4()
 
     @pytest.mark.asyncio
-    async def test_three_versions_two_superseded(self) -> None:
-        """3 versiones del mismo proceso (distinto año en path) → 2 superseded."""
+    async def test_three_versions_are_one_series_finding(self) -> None:
+        """CUR.2 — tres versiones por año dan **un** hallazgo de serie, no dos acusaciones.
+
+        Decía «2 superseded». Lo cambió un dato del dominio que aportó el usuario: el portal
+        publica acuerdos y actas por año y **todos siguen vigentes**, así que decir que la de 2022
+        está «superada» por la de 2024 es falso. Lo cierto es que la serie existe.
+        """
         pages = [
             _FakePage(
                 self.SITE, f"https://u.es/proc/{yr}/x",
@@ -334,17 +339,18 @@ class TestSuperseded:
         ]
         detector, repo = _make_detector(pages)
         await detector.analyze(self.SITE)
-        sup = repo.of_type("superseded")
-        assert len(sup) == 2
-        # La vigente (2024) no aparece como superseded
-        vigente = pages[2]
-        assert all(f.page_id != vigente.id for f in sup)
-        # related_page_id apunta a la vigente
-        assert all(f.related_page_id == vigente.id for f in sup)
+
+        series = repo.of_type("version_series")
+        assert len(series) == 1
+        assert series[0].severity == "info"
+        assert series[0].signal["count"] == 3
+        # La más reciente primero: es la que alguien va a querer mirar.
+        assert series[0].signal["versions"][0]["url"].endswith("/2024/x")
+        assert repo.of_type("superseded") == []
 
     @pytest.mark.asyncio
     async def test_year_in_path_groups_correctly(self) -> None:
-        """'/proc/2023/x' y '/proc/2024/x' agrupan; '/proc/x' y '/otro/x' no."""
+        """'/proc/2023/x' y '/proc/2024/x' agrupan en una serie; '/proc/x' y '/otro/x' no."""
         pages = [
             _FakePage(self.SITE, "https://u.es/proc/2023/x",
                       canonical_url="https://u.es/proc/2023/x", content_year=2023),
@@ -357,10 +363,12 @@ class TestSuperseded:
         ]
         detector, repo = _make_detector(pages)
         await detector.analyze(self.SITE)
-        sup = repo.of_type("superseded")
-        # Solo el 2023 queda superseded; los demás están en grupos distintos
-        assert len(sup) == 1
-        assert sup[0].page_id == pages[0].id
+
+        series = repo.of_type("version_series")
+        assert len(series) == 1
+        assert series[0].signal["count"] == 2
+        agrupadas = {v["url"] for v in series[0].signal["versions"]}
+        assert agrupadas == {"https://u.es/proc/2023/x", "https://u.es/proc/2024/x"}
 
     @pytest.mark.asyncio
     async def test_single_page_group_not_superseded(self) -> None:

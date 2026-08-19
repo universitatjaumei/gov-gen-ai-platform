@@ -16,6 +16,7 @@ import { resolve } from 'node:path'
  */
 
 const TIPOS_QUE_EMITE_EL_BACKEND = [
+  'version_series',
   'superseded',
   'duplicate',
   'contradiction',

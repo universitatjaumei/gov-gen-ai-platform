@@ -98,5 +98,14 @@
   "type_content_updated": "Actualizada en el portal",
   "site_date_selector": "Selector CSS de la fecha",
   "site_date_format": "Formato de la fecha",
-  "site_date_help": "Si el portal publica la fecha en cada página, dónde está. En www.uji.es es .clockBarDate, con la unidad responsable al lado. Sin esto, la antigüedad se deduce del año en la URL."
+  "site_date_help": "Si el portal publica la fecha en cada página, dónde está. En www.uji.es es .clockBarDate, con la unidad responsable al lado. Sin esto, la antigüedad se deduce del año en la URL.",
+  "type_version_series": "Serie por años",
+  "site_criteria_section": "Criterios de curación de este sitio",
+  "site_stale_days": "Antigüedad (días)",
+  "site_thin_tokens": "Mínimo de contenido (tokens)",
+  "site_series_policy": "Varias versiones por año",
+  "series_policy_series": "Serie: todas siguen vigentes",
+  "series_policy_superseded": "La nueva deroga a la anterior",
+  "series_policy_off": "El año no significa nada aquí",
+  "site_series_help": "Cómo publica este portal. La UJI publica acuerdos y actas por año que siguen vigentes; otro portal versiona convocatorias y la nueva sustituye a la vieja."
 }

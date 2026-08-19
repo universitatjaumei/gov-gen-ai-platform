@@ -145,14 +145,20 @@ async def test_la_misma_pagina_en_http_y_https_no_es_una_supersesion():
 
 
 @pytest.mark.asyncio
-async def test_dos_versiones_por_ano_en_la_url_si_son_una_supersesion():
-    """El caso que el detector existe para encontrar: la nueva publicada, la vieja sin retirar."""
+async def test_dos_versiones_por_ano_en_la_url_son_una_serie():
+    """CUR.2 — lo que el detector puede afirmar de un grupo por años es que **existe**.
+
+    Este test decía `superseded`. Lo corrigió el usuario con un dato del dominio: el portal publica
+    por años y todos los documentos siguen vigentes, así que «superada» era falso.
+    """
     paginas = [
         _Pagina(url="https://www.uji.es/x/2024/beques/", content_year=2024),
         _Pagina(url="https://www.uji.es/x/2025/beques/", content_year=2025),
     ]
 
-    assert "superseded" in await _tipos(paginas)
+    tipos = await _tipos(paginas)
+    assert "version_series" in tipos
+    assert "superseded" not in tipos
 
 
 @pytest.mark.asyncio

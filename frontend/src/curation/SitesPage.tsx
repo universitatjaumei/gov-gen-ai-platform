@@ -47,6 +47,12 @@ const siteSchema = z.object({
   // `.clockBarDate`, con la unidad responsable al lado. Sin esto, «desactualizada» se adivina.
   content_date_selector: z.string().optional(),
   content_date_format: z.string().default('%d/%m/%Y'),
+  // CUR.2.1 — los criterios de juicio son de cada sitio, y por tanto de cada organización: un
+  // portal de normativa y uno de noticias no envejecen igual, y donde uno publica series vigentes
+  // otro versiona convocatorias. Estaban en el código.
+  stale_days: z.coerce.number().int().min(1).max(36500).default(365),
+  thin_min_tokens: z.coerce.number().int().min(0).max(100000).default(120),
+  version_series_policy: z.enum(['series', 'superseded', 'off']).default('series'),
 })
 
 type SiteFormInput = z.input<typeof siteSchema>
@@ -85,6 +91,9 @@ export function SitesPage() {
       delay_seconds: 1,
       respect_robots: true,
       content_date_format: '%d/%m/%Y',
+      stale_days: 365,
+      thin_min_tokens: 120,
+      version_series_policy: 'series',
     },
   })
 
@@ -104,6 +113,9 @@ export function SitesPage() {
           respect_robots: data.respect_robots,
           content_date_selector: data.content_date_selector || undefined,
           content_date_format: data.content_date_format,
+          stale_days: data.stale_days,
+          thin_min_tokens: data.thin_min_tokens,
+          version_series_policy: data.version_series_policy,
         },
       },
     })
@@ -284,6 +296,37 @@ export function SitesPage() {
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">{t('site_date_help')}</p>
+              </fieldset>
+
+              {/* CUR.2.1 — los criterios con los que se juzga el contenido de ESTE sitio. Vivían en
+                  el código, así que todas las organizaciones compartían el mismo. */}
+              <fieldset className="border-t pt-3 space-y-3">
+                <legend className="text-sm font-medium">{t('site_criteria_section')}</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-sm font-medium" htmlFor="stale_days">
+                      {t('site_stale_days')}
+                    </label>
+                    <input {...register('stale_days')} id="stale_days" data-testid="campo-antiguedad" type="number" min={1} className="w-full border rounded px-2 py-1.5 text-sm mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium" htmlFor="thin_min_tokens">
+                      {t('site_thin_tokens')}
+                    </label>
+                    <input {...register('thin_min_tokens')} id="thin_min_tokens" data-testid="campo-pobreza" type="number" min={0} className="w-full border rounded px-2 py-1.5 text-sm mt-1" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium" htmlFor="version_series_policy">
+                    {t('site_series_policy')}
+                  </label>
+                  <select {...register('version_series_policy')} id="version_series_policy" data-testid="campo-politica-series" className="w-full border rounded px-2 py-1.5 text-sm mt-1">
+                    <option value="series">{t('series_policy_series')}</option>
+                    <option value="superseded">{t('series_policy_superseded')}</option>
+                    <option value="off">{t('series_policy_off')}</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground mt-0.5">{t('site_series_help')}</p>
+                </div>
                 <p className="text-xs text-muted-foreground">{t('site_courtesy_help')}</p>
               </fieldset>
 
