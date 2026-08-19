@@ -22,12 +22,13 @@ from server.app.modules.agents_hub.ingestion.markdown_utils import (
     extract_title_from_markdown,
 )
 from server.app.modules.curation.contenido_web import (
+    texto_de_contenido,
     fecha_y_responsable,
     parece_html,
-    texto_visible,
     titulo_de,
 )
 from server.app.modules.curation.cortesia import RutaProhibidaPorRobots, clasificar_fallo
+from server.app.modules.curation.plantilla_del_sitio import bloques_repetidos, sin_bloques
 from server.app.modules.curation.sondeo_dinamico import senales_de_dinamismo
 
 
@@ -56,6 +57,13 @@ class SiteCrawlSummary:
     pages_pending: int = 0
     #: URLs que el `robots.txt` del sitio excluye. No son errores.
     pages_forbidden: int = 0
+    #: CUR.3 — cuánta plantilla se ha quitado y a cuántas páginas. Es la cifra que dice si el
+    #: recorte está haciendo algo, y sin ella no se puede juzgar si merece la pena.
+    boilerplate_blocks: int = 0
+    boilerplate_chars_removed: int = 0
+    pages_trimmed: int = 0
+    #: Páginas donde el recorte se lo habría llevado todo y se conservó el original.
+    pages_trim_reverted: int = 0
     # IDs de páginas del diff — usados por SiteQualityAnalysisJob para auto-ingesta (9Q.5)
     new_page_ids: list[uuid.UUID] = field(default_factory=list)
     changed_page_ids: list[uuid.UUID] = field(default_factory=list)
@@ -210,6 +218,11 @@ class SiteCrawler:
             )
             summary.pages_error += 1
 
+        # 2.ter. La plantilla que ningún selector declara, reconocida por repetición (CUR.3): una
+        # línea que sale igual en casi todas las páginas del sitio es menú, no contenido. Se hace
+        # aquí, con todas las páginas leídas, porque es lo único que permite verlo.
+        await self._quitar_la_plantilla_repetida(site, summary)
+
         # 3. Diff de sitemap: bajas (páginas activas que ya no aparecen).
         #
         # Sólo si el rastreo vio el sitio entero. Con un rastreo truncado —por `max_pages`, por
@@ -230,6 +243,51 @@ class SiteCrawler:
         await self._session.flush()
 
         return summary
+
+    async def _quitar_la_plantilla_repetida(
+        self, site: Any, summary: SiteCrawlSummary
+    ) -> None:
+        """Quita de cada página las líneas que se repiten en casi todas las del sitio (CUR.3).
+
+        Los selectores declarados sólo llegan hasta donde alguien los escribió. Esto no necesita
+        saber nada del portal: si una línea sale igual en el 60 % de sus páginas, es plantilla.
+
+        Se apoya en las páginas ya guardadas —incluidas las de rastreos anteriores— porque la
+        repetición es una propiedad **del sitio**, no de una ejecución.
+        """
+        umbral = float((getattr(site, "config_json", None) or {}).get(
+            "boilerplate_repeat_threshold", 0.6
+        ))
+
+        paginas = [
+            p
+            for p in await self._pages.list_by_site(site.id, status="active")
+            if getattr(p, "markdown_content", None)
+        ]
+        if not paginas:
+            return
+
+        bloques = bloques_repetidos([p.markdown_content for p in paginas], umbral=umbral)
+        if not bloques:
+            return
+        summary.boilerplate_blocks = len(bloques)
+
+        for pagina in paginas:
+            limpio, aviso = sin_bloques(pagina.markdown_content, bloques)
+            if aviso:
+                summary.pages_trim_reverted += 1
+                continue
+            if limpio == pagina.markdown_content:
+                continue
+
+            summary.boilerplate_chars_removed += len(pagina.markdown_content) - len(limpio)
+            summary.pages_trimmed += 1
+            await self._pages.upsert(
+                site_id=site.id,
+                url=pagina.url,
+                markdown_content=limpio,
+                token_count=estimate_tokens(limpio),
+            )
 
     @staticmethod
     def _cola_a_guardar(recorrido: Any, summary: SiteCrawlSummary) -> dict[str, Any] | None:
@@ -286,14 +344,26 @@ class SiteCrawler:
         header_signals = self._signals.extract_from_headers(headers)
         declared_canonical = self._signals.extract_canonical(body)
 
+        config = (getattr(site, "config_json", None) or {}) if site is not None else {}
+
         es_html = parece_html(body)
-        contenido = texto_visible(body) if es_html else body
+        # CUR.3 — de una página HTML se guarda su **contenido**, no su plantilla: cada página del
+        # portal lleva el menú completo, y al corpus entraba con el contenido.
+        if es_html:
+            contenido, aviso_de_recorte = texto_de_contenido(
+                body,
+                config.get("content_selector"),
+                config.get("boilerplate_selectors") or [],
+            )
+            if aviso_de_recorte:
+                _log.info("Recorte de plantilla en %s: %s", url, aviso_de_recorte)
+        else:
+            contenido = body
         titulo = titulo_de(body) if es_html else extract_title_from_markdown(body)
         senales = [s.como_dict() for s in senales_de_dinamismo(body)] if es_html else []
 
         # CUR.1 — la fecha y la unidad responsable que publica la propia página, si el sitio declara
         # dónde están. El marcado es de cada portal, así que viene de su configuración.
-        config = (getattr(site, "config_json", None) or {}) if site is not None else {}
         publicada, responsable = (
             fecha_y_responsable(
                 body,

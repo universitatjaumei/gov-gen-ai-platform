@@ -50,6 +50,16 @@ class CrawlConfig(BaseModel):
     # aplica al vocabulario del corpus: **el criterio es dato, no código**.
     #
     # Los defectos son los de hoy, para no cambiarle el criterio a nadie al desplegar esto.
+    # CUR.3 — qué parte de la página es contenido y qué es plantilla. Al corpus tiene que ir sólo
+    # lo primero: medido en el portal, cada página lleva el menú completo, y el asistente lo cita.
+    # `content_selector` es la señal más fuerte cuando el portal la ofrece (`main` aquí);
+    # `boilerplate_selectors` quita lo que está dentro del contenido y sigue siendo plantilla
+    # —miga de pan, barra de fecha, iconos de compartir—.
+    content_selector: str | None = None
+    boilerplate_selectors: list[str] = Field(default_factory=list)
+    #: Proporción de páginas en las que una línea tiene que aparecer para tenerse por plantilla.
+    boilerplate_repeat_threshold: float = Field(default=0.6, gt=0.0, le=1.0)
+
     stale_days: int = Field(default=365, ge=1, le=36_500)
     thin_min_tokens: int = Field(default=120, ge=0, le=100_000)
     #: `series` — varias versiones por año y **todas vigentes** (la UJI: acuerdos y actas).

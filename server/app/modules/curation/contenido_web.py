@@ -28,6 +28,18 @@ _ENCABEZADO = re.compile(r"<h[1-3][^>]*>([\s\S]*?)</h[1-3]>", re.IGNORECASE)
 #: Suficiente para distinguir una respuesta HTML de un Markdown o un texto plano.
 _PARECE_HTML = re.compile(r"<(html|body|div|p|h[1-6]|table|span)\b", re.IGNORECASE)
 
+#: Etiquetas que separan bloques de texto. Cada una abre línea nueva (CUR.3): sin eso el texto de
+#: una página es una sola línea y no hay forma de trocearlo ni de ver qué se repite.
+_BLOQUE = re.compile(
+    r"</?(?:p|div|br|li|tr|h[1-6]|section|article|main|header|footer|nav|aside|table|"
+    r"thead|tbody|ul|ol|dl|dt|dd|blockquote|figure|figcaption|form|hr)\b[^>]*>",
+    re.IGNORECASE,
+)
+
+#: Estructura que en cualquier portal es plantilla y no contenido. Este portal no las usa —su menú
+#: son `div` con clases— pero otros sí, y descartarlas no cuesta nada.
+_ETIQUETAS_DE_PLANTILLA = ("nav", "header", "footer", "aside")
+
 
 def parece_html(contenido: str) -> bool:
     """`True` si merece la pena convertir. El corpus normativo entra como Markdown por otra
@@ -36,21 +48,80 @@ def parece_html(contenido: str) -> bool:
 
 
 def texto_visible(contenido: str) -> str:
-    """El texto que una persona vería, con los espacios colapsados.
+    """El texto que una persona vería, **una línea por bloque**.
 
     `<noscript>` se descarta con los scripts: su contenido es «activa JavaScript», que no es
     contenido de la página y aparece en todas las del portal.
+
+    CUR.3 — los saltos de bloque se conservan. Sin ellos el texto de una página es una sola línea
+    de miles de caracteres: no se puede trocear con sentido para el corpus ni detectar qué líneas se
+    repiten en todas las páginas, que es cómo se reconoce la plantilla.
     """
     if not contenido:
         return ""
     sin_script = _SCRIPT_O_ESTILO.sub(" ", contenido)
     sin_comentarios = _COMENTARIO.sub(" ", sin_script)
-    sin_etiquetas = _ETIQUETA.sub(" ", sin_comentarios)
-    limpio = _ESPACIOS.sub(" ", _html.unescape(sin_etiquetas)).strip()
+    # Cada bloque, su línea. Se marca antes de quitar las etiquetas, que es cuando se sabe dónde
+    # empezaba y acababa.
+    con_saltos = _BLOQUE.sub("\n", sin_comentarios)
+    sin_etiquetas = _ETIQUETA.sub(" ", con_saltos)
+
+    lineas = [
+        _ESPACIOS.sub(" ", linea).strip()
+        for linea in _html.unescape(sin_etiquetas).split("\n")
+    ]
+    limpio = "\n".join(linea for linea in lineas if linea)
     # Cinturón: cualquier respuesta puede traer bytes nulos —un binario servido como si fuera
     # página— y Postgres rechaza la fila entera con «invalid byte sequence for encoding UTF8».
     # Pasó con un PDF del portal y se llevó por delante el rastreo completo.
     return limpio.replace("\x00", "")
+
+
+def texto_de_contenido(
+    contenido: str, content_selector: str | None, boilerplate_selectors: list[str] | None
+) -> tuple[str, str | None]:
+    """El texto de la página **sin su plantilla**, y un aviso si algo no cuadró (CUR.3).
+
+    Medido en el portal real: cada página lleva el menú completo —más de mil caracteres idénticos en
+    todas—, y al corpus entraba con el contenido, así que el asistente recuperaba menús.
+
+    Tres cosas, en este orden:
+
+    1. Si el sitio declara **dónde está su contenido** (`main` en este portal), se conserva sólo eso.
+       Es la señal más fuerte que ofrece: quita el 39 % del texto en una página del apartado y el
+       67 % en la de normativa. Si el selector no encuentra nada, se sigue con la página entera y se
+       avisa: mejor texto de más que una página vacía por un selector mal escrito.
+    2. Se quitan los bloques de plantilla que el sitio declare —la miga de pan, la barra de fecha y
+       los iconos de compartir están **dentro** de `main`—.
+    3. Y las etiquetas estructurales (`nav`, `header`, `footer`, `aside`), que este portal no usa
+       pero otros sí.
+    """
+    if not contenido:
+        return "", None
+
+    aviso: str | None = None
+    try:
+        from bs4 import BeautifulSoup
+
+        arbol = BeautifulSoup(contenido, "html.parser")
+
+        if content_selector:
+            elegido = arbol.select_one(content_selector)
+            if elegido is None:
+                aviso = "content_selector_sin_coincidencia"
+            else:
+                arbol = elegido
+
+        for selector in [*(boilerplate_selectors or []), *_ETIQUETAS_DE_PLANTILLA]:
+            try:
+                for encontrado in arbol.select(selector):
+                    encontrado.decompose()
+            except Exception:  # noqa: BLE001 — un selector mal escrito no tumba el rastreo
+                continue
+
+        return texto_visible(str(arbol)), aviso
+    except Exception:  # noqa: BLE001 — HTML irrecuperable: mejor el texto entero que nada
+        return texto_visible(contenido), "html_no_analizable"
 
 
 def fecha_y_responsable(
