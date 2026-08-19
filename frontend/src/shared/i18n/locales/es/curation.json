@@ -134,5 +134,6 @@
   "recon_section": "Subapartado",
   "recon_section_urls": "URLs",
   "recon_section_example": "Ejemplo",
-  "recon_download_csv": "Descargar sitemap (CSV)"
+  "recon_download_csv": "Descargar sitemap (CSV)",
+  "scope_off": "No analizar"
 }

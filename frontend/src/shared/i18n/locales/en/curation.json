@@ -134,5 +134,6 @@
   "recon_section": "Subsection",
   "recon_section_urls": "URLs",
   "recon_section_example": "Example",
-  "recon_download_csv": "Download sitemap (CSV)"
+  "recon_download_csv": "Download sitemap (CSV)",
+  "scope_off": "Do not analyse"
 }

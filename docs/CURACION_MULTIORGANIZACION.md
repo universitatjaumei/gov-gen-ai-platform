@@ -67,6 +67,35 @@ cualquier portal, y hacerlo configurable sería ofrecer la opción de mentir en 
 * **Lo que no es una página**: PDF, imágenes, hojas de cálculo. Un PDF puede ser contenido valioso,
   pero no por esta vía.
 
+## El análisis semántico (CUR.7)
+
+Tres criterios más pasan a ser dato del sitio, por la misma razón que `stale_days`:
+
+* **`audit_semantic_scope`** — `ingested` (sólo lo que ya está en el corpus, coste 0 de
+  embeddings), `full` (todas las páginas activas, embebiendo las que falten) u `off`. Se puede
+  **cambiar después de crear el sitio**, que es cuando la decisión se toma de verdad: primero se
+  rastrea y se lee el informe determinista, y sólo entonces se sabe si vale pagar el semántico.
+* **`semantic_similarity_threshold`** (0,92 por defecto) — qué se parece bastante para merecer una
+  llamada al modelo. Depende de cómo escriba el portal: uno con fichas muy plantilladas necesita el
+  umbral más alto que uno con textos largos.
+* **`semantic_max_pairs`** (200 por defecto) — el techo de llamadas al modelo por pasada. Es el
+  control de gasto, y por eso es del sitio y no del código.
+
+Lo que **no** es configurable, por las mismas razones de siempre: el detector no juzga páginas en
+error, no compara una página consigo misma bajo otra URL —eso es supersesión, que ya se decidió—, no
+gasta una llamada en dos ediciones de la misma serie, y el prompt del juez llega literal al modelo.
+
+Y una regla del prompt que **es dato del dominio y no criterio de nadie**: un portal que archiva
+ediciones de un curso, una convocatoria o un acuerdo publica una por año, y dos ediciones **no se
+contradicen** aunque cambien fechas, horas o profesorado. Medido: sin decírselo al juez, nueve de
+once hallazgos de la primera pasada real eran «contradicción» entre `23-24/…` y `25-26/…` del mismo
+curso. Con la regla puesta: **cero contradicciones y trece duplicados**, cuatro de ellos la misma
+página bajo dos rutas del portal. Un detalle que parece de fontanería y no lo es: el
+adaptador del modelo es `JuezDeContenidoWeb` y **no** `RedactorDeBloques`, que cumple el mismo
+protocolo pero entiende su primer argumento como el *identificador* de una plantilla de prompt.
+Confundirlos no rompe nada visible: el modelo recibe «esa plantilla no está en el catálogo» y
+contesta `unrelated` a todo.
+
 ## Lo que queda pendiente de decidir
 
 * **Defectos por organización.** Hoy los defectos son del contrato (`CrawlConfig`), iguales para

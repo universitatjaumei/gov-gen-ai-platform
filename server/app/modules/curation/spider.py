@@ -83,6 +83,23 @@ def url_de_pagina(url: str) -> str | None:
     return partes._replace(query=urlencode(conservados)).geturl()
 
 
+def clave_de_pagina(url: str) -> str:
+    """Con qué se compara si dos URLs son **la misma página**, sin cambiar lo que se pide.
+
+    Lo destapó el detector semántico en CUR.7: `…/base/calendari` y `…/base/calendari/` salieron
+    como duplicado con similitud **1,000**. No era un duplicado del portal —el portal enlaza las dos
+    formas—, era la misma página rastreada y guardada dos veces.
+
+    La barra final se ignora **sólo para comparar**. Añadirla a la URL que se pide sería otra cosa y
+    peor: hay servidores donde `/x/doc` existe y `/x/doc/` da 404, así que la petición tiene que
+    salir tal como el portal la enlazó. Es identidad de página, como el `http`/`https` de RAS.5: no
+    se configura.
+    """
+    partes = urlparse(url_de_pagina(url) or url)
+    ruta = partes.path.rstrip("/") or "/"
+    return partes._replace(path=ruta).geturl()
+
+
 def _parece_una_direccion(valor: str) -> bool:
     limpio = valor.strip()
     return limpio.startswith(("http://", "https://", "/"))
@@ -297,6 +314,12 @@ class GenericSpider:
             queue = deque([(source.root_url, 0)])
             visited = {source.root_url}
 
+        # CUR.7 — qué páginas se han visto ya, comparadas por identidad y no por texto de URL. El
+        # conjunto de URLs sigue siendo el de arriba (es lo que se guarda para reanudar y lo que
+        # cuenta el reconocimiento); esto es sólo para no pedir dos veces la misma página servida con
+        # y sin barra final, que es como se colaron dos copias de `/base/calendari` en el corpus.
+        claves_vistas: set[str] = {clave_de_pagina(u) for u in visited}
+
         crawled_urls: list[str] = []
         pages_skipped = 0
         prohibidas = 0
@@ -348,9 +371,10 @@ class GenericSpider:
             # es nueva: es la misma servida por otra dirección.
             final = str(cabeceras.get("x-final-url") or url)
             if final != url:
-                if final in crawled_urls:
+                if clave_de_pagina(final) in {clave_de_pagina(u) for u in crawled_urls}:
                     continue
                 visited.add(final)
+                claves_vistas.add(clave_de_pagina(final))
                 self._recordar(final, (html, cabeceras))
                 url = final
 
@@ -368,7 +392,7 @@ class GenericSpider:
                     no_legibles += 1
                     continue
                 link = normalizado
-                if link in visited:
+                if clave_de_pagina(link) in claves_vistas:
                     continue
                 if urlparse(link).netloc != base_netloc:
                     continue
@@ -385,6 +409,7 @@ class GenericSpider:
                     prohibidas += 1
                     continue
                 visited.add(link)
+                claves_vistas.add(clave_de_pagina(link))
                 queue.append((link, depth + 1))
 
         status = (

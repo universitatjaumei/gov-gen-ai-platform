@@ -111,3 +111,152 @@ class DeterministicDetectorDispatcher:
             hallazgos = await detector.analyze(site_id)
             await session.commit()
             return hallazgos
+
+
+class SemanticDetectorDispatcher:
+    """El detector semántico, ejecutado de verdad (CUR.7).
+
+    `SemanticContradictionDetector` existe desde 9Q.4 con sus tests y **nadie lo ejecutaba**: el
+    job del arranque se construía con `detectors=[determinista]`, así que un sitio guardado con
+    `audit_semantic_scope='full'` no cambiaba nada. Tercera vez que aparece este patrón en el
+    proyecto —el watcher de RAS.5, el bloque `TABLE` de SEG.5— y siempre igual: la capacidad
+    construida detrás de una puerta que nadie abrió.
+
+    Dos cosas que hay que hacer aquí porque no las hace nadie más:
+
+    * **Persistir.** El detector devuelve hallazgos y no los guarda —lo dice su docstring: «eso es
+      del job»— y el job **no los guarda**: cuenta, marca supersesiones y calcula `quality_score`.
+      Sin este `upsert`, el detector llamaría al LLM y sus hallazgos morirían con la sesión.
+    * **Resolver el modelo y los embeddings por sesión**, igual que el despachador determinista:
+      una instancia creada al arrancar tendría la sesión de entonces.
+
+    El nivel de modelo es el **1**. `docs/NIVELES_DE_MODELO.md` reserva el 3 para «juzgar código
+    ajeno»; esto juzga **contenido**, que es lo que el nivel 1 ya hace en la ingesta.
+    """
+
+    _is_semantic = True
+
+    def __init__(
+        self,
+        session_factory: Any,
+        *,
+        llm_factory: Any = None,
+        embedding_factory: Any = None,
+        finding_repo_factory: Any = None,
+        detector_factory: Any = None,
+    ) -> None:
+        self._session_factory = session_factory
+        self._llm_factory = llm_factory
+        self._embedding_factory = embedding_factory
+        self._finding_repo_factory = finding_repo_factory
+        self._detector_factory = detector_factory
+
+    async def analyze(self, site_id: uuid.UUID) -> list:
+        async with self._session_factory() as session:
+            sitio = await session.get(HubWebSite, site_id)
+            if sitio is None:
+                return []
+
+            # `off` lo decide quien cura, y tiene que costar cero: sin llamadas al modelo y sin
+            # embeber nada. Comprobarlo aquí y no dentro del detector evita construir el modelo.
+            alcance = getattr(sitio, "audit_semantic_scope", "ingested")
+            if alcance == "off":
+                return []
+
+            criterios = getattr(sitio, "config_json", None) or {}
+            llm = await self._resolver_llm(session)
+            embedding = await self._resolver_embeddings(session, sitio)
+
+            detector = (self._detector_factory or self._detector_de_verdad)(
+                session,
+                llm,
+                embedding,
+                similarity_threshold=criterios.get("semantic_similarity_threshold", 0.92),
+                max_pairs_per_run=criterios.get("semantic_max_pairs", 200),
+            )
+            hallazgos = await detector.analyze(site_id)
+
+            repo = (self._finding_repo_factory or self._repo_de_verdad)(session)
+            for hallazgo in hallazgos:
+                await repo.upsert(hallazgo)
+            await session.commit()
+            return hallazgos
+
+    # -- dependencias reales, resueltas por ejecución ------------------------
+
+    @staticmethod
+    def _detector_de_verdad(*args: Any, **kw: Any) -> Any:
+        from server.app.modules.curation.semantic_detector import (
+            SemanticContradictionDetector,
+        )
+
+        return SemanticContradictionDetector(*args, **kw)
+
+    @staticmethod
+    def _repo_de_verdad(session: Any) -> Any:
+        from server.app.modules.curation.findings_repo import ContentFindingRepo
+
+        return ContentFindingRepo(session)
+
+    async def _resolver_llm(self, session: Any) -> Any:
+        if self._llm_factory is not None:
+            resultado = self._llm_factory(session)
+            return await resultado if hasattr(resultado, "__await__") else resultado
+
+        from server.app.modules.agents_hub.services.config_provider import (
+            LocalConfigProvider,
+        )
+        from server.app.modules.agents_hub.services.model_factory import get_model_for_tier
+        from server.app.modules.curation.semantic_detector import JuezDeContenidoWeb
+
+        modelo = await get_model_for_tier(1, LocalConfigProvider(session))
+        nombre = getattr(modelo, "model_name", None) or getattr(modelo, "model", "desconocido")
+        # `JuezDeContenidoWeb` y no `RedactorDeBloques`: cumplen el mismo protocolo con semánticas
+        # distintas —el segundo entiende su primer argumento como el **id** de una plantilla— y
+        # usarlo aquí mandaría al modelo «esa plantilla no está en el catálogo» en vez del prompt.
+        return JuezDeContenidoWeb(modelo, str(nombre))
+
+    async def _resolver_embeddings(self, session: Any, sitio: Any) -> Any:
+        if self._embedding_factory is not None:
+            resultado = self._embedding_factory(session, sitio)
+            return await resultado if hasattr(resultado, "__await__") else resultado
+
+        from server.app.modules.agents_hub.services.embedding_resolver import (
+            resolve_embedding_service,
+        )
+
+        # Por el chatbot que tenga corpus de este sitio, y por la plataforma cuando no lo haya:
+        # comparar con un modelo distinto del que embebió el corpus da distancias sin sentido.
+        chatbot_id = await self._chatbot_con_corpus_del_sitio(session, sitio.id)
+        return await resolve_embedding_service(session, chatbot_id)
+
+    @staticmethod
+    async def _chatbot_con_corpus_del_sitio(session: Any, site_id: uuid.UUID) -> uuid.UUID | None:
+        from sqlalchemy import select
+
+        from server.app.modules.agents_hub.database.operational_models import (
+            HubCrawledPage,
+            HubDocument,
+        )
+
+        stmt = (
+            select(HubDocument.chatbot_id)
+            .join(HubCrawledPage, HubCrawledPage.id == HubDocument.crawled_page_id)
+            .where(HubCrawledPage.site_id == site_id)
+            .limit(1)
+        )
+        resultado = await session.execute(stmt)
+        return resultado.scalars().first()
+
+
+def detectores_de_calidad(session_factory: Any, *, run_semantic: bool = True) -> list:
+    """Los detectores que el job ejecuta en cada pasada.
+
+    Existe para que el arranque no vuelva a construir la lista a mano: así estaba, y así se quedó
+    con un solo detector durante todo el bloque 9Q en adelante. Apagar el semántico **quita la
+    pieza** en vez de dejarla dentro confiando en un `if` de más adentro.
+    """
+    detectores: list = [DeterministicDetectorDispatcher(session_factory)]
+    if run_semantic:
+        detectores.append(SemanticDetectorDispatcher(session_factory))
+    return detectores

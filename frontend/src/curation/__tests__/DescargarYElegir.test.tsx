@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from 'vitest'
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import i18n from '@/shared/i18n'
@@ -74,6 +74,8 @@ function envolver(elemento: React.ReactElement) {
 beforeAll(async () => {
   await i18n.changeLanguage('es')
 })
+
+afterEach(cleanup)
 
 beforeEach(() => {
   vi.clearAllMocks()

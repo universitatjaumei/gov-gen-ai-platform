@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from 'vitest'
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import i18n from '@/shared/i18n'
 
@@ -42,6 +42,8 @@ vi.mock('@/shared/api/generated/hub-sites/hub-sites', () => ({
   useUpdateSite: () => ({ mutate: vi.fn(), isPending: false }),
   getListSitesQueryKey: () => ['sites'],
   useReconnoiterSite: () => mockReconocer,
+  // CUR.7 — la fila del sitio deja cambiar el alcance del análisis semántico.
+  usePatchSite: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 vi.mock('@/shared/api/download', () => ({ descargarConAutorizacion: vi.fn() }))
@@ -54,6 +56,8 @@ function envolver(elemento: React.ReactElement) {
 beforeAll(async () => {
   await i18n.changeLanguage('es')
 })
+
+afterEach(cleanup)
 
 beforeEach(() => {
   vi.clearAllMocks()

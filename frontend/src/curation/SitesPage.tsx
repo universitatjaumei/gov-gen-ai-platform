@@ -10,6 +10,7 @@ import {
   useDeleteSite,
   useTriggerSiteCrawl,
   useReconnoiterSite,
+  usePatchSite,
   getListSitesQueryKey,
 } from '@/shared/api/generated/hub-sites/hub-sites'
 import type { ReconnaissanceView, SiteView } from '@/shared/api/generated/model'
@@ -20,7 +21,7 @@ const siteSchema = z.object({
   root_url: z.string().url(),
   sitemap_url: z.string().url().optional().or(z.literal('')),
   crawl_interval_hours: z.coerce.number().int().min(1).default(24),
-  audit_semantic_scope: z.enum(['ingested', 'full']).default('ingested'),
+  audit_semantic_scope: z.enum(['ingested', 'full', 'off']).default('ingested'),
   // RAS.5 — el rastreo se acota por apartado, que es como tiene sentido usarlo: cada apartado
   // del portal tiene un responsable distinto y un informe del portal completo no lo lee nadie.
   // El spider ya leía esto; lo que no había era forma de fijarlo desde ninguna pantalla.
@@ -85,6 +86,14 @@ export function SitesPage() {
     },
   })
   const crawlMutation = useTriggerSiteCrawl()
+  // CUR.7 — cambiar el alcance semántico de un sitio ya creado.
+  const patchMutation = usePatchSite()
+
+  const cambiarAlcance = (siteId: string, alcance: string) =>
+    patchMutation.mutate(
+      { siteId, data: { audit_semantic_scope: alcance } },
+      { onSuccess: () => qc.invalidateQueries({ queryKey: getListSitesQueryKey() }) },
+    )
 
   // CUR.6 — el reconocimiento previo: cuántas páginas tiene el apartado y cuánto costaría.
   const reconocerMutation = useReconnoiterSite()
@@ -203,6 +212,7 @@ export function SitesPage() {
                 <th className="py-2 pr-4">{t('site_root_url')}</th>
                 <th className="py-2 pr-4">{t('site_last_crawled')}</th>
                 <th className="py-2 pr-4">{t('site_status')}</th>
+                <th className="py-2 pr-4">{t('site_audit_scope')}</th>
                 <th className="py-2" />
               </tr>
             </thead>
@@ -220,6 +230,22 @@ export function SitesPage() {
                     <span className={`text-xs px-2 py-0.5 rounded-full ${site.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                       {site.status}
                     </span>
+                  </td>
+                  {/* CUR.7 — el alcance semántico se fijaba sólo al crear el sitio, y es la
+                      decisión que se toma después: se rastrea, se lee el informe, y entonces se
+                      decide si vale pagar embeddings y llamadas al modelo. */}
+                  <td className="py-2 pr-4">
+                    <select
+                      data-testid={`alcance-${site.id}`}
+                      aria-label={t('site_audit_scope')}
+                      value={site.audit_semantic_scope ?? 'ingested'}
+                      onChange={(e) => cambiarAlcance(site.id, e.target.value)}
+                      className="text-xs border rounded px-1 py-0.5"
+                    >
+                      <option value="ingested">{t('scope_ingested')}</option>
+                      <option value="full">{t('scope_full')}</option>
+                      <option value="off">{t('scope_off')}</option>
+                    </select>
                   </td>
                   <td className="py-2 space-x-2">
                     <button

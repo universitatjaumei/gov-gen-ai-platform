@@ -127,3 +127,74 @@ async def test_dos_variantes_de_la_misma_pagina_no_son_dos_paginas():
     from server.app.modules.curation.deterministic_detector import _process_key
 
     assert _process_key(None, _TRAMPA) == _process_key(None, _RAIZ)
+
+
+# ───────── La barra final (CUR.7) ─────────
+#
+# Lo destapó el detector semántico en su primera pasada útil: `…/base/calendari` y
+# `…/base/calendari/` salieron como duplicado con similitud **1,000**. No es un duplicado del
+# portal: es la misma página rastreada y guardada dos veces, porque el portal enlaza las dos formas
+# y para nosotros eran dos URLs. Es identidad de página, como el `http`/`https` de RAS.5, así que va
+# aquí y no en los criterios configurables.
+#
+# Se compara sin la barra, pero **se pide con lo que el portal enlazó**: hay servidores donde
+# `/x/doc` existe y `/x/doc/` da 404.
+
+
+def test_la_barra_final_no_hace_una_pagina_distinta():
+    from server.app.modules.curation.spider import clave_de_pagina
+
+    assert clave_de_pagina("https://www.uji.es/x/calendari/") == clave_de_pagina(
+        "https://www.uji.es/x/calendari"
+    )
+
+
+def test_la_url_que_se_pide_no_se_toca():
+    """La normalización es para comparar; cambiar la petición es otra cosa, y peor."""
+    assert url_de_pagina("https://www.uji.es/x/calendari") == "https://www.uji.es/x/calendari"
+
+
+def test_la_raiz_del_sitio_no_se_queda_sin_ruta():
+    from server.app.modules.curation.spider import clave_de_pagina
+
+    assert clave_de_pagina("https://www.uji.es") == clave_de_pagina("https://www.uji.es/")
+    assert clave_de_pagina("https://www.uji.es").endswith("/")
+
+
+def test_la_barra_final_tampoco_cuenta_cuando_hay_parametros_de_verdad():
+    from server.app.modules.curation.spider import clave_de_pagina
+
+    a = clave_de_pagina("https://www.uji.es/x/llistat/?pagina=3")
+    b = clave_de_pagina("https://www.uji.es/x/llistat?pagina=3")
+    assert a == b
+    assert "pagina=3" in a
+
+
+@pytest.mark.asyncio
+async def test_el_spider_no_pide_la_misma_pagina_con_y_sin_barra():
+    """Dos enlaces a la misma página, una forma con barra y otra sin: una sola petición."""
+    from server.app.modules.curation.spider import GenericSpider
+
+    pedidas: list[str] = []
+
+    async def traer(url: str):
+        pedidas.append(url)
+        if url.rstrip("/").endswith("escola-doctorat"):
+            cuerpo = (
+                '<a href="https://www.uji.es/x/calendari">a</a>'
+                '<a href="https://www.uji.es/x/calendari/">b</a>'
+            )
+        else:
+            cuerpo = ""
+        return (f"<html><body>{cuerpo}</body></html>", {"content-type": "text/html"})
+
+    class _Sitio:
+        root_url = "https://www.uji.es/x/escola-doctorat/"
+        config_json = {"crawl_depth": 2, "max_pages": 20, "delay_seconds": 0}
+        crawl_frontier = None
+
+    resultado = await GenericSpider(traer).crawl(_Sitio())
+
+    calendarios = [u for u in pedidas if "calendari" in u]
+    assert len(calendarios) == 1, calendarios
+    assert resultado.pages_crawled == 2

@@ -245,3 +245,59 @@ def test_version_series_es_un_tipo_de_hallazgo_del_contrato():
     from server.app.modules.curation.contracts import FindingType
 
     assert "version_series" in get_args(FindingType)
+
+
+# ---------------------------------------------------------------------------
+# Cursos académicos: la misma serie, escrita de otra forma (CUR.7)
+# ---------------------------------------------------------------------------
+#
+# Salió al ejecutar el detector semántico contra el apartado real. Sus diez primeros hallazgos eran
+# **el mismo falso positivo que este fichero arregló**, con otra sintaxis: el archivo de formación
+# transversal publica una página por curso académico —`/23-24/`, `/24-25/`, `/25-26/`— y el modelo
+# las declaraba «contradicción» porque las fechas de impartición no coinciden. No se contradicen:
+# son ediciones distintas del mismo curso, todas archivadas.
+#
+# La causa es que la identidad de serie sólo reconocía años de cuatro cifras, así que estas páginas
+# no se agrupaban aquí tampoco. Se arregla en un sitio y sirve a los dos detectores.
+
+_CURSOS = "https://www.uji.es/estudis/centres/escola-doctorat/base/arxiu/Formacio-transversal"
+
+
+def _serie_de_cursos(cursos: list[str]) -> list[_Pagina]:
+    return [
+        _Pagina(
+            url=f"{_CURSOS}/{curso}/recerca/multivariant/",
+            content_published_at=datetime(2000 + int(curso[:2]), 9, 1, tzinfo=timezone.utc),
+            content_hash=f"hash-{curso}",
+        )
+        for curso in cursos
+    ]
+
+
+@pytest.mark.asyncio
+async def test_un_curso_academico_tambien_es_una_serie():
+    hallazgos = await _hallazgos(_serie_de_cursos(["23-24", "24-25", "25-26"]))
+
+    series = [h for h in hallazgos if h.finding_type == "version_series"]
+    assert len(series) == 1
+    assert series[0].signal["count"] == 3
+
+
+@pytest.mark.asyncio
+async def test_una_serie_de_cursos_no_acusa_de_superada_a_la_edicion_anterior():
+    hallazgos = await _hallazgos(_serie_de_cursos(["23-24", "24-25", "25-26"]))
+
+    assert [h for h in hallazgos if h.finding_type == "superseded"] == []
+
+
+@pytest.mark.asyncio
+async def test_dos_numeros_que_no_son_un_curso_academico_no_agrupan_nada():
+    """`/12-34/` no es un curso: agrupar por cualquier pareja de cifras juntaría cosas ajenas."""
+    paginas = [
+        _Pagina(url=f"{_CURSOS}/12-34/x/", content_hash="a"),
+        _Pagina(url=f"{_CURSOS}/56-78/x/", content_hash="b"),
+    ]
+
+    hallazgos = await _hallazgos(paginas)
+
+    assert [h for h in hallazgos if h.finding_type == "version_series"] == []

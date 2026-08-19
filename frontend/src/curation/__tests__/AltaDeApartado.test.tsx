@@ -21,6 +21,8 @@ vi.mock('@/shared/api/generated/hub-sites/hub-sites', () => ({
   useTriggerSiteCrawl: () => ({ mutate: vi.fn() }),
   // CUR.6 — el formulario de alta ofrece el reconocimiento previo del apartado.
   useReconnoiterSite: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  // CUR.7 — la fila del sitio deja cambiar el alcance del análisis semántico.
+  usePatchSite: () => ({ mutate: vi.fn(), isPending: false }),
   getListSitesQueryKey: () => ['sites'],
 }))
 

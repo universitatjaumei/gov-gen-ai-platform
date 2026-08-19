@@ -47,13 +47,36 @@ class EmbeddingService(Protocol):
     async def embed(self, text: str) -> list[float]: ...
 
 
+def _misma_serie(page_a: Any, page_b: Any) -> bool:
+    """¿Son dos versiones del mismo recurso publicado por años o por cursos académicos?
+
+    Reutiliza la identidad de serie del detector determinista para no tener dos ideas distintas de
+    qué es «la misma página en otro año» en el mismo módulo.
+    """
+    from server.app.modules.curation.deterministic_detector import _process_key
+
+    clave_a = _process_key(getattr(page_a, "canonical_url", None), page_a.url)
+    clave_b = _process_key(getattr(page_b, "canonical_url", None), page_b.url)
+    # `__no_year__…` es la clave de «esta URL no participa en ninguna serie», y es única por página:
+    # dos de ellas nunca son la misma serie aunque coincidan por casualidad.
+    return clave_a == clave_b and not clave_a.startswith("__no_year__")
+
+
 def _cosine(a: list[float], b: list[float]) -> float:
+    """Similitud coseno, **siempre como `float` de Python**.
+
+    El `float()` no es cosmético: los vectores leídos de pgvector vuelven como `float32` de numpy, y
+    la similitud acaba dentro de `signal_json`, donde `json.dumps` no sabe escribirla. Con vectores
+    recién embebidos son floats normales y todo va bien, así que el fallo aparecía **sólo en la
+    segunda pasada** de un sitio —la primera guardó sus diez hallazgos, la segunda falló al
+    guardarlos—. Medido en CUR.7.
+    """
     dot = sum(x * y for x, y in zip(a, b))
     na = math.sqrt(sum(x * x for x in a))
     nb = math.sqrt(sum(y * y for y in b))
     if na == 0.0 or nb == 0.0:
         return 0.0
-    return dot / (na * nb)
+    return float(dot / (na * nb))
 
 
 def _build_judge_prompt(text_a: str, text_b: str) -> str:
@@ -64,10 +87,43 @@ def _build_judge_prompt(text_a: str, text_b: str) -> str:
         '"confidence": <0..1>, "explanation": "<breve>"}.\n'
         "- duplicate: dicen esencialmente lo mismo (redundancia).\n"
         "- contradiction: afirman datos incompatibles sobre el mismo asunto.\n"
-        "- unrelated: tratan asuntos distintos.\n\n"
+        "- unrelated: tratan asuntos distintos.\n"
+        # CUR.7 — medido: nueve de once hallazgos de la primera pasada real eran «contradicción»
+        # entre dos ediciones del mismo curso archivado. Es el dato del dominio que el usuario dio
+        # en CUR.2 —el portal publica por años y todos siguen siendo válidos— y sin decírselo el
+        # modelo concluye lo esperable: que dos fechas distintas para el mismo curso se contradicen.
+        "\nMuy importante: este portal archiva **ediciones** de un mismo curso, convocatoria o "
+        "acuerdo, una por año o curso académico. Dos ediciones distintas NO se contradicen aunque "
+        "cambien sus fechas, horarios, horas acreditables o profesorado: cada una describe su "
+        "propia edición y todas siguen siendo válidas como archivo. Responde 'contradiction' sólo "
+        "si los dos fragmentos afirman datos incompatibles sobre **la misma** edición o sobre un "
+        "hecho que no depende del año.\n\n"
         f"--- DOCUMENTO A ---\n{text_a[:_TEXT_LIMIT]}\n\n"
         f"--- DOCUMENTO B ---\n{text_b[:_TEXT_LIMIT]}\n"
     )
+
+
+class JuezDeContenidoWeb:
+    """Adaptador mínimo del modelo al protocolo `LLMService` de este detector (CUR.7).
+
+    Existe porque **el prompt tiene que llegar literal**. El otro adaptador del proyecto que cumple
+    este mismo protocolo, `RedactorDeBloques`, trata su primer argumento como el **identificador**
+    de una plantilla de prompt y lo sustituye por la instrucción del catálogo: pasarle el prompt del
+    juez lo convertiría en «la plantilla de prompt "Eres un auditor de contenido web…" no está en el
+    catálogo del módulo», y el modelo recibiría cualquier cosa menos la pregunta. Dos protocolos con
+    la misma firma y semánticas distintas: por eso este adaptador es de tres líneas y no se reutiliza
+    el de al lado.
+    """
+
+    def __init__(self, modelo: Any, model_name: str) -> None:
+        self._modelo = modelo
+        self.model_name = model_name
+
+    async def generate(self, prompt: str, context: str) -> str:
+        contenido = f"{prompt}\n\n{context}" if context else prompt
+        respuesta = await self._modelo.ainvoke([{"role": "user", "content": contenido}])
+        texto = getattr(respuesta, "content", respuesta)
+        return texto if isinstance(texto, str) else str(texto)
 
 
 class SemanticContradictionDetector:
@@ -186,6 +242,12 @@ class SemanticContradictionDetector:
                     and page_a.canonical_url == page_b.canonical_url
                 ):
                     continue
+                # Dos ediciones de la misma serie tampoco: el determinista ya las agrupa como
+                # `version_series`, y pagar una llamada al modelo para que diga «contradicción»
+                # sobre el mismo curso en dos años es gasto y ruido a la vez. Medido: los diez
+                # primeros hallazgos reales del detector eran justo eso (CUR.7).
+                if _misma_serie(page_a, page_b):
+                    continue
                 similarity = _cosine(vec_a, vec_b)
                 if similarity >= self._threshold:
                     pairs.append((page_a, page_b, similarity))
@@ -228,7 +290,9 @@ class SemanticContradictionDetector:
             related_page_id=page_b.id,
             source_url=page_a.url,
             signal={
-                "similarity": round(similarity, 4),
+                # `float()` antes de redondear: `round` sobre un `float32` de numpy devuelve otro
+                # `float32`, y esto va a un JSONB.
+                "similarity": round(float(similarity), 4),
                 "explanation": verdict.get("explanation", ""),
                 "text_a": (page_a.markdown_content or "")[:_SIGNAL_TEXT_LIMIT],
                 "text_b": (page_b.markdown_content or "")[:_SIGNAL_TEXT_LIMIT],

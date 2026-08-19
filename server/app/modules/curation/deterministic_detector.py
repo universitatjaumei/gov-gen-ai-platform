@@ -20,6 +20,10 @@ from server.app.modules.curation.contracts import ContentFinding
 
 _YEAR_SEG = re.compile(r"/((?:19|20)\d{2})(?=/|$)")
 
+#: Un curso académico como segmento de ruta: `/23-24/`, `/2023-24/`, `/2023-2024/`. Que los dos
+#: números sean consecutivos lo comprueba `_sin_curso`; el patrón solo los localiza.
+_CURSO_SEG = re.compile(r"/((?:19|20)?\d{2})-((?:19|20)?\d{2})(?=/|$)")
+
 #: Qué se puede afirmar según la causa del fallo de rastreo (RAS.3). Lo que no se clasificó —las
 #: páginas rastreadas antes de esto— conserva la severidad de antes: no se le atribuye una causa.
 _SEVERIDAD_DEL_ERROR: dict[str | None, str] = {
@@ -30,9 +34,27 @@ _SEVERIDAD_DEL_ERROR: dict[str | None, str] = {
 
 
 def _strip_year_segments(path: str) -> str:
-    """Quita todos los segmentos de año de un path URL."""
-    normalized = _YEAR_SEG.sub("", path)
+    """Quita todos los segmentos de año de un path URL, incluidos los cursos académicos."""
+    normalized = _CURSO_SEG.sub(_sin_curso, _YEAR_SEG.sub("", path))
     return normalized.rstrip("/") or "/"
+
+
+def _sin_curso(coincidencia: re.Match[str]) -> str:
+    """Quita `/23-24/` sólo si de verdad es un curso académico: dos años consecutivos.
+
+    Salió con el detector semántico de CUR.7: el archivo de formación transversal publica una página
+    por curso —`/23-24/`, `/24-25/`, `/25-26/`— y con la identidad de serie mirando sólo años de
+    cuatro cifras, esas páginas no se agrupaban. Resultado: el juez las declaraba «contradicción»
+    porque las fechas de impartición no coinciden, que es exactamente el falso positivo que CUR.2
+    quitó del detector determinista. Se arregla en la identidad y sirve a los dos.
+
+    La comprobación de consecutivos no es celo: sin ella, `/12-34/` y `/56-78/` agruparían páginas
+    que no tienen nada que ver.
+    """
+    primero, segundo = coincidencia.group(1), coincidencia.group(2)
+    inicio = int(primero) % 100
+    fin = int(segundo) % 100
+    return "" if (inicio + 1) % 100 == fin else coincidencia.group(0)
 
 
 def _identidad_de_pagina(url: str) -> str:
@@ -57,7 +79,9 @@ def _process_key(canonical_url: str | None, url: str) -> str:
     base = _identidad_de_pagina(canonical_url or url)
     parsed = urlparse(base)
     path = parsed.path
-    if not _YEAR_SEG.search(path):
+    # Un año de cuatro cifras o un curso académico. Sólo mirar el primero dejaba fuera el archivo
+    # de cursos del portal (`/23-24/`), que es una serie tan clara como los acuerdos por año.
+    if _strip_year_segments(path) == (path.rstrip("/") or "/"):
         # Sin año en la URL: clave única, no participa en grupos de supersesión.
         #
         # RAS.5 — decía «única» y no lo era: sólo llevaba el path, así que `http://…/normestudi/`

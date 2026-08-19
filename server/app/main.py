@@ -97,11 +97,11 @@ def _start_quality_scheduler():
         # interfaz respondía 202 y no hacía nada. El rastreo es la ENTRADA del flujo de
         # curación: sin él no hay páginas que auditar, ni hallazgos, ni candidatas.
         #
-        # Los detectores deterministas se enchufan aquí; el semántico sigue detrás de su
-        # flag porque cuesta embeddings y modelo por página.
+        # Los dos detectores se enchufan aquí. El semántico va detrás de su flag —cuesta
+        # embeddings y una llamada al modelo por par— y del alcance de cada sitio.
         from server.app.modules.curation.site_crawler_dispatcher import (
-            DeterministicDetectorDispatcher,
             SiteCrawlerDispatcher,
+            detectores_de_calidad,
         )
 
         # RAS.5 — la fábrica de watchers y el repo de hallazgos. Iban a `None`, así que el
@@ -122,7 +122,13 @@ def _start_quality_scheduler():
         job = SiteQualityAnalysisJob(
             session_factory=hub_session_factory,
             site_crawler=SiteCrawlerDispatcher(hub_session_factory),
-            detectors=[DeterministicDetectorDispatcher(hub_session_factory)],
+            # CUR.7 — los **dos** detectores. Aquí iba sólo el determinista, así que
+            # `audit_semantic_scope='full'` y `run_semantic=True` no significaban nada: el
+            # semántico existía desde 9Q.4 con sus tests y no lo ejecutaba nadie.
+            detectors=detectores_de_calidad(
+                hub_session_factory,
+                run_semantic=settings.content_quality_semantic_enabled,
+            ),
             watcher=None,
             selection_repo=_NullSelectionRepo(),
             run_semantic=settings.content_quality_semantic_enabled,
