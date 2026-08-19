@@ -12,10 +12,13 @@ echo.
 echo REQUISITOS PREVIOS (hazlos antes de seguir)
 echo   1. Docker Desktop en marcha.
 echo   2. Base de datos arriba:  docker compose up -d db
-echo   3. Backend arrancado desde la raiz del proyecto:
+echo   3. Backend arrancado desde la raiz del proyecto, EN EL PUERTO QUE
+echo      DIGA frontend\.env (VITE_API_TARGET). En esta maquina es el 8002:
 echo        cd C:\Users\fabra\Documents\AI_agents_hub
 echo        set CRAWLER_CONTACT=fabra@uji.es
-echo        server\.venv\Scripts\python.exe -m uvicorn server.app.main:app --port 8001
+echo        server\.venv\Scripts\python.exe -m uvicorn server.app.main:app --port 8002
+echo      OJO: tarda 2-4 minutos en arrancar (carga torch). Hasta que no
+echo      escriba "Application startup complete" no responde.
 echo   4. Frontend:  cd frontend  y luego  npm run dev
 echo.
 pause
@@ -24,10 +27,25 @@ echo ----------------------------------------------------------
 echo  PASO 1 - Los servicios responden
 echo ----------------------------------------------------------
 echo.
-curl -s -o nul -w "backend /docs -> %%{http_code}\n" http://localhost:8001/docs
-curl -s -o nul -w "frontend    -> %%{http_code}\n" http://localhost:5174/
+echo A que puerto apunta el frontend:
+findstr /I VITE_API_TARGET frontend\.env.local
 echo.
-echo Ambos deben responder 200. Si no, revisa los requisitos previos.
+echo Backend, probando los puertos habituales:
+curl -s -o nul -w "   puerto 8000 health: %%{http_code}\n" http://localhost:8000/health
+curl -s -o nul -w "   puerto 8001 health: %%{http_code}\n" http://localhost:8001/health
+curl -s -o nul -w "   puerto 8002 health: %%{http_code}\n" http://localhost:8002/health
+echo.
+echo Frontend y su proxy al backend:
+curl -s -o nul -w "   frontend 5174:      %%{http_code}\n" http://localhost:5174/
+curl -s -o nul -w "   5174 hacia la API:  %%{http_code}\n" http://localhost:5174/api/v1/hub/sites
+echo.
+echo QUE DEBES VER:
+echo   - El puerto que sale arriba en VITE_API_TARGET responde 200 en health.
+echo     Los otros pueden dar 000 o 404: da igual, no se usan.
+echo   - El frontend 5174 responde 200.
+echo   - "5174 hacia la API" responde 401. Eso es CORRECTO: significa que el
+echo     backend contesta y pide sesion. Si sale 000 o 502, el backend no
+echo     esta levantado, o esta en un puerto distinto al de VITE_API_TARGET.
 echo.
 pause
 echo.
