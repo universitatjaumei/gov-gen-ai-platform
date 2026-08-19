@@ -4,11 +4,10 @@ import pytest
 
 def test_database_models_import():
     """Verifica que los modelos de base de datos se importan correctamente."""
-    from server.app.database.models import AIConfig, TokenLog, ModelPricing, ExtractionServiceConfig
+    from server.app.database.models import AIConfig, TokenLog, ModelPricing
     assert AIConfig is not None
     assert TokenLog is not None
     assert ModelPricing is not None
-    assert ExtractionServiceConfig is not None
 
 
 def test_database_db_import():

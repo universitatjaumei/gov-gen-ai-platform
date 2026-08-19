@@ -12,9 +12,8 @@ from datetime import datetime
 from typing import Optional, Dict, List, Any
 from sqlmodel import SQLModel, Field, Column
 from sqlalchemy import JSON, Text
-import json
 from automatia_shared.enums import ScreenshotPolicyEnum, AutomationType
-from pydantic import field_validator, field_serializer, ConfigDict
+from pydantic import field_validator, ConfigDict
 
 from automatia_shared.enums import LicenseStatus
 
@@ -55,58 +54,6 @@ class TokenLog(SQLModel, table=True):
     output_tokens: int
     cost: float = Field(default=0.0, description="Calculated cost in USD")
 
-
-class ExtractionServiceConfig(SQLModel, table=True):
-    """
-    Configuración para servicios de extracción, incluyendo los system prompts.
-
-    Niveles de alcance:
-    - SYSTEM: Prompts definidos por el sistema (inmutables).
-    - PARTNER: Prompts personalizados por el Distribuidor.
-    - CLIENT: Sobrescrituras específicas por Cliente.
-    """
-
-    service_id: str = Field(
-        primary_key=True, description="Internal ID (e.g., 'sys_phase0_discovery')"
-    )
-    name: str = Field(description="Human-readable name")
-    module: str = Field(
-        default="extraction", description="Module this prompt belongs to"
-    )
-    target_function: Optional[str] = Field(
-        default=None, description="Function that uses this prompt"
-    )
-    description: Optional[str] = None
-    system_prompt_template: str = Field(
-        sa_column=Column(Text), description="The prompt template"
-    )
-    expected_schema: Dict[str, Any] = Field(default={}, sa_column=Column(JSON))
-    suggested_model: Optional[str] = Field(
-        default=None, description="Recommended model for this prompt"
-    )
-    tier_override: Optional[int] = Field(
-        default=None,
-        description="Override tier: 1=Flash, 2=Logic, 3=Supervision. None=use role default",
-    )
-
-    @field_validator("expected_schema", mode="before")
-    @classmethod
-    def parse_json_schema(cls, v):
-        if isinstance(v, str):
-            try:
-                return json.loads(v)
-            except ValueError:
-                return {}
-        return v
-
-    @field_serializer("expected_schema")
-    def serialize_schema(self, v):
-        if isinstance(v, str):
-            try:
-                return json.loads(v)
-            except ValueError:
-                return {}
-        return v
 
 
 class ModelPricing(SQLModel, table=True):
@@ -458,46 +405,6 @@ class SchedulerConfig(SQLModel, table=True):
     )
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-
-class SystemPrompt(SQLModel, table=True):
-    """
-    Prompts del Sistema para el AI Brain.
-
-    Almacenados en el servidor para mayor seguridad y una gestión
-    centralizada de las instrucciones de la IA.
-    """
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-
-    # Identification
-    name: str = Field(
-        index=True,
-        unique=True,
-        description="Unique ID: 'script_generator', 'flow_orchestrator'",
-    )
-    version: str = Field(default="1.0", description="Prompt versioning")
-
-    # Content
-    content: str = Field(
-        sa_column=Column(Text), description="Full text of the system prompt"
-    )
-
-    # Context type
-    context_type: str = Field(
-        default="generic", description="Type: 'catalog_aware', 'generic', 'copilot'"
-    )
-
-    # Tier constraints
-    tier: Optional[str] = Field(
-        default=None, description="Required tier: 'FLASH', 'PRO', 'ULTRA' (None = all)"
-    )
-
-    # State
-    is_active: bool = Field(default=True, description="Active status")
-
-    # Audit
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class ClientTelemetryLog(SQLModel, table=True):

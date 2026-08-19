@@ -35,7 +35,9 @@ class ActividadLLM(StrEnum):
     """Una actividad del módulo que necesita un modelo.
 
     El valor es la clave estable con la que se guarda el override, así que **no se renombra**
-    sin migrar los datos: es el `name` de `SystemPrompt` del legacy.
+    sin migrar los datos. La convención de nombres se heredó a propósito de los prompts del legacy
+    de AutomatIA; esas tablas se retiraron en LEG.4 y la convención se queda, con lo que se salvó
+    de sus textos anotado en `docs/COMPARATIVA_PROMPTS_LEGACY.md`.
     """
 
     PROPUESTA_DE_SCRIPT = "propuesta_de_script"
