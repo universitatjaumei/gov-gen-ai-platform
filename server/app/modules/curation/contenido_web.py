@@ -14,6 +14,7 @@ lo que acaba en el corpus, así que tiene que ser ya el texto.
 from __future__ import annotations
 
 import html as _html
+from datetime import datetime, timezone
 import re
 
 _SCRIPT_O_ESTILO = re.compile(
@@ -50,6 +51,56 @@ def texto_visible(contenido: str) -> str:
     # página— y Postgres rechaza la fila entera con «invalid byte sequence for encoding UTF8».
     # Pasó con un PDF del portal y se llevó por delante el rastreo completo.
     return limpio.replace("\x00", "")
+
+
+def fecha_y_responsable(
+    contenido: str, selector: str | None, formato: str
+) -> tuple[datetime | None, str | None]:
+    """La fecha que **publica** la página y la unidad que la mantiene (CUR.1).
+
+    El portal las sirve juntas en el HTML —medido en `/base/doctorands/`:
+    `<div class="clockBarDate"><span>24/09/2025</span> | <span>Escola de Doctorat</span></div>`— y
+    las estábamos ignorando: `stale` adivinaba la antigüedad del año más reciente citado en el texto,
+    y marcaba 303 de 400 páginas.
+
+    El selector llega de la **configuración del sitio**, no del código: ese marcado es de este
+    portal, y hardcodearlo acoplaría el módulo a un cliente. Sin selector, nada cambia.
+
+    Nada de esto puede tumbar un rastreo: un selector inválido, un bloque que no está o un texto que
+    no es una fecha devuelven `None`, que es exactamente lo que había antes.
+    """
+    if not selector or not contenido:
+        return None, None
+
+    try:
+        from bs4 import BeautifulSoup
+
+        bloque = BeautifulSoup(contenido, "html.parser").select_one(selector)
+    except Exception:  # noqa: BLE001 — selector mal escrito, HTML roto: da igual cuál
+        return None, None
+
+    if bloque is None:
+        return None, None
+
+    partes = [t.get_text(strip=True) for t in bloque.find_all("span")]
+    if not partes:
+        partes = [bloque.get_text(strip=True)]
+
+    fecha = None
+    responsable = None
+    for parte in partes:
+        if fecha is None:
+            try:
+                # `strptime` rechaza `31/02/2025`, y eso es lo que se quiere: aceptar una fecha
+                # imposible daría una antigüedad inventada.
+                fecha = datetime.strptime(parte, formato).replace(tzinfo=timezone.utc)
+                continue
+            except ValueError:
+                pass
+        if responsable is None and parte and parte != "|":
+            responsable = parte
+
+    return fecha, responsable
 
 
 def titulo_de(contenido: str) -> str | None:

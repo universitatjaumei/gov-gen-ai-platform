@@ -92,6 +92,10 @@ def _content_date(page: Any) -> tuple[datetime | None, str | None]:
     2021, 2024 y 2071— y eso marcaba como antiguas **303 de 400 páginas**. Un año en la URL sí es
     una señal del portal: así versiona sus documentos (`/2019/`, `/pext/19-20/`).
     """
+    # CUR.1 — la que publica la propia página gana a todas: es la única que dice cuándo se
+    # actualizó el contenido, y no cuándo el servidor sirvió el fichero.
+    if getattr(page, "content_published_at", None):
+        return page.content_published_at, "page_date"
     if page.sitemap_lastmod:
         return page.sitemap_lastmod, "sitemap_lastmod"
     if page.http_last_modified:
@@ -274,6 +278,8 @@ class DeterministicQualityDetector:
                         "date": content_date.isoformat(),
                         "age_days": age_days,
                         "source": origen,
+                        # Quién mantiene la página: es lo que hace accionable el hallazgo.
+                        "owner": getattr(page, "content_owner", None),
                     },
                     now=now,
                 ))

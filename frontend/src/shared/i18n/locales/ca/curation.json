@@ -95,5 +95,8 @@
   "site_respect_robots": "Respectar el robots.txt del lloc",
   "site_courtesy_help": "La pausa i el respecte al robots.txt venen posats. Abaixar-los és una decisió que queda registrada ací.",
   "type_needs_javascript": "No llegible sense JavaScript",
-  "type_content_updated": "Actualitzada al portal"
+  "type_content_updated": "Actualitzada al portal",
+  "site_date_selector": "Selector CSS de la data",
+  "site_date_format": "Format de la data",
+  "site_date_help": "Si el portal publica la data en cada pàgina, on és. A www.uji.es és .clockBarDate, amb la unitat responsable al costat. Sense això, l'antiguitat es dedueix de l'any de l'URL."
 }

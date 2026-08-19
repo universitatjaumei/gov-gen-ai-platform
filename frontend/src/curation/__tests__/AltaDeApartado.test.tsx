@@ -81,6 +81,32 @@ describe('alta de un apartado del portal', () => {
     expect(enviado.crawl_config.respect_robots).toBe(true)
   })
 
+  it('ofrece de dónde saca el portal la fecha de cada página', () => {
+    // CUR.1 — con esa fecha, «desactualizada» es un dato y no una conjetura sobre el año de la URL.
+    abrirFormulario()
+
+    expect(screen.getByTestId('campo-selector-fecha')).toBeInTheDocument()
+    expect(screen.getByTestId('campo-formato-fecha')).toHaveValue('%d/%m/%Y')
+  })
+
+  it('manda el selector de fecha con la configuración del rastreo', async () => {
+    abrirFormulario()
+
+    fireEvent.change(screen.getByTestId('campo-nombre'), { target: { value: 'Escola' } })
+    fireEvent.change(screen.getByTestId('campo-url'), {
+      target: { value: 'https://www.uji.es/centres/escola-doctorat/' },
+    })
+    fireEvent.change(screen.getByTestId('campo-selector-fecha'), {
+      target: { value: '.clockBarDate' },
+    })
+    fireEvent.submit(screen.getByTestId('form-sitio'))
+
+    await waitFor(() => expect(createMutate).toHaveBeenCalled())
+    const enviado = createMutate.mock.calls[0][0].data
+    expect(enviado.crawl_config.content_date_selector).toBe('.clockBarDate')
+    expect(enviado.crawl_config.content_date_format).toBe('%d/%m/%Y')
+  })
+
   it('un filtro que no es una expresión regular válida se avisa antes de enviarlo', async () => {
     abrirFormulario()
 

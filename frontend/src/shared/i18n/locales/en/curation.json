@@ -95,5 +95,8 @@
   "site_respect_robots": "Respect the site's robots.txt",
   "site_courtesy_help": "The delay and robots.txt compliance are on by default. Lowering them is a decision recorded here.",
   "type_needs_javascript": "Not readable without JavaScript",
-  "type_content_updated": "Updated on the portal"
+  "type_content_updated": "Updated on the portal",
+  "site_date_selector": "Date CSS selector",
+  "site_date_format": "Date format",
+  "site_date_help": "If the portal publishes a date on each page, where it is. On www.uji.es it is .clockBarDate, with the owning unit next to it. Without this, age is inferred from the year in the URL."
 }

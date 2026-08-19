@@ -102,6 +102,15 @@ class HubCrawledPage(HubOperationalBase):
         JSONB, nullable=True, default=list
     )
 
+    # CUR.1 — la fecha que la propia página publica y la unidad que la mantiene. El portal las sirve
+    # en el HTML y las estábamos ignorando: `stale` adivinaba la antigüedad del año más reciente
+    # citado en el texto y marcaba tres de cada cuatro páginas. Con esto, «desactualizada» es un
+    # dato, y el responsable es lo que hace accionable el informe: dice a quién escribir.
+    content_published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    content_owner: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     # embedding de página para auditoría semántica en modo "full" (9Q.4).
     # Misma dimensión que HubDocumentChunk.embedding (BGE-M3 = 1024) para que cruce coseno.
     # None = sin embedding (no auditada en modo full todavía).

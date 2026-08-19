@@ -21,7 +21,12 @@ from server.app.modules.agents_hub.ingestion.markdown_utils import (
     estimate_tokens,
     extract_title_from_markdown,
 )
-from server.app.modules.curation.contenido_web import parece_html, texto_visible, titulo_de
+from server.app.modules.curation.contenido_web import (
+    fecha_y_responsable,
+    parece_html,
+    texto_visible,
+    titulo_de,
+)
 from server.app.modules.curation.cortesia import RutaProhibidaPorRobots, clasificar_fallo
 from server.app.modules.curation.sondeo_dinamico import senales_de_dinamismo
 
@@ -164,7 +169,7 @@ class SiteCrawler:
                     status="active",
                     error_message=None,
                     sitemap_lastmod=sitemap_map.get(url),
-                    **self._page_fields(url, body, headers),
+                    **self._page_fields(url, body, headers, site),
                     content_hash=content_hash,
                 )
             except Exception as exc:  # noqa: BLE001
@@ -267,7 +272,9 @@ class SiteCrawler:
         )
         return discovered | set(sitemap_map.keys()), sitemap_map, crawl_result
 
-    def _page_fields(self, url: str, body: str, headers: dict) -> dict[str, Any]:
+    def _page_fields(
+        self, url: str, body: str, headers: dict, site: Any = None
+    ) -> dict[str, Any]:
         """Campos de contenido + señales para el upsert de una página.
 
         RAS.2 — de una página HTML se guarda **su texto**, no su marcado: con el marcado dentro,
@@ -284,7 +291,22 @@ class SiteCrawler:
         titulo = titulo_de(body) if es_html else extract_title_from_markdown(body)
         senales = [s.como_dict() for s in senales_de_dinamismo(body)] if es_html else []
 
+        # CUR.1 — la fecha y la unidad responsable que publica la propia página, si el sitio declara
+        # dónde están. El marcado es de cada portal, así que viene de su configuración.
+        config = (getattr(site, "config_json", None) or {}) if site is not None else {}
+        publicada, responsable = (
+            fecha_y_responsable(
+                body,
+                config.get("content_date_selector"),
+                config.get("content_date_format") or "%d/%m/%Y",
+            )
+            if es_html
+            else (None, None)
+        )
+
         return {
+            "content_published_at": publicada,
+            "content_owner": responsable,
             "markdown_content": contenido,
             "title": titulo,
             "token_count": estimate_tokens(contenido),

@@ -43,6 +43,10 @@ const siteSchema = z.object({
   // exige decirlo aquí, donde queda a la vista de quien da de alta el apartado.
   delay_seconds: z.coerce.number().min(0).max(60).default(1),
   respect_robots: z.boolean().default(true),
+  // CUR.1 — de dónde saca este portal la fecha que publica cada página. En `www.uji.es` está en
+  // `.clockBarDate`, con la unidad responsable al lado. Sin esto, «desactualizada» se adivina.
+  content_date_selector: z.string().optional(),
+  content_date_format: z.string().default('%d/%m/%Y'),
 })
 
 type SiteFormInput = z.input<typeof siteSchema>
@@ -80,6 +84,7 @@ export function SitesPage() {
       max_pages: 50,
       delay_seconds: 1,
       respect_robots: true,
+      content_date_format: '%d/%m/%Y',
     },
   })
 
@@ -97,6 +102,8 @@ export function SitesPage() {
           max_pages: data.max_pages,
           delay_seconds: data.delay_seconds,
           respect_robots: data.respect_robots,
+          content_date_selector: data.content_date_selector || undefined,
+          content_date_format: data.content_date_format,
         },
       },
     })
@@ -249,6 +256,34 @@ export function SitesPage() {
                   <input {...register('respect_robots')} data-testid="campo-robots" type="checkbox" />
                   {t('site_respect_robots')}
                 </label>
+                {/* CUR.1 — la fecha que el propio portal publica en cada página. Con ella,
+                    «desactualizada» es un dato; sin ella se adivina por el año de la URL. */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-sm font-medium" htmlFor="content_date_selector">
+                      {t('site_date_selector')}
+                    </label>
+                    <input
+                      {...register('content_date_selector')}
+                      id="content_date_selector"
+                      data-testid="campo-selector-fecha"
+                      placeholder=".clockBarDate"
+                      className="w-full border rounded px-2 py-1.5 text-sm mt-1 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium" htmlFor="content_date_format">
+                      {t('site_date_format')}
+                    </label>
+                    <input
+                      {...register('content_date_format')}
+                      id="content_date_format"
+                      data-testid="campo-formato-fecha"
+                      className="w-full border rounded px-2 py-1.5 text-sm mt-1 font-mono"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">{t('site_date_help')}</p>
                 <p className="text-xs text-muted-foreground">{t('site_courtesy_help')}</p>
               </fieldset>
 

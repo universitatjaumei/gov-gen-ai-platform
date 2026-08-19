@@ -36,6 +36,30 @@ class CrawlConfig(BaseModel):
     max_concurrency: int = Field(default=1, ge=1, le=8)
     max_retries: int = Field(default=3, ge=1, le=10)
 
+    # CUR.1 — de dónde sacar la fecha que **publica** la página y la unidad que la mantiene. El
+    # marcado es de cada portal (`www.uji.es` las sirve juntas en `.clockBarDate`), así que va en la
+    # configuración del sitio: hardcodearlo acoplaría el módulo a un cliente. Vacío = como antes.
+    content_date_selector: str | None = None
+    content_date_format: str = "%d/%m/%Y"
+
+    @field_validator("content_date_format")
+    @classmethod
+    def _debe_ser_un_formato_de_fecha(cls, valor: str) -> str:
+        """Un formato inválido fallaría en **cada página** del rastreo, lejos del formulario."""
+        from datetime import datetime
+
+        try:
+            datetime.strptime(datetime(2026, 1, 2).strftime(valor), valor)
+        except (ValueError, TypeError) as fallo:
+            raise ValueError(
+                f"«{valor}» no es un formato de fecha de `strftime` válido: {fallo}"
+            ) from fallo
+        if valor.strip() == datetime(2026, 1, 2).strftime(valor).strip():
+            # Una cadena sin directivas (`no es un formato`) «formatea» a sí misma: no es un
+            # formato, es texto.
+            raise ValueError(f"«{valor}» no lleva ninguna directiva de fecha (%d, %m, %Y…)")
+        return valor
+
     @field_validator("url_regex_filter")
     @classmethod
     def _debe_compilar(cls, valor: str | None) -> str | None:
