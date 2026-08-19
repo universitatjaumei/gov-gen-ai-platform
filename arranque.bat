@@ -8,13 +8,11 @@ echo ========================================
 echo.
 echo  1. FastAPI + Frontend React (desarrollo completo)
 echo  2. Solo servidor FastAPI
-echo  3. Aplicacion NiceGUI legacy
 echo.
-set /p OPCION="Selecciona [1/2/3]: "
+set /p OPCION="Selecciona [1/2]: "
 
 if "%OPCION%"=="1" goto :completo
 if "%OPCION%"=="2" goto :servidor
-if "%OPCION%"=="3" goto :legacy
 
 echo [ERROR] Opcion no valida.
 pause
@@ -39,17 +37,6 @@ echo [INFO] Swagger UI en http://localhost:8000/docs
 echo.
 set PYTHONUNBUFFERED=1
 uv run --project server uvicorn server.app.main:app --reload --reload-dir server --host 0.0.0.0 --port 8000
-goto :fin
-
-:legacy
-echo.
-echo [INFO] Iniciando aplicacion NiceGUI (modo legacy)...
-set PYTHONUNBUFFERED=1
-if exist ".venv\Scripts\python.exe" (
-    ".venv\Scripts\python.exe" main.py
-) else (
-    uv run main.py
-)
 goto :fin
 
 :fin
