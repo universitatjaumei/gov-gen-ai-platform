@@ -107,5 +107,13 @@
   "series_policy_series": "Sèrie: totes segueixen vigents",
   "series_policy_superseded": "La nova deroga l'anterior",
   "series_policy_off": "L'any no significa res ací",
-  "site_series_help": "Com publica aquest portal. La UJI publica acords i actes per any que segueixen vigents; un altre portal versiona convocatòries i la nova substitueix la vella."
+  "site_series_help": "Com publica aquest portal. La UJI publica acords i actes per any que segueixen vigents; un altre portal versiona convocatòries i la nova substitueix la vella.",
+  "view_stored_content": "Veure text guardat",
+  "expand_versions": "Veure les {{count}} versions",
+  "collapse_versions": "Ocultar versions",
+  "page_content_title": "Text guardat de la pàgina",
+  "page_content_note": "Aquest és el text que aniria al corpus de l'assistent, sense el menú ni la plantilla del portal. No és la pàgina original.",
+  "page_content_empty": "Aquesta pàgina no té text guardat.",
+  "page_content_needs_js": "Aquesta pàgina no s'ha pogut llegir sense renderitzar, així que el seu text pot estar incomplet.",
+  "show_rest": "més (veure tots)"
 }

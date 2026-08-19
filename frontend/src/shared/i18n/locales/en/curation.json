@@ -107,5 +107,13 @@
   "series_policy_series": "Series: all remain valid",
   "series_policy_superseded": "The new one supersedes the old",
   "series_policy_off": "The year means nothing here",
-  "site_series_help": "How this portal publishes. UJI publishes yearly agreements and minutes that all remain valid; another portal versions calls for applications, where the new one replaces the old."
+  "site_series_help": "How this portal publishes. UJI publishes yearly agreements and minutes that all remain valid; another portal versions calls for applications, where the new one replaces the old.",
+  "view_stored_content": "View stored text",
+  "expand_versions": "View the {{count}} versions",
+  "collapse_versions": "Hide versions",
+  "page_content_title": "Page's stored text",
+  "page_content_note": "This is the text that would go into the assistant's corpus, without the portal's menu or template. It is not the original page.",
+  "page_content_empty": "This page has no stored text.",
+  "page_content_needs_js": "This page could not be read without rendering, so its text may be incomplete.",
+  "show_rest": "more (show all)"
 }

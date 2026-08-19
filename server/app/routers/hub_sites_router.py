@@ -24,6 +24,7 @@ from server.app.modules.agents_hub.database.operational_models import HubCrawled
 from server.app.modules.curation.selection_contracts import (
     CandidatePageView,
     CrawlConfig,
+    PageContentView,
     PageView,
     SelectionCreate,
     SelectionView,
@@ -358,6 +359,46 @@ async def delete_selection(
     repo = CorpusSelectionRepo(session)
     await repo.delete(selection_id)
     await session.commit()
+
+
+@router.get(
+    "/hub/pages/{page_id}/content",
+    response_model=PageContentView,
+    operation_id="getPageContent",
+)
+async def get_page_content(
+    page_id: uuid.UUID,
+    current_user: UserInfo = Depends(_require_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """El texto guardado de una página rastreada: lo que iría al corpus (CUR.4).
+
+    Deploy: edge. El informe de calidad acusaba y no dejaba comprobar —«hay que copiar y pegar»—, y
+    no había ninguna pantalla que mostrara el contenido de una página. Hace falta para juzgar si un
+    hallazgo es cierto, para decidir si la página merece publicarse y, desde CUR.3, para comprobar
+    que el recorte de plantilla no se ha llevado contenido por delante.
+    """
+    pagina = await session.get(HubCrawledPage, page_id)
+    if pagina is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
+
+    # El texto de una página es contenido del cliente, así que la guarda de organización va aquí
+    # igual que en el resto del módulo.
+    await assert_site_org_access(session, pagina.site_id, current_user)
+
+    return PageContentView(
+        id=pagina.id,
+        url=pagina.url,
+        title=pagina.title,
+        status=pagina.status,
+        # Vacío y no nulo: una página en error no tiene texto, y eso hay que poder verlo sin
+        # adivinar si falta el dato o falta el contenido.
+        content=pagina.markdown_content or "",
+        token_count=pagina.token_count,
+        owner=getattr(pagina, "content_owner", None),
+        published_at=getattr(pagina, "content_published_at", None),
+        render_signals=list(getattr(pagina, "render_signals", None) or []),
+    )
 
 
 # ──────────────────────── Candidatas e ingestión ────────────────────────

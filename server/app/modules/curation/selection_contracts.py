@@ -167,6 +167,28 @@ class PageView(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PageContentView(BaseModel):
+    """El texto **guardado** de una página, que es el que iría al corpus (CUR.4).
+
+    El informe acusaba y no dejaba comprobar: no había ninguna pantalla que mostrara el texto de una
+    página rastreada. Hace falta para juzgar un hallazgo, para decidir si la página merece entrar en
+    el corpus y —desde CUR.3— para comprobar que el recorte de plantilla no se ha comido contenido.
+
+    Se sirve lo guardado, no la página original: eso último ya se puede ver abriendo la URL.
+    """
+
+    id: uuid.UUID
+    url: str
+    title: str | None
+    status: str
+    content: str
+    token_count: int | None
+    owner: str | None
+    published_at: datetime | None
+    #: Por qué no se pudo leer sin renderizar, si es el caso (RAS.2).
+    render_signals: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class SelectionView(BaseModel):
     id: uuid.UUID
     chatbot_id: uuid.UUID

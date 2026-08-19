@@ -20,7 +20,7 @@ from fastapi import (
     Response,
     status,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user
@@ -101,6 +101,15 @@ async def _require_admin(user: UserInfo = Depends(get_current_user)) -> UserInfo
 
 
 class _FindingOut(BaseModel):
+    """Un hallazgo, tal como lo lee la cola de revisión.
+
+    `page_id` y `signal` no son extras informativos: son lo que hace **revisable** el hallazgo
+    (CUR.4). Sin `page_id` la fila no puede abrir el texto guardado de la página que acusa, y sin
+    la señal un hallazgo de grupo —la serie por años, el duplicado exacto— sólo enseña una de sus
+    URLs y las demás quedan invisibles. La señal se guarda en `signal_json`; el nombre de la
+    columna no tiene por qué salir a la API.
+    """
+
     id: uuid.UUID
     site_id: uuid.UUID
     finding_type: str
@@ -108,6 +117,8 @@ class _FindingOut(BaseModel):
     status: str
     confidence: float
     source_url: str | None
+    page_id: uuid.UUID | None = None
+    signal: dict[str, Any] = Field(default_factory=dict, validation_alias="signal_json")
     detected_at: Any
     reviewed_at: Any = None
 

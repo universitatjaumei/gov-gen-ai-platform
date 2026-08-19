@@ -107,5 +107,13 @@
   "series_policy_series": "Serie: todas siguen vigentes",
   "series_policy_superseded": "La nueva deroga a la anterior",
   "series_policy_off": "El año no significa nada aquí",
-  "site_series_help": "Cómo publica este portal. La UJI publica acuerdos y actas por año que siguen vigentes; otro portal versiona convocatorias y la nueva sustituye a la vieja."
+  "site_series_help": "Cómo publica este portal. La UJI publica acuerdos y actas por año que siguen vigentes; otro portal versiona convocatorias y la nueva sustituye a la vieja.",
+  "view_stored_content": "Ver texto guardado",
+  "expand_versions": "Ver las {{count}} versiones",
+  "collapse_versions": "Ocultar versiones",
+  "page_content_title": "Texto guardado de la página",
+  "page_content_note": "Esto es el texto que iría al corpus del asistente, sin el menú ni la plantilla del portal. No es la página original.",
+  "page_content_empty": "Esta página no tiene texto guardado.",
+  "page_content_needs_js": "Esta página no se pudo leer sin renderizar, así que su texto puede estar incompleto.",
+  "show_rest": "más (ver todos)"
 }

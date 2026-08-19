@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useGetSiteQualityReport } from '@/shared/api/generated/hub-content-quality/hub-content-quality'
 import type { WebQualityReport, FindingTypeSection } from '@/shared/api/generated/model'
@@ -13,6 +14,15 @@ export function WebQualityReportViewer({ siteId }: Props) {
   const { t: tc } = useTranslation('common')
 
   const { data: report, isLoading } = useGetSiteQualityReport(siteId)
+  // CUR.4 — que secciones del informe se estan viendo enteras.
+  const [desplegadas, setDesplegadas] = useState<Set<string>>(new Set())
+  const alternar = (tipo: string) =>
+    setDesplegadas((previas) => {
+      const siguiente = new Set(previas)
+      if (siguiente.has(tipo)) siguiente.delete(tipo)
+      else siguiente.add(tipo)
+      return siguiente
+    })
 
   if (isLoading) return <p className="text-muted-foreground">{tc('loading')}</p>
   if (!report) return null
@@ -77,15 +87,54 @@ export function WebQualityReportViewer({ siteId }: Props) {
                 </span>
               </div>
               <p className="text-xs text-muted-foreground italic">{t('report_recommendation')}: {section.recommendation}</p>
+              {/* CUR.4 — las URLs, clickables y en otra pestaña; y el «+N más» se despliega en vez
+                  de quedarse como un texto muerto. Del usuario: «ahora hay que copiar y pegar». */}
               <ul className="text-xs space-y-1">
-                {section.findings.slice(0, 5).map((f) => (
-                  <li key={String(f.id)} className="flex gap-2">
-                    <span className="truncate">{f.page_url ?? '—'}</span>
-                    {f.related_page_url && <span className="text-muted-foreground">→ {f.related_page_url}</span>}
+                {(desplegadas.has(section.finding_type)
+                  ? section.findings
+                  : section.findings.slice(0, 5)
+                ).map((f) => (
+                  <li key={String(f.id)} className="flex gap-2 flex-wrap">
+                    {f.page_url ? (
+                      <a
+                        href={f.page_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary underline break-all"
+                      >
+                        {f.page_url}
+                      </a>
+                    ) : (
+                      <span>—</span>
+                    )}
+                    {f.related_page_url && (
+                      <span className="text-muted-foreground">
+                        →{' '}
+                        <a
+                          href={f.related_page_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline break-all"
+                        >
+                          {f.related_page_url}
+                        </a>
+                      </span>
+                    )}
                   </li>
                 ))}
                 {section.findings.length > 5 && (
-                  <li className="text-muted-foreground">+{section.findings.length - 5} más</li>
+                  <li>
+                    <button
+                      type="button"
+                      data-testid={`btn-desplegar-seccion-${section.finding_type}`}
+                      onClick={() => alternar(section.finding_type)}
+                      className="text-primary underline"
+                    >
+                      {desplegadas.has(section.finding_type)
+                        ? t('collapse_versions')
+                        : `+${section.findings.length - 5} ${t('show_rest')}`}
+                    </button>
+                  </li>
                 )}
               </ul>
             </div>

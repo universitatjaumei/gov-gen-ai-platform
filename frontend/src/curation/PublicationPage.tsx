@@ -15,6 +15,7 @@ import {
 } from '@/shared/api/generated/hub-sites/hub-sites'
 import type { CandidatePageView, SiteView } from '@/shared/api/generated/model'
 import { useListChatbotsApiV1HubChatbotsGet } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
+import { PageContentDialog } from './PageContentDialog'
 
 const selSchema = z.object({
   rule_type: z.enum(['path_prefix', 'sitemap_section', 'manual']).default('path_prefix'),
@@ -43,6 +44,8 @@ export function PublicationPage() {
   const { t: tc } = useTranslation('common')
   const qc = useQueryClient()
   const [selDialogOpen, setSelDialogOpen] = useState(false)
+  // CUR.4 — la pagina cuyo texto guardado se esta leyendo antes de decidir si se publica.
+  const [paginaAbierta, setPaginaAbierta] = useState<string | null>(null)
   const [selectedSiteId, setSelectedSiteId] = useState<string>('')
   const [selectedChatbotId, setSelectedChatbotId] = useState<string>('')
 
@@ -177,10 +180,31 @@ export function PublicationPage() {
                 <tbody>
                   {(candidates as CandidatePageView[]).map((c) => (
                     <tr key={String(c.page_id)} className="border-b">
-                      <td className="py-1 pr-2 truncate max-w-xs">{c.url}</td>
+                      {/* CUR.4 — para decidir si una página merece entrar en el corpus hay que
+                          poder abrirla y, sobre todo, leer **el texto que se guardó**, que es lo
+                          que el asistente va a citar y no lo que se ve en el portal. */}
+                      <td className="py-1 pr-2 max-w-xs">
+                        <a
+                          data-testid={`enlace-candidata-${c.page_id}`}
+                          href={c.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline break-all"
+                        >
+                          {c.url}
+                        </a>
+                      </td>
                       <td className="py-1 pr-2">{c.matched_rule ?? '—'}</td>
                       <td className="py-1 pr-2">{c.is_new ? '✓' : '—'}</td>
-                      <td className="py-1">
+                      <td className="py-1 space-x-1">
+                        <button
+                          type="button"
+                          data-testid={`btn-ver-candidata-${c.page_id}`}
+                          className="px-2 py-0.5 rounded border text-xs"
+                          onClick={() => setPaginaAbierta(String(c.page_id))}
+                        >
+                          {t('view_stored_content')}
+                        </button>
                         <button
                           className="px-2 py-0.5 rounded border text-xs"
                           onClick={() => handleIngest(String(c.page_id))}
@@ -228,6 +252,10 @@ export function PublicationPage() {
           </div>
         </div>
       )}
+      {paginaAbierta && (
+        <PageContentDialog pageId={paginaAbierta} onClose={() => setPaginaAbierta(null)} />
+      )}
+
     </div>
   )
 }

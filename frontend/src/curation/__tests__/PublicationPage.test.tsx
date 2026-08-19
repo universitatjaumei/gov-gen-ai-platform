@@ -15,6 +15,9 @@ vi.mock('@/shared/api/generated/hub-sites/hub-sites', () => ({
   useListCandidates: vi.fn(() => ({ data: mockCandidates.list, isLoading: false })),
   useIngestPage: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   getListSelectionsQueryKey: vi.fn(() => ['listSelections']),
+  // CUR.4 — la pantalla monta el visor del texto guardado, que lo usa para decidir si una
+  // candidata merece publicarse. Sin este export el módulo doblado no resuelve el import.
+  useGetPageContent: vi.fn(() => ({ data: undefined, isLoading: false })),
 }))
 
 const mockChatbots = vi.hoisted(() => ({ list: [] as object[] }))

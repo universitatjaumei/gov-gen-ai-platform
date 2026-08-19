@@ -9,8 +9,31 @@ import {
 } from '@/shared/api/generated/hub-content-quality/hub-content-quality'
 import type { SiteView } from '@/shared/api/generated/model'
 import { ContentGapsPanel } from './ContentGapsPanel'
+import { PageContentDialog } from './PageContentDialog'
 
 type Severity = 'critical' | 'warning' | 'info'
+
+interface Version {
+  url: string
+  date?: string | null
+}
+
+interface Hallazgo {
+  id: string
+  finding_type: string
+  severity: Severity
+  status: string
+  source_url?: string | null
+  detected_at: string
+  page_id?: string | null
+  signal?: { versions?: Version[] } | null
+}
+
+/** Las versiones que un hallazgo de grupo lleva dentro: serie por años o duplicado exacto. */
+function versionesDe(f: Hallazgo): Version[] {
+  const versiones = f.signal?.versions
+  return Array.isArray(versiones) ? versiones : []
+}
 
 const SEVERITY_BADGE: Record<Severity, string> = {
   critical: 'bg-red-100 text-red-800',
@@ -32,6 +55,9 @@ export function FindingsPage() {
   const [selectedSiteId, setSelectedSiteId] = useState<string>('')
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [typeFilter, setTypeFilter] = useState<string>('')
+  // CUR.4 — qué grupo está desplegado y qué página se está leyendo.
+  const [desplegado, setDesplegado] = useState<string | null>(null)
+  const [paginaAbierta, setPaginaAbierta] = useState<string | null>(null)
 
   const { data: sites = [] } = useListSites()
   const { data: findings = [], isLoading: findingsLoading } = useListSiteFindings(
@@ -129,10 +155,49 @@ export function FindingsPage() {
                 </tr>
               </thead>
               <tbody>
-                {(findings as { id: string; finding_type: string; severity: Severity; status: string; source_url?: string | null; detected_at: string }[]).map((f) => (
-                  <tr key={f.id} className="border-b">
+                {(findings as Hallazgo[]).map((f) => (
+                  <tr key={f.id} className="border-b align-top">
                     <td className="py-2 pr-3">
                       <span className="text-xs">{t(`type_${f.finding_type}` as Parameters<typeof t>[0])}</span>
+                      {/* CUR.4 — un hallazgo de grupo habla de varias páginas: aquí se despliegan
+                          con sus fechas, que es lo que se compara. Antes ponía «+4 más» y no se
+                          podía abrir. */}
+                      {versionesDe(f).length > 0 && (
+                        <>
+                          <button
+                            type="button"
+                            data-testid={`btn-desplegar-${f.id}`}
+                            onClick={() => setDesplegado(desplegado === f.id ? null : f.id)}
+                            className="block text-xs text-primary underline mt-1"
+                          >
+                            {desplegado === f.id
+                              ? t('collapse_versions')
+                              : t('expand_versions', { count: versionesDe(f).length })}
+                          </button>
+                          {desplegado === f.id && (
+                            <ul data-testid={`versiones-${f.id}`} className="mt-1 space-y-0.5">
+                              {versionesDe(f).map((v) => (
+                                <li key={v.url} className="text-xs">
+                                  <a
+                                    href={v.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-primary underline break-all"
+                                  >
+                                    {v.url}
+                                  </a>
+                                  {v.date && (
+                                    <span className="text-muted-foreground">
+                                      {' '}
+                                      · {new Date(v.date).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </>
+                      )}
                     </td>
                     <td className="py-2 pr-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${SEVERITY_BADGE[f.severity] ?? ''}`}>
@@ -140,7 +205,32 @@ export function FindingsPage() {
                       </span>
                     </td>
                     <td className="py-2 pr-3 text-xs">{t(`status_${f.status}` as Parameters<typeof t>[0])}</td>
-                    <td className="py-2 pr-3 text-xs truncate max-w-xs">{f.source_url ?? '—'}</td>
+                    {/* CUR.4 — clickable y en otra pestaña: «ahora hay que copiar y pegar». */}
+                    <td className="py-2 pr-3 text-xs max-w-xs">
+                      {f.source_url ? (
+                        <a
+                          data-testid={`enlace-${f.id}`}
+                          href={f.source_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline break-all"
+                        >
+                          {f.source_url}
+                        </a>
+                      ) : (
+                        '—'
+                      )}
+                      {f.page_id && (
+                        <button
+                          type="button"
+                          data-testid={`btn-ver-contenido-${f.id}`}
+                          onClick={() => setPaginaAbierta(f.page_id ?? null)}
+                          className="block text-xs text-primary underline mt-1"
+                        >
+                          {t('view_stored_content')}
+                        </button>
+                      )}
+                    </td>
                     <td className="py-2 pr-3 text-xs">{new Date(f.detected_at).toLocaleDateString()}</td>
                     <td className="py-2 space-x-1">
                       {f.status === 'new' && (
@@ -164,6 +254,10 @@ export function FindingsPage() {
       {/* RAG.14: los huecos de corpus son entrada de trabajo para el curador, no un panel
           aparte del chatbot — docs/DECISION_CURACION_SEPARADA.md, "Sobre CorpusSelectionService". */}
       <ContentGapsPanel />
+
+      {paginaAbierta && (
+        <PageContentDialog pageId={paginaAbierta} onClose={() => setPaginaAbierta(null)} />
+      )}
     </div>
   )
 }
