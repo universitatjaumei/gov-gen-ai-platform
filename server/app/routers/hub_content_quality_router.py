@@ -118,6 +118,10 @@ class _FindingOut(BaseModel):
     confidence: float
     source_url: str | None
     page_id: uuid.UUID | None = None
+    #: CUR.8 — la segunda página de un hallazgo que habla de dos. «Se muestran una serie de páginas
+    #: duplicadas pero solo se menciona una»: sin esto la pantalla no puede ofrecer su texto
+    #: guardado, que es con lo que se juzga si el duplicado es cierto.
+    related_page_id: uuid.UUID | None = None
     signal: dict[str, Any] = Field(default_factory=dict, validation_alias="signal_json")
     detected_at: Any
     reviewed_at: Any = None

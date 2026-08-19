@@ -35,3 +35,8 @@ class WebQualityReport(BaseModel):
     totals_by_type: dict[str, int]
     totals_by_severity: dict[str, int]
     sections: list[FindingTypeSection]
+    #: CUR.8 — si esta instalación puede producir un PDF de verdad (necesita LibreOffice). La
+    #: pantalla ofrece el botón sólo cuando es `True`: «o se quita el botón o se permite que la
+    #: descarga sea en pdf». Viaja en el informe y no en un endpoint aparte para no gastar una
+    #: petición más por cada informe que se abre.
+    pdf_available: bool = False

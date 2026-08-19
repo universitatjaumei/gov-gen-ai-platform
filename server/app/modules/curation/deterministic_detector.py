@@ -340,6 +340,11 @@ class DeterministicQualityDetector:
                         "source": origen,
                         # Quién mantiene la página: es lo que hace accionable el hallazgo.
                         "owner": getattr(page, "content_owner", None),
+                        # CUR.8 — el umbral con el que se juzgó, para que el hallazgo se explique
+                        # solo. Va dentro y no se lee de la configuración al pintar la pantalla:
+                        # el criterio es de cada sitio y se puede cambiar, así que leerlo después
+                        # daría el criterio de hoy en vez del que produjo este aviso.
+                        "threshold": self._stale_days,
                     },
                     now=now,
                 ))

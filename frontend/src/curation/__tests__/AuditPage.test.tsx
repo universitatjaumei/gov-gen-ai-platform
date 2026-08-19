@@ -118,6 +118,8 @@ describe('WebQualityReportViewer (vía AuditPage)', () => {
       totals_by_type: { stale: 1 },
       totals_by_severity: { info: 1 },
       sections: [],
+      // CUR.8 — el botón de PDF sólo sale si el servidor puede hacer uno.
+      pdf_available: true,
     }
 
     const { AuditPage } = await import('../AuditPage')

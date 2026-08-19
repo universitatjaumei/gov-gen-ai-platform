@@ -12,6 +12,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Sequence
 
+from server.app.modules.curation.report_exporter import se_puede_convertir_a_pdf
 from server.app.modules.curation.report_contracts import (
     ContentFindingView,
     FindingTypeSection,
@@ -116,6 +117,7 @@ class WebQualityReportBuilder:
                 totals_by_type={},
                 totals_by_severity={},
                 sections=[],
+                pdf_available=se_puede_convertir_a_pdf(),
             )
 
         # Agrupar por tipo
@@ -147,4 +149,6 @@ class WebQualityReportBuilder:
             totals_by_type=totals_by_type,
             totals_by_severity=dict(totals_by_severity),
             sections=sections,
+            # CUR.8 — para que la pantalla ofrezca el PDF sólo si esta máquina puede hacer uno.
+            pdf_available=se_puede_convertir_a_pdf(),
         )

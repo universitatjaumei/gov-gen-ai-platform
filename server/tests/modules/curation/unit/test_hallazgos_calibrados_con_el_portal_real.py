@@ -53,6 +53,8 @@ class _Pagina:
     sitemap_lastmod: datetime | None = None
     http_last_modified: datetime | None = None
     content_year: int | None = None
+    content_published_at: datetime | None = None
+    content_owner: str | None = None
     first_seen_at: datetime | None = None
     render_signals: list[dict] | None = None
 
@@ -231,3 +233,29 @@ async def test_el_hallazgo_dice_de_donde_sale_la_fecha():
 
     stale = next(h for h in hallazgos if h.finding_type == "stale")
     assert stale.signal["source"] == "url_year"
+
+
+# ───────── El hallazgo tiene que decir por qué lo es (CUR.8) ─────────
+#
+# Del usuario: «cuando se dice que están desactualizadas o potencialmente desactualizadas, se debería
+# decir la razón (que la fecha que se indica como fecha de actualización es anterior a x años, meses o
+# el criterio que se utilice)». El umbral con el que se juzgó **tiene que viajar en el hallazgo**: es
+# de cada sitio desde CUR.2.1, así que leerlo de la configuración al pintar la pantalla daría el
+# criterio de hoy y no el que produjo el aviso.
+
+
+@pytest.mark.asyncio
+async def test_una_desactualizada_lleva_el_umbral_con_el_que_se_juzgo():
+    pagina = _Pagina(
+        url="https://www.uji.es/x/",
+        content_published_at=datetime(2021, 11, 18, tzinfo=timezone.utc),
+    )
+    detector = DeterministicQualityDetector(
+        session=_Sesion([pagina]), finding_repo=_Repo(), now_fn=lambda: _AHORA, stale_days=400
+    )
+
+    hallazgos = await detector.analyze(uuid.uuid4())
+
+    stale = next(h for h in hallazgos if h.finding_type == "stale")
+    assert stale.signal["threshold"] == 400
+    assert stale.signal["age_days"] > 400

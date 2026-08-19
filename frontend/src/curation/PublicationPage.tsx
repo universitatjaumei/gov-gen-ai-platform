@@ -12,6 +12,7 @@ import {
   useListCandidates,
   useIngestPage,
   getListSelectionsQueryKey,
+  getListCandidatesQueryKey,
 } from '@/shared/api/generated/hub-sites/hub-sites'
 import type { CandidatePageView, SiteView } from '@/shared/api/generated/model'
 import { useListChatbotsApiV1HubChatbotsGet } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
@@ -49,6 +50,8 @@ export function PublicationPage() {
   // CUR.5 — las paginas marcadas para publicar. Del usuario: «no pueden desmarcarse algunas.
   // Convenria que se pudiera elegir».
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set())
+  // CUR.8 — cuántas se acaban de enviar a ingerir, para poder decirlo.
+  const [enviadasAIngerir, setEnviadasAIngerir] = useState<number | null>(null)
   const [selectedSiteId, setSelectedSiteId] = useState<string>('')
   const [selectedChatbotId, setSelectedChatbotId] = useState<string>('')
 
@@ -93,10 +96,29 @@ export function PublicationPage() {
     })
   }
 
-  const handleIngest = (pageId: string) => {
-    if (!selectedChatbotId) return
-    ingestMutation.mutate({ chatbotId: selectedChatbotId, pageId })
+  /**
+   * CUR.8 — ingerir **y decirlo**.
+   *
+   * Del usuario: «he seleccionado 4 páginas para que fueran cargadas en chatbot demo pero no sé si
+   * ha funcionado». Había funcionado —cinco páginas con sus fragmentos en la base—, pero la pantalla
+   * no decía nada: la mutación se lanzaba sin `onSuccess`, así que la tabla no se refrescaba y las
+   * filas seguían igual. Una acción sin acuse de recibo se repite o se abandona.
+   *
+   * El servidor responde 202 y la ingesta sigue en segundo plano —embebe con el modelo del
+   * chatbot—, así que el aviso dice que tarda: prometer «hecho» sería mentir por unos segundos.
+   */
+  const enviarAIngerir = (pageIds: string[]) => {
+    if (!selectedChatbotId || pageIds.length === 0) return
+    setEnviadasAIngerir(pageIds.length)
+    pageIds.forEach((pageId) =>
+      ingestMutation.mutate(
+        { chatbotId: selectedChatbotId, pageId },
+        { onSuccess: () => qc.invalidateQueries({ queryKey: getListCandidatesQueryKey(selectedSiteId) }) },
+      ),
+    )
   }
+
+  const handleIngest = (pageId: string) => enviarAIngerir([pageId])
 
   /**
    * CUR.5 — marcar, desmarcar e ingerir lo marcado.
@@ -123,8 +145,7 @@ export function PublicationPage() {
     )
 
   const ingerirLoMarcado = () => {
-    if (!selectedChatbotId) return
-    marcadas.forEach((pageId) => ingestMutation.mutate({ chatbotId: selectedChatbotId, pageId }))
+    enviarAIngerir([...marcadas])
     setMarcadas(new Set())
   }
 
@@ -197,6 +218,25 @@ export function PublicationPage() {
 
           {/* Candidatas: cada fila publica por su cuenta, y CUR.5 añade marcar varias */}
           <section>
+            {enviadasAIngerir !== null && (
+              <div
+                data-testid="aviso-ingesta"
+                className="mb-2 text-xs rounded border border-green-600/40 bg-green-50 text-green-900 px-2 py-1.5 flex items-center gap-2"
+              >
+                <span className="flex-1">{t('ingest_sent', { count: enviadasAIngerir })}</span>
+                <button
+                  type="button"
+                  data-testid="btn-refrescar-candidatas"
+                  onClick={() => qc.invalidateQueries({ queryKey: getListCandidatesQueryKey(selectedSiteId) })}
+                  className="underline"
+                >
+                  {t('refresh_candidates')}
+                </button>
+                <button type="button" onClick={() => setEnviadasAIngerir(null)} aria-label={tc('cancel')}>
+                  ×
+                </button>
+              </div>
+            )}
             <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
               <h3 className="text-sm font-semibold">{t('candidates_title')}</h3>
               {(candidates as CandidatePageView[]).length > 0 && (

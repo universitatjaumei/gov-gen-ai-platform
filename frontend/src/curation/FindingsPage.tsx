@@ -10,6 +10,7 @@ import {
 import type { SiteView } from '@/shared/api/generated/model'
 import { ContentGapsPanel } from './ContentGapsPanel'
 import { PageContentDialog } from './PageContentDialog'
+import { razonDelHallazgo, urlRelacionada } from './razonDelHallazgo'
 
 type Severity = 'critical' | 'warning' | 'info'
 
@@ -26,13 +27,15 @@ interface Hallazgo {
   source_url?: string | null
   detected_at: string
   page_id?: string | null
-  signal?: { versions?: Version[] } | null
+  // CUR.8 — la segunda página de un hallazgo que habla de dos.
+  related_page_id?: string | null
+  signal?: Record<string, unknown> | null
 }
 
 /** Las versiones que un hallazgo de grupo lleva dentro: serie por años o duplicado exacto. */
 function versionesDe(f: Hallazgo): Version[] {
   const versiones = f.signal?.versions
-  return Array.isArray(versiones) ? versiones : []
+  return Array.isArray(versiones) ? (versiones as Version[]) : []
 }
 
 const SEVERITY_BADGE: Record<Severity, string> = {
@@ -150,6 +153,7 @@ export function FindingsPage() {
                   <th className="py-2 pr-3">{t('finding_severity')}</th>
                   <th className="py-2 pr-3">{t('finding_status')}</th>
                   <th className="py-2 pr-3">{t('finding_url')}</th>
+                  <th className="py-2 pr-3">{t('finding_reason')}</th>
                   <th className="py-2 pr-3">{t('finding_detected')}</th>
                   <th className="py-2" />
                 </tr>
@@ -205,7 +209,10 @@ export function FindingsPage() {
                       </span>
                     </td>
                     <td className="py-2 pr-3 text-xs">{t(`status_${f.status}` as Parameters<typeof t>[0])}</td>
-                    {/* CUR.4 — clickable y en otra pestaña: «ahora hay que copiar y pegar». */}
+                    {/* CUR.4 — clickable y en otra pestaña: «ahora hay que copiar y pegar».
+                        CUR.8 — y si el hallazgo habla de dos páginas, **las dos**: «se muestran una
+                        serie de páginas duplicadas pero solo se menciona una». Un duplicado con una
+                        sola URL no se puede juzgar. */}
                     <td className="py-2 pr-3 text-xs max-w-xs">
                       {f.source_url ? (
                         <a
@@ -220,16 +227,45 @@ export function FindingsPage() {
                       ) : (
                         '—'
                       )}
-                      {f.page_id && (
-                        <button
-                          type="button"
-                          data-testid={`btn-ver-contenido-${f.id}`}
-                          onClick={() => setPaginaAbierta(f.page_id ?? null)}
-                          className="block text-xs text-primary underline mt-1"
-                        >
-                          {t('view_stored_content')}
-                        </button>
+                      <div className="space-x-2">
+                        {f.page_id && (
+                          <button
+                            type="button"
+                            data-testid={`btn-ver-contenido-${f.id}`}
+                            onClick={() => setPaginaAbierta(f.page_id ?? null)}
+                            className="text-xs text-primary underline"
+                          >
+                            {t('view_stored_content')}
+                          </button>
+                        )}
+                      </div>
+                      {urlRelacionada(f) && (
+                        <div className="mt-1 pl-2 border-l-2 border-muted">
+                          <a
+                            data-testid={`enlace-relacionada-${f.id}`}
+                            href={urlRelacionada(f) ?? ''}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary underline break-all"
+                          >
+                            {urlRelacionada(f)}
+                          </a>
+                          {f.related_page_id && (
+                            <button
+                              type="button"
+                              data-testid={`btn-ver-relacionada-${f.id}`}
+                              onClick={() => setPaginaAbierta(f.related_page_id ?? null)}
+                              className="block text-xs text-primary underline"
+                            >
+                              {t('view_stored_content')}
+                            </button>
+                          )}
+                        </div>
                       )}
+                    </td>
+                    {/* CUR.8 — la razón, que es lo que hace revisable el hallazgo. */}
+                    <td className="py-2 pr-3 text-xs max-w-sm" data-testid={`razon-${f.id}`}>
+                      {razonDelHallazgo(f, t as unknown as (c: string, o?: Record<string, unknown>) => string)}
                     </td>
                     <td className="py-2 pr-3 text-xs">{new Date(f.detected_at).toLocaleDateString()}</td>
                     <td className="py-2 space-x-1">

@@ -95,13 +95,20 @@ describe('PublicationPage (curation)', () => {
     const botones = screen.getAllByText(/^ingerir$/i)
     expect(botones).toHaveLength(2)
 
+    // El segundo argumento es el `onSuccess` que refresca la tabla (CUR.8).
     fireEvent.click(botones[0])
     expect(mutateFn).toHaveBeenCalledTimes(1)
-    expect(mutateFn).toHaveBeenCalledWith({ chatbotId: CHATBOT.id, pageId: CANDIDATE_A.page_id })
+    expect(mutateFn).toHaveBeenCalledWith(
+      { chatbotId: CHATBOT.id, pageId: CANDIDATE_A.page_id },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    )
 
     fireEvent.click(botones[1])
     expect(mutateFn).toHaveBeenCalledTimes(2)
-    expect(mutateFn).toHaveBeenLastCalledWith({ chatbotId: CHATBOT.id, pageId: CANDIDATE_B.page_id })
+    expect(mutateFn).toHaveBeenLastCalledWith(
+      { chatbotId: CHATBOT.id, pageId: CANDIDATE_B.page_id },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    )
   })
 
   it('crea una nueva selección de corpus', async () => {

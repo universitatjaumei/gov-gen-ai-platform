@@ -67,16 +67,28 @@ export function WebQualityReportViewer({ siteId }: Props) {
           >
             {t('download_docx')}
           </button>
-          <button
-            type="button"
-            data-testid="btn-descargar-pdf"
-            onClick={() => descargar('pdf')}
-            className="text-xs px-3 py-1.5 rounded border hover:bg-accent"
-          >
-            {t('download_pdf')}
-          </button>
+          {/* CUR.8 — el PDF sólo si esta instalación puede hacer uno. Del usuario: «o se quita el
+              botón o se permite que la descarga sea en pdf». Que el fichero no mienta (VER.7) era
+              lo mínimo; un botón que promete lo que no puede dar sigue siendo una promesa
+              incumplida. Lo decide el servidor, que es quien sabe si tiene LibreOffice. */}
+          {typedReport.pdf_available && (
+            <button
+              type="button"
+              data-testid="btn-descargar-pdf"
+              onClick={() => descargar('pdf')}
+              className="text-xs px-3 py-1.5 rounded border hover:bg-accent"
+            >
+              {t('download_pdf')}
+            </button>
+          )}
         </div>
       </div>
+
+      {!typedReport.pdf_available && (
+        <p data-testid="aviso-sin-pdf" className="text-xs text-muted-foreground">
+          {t('pdf_unavailable')}
+        </p>
+      )}
 
       {errorDeDescarga && (
         <p data-testid="error-descarga" className="text-xs text-destructive">

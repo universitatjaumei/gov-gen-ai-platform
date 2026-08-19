@@ -74,3 +74,59 @@ class TestLaExportacion:
         assert respuesta.media_type != "application/pdf"
         assert ".docx" in respuesta.headers["content-disposition"]
         assert ".pdf" not in respuesta.headers["content-disposition"]
+
+
+# ───────── CUR.8 — o el boton hace PDF o no esta ─────────
+#
+# Del usuario, tras descargar: «al darle a descargar al pdf descarga un word. No es mucho problema.
+# Podría descargarse solo word pero o se quita el botón o se permite que la descarga sea en pdf».
+# Tiene razón: un botón que promete PDF y entrega DOCX es una promesa incumplida aunque el fichero
+# esté bien etiquetado. La respuesta honesta es ofrecerlo **sólo cuando se puede cumplir**, y para
+# eso hace falta que el servidor diga si puede.
+
+
+class TestSiSePuedeHacerPdf:
+
+    def test_dice_que_no_cuando_libreoffice_no_esta(self, monkeypatch):
+        from server.app.modules.curation import report_exporter
+
+        monkeypatch.setattr(report_exporter.shutil, "which", lambda _nombre: None)
+
+        assert report_exporter.se_puede_convertir_a_pdf() is False
+
+    def test_dice_que_si_cuando_libreoffice_esta(self, monkeypatch):
+        from server.app.modules.curation import report_exporter
+
+        monkeypatch.setattr(
+            report_exporter.shutil, "which", lambda nombre: "/usr/bin/soffice" if nombre else None
+        )
+
+        assert report_exporter.se_puede_convertir_a_pdf() is True
+
+    def test_busca_los_dos_nombres_del_ejecutable(self, monkeypatch):
+        """En Linux es `libreoffice` y en Windows `soffice`: buscar solo uno diria que no puede
+        cuando si puede."""
+        from server.app.modules.curation import report_exporter
+
+        buscados: list[str] = []
+
+        def _which(nombre: str):
+            buscados.append(nombre)
+            return None
+
+        monkeypatch.setattr(report_exporter.shutil, "which", _which)
+        report_exporter.se_puede_convertir_a_pdf()
+
+        assert "soffice" in buscados
+        assert "libreoffice" in buscados
+
+
+class TestElInformeDiceQueFormatosTiene:
+
+    @pytest.mark.asyncio
+    async def test_el_informe_declara_si_el_pdf_esta_disponible(self):
+        """La pantalla no puede adivinarlo, y preguntarlo aparte seria una peticion mas por
+        informe."""
+        from server.app.modules.curation.report_contracts import WebQualityReport
+
+        assert "pdf_available" in WebQualityReport.model_fields

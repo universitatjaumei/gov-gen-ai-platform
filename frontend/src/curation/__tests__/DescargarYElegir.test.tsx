@@ -35,8 +35,10 @@ const INFORME = {
 
 vi.mock('@/shared/api/download', () => ({ descargarConAutorizacion: vi.fn().mockResolvedValue(undefined) }))
 
+const mockInforme = vi.hoisted(() => ({ datos: null as object | null }))
+
 vi.mock('@/shared/api/generated/hub-content-quality/hub-content-quality', () => ({
-  useGetSiteQualityReport: () => ({ data: INFORME, isLoading: false }),
+  useGetSiteQualityReport: () => ({ data: mockInforme.datos, isLoading: false }),
 }))
 
 const mockCandidatas = vi.hoisted(() => ({ list: [] as object[] }))
@@ -80,6 +82,7 @@ afterEach(cleanup)
 beforeEach(() => {
   vi.clearAllMocks()
   mockCandidatas.list = []
+  mockInforme.datos = { ...INFORME, pdf_available: true }
 })
 
 describe('la descarga del informe de auditoría', () => {
@@ -129,16 +132,18 @@ describe('la descarga del informe de auditoría', () => {
   })
 })
 
-describe('elegir qué páginas se publican', () => {
-  async function pantallaDePublicacion() {
+async function pantallaDePublicacionCompartida() {
     const { PublicationPage } = await import('../PublicationPage')
     envolver(<PublicationPage />)
     fireEvent.change(screen.getByRole('combobox', { name: /seleccione un sitio/i }), { target: { value: SITIO } })
     fireEvent.change(screen.getByRole('combobox', { name: /chatbot destino/i }), { target: { value: 'bot-1' } })
     // Por `data-testid` y no por el texto de la URL: la URL sale además en el `aria-label` de su
     // casilla, y esperar por texto ambiguo convierte la espera en un flake.
-    await screen.findByTestId(`marca-${SIN_INGERIR.page_id}`)
-  }
+  await screen.findByTestId(`marca-${SIN_INGERIR.page_id}`)
+}
+
+describe('elegir qué páginas se publican', () => {
+  const pantallaDePublicacion = pantallaDePublicacionCompartida
 
   it('se marca y se desmarca cada página', async () => {
     mockCandidatas.list = [SIN_INGERIR, OTRA]
@@ -162,7 +167,12 @@ describe('elegir qué páginas se publican', () => {
     fireEvent.click(screen.getByTestId('btn-ingerir-marcadas'))
 
     expect(mockIngerir.mutate).toHaveBeenCalledTimes(1)
-    expect(mockIngerir.mutate).toHaveBeenCalledWith({ chatbotId: 'bot-1', pageId: 'p2' })
+    // El segundo argumento es el `onSuccess` que refresca la tabla (CUR.8): sin él la fila no se
+    // actualizaba y nadie sabía si la ingesta había funcionado.
+    expect(mockIngerir.mutate).toHaveBeenCalledWith(
+      { chatbotId: 'bot-1', pageId: 'p2' },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    )
   })
 
   it('sin nada marcado no hay nada que ingerir', async () => {
@@ -201,5 +211,82 @@ describe('elegir qué páginas se publican', () => {
     fireEvent.click(screen.getByTestId('marca-todo'))
 
     expect(screen.getByTestId('btn-ingerir-marcadas').textContent).toContain('2')
+  })
+})
+
+describe('la ingesta se confirma en la pantalla (CUR.8)', () => {
+  /**
+   * Del usuario: «he seleccionado 4 páginas para que fueran cargadas en chatbot demo pero no sé si
+   * ha funcionado». Y sí había funcionado —cinco páginas con sus fragmentos en la base—, pero la
+   * pantalla no decía nada: la mutación se lanzaba sin `onSuccess`, así que la tabla no se
+   * refrescaba y las filas seguían igual. Una acción sin acuse de recibo se repite o se abandona.
+   */
+  it('dice cuántas se han enviado, y que tardan un momento', async () => {
+    mockCandidatas.list = [SIN_INGERIR, OTRA]
+    await pantallaDePublicacionCompartida()
+
+    fireEvent.click(screen.getByTestId('marca-todo'))
+    fireEvent.click(screen.getByTestId('btn-ingerir-marcadas'))
+
+    const aviso = await screen.findByTestId('aviso-ingesta')
+    expect(aviso.textContent).toContain('2')
+  })
+
+  it('pide de nuevo las candidatas al terminar, para que la fila se actualice sola', async () => {
+    mockCandidatas.list = [SIN_INGERIR]
+    await pantallaDePublicacionCompartida()
+
+    fireEvent.click(screen.getByTestId('marca-p1'))
+    fireEvent.click(screen.getByTestId('btn-ingerir-marcadas'))
+
+    // La mutación se llama con su callback de éxito: es lo que refresca la tabla.
+    expect(mockIngerir.mutate).toHaveBeenCalledWith(
+      { chatbotId: 'bot-1', pageId: 'p1' },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    )
+  })
+
+  it('la ingesta de una sola pagina tambien avisa', async () => {
+    mockCandidatas.list = [SIN_INGERIR]
+    await pantallaDePublicacionCompartida()
+
+    fireEvent.click(screen.getAllByText(/^ingerir$/i)[0])
+
+    expect(await screen.findByTestId('aviso-ingesta')).toBeInTheDocument()
+  })
+})
+
+describe('el boton de PDF solo si hay PDF (CUR.8)', () => {
+  /**
+   * Del usuario: «al darle a descargar al pdf descarga un word. No es mucho problema. Podría
+   * descargarse solo word pero **o se quita el botón o se permite que la descarga sea en pdf**».
+   * VER.7 hizo que el fichero no mintiera —sale con extensión y tipo de DOCX—, y eso era lo mínimo;
+   * el botón seguía prometiendo algo que esta máquina no puede dar. Lo decide el servidor, que es
+   * quien sabe si tiene LibreOffice.
+   */
+  it('sin PDF posible, no hay boton de PDF', async () => {
+    mockInforme.datos = { ...INFORME, pdf_available: false }
+    const { WebQualityReportViewer } = await import('../WebQualityReportViewer')
+    envolver(<WebQualityReportViewer siteId={SITIO} />)
+
+    expect(screen.getByTestId('btn-descargar-docx')).toBeInTheDocument()
+    expect(screen.queryByTestId('btn-descargar-pdf')).not.toBeInTheDocument()
+  })
+
+  it('y se explica por que, en vez de desaparecer sin mas', async () => {
+    mockInforme.datos = { ...INFORME, pdf_available: false }
+    const { WebQualityReportViewer } = await import('../WebQualityReportViewer')
+    envolver(<WebQualityReportViewer siteId={SITIO} />)
+
+    expect(screen.getByTestId('aviso-sin-pdf')).toBeInTheDocument()
+  })
+
+  it('con PDF posible, el boton esta y el aviso no', async () => {
+    mockInforme.datos = { ...INFORME, pdf_available: true }
+    const { WebQualityReportViewer } = await import('../WebQualityReportViewer')
+    envolver(<WebQualityReportViewer siteId={SITIO} />)
+
+    expect(screen.getByTestId('btn-descargar-pdf')).toBeInTheDocument()
+    expect(screen.queryByTestId('aviso-sin-pdf')).not.toBeInTheDocument()
   })
 })

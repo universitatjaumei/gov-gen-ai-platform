@@ -9,9 +9,29 @@ con un aviso en los headers (degradación documentada).
 from __future__ import annotations
 
 import io
+import shutil
 from typing import Any
 
 from server.app.modules.curation.report_contracts import WebQualityReport
+
+#: Cómo se llama el ejecutable de LibreOffice según el sistema. En Linux suele ser `libreoffice`
+#: (con `soffice` como alias) y en Windows sólo existe `soffice`.
+_EJECUTABLES_DE_LIBREOFFICE = ("soffice", "libreoffice")
+
+
+def se_puede_convertir_a_pdf() -> bool:
+    """Si esta máquina puede producir un PDF de verdad (CUR.8).
+
+    Del usuario, tras descargar el informe: «al darle a descargar al pdf descarga un word. No es
+    mucho problema. Podría descargarse solo word pero **o se quita el botón o se permite que la
+    descarga sea en pdf**». Un botón que promete PDF y entrega DOCX es una promesa incumplida
+    aunque el fichero salga bien etiquetado —eso lo arregló VER.7 y era lo mínimo, no la solución—.
+    Así que el botón se ofrece **sólo cuando se puede cumplir**, y quien lo sabe es el servidor.
+
+    Se comprueba con `which` y no intentando la conversión: preguntar cuesta microsegundos y
+    convertir cuesta segundos.
+    """
+    return any(shutil.which(nombre) for nombre in _EJECUTABLES_DE_LIBREOFFICE)
 
 
 class WebQualityReportExporter:
@@ -71,6 +91,11 @@ class WebQualityReportExporter:
         import os
 
         docx_bytes = await self.to_docx(report)
+        ejecutable = next(
+            (nombre for nombre in _EJECUTABLES_DE_LIBREOFFICE if shutil.which(nombre)), None
+        )
+        if ejecutable is None:
+            return docx_bytes
 
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -82,7 +107,7 @@ class WebQualityReportExporter:
 
                 result = subprocess.run(
                     [
-                        "libreoffice",
+                        ejecutable,
                         "--headless",
                         "--convert-to", "pdf",
                         "--outdir", tmpdir,
