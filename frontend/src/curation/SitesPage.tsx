@@ -9,9 +9,11 @@ import {
   useCreateSite,
   useDeleteSite,
   useTriggerSiteCrawl,
+  useReconnoiterSite,
   getListSitesQueryKey,
 } from '@/shared/api/generated/hub-sites/hub-sites'
-import type { SiteView } from '@/shared/api/generated/model'
+import type { ReconnaissanceView, SiteView } from '@/shared/api/generated/model'
+import { descargarConAutorizacion } from '@/shared/api/download'
 
 const siteSchema = z.object({
   name: z.string().min(1),
@@ -55,6 +57,9 @@ const siteSchema = z.object({
   version_series_policy: z.enum(['series', 'superseded', 'off']).default('series'),
 })
 
+/** Hasta dónde baja el reconocimiento previo (CUR.6). El mismo número que el contrato. */
+const PROFUNDIDAD_DEL_SONDEO = 3
+
 type SiteFormInput = z.input<typeof siteSchema>
 type SiteFormValues = z.output<typeof siteSchema>
 
@@ -81,7 +86,12 @@ export function SitesPage() {
   })
   const crawlMutation = useTriggerSiteCrawl()
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<SiteFormInput, unknown, SiteFormValues>({
+  // CUR.6 — el reconocimiento previo: cuántas páginas tiene el apartado y cuánto costaría.
+  const reconocerMutation = useReconnoiterSite()
+  const [reconocimiento, setReconocimiento] = useState<ReconnaissanceView | null>(null)
+  const [errorReconocimiento, setErrorReconocimiento] = useState<string | null>(null)
+
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<SiteFormInput, unknown, SiteFormValues>({
     resolver: zodResolver(siteSchema),
     defaultValues: {
       crawl_interval_hours: 24,
@@ -96,6 +106,48 @@ export function SitesPage() {
       version_series_policy: 'series',
     },
   })
+
+  /**
+   * CUR.6 — reconocer la URL del formulario sin haber creado el sitio.
+   *
+   * Los parámetros del sondeo son los del **rastreo que se lanzaría**: el filtro acota el apartado
+   * y la pausa es la que va a dominar el reloj. Con dos segundos por página, mil URLs son media
+   * hora, y ése es el número que responde «de golpe o por subapartados».
+   */
+  const parametrosDelSondeo = () => ({
+    root_url: watch('root_url'),
+    url_regex_filter: watch('url_regex_filter') || undefined,
+    delay_seconds: Number(watch('delay_seconds') ?? 1),
+    respect_robots: !!watch('respect_robots'),
+    // Profundidad **del sondeo**, no la del rastreo configurado. Medido contra el portal: con la
+    // profundidad 1 que trae el formulario, el reconocimiento devolvía 11 URLs de un apartado que
+    // tiene 349 —o sea, contestaba a otra pregunta—. Lo que se quiere saber es cuánto hay ahí.
+    crawl_depth: PROFUNDIDAD_DEL_SONDEO,
+  })
+
+  const reconocer = async () => {
+    setErrorReconocimiento(null)
+    setReconocimiento(null)
+    try {
+      const informe = await reconocerMutation.mutateAsync({ data: parametrosDelSondeo() })
+      setReconocimiento(informe as unknown as ReconnaissanceView)
+    } catch (fallo) {
+      setErrorReconocimiento(fallo instanceof Error ? fallo.message : String(fallo))
+    }
+  }
+
+  const descargarElSitemap = async () => {
+    setErrorReconocimiento(null)
+    try {
+      await descargarConAutorizacion(
+        '/api/v1/hub/site-reconnaissance',
+        'sitemap.csv',
+        { ...parametrosDelSondeo(), formato: 'csv' },
+      )
+    } catch (fallo) {
+      setErrorReconocimiento(fallo instanceof Error ? fallo.message : String(fallo))
+    }
+  }
 
   const onSubmit = (data: SiteFormValues) => {
     createMutation.mutate({
@@ -211,6 +263,79 @@ export function SitesPage() {
                 <label className="text-sm font-medium">{t('site_sitemap_url')}</label>
                 <input {...register('sitemap_url')} className="w-full border rounded px-2 py-1.5 text-sm mt-1" type="url" />
               </div>
+
+              {/* CUR.6 — «valorar la extensión del sitio y si conviene hacerlo todo de golpe o por
+                  subapartados». El portal no publica sitemap (404 medido en RAS.4), así que se
+                  construye recorriendo: un sondeo corto que no guarda nada. */}
+              <fieldset className="border-t pt-3 space-y-2">
+                <legend className="text-sm font-medium">{t('recon_title')}</legend>
+                <p className="text-xs text-muted-foreground">{t('recon_help')}</p>
+                <button
+                  type="button"
+                  data-testid="btn-reconocer"
+                  disabled={!watch('root_url') || reconocerMutation.isPending}
+                  onClick={reconocer}
+                  className="text-xs px-2 py-1 rounded border disabled:opacity-50"
+                >
+                  {reconocerMutation.isPending ? t('recon_running') : t('recon_run')}
+                </button>
+
+                {errorReconocimiento && (
+                  <p data-testid="error-reconocimiento" className="text-xs text-destructive">
+                    {t('recon_failed')}: {errorReconocimiento}
+                  </p>
+                )}
+
+                {reconocimiento && (
+                  <div className="space-y-2">
+                    <p className="text-xs" data-testid="total-urls">
+                      {t('recon_total', {
+                        urls: reconocimiento.urls_encontradas,
+                        sondeadas: reconocimiento.paginas_sondeadas,
+                      })}
+                    </p>
+                    <p className="text-xs font-medium" data-testid="estimacion-rastreo">
+                      {t('recon_estimate', {
+                        minutos: Math.round(reconocimiento.segundos_estimados / 60),
+                        porPagina: reconocimiento.segundos_por_pagina.toFixed(1),
+                      })}
+                    </p>
+                    {reconocimiento.truncado && (
+                      <p data-testid="aviso-sondeo-truncado" className="text-xs text-amber-700">
+                        {t('recon_truncated', { motivo: reconocimiento.motivo_de_parada ?? '' })}
+                      </p>
+                    )}
+                    <table className="w-full text-xs border-collapse" data-testid="apartados-del-sitio">
+                      <thead>
+                        <tr className="border-b text-left text-muted-foreground">
+                          <th className="py-1 pr-2">{t('recon_section')}</th>
+                          <th className="py-1 pr-2">{t('recon_section_urls')}</th>
+                          <th className="py-1">{t('recon_section_example')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reconocimiento.apartados.map((a) => (
+                          <tr key={a.apartado} className="border-b">
+                            <td className="py-1 pr-2 font-mono">{a.apartado}</td>
+                            <td className="py-1 pr-2">{a.urls}</td>
+                            <td className="py-1 truncate max-w-[16rem] text-muted-foreground">
+                              {a.ejemplos[0] ?? '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <button
+                      type="button"
+                      data-testid="btn-descargar-csv"
+                      onClick={descargarElSitemap}
+                      className="text-xs px-2 py-1 rounded border"
+                    >
+                      {t('recon_download_csv')}
+                    </button>
+                  </div>
+                )}
+              </fieldset>
               <div>
                 <label className="text-sm font-medium">{t('site_interval')}</label>
                 <input {...register('crawl_interval_hours')} type="number" min={1} className="w-full border rounded px-2 py-1.5 text-sm mt-1" />

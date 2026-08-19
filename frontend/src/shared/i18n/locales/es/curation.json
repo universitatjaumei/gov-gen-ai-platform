@@ -122,5 +122,17 @@
   "candidate_corpus_state": "En el corpus",
   "candidate_ingested": "Ya ingerida",
   "candidate_not_ingested": "Sin ingerir",
-  "candidates_summary": "{{publicables}} por publicar · {{ingeridas}} ya en el corpus"
+  "candidates_summary": "{{publicables}} por publicar · {{ingeridas}} ya en el corpus",
+  "recon_title": "Reconocimiento previo",
+  "recon_help": "Recorre el apartado hasta 3 niveles sin guardar nada, para saber cuántas páginas hay y cuánto costaría rastrearlas con la pausa de cortesía configurada arriba.",
+  "recon_run": "Reconocer el sitio",
+  "recon_running": "Reconociendo…",
+  "recon_failed": "No se ha podido reconocer el sitio",
+  "recon_total": "{{urls}} URLs encontradas hasta 3 niveles ({{sondeadas}} pedidas)",
+  "recon_estimate": "Rastreo completo: unos {{minutos}} min, a {{porPagina}} s por página",
+  "recon_truncated": "El sondeo se paró antes de acabar ({{motivo}}): el apartado puede tener más páginas.",
+  "recon_section": "Subapartado",
+  "recon_section_urls": "URLs",
+  "recon_section_example": "Ejemplo",
+  "recon_download_csv": "Descargar sitemap (CSV)"
 }

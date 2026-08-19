@@ -8,6 +8,7 @@ import re
 import uuid
 from datetime import datetime
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -213,6 +214,61 @@ class SelectionCreate(BaseModel):
     rule_type: TiposDeRegla
     rule_value: str | None = None
     auto_ingest_new: bool = True
+
+
+class ReconnaissanceRequest(BaseModel):
+    """Lo que se pide para reconocer un apartado antes de darlo de alta (CUR.6).
+
+    `delay_seconds` no es la pausa del sondeo —el sondeo va con prisa porque responde dentro de una
+    petición— sino **la del rastreo que se lanzaría**: es la que decide si el apartado son minutos u
+    horas, y por tanto la que hace útil la estimación.
+    """
+
+    root_url: str
+    crawl_depth: int = Field(default=3, ge=0, le=10)
+    max_pages: int = Field(default=60, ge=1, le=2_000)
+    delay_seconds: float = Field(default=1.0, ge=0, le=60)
+    respect_robots: bool = True
+    url_regex_filter: str | None = None
+    formato: Literal["json", "csv"] = "json"
+
+    @field_validator("root_url")
+    @classmethod
+    def _debe_ser_una_url(cls, valor: str) -> str:
+        partes = urlparse(valor)
+        if partes.scheme not in {"http", "https"} or not partes.netloc:
+            raise ValueError("root_url debe ser una URL http(s) absoluta")
+        return valor
+
+    @field_validator("url_regex_filter")
+    @classmethod
+    def _debe_compilar(cls, valor: str | None) -> str | None:
+        if valor:
+            try:
+                re.compile(valor)
+            except re.error as fallo:
+                raise ValueError(f"url_regex_filter no es una expresión regular válida: {fallo}")
+        return valor
+
+
+class SiteSectionView(BaseModel):
+    apartado: str
+    urls: int
+    ejemplos: list[str]
+
+
+class ReconnaissanceView(BaseModel):
+    root_url: str
+    urls_encontradas: int
+    paginas_sondeadas: int
+    truncado: bool
+    motivo_de_parada: str | None
+    apartados: list[SiteSectionView]
+    segundos_por_pagina: float
+    segundos_estimados: float
+    urls_prohibidas: int = 0
+    no_legibles: int = 0
+    fallos: int = 0
 
 
 class CandidatePageView(BaseModel):

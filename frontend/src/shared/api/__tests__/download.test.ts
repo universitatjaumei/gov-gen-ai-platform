@@ -66,6 +66,23 @@ describe('descargar un fichero protegido', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:falso')
   })
 
+  it('con cuerpo va por POST: hay ficheros que no son un recurso, son un resultado', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({ data: new Blob(['a,b']), headers: {} })
+    const get = vi.spyOn(apiClient, 'get')
+
+    await descargarConAutorizacion('/api/v1/hub/site-reconnaissance', 'sitemap.csv', {
+      root_url: 'https://www.uji.es/',
+      formato: 'csv',
+    })
+
+    expect(post).toHaveBeenCalledWith(
+      '/api/v1/hub/site-reconnaissance',
+      { root_url: 'https://www.uji.es/', formato: 'csv' },
+      { responseType: 'blob' },
+    )
+    expect(get).not.toHaveBeenCalled()
+  })
+
   it('un fallo del servidor se propaga: quien llama tiene que poder decirlo en pantalla', async () => {
     vi.spyOn(apiClient, 'get').mockRejectedValue(new Error('No hay informe'))
 

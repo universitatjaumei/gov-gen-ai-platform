@@ -122,5 +122,17 @@
   "candidate_corpus_state": "Al corpus",
   "candidate_ingested": "Ja ingerida",
   "candidate_not_ingested": "Sense ingerir",
-  "candidates_summary": "{{publicables}} per publicar · {{ingeridas}} ja al corpus"
+  "candidates_summary": "{{publicables}} per publicar · {{ingeridas}} ja al corpus",
+  "recon_title": "Reconeixement previ",
+  "recon_help": "Recorre l’apartat fins a 3 nivells sense guardar res, per saber quantes pàgines hi ha i què costaria rastrejar-les amb la pausa de cortesia configurada damunt.",
+  "recon_run": "Reconéixer el lloc",
+  "recon_running": "Reconeixent…",
+  "recon_failed": "No s’ha pogut reconéixer el lloc",
+  "recon_total": "{{urls}} URL trobades fins a 3 nivells ({{sondeadas}} demanades)",
+  "recon_estimate": "Rastreig complet: uns {{minutos}} min, a {{porPagina}} s per pàgina",
+  "recon_truncated": "El sondeig s’ha parat abans d’acabar ({{motivo}}): l’apartat pot tindre més pàgines.",
+  "recon_section": "Subapartat",
+  "recon_section_urls": "URL",
+  "recon_section_example": "Exemple",
+  "recon_download_csv": "Descarregar sitemap (CSV)"
 }

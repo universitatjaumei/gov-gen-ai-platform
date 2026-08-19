@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import uuid
 from typing import Any
+from urllib.parse import urlparse
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +27,8 @@ from server.app.modules.curation.selection_contracts import (
     CrawlConfig,
     PageContentView,
     PageView,
+    ReconnaissanceRequest,
+    ReconnaissanceView,
     SelectionCreate,
     SelectionView,
     SiteCreate,
@@ -101,6 +104,64 @@ async def _require_admin(user: UserInfo = Depends(get_current_user)) -> UserInfo
     if not (user.is_superadmin or user.is_admin):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role")
     return user
+
+
+# ──────────────────────── Reconocimiento previo (CUR.6) ────────────────────────
+
+
+def get_servicio_de_reconocimiento() -> Any:
+    """El servicio que recorre un sitio sin guardar nada."""
+    from server.app.modules.curation.reconocimiento import ReconocimientoDeSitio
+
+    return ReconocimientoDeSitio()
+
+
+@router.post(
+    "/hub/site-reconnaissance",
+    response_model=ReconnaissanceView,
+    operation_id="reconnoiterSite",
+    responses={200: {"content": {"text/csv": {}}, "description": "El sitemap como CSV"}},
+)
+async def reconnoiter_site(
+    body: ReconnaissanceRequest,
+    current_user: UserInfo = Depends(_require_admin),
+    servicio: Any = Depends(get_servicio_de_reconocimiento),
+):
+    """Cuántas páginas tiene un apartado, y cuánto costaría rastrearlo (CUR.6).
+
+    Deploy: edge.
+
+    No toca la base y no necesita que el sitio exista: la pregunta se hace **antes** de darlo de
+    alta, y hasta ahora la única forma de responderla era lanzar el rastreo de verdad y esperar. Del
+    usuario: «así se podría valorar la extensión del sitio y si conviene hacerlo todo de golpe o por
+    subapartados».
+
+    No hay guarda de organización porque no hay sitio al que aplicarla; lo que se comprueba es el
+    rol, porque esto hace que el servidor pida páginas —la misma potestad que crear un sitio—.
+    """
+    informe = await servicio.reconocer(
+        body.root_url,
+        max_depth=body.crawl_depth,
+        max_pages=body.max_pages,
+        respect_robots=body.respect_robots,
+        url_regex_filter=body.url_regex_filter,
+        # La pausa del sondeo la fija el servicio (va con prisa); ésta es la del rastreo real, que
+        # es la que hace que la estimación signifique algo.
+        pausa_del_rastreo=body.delay_seconds,
+    )
+
+    if body.formato == "csv":
+        from server.app.modules.curation.reconocimiento import csv_de_apartados
+
+        cuerpo = csv_de_apartados(list(informe.urls), informe.root_url)
+        nombre = f"reconocimiento_{urlparse(informe.root_url).netloc}.csv"
+        return Response(
+            content=cuerpo,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{nombre}"'},
+        )
+
+    return informe
 
 
 # ──────────────────────── CRUD de sitios ────────────────────────

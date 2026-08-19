@@ -14,8 +14,13 @@ import { apiClient } from './client'
 export async function descargarConAutorizacion(
   ruta: string,
   nombrePorDefecto: string,
+  cuerpo?: unknown,
 ): Promise<void> {
-  const respuesta = await apiClient.get(ruta, { responseType: 'blob' })
+  // Con cuerpo va por POST: el CSV del reconocimiento (CUR.6) no es un recurso que exista en una
+  // URL, es el resultado de un recorrido que se pide con sus parámetros.
+  const respuesta = cuerpo
+    ? await apiClient.post(ruta, cuerpo, { responseType: 'blob' })
+    : await apiClient.get(ruta, { responseType: 'blob' })
 
   const url = URL.createObjectURL(respuesta.data as Blob)
   try {

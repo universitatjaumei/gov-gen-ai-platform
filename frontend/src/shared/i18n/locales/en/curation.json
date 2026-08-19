@@ -122,5 +122,17 @@
   "candidate_corpus_state": "In corpus",
   "candidate_ingested": "Already ingested",
   "candidate_not_ingested": "Not ingested",
-  "candidates_summary": "{{publicables}} to publish · {{ingeridas}} already in corpus"
+  "candidates_summary": "{{publicables}} to publish · {{ingeridas}} already in corpus",
+  "recon_title": "Site reconnaissance",
+  "recon_help": "Walks the section up to 3 levels deep without storing anything, to see how many pages there are and what crawling them would cost with the courtesy delay set above.",
+  "recon_run": "Reconnoiter site",
+  "recon_running": "Reconnoitering…",
+  "recon_failed": "The site could not be reconnoitered",
+  "recon_total": "{{urls}} URLs found up to 3 levels ({{sondeadas}} requested)",
+  "recon_estimate": "Full crawl: about {{minutos}} min, at {{porPagina}} s per page",
+  "recon_truncated": "The probe stopped early ({{motivo}}): the section may have more pages.",
+  "recon_section": "Subsection",
+  "recon_section_urls": "URLs",
+  "recon_section_example": "Example",
+  "recon_download_csv": "Download sitemap (CSV)"
 }

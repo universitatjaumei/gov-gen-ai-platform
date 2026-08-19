@@ -19,6 +19,8 @@ vi.mock('@/shared/api/generated/hub-sites/hub-sites', () => ({
   useCreateSite: () => ({ mutate: createMutate, isPending: false }),
   useDeleteSite: () => ({ mutate: vi.fn() }),
   useTriggerSiteCrawl: () => ({ mutate: vi.fn() }),
+  // CUR.6 — el formulario de alta ofrece el reconocimiento previo del apartado.
+  useReconnoiterSite: () => ({ mutateAsync: vi.fn(), isPending: false }),
   getListSitesQueryKey: () => ['sites'],
 }))
 
