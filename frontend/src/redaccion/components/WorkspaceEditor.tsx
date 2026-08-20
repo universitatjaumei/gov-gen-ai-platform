@@ -65,6 +65,9 @@ export function WorkspaceEditor({ workspace }: Props) {
           return (
             <div
               key={block.block_id}
+              // INF.3 — el ancla a la que apunta el aviso del 409. Sin ella, «hay que aprobar
+              // v_matricula» obliga a buscar el bloque a ojo en una lista larga.
+              id={`bloque-${block.block_id}`}
               role="region"
               aria-label={tR('editor.block_region', { type: block.kind, id: block.block_id })}
               aria-describedby={statusDescId}

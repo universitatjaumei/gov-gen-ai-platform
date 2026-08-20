@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { noReintentarSiElServidorYaDecidio } from '@/shared/api/reintentos'
 import { Suspense, lazy } from 'react'
 import { AuthProvider, PrivateRoute } from '@/shared/auth'
 import { AppLayout } from '@/admin/AppLayout'
@@ -53,7 +54,11 @@ const WorkspacePage = lazy(() => import('@/redaccion/pages/WorkspacePage').then(
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 2,
+      // INF.3 — un 4xx no se reintenta: es una decisión del servidor, no una avería. Con
+      // `retry: 2` a secas, un 409 de la vista previa se pedía tres veces antes de que la
+      // pantalla pudiera explicar nada, y en ese hueco la consulta no está ni cargando ni en
+      // error. Ver `shared/api/reintentos.ts`.
+      retry: noReintentarSiElServidorYaDecidio,
       staleTime: 1000 * 60 * 5,
     },
   },

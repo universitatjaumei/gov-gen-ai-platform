@@ -144,3 +144,40 @@ describe('INF.2 — el panel itera las acciones del servidor', () => {
     expect(screen.queryByTestId('btn-editar-v_matricula')).toBeDefined()
   })
 })
+
+/**
+ * INF.3 — regenerar no reescribe el texto en el momento.
+ *
+ * Observado al verificar INF.2 en navegador: pulsar «Regenerar» saca el bloque de `failed` y lo
+ * deja en `ai_generated` **sin contenido nuevo**; el texto se produce en la siguiente
+ * generación. La pantalla no lo decía, así que se lee como un botón que no hizo nada — el mismo
+ * malentendido que este bloque entero está arreglando.
+ */
+describe('INF.3 — regenerar dice qué va a pasar', () => {
+  it('should_say_the_text_is_rewritten_on_the_next_generation', async () => {
+    const patchConExito = vi.fn((_vars: unknown, opciones: { onSuccess?: () => void }) =>
+      opciones?.onSuccess?.(),
+    )
+    vi.mocked(useGetWorkspaceById).mockReturnValue({
+      data: { id: WS, status: 'in_review', blocks: [BLOQUE_FALLIDO] },
+      isLoading: false,
+    } as never)
+    vi.mocked(usePatchWorkspaceBlock).mockReturnValue({
+      mutate: patchConExito,
+      isPending: false,
+    } as never)
+    vi.mocked(useEditBlock).mockReturnValue({ mutate: vi.fn(), isPending: false } as never)
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={qc}>
+        <AIBlockReviewPanel workspaceId={WS} />
+      </QueryClientProvider>,
+    )
+
+    fireEvent.click(await screen.findByTestId('btn-regenerate-v_matricula'))
+
+    const aviso = await screen.findByTestId('aviso-regenerado')
+    expect(aviso.textContent).toBeTruthy()
+  })
+})

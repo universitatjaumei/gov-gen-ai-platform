@@ -100,20 +100,23 @@
   "nav_scripts_new": "Request a script",
   "nav_scripts_review": "Script review",
   "nav_templates": "Templates",
+  "preview_back": "Back to the report",
   "preview_pending": "Before you can see the report, {{count}} AI-written block(s) must be approved. Go back to the report screen and approve them in the review panel.",
+  "preview_print": "Print / Export PDF",
   "review": {
-    "pending": "{{count}} passage(s) awaiting review",
     "all_approved": "All passages approved — ready to assemble",
-    "source_anchored": "Comments on: {{tables}}",
-    "source_full": "Not anchored: it read the whole report",
     "approve": "Approve",
     "edit": "Rewrite",
-    "reject": "Reject",
-    "regenerate": "Regenerate",
-    "save": "Save",
     "edit_label": "Passage text",
     "edited_by": "Edited by {{who}}",
-    "show_original": "See what the AI proposed"
+    "pending": "{{count}} passage(s) awaiting review",
+    "regenerate": "Regenerate",
+    "regenerate_queued": "A rewrite of “{{block}}” was requested. The new text appears the next time the report is generated.",
+    "reject": "Reject",
+    "save": "Save",
+    "show_original": "See what the AI proposed",
+    "source_anchored": "Comments on: {{tables}}",
+    "source_full": "Not anchored: it read the whole report"
   },
   "status": {
     "missing_data": "Data pending",
@@ -146,6 +149,7 @@
   "workspace_inputs": "Input data",
   "workspace_missing_inputs": "Missing input data",
   "workspace_not_found": "This report could not be found.",
+  "workspace_pending_approval": "The AI-written sections must be approved first",
   "workspace_preview": "Preview",
   "workspace_run_failed": "Could not start the generation",
   "workspace_status": {

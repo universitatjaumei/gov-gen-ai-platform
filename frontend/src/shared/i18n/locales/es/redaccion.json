@@ -100,20 +100,23 @@
   "nav_scripts_new": "Pedir un script",
   "nav_scripts_review": "Revisión de scripts",
   "nav_templates": "Plantillas",
+  "preview_back": "Volver al informe",
   "preview_pending": "Antes de ver el informe hay que aprobar {{count}} bloque(s) escrito(s) por la IA. Vuelve a la pantalla del informe y apruébalo(s) en el panel de revisión.",
+  "preview_print": "Imprimir / Exportar PDF",
   "review": {
-    "pending": "{{count}} apartado(s) pendiente(s) de revisión",
     "all_approved": "Todos los apartados aprobados — listo para ensamblar",
-    "source_anchored": "Valora: {{tables}}",
-    "source_full": "Sin anclar: ha leído todo el informe",
     "approve": "Aprobar",
     "edit": "Editar",
-    "reject": "Rechazar",
-    "regenerate": "Regenerar",
-    "save": "Guardar",
     "edit_label": "Texto del apartado",
     "edited_by": "Editado por {{who}}",
-    "show_original": "Ver lo que propuso la IA"
+    "pending": "{{count}} apartado(s) pendiente(s) de revisión",
+    "regenerate": "Regenerar",
+    "regenerate_queued": "Se ha pedido volver a redactar «{{block}}». El texto nuevo aparece al generar el informe otra vez.",
+    "reject": "Rechazar",
+    "save": "Guardar",
+    "show_original": "Ver lo que propuso la IA",
+    "source_anchored": "Valora: {{tables}}",
+    "source_full": "Sin anclar: ha leído todo el informe"
   },
   "status": {
     "missing_data": "Datos pendientes",
@@ -146,6 +149,7 @@
   "workspace_inputs": "Datos de partida",
   "workspace_missing_inputs": "Faltan datos de partida",
   "workspace_not_found": "No se encuentra este informe.",
+  "workspace_pending_approval": "Antes de esto hay que aprobar los apartados escritos por la IA",
   "workspace_preview": "Vista previa",
   "workspace_run_failed": "No se pudo lanzar la generacion",
   "workspace_status": {

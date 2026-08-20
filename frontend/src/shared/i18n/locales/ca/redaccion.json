@@ -100,20 +100,23 @@
   "nav_scripts_new": "Demanar un script",
   "nav_scripts_review": "Revisió de scripts",
   "nav_templates": "Plantilles",
+  "preview_back": "Tornar a l’informe",
   "preview_pending": "Abans de veure l’informe cal aprovar {{count}} bloc(s) escrit(s) per la IA. Torna a la pantalla de l’informe i aprova’l(s) al panell de revisió.",
+  "preview_print": "Imprimir / Exportar PDF",
   "review": {
-    "pending": "{{count}} apartat(s) pendent(s) de revisió",
     "all_approved": "Tots els apartats aprovats — a punt per a assemblar",
-    "source_anchored": "Valora: {{tables}}",
-    "source_full": "Sense ancorar: ha llegit tot l’informe",
     "approve": "Aprova",
     "edit": "Edita",
-    "reject": "Rebutja",
-    "regenerate": "Regenera",
-    "save": "Guarda",
     "edit_label": "Text de l’apartat",
     "edited_by": "Editat per {{who}}",
-    "show_original": "Veure què va proposar la IA"
+    "pending": "{{count}} apartat(s) pendent(s) de revisió",
+    "regenerate": "Regenera",
+    "regenerate_queued": "S’ha demanat tornar a redactar «{{block}}». El text nou apareix al generar l’informe una altra vegada.",
+    "reject": "Rebutja",
+    "save": "Guarda",
+    "show_original": "Veure què va proposar la IA",
+    "source_anchored": "Valora: {{tables}}",
+    "source_full": "Sense ancorar: ha llegit tot l’informe"
   },
   "status": {
     "missing_data": "Dades pendents",
@@ -146,6 +149,7 @@
   "workspace_inputs": "Dades de partida",
   "workspace_missing_inputs": "Falten dades de partida",
   "workspace_not_found": "No es troba aquest informe.",
+  "workspace_pending_approval": "Abans d’aixo cal aprovar els apartats escrits per la IA",
   "workspace_preview": "Vista prèvia",
   "workspace_run_failed": "No s’ha pogut engegar la generacio",
   "workspace_status": {

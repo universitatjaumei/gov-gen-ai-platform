@@ -27,17 +27,30 @@ import { WorkspaceStatusBar } from '../components/WorkspaceStatusBar'
 const CON_CONTENIDO = new Set(['in_review', 'assembled', 'exported'])
 
 /**
- * Traduce el fallo de `run` a algo que se pueda leer.
+ * Traduce un fallo de la pantalla a algo que se pueda leer, y a qué bloques hay que ir.
  *
- * INF.1 — el 422 llega con `detail.missing_slots`, así que cuando el servidor rechaza por
- * falta de datos se nombran los que faltan. Para cualquier otro fallo se enseña su mensaje:
- * lo que no puede pasar es que el botón vuelva a su sitio sin decir nada, que es lo que hacía.
+ * INF.1 — el 422 de `run` llega con `detail.missing_slots`, así que se nombran los que faltan.
+ * INF.3 — el 409 de la vista previa y de la exportación llega con `detail.pending_block_ids`,
+ * y esos se convierten en enlaces al bloque. Lo que no puede pasar es que el botón vuelva a su
+ * sitio sin decir nada, que es lo que hacía «Exportar a Word».
  */
-export function mensajeDeFallo(fallo: unknown, t: (clave: string) => string): string {
-  const detalle = (fallo as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
-  const faltan = (detalle as { missing_slots?: string[] } | undefined)?.missing_slots
-  if (faltan?.length) return `${t('workspace_missing_inputs')}: ${faltan.join(', ')}`
-  return (fallo as Error)?.message || t('workspace_run_failed')
+export function mensajeDeFallo(
+  fallo: unknown,
+  t: (clave: string) => string,
+): { texto: string; bloques: string[] } {
+  const detalle = ((fallo as { response?: { data?: { detail?: unknown } } })?.response?.data
+    ?.detail ?? {}) as { missing_slots?: string[]; pending_block_ids?: string[] }
+
+  if (detalle.missing_slots?.length) {
+    return {
+      texto: `${t('workspace_missing_inputs')}: ${detalle.missing_slots.join(', ')}`,
+      bloques: [],
+    }
+  }
+  if (detalle.pending_block_ids?.length) {
+    return { texto: t('workspace_pending_approval'), bloques: detalle.pending_block_ids }
+  }
+  return { texto: (fallo as Error)?.message || t('workspace_run_failed'), bloques: [] }
 }
 
 /**
@@ -66,7 +79,8 @@ export function WorkspacePage() {
   }
   const { t: tc } = useTranslation('common')
   const qc = useQueryClient()
-  const [errorDeSubida, setErrorDeSubida] = useState('')
+  // INF.3 — un solo aviso para toda la pantalla, con los bloques a los que hay que ir.
+  const [aviso, setAviso] = useState<{ texto: string; bloques: string[] } | null>(null)
 
   const { data: workspaceRaw, isLoading } = useGetWorkspaceById(id, {
     query: {
@@ -98,7 +112,7 @@ export function WorkspacePage() {
 
   /** Sube lo que el contrato pidiera y lanza la generación. Único camino (INF.1). */
   async function enviar(datos: { fields: Record<string, string>; files: Record<string, File[]> }) {
-    setErrorDeSubida('')
+    setAviso(null)
     setSubiendo(true)
     try {
       for (const [slotId, ficheros] of Object.entries(datos.files)) {
@@ -107,7 +121,7 @@ export function WorkspacePage() {
         }
       }
     } catch (fallo) {
-      setErrorDeSubida((fallo as Error).message)
+      setAviso({ texto: (fallo as Error).message, bloques: [] })
       return
     } finally {
       setSubiendo(false)
@@ -116,20 +130,20 @@ export function WorkspacePage() {
       onSuccess: () => qc.invalidateQueries({ queryKey: getGetWorkspaceByIdQueryKey(id) }),
       // El 422 de INF.1 llega aquí cuando falta un slot que la pantalla no pudo prever: se
       // dice, en vez de dejar el botón como si no hubiera pasado nada.
-      onError: (fallo: unknown) => setErrorDeSubida(mensajeDeFallo(fallo, t)),
+      onError: (fallo: unknown) => setAviso(mensajeDeFallo(fallo, t)),
     })
   }
 
   /** CUR.5 — el DOCX se pide con el token; un `<a href>` a la API se lleva un 401. */
   async function exportar() {
-    setErrorDeSubida('')
+    setAviso(null)
     try {
       await descargarConAutorizacion(
         `/api/v1/redaccion/workspaces/${id}/export`,
         `informe_${id}.docx`,
       )
     } catch (fallo) {
-      setErrorDeSubida((fallo as Error).message)
+      setAviso(mensajeDeFallo(fallo, t))
     }
   }
 
@@ -163,10 +177,38 @@ export function WorkspacePage() {
               {t('workspace_generating')}
             </p>
           )}
-          {errorDeSubida && (
-            <p role="alert" className="text-sm text-destructive mt-2">{errorDeSubida}</p>
-          )}
         </section>
+      )}
+
+      {/* INF.3 — el aviso vive **fuera** de la sección del contrato. Estaba dentro, así que un
+          informe ya generado —donde el formulario puede no estar visible— se comía el mensaje:
+          exportar recibía 409 y la pantalla no cambiaba nada. Un fallo silencioso es
+          indistinguible de un botón muerto, y así lo leyó el usuario. */}
+      {aviso && (
+        <div
+          data-testid="workspace-aviso"
+          role="alert"
+          className="p-3 border rounded-md text-sm bg-destructive/10 text-destructive space-y-1"
+        >
+          <p>{aviso.texto}</p>
+          {aviso.bloques.length > 0 && (
+            <ul className="flex gap-3 flex-wrap">
+              {aviso.bloques.map((bloque) => (
+                <li key={bloque}>
+                  {/* Al bloque que hay que atender, no a una lista de nombres que hay que
+                      buscar a mano. */}
+                  <a
+                    data-testid={`enlace-a-bloque-${bloque}`}
+                    href={`#bloque-${bloque}`}
+                    className="underline"
+                  >
+                    {bloque}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       <div className="flex items-center gap-3 flex-wrap">

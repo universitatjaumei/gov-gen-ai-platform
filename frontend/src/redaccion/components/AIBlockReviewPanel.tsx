@@ -63,6 +63,8 @@ export function AIBlockReviewPanel({ workspaceId }: Props) {
   const qc = useQueryClient()
 
   const [editando, setEditando] = useState<string | null>(null)
+  /** INF.3 — bloque cuya regeneración se acaba de pedir, para poder decir qué pasa ahora. */
+  const [regenerado, setRegenerado] = useState<string | null>(null)
   const [borrador, setBorrador] = useState('')
 
   const { data: workspaceRaw, isLoading } = useGetWorkspaceById(workspaceId)
@@ -84,7 +86,16 @@ export function AIBlockReviewPanel({ workspaceId }: Props) {
   }
 
   function actuar(blockId: string, action: AccionDeTransicion) {
-    patchBlock({ workspaceId, blockId, data: { action } }, refrescar)
+    patchBlock({ workspaceId, blockId, data: { action } }, {
+      ...refrescar,
+      onSuccess: () => {
+        refrescar.onSuccess()
+        // INF.3 — regenerar **no reescribe el texto en el momento**: saca el bloque de `failed`
+        // y el modelo lo redacta en la siguiente generación. Sin decirlo, se lee como un botón
+        // que no hizo nada, que es el malentendido que este bloque está arreglando.
+        if (action === 'regenerate') setRegenerado(blockId)
+      },
+    })
   }
 
   function empezarAEditar(blockId: string, texto: string) {
@@ -110,6 +121,12 @@ export function AIBlockReviewPanel({ workspaceId }: Props) {
       {todoAprobado && (
         <p data-testid="ready-for-assembly" className="text-sm text-green-700 font-medium">
           {tR('review.all_approved')}
+        </p>
+      )}
+
+      {regenerado && (
+        <p data-testid="aviso-regenerado" role="status" className="text-sm text-muted-foreground">
+          {tR('review.regenerate_queued', { block: regenerado })}
         </p>
       )}
 
