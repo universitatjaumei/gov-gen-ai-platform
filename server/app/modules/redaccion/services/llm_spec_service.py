@@ -65,11 +65,17 @@ def _campos_obligatorios() -> str:
     # SEG.3 — la lista estaba escrita a mano y se quedó corta en cuanto entró `md_table`. Es la
     # tercera vez que pasa (tipos de gráfico y operaciones de ETL en GUI.3): sale del contrato.
     f"- DETERMINISTIC_DATA: source_pipeline ({' | '.join(get_args(ExtractionSourceKind))}).\n"
-    "- DATA_TRANSFORM: config with source_block_ref ({\"block_id\": \"<id>\"}) plus EITHER"
+    # INF.5 — el mismo repaso que a `data_block_refs`: nombrar los kinds y decir qué **no**
+    # vale. El validador comprueba las tres referencias con la misma regla, así que las tres
+    # tienen que describirse igual; una referencia inventada deja el bloque sin datos en
+    # ejecución y sin nada que explique por qué.
+    "- DATA_TRANSFORM: config with source_block_ref ({\"block_id\": \"<id>\"}) — again the id of"
+    " a DETERMINISTIC_DATA or DATA_TRANSFORM block, never a TABLE or a CHART — plus EITHER"
     ' mode="deterministic" and operations (a list, see the catalogue below), OR mode="ai" and'
     " nl_instruction (what to do, in words). Prefer deterministic when you can express it.\n"
-    "- TABLE: data_block_ref (the id of a DETERMINISTIC_DATA or DATA_TRANSFORM block in this"
-    " same template).\n"
+    "- TABLE: data_block_ref — the id of a DETERMINISTIC_DATA or DATA_TRANSFORM block in this"
+    " same template. Never another TABLE or a CHART: a presentation cannot feed another"
+    " presentation.\n"
     "- CHART: data_block_ref (same rule as TABLE), and optionally config with chart_type"
     f" ({' | '.join(get_args(TipoDeGrafico))}), title, x_label, y_label, show_values, sort"
     " (none | asc | desc). x_axis is the column on the X axis and y_axis the one on the Y axis,"
@@ -83,10 +89,25 @@ def _campos_obligatorios() -> str:
     " else.\n"
     # SEG.1 — sin esto el modelo nunca ancla, y una valoración que recibe las treinta tablas del
     # informe mezcla y omite. Es lo que hizo fracasar el intento anterior con una gema.
-    "  **data_block_refs** (list of block ids): the table or tables this passage is about. USE"
-    " IT. A passage that comments on one table must reference that table and no other: giving"
-    " the model every table of the report produces a blended summary that leaves things out."
-    " One AI block per table is the normal shape for a monitoring report.\n"
+    #
+    # INF.5 — y decía «the table or tables this passage is about», que es exactamente lo que
+    # induce el error: para el modelo la «tabla» del informe es el bloque TABLE, y el validador
+    # exige el bloque que **produce** los datos. En las pruebas del 2026-08-20 el modelo ancló
+    # la valoración al TABLE y al CHART, y la pantalla se quedó con dos errores rojos y el botón
+    # de aprobar deshabilitado, sin forma de corregirlo.
+    "  **data_block_refs** (list of block ids): the ids of the blocks that PRODUCE the data this"
+    " passage comments on — a DETERMINISTIC_DATA or a DATA_TRANSFORM block. **Never** the id of"
+    " a TABLE or a CHART: those are presentations of data that already exists somewhere else,"
+    " they hold no data of their own, and pointing a passage at one is rejected. USE IT. A"
+    " passage that comments on one dataset must reference that dataset and no other: giving the"
+    " model every table of the report produces a blended summary that leaves things out. One AI"
+    " block per dataset is the normal shape for a monitoring report.\n"
+    "  Example of the correct shape — the passage points at the data block, not at the table"
+    " that draws it:\n"
+    '    {"kind": "DETERMINISTIC_DATA", "id": "d_saldos", ...}\n'
+    '    {"kind": "TABLE", "id": "t_saldos", "data_block_ref": "d_saldos", ...}\n'
+    '    {"kind": "AI_SUMMARY", "id": "v_saldos", "data_block_refs": ["d_saldos"], ...}\n'
+    '  Wrong: "data_block_refs": ["t_saldos"] — that is the table, not the data.\n'
     "- CITATION_BLOCK: source_block_refs (list of block ids).\n"
     "- REVIEW_GATE: review_policy_id.\n"
     "A TABLE or CHART without a data block to point at is invalid: add the data block first.\n"
