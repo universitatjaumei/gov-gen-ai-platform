@@ -14,9 +14,16 @@ import type {
   MuestraDeDatos,
 } from '@/shared/api/generated/model'
 import { useAuth } from '@/shared/auth'
+import {
+  aplicarArreglo,
+  arregloMecanico,
+  bloqueDelError,
+  claveDelMensaje,
+} from '../utils/erroresDeLaPropuesta'
 
 export function LLMDraftPreviewPage() {
   const { t } = useTranslation('common')
+  const { t: tR } = useTranslation('redaccion')
   const { user } = useAuth()
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin'
 
@@ -56,17 +63,37 @@ export function LLMDraftPreviewPage() {
   const { mutate: approveTemplate, isPending: isApprovingTemplate } = useApproveAsTemplate()
   const { mutate: approveWorkspace, isPending: isApprovingWorkspace } = useApproveAsWorkspace()
 
-  const draft = proposedRaw as unknown as ReportTemplateDraftOutput | undefined
+  /**
+   * INF.6 — la propuesta es **editable en la pantalla**.
+   *
+   * Antes se usaba directamente lo que devolvió el modelo, así que una propuesta rechazada solo
+   * se podía tirar: había que volver a escribir el prompt entero. Con una copia local, corregir
+   * una referencia y revalidar cuesta una llamada barata a `/validate` y ninguna al modelo.
+   */
+  const [borrador, setBorrador] = useState<ReportTemplateDraftOutput | null>(null)
+  const propuestaDelModelo = proposedRaw as unknown as ReportTemplateDraftOutput | undefined
   const validation = validationRaw as unknown as ReportTemplateDraftValidationResult | undefined
   const isApproving = isApprovingTemplate || isApprovingWorkspace
-  const canApprove = !!draft && !isValidating && (!validation || validation.ok === true)
+  const canApprove = !!borrador && !isValidating && (!validation || validation.ok === true)
 
   useEffect(() => {
-    if (draft) {
-      validateMutate({ data: draft as unknown as ReportTemplateDraftInput })
+    if (propuestaDelModelo) setBorrador(propuestaDelModelo)
+  }, [propuestaDelModelo])
+
+  useEffect(() => {
+    if (borrador) {
+      validateMutate({ data: borrador as unknown as ReportTemplateDraftInput })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft])
+  }, [borrador])
+
+  /** Aplica el arreglo que el error admite y revalida. Sin volver a consultar al modelo. */
+  function corregir(error: { field: string; message: string }) {
+    if (!borrador) return
+    const arreglo = arregloMecanico(borrador as never, error)
+    if (!arreglo) return
+    setBorrador(aplicarArreglo(borrador as never, arreglo) as never)
+  }
 
   function handlePropose() {
     if (!promptText) return
@@ -81,13 +108,12 @@ export function LLMDraftPreviewPage() {
   }
 
   function handleApprove() {
-    if (!draft || !canApprove) return
-    const name = draftName || 'Nuevo informe'
-    if (mode === 'template') {
-      approveTemplate({ data: { draft: draft as unknown as ReportTemplateDraftInput, name } })
-    } else {
-      approveWorkspace({ data: { draft: draft as unknown as ReportTemplateDraftInput, name } })
-    }
+    if (!borrador || !canApprove) return
+    // Se aprueba **el borrador corregido**, no lo que devolvió el modelo.
+    const name = draftName || tR('draft_default_name')
+    const data = { draft: borrador as unknown as ReportTemplateDraftInput, name }
+    if (mode === 'template') approveTemplate({ data })
+    else approveWorkspace({ data })
   }
 
   return (
@@ -134,7 +160,7 @@ export function LLMDraftPreviewPage() {
           value={promptText}
           onChange={e => setPromptText(e.target.value)}
           rows={3}
-          placeholder="Describe el informe en lenguaje natural..."
+          placeholder={tR('draft_prompt_placeholder')}
           className="w-full border rounded p-2 text-sm resize-none"
         />
         <button
@@ -144,37 +170,91 @@ export function LLMDraftPreviewPage() {
           onClick={handlePropose}
           className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded disabled:opacity-50"
         >
-          {isProposing ? t('loading') : 'Generar propuesta'}
+          {isProposing ? t('loading') : tR('draft_propose')}
         </button>
+        {/* INF.6 — una espera de treinta segundos con el boton deshabilitado y nada mas se lee
+            como una pantalla colgada, y asi la leyo el usuario. Se dice que hay un modelo
+            trabajando y que tarda. */}
+        {isProposing && (
+          <p data-testid="proponiendo" role="status" className="text-xs text-muted-foreground">
+            {tR('draft_proposing')}
+          </p>
+        )}
       </div>
 
       {/* Draft preview */}
-      {draft && (
+      {borrador && (
         <div data-testid="draft-preview" className="border rounded p-4 space-y-3 bg-card">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>Perfil: <strong>{draft.proposed_profile}</strong></span>
+            <span>{tR('draft_profile')}: <strong>{borrador.proposed_profile}</strong></span>
             <span>·</span>
-            <span>Secciones: {draft.proposed_sections?.length ?? 0}</span>
+            <span>{tR('draft_sections')}: {borrador.proposed_sections?.length ?? 0}</span>
             <span>·</span>
-            <span>Modelo: {draft.model_used}</span>
+            <span>{tR('draft_model')}: {borrador.model_used}</span>
           </div>
 
-          {draft.rationale && (
-            <p className="text-xs text-muted-foreground italic">{draft.rationale}</p>
+          {borrador.rationale && (
+            <p className="text-xs text-muted-foreground italic">{borrador.rationale}</p>
           )}
 
-          {/* Validation errors */}
+          {/* INF.6 — los apartados de la propuesta, cada uno con lo que le pasa.
+              Antes los errores salían en una lista suelta arriba, con el `field` crudo
+              (`blocks[b6].data_block_refs`) y sin nada que tocar: la única salida era volver a
+              escribir el prompt. */}
+          <ul data-testid="bloques-propuestos" className="space-y-2">
+            {(borrador.proposed_blocks ?? []).map((bloque) => {
+              const id = (bloque as { id: string }).id
+              const suyos = (validation?.errors ?? []).filter((e) => bloqueDelError(e.field) === id)
+              return (
+                <li
+                  key={id}
+                  data-testid={`bloque-propuesto-${id}`}
+                  className={`border rounded p-2 text-xs ${suyos.length ? 'border-destructive' : ''}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{(bloque as { title?: string }).title ?? id}</span>
+                    <span className="text-muted-foreground">{(bloque as { kind: string }).kind}</span>
+                  </div>
+
+                  {suyos.map((error, i) => {
+                    const clave = claveDelMensaje(error)
+                    const arreglo = arregloMecanico(borrador as never, error)
+                    return (
+                      <div key={i} data-testid={`error-${id}-${i}`} className="mt-1 space-y-1">
+                        {/* En lenguaje de quien pide un informe cuando se reconoce el caso; si
+                            no, el mensaje del servidor, que es peor que una frase pensada pero
+                            mucho mejor que esconderlo. */}
+                        <p role="alert" className="text-destructive">
+                          {clave ? tR(clave) : error.message}
+                        </p>
+                        {arreglo && (
+                          <button
+                            type="button"
+                            data-testid={`btn-corregir-${id}`}
+                            onClick={() => corregir(error)}
+                            className="px-2 py-0.5 border rounded hover:bg-accent"
+                          >
+                            {tR('draft_error.fix', { de: arreglo.de, a: arreglo.a })}
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </li>
+              )
+            })}
+          </ul>
+
+          {/* Los que no hablan de un bloque concreto siguen necesitando un sitio. */}
           {validation && !validation.ok && (
             <ul data-testid="validation-errors" className="space-y-1">
-              {(validation.errors ?? []).map((e, i) => (
-                <li
-                  key={i}
-                  data-testid={`error-${e.field}`}
-                  className="text-xs text-destructive"
-                >
-                  <span className="font-medium">{e.field}</span>: {e.message}
-                </li>
-              ))}
+              {(validation.errors ?? [])
+                .filter((e) => bloqueDelError(e.field) === null)
+                .map((e, i) => (
+                  <li key={i} data-testid={`error-${e.field}`} className="text-xs text-destructive">
+                    <span className="font-medium">{e.field}</span>: {e.message}
+                  </li>
+                ))}
             </ul>
           )}
 
@@ -189,7 +269,7 @@ export function LLMDraftPreviewPage() {
                   mode === 'workspace' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent/30'
                 }`}
               >
-                Crear workspace
+                {tR('draft_mode_workspace')}
               </button>
               <button
                 type="button"
@@ -199,7 +279,7 @@ export function LLMDraftPreviewPage() {
                   mode === 'template' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent/30'
                 }`}
               >
-                Crear plantilla
+                {tR('draft_mode_template')}
               </button>
             </div>
           )}
@@ -209,7 +289,7 @@ export function LLMDraftPreviewPage() {
             data-testid="input-draft-name"
             value={draftName}
             onChange={e => setDraftName(e.target.value)}
-            placeholder={mode === 'template' ? 'Nombre de plantilla' : 'Nombre del informe'}
+            placeholder={mode === 'template' ? tR('draft_name_template') : tR('draft_name_report')}
             className="w-full border rounded px-3 py-1.5 text-sm"
           />
 
@@ -221,7 +301,7 @@ export function LLMDraftPreviewPage() {
             onClick={handleApprove}
             className="px-4 py-2 text-sm bg-green-600 text-white rounded disabled:opacity-50"
           >
-            {isApproving ? t('loading') : 'Aprobar y crear'}
+            {isApproving ? t('loading') : tR('draft_approve')}
           </button>
         </div>
       )}

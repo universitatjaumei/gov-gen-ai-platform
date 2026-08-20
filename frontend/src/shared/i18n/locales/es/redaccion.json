@@ -80,6 +80,24 @@
     "retry_attempts": "Reintentos",
     "updated_at": "Actualizado"
   },
+  "draft_approve": "Aprobar y crear",
+  "draft_default_name": "Nuevo informe",
+  "draft_error": {
+    "anchored_to_presentation": "Esta valoracion se apoya en una tabla o un grafico, que solo dibujan datos. Tiene que apoyarse en el apartado que produce esos datos.",
+    "unknown_reference": "Esta valoracion se apoya en un apartado que no existe en la propuesta.",
+    "presentation_without_data": "Esta tabla o grafico no apunta a ningun apartado que produzca datos.",
+    "fix": "Apoyarla en {{a}} en vez de en {{de}}"
+  },
+  "draft_mode_template": "Plantilla reutilizable",
+  "draft_mode_workspace": "Informe de una sola vez",
+  "draft_model": "Modelo",
+  "draft_name_report": "Nombre del informe",
+  "draft_name_template": "Nombre de la plantilla",
+  "draft_profile": "Perfil",
+  "draft_prompt_placeholder": "Describe el informe que necesitas...",
+  "draft_propose": "Generar propuesta",
+  "draft_proposing": "Consultando al modelo. Suele tardar unos segundos; no cierres la pantalla.",
+  "draft_sections": "Secciones",
   "editor": {
     "block_region": "Bloque {{type}}: {{id}}"
   },

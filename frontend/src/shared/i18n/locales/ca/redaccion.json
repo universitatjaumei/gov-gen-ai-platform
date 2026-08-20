@@ -80,6 +80,24 @@
     "retry_attempts": "Reintents",
     "updated_at": "Actualitzat"
   },
+  "draft_approve": "Aprovar i crear",
+  "draft_default_name": "Informe nou",
+  "draft_error": {
+    "anchored_to_presentation": "Aquesta valoracio es basa en una taula o un grafic, que nomes dibuixen dades. Ha de basar-se en l’apartat que produeix aquestes dades.",
+    "unknown_reference": "Aquesta valoracio es basa en un apartat que no existeix a la proposta.",
+    "presentation_without_data": "Aquesta taula o grafic no apunta a cap apartat que produeixi dades.",
+    "fix": "Basar-la en {{a}} en lloc de {{de}}"
+  },
+  "draft_mode_template": "Plantilla reutilitzable",
+  "draft_mode_workspace": "Informe d’una sola vegada",
+  "draft_model": "Model",
+  "draft_name_report": "Nom de l’informe",
+  "draft_name_template": "Nom de la plantilla",
+  "draft_profile": "Perfil",
+  "draft_prompt_placeholder": "Descriu l’informe que necessites...",
+  "draft_propose": "Generar proposta",
+  "draft_proposing": "Consultant el model. Sol trigar uns segons; no tanques la pantalla.",
+  "draft_sections": "Seccions",
   "editor": {
     "block_region": "Bloc {{type}}: {{id}}"
   },

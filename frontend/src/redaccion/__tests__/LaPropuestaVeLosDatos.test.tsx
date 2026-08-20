@@ -133,3 +133,100 @@ describe('INF.4 — la propuesta ve los datos', () => {
     )
   })
 })
+
+/**
+ * INF.6 — una propuesta inválida se arregla sin volver a llamar al modelo.
+ *
+ * Con la propuesta rechazada, «Aprobar y crear» quedaba deshabilitado y la única salida era
+ * reescribir el prompt entero. El usuario se quedó ahí el 2026-08-20: dos líneas rojas con
+ * `blocks[b6].data_block_refs` y ningún sitio donde tocar.
+ */
+describe('INF.6 — corregir la propuesta, no rehacerla', () => {
+  const PROPUESTA_MAL = {
+    proposed_profile: 'GENERIC_REPORT',
+    proposed_sections: [{ id: 's1', title: 'Tesoreria', order: 1, block_ids: ['b3', 'b4', 'b6'] }],
+    proposed_blocks: [
+      { kind: 'DETERMINISTIC_DATA', id: 'b3', title: 'Saldos', order: 1, source_pipeline: 'csv' },
+      { kind: 'TABLE', id: 'b4', title: 'Saldos por mes', order: 2, data_block_ref: 'b3' },
+      {
+        kind: 'AI_SUMMARY', id: 'b6', title: 'Valoracion', order: 3,
+        ai_prompt_template_id: 'generic_report_v1', review_policy_id: 'required',
+        data_block_refs: ['b4'],
+      },
+    ],
+    proposed_inputs: { required_slots: [], optional_slots: [] },
+    model_used: 'gemini', prompt_version: 'llm_spec_v2',
+  }
+
+  const ERROR = {
+    field: 'blocks[b6].data_block_refs',
+    message: "AI_SUMMARY block 'b6' valora 'b4', que no produce datos ('TABLE')",
+  }
+
+  function pintarConPropuestaInvalida() {
+    vi.mocked(useProposeLlmDraft).mockReturnValue({
+      mutate: proponer, data: PROPUESTA_MAL, isPending: false,
+    } as never)
+    vi.mocked(useValidateLlmDraft).mockReturnValue({
+      mutate: vi.fn(), data: { ok: false, errors: [ERROR] }, isPending: false,
+    } as never)
+    return pintar()
+  }
+
+  it('should_show_the_error_next_to_its_block', async () => {
+    pintarConPropuestaInvalida()
+
+    const bloque = await screen.findByTestId('bloque-propuesto-b6')
+    expect(bloque.textContent).toMatch(/valoracion/i)
+    expect(screen.getByTestId('error-b6-0')).toBeDefined()
+  })
+
+  it('should_explain_the_error_in_plain_words_not_with_the_field_path', async () => {
+    pintarConPropuestaInvalida()
+
+    const aviso = await screen.findByTestId('error-b6-0')
+    expect(aviso.textContent).toMatch(/tabla|grafico/i)
+    expect(aviso.textContent).not.toMatch(/data_block_refs/)
+  })
+
+  it('should_offer_the_mechanical_fix', async () => {
+    pintarConPropuestaInvalida()
+    expect(await screen.findByTestId('btn-corregir-b6')).toBeDefined()
+  })
+
+  it('should_revalidate_after_the_fix_without_asking_the_model_again', async () => {
+    const revalidar = vi.fn()
+    vi.mocked(useProposeLlmDraft).mockReturnValue({
+      mutate: proponer, data: PROPUESTA_MAL, isPending: false,
+    } as never)
+    vi.mocked(useValidateLlmDraft).mockReturnValue({
+      mutate: revalidar, data: { ok: false, errors: [ERROR] }, isPending: false,
+    } as never)
+    pintar()
+
+    fireEvent.click(await screen.findByTestId('btn-corregir-b6'))
+
+    await waitFor(() =>
+      expect(revalidar).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            proposed_blocks: expect.arrayContaining([
+              expect.objectContaining({ id: 'b6', data_block_refs: ['b3'] }),
+            ]),
+          }),
+        }),
+      ),
+    )
+    // Y sin volver a pedir la propuesta al modelo.
+    expect(proponer).not.toHaveBeenCalled()
+  })
+
+  it('should_say_it_is_asking_the_model_while_it_waits', async () => {
+    vi.mocked(useProposeLlmDraft).mockReturnValue({
+      mutate: proponer, data: undefined, isPending: true,
+    } as never)
+    pintar()
+
+    expect(await screen.findByTestId('proponiendo')).toBeDefined()
+  })
+})

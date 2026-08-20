@@ -80,6 +80,24 @@
     "retry_attempts": "Retry attempts",
     "updated_at": "Updated at"
   },
+  "draft_approve": "Approve and create",
+  "draft_default_name": "New report",
+  "draft_error": {
+    "anchored_to_presentation": "This passage relies on a table or a chart, and those only draw data. It must rely on the section that produces the data.",
+    "unknown_reference": "This passage relies on a section that does not exist in the proposal.",
+    "presentation_without_data": "This table or chart does not point at any section that produces data.",
+    "fix": "Rely on {{a}} instead of {{de}}"
+  },
+  "draft_mode_template": "Reusable template",
+  "draft_mode_workspace": "One-off report",
+  "draft_model": "Model",
+  "draft_name_report": "Report name",
+  "draft_name_template": "Template name",
+  "draft_profile": "Profile",
+  "draft_prompt_placeholder": "Describe the report you need...",
+  "draft_propose": "Generate proposal",
+  "draft_proposing": "Asking the model. This usually takes a few seconds; do not close the screen.",
+  "draft_sections": "Sections",
   "editor": {
     "block_region": "Block {{type}}: {{id}}"
   },
