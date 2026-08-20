@@ -7,9 +7,13 @@ import path from 'path'
 
 /** Destino del proxy de desarrollo.
  *
- * Configurable por `VITE_API_TARGET` (`.env.local`) porque el puerto del backend no siempre
- * puede ser el de siempre: en esta máquina el 8000 quedó retenido por un proceso huérfano
- * que no responde a `taskkill`. El defecto no cambia, así que nadie tiene que hacer nada.
+ * Configurable por `VITE_API_TARGET` (`.env.local`) para quien necesite otro puerto, pero el
+ * defecto es el bueno: es el puerto en el que `arranque.bat` levanta el backend.
+ *
+ * Si el 8000 da `WinError 10048`, no es que haga falta otro puerto: lo retiene el árbol de
+ * procesos de un uvicorn `--reload` anterior cuyo arranque falló, con el socket en estado
+ * `Bound` (invisible para `netstat | findstr LISTENING`). Se mata el árbol entero y se sigue
+ * en el 8000. Detalle en la nota del 2026-08-20 de `PROJECT_STATE.md`.
  */
 const DESTINO_API_POR_DEFECTO = 'http://localhost:8000'
 

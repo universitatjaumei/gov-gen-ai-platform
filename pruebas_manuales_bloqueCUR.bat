@@ -11,15 +11,23 @@ echo Aqui solo queda lo que una persona tiene que juzgar.
 echo.
 echo REQUISITOS PREVIOS (hazlos antes de seguir)
 echo   1. Docker Desktop en marcha.
-echo   2. Base de datos arriba:  docker compose up -d db
-echo   3. Backend arrancado desde la raiz del proyecto, EN EL PUERTO QUE
-echo      DIGA frontend\.env (VITE_API_TARGET). En esta maquina es el 8002:
+echo   2. Base de datos arriba, SOLO ese servicio:
+echo        docker compose up -d postgres
+echo      (el servicio se llama "postgres". Un "up -d" completo choca en
+echo       9000/9001 con el MinIO del stack de produccion si esta levantado)
+echo   3. Backend arrancado desde la raiz del proyecto, en el puerto 8000:
 echo        cd C:\Users\fabra\Documents\AI_agents_hub
 echo        set CRAWLER_CONTACT=fabra@uji.es
-echo        server\.venv\Scripts\python.exe -m uvicorn server.app.main:app --port 8002
+echo        uv run --project server uvicorn server.app.main:app --port 8000
 echo      OJO: tarda 2-4 minutos en arrancar (carga torch). Hasta que no
 echo      escriba "Application startup complete" no responde.
+echo      Si da WinError 10048, el 8000 lo retiene el arbol de procesos de
+echo      un uvicorn anterior que fallo al arrancar. NO cambies de puerto:
+echo        Get-NetTCPConnection -LocalPort 8000
+echo        Stop-Process -Id (los PID del arbol entero) -Force
 echo   4. Frontend:  cd frontend  y luego  npm run dev
+echo      Vite imprime su puerto al arrancar. Normalmente el 5173; si estaba
+echo      ocupado usara el 5174. Usa el que imprima en las URLs de abajo.
 echo.
 pause
 echo.
@@ -27,25 +35,22 @@ echo ----------------------------------------------------------
 echo  PASO 1 - Los servicios responden
 echo ----------------------------------------------------------
 echo.
-echo A que puerto apunta el frontend:
-findstr /I VITE_API_TARGET frontend\.env.local
+echo A que puerto apunta el frontend (debe decir 8000):
+findstr /I "VITE_API_TARGET=" frontend\.env.local
 echo.
-echo Backend, probando los puertos habituales:
+echo Backend:
 curl -s -o nul -w "   puerto 8000 health: %%{http_code}\n" http://localhost:8000/health
-curl -s -o nul -w "   puerto 8001 health: %%{http_code}\n" http://localhost:8001/health
-curl -s -o nul -w "   puerto 8002 health: %%{http_code}\n" http://localhost:8002/health
 echo.
 echo Frontend y su proxy al backend:
-curl -s -o nul -w "   frontend 5174:      %%{http_code}\n" http://localhost:5174/
-curl -s -o nul -w "   5174 hacia la API:  %%{http_code}\n" http://localhost:5174/api/v1/hub/sites
+curl -s -o nul -w "   frontend 5173:      %%{http_code}\n" http://localhost:5173/
+curl -s -o nul -w "   5173 hacia la API:  %%{http_code}\n" http://localhost:5173/api/v1/hub/sites
 echo.
 echo QUE DEBES VER:
-echo   - El puerto que sale arriba en VITE_API_TARGET responde 200 en health.
-echo     Los otros pueden dar 000 o 404: da igual, no se usan.
-echo   - El frontend 5174 responde 200.
-echo   - "5174 hacia la API" responde 401. Eso es CORRECTO: significa que el
+echo   - El backend responde 200 en health, en el 8000.
+echo   - El frontend responde 200 (en el puerto que imprimio Vite).
+echo   - "hacia la API" responde 401. Eso es CORRECTO: significa que el
 echo     backend contesta y pide sesion. Si sale 000 o 502, el backend no
-echo     esta levantado, o esta en un puerto distinto al de VITE_API_TARGET.
+echo     esta levantado, o VITE_API_TARGET no apunta a su puerto.
 echo.
 pause
 echo.
@@ -55,7 +60,7 @@ echo ----------------------------------------------------------
 echo.
 echo Esto es criterio humano: el modelo propone y una persona decide.
 echo.
-echo   1. Abre  http://localhost:5174/curation/findings
+echo   1. Abre  http://localhost:5173/curation/findings
 echo   2. Elige el sitio "Escola de Doctorat (RAS.5)"
 echo   3. En el filtro de tipo elige "Duplicada"
 echo   4. Para cada fila: abre las dos URLs (son enlaces) y decide
@@ -86,7 +91,7 @@ echo ----------------------------------------------------------
 echo  PASO 4 - Descargar el informe y abrirlo
 echo ----------------------------------------------------------
 echo.
-echo   1. Abre  http://localhost:5174/curation/audit
+echo   1. Abre  http://localhost:5173/curation/audit
 echo   2. Elige el sitio y pulsa "Descargar DOCX"
 echo   3. Abre el fichero en Word: comprueba que se lee y que las
 echo      secciones tienen sus URLs
@@ -101,7 +106,7 @@ echo ----------------------------------------------------------
 echo  PASO 5 - Publicar un apartado al asistente
 echo ----------------------------------------------------------
 echo.
-echo   1. Abre  http://localhost:5174/curation/publish
+echo   1. Abre  http://localhost:5173/curation/publish
 echo   2. Elige el sitio y un chatbot de pruebas
 echo   3. Marca 3 o 4 paginas y pulsa "Ingerir las marcadas"
 echo   4. Recarga: deben aparecer como "Ya ingerida" y sin casilla

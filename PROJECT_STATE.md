@@ -198,12 +198,31 @@ prompts **de este repositorio** —`ExtractionServiceConfig`, `seeds_prompts.py`
 la raíz, con `tests/test_prompts.py` sembrando la base de datos del desarrollador y siendo
 inestable con `-n auto`—. ~~(2) los diez tipos de gráfico del legacy~~ **→ pasó a ser PRO.8**.
 
-**Dos cosas del entorno que quedaron así, a propósito**: el backend de desarrollo corre en el
-**8001** —el 8000 lo retiene un proceso huérfano que no responde a `taskkill`— y el proxy de
-Vite lee el destino de `frontend/.env.local` (`VITE_API_TARGET`), con el 8000 como defecto
-para no cambiarle el comportamiento a nadie. El sandbox del stack de producción no publica su
-puerto, así que para probarlo desde un backend en el host se levantó una instancia aparte en
-el 5099.
+**Una cosa del entorno que quedó así, a propósito**: el sandbox del stack de producción no
+publica su puerto, así que para probarlo desde un backend en el host se levantó una instancia
+aparte en el 5099.
+
+> ⚠️ **Corregido el 2026-08-20: el «huérfano del 8000» no era inmatable.** Esta nota decía que
+> el backend de desarrollo corría en el **8001** porque el 8000 lo retenía «un proceso huérfano
+> que no responde a `taskkill`», y de ahí la deriva a 8001 y luego al 8002 de
+> `frontend/.env.local`. **Ninguna de las dos mudanzas hacía falta.**
+>
+> El mecanismo real: cuando uvicorn `--reload` falla en el arranque (típicamente por la BD
+> apagada), **el árbol de procesos no muere**. El padre se queda con el socket en estado
+> **`Bound`**, no `Listening`, así que `netstat | findstr LISTENING` no lo ve —el puerto parece
+> libre— pero `bind()` falla con `WinError 10048`. Lo que no funcionaba era matar **un** PID:
+> el resto del árbol mantiene el socket. Matando los tres a la vez el puerto se libera.
+>
+> ```powershell
+> Get-NetTCPConnection -LocalPort 8000 | Select LocalAddress,State,OwningProcess
+> Get-CimInstance Win32_Process -Filter "ProcessId=<PID>" | Select ParentProcessId,CommandLine
+> Stop-Process -Id <los PID del árbol entero> -Force
+> ```
+>
+> `frontend/.env.local` vuelve a apuntar al **8000**, que es lo que levanta `arranque.bat`.
+> Mientras apuntaba al 8002 y el backend arrancaba en el 8000, toda llamada a la API desde el
+> frontend en dev daba 502. Si el 8000 vuelve a dar 10048, se limpia el árbol; no se cambia de
+> puerto.
 
 **Fuera del alcance de VER, documentado**: `POST /redaccion/scripts/propose` y
 `POST /redaccion/copilot/ask` siguen siendo stubs 503 por decisión del usuario.
