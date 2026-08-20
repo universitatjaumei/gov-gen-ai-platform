@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from uuid import UUID
+
 from pydantic import BaseModel, Field
 
 
@@ -33,6 +35,10 @@ class CopilotAskRequest(BaseModel):
     question: str = Field(..., min_length=1)
     module: CopilotModule | None = None
     top_k: int = Field(default=4, ge=1, le=10)
+    # INF.10 — el informe que hay abierto, si lo hay. Sin esto el copiloto responde con la
+    # documentacion del proyecto y no sabe que apartados tiene delante ni en que estado estan,
+    # asi que «no se donde aprobar los bloques» no tenia respuesta posible.
+    workspace_id: UUID | None = None
 
 
 class CopilotTranslateRequest(BaseModel):

@@ -56,6 +56,10 @@ export function CopilotPanel() {
           question: input,
           module: moduleHint,
           top_k: 4,
+          // INF.10 — el informe abierto. El copiloto ya sabía en qué contexto estaba
+          // («informe» o «flujo») y no **cuál**, así que respondía con la documentación del
+          // proyecto: «no sé dónde aprobar los bloques» no tenía respuesta posible.
+          workspace_id: context?.type === 'informe' ? context.entityId : null,
         })
         setAskResponse(res)
       } else {

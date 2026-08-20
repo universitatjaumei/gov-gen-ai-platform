@@ -46,9 +46,10 @@ class CopilotService:
         question: str,
         module: CopilotModule | None = None,
         top_k: int = 4,
+        contexto_del_informe: str | None = None,
     ) -> CopilotAnswer:
         chunks = await self._retriever.retrieve(question, module=module, top_k=top_k)
-        if not chunks:
+        if not chunks and not contexto_del_informe:
             return CopilotAnswer(
                 answer="No tengo esa información en la documentación disponible.",
                 source_refs=[],
@@ -62,7 +63,16 @@ class CopilotService:
                 "role": "user",
                 "content": (
                     f"CONTEXTO:\n{context_block}\n\n"
-                    f"PREGUNTA: {question}\n\n"
+                    # INF.10 — el estado del informe abierto va **después** de la documentación
+                    # y marcado como tal: cuando la pregunta es «dónde hago esto», lo que vale
+                    # es este informe y no la descripción general de la pantalla. El texto ya
+                    # viene anonimizado de `contexto_del_informe`.
+                    + (f"{contexto_del_informe}\n\n" if contexto_del_informe else "")
+                    + f"PREGUNTA: {question}\n\n"
+                    "Si el estado del informe abierto responde a la pregunta, contesta con la"
+                    " accion concreta de ESTE informe —qué apartado y dónde— en vez de con una"
+                    " descripción general. Si hay algo pendiente de una persona, dilo aunque no"
+                    " te lo pregunten.\n"
                     "Responde en el idioma de la pregunta."
                 ),
             },

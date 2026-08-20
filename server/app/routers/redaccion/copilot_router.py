@@ -84,13 +84,44 @@ async def get_copilot_service(
 async def ask_copilot(
     body: CopilotAskRequest,
     user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
     service: CopilotService = Depends(get_copilot_service),
 ) -> CopilotAnswer:
-    """RAG sobre la documentación interna del módulo activo + síntesis LLM con citas."""
+    """RAG sobre la documentación interna del módulo activo + síntesis LLM con citas.
+
+    INF.10 — si la pregunta llega con un informe abierto, el copiloto recibe **su estado**:
+    apartados, en qué situación está cada uno, qué acciones caben sobre él y qué falta. Sin eso
+    respondía solo con la documentación del proyecto, y «no sé dónde aprobar los bloques» no
+    tenía respuesta posible. Los avisos van anonimizados; el texto que escribió la IA no va.
+    """
+    contexto = None
+    if body.workspace_id is not None:
+        from server.app.modules.redaccion.database.repos import (
+            ReportTemplateVersionRepo,
+            WorkspaceBlockRepo,
+            WorkspaceRepo,
+        )
+        from server.app.modules.redaccion.services.contexto_del_informe import (
+            contexto_del_informe,
+        )
+        from server.app.routers.redaccion._actor import es_propietario
+
+        workspace = await WorkspaceRepo(session).get(body.workspace_id)
+        # El contexto de un informe ajeno no se filtra por una pregunta al copiloto: es la
+        # misma comprobación que hace el resto del módulo desde SEC.8.1.
+        if workspace is not None and es_propietario(user.user_id, workspace.owner_id):
+            contexto = await contexto_del_informe(
+                workspace_repo=WorkspaceRepo(session),
+                block_repo=WorkspaceBlockRepo(session),
+                template_version_repo=ReportTemplateVersionRepo(session),
+                workspace_id=body.workspace_id,
+            )
+
     return await service.answer(
         question=body.question,
         module=body.module,
         top_k=body.top_k,
+        contexto_del_informe=contexto,
     )
 
 

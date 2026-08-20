@@ -33,6 +33,14 @@ def test_config_base_contains_only_config_models() -> None:
         # mismo lado que `hub_prompt_templates`: es lo que se le dice a un modelo y con qué
         # nivel corre, no dato del cliente final. El edge lo lee vía ConfigProvider.
         "hub_activity_prompts",
+        # Módulos de la plataforma y quién los tiene concedidos (INF.7) — es configuración
+        # administrativa: se decide en el cloud y **el edge la necesita**, porque los routers
+        # de informes, curación y automatización viven ahí y tienen que saber si quien pide un
+        # informe puede pedirlo. No contiene dato del cliente final: el catálogo son cuatro
+        # códigos y la concesión es un par (sujeto, módulo). Mismo lado que `hub_sso_users`,
+        # que también es identidad administrativa y no contenido.
+        "hub_platform_modules",
+        "hub_module_grants",
     }
 
 def test_operational_base_contains_only_operational_models() -> None:

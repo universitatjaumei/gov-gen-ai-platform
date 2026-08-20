@@ -16,7 +16,19 @@ import { resolve } from 'node:path'
 const APP = readFileSync(resolve(__dirname, '../App.tsx'), 'utf-8')
 
 /** Envoltorios presentes en todas las rutas: partirlos añade espera y no ahorra nada. */
-const ESTATICOS_ESPERADOS = ['AppLayout', 'HubLayout', 'CurationLayout', 'PrivateRoute']
+const ESTATICOS_ESPERADOS = [
+  'AppLayout',
+  'HubLayout',
+  'CurationLayout',
+  'PrivateRoute',
+  // INF.7 — `Aterrizaje` decide a qué módulo entra cada persona y está en la ruta índice **y**
+  // en el comodín, o sea que corre en practicamente toda entrada en frío: cargar por separado
+  // el componente que decide a dónde vas añade un viaje al servidor antes de poder ir a ningún
+  // sitio. `SinAcceso` son diez líneas de texto y vive al lado. Los dos caen en la misma razón
+  // que los envoltorios de arriba.
+  'Aterrizaje',
+  'SinAcceso',
+]
 
 describe('CAL.5 — carga por ruta', () => {
   it('should_lazy_load_route_chunks', () => {
