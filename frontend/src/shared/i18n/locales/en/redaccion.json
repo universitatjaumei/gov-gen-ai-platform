@@ -40,8 +40,8 @@
       "conflict": "Unresolved conflict"
     },
     "conflict_title": "Save conflict",
-    "conflict_body": "Another session has modified this workspace. Reload to see the changes; any unsaved local edits will be lost.",
-    "reload_workspace": "Reload workspace"
+    "conflict_body": "Another session has changed this report. Reload to see the changes; your unsaved ones will be lost.",
+    "reload_workspace": "Reload the report"
   },
   "copilot": {
     "placeholder": "Type a question or instruction…",
@@ -88,6 +88,8 @@
     "presentation_without_data": "This table or chart does not point at any section that produces data.",
     "fix": "Rely on {{a}} instead of {{de}}"
   },
+  "draft_mode_help_template": "Recommended if the report repeats: the template is saved and next time it runs without asking the AI again.",
+  "draft_mode_help_workspace": "For a report you will only make once.",
   "draft_mode_template": "Reusable template",
   "draft_mode_workspace": "One-off report",
   "draft_model": "Model",
@@ -97,6 +99,7 @@
   "draft_prompt_placeholder": "Describe the report you need...",
   "draft_propose": "Generate proposal",
   "draft_proposing": "Asking the model. This usually takes a few seconds; do not close the screen.",
+  "draft_recommended": "recommended",
   "draft_sections": "Sections",
   "drawer": {
     "aria_label": "Tools panel",

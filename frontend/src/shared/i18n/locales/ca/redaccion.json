@@ -40,8 +40,8 @@
       "conflict": "Conflicte sense resoldre"
     },
     "conflict_title": "Conflicte en guardar",
-    "conflict_body": "Una altra sessió ha modificat aquest workspace. Recarrega per veure els canvis; els teus no guardats es perdran.",
-    "reload_workspace": "Recarregar workspace"
+    "conflict_body": "Una altra sessio ha modificat aquest informe. Recarrega per veure els canvis; els teus sense guardar es perdran.",
+    "reload_workspace": "Recarregar l’informe"
   },
   "copilot": {
     "placeholder": "Escriu la teva pregunta o instrucció…",
@@ -88,6 +88,8 @@
     "presentation_without_data": "Aquesta taula o grafic no apunta a cap apartat que produeixi dades.",
     "fix": "Basar-la en {{a}} en lloc de {{de}}"
   },
+  "draft_mode_help_template": "Recomanat si l’informe es repeteix: la plantilla es guarda i les properes vegades s’executa sense tornar a consultar la IA.",
+  "draft_mode_help_workspace": "Per a un informe que nomes faras una vegada.",
   "draft_mode_template": "Plantilla reutilitzable",
   "draft_mode_workspace": "Informe d’una sola vegada",
   "draft_model": "Model",
@@ -97,6 +99,7 @@
   "draft_prompt_placeholder": "Descriu l’informe que necessites...",
   "draft_propose": "Generar proposta",
   "draft_proposing": "Consultant el model. Sol trigar uns segons; no tanques la pantalla.",
+  "draft_recommended": "recomanat",
   "draft_sections": "Seccions",
   "drawer": {
     "aria_label": "Panell d’eines",

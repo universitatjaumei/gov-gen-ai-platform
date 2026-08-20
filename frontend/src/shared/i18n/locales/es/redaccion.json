@@ -40,8 +40,8 @@
       "conflict": "Conflicto sin resolver"
     },
     "conflict_title": "Conflicto al guardar",
-    "conflict_body": "Otra sesión ha modificado este workspace. Recarga para ver los cambios; los tuyos no guardados se perderán.",
-    "reload_workspace": "Recargar workspace"
+    "conflict_body": "Otra sesion ha modificado este informe. Recarga para ver los cambios; los tuyos sin guardar se perderan.",
+    "reload_workspace": "Recargar el informe"
   },
   "copilot": {
     "placeholder": "Escribe tu pregunta o instrucción…",
@@ -88,6 +88,8 @@
     "presentation_without_data": "Esta tabla o grafico no apunta a ningun apartado que produzca datos.",
     "fix": "Apoyarla en {{a}} en vez de en {{de}}"
   },
+  "draft_mode_help_template": "Recomendado si el informe se repite: la plantilla se guarda y las proximas veces se ejecuta sin volver a consultar a la IA.",
+  "draft_mode_help_workspace": "Para un informe que solo vas a hacer una vez.",
   "draft_mode_template": "Plantilla reutilizable",
   "draft_mode_workspace": "Informe de una sola vez",
   "draft_model": "Modelo",
@@ -97,6 +99,7 @@
   "draft_prompt_placeholder": "Describe el informe que necesitas...",
   "draft_propose": "Generar propuesta",
   "draft_proposing": "Consultando al modelo. Suele tardar unos segundos; no cierres la pantalla.",
+  "draft_recommended": "recomendado",
   "draft_sections": "Secciones",
   "drawer": {
     "aria_label": "Panel de herramientas",

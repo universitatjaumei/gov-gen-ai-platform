@@ -29,7 +29,14 @@ export function LLMDraftPreviewPage() {
 
   const [promptText, setPromptText] = useState('')
   const [draftName, setDraftName] = useState('')
-  const [mode, setMode] = useState<'template' | 'workspace'>('workspace')
+  // INF.9 — **plantilla por defecto para quien puede elegir**. Del usuario: «por el principio
+  // de determinista first deberia sugerirse plantilla por defecto si se va a repetir el
+  // informe»; marcarla como recomendada y arrancar en la otra es recomendar de boquilla.
+  //
+  // Para quien **no** puede elegir —el selector solo se ofrece a admin y superadmin— el defecto
+  // tiene que ser el informe suelto: publicar una plantilla es una decision de plataforma, y
+  // dejarla como defecto invisible haria que un trabajador creara plantillas sin saberlo.
+  const [mode, setMode] = useState<'template' | 'workspace'>(isAdmin ? 'template' : 'workspace')
 
   /**
    * INF.4 — la estructura del fichero sobre el que va el informe.
@@ -258,29 +265,40 @@ export function LLMDraftPreviewPage() {
             </ul>
           )}
 
-          {/* Mode toggle — superadmin/admin only */}
+          {/* INF.9 — la eleccion importa y la pantalla no la explicaba: ofrecia «Crear
+              workspace» y «Crear plantilla» como equivalentes, con vocabulario interno. Una
+              plantilla se reusa y su parte determinista se ejecuta igual cada vez; un informe
+              suelto se tira. Es la diferencia entre pagar el LLM una vez y pagarlo cada mes,
+              que es el principio determinista-primero del proyecto. */}
           {isAdmin && (
-            <div className="flex gap-2">
-              <button
-                type="button"
-                data-testid="mode-workspace"
-                onClick={() => setMode('workspace')}
-                className={`px-3 py-1 text-xs rounded border transition-colors ${
-                  mode === 'workspace' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent/30'
-                }`}
-              >
-                {tR('draft_mode_workspace')}
-              </button>
-              <button
-                type="button"
-                data-testid="mode-template"
-                onClick={() => setMode('template')}
-                className={`px-3 py-1 text-xs rounded border transition-colors ${
-                  mode === 'template' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent/30'
-                }`}
-              >
-                {tR('draft_mode_template')}
-              </button>
+            <div className="space-y-2" data-testid="eleccion-de-modo">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  data-testid="mode-template"
+                  onClick={() => setMode('template')}
+                  className={`px-3 py-1 text-xs rounded border transition-colors ${
+                    mode === 'template' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent/30'
+                  }`}
+                >
+                  {tR('draft_mode_template')}
+                  {/* La recomendacion, marcada: recomendar sin decirlo no es recomendar. */}
+                  <span className="ml-1 opacity-80">({tR('draft_recommended')})</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="mode-workspace"
+                  onClick={() => setMode('workspace')}
+                  className={`px-3 py-1 text-xs rounded border transition-colors ${
+                    mode === 'workspace' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent/30'
+                  }`}
+                >
+                  {tR('draft_mode_workspace')}
+                </button>
+              </div>
+              <p data-testid="ayuda-del-modo" className="text-xs text-muted-foreground">
+                {mode === 'template' ? tR('draft_mode_help_template') : tR('draft_mode_help_workspace')}
+              </p>
             </div>
           )}
 

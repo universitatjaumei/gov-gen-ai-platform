@@ -230,3 +230,61 @@ describe('INF.6 — corregir la propuesta, no rehacerla', () => {
     expect(await screen.findByTestId('proponiendo')).toBeDefined()
   })
 })
+
+/**
+ * INF.9 — plantilla o informe suelto, explicado al elegir.
+ *
+ * Del usuario: «Tampoco sabe la diferencia entre workspace y plantilla. Por el principio de
+ * determinista first debería sugerirse plantilla por defecto si se va a repetir el informe.»
+ * La pantalla ofrecía «Crear workspace» y «Crear plantilla» como equivalentes, con vocabulario
+ * interno y sin decir que la elección importa.
+ */
+describe('INF.9 — la elección se explica', () => {
+  function pintarConPropuesta() {
+    vi.mocked(useProposeLlmDraft).mockReturnValue({
+      mutate: proponer,
+      data: {
+        proposed_profile: 'GENERIC_REPORT', proposed_sections: [], proposed_blocks: [],
+        proposed_inputs: { required_slots: [], optional_slots: [] },
+        model_used: 'gemini', prompt_version: 'v2',
+      },
+      isPending: false,
+    } as never)
+    vi.mocked(useValidateLlmDraft).mockReturnValue({
+      mutate: vi.fn(), data: { ok: true, errors: [] }, isPending: false,
+    } as never)
+    return pintar()
+  }
+
+  it('should_not_use_the_word_workspace_in_the_choice', async () => {
+    pintarConPropuesta()
+
+    const eleccion = await screen.findByTestId('eleccion-de-modo')
+    expect(eleccion.textContent?.toLowerCase()).not.toContain('workspace')
+  })
+
+  it('should_mark_the_template_as_the_recommended_option', async () => {
+    pintarConPropuesta()
+
+    const plantilla = await screen.findByTestId('mode-template')
+    expect(plantilla.textContent?.toLowerCase()).toMatch(/recomendado/)
+  })
+
+  it('should_say_why_the_template_is_recommended', async () => {
+    pintarConPropuesta()
+
+    const ayuda = await screen.findByTestId('ayuda-del-modo')
+    // La razón concreta: se ejecuta sin volver a consultar a la IA.
+    expect(ayuda.textContent?.toLowerCase()).toMatch(/repite|sin volver a consultar/)
+  })
+
+  it('should_explain_the_one_off_option_too', async () => {
+    pintarConPropuesta()
+
+    fireEvent.click(await screen.findByTestId('mode-workspace'))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('ayuda-del-modo').textContent?.toLowerCase()).toMatch(/una vez/),
+    )
+  })
+})
