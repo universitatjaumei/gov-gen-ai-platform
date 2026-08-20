@@ -5,11 +5,13 @@ import {
   useValidateLlmDraft,
   useApproveAsTemplate,
   useApproveAsWorkspace,
+  useDescribeSampleFile,
 } from '@/shared/api/generated/redaccion-llm-drafts/redaccion-llm-drafts'
 import type {
   ReportTemplateDraftOutput,
   ReportTemplateDraftInput,
   ReportTemplateDraftValidationResult,
+  MuestraDeDatos,
 } from '@/shared/api/generated/model'
 import { useAuth } from '@/shared/auth'
 
@@ -21,6 +23,33 @@ export function LLMDraftPreviewPage() {
   const [promptText, setPromptText] = useState('')
   const [draftName, setDraftName] = useState('')
   const [mode, setMode] = useState<'template' | 'workspace'>('workspace')
+
+  /**
+   * INF.4 — la estructura del fichero sobre el que va el informe.
+   *
+   * Se ofrece **antes** del prompt a propósito: sin ella el modelo no conoce las columnas y
+   * tiene que adivinarlas, que es lo que hizo fracasar la propuesta en las pruebas del
+   * 2026-08-20. El servidor la resume y **anonimiza los valores**, y aquí se enseña lo que se
+   * va a enviar: quien pide el informe puede ver qué sale de su organización antes de que
+   * salga.
+   */
+  const [muestra, setMuestra] = useState<MuestraDeDatos | null>(null)
+  const [errorDeMuestra, setErrorDeMuestra] = useState('')
+  const { mutate: describirFichero, isPending: leyendoFichero } = useDescribeSampleFile()
+
+  function elegirFichero(fichero: File | undefined) {
+    setErrorDeMuestra('')
+    setMuestra(null)
+    if (!fichero) return
+    describirFichero(
+      { data: { file: fichero } },
+      {
+        onSuccess: (resumen) => setMuestra(resumen as unknown as MuestraDeDatos),
+        onError: (fallo: unknown) =>
+          setErrorDeMuestra((fallo as Error)?.message || t('error')),
+      },
+    )
+  }
 
   const { mutate: propose, data: proposedRaw, isPending: isProposing } = useProposeLlmDraft()
   const { mutate: validateMutate, data: validationRaw, isPending: isValidating } = useValidateLlmDraft()
@@ -45,6 +74,8 @@ export function LLMDraftPreviewPage() {
       data: {
         prompt_nl: promptText,
         mode: mode === 'template' ? 'admin_template' : 'user_workspace',
+        // Si no hay fichero va `null` y el servidor se comporta como antes.
+        muestra,
       },
     })
   }
@@ -61,6 +92,41 @@ export function LLMDraftPreviewPage() {
 
   return (
     <div className="space-y-4 p-4 max-w-2xl">
+      {/* INF.4 — el fichero va antes del prompt: describir un informe sobre datos que el modelo
+          no ha visto es pedirle que adivine los nombres de las columnas. Es opcional. */}
+      <div className="space-y-2 border rounded p-3 bg-card">
+        <label htmlFor="fichero-de-muestra" className="text-sm font-medium block">
+          {t('sample_label', 'Fichero de datos (opcional)')}
+        </label>
+        <p className="text-xs text-muted-foreground">
+          {t(
+            'sample_help',
+            'Si lo aportas, la IA verá los nombres de las columnas y su tipo. Los valores se anonimizan antes de enviarse.',
+          )}
+        </p>
+        <input
+          id="fichero-de-muestra"
+          data-testid="input-muestra"
+          type="file"
+          accept=".csv,.xlsx,.xls"
+          onChange={(e) => elegirFichero(e.target.files?.[0])}
+        />
+        {leyendoFichero && <p className="text-xs text-muted-foreground">{t('loading')}</p>}
+        {errorDeMuestra && (
+          <p role="alert" className="text-xs text-destructive">{errorDeMuestra}</p>
+        )}
+        {muestra && (
+          <div data-testid="resumen-de-muestra" className="text-xs space-y-1">
+            <p>
+              <strong>{muestra.nombre_del_fichero}</strong> — {muestra.filas_totales}{' '}
+              {t('sample_rows', 'filas')}
+            </p>
+            {/* Lo que se va a enviar, a la vista. */}
+            <p className="text-muted-foreground">{muestra.columnas.join(' · ')}</p>
+          </div>
+        )}
+      </div>
+
       {/* Prompt input */}
       <div className="space-y-2">
         <textarea

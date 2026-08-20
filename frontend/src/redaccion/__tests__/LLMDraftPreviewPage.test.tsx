@@ -23,6 +23,9 @@ vi.mock('@/shared/api/generated/redaccion-llm-drafts/redaccion-llm-drafts', () =
   useValidateLlmDraft: vi.fn(),
   useApproveAsTemplate: vi.fn(),
   useApproveAsWorkspace: vi.fn(),
+  // INF.4 — el fichero de muestra opcional. El mock de un módulo tiene que cubrir todo lo que
+  // el componente importa: sin esta entrada, la pantalla revienta al montar.
+  useDescribeSampleFile: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }))
 
 vi.mock('@/shared/auth', async () => {

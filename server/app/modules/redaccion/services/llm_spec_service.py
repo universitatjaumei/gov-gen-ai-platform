@@ -19,6 +19,7 @@ from server.app.modules.redaccion.contracts.inputs import InputContract, InputSl
 from server.app.modules.redaccion.contracts.template import SectionContract
 from server.app.modules.redaccion.pipelines.contracts import ExtractionSourceKind
 from server.app.modules.redaccion.services.charts.chart_configuration import TipoDeGrafico
+from server.app.modules.redaccion.services.muestra_de_datos import MuestraDeDatos
 from server.app.modules.redaccion.services.redactor_de_bloques import (
     PROMPT_RESUMEN_DE_RESULTADOS,
     PROMPT_VALORACION_DE_TENDENCIA,
@@ -238,11 +239,18 @@ class LLMSpecService:
         self,
         prompt_nl: str,
         owner_kind: Literal["admin", "user"],
+        muestra: "MuestraDeDatos | None" = None,
     ) -> ReportTemplateDraft:
         messages = [
             {"role": "system", "content": _build_system_prompt(owner_kind)},
             {"role": "user", "content": prompt_nl},
         ]
+
+        # INF.4 — la estructura del fichero, si quien pide el informe la aportó. Sin esto el
+        # modelo adivina los nombres de las columnas, y en las pruebas del 2026-08-20 adivinó
+        # mal. Los valores ya vienen anonimizados de `muestra_de_datos`.
+        if muestra is not None:
+            messages.append({"role": "user", "content": _contexto_de_la_muestra(muestra)})
 
         # Un reintento con el error como respuesta, igual que `etl_factory`: la mayoría de
         # estos fallos son de forma y el modelo los corrige en cuanto se le dice cuál es,
@@ -276,3 +284,38 @@ class LLMSpecService:
             model_used=self._model_name,
             prompt_version=self._prompt_version,
         )
+
+
+def _contexto_de_la_muestra(muestra: "MuestraDeDatos") -> str:
+    """La estructura del fichero, en el formato que usaba `etl_factory` en el legacy.
+
+    Tres cosas que este texto tiene que dejar claras, y las tres salieron de ver fallar la
+    propuesta del usuario:
+
+    - **Las columnas listadas son las que existen.** Sin decirlo, el modelo completa con
+      campos plausibles que no están en el fichero, y el informe falla al extraer.
+    - **El tipo importa.** Si `saldo` sale como `object`, los importes vienen como texto y hay
+      que convertirlos antes de sumar; el prompt del sistema ya avisa de que sumar texto da una
+      cifra mal sin error.
+    - **Los valores son de ejemplo y están anonimizados**, para que el modelo no los tome como
+      datos reales ni los repita en el informe.
+    """
+    import json
+
+    columnas = ", ".join(muestra.columnas)
+    tipos = json.dumps(muestra.tipos, ensure_ascii=False, indent=2)
+    filas = json.dumps(muestra.primeras_filas, ensure_ascii=False, indent=2, default=str)
+
+    return (
+        f"## The data file the report is about\n"
+        f"File: {muestra.nombre_del_fichero}\n"
+        f"Rows: {muestra.filas_totales}\n"
+        f"Columns: {columnas}\n"
+        f"Inferred types:\n{tipos}\n"
+        f"First {len(muestra.primeras_filas)} rows (values anonymised, use them only to see the"
+        f" shape of the data):\n{filas}\n"
+        f"\nThese are the **only columns** that exist. Do not invent column names: a block that"
+        f" reads a column which is not in this list fails at extraction time. If the report the"
+        f" user asks for needs something that is not here, say so in a STATIC_TEXT block"
+        f" instead of guessing.\n"
+    )

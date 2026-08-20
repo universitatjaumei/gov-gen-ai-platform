@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,6 +34,11 @@ from server.app.modules.redaccion.database.repos import (
 )
 from server.app.modules.agents_hub.services.model_factory import get_model_for_tier
 from server.app.modules.redaccion.services.draft_validator import DraftValidator
+from server.app.modules.redaccion.services.muestra_de_datos import (
+    MuestraDeDatos,
+    MuestraIlegibleError,
+    resumen_de_la_muestra,
+)
 from server.app.modules.redaccion.services.llm_spec_service import (
     LLMSpecService,
     PropuestaInvalidaError,
@@ -52,6 +57,11 @@ _require_admin = require_role("superadmin", "admin")
 class ProposeRequest(BaseModel):
     prompt_nl: str
     mode: Literal["admin_template", "user_workspace"] = "user_workspace"
+    # INF.4 — la estructura del fichero sobre el que va el informe, si quien lo pide la aportó.
+    # Se obtiene de `POST /llm-drafts/sample`, que es quien lee el fichero y **anonimiza** los
+    # valores: así lo que viaja al modelo ya está anonimizado y, además, la pantalla puede
+    # enseñar exactamente qué se va a mandar antes de mandarlo.
+    muestra: MuestraDeDatos | None = None
 
 
 class ApproveAsTemplateRequest(BaseModel):
@@ -114,6 +124,37 @@ async def get_llm_spec_service(
 # Endpoints
 # ---------------------------------------------------------------------------
 
+@router.post(
+    "/sample",
+    response_model=MuestraDeDatos,
+    operation_id="describeSampleFile",
+)
+async def describe_sample_file(
+    file: UploadFile = File(...),
+    _user: UserInfo = Depends(get_current_user),
+) -> MuestraDeDatos:
+    """La estructura de un fichero, con los valores de la muestra **ya anonimizados** (INF.4).
+
+    Deploy: edge
+
+    Existe porque pedirle a un modelo la estructura de un informe sobre un fichero cuyas
+    columnas no ha visto es pedirle que adivine, y en las pruebas del 2026-08-20 adivinó mal.
+    El legacy sí lo mandaba (`etl_factory`), anonimizado.
+
+    Va aparte de `/propose` en vez de convertirlo en multipart por dos razones: `/propose`
+    sigue siendo un contrato JSON para quien ya lo usa, y la pantalla puede **enseñar lo que se
+    va a enviar** antes de enviarlo, que en una herramienta cuyos usuarios desconfían de mandar
+    datos a un LLM no es un detalle.
+
+    El fichero **no se guarda**: se lee, se resume y se descarta.
+    """
+    contenido = await file.read()
+    try:
+        return resumen_de_la_muestra(contenido, file.filename or "sin-nombre")
+    except MuestraIlegibleError as fallo:
+        raise HTTPException(status_code=422, detail=str(fallo)) from fallo
+
+
 @router.post("/propose", response_model=ReportTemplateDraft, operation_id="proposeLlmDraft")
 async def propose(
     body: ProposeRequest,
@@ -125,7 +166,7 @@ async def propose(
         "admin" if user.role in ("superadmin", "admin") else "user"
     )
     try:
-        return await service.propose_template(body.prompt_nl, owner_kind)
+        return await service.propose_template(body.prompt_nl, owner_kind, muestra=body.muestra)
     except PropuestaInvalidaError as fallo:
         # 422 y no 500: la propuesta la hizo el modelo, y quien pidió el informe necesita
         # saber que puede reformular, no ver un error del servidor.
