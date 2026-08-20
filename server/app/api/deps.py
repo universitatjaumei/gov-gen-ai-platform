@@ -153,3 +153,48 @@ def require_scopes(*needed: str):
         return user
 
     return _check
+
+
+async def modulos_concedidos(
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[str]:
+    """Los módulos que tiene concedidos quien hace esta petición (INF.7).
+
+    Existe como dependencia propia, y no dentro de `require_module`, por dos razones. Una es
+    que así se calcula **una vez** por petición aunque varias guardas la consulten. La otra es
+    que es **un solo punto que los tests pueden sobreescribir**: un test de chatbots que
+    mockea la sesión con `AsyncMock` no puede responder a una consulta real, y sin este punto
+    de sustitución la guarda devolvía 500 en vez de 403 — un fallo de infraestructura
+    disfrazado de decisión de autorización.
+    """
+    from server.app.core.auth.modulos_service import modulos_del_usuario
+
+    return await modulos_del_usuario(session, user)
+
+
+def require_module(codigo: str):
+    """Dependencia que exige tener concedido un módulo (INF.7).
+
+    Antes, los routers de un módulo entero solo pedían `get_current_user`: cualquier cuenta
+    autenticada podía listar y editar los chatbots institucionales y la configuración de LLM.
+    Con el módulo de informes abierto a toda la organización, eso deja de ser teórico.
+
+    El 403 dice **qué módulo** falta: quien lo recibe tiene que poder pedirlo, no adivinar.
+    """
+
+    async def _comprobar(
+        user: UserInfo = Depends(get_current_user),
+        concedidos: list[str] = Depends(modulos_concedidos),
+    ) -> UserInfo:
+        if codigo not in concedidos:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "message": f"Sin acceso al modulo '{codigo}'",
+                    "modulo_requerido": codigo,
+                },
+            )
+        return user
+
+    return _comprobar

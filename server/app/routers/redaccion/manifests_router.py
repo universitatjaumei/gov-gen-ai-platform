@@ -12,12 +12,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.api.deps import get_current_user, get_session
+from server.app.api.deps import get_current_user, get_session, require_module
 from server.app.modules.redaccion.contracts.manifest import DraftingRunManifest
 from server.app.modules.redaccion.database.models import HubRunManifest, HubWorkspace
 from server.app.routers.redaccion._actor import es_propietario
 
-router = APIRouter(prefix="/redaccion", tags=["redaccion-manifests"])
+router = APIRouter(prefix="/redaccion", tags=["redaccion-manifests"],
+    # INF.7 — el modulo se exige a nivel de router: asi no se puede olvidar en un
+    # endpoint nuevo del mismo fichero, que es como se abrieron los agujeros que SEC.8.1
+    # tuvo que cerrar uno a uno.
+    dependencies=[Depends(require_module("informes"))],
+)
 
 
 async def _load_manifest(orm: HubRunManifest) -> DraftingRunManifest:

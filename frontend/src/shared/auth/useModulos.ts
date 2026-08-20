@@ -1,0 +1,50 @@
+import { useGetMeApiV1AuthMeGet } from '@/shared/api/generated/auth/auth'
+
+/**
+ * Los módulos que el servidor concede a quien está dentro (INF.7).
+ *
+ * **El frontend no decide.** Antes no había nada que decidir: `App.tsx` metía todas las rutas
+ * bajo un `PrivateRoute` que solo comprobaba que hubiera sesión, no existía un solo `role ===`
+ * en la capa de navegación, y el aterrizaje era `/hub/chatbots` fijo. Con el módulo de informes
+ * abierto a toda la organización, eso significaba que cualquier trabajador con cuenta veía
+ * —y podía editar— los chatbots institucionales.
+ *
+ * Ahora la lista viene de `/auth/me` y el menú y las rutas se generan iterándola. Es el mismo
+ * patrón que `acciones_permitidas` en los bloques: el servidor calcula, el cliente pinta.
+ *
+ * `cargando` importa: mientras no se sabe qué hay concedido no se puede decidir si una ruta
+ * está prohibida, y tratar «no lo sé» como «no» echaría a la gente de su propia pantalla en
+ * cada recarga.
+ */
+export function useModulos(): { modulos: string[]; cargando: boolean } {
+  const { data, isLoading } = useGetMeApiV1AuthMeGet()
+  const modulos = (data as { modulos?: unknown } | undefined)?.modulos
+  return {
+    modulos: Array.isArray(modulos) ? modulos.map(String) : [],
+    cargando: isLoading,
+  }
+}
+
+/** La primera ruta a la que puede ir esta persona, para el aterrizaje. */
+export function primeraRutaConcedida(modulos: string[]): string {
+  for (const [codigo, ruta] of RUTA_DEL_MODULO) {
+    if (modulos.includes(codigo)) return ruta
+  }
+  // Sin ningún módulo no hay a dónde ir: la pantalla lo dice en vez de rebotar en bucle.
+  return '/sin-acceso'
+}
+
+/** Qué módulo abre cada zona de la aplicación. El orden es el del aterrizaje. */
+export const RUTA_DEL_MODULO: ReadonlyArray<readonly [string, string]> = [
+  ['informes', '/redaccion'],
+  ['chatbots', '/hub'],
+  ['curacion', '/curation'],
+]
+
+/** El módulo que protege una ruta, si la protege alguno. */
+export function moduloDeLaRuta(pathname: string): string | null {
+  for (const [codigo, ruta] of RUTA_DEL_MODULO) {
+    if (pathname === ruta || pathname.startsWith(`${ruta}/`)) return codigo
+  }
+  return null
+}

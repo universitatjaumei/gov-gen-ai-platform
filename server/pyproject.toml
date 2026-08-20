@@ -117,3 +117,8 @@ asyncio_default_fixture_loop_scope = "function"
 addopts = [
     "-n", "auto",
 ]
+markers = [
+    # INF.7 — los tests que prueban la guarda de modulos se quedan con la funcion de verdad;
+    # el resto la tiene parcheada por el fixture autouse de `tests/conftest.py`.
+    "sin_guarda_de_modulos: usa la comprobacion real de modulos concedidos",
+]

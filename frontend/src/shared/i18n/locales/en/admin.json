@@ -1,11 +1,4 @@
 {
-  "nav": {
-    "chatbots": "Chatbots",
-    "reports": "Reports",
-    "curation": "Curation",
-    "main": "Main navigation",
-    "language": "Language"
-  },
   "hub": {
     "chatbots": "Chatbots",
     "organizaciones": "Organizations",
@@ -324,5 +317,16 @@
     "error": "Invalid credentials",
     "show_password": "Show the password",
     "hide_password": "Hide the password"
+  },
+  "nav": {
+    "chatbots": "Chatbots",
+    "reports": "Reports",
+    "curation": "Curation",
+    "main": "Main navigation",
+    "language": "Language"
+  },
+  "sin_acceso": {
+    "texto": "Your account exists but no module has been granted. Ask the platform administrator for access, saying what you need: reports, chatbots or curation.",
+    "titulo": "You do not have access to any module yet"
   }
 }

@@ -1,11 +1,4 @@
 {
-  "nav": {
-    "chatbots": "Chatbots",
-    "reports": "Informes",
-    "curation": "Curació",
-    "main": "Navegació principal",
-    "language": "Idioma"
-  },
   "hub": {
     "chatbots": "Chatbots",
     "organizaciones": "Organitzacions",
@@ -324,5 +317,16 @@
     "error": "Credencials incorrectes",
     "show_password": "Mostrar la contrasenya",
     "hide_password": "Amagar la contrasenya"
+  },
+  "nav": {
+    "chatbots": "Chatbots",
+    "reports": "Informes",
+    "curation": "Curació",
+    "main": "Navegació principal",
+    "language": "Idioma"
+  },
+  "sin_acceso": {
+    "texto": "El teu compte existeix però no té cap mòdul concedit. Demana accés a qui administra la plataforma indicant què necessites: informes, chatbots o curació.",
+    "titulo": "Encara no tens accés a cap mòdul"
   }
 }

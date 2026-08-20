@@ -14,7 +14,7 @@ from sqlalchemy import delete as sql_delete
 from sqlalchemy import func
 from sqlalchemy import select
 
-from server.app.api.deps import require_role
+from server.app.api.deps import require_role, require_module
 from server.app.core.auth.models import UserInfo
 from server.app.core.auth.tenancy import assert_org_access, scope_query_to_orgs
 from server.app.modules.agents_hub.database.config_models import HubChatbot, HubLLMConfig
@@ -34,7 +34,12 @@ from server.app.modules.agents_hub.services.embedding_space import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/hub/chatbots", tags=["hub-chatbots"])
+router = APIRouter(prefix="/hub/chatbots", tags=["hub-chatbots"],
+    # INF.7 — el modulo se exige a nivel de router: asi no se puede olvidar en un
+    # endpoint nuevo del mismo fichero, que es como se abrieron los agujeros que SEC.8.1
+    # tuvo que cerrar uno a uno.
+    dependencies=[Depends(require_module("chatbots"))],
+)
 
 _require_admin = require_role("superadmin", "admin")
 

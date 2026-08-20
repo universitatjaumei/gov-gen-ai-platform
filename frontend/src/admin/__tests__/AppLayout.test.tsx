@@ -1,9 +1,25 @@
-import { describe, it, expect, beforeEach, beforeAll } from 'vitest'
+import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import i18n from '@/shared/i18n'
 import { AuthProvider } from '@/shared/auth'
 import { AppLayout } from '../AppLayout'
+import { useGetMeApiV1AuthMeGet } from '@/shared/api/generated/auth/auth'
+
+/**
+ * INF.7 — el menú se genera con los módulos que concede el servidor, así que el test tiene que
+ * darlos: antes las tres entradas estaban escritas en el componente y salían para cualquiera.
+ */
+vi.mock('@/shared/api/generated/auth/auth', () => ({
+  useGetMeApiV1AuthMeGet: vi.fn(),
+}))
+
+function conModulos(modulos: string[]) {
+  vi.mocked(useGetMeApiV1AuthMeGet).mockReturnValue({
+    data: { modulos },
+    isLoading: false,
+  } as never)
+}
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
   btoa(JSON.stringify({ user_id: '1', email: 'admin@test.com', role: 'admin', exp: 9999999999 }))
@@ -16,6 +32,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   localStorage.setItem('access_token', TOKEN)
+  conModulos(['chatbots', 'curacion', 'informes', 'plataforma'])
 })
 
 function renderLayout(path = '/hub') {
@@ -76,5 +93,18 @@ describe('AppLayout', () => {
   it('should_have_logout_button', () => {
     renderLayout()
     expect(screen.getByRole('button', { name: /cerrar sesión/i })).toBeDefined()
+  })
+})
+
+describe('INF.7 — el menú sólo enseña lo concedido', () => {
+  it('should_show_only_reports_for_a_reports_only_worker', () => {
+    conModulos(['informes'])
+    renderLayout('/redaccion')
+
+    expect(screen.getByRole('link', { name: /informes/i })).toBeDefined()
+    // Lo que hacía falta arreglar: un trabajador cualquiera veía —y podía editar— los
+    // chatbots institucionales.
+    expect(screen.queryByRole('link', { name: /chatbots/i })).toBeNull()
+    expect(screen.queryByRole('link', { name: /curaci/i })).toBeNull()
   })
 })

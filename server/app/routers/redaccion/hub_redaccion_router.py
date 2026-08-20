@@ -21,6 +21,7 @@ from server.app.api.deps import (
     require_role,
     require_scopes,
 )
+from server.app.api.deps import require_module
 from server.app.core.auth.models import UserInfo
 from server.app.routers.redaccion._actor import es_propietario, user_to_uuid
 from server.app.modules.redaccion.contracts.template import ReportTemplateSpec
@@ -50,7 +51,12 @@ from server.app.modules.redaccion.services.template_migration_service import (
     WorkspaceOwnershipError,
 )
 
-router = APIRouter(prefix="/hub/redaccion", tags=["hub-redaccion"])
+router = APIRouter(prefix="/hub/redaccion", tags=["hub-redaccion"],
+    # INF.7 — el modulo se exige a nivel de router: asi no se puede olvidar en un
+    # endpoint nuevo del mismo fichero, que es como se abrieron los agujeros que SEC.8.1
+    # tuvo que cerrar uno a uno.
+    dependencies=[Depends(require_module("informes"))],
+)
 
 # ---------------------------------------------------------------------------
 # DTOs — workspace / blocks / warnings (9R.7.2)

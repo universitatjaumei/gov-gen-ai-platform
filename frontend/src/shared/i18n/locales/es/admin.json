@@ -1,11 +1,4 @@
 {
-  "nav": {
-    "chatbots": "Chatbots",
-    "reports": "Informes",
-    "curation": "Curación",
-    "main": "Navegación principal",
-    "language": "Idioma"
-  },
   "hub": {
     "chatbots": "Chatbots",
     "organizaciones": "Organizaciones",
@@ -324,5 +317,16 @@
     "error": "Credenciales incorrectas",
     "show_password": "Mostrar la contraseña",
     "hide_password": "Ocultar la contraseña"
+  },
+  "nav": {
+    "chatbots": "Chatbots",
+    "reports": "Informes",
+    "curation": "Curación",
+    "main": "Navegación principal",
+    "language": "Idioma"
+  },
+  "sin_acceso": {
+    "texto": "Tu cuenta existe pero no tiene ningun modulo concedido. Pide acceso a quien administra la plataforma indicando que necesitas: informes, chatbots o curacion.",
+    "titulo": "Todavia no tienes acceso a ningun modulo"
   }
 }

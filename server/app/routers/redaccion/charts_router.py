@@ -15,8 +15,14 @@ from server.app.core.sandbox_client import SandboxClient, get_sandbox_client
 from server.app.modules.redaccion.services.charts.chart_configuration import ChartConfiguration
 from server.app.modules.redaccion.services.charts.deterministic_chart_service import DeterministicChartService
 from server.app.modules.redaccion.services.charts.chart_renderer import render_chart_from_script, ChartRenderError
+from server.app.api.deps import require_module
 
-router = APIRouter(prefix="/redaccion/charts", tags=["redaccion-charts"])
+router = APIRouter(prefix="/redaccion/charts", tags=["redaccion-charts"],
+    # INF.7 — el modulo se exige a nivel de router: asi no se puede olvidar en un
+    # endpoint nuevo del mismo fichero, que es como se abrieron los agujeros que SEC.8.1
+    # tuvo que cerrar uno a uno.
+    dependencies=[Depends(require_module("informes"))],
+)
 
 
 class DeterministicPreviewRequest(BaseModel):

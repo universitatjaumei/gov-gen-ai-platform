@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { noReintentarSiElServidorYaDecidio } from '@/shared/api/reintentos'
 import { Suspense, lazy } from 'react'
 import { AuthProvider, PrivateRoute } from '@/shared/auth'
+import { RutaDeModulo, Aterrizaje, SinAcceso } from '@/shared/auth/RutaDeModulo'
 import { AppLayout } from '@/admin/AppLayout'
 import { HubLayout } from '@/admin/HubLayout'
 import { CurationLayout } from '@/curation/CurationLayout'
@@ -96,8 +97,11 @@ function App() {
               <Route path="/auth/callback" element={<AuthCallbackPage />} />
               <Route element={<PrivateRoute />}>
                 <Route element={<AppLayout />}>
-                  <Route index element={<Navigate to="/hub" replace />} />
-                  <Route path="/hub" element={<HubLayout />}>
+                  {/* INF.7 — el aterrizaje ya no es `/hub` fijo: cae en el primer modulo
+                      concedido. Un trabajador que solo hace informes entra en informes. */}
+                  <Route index element={<Aterrizaje />} />
+                  <Route path="/sin-acceso" element={<SinAcceso />} />
+                  <Route path="/hub" element={<RutaDeModulo modulo="chatbots"><HubLayout /></RutaDeModulo>}>
                     <Route index element={<Navigate to="/hub/chatbots" replace />} />
                     <Route path="chatbots" element={<ChatbotsPage />} />
                     <Route path="organizaciones" element={<OrganizacionesPage />} />
@@ -111,7 +115,7 @@ function App() {
                     <Route path="test-scenarios" element={<TestScenariosPage />} />
                     <Route path="access-tokens" element={<AccessTokensPage />} />
                   </Route>
-                  <Route path="/curation" element={<CurationLayout />}>
+                  <Route path="/curation" element={<RutaDeModulo modulo="curacion"><CurationLayout /></RutaDeModulo>}>
                     <Route index element={<Navigate to="/curation/sites" replace />} />
                     <Route path="sites" element={<CurationSitesPage />} />
                     <Route path="audit" element={<CurationAuditPage />} />
@@ -120,7 +124,7 @@ function App() {
                   </Route>
                   {/* Informes: las pantallas existían pero sus rutas estaban sueltas y
                       fuera de todo menú, así que sólo se llegaba escribiendo la URL. */}
-                  <Route path="/redaccion" element={<RedaccionLayout />}>
+                  <Route path="/redaccion" element={<RutaDeModulo modulo="informes"><RedaccionLayout /></RutaDeModulo>}>
                     <Route index element={<Navigate to="/redaccion/builder" replace />} />
                     <Route path="builder" element={<ReportTemplateBuilderPage />} />
                     <Route path="wizard" element={<GenericReportWizard />} />
@@ -135,7 +139,7 @@ function App() {
                   <Route path="/redaccion/workspaces/:id" element={<WorkspacePage />} />
                 </Route>
               </Route>
-              <Route path="*" element={<Navigate to="/hub" replace />} />
+              <Route path="*" element={<Aterrizaje />} />
             </Routes>
           </Suspense>
         </AuthProvider>

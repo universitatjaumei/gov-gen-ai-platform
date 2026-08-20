@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/shared/auth'
+import { useModulos } from '@/shared/auth/useModulos'
 import { SUPPORTED_LANGUAGES } from '@/shared/i18n'
 import logoUji from '@/assets/logo-uji.png'
 
@@ -20,15 +21,19 @@ const IDIOMAS: Record<string, string> = {
  * con LLM— y no figuraba en ningún menú: sólo se llegaba escribiendo la URL.
  */
 const NAV_SECTIONS = [
-  { key: 'chatbots', path: '/hub' },
-  { key: 'reports', path: '/redaccion' },
-  { key: 'curation', path: '/curation' },
+  { key: 'chatbots', path: '/hub', modulo: 'chatbots' },
+  { key: 'reports', path: '/redaccion', modulo: 'informes' },
+  { key: 'curation', path: '/curation', modulo: 'curacion' },
 ] as const
 
 export function AppLayout() {
   const { t, i18n } = useTranslation('admin')
   const { t: tc } = useTranslation('common')
   const { user, logout } = useAuth()
+  // INF.7 — el menu se genera con lo que el servidor concede. No habia nada que filtrar:
+  // cualquier cuenta veia chatbots, informes y curacion.
+  const { modulos } = useModulos()
+  const secciones = NAV_SECTIONS.filter((s) => modulos.includes(s.modulo))
 
   return (
     <div className="flex h-screen">
@@ -45,7 +50,7 @@ export function AppLayout() {
           className="h-8 w-auto self-start mb-5 mt-1"
         />
 
-        {NAV_SECTIONS.map(({ key, path }) => (
+        {secciones.map(({ key, path }) => (
           <NavLink
             key={key}
             to={path}

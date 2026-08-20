@@ -583,3 +583,50 @@ class HubWidgetKey(HubConfigBase):
     revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class HubPlatformModule(HubConfigBase):
+    """El catálogo de módulos de la plataforma, **como dato** (INF.7).
+
+    Vive en tabla y no en un `Enum` de Python ni en un `CheckConstraint`, por la misma regla que
+    el vocabulario del corpus: si los módulos fueran código, añadir uno exigiría una migración y
+    un despliegue. `vigente` permite retirar uno sin borrar las concesiones que lo citan, que
+    son el histórico de quién tuvo acceso a qué.
+
+    En `HubConfigBase` porque es **configuración administrativa**: se decide en el cloud y el
+    edge la necesita para saber si quien pide un informe puede pedirlo.
+    """
+
+    __tablename__ = "hub_platform_modules"
+
+    code: Mapped[str] = mapped_column(String(50), primary_key=True)
+    label: Mapped[str] = mapped_column(String(120), nullable=False)
+    vigente: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class HubModuleGrant(HubConfigBase):
+    """Un módulo concedido a un usuario (INF.7).
+
+    El sujeto es el id de usuario **normalizado a UUID** con `_actor.user_to_uuid`: no hay una
+    tabla de usuarios única —hay `SuperAdminAccount` con `admin_id` entero y `AdminAccount` con
+    `partner_id` de texto—, así que la clave estable es la que se deriva del claim del token.
+    Ese normalizador existe precisamente por eso.
+    """
+
+    __tablename__ = "hub_module_grants"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    subject_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    module_code: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    granted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+    #: Quién lo concedió. Un permiso sin autoría no se puede auditar.
+    granted_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("subject_id", "module_code", name="uq_grant_subject_module"),
+    )

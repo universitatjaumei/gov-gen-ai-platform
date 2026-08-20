@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.api.deps import get_current_user, get_session
+from server.app.api.deps import get_current_user, get_session, require_module
 from server.app.core.auth.models import UserInfo
 from server.app.routers.redaccion._actor import es_propietario
 from server.app.modules.redaccion.database.models import (
@@ -30,7 +30,12 @@ from server.app.modules.redaccion.services.anonymization.run_context import (
     AnonymizationSummary,
 )
 
-router = APIRouter(prefix="/redaccion/workspaces", tags=["redaccion-anonymization"])
+router = APIRouter(prefix="/redaccion/workspaces", tags=["redaccion-anonymization"],
+    # INF.7 — el modulo se exige a nivel de router: asi no se puede olvidar en un
+    # endpoint nuevo del mismo fichero, que es como se abrieron los agujeros que SEC.8.1
+    # tuvo que cerrar uno a uno.
+    dependencies=[Depends(require_module("informes"))],
+)
 
 _LOCKED_STATUSES = frozenset({"drafting", "in_review", "assembled", "exported"})
 

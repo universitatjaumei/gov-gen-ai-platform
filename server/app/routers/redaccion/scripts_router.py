@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.api.deps import get_current_user, get_session
+from server.app.api.deps import get_current_user, get_session, require_module
 from server.app.core.auth.models import UserInfo
 from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
 from server.app.modules.agents_hub.services.model_factory import get_model_for_tier
@@ -66,7 +66,12 @@ from server.app.modules.redaccion.services.test_data_anonymizer import (
 )
 
 
-router = APIRouter(prefix="/redaccion/scripts", tags=["redaccion-scripts"])
+router = APIRouter(prefix="/redaccion/scripts", tags=["redaccion-scripts"],
+    # INF.7 — el modulo se exige a nivel de router: asi no se puede olvidar en un
+    # endpoint nuevo del mismo fichero, que es como se abrieron los agujeros que SEC.8.1
+    # tuvo que cerrar uno a uno.
+    dependencies=[Depends(require_module("informes"))],
+)
 
 
 # ---------------------------------------------------------------------------

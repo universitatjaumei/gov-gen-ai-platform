@@ -18,14 +18,19 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from server.app.api.deps import require_role
+from server.app.api.deps import require_role, require_module
 from server.app.core.auth.models import UserInfo
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.config_models import HubChatbot, HubLLMConfig, HubProvider
 from server.app.modules.agents_hub.services.model_factory import _build_model
 from server.app.services.model_fetcher import get_models_for_provider
 
-router = APIRouter(prefix="/hub/llm-configs", tags=["hub-llm-configs"])
+router = APIRouter(prefix="/hub/llm-configs", tags=["hub-llm-configs"],
+    # INF.7 — el modulo se exige a nivel de router: asi no se puede olvidar en un
+    # endpoint nuevo del mismo fichero, que es como se abrieron los agujeros que SEC.8.1
+    # tuvo que cerrar uno a uno.
+    dependencies=[Depends(require_module("plataforma"))],
+)
 
 _require_admin = require_role("superadmin", "admin")
 

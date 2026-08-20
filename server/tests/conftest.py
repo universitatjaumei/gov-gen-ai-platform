@@ -191,3 +191,37 @@ async def db_url(_plantilla_hub: str):
             cur.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
         admin.close()
         admin.close()
+
+
+@pytest.fixture(autouse=True)
+def _modulos_concedidos_en_tests(request, monkeypatch):
+    """INF.7 — en los tests, quien está autenticado tiene todos los módulos.
+
+    La guarda `require_module` es real en producción: sin concesión, 403. Pero un test de
+    chatbots que mockea la sesión con `AsyncMock` no puede responder a la consulta de
+    concesiones, así que sin esto la guarda devolvía **500** —un fallo de infraestructura
+    disfrazado de decisión de autorización— y once ficheros que no van de permisos se volvían
+    rojos por algo que no estaban probando.
+
+    Se parchea la **función del servicio** y no `app.dependency_overrides`, porque varios tests
+    montan su propia `FastAPI` en vez de importar la de `main`: un override sobre una instancia
+    concreta no les llega, y un parche del módulo sí, porque `modulos_concedidos` lo importa
+    dentro del cuerpo y se resuelve en cada llamada.
+
+    Quien **sí** prueba la guarda lleva el marcador `sin_guarda_de_modulos` y se queda con la
+    función de verdad. Es el mismo reparto que ya existe con `get_current_user`.
+    """
+    if request.node.get_closest_marker("sin_guarda_de_modulos"):
+        yield
+        return
+
+    from server.app.core.auth import modulos_service
+    from server.app.core.auth.modulos import MODULOS_INICIALES
+
+    todos = [codigo for codigo, _ in MODULOS_INICIALES]
+
+    async def _todos(_session, _user):
+        return todos
+
+    monkeypatch.setattr(modulos_service, "modulos_del_usuario", _todos)
+    yield

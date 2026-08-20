@@ -180,6 +180,20 @@ async def set_admin_password(
 
 
 @router.get("/me", response_model=dict)
-async def get_me(current_user: UserInfo = Depends(get_current_user)) -> dict:
-    """Devuelve la información del usuario autenticado (validación del token)."""
-    return current_user.to_dict()
+async def get_me(
+    current_user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """La información del usuario autenticado, **con los módulos que tiene concedidos**.
+
+    INF.7 — el menú y las rutas del frontend se generan iterando `modulos`. Antes no había nada
+    que iterar: `App.tsx` metía todas las rutas bajo un `PrivateRoute` que solo comprobaba que
+    hubiera sesión, así que cualquier cuenta veía chatbots, curación, informes y la
+    configuración de LLM. El servidor decide y el cliente pinta lo que reciba.
+    """
+    from server.app.core.auth.modulos_service import modulos_del_usuario
+
+    return {
+        **current_user.to_dict(),
+        "modulos": await modulos_del_usuario(session, current_user),
+    }
