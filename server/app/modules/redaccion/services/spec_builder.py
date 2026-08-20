@@ -28,9 +28,6 @@ from server.app.modules.redaccion.contracts.ui import (
     UISection,
 )
 
-#: Slots que se resuelven subiendo un fichero. El resto se teclean.
-TIPOS_DE_FICHERO = frozenset({"pdf", "excel", "csv"})
-
 _TIPOS_IA = frozenset({"AI_ASSISTED_TEXT", "AI_SUMMARY", "AI_REWRITE"})
 
 #: Extensiones que acepta cada zona de arrastre, por tipo de slot.
@@ -40,6 +37,17 @@ _ACEPTA = {
     "csv": [".csv"],
     "markdown": [".md", ".markdown"],
 }
+
+#: Slots que se resuelven subiendo un fichero. El resto se teclean.
+#
+# INF.1 — se deriva de `_ACEPTA` en vez de escribirse a mano. Iba
+# `frozenset({"pdf", "excel", "csv"})` y **se quedó corta cuando SEG.3 añadió `markdown`**:
+# las dos tablas discrepaban, así que un slot de markdown salía como campo de texto en vez de
+# como zona de subida, y un fichero no se puede teclear. Un tipo es de fichero si y solo si
+# tiene extensiones declaradas, con lo que no pueden volver a desincronizarse. Es la tercera
+# vez en el módulo que una lista escrita a mano se queda corta (tipos de gráfico y operaciones
+# de ETL en GUI.3, `md_table` en SEG.3), y la misma solución.
+TIPOS_DE_FICHERO = frozenset(_ACEPTA)
 
 
 def _todos_los_slots(inputs: InputContract) -> list[InputSlot]:
@@ -62,6 +70,7 @@ def _contrato_de_ui(borrador: ReportTemplateDraft, hay_ia: bool) -> ReportUICont
                 accept=_ACEPTA.get(s.kind, []),
                 multiple=s.multiple,
                 max_size_mb=s.max_size_mb,
+                required=s.slot_id in requeridos,
             )
             for s in slots
             if s.kind in TIPOS_DE_FICHERO

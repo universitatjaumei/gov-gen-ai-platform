@@ -70,6 +70,11 @@ class WorkspaceOut(BaseModel):
     blocks: list[BlockStateOut]
     created_at: datetime
     updated_at: datetime
+    # INF.1 — qué slots tienen ya su fichero. Sin esto la pantalla no puede distinguir «falta el
+    # dato de partida» de «ya se subió en la ejecución anterior», así que el camino único
+    # obligaría a resubir el mismo fichero cada vez que se reejecuta un informe. Van solo los
+    # `slot_id`, no las rutas: la pantalla necesita saber qué está satisfecho, no dónde vive.
+    uploaded_slots: list[str] = []
 
 
 class BlockPatchRequest(BaseModel):
@@ -397,12 +402,30 @@ async def get_template_ui_contract(
     _user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> ReportUIContract:
-    """Devuelve el ReportUIContract de una versión de plantilla."""
+    """Devuelve el ReportUIContract de una versión de plantilla.
+
+    INF.1 — `required` de cada dropzone se **deriva del `input_contract` al servir**, no se
+    confía al valor guardado. Las versiones son inmutables y las que ya existen se guardaron
+    antes de que el campo existiera, así que leerlas tal cual daría `required=False` para un
+    slot obligatorio y la pantalla volvería a dejar lanzar el informe sin datos. La fuente de
+    verdad de qué es obligatorio es `input_contract.required_slots`; el campo del dropzone es
+    la proyección que consume el cliente.
+    """
     version = await ReportTemplateVersionRepo(session).get(version_id)
     if version is None:
         raise HTTPException(status_code=404, detail="Template version not found")
     spec = ReportTemplateSpec.model_validate(version.spec_json)
-    return spec.ui_contract
+
+    obligatorios = {s.slot_id for s in spec.input_contract.required_slots}
+    contrato = spec.ui_contract.model_copy(
+        update={
+            "dropzones": [
+                dz.model_copy(update={"required": dz.slot_id in obligatorios})
+                for dz in spec.ui_contract.dropzones
+            ]
+        }
+    )
+    return contrato
 
 
 @router.get(
@@ -443,6 +466,7 @@ async def get_workspace_by_id(
         ],
         created_at=workspace.created_at,
         updated_at=workspace.updated_at,
+        uploaded_slots=sorted(workspace.inputs_json or {}),
     )
 
 

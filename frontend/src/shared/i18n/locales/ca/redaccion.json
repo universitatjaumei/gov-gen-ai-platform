@@ -1,4 +1,37 @@
 {
+  "announcer": {
+    "extracted": "Bloc {{label}}: dades extretes.",
+    "ai_generated": "Bloc {{label}}: esborrany IA llest, requereix revisió.",
+    "approved": "Bloc {{label}}: aprovat.",
+    "rejected": "Bloc {{label}}: rebutjat, es regenerarà."
+  },
+  "anonymization": {
+    "tab": "Anonimització",
+    "mode_label": "Mode d'anonimització",
+    "modes": {
+      "off": "Desactivat",
+      "detect_only": "Només detectar",
+      "replace": "Reemplaçar (Faker)",
+      "replace_with_disposition_7": "Reemplaçar + LOPDGDD"
+    },
+    "mode_descriptions": {
+      "off": "PII real arriba al LLM. Només per a desenvolupament.",
+      "detect_only": "Detecta PII però no substitueix al prompt.",
+      "replace": "Substitueix PII amb dades sintètiques abans del LLM.",
+      "replace_with_disposition_7": "Reemplaça amb Faker i emmascara DNI/NIE/Passaport (LOPDGDD Disp. 7a)."
+    },
+    "badge_lopdgdd": "LOPDGDD",
+    "table_title": "Detecció actual de PII",
+    "col_type": "Tipus",
+    "col_count": "Quantitat",
+    "total": "Total",
+    "no_run": "Encara no s'ha executat cap anàlisi.",
+    "btn_reanalyze": "Re-analitzar ara",
+    "btn_change_mode": "Canviar mode",
+    "reanalyzing": "Analitzant…",
+    "mode_locked": "El mode no es pot canviar durant l'execució.",
+    "loading": "Carregant…"
+  },
   "autosave": {
     "status": {
       "saved": "Guardat",
@@ -39,29 +72,6 @@
     "copied": "Copiat",
     "translate_hint": "Aquesta proposta és un suggeriment per a llegir-la: els blocs de l’informe es creen des de la descripció, a «Proposar amb IA»."
   },
-  "status": {
-    "missing_data": "Dades pendents",
-    "data_loaded": "Dades carregades",
-    "needs_review": "Pendent de revisió",
-    "approved": "Aprovat",
-    "error_recoverable": "Error (recuperable)",
-    "rejected": "Rebutjat — reintentar"
-  },
-  "workspace_status": {
-    "preparing": "Preparant",
-    "extracting": "Extraient dades",
-    "drafting": "En redacció",
-    "in_review": "En revisió",
-    "ready_to_export": "Llest per exportar",
-    "exported": "Exportat"
-  },
-  "failure": {
-    "ai_failed": "La IA no ha pogut generar aquest bloc. Pots tornar-ho a intentar.",
-    "extraction_failed": "No s'han pogut extreure dades del document. Revisa el fitxer i torna a intentar.",
-    "script_failed": "El càlcul automàtic ha fallat. Contacta amb l'administrador.",
-    "validation_failed": "Les dades no compleixen el format esperat.",
-    "unknown": "S'ha produït un error inesperat."
-  },
   "debug": {
     "title": "Detalls tècnics",
     "status": "Estat intern",
@@ -70,56 +80,49 @@
     "retry_attempts": "Reintents",
     "updated_at": "Actualitzat"
   },
-  "anonymization": {
-    "tab": "Anonimització",
-    "mode_label": "Mode d'anonimització",
-    "modes": {
-      "off": "Desactivat",
-      "detect_only": "Només detectar",
-      "replace": "Reemplaçar (Faker)",
-      "replace_with_disposition_7": "Reemplaçar + LOPDGDD"
-    },
-    "mode_descriptions": {
-      "off": "PII real arriba al LLM. Només per a desenvolupament.",
-      "detect_only": "Detecta PII però no substitueix al prompt.",
-      "replace": "Substitueix PII amb dades sintètiques abans del LLM.",
-      "replace_with_disposition_7": "Reemplaça amb Faker i emmascara DNI/NIE/Passaport (LOPDGDD Disp. 7a)."
-    },
-    "badge_lopdgdd": "LOPDGDD",
-    "table_title": "Detecció actual de PII",
-    "col_type": "Tipus",
-    "col_count": "Quantitat",
-    "total": "Total",
-    "no_run": "Encara no s'ha executat cap anàlisi.",
-    "btn_reanalyze": "Re-analitzar ara",
-    "btn_change_mode": "Canviar mode",
-    "reanalyzing": "Analitzant…",
-    "mode_locked": "El mode no es pot canviar durant l'execució.",
-    "loading": "Carregant…"
-  },
-  "announcer": {
-    "extracted": "Bloc {{label}}: dades extretes.",
-    "ai_generated": "Bloc {{label}}: esborrany IA llest, requereix revisió.",
-    "approved": "Bloc {{label}}: aprovat.",
-    "rejected": "Bloc {{label}}: rebutjat, es regenerarà."
-  },
   "editor": {
     "block_region": "Bloc {{type}}: {{id}}"
   },
-  "nav_templates": "Plantilles",
+  "failure": {
+    "ai_failed": "La IA no ha pogut generar aquest bloc. Pots tornar-ho a intentar.",
+    "extraction_failed": "No s'han pogut extreure dades del document. Revisa el fitxer i torna a intentar.",
+    "script_failed": "El càlcul automàtic ha fallat. Contacta amb l'administrador.",
+    "validation_failed": "Les dades no compleixen el format esperat.",
+    "unknown": "S'ha produït un error inesperat."
+  },
+  "inputs": {
+    "file_required": "falta el fitxer",
+    "file_already_uploaded": "ja pujat: es reutilitza si no tries un altre"
+  },
+  "nav_aria": "Navegació d'informes",
   "nav_llm_draft": "Proposar amb IA",
   "nav_new_report": "Nou informe",
   "nav_scripts_new": "Demanar un script",
   "nav_scripts_review": "Revisió de scripts",
-  "nav_aria": "Navegació d'informes",
-  "workspace_not_found": "No es troba aquest informe.",
-  "workspace_error": "La generació ha fallat. Revisa els avisos de sota i torna-ho a provar.",
-  "workspace_inputs": "Dades de partida",
-  "workspace_generate": "Generar informe",
-  "workspace_generating": "Generant…",
-  "workspace_preview": "Vista prèvia",
-  "workspace_export": "Exportar a Word",
-  "workspace_copilot": "Copilot",
+  "nav_templates": "Plantilles",
+  "preview_pending": "Abans de veure l’informe cal aprovar {{count}} bloc(s) escrit(s) per la IA. Torna a la pantalla de l’informe i aprova’l(s) al panell de revisió.",
+  "review": {
+    "pending": "{{count}} apartat(s) pendent(s) de revisió",
+    "all_approved": "Tots els apartats aprovats — a punt per a assemblar",
+    "source_anchored": "Valora: {{tables}}",
+    "source_full": "Sense ancorar: ha llegit tot l’informe",
+    "approve": "Aprova",
+    "edit": "Edita",
+    "reject": "Rebutja",
+    "regenerate": "Regenera",
+    "save": "Guarda",
+    "edit_label": "Text de l’apartat",
+    "edited_by": "Editat per {{who}}",
+    "show_original": "Veure què va proposar la IA"
+  },
+  "status": {
+    "missing_data": "Dades pendents",
+    "data_loaded": "Dades carregades",
+    "needs_review": "Pendent de revisió",
+    "approved": "Aprovat",
+    "error_recoverable": "Error (recuperable)",
+    "rejected": "Rebutjat — reintentar"
+  },
   "templates": {
     "no_permission": "Aquesta pantalla és només per a administradors.",
     "show_archived": "Mostra també les retirades",
@@ -135,19 +138,22 @@
     "archive_warning": "Deixarà d’aparèixer a les llistes i no es podran crear informes nous amb ella. Els informes ja generats amb aquesta plantilla es conserven i es podran continuar obrint i exportant. Podràs recuperar-la des de «Mostra també les retirades».",
     "archive_confirm": "Sí, retira-la"
   },
-  "preview_pending": "Abans de veure l’informe cal aprovar {{count}} bloc(s) escrit(s) per la IA. Torna a la pantalla de l’informe i aprova’l(s) al panell de revisió.",
-  "review": {
-    "pending": "{{count}} apartat(s) pendent(s) de revisió",
-    "all_approved": "Tots els apartats aprovats — a punt per a assemblar",
-    "source_anchored": "Valora: {{tables}}",
-    "source_full": "Sense ancorar: ha llegit tot l’informe",
-    "approve": "Aprova",
-    "edit": "Edita",
-    "reject": "Rebutja",
-    "regenerate": "Regenera",
-    "save": "Guarda",
-    "edit_label": "Text de l’apartat",
-    "edited_by": "Editat per {{who}}",
-    "show_original": "Veure què va proposar la IA"
+  "workspace_copilot": "Copilot",
+  "workspace_error": "La generació ha fallat. Revisa els avisos de sota i torna-ho a provar.",
+  "workspace_export": "Exportar a Word",
+  "workspace_generate": "Generar informe",
+  "workspace_generating": "Generant…",
+  "workspace_inputs": "Dades de partida",
+  "workspace_missing_inputs": "Falten dades de partida",
+  "workspace_not_found": "No es troba aquest informe.",
+  "workspace_preview": "Vista prèvia",
+  "workspace_run_failed": "No s’ha pogut engegar la generacio",
+  "workspace_status": {
+    "preparing": "Preparant",
+    "extracting": "Extraient dades",
+    "drafting": "En redacció",
+    "in_review": "En revisió",
+    "ready_to_export": "Llest per exportar",
+    "exported": "Exportat"
   }
 }

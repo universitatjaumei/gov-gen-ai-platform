@@ -468,9 +468,19 @@ async def run_workspace(
         # session.get ya está hecho por _get_workspace; start_run lo repite a
         # través del repo. En MVP es aceptable: el coste de un get adicional
         # es despreciable frente a la simplicidad del wire-up.
-        result = await svc.start_run(workspace_id, validate=False)
+        #
+        # INF.1 — `validate=True`. Iba apagado, así que un informe sin sus datos se encolaba,
+        # respondía 202 y fallaba dentro del grafo: el usuario veía «Datos pendientes» y tres
+        # warnings que solo aparecen volviendo atrás con el navegador. La guarda existía y
+        # nadie la usaba.
+        result = await svc.start_run(workspace_id, validate=True)
     except InputsNotReadyError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        # El detalle va **estructurado**: la pantalla tiene que poder señalar el campo que
+        # falta, y para eso necesita el `slot_id`, no una frase que contenga el slot_id.
+        raise HTTPException(
+            status_code=422,
+            detail={"missing_slots": exc.missing, "message": str(exc)},
+        ) from exc
 
     audit_event = HubWorkspaceAuditEvent(
         workspace_id=workspace_id,

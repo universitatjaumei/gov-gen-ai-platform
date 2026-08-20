@@ -127,3 +127,85 @@ describe('DynamicFieldRenderer', () => {
     expect(screen.queryByText('Excel File')).toBeNull()
   })
 })
+
+/**
+ * INF.1 — un fichero obligatorio se exige **antes** de lanzar el informe.
+ *
+ * `UIFieldDescriptor` tenía `required` y `UIDropzoneDescriptor` no, así que el zod de este
+ * componente solo validaba los campos de texto: un informe cuyo dato de partida es un fichero
+ * se enviaba vacío. Es la mitad de pantalla del bloqueo A de las pruebas humanas del
+ * 2026-08-20 —el usuario lanzó el informe sin fichero y nadie se lo dijo—.
+ */
+describe('INF.1 — el fichero obligatorio se valida antes de lanzar', () => {
+  const CON_FICHERO_OBLIGATORIO: ReportUIContract = {
+    ...SAMPLE_CONTRACT,
+    dropzones: [
+      {
+        slot_id: 'datos',
+        label: { es: 'Informe resumen', en: 'Summary' },
+        accept: ['.md'],
+        multiple: false,
+        max_size_mb: null,
+        required: true,
+      },
+      {
+        slot_id: 'anexo',
+        label: { es: 'Anexo opcional', en: 'Optional annex' },
+        accept: ['.pdf'],
+        multiple: false,
+        max_size_mb: null,
+        required: false,
+      },
+    ],
+    manual_fields: [],
+  }
+
+  it('should_block_the_submit_when_a_required_file_is_missing', async () => {
+    const onSubmit = vi.fn()
+    render(<ReportUIContractRenderer contract={CON_FICHERO_OBLIGATORIO} onSubmit={onSubmit} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /continuar/i }))
+
+    // Se espera a que **aparezca el aviso** y solo entonces se comprueba que no se envió.
+    // Un `waitFor` sobre una aserción negativa se cumple en el instante 0 y da un falso verde
+    // aunque el envío ocurra un tick después: hay que anclarlo a algo que sí pasa.
+    await screen.findByRole('alert')
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('should_name_the_missing_file_so_the_user_knows_which_one', async () => {
+    render(<ReportUIContractRenderer contract={CON_FICHERO_OBLIGATORIO} onSubmit={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /continuar/i }))
+
+    // El aviso tiene que estar donde está el campo, y nombrarlo: «falta algo» no sirve.
+    const avisos = await screen.findAllByRole('alert')
+    expect(avisos.some((a) => /informe resumen/i.test(a.textContent ?? ''))).toBe(true)
+  })
+
+  it('should_submit_once_the_required_file_is_chosen', async () => {
+    const onSubmit = vi.fn()
+    render(<ReportUIContractRenderer contract={CON_FICHERO_OBLIGATORIO} onSubmit={onSubmit} />)
+
+    const entrada = screen.getByLabelText(/informe resumen/i) as HTMLInputElement
+    fireEvent.change(entrada, {
+      target: { files: [new File(['# tabla'], 'informe.md', { type: 'text/markdown' })] },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /continuar/i }))
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(onSubmit.mock.calls[0][0].files.datos).toHaveLength(1)
+  })
+
+  it('should_not_demand_the_optional_file', async () => {
+    const onSubmit = vi.fn()
+    render(<ReportUIContractRenderer contract={CON_FICHERO_OBLIGATORIO} onSubmit={onSubmit} />)
+
+    fireEvent.change(screen.getByLabelText(/informe resumen/i), {
+      target: { files: [new File(['# tabla'], 'informe.md')] },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /continuar/i }))
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+  })
+})

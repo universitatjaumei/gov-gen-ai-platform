@@ -24,6 +24,10 @@ class UIDropzoneDescriptor(BaseModel):
     accept: list[str] = []
     multiple: bool = False
     max_size_mb: int | None = None
+    # INF.1 — `UIFieldDescriptor` lo tenía y esto no, así que la pantalla sabía qué campo de
+    # texto era obligatorio y **no qué fichero lo era**: no podía validar antes de lanzar, y el
+    # informe se ejecutaba sin datos. El servidor lo dice; el cliente no lo deduce.
+    required: bool = False
 
 
 class UISection(BaseModel):

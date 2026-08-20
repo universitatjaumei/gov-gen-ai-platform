@@ -119,16 +119,60 @@ describe('WorkspacePage', () => {
     await waitFor(() => expect(screen.getByTestId('workspace-editor')).toBeDefined())
   })
 
-  it('should_let_the_user_generate_the_report', async () => {
+  /**
+   * INF.1 — este test comprobaba el botón «Generar informe», que llamaba a `run` **sin pasar
+   * por la subida**. Codificaba el bloqueo A de las pruebas humanas del 2026-08-20: el usuario
+   * pulsó ese botón —el destacado—, el informe se ejecutó sin datos y la pantalla no dijo
+   * nada. Ahora se genera enviando el formulario del contrato, que es el único camino.
+   */
+  it('should_let_the_user_generate_the_report_through_the_contract_form', async () => {
     renderPage()
 
-    const boton = await screen.findByTestId('btn-generar-informe')
-    fireEvent.click(boton)
+    fireEvent.change(screen.getByLabelText(/datos presupuestarios/i), {
+      target: { files: [new File(['x'], 'datos.xlsx')] },
+    })
+    fireEvent.change(screen.getByLabelText(/periodo/i), { target: { value: '2026' } })
+    fireEvent.click(screen.getByRole('button', { name: /continuar/i }))
 
-    expect(runMutate).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: WORKSPACE_ID }),
-      expect.anything(),
+    await waitFor(() =>
+      expect(runMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceId: WORKSPACE_ID }),
+        expect.anything(),
+      ),
     )
+  })
+
+  it('should_not_offer_any_way_to_run_that_skips_the_upload', async () => {
+    renderPage()
+
+    await waitFor(() => expect(screen.getByTestId('workspace-editor')).toBeDefined())
+    // El test falla si alguien reintroduce un disparador que no pase por el formulario.
+    expect(screen.queryByTestId('btn-generar-informe')).toBeNull()
+  })
+
+  it('should_not_demand_again_a_file_already_uploaded', async () => {
+    renderPage({ ...WORKSPACE, uploaded_slots: ['datos_excel'] })
+
+    fireEvent.change(screen.getByLabelText(/periodo/i), { target: { value: '2026' } })
+    fireEvent.click(screen.getByRole('button', { name: /continuar/i }))
+
+    // Sin esto, reejecutar un informe obligaría a resubir el mismo fichero cada vez.
+    await waitFor(() => expect(runMutate).toHaveBeenCalled())
+  })
+
+  it('should_say_the_missing_slot_when_the_server_refuses_the_run', async () => {
+    vi.mocked(useRunWorkspace).mockReturnValue({
+      mutate: (_vars: unknown, opciones: { onError?: (e: unknown) => void }) =>
+        opciones?.onError?.({ response: { data: { detail: { missing_slots: ['datos_excel'] } } } }),
+      isPending: false,
+    } as any)
+    renderPage({ ...WORKSPACE, uploaded_slots: ['datos_excel'] })
+
+    fireEvent.change(screen.getByLabelText(/periodo/i), { target: { value: '2026' } })
+    fireEvent.click(screen.getByRole('button', { name: /continuar/i }))
+
+    const aviso = await screen.findByRole('alert')
+    expect(aviso.textContent).toMatch(/datos_excel/)
   })
 
   it('should_say_when_the_generation_failed_instead_of_looking_idle', async () => {

@@ -1,4 +1,37 @@
 {
+  "announcer": {
+    "extracted": "Bloque {{label}}: datos extraídos.",
+    "ai_generated": "Bloque {{label}}: borrador IA listo, requiere revisión.",
+    "approved": "Bloque {{label}}: aprobado.",
+    "rejected": "Bloque {{label}}: rechazado, se regenerará."
+  },
+  "anonymization": {
+    "tab": "Anonimización",
+    "mode_label": "Modo de anonimización",
+    "modes": {
+      "off": "Desactivado",
+      "detect_only": "Solo detectar",
+      "replace": "Reemplazar (Faker)",
+      "replace_with_disposition_7": "Reemplazar + LOPDGDD"
+    },
+    "mode_descriptions": {
+      "off": "PII real llega al LLM. Solo para desarrollo.",
+      "detect_only": "Detecta PII pero no sustituye en el prompt.",
+      "replace": "Sustituye PII con datos sintéticos antes del LLM.",
+      "replace_with_disposition_7": "Reemplaza con Faker y enmascara DNI/NIE/Pasaporte (LOPDGDD Disp. 7ª)."
+    },
+    "badge_lopdgdd": "LOPDGDD",
+    "table_title": "Detección actual de PII",
+    "col_type": "Tipo",
+    "col_count": "Cantidad",
+    "total": "Total",
+    "no_run": "No se ha ejecutado ningún análisis todavía.",
+    "btn_reanalyze": "Re-analizar ahora",
+    "btn_change_mode": "Cambiar modo",
+    "reanalyzing": "Analizando…",
+    "mode_locked": "El modo no se puede cambiar durante la ejecución.",
+    "loading": "Cargando…"
+  },
   "autosave": {
     "status": {
       "saved": "Guardado",
@@ -39,29 +72,6 @@
     "copied": "Copiado",
     "translate_hint": "Esta propuesta es una sugerencia para que la leas: los bloques del informe se crean desde la descripción, en «Proponer con IA»."
   },
-  "status": {
-    "missing_data": "Datos pendientes",
-    "data_loaded": "Datos cargados",
-    "needs_review": "Pendiente de revisión",
-    "approved": "Aprobado",
-    "error_recoverable": "Error (recuperable)",
-    "rejected": "Rechazado — reintentar"
-  },
-  "workspace_status": {
-    "preparing": "Preparando",
-    "extracting": "Extrayendo datos",
-    "drafting": "En redacción",
-    "in_review": "En revisión",
-    "ready_to_export": "Listo para exportar",
-    "exported": "Exportado"
-  },
-  "failure": {
-    "ai_failed": "La IA no pudo generar este bloque. Puedes reintentarlo.",
-    "extraction_failed": "No se pudieron extraer datos del documento. Revisa el archivo y reintenta.",
-    "script_failed": "El cálculo automático falló. Contacta con el administrador.",
-    "validation_failed": "Los datos no cumplen el formato esperado.",
-    "unknown": "Se ha producido un error inesperado."
-  },
   "debug": {
     "title": "Detalles técnicos",
     "status": "Estado interno",
@@ -70,56 +80,49 @@
     "retry_attempts": "Reintentos",
     "updated_at": "Actualizado"
   },
-  "anonymization": {
-    "tab": "Anonimización",
-    "mode_label": "Modo de anonimización",
-    "modes": {
-      "off": "Desactivado",
-      "detect_only": "Solo detectar",
-      "replace": "Reemplazar (Faker)",
-      "replace_with_disposition_7": "Reemplazar + LOPDGDD"
-    },
-    "mode_descriptions": {
-      "off": "PII real llega al LLM. Solo para desarrollo.",
-      "detect_only": "Detecta PII pero no sustituye en el prompt.",
-      "replace": "Sustituye PII con datos sintéticos antes del LLM.",
-      "replace_with_disposition_7": "Reemplaza con Faker y enmascara DNI/NIE/Pasaporte (LOPDGDD Disp. 7ª)."
-    },
-    "badge_lopdgdd": "LOPDGDD",
-    "table_title": "Detección actual de PII",
-    "col_type": "Tipo",
-    "col_count": "Cantidad",
-    "total": "Total",
-    "no_run": "No se ha ejecutado ningún análisis todavía.",
-    "btn_reanalyze": "Re-analizar ahora",
-    "btn_change_mode": "Cambiar modo",
-    "reanalyzing": "Analizando…",
-    "mode_locked": "El modo no se puede cambiar durante la ejecución.",
-    "loading": "Cargando…"
-  },
-  "announcer": {
-    "extracted": "Bloque {{label}}: datos extraídos.",
-    "ai_generated": "Bloque {{label}}: borrador IA listo, requiere revisión.",
-    "approved": "Bloque {{label}}: aprobado.",
-    "rejected": "Bloque {{label}}: rechazado, se regenerará."
-  },
   "editor": {
     "block_region": "Bloque {{type}}: {{id}}"
   },
-  "nav_templates": "Plantillas",
+  "failure": {
+    "ai_failed": "La IA no pudo generar este bloque. Puedes reintentarlo.",
+    "extraction_failed": "No se pudieron extraer datos del documento. Revisa el archivo y reintenta.",
+    "script_failed": "El cálculo automático falló. Contacta con el administrador.",
+    "validation_failed": "Los datos no cumplen el formato esperado.",
+    "unknown": "Se ha producido un error inesperado."
+  },
+  "inputs": {
+    "file_required": "falta el fichero",
+    "file_already_uploaded": "ya subido: se reutiliza si no eliges otro"
+  },
+  "nav_aria": "Navegación de informes",
   "nav_llm_draft": "Proponer con IA",
   "nav_new_report": "Nuevo informe",
   "nav_scripts_new": "Pedir un script",
   "nav_scripts_review": "Revisión de scripts",
-  "nav_aria": "Navegación de informes",
-  "workspace_not_found": "No se encuentra este informe.",
-  "workspace_error": "La generación falló. Revisa los avisos de abajo y vuelve a intentarlo.",
-  "workspace_inputs": "Datos de partida",
-  "workspace_generate": "Generar informe",
-  "workspace_generating": "Generando…",
-  "workspace_preview": "Vista previa",
-  "workspace_export": "Exportar a Word",
-  "workspace_copilot": "Copiloto",
+  "nav_templates": "Plantillas",
+  "preview_pending": "Antes de ver el informe hay que aprobar {{count}} bloque(s) escrito(s) por la IA. Vuelve a la pantalla del informe y apruébalo(s) en el panel de revisión.",
+  "review": {
+    "pending": "{{count}} apartado(s) pendiente(s) de revisión",
+    "all_approved": "Todos los apartados aprobados — listo para ensamblar",
+    "source_anchored": "Valora: {{tables}}",
+    "source_full": "Sin anclar: ha leído todo el informe",
+    "approve": "Aprobar",
+    "edit": "Editar",
+    "reject": "Rechazar",
+    "regenerate": "Regenerar",
+    "save": "Guardar",
+    "edit_label": "Texto del apartado",
+    "edited_by": "Editado por {{who}}",
+    "show_original": "Ver lo que propuso la IA"
+  },
+  "status": {
+    "missing_data": "Datos pendientes",
+    "data_loaded": "Datos cargados",
+    "needs_review": "Pendiente de revisión",
+    "approved": "Aprobado",
+    "error_recoverable": "Error (recuperable)",
+    "rejected": "Rechazado — reintentar"
+  },
   "templates": {
     "no_permission": "Esta pantalla es solo para administradores.",
     "show_archived": "Ver también las retiradas",
@@ -135,19 +138,22 @@
     "archive_warning": "Dejará de aparecer en las listas y no se podrán crear informes nuevos con ella. Los informes ya generados con esta plantilla se conservan y se siguen pudiendo abrir y exportar. Podrás recuperarla desde «Ver también las retiradas».",
     "archive_confirm": "Sí, retirarla"
   },
-  "preview_pending": "Antes de ver el informe hay que aprobar {{count}} bloque(s) escrito(s) por la IA. Vuelve a la pantalla del informe y apruébalo(s) en el panel de revisión.",
-  "review": {
-    "pending": "{{count}} apartado(s) pendiente(s) de revisión",
-    "all_approved": "Todos los apartados aprobados — listo para ensamblar",
-    "source_anchored": "Valora: {{tables}}",
-    "source_full": "Sin anclar: ha leído todo el informe",
-    "approve": "Aprobar",
-    "edit": "Editar",
-    "reject": "Rechazar",
-    "regenerate": "Regenerar",
-    "save": "Guardar",
-    "edit_label": "Texto del apartado",
-    "edited_by": "Editado por {{who}}",
-    "show_original": "Ver lo que propuso la IA"
+  "workspace_copilot": "Copiloto",
+  "workspace_error": "La generación falló. Revisa los avisos de abajo y vuelve a intentarlo.",
+  "workspace_export": "Exportar a Word",
+  "workspace_generate": "Generar informe",
+  "workspace_generating": "Generando…",
+  "workspace_inputs": "Datos de partida",
+  "workspace_missing_inputs": "Faltan datos de partida",
+  "workspace_not_found": "No se encuentra este informe.",
+  "workspace_preview": "Vista previa",
+  "workspace_run_failed": "No se pudo lanzar la generacion",
+  "workspace_status": {
+    "preparing": "Preparando",
+    "extracting": "Extrayendo datos",
+    "drafting": "En redacción",
+    "in_review": "En revisión",
+    "ready_to_export": "Listo para exportar",
+    "exported": "Exportado"
   }
 }

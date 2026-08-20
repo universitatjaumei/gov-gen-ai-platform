@@ -1,4 +1,37 @@
 {
+  "announcer": {
+    "extracted": "Block {{label}}: data extracted.",
+    "ai_generated": "Block {{label}}: AI draft ready, requires review.",
+    "approved": "Block {{label}}: approved.",
+    "rejected": "Block {{label}}: rejected, will regenerate."
+  },
+  "anonymization": {
+    "tab": "Anonymization",
+    "mode_label": "Anonymization mode",
+    "modes": {
+      "off": "Off",
+      "detect_only": "Detect only",
+      "replace": "Replace (Faker)",
+      "replace_with_disposition_7": "Replace + LOPDGDD"
+    },
+    "mode_descriptions": {
+      "off": "Real PII reaches the LLM. Development only.",
+      "detect_only": "Detects PII but does not substitute in the prompt.",
+      "replace": "Substitutes PII with synthetic data before the LLM.",
+      "replace_with_disposition_7": "Replaces with Faker and masks DNI/NIE/Passport (LOPDGDD Disp. 7th)."
+    },
+    "badge_lopdgdd": "LOPDGDD",
+    "table_title": "Current PII detection",
+    "col_type": "Type",
+    "col_count": "Count",
+    "total": "Total",
+    "no_run": "No analysis has been run yet.",
+    "btn_reanalyze": "Re-analyze now",
+    "btn_change_mode": "Change mode",
+    "reanalyzing": "Analyzing…",
+    "mode_locked": "Mode cannot be changed while execution is in progress.",
+    "loading": "Loading…"
+  },
   "autosave": {
     "status": {
       "saved": "Saved",
@@ -39,29 +72,6 @@
     "copied": "Copied",
     "translate_hint": "This proposal is a suggestion for you to read: the report blocks are created from the description, in “Propose with AI”."
   },
-  "status": {
-    "missing_data": "Data pending",
-    "data_loaded": "Data loaded",
-    "needs_review": "Pending review",
-    "approved": "Approved",
-    "error_recoverable": "Error (recoverable)",
-    "rejected": "Rejected — retry"
-  },
-  "workspace_status": {
-    "preparing": "Preparing",
-    "extracting": "Extracting data",
-    "drafting": "Drafting",
-    "in_review": "Under review",
-    "ready_to_export": "Ready to export",
-    "exported": "Exported"
-  },
-  "failure": {
-    "ai_failed": "AI could not generate this block. You can retry.",
-    "extraction_failed": "Data could not be extracted from the document. Check the file and retry.",
-    "script_failed": "Automatic calculation failed. Contact an administrator.",
-    "validation_failed": "Data does not meet the expected format.",
-    "unknown": "An unexpected error occurred."
-  },
   "debug": {
     "title": "Technical details",
     "status": "Internal status",
@@ -70,56 +80,49 @@
     "retry_attempts": "Retry attempts",
     "updated_at": "Updated at"
   },
-  "anonymization": {
-    "tab": "Anonymization",
-    "mode_label": "Anonymization mode",
-    "modes": {
-      "off": "Off",
-      "detect_only": "Detect only",
-      "replace": "Replace (Faker)",
-      "replace_with_disposition_7": "Replace + LOPDGDD"
-    },
-    "mode_descriptions": {
-      "off": "Real PII reaches the LLM. Development only.",
-      "detect_only": "Detects PII but does not substitute in the prompt.",
-      "replace": "Substitutes PII with synthetic data before the LLM.",
-      "replace_with_disposition_7": "Replaces with Faker and masks DNI/NIE/Passport (LOPDGDD Disp. 7th)."
-    },
-    "badge_lopdgdd": "LOPDGDD",
-    "table_title": "Current PII detection",
-    "col_type": "Type",
-    "col_count": "Count",
-    "total": "Total",
-    "no_run": "No analysis has been run yet.",
-    "btn_reanalyze": "Re-analyze now",
-    "btn_change_mode": "Change mode",
-    "reanalyzing": "Analyzing…",
-    "mode_locked": "Mode cannot be changed while execution is in progress.",
-    "loading": "Loading…"
-  },
-  "announcer": {
-    "extracted": "Block {{label}}: data extracted.",
-    "ai_generated": "Block {{label}}: AI draft ready, requires review.",
-    "approved": "Block {{label}}: approved.",
-    "rejected": "Block {{label}}: rejected, will regenerate."
-  },
   "editor": {
     "block_region": "Block {{type}}: {{id}}"
   },
-  "nav_templates": "Templates",
+  "failure": {
+    "ai_failed": "AI could not generate this block. You can retry.",
+    "extraction_failed": "Data could not be extracted from the document. Check the file and retry.",
+    "script_failed": "Automatic calculation failed. Contact an administrator.",
+    "validation_failed": "Data does not meet the expected format.",
+    "unknown": "An unexpected error occurred."
+  },
+  "inputs": {
+    "file_required": "file is missing",
+    "file_already_uploaded": "already uploaded: reused unless you pick another"
+  },
+  "nav_aria": "Reports navigation",
   "nav_llm_draft": "Propose with AI",
   "nav_new_report": "New report",
   "nav_scripts_new": "Request a script",
   "nav_scripts_review": "Script review",
-  "nav_aria": "Reports navigation",
-  "workspace_not_found": "This report could not be found.",
-  "workspace_error": "Generation failed. Check the warnings below and try again.",
-  "workspace_inputs": "Input data",
-  "workspace_generate": "Generate report",
-  "workspace_generating": "Generating…",
-  "workspace_preview": "Preview",
-  "workspace_export": "Export to Word",
-  "workspace_copilot": "Copilot",
+  "nav_templates": "Templates",
+  "preview_pending": "Before you can see the report, {{count}} AI-written block(s) must be approved. Go back to the report screen and approve them in the review panel.",
+  "review": {
+    "pending": "{{count}} passage(s) awaiting review",
+    "all_approved": "All passages approved — ready to assemble",
+    "source_anchored": "Comments on: {{tables}}",
+    "source_full": "Not anchored: it read the whole report",
+    "approve": "Approve",
+    "edit": "Rewrite",
+    "reject": "Reject",
+    "regenerate": "Regenerate",
+    "save": "Save",
+    "edit_label": "Passage text",
+    "edited_by": "Edited by {{who}}",
+    "show_original": "See what the AI proposed"
+  },
+  "status": {
+    "missing_data": "Data pending",
+    "data_loaded": "Data loaded",
+    "needs_review": "Pending review",
+    "approved": "Approved",
+    "error_recoverable": "Error (recoverable)",
+    "rejected": "Rejected — retry"
+  },
   "templates": {
     "no_permission": "This screen is for administrators only.",
     "show_archived": "Also show retired ones",
@@ -135,19 +138,22 @@
     "archive_warning": "It will stop appearing in the lists and no new reports can be created from it. Reports already generated from this template are kept and can still be opened and exported. You can bring it back from “Also show retired ones”.",
     "archive_confirm": "Yes, retire it"
   },
-  "preview_pending": "Before you can see the report, {{count}} AI-written block(s) must be approved. Go back to the report screen and approve them in the review panel.",
-  "review": {
-    "pending": "{{count}} passage(s) awaiting review",
-    "all_approved": "All passages approved — ready to assemble",
-    "source_anchored": "Comments on: {{tables}}",
-    "source_full": "Not anchored: it read the whole report",
-    "approve": "Approve",
-    "edit": "Rewrite",
-    "reject": "Reject",
-    "regenerate": "Regenerate",
-    "save": "Save",
-    "edit_label": "Passage text",
-    "edited_by": "Edited by {{who}}",
-    "show_original": "See what the AI proposed"
+  "workspace_copilot": "Copilot",
+  "workspace_error": "Generation failed. Check the warnings below and try again.",
+  "workspace_export": "Export to Word",
+  "workspace_generate": "Generate report",
+  "workspace_generating": "Generating…",
+  "workspace_inputs": "Input data",
+  "workspace_missing_inputs": "Missing input data",
+  "workspace_not_found": "This report could not be found.",
+  "workspace_preview": "Preview",
+  "workspace_run_failed": "Could not start the generation",
+  "workspace_status": {
+    "preparing": "Preparing",
+    "extracting": "Extracting data",
+    "drafting": "Drafting",
+    "in_review": "Under review",
+    "ready_to_export": "Ready to export",
+    "exported": "Exported"
   }
 }

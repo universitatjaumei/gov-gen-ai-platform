@@ -87,15 +87,31 @@ class WorkspaceRunService:
     # ------------------------------------------------------------------
     # Validación de inputs
     # ------------------------------------------------------------------
-    def validate_inputs(self, workspace_id: UUID, uploaded_slots: list[str]) -> None:
-        """Lanza InputsNotReadyError si no hay slots subidos.
+    def validate_inputs(
+        self,
+        workspace_id: UUID,
+        uploaded_slots: list[str],
+        required_slots: list[str] | None = None,
+    ) -> None:
+        """Lanza `InputsNotReadyError` con los slots obligatorios que faltan.
 
-        En implementaciones futuras este check cruzará uploaded_slots contra
-        InputContract.required_slots de la spec asociada al workspace. Para el
-        MVP, basta con detectar que no se ha subido nada.
+        INF.1 — antes solo detectaba «no se ha subido nada» y reportaba el literal
+        `<all_required>`, que no sirve para señalar un campo en la pantalla. Ahora cruza lo
+        subido contra `InputContract.required_slots`, que es lo que su propio docstring dejaba
+        anotado como pendiente.
+
+        Con `required_slots=None` se conserva la comprobación de mínimos: una plantilla cuyo
+        contrato no se pudo leer no debe ejecutarse a ciegas si no hay nada subido.
         """
-        if not uploaded_slots:
-            raise InputsNotReadyError(missing=["<all_required>"])
+        if required_slots is None:
+            if not uploaded_slots:
+                raise InputsNotReadyError(missing=["<all_required>"])
+            return
+
+        subidos = set(uploaded_slots)
+        faltan = [slot for slot in required_slots if slot not in subidos]
+        if faltan:
+            raise InputsNotReadyError(missing=faltan)
 
     # ------------------------------------------------------------------
     # Modo dry-run (sin BD, sin LLM, sin grafo real)
@@ -172,6 +188,33 @@ class WorkspaceRunService:
     # ------------------------------------------------------------------
     # Encolado de ejecución real (semántica queue-and-poll)
     # ------------------------------------------------------------------
+    async def _slots_obligatorios(self, template_version_id: UUID) -> list[str]:
+        """Los `slot_id` que el contrato de la plantilla declara obligatorios.
+
+        Una plantilla sin `input_contract` legible declara **cero** slots obligatorios, y eso
+        es lo que se devuelve. La guarda hace cumplir el contrato; no inventa requisitos donde
+        no hay contrato. Hay plantillas que legítimamente no piden nada —un informe de texto
+        estático, o uno alimentado por un script— y negarles la ejecución para protegerse de
+        una plantilla mal guardada es el intercambio equivocado: ese caso lo hace visible
+        INF.2, en el bloque que falla, con su acción para reintentar.
+        """
+        from server.app.modules.redaccion.database.repos import ReportTemplateVersionRepo
+
+        if self._session is None:
+            return []
+
+        version = await ReportTemplateVersionRepo(self._session).get(template_version_id)
+        spec = getattr(version, "spec_json", None)
+        contrato = spec.get("input_contract") if isinstance(spec, dict) else None
+        if not isinstance(contrato, dict):
+            return []
+
+        return [
+            slot["slot_id"]
+            for slot in contrato.get("required_slots") or []
+            if isinstance(slot, dict) and slot.get("slot_id")
+        ]
+
     async def start_run(
         self,
         workspace_id: UUID,
@@ -201,7 +244,11 @@ class WorkspaceRunService:
                 uploaded_slots = (
                     list(inputs_json.keys()) if isinstance(inputs_json, dict) else []
                 )
-                self.validate_inputs(workspace_id, uploaded_slots)
+                self.validate_inputs(
+                    workspace_id,
+                    uploaded_slots,
+                    await self._slots_obligatorios(workspace.template_version_id),
+                )
 
             if workspace.status in ("draft", "ingesting"):
                 workspace.status = "drafting"

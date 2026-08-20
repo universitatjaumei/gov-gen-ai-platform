@@ -27,6 +27,20 @@ import { WorkspaceStatusBar } from '../components/WorkspaceStatusBar'
 const CON_CONTENIDO = new Set(['in_review', 'assembled', 'exported'])
 
 /**
+ * Traduce el fallo de `run` a algo que se pueda leer.
+ *
+ * INF.1 — el 422 llega con `detail.missing_slots`, así que cuando el servidor rechaza por
+ * falta de datos se nombran los que faltan. Para cualquier otro fallo se enseña su mensaje:
+ * lo que no puede pasar es que el botón vuelva a su sitio sin decir nada, que es lo que hacía.
+ */
+export function mensajeDeFallo(fallo: unknown, t: (clave: string) => string): string {
+  const detalle = (fallo as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  const faltan = (detalle as { missing_slots?: string[] } | undefined)?.missing_slots
+  if (faltan?.length) return `${t('workspace_missing_inputs')}: ${faltan.join(', ')}`
+  return (fallo as Error)?.message || t('workspace_run_failed')
+}
+
+/**
  * La pantalla donde se trabaja un informe (VER.4).
  *
  * El módulo sabía crear workspaces y **no tenía dónde abrirlos**: `WorkspaceEditor`,
@@ -75,15 +89,17 @@ export function WorkspacePage() {
 
   const subir = useUploadWorkspaceInput()
   const { mutate: generar, isPending: generando } = useRunWorkspace()
+  const [subiendo, setSubiendo] = useState(false)
 
   if (isLoading) return <div className="p-4">{tc('loading')}</div>
   if (!workspace) return <div className="p-4">{t('workspace_not_found')}</div>
 
   const enMarcha = workspace.status === 'drafting' || workspace.status === 'extracting'
 
-  /** Sube lo que el contrato pidiera y lanza la generación. */
+  /** Sube lo que el contrato pidiera y lanza la generación. Único camino (INF.1). */
   async function enviar(datos: { fields: Record<string, string>; files: Record<string, File[]> }) {
     setErrorDeSubida('')
+    setSubiendo(true)
     try {
       for (const [slotId, ficheros] of Object.entries(datos.files)) {
         for (const fichero of ficheros) {
@@ -93,9 +109,14 @@ export function WorkspacePage() {
     } catch (fallo) {
       setErrorDeSubida((fallo as Error).message)
       return
+    } finally {
+      setSubiendo(false)
     }
     generar({ workspaceId: id }, {
       onSuccess: () => qc.invalidateQueries({ queryKey: getGetWorkspaceByIdQueryKey(id) }),
+      // El 422 de INF.1 llega aquí cuando falta un slot que la pantalla no pudo prever: se
+      // dice, en vez de dejar el botón como si no hubiera pasado nada.
+      onError: (fallo: unknown) => setErrorDeSubida(mensajeDeFallo(fallo, t)),
     })
   }
 
@@ -126,26 +147,29 @@ export function WorkspacePage() {
       {contrato && (
         <section className="border rounded-lg p-4 bg-card">
           <h2 className="text-base font-medium mb-3">{t('workspace_inputs')}</h2>
-          <ReportUIContractRenderer contract={contrato} onSubmit={enviar} />
+          {/* INF.1 — este formulario es el **único** disparador de la generación. Había además
+              un botón «Generar informe» que llamaba a `run` sin pasar por la subida, y era el
+              destacado: en las pruebas del 2026-08-20 el usuario pulsó ese, el informe se
+              ejecutó sin datos y la pantalla no dijo nada. Un camino que se salta los datos no
+              es un atajo, es una trampa. */}
+          <ReportUIContractRenderer
+            contract={contrato}
+            onSubmit={enviar}
+            satisfiedSlots={workspace.uploaded_slots ?? []}
+            submitting={subiendo || generando || enMarcha}
+          />
+          {enMarcha && (
+            <p data-testid="workspace-en-marcha" role="status" className="text-sm text-muted-foreground mt-2">
+              {t('workspace_generating')}
+            </p>
+          )}
           {errorDeSubida && (
-            <p className="text-sm text-destructive mt-2">{errorDeSubida}</p>
+            <p role="alert" className="text-sm text-destructive mt-2">{errorDeSubida}</p>
           )}
         </section>
       )}
 
       <div className="flex items-center gap-3 flex-wrap">
-        <button
-          type="button"
-          data-testid="btn-generar-informe"
-          disabled={generando || enMarcha}
-          onClick={() => generar({ workspaceId: id }, {
-            onSuccess: () => qc.invalidateQueries({ queryKey: getGetWorkspaceByIdQueryKey(id) }),
-          })}
-          className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md disabled:opacity-50"
-        >
-          {enMarcha ? t('workspace_generating') : t('workspace_generate')}
-        </button>
-
         {CON_CONTENIDO.has(workspace.status) && (
           <>
             <Link
