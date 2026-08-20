@@ -25,7 +25,17 @@ describe('useFocusStore', () => {
     expect(useFocusStore.getState().context).toBeNull()
   })
 
-  it('should_render_informe_tabs_when_context_type_is_informe', () => {
+  /**
+   * INF.8 — estos dos tests exigían que existieran las pestañas «Bloques», «Datos», «IA»,
+   * «Configuración» y «Data Pills», y **ninguna tenía panel**: `DrawerHub` solo pintaba
+   * contenido para `copilot`. O sea que codificaban el defecto que el usuario reportó —«el
+   * copiloto tiene cuatro tablas de las cuales 3 están totalmente en blanco»— como
+   * comportamiento correcto.
+   *
+   * Lo que se comprueba ahora es la regla: no se declara una pestaña sin panel. Cuando alguna
+   * de esas vistas exista, volverá con su test.
+   */
+  it('should_only_declare_tabs_that_have_a_panel', () => {
     act(() => {
       useFocusStore.getState().setContext({ type: 'informe', entityId: 'ws-1' })
       useFocusStore.getState().toggleDrawer()
@@ -33,16 +43,14 @@ describe('useFocusStore', () => {
 
     render(<DrawerHub />)
 
-    expect(screen.getByRole('tab', { name: /bloques/i })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /datos/i })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /ia/i })).toBeInTheDocument()
-    // 1C.0.bis añade tab Copilot también al contexto 'informe'
+    expect(screen.getAllByRole('tab')).toHaveLength(1)
     expect(screen.getByRole('tab', { name: /copilot/i })).toBeInTheDocument()
-    // Tabs específicas del flujo siguen sin aparecer
-    expect(screen.queryByRole('tab', { name: /data pills/i })).not.toBeInTheDocument()
+    for (const ausente of [/bloques/i, /datos/i, /data pills/i, /configuraci/i]) {
+      expect(screen.queryByRole('tab', { name: ausente })).not.toBeInTheDocument()
+    }
   })
 
-  it('should_render_flujo_tabs_when_context_type_is_flujo', () => {
+  it('should_offer_the_copilot_in_both_contexts', () => {
     act(() => {
       useFocusStore.getState().setContext({ type: 'flujo', entityId: 'flow-1' })
       useFocusStore.getState().toggleDrawer()
@@ -50,10 +58,7 @@ describe('useFocusStore', () => {
 
     render(<DrawerHub />)
 
-    expect(screen.getByRole('tab', { name: /configuraci/i })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /data pills/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /copilot/i })).toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: /bloques/i })).not.toBeInTheDocument()
   })
 
   it('should_collapse_sidebar_when_view_mode_is_focus', () => {

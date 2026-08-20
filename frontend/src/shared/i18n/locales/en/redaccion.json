@@ -98,6 +98,11 @@
   "draft_propose": "Generate proposal",
   "draft_proposing": "Asking the model. This usually takes a few seconds; do not close the screen.",
   "draft_sections": "Sections",
+  "drawer": {
+    "aria_label": "Tools panel",
+    "close": "Close the panel",
+    "copilot": "Copilot"
+  },
   "editor": {
     "block_region": "Block {{type}}: {{id}}"
   },
@@ -109,8 +114,12 @@
     "unknown": "An unexpected error occurred."
   },
   "inputs": {
-    "file_required": "file is missing",
-    "file_already_uploaded": "already uploaded: reused unless you pick another"
+    "accepted_formats": "Formats: {{formatos}}",
+    "any_format": "Any table format",
+    "chosen": "Chosen: {{nombre}}",
+    "drop_here": "Drop the file here, or click to choose it",
+    "file_already_uploaded": "already uploaded: reused unless you pick another",
+    "file_required": "file is missing"
   },
   "nav_aria": "Reports navigation",
   "nav_llm_draft": "Propose with AI",

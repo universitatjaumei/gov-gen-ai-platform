@@ -99,7 +99,13 @@ export function ReportUIContractRenderer({
         register={register}
         errors={errors}
       />
-      <button type="submit" disabled={submitting}>
+      {/* INF.8 — iba sin una sola clase, así que el único disparador del informe parecía
+          texto. Es la accion principal de la pantalla y ahora lo parece. */}
+      <button
+        type="submit"
+        disabled={submitting}
+        className="mt-3 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-md disabled:opacity-50"
+      >
         {submitting ? t('loading') : t('continue')}
       </button>
     </form>

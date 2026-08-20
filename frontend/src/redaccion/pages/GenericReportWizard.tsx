@@ -44,7 +44,7 @@ export function GenericReportWizard() {
             onClick={() => handleCreate(tmpl)}
             className="px-3 py-1 text-xs bg-primary text-primary-foreground rounded disabled:opacity-50"
           >
-            Crear informe
+            {t('create_report', 'Crear informe')}
           </button>
         </div>
       ))}

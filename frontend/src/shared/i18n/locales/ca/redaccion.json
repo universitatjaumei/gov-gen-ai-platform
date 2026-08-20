@@ -98,6 +98,11 @@
   "draft_propose": "Generar proposta",
   "draft_proposing": "Consultant el model. Sol trigar uns segons; no tanques la pantalla.",
   "draft_sections": "Seccions",
+  "drawer": {
+    "aria_label": "Panell d’eines",
+    "close": "Tancar el panell",
+    "copilot": "Copilot"
+  },
   "editor": {
     "block_region": "Bloc {{type}}: {{id}}"
   },
@@ -109,8 +114,12 @@
     "unknown": "S'ha produït un error inesperat."
   },
   "inputs": {
-    "file_required": "falta el fitxer",
-    "file_already_uploaded": "ja pujat: es reutilitza si no tries un altre"
+    "accepted_formats": "Formats: {{formatos}}",
+    "any_format": "Qualsevol format de taula",
+    "chosen": "Triat: {{nombre}}",
+    "drop_here": "Arrossega el fitxer aqui o prem per triar-lo",
+    "file_already_uploaded": "ja pujat: es reutilitza si no tries un altre",
+    "file_required": "falta el fitxer"
   },
   "nav_aria": "Navegació d'informes",
   "nav_llm_draft": "Proposar amb IA",

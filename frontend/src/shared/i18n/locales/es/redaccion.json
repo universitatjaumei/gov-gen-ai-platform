@@ -98,6 +98,11 @@
   "draft_propose": "Generar propuesta",
   "draft_proposing": "Consultando al modelo. Suele tardar unos segundos; no cierres la pantalla.",
   "draft_sections": "Secciones",
+  "drawer": {
+    "aria_label": "Panel de herramientas",
+    "close": "Cerrar el panel",
+    "copilot": "Copiloto"
+  },
   "editor": {
     "block_region": "Bloque {{type}}: {{id}}"
   },
@@ -109,8 +114,12 @@
     "unknown": "Se ha producido un error inesperado."
   },
   "inputs": {
-    "file_required": "falta el fichero",
-    "file_already_uploaded": "ya subido: se reutiliza si no eliges otro"
+    "accepted_formats": "Formatos: {{formatos}}",
+    "any_format": "Cualquier formato de tabla",
+    "chosen": "Elegido: {{nombre}}",
+    "drop_here": "Arrastra el fichero aqui o pulsa para elegirlo",
+    "file_already_uploaded": "ya subido: se reutiliza si no eliges otro",
+    "file_required": "falta el fichero"
   },
   "nav_aria": "Navegación de informes",
   "nav_llm_draft": "Proponer con IA",
