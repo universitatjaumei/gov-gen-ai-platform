@@ -69,8 +69,21 @@ describe('CUR.2 — i18n de curación', () => {
     // hub.availability_* en el namespace admin.
     const PREFIJOS_DINAMICOS = ['type_', 'severity_', 'status_']
 
+    // Las clases de error del rastreo (RAS.3) se traducen igual, con
+    // `t(\`reason_error_${clase}\`)` en `razonDelHallazgo.ts`, así que tampoco aparecen
+    // literales. Se enumeran una a una en vez de exentar el prefijo `reason_error_`
+    // completo: `reason_error_attempts` SÍ se escribe literal y debe seguir vigilada.
+    // La lista espeja `conocidas` en `curation/razonDelHallazgo.ts`.
+    const CLAVES_DINAMICAS = [
+      'reason_error_not_found',
+      'reason_error_transient',
+      'reason_error_client_error',
+      'reason_error_unknown',
+    ]
+
     const muertas = claves(es as Diccionario).filter((k) => {
       if (PREFIJOS_DINAMICOS.some((p) => k.startsWith(p))) return false
+      if (CLAVES_DINAMICAS.includes(k)) return false
       return !codigoCuracion.includes(`'${k}'`) && !codigoCuracion.includes(`"${k}"`)
     })
 

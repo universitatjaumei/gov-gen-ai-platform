@@ -157,6 +157,5 @@
   "refresh_candidates": "Refresh",
   "pdf_unavailable": "This server has no LibreOffice, so it cannot generate PDF: the report downloads as Word. Installing LibreOffice on the server brings the PDF button back.",
   "status_open": "Open",
-  "status_all": "All statuses",
-  "findings_retired": "{{count}} finding(s) retired in the last analysis because they are no longer detected"
+  "status_all": "All statuses"
 }
