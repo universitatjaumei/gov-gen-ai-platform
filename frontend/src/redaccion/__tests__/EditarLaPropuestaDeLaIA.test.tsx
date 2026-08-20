@@ -41,6 +41,11 @@ const BLOQUE_DE_IA = {
   },
   retry_attempts: 0,
   updated_at: '2026-08-18T10:00:00Z',
+  // INF.2 — lo que el servidor devuelve para un bloque en `needs_review`. El panel ya no lo
+  // deduce del estado, así que el fixture tiene que traerlo: sin él, este bloque no se pinta.
+  // `regenerate` no está a propósito — `needs_review → ai_generated` no es una transición
+  // válida, y el botón que lo ofrecía era un botón roto.
+  acciones_permitidas: ['approve', 'edit', 'reject'],
 }
 
 function mockearApi(overrides: Record<string, unknown> = {}) {

@@ -8,11 +8,14 @@ from server.app.modules.redaccion.contracts.runtime import (
     WorkspaceState,
 )
 
-_INCLUDABLE_STATUSES = frozenset({"approved", "locked"})
-
-#: Los bloques cuyo texto lo escribió un modelo. Son los únicos que exigen que un humano los
-#: apruebe antes de salir en el informe.
-_TIPOS_DE_IA = frozenset({"AI_ASSISTED_TEXT", "AI_SUMMARY", "AI_REWRITE"})
+# INF.2 — los estados aprobados y los tipos de IA vienen de `block_actions`, que es donde vive
+# la política de revisión. Estaban repetidos aquí, y esa copia es la que permitió que el
+# ensamblador y la exportación usaran reglas distintas para la misma pregunta.
+from server.app.modules.redaccion.services.block_actions import (  # noqa: E402
+    ESTADOS_APROBADOS as _INCLUDABLE_STATUSES,
+    TIPOS_DE_IA as _TIPOS_DE_IA,
+    bloques_pendientes,
+)
 
 
 def _entra_en_el_informe(kind: str, status: str, tiene_contenido: bool) -> bool:
@@ -83,7 +86,10 @@ class FinalAssemblerNode:
 
     Respeta el orden de secciones y bloques definido en el spec.
     Calcula final_document_hash (SHA-256).
-    Transición workspace: * → assembled.
+
+    Transición del workspace: `assembled` **solo si no queda ningún bloque de IA por aprobar**;
+    si queda alguno, `in_review`. Es la misma regla que la vista previa y la exportación
+    (`bloques_pendientes`), y antes no lo era: aquí se declaraba `assembled` siempre.
 
     Lanza WorkspaceBlockedByFailedBlocksError si algún bloque requerido tiene status=failed
     y no está en skip_blocks.
@@ -135,8 +141,20 @@ class FinalAssemblerNode:
         document = "\n\n".join(parts)
         doc_hash = hashlib.sha256(document.encode()).hexdigest()
 
+        # INF.2 — `assembled` solo si de verdad se puede exportar, **con la misma regla** que la
+        # vista previa y la exportación. Antes se declaraba siempre: la guarda de arriba solo
+        # mira los bloques `required` y `required` es `False` por defecto en todo bloque, así
+        # que en una plantilla propuesta por un modelo no se disparaba nunca. Resultado medido:
+        # insignia «Listo para exportar» sobre un informe cuya vista previa devolvía 409.
+        #
+        # Un apartado de IA sin aprobar no es un fallo de la ejecución —hay algo que una persona
+        # tiene que revisar—, así que el informe queda `in_review` y no se rompe el grafo.
+        pendientes = bloques_pendientes(
+            list(state.blocks.values()), omitidos=set(state.skip_blocks)
+        )
+
         return {
             "final_document": document,
             "final_document_hash": doc_hash,
-            "status": "assembled",
+            "status": "in_review" if pendientes else "assembled",
         }

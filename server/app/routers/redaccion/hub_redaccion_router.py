@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -37,6 +37,10 @@ from server.app.modules.redaccion.database.repos import (
     WorkspaceBlockRepo,
     WorkspaceRepo,
 )
+from server.app.modules.redaccion.services.block_actions import (
+    _DESTINO_DE_LA_ACCION,
+    acciones_permitidas,
+)
 from server.app.modules.redaccion.services.estructura_del_informe import bloques_sin_seccion
 from server.app.modules.redaccion.services.template_migration_service import (
     CompatibilityConflictError,
@@ -61,6 +65,31 @@ class BlockStateOut(BaseModel):
     last_error_message: str | None = None
     retry_attempts: int = 0
     updated_at: datetime
+    # INF.2 — lo que se puede hacer con este bloque, decidido en el servidor. El cliente itera
+    # esta lista y no compara `status` con literales: comparándolos, un bloque de IA que falla
+    # no era ni «pendiente» ni «aprobado» para la pantalla, así que bloqueaba el informe sin
+    # ofrecer salida. Regla maestra nº2. Detalle en `services/block_actions.py`.
+    acciones_permitidas: list[str] = []
+
+
+def _estado_del_bloque(block: Any) -> BlockStateOut:
+    """El DTO de un bloque, en un solo sitio.
+
+    Se construía campo a campo en dos endpoints. Añadir `acciones_permitidas` a mano en los dos
+    es justo cómo empiezan a divergir: uno lo trae y el otro no, y la pantalla se comporta
+    distinto según de qué petición venga.
+    """
+    return BlockStateOut(
+        block_id=block.block_id,
+        kind=block.kind,
+        status=block.status,
+        content=block.content_json,
+        failure_kind=block.failure_kind,
+        last_error_message=block.last_error_message,
+        retry_attempts=block.retry_attempts,
+        updated_at=block.updated_at,
+        acciones_permitidas=acciones_permitidas(kind=block.kind, status=block.status),
+    )
 
 
 class WorkspaceOut(BaseModel):
@@ -96,11 +125,10 @@ _KIND_TO_SEVERITY: dict[str, str] = {
     "missing_data": "warning",
 }
 
-_ACTION_TO_STATUS: dict[str, str] = {
-    "approve": "approved",
-    "reject": "rejected",
-    "regenerate": "extracted",
-}
+# INF.2 — el mapa de acción a estado vive en `block_actions`, con la máquina de estados.
+# Estaba duplicado aquí y **discrepaba**: `regenerate` llevaba a `extracted` en este endpoint y
+# a `ai_generated` en el validado de `workspaces_router`, así que el estado resultante dependía
+# de por qué puerta se entrase.
 
 # ---------------------------------------------------------------------------
 # DTOs — templates / workspaces (9R.7.3)
@@ -452,16 +480,7 @@ async def get_workspace_by_id(
         template_version_id=workspace.template_version_id,
         status=workspace.status,
         blocks=[
-            BlockStateOut(
-                block_id=b.block_id,
-                kind=b.kind,
-                status=b.status,
-                content=b.content_json,
-                failure_kind=b.failure_kind,
-                last_error_message=b.last_error_message,
-                retry_attempts=b.retry_attempts,
-                updated_at=b.updated_at,
-            )
+            _estado_del_bloque(b)
             for b in blocks
         ],
         created_at=workspace.created_at,
@@ -501,19 +520,27 @@ async def patch_workspace_block(
     if block is None:
         raise HTTPException(status_code=404, detail="Block not found")
 
-    block.status = _ACTION_TO_STATUS[body.action]
+    # INF.2 — se hace cumplir **la misma lista que se anuncia**. Este endpoint escribía el
+    # estado a pelo, sin consultar la máquina de estados: pedir «regenerar» sobre un bloque
+    # pendiente de revisión lo movía a `extracted` en silencio, una transición que la tabla no
+    # permite. Con la comprobación aquí, `acciones_permitidas` deja de ser decorativo — lo que
+    # la pantalla no ofrece, el servidor no acepta.
+    permitidas = acciones_permitidas(kind=block.kind, status=block.status)
+    if body.action not in permitidas:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    f"No se puede {body.action!r} un bloque en estado {block.status!r}"
+                ),
+                "acciones_permitidas": permitidas,
+            },
+        )
+
+    block.status = _DESTINO_DE_LA_ACCION[body.action]
     await session.commit()
     await session.refresh(block)
-    return BlockStateOut(
-        block_id=block.block_id,
-        kind=block.kind,
-        status=block.status,
-        content=block.content_json,
-        failure_kind=block.failure_kind,
-        last_error_message=block.last_error_message,
-        retry_attempts=block.retry_attempts,
-        updated_at=block.updated_at,
-    )
+    return _estado_del_bloque(block)
 
 
 @router.get(

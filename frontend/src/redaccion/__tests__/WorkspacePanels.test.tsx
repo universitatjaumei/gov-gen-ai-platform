@@ -33,7 +33,21 @@ import {
 // Helpers
 // --------------------------------------------------------------------------
 
+/**
+ * INF.2 — `acciones_permitidas` la calcula el servidor, y el fixture tiene que traerla porque
+ * el panel ya no la deduce del estado. Esto espeja `services/block_actions.py`: desde
+ * `needs_review` se puede aprobar, editar y rechazar —**no** regenerar, que no es una
+ * transición válida—, y desde `failed` se puede regenerar.
+ */
+const ACCIONES_POR_ESTADO: Record<string, string[]> = {
+  needs_review: ['approve', 'edit', 'reject'],
+  failed: ['edit', 'reject', 'regenerate'],
+  approved: [],
+  locked: [],
+}
+
 function makeBlock(id: string, status: string, kind = 'AI_ASSISTED_TEXT') {
+  const esDeIA = kind.startsWith('AI_')
   return {
     block_id: id,
     kind,
@@ -43,6 +57,7 @@ function makeBlock(id: string, status: string, kind = 'AI_ASSISTED_TEXT') {
     last_error_message: null,
     retry_attempts: 0,
     updated_at: '2026-01-01T00:00:00Z',
+    acciones_permitidas: esDeIA ? (ACCIONES_POR_ESTADO[status] ?? []) : [],
   }
 }
 
@@ -117,13 +132,19 @@ describe('AIBlockReviewPanel', () => {
     expect(screen.getByTestId('pending-review-count')).toBeDefined()
   })
 
-  it('should_allow_regenerate_ai_block', () => {
+  /**
+   * INF.2 — este test pulsaba «Regenerar» sobre un bloque en `needs_review`, y esa transición
+   * **no existe** (`needs_review → {approved, rejected}`). O sea que codificaba el defecto: el
+   * panel pintaba un botón que el servidor no podía atender. Regenerar es lo que se hace con un
+   * bloque que **falló**, que es justo el caso que dejó al usuario sin salida.
+   */
+  it('should_allow_regenerate_a_failed_ai_block', () => {
     vi.mocked(useGetWorkspaceById).mockReturnValue({
       data: {
         id: 'ws-1',
         template_version_id: 'tv-1',
         status: 'in_review',
-        blocks: [makeBlock('b_ai', 'needs_review')],
+        blocks: [makeBlock('b_ai', 'failed')],
         created_at: '2026-01-01T00:00:00Z',
         updated_at: '2026-01-01T00:00:00Z',
       },

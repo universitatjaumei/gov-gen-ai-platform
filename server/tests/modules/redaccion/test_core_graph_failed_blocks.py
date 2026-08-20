@@ -441,3 +441,87 @@ class TestFinalAssemblerFailures:
         # Must not raise — optional failed block in skip_blocks is allowed
         result = await node(state)
         assert result.get("status") == "assembled"
+
+
+# ─────────────── INF.2 — `assembled` tiene que significar «se puede exportar» ───────────────
+#
+# En las pruebas humanas del 2026-08-20 el workspace quedo en `assembled` con dos bloques de IA
+# en `failed`: la insignia decia «Listo para exportar» y la vista previa y la exportacion
+# devolvian 409 por esos mismos bloques.
+#
+# La causa: el ensamblador se bloqueaba solo si un bloque **`required`** estaba `failed`, y
+# `required` es `False` por defecto en todo bloque —el modelo que propone la plantilla no lo
+# pone nunca—. O sea que la guarda no se disparaba jamas en una plantilla propuesta por IA.
+#
+# La regla pasa a ser la misma que usan la vista previa y la exportacion: un bloque de IA sin
+# aprobar deja el informe en `in_review`, que es lo que de verdad hay que hacer con el.
+
+class TestElEnsambladoNoMiente:
+    async def test_should_not_declare_assembled_with_unapproved_ai_blocks(self) -> None:
+        from server.app.modules.redaccion.graph.nodes.final_assembler import FinalAssemblerNode
+
+        spec = _make_spec([
+            {"id": "t_datos", "kind": "DETERMINISTIC_DATA"},
+            {"id": "v_texto", "kind": "AI_ASSISTED_TEXT"},
+        ])
+        state = _make_state(
+            spec=spec,
+            blocks={
+                "t_datos": _block("t_datos", "extracted", content={"tables": []}),
+                # Ni `approved` ni `locked`: exactamente el caso del usuario.
+                "v_texto": _block("v_texto", "failed", kind="AI_ASSISTED_TEXT",
+                                  failure_kind="ai_failed"),
+            },
+        )
+
+        salida = await FinalAssemblerNode()(state)
+
+        assert salida.get("status") != "assembled", (
+            "un informe con un apartado de IA sin aprobar no esta listo para exportar"
+        )
+        assert salida.get("status") == "in_review"
+
+    async def test_should_declare_assembled_when_every_ai_block_is_approved(self) -> None:
+        from server.app.modules.redaccion.graph.nodes.final_assembler import FinalAssemblerNode
+
+        spec = _make_spec([{"id": "v_texto", "kind": "AI_ASSISTED_TEXT"}])
+        state = _make_state(
+            spec=spec,
+            blocks={"v_texto": _block("v_texto", "approved", kind="AI_ASSISTED_TEXT",
+                                      content={"text": "Valoracion aprobada."})},
+        )
+
+        salida = await FinalAssemblerNode()(state)
+
+        assert salida.get("status") == "assembled"
+
+    async def test_should_declare_assembled_for_a_report_without_ai_blocks(self) -> None:
+        """Nada transiciona un `DETERMINISTIC_DATA` a `approved`: exigirselo lo dejaria
+        inalcanzable, que es el error que la vista previa ya cometio una vez."""
+        from server.app.modules.redaccion.graph.nodes.final_assembler import FinalAssemblerNode
+
+        spec = _make_spec([{"id": "t_datos", "kind": "DETERMINISTIC_DATA"}])
+        state = _make_state(
+            spec=spec,
+            blocks={"t_datos": _block("t_datos", "extracted", content={"tables": []})},
+        )
+
+        salida = await FinalAssemblerNode()(state)
+
+        assert salida.get("status") == "assembled"
+
+    async def test_should_ignore_a_block_someone_decided_to_skip(self) -> None:
+        from server.app.modules.redaccion.graph.nodes.final_assembler import FinalAssemblerNode
+
+        spec = _make_spec([{"id": "v_texto", "kind": "AI_ASSISTED_TEXT"}])
+        state = _make_state(
+            spec=spec,
+            blocks={"v_texto": _block("v_texto", "failed", kind="AI_ASSISTED_TEXT")},
+            skip_blocks=["v_texto"],
+        )
+
+        salida = await FinalAssemblerNode()(state)
+
+        assert salida.get("status") == "assembled", (
+            "un apartado descartado a conciencia no puede seguir bloqueando el informe"
+        )

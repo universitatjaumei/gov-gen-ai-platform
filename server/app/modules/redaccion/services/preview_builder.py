@@ -22,31 +22,16 @@ from server.app.modules.redaccion.contracts.preview import (
     TocEntry,
 )
 from server.app.modules.redaccion.contracts.template import SectionContract
+from server.app.modules.redaccion.services.block_actions import bloques_pendientes
 
 _log = logging.getLogger(__name__)
 
-_APPROVED_STATES = frozenset({"approved", "locked"})
 _NIL_UUID = UUID("00000000-0000-0000-0000-000000000000")
 _section_adapter: TypeAdapter[list[SectionContract]] = TypeAdapter(list[SectionContract])
 
-
-#: Los bloques cuyo texto lo escribió un modelo: los únicos que esperan una aprobación.
-_TIPOS_DE_IA = frozenset({"AI_ASSISTED_TEXT", "AI_SUMMARY", "AI_REWRITE"})
-
-
-def bloques_pendientes(bloques: list[Any]) -> list[str]:
-    """Los que impiden la vista previa, que son solo los de IA sin aprobar.
-
-    Exigirla a **todos** la hacía inalcanzable por construcción: nada transiciona un
-    `STATIC_TEXT` o un `DETERMINISTIC_DATA` a `approved`, así que la pantalla respondía 409
-    para siempre. Misma regla que el ensamblado final, y por el mismo motivo: lo que se
-    revisa es lo que escribió el modelo.
-    """
-    return [
-        b.block_id
-        for b in bloques
-        if b.kind in _TIPOS_DE_IA and b.status not in _APPROVED_STATES
-    ]
+# INF.2 — `bloques_pendientes`, `TIPOS_DE_IA` y los estados aprobados vivían aquí, y el
+# ensamblador del grafo usaba una regla distinta con el mismo nombre. Ahora la política vive en
+# un solo módulo y este la consume: `services/block_actions.py`.
 
 
 class PendingBlocksError(Exception):

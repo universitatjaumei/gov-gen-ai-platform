@@ -15,6 +15,37 @@ interface Props {
   workspaceId: string
 }
 
+/** Las acciones que son una transición de estado; `edit` no lo es (sobreescribe el contenido). */
+type AccionDeTransicion = 'approve' | 'reject' | 'regenerate'
+
+/**
+ * Cómo se pinta cada acción. INF.2 — el catálogo es **presentación**: qué acciones existen y
+ * cuáles caben en este bloque lo decide el servidor (`acciones_permitidas`). El `testid` de
+ * editar es `btn-editar` y no `btn-edit` porque así lo llamaban los tests de SEG.4.
+ */
+const BOTONES: Record<string, { testid: string; clave: string; clase: string }> = {
+  approve: {
+    testid: 'btn-approve',
+    clave: 'review.approve',
+    clase: 'px-2 py-1 text-xs bg-green-600 text-white rounded disabled:opacity-50',
+  },
+  edit: {
+    testid: 'btn-editar',
+    clave: 'review.edit',
+    clase: 'px-2 py-1 text-xs border rounded hover:bg-accent disabled:opacity-50',
+  },
+  reject: {
+    testid: 'btn-reject',
+    clave: 'review.reject',
+    clase: 'px-2 py-1 text-xs bg-destructive text-destructive-foreground rounded disabled:opacity-50',
+  },
+  regenerate: {
+    testid: 'btn-regenerate',
+    clave: 'review.regenerate',
+    clase: 'px-2 py-1 text-xs border rounded disabled:opacity-50',
+  },
+}
+
 /**
  * Revisión de los apartados escritos por la IA (SEG.4).
  *
@@ -42,13 +73,17 @@ export function AIBlockReviewPanel({ workspaceId }: Props) {
   if (isLoading) return <div>{t('loading')}</div>
   if (!workspace) return null
 
-  const pendientes = workspace.blocks.filter((b) => b.status === 'needs_review')
+  // INF.2 — se pinta lo que **el servidor** dice que se puede hacer. Antes se filtraba por
+  // `status === 'needs_review'`, así que un bloque de IA en `failed` no aparecía y el panel
+  // anunciaba «todos aprobados» mientras la exportación devolvía 409 por ese mismo bloque:
+  // quien revisaba se quedaba sin nada que pulsar. El frontend no decide estados.
+  const pendientes = workspace.blocks.filter((b) => (b.acciones_permitidas ?? []).length > 0)
   const todoAprobado = pendientes.length === 0
   const refrescar = {
     onSuccess: () => qc.invalidateQueries({ queryKey: getGetWorkspaceByIdQueryKey(workspaceId) }),
   }
 
-  function actuar(blockId: string, action: 'approve' | 'reject' | 'regenerate') {
+  function actuar(blockId: string, action: AccionDeTransicion) {
     patchBlock({ workspaceId, blockId, data: { action } }, refrescar)
   }
 
@@ -175,42 +210,31 @@ export function AIBlockReviewPanel({ workspaceId }: Props) {
                   </details>
                 )}
 
+                {/* INF.2 — un botón por acción que el servidor permite, **en su orden**. Los
+                    cuatro estaban escritos a mano, así que se pintaba «Regenerar» sobre un
+                    bloque `needs_review` y esa transición no existe. Si no está en la lista,
+                    no hay botón; y si está, el endpoint no puede rechazarla. */}
                 <div className="flex gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    data-testid={`btn-approve-${block.block_id}`}
-                    disabled={isPending}
-                    onClick={() => actuar(block.block_id, 'approve')}
-                    className="px-2 py-1 text-xs bg-green-600 text-white rounded disabled:opacity-50"
-                  >
-                    {tR('review.approve')}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`btn-editar-${block.block_id}`}
-                    onClick={() => empezarAEditar(block.block_id, texto)}
-                    className="px-2 py-1 text-xs border rounded hover:bg-accent"
-                  >
-                    {tR('review.edit')}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`btn-reject-${block.block_id}`}
-                    disabled={isPending}
-                    onClick={() => actuar(block.block_id, 'reject')}
-                    className="px-2 py-1 text-xs bg-destructive text-destructive-foreground rounded disabled:opacity-50"
-                  >
-                    {tR('review.reject')}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`btn-regenerate-${block.block_id}`}
-                    disabled={isPending}
-                    onClick={() => actuar(block.block_id, 'regenerate')}
-                    className="px-2 py-1 text-xs border rounded disabled:opacity-50"
-                  >
-                    {tR('review.regenerate')}
-                  </button>
+                  {(block.acciones_permitidas ?? []).map((accion) => {
+                    const boton = BOTONES[accion]
+                    if (!boton) return null
+                    return (
+                      <button
+                        key={accion}
+                        type="button"
+                        data-testid={`${boton.testid}-${block.block_id}`}
+                        disabled={isPending}
+                        onClick={() =>
+                          accion === 'edit'
+                            ? empezarAEditar(block.block_id, texto)
+                            : actuar(block.block_id, accion as AccionDeTransicion)
+                        }
+                        className={boton.clase}
+                      >
+                        {tR(boton.clave)}
+                      </button>
+                    )
+                  })}
                 </div>
               </>
             )}
