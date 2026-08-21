@@ -121,8 +121,8 @@ se mantiene su carácter multiorganización.
 
 Cada organización que despliegue la plataforma —una universidad, una diputación, un ayuntamiento—
 trabaja sobre **su propio fork**: ahí van su despliegue, su configuración y los desarrollos que
-responden a necesidades suyas. Lo que se pueda generalizar sube al principal **por *pull
-request***.
+responden a necesidades suyas. Lo que se pueda generalizar **se pide** que suba al principal por
+*pull request*.
 
 La regla vale igual para todas, **incluida la Universitat Jaume I**, donde nació el proyecto: su
 desarrollo institucional entra como aportación, no como dirección. Por eso este documento no nombra
@@ -133,6 +133,21 @@ las necesidades de una institución entraran directamente en el principal, en po
 principal *sería* el sistema de esa institución, y el resto heredaría decisiones tomadas para un
 contexto que no es el suyo. Con fork y *pull request*, lo específico se queda donde es específico y
 sólo sube al principal lo que sirve a todos.
+
+### Lo que obliga la licencia y lo que pide el proyecto
+
+Conviene no confundirlos, porque son cosas de naturaleza distinta y sólo una es exigible.
+
+| | |
+|---|---|
+| **La licencia obliga a** | Dar el código fuente de **tu versión** a **los usuarios de tu despliegue**, si la has modificado y la ofreces por red (§13). Y a distribuirla bajo AGPL, con su fuente, si la distribuyes (§5 y §6). |
+| **La licencia NO obliga a** | Enviar nada al principal. **Ningún copyleft obliga a contribuir aguas arriba**, ni la AGPL ni la GPL. Tampoco a publicar al mundo: la obligación es frente a los usuarios de esa instancia. |
+| **El proyecto pide** | Que lo generalizable llegue por *pull request*. Es una **convención de gobernanza**, no una cláusula. |
+
+El modelo funciona igual, pero por otra vía: la licencia garantiza que ninguna mejora quede cerrada
+y que el principal **pueda** incorporarla legalmente; el *pull request* es lo que evita tener que ir
+a buscarla. La licencia asegura la posibilidad, la convención asegura la comodidad — y conviene no
+confiar en la segunda como si fuera la primera.
 
 El detalle operativo —qué se acepta como contribución y qué no, cómo se prepara— está en
 `CONTRIBUTING.md`.
@@ -172,6 +187,19 @@ pública servido por web, esa es la diferencia que importa: sin ella, una modifi
 servirse a la ciudadanía sin devolver nada. Y siendo el destinatario otras administraciones, es
 también lo que impide que una mejora pagada con fondos públicos quede cerrada.
 
-Ese mismo §13 impone una obligación **a este despliegue también**: una aplicación web bajo AGPL
-debe dar a sus usuarios una vía para obtener el fuente — en la práctica, un enlace visible al
-repositorio desde la propia interfaz. Está pendiente de añadir.
+### La obligación del §13 sobre cada despliegue
+
+Pendiente de implementar, y con tres condiciones que no son opcionales:
+
+- **Va en la interfaz del despliegue**, no en este README. La obligación es de quien ejecuta la
+  versión modificada, frente a los usuarios de **esa instancia**.
+- **Apunta al fuente de esa versión** —el fork, en el commit desplegado—, no al principal. El §13
+  pide el *Corresponding Source*, no «el proyecto». Por eso tiene que ser **configuración**
+  (`SOURCE_URL` o equivalente) y no una URL fija en el código: fijarla al principal haría que
+  cualquier despliegue modificado incumpliera.
+- **Tiene que verse donde están los usuarios**, y eso incluye el **widget público embebido**: la
+  ciudadanía que usa el chatbot también son usuarios interactuando remotamente. Es el caso que se
+  olvida.
+
+El §13 se activa **si se modifica** el programa: quien despliegue el código tal cual no queda
+sujeto a esta obligación concreta, aunque enlazar el fuente sigue siendo lo razonable.

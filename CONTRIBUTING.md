@@ -31,6 +31,12 @@ sección:
 *pull request* sólo si se puede generalizar. Si las necesidades de una institución entraran directas
 en el principal, el principal acabaría siendo el sistema de esa institución.
 
+> **Esto es una convención de gobernanza, no una obligación de la licencia.** La AGPL exige dar el
+> fuente de tu versión **a los usuarios de tu despliegue** (§13), y distribuirla bajo AGPL si la
+> distribuyes. **No exige enviar nada aguas arriba**: ningún copyleft obliga a contribuir al
+> proyecto de origen. Lo que la licencia garantiza es que ninguna mejora quede cerrada y que el
+> principal **pueda** incorporarla; el *pull request* es lo que evita tener que ir a buscarla.
+
 ### Qué se puede generalizar (y sube), y qué no
 
 | Sube al principal | Se queda en el fork |
