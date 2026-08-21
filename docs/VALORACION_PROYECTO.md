@@ -68,7 +68,7 @@ Las dos conclusiones principales de esta valoración son:
    ("refactor de nomenclatura aplicado en Fase 1") dan por hecho el renombrado
    Partner→Admin, Client→Organización. El código sigue usando `PartnerAccount`,
    `HubClient` y roles `admin`/`partner`. No es un problema en sí, pero **hay que decidir
-   ya**: o se ejecuta el renombrado (Bloque 2 de `CAMBIOS ARQUITECTURA.md`) antes de la
+   ya**: o se ejecuta el renombrado (Bloque 2 de `CAMBIOS_ARQUITECTURA.md`) antes de la
    Fase 2 —cuando el coste es mínimo—, o se actualiza la documentación para reflejar la
    nomenclatura real. Renombrar después de construir Expedientes (Fase 3, que introduce
    `responsable_rol` por todas partes) multiplicará el coste.
@@ -255,7 +255,7 @@ token de widget → uploads/headers/docs. El Deploy GCP sin esto publicaría los
    (adaptadores) — está bien señalado; sugiero moverlo al principio de 2.C para
    des-arriesgar F3.
 6. La decisión de Zustand para Focus Mode (9.12a) está bien justificada; nótese que
-   `CAMBIOS PLANIFICACIÓN.md` lo reubicaba en `frontend/src/shared/layout/` como
+   `CAMBIOS_PLANIFICACION.md` lo reubicaba en `frontend/src/shared/layout/` como
    infraestructura transversal — el plan de F2 aún lo sitúa en `src/automation/state/`;
    unificar antes de implementar.
 
@@ -293,7 +293,7 @@ token de widget → uploads/headers/docs. El Deploy GCP sin esto publicaría los
    metadatos de colectivo se capturan (y su base jurídica RGPD para capturarlos) antes de
    implementar el scorer; de lo contrario el dashboard no tendrá datos que agrupar.
 
-### 5.3 Cambios propuestos en CAMBIOS ARQUITECTURA.md — estado
+### 5.3 Cambios propuestos en CAMBIOS_ARQUITECTURA.md — estado
 
 | Bloque | Estado real | Recomendación |
 |---|---|---|

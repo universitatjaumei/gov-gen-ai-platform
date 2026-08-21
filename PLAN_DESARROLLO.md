@@ -50,7 +50,7 @@ Repositorio `gov-gen-ai-platform` en GitHub (ModestoFabra), monorepo con:
 
 **Documentos de referencia:**
 - `Descripción y funcionalidades.md` — Visión funcional GovGenAI (malla agéntica, PMDS, zero-knowledge, RunManifest, IA frugal)
-- `Arquitectura.md` — Arquitectura funcional y técnica unificada (principios irreversibles, roles, Cloud/Edge, privacidad selectiva)
+- `docs/Arquitectura.md` — Arquitectura funcional y técnica unificada (principios irreversibles, roles, Cloud/Edge, privacidad selectiva)
 - `modulo_AI_agents-hub.md` — Plan de integración Hub + AutomatIA (decisiones adoptadas)
 - `ARCHITECTURE_old.md` — Arquitectura técnica de AutomatIA (GovGenAI)
 - `Plan_TDD_Fase1.md` / `Plan_TDD_Fase2.md` / `Plan_TDD_Fase3.md` — Prompts atómicos TDD por Fase Funcional (sustituyen al antiguo `PLAN_TDD_DETALLADO.md`)
@@ -361,7 +361,7 @@ público con marca institucional.
 | 1.B.2 | Sistema de temas en cascada | Variables CSS, presets (Oscuro, Universidad), editor visual *(antes Fase TDD 10)* |
 | 1.B.3 | Despliegue staging Cloud | Google Cloud: Secret Manager, Cloud SQL (PostgreSQL+pgvector), Cloud Run, GCS |
 
-**Cascada de temas (nomenclatura actualizada §4 Arquitectura.md):**
+**Cascada de temas (nomenclatura actualizada §4 docs/Arquitectura.md):**
 ```
 Plataforma (defaults globales — SuperAdmin)
     └── Organización (logo, colores corporativos — Admin)
@@ -384,18 +384,18 @@ pública de pruebas en GCP; OIDC/SAML operativo.
 ### Subfase 1.C — Privacidad NER, Focus Mode e Informes
 *Duración estimada: 3 semanas | Junio–Julio 2026*
 
-Materializa el principio de privacidad selectiva (§7 Arquitectura.md) y entrega el
+Materializa el principio de privacidad selectiva (§7 docs/Arquitectura.md) y entrega el
 workspace de redacción asistida.
 
 | ID | Tarea | Origen | Destino | Detalle |
 |---|---|---|---|---|
 | 1.C.1 | Privacidad reversible (anonimización NER) | `app/modules/privacy/anonymizer.py` (1010 LoC), `app/services/anonymization_service.py`, `app/utils/pii_detector.py`, `app/services/privacy_guardian.py`, `app/services/screenshot_guard.py` | `server/app/core/privacy/` | Migración as-is del motor NER. Vault de mapeos pseudónimo↔real en Edge (cifrado at rest). Hook pre/post-LLM en grafo de informes. **No aplica al chatbot informativo público.** *(antes Fase 6.1)* |
-| 1.C.2 | Políticas de privacidad selectiva | — | `HubOrganizacion.default_privacy_policy`, `HubTipoExpediente.requires_anonymization`, `HubChatbot.anonymize_output` | Modelado en BD según §7.2 Arquitectura.md |
+| 1.C.2 | Políticas de privacidad selectiva | — | `HubOrganizacion.default_privacy_policy`, `HubTipoExpediente.requires_anonymization`, `HubChatbot.anonymize_output` | Modelado en BD según §7.2 docs/Arquitectura.md |
 | 1.C.3 | Focus Mode + DrawerHub | — | `frontend/src/shared/layout/` | Infraestructura transversal Zustand + Sheet shadcn/ui. Drawer con pestañas dinámicas (Informe vs. Flujo). Reutilizable en Fase 2.B *(antes prompt 9.12.a)* |
 | 1.C.4 | Workspace de informes (Dropzone + live preview) | — | `frontend/src/agent/` | Modo agente expandido con Dropzone PDFs, live preview del borrador, "Solicitar cambios" |
 | 1.C.5 | Exportación maquetada DOCX/ODT | — | `server/app/modules/agents_hub/services/export_service.py` | Plantillas Jinja2/Docx con índice automático, citas a pie de página, anexo de auditoría con `RunManifest` (versión scoped, no la unificada de Fase 2.C). Estilos del Sistema de Temas |
 | 1.C.6 | Driver Google Drive (opcional) | — | `export_service.py` | Subida a carpeta institucional via `google-api-python-client` + selector de destino en UI |
-| 1.C.7 | Memoria de estilo separada de identidad | — | `user_preferences_vector` | Re-anonimización antes de extraer patrones (§7.4 Arquitectura.md) |
+| 1.C.7 | Memoria de estilo separada de identidad | — | `user_preferences_vector` | Re-anonimización antes de extraer patrones (§7.4 docs/Arquitectura.md) |
 
 **Criterio de éxito 1.C**: un User identificado puede subir un PDF con datos personales,
 obtener un informe con citas a normativa pública y exportarlo en DOCX maquetado,
@@ -428,7 +428,7 @@ para el padrón que use el LLM local y lea estos PDFs"* y ejecuta la configuraci
 *Prerequisito: Fase 1 desplegada en piloto*
 
 Migra el sistema legacy NiceGUI a la arquitectura distribuida Edge + Thin Client y
-materializa la Skill & Script Library completa (§2.4 Arquitectura.md).
+materializa la Skill & Script Library completa (§2.4 docs/Arquitectura.md).
 
 ## Subfase 2.A — Thin Client + Sandbox distribuido
 *Duración estimada: 2–3 semanas*
@@ -439,7 +439,7 @@ materializa la Skill & Script Library completa (§2.4 Arquitectura.md).
 | 2.A.2 | Sandbox distribuido Edge ↔ Thin-client | Migrar `sandbox_worker.py` al thin client; mantener `safety_sandbox.py` (auditoría AST) en server. Contrato: server firma → thin client verifica + ejecuta + devuelve `RunManifest` firmado *(antes Fase 5.4)* |
 | 2.A.3 | Emparejamiento seguro Thin Client ↔ Edge | Token de enrolment, refresh de credenciales, registro de capacidades, heartbeat, actualización remota *(antes Fase 5.5)* |
 | 2.A.4 | Skill de Sincronización de Workspace | Detección automática de Google Drive File Stream / OneDrive en Windows/Linux; handler `FILE_GENERATED`; movimiento firmado de archivos a la carpeta sincronizada de la Organización *(NUEVA)* |
-| 2.A.5 | Vault de identidades en Edge (completo) | Materialización del Vault del §7.3 Arquitectura.md una vez exista despliegue Edge real |
+| 2.A.5 | Vault de identidades en Edge (completo) | Materialización del Vault del §7.3 docs/Arquitectura.md una vez exista despliegue Edge real |
 
 **Criterio de éxito 2.A**: un Thin Client en una estación Windows/Linux ejecuta un script
 Python firmado recibido del Edge node, con aislamiento de red, FS y proceso, y devuelve
@@ -467,7 +467,7 @@ un `RunManifest` firmado verificable por el server.
 *Duración estimada: 3–4 semanas*
 
 Migra los servicios transversales del `client_app/` al server FastAPI y materializa la
-**Skill & Script Library** completa (§2.4 Arquitectura.md). Aplica la regla de CLAUDE.md:
+**Skill & Script Library** completa (§2.4 docs/Arquitectura.md). Aplica la regla de CLAUDE.md:
 al cerrar cada subtarea, el código legacy correspondiente debe moverse a carpeta legacy para eliminacion final y sin referencias en el repo.
 
 | ID | Tarea | Origen legacy | Destino server | Detalle |
@@ -493,7 +493,7 @@ Como regla general los scripts de automatización **se ejecutan en el Edge**. En
 de informes (Fase 1.C) ya se ejecutaban allí para entregar informes rápidos íntegramente
 en la nube institucional. En esta Fase 2 se habilita además la capacidad del **Thin Client**
 para recibir y ejecutar esos mismos scripts sobre **carpetas locales** y para tareas de
-automatización que requieren recursos locales (ver §2.3 Arquitectura.md).
+automatización que requieren recursos locales (ver §2.3 docs/Arquitectura.md).
 
 ---
 
@@ -647,12 +647,12 @@ según prioridad de la Organización piloto.
 > **Sección añadida (Prompt 2 — mayo 2026).** Aclara la división de responsabilidades
 > entre los tres documentos vivos del proyecto y evita duplicación.
 
-`Arquitectura.md`, este documento y los `Plan_TDD_Fase{1,2,3}.md` son **complementarios
+`docs/Arquitectura.md`, este documento y los `Plan_TDD_Fase{1,2,3}.md` son **complementarios
 y no se solapan**:
 
 | Documento | Naturaleza | Pregunta a la que responde |
 | :---- | :---- | :---- |
-| **`Arquitectura.md`** | Estado objetivo · Decisiones **irreversibles** | **¿Qué es** la plataforma y qué principios la rigen? (módulos, roles, privacidad, Cloud/Edge, stack) |
+| **`docs/Arquitectura.md`** | Estado objetivo · Decisiones **irreversibles** | **¿Qué es** la plataforma y qué principios la rigen? (módulos, roles, privacidad, Cloud/Edge, stack) |
 | **`PLAN_DESARROLLO.md`** *(este documento)* | Plan de ejecución · Revisable sprint a sprint | **¿Cuándo y en qué orden** se materializa la arquitectura? (3 Fases Funcionales, sub-fases, calendario) |
 | **`Plan_TDD_Fase1.md` / `Plan_TDD_Fase2.md` / `Plan_TDD_Fase3.md`** | Detalle TDD por prompt · Ejecutable | **¿Cómo se construye** cada pieza, paso a paso? (prompts atómicos Red/Green) |
 
@@ -673,7 +673,7 @@ y no se solapan**:
 ### Lo que NO está en este documento
 
 - **Detalle técnico de cada prompt** → vive en `Plan_TDD_Fase{1,2,3}.md`.
-- **Cualquier principio o decisión irreversible** → vive en `Arquitectura.md`.
+- **Cualquier principio o decisión irreversible** → vive en `docs/Arquitectura.md`.
 - **Estado actual de implementación** (qué está hecho ahora mismo, líneas modificadas, tests verdes) → vive en el repositorio (commits, README de cada módulo).
 
 ---

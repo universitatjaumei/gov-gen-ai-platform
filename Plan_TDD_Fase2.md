@@ -46,7 +46,7 @@ no se desarrollarán hasta comenzar la subfase correspondiente:
 
 # Recomendaciones y replanteamiento de la Fase 2 (2026-07-11)
 
-> Sección añadida a partir de `VALORACION_PROYECTO.md` y de un inventario real de `client_app/`.
+> Sección añadida a partir de `docs/VALORACION_PROYECTO.md` y de un inventario real de `client_app/`.
 > **Precede a los bloques 9C/9D/FASE 14-18 originales, que quedan condicionados por esta sección.**
 > No borra ningún prompt: replantea qué merece la pena ejecutar y en qué orden. La decisión
 > go/no-go sobre la migración es del usuario; aquí está la recomendación fundamentada.
@@ -60,7 +60,7 @@ Antes de tocar código de Fase 2:
 3. **`2A.2` Secure Pairing es bloqueante, no opcional**: un Thin Client que ejecuta scripts con un `AGENT_TOKEN` estático de `.env` reproduce a escala local el bypass de autenticación A1 corregido en Fase 1. El enrolment de un solo uso se diseña como parte del scaffolding (9.16), no después.
 4. **El esqueleto de `9.16`** (`websockets.connect` en bucle simple) debe entregarse con reconexión + backoff, heartbeat y cola de jobs pendientes; no el happy path.
 5. **`2C.0` (MCP Client) es prerrequisito bloqueante de la Fase 3**: adelantarlo al principio de la Subfase 2.C para des-arriesgar Expedientes.
-6. **Unificar la ubicación de Focus Mode**: `CAMBIOS PLANIFICACIÓN.md` lo reubicó en `frontend/src/shared/layout/` (ya entregado en Fase 1.C, prompt 1C.0). Los prompts 9.12a de este documento que aún lo sitúan en `src/automation/state/` deben **reutilizar** el store transversal existente, no crear uno nuevo.
+6. **Unificar la ubicación de Focus Mode**: `docs/CAMBIOS_PLANIFICACION.md` lo reubicó en `frontend/src/shared/layout/` (ya entregado en Fase 1.C, prompt 1C.0). Los prompts 9.12a de este documento que aún lo sitúan en `src/automation/state/` deben **reutilizar** el store transversal existente, no crear uno nuevo.
 
 ## 2. Hallazgo que cambia el alcance: gran parte del "valor legacy" YA está reimplementado
 
@@ -1052,7 +1052,7 @@ evento `FILE_GENERATED` por WebSocket.
 **Problema que resuelve:** Sin este skill, los informes y documentos generados en el
 cloud quedan en una carpeta temporal y el usuario debe descargarlos y moverlos
 manualmente. El skill cierra el ciclo de entrega local de forma transparente, habilitando
-el flujo de trabajo humano fuera de la plataforma previsto en `CAMBIOS PLANIFICACIÓN.md`.
+el flujo de trabajo humano fuera de la plataforma previsto en `docs/CAMBIOS_PLANIFICACION.md`.
 
 **Dependencias:** Prompt 9.16 (thin client + WebSocket operativo) · FASE 14 (firma y
 verificación de scripts) · Prompt 1.B Export DOCX/ODT (Fase 1.C, que genera el fichero).
@@ -1239,7 +1239,7 @@ y lo propone para inclusión en el Script Registry, sujeto a aprobación del Adm
 **Problema que resuelve:** Sin un mecanismo de aprendizaje controlado, cada automatización
 es un caso de uso aislado y la plataforma no acumula valor. El NodoAprendizaje convierte
 las ejecuciones HITL-validadas en activos reutilizables, implementando el principio
-Hermes de autoaprendizaje determinista (§2.4 de `Arquitectura.md`): "la IA propone,
+Hermes de autoaprendizaje determinista (§2.4 de `docs/Arquitectura.md`): "la IA propone,
 el humano valida, el sistema aprende".
 
 **Dependencias:** FASE 15 (Script Registry con índice semántico y tabla `scripts_aprobados`)

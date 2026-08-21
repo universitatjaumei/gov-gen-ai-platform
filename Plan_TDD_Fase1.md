@@ -44,7 +44,7 @@ capaz de servir chatbots informativos y de redacción para al menos una organiza
 
 ## Nomenclatura vigente
 SuperAdmin / Admin / Organización / Usuario
-(Ver §4 de Arquitectura.md para el mapeo completo SuperAdmin←Admin, Admin←Partner, Organización←Cliente.)
+(Ver §4 de docs/Arquitectura.md para el mapeo completo SuperAdmin←Admin, Admin←Partner, Organización←Cliente.)
 
 ---
 
@@ -12765,7 +12765,7 @@ CRITERIOS DE ACEPTACIÓN:
 
 # COMPLECIÓN DE FASE 1 — Bloques nuevos (planificados 2026-07-11)
 
-> Bloques añadidos a partir de la valoración de `VALORACION_PROYECTO.md` (aprobada por el usuario).
+> Bloques añadidos a partir de la valoración de `docs/VALORACION_PROYECTO.md` (aprobada por el usuario).
 > Todos los prompts son **autocontenidos** y siguen el ciclo TDD RED → GREEN.
 >
 > **Orden de ejecución recomendado** (se inserta sobre el cursor actual, 11.x):
@@ -12785,7 +12785,7 @@ CRITERIOS DE ACEPTACIÓN:
 
 ## Bloque ROL — Renombrado de nomenclatura institucional (Subfase 1.B, PENDIENTE)
 
-> **Contexto**: `Arquitectura.md` §5 y `PLAN_DESARROLLO.md` dan por aplicado el renombrado de roles, pero el código sigue con la nomenclatura antigua. Este bloque lo aplica. Es más barato ahora que tras la Fase 3 (Expedientes introduce `responsable_rol` por todo el módulo).
+> **Contexto**: `docs/Arquitectura.md` §5 y `PLAN_DESARROLLO.md` dan por aplicado el renombrado de roles, pero el código sigue con la nomenclatura antigua. Este bloque lo aplica. Es más barato ahora que tras la Fase 3 (Expedientes introduce `responsable_rol` por todo el módulo).
 
 **Mapa de renombrado (fuente de verdad para ambos prompts):**
 
@@ -12894,7 +12894,7 @@ CRITERIOS DE ACEPTACIÓN:
 
 ## Bloque SEC — Endurecimiento de seguridad (Subfase 1.B, PENDIENTE, BLOQUEANTE DE DESPLIEGUE)
 
-> **Contexto**: hallazgos de la auditoría de seguridad (`VALORACION_PROYECTO.md` §4). Se ejecuta **después de ROL** (usa la nomenclatura nueva: rol `admin`, `organizacion_id`) y **antes de Deploy GCP**. Todo `Deploy: cloud|edge|shared` según el router.
+> **Contexto**: hallazgos de la auditoría de seguridad (`docs/VALORACION_PROYECTO.md` §4). Se ejecuta **después de ROL** (usa la nomenclatura nueva: rol `admin`, `organizacion_id`) y **antes de Deploy GCP**. Todo `Deploy: cloud|edge|shared` según el router.
 
 ---
 
@@ -13674,7 +13674,7 @@ y no existe mecanismo real de inyección (`SpiderFactory`/`SiteCrawler` sin llam
 
 ## Bloque CAL — Deuda de calidad previa al repositorio público (Subfase 1.B, PENDIENTE)
 
-> **Contexto**: hallazgos de las auditorías de calidad backend/frontend (`VALORACION_PROYECTO.md` §3). Cierra violaciones de reglas duras del proyecto (Contract-First, sin código muerto, sin shims) antes de abrir el repo bajo AGPLv3.
+> **Contexto**: hallazgos de las auditorías de calidad backend/frontend (`docs/VALORACION_PROYECTO.md` §3). Cierra violaciones de reglas duras del proyecto (Contract-First, sin código muerto, sin shims) antes de abrir el repo bajo AGPLv3.
 
 ---
 

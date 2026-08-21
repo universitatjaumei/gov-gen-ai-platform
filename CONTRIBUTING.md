@@ -4,7 +4,7 @@ Normas obligatorias para evolucionar y mantener la plataforma. Aplican a todo co
 humano o agente de IA.
 
 > **Fuentes de verdad** (este manual las resume; no las sustituye):
-> - `Arquitectura.md` — **qué** es la plataforma y qué principios la rigen (módulos, roles, privacidad, frontera Cloud/Edge, stack). Decisiones estructurales.
+> - `docs/Arquitectura.md` — **qué** es la plataforma y qué principios la rigen (módulos, roles, privacidad, frontera Cloud/Edge, stack). Decisiones estructurales.
 > - `PLAN_DESARROLLO.md` — **cuándo y en qué orden** se construye (3 Fases Funcionales, calendario).
 > - `Plan_TDD_Fase1.md` / `Plan_TDD_Fase2.md` / `Plan_TDD_Fase3.md` — **cómo** se construye cada pieza (prompts TDD Red/Green).
 > - `CLAUDE.md` — **reglas operativas** para agentes (retirada de legacy, frontera edge/cloud, portabilidad, shell, migraciones). En caso de conflicto, **CLAUDE.md manda**.
@@ -23,7 +23,7 @@ humano o agente de IA.
 
 ## 🤖 1. Reglas para agentes de IA
 
-- **Análisis previo obligatorio**: antes de proponer cambios, lee `Arquitectura.md` (soberanía del dato, jerarquía de servicios, frontera Cloud/Edge) y `CLAUDE.md` (reglas duras). Localiza el cursor en `PROJECT_STATE.md`.
+- **Análisis previo obligatorio**: antes de proponer cambios, lee `docs/Arquitectura.md` (soberanía del dato, jerarquía de servicios, frontera Cloud/Edge) y `CLAUDE.md` (reglas duras). Localiza el cursor en `PROJECT_STATE.md`.
 - **Inyección de dependencias, no instanciación manual**: en el servidor FastAPI usa `Depends`. **No** instancies servicios a mano ni accedas a sus métodos privados a través de la frontera HTTP.
 - **Autonomía con responsabilidad**: ejecuta cambios alineados con la arquitectura y reporta tras la ejecución. Si detectas código que viola los estándares, propón la refactorización.
 - **Divide y vencerás**: descompón tareas complejas en pasos pequeños y verificables.

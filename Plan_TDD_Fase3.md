@@ -61,7 +61,7 @@ no se desarrollarán hasta comenzar la subfase correspondiente:
 
 # Recomendaciones de la Fase 3 (2026-07-11)
 
-> Sección añadida a partir de `VALORACION_PROYECTO.md`. **Precede y condiciona** a los sprints
+> Sección añadida a partir de `docs/VALORACION_PROYECTO.md`. **Precede y condiciona** a los sprints
 > E1–E5, FASE 17 y 19 de más abajo. No borra prompts: reconcilia los prerrequisitos con el estado
 > real del proyecto y añade recomendaciones técnicas y de riesgo. Léela antes de detallar el TDD
 > de cualquier sprint de Fase 3.
@@ -462,7 +462,7 @@ Edge node, no en el cloud.
 **Problema que resuelve:** Los expedientes contienen datos personales y documentación
 sensible del ciudadano. Si los scripts de procesamiento se ejecutaran en el cloud, los
 datos originales cruzarían la frontera del perímetro del cliente, violando el modelo
-de privacidad selectiva definido en §7.2 de `Arquitectura.md` y los requisitos del
+de privacidad selectiva definido en §7.2 de `docs/Arquitectura.md` y los requisitos del
 modo `DEPLOY_MODE=edge`. El ENS (Esquema Nacional de Seguridad) impone restricciones
 sobre dónde pueden procesarse documentos de categoría media/alta.
 
