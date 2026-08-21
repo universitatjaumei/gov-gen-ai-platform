@@ -1,2 +1,0 @@
-310: │       ├── agent/                     # Modo agente expandido (Prompts 9.11-9.13)
-1171: ### Prompt 9.11 - Modo agente: panel expandido
