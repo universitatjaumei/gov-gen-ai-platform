@@ -137,12 +137,33 @@ export function LLMDraftPreviewPage() {
             'Si lo aportas, la IA verá los nombres de las columnas y su tipo. Los valores se anonimizan antes de enviarse.',
           )}
         </p>
+        {/* La misma zona que la pantalla del informe (INF.8). Aqui se me habia colado un
+            `<input type="file">` desnudo, o sea el navegador pintando su control **en su
+            idioma** —«Tria un fitxer» en una pantalla en castellano—, que es exactamente el
+            defecto que el usuario reporto. El input sigue recibiendo el fichero y se oculta
+            con `sr-only`, no con `display:none`, para no sacarlo del teclado. */}
+        <label
+          htmlFor="fichero-de-muestra"
+          data-testid="zona-muestra"
+          className="flex flex-col items-center justify-center gap-1 w-full px-4 py-5 border-2 border-dashed border-input rounded-md cursor-pointer text-center hover:border-primary hover:bg-accent/40 transition-colors"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault()
+            elegirFichero(e.dataTransfer.files?.[0])
+          }}
+        >
+          <span className="text-sm font-medium">{tR('inputs.drop_here')}</span>
+          <span className="text-xs text-muted-foreground">
+            {tR('inputs.accepted_formats', { formatos: '.csv, .xlsx, .xls' })}
+          </span>
+        </label>
         <input
           id="fichero-de-muestra"
           data-testid="input-muestra"
           type="file"
           accept=".csv,.xlsx,.xls"
           onChange={(e) => elegirFichero(e.target.files?.[0])}
+          className="sr-only"
         />
         {leyendoFichero && <p className="text-xs text-muted-foreground">{t('loading')}</p>}
         {errorDeMuestra && (

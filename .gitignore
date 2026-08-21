@@ -116,3 +116,9 @@ frontend/src/shared/api/generated/
 # del entorno local dentro: no se comparten.
 frontend/widget-normativa.html
 frontend/widget-gerencia.html
+
+# Trabajo local de la maquina: ficheros de entrada de pruebas, salidas, volcados y notas de
+# sesion. Nada de esto es codigo fuente, y varios llevan datos de la institucion. Se conserva
+# `_local/README.md` para que la carpeta explique para que es.
+_local/*
+!_local/README.md

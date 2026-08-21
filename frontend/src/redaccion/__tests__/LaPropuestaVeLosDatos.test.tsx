@@ -67,6 +67,24 @@ describe('INF.4 — la propuesta ve los datos', () => {
     expect(screen.getByTestId('input-muestra')).toBeDefined()
   })
 
+  /**
+   * Encontrado al capturar la pantalla para la guia: el fichero de muestra que INF.4 anadio
+   * aqui era un `<input type="file">` desnudo, o sea el navegador pintando su propio control
+   * **en su idioma** —«Tria un fitxer» en una pantalla en castellano—. Es el mismo defecto que
+   * INF.8 arreglo en la pantalla del informe, reintroducido en otra pantalla.
+   */
+  it('should_not_leave_the_browser_file_control_bare', () => {
+    pintar()
+
+    // Hay zona propia, con su texto.
+    const zona = screen.getByTestId('zona-muestra')
+    expect(zona.textContent).toMatch(/arrastra|pulsa/i)
+    // Y el input sigue existiendo y alcanzable: oculto a la vista, no para el teclado.
+    const entrada = screen.getByTestId('input-muestra')
+    expect(entrada.className).toContain('sr-only')
+    expect(zona.getAttribute('for')).toBe(entrada.getAttribute('id'))
+  })
+
   it('should_send_the_file_to_the_server_to_be_summarised_and_anonymised', async () => {
     pintar()
 
