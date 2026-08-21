@@ -1,0 +1,57 @@
+# Comprueba que cada commit de un pull request lleva `Signed-off-by`.
+#
+# Un DCO que nadie comprueba se incumple sin que nadie lo note, y la gracia del DCO
+# es poder acreditar la procedencia del código dentro de unos años. Ver `CONTRIBUTING.md`.
+#
+# Corre SOLO en pull_request: no revisa el historial de `main`, que es anterior a esta
+# política. Y compara contra la base del PR, así que valida los commits que aporta ese
+# PR y ninguno más.
+name: DCO
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  signed-off-by:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Necesita el historial para poder recorrer los commits del PR.
+          fetch-depth: 0
+
+      - name: Cada commit lleva Signed-off-by
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          shopt -s nocasematch
+          fallan=0
+          for sha in $(git rev-list --no-merges "$BASE".."$HEAD"); do
+            mensaje="$(git show -s --format='%B' "$sha")"
+            autor="$(git show -s --format='%an <%ae>' "$sha")"
+            rotulo="$(git show -s --format='%h %s' "$sha")"
+
+            # Coincidencia nativa de bash, sin tuberías: `grep -q` cierra la tubería antes de
+            # tiempo y en algunos entornos aborta, lo que daba falsos rechazos.
+            if [[ ! "$mensaje" =~ (^|$'\n')[[:space:]]*Signed-off-by:[[:space:]]+.+[[:space:]]*\<.+@.+\> ]]; then
+              echo "::error::$rotulo — falta Signed-off-by"
+              fallan=$((fallan + 1))
+            elif [[ "$mensaje" != *"Signed-off-by: $autor"* ]]; then
+              echo "::error::$rotulo — el Signed-off-by no coincide con el autor ($autor)"
+              fallan=$((fallan + 1))
+            fi
+          done
+
+          if [ "$fallan" -gt 0 ]; then
+            echo
+            echo "$fallan commit(s) sin firmar. Se arregla con:"
+            echo "    git rebase --signoff $BASE"
+            echo "    git push --force-with-lease"
+            echo
+            echo "Que certificas al firmar: fichero DCO en la raiz del repositorio."
+            exit 1
+          fi
+          echo "Todos los commits del pull request van firmados."

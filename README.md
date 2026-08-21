@@ -149,6 +149,10 @@ y que el principal **pueda** incorporarla legalmente; el *pull request* es lo qu
 a buscarla. La licencia asegura la posibilidad, la convención asegura la comodidad — y conviene no
 confiar en la segunda como si fuera la primera.
 
+Las contribuciones al principal exigen **DCO** (*Developer Certificate of Origin* 1.1): una línea
+`Signed-off-by` en cada commit, que `git commit -s` añade sola. Certifica que tienes derecho a
+aportar el código; **no cede derechos**, conservas tu copyright. Texto íntegro en `DCO`.
+
 El detalle operativo —qué se acepta como contribución y qué no, cómo se prepara— está en
 `CONTRIBUTING.md`.
 

@@ -50,6 +50,40 @@ Antes de abrir un *pull request* hacia el principal, pregúntate si otra adminis
 cambio. Si la respuesta es «le daría igual», es material de fork; si es «lo necesita pero al revés»,
 lo que sube es la **opción de configuración**, no la decisión.
 
+### Certificado de origen (DCO): cada commit va firmado
+
+Toda contribución al principal exige un **DCO** — *Developer Certificate of Origin* 1.1, el mismo
+que usa el kernel de Linux. En la práctica es una línea al final del mensaje de cada commit:
+
+```
+Signed-off-by: Nombre Apellidos <correo@ejemplo.org>
+```
+
+Se añade sola con `git commit -s`. Si ya has commiteado sin ella:
+
+```bash
+git commit --amend -s                      # el último commit
+git rebase --signoff origin/main           # toda la rama
+```
+
+**Qué certificas al firmar** (texto íntegro en el fichero `DCO`): que el código es tuyo o que tienes
+derecho a aportarlo bajo esta licencia, y que entiendes que la contribución y tu firma quedan en un
+registro público indefinido.
+
+**Qué NO es.** No cedes derechos: **conservas tu copyright** sobre lo que aportas. El DCO no es un
+CLA; no transfiere nada ni permite relicenciar tu código. Se pide precisamente porque es la opción
+ligera: una línea, sin firmar papeles ni ceder titularidad.
+
+**Por qué se pide.** Sin él, dentro de dos años nadie puede acreditar que quien aportó un módulo
+tenía derecho a aportarlo — y un proyecto que van a usar administraciones públicas necesita poder
+demostrar la procedencia de su código. Usa **tu nombre real**: el DCO habla de *real name*, y un
+seudónimo no certifica nada.
+
+**Se comprueba en CI.** El *workflow* `.github/workflows/dco.yml` revisa cada commit del *pull
+request* —no el historial de `main`, que es anterior a esta política— y falla si falta la firma o si
+no coincide con el autor del commit. Una política que nadie comprueba se incumple sin que nadie lo
+note.
+
 ### Cómo se prepara la contribución
 
 - Se sincroniza con el principal antes de empezar, y se trabaja sobre rama, no sobre `main`.
@@ -58,6 +92,7 @@ lo que sube es la **opción de configuración**, no la decisión.
 - El *pull request* explica **qué problema resuelve para cualquier organización**, no sólo para la
   que lo envía.
 - Nada de secretos, datos reales ni corpus institucional en el diff. Ver §6.
+- **Todos los commits llevan `Signed-off-by`** (`git commit -s`). Ver el apartado del DCO más arriba.
 
 ---
 
