@@ -1,6 +1,7 @@
 [project]
 name = "automatia"
 version = "0.1.0"
+license = "AGPL-3.0-or-later"
 description = "Migración de AutomatIA a NiceGUI"
 readme = "README.md"
 requires-python = ">=3.11"

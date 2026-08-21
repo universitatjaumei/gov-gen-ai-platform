@@ -1,6 +1,7 @@
 [project]
 name = "automatia-client"
 version = "0.1.0"
+license = "AGPL-3.0-or-later"
 description = "AutomatIA Client Application - On-Premise Document Processing"
 readme = "README.md"
 requires-python = ">=3.11"

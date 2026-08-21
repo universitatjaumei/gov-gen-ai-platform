@@ -1,6 +1,7 @@
 [project]
 name = "govgenai-mcp"
 version = "0.1.0"
+license = "AGPL-3.0-or-later"
 description = "Servidor MCP stdio para autoría de plantillas y configuración de chatbots de Gov Gen AI Platform."
 requires-python = ">=3.11"
 dependencies = [

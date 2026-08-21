@@ -104,5 +104,10 @@ vive en `_legacy_nicegui/` es referencia en cuarentena, no código en uso.
 
 ## Licencia
 
-**Pendiente de definir.** Hasta que se publique una licencia, el código no lleva permiso de
-reutilización.
+**GNU Affero General Public License v3.0 o posterior** (AGPL-3.0-or-later). El texto completo
+está en `LICENSE`.
+
+Se eligió la AGPL y no la GPL por su §13: quien despliegue una versión modificada de esta
+plataforma **como servicio en red** tiene que ofrecer el código fuente de esa versión a quien la
+use. Para software de administración pública ofrecido por web, esa es la diferencia que importa:
+sin ella, una modificación puede servirse a la ciudadanía sin devolver nada.
