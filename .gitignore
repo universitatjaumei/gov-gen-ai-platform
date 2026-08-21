@@ -86,8 +86,14 @@ client_app/app/modules/extraccion/servicios/
 copia/
 
 # Claude Code local settings (rutas absolutas de máquina)
-.claude/settings.local.json
-.claude/scheduled_tasks.lock
+**/.claude/settings.local.json
+**/.claude/scheduled_tasks.lock
+
+# Volcados de la extracción y sandboxes de depuración. Llevaban el cuerpo real de
+# documentos de la institución: la anonimización sólo sustituía las entidades
+# detectadas, no el texto alrededor.
+/logs/
+/tmp/
 
 # Tooling local — no subir al repo
 .agents/
