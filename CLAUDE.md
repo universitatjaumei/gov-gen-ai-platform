@@ -198,7 +198,9 @@ Solo lo que el agente **no puede** verificar con el navegador:
 
 - **Uno por bloque, no por prompt.** Se genera al cerrar el bloque.
 - **Nombre**: `pruebas_manuales_bloque<NOMBRE>.bat` (p. ej. `pruebas_manuales_bloqueSEC.bat`). Para prompts sueltos fuera de un bloque: `pruebas_manuales_promptXX.bat`.
-- **Ubicación**: en el directorio desde el que deben ejecutarse los comandos (normalmente la raíz del proyecto o el subdirectorio correspondiente).
+- **Ubicación**: `pruebas_manuales/`. Los comandos siguen ejecutándose desde la raíz del
+  proyecto: el `.bat` lleva `cd /d "%~dp0.."` justo tras el `chcp`, así que las rutas relativas
+  (`frontend\.env.local`, `cd server`) funcionan aunque el guion viva en un subdirectorio.
 - **Contenido mínimo obligatorio**:
   - Línea `@echo off` al inicio y `chcp 65001 > nul` para codificación UTF-8.
   - Bloques `echo` que muestren por pantalla cada sección: requisitos previos, comandos a ejecutar, qué comprobar, cómo terminar.

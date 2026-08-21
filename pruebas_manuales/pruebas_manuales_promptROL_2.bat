@@ -1,5 +1,7 @@
 @echo off
 chcp 65001 > nul
+rem Se ejecuta desde la raiz del repositorio, este el .bat donde este.
+cd /d "%~dp0.."
 echo ============================================
 echo   PRUEBAS MANUALES - Prompt ROL.2 (Frontend)
 echo   Renombrado: SuperAdmin / Admin / Organizacion

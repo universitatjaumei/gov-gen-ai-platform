@@ -1,5 +1,7 @@
 @echo off
 chcp 1252 > nul
+rem Se ejecuta desde la raiz del repositorio, este el .bat donde este.
+cd /d "%~dp0.."
 title Pruebas manuales - Plataforma completa (MAN.2)
 setlocal enabledelayedexpansion
 
