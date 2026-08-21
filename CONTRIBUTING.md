@@ -19,11 +19,13 @@ Antes de *cómo* se contribuye, **dónde**.
 | Repositorio | Papel | Qué entra |
 |---|---|---|
 | GitHub — `ModestoFabra/gov-gen-ai-platform` | **Principal** (*upstream*) | Lo que sirve a cualquier organización que despliegue la plataforma. |
-| Bitbucket de la UJI *(pendiente de crear)* | **Fork institucional** | Despliegue de la UJI, configuración propia, y desarrollos para necesidades específicas de la universidad. |
+| El fork de cada organización que despliega | **Despliegue y desarrollo propio** | Su configuración, sus integraciones internas, y los desarrollos que responden a necesidades suyas. |
 
-El proyecto nace de la actividad investigadora del grupo **INNOVAP** y está destinado a varias
-administraciones —con atención particular a las entidades locales—, no a una sola institución. De
-ahí sale la única regla dura de esta sección:
+El proyecto nace de la actividad investigadora del grupo **INNOVAP** (Derecho Público e Innovación)
+y está destinado a varias administraciones —con atención particular a las entidades locales—, no a
+una sola institución. **La regla vale igual para todas, incluida la universidad donde nació**: no
+hay fork privilegiado, y por eso aquí no se nombra ninguno. De ahí sale la única regla dura de esta
+sección:
 
 **Lo específico de una institución no entra en el principal.** Se queda en su fork y sube por
 *pull request* sólo si se puede generalizar. Si las necesidades de una institución entraran directas

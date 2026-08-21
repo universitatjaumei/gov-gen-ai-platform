@@ -1,10 +1,10 @@
 # Gov Gen AI Platform
 
 Plataforma de IA generativa para administración pública. Nace de la actividad investigadora del
-grupo **INNOVAP** de la Universitat Jaume I, y su finalidad no es cubrir las necesidades de una
-universidad concreta: es ofrecer una solución de **software libre multiorganización**, utilizable
-por otras administraciones públicas y en particular por **entidades locales**, que rara vez tienen
-capacidad para construir algo así por su cuenta.
+grupo **INNOVAP** (Derecho Público e Innovación) de la Universitat Jaume I, y su finalidad no es
+cubrir las necesidades de una universidad concreta: es ofrecer una solución de **software libre
+multiorganización**, utilizable por otras administraciones públicas y en particular por **entidades
+locales**, que rara vez tienen capacidad para construir algo así por su cuenta.
 
 Ese propósito no es una declaración de intenciones del README: es lo que explica media
 arquitectura. La jerarquía Plataforma → Organización → Chatbot, la separación entre configuración y
@@ -114,19 +114,19 @@ _legacy_nicegui/        cuarentena de la migración; sólo lectura
 En desarrollo activo. La migración desde la aplicación NiceGUI original sigue en curso: lo que
 vive en `_legacy_nicegui/` es referencia en cuarentena, no código en uso.
 
-## Gobernanza: proyecto de investigación con contribuciones institucionales
+## Gobernanza: un principal y tantos forks como organizaciones
 
 Este repositorio es el **principal** (*upstream*): aquí se decide la dirección del proyecto y aquí
 se mantiene su carácter multiorganización.
 
-| Repositorio | Papel |
-|---|---|
-| GitHub — `ModestoFabra/gov-gen-ai-platform` | **Principal.** Referencia del proyecto de software libre. |
-| Bitbucket de la UJI *(pendiente de crear)* | **Fork institucional.** Despliegue en la universidad y desarrollos para necesidades propias de la UJI. |
+Cada organización que despliegue la plataforma —una universidad, una diputación, un ayuntamiento—
+trabaja sobre **su propio fork**: ahí van su despliegue, su configuración y los desarrollos que
+responden a necesidades suyas. Lo que se pueda generalizar sube al principal **por *pull
+request***.
 
-El desarrollo institucional —el que se aborde desde el **Teclab**, el laboratorio de tecnología de
-la Delegación del rector para la estrategia digital y la inteligencia artificial— se hace en el
-fork y llega al principal **como contribución, por *pull request***. No en sentido contrario.
+La regla vale igual para todas, **incluida la Universitat Jaume I**, donde nació el proyecto: su
+desarrollo institucional entra como aportación, no como dirección. Por eso este documento no nombra
+ningún fork en particular; no hay uno privilegiado.
 
 La razón es la que da sentido al proyecto: está destinado a varias administraciones, no a una. Si
 las necesidades de una institución entraran directamente en el principal, en poco tiempo el
@@ -134,12 +134,13 @@ principal *sería* el sistema de esa institución, y el resto heredaría decisio
 contexto que no es el suyo. Con fork y *pull request*, lo específico se queda donde es específico y
 sólo sube al principal lo que sirve a todos.
 
-El detalle operativo —qué se acepta como contribución, cómo se prepara— está en `CONTRIBUTING.md`.
+El detalle operativo —qué se acepta como contribución y qué no, cómo se prepara— está en
+`CONTRIBUTING.md`.
 
 ## Licencia, titularidad y procedencia
 
 Copyright © 2026 **Universitat Jaume I de Castelló**  
-Desarrollado en el grupo de investigación **INNOVAP** (Universitat Jaume I)  
+Desarrollado en el grupo de investigación **INNOVAP** — Derecho Público e Innovación (Universitat Jaume I)  
 Autor: **Modesto Fabra** — `fabra@uji.es`
 
 La titularidad corresponde a la UJI, que es la persona jurídica. **INNOVAP** consta como

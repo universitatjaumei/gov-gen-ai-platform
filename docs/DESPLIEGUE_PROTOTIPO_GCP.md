@@ -3,6 +3,12 @@
 > **Escrito el 2026-08-16.** Alcance: un **prototipo** para que un grupo de personas lo
 > pruebe, **sin dominio propio**. No sustituye al bloque Deploy de `planificacion/Plan_TDD_Fase1.md`
 > (D.0–D.6), que es el despliegue en condiciones; esto es lo mínimo para que se pueda usar.
+>
+> **De qué repositorio se despliega (2026-08-21).** De este, el principal. La gobernanza del
+> proyecto prevé que cada organización despliegue desde su propio fork (ver `CONTRIBUTING.md`),
+> pero el fork de la universidad no existe todavía y crearlo para una demostración sería poner el
+> carro delante: primero se valora si la cosa tiene interés institucional, y entonces se hace el
+> fork y se planifica el despliegue desde ahí. Esta nota deja de aplicarse en ese momento.
 
 ---
 
