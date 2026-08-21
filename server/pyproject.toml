@@ -60,6 +60,9 @@ dependencies = [
     "langchain-google-vertexai>=2.0.0",
 ]
 
+[project.urls]
+Repository = "https://github.com/ModestoFabra/gov-gen-ai-platform"
+
 [dependency-groups]
 dev = [
     "pytest",

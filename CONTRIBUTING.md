@@ -12,6 +12,47 @@ humano o agente de IA.
 
 ---
 
+## 🌐 Dónde trabajas: principal y fork
+
+Antes de *cómo* se contribuye, **dónde**.
+
+| Repositorio | Papel | Qué entra |
+|---|---|---|
+| GitHub — `ModestoFabra/gov-gen-ai-platform` | **Principal** (*upstream*) | Lo que sirve a cualquier organización que despliegue la plataforma. |
+| Bitbucket de la UJI *(pendiente de crear)* | **Fork institucional** | Despliegue de la UJI, configuración propia, y desarrollos para necesidades específicas de la universidad. |
+
+El proyecto nace de la actividad investigadora del grupo **INNOVAP** y está destinado a varias
+administraciones —con atención particular a las entidades locales—, no a una sola institución. De
+ahí sale la única regla dura de esta sección:
+
+**Lo específico de una institución no entra en el principal.** Se queda en su fork y sube por
+*pull request* sólo si se puede generalizar. Si las necesidades de una institución entraran directas
+en el principal, el principal acabaría siendo el sistema de esa institución.
+
+### Qué se puede generalizar (y sube), y qué no
+
+| Sube al principal | Se queda en el fork |
+|---|---|
+| Un módulo nuevo, o una capacidad que cualquier organización pueda activar. | Configuración de la institución: organizaciones, chatbots, temas visuales, prompts propios. |
+| Un arreglo de un defecto real, con su test. | Integraciones con sistemas internos que sólo esa institución tiene. |
+| Una opción de configuración que hace parametrizable algo que estaba fijo. | Corpus, datos y credenciales. Nunca salen del fork ni del despliegue. |
+| Mejoras de accesibilidad, i18n, rendimiento, seguridad. | Cambios que presuponen la estructura organizativa de una institución concreta. |
+
+Antes de abrir un *pull request* hacia el principal, pregúntate si otra administración querría ese
+cambio. Si la respuesta es «le daría igual», es material de fork; si es «lo necesita pero al revés»,
+lo que sube es la **opción de configuración**, no la decisión.
+
+### Cómo se prepara la contribución
+
+- Se sincroniza con el principal antes de empezar, y se trabaja sobre rama, no sobre `main`.
+- Se respeta todo lo de este manual: **TDD** (no hay PR sin tests), Conventional Commits, retirada
+  del legacy, frontera edge/cloud y estándares técnicos.
+- El *pull request* explica **qué problema resuelve para cualquier organización**, no sólo para la
+  que lo envía.
+- Nada de secretos, datos reales ni corpus institucional en el diff. Ver §6.
+
+---
+
 ## 🎯 0. Pre-flight (obligatorio)
 
 - **Entorno Python con `uv`.** Toda ejecución de backend, tests o scripts se hace vía `uv run …`. En Windows, **nunca** invoques `python` directamente (te redirige a la Microsoft Store); usa el ejecutor `uv`. Si añades dependencias, ejecuta `uv sync` antes de continuar.

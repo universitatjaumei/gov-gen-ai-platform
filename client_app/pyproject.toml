@@ -29,6 +29,9 @@ dependencies = [
     "imapclient>=3.0.0",
 ]
 
+[project.urls]
+Repository = "https://github.com/ModestoFabra/gov-gen-ai-platform"
+
 [tool.uv]
 dev-dependencies = [
     "pytest",

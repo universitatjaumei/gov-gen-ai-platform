@@ -3,6 +3,7 @@
   "private": true,
   "license": "AGPL-3.0-or-later",
   "author": "Modesto Fabra <fabra@uji.es>",
+  "repository": { "type": "git", "url": "https://github.com/ModestoFabra/gov-gen-ai-platform" },
   "version": "0.0.0",
   "type": "module",
   "scripts": {

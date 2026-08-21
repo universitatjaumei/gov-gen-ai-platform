@@ -65,6 +65,9 @@ dependencies = [
     "s3fs>=2026.2.0",
 ]
 
+[project.urls]
+Repository = "https://github.com/ModestoFabra/gov-gen-ai-platform"
+
 [dependency-groups]
 dev = [
     "axe-playwright-python>=0.1.7",

@@ -1,6 +1,17 @@
 # Gov Gen AI Platform
 
-Plataforma de IA generativa para administración pública, construida en la Universitat Jaume I.
+Plataforma de IA generativa para administración pública. Nace de la actividad investigadora del
+grupo **INNOVAP** de la Universitat Jaume I, y su finalidad no es cubrir las necesidades de una
+universidad concreta: es ofrecer una solución de **software libre multiorganización**, utilizable
+por otras administraciones públicas y en particular por **entidades locales**, que rara vez tienen
+capacidad para construir algo así por su cuenta.
+
+Ese propósito no es una declaración de intenciones del README: es lo que explica media
+arquitectura. La jerarquía Plataforma → Organización → Chatbot, la separación entre configuración y
+dato operacional, y la frontera edge/cloud existen porque el sistema tiene que servir a
+instituciones distintas sin que ninguna vea los datos de otra. Un sistema hecho para una sola
+institución no necesitaría nada de eso.
+
 Cuatro módulos sobre una misma base:
 
 | Módulo | Qué hace |
@@ -103,13 +114,43 @@ _legacy_nicegui/        cuarentena de la migración; sólo lectura
 En desarrollo activo. La migración desde la aplicación NiceGUI original sigue en curso: lo que
 vive en `_legacy_nicegui/` es referencia en cuarentena, no código en uso.
 
-## Licencia y titularidad
+## Gobernanza: proyecto de investigación con contribuciones institucionales
+
+Este repositorio es el **principal** (*upstream*): aquí se decide la dirección del proyecto y aquí
+se mantiene su carácter multiorganización.
+
+| Repositorio | Papel |
+|---|---|
+| GitHub — `ModestoFabra/gov-gen-ai-platform` | **Principal.** Referencia del proyecto de software libre. |
+| Bitbucket de la UJI *(pendiente de crear)* | **Fork institucional.** Despliegue en la universidad y desarrollos para necesidades propias de la UJI. |
+
+El desarrollo institucional —el que se aborde desde el **Teclab**, el laboratorio de tecnología de
+la Delegación del rector para la estrategia digital y la inteligencia artificial— se hace en el
+fork y llega al principal **como contribución, por *pull request***. No en sentido contrario.
+
+La razón es la que da sentido al proyecto: está destinado a varias administraciones, no a una. Si
+las necesidades de una institución entraran directamente en el principal, en poco tiempo el
+principal *sería* el sistema de esa institución, y el resto heredaría decisiones tomadas para un
+contexto que no es el suyo. Con fork y *pull request*, lo específico se queda donde es específico y
+sólo sube al principal lo que sirve a todos.
+
+El detalle operativo —qué se acepta como contribución, cómo se prepara— está en `CONTRIBUTING.md`.
+
+## Licencia, titularidad y procedencia
 
 Copyright © 2026 **Universitat Jaume I de Castelló**  
+Desarrollado en el grupo de investigación **INNOVAP** (Universitat Jaume I)  
 Autor: **Modesto Fabra** — `fabra@uji.es`
 
+La titularidad corresponde a la UJI, que es la persona jurídica. **INNOVAP** consta como
+procedencia porque no es un dato accesorio: la aplicación nace de actividad investigadora, y de ahí
+viene su vocación multiorganización. El desarrollo que la universidad realice sobre ella no cambia
+ese origen; entra como aportación al proyecto de software libre.
+
 Este programa se distribuye bajo la **GNU Affero General Public License v3.0 o posterior**
-(`AGPL-3.0-or-later`). El texto completo está en `LICENSE`.
+(`AGPL-3.0-or-later`). El texto completo está en `LICENSE`, íntegro y sin modificar: la propia
+licencia permite copiarla literalmente pero no alterarla, así que la procedencia y el propósito se
+declaran aquí y no dentro de ella.
 
 > This program is free software: you can redistribute it and/or modify it under the terms of the
 > GNU Affero General Public License as published by the Free Software Foundation, either version 3
@@ -127,7 +168,8 @@ Este programa se distribuye bajo la **GNU Affero General Public License v3.0 o p
 Por el §13. Quien despliegue una versión modificada de esta plataforma **como servicio en red**
 tiene que ofrecer el código fuente de esa versión a quien la use. Para software de administración
 pública servido por web, esa es la diferencia que importa: sin ella, una modificación puede
-servirse a la ciudadanía sin devolver nada.
+servirse a la ciudadanía sin devolver nada. Y siendo el destinatario otras administraciones, es
+también lo que impide que una mejora pagada con fondos públicos quede cerrada.
 
 Ese mismo §13 impone una obligación **a este despliegue también**: una aplicación web bajo AGPL
 debe dar a sus usuarios una vía para obtener el fuente — en la práctica, un enlace visible al
