@@ -19,7 +19,7 @@ jobs:
   signed-off-by:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Necesita historial para poder recorrer el tramo a revisar.
           fetch-depth: 0
