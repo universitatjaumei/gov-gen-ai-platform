@@ -107,11 +107,6 @@ vive en `_legacy_nicegui/` es referencia en cuarentena, no código en uso.
 Copyright © 2026 **Universitat Jaume I de Castelló**  
 Autor: **Modesto Fabra** — `fabra@uji.es`
 
-La titularidad es institucional. La autoría se hace constar de forma expresa, y no sólo por
-cortesía: en los proyectos de investigación de la universidad, el personal autor de propiedad
-intelectual tiene imputado un tercio de los ingresos que la obra genere. Con esta licencia es
-improbable que los haya, pero el reconocimiento de la autoría no depende de que los haya.
-
 Este programa se distribuye bajo la **GNU Affero General Public License v3.0 o posterior**
 (`AGPL-3.0-or-later`). El texto completo está en `LICENSE`.
 
