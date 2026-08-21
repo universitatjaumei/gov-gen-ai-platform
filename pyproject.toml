@@ -1,8 +1,9 @@
 [project]
 name = "automatia"
 version = "0.1.0"
+authors = [{ name = "Modesto Fabra", email = "fabra@uji.es" }]
 license = "AGPL-3.0-or-later"
-description = "Migración de AutomatIA a NiceGUI"
+description = "Gov Gen AI Platform — raíz del monorepo: aplicación NiceGUI legada, en retirada. El código activo vive en server/ y frontend/."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

@@ -1,6 +1,7 @@
 [project]
 name = "automatia-server"
 version = "0.1.0"
+authors = [{ name = "Modesto Fabra", email = "fabra@uji.es" }]
 license = "AGPL-3.0-or-later"
 description = "AutomatIA Brain Server - SaaS AI Services"
 readme = "README.md"

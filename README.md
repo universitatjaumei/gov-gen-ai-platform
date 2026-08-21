@@ -102,12 +102,37 @@ _legacy_nicegui/        cuarentena de la migración; sólo lectura
 En desarrollo activo. La migración desde la aplicación NiceGUI original sigue en curso: lo que
 vive en `_legacy_nicegui/` es referencia en cuarentena, no código en uso.
 
-## Licencia
+## Licencia y titularidad
 
-**GNU Affero General Public License v3.0 o posterior** (AGPL-3.0-or-later). El texto completo
-está en `LICENSE`.
+Copyright © 2026 **Universitat Jaume I de Castelló**  
+Autor: **Modesto Fabra** — `fabra@uji.es`
 
-Se eligió la AGPL y no la GPL por su §13: quien despliegue una versión modificada de esta
-plataforma **como servicio en red** tiene que ofrecer el código fuente de esa versión a quien la
-use. Para software de administración pública ofrecido por web, esa es la diferencia que importa:
-sin ella, una modificación puede servirse a la ciudadanía sin devolver nada.
+La titularidad es institucional. La autoría se hace constar de forma expresa, y no sólo por
+cortesía: en los proyectos de investigación de la universidad, el personal autor de propiedad
+intelectual tiene imputado un tercio de los ingresos que la obra genere. Con esta licencia es
+improbable que los haya, pero el reconocimiento de la autoría no depende de que los haya.
+
+Este programa se distribuye bajo la **GNU Affero General Public License v3.0 o posterior**
+(`AGPL-3.0-or-later`). El texto completo está en `LICENSE`.
+
+> This program is free software: you can redistribute it and/or modify it under the terms of the
+> GNU Affero General Public License as published by the Free Software Foundation, either version 3
+> of the License, or (at your option) any later version.
+>
+> This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+> without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+> GNU Affero General Public License for more details.
+>
+> You should have received a copy of the GNU Affero General Public License along with this program.
+> If not, see <https://www.gnu.org/licenses/>.
+
+### Por qué AGPL y no GPL
+
+Por el §13. Quien despliegue una versión modificada de esta plataforma **como servicio en red**
+tiene que ofrecer el código fuente de esa versión a quien la use. Para software de administración
+pública servido por web, esa es la diferencia que importa: sin ella, una modificación puede
+servirse a la ciudadanía sin devolver nada.
+
+Ese mismo §13 impone una obligación **a este despliegue también**: una aplicación web bajo AGPL
+debe dar a sus usuarios una vía para obtener el fuente — en la práctica, un enlace visible al
+repositorio desde la propia interfaz. Está pendiente de añadir.
