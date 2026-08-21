@@ -13,7 +13,7 @@ Destinatarios: quien convierte el corpus existente y quien defina el generador d
 
 Consumidor en el hub: `MarkdownChunker` (`server/app/modules/agents_hub/ingestion/chunker.py`) y
 `ingestion/corpus/` (front-matter y contrato de paquete), prompts **ING.0.3** e **ING.0.4** de
-`Plan_TDD_Fase1.md`.
+`planificacion/Plan_TDD_Fase1.md`.
 
 ---
 

@@ -275,12 +275,12 @@ enseña el determinismo y la revisión humana en el mismo recorrido.
 | `Arquitectura.md` | Arquitectura funcional y técnica: módulos, roles, frontera cloud/edge/local, privacidad, decisiones estructurales |
 | `MARCO_GOBERNANZA_IA.md` | Marco normativo interno: principios de gobernanza, mecanismos que los implementan, evidencia generada y clasificación de riesgo por caso de uso |
 | `docs/EU_GOVERNANCE_CONCEPT_NOTE.md` | Proyección del marco de gobernanza hacia consorcios y financiación europea |
-| `PLAN_DESARROLLO.md` | Plan de desarrollo del conjunto y decisiones durables (licencias, stack, identidad) |
+| `planificacion/PLAN_DESARROLLO.md` | Plan de desarrollo del conjunto y decisiones durables (licencias, stack, identidad) |
 | `VALORACION_PROYECTO.md` | Auditoría global del proyecto: calidad, seguridad y sentido de producto |
 | `docs/SANDBOX_SECURITY.md` | Aislamiento de la ejecución de código |
 | `docs/REDACCION_CONTRACT_FIRST.md` | Contrato del módulo de informes |
 | `docs/A11Y_CHECKLIST.md` | Verificación de accesibilidad |
-| `PROJECT_STATE.md` | Estado vivo del desarrollo, al día |
+| `planificacion/PROJECT_STATE.md` | Estado vivo del desarrollo, al día |
 
 ---
 

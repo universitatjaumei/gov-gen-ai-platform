@@ -13,7 +13,7 @@ bloque con sus pruebas manuales.
 
 ## 1. Qué es un bloque
 
-Un bloque es el grupo de prompts numerados que `PROJECT_STATE.md` presenta como una fila
+Un bloque es el grupo de prompts numerados que `planificacion/PROJECT_STATE.md` presenta como una fila
 de la tabla de planes activos. Ejemplos reales:
 
 | Bloque | Prompts |
@@ -37,9 +37,9 @@ si no dice nada, se ejecuta el bloque completo.
 El usuario escribe algo como *"ejecuta el bloque SEC"* o *"continúa con el bloque en curso"*.
 El agente entonces:
 
-1. Lee `PROJECT_STATE.md`, localiza el cursor y el bloque.
+1. Lee `planificacion/PROJECT_STATE.md`, localiza el cursor y el bloque.
 2. Lee **verbatim** los prompts del bloque en el plan correspondiente
-   (`Plan_TDD_Fase1.md`, `Plan_TDD_Fase2.md`, ...).
+   (`planificacion/Plan_TDD_Fase1.md`, `planificacion/Plan_TDD_Fase2.md`, ...).
 3. Comprueba el **modelo sugerido** de cada prompt del bloque. Si alguno sugiere un modelo
    más capaz que el de la sesión, lo dice **una sola vez, antes de empezar**, y espera
    decisión. No vuelve a interrumpir por este motivo dentro del bloque.
@@ -66,7 +66,7 @@ Para cada prompt del bloque, en este orden:
    - Retirada del legacy según el checklist de `CLAUDE.md` (`_legacy_nicegui/` o borrado)
      y `grep -r` de referencias a cero.
    - Verificación en navegador si el prompt toca UI (§4).
-6. **Actualizar `PROJECT_STATE.md`**: marcar el paso ✅, mover el cursor, añadir fila al
+6. **Actualizar `planificacion/PROJECT_STATE.md`**: marcar el paso ✅, mover el cursor, añadir fila al
    historial reciente.
 7. **Commit** — un commit Conventional por prompt, con el identificador del prompt en el
    asunto (p. ej. `feat(sec): SEC.2 aislamiento multi-tenant por organizacion_id`).
@@ -74,7 +74,7 @@ Para cada prompt del bloque, en este orden:
    bloque largo: si el prompt 5 rompe el 3, hay un punto exacto al que volver.
 8. **Siguiente prompt**, sin informar.
 
-Los fallos **preexistentes** ajenos al prompt (ver `PROJECT_STATE.md` y la memoria de
+Los fallos **preexistentes** ajenos al prompt (ver `planificacion/PROJECT_STATE.md` y la memoria de
 gaps del suite) no bloquean el avance: se anotan y se sigue.
 
 ---
@@ -100,7 +100,7 @@ El agente rompe la autonomía **solo** por estas causas:
 - **Desviaciones entre el plan y el código real.** El agente aplica la interpretación más
   fiel al espíritu del prompt, sin inventar infraestructura que no existe ni añadir
   features no pedidas, lo registra como *"Desviación documentada"* en la fila de historial
-  de `PROJECT_STATE.md`, y sigue. Todas las desviaciones se resumen en el informe de cierre.
+  de `planificacion/PROJECT_STATE.md`, y sigue. Todas las desviaciones se resumen en el informe de cierre.
 - Fallos de test preexistentes ya inventariados.
 - Dudas de estilo, nombres o estructura interna resolubles con las reglas de `CLAUDE.md`.
 

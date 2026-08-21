@@ -172,7 +172,7 @@ Aclaración lugar ejecución scripts: SI en la fase 3, en la tramitación de los
 
 **Instrucciones de Reestructuración Técnica (3 Fases / 3 Archivos):**
 
-"Actúa como Project Manager y Arquitecto de Software. Divide el archivo `PLAN_TDD_DETALLADO.md` en tres nuevos archivos: `Plan_TDD_fase_1.md`, `Plan_TDD_fase_2.md` y `Plan_TDD_fase_3.md`.
+"Actúa como Project Manager y Arquitecto de Software. Divide el archivo `planificacion/PLAN_TDD_DETALLADO.md` en tres nuevos archivos: `Plan_TDD_fase_1.md`, `Plan_TDD_fase_2.md` y `Plan_TDD_fase_3.md`.
 
 **1\. Nomenclatura Institucional:**
 

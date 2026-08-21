@@ -2,7 +2,7 @@
 
 > **Fecha**: 2026-07-24
 > **Estado**: Aceptada
-> **Fuentes**: `MARCO_GOBERNANZA_IA.md` (P1–P11), `PROJECT_STATE.md` (estado Fase 1),
+> **Fuentes**: `MARCO_GOBERNANZA_IA.md` (P1–P11), `planificacion/PROJECT_STATE.md` (estado Fase 1),
 > `docs/COMPARATIVA_RAG_LAMB.md`, arquitectura LAMB sobre Open WebUI
 > (`C:\Users\fabra\Documents\LAMB_MOODLE\lamb`), evaluación de Open WebUI en el workspace
 > `C:\Users\fabra\Documents\openwebui-gerencia`.
@@ -157,7 +157,7 @@ backend recupera y devuelve respuesta + `sources`, y Open WebUI solo presenta.
 infraestructura madura *dentro* del backend (reranker, índice HNSW, parsers de ingesta tipo
 Docling/MarkItDown) en lugar de matemática de retrieval y parsing artesanales. Es "reducir
 mantenimiento vía dependencias", no "mover a Open WebUI". Es exactamente el objetivo del
-**bloque RAG.1–14** (`Plan_TDD_Fase1.md`) y del bloque **ING** de ingesta multi-formato.
+**bloque RAG.1–14** (`planificacion/Plan_TDD_Fase1.md`) y del bloque **ING** de ingesta multi-formato.
 
 > **Lectura.** El instinto de "que OWUI se lleve también la carga del RAG" es comprensible pero
 > apunta al activo que *más* hay que proteger dentro del perímetro. La carga que sí se puede ceder
@@ -283,5 +283,5 @@ WebUI la impida y justifique reconstruir la carcasa. En los tres casos, el backe
 - `MARCO_GOBERNANZA_IA.md` — principios P1–P11 que fundamentan esta decisión.
 - `docs/COMPARATIVA_RAG_LAMB.md` — evidencia del patrón LAMB (backend propio + Open WebUI).
 - `docs/REDACCION_CONTRACT_FIRST.md` — módulo de redacción/informes en la app propia (§5).
-- `PROJECT_STATE.md` — estado de Fase 1 y planificación del deploy.
-- `Plan_TDD_Fase3.md` — gestor de expedientes (capa que mantiene interfaz propia).
+- `planificacion/PROJECT_STATE.md` — estado de Fase 1 y planificación del deploy.
+- `planificacion/Plan_TDD_Fase3.md` — gestor de expedientes (capa que mantiene interfaz propia).

@@ -7,7 +7,7 @@
 > de la validación del corpus ejecutando el pipeline real en seco.
 >
 > Este documento es la fuente de verdad del estado pre-deploy. Los bloques de remediación
-> se planifican como **SEC.8** en `PROJECT_STATE.md`.
+> se planifican como **SEC.8** en `planificacion/PROJECT_STATE.md`.
 
 ## Veredicto
 

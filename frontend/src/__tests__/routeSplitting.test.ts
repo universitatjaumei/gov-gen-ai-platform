@@ -7,7 +7,7 @@
  * la **precondición**: cada página entra por un `import()` dinámico, y Rollup emite un chunk
  * por cada uno.
  *
- * La medida real del reparto está en el historial de `PROJECT_STATE.md`.
+ * La medida real del reparto está en `planificacion/HISTORIAL.md`.
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'

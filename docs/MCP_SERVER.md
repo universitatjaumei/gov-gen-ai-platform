@@ -5,7 +5,7 @@ Servidor **MCP (Model Context Protocol) stdio** que permite a un cliente como
 hablando con la API de la plataforma. Cierra el bucle **configurar → probar →
 ajustar** desde una conversación, sin construir UI a medida.
 
-> Bloque MCP (MCP.1–MCP.4) del `Plan_TDD_Fase1.md`. Diseño = **opción A** de
+> Bloque MCP (MCP.1–MCP.4) del `planificacion/Plan_TDD_Fase1.md`. Diseño = **opción A** de
 > [`docs/mcp.md`](mcp.md): un cliente HTTP local, no una superficie nueva en el server.
 
 ---

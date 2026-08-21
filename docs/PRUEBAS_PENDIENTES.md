@@ -19,7 +19,7 @@
   recibía 403 al leer su propio workspace** — los seis endpoints de
   `workspaces_router.py` comparaban el `user_id` crudo contra el `owner_id` en
   UUID sin pasar por `es_propietario()`. Detalle completo en el historial de
-  `PROJECT_STATE.md` (2026-08-14).
+  `planificacion/PROJECT_STATE.md` (2026-08-14).
 - **Sigue pendiente de Camino 3**: un borrador real con bloques `AI_ASSISTED_TEXT`
   (vía `/redaccion/llm-drafts/approve-as-workspace`), la anonimización con datos
   sintéticos, y abrir el export en Word/Adobe real.
@@ -34,13 +34,13 @@
   cada ejecución — ningún script podía aprobarse jamás por esta vía; (11) el
   botón «Aprobar» del panel real no tenía ningún campo para elegir la plantilla
   destino y mandaba una cadena vacía (422 siempre). Detalle completo en el
-  historial de `PROJECT_STATE.md` (2026-08-14).
+  historial de `planificacion/PROJECT_STATE.md` (2026-08-14).
 - **Camino 4 cerrado, no pendiente**: el paso (d) no se puede recorrer porque el
   canal `client_app` ↔ cloud por WebSocket no existe todavía — no es un bug, es
   el **Prompt 9.16** (Bloque 9D / Subfase 2.A, Fase 2), diseñado pero aparcado a
   propósito (decisión del usuario 2026-08-14: no adelantarlo). No afecta al
   ciclo propuesta→sandbox→aprobación, que es autocontenido en el servidor.
-  Detalle completo en el historial de `PROJECT_STATE.md` (2026-08-14).
+  Detalle completo en `planificacion/HISTORIAL.md` (2026-08-14).
 - **Aviso de entorno**: si `curl`/el navegador dan respuestas inconsistentes contra
   el backend tras reiniciarlo, comprueba `Get-NetTCPConnection -LocalPort 8000` —
   puede haber un "uvicorn zombi" en `0.0.0.0:8000` sirviendo código viejo con un
@@ -139,7 +139,7 @@ Tiene menú, o le pasas el número como parámetro:
 ### 2.3 — `pruebas_manuales_bloqueSEC.bat`
 
 **Por qué**: el bloque SEC sigue marcado «pendientes las pruebas manuales» en
-`PROJECT_STATE.md`.
+`planificacion/PROJECT_STATE.md`.
 
 **Qué comprueba**: contabilidad de tokens y cuotas, login del admin, temas cerrados sin
 sesión, aislamiento entre organizaciones.

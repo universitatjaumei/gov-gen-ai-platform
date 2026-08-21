@@ -276,7 +276,7 @@ Este es el prompt técnico detallado para implementar el **Asistente de Ingesti�
 
 ### Bloque Seis. Actualización de documentación, 
 
-Habrá que actualizar a los archivos de documentación `Arquitectura.md` y `PLAN_TDD_DETALLADO.md` para reflejar los cambios realizados. 
+Habrá que actualizar a los archivos de documentación `Arquitectura.md` y `planificacion/PLAN_TDD_DETALLADO.md` para reflejar los cambios realizados. 
 
 1. La filosofía Hermes  
 2. La sustitución de `Partner` por `Admin` y `Client` por `Organización`.  

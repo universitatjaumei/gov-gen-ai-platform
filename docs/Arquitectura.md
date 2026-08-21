@@ -391,7 +391,7 @@ La procedencia preservada habilita citas trazables y los *snapshots* temporales 
 
 ### 7.5 Estrategia de recuperación y evolución agéntica
 
-Decisiones adoptadas el 2026-07-15 a partir de la comparativa arquitectónica con LAMB (`docs/COMPARATIVA_RAG_LAMB.md`); su implementación se planifica en el Bloque RAG de `Plan_TDD_Fase1.md`:
+Decisiones adoptadas el 2026-07-15 a partir de la comparativa arquitectónica con LAMB (`docs/COMPARATIVA_RAG_LAMB.md`); su implementación se planifica en el Bloque RAG de `planificacion/Plan_TDD_Fase1.md`:
 
 * **Búsqueda híbrida real.** Rama vectorial (pgvector con índice HNSW, distancia coseno) + rama léxica (full-text search de PostgreSQL, `tsvector`/GIN con ranking) fusionadas por Reciprocal Rank Fusion, con **reranking cross-encoder** (BGE-reranker-v2-m3, misma familia que el embedding BGE-M3) activable por chatbot. La rama léxica cubre lo que los embeddings pierden en dominio administrativo: siglas, códigos de procedimiento, nombres de convocatorias y artículos de normativa.
 * **Representación con contexto.** Los chunks se embeben enriquecidos con el título del documento y su jerarquía de cabeceras (*contextual retrieval*); el chunking *parent-child* (small-to-big: hijo pequeño para buscar, sección padre como evidencia) está disponible por configuración. Cada chunk registra el modelo y la dimensión de embedding con que fue generado, y existe una ruta de re-embedding masivo — cambiar de modelo de embedding es una operación soportada, no una migración ad-hoc.

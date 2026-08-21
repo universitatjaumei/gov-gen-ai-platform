@@ -3,7 +3,7 @@
 ## Contexto del proyecto
 
 Gov Gen AI Platform es el resultado de integrar **AI Agents Hub** (chatbots RAG, LangGraph) y **AutomatIA**
-(automatización, scripts, RPA) en un monorepo. El plan de desarrollo completo está en `PLAN_DESARROLLO.md`.
+(automatización, scripts, RPA) en un monorepo. El plan de desarrollo completo está en `planificacion/PLAN_DESARROLLO.md`.
 
 El cliente NiceGUI (`client_app/`) está siendo migrado progresivamente al servidor FastAPI y al frontend React.
 **El código NiceGUI es legacy y debe eliminarse** a medida que cada módulo quede cubierto en el nuevo sistema.
@@ -13,7 +13,7 @@ El cliente NiceGUI (`client_app/`) está siendo migrado progresivamente al servi
 ## Ejecución agéntica por bloques
 
 El desarrollo se ejecuta **de forma autónoma y secuencial, por bloques de prompts**.
-Un bloque es una fila de la tabla de planes activos de `PROJECT_STATE.md`
+Un bloque es una fila de la tabla de planes activos de `planificacion/PROJECT_STATE.md`
 (Fase 11 = 11.1→11.3; Bloque SEC = SEC.1→SEC.7; Bloque RAG = RAG.1→RAG.14...).
 
 **El bloque es la unidad de interacción: una vez arrancado, no informes hasta cerrarlo.**
@@ -23,7 +23,7 @@ No pidas confirmación entre prompts. Detalle completo en `docs/METODOLOGIA_AGEN
 
 RED → GREEN → REFACTOR → verificaciones de cierre (suite verde, migración aplicada,
 contrato regenerado si cambió la API, retirada del legacy con `grep -r` a cero,
-verificación en navegador si toca UI) → actualizar `PROJECT_STATE.md` →
+verificación en navegador si toca UI) → actualizar `planificacion/PROJECT_STATE.md` →
 **un commit Conventional por prompt** con el identificador del prompt en el asunto,
 sin `Co-Authored-By` y **sin push** → siguiente prompt.
 
@@ -47,7 +47,7 @@ desarrollador, imports a módulos que ya no existen.
 
 **Desde Git Bash, no desde PowerShell.** `tests/infra/test_setup_script.py` invoca `bash`, que
 en PowerShell resuelve al lanzador de WSL y da 10 rojos de entorno. Ver la nota del historial
-del 2026-07-31 en `PROJECT_STATE.md`.
+del 2026-07-31 en `planificacion/PROJECT_STATE.md`.
 
 La suite corre en paralelo (`-n auto` en `addopts`) y sin cobertura; para depurar un fallo con
 la salida en orden, `-n0`, y para medir cobertura en local, `--cov=app`. **Si una cifra de
@@ -78,13 +78,13 @@ Solo por estas cuatro causas:
 - **Desviaciones entre el plan y el código real.** Aplica la interpretación más fiel al
   espíritu del prompt, sin inventar infraestructura inexistente ni añadir features no
   pedidas; regístralo como *"Desviación documentada"* en el historial de
-  `PROJECT_STATE.md` y sigue. Se resume en el informe de cierre.
+  `planificacion/PROJECT_STATE.md` y sigue. Se resume en el informe de cierre.
 - Fallos de test preexistentes ya inventariados.
 - Dudas de estilo o estructura resolubles con las reglas de este documento.
 
 ### Al arrancar y al cerrar
 
-- **Al arrancar**: lee el cursor de `PROJECT_STATE.md`, lee los prompts verbatim del plan,
+- **Al arrancar**: lee el cursor de `planificacion/PROJECT_STATE.md`, lee los prompts verbatim del plan,
   comprueba los prerrequisitos, y si algún prompt del bloque sugiere un modelo más capaz
   que el de la sesión, dilo **una sola vez antes de empezar**.
 - **Al cerrar**: un solo informe con prompts cerrados + commits, cifras reales de tests,
@@ -344,7 +344,7 @@ vocabulario deja de revisarse en la práctica.
   etiqueta te obliga a re-embeber, algo se ha colado en el texto embebido.
 
 Contexto completo de la estrategia de recuperación en tres niveles: bloques **ING.0**, **VIS** y
-**SYNC** de `Plan_TDD_Fase1.md`.
+**SYNC** de `planificacion/Plan_TDD_Fase1.md`.
 
 ---
 
@@ -363,7 +363,7 @@ El mismo codebase sirve a ambos modos. Para que eso siga siendo cierto, respeta
 **dos fronteras** a la vez: la de datos (modelos ORM) y la de aplicación
 (routers y módulos). La línea base de este split se establece en los prompts
 **9.6.5** (capa ORM, `ConfigProvider`, sync API) y **9.6.6** (`DEPLOY_MODE`,
-clasificación de routers/módulos) del `PLAN_TDD_DETALLADO.md`.
+clasificación de routers/módulos) del `planificacion/PLAN_TDD_DETALLADO.md`.
 
 ### 1. Frontera de datos (modelos ORM)
 
@@ -528,20 +528,20 @@ antes de que el problema aparezca en métricas reales.
 
 ## Modelo por prompt
 
-Cada prompt activo en `Plan_TDD_Fase1.md` (y subsiguientes) lleva una etiqueta `**Modelo sugerido**: Opus | Sonnet — <razón corta>` justo bajo el título. La etiqueta es **una recomendación informada**, no un requisito: el usuario decide al abrir sesión qué modelo usar con `/model opus` o `/model sonnet`.
+Cada prompt activo en `planificacion/Plan_TDD_Fase1.md` (y subsiguientes) lleva una etiqueta `**Modelo sugerido**: Opus | Sonnet — <razón corta>` justo bajo el título. La etiqueta es **una recomendación informada**, no un requisito: el usuario decide al abrir sesión qué modelo usar con `/model opus` o `/model sonnet`.
 
 Heurística usada para etiquetar:
 
 - **Opus** se sugiere cuando el prompt concentra **decisiones de diseño embebidas** (qué preservar de un legacy masivo, cómo discriminar uniones, cómo afinar prompts del sistema LLM), **migra >800 LOC ajeno**, o requiere **debugging cruzado multi-módulo** donde Sonnet suele pegarse.
 - **Sonnet** se sugiere cuando el alcance está **explícitamente cerrado en el prompt** (endpoints concretos, tests enumerados, fixtures dadas) y las **decisiones abiertas son pocas**.
 
-Una segunda referencia rápida vive en `PROJECT_STATE.md`:
+Una segunda referencia rápida vive en `planificacion/PROJECT_STATE.md`:
 - Columna **Modelo sugerido siguiente** en la tabla de bloques activos.
 - Línea **"Modelo sugerido para el próximo prompt: ..."** junto al "Cursor actual".
 
 Cómo actúa un agente al abrir una sesión:
 
-1. Lee `PROJECT_STATE.md` y localiza el cursor + el modelo sugerido para el próximo prompt.
+1. Lee `planificacion/PROJECT_STATE.md` y localiza el cursor + el modelo sugerido para el próximo prompt.
 2. Si el modelo de la sesión actual coincide con el sugerido → procede.
 3. Si NO coincide → menciona la discrepancia en una sola línea al inicio de la respuesta ("El cursor sugiere Opus para este prompt; estoy en Sonnet. ¿Continúo o prefieres cambiar con `/model opus`?") y espera decisión del usuario antes de ejecutar.
 4. No intentes auto-cambiar de modelo. La elección es del usuario por motivos de coste/disponibilidad.
@@ -557,23 +557,23 @@ Cuándo delegar a un sub-agente con modelo distinto:
 
 ## Seguimiento del estado del proyecto
 
-El archivo `PROJECT_STATE.md` es la fuente de verdad del progreso de los planes de desarrollo.
+El archivo `planificacion/PROJECT_STATE.md` es la fuente de verdad del progreso de los planes de desarrollo.
 
-### Regla obligatoria: actualizar PROJECT_STATE.md al terminar cada prompt
+### Regla obligatoria: actualizar planificacion/PROJECT_STATE.md al terminar cada prompt
 
 **Al finalizar cualquier prompt que implemente o avance un paso de un plan de desarrollo**
-(`Plan_TDD_Fase1.md`, `Plan_Contrato_OpenAPI.md`, `Plan_TDD_Fase2.md`, `Plan_TDD_Fase3.md`
-o cualquier plan futuro), actualiza `PROJECT_STATE.md` antes de cerrar la respuesta:
+(`planificacion/Plan_TDD_Fase1.md`, `Plan_Contrato_OpenAPI.md`, `planificacion/Plan_TDD_Fase2.md`, `planificacion/Plan_TDD_Fase3.md`
+o cualquier plan futuro), actualiza `planificacion/PROJECT_STATE.md` antes de cerrar la respuesta:
 
 1. **Marca el paso completado** con ✅ y mueve el cursor al siguiente.
 2. **Si el paso es parcial** (p. ej. RED escrito pero GREEN pendiente), márcalo con ▶ y anota qué falta.
-3. **Añade una fila arriba de la tabla de `HISTORIAL.md`** con la fecha de hoy, el identificador del prompt y una descripción de una línea. El historial se separó de `PROJECT_STATE.md` el 2026-08-21: eran 535 de sus 626 KB, y este fichero se lee entero al arrancar cada sesión.
+3. **Añade una fila arriba de la tabla de `planificacion/HISTORIAL.md`** con la fecha de hoy, el identificador del prompt y una descripción de una línea. El historial se separó de `planificacion/PROJECT_STATE.md` el 2026-08-21: eran 535 de sus 626 KB, y este fichero se lee entero al arrancar cada sesión.
 4. **Si un bloque entero queda completo**, actualiza la columna Estado del bloque a ✅ Completo.
 
 Esta actualización es **obligatoria** incluso en prompts pequeños o de corrección.
 No omitirla aunque el cambio sea un fix puntual que avanza el cursor.
 
-### Cuándo NO actualizar PROJECT_STATE.md
+### Cuándo NO actualizar planificacion/PROJECT_STATE.md
 
 - Prompts de configuración de herramientas (permisos, settings, hooks).
 - Prompts de consulta o explicación sin cambios de código.

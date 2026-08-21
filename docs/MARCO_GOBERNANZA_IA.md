@@ -11,7 +11,7 @@
 > proyecto para lectores externos es `PRESENTACION_PROYECTO.md`; su proyección hacia consorcios y
 > financiación europea vive en `docs/EU_GOVERNANCE_CONCEPT_NOTE.md` y `docs/EU_GOVERNANCE_TOPICS.md`.
 > Las reglas de arquitectura que lo implementan son vinculantes para los agentes de desarrollo vía
-> `CLAUDE.md`. El estado detallado de cada mecanismo se sigue en `PROJECT_STATE.md`.
+> `CLAUDE.md`. El estado detallado de cada mecanismo se sigue en `planificacion/PROJECT_STATE.md`.
 
 ---
 
@@ -477,7 +477,7 @@ fuera de la plataforma. Se enumeran aquí para que la frontera quede explícita:
 - `docs/SANDBOX_SECURITY.md` — detalle del principio P11.
 - `docs/REDACCION_CONTRACT_FIRST.md` — aplicación de P4 y P5 al módulo de informes.
 - `Arquitectura.md` — arquitectura funcional y técnica.
-- `PROJECT_STATE.md` — estado de implementación al día.
+- `planificacion/PROJECT_STATE.md` — estado de implementación al día.
 
 > **Nota de vigencia**: los estados indicados en §4 y §5 corresponden al 18 de agosto de 2026. Los
 > mecanismos marcados como previstos reflejan la arquitectura objetivo: este marco es normativo para

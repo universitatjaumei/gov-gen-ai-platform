@@ -4,7 +4,7 @@
 de tests pueda usarla: es el único lugar autorizado para crear tablas partiendo de
 `DATABASE_URL` (lo vigila `tests/infra/test_suite_hygiene.py`). Historia: los tests que
 creaban tablas sobre la BD del desarrollador la dejaron dos veces sin esquema del hub y
-acumularon organizaciones y chatbots residuales (TST.1/TST.2 en `PROJECT_STATE.md`).
+acumularon organizaciones y chatbots residuales (TST.1/TST.2 en `planificacion/PROJECT_STATE.md`).
 
 La política de event loops se declara en pyproject.toml
 (`asyncio_default_fixture_loop_scope = "function"`), no aquí: el override de la fixture

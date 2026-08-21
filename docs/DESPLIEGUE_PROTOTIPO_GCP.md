@@ -1,7 +1,7 @@
 # Despliegue del prototipo en GCP — sitio de normativa + asistente público
 
 > **Escrito el 2026-08-16.** Alcance: un **prototipo** para que un grupo de personas lo
-> pruebe, **sin dominio propio**. No sustituye al bloque Deploy de `Plan_TDD_Fase1.md`
+> pruebe, **sin dominio propio**. No sustituye al bloque Deploy de `planificacion/Plan_TDD_Fase1.md`
 > (D.0–D.6), que es el despliegue en condiciones; esto es lo mínimo para que se pueda usar.
 
 ---

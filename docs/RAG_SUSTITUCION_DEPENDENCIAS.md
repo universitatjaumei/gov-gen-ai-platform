@@ -4,7 +4,7 @@
 > **Estado**: Aceptado — vista transversal del Bloque RAG e ingesta
 > **Fuentes**: código real (`server/app/modules/agents_hub/`), `pyproject.toml`,
 > `docs/COMPARATIVA_RAG_LAMB.md`, `docs/DECISION_OPENWEBUI_CARCASA_CHAT.md` (§6),
-> `Plan_TDD_Fase1.md` (Bloque RAG, Bloque ING).
+> `planificacion/Plan_TDD_Fase1.md` (Bloque RAG, Bloque ING).
 > **Finalidad**: aplicar la lente de mantenibilidad de la decisión OWUI a la capa RAG —
 > distinguir qué código *reinventa* lo que una librería madura ya hace (sustituir), qué es un
 > hueco (añadir dep), qué ya está bien apoyado (no tocar) y qué es diferencial de gobernanza (no
@@ -132,5 +132,5 @@ mejora se cierra sin comparar recall@k/MRR contra la baseline de RAG.1 (regla du
 
 - `docs/DECISION_OPENWEBUI_CARCASA_CHAT.md` §6 — por qué RAG/ingesta se queda en el perímetro.
 - `docs/COMPARATIVA_RAG_LAMB.md` — origen de las mejoras (contra LAMB).
-- `Plan_TDD_Fase1.md` — Bloque RAG (RAG.1–RAG.14) y Bloque ING (detalle verbatim de cada prompt).
+- `planificacion/Plan_TDD_Fase1.md` — Bloque RAG (RAG.1–RAG.14) y Bloque ING (detalle verbatim de cada prompt).
 - `MARCO_GOBERNANZA_IA.md` — P2, P6, P7, P8, P9, P10 citados aquí.

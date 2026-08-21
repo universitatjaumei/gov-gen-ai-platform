@@ -6,7 +6,7 @@
 > conserva el nombre del fichero porque el asunto es el mismo; el contenido está verificado
 > contra el código y contra las carpetas reales el 2026-08-15.
 >
-> El plan ejecutable vive en `Plan_TDD_Fase1.md` §Bloque PIL. Esto es el análisis que lo
+> El plan ejecutable vive en `planificacion/Plan_TDD_Fase1.md` §Bloque PIL. Esto es el análisis que lo
 > sostiene.
 
 ---

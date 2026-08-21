@@ -1,6 +1,6 @@
 # Pruebas manuales de la plataforma completa
 
-**Prompt MAN.1** (`Plan_TDD_Fase1.md`). Sustituye al modelo anterior de un `.bat` por bloque:
+**Prompt MAN.1** (`planificacion/Plan_TDD_Fase1.md`). Sustituye al modelo anterior de un `.bat` por bloque:
 esos guiones caducaban en silencio cada vez que un bloque posterior renombraba una ruta o
 rehacía una pantalla, y nadie había recorrido la plataforma de una pieza.
 
@@ -17,7 +17,7 @@ de verdad.
 |---|---|---|---|
 | 1 | `curation/SitesPage.tsx`: `useDeleteSite` no invalidaba la lista tras borrar (DELETE 204 en servidor, fila seguía en pantalla) | ✅ **Arreglado** (commit `6cba8fc`, test RED/GREEN) | 1 fichero |
 | 2 | `GET /api/v1/hub/redaccion/templates` (y 5 sitios más del mismo router) devuelve **500** para cualquier sesión cuyo `user_id` no sea UUID — el SuperAdmin de desarrollo tiene `admin_id` entero y el Admin `partner_id` de texto libre, ninguno UUID | ✅ **Arreglado** — los 6 sitios de `hub_redaccion_router.py` usan ahora `_actor.user_to_uuid` (uuid5 determinista), el mismo patrón que ya aplicaban `llm_drafts_router.py` y `scripts_router.py` para este problema; se extrajo a un helper compartido para no triplicarlo. No era una decisión de diseño abierta: dar a SuperAdmin/Admin una identidad UUID real exigiría migrar `SuperAdminAccount.admin_id`/`AdminAccount.partner_id`, desproporcionado para este hallazgo. 5 tests nuevos en `tests/redaccion/test_hub_redaccion_router.py` | 3 ficheros de código + 1 test nuevo. De paso, arreglados dos rojos preexistentes destapados al tocar el módulo: `test_llm_drafts_router.py` no colectaba (`_PARTNER` con `role="partner"`, obsoleto desde el renombrado ROL.1→ROL.2) y una aserción esperaba `status == "draft"` donde el código, deliberadamente desde 9R.10.2, devuelve `"ingesting"` |
-| 3 | El widget público (`frontend/src/widget/`) **no consume ningún tema** de organización/chatbot — `ThemeProvider` sólo está cableado en `frontend/src/App.tsx` (panel admin) | ✅ **Arreglado** — investigado primero: `HubChatbot.theme_config`/`HubOrganizacion.theme_config` eran columnas huérfanas (nadie las leía); el sistema real es `hub_themes_router.py` (temas en `data/themes/*.json`, cascada plataforma→organización→chatbot ya modelada), pero `apply_theme_to_chatbot` era un stub con `# TODO` que no persistía nada. Completado el stub (guarda `{"theme_id": ...}` en `theme_config`, reutilizada como puntero) y añadido `GET /hub/themes/for-chatbot/{chatbot_id}`: devuelve solo `config` (nunca `theme_id`/`organizacion_id`/`name`, para no reabrir el censo de organizaciones que SEC.5 cerró) y exige `assert_chatbot_access` (mismo criterio que `/hub/chat`). El widget (`main.tsx`) lo llama al montar y reutiliza `injectThemeCSS` de `ThemeProvider` (exportada para la ocasión), sin duplicar lógica de temas. Verificado en navegador de punta a punta: tema creado por API → aplicado a "Chatbot MAN Uno" → `--color-primary` inyectado en `:root` con el valor real (`#ff00aa`). 10 tests backend + 6 tests frontend nuevos, suite frontend completa **en serie: 281 passed, 0 failed** (`--no-file-parallelism`; en paralelo la suite da falsos rojos distintos en cada pasada — contención ya documentada en `PROJECT_STATE.md`, no relacionada con este cambio), `tsc --noEmit` limpio. **Pendiente para un prompt propio** (fuera de MAN.2, a petición del usuario): completar el editor de temas del panel admin con cabecera/logo — es la definición de la plantilla, no la resolución que consume el widget |
+| 3 | El widget público (`frontend/src/widget/`) **no consume ningún tema** de organización/chatbot — `ThemeProvider` sólo está cableado en `frontend/src/App.tsx` (panel admin) | ✅ **Arreglado** — investigado primero: `HubChatbot.theme_config`/`HubOrganizacion.theme_config` eran columnas huérfanas (nadie las leía); el sistema real es `hub_themes_router.py` (temas en `data/themes/*.json`, cascada plataforma→organización→chatbot ya modelada), pero `apply_theme_to_chatbot` era un stub con `# TODO` que no persistía nada. Completado el stub (guarda `{"theme_id": ...}` en `theme_config`, reutilizada como puntero) y añadido `GET /hub/themes/for-chatbot/{chatbot_id}`: devuelve solo `config` (nunca `theme_id`/`organizacion_id`/`name`, para no reabrir el censo de organizaciones que SEC.5 cerró) y exige `assert_chatbot_access` (mismo criterio que `/hub/chat`). El widget (`main.tsx`) lo llama al montar y reutiliza `injectThemeCSS` de `ThemeProvider` (exportada para la ocasión), sin duplicar lógica de temas. Verificado en navegador de punta a punta: tema creado por API → aplicado a "Chatbot MAN Uno" → `--color-primary` inyectado en `:root` con el valor real (`#ff00aa`). 10 tests backend + 6 tests frontend nuevos, suite frontend completa **en serie: 281 passed, 0 failed** (`--no-file-parallelism`; en paralelo la suite da falsos rojos distintos en cada pasada — contención ya documentada en `planificacion/PROJECT_STATE.md`, no relacionada con este cambio), `tsc --noEmit` limpio. **Pendiente para un prompt propio** (fuera de MAN.2, a petición del usuario): completar el editor de temas del panel admin con cabecera/logo — es la definición de la plantilla, no la resolución que consume el widget |
 | 4 | "Ejecutar" en `/hub/test-scenarios` fija `fallback_reason=None` a propósito (línea 256 de `hub_test_scenarios_router.py`) — **no es un bug**, pero significa que las ejecuciones de escenarios de prueba **nunca** alimentan la detección de huecos de RAG.14. Sólo lo hace una conversación real (widget o `POST /hub/chat/{id}`) | ℹ️ Documentado, sin acción — es la separación correcta entre "revisión manual" y "señal de uso real" | Ninguno; queda anotado para que nadie repita la confusión |
 
 ---
@@ -84,7 +84,7 @@ instancia aparte del sandbox en `:5099`. Sesión real como `fabra@uji.es`.
 endpoint devolvía un `run_id` sintético sin ejecutar el grafo—, no había pantalla donde abrir
 un workspace, la subida de ficheros no se persistía, el rastreo de sitios fallaba siempre y el
 «PDF» del informe de calidad era un DOCX. Diecinueve hallazgos, todos arreglados con TDD.
-Detalle en `PROJECT_STATE.md`, entradas VER.1–VER.8.
+Detalle en `planificacion/PROJECT_STATE.md`, entradas VER.1–VER.8.
 
 ---
 
@@ -117,7 +117,7 @@ CHART **no dibujaba nada**; el informe **no se podía exportar**; y el copiloto 
 tengo esa información» a preguntas cuya respuesta está en `docs/`; una plantilla **no podía pedir
 ni un título** para su gráfico y pedir uno «usual» costaba generar código; y los importes en
 formato de aquí llegaban como texto, así que **sumarlos concatenaba sin dar error**. Todo
-arreglado con TDD; detalle en `PROJECT_STATE.md`, entradas PRO.1–PRO.9.
+arreglado con TDD; detalle en `planificacion/PROJECT_STATE.md`, entradas PRO.1–PRO.9.
 
 ---
 

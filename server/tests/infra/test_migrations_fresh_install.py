@@ -3,7 +3,7 @@
 Reproduce exactamente lo que hace el servicio `migrate` de docker-compose.prod.yml
 en una instalación nueva. Antes de este fix, la cadena fallaba en
 d4e5f6a7b8c9_hub_ingestion_language (ALTER TABLE sobre `hub_ingestion_sources`,
-una tabla que ninguna migración crea — ver PROJECT_STATE.md 2026-07-15).
+una tabla que ninguna migración crea — ver planificacion/PROJECT_STATE.md 2026-07-15).
 
 Requiere un servidor Postgres accesible (usa las mismas credenciales que
 DATABASE_URL_SYNC) con permiso CREATEDB; si no está disponible, se salta.

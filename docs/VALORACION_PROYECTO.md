@@ -2,8 +2,8 @@
 
 > Informe de valoración global: estado de la Fase 1, calidad del desarrollo, seguridad,
 > sentido del producto y análisis de la planificación pendiente (Fases 2 y 3).
-> Fecha: 2026-07-11. Basado en `PROJECT_STATE.md`, los tres planes TDD, `Arquitectura.md`,
-> `PLAN_DESARROLLO.md`, los documentos de cambios y una auditoría del código actual
+> Fecha: 2026-07-11. Basado en `planificacion/PROJECT_STATE.md`, los tres planes TDD, `Arquitectura.md`,
+> `planificacion/PLAN_DESARROLLO.md`, los documentos de cambios y una auditoría del código actual
 > (backend, frontend y seguridad).
 
 ---
@@ -37,7 +37,7 @@ Las dos conclusiones principales de esta valoración son:
 
 ## 2. Fase 1 — Qué se ha construido y valoración
 
-### 2.1 Completado (según PROJECT_STATE.md, verificado contra el código)
+### 2.1 Completado (según planificacion/PROJECT_STATE.md, verificado contra el código)
 
 | Bloque | Contenido | Valoración |
 |---|---|---|
@@ -64,7 +64,7 @@ Las dos conclusiones principales de esta valoración son:
 
 ### 2.3 Divergencias documentación ↔ código detectadas
 
-1. **Nomenclatura de roles no aplicada.** `Arquitectura.md` §5 y `PLAN_DESARROLLO.md`
+1. **Nomenclatura de roles no aplicada.** `Arquitectura.md` §5 y `planificacion/PLAN_DESARROLLO.md`
    ("refactor de nomenclatura aplicado en Fase 1") dan por hecho el renombrado
    Partner→Admin, Client→Organización. El código sigue usando `PartnerAccount`,
    `HubClient` y roles `admin`/`partner`. No es un problema en sí, pero **hay que decidir
@@ -239,7 +239,7 @@ token de widget → uploads/headers/docs. El Deploy GCP sin esto publicaría los
 1. **Volumen infraestimado.** El plan enumera ~5.000 LOC de servicios legacy a migrar,
    pero `client_app/` tiene 489 ficheros (~6,2 MB). Antes de arrancar F2, generar un
    **inventario de migración** (fichero → destino → fase → LOC) y añadirlo a
-   `PROJECT_STATE.md`; lo que no tenga destino es Caso B (borrar). Sin inventario, el
+   `planificacion/PROJECT_STATE.md`; lo que no tenga destino es Caso B (borrar). Sin inventario, el
    "criterio de éxito 2.B" (client_app/app/ui vacío) no es verificable de forma incremental.
 2. **Prerrequisito de calidad**: refactorizar `AIBrainService`/`automation.py` (DI,
    partición, registro del router) como prompt 0 de la Fase 2, antes de construir UI
@@ -363,7 +363,7 @@ administraciones públicas españolas:
    `CLAUDE.md` con `src/redaccion/`.
 
 **Preparación de Fase 2:**
-10. Inventario de migración de `client_app/` (fichero→destino→LOC) en `PROJECT_STATE.md`.
+10. Inventario de migración de `client_app/` (fichero→destino→LOC) en `planificacion/PROJECT_STATE.md`.
 11. Prompt 0 de F2: refactor DI/partición de `AIBrainService` + registro (o retirada) de
     `automation.py`/`telemetry_router`.
 12. Detallar TDD de FASE 14 con Secure Pairing (2A.2) como parte del scaffolding, no como

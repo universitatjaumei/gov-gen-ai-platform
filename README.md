@@ -84,6 +84,7 @@ server/app/core/        servicios compartidos: LLM gateway, auth, tenancy, stora
 frontend/src/           admin · curation · redaccion · widget
 client_app/             agente de ejecución local (RPA); el resto es legacy
 docs/                   arquitectura, decisiones, manuales, casos guía
+planificacion/          plan de desarrollo, cursor del trabajo e historial
 pruebas_manuales/       guiones .bat de lo que sólo puede juzgar una persona
 _legacy_nicegui/        cuarentena de la migración; sólo lectura
 ```
@@ -95,7 +96,7 @@ _legacy_nicegui/        cuarentena de la migración; sólo lectura
 - `CONTRIBUTING.md` — cómo se trabaja aquí.
 - `CLAUDE.md` — reglas duras para agentes de programación, y de paso el contrato de estilo
   del proyecto.
-- `PROJECT_STATE.md` — dónde está el desarrollo ahora mismo.
+- `planificacion/PROJECT_STATE.md` — dónde está el desarrollo ahora mismo.
 
 ## Estado
 

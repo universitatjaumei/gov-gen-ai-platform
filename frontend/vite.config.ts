@@ -13,7 +13,7 @@ import path from 'path'
  * Si el 8000 da `WinError 10048`, no es que haga falta otro puerto: lo retiene el árbol de
  * procesos de un uvicorn `--reload` anterior cuyo arranque falló, con el socket en estado
  * `Bound` (invisible para `netstat | findstr LISTENING`). Se mata el árbol entero y se sigue
- * en el 8000. Detalle en la nota del 2026-08-20 de `PROJECT_STATE.md`.
+ * en el 8000. Detalle en la nota del 2026-08-20 de `planificacion/PROJECT_STATE.md`.
  */
 const DESTINO_API_POR_DEFECTO = 'http://localhost:8000'
 
