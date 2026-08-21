@@ -25,10 +25,29 @@ RED → GREEN → REFACTOR → verificaciones de cierre (suite verde, migración
 contrato regenerado si cambió la API, retirada del legacy con `grep -r` a cero,
 verificación en navegador si toca UI) → actualizar `planificacion/PROJECT_STATE.md` →
 **un commit Conventional por prompt** con el identificador del prompt en el asunto,
-sin `Co-Authored-By` y **sin push** → siguiente prompt.
+**firmado** (`git commit -s`), sin `Co-Authored-By` y **sin push** → siguiente prompt.
 
 El commit por prompt es lo que hace reversible un bloque largo: si el prompt 5 rompe
 el 3, hay un punto exacto al que volver.
+
+### Todos los commits van firmados (DCO)
+
+`git commit -s`, que añade al final del mensaje:
+
+```
+Signed-off-by: Modesto Fabra <fabra@uji.es>
+```
+
+Certifica que quien commitea tiene derecho a aportar ese código bajo la licencia del proyecto
+(AGPL-3.0-or-later). El texto completo está en `DCO` y la explicación en `CONTRIBUTING.md`.
+
+**La firma es la del autor humano del commit, no del agente.** Un agente que commitea en esta
+máquina lo hace como el autor configurado en git, y por eso sigue sin añadirse `Co-Authored-By`:
+la línea que importa es la que certifica procedencia, y sólo la puede certificar una persona.
+
+Se exige aquí y no sólo en las contribuciones externas porque un mantenedor que se exceptúa de su
+propia política la deja sin fuerza. Lo comprueba `.github/workflows/dco.yml`, en los *pull requests*
+y en los *push* a `main`; el historial anterior al 2026-08-21 queda fuera, que es cuando se adoptó.
 
 ### Qué tests ejecutar y cuándo (escalonado)
 

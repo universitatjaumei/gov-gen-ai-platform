@@ -1,15 +1,18 @@
-# Comprueba que cada commit de un pull request lleva `Signed-off-by`.
+# Comprueba que cada commit lleva `Signed-off-by`.
 #
-# Un DCO que nadie comprueba se incumple sin que nadie lo note, y la gracia del DCO
-# es poder acreditar la procedencia del código dentro de unos años. Ver `CONTRIBUTING.md`.
+# Un DCO que nadie comprueba se incumple sin que nadie lo note, y la gracia del DCO es
+# poder acreditar la procedencia del código dentro de unos años. Ver `CONTRIBUTING.md`.
 #
-# Corre SOLO en pull_request: no revisa el historial de `main`, que es anterior a esta
-# política. Y compara contra la base del PR, así que valida los commits que aporta ese
-# PR y ninguno más.
+# Se revisan los commits de cada pull request y los de cada push a `main`: la política
+# vale también para el principal, porque un mantenedor que se exceptúa de su propia
+# política la deja sin fuerza. El historial anterior al 2026-08-21 queda fuera —es previo
+# a la adopción—, y por eso nunca se recorre el historial completo, sólo el tramo nuevo.
 name: DCO
 
 on:
   pull_request:
+    branches: [main]
+  push:
     branches: [main]
 
 jobs:
@@ -18,18 +21,52 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Necesita el historial para poder recorrer los commits del PR.
+          # Necesita historial para poder recorrer el tramo a revisar.
           fetch-depth: 0
 
-      - name: Cada commit lleva Signed-off-by
+      - name: Determinar el tramo a revisar
+        id: tramo
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
+          EVENTO: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_ANTES: ${{ github.event.before }}
+          PUSH_DESPUES: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENTO" = "pull_request" ]; then
+            echo "base=$PR_BASE" >> "$GITHUB_OUTPUT"
+            echo "head=$PR_HEAD" >> "$GITHUB_OUTPUT"
+          else
+            # Un push que crea la rama, o el primero tras habilitar esto, trae `before` a
+            # ceros: no hay tramo anterior con el que comparar y no se revisa nada.
+            if [ -z "$PUSH_ANTES" ] || [ "$PUSH_ANTES" = "0000000000000000000000000000000000000000" ]; then
+              echo "Push sin referencia anterior; nada que revisar."
+              echo "base=" >> "$GITHUB_OUTPUT"
+              echo "head=" >> "$GITHUB_OUTPUT"
+            elif ! git cat-file -e "$PUSH_ANTES^{commit}" 2>/dev/null; then
+              # Tras un push forzado el commit anterior puede no existir ya.
+              echo "El commit anterior ($PUSH_ANTES) no existe en este repositorio; nada que revisar."
+              echo "base=" >> "$GITHUB_OUTPUT"
+              echo "head=" >> "$GITHUB_OUTPUT"
+            else
+              echo "base=$PUSH_ANTES" >> "$GITHUB_OUTPUT"
+              echo "head=$PUSH_DESPUES" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Cada commit lleva Signed-off-by
+        if: steps.tramo.outputs.base != ''
+        env:
+          BASE: ${{ steps.tramo.outputs.base }}
+          HEAD: ${{ steps.tramo.outputs.head }}
         run: |
           set -euo pipefail
           shopt -s nocasematch
           fallan=0
+          revisados=0
           for sha in $(git rev-list --no-merges "$BASE".."$HEAD"); do
+            revisados=$((revisados + 1))
             mensaje="$(git show -s --format='%B' "$sha")"
             autor="$(git show -s --format='%an <%ae>' "$sha")"
             rotulo="$(git show -s --format='%h %s' "$sha")"
@@ -47,11 +84,11 @@ jobs:
 
           if [ "$fallan" -gt 0 ]; then
             echo
-            echo "$fallan commit(s) sin firmar. Se arregla con:"
+            echo "$fallan de $revisados commit(s) sin firmar. Se arregla con:"
             echo "    git rebase --signoff $BASE"
             echo "    git push --force-with-lease"
             echo
             echo "Que certificas al firmar: fichero DCO en la raiz del repositorio."
             exit 1
           fi
-          echo "Todos los commits del pull request van firmados."
+          echo "$revisados commit(s) revisados, todos firmados."

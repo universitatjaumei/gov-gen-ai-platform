@@ -79,10 +79,13 @@ tenía derecho a aportarlo — y un proyecto que van a usar administraciones pú
 demostrar la procedencia de su código. Usa **tu nombre real**: el DCO habla de *real name*, y un
 seudónimo no certifica nada.
 
-**Se comprueba en CI.** El *workflow* `.github/workflows/dco.yml` revisa cada commit del *pull
-request* —no el historial de `main`, que es anterior a esta política— y falla si falta la firma o si
-no coincide con el autor del commit. Una política que nadie comprueba se incumple sin que nadie lo
-note.
+**Se exige también en el principal.** No sólo a quien contribuye: los commits de este repositorio
+van firmados igual. Un mantenedor que se exceptúa de su propia política la deja sin fuerza.
+
+**Se comprueba en CI.** El *workflow* `.github/workflows/dco.yml` revisa los commits de cada *pull
+request* y también los de cada *push* a `main`, y falla si falta la firma o si no coincide con el
+autor del commit. Queda fuera el historial anterior al 2026-08-21, que es cuando se adoptó la
+política. Una política que nadie comprueba se incumple sin que nadie lo note.
 
 ### Cómo se prepara la contribución
 
@@ -135,7 +138,7 @@ Si escribes código nuevo en `client_app/` fuera del agente de ejecución local,
 - 🔴 **RED**: escribe el test en la carpeta `tests/` correspondiente y comprueba que falla. No hay PR sin tests.
 - 🟢 **GREEN**: implementa el mínimo necesario para pasar.
 - 🔵 **REFACTOR**: limpia manteniendo los tests en verde.
-- 💾 **COMMIT**: commit inmediato tras GREEN, con **Conventional Commits** (`feat:`, `fix:`, `test:`, `refactor:`, `docs:`, `chore:`). Menciona qué tests pasan. **No** incluyas líneas `Co-Authored-By` de Claude.
+- 💾 **COMMIT**: commit inmediato tras GREEN, con **Conventional Commits** (`feat:`, `fix:`, `test:`, `refactor:`, `docs:`, `chore:`) y **firmado** (`git commit -s`). Menciona qué tests pasan. **No** incluyas líneas `Co-Authored-By` de Claude.
 
 ---
 
