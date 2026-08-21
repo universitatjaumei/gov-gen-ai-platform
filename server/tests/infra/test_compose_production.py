@@ -5,6 +5,7 @@ verificación de arranque real se hace manualmente con `docker compose up`).
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
@@ -319,3 +320,66 @@ def test_named_volumes_pin_an_explicit_name() -> None:
             "Sin él, renombrar el proyecto (o mover el directorio) deja los "
             "datos huérfanos."
         )
+
+
+# ---------------------------------------------------------------------------
+# 10. La imagen de despliegue corre el mismo Python que la suite
+# ---------------------------------------------------------------------------
+
+def _version_del_pin() -> str:
+    """La versión fijada para el desarrollo, en `server/.python-version`."""
+    return (_ROOT / "server" / ".python-version").read_text(encoding="utf-8").strip()
+
+
+def _versiones_del_dockerfile() -> list[str]:
+    """Cada `FROM python:X.Y-...` del Dockerfile de la raíz, en orden."""
+    contenido = (_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    return re.findall(r"^FROM\s+python:(\d+\.\d+)", contenido, re.MULTILINE)
+
+
+def test_la_imagen_de_despliegue_usa_el_python_que_se_prueba() -> None:
+    """Encontrado el 2026-08-21, antes de arrancar el bloque Deploy: la imagen se
+    construía sobre `python:3.11-slim` mientras la suite, la integración continua y
+    `server/.python-version` iban en 3.13. Dos generaciones de diferencia entre lo
+    que se prueba y lo que se enviaría, con un `uv.lock` resuelto para 3.13.
+
+    Puede funcionar, y justamente por eso no se nota: la deriva sólo se manifiesta
+    cuando una dependencia se comporta distinto, y entonces el síntoma aparece en
+    producción y no en ningún test.
+
+    (El sandbox de scripts va en 3.12 a propósito y no entra aquí: es un servicio
+    aparte, con su propio `pyproject.toml` que declara `>=3.12` y su propio
+    `uv.lock`. Ahí 3.12 es coherente, no deriva.)
+    """
+    pin = _version_del_pin()
+    etapas = _versiones_del_dockerfile()
+
+    assert etapas, "el Dockerfile de la raíz ya no parte de una imagen `python:X.Y`"
+    discrepantes = [v for v in etapas if v != pin]
+    assert not discrepantes, (
+        f"el Dockerfile construye sobre Python {sorted(set(discrepantes))} y la suite corre "
+        f"en {pin} (server/.python-version). Se prueba en un intérprete y se envía otro."
+    )
+
+
+def test_todas_las_etapas_del_dockerfile_usan_la_misma_version() -> None:
+    """Un builder y un runtime con Pythons distintos copian un `.venv` construido
+    para un intérprete a una imagen con otro. Los `.pyc` y las extensiones nativas
+    van ligados a la versión: el fallo no aparece al construir, aparece al importar.
+    """
+    etapas = _versiones_del_dockerfile()
+    assert len(set(etapas)) <= 1, (
+        f"las etapas del Dockerfile usan versiones distintas de Python: {etapas}"
+    )
+
+
+def test_la_integracion_continua_usa_el_python_del_pin() -> None:
+    """Si CI prueba en una versión y el pin dice otra, la deriva vuelve por donde vino."""
+    ci = (_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    versiones = set(re.findall(r"python-version:\s*\[?\s*\"?(\d+\.\d+)\"?", ci))
+    pin = _version_del_pin()
+
+    assert versiones, "ci.yml ya no declara `python-version`"
+    assert versiones == {pin}, (
+        f"CI prueba en {sorted(versiones)} y el pin dice {pin} (server/.python-version)"
+    )
