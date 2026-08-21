@@ -99,6 +99,8 @@ copia/
 .agents/
 rtk_bin/
 scripts/clickhouse/
+.ruff_cache/
+.benchmarks/
 
 # Capturas y assets temporales
 *.jpg
@@ -110,6 +112,11 @@ scripts/clickhouse/
 !frontend/src/assets/*.png
 !frontend/src/assets/*.jpg
 !frontend/src/assets/*.jpeg
+# Ni el logotipo de las páginas de demostración: viven junto al HTML para que la página sea
+# portable, y sin ellos quien clone ve la demo sin marca — fallando en silencio, porque un
+# `<img>` roto no da error. Vigilado por
+# `server/tests/infra/test_los_html_de_docs_no_apuntan_a_imagenes_fantasma.py`.
+!docs/chatbots-publicos/*.png
 
 # Contrato OpenAPI — generado por server/export_openapi.py, no editar manualmente
 server/openapi.json
