@@ -1,4 +1,4 @@
-# Estado del Proyecto — Gov Gen AI Platform
+| **Bloque NIC** — Retirada del legacy NiceGUI, con inventario antes de borrar | — | NIC.1 (**después de Deploy**) |# Estado del Proyecto — Gov Gen AI Platform
 
 > Actualizado automáticamente al final de cada prompt de desarrollo.
 > Fuente de verdad para saber en qué paso está cada plan activo.
@@ -72,20 +72,41 @@
 
 ## 👉 EMPEZAR AQUÍ EL PRÓXIMO DÍA (actualizado 2026-08-21, al preparar el repositorio para abrirlo)
 
-**Cursor actual: Bloque NIC, prompt NIC.1.** El **Bloque INF quedó completo** el 2026-08-20 (los 10
+**Cursor actual: Deploy GCP, prompt D.0.** El **Bloque INF quedó completo** el 2026-08-20 (los 10
 prompts) y el 2026-08-21 se preparó el repositorio para abrirse: limpieza de la raíz, licencia,
 gobernanza y DCO. Ese trabajo no es un bloque del plan y no mueve el cursor, pero deja dos bloques
 nuevos **al final de la Fase 1** y un orden que no se puede invertir.
 
-**Modelo sugerido para el próximo prompt: Opus** — NIC.1 decide qué se considera «cubierto», y de esa
-decisión depende lo que NIC.2 y NIC.3 borran.
+**Modelo sugerido para el próximo prompt**: el que indique el bloque Deploy para D.0.
 
-### El orden es una decisión del usuario, no una preferencia
+**Deploy va ANTES de NIC**, y no por preferencia: `CLAUDE.md` §128 dice que `_legacy_nicegui/` se
+borra «una vez verificado que todo lo migrado funciona en producción», y NIC.5 **es** ese borrado. Se
+añaden tres razones: NIC.1 decide qué cuenta como «cubierto» y producción es el único sitio donde esa
+respuesta se comprueba; NIC **no le ahorra nada al despliegue** (comprobado: el `Dockerfile` sólo
+copia `shared/`, `server/app/`, `server/migrations/` y el `.venv` — `client_app/` nunca entra en la
+imagen); y NIC.4 toca el `pyproject.toml` de la raíz, que es lo último que conviene mover justo antes
+de desplegar por primera vez. Secuencia acordada el 2026-08-21:
+**Deploy (D.0–D.6) → pruebas humanas y RAG.6b → REV → NIC → REPO.**
 
-**NIC (retirada del legacy NiceGUI) → NIC.5 (el usuario borra `_legacy_nicegui/`) → REPO (sustituir
-el repositorio de GitHub).** Decidido el 2026-08-21: no tiene sentido montar el repositorio
-definitivo y acto seguido meterle la retirada de 500 ficheros de legacy. **REPO no se ejecuta hasta
-que la migración esté hecha.**
+**Ya alineado antes de D.0**: el `Dockerfile` construía en Python 3.11 y la suite corre en 3.13.
+Corregido y verificado construyendo la imagen (Python 3.13.15 dentro, `xmlsec` y `onelogin.saml2`
+importan, `server.app.main` con 163 rutas), con tres guardarraíles para que no vuelva a derivar.
+**Pendiente aparte**: `requires-python` sigue en `>=3.11` en los cinco pyproject; estrecharlo obliga
+a re-resolver cinco locks y no debe viajar con el despliegue.
+
+### El orden, y por qué
+
+**Deploy → pruebas humanas y RAG.6b → REV → NIC → NIC.5 (el usuario borra `_legacy_nicegui/`) → REPO.**
+
+Dos decisiones distintas lo fijan. La primera es del usuario (2026-08-21): **REPO no se ejecuta hasta
+que la migración esté hecha**, porque no tiene sentido montar el repositorio definitivo y acto seguido
+meterle la retirada de 500 ficheros de legacy. La segunda sale de `CLAUDE.md` §128: `_legacy_nicegui/`
+se borra «una vez verificado que todo lo migrado funciona en producción», así que **NIC.5 no puede
+preceder al despliegue** — y NIC.5 es lo que cierra la Fase 1.
+
+**REPO no depende técnicamente de NIC.** Si abrir el repositorio pasara a tener fecha, se desengancha:
+la dependencia dura es sólo la de los objetos huérfanos, que va de borrar el repositorio viejo y no
+tiene nada que ver con el código legacy.
 
 ### Lo que espera a una persona, no a un agente
 
