@@ -567,7 +567,7 @@ o cualquier plan futuro), actualiza `PROJECT_STATE.md` antes de cerrar la respue
 
 1. **Marca el paso completado** con ✅ y mueve el cursor al siguiente.
 2. **Si el paso es parcial** (p. ej. RED escrito pero GREEN pendiente), márcalo con ▶ y anota qué falta.
-3. **Añade una fila al historial reciente** con la fecha de hoy, el identificador del prompt y una descripción de una línea.
+3. **Añade una fila arriba de la tabla de `HISTORIAL.md`** con la fecha de hoy, el identificador del prompt y una descripción de una línea. El historial se separó de `PROJECT_STATE.md` el 2026-08-21: eran 535 de sus 626 KB, y este fichero se lee entero al arrancar cada sesión.
 4. **Si un bloque entero queda completo**, actualiza la columna Estado del bloque a ✅ Completo.
 
 Esta actualización es **obligatoria** incluso en prompts pequeños o de corrección.
