@@ -12,6 +12,8 @@ vi.mock('@/shared/api/generated/redaccion-llm-drafts/redaccion-llm-drafts', () =
   useValidateLlmDraft: vi.fn(() => ({ mutate: vi.fn(), data: undefined, isPending: false })),
   useApproveAsTemplate: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useApproveAsWorkspace: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  // Lo añadió INF.4 (fichero de muestra). Falta aquí = la página revienta al montarse.
+  useDescribeSampleFile: vi.fn(() => ({ mutate: vi.fn(), data: undefined, isPending: false })),
 }))
 
 const TOKEN =
