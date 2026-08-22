@@ -19722,9 +19722,15 @@ donde alguien los va a buscar.
 > **leer** las concesiones existentes pero no enumerar a quién concederlas. Eso es identidad, no
 > reorganización del panel: va en el **Bloque IDE**.
 >
-> **Qué se puede adelantar si corre prisa.** PLAT.1 + PLAT.2 arreglan por sí solos la contradicción
-> que hoy da un 403: son dos prompts y no tocan ningún contrato. Si el piloto va a tener
-> administradores que no sean superadmin, esos dos merecen ir antes que el resto del bloque.
+> **PLAT.1 y PLAT.2 se ejecutan ANTES del Bloque IDE, y el resto después** (decisión del usuario,
+> 2026-08-22). No es una preferencia: las pantallas de IDE.4 e IDE.5 cuelgan de `/plataforma`, que es
+> la sección que crea PLAT.2, así que sin ella no tienen dónde vivir. Y PLAT.1 va delante de PLAT.2
+> porque mover «Modelos LLM» a una sección en la que un admin no puede entrar le **quita** un acceso
+> que hoy tiene. Ya estaban marcados como adelantables por otro motivo —arreglan solos el 403—, así
+> que adelantarlos no fuerza nada.
+>
+> **Orden de ejecución completo**: PLAT.1 → PLAT.2 → IDE.1…IDE.5 → PLAT.3…PLAT.7 → **Deploy**.
+> El bloque se queda escrito seguido, que es más fácil de leer que partido en dos.
 
 ---
 
@@ -20017,6 +20023,21 @@ de un cambio de pantalla.
 - [ ] Cero codigos de modulo escritos en el frontend
 ```
 
+> **Este bloque va ANTES del despliegue** (decisión del usuario, 2026-08-22): «no tiene sentido hacer el
+> deploy de una aplicación con una estructura y unos mecanismos de identificación que no son los que se
+> van a utilizar». El argumento se sostiene solo: IDE.2 renombra una tabla, IDE.5 cambia el esquema de
+> las concesiones e IDE.1 cambia el comportamiento de la autenticación. Migración de esquema, cambio de
+> autorización y renombrado son las tres cosas que salen baratas **antes** de que haya personas reales
+> dentro, y caras después.
+>
+> **Requiere PLAT.1 y PLAT.2 hechos**: las pantallas de IDE.4 e IDE.5 viven en `/plataforma`, la sección
+> que crea PLAT.2. El resto de PLAT va después de este bloque. Orden completo:
+> PLAT.1 → PLAT.2 → **IDE.1…IDE.5** → PLAT.3…PLAT.7 → Deploy.
+>
+> **Y deja una consecuencia para el despliegue**: IDE.1 introduce un ajuste nuevo (la autoridad del
+> rol), así que el inventario de variables de entorno del bloque Deploy tiene que incluirlo. Un
+> despliegue que lo omita se queda con el valor por defecto sin que nadie lo haya decidido.
+>
 > **Orden y dependencias.** **IDE.1 primero, y sin él el bloque no tiene sentido**: mientras el alta
 > automática pise el rol, cualquier pantalla de usuarios es decorativa. IDE.2 es el renombrado y va
 > antes de IDE.3, que escribe en esa tabla. IDE.4 depende de IDE.3 y es el único prompt barato del
