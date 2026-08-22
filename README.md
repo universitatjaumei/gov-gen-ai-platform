@@ -1,10 +1,7 @@
 # Gov Gen AI Platform
 
 Plataforma de IA generativa para administración pública. Nace de la actividad investigadora del
-grupo **INNOVAP** (Derecho Público e Innovación) de la Universitat Jaume I, y su finalidad no es
-cubrir las necesidades de una universidad concreta: es ofrecer una solución de **software libre
-multiorganización**, utilizable por otras administraciones públicas y en particular por **entidades
-locales**, que rara vez tienen capacidad para construir algo así por su cuenta.
+grupo **INNOVAP** (Derecho Público e Innovación) de la Universitat Jaume I, y su finalidad es ofrecer una solución de **software libre multiorganización**, utilizable por otras administraciones públicas y en particular por **entidades locales**, que rara vez tienen capacidad para construir algo así por su cuenta.
 
 Ese propósito no es una declaración de intenciones del README: es lo que explica media
 arquitectura. La jerarquía Plataforma → Organización → Chatbot, la separación entre configuración y
@@ -12,16 +9,36 @@ dato operacional, y la frontera edge/cloud existen porque el sistema tiene que s
 instituciones distintas sin que ninguna vea los datos de otra. Un sistema hecho para una sola
 institución no necesitaría nada de eso.
 
-Cuatro módulos sobre una misma base:
+El principio que guía el desarrollo, en términos académicos, es el de **conformidad por diseño**
+(*compliance by design*): las obligaciones jurídicas no se documentan aparte del sistema, se
+incorporan a su construcción. Cada actuación asistida por IA deja evidencia de supervisión humana,
+de procedencia de la información y del tratamiento de datos personales aplicado, y esas garantías
+se traducen en comprobaciones ejecutables y pruebas automáticas —*compliance as code*— en lugar de
+descansar en la buena fe o en auditorías puntuales.
+
+De ahí salen decisiones que de otro modo parecerían caprichos técnicos: que el determinismo se
+prefiera al modelo generativo siempre que alcance, que ninguna afirmación se emita sin cita a su
+fuente, que la respuesta de indisponibilidad sea una función del sistema y no un fallo, y que la
+frontera edge/cloud esté implementada en el código y vigilada por tests en vez de prometida en un
+contrato. El desarrollo del principio y su encaje normativo —Reglamento (UE) 2024/1689, RGPD, Leyes
+39/2015 y 40/2015, Esquema Nacional de Seguridad— está en `docs/PRESENTACION_PROYECTO.md` y
+`docs/MARCO_GOBERNANZA_IA.md`.
+
+Tres módulos sobre una misma base:
 
 | Módulo | Qué hace |
 |---|---|
 | **Chatbots** | Asistentes con recuperación sobre corpus normativo propio (RAG en tres niveles), publicables como widget embebible o como agente identificado. |
-| **Informes** | Redacción asistida de informes: tablas deterministas calculadas desde los datos, valoración escrita por el modelo y **aprobada o editada por una persona** antes de exportar. |
-| **Automatización** | Flujos, ETL, extracción de PDF y scripts generados a medida, ejecutados en un sandbox aislado. |
+| **Informes** | Redacción asistida de informes: extracción determinista de PDF y hojas de cálculo, transformación declarativa de los datos, gráficos, y valoración escrita por el modelo y **aprobada o editada por una persona** antes de exportar. Cuando un documento es tan irregular que hay que programar su lectura, el código se audita y se ejecuta en un sandbox sin red. |
 | **Curación** | Rastreo del portal institucional, detección de contenido caducado o contradictorio, y selección de lo que entra al corpus. |
 
-El principio que ordena el diseño: **el servidor decide, el cliente pinta**. El frontend no
+Hay otros dos módulos previstos que **todavía no existen**: **Automatización de procesos** —flujos
+y RPA, que depende del cliente de ejecución local— y **Gestor de expedientes** —tramitación con
+fases y acciones calculadas en el servidor—. Lo que hoy vive en `server/app/modules/automation/` es
+infraestructura que consume Informes, no un módulo de usuario: no tiene routers registrados ni
+interfaz. Alcance y plazos de los dos, en `docs/PRESENTACION_PROYECTO.md`.
+
+La regla que ordena el diseño técnico: **el servidor decide, el cliente pinta**. El frontend no
 calcula qué acciones están permitidas, ni conoce a priori los campos de un formulario; los recibe.
 Ver `docs/Arquitectura.md`.
 
@@ -36,7 +53,7 @@ El mismo código sirve a los dos, y esa es una restricción de arquitectura, no 
   anonimizadas.
 
 La frontera se sostiene con dos bases ORM separadas y una clasificación explícita de routers y
-módulos, con tests que fallan si se cruza. Detalle en `CLAUDE.md` §Frontera Edge-Cloud.
+módulos, con tests que fallan si se cruza. Detalle en `AGENTS.md` §Frontera Edge-Cloud.
 
 ## Stack
 
@@ -75,7 +92,7 @@ cd frontend; npm test
 ```
 
 El detalle de por qué Git Bash, y qué subconjunto corresponde a cada momento, está en
-`CLAUDE.md`. **TDD es obligatorio**: el test va antes del código.
+`AGENTS.md`. **TDD es obligatorio**: el test va antes del código.
 
 ## El contrato es la fuente de verdad
 
@@ -102,11 +119,17 @@ _legacy_nicegui/        cuarentena de la migración; sólo lectura
 
 ## Documentación
 
+- `docs/PRESENTACION_PROYECTO.md` — qué hace la plataforma, qué está construido y verificado, y
+  qué está previsto. Es el documento para leer primero si vienes de fuera.
 - `docs/Arquitectura.md` — qué es la plataforma y qué principios la rigen.
 - `docs/MARCO_GOBERNANZA_IA.md` — gobernanza, trazabilidad y protección de datos.
+- `docs/LICENCIA_ES.md` — la AGPL explicada en español: qué permite, qué obliga y qué no, y qué
+  significa para un pliego.
 - `CONTRIBUTING.md` — cómo se trabaja aquí.
-- `CLAUDE.md` — reglas duras para agentes de programación, y de paso el contrato de estilo
-  del proyecto.
+- `AGENTS.md` — reglas duras para agentes de programación, y de paso el contrato de estilo
+  del proyecto. Vale para cualquier agente, no solo para Claude Code: el `CLAUDE.md` de la raíz
+  es un fichero de tres líneas que importa este, porque Claude Code busca ese nombre por
+  convención.
 - `planificacion/PROJECT_STATE.md` — dónde está el desarrollo ahora mismo.
 
 ## Estado
@@ -171,6 +194,12 @@ Este programa se distribuye bajo la **GNU Affero General Public License v3.0 o p
 (`AGPL-3.0-or-later`). El texto completo está en `LICENSE`, íntegro y sin modificar: la propia
 licencia permite copiarla literalmente pero no alterarla, así que la procedencia y el propósito se
 declaran aquí y no dentro de ella.
+
+Para quien tenga que decidir si su administración puede usar o desplegar esto, `docs/LICENCIA_ES.md`
+explica en español qué permite la licencia, qué obliga, **qué no obliga** y qué significa para un
+pliego. Es un documento informativo y lo dice: no es una traducción de la licencia, porque la FSF no
+aprueba traducciones y dos textos que dicen cosas parecidas acaban diciendo cosas distintas. El
+único texto vinculante es `LICENSE`.
 
 > This program is free software: you can redistribute it and/or modify it under the terms of the
 > GNU Affero General Public License as published by the Free Software Foundation, either version 3

@@ -4,7 +4,7 @@
 esos guiones caducaban en silencio cada vez que un bloque posterior renombraba una ruta o
 rehacía una pantalla, y nadie había recorrido la plataforma de una pieza.
 
-**Regla que no cambia** (CLAUDE.md §Verificación de UI): lo que el agente puede comprobar en
+**Regla que no cambia** (AGENTS.md §Verificación de UI): lo que el agente puede comprobar en
 navegador **no entra** aquí. Esta matriz es sólo lo irreducible — credenciales e IdP reales,
 sistemas externos no simulables, juicio subjetivo, lector de pantalla real y datos personales
 de verdad.

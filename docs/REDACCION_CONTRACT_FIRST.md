@@ -73,7 +73,7 @@ El manifest se emite incluso si la ejecución falla (para auditoría).
 ### 8. Edge/Cloud
 Los módulos 9R son **edge**: procesan documentos y expedientes del cliente. Los routers
 se etiquetan `Deploy: edge` y no importan módulos cloud directamente. La configuración
-se lee vía `ConfigProvider`. Ver `CLAUDE.md` §Frontera Edge-Cloud.
+se lee vía `ConfigProvider`. Ver `AGENTS.md` §Frontera Edge-Cloud.
 
 ---
 

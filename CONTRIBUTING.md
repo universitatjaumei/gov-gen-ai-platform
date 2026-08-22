@@ -7,7 +7,7 @@ humano o agente de IA.
 > - `docs/Arquitectura.md` — **qué** es la plataforma y qué principios la rigen (módulos, roles, privacidad, frontera Cloud/Edge, stack). Decisiones estructurales.
 > - `planificacion/PLAN_DESARROLLO.md` — **cuándo y en qué orden** se construye (3 Fases Funcionales, calendario).
 > - `planificacion/Plan_TDD_Fase1.md` / `planificacion/Plan_TDD_Fase2.md` / `planificacion/Plan_TDD_Fase3.md` — **cómo** se construye cada pieza (prompts TDD Red/Green).
-> - `CLAUDE.md` — **reglas operativas** para agentes (retirada de legacy, frontera edge/cloud, portabilidad, shell, migraciones). En caso de conflicto, **CLAUDE.md manda**.
+> - `AGENTS.md` — **reglas operativas** para agentes de programación, cualquiera que uses (retirada de legacy, frontera edge/cloud, portabilidad, shell, migraciones). En caso de conflicto, **AGENTS.md manda**. El `CLAUDE.md` de la raíz solo lo importa, porque Claude Code busca ese nombre.
 > - `planificacion/PROJECT_STATE.md` — estado actual y cursor de cada plan.
 
 ---
@@ -102,7 +102,7 @@ política. Una política que nadie comprueba se incumple sin que nadie lo note.
 ## 🎯 0. Pre-flight (obligatorio)
 
 - **Entorno Python con `uv`.** Toda ejecución de backend, tests o scripts se hace vía `uv run …`. En Windows, **nunca** invoques `python` directamente (te redirige a la Microsoft Store); usa el ejecutor `uv`. Si añades dependencias, ejecuta `uv sync` antes de continuar.
-- **Shell del proyecto: PowerShell 5.1.** El operador `&&` **no existe** y provoca error de parseo. Encadena con `;` o `; if ($?) { … }`. Usa rutas absolutas al cambiar de directorio (ver `CLAUDE.md` → "Reglas de comandos de shell").
+- **Shell del proyecto: PowerShell 5.1.** El operador `&&` **no existe** y provoca error de parseo. Encadena con `;` o `; if ($?) { … }`. Usa rutas absolutas al cambiar de directorio (ver `AGENTS.md` → "Reglas de comandos de shell").
 - **Stack local**: `docker compose up -d` levanta PostgreSQL+pgvector, MinIO y el microservicio `script-sandbox`. Backend: `cd server; uv run pytest`. Frontend: `cd frontend; npm test`.
 - **Dependencia de sistema (SSO SAML)**: el SP SAML usa `python3-saml`, que depende de `xmlsec` (libxml2 + libxmlsec1). En Windows el wheel de `xmlsec` ya las incluye; en imágenes Docker Debian/Ubuntu añade `libxml2-dev libxmlsec1-dev pkg-config` (apt) antes de `uv sync`.
 
@@ -110,7 +110,7 @@ política. Una política que nadie comprueba se incumple sin que nadie lo note.
 
 ## 🤖 1. Reglas para agentes de IA
 
-- **Análisis previo obligatorio**: antes de proponer cambios, lee `docs/Arquitectura.md` (soberanía del dato, jerarquía de servicios, frontera Cloud/Edge) y `CLAUDE.md` (reglas duras). Localiza el cursor en `planificacion/PROJECT_STATE.md`.
+- **Análisis previo obligatorio**: antes de proponer cambios, lee `docs/Arquitectura.md` (soberanía del dato, jerarquía de servicios, frontera Cloud/Edge) y `AGENTS.md` (reglas duras). Localiza el cursor en `planificacion/PROJECT_STATE.md`.
 - **Inyección de dependencias, no instanciación manual**: en el servidor FastAPI usa `Depends`. **No** instancies servicios a mano ni accedas a sus métodos privados a través de la frontera HTTP.
 - **Autonomía con responsabilidad**: ejecuta cambios alineados con la arquitectura y reporta tras la ejecución. Si detectas código que viola los estándares, propón la refactorización.
 - **Divide y vencerás**: descompón tareas complejas en pasos pequeños y verificables.
@@ -150,13 +150,13 @@ Si escribes código nuevo en `client_app/` fuera del agente de ejecución local,
 - **SDUI / HATEOAS**: el frontend no conoce campos a priori ni calcula permisos. Renderiza formularios iterando el `ui_contract` del backend y botones iterando `acciones_permitidas`. Nada de `if (rol === …) mostrarBoton()`.
 - **i18n obligatorio**: ningún string hardcodeado en la UI. Usa `i18next` con locales `ca` / `es` / `en` en `frontend/src/shared/i18n/`. (El antiguo `translations.json` de NiceGUI es legacy.)
 - **Sin features no pedidas**: no añadas manejo de errores, validaciones, flags ni abstracciones para escenarios fuera de la tarea.
-- **Migraciones**: cuando toques `server/migrations/versions/`, aplica la migración con `uv run alembic upgrade <rev>` (ver `CLAUDE.md`).
+- **Migraciones**: cuando toques `server/migrations/versions/`, aplica la migración con `uv run alembic upgrade <rev>` (ver `AGENTS.md`).
 
 ---
 
 ## 🚧 5. Frontera Edge/Cloud y desacoplamiento (muro de seguridad)
 
-Regulado en runtime por `DEPLOY_MODE=cloud|edge|all`. Ver el detalle completo en `CLAUDE.md` → "Frontera Edge-Cloud".
+Regulado en runtime por `DEPLOY_MODE=cloud|edge|all`. Ver el detalle completo en `AGENTS.md` → "Frontera Edge-Cloud".
 
 - **Dos `DeclarativeBase`**: `HubConfigBase` (config, se sincroniza cloud→edge) y `HubOperationalBase` (solo edge). **Sin `relationship()` cross-base**; navega por `*_id` con query explícito.
 - **Un módulo edge no importa de un módulo cloud.** La configuración se lee vía `ConfigProvider`, no importando modelos de config directamente.
@@ -182,4 +182,4 @@ Regulado en runtime por `DEPLOY_MODE=cloud|edge|all`. Ver el detalle completo en
 - **Caso B** (código huérfano sin migración): borrar directamente. El historial de git es la fuente de verdad del pasado.
 - Nada nuevo entra en `_legacy_archive/`. Sin shims de retrocompatibilidad ni alias `_old_*`.
 
-Ver el procedimiento completo en `CLAUDE.md` → "Regla crítica: migración = código nuevo + retirada del legacy".
+Ver el procedimiento completo en `AGENTS.md` → "Regla crítica: migración = código nuevo + retirada del legacy".

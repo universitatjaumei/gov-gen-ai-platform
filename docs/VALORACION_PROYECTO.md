@@ -74,7 +74,7 @@ Las dos conclusiones principales de esta valoración son:
    `responsable_rol` por todas partes) multiplicará el coste.
 2. **`frontend/src/agent/` no existe** y `frontend/src/automation/` son carpetas vacías;
    en cambio existe `frontend/src/redaccion/` (el módulo más desarrollado) que no figura
-   en el mapa de módulos de `CLAUDE.md`. Actualizar `CLAUDE.md` evita que futuros agentes
+   en el mapa de módulos de `AGENTS.md`. Actualizar `AGENTS.md` evita que futuros agentes
    de programación coloquen código en el sitio equivocado.
 3. **OIDC no existe**; solo SAML. Los planes de F3 citan "Auth OIDC/SAML" como
    prerrequisito — con SAML+JWT es suficiente, pero conviene ajustar el texto.
@@ -100,9 +100,9 @@ Las dos conclusiones principales de esta valoración son:
 1. **`api/v1/automation.py` (1.189 LOC, 19 endpoints) instancia `AIBrainService()` a mano
    en ~18 endpoints y llama a métodos privados** (`_validate_license`,
    `_resolve_server_config`) a través de la frontera HTTP. Viola las dos reglas de
-   `CLAUDE.md` (DI obligatoria; sin acceso a internos). Además **este router y
+   `AGENTS.md` (DI obligatoria; sin acceso a internos). Además **este router y
    `telemetry_router` no están registrados en `main.py`**: son 1.200+ líneas de
-   superficie muerta. Decisión pendiente: registrarlos como edge (la tabla de CLAUDE.md
+   superficie muerta. Decisión pendiente: registrarlos como edge (la tabla de AGENTS.md
    dice que `/automation/*` es edge) tras refactorizarlos, o retirarlos hasta la Fase 2.
 2. **`server/app/ui/` contiene 21 ficheros NiceGUI** (p. ej. `admin_security.py`, 1.035
    LOC) dentro del árbol activo del servidor, sin importadores, pero con tests
@@ -112,7 +112,7 @@ Las dos conclusiones principales de esta valoración son:
    visión, generación de scripts, forensics) y prácticamente sin tests funcionales. Igual
    `cortex.py` y `extraction_strategies.py` (767 LOC). Este código es justo el que la
    Fase 2 va a tocar: partir el servicio ANTES de migrar la UI sobre él ahorrará dolor.
-4. **Shims prohibidos por CLAUDE.md**: `init_db = init_server_db` (`db.py:31-32`) y alias
+4. **Shims prohibidos por AGENTS.md**: `init_db = init_server_db` (`db.py:31-32`) y alias
    "legacy" en `seeds.py:174-176`. Menor, pero contradice la norma "borra, no comentes".
 5. **Bloqueo del event loop**: `subprocess.run(["libreoffice", ...])` síncrono dentro de
    `async def to_pdf` (`report_exporter.py:84`); envolver en `asyncio.to_thread`. Nota
@@ -360,7 +360,7 @@ administraciones públicas españolas:
 8. Migrar los 5 módulos API manuales del frontend a Orval (cierra el TODO CF.4);
    descomponer `DocumentsPage`; completar `ca/admin.json`; lazy routes.
 9. Decidir y ejecutar (o descartar formalmente) el renombrado de roles; actualizar
-   `CLAUDE.md` con `src/redaccion/`.
+   `AGENTS.md` con `src/redaccion/`.
 
 **Preparación de Fase 2:**
 10. Inventario de migración de `client_app/` (fichero→destino→LOC) en `planificacion/PROJECT_STATE.md`.

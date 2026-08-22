@@ -5,7 +5,7 @@
 ## El problema
 
 BGE-M3 (1,1 GB) y, si RAG.6 se implementa como estaba escrito, BGE-reranker-v2-m3 (~600 MB)
-son 3-4 GB de RAM por instancia de Cloud Run. `CLAUDE.md` ya fija ese umbral como criterio de
+son 3-4 GB de RAM por instancia de Cloud Run. `AGENTS.md` ya fija ese umbral como criterio de
 extracción a microservicio, pero la conclusión real es anterior: **en cloud no queremos esos
 modelos, queremos una API**; en edge sí los queremos, porque el dato no puede salir.
 
@@ -83,7 +83,7 @@ que revisarla, al precio de romper la compatibilidad de esquema con BGE-M3 en ed
 - **Si el default de plataforma pasa a Google.** Hoy sigue siendo BGE-M3 local, que es lo que
   funciona en desarrollo. Cambiarlo es un `UPDATE` de configuración una vez exista MOD.2.
 - **La extracción a microservicio** de BGE-M3/Docling: sigue rigiendo el criterio de
-  `CLAUDE.md` (cold start > 15 s, RAM > 2 GB o necesidad de escalar por separado).
+  `AGENTS.md` (cold start > 15 s, RAM > 2 GB o necesidad de escalar por separado).
 
 ## Orden de ejecución
 

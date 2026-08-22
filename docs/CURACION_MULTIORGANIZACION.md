@@ -11,7 +11,7 @@ siguiente decisión caiga del lado correcto sin volver a discutirlo.
 
 **El criterio es dato; la honestidad es código.**
 
-Es la misma regla que el proyecto ya aplica al vocabulario del corpus (CLAUDE.md §5: «el vocabulario
+Es la misma regla que el proyecto ya aplica al vocabulario del corpus (AGENTS.md §5: «el vocabulario
 es dato, no código»), y por el mismo motivo: lo que depende de cómo es *un* portal tiene que poder
 cambiarse sin tocar el código, o el módulo deja de servir al segundo cliente.
 

@@ -1,6 +1,6 @@
 # Metodología de desarrollo agéntico por bloques
 
-> Regla operativa para agentes de programación. `CLAUDE.md` es la fuente dominante;
+> Regla operativa para agentes de programación. `AGENTS.md` es la fuente dominante;
 > este documento desarrolla en detalle la sección "Ejecución agéntica por bloques".
 > Adoptada el 2026-07-27.
 
@@ -63,7 +63,7 @@ Para cada prompt del bloque, en este orden:
    - Suite completa del ámbito tocado en verde (`pytest`, `vitest`, `tsc -b`).
    - Migración Alembic **aplicada** (`uv run alembic upgrade <rev>` + `alembic current`).
    - Contrato regenerado si cambió la API (`export_openapi` + `npm run generate:api`).
-   - Retirada del legacy según el checklist de `CLAUDE.md` (`_legacy_nicegui/` o borrado)
+   - Retirada del legacy según el checklist de `AGENTS.md` (`_legacy_nicegui/` o borrado)
      y `grep -r` de referencias a cero.
    - Verificación en navegador si el prompt toca UI (§4).
 6. **Actualizar `planificacion/PROJECT_STATE.md`**: marcar el paso ✅, mover el cursor, añadir fila al
@@ -102,7 +102,7 @@ El agente rompe la autonomía **solo** por estas causas:
   features no pedidas, lo registra como *"Desviación documentada"* en la fila de historial
   de `planificacion/PROJECT_STATE.md`, y sigue. Todas las desviaciones se resumen en el informe de cierre.
 - Fallos de test preexistentes ya inventariados.
-- Dudas de estilo, nombres o estructura interna resolubles con las reglas de `CLAUDE.md`.
+- Dudas de estilo, nombres o estructura interna resolubles con las reglas de `AGENTS.md`.
 
 ---
 
@@ -217,7 +217,7 @@ Al cerrar el bloque, el agente entrega **un solo mensaje** con:
 5. **Desviaciones documentadas** — qué se apartó del plan y por qué.
 6. **Pendiente** — lo que quedó fuera y el motivo.
 7. **Pruebas manuales** — el bloque de instrucciones del `.bat`, con el formato de
-   `CLAUDE.md` (Antes de empezar / Ejecuta el archivo / Pasos en la interfaz / Qué debes
+   `AGENTS.md` (Antes de empezar / Ejecuta el archivo / Pasos en la interfaz / Qué debes
    ver / Casos límite / Para terminar).
 
 Después del informe, el agente **espera**: el siguiente bloque no arranca solo.

@@ -11,7 +11,7 @@
 > proyecto para lectores externos es `PRESENTACION_PROYECTO.md`; su proyección hacia consorcios y
 > financiación europea vive en `docs/EU_GOVERNANCE_CONCEPT_NOTE.md` y `docs/EU_GOVERNANCE_TOPICS.md`.
 > Las reglas de arquitectura que lo implementan son vinculantes para los agentes de desarrollo vía
-> `CLAUDE.md`. El estado detallado de cada mecanismo se sigue en `planificacion/PROJECT_STATE.md`.
+> `AGENTS.md`. El estado detallado de cada mecanismo se sigue en `planificacion/PROJECT_STATE.md`.
 
 ---
 
@@ -224,7 +224,7 @@ competencia.
 
 **Mecanismos.** Contrato HATEOAS: el DTO de cada expediente incluirá `acciones_permitidas`,
 calculado en el servidor evaluando fase, estado y rol. El frontend genera los controles iterando
-ese array (regla maestra en `CLAUDE.md`).
+ese array (regla maestra en `AGENTS.md`).
 
 **Obligaciones de desarrollo.**
 - Prohibido en el frontend cualquier condicional de negocio del tipo `if (fase === X) mostrar()`.
@@ -320,7 +320,7 @@ que ve ambos mundos.
 - Toda superficie HTTP nueva se etiqueta con su plano de despliegue y se registra en el arranque
   correspondiente.
 - Ante la duda: si toca datos del cliente final → edge; si solo configuración → cloud; si ambos →
-  partir la responsabilidad. (Detalle en `CLAUDE.md`.)
+  partir la responsabilidad. (Detalle en `AGENTS.md`.)
 
 ### P9 — Calidad y vigencia de la información que consume la IA · ✅
 
@@ -471,7 +471,7 @@ fuera de la plataforma. Se enumeran aquí para que la frontera quede explícita:
 
 - `PRESENTACION_PROYECTO.md` — presentación del proyecto, módulos y estado de desarrollo para
   lectores externos.
-- `CLAUDE.md` — reglas de arquitectura vinculantes que implementan este marco.
+- `AGENTS.md` — reglas de arquitectura vinculantes que implementan este marco.
 - `docs/EU_GOVERNANCE_CONCEPT_NOTE.md` y `docs/EU_GOVERNANCE_TOPICS.md` — proyección del marco hacia
   consorcios y financiación europea.
 - `docs/SANDBOX_SECURITY.md` — detalle del principio P11.
