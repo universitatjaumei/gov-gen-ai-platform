@@ -38,7 +38,7 @@ const ValoresPorDefectoPage = lazy(() => import('@/admin/pages/ValoresPorDefecto
 const OrganizacionesPage = lazy(() => import('@/admin/pages/OrganizacionesPage').then(m => ({ default: m.OrganizacionesPage })))
 const DocumentsPage = lazy(() => import('@/admin/pages/DocumentsPage').then(m => ({ default: m.DocumentsPage })))
 const VigenciaPage = lazy(() => import('@/admin/pages/VigenciaPage').then(m => ({ default: m.VigenciaPage })))
-const ReportsPage = lazy(() => import('@/admin/pages/ReportsPage').then(m => ({ default: m.ReportsPage })))
+const RevisionInteraccionesPage = lazy(() => import('@/admin/pages/RevisionInteraccionesPage').then(m => ({ default: m.RevisionInteraccionesPage })))
 const LLMConfigsPage = lazy(() => import('@/admin/pages/LLMConfigsPage').then(m => ({ default: m.LLMConfigsPage })))
 const PromptsPage = lazy(() => import('@/admin/pages/PromptsPage').then(m => ({ default: m.PromptsPage })))
 const ActivityPromptsPage = lazy(() => import('@/admin/pages/ActivityPromptsPage').then(m => ({ default: m.ActivityPromptsPage })))
@@ -112,7 +112,11 @@ function App() {
                     <Route path="valores-por-defecto" element={<ValoresPorDefectoPage />} />
                     <Route path="documents" element={<DocumentsPage />} />
                     <Route path="vigencia" element={<VigenciaPage />} />
-                    <Route path="reports" element={<ReportsPage />} />
+                    {/* PLAT.7 — «reports» chocaba de frente con el módulo Informes, que es
+                        donde alguien iría a buscarlo; esto es la revisión de interacciones
+                        de los asistentes, y la etiqueta ya decía «Revisión». Sin redirección
+                        desde la ruta vieja, que AGENTS.md prohíbe los shims. */}
+                    <Route path="revision" element={<RevisionInteraccionesPage />} />
                     <Route path="prompts" element={<PromptsPage />} />
                     <Route path="test-scenarios" element={<TestScenariosPage />} />
                   </Route>

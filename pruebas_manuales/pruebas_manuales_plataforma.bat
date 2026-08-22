@@ -179,7 +179,7 @@ echo     el recuento NO debe duplicarse.
 echo.
 echo  f) Da feedback bajo (puntuacion <= 2) a una respuesta real desde
 echo     el widget o via /api/v1/hub/feedback, y comprueba en
-echo     http://localhost:5173/hub/reports que aparece en el listado.
+echo     http://localhost:5173/hub/revision que aparece en el listado.
 echo.
 pause
 goto MENU

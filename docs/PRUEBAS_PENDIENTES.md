@@ -104,7 +104,7 @@ pidiendo una tecla entre pasos.
 **Por qué**: REV.1 es el código más reciente con interfaz y **nadie lo ha verificado a
 mano todavía**. Añade el veredicto de quien revisa sobre conversaciones reales.
 
-**Qué comprueba**: la cola de pendientes y el veredicto en http://localhost:5173/hub/reports,
+**Qué comprueba**: la cola de pendientes y el veredicto en http://localhost:5173/hub/revision,
 con nota obligatoria cuando el veredicto es «mal».
 
 ### 2.2 — `pruebas_manuales_plataforma.bat` — **prioridad alta**

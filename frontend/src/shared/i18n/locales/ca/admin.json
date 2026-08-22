@@ -3,7 +3,6 @@
     "chatbots": "Chatbots",
     "organizaciones": "Organitzacions",
     "documents": "Documents",
-    "reports": "Revisió",
     "new_chatbot": "Nou chatbot",
     "chatbot_name": "Nom",
     "chatbot_prompt": "Prompt del sistema",
@@ -14,7 +13,6 @@
     "new_organizacion": "Nova organització",
     "organizacion_name": "Nom de l'organització",
     "organizacion_admin": "Admin ID",
-    "organizacion_theme": "Configuració de tema (JSON)",
     "organizacion_active": "Actiu",
     "organizacion_chatbots": "Chatbots",
     "no_organizaciones": "No hi ha organitzacions creades",
@@ -309,7 +307,8 @@
       }
     },
     "llm_configs_alcance_de_los_niveles": "Els nivells (1, 2, 3) no són només de Chatbots: els consumeixen també Informes —copilot, proposta i auditoria de scripts, esborranys— i Curació —rastreig i reconeixement—. Canviar el model d’un nivell canvia el comportament dels tres mòduls.",
-    "organizacion_identidad_visual": "Identitat visual"
+    "organizacion_identidad_visual": "Identitat visual",
+    "revision": "Revisió"
   },
   "login": {
     "title": "Inicia la sessió",

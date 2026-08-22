@@ -17,7 +17,6 @@ import type { OrganizacionRead } from '@/shared/api/generated/model'
 const schema = z.object({
   name: z.string().min(1),
   partner_id: z.string().min(1),
-  theme_config: z.string(),
   is_active: z.boolean(),
 })
 type FormValues = z.infer<typeof schema>
@@ -40,7 +39,6 @@ export function OrganizacionesPage() {
   const toBody = (values: FormValues) => ({
     name: values.name,
     partner_id: values.partner_id,
-    theme_config: parseJson(values.theme_config),
     is_active: values.is_active,
   })
 
@@ -72,12 +70,12 @@ export function OrganizacionesPage() {
   // formulario, así que dar de alta una organización la deja igual configurada que antes.
   const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: '', partner_id: '', theme_config: '{}', is_active: true },
+    defaultValues: { name: '', partner_id: '', is_active: true },
   })
 
   function openCreate() {
     setEditing(null)
-    reset({ name: '', partner_id: '', theme_config: '{}', is_active: true })
+    reset({ name: '', partner_id: '', is_active: true })
     setDialogOpen(true)
   }
 
@@ -86,7 +84,6 @@ export function OrganizacionesPage() {
     reset({
       name: c.name,
       partner_id: c.partner_id,
-      theme_config: JSON.stringify(c.theme_config, null, 2),
       is_active: c.is_active,
     })
     setDialogOpen(true)
@@ -233,15 +230,6 @@ export function OrganizacionesPage() {
                 />
                 {errors.partner_id && <p className="text-destructive text-xs mt-1">{errors.partner_id.message}</p>}
               </div>
-              <div>
-                <label htmlFor="organizacion_theme_config" className="text-sm font-medium">{t('hub.organizacion_theme')}</label>
-                <textarea
-                  id="organizacion_theme_config"
-                  {...register('theme_config')}
-                  rows={4}
-                  className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background font-mono resize-y"
-                />
-              </div>
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="is_active" {...register('is_active')} className="rounded" />
                 <label htmlFor="is_active" className="text-sm">{t('hub.organizacion_active')}</label>
@@ -296,12 +284,4 @@ export function OrganizacionesPage() {
       )}
     </div>
   )
-}
-
-function parseJson(raw: string): Record<string, unknown> {
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return {}
-  }
 }

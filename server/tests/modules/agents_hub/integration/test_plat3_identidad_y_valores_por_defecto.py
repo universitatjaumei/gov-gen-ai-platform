@@ -234,16 +234,11 @@ class TestElContratoDeCadaMitad:
 
         assert {"id", "name", "partner_id", "is_active", "chatbot_count"} <= set(cuerpo)
 
-    @pytest.mark.asyncio
-    async def test_should_not_retire_theme_config_yet(self, db_session):
-        """`theme_config` está muerto y lo retira **PLAT.7**, cuando exista su sustituto.
-        Adelantarlo aquí dejaría a la organización sin forma de configurar su tema."""
-        org = await _organizacion(db_session)
-
-        async with _cliente(db_session, _principal(org.id)) as cliente:
-            cuerpo = (await cliente.get("/api/v1/hub/organizaciones")).json()[0]
-
-        assert "theme_config" in cuerpo
+    # `test_should_not_retire_theme_config_yet` vivía aquí y sostenía la línea hasta que
+    # existiera el sustituto: retirarlo antes dejaba a la organización sin forma de configurar
+    # su tema. PLAT.6 dio la pantalla y **PLAT.7 retiró la columna**, así que el guardarraíl se
+    # dio la vuelta y ahora comprueba que no vuelva:
+    # `tests/infra/test_plat7_retirada_del_tema_en_json.py`.
 
     @pytest.mark.asyncio
     async def test_should_serve_every_rag_default_on_its_own_endpoint(self, db_session):

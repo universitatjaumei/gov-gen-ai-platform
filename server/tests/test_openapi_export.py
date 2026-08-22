@@ -254,8 +254,10 @@ class TestOpenAPISchemaContract:
         )
         props = set(read_schema.get("properties", {}).keys())
 
+        # `theme_config` salió en PLAT.7: era una copia JSONB que no leía nadie, y la
+        # identidad visual se configura en /plataforma/identidad-visual desde PLAT.6.
         expected = {
-            "id", "name", "partner_id", "theme_config", "is_active",
+            "id", "name", "partner_id", "is_active",
             "chatbot_count", "created_at", "updated_at",
         }
         missing = expected - props
@@ -378,7 +380,7 @@ class TestOpenAPIResponseTypesForFrontend:
             f"Promise<unknown>: {sin_contrato}"
         )
 
-    # -- Feedback: la superficie que consume ReportsPage --
+    # -- Feedback: la superficie que consume RevisionInteraccionesPage --
 
     def test_interaction_review_schema_exists(self):
         """La interacción para revisión humana es un tipo del contrato."""
@@ -390,7 +392,7 @@ class TestOpenAPIResponseTypesForFrontend:
         )
 
     def test_interaction_review_fields_are_complete(self):
-        """Lleva los campos que ReportsPage tabula y exporta a CSV."""
+        """Lleva los campos que RevisionInteraccionesPage tabula y exporta a CSV."""
         review = self._schemas().get("InteractionReviewOut", {})
         props = set(review.get("properties", {}).keys())
         expected = {

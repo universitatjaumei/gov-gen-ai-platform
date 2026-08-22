@@ -3,7 +3,6 @@
     "chatbots": "Chatbots",
     "organizaciones": "Organizaciones",
     "documents": "Documentos",
-    "reports": "Revisión",
     "new_chatbot": "Nuevo chatbot",
     "chatbot_name": "Nombre",
     "chatbot_prompt": "Prompt del sistema",
@@ -14,7 +13,6 @@
     "new_organizacion": "Nueva organización",
     "organizacion_name": "Nombre de la organización",
     "organizacion_admin": "Admin ID",
-    "organizacion_theme": "Configuración de tema (JSON)",
     "organizacion_active": "Activo",
     "organizacion_chatbots": "Chatbots",
     "no_organizaciones": "No hay organizaciones creadas",
@@ -309,7 +307,8 @@
       }
     },
     "llm_configs_alcance_de_los_niveles": "Los niveles (1, 2, 3) no son solo de Chatbots: los consumen también Informes —copiloto, propuesta y auditoría de scripts, borradores— y Curación —rastreo y reconocimiento—. Cambiar el modelo de un nivel cambia el comportamiento de los tres módulos.",
-    "organizacion_identidad_visual": "Identidad visual"
+    "organizacion_identidad_visual": "Identidad visual",
+    "revision": "Revisión"
   },
   "login": {
     "title": "Iniciar sesión",

@@ -71,7 +71,7 @@ function exportToCsv(chatbotId: string, interactions: InteractionReviewOut[]) {
   URL.revokeObjectURL(url)
 }
 
-export function ReportsPage() {
+export function RevisionInteraccionesPage() {
   const { t } = useTranslation('admin')
 
   const [selectedChatbotId, setSelectedChatbotId] = useState('')

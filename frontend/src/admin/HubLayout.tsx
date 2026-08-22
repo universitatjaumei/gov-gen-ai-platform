@@ -9,7 +9,7 @@ const HUB_SUBNAV = [
   { key: 'hub.valores_por_defecto_nav', path: '/hub/valores-por-defecto' },
   { key: 'hub.documents', path: '/hub/documents' },
   { key: 'hub.vigencia', path: '/hub/vigencia' },
-  { key: 'hub.reports', path: '/hub/reports' },
+  { key: 'hub.revision', path: '/hub/revision' },
   { key: 'hub.prompt_templates', path: '/hub/prompts' },
   { key: 'admin:hub.test_scenarios.title', path: '/hub/test-scenarios' },
 ] as const

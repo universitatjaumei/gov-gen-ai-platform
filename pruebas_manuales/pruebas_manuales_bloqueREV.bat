@@ -9,7 +9,7 @@ echo   BLOQUE REV - Revision humana de las respuestas
 echo ============================================================
 echo.
 echo Lo que el agente YA verifico (no hace falta repetirlo):
-echo   - La pantalla /hub/reports carga con los filtros nuevos,
+echo   - La pantalla /hub/revision carga con los filtros nuevos,
 echo     el contador "Pendientes de revisar" y los botones de
 echo     veredicto por fila, en catalan.
 echo   - Contra Postgres real: 422 sin nota, 200 con nota firmando
@@ -64,7 +64,7 @@ echo ------------------------------------------------------------
 echo   PASO 2 - Revisa las respuestas
 echo ------------------------------------------------------------
 echo.
-echo 1. Abre http://localhost:5173/hub/reports y elige ese chatbot.
+echo 1. Abre http://localhost:5173/hub/revision y elige ese chatbot.
 echo 2. "Pendientes de revisar" debe marcar 2.
 echo 3. En la respuesta buena, pulsa "Adecuada".
 echo    -^> La fila desaparece de la lista (el filtro es "Sin revisar")

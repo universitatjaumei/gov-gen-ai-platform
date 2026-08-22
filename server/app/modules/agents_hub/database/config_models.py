@@ -94,7 +94,6 @@ class HubOrganizacion(HubConfigBase):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     partner_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    theme_config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # --- Defaults del grafo público (cascada hacia chatbots) ---
     default_public_graph_profile: Mapped[str] = mapped_column(String(50), nullable=False, default="PUBLIC_KB_RICH")

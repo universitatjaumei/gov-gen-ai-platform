@@ -64,7 +64,7 @@ class InteractionReviewOut(BaseModel):
     """Interacción servida a la revisión humana (CAL.2).
 
     El endpoint devolvía `list[dict]`, que en el contrato es una lista de objetos sin
-    forma; `ReportsPage` se veía obligada a redeclarar los siete campos a mano. Lo que
+    forma; `RevisionInteraccionesPage` se veía obligada a redeclarar los siete campos a mano. Lo que
     la pantalla tabula y exporta a CSV sale de aquí.
     """
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ReportsPage } from '../ReportsPage'
+import { RevisionInteraccionesPage } from '../RevisionInteraccionesPage'
 import {
   useGetInteractionsForReviewApiV1HubFeedbackChatbotIdReviewGet,
   useReviewInteractionApiV1HubFeedbackInteractionsInteractionIdReviewPatch,
@@ -78,12 +78,12 @@ function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
-      <ReportsPage />
+      <RevisionInteraccionesPage />
     </QueryClientProvider>,
   )
 }
 
-describe('ReportsPage', () => {
+describe('RevisionInteraccionesPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(useListChatbotsApiV1HubChatbotsGet).mockReturnValue({ data: SAMPLE_CHATBOTS } as any)
@@ -159,7 +159,7 @@ describe('ReportsPage', () => {
 // Distinto de las estrellas de arriba: eso es lo que opinó el usuario final. Esto es lo que
 // dice quien audita, y es lo que Gerencia pidió para decidir si hay que reformular una FAQ.
 
-describe('ReportsPage — revisión (REV.1)', () => {
+describe('RevisionInteraccionesPage — revisión (REV.1)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(useListChatbotsApiV1HubChatbotsGet).mockReturnValue({ data: SAMPLE_CHATBOTS } as any)

@@ -3,7 +3,6 @@
     "chatbots": "Chatbots",
     "organizaciones": "Organizations",
     "documents": "Documents",
-    "reports": "Review",
     "new_chatbot": "New chatbot",
     "chatbot_name": "Name",
     "chatbot_prompt": "System prompt",
@@ -14,7 +13,6 @@
     "new_organizacion": "New organization",
     "organizacion_name": "Organization name",
     "organizacion_admin": "Admin ID",
-    "organizacion_theme": "Theme config (JSON)",
     "organizacion_active": "Active",
     "organizacion_chatbots": "Chatbots",
     "no_organizaciones": "No organizations created",
@@ -309,7 +307,8 @@
       }
     },
     "llm_configs_alcance_de_los_niveles": "Tiers (1, 2, 3) are not only for Chatbots: Reports —copilot, script proposal and audit, drafts— and Curation —crawling and recognition— consume them too. Changing a tier’s model changes the behaviour of all three modules.",
-    "organizacion_identidad_visual": "Visual identity"
+    "organizacion_identidad_visual": "Visual identity",
+    "revision": "Review"
   },
   "login": {
     "title": "Sign in",

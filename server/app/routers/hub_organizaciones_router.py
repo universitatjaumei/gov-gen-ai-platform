@@ -44,15 +44,14 @@ class OrganizacionRead(BaseModel):
     bajo el módulo Chatbots: la mayoría de sus campos sí eran de Chatbots. Ahora esos viven en
     `/{organizacion_id}/valores-por-defecto`, que es donde pertenecen.
 
-    `theme_config` sigue aquí a propósito: está muerto —nadie lo lee, la cascada resuelve desde
-    `hub_themes`— y lo retira **PLAT.7**, cuando exista la pantalla que lo sustituye. Quitarlo
-    antes dejaría a la organización sin forma de configurar su tema.
+    `theme_config` salió de aquí en **PLAT.7**, una vez PLAT.6 le dio sustituto: era una copia
+    JSONB que no leía nadie —la cascada resuelve desde `hub_themes`— con un `<textarea>` a la
+    vista que sí se veía. La identidad visual se configura en `/plataforma/identidad-visual`.
     """
 
     id: uuid.UUID
     name: str
     partner_id: str
-    theme_config: dict
     is_active: bool
     chatbot_count: int = 0
     created_at: datetime
@@ -73,7 +72,6 @@ class OrganizacionCreate(BaseModel):
 
     name: str
     partner_id: str
-    theme_config: dict = {}
     is_active: bool = True
 
     model_config = {"extra": "forbid"}
@@ -88,7 +86,6 @@ class OrganizacionUpdate(BaseModel):
 
     name: str | None = None
     partner_id: str | None = None
-    theme_config: dict | None = None
     is_active: bool | None = None
 
     model_config = {"extra": "forbid"}
@@ -190,7 +187,6 @@ async def create_organizacion(
     organizacion = HubOrganizacion(
         name=body.name,
         partner_id=body.partner_id,
-        theme_config=body.theme_config,
         is_active=body.is_active,
     )
     session.add(organizacion)
