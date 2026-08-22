@@ -308,7 +308,8 @@
         "rewrite_llm_config_id": "Modelo que reescribe la consulta"
       }
     },
-    "llm_configs_alcance_de_los_niveles": "Los niveles (1, 2, 3) no son solo de Chatbots: los consumen también Informes —copiloto, propuesta y auditoría de scripts, borradores— y Curación —rastreo y reconocimiento—. Cambiar el modelo de un nivel cambia el comportamiento de los tres módulos."
+    "llm_configs_alcance_de_los_niveles": "Los niveles (1, 2, 3) no son solo de Chatbots: los consumen también Informes —copiloto, propuesta y auditoría de scripts, borradores— y Curación —rastreo y reconocimiento—. Cambiar el modelo de un nivel cambia el comportamiento de los tres módulos.",
+    "organizacion_identidad_visual": "Identidad visual"
   },
   "login": {
     "title": "Iniciar sesión",
@@ -384,6 +385,33 @@
         "usuario": "Persona",
         "grupo": "Grupo del IdP"
       }
+    },
+    "identidad_visual_nav": "Identidad visual",
+    "identidad_visual": {
+      "titulo": "Identidad visual",
+      "alcance": "Los colores, la tipografía y el logotipo. Cada nivel hereda del de arriba: la plataforma marca la base, la organización la ajusta y un asistente concreto puede ajustarla otra vez.",
+      "nivel": "Nivel",
+      "niveles": {
+        "plataforma": "Plataforma",
+        "organizacion": "Organización",
+        "chatbot": "Asistente"
+      },
+      "organizacion": "Organización",
+      "chatbot": "Asistente",
+      "colores": "Colores",
+      "tipografia": "Tipografía",
+      "logotipo": "Logotipo",
+      "previa": "Vista previa",
+      "guardar": "Guardar",
+      "cargando": "Cargando...",
+      "nombre_por_defecto": "Tema",
+      "heredado_de": "Heredado de {{nivel}}",
+      "limites": "PNG o JPEG, hasta 1 MB. El SVG queda fuera a propósito: puede llevar scripts dentro, y el logotipo se sirve sin sesión.",
+      "guarda_antes_de_subir": "Este nivel todavía no tiene tema propio. Guarda un cambio antes de subir el logotipo.",
+      "sin_marca": "Sin logotipo",
+      "elegir_fichero": "Fichero del logotipo",
+      "formato_rechazado": "Ese fichero es de tipo {{tipo}}. Solo se aceptan PNG y JPEG: el SVG puede llevar scripts dentro y el logotipo se sirve sin sesión.",
+      "demasiado_grande": "El fichero pasa de 1 MB, que es el tope del servidor. Reduce la imagen antes de subirla."
     }
   }
 }

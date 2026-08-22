@@ -55,16 +55,35 @@ def _app_con(principal: UserInfo, session):
     return TestClient(app, raise_server_exceptions=False)
 
 
-def _sesion_que_devuelve(entidad=None, tema=None):
+def _sesion_que_devuelve(entidad=None, tema=None, *, de_la_plataforma=None, de_la_organizacion=None):
     """SEC.8.6: el tema ya no se lee del disco, así que la sesión tiene que servir dos
-    cosas distintas —el chatbot y su tema— y despachar por modelo."""
+    cosas distintas —el chatbot y su tema— y despachar por modelo.
+
+    PLAT.6 le añadió una tercera: el endpoint **resuelve la cascada** —plataforma →
+    organización → asistente— en vez de devolver el tema apuntado tal cual, así que la sesión
+    tiene que contestar también a las consultas de los niveles de arriba. Por omisión no hay
+    ninguno, que es el caso de los tests que ya existían.
+    """
     from server.app.modules.agents_hub.database.config_models import HubTheme
 
     async def _get(model, _pk):
         return tema if model is HubTheme else entidad
 
+    def _execute(consulta):
+        # `_tema_mas_reciente` distingue los dos niveles por `organizacion_id`: `IS NULL` es
+        # el de plataforma. Leerlo de la consulta compilada es frágil; basta con el orden en
+        # que el endpoint los pide, que es plataforma primero.
+        pedidos = list(niveles)
+        siguiente = pedidos.pop(0) if pedidos else None
+        niveles[:] = pedidos
+        resultado = MagicMock()
+        resultado.scalars.return_value.first.return_value = siguiente
+        return resultado
+
+    niveles = [de_la_plataforma, de_la_organizacion]
     session = MagicMock()
     session.get = AsyncMock(side_effect=_get)
+    session.execute = AsyncMock(side_effect=_execute)
     session.commit = AsyncMock()
     return session
 

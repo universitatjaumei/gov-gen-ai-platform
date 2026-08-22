@@ -308,7 +308,8 @@
         "rewrite_llm_config_id": "Model que reescriu la consulta"
       }
     },
-    "llm_configs_alcance_de_los_niveles": "Els nivells (1, 2, 3) no són només de Chatbots: els consumeixen també Informes —copilot, proposta i auditoria de scripts, esborranys— i Curació —rastreig i reconeixement—. Canviar el model d’un nivell canvia el comportament dels tres mòduls."
+    "llm_configs_alcance_de_los_niveles": "Els nivells (1, 2, 3) no són només de Chatbots: els consumeixen també Informes —copilot, proposta i auditoria de scripts, esborranys— i Curació —rastreig i reconeixement—. Canviar el model d’un nivell canvia el comportament dels tres mòduls.",
+    "organizacion_identidad_visual": "Identitat visual"
   },
   "login": {
     "title": "Inicia la sessió",
@@ -384,6 +385,33 @@
         "usuario": "Persona",
         "grupo": "Grup de l’IdP"
       }
+    },
+    "identidad_visual_nav": "Identitat visual",
+    "identidad_visual": {
+      "titulo": "Identitat visual",
+      "alcance": "Els colors, la tipografia i el logotip. Cada nivell hereta del de dalt: la plataforma marca la base, l’organització l’ajusta i un assistent concret la pot ajustar una altra vegada.",
+      "nivel": "Nivell",
+      "niveles": {
+        "plataforma": "Plataforma",
+        "organizacion": "Organització",
+        "chatbot": "Assistent"
+      },
+      "organizacion": "Organització",
+      "chatbot": "Assistent",
+      "colores": "Colors",
+      "tipografia": "Tipografia",
+      "logotipo": "Logotip",
+      "previa": "Vista previa",
+      "guardar": "Guardar",
+      "cargando": "Carregant...",
+      "nombre_por_defecto": "Tema",
+      "heredado_de": "Heretat de {{nivel}}",
+      "limites": "PNG o JPEG, fins a 1 MB. L’SVG queda fora a propòsit: pot portar scripts dins, i el logotip se serveix sense sessió.",
+      "guarda_antes_de_subir": "Aquest nivell encara no té tema propi. Guarda un canvi abans de pujar el logotip.",
+      "sin_marca": "Sense logotip",
+      "elegir_fichero": "Fitxer del logotip",
+      "formato_rechazado": "Aquest fitxer és de tipus {{tipo}}. Només s’accepten PNG i JPEG: l’SVG pot portar scripts dins i el logotip se serveix sense sessió.",
+      "demasiado_grande": "El fitxer passa d’1 MB, que és el tope del servidor. Redueix la imatge abans de pujar-la."
     }
   }
 }

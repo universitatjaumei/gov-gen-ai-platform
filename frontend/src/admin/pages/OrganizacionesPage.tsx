@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
@@ -181,6 +182,17 @@ export function OrganizacionesPage() {
                   </button>
                 </td>
                 <td className="py-3 text-right">
+                  {/* PLAT.6 — al nivel de esta organización en la cascada visual. Quien mira
+                      esta fila es quien quiere cambiarle el logotipo; hacerle buscar la
+                      pantalla y volver a elegir la organización en un selector es trabajo
+                      que ya está hecho aquí. */}
+                  <Link
+                    to={`/plataforma/identidad-visual?organizacion=${c.id}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-xs hover:underline px-2"
+                  >
+                    {t('hub.organizacion_identidad_visual')}
+                  </Link>
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setDeleteTarget(c) }}

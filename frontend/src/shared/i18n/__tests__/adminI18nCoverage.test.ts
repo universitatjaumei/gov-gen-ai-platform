@@ -87,6 +87,9 @@ describe('CAL.4 — i18n del panel admin', () => {
       // PLAT.3 — la etiqueta de cada valor por defecto, iterando lo que devuelve el
       // servidor: `t(`hub.valores_por_defecto.campos.${campo}`)`.
       'hub.valores_por_defecto.campos.',
+      // PLAT.6 — el nivel de la cascada visual, que la pantalla ofrece según el rol y usa
+      // también para decir de qué nivel hereda cada campo.
+      'plataforma.identidad_visual.niveles.',
     ]
 
     // Las formas plurales de i18next (`x_one` / `x_other`) tampoco aparecen literales: el

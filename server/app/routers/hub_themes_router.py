@@ -312,6 +312,27 @@ async def get_preset_themes() -> list[dict]:
     ]
 
 
+@router.get("/defaults", response_model=TemaResueltoOut)
+async def get_theme_defaults(
+    _: UserInfo = Depends(_require_admin),
+    _modulo=_de_plataforma,
+) -> TemaResueltoOut:
+    """Los valores por omisión del contrato, para que la pantalla sepa **qué campos existen**.
+
+    Lo destapó la verificación en navegador de PLAT.6: en el nivel de plataforma de una
+    instalación recién levantada no hay tema propio ni nivel padre del que heredar, así que la
+    pantalla iteraba un conjunto vacío y no ofrecía ni un campo — justo en el estado en el que
+    alguien entra por primera vez a poner los colores de su institución.
+
+    La alternativa era escribir la lista de campos en el frontend, que es lo que PLAT.6 prohíbe:
+    se desincroniza del contrato en cuanto se añade un color. Aquí la lista **es** el modelo, así
+    que añadir un campo a `ThemeColors` lo hace aparecer en la pantalla sin tocar TypeScript.
+
+    Va antes de `/{theme_id}` porque si no, «defaults» se leería como un identificador.
+    """
+    return TemaResueltoOut(config=ThemeConfig(name="defaults").model_dump())
+
+
 @router.get("", response_model=list[ThemeResponse])
 async def get_themes(
     organizacion_id: str | None = None,
@@ -377,12 +398,28 @@ async def get_theme_for_chatbot(
         actor = resolve_effective_actor(http_request, user)
         assert_chatbot_access(actor, chatbot, via="session")
 
+    # **Los tres niveles, no solo el del asistente.** Antes devolvía el tema apuntado tal
+    # cual: mientras todo se almacenaba completo no se notaba, pero un tema de asistente que
+    # solo pusiera un color ya servía al widget ese color y nada más — ni la paleta de su
+    # organización ni la de la plataforma. Con el almacenamiento disperso que exige la cascada
+    # (ver `create_theme`), eso pasaría de rareza a norma.
+    config: dict = {}
+    plataforma = await _tema_mas_reciente(session, organizacion_id=None)
+    if plataforma is not None:
+        config = _fusionar(config, plataforma.config or {})
+    if chatbot.organizacion_id is not None:
+        de_la_organizacion = await _tema_mas_reciente(
+            session, organizacion_id=chatbot.organizacion_id
+        )
+        if de_la_organizacion is not None:
+            config = _fusionar(config, de_la_organizacion.config or {})
+
     theme_id = (chatbot.theme_config or {}).get("theme_id")
     if theme_id:
         theme = await _load_theme(session, theme_id)
         if theme:
-            return ChatbotThemeOut(config=theme.get("config", {}))
-    return ChatbotThemeOut(config={})
+            config = _fusionar(config, theme.get("config", {}))
+    return ChatbotThemeOut(config=config)
 
 
 @router.get("/resolved", response_model=TemaResueltoOut)
@@ -477,7 +514,13 @@ async def create_theme(
         name=data.name,
         organizacion_id=uuid.UUID(data.organizacion_id) if data.organizacion_id else None,
         chatbot_id=uuid.UUID(data.chatbot_id) if data.chatbot_id else None,
-        config=data.config.model_dump(),
+        # `exclude_unset` y no `model_dump()` a secas: con los valores por omisión del
+        # contrato materializados, el primer guardado de una organización se llevaba los
+        # dieciséis colores de la plataforma como valores **propios**, y a partir de ahí un
+        # cambio en la plataforma ya no le llegaba. La cascada quedaba de adorno. Lo destapó
+        # la verificación en navegador de PLAT.6, no un test unitario: hacía falta seguir la
+        # secuencia entera —crear el tema y luego cambiar el de arriba— para verlo.
+        config=data.config.model_dump(exclude_unset=True),
         is_default=False,
         created_by=user.user_id,
         # Explícitas y no delegadas al default de la columna: el objeto queda completo
@@ -505,7 +548,9 @@ async def update_theme(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Theme {theme_id} not found")
     if tema.is_default:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot modify default themes")
-    tema.config = data.config.model_dump()
+    # Mismo motivo que en el alta: sin `exclude_unset`, el segundo guardado volvería a
+    # congelar la paleta que el primero dejó heredable.
+    tema.config = data.config.model_dump(exclude_unset=True)
     tema.updated_at = datetime.now(timezone.utc)
     await session.commit()
     await session.refresh(tema)

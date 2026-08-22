@@ -308,7 +308,8 @@
         "rewrite_llm_config_id": "Model that rewrites the query"
       }
     },
-    "llm_configs_alcance_de_los_niveles": "Tiers (1, 2, 3) are not only for Chatbots: Reports —copilot, script proposal and audit, drafts— and Curation —crawling and recognition— consume them too. Changing a tier’s model changes the behaviour of all three modules."
+    "llm_configs_alcance_de_los_niveles": "Tiers (1, 2, 3) are not only for Chatbots: Reports —copilot, script proposal and audit, drafts— and Curation —crawling and recognition— consume them too. Changing a tier’s model changes the behaviour of all three modules.",
+    "organizacion_identidad_visual": "Visual identity"
   },
   "login": {
     "title": "Sign in",
@@ -384,6 +385,33 @@
         "usuario": "Person",
         "grupo": "IdP group"
       }
+    },
+    "identidad_visual_nav": "Visual identity",
+    "identidad_visual": {
+      "titulo": "Visual identity",
+      "alcance": "Colours, typography and logo. Each level inherits from the one above: the platform sets the base, an organisation adjusts it, and a single assistant can adjust it again.",
+      "nivel": "Level",
+      "niveles": {
+        "plataforma": "Platform",
+        "organizacion": "Organisation",
+        "chatbot": "Assistant"
+      },
+      "organizacion": "Organisation",
+      "chatbot": "Assistant",
+      "colores": "Colours",
+      "tipografia": "Typography",
+      "logotipo": "Logo",
+      "previa": "Preview",
+      "guardar": "Save",
+      "cargando": "Loading...",
+      "nombre_por_defecto": "Theme",
+      "heredado_de": "Inherited from {{nivel}}",
+      "limites": "PNG or JPEG, up to 1 MB. SVG is deliberately excluded: it can carry scripts, and the logo is served without a session.",
+      "guarda_antes_de_subir": "This level has no theme of its own yet. Save a change before uploading a logo.",
+      "sin_marca": "No logo",
+      "elegir_fichero": "Logo file",
+      "formato_rechazado": "That file is of type {{tipo}}. Only PNG and JPEG are accepted: SVG can carry scripts, and the logo is served without a session.",
+      "demasiado_grande": "The file is over 1 MB, the server limit. Shrink the image before uploading it."
     }
   }
 }
