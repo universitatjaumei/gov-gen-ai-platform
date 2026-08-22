@@ -1,1 +1,0 @@
-Always read and strictly follow the instructions in CONTRIBUTING.md before proposing or executing any code changes.
