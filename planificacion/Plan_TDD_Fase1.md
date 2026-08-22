@@ -10148,6 +10148,52 @@ Fase Deploy
 
 ---
 
+### Prompt D.0.doc (RED/GREEN) — La documentación no puede prometer lo que la VM no da
+
+**Modelo sugerido**: **Sonnet** — alcance cerrado: ocho menciones que revisar y una corrección
+con consecuencia.
+
+```
+# PROMPT D.0.doc (RED/GREEN) — Repasar lo que la documentacion supone de Cloud Run
+# Deploy: n/a (documentacion)
+
+## Por que
+El destino paso a ser una **VM con Docker Compose** y no Cloud Run
+(`docs/DECISION_EXTRACCION_Y_DESPLIEGUE.md` §2). Ocho documentos de `docs/` siguen mencionando
+Cloud Run, y la mayoria lo hace bien —registran el cambio o lo citan de pasada—, pero **uno
+afirma una proteccion que la VM no trae**:
+
+    docs/SANDBOX_SECURITY.md:114
+    ### Capa 8 — gVisor en GCP (despliegue Cloud Run)
+    Cloud Run ejecuta los contenedores sobre gVisor (runtime runsc), que intercepta las
+    llamadas al sistema y las emula en espacio de usuario.
+
+Esa capa la daba **la plataforma**, no el codigo. En una VM con Docker Compose no esta salvo
+que se configure. Un documento de seguridad que cuenta una capa inexistente no es desorden
+documental: es la clase de cosa que alguien lee justo antes de desplegar, y decide con ella.
+
+## Que hacer
+1. Repasar las ocho menciones (`grep -ril "cloud run" docs/`) y clasificarlas: las que
+   registran historia se quedan como estan; las que razonan **sobre el destino actual** se
+   corrigen.
+2. `SANDBOX_SECURITY.md`, capa 8: decir la verdad. O se configura gVisor en la VM —y entonces
+   se documenta como configuracion, con su comprobacion—, o la capa **no existe** y hay que
+   decir cuantas quedan y si eso cambia el juicio sobre el aislamiento del sandbox.
+   **Decidir, no dejarlo ambiguo**: el sandbox ejecuta codigo generado por un LLM.
+3. Si alguna correccion cambia el juicio de seguridad, decirlo en el informe de cierre y no
+   solo en el documento.
+
+## Tests (RED primero)
+- RED: un test de infra falla si `docs/` afirma que el despliegue corre sobre Cloud Run
+  —distinto de mencionarlo como historia o como alternativa descartada—.
+- RED: el numero de capas que declara `SANDBOX_SECURITY.md` coincide con las que existen.
+
+## Criterio de done
+- [ ] Las ocho menciones clasificadas, con la lista en el commit
+- [ ] La capa 8 resuelta en un sentido o en el otro, no matizada
+- [ ] Guardarrail que impide volver a prometer una capa que no esta
+```
+
 ### Prompt D.0 — Habilitación de servicios del proyecto GCP
 
 **Modelo sugerido**: **Sonnet** — script idempotente y lista versionada; sin decisiones abiertas.
@@ -20131,4 +20177,53 @@ commits, una rama, sin tags. Borrarlo de GitHub no pierde historia.
 Antes de borrarlo, limpiar los volcados en ese clon —para poder reclonar si algo sale mal—:
 rm -f logs/*.txt  y  git filter-repo --path logs --invert-paths --force
 Y guardar un bundle en un disco externo si la historia de enero-marzo importa: sera la unica copia.
+```
+
+
+### Prompt REPO.3 (RED/GREEN) — El triaje editorial de `docs/`
+
+**Modelo sugerido**: **Opus** — decide qué se publica y qué no, y algunas instantáneas llevan
+asuntos abiertos dentro.
+
+```
+# PROMPT REPO.3 (RED/GREEN) — Que instantaneas viajan al repositorio publico
+# Deploy: n/a (documentacion)
+
+## Por que
+El 2026-08-22, al revisar `docs/` para abrir el repositorio, salieron tres clases de documento y
+sólo una se resolvio entonces:
+
+- **La isla AutomatIA** (17 ficheros que describian otro producto) → a cuarentena ese mismo dia.
+- **Premisa caducada** (los que razonaban sobre Cloud Run) → prompt D.0.doc, antes de desplegar.
+- **Ciertos pero historicos** → esto. Se dejo para aqui a proposito: no estan mal, son
+  instantaneas y razonamiento, y decidir si un repositorio publico los quiere es una eleccion
+  **editorial** que se toma mejor mirando al publico que va a leerlos.
+
+Y hay un motivo mas para no haberlo hecho antes: algunos llevan **asuntos abiertos** dentro
+—`VALORACION_PROYECTO.md` tenia hallazgos con decisiones marcadas como pendientes—, asi que
+esto es triar, no borrar a bulto. Borrarlos sin leerlos pierde trabajo por hacer.
+
+## Que hacer
+1. Leer y clasificar, uno a uno: `VALORACION_PROYECTO.md`, `AUDITORIA_PRE_DEPLOY.md`,
+   `PRUEBAS_PENDIENTES.md`, `CAMBIOS_ARQUITECTURA.md`, `CAMBIOS_PLANIFICACION.md`, los cuatro
+   `COMPARATIVA_*.md`, `PLAN_CHATBOTS_E_INGESTA_LOCAL.md` y
+   `DECISION_OPENWEBUI_CARCASA_CHAT.md` (una decision **descartada**, que puede seguir siendo
+   util precisamente por eso).
+2. **Antes de tirar nada, extraer lo que siga abierto** y llevarlo a donde vive el trabajo
+   pendiente: `planificacion/PROJECT_STATE.md` o un bloque. Un hallazgo sin resolver no se
+   archiva, se traslada.
+3. Decidir para cada uno: se queda como instantanea fechada, se resume en el historial y se
+   retira, o se va. **Razonar cada retirada en el commit**, no borrar en lote.
+4. Unificar `MCP_SERVER.md` y `mcp.md`, que se solapan; el indice ya lo señala.
+5. Dejar `docs/README.md` coherente con lo que quede.
+
+## Tests (RED primero)
+- RED: `docs/README.md` no enlaza ningun fichero que no exista (indice sin enlaces rotos).
+- RED: ningun documento activo referencia uno retirado.
+
+## Criterio de done
+- [ ] Los doce clasificados, con la razon de cada retirada en el commit
+- [ ] Cero asuntos abiertos perdidos: los que habia, trasladados y citados
+- [ ] `MCP_SERVER.md` y `mcp.md` unificados
+- [ ] `docs/README.md` sin enlaces rotos
 ```

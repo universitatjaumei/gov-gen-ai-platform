@@ -1,149 +1,104 @@
-# Índice de Documentación de AutomatIA
+# Índice de la documentación
 
-Bienvenido a la documentación completa de AutomatIA. Esta guía te ayudará a encontrar la información que necesitas según tu rol y necesidades.
+Esta carpeta tiene tres clases de documento y conviene distinguirlas antes de leer, porque no
+todas envejecen igual:
 
-## 🎯 Navegación por Rol
+- **Referencia viva** — describe cómo es la plataforma hoy. Si contradice al código, es un fallo
+  del documento y hay que arreglarlo.
+- **Decisión** — por qué algo se hizo así, con fecha. No se actualiza: se sustituye por otra
+  decisión posterior que la cite.
+- **Instantánea** — una valoración, una auditoría o una comparativa en una fecha concreta. Es
+  cierta *para esa fecha*, y se lee como historia, no como estado.
 
-### 👤 Usuario Final
-Si eres usuario final de AutomatIA en tu organización:
-
-1. **Primeros pasos**: [Guía de Inicio Rápido](quick_start.md)
-2. **Uso diario**: [Manual de Usuario - Client Node](functional/user_manual_client.md)
-3. **Transformación de datos**: [Guía de Usuario ETL](ETL_USER_GUIDE.md)
-4. **Automatización de procesos**: [Configuración de Flujos](functional/flows_configuration.md)
-5. **Problemas comunes**: [Resolución de Problemas](troubleshooting.md)
-
-### 🤝 Partner/Integrador
-Si eres un Partner que gestiona clientes de AutomatIA:
-
-1. **Administración**: [Guía de Administración para Partners](functional/partner_admin_guide.md)
-2. **Panel de control**: [Manual de Administración](MANUAL_ADMIN.md)
-3. **Instalación**: [Guía de Despliegue](deployment_guide.md)
-4. **Soporte técnico**: [Resolución de Problemas](troubleshooting.md)
-
-### 💻 Desarrollador
-Si estás desarrollando o extendiendo AutomatIA:
-
-1. **Arquitectura**: [Arquitectura Detallada](technical/architecture_detailed.md)
-2. **Módulos de generación**: [Factory Modules](technical/factory_modules.md)
-3. **Seguridad**: [Modelo de Seguridad](technical/security_model.md)
-4. **Base de datos**: [Esquema de BD](technical/database_schema.md)
-5. **Motor de ejecución**: [Runtime Engine](technical/runtime_engine.md)
-6. **API interna**: [Documentación API](INTERNAL_API.md)
-7. **Nuevas características**: [Features V4.0](technical/new_features_v4.md)
-
-## 📚 Documentación por Categoría
-
-### Documentación Funcional
-
-| Documento | Descripción | Audiencia |
-|-----------|-------------|-----------|
-| [Manual de Usuario - Client Node](functional/user_manual_client.md) | Guía completa de uso diario de la aplicación cliente | Usuario Final |
-| [Guía de Usuario ETL](ETL_USER_GUIDE.md) | Transformación de datos con lenguaje natural | Usuario Final |
-| [Configuración de Flujos](functional/flows_configuration.md) | Creación y gestión de workflows automatizados | Usuario Final |
-| [Guía de Administración para Partners](functional/partner_admin_guide.md) | Gestión de organizaciones y licencias | Partner |
-| [Manual de Administración](MANUAL_ADMIN.md) | Panel de administración del servidor | Partner/Admin |
-
-### Documentación Técnica
-
-| Documento | Descripción | Audiencia |
-|-----------|-------------|-----------|
-| [Arquitectura Detallada](technical/architecture_detailed.md) | Diseño del sistema, componentes y comunicación | Desarrollador |
-| [Factory Modules](technical/factory_modules.md) | Módulos de generación de código (PDF, ETL, RPA, Graphics, Reports) | Desarrollador |
-| [Modelo de Seguridad](technical/security_model.md) | Anonimización, sandbox, políticas de seguridad | Desarrollador |
-| [Esquema de Base de Datos](technical/database_schema.md) | Tablas y relaciones de BD cliente y servidor | Desarrollador |
-| [Runtime Engine](technical/runtime_engine.md) | Motor de ejecución y orquestación de flujos | Desarrollador |
-| [API Reference](technical/api_reference.md) | Endpoints y comunicación Brain-Client | Desarrollador |
-| [Features V4.0](technical/new_features_v4.md) | Nuevas características de la versión 4.0 | Desarrollador |
-
-### Documentación Operacional
-
-| Documento | Descripción | Audiencia |
-|-----------|-------------|-----------|
-| [Guía de Inicio Rápido](quick_start.md) | Instalación y primeros pasos en 5 minutos | Todos |
-| [Guía de Despliegue](deployment_guide.md) | Instalación completa y configuración | Partner/DevOps |
-| [Resolución de Problemas](troubleshooting.md) | Soluciones a problemas comunes | Todos |
-| [API Interna](INTERNAL_API.md) | Comunicación entre componentes del sistema | Desarrollador |
-
-## 🔍 Búsqueda Rápida por Tema
-
-### Instalación y Configuración
-- [Guía de Inicio Rápido](quick_start.md) - Instalación en 5 minutos
-- [Guía de Despliegue](deployment_guide.md) - Instalación completa
-- Configuración de variables de entorno → [Deployment Guide: Sección 3](deployment_guide.md#3-configuración-de-variables-de-entorno-env)
-
-### Extracción de Documentos
-- Guía de usuario → [Manual de Usuario: Sección 2](functional/user_manual_client.md#2-automatizaciones-de-documentos-extracción)
-- Arquitectura técnica → [Factory Modules: PDFFactory](technical/factory_modules.md#a-pdffactory-pdf_factorypy)
-
-### Transformación de Datos (ETL)
-- Guía completa → [Guía de Usuario ETL](ETL_USER_GUIDE.md)
-- Arquitectura técnica → [Factory Modules: ETLFactory](technical/factory_modules.md#b-etlscriptfactory-etl_factorypy)
-
-### Automatización Web (RPA)
-- Guía de usuario → [Manual de Usuario: Sección 3](functional/user_manual_client.md#3-automatización-de-procesos-rpa)
-- Arquitectura técnica → [Factory Modules: NavigationFactory](technical/factory_modules.md#c-navigationfactory-navigation_factorypy)
-
-### Generación de Gráficos e Informes
-- Documentación técnica → [Features V4.0: Graphics & Reports](technical/new_features_v4.md)
-
-### Flujos de Trabajo
-- Configuración → [Configuración de Flujos](functional/flows_configuration.md)
-- Motor de ejecución → [Runtime Engine: WorkflowEngine](technical/runtime_engine.md#2-orquestación-de-flujos-flowengine)
-
-### Seguridad y Privacidad
-- Modelo completo → [Modelo de Seguridad](technical/security_model.md)
-- Anonimización → [Modelo de Seguridad: Anonymizer](technical/security_model.md#1-módulo-anonymizer-privacidad-rgpd)
-- Sandbox → [Modelo de Seguridad: Sandbox](technical/security_model.md#2-sandbox-de-ejecución-seguridad-del-runtime)
-
-### Conectores (Watchers)
-- Email, carpetas, web, API → [Manual de Usuario: Sección 4](functional/user_manual_client.md#4-conectores-connections)
-
-### Administración
-- Panel de Partners → [Guía de Administración para Partners](functional/partner_admin_guide.md)
-- Panel de Superadmin → [Manual de Administración](MANUAL_ADMIN.md)
-
-### Troubleshooting
-- Problemas comunes → [Resolución de Problemas](troubleshooting.md)
-
-## 📖 Documentos Adicionales en la Raíz
-
-Además de la documentación en `docs/`, existen documentos técnicos en la raíz del proyecto:
-
-- `ARCHITECTURE.md` - Documento maestro de arquitectura (versión extendida)
-- `ROADMAP_DEVELOPMENT.md` - Roadmap de desarrollo del proyecto
-- `PROMPTS_MAESTROS.md` - Prompts de sistema para generación de IA
-
-## 🆕 Novedades de la Versión 4.0
-
-La versión 4.0 introduce importantes mejoras:
-
-- **GraphicsFactory**: Generación automática de gráficos con matplotlib/seaborn
-- **ReportFactory**: Creación de informes PDF profesionales con ReportLab
-- **ClarificationService**: Sistema de preguntas previas a la generación
-- **ScreenshotGuard**: Control de privacidad visual para RPA
-- **ValidationLoopManager**: Ciclo de validación con feedback del usuario
-- **APIWatcher**: Consumo de APIs REST como fuente de datos
-
-Consulta [Features V4.0](technical/new_features_v4.md) para más detalles.
-
-## 💡 Sugerencias de Lectura
-
-### Para empezar desde cero
-1. [Guía de Inicio Rápido](quick_start.md)
-2. [Manual de Usuario - Client Node](functional/user_manual_client.md)
-3. [Guía de Usuario ETL](ETL_USER_GUIDE.md)
-
-### Para entender la arquitectura
-1. [Arquitectura Detallada](technical/architecture_detailed.md)
-2. [Modelo de Seguridad](technical/security_model.md)
-3. [Factory Modules](technical/factory_modules.md)
-
-### Para administrar el sistema
-1. [Guía de Despliegue](deployment_guide.md)
-2. [Manual de Administración](MANUAL_ADMIN.md)
-3. [Resolución de Problemas](troubleshooting.md)
+> **El índice anterior era el de AutomatIA**, la aplicación NiceGUI de la que nace este proyecto,
+> y con él diecisiete documentos que describían aquel producto: el *Client Node*, el *Brain*, su
+> `brain_server.db`. El 2026-08-22 pasaron a `_legacy_nicegui/docs/`, que es la cuarentena de la
+> migración —sólo lectura, y los borra una persona al cerrar la Fase 1—. No se borraron todavía
+> porque el Bloque NIC tiene que inventariar qué de `client_app/` está cubierto, y esos documentos
+> son la descripción de lo que había.
 
 ---
 
-¿No encuentras lo que buscas? Consulta el [archivo de troubleshooting](troubleshooting.md) o contacta con tu Partner de soporte.
+## Empezar por aquí
+
+| Documento | Qué es |
+|---|---|
+| [`PRESENTACION_PROYECTO.md`](PRESENTACION_PROYECTO.md) | Qué hace la plataforma, qué está construido y verificado, y qué está previsto. El documento para quien llega de fuera |
+| [`Arquitectura.md`](Arquitectura.md) | Qué es la plataforma y qué principios la rigen: módulos, roles, privacidad, frontera cloud/edge, stack |
+| [`../AGENTS.md`](../AGENTS.md) | Las reglas duras para agentes de programación, y de paso el contrato de estilo del proyecto |
+| [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Cómo se trabaja aquí |
+
+## Gobernanza, conformidad y licencia
+
+| Documento | Clase |
+|---|---|
+| [`MARCO_GOBERNANZA_IA.md`](MARCO_GOBERNANZA_IA.md) | Referencia viva — gobernanza, trazabilidad y protección de datos; los dos planos y qué obligación vive en cada uno |
+| [`LICENCIA_ES.md`](LICENCIA_ES.md) | Referencia viva — la AGPL explicada en español: qué permite, qué obliga, qué **no** obliga, y qué significa para un pliego |
+| [`REQUISITOS_PUBLICACION_PLATAFORMA.md`](REQUISITOS_PUBLICACION_PLATAFORMA.md) | Referencia viva — qué hace falta para publicar la plataforma |
+| [`EU_GOVERNANCE_CONCEPT_NOTE.md`](EU_GOVERNANCE_CONCEPT_NOTE.md) · [`EU_GOVERNANCE_TOPICS.md`](EU_GOVERNANCE_TOPICS.md) | Referencia viva — encaje europeo del proyecto |
+
+## Chatbots y corpus normativo
+
+| Documento | Clase |
+|---|---|
+| [`CONTRATO_MD_CORPUS.md`](CONTRATO_MD_CORPUS.md) | Referencia viva — el contrato que cumple todo `.md` que entra al corpus. Lo consume la ingesta |
+| [`CARGA_VOCABULARIO.md`](CARGA_VOCABULARIO.md) | Referencia viva — cómo se carga el vocabulario de ámbitos y submaterias |
+| [`GRAPH_PROFILES.md`](GRAPH_PROFILES.md) | Referencia viva — los perfiles de grafo público y qué hace cada uno |
+| [`NIVELES_DE_MODELO.md`](NIVELES_DE_MODELO.md) | Referencia viva — los niveles (*tiers*) de modelo y qué actividad usa cada uno |
+| [`DEPURAR_CONTEXTO_RAG.md`](DEPURAR_CONTEXTO_RAG.md) | Referencia viva — cómo depurar qué contexto llegó al modelo |
+| [`CURACION_MULTIORGANIZACION.md`](CURACION_MULTIORGANIZACION.md) | Referencia viva — la curación con varias organizaciones |
+| [`CASO_CURACION_ESCOLA_DOCTORAT.md`](CASO_CURACION_ESCOLA_DOCTORAT.md) | Referencia viva — caso guía de curación, extremo a extremo |
+
+## Informes, scripts y sandbox
+
+| Documento | Clase |
+|---|---|
+| [`REDACCION_CONTRACT_FIRST.md`](REDACCION_CONTRACT_FIRST.md) | Referencia viva — el contrato del módulo de Informes: plantillas, extracción, `DraftingCoreGraph`, `RunManifest` |
+| [`CASO_INFORME_SEGUIMIENTO.md`](CASO_INFORME_SEGUIMIENTO.md) | Referencia viva — el caso guía del módulo, con las dos reglas duras que salieron de él |
+| [`SANDBOX_SECURITY.md`](SANDBOX_SECURITY.md) | Referencia viva — las capas de aislamiento del código generado. **Pendiente de repasar**: su «capa 8» supone gVisor de Cloud Run y el destino pasó a ser una VM |
+
+## Plataforma y operación
+
+| Documento | Clase |
+|---|---|
+| [`MCP_SERVER.md`](MCP_SERVER.md) · [`mcp.md`](mcp.md) | Referencia viva — el servidor MCP. **Se solapan**: pendiente de unificar |
+| [`A11Y_GUIDELINES.md`](A11Y_GUIDELINES.md) · [`A11Y_CHECKLIST.md`](A11Y_CHECKLIST.md) | Referencia viva — accesibilidad: criterios y lista de comprobación |
+| [`PRUEBAS_MANUALES.md`](PRUEBAS_MANUALES.md) | Referencia viva — qué se prueba a mano y qué no, con la matriz por módulo |
+| [`METODOLOGIA_AGENTICA.md`](METODOLOGIA_AGENTICA.md) | Referencia viva — cómo se ejecuta el desarrollo por bloques |
+| [`GESTOR_EXPEDIENTES.md`](GESTOR_EXPEDIENTES.md) | Referencia viva — el módulo previsto para 2027-2028; todavía no existe |
+| [`DESPLIEGUE_PROTOTIPO_GCP.md`](DESPLIEGUE_PROTOTIPO_GCP.md) | Referencia viva — el despliegue mínimo del prototipo. No sustituye al bloque Deploy |
+| [`chatbots-publicos/`](chatbots-publicos/) | Referencia viva — cómo se embebe el widget: plantilla CSS, tema de ejemplo y página de demostración |
+| [`ejemplos/`](ejemplos/) | Referencia viva — ficheros de ejemplo (FAQ del corpus) |
+
+## Decisiones
+
+Se leen por su fecha. Ninguna se actualiza: si una decisión cambia, la sustituye otra que la cite.
+
+| Documento | Decidió |
+|---|---|
+| [`DECISION_EXTRACCION_Y_DESPLIEGUE.md`](DECISION_EXTRACCION_Y_DESPLIEGUE.md) | Retirar Docling y desplegar en **VM y no en Cloud Run** |
+| [`DECISION_MODELOS_EMBEDDING_RERANKER.md`](DECISION_MODELOS_EMBEDDING_RERANKER.md) | Qué modelo de embedding y de reordenación, y cuándo extraerlos a un servicio |
+| [`DECISION_CURACION_SEPARADA.md`](DECISION_CURACION_SEPARADA.md) | La curación como módulo propio |
+| [`DECISION_RENDERIZADO_RASTREO.md`](DECISION_RENDERIZADO_RASTREO.md) | Cómo se renderiza al rastrear un portal |
+| [`DECISION_OPENWEBUI_CARCASA_CHAT.md`](DECISION_OPENWEBUI_CARCASA_CHAT.md) | **Descartar** OpenWebUI como carcasa de chat |
+| [`RAG_SUSTITUCION_DEPENDENCIAS.md`](RAG_SUSTITUCION_DEPENDENCIAS.md) | Qué dependencias de recuperación se sustituyeron y por qué |
+
+## Instantáneas
+
+Ciertas en su fecha. Se leen como historia del proyecto, no como estado.
+
+| Documento | Fecha del corte |
+|---|---|
+| [`VALORACION_PROYECTO.md`](VALORACION_PROYECTO.md) | Valoración del proyecto, con hallazgos y decisiones pendientes anotadas |
+| [`AUDITORIA_PRE_DEPLOY.md`](AUDITORIA_PRE_DEPLOY.md) | Auditoría previa al despliegue |
+| [`PRUEBAS_PENDIENTES.md`](PRUEBAS_PENDIENTES.md) | Pruebas pendientes en su momento |
+| [`CAMBIOS_ARQUITECTURA.md`](CAMBIOS_ARQUITECTURA.md) · [`CAMBIOS_PLANIFICACION.md`](CAMBIOS_PLANIFICACION.md) | Registro de cambios de arquitectura y de planificación |
+| [`COMPARATIVA_ETL_LEGACY.md`](COMPARATIVA_ETL_LEGACY.md) · [`COMPARATIVA_LEGACY_INFORMES.md`](COMPARATIVA_LEGACY_INFORMES.md) · [`COMPARATIVA_PROMPTS_LEGACY.md`](COMPARATIVA_PROMPTS_LEGACY.md) | Qué hacía el legacy NiceGUI frente a lo nuevo, módulo a módulo |
+| [`COMPARATIVA_RAG_LAMB.md`](COMPARATIVA_RAG_LAMB.md) | Comparativa de la recuperación frente a otra implementación |
+| [`PLAN_CHATBOTS_E_INGESTA_LOCAL.md`](PLAN_CHATBOTS_E_INGESTA_LOCAL.md) | El plan de carga del corpus en local |
+
+## Dónde está el estado del desarrollo
+
+No aquí. El cursor, los bloques y el historial viven en [`../planificacion/`](../planificacion/):
+`PROJECT_STATE.md` para dónde está el trabajo ahora mismo, `HISTORIAL.md` para por qué cada cosa
+se hizo como se hizo.
