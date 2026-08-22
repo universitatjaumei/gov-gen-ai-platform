@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/shared/auth'
 import { useModulos } from '@/shared/auth/useModulos'
 import { SUPPORTED_LANGUAGES } from '@/shared/i18n'
-import logoUji from '@/assets/logo-uji.png'
+import { useMarca } from '@/shared/marca/useMarca'
 
 /** El nombre de cada idioma EN ese idioma: quien busca su lengua la reconoce escrita así. */
 const IDIOMAS: Record<string, string> = {
@@ -34,6 +34,9 @@ export function AppLayout() {
   // cualquier cuenta veia chatbots, informes y curacion.
   const { modulos } = useModulos()
   const secciones = NAV_SECTIONS.filter((s) => modulos.includes(s.modulo))
+  // La marca la resuelve la cascada del servidor. Aquí estaba importada como código, así
+  // que el panel llevaba el logotipo de una institución concreta en cualquier despliegue.
+  const { marca, cargando: cargandoMarca } = useMarca()
 
   return (
     <div className="flex h-screen">
@@ -44,11 +47,20 @@ export function AppLayout() {
         aria-label={t('nav.main')}
         className="flex flex-col w-56 shrink-0 bg-sidebar text-sidebar-foreground p-4 gap-1"
       >
-        <img
-          src={logoUji}
-          alt="Universitat Jaume I"
-          className="h-8 w-auto self-start mb-5 mt-1"
-        />
+        {/* Sin marca configurada va el nombre de la plataforma, ya traducido: ni un hueco
+            ni el logotipo de nadie. Y mientras la cascada está en vuelo no se pinta
+            ninguna de las dos cosas, para que la cabecera no cambie de forma al cargar. */}
+        {cargandoMarca ? (
+          <div className="h-8 mb-5 mt-1" />
+        ) : marca.logoUrl ? (
+          <img
+            src={marca.logoUrl}
+            alt={marca.logoAlt || tc('app_name')}
+            className="h-8 w-auto self-start mb-5 mt-1"
+          />
+        ) : (
+          <p className="h-8 mb-5 mt-1 self-start font-semibold leading-8">{tc('app_name')}</p>
+        )}
 
         {secciones.map(({ key, path }) => (
           <NavLink

@@ -106,13 +106,16 @@ scripts/clickhouse/
 *.jpg
 *.jpeg
 *.png
-# ...pero los assets de la interfaz NO son capturas: son código fuente. Sin ellos, el import no
-# resuelve y la compilación falla en integración continua, donde solo existe lo versionado.
-# Vigilado por `frontend/src/__tests__/assetsVersionados.test.ts`.
-!frontend/src/assets/*.png
-!frontend/src/assets/*.jpg
-!frontend/src/assets/*.jpeg
-# Ni el logotipo de las páginas de demostración: viven junto al HTML para que la página sea
+# La excepción que había aquí para `frontend/src/assets/*` se retiró: su efecto real, junto
+# con el guardarraíl de `assetsVersionados.test.ts`, era **garantizar** que el logotipo de una
+# institución concreta viajara al repositorio principal, porque `AppLayout` lo importaba como
+# código. Una imagen importada desde `src/` se compila dentro del bundle y por tanto es la
+# misma para todos los despliegues: la marca de una organización llega ahora por la cascada
+# visual del servidor. Lo vigila `frontend/src/__tests__/marcaNoViajaEnElRepo.test.ts`.
+# Si alguna vez hace falta una ilustración genérica de la plataforma, su sitio es
+# `frontend/public/`, que no está ignorado.
+#
+# Sí sigue exceptuado el logotipo de las páginas de demostración: viven junto al HTML para que la página sea
 # portable, y sin ellos quien clone ve la demo sin marca — fallando en silencio, porque un
 # `<img>` roto no da error. Vigilado por
 # `server/tests/infra/test_los_html_de_docs_no_apuntan_a_imagenes_fantasma.py`.

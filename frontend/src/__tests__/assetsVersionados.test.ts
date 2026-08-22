@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { codigoSinComentarios } from '@/test-utils/codigoSinComentarios'
 
 /**
  * Los assets que importa la interfaz tienen que estar en git.
@@ -34,7 +35,9 @@ function ficherosDeCodigo(directorio: string): string[] {
 function assetsReferenciados(): { desde: string; asset: string }[] {
   const referencias: { desde: string; asset: string }[] = []
   for (const fichero of ficherosDeCodigo(SRC)) {
-    const contenido = readFileSync(fichero, 'utf8')
+    // Sin comentarios: la explicación de por qué se retiró un asset menciona su ruta, y
+    // buscarla en el fichero entero convertía esa explicación en un falso positivo.
+    const contenido = codigoSinComentarios(readFileSync(fichero, 'utf8'))
     for (const encontrado of contenido.matchAll(/['"]@\/([^'"]+)['"]/g)) {
       const asset = encontrado[1]
       if (EXTENSIONES.test(asset)) referencias.push({ desde: fichero, asset })

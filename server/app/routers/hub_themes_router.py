@@ -13,12 +13,23 @@ import re
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import (
+    get_current_user,
     get_current_user_optional,
     require_role,
 )
@@ -30,10 +41,16 @@ from server.app.core.auth.widget_key import (
 from server.app.core.auth.delegated_actor import resolve_effective_actor
 from server.app.core.auth.models import UserInfo
 from server.app.core.auth.tenancy import assert_org_access, puede_acceder
+from server.app.core.storage import StorageService, get_storage_service
+from server.app.core.uploads import UploadKind, tipo_de_imagen, validate_upload
 from server.app.modules.agents_hub.database.config_models import HubChatbot, HubTheme
 from server.app.modules.agents_hub.database.connection import get_async_session
 
 router = APIRouter(prefix="/hub/themes", tags=["hub-themes"])
+
+# Un logotipo institucional cabe de sobra en 1 MB. El tope se declara aquí y no se toma
+# del `max_upload_mb` general: ese está dimensionado para un PDF del corpus.
+_MAX_LOGO_BYTES = 1024 * 1024
 
 _require_admin = require_role("superadmin", "admin")
 _require_superadmin = require_role("superadmin")
@@ -82,12 +99,31 @@ class ThemeSpacing(BaseModel):
     xl: str = "2rem"
 
 
+class ThemeBranding(BaseModel):
+    """La marca de la institución, **como dato de configuración**.
+
+    Existía la cascada visual entera —colores, tipografía, espaciado— y la marca era lo
+    único que no viajaba por ella: el panel importaba `@/assets/logo-uji.png` como código
+    fuente, así que cualquier institución que clonara el repositorio arrancaba con el
+    logotipo de otra. Es la misma regla que ya rige el vocabulario del corpus: la identidad
+    de una organización es dato revisable, no una línea del programa.
+
+    `logoContentType` lo deduce el servidor de la firma real del fichero, nunca del
+    `content_type` que manda el cliente.
+    """
+
+    logoUrl: str | None = None
+    logoAlt: str | None = None
+    logoContentType: str | None = None
+
+
 class ThemeConfig(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     version: str = "1.0.0"
     colors: ThemeColors = Field(default_factory=ThemeColors)
     typography: ThemeTypography = Field(default_factory=ThemeTypography)
     spacing: ThemeSpacing = Field(default_factory=ThemeSpacing)
+    branding: ThemeBranding = Field(default_factory=ThemeBranding)
     customCSS: str | None = None
 
     model_config = {"extra": "allow"}
@@ -124,6 +160,19 @@ class ChatbotThemeOut(BaseModel):
     """Solo `config` -- sin owner_id/theme_id/name: ver `get_theme_for_chatbot`."""
 
     config: dict = Field(default_factory=dict)
+
+
+class TemaResueltoOut(BaseModel):
+    """La cascada ya resuelta para quien pregunta. Misma disciplina que
+    `ChatbotThemeOut`: solo `config`, nunca el id ni el nombre del tema ni la
+    organización a la que pertenece."""
+
+    config: dict = Field(default_factory=dict)
+
+
+class LogoSubidoOut(BaseModel):
+    logoUrl: str
+    logoAlt: str | None = None
 
 
 # ============================================
@@ -182,6 +231,56 @@ async def _load_theme(session, theme_id: str) -> dict | None:
 async def _list_themes(session) -> list[dict]:
     filas = (await session.execute(select(HubTheme))).scalars().all()
     return [_a_dict(t) for t in filas]
+
+
+def _fusionar(base: dict, encima: dict) -> dict:
+    """Fusión en profundidad: la cascada añade, no reemplaza.
+
+    Con un reemplazo plano, una organización que solo quiere poner su logotipo tendría
+    que volver a declarar la paleta entera para no perderla — y en cuanto la plataforma
+    cambiara un color, el suyo se quedaría congelado sin que nadie lo notara.
+    """
+    resultado = dict(base)
+    for clave, valor in encima.items():
+        anterior = resultado.get(clave)
+        if isinstance(anterior, dict) and isinstance(valor, dict):
+            resultado[clave] = _fusionar(anterior, valor)
+        elif valor is not None:
+            resultado[clave] = valor
+    return resultado
+
+
+async def _tema_mas_reciente(session, *, organizacion_id: uuid.UUID | None) -> HubTheme | None:
+    """El tema de un nivel de la cascada: plataforma si `organizacion_id` es `None`.
+
+    `chatbot_id IS NULL` porque el tema de un asistente concreto no entra en la cascada
+    del panel: ese lo resuelve `get_theme_for_chatbot` para el widget.
+
+    Se ordena por `updated_at` en vez de mirar `is_default`: los temas predefinidos
+    (`is_default`) y el que cree un superadministrador para la plataforma ocupan el mismo
+    nivel, y el criterio intuitivo es que gane el último configurado.
+    """
+    consulta = (
+        select(HubTheme)
+        .where(HubTheme.chatbot_id.is_(None))
+        .order_by(HubTheme.updated_at.desc())
+        .limit(1)
+    )
+    if organizacion_id is None:
+        consulta = consulta.where(HubTheme.organizacion_id.is_(None))
+    else:
+        consulta = consulta.where(HubTheme.organizacion_id == organizacion_id)
+    return (await session.execute(consulta)).scalars().first()
+
+
+def _clave_del_logo(theme_id: uuid.UUID | str) -> str:
+    """Clave de almacenamiento del logotipo.
+
+    Sin extensión a propósito: el tipo real se guarda en `branding.logoContentType`, así
+    que servirlo no depende de adivinar el sufijo ni de que el nombre que puso quien subió
+    el fichero diga la verdad.
+    """
+    return f"branding/{theme_id}/logo"
 
 
 # ============================================
@@ -269,6 +368,42 @@ async def get_theme_for_chatbot(
         if theme:
             return ChatbotThemeOut(config=theme.get("config", {}))
     return ChatbotThemeOut(config={})
+
+
+@router.get("/resolved", response_model=TemaResueltoOut)
+async def get_resolved_theme(
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> TemaResueltoOut:
+    """La cascada visual resuelta para quien pregunta: plataforma → organización.
+
+    Es lo que consume el panel de administración para pintar su cabecera. Antes no
+    consumía nada: el logotipo estaba importado como código, así que el panel llevaba la
+    marca de una institución concreta en cualquier despliegue.
+
+    **Va registrado antes de `/{theme_id}`.** FastAPI resuelve por orden de registro y
+    `_assert_id_de_tema` rechaza lo que no sea un UUID: al revés, esta ruta contestaría
+    «Identificador de tema inválido» y el fallo parecería del cliente.
+
+    La organización se toma del token y solo cuando es **una sola**. Con varias no hay
+    forma de saber cuál de ellas es «la casa» de quien mira, y en un superadministrador la
+    lista vacía significa «todas» (ver `UserInfo.organizacion_ids`): en los dos casos se
+    responde con la marca de la plataforma, que es la respuesta honesta.
+    """
+    plataforma = await _tema_mas_reciente(session, organizacion_id=None)
+    config: dict = dict(plataforma.config or {}) if plataforma is not None else {}
+
+    if len(user.organizacion_ids) == 1:
+        try:
+            organizacion_id = uuid.UUID(user.organizacion_ids[0])
+        except ValueError:
+            organizacion_id = None
+        if organizacion_id is not None:
+            propio = await _tema_mas_reciente(session, organizacion_id=organizacion_id)
+            if propio is not None:
+                config = _fusionar(config, propio.config or {})
+
+    return TemaResueltoOut(config=config)
 
 
 @router.get("/{theme_id}", response_model=ThemeResponse)
@@ -397,3 +532,130 @@ async def apply_theme_to_chatbot(
     chatbot.theme_config = {"theme_id": theme_id}
     await session.commit()
     return {"message": f"Theme {theme_id} applied to chatbot {chatbot_id}", "theme_name": theme["name"]}
+
+
+# ============================================
+# La marca de la institución
+# ============================================
+
+
+@router.post("/{theme_id}/logo", response_model=LogoSubidoOut)
+async def upload_theme_logo(
+    theme_id: str,
+    http_request: Request,
+    file: UploadFile = File(...),
+    logoAlt: str | None = Form(None),
+    user: UserInfo = Depends(_require_admin),
+    session: AsyncSession = Depends(get_async_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> LogoSubidoOut:
+    """Sube el logotipo de un tema y lo deja apuntado en su `config`.
+
+    El fichero va por `StorageService` y no al disco: la regla de portabilidad del
+    proyecto, y además el contenedor de producción es reemplazable.
+
+    La validación es la de SEC.6 (`validate_upload`), que mira extensión y **firma real**
+    —el `content_type` del multipart lo elige quien sube— y corta la lectura al pasarse de
+    tamaño en vez de tragarse el fichero para luego rechazarlo.
+    """
+    tema = await session.get(HubTheme, _assert_id_de_tema(theme_id))
+    if tema is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Theme {theme_id} not found"
+        )
+
+    # Mismo criterio que `create_theme`: un tema sin organización es de plataforma y lo
+    # hereda todo el mundo, así que su marca la pone un superadministrador.
+    if tema.organizacion_id is None:
+        if not user.is_superadmin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "La marca de un tema de plataforma la hereda todo el mundo: "
+                    "solo un superadministrador puede cambiarla."
+                ),
+            )
+    else:
+        assert_org_access(user, str(tema.organizacion_id))
+
+    # Los temas predefinidos son la base de estilo que comparten todas las
+    # organizaciones, igual que en `update_theme`: la marca va en un tema propio.
+    if tema.is_default:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot modify default themes",
+        )
+
+    buffer = await validate_upload(file, kind=UploadKind.IMAGE, max_bytes=_MAX_LOGO_BYTES)
+    contenido = buffer.read()
+    buffer.close()
+
+    tipo = tipo_de_imagen(contenido)
+    if tipo is None:  # pragma: no cover - `validate_upload` ya lo habría rechazado
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="El contenido no corresponde a una imagen admitida.",
+        )
+
+    await storage.put(_clave_del_logo(tema.id), contenido)
+
+    # Ruta relativa y calculada, no interpolada: un `<img src>` con ruta relativa funciona
+    # detrás de cualquier proxy, y `url_path_for` la deriva del prefijo real de montaje.
+    url = http_request.app.url_path_for("get_theme_logo", theme_id=str(tema.id))
+    branding = dict((tema.config or {}).get("branding") or {})
+    branding.update(
+        {
+            "logoUrl": str(url),
+            "logoContentType": tipo,
+            **({"logoAlt": logoAlt} if logoAlt is not None else {}),
+        }
+    )
+    # Reasignación completa: mutar el dict en sitio no marca la columna JSONB como sucia
+    # y el UPDATE no llegaría a salir.
+    tema.config = {**(tema.config or {}), "branding": branding}
+    tema.updated_at = datetime.now(timezone.utc)
+    await session.commit()
+
+    return LogoSubidoOut(logoUrl=str(url), logoAlt=branding.get("logoAlt"))
+
+
+@router.get("/{theme_id}/logo")
+async def get_theme_logo(
+    theme_id: str,
+    session: AsyncSession = Depends(get_async_session),
+    storage: StorageService = Depends(get_storage_service),
+) -> Response:
+    """Sirve el logotipo de un tema. **Sin autenticación, y es deliberado.**
+
+    Un `<img src>` no manda la cabecera `Authorization`, así que exigirla convertiría la
+    marca en un icono roto —y en el widget público no hay sesión ninguna que exigir—. No
+    reabre el hueco que cerró SEC.5: devuelve los bytes de una imagen y nada más, sin el
+    nombre del tema, sin la organización a la que pertenece y sin forma de enumerar cuáles
+    existen, porque la clave es el UUID del tema.
+    """
+    tema = await session.get(HubTheme, _assert_id_de_tema(theme_id))
+    if tema is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Theme {theme_id} not found"
+        )
+
+    branding = (tema.config or {}).get("branding") or {}
+    if not branding.get("logoUrl"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Este tema no tiene logotipo"
+        )
+
+    try:
+        contenido = await storage.get(_clave_del_logo(tema.id))
+    except FileNotFoundError:
+        # El puntero está en la configuración y el objeto no: es el mismo fallo que SEC.8.6
+        # arregló con los temas en ficheros, así que se dice como un 404 y no como un 500.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Este tema no tiene logotipo"
+        ) from None
+
+    return Response(
+        content=contenido,
+        media_type=branding.get("logoContentType") or "application/octet-stream",
+        headers={"Cache-Control": "public, max-age=300"},
+    )

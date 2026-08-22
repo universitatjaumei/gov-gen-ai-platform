@@ -144,9 +144,24 @@ export interface ThemeAnimations {
   easingBounce: string;
 }
 
+/** La marca de la institución, que llega por la cascada y no por un `import`.
+ *
+ * `AppLayout` importaba `@/assets/logo-uji.png`: una imagen importada desde `src/` se
+ * compila dentro del bundle, así que era la misma para todos los despliegues de un
+ * proyecto pensado para servir a varias administraciones. Lo vigila
+ * `src/__tests__/marcaNoViajaEnElRepo.test.ts`.
+ */
+export interface ThemeBranding {
+  logoUrl?: string;
+  logoAlt?: string;
+  /** Lo deduce el servidor de la firma real del fichero; el cliente no lo necesita. */
+  logoContentType?: string;
+}
+
 export interface ThemeConfig {
   name: string;
   version: string;
+  branding?: ThemeBranding;
   colors: ThemeColors;
   typography: ThemeTypography;
   spacing: ThemeSpacing;

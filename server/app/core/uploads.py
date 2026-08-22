@@ -25,6 +25,8 @@ from fastapi import HTTPException, UploadFile, status
 from server.app.core.config import get_settings
 
 MAGIC_PDF = b"%PDF-"
+MAGIC_PNG = b"\x89PNG\r\n\x1a\n"
+MAGIC_JPEG = b"\xff\xd8\xff"
 
 _NOMBRE_POR_DEFECTO = "fichero"
 # Todo lo que un sistema de ficheros —o una clave de objeto— puede interpretar como
@@ -42,6 +44,7 @@ class UploadKind(Enum):
 
     PDF = "pdf"
     TEXT = "text"
+    IMAGE = "image"
 
 
 _REGLAS: dict[UploadKind, dict] = {
@@ -54,7 +57,36 @@ _REGLAS: dict[UploadKind, dict] = {
         "extensiones": (".md", ".markdown", ".txt"),
         "magic": (),
     },
+    UploadKind.IMAGE: {
+        # Marca institucional (logotipos de plataforma, organización o asistente).
+        #
+        # **Sin SVG, a propósito.** Un SVG es un documento XML que admite `<script>` y
+        # manejadores de eventos: servido desde el origen de la API, subir la marca sería
+        # subir código ejecutable a la aplicación. Un logotipo en PNG cubre el caso real.
+        #
+        # **Sin WebP, y no por gusto**: su firma está partida (`RIFF` en el byte 0 y
+        # `WEBP` en el 8), y la comprobación de aquí es un `startswith`. Aceptar `RIFF`
+        # a secas dejaría pasar cualquier contenedor RIFF —un AVI, por ejemplo—, así que
+        # antes que debilitar la firma se deja el formato fuera.
+        "extensiones": (".png", ".jpg", ".jpeg"),
+        "magic": (MAGIC_PNG, MAGIC_JPEG),
+    },
 }
+
+# El tipo que se sirve luego, deducido de la firma real y no del `content_type` del
+# multipart, que lo elige quien sube.
+TIPO_POR_FIRMA: dict[bytes, str] = {
+    MAGIC_PNG: "image/png",
+    MAGIC_JPEG: "image/jpeg",
+}
+
+
+def tipo_de_imagen(contenido: bytes) -> str | None:
+    """Media type de una imagen ya validada, según su firma."""
+    for firma, tipo in TIPO_POR_FIRMA.items():
+        if contenido.startswith(firma):
+            return tipo
+    return None
 
 
 def default_max_bytes() -> int:

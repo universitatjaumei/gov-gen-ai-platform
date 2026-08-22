@@ -5,6 +5,7 @@ import i18n from '@/shared/i18n'
 import { AuthProvider } from '@/shared/auth'
 import { AppLayout } from '../AppLayout'
 import { useGetMeApiV1AuthMeGet } from '@/shared/api/generated/auth/auth'
+import { useGetResolvedThemeApiV1HubThemesResolvedGet } from '@/shared/api/generated/hub-themes/hub-themes'
 
 /**
  * INF.7 — el menú se genera con los módulos que concede el servidor, así que el test tiene que
@@ -12,6 +13,13 @@ import { useGetMeApiV1AuthMeGet } from '@/shared/api/generated/auth/auth'
  */
 vi.mock('@/shared/api/generated/auth/auth', () => ({
   useGetMeApiV1AuthMeGet: vi.fn(),
+}))
+
+// La marca del panel viene de la cascada del servidor; sin el doble, el `useQuery` de este
+// hook reventaría por falta de `QueryClientProvider`. Lo que hace la marca tiene sus propios
+// tests en `AppLayoutMarca.test.tsx`.
+vi.mock('@/shared/api/generated/hub-themes/hub-themes', () => ({
+  useGetResolvedThemeApiV1HubThemesResolvedGet: vi.fn(),
 }))
 
 function conModulos(modulos: string[]) {
@@ -33,6 +41,10 @@ beforeAll(async () => {
 beforeEach(() => {
   localStorage.setItem('access_token', TOKEN)
   conModulos(['chatbots', 'curacion', 'informes', 'plataforma'])
+  vi.mocked(useGetResolvedThemeApiV1HubThemesResolvedGet).mockReturnValue({
+    data: { config: {} },
+    isLoading: false,
+  } as never)
 })
 
 function renderLayout(path = '/hub') {
