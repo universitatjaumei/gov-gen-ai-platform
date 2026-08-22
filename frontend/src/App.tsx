@@ -29,6 +29,7 @@ import '@/shared/i18n'
  */
 const LoginPage = lazy(() => import('@/admin/pages/LoginPage').then(m => ({ default: m.LoginPage })))
 const AuthCallbackPage = lazy(() => import('@/admin/pages/AuthCallbackPage').then(m => ({ default: m.AuthCallbackPage })))
+const ModulosPage = lazy(() => import('@/admin/pages/ModulosPage').then(m => ({ default: m.ModulosPage })))
 const UsuariosPage = lazy(() => import('@/admin/pages/UsuariosPage').then(m => ({ default: m.UsuariosPage })))
 const AccessTokensPage = lazy(() => import('@/admin/pages/AccessTokensPage').then(m => ({ default: m.AccessTokensPage })))
 const ChatbotsPage = lazy(() => import('@/admin/pages/ChatbotsPage').then(m => ({ default: m.ChatbotsPage })))
@@ -124,6 +125,7 @@ function App() {
                     <Route path="prompts-actividad" element={<ActivityPromptsPage />} />
                     <Route path="tokens" element={<AccessTokensPage />} />
                     <Route path="usuarios" element={<UsuariosPage />} />
+                    <Route path="modulos" element={<ModulosPage />} />
                   </Route>
                   <Route path="/curation" element={<RutaDeModulo modulo="curacion"><CurationLayout /></RutaDeModulo>}>
                     <Route index element={<Navigate to="/curation/sites" replace />} />

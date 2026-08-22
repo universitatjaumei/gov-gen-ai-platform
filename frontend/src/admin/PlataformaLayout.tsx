@@ -6,6 +6,7 @@ const PLATAFORMA_SUBNAV = [
   { key: 'plataforma.prompts_actividad', path: '/plataforma/prompts-actividad' },
   { key: 'plataforma.tokens', path: '/plataforma/tokens' },
   { key: 'plataforma.usuarios_nav', path: '/plataforma/usuarios' },
+  { key: 'plataforma.modulos_nav', path: '/plataforma/modulos' },
 ] as const
 
 /**

@@ -363,6 +363,25 @@
         "manual": "Alta manual",
         "sso": "SSO"
       }
+    },
+    "modulos_nav": "Mòduls",
+    "modulos": {
+      "titulo": "Concessió de mòduls",
+      "nota_superadmin": "El superadministrador entra en tots els mòduls sense concessió: és el rol de la plataforma, i fer-ho dependre d’una fila deixaria una instal·lació nova amb el superadministrador tancat fora. No busques la seua fila ací.",
+      "tipo": "Tipus de subjecte",
+      "sujeto": "Subjecte",
+      "modulo": "Mòdul",
+      "persona": "Persona",
+      "nombre_del_grupo": "Nom del grup",
+      "conceder": "Concedir",
+      "retirar": "Retirar",
+      "retirar_del_grupo": "Retirar a tot el grup",
+      "concedido_por": "Concedit per",
+      "pista_grupo": "El nom ha de coincidir amb el que declara l’IdP en el seu atribut de grups (per exemple PDI o PTGAS). La comparació no distingeix majúscules. Concedir a un grup arriba a tot el col·lectiu, també a qui encara no ha entrat mai.",
+      "tipos": {
+        "usuario": "Persona",
+        "grupo": "Grup de l’IdP"
+      }
     }
   }
 }

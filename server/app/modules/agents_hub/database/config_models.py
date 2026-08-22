@@ -637,18 +637,32 @@ class HubPlatformModule(HubConfigBase):
 
 
 class HubModuleGrant(HubConfigBase):
-    """Un módulo concedido a un usuario (INF.7).
+    """Un módulo concedido a **una persona o a un grupo del IdP** (INF.7, ampliado en IDE.5).
 
-    El sujeto es el id de usuario **normalizado a UUID** con `_actor.user_to_uuid`: no hay una
-    tabla de usuarios única —hay `SuperAdminAccount` con `admin_id` entero y `AdminAccount` con
-    `partner_id` de texto—, así que la clave estable es la que se deriva del claim del token.
-    Ese normalizador existe precisamente por eso.
+    Con `subject_type = 'usuario'` el sujeto es el id de usuario **normalizado a UUID** con
+    `_actor.user_to_uuid`: no hay una tabla de usuarios única —hay `SuperAdminAccount` con
+    `admin_id` entero y `AdminAccount` con `partner_id` de texto—, así que la clave estable es la
+    que se deriva del claim del token. Ese normalizador existe precisamente por eso.
+
+    Con `subject_type = 'grupo'` el sujeto es el **nombre del grupo tal como lo declara el IdP**
+    en el atributo de `SAML_ATTR_GROUPS`. Es la puerta al modelo que quiere el usuario: el ERP
+    mete a la persona en un grupo, el IdP lo declara, y la concesión del grupo le da los módulos
+    sin que nadie toque nada aquí. La semántica es la de `assert_chatbot_access` —rol **o**
+    grupo, lo que case primero— con su regla: sin concesión que case, no hay módulo.
+
+    `subject_id` es `String(255)` y no `String(36)`: estaba dimensionado para un UUID y un
+    nombre de grupo institucional no cabe ahí de forma fiable.
     """
 
     __tablename__ = "hub_module_grants"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    subject_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    subject_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    #: `usuario` | `grupo`. Dato con dos valores estables y consumidor en el código: va con
+    #: `CheckConstraint`, mismo criterio que `origen` en `HubUser`.
+    subject_type: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="usuario", server_default="usuario"
+    )
     module_code: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     granted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
@@ -657,5 +671,12 @@ class HubModuleGrant(HubConfigBase):
     granted_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
     __table_args__ = (
-        UniqueConstraint("subject_id", "module_code", name="uq_grant_subject_module"),
+        # El tipo entra en la clave: sin él, un grupo cuyo nombre coincidiera con el UUID de
+        # una persona no podría convivir con la concesión de esa persona.
+        UniqueConstraint(
+            "subject_type", "subject_id", "module_code", name="uq_grant_subject_type_module"
+        ),
+        CheckConstraint(
+            "subject_type IN ('usuario', 'grupo')", name="ck_grant_subject_type"
+        ),
     )

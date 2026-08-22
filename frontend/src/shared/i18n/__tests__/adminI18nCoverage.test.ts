@@ -82,6 +82,8 @@ describe('CAL.4 — i18n del panel admin', () => {
       // de pintar lo que el contrato mande y volvería a decidir ella.
       'plataforma.usuarios.roles.',
       'plataforma.usuarios.origenes.',
+      // IDE.5 — el tipo de sujeto de cada concesión, iterando lo que devuelve el servidor.
+      'plataforma.modulos.tipos.',
     ]
 
     // Las formas plurales de i18next (`x_one` / `x_other`) tampoco aparecen literales: el

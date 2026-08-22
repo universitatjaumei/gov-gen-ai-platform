@@ -363,6 +363,25 @@
         "manual": "Alta manual",
         "sso": "SSO"
       }
+    },
+    "modulos_nav": "Módulos",
+    "modulos": {
+      "titulo": "Concesión de módulos",
+      "nota_superadmin": "El superadministrador entra en todos los módulos sin concesión: es el rol de la plataforma, y hacerlo depender de una fila dejaría una instalación nueva con el superadministrador encerrado fuera. No busques su fila aquí.",
+      "tipo": "Tipo de sujeto",
+      "sujeto": "Sujeto",
+      "modulo": "Módulo",
+      "persona": "Persona",
+      "nombre_del_grupo": "Nombre del grupo",
+      "conceder": "Conceder",
+      "retirar": "Retirar",
+      "retirar_del_grupo": "Retirar a todo el grupo",
+      "concedido_por": "Concedido por",
+      "pista_grupo": "El nombre tiene que coincidir con el que declara el IdP en su atributo de grupos (por ejemplo PDI o PTGAS). La comparación no distingue mayúsculas. Conceder a un grupo alcanza a todo el colectivo, también a quien todavía no ha entrado nunca.",
+      "tipos": {
+        "usuario": "Persona",
+        "grupo": "Grupo del IdP"
+      }
     }
   }
 }
