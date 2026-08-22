@@ -54,6 +54,12 @@ jobs:
       JWT_ALGORITHM: HS256
       JWT_EXPIRATION_MINUTES: "60"
       # GOOGLE_API_KEY no se necesita: los tests unitarios/integración mockean el LLM
+      # CI no levanta el microservicio del sandbox, así que `SANDBOX_BASE_URL` apuntaría a
+      # `script-sandbox:5000` —un nombre de la red de Docker— y los dos tests que hablan con
+      # él esperarían 30 s antes de fallar con `422 TEST_FAILED: Timeout`, que no parece un
+      # problema de entorno. `TESTING=1` conmuta `sandbox_mode` a `local`, y está documentado
+      # en `.env.example` para el mismo caso en desarrollo.
+      TESTING: "1"
 
     defaults:
       run:
@@ -90,16 +96,26 @@ jobs:
       # estado filtrado vuelve a ser invisible, que es exactamente lo que este paso existe
       # para cazar. En local manda la velocidad; aquí manda la detección, y CI puede
       # permitirse los minutos.
-      - name: Run unit + integration + E2E tests (single invocation, needs PostgreSQL)
+      # `tests` entero, y no una lista de rutas. La lista que había aquí cubría 1.187 de los
+      # 2.811 tests de la suite: **el 42%**. Fuera quedaban `tests/modules/redaccion` (647
+      # tests) y `tests/modules/curation` (413), los dos módulos con más tests del proyecto,
+      # más `tests/public_graphs` entero y todo `tests/api` salvo cuatro ficheros. Un rojo ahí
+      # dejaba el check en verde, que es el mismo agujero que SEC.8.7 cerró para el árbol de
+      # la raíz — y así pasaron inadvertidos los dos tests del sandbox que dependían de un
+      # servicio ausente.
+      #
+      # Se pone `tests` y no una lista más larga **a propósito**: una lista vuelve a
+      # desalinearse en cuanto alguien añade un directorio, y nadie se entera porque el
+      # síntoma es un check verde. Medido: los directorios que faltaban tardan 2:33 en serie,
+      # así que la cobertura completa cuesta minutos, no el triple del gate.
+      #
+      # Los dos gates de abajo repiten unos pocos de estos tests. La duplicación es
+      # deliberada: cuesta segundos y compra que un fallo de aislamiento entre organizaciones
+      # se lea como «no despliegues» y no como «un test en rojo».
+      - name: Run the whole backend suite (single invocation, needs PostgreSQL)
         run: |
           uv run pytest \
-            tests/modules/agents_hub/unit/ \
-            tests/modules/agents_hub/integration/ \
-            tests/modules/agents_hub/e2e/ \
-            tests/unit/test_jwt_handler.py \
-            tests/unit/test_auth_context.py \
-            tests/api/test_role_context.py \
-            tests/infra/ \
+            tests \
             -n0 \
             --cov=app \
             --cov-report=xml \
