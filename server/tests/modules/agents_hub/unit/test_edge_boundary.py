@@ -12,8 +12,9 @@ def test_config_base_contains_only_config_models() -> None:
         "hub_llm_configs",
         "hub_prompt_templates",
         "hub_providers",
-        # SSO/PAT (AUTH.2 / AUTH.3) — configuración cloud→edge
-        "hub_sso_users",
+        # Personas y PAT (AUTH.2 / AUTH.3) — configuración cloud→edge. La tabla se
+        # llama `hub_users` desde IDE.2: era de SSO cuando su único escritor era el ACS.
+        "hub_users",
         "hub_personal_access_tokens",
         # Vocabulario controlado del corpus (ING.0.1) — ámbitos y submaterias son
         # configuración institucional, no dato operacional del cliente: se
@@ -37,7 +38,7 @@ def test_config_base_contains_only_config_models() -> None:
         # administrativa: se decide en el cloud y **el edge la necesita**, porque los routers
         # de informes, curación y automatización viven ahí y tienen que saber si quien pide un
         # informe puede pedirlo. No contiene dato del cliente final: el catálogo son cuatro
-        # códigos y la concesión es un par (sujeto, módulo). Mismo lado que `hub_sso_users`,
+        # códigos y la concesión es un par (sujeto, módulo). Mismo lado que `hub_users`,
         # que también es identidad administrativa y no contenido.
         "hub_platform_modules",
         "hub_module_grants",

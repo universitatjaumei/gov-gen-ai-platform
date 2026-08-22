@@ -411,14 +411,34 @@ class HubActivityPrompt(HubConfigBase):
     )
 
 
-class HubSsoUser(HubConfigBase):
-    """Usuario aprovisionado vía SSO SAML (AUTH.2).
+class HubUser(HubConfigBase):
+    """Una persona de la plataforma (IDE.2). Antes `HubSsoUser` / `hub_sso_users`.
 
-    Identidades que llegan por el IdP institucional y no son SuperAdminAccount ni
-    AdminAccount. Se crea/actualiza Just-In-Time tras validar la aserción.
+    Identidades que no son `SuperAdminAccount` ni `AdminAccount`. Se llamaba «sso» porque su
+    único escritor era el ACS de SAML, que la crea o actualiza Just-In-Time tras validar la
+    aserción — pero la tabla siempre fue un registro de personas completo (correo único, nombre,
+    rol, organización, activo, último acceso), y con el nombre viejo nadie iba a escribir aquí
+    una persona dada de alta a mano. `origen` dice quién la creó.
+
+    **El rol no lo pisa el IdP salvo que se le deje** (IDE.1): con
+    `IDENTITY_ROLE_AUTHORITY=app` —el defecto— quien entra por SSO no cambia el rol que le puso
+    una persona, y quien llega nuevo entra con `SAML_DEFAULT_ROLE`.
+
+    **Sigue habiendo cuatro tablas de identidad** (`SuperAdminAccount` con `admin_id` entero,
+    `AdminAccount` con `partner_id` de texto, `ClientAccount`, y esta), y unificarlas no es
+    trabajo de este prompt: `user_to_uuid` está en la propiedad de los workspaces de redacción,
+    en los PAT y en las concesiones de módulo, y `es_propietario` ya acepta las dos formas en
+    que quedó escrita la propiedad (SEC.8.1). Es una migración de datos con riesgo y merece
+    bloque propio.
     """
 
-    __tablename__ = "hub_sso_users"
+    __tablename__ = "hub_users"
+    __table_args__ = (
+        # Dato con dos valores estables, cada uno con consumidor en el código: aquí sí va
+        # `CheckConstraint`, mismo criterio que `purpose` en `HubLLMConfig`. Lo que no puede
+        # ser un `Enum` es el vocabulario del corpus, que está para revisarse.
+        CheckConstraint("origen IN ('sso', 'manual')", name="ck_hub_users_origen"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -444,6 +464,12 @@ class HubSsoUser(HubConfigBase):
         index=True,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    #: Quién creó la fila: `sso` (el ACS, Just-In-Time) o `manual` (una persona, IDE.3). El
+    #: defecto es `sso` porque el ACS no va a escribirlo en cada entrada, y NULL no vale: la
+    #: pantalla de personas distingue las dos procedencias.
+    origen: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="sso", server_default="sso"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

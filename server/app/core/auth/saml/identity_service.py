@@ -1,7 +1,7 @@
 """Provisioning de identidad desde una aserción SAML validada (AUTH.2). Deploy: cloud.
 
 Mapea NameID + atributos a una sesión del sistema (``UserInfo``): localiza la cuenta
-(SuperAdminAccount / AdminAccount) por email o aprovisiona (JIT) un ``HubSsoUser``.
+(SuperAdminAccount / AdminAccount) por email o aprovisiona (JIT) un ``HubUser``.
 
 **Qué se acepta de la aserción y qué no (SEC.2.1).** De la aserción salen la identidad y los
 grupos: el email, el nombre y el atributo de grupos, que es lo que el IdP sabe y el backend
@@ -32,7 +32,7 @@ from server.app.core.auth.models import UserInfo
 from server.app.core.auth.saml.role_mapping import resolve_role
 from server.app.core.config import get_settings
 from server.app.database.models import SuperAdminAccount, AdminAccount
-from server.app.modules.agents_hub.database.config_models import HubSsoUser
+from server.app.modules.agents_hub.database.config_models import HubUser
 
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ def _grupos(attributes: dict) -> tuple[str, ...]:
     return tuple(str(g) for g in (attributes.get(settings.saml_attr_groups) or ()))
 
 
-def _rol_aprovisionado(attributes: dict, *, fila_existente: HubSsoUser | None) -> str | None:
+def _rol_aprovisionado(attributes: dict, *, fila_existente: HubUser | None) -> str | None:
     """El rol con el que se crea o se refresca una fila, según quién sea la autoridad.
 
     Devuelve ``None`` cuando **no hay que tocar** el rol de una fila que ya existe: es la
@@ -163,7 +163,7 @@ class SamlIdentityService:
 
         sso = (
             await self.session.execute(
-                select(HubSsoUser).where(HubSsoUser.email == email)
+                select(HubUser).where(HubUser.email == email)
             )
         ).scalars().first()
 
@@ -172,7 +172,7 @@ class SamlIdentityService:
         rol = _rol_aprovisionado(attributes, fila_existente=sso)
 
         if sso is None:
-            sso = HubSsoUser(
+            sso = HubUser(
                 email=email,
                 display_name=display_name,
                 role=rol or settings.saml_default_role,

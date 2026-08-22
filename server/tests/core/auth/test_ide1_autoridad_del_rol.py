@@ -49,10 +49,10 @@ async def _entrar(session, email: str, attributes: dict):
 async def _sso_user(session, email: str):
     from sqlalchemy import select
 
-    from server.app.modules.agents_hub.database.config_models import HubSsoUser
+    from server.app.modules.agents_hub.database.config_models import HubUser
 
     return (
-        await session.execute(select(HubSsoUser).where(HubSsoUser.email == email))
+        await session.execute(select(HubUser).where(HubUser.email == email))
     ).scalar_one()
 
 

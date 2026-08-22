@@ -55,7 +55,7 @@ def test_resolve_role_precedence_superadmin_over_admin(saml_ctx, monkeypatch):
 async def test_resolve_session_known_superadmin(saml_ctx, db):
     from server.app.core.auth.saml.identity_service import SamlIdentityService
     from server.app.database.models import SuperAdminAccount
-    from server.app.modules.agents_hub.database.config_models import HubSsoUser
+    from server.app.modules.agents_hub.database.config_models import HubUser
     from sqlalchemy import select
 
     email = f"superadmin-{_uid()}@uji.es"
@@ -70,9 +70,9 @@ async def test_resolve_session_known_superadmin(saml_ctx, db):
     )
     assert info.role == "superadmin"
     assert info.email == email
-    # No se crea HubSsoUser para una cuenta superadmin existente.
+    # No se crea HubUser para una cuenta superadmin existente.
     sso = (
-        await db.session.execute(select(HubSsoUser).where(HubSsoUser.email == email))
+        await db.session.execute(select(HubUser).where(HubUser.email == email))
     ).scalars().first()
     assert sso is None
 
@@ -99,7 +99,7 @@ async def test_resolve_session_known_admin(saml_ctx, db):
 @pytest.mark.asyncio
 async def test_resolve_session_jit_provision_with_group_role(saml_ctx, db, monkeypatch):
     from server.app.core.auth.saml.identity_service import SamlIdentityService
-    from server.app.modules.agents_hub.database.config_models import HubSsoUser
+    from server.app.modules.agents_hub.database.config_models import HubUser
     from sqlalchemy import select
 
     # IDE.1 — el mapeo grupo->rol solo manda cuando la autoridad del rol es el IdP. Con el
@@ -121,7 +121,7 @@ async def test_resolve_session_jit_provision_with_group_role(saml_ctx, db, monke
     )
     assert info.role == "admin"
     sso = (
-        await db.session.execute(select(HubSsoUser).where(HubSsoUser.email == email))
+        await db.session.execute(select(HubUser).where(HubUser.email == email))
     ).scalars().first()
     assert sso is not None
     assert sso.role == "admin"
@@ -143,7 +143,7 @@ async def test_resolve_session_jit_default_role(saml_ctx, db):
 @pytest.mark.asyncio
 async def test_resolve_session_second_login_no_duplicate(saml_ctx, db):
     from server.app.core.auth.saml.identity_service import SamlIdentityService
-    from server.app.modules.agents_hub.database.config_models import HubSsoUser
+    from server.app.modules.agents_hub.database.config_models import HubUser
     from sqlalchemy import func, select
 
     email = f"jit-{_uid()}@uji.es"
@@ -154,12 +154,12 @@ async def test_resolve_session_second_login_no_duplicate(saml_ctx, db):
 
     count = (
         await db.session.execute(
-            select(func.count()).select_from(HubSsoUser).where(HubSsoUser.email == email)
+            select(func.count()).select_from(HubUser).where(HubUser.email == email)
         )
     ).scalar_one()
     assert count == 1
     sso = (
-        await db.session.execute(select(HubSsoUser).where(HubSsoUser.email == email))
+        await db.session.execute(select(HubUser).where(HubUser.email == email))
     ).scalars().first()
     assert sso.last_login_at is not None
 
@@ -245,7 +245,7 @@ ORG_RECLAMADA = "00000000-0000-0000-0000-0000000000f2"
 
 
 async def _crear_organizacion(db, organizacion_id: str) -> None:
-    """La organización tiene que existir: `hub_sso_users.organizacion_id` es una FK."""
+    """La organización tiene que existir: `hub_users.organizacion_id` es una FK."""
     import uuid as _uuid
 
     from server.app.modules.agents_hub.database.config_models import HubOrganizacion
@@ -265,7 +265,7 @@ async def test_should_take_the_organizacion_from_the_idp_configuration(
     saml_ctx, db, monkeypatch
 ):
     from server.app.core.auth.saml.identity_service import SamlIdentityService
-    from server.app.modules.agents_hub.database.config_models import HubSsoUser
+    from server.app.modules.agents_hub.database.config_models import HubUser
     from sqlalchemy import select
 
     monkeypatch.setenv("SAML_ORGANIZACION_ID", ORG_DEL_IDP)
@@ -279,7 +279,7 @@ async def test_should_take_the_organizacion_from_the_idp_configuration(
 
     assert info.organizacion_ids == (ORG_DEL_IDP,)
     sso = (
-        await db.session.execute(select(HubSsoUser).where(HubSsoUser.email == email))
+        await db.session.execute(select(HubUser).where(HubUser.email == email))
     ).scalars().first()
     assert str(sso.organizacion_id) == ORG_DEL_IDP
 
@@ -374,14 +374,19 @@ def test_should_leave_existing_sso_users_without_organizacion_after_migration():
     """
     from pathlib import Path
 
+    # Se busca la migración que **añade la columna**, no «la más reciente que mencione las dos
+    # palabras»: con ese criterio, la de IDE.2 —que renombra la tabla y por eso nombra los
+    # índices `ix_hub_sso_users_organizacion_id`— pasó a ser la elegida y el test se puso rojo
+    # sin que nada de lo que vigila hubiera cambiado.
     ficheros = [
         f
         for f in Path("migrations/versions").glob("*.py")
-        if "hub_sso_users" in f.read_text(encoding="utf-8")
-        and "organizacion_id" in f.read_text(encoding="utf-8")
+        if 'sa.Column("organizacion_id"' in f.read_text(encoding="utf-8")
+        and "hub_sso_users" in f.read_text(encoding="utf-8")
     ]
     assert ficheros, "ninguna migración añade organizacion_id a hub_sso_users"
-    texto = max(ficheros, key=lambda f: f.stat().st_mtime).read_text(encoding="utf-8")
+    assert len(ficheros) == 1, f"se esperaba una sola migración que añada la columna: {ficheros}"
+    texto = ficheros[0].read_text(encoding="utf-8")
     arriba = texto.split("def downgrade")[0]
 
     assert "nullable=True" in arriba

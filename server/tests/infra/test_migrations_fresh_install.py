@@ -195,17 +195,21 @@ def test_should_close_new_chatbots_by_default_on_fresh_install(fresh_database: s
 def test_should_leave_sso_users_without_organizacion_on_fresh_install(
     fresh_database: str,
 ) -> None:
-    """SEC.2.1 — la columna existe, admite NULL y nadie hereda una organización."""
+    """SEC.2.1 — la columna existe, admite NULL y nadie hereda una organización.
+
+    La tabla se llama `hub_users` desde IDE.2; era `hub_sso_users` cuando se escribió
+    este test, y el nombre viejo solo sobrevive en las migraciones que lo usaron.
+    """
     _upgrade_head(fresh_database)
 
-    assert "organizacion_id" in _columns(fresh_database, "hub_sso_users")
+    assert "organizacion_id" in _columns(fresh_database, "hub_users")
 
     conn = psycopg2.connect(fresh_database.replace("postgresql+psycopg2", "postgresql"))
     try:
         with conn.cursor() as cur:
             cur.execute(
                 "select is_nullable, column_default from information_schema.columns "
-                "where table_name = 'hub_sso_users' and column_name = 'organizacion_id'"
+                "where table_name = 'hub_users' and column_name = 'organizacion_id'"
             )
             admite_null, defecto = cur.fetchone()
             assert admite_null == "YES"
