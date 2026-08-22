@@ -220,6 +220,14 @@ async def db(db_url):
     from sqlmodel import SQLModel
     from sqlmodel.ext.asyncio.session import AsyncSession
 
+    # Importar los modelos ANTES del `create_all`, y no dentro de cada test. `SQLModel.metadata`
+    # solo conoce las tablas de los módulos que ya se han importado, así que sin esto el
+    # `create_all` de abajo no creaba nada cuando este fichero era el primero de la sesión:
+    # el test moría con `UndefinedTableError: relation "superadminaccount" does not exist` y el
+    # fallo parecía de la lógica que estuviera probando. Funcionaba por casualidad, porque otro
+    # módulo de test importaba los modelos antes.
+    import server.app.database.models  # noqa: F401
+
     engine = create_async_engine(db_url)
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)

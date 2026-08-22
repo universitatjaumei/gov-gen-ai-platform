@@ -49,6 +49,19 @@ class Settings:
     # aserción: si viniera de fuera, quien controla el IdP podría declarar a qué
     # organización pertenece cada persona que entra.
     saml_organizacion_id: str = ""
+    # IDE.1 — quién manda sobre el ROL de una persona: `app` o `idp`.
+    #
+    # Con `app` (defecto) el atributo de rol de la aserción **no se lee**, y tampoco
+    # `SAML_GROUP_ROLE_MAP`: quien llega nuevo entra con `SAML_DEFAULT_ROLE` y promocionarlo es
+    # un acto de una persona. Con `idp` el rol se resuelve de la aserción en cada entrada, que
+    # es el comportamiento anterior a IDE.1 y el modo para el día que el ERP sea la fuente.
+    #
+    # **No gobierna los grupos ni la organización, a propósito.** Los grupos no se guardan: se
+    # leen de cada aserción, así que ahí el IdP es la autoridad por construcción, y son los que
+    # repartirán módulos (IDE.5). Y `organizacion_id` sale de `SAML_ORGANIZACION_ID`, o sea de
+    # la configuración del despliegue: nunca vino de la aserción, así que no hay autoridad que
+    # disputar. Por eso el ajuste se llama `..._ROLE_...` y no `IDENTITY_AUTHORITY` a secas.
+    identity_role_authority: str = "app"
     # Subidas (SEC.6) — límite de tamaño y cuota de documentos por chatbot
     max_upload_mb: int = 10
     max_documents_per_chatbot: int = 0  # 0 = sin límite
@@ -96,11 +109,32 @@ def get_settings() -> Settings:
         saml_default_role=os.getenv("SAML_DEFAULT_ROLE", "user"),
         saml_frontend_return_url=os.getenv("SAML_FRONTEND_RETURN_URL", ""),
         saml_organizacion_id=os.getenv("SAML_ORGANIZACION_ID", ""),
+        identity_role_authority=os.getenv("IDENTITY_ROLE_AUTHORITY", "app").strip().lower(),
         max_upload_mb=int(os.getenv("MAX_UPLOAD_MB", "10")),
         max_documents_per_chatbot=int(os.getenv("MAX_DOCUMENTS_PER_CHATBOT", "0")),
     )
+    _assert_autoridad_del_rol(ajustes)
     _assert_configuracion_de_produccion(ajustes)
     return ajustes
+
+
+AUTORIDADES_DEL_ROL = ("app", "idp")
+
+
+def _assert_autoridad_del_rol(ajustes: Settings) -> None:
+    """Un valor que no se entiende no se interpreta: aquí se adivinaría quién reparte permisos.
+
+    Falla **siempre**, no solo en producción como el resto de `_assert_configuracion_de_produccion`:
+    un entorno de desarrollo con la autoridad equivocada enseña un comportamiento que no es el
+    que va a haber, y eso se descubre tarde.
+    """
+    if ajustes.identity_role_authority not in AUTORIDADES_DEL_ROL:
+        raise RuntimeError(
+            f"IDENTITY_ROLE_AUTHORITY={ajustes.identity_role_authority!r} no es un valor "
+            f"conocido. Admitidos: {', '.join(AUTORIDADES_DEL_ROL)}. "
+            "`app` = el rol lo pone una persona y el atributo de rol del IdP se ignora; "
+            "`idp` = el rol se resuelve de la aserción en cada inicio de sesión."
+        )
 
 
 _SECRETOS_DE_EJEMPLO = frozenset({

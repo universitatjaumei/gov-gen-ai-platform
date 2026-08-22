@@ -10,6 +10,16 @@ no. La **organización** no: esa sale de la configuración del despliegue
 atributo, quien controla el IdP podría declarar a qué organización pertenece cada persona que
 entra, y con ella a qué corpus llega. Es la misma regla anti-escalada que
 ``delegated_actor.py`` aplica a la cabecera delegada.
+
+**Y el rol depende de quién sea la autoridad (IDE.1).** Con ``IDENTITY_ROLE_AUTHORITY=app``
+—el defecto— el atributo de rol de la aserción no se lee: el rol lo pone una persona, y quien
+llega nuevo entra con ``SAML_DEFAULT_ROLE``. Con ``idp`` se resuelve de la aserción en cada
+entrada, que es lo que se hacía antes de IDE.1.
+
+Ignorar el atributo también al **crear** la fila es deliberado: ``resolve_role`` acepta
+``superadmin``, así que confiar en la aserción la primera vez deja que un IdP mal configurado
+acuñe un superadministrador con la autoridad puesta en la aplicación — el interruptor
+protegería solo lo ya creado, que es la mitad inútil del problema.
 """
 
 import logging
@@ -41,6 +51,36 @@ def _grupos(attributes: dict) -> tuple[str, ...]:
     """Grupos declarados por el IdP. Los consume el modo `restricted` de SEC.2.1."""
     settings = get_settings()
     return tuple(str(g) for g in (attributes.get(settings.saml_attr_groups) or ()))
+
+
+def _rol_aprovisionado(attributes: dict, *, fila_existente: HubSsoUser | None) -> str | None:
+    """El rol con el que se crea o se refresca una fila, según quién sea la autoridad.
+
+    Devuelve ``None`` cuando **no hay que tocar** el rol de una fila que ya existe: es la
+    diferencia entre «pon este rol» y «deja el que haya», y colapsarlas en una sola cadena
+    obligaría a que el llamante volviera a decidir.
+    """
+    settings = get_settings()
+
+    if settings.identity_role_authority == "idp":
+        return resolve_role(attributes)
+
+    # Autoridad de la aplicación. El atributo de rol de la aserción no se lee ni al crear.
+    declarado = _first(attributes, settings.saml_attr_role)
+    if declarado:
+        # Nadie sabe todavía qué atributos manda cada IdP —los configura quien lo administra—,
+        # así que decirlo en el log convierte esa incógnita en un dato observable. En INFO y no
+        # en WARNING: no es un fallo, es la configuración haciendo lo que se le pidió.
+        logger.info(
+            "El IdP declara role=%r y se ignora: IDENTITY_ROLE_AUTHORITY=app, "
+            "así que el rol lo pone una persona. Cambia el ajuste a `idp` si quieres que "
+            "manden los atributos de la aserción.",
+            declarado,
+        )
+
+    if fila_existente is not None:
+        return None
+    return settings.saml_default_role
 
 
 def _organizacion_del_idp() -> uuid.UUID | None:
@@ -117,7 +157,6 @@ class SamlIdentityService:
         self, nameid: str, attributes: dict, email: str
     ) -> UserInfo:
         settings = get_settings()
-        role = resolve_role(attributes)
         display_name = _first(attributes, settings.saml_attr_name) or email
         organizacion_id = await self._organizacion_configurada()
         now = datetime.now(timezone.utc)
@@ -128,11 +167,15 @@ class SamlIdentityService:
             )
         ).scalars().first()
 
+        # IDE.1 — el rol depende de quién sea la autoridad, y hay que saber si la fila ya
+        # existía para distinguir «pon este rol» de «deja el que haya».
+        rol = _rol_aprovisionado(attributes, fila_existente=sso)
+
         if sso is None:
             sso = HubSsoUser(
                 email=email,
                 display_name=display_name,
-                role=role,
+                role=rol or settings.saml_default_role,
                 external_id=nameid,
                 idp_entity_id=settings.saml_idp_metadata_url or None,
                 organizacion_id=organizacion_id,
@@ -143,7 +186,11 @@ class SamlIdentityService:
             self.session.add(sso)
         else:
             sso.display_name = display_name
-            sso.role = role
+            # `None` significa «no lo toques»: con la autoridad en la aplicación, el rol que
+            # puso una persona tiene que sobrevivir al siguiente inicio de sesión. Que no lo
+            # hiciera es el motivo por el que este bloque existe.
+            if rol is not None:
+                sso.role = rol
             sso.external_id = nameid
             sso.last_login_at = now
             # Se refresca en cada entrada: si el despliegue configura la organización

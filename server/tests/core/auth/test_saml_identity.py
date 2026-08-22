@@ -102,6 +102,11 @@ async def test_resolve_session_jit_provision_with_group_role(saml_ctx, db, monke
     from server.app.modules.agents_hub.database.config_models import HubSsoUser
     from sqlalchemy import select
 
+    # IDE.1 — el mapeo grupo->rol solo manda cuando la autoridad del rol es el IdP. Con el
+    # defecto (`app`) se ignora a propósito: el rol lo pone una persona, y un IdP que emitiera
+    # `superadmin` acuñaría un superadministrador en el primer inicio de sesión. Lo que este
+    # test comprueba —que el mapeo funciona— sigue siendo cierto, ahora en su modo.
+    monkeypatch.setenv("IDENTITY_ROLE_AUTHORITY", "idp")
     monkeypatch.setenv("SAML_GROUP_ROLE_MAP", '{"pas-info": "admin"}')
     email = f"jit-{_uid()}@uji.es"
     db.track(email)
