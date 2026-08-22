@@ -102,7 +102,6 @@
     "organizacion_default_answer_template": "Default answer template",
     "ai_brain": "AI Brain",
     "activity_prompts": {
-      "nav": "Activity prompts",
       "title": "Platform activity prompts",
       "intro": "Which activities exist, what model tier they run on and what they are told is declared in code. This screen stores the exceptions.",
       "tier": "Tier",
@@ -323,10 +322,17 @@
     "reports": "Reports",
     "curation": "Curation",
     "main": "Main navigation",
-    "language": "Language"
+    "language": "Language",
+    "plataforma": "Platform"
   },
   "sin_acceso": {
     "texto": "Your account exists but no module has been granted. Ask the platform administrator for access, saying what you need: reports, chatbots or curation.",
     "titulo": "You do not have access to any module yet"
+  },
+  "plataforma": {
+    "subnav_aria": "Platform administration navigation",
+    "modelos": "LLM models",
+    "prompts_actividad": "Activity prompts",
+    "tokens": "Access tokens"
   }
 }

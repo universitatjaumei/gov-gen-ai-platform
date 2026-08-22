@@ -12,10 +12,13 @@ const IDIOMAS: Record<string, string> = {
   en: 'English',
 }
 
-/** Las tres cosas que la plataforma sabe hacer hoy.
+/** Lo que la plataforma sabe hacer, más su administración.
  *
  * «Automatización» y «Plataforma» eran `PlaceholderPage`: entradas de menú que llevaban a
- * una pantalla vacía. Un menú que promete lo que no hay es peor que un menú corto.
+ * una pantalla vacía. Un menú que promete lo que no hay es peor que un menú corto, así que
+ * las dos se retiraron. «Automatización» sigue fuera —el módulo no existe—, pero
+ * «Plataforma» vuelve en PLAT.2, esta vez con contenido: las pantallas que nunca fueron del
+ * módulo Chatbots y estaban dentro de él.
  *
  * «Informes» apunta a `/redaccion`, que estaba construido —plantillas, asistente, borrador
  * con LLM— y no figuraba en ningún menú: sólo se llegaba escribiendo la URL.
@@ -24,6 +27,7 @@ const NAV_SECTIONS = [
   { key: 'chatbots', path: '/hub', modulo: 'chatbots' },
   { key: 'reports', path: '/redaccion', modulo: 'informes' },
   { key: 'curation', path: '/curation', modulo: 'curacion' },
+  { key: 'plataforma', path: '/plataforma', modulo: 'plataforma' },
 ] as const
 
 export function AppLayout() {

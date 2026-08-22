@@ -122,7 +122,6 @@
     "provider_table_base_url": "Base URL",
     "prompt_templates": "Prompts del sistema",
     "activity_prompts": {
-      "nav": "Prompts d'activitat",
       "title": "Prompts de les activitats de la plataforma",
       "intro": "Quines activitats existeixen, amb quin nivell de model funcionen i què se'ls diu ho declara el codi. Ací es guarden les excepcions.",
       "tier": "Nivell",
@@ -323,10 +322,17 @@
     "reports": "Informes",
     "curation": "Curació",
     "main": "Navegació principal",
-    "language": "Idioma"
+    "language": "Idioma",
+    "plataforma": "Plataforma"
   },
   "sin_acceso": {
     "texto": "El teu compte existeix però no té cap mòdul concedit. Demana accés a qui administra la plataforma indicant què necessites: informes, chatbots o curació.",
     "titulo": "Encara no tens accés a cap mòdul"
+  },
+  "plataforma": {
+    "subnav_aria": "Navegació de l'administració de la plataforma",
+    "modelos": "Models LLM",
+    "prompts_actividad": "Prompts d'activitat",
+    "tokens": "Tokens d'accés"
   }
 }

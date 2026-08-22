@@ -6,6 +6,7 @@ import { AuthProvider, PrivateRoute } from '@/shared/auth'
 import { RutaDeModulo, Aterrizaje, SinAcceso } from '@/shared/auth/RutaDeModulo'
 import { AppLayout } from '@/admin/AppLayout'
 import { HubLayout } from '@/admin/HubLayout'
+import { PlataformaLayout } from '@/admin/PlataformaLayout'
 import { CurationLayout } from '@/curation/CurationLayout'
 import { ThemeProvider } from './themes/ThemeProvider'
 import './index.css'
@@ -108,12 +109,19 @@ function App() {
                     <Route path="documents" element={<DocumentsPage />} />
                     <Route path="vigencia" element={<VigenciaPage />} />
                     <Route path="reports" element={<ReportsPage />} />
-                    <Route path="llm-configs" element={<LLMConfigsPage />} />
                     <Route path="prompts" element={<PromptsPage />} />
-                    <Route path="activity-prompts" element={<ActivityPromptsPage />} />
                     <Route path="brain" element={<AIBrainPage />} />
                     <Route path="test-scenarios" element={<TestScenariosPage />} />
-                    <Route path="access-tokens" element={<AccessTokensPage />} />
+                  </Route>
+                  {/* PLAT.2 — la administración de la plataforma no es del módulo Chatbots.
+                      «Modelos LLM» vivía bajo `/hub` mientras su router ya exigía
+                      `require_module("plataforma")`: el menú prometía lo que la API negaba.
+                      Sin redirecciones desde las rutas viejas, que AGENTS.md prohíbe los shims. */}
+                  <Route path="/plataforma" element={<RutaDeModulo modulo="plataforma"><PlataformaLayout /></RutaDeModulo>}>
+                    <Route index element={<Navigate to="/plataforma/modelos" replace />} />
+                    <Route path="modelos" element={<LLMConfigsPage />} />
+                    <Route path="prompts-actividad" element={<ActivityPromptsPage />} />
+                    <Route path="tokens" element={<AccessTokensPage />} />
                   </Route>
                   <Route path="/curation" element={<RutaDeModulo modulo="curacion"><CurationLayout /></RutaDeModulo>}>
                     <Route index element={<Navigate to="/curation/sites" replace />} />

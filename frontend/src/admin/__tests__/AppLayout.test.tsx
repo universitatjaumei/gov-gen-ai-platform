@@ -58,15 +58,19 @@ function renderLayout(path = '/hub') {
 }
 
 describe('AppLayout', () => {
-  it('should_render_the_three_things_the_platform_does', () => {
+  it('should_render_the_three_modules_plus_platform_administration', () => {
     // «Automatización» y «Plataforma» eran pantallas vacías: un menú que promete lo que no
     // hay es peor que un menú corto. «Informes» estaba construido y fuera de todo menú.
+    //
+    // **PLAT.2 devuelve «Plataforma», esta vez con contenido**: las pantallas transversales
+    // que vivían dentro del módulo Chatbots. «Automatización» sigue fuera, porque ese módulo
+    // no existe — sólo hay infraestructura que consume Informes.
     renderLayout()
     expect(screen.getByText('Chatbots')).toBeDefined()
     expect(screen.getByText('Informes')).toBeDefined()
     expect(screen.getByText('Curación')).toBeDefined()
+    expect(screen.getByText('Plataforma')).toBeDefined()
     expect(screen.queryByText('Automatización')).toBeNull()
-    expect(screen.queryByText('Plataforma')).toBeNull()
   })
 
   it('should_mark_chatbots_section_active_on_hub_route', () => {

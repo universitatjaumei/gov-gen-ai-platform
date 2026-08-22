@@ -7,15 +7,15 @@ const HUB_SUBNAV = [
   { key: 'hub.documents', path: '/hub/documents' },
   { key: 'hub.vigencia', path: '/hub/vigencia' },
   { key: 'hub.reports', path: '/hub/reports' },
-  { key: 'hub.llm_configs', path: '/hub/llm-configs' },
   { key: 'hub.prompt_templates', path: '/hub/prompts' },
-  // PRO.2.1 — los prompts de las actividades de plataforma, que no cuelgan de ningún chatbot
-  // y por eso no caben en la pantalla de al lado.
-  { key: 'hub.activity_prompts.nav', path: '/hub/activity-prompts' },
   { key: 'hub.ai_brain', path: '/hub/brain' },
   { key: 'admin:hub.test_scenarios.title', path: '/hub/test-scenarios' },
-  { key: 'auth:nav_access_tokens', path: '/hub/access-tokens' },
 ] as const
+
+// PLAT.2 — tres tabs salieron de aquí a la sección Plataforma: «Modelos LLM» (su router ya
+// exigía `require_module("plataforma")`, así que el menú prometía lo que la API negaba),
+// «Prompts de actividad» (que por definición no cuelgan de ningún chatbot, PRO.2.1) y
+// «Tokens de acceso» (credenciales de máquina de la plataforma).
 
 export function HubLayout() {
   const { t } = useTranslation(['admin', 'auth'])

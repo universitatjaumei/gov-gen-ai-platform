@@ -34,11 +34,17 @@ export function primeraRutaConcedida(modulos: string[]): string {
   return '/sin-acceso'
 }
 
-/** Qué módulo abre cada zona de la aplicación. El orden es el del aterrizaje. */
+/** Qué módulo abre cada zona de la aplicación. El orden es el del aterrizaje.
+ *
+ * `plataforma` va **última** (PLAT.2): quien tenga informes y plataforma entra a trabajar, no a
+ * configurar. Pero tiene que estar, porque sin ella quien solo administra la plataforma
+ * aterrizaba en `/sin-acceso` teniendo acceso.
+ */
 export const RUTA_DEL_MODULO: ReadonlyArray<readonly [string, string]> = [
   ['informes', '/redaccion'],
   ['chatbots', '/hub'],
   ['curacion', '/curation'],
+  ['plataforma', '/plataforma'],
 ]
 
 /** El módulo que protege una ruta, si la protege alguno. */
