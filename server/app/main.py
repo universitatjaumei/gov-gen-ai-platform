@@ -45,6 +45,7 @@ from server.app.routers.redaccion.manifests_router import router as redaccion_ma
 from server.app.routers.redaccion.copilot_router import router as redaccion_copilot_router
 from server.app.routers.redaccion.anonymization_router import router as redaccion_anonymization_router
 from server.app.routers.hub_themes_router import router as hub_themes_router
+from server.app.routers.hub_users_router import router as hub_users_router
 from server.app.routers.hub_agents_router import router as hub_agents_router
 from server.app.routers.hub_sites_router import router as hub_sites_router
 from server.app.routers.hub_content_quality_router import router as hub_content_quality_router
@@ -337,6 +338,7 @@ def _register_cloud(app: FastAPI) -> None:
     app.include_router(hub_prompt_templates_router, prefix="/api/v1")
     app.include_router(hub_activity_prompts_router, prefix="/api/v1")  # Deploy: cloud
     app.include_router(hub_themes_router, prefix="/api/v1")  # Deploy: cloud
+    app.include_router(hub_users_router, prefix="/api/v1")  # Deploy: cloud
     app.include_router(edge_sync_router, prefix="/api/v1")  # servido por cloud
 
 

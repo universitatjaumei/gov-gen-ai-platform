@@ -42,6 +42,15 @@ class SamlMissingEmailError(Exception):
     """La aserción no contiene el atributo de email requerido."""
 
 
+class SamlUserInactiveError(Exception):
+    """La persona existe y está desactivada (IDE.3).
+
+    `is_active` existía desde AUTH.2 y **nadie la miraba**: desactivar a alguien lo quitaba del
+    listado y lo dejaba entrando igual. Se distingue de «no existe» a propósito: quien
+    administra necesita saber que la cuenta está, pero cerrada.
+    """
+
+
 def _first(attributes: dict, name: str) -> str | None:
     values = attributes.get(name) or []
     return values[0] if values else None
@@ -116,7 +125,12 @@ class SamlIdentityService:
             raise SamlMissingEmailError(
                 f"SAML assertion missing email attribute '{settings.saml_attr_email}'"
             )
-        email = email.lower()
+        # La misma normalización que usa el alta manual (IDE.3), importada de allí y no
+        # reescrita: si las dos se separan, una persona dada de alta como `Fabra@UJI.es` deja
+        # de ser la que llega del IdP como `fabra@uji.es`, y el alta se queda muerta.
+        from server.app.routers.hub_users_router import normalizar_correo
+
+        email = normalizar_correo(email)
 
         superadmin = (
             await self.session.execute(
@@ -184,6 +198,11 @@ class SamlIdentityService:
                 last_login_at=now,
             )
             self.session.add(sso)
+        elif not sso.is_active:
+            # Antes de tocar nada: una cuenta cerrada no se refresca ni deja pasar.
+            raise SamlUserInactiveError(
+                f"La cuenta {email} está desactivada en esta plataforma"
+            )
         else:
             sso.display_name = display_name
             # `None` significa «no lo toques»: con la autoridad en la aplicación, el rol que

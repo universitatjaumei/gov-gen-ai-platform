@@ -470,6 +470,9 @@ class HubUser(HubConfigBase):
     origen: Mapped[str] = mapped_column(
         String(10), nullable=False, default="sso", server_default="sso"
     )
+    #: Quién dio el alta, cuando la dio una persona (IDE.3). NULL en las filas que creó el
+    #: ACS: no hay a quién atribuirlas, y `origen = 'sso'` ya dice lo que se sabe de ellas.
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

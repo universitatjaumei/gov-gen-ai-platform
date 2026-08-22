@@ -22,6 +22,7 @@ from server.app.core.auth.saml import (
 from server.app.core.auth.saml.identity_service import (
     SamlIdentityService,
     SamlMissingEmailError,
+    SamlUserInactiveError,
 )
 from server.app.core.config import get_settings
 
@@ -88,6 +89,13 @@ async def saml_acs(request: Request, session=Depends(get_session)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "SAML_MISSING_EMAIL", "reason": str(exc)},
+        )
+    except SamlUserInactiveError as exc:
+        # 403 y no 401: el IdP la autenticó bien, es esta plataforma la que no la deja pasar.
+        # Con un 401 quien lo vea buscará el fallo en el IdP, que es donde no está.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "USER_INACTIVE", "reason": str(exc)},
         )
 
     token = create_token(user_info)
