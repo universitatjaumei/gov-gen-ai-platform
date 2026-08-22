@@ -6,6 +6,21 @@ on:
   pull_request:
     branches: [main]
 
+# Un `push` que llega mientras corre el anterior lo cancela, en vez de pagar los dos.
+#
+# Aquí importa por cómo se trabaja en este proyecto: el desarrollo va por bloques y se sube
+# una tanda de commits al cerrar uno, así que sin esto GitHub arranca un run por commit y
+# factura todos aunque solo el último interese. Con `github.ref` en el grupo, `main` y cada
+# pull request se cancelan por separado.
+#
+# **El precio, dicho**: el commit intermedio se queda sin check propio, marcado como
+# cancelado. Es aceptable porque lo que se despliega es la punta de la rama, no un commit del
+# medio; si algún día hace falta el estado de cada commit —una bisección sobre resultados de
+# CI, por ejemplo— esto es lo primero que hay que quitar.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
