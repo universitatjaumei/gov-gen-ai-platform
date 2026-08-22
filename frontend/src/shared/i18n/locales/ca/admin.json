@@ -164,15 +164,6 @@
     "chatbot_answer_template": "Plantilla de resposta",
     "chatbot_answer_template_generic": "Genèrica",
     "chatbot_answer_template_institutional": "Institucional",
-    "organizacion_graph_defaults": "Configuració per defecte del graf",
-    "organizacion_default_graph_profile": "Perfil de graf per defecte",
-    "organizacion_default_retrieval_mode": "Mode de recuperació per defecte",
-    "organizacion_default_language_mode": "Mode d'idioma per defecte",
-    "organizacion_default_quality_threshold": "Llindar de qualitat per defecte",
-    "organizacion_default_min_results": "Resultats mínims per defecte",
-    "organizacion_default_min_score": "Puntuació mínima per defecte",
-    "organizacion_default_reranker_enabled": "Reranker activat per defecte",
-    "organizacion_default_answer_template": "Plantilla de resposta per defecte",
     "ai_brain": "Cervell IA",
     "brain_select_chatbot": "— Selecciona un chatbot —",
     "brain_prompt_editor": "Editor de Prompt del Sistema",
@@ -306,7 +297,31 @@
     "vigencia_motiu_estat_no_vigent": "Estat no vigent",
     "vigencia_col_estat": "Estat",
     "vigencia_col_revisio": "Revisió prevista",
-    "vigencia_col_revisat": "Revisat per"
+    "vigencia_col_revisat": "Revisat per",
+    "valores_por_defecto_nav": "Valors per defecte",
+    "valores_por_defecto": {
+      "titulo": "Valors per defecte de recuperació",
+      "alcance": "Configuració del mòdul Chatbots aplicada a una organització: perfil de graf, mode de recuperació, trossejat, reranker. No és identitat de l’inquilí, i per això ja no viu en la pantalla d’Organitzacions.",
+      "organizacion": "Organització",
+      "heredado": "Heretat de la plataforma",
+      "volver_a_heredar": "Tornar a heretar",
+      "campos": {
+        "default_public_graph_profile": "Perfil de graf per defecte",
+        "default_retrieval_mode": "Mode de recuperació per defecte",
+        "default_language_mode": "Mode d'idioma per defecte",
+        "default_quality_threshold": "Llindar de qualitat per defecte",
+        "default_min_retrieval_results": "Resultats mínims per defecte",
+        "default_min_retrieval_score": "Puntuació mínima per defecte",
+        "default_reranker_enabled": "Reranker activat per defecte",
+        "default_answer_template": "Plantilla de resposta per defecte",
+        "default_context_token_budget": "Pressupost de context (tokens)",
+        "default_chunk_size": "Mida de fragment",
+        "default_chunk_overlap": "Solapament entre fragments",
+        "default_chunking_strategy": "Estratègia de trossejat",
+        "default_query_rewriting_enabled": "Reescriptura de la consulta",
+        "rewrite_llm_config_id": "Model que reescriu la consulta"
+      }
+    }
   },
   "login": {
     "title": "Inicia la sessió",

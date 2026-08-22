@@ -22,12 +22,70 @@ _require_admin = require_role("superadmin", "admin")
 
 
 class OrganizacionRead(BaseModel):
+    """La **identidad** del inquilino, y nada más (PLAT.3).
+
+    Llevaba también catorce `default_*` de configuración de RAG. Por eso la pantalla acabó
+    bajo el módulo Chatbots: la mayoría de sus campos sí eran de Chatbots. Ahora esos viven en
+    `/{organizacion_id}/valores-por-defecto`, que es donde pertenecen.
+
+    `theme_config` sigue aquí a propósito: está muerto —nadie lo lee, la cascada resuelve desde
+    `hub_themes`— y lo retira **PLAT.7**, cuando exista la pantalla que lo sustituye. Quitarlo
+    antes dejaría a la organización sin forma de configurar su tema.
+    """
+
     id: uuid.UUID
     name: str
     partner_id: str
     theme_config: dict
     is_active: bool
     chatbot_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class OrganizacionCreate(BaseModel):
+    """El alta de un inquilino: su identidad.
+
+    Los `default_*` de RAG salieron de aquí y **no se pierden**: las columnas del modelo
+    declaran exactamente los mismos valores por defecto que declaraba este DTO
+    (`PUBLIC_KB_RICH`, `RAG`, `prefer`, 0.6, 2, 0.0, False, `generic`, y `None` en los
+    heredables). Dar de alta una organización sigue dejándola con la misma configuración; lo
+    que cambia es que ajustarla es otra pantalla y otra llamada.
+    """
+
+    name: str
+    partner_id: str
+    theme_config: dict = {}
+    is_active: bool = True
+
+    model_config = {"extra": "forbid"}
+
+
+class OrganizacionUpdate(BaseModel):
+    """Cambios sobre la identidad. `extra="forbid"` a propósito.
+
+    Mandar aquí un campo de RAG es un error de quien llama, y decirlo con un 422 es mejor que
+    ignorarlo: ignorado, quien lo mandó cree que se guardó.
+    """
+
+    name: str | None = None
+    partner_id: str | None = None
+    theme_config: dict | None = None
+    is_active: bool | None = None
+
+    model_config = {"extra": "forbid"}
+
+
+class ValoresPorDefectoRead(BaseModel):
+    """Los valores por defecto de RAG de una organización.
+
+    Son configuración del **módulo Chatbots** aplicada a una organización, no identidad de la
+    organización: el perfil de grafo, el modo de recuperación, el troceado o el reranker no
+    dicen nada de quién es el inquilino.
+    """
+
     default_public_graph_profile: str
     default_retrieval_mode: str
     default_language_mode: str
@@ -45,38 +103,21 @@ class OrganizacionRead(BaseModel):
     # RAG.10: None = heredar el default de plataforma (False)
     default_query_rewriting_enabled: bool | None
     rewrite_llm_config_id: uuid.UUID | None
-    created_at: datetime
-    updated_at: datetime
 
     model_config = {"from_attributes": True}
 
 
-class OrganizacionCreate(BaseModel):
-    name: str
-    partner_id: str
-    theme_config: dict = {}
-    is_active: bool = True
-    default_public_graph_profile: str = "PUBLIC_KB_RICH"
-    default_retrieval_mode: str = "RAG"
-    default_language_mode: str = "prefer"
-    default_quality_threshold: float = 0.6
-    default_min_retrieval_results: int = 2
-    default_min_retrieval_score: float = 0.0
-    default_reranker_enabled: bool = False
-    default_answer_template: str = "generic"
-    default_context_token_budget: int | None = None
-    default_chunk_size: int | None = None
-    default_chunk_overlap: int | None = None
-    default_chunking_strategy: str | None = None
-    default_query_rewriting_enabled: bool | None = None
-    rewrite_llm_config_id: uuid.UUID | None = None
+class ValoresPorDefectoUpdate(BaseModel):
+    """Cambios sobre los valores por defecto.
 
+    **Todos opcionales y `exclude_unset` al aplicarlos**, que es la diferencia que importa:
+    seis de estos campos usan `None` con el significado «heredar el defecto de plataforma»
+    —el presupuesto de contexto, los tres de troceado, la reescritura de consulta y el modelo
+    que la hace—, así que hay que poder distinguir «no lo mandé» de «mándalo a null». El código
+    anterior usaba `exclude_none`, que descartaba las dos cosas por igual: una vez fijado un
+    valor propio, volver a heredar era imposible por API.
+    """
 
-class OrganizacionUpdate(BaseModel):
-    name: str | None = None
-    partner_id: str | None = None
-    theme_config: dict | None = None
-    is_active: bool | None = None
     default_public_graph_profile: str | None = None
     default_retrieval_mode: str | None = None
     default_language_mode: str | None = None
@@ -91,6 +132,8 @@ class OrganizacionUpdate(BaseModel):
     default_chunking_strategy: str | None = None
     default_query_rewriting_enabled: bool | None = None
     rewrite_llm_config_id: uuid.UUID | None = None
+
+    model_config = {"extra": "forbid"}
 
 
 _count_sq = (
@@ -132,20 +175,6 @@ async def create_organizacion(
         partner_id=body.partner_id,
         theme_config=body.theme_config,
         is_active=body.is_active,
-        default_public_graph_profile=body.default_public_graph_profile,
-        default_retrieval_mode=body.default_retrieval_mode,
-        default_language_mode=body.default_language_mode,
-        default_quality_threshold=body.default_quality_threshold,
-        default_min_retrieval_results=body.default_min_retrieval_results,
-        default_min_retrieval_score=body.default_min_retrieval_score,
-        default_reranker_enabled=body.default_reranker_enabled,
-        default_answer_template=body.default_answer_template,
-        default_context_token_budget=body.default_context_token_budget,
-        default_chunk_size=body.default_chunk_size,
-        default_chunk_overlap=body.default_chunk_overlap,
-        default_chunking_strategy=body.default_chunking_strategy,
-        default_query_rewriting_enabled=body.default_query_rewriting_enabled,
-        rewrite_llm_config_id=body.rewrite_llm_config_id,
     )
     session.add(organizacion)
     await session.commit()
@@ -169,7 +198,8 @@ async def update_organizacion(
         )
     assert_org_access(user, organizacion.id)
 
-    for field, value in body.model_dump(exclude_none=True).items():
+    # `exclude_unset` y no `exclude_none`: distingue «no lo mandé» de «mándalo a null».
+    for field, value in body.model_dump(exclude_unset=True).items():
         setattr(organizacion, field, value)
     organizacion.updated_at = datetime.now(timezone.utc)
 
@@ -178,6 +208,60 @@ async def update_organizacion(
     return OrganizacionRead.model_validate(organizacion).model_copy(
         update={"chatbot_count": 0}
     )
+
+
+@router.get(
+    "/{organizacion_id}/valores-por-defecto", response_model=ValoresPorDefectoRead
+)
+async def get_valores_por_defecto(
+    organizacion_id: uuid.UUID,
+    user: UserInfo = Depends(_require_admin),
+    session=Depends(get_async_session),
+):
+    """Los valores por defecto de RAG de una organización (PLAT.3).
+
+    Endpoint propio y no un bloque del anterior: así la pantalla de identidad no tiene que
+    devolver catorce campos que no muestra, y la de Chatbots no tiene que mandar el nombre del
+    inquilino para cambiar un umbral.
+    """
+    organizacion = await session.get(HubOrganizacion, organizacion_id)
+    if not organizacion:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Organización not found"
+        )
+    assert_org_access(user, organizacion.id)
+    return ValoresPorDefectoRead.model_validate(organizacion)
+
+
+@router.patch(
+    "/{organizacion_id}/valores-por-defecto", response_model=ValoresPorDefectoRead
+)
+async def update_valores_por_defecto(
+    organizacion_id: uuid.UUID,
+    body: ValoresPorDefectoUpdate,
+    user: UserInfo = Depends(_require_admin),
+    session=Depends(get_async_session),
+):
+    """Cambia los valores por defecto, y **permite volver a heredar**.
+
+    `exclude_unset` es el punto del ejercicio: con `exclude_none` un `null` explícito se
+    descartaba igual que un campo omitido, así que los seis campos cuyo `None` significa
+    «heredar el defecto de plataforma» se quedaban con su valor propio para siempre.
+    """
+    organizacion = await session.get(HubOrganizacion, organizacion_id)
+    if not organizacion:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Organización not found"
+        )
+    assert_org_access(user, organizacion.id)
+
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(organizacion, field, value)
+    organizacion.updated_at = datetime.now(timezone.utc)
+
+    await session.commit()
+    await session.refresh(organizacion)
+    return ValoresPorDefectoRead.model_validate(organizacion)
 
 
 @router.delete("/{organizacion_id}", status_code=status.HTTP_204_NO_CONTENT)

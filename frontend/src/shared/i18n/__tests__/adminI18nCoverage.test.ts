@@ -84,6 +84,9 @@ describe('CAL.4 — i18n del panel admin', () => {
       'plataforma.usuarios.origenes.',
       // IDE.5 — el tipo de sujeto de cada concesión, iterando lo que devuelve el servidor.
       'plataforma.modulos.tipos.',
+      // PLAT.3 — la etiqueta de cada valor por defecto, iterando lo que devuelve el
+      // servidor: `t(`hub.valores_por_defecto.campos.${campo}`)`.
+      'hub.valores_por_defecto.campos.',
     ]
 
     // Las formas plurales de i18next (`x_one` / `x_other`) tampoco aparecen literales: el

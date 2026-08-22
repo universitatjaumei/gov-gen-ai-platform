@@ -33,6 +33,7 @@ const ModulosPage = lazy(() => import('@/admin/pages/ModulosPage').then(m => ({ 
 const UsuariosPage = lazy(() => import('@/admin/pages/UsuariosPage').then(m => ({ default: m.UsuariosPage })))
 const AccessTokensPage = lazy(() => import('@/admin/pages/AccessTokensPage').then(m => ({ default: m.AccessTokensPage })))
 const ChatbotsPage = lazy(() => import('@/admin/pages/ChatbotsPage').then(m => ({ default: m.ChatbotsPage })))
+const ValoresPorDefectoPage = lazy(() => import('@/admin/pages/ValoresPorDefectoPage').then(m => ({ default: m.ValoresPorDefectoPage })))
 const OrganizacionesPage = lazy(() => import('@/admin/pages/OrganizacionesPage').then(m => ({ default: m.OrganizacionesPage })))
 const DocumentsPage = lazy(() => import('@/admin/pages/DocumentsPage').then(m => ({ default: m.DocumentsPage })))
 const VigenciaPage = lazy(() => import('@/admin/pages/VigenciaPage').then(m => ({ default: m.VigenciaPage })))
@@ -108,6 +109,7 @@ function App() {
                     <Route index element={<Navigate to="/hub/chatbots" replace />} />
                     <Route path="chatbots" element={<ChatbotsPage />} />
                     <Route path="organizaciones" element={<OrganizacionesPage />} />
+                    <Route path="valores-por-defecto" element={<ValoresPorDefectoPage />} />
                     <Route path="documents" element={<DocumentsPage />} />
                     <Route path="vigencia" element={<VigenciaPage />} />
                     <Route path="reports" element={<ReportsPage />} />

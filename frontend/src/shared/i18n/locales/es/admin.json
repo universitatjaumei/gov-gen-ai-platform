@@ -164,15 +164,6 @@
     "chatbot_answer_template": "Plantilla de respuesta",
     "chatbot_answer_template_generic": "Genérica",
     "chatbot_answer_template_institutional": "Institucional",
-    "organizacion_graph_defaults": "Configuración por defecto del grafo",
-    "organizacion_default_graph_profile": "Perfil de grafo por defecto",
-    "organizacion_default_retrieval_mode": "Modo de retrieval por defecto",
-    "organizacion_default_language_mode": "Modo de idioma por defecto",
-    "organizacion_default_quality_threshold": "Umbral de calidad por defecto",
-    "organizacion_default_min_results": "Resultados mínimos por defecto",
-    "organizacion_default_min_score": "Puntuación mínima por defecto",
-    "organizacion_default_reranker_enabled": "Reranker activado por defecto",
-    "organizacion_default_answer_template": "Plantilla de respuesta por defecto",
     "ai_brain": "Cerebro IA",
     "brain_select_chatbot": "— Selecciona un chatbot —",
     "brain_prompt_editor": "Editor de Prompt del Sistema",
@@ -306,7 +297,31 @@
     "vigencia_motiu_estat_no_vigent": "Estado no vigente",
     "vigencia_col_estat": "Estado",
     "vigencia_col_revisio": "Revisión prevista",
-    "vigencia_col_revisat": "Revisado por"
+    "vigencia_col_revisat": "Revisado por",
+    "valores_por_defecto_nav": "Valores por defecto",
+    "valores_por_defecto": {
+      "titulo": "Valores por defecto de recuperación",
+      "alcance": "Configuración del módulo Chatbots aplicada a una organización: perfil de grafo, modo de recuperación, troceado, reranker. No es identidad del inquilino, y por eso ya no vive en la pantalla de Organizaciones.",
+      "organizacion": "Organización",
+      "heredado": "Heredado de la plataforma",
+      "volver_a_heredar": "Volver a heredar",
+      "campos": {
+        "default_public_graph_profile": "Perfil de grafo por defecto",
+        "default_retrieval_mode": "Modo de retrieval por defecto",
+        "default_language_mode": "Modo de idioma por defecto",
+        "default_quality_threshold": "Umbral de calidad por defecto",
+        "default_min_retrieval_results": "Resultados mínimos por defecto",
+        "default_min_retrieval_score": "Puntuación mínima por defecto",
+        "default_reranker_enabled": "Reranker activado por defecto",
+        "default_answer_template": "Plantilla de respuesta por defecto",
+        "default_context_token_budget": "Presupuesto de contexto (tokens)",
+        "default_chunk_size": "Tamaño de fragmento",
+        "default_chunk_overlap": "Solape entre fragmentos",
+        "default_chunking_strategy": "Estrategia de troceado",
+        "default_query_rewriting_enabled": "Reescritura de la consulta",
+        "rewrite_llm_config_id": "Modelo que reescribe la consulta"
+      }
+    }
   },
   "login": {
     "title": "Iniciar sesión",

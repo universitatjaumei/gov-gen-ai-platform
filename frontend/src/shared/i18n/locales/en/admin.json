@@ -91,15 +91,6 @@
     "chatbot_answer_template": "Answer template",
     "chatbot_answer_template_generic": "Generic",
     "chatbot_answer_template_institutional": "Institutional",
-    "organizacion_graph_defaults": "Default graph configuration",
-    "organizacion_default_graph_profile": "Default graph profile",
-    "organizacion_default_retrieval_mode": "Default retrieval mode",
-    "organizacion_default_language_mode": "Default language mode",
-    "organizacion_default_quality_threshold": "Default quality threshold",
-    "organizacion_default_min_results": "Default minimum results",
-    "organizacion_default_min_score": "Default minimum score",
-    "organizacion_default_reranker_enabled": "Reranker enabled by default",
-    "organizacion_default_answer_template": "Default answer template",
     "ai_brain": "AI Brain",
     "activity_prompts": {
       "title": "Platform activity prompts",
@@ -306,7 +297,31 @@
     "vigencia_motiu_estat_no_vigent": "Not in force",
     "vigencia_col_estat": "Status",
     "vigencia_col_revisio": "Review due",
-    "vigencia_col_revisat": "Reviewed by"
+    "vigencia_col_revisat": "Reviewed by",
+    "valores_por_defecto_nav": "Retrieval defaults",
+    "valores_por_defecto": {
+      "titulo": "Retrieval defaults",
+      "alcance": "Chatbots-module configuration applied to one organisation: graph profile, retrieval mode, chunking, reranker. It is not tenant identity, which is why it no longer lives on the Organisations screen.",
+      "organizacion": "Organisation",
+      "heredado": "Inherited from the platform",
+      "volver_a_heredar": "Go back to inheriting",
+      "campos": {
+        "default_public_graph_profile": "Default graph profile",
+        "default_retrieval_mode": "Default retrieval mode",
+        "default_language_mode": "Default language mode",
+        "default_quality_threshold": "Default quality threshold",
+        "default_min_retrieval_results": "Default minimum results",
+        "default_min_retrieval_score": "Default minimum score",
+        "default_reranker_enabled": "Reranker enabled by default",
+        "default_answer_template": "Default answer template",
+        "default_context_token_budget": "Context budget (tokens)",
+        "default_chunk_size": "Chunk size",
+        "default_chunk_overlap": "Chunk overlap",
+        "default_chunking_strategy": "Chunking strategy",
+        "default_query_rewriting_enabled": "Query rewriting",
+        "rewrite_llm_config_id": "Model that rewrites the query"
+      }
+    }
   },
   "login": {
     "title": "Sign in",
