@@ -333,6 +333,36 @@
     "subnav_aria": "Navegació de l'administració de la plataforma",
     "modelos": "Models LLM",
     "prompts_actividad": "Prompts d'activitat",
-    "tokens": "Tokens d'accés"
+    "tokens": "Tokens d'accés",
+    "usuarios_nav": "Persones",
+    "usuarios": {
+      "titulo": "Persones de la plataforma",
+      "alcance": "Qui té compte, amb quin rol i si ha entrat alguna vegada. No són tots els comptes: els de superadministrador, partner i client viuen en taules pròpies que encara no estan unificades.",
+      "aviso_autoridad_idp": "En aquest desplegament el rol el decideix el proveïdor d’identitat (IDENTITY_ROLE_AUTHORITY=idp): el que canvies ací ho trepitjarà el següent inici de sessió.",
+      "correo": "Correu",
+      "nombre": "Nom",
+      "rol": "Rol",
+      "origen": "Origen",
+      "estado": "Estat",
+      "ultimo_acceso": "Últim accés",
+      "nunca_entro": "No ha entrat mai",
+      "activa": "Activa",
+      "desactivada": "Desactivada",
+      "dar_de_alta": "Donar d’alta",
+      "desactivar": "Desactivar",
+      "reactivar": "Reactivar",
+      "cargando": "Carregant…",
+      "sin_contrasena": "L’alta no crea contrasenya: la identitat es comprova amb el SSO institucional.",
+      "roles": {
+        "user": "Usuari",
+        "informer": "Informador",
+        "admin": "Administrador",
+        "superadmin": "Superadministrador"
+      },
+      "origenes": {
+        "manual": "Alta manual",
+        "sso": "SSO"
+      }
+    }
   }
 }

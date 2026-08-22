@@ -190,10 +190,18 @@ async def get_me(
     que iterar: `App.tsx` metía todas las rutas bajo un `PrivateRoute` que solo comprobaba que
     hubiera sesión, así que cualquier cuenta veía chatbots, curación, informes y la
     configuración de LLM. El servidor decide y el cliente pinta lo que reciba.
+
+    Y **quién manda sobre el rol** en este despliegue (IDE.1). Va aquí, en el sitio que ya
+    responde «qué necesita saber esta sesión», y no en una pantalla concreta: la pantalla de
+    personas tiene que avisar de que con la autoridad en el IdP editar un rol a mano es tirar
+    el trabajo, y para avisar necesita el dato del servidor. No es un secreto: es configuración
+    operativa, y adivinarla en el cliente sería inventarla.
     """
     from server.app.core.auth.modulos_service import modulos_del_usuario
+    from server.app.core.config import get_settings
 
     return {
         **current_user.to_dict(),
         "modulos": await modulos_del_usuario(session, current_user),
+        "identity_role_authority": get_settings().identity_role_authority,
     }

@@ -333,6 +333,36 @@
     "subnav_aria": "Navegación de la administración de la plataforma",
     "modelos": "Modelos LLM",
     "prompts_actividad": "Prompts de actividad",
-    "tokens": "Tokens de acceso"
+    "tokens": "Tokens de acceso",
+    "usuarios_nav": "Personas",
+    "usuarios": {
+      "titulo": "Personas de la plataforma",
+      "alcance": "Quién tiene cuenta, con qué rol y si ha entrado alguna vez. No son todas las cuentas: las de superadministrador, partner y cliente viven en tablas propias que todavía no están unificadas.",
+      "aviso_autoridad_idp": "En este despliegue el rol lo decide el proveedor de identidad (IDENTITY_ROLE_AUTHORITY=idp): lo que cambies aquí lo pisará el siguiente inicio de sesión.",
+      "correo": "Correo",
+      "nombre": "Nombre",
+      "rol": "Rol",
+      "origen": "Origen",
+      "estado": "Estado",
+      "ultimo_acceso": "Último acceso",
+      "nunca_entro": "Nunca ha entrado",
+      "activa": "Activa",
+      "desactivada": "Desactivada",
+      "dar_de_alta": "Dar de alta",
+      "desactivar": "Desactivar",
+      "reactivar": "Reactivar",
+      "cargando": "Cargando…",
+      "sin_contrasena": "El alta no crea contraseña: la identidad se comprueba con el SSO institucional.",
+      "roles": {
+        "user": "Usuario",
+        "informer": "Informador",
+        "admin": "Administrador",
+        "superadmin": "Superadministrador"
+      },
+      "origenes": {
+        "manual": "Alta manual",
+        "sso": "SSO"
+      }
+    }
   }
 }

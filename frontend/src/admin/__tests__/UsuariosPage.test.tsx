@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { render, screen, within, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import i18n from '@/shared/i18n'
 import { UsuariosPage } from '../pages/UsuariosPage'
 import {
@@ -9,6 +9,7 @@ import {
   useCreateUserApiV1HubUsersPost,
   useUpdateUserApiV1HubUsersUserIdPatch,
 } from '@/shared/api/generated/hub-users/hub-users'
+import { useAutoridadDelRol } from '@/shared/auth/useAutoridadDelRol'
 
 /**
  * IDE.4 — quién existe en esta plataforma.
@@ -29,6 +30,13 @@ vi.mock('@/shared/api/generated/hub-users/hub-users', () => ({
   useListUsersApiV1HubUsersGet: vi.fn(),
   useCreateUserApiV1HubUsersPost: vi.fn(),
   useUpdateUserApiV1HubUsersUserIdPatch: vi.fn(),
+}))
+
+// La autoridad del rol la resuelve la pantalla contra el servidor, no la recibe por prop: un
+// componente de ruta tiene que poder cargarse por separado (CAL.5), y un envoltorio en
+// `App.tsx` que le pasara el dato rompía esa carga perezosa.
+vi.mock('@/shared/auth/useAutoridadDelRol', () => ({
+  useAutoridadDelRol: vi.fn(),
 }))
 
 const PERSONAS = [
@@ -87,10 +95,16 @@ beforeEach(() => {
 })
 
 function renderPage(autoridadDelRol: 'app' | 'idp' = 'app') {
+  vi.mocked(useAutoridadDelRol).mockReturnValue(autoridadDelRol)
+  // Los hooks generados están doblados, pero la pantalla usa `useQueryClient` para invalidar
+  // el listado tras un alta, y eso sí exige el proveedor de verdad.
+  const cliente = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <MemoryRouter>
-      <UsuariosPage autoridadDelRol={autoridadDelRol} />
-    </MemoryRouter>
+    <QueryClientProvider client={cliente}>
+      <MemoryRouter>
+        <UsuariosPage />
+      </MemoryRouter>
+    </QueryClientProvider>
   )
 }
 
@@ -160,13 +174,12 @@ describe('IDE.4 — lo que la pantalla tiene que advertir', () => {
 })
 
 describe('IDE.4 — alta y edición', () => {
-  it('should_create_a_person_with_the_role_chosen', async () => {
-    const usuario = userEvent.setup()
+  it('should_create_a_person_with_the_role_chosen', () => {
     renderPage()
 
-    await usuario.type(screen.getByLabelText(/correo/i), 'nueva@uji.es')
-    await usuario.selectOptions(screen.getByLabelText(/^rol/i), 'admin')
-    await usuario.click(screen.getByRole('button', { name: /dar de alta/i }))
+    fireEvent.change(screen.getByLabelText(/correo/i), { target: { value: 'nueva@uji.es' } })
+    fireEvent.change(screen.getByLabelText(/^rol/i), { target: { value: 'admin' } })
+    fireEvent.click(screen.getByRole('button', { name: /dar de alta/i }))
 
     expect(mutar).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ email: 'nueva@uji.es', role: 'admin' }) }),
@@ -181,13 +194,11 @@ describe('IDE.4 — alta y edición', () => {
     expect(screen.queryByLabelText(/contraseña/i)).toBeNull()
   })
 
-  it('should_deactivate_a_person_without_deleting_them', async () => {
-    const usuario = userEvent.setup()
+  it('should_deactivate_a_person_without_deleting_them', () => {
     renderPage()
 
     const fila = screen.getByRole('row', { name: /manual@uji\.es/ })
-    const boton = within(fila).getByRole('button', { name: /desactivar/i })
-    await usuario.click(boton)
+    fireEvent.click(within(fila).getByRole('button', { name: /desactivar/i }))
 
     expect(mutar).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ is_active: false }) }),

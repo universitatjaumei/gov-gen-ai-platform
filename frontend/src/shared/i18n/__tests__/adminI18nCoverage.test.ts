@@ -76,6 +76,12 @@ describe('CAL.4 — i18n del panel admin', () => {
       'nav.',
       'hub.availability_',
       'hub.test_scenarios.verdict_',
+      // IDE.4 — el rol y el origen de cada persona se pintan iterando lo que devuelve el
+      // servidor: `t(`plataforma.usuarios.roles.${persona.role}`)`. La clave literal no
+      // aparece en el código, y tiene que ser así: si estuviera escrita, la pantalla dejaría
+      // de pintar lo que el contrato mande y volvería a decidir ella.
+      'plataforma.usuarios.roles.',
+      'plataforma.usuarios.origenes.',
     ]
 
     // Las formas plurales de i18next (`x_one` / `x_other`) tampoco aparecen literales: el

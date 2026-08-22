@@ -333,6 +333,36 @@
     "subnav_aria": "Platform administration navigation",
     "modelos": "LLM models",
     "prompts_actividad": "Activity prompts",
-    "tokens": "Access tokens"
+    "tokens": "Access tokens",
+    "usuarios_nav": "People",
+    "usuarios": {
+      "titulo": "People on this platform",
+      "alcance": "Who has an account, with which role, and whether they have ever signed in. This is not every account: superadmin, partner and client accounts live in their own tables, not yet unified.",
+      "aviso_autoridad_idp": "On this deployment the identity provider decides the role (IDENTITY_ROLE_AUTHORITY=idp): whatever you change here will be overwritten at the next sign-in.",
+      "correo": "Email",
+      "nombre": "Name",
+      "rol": "Role",
+      "origen": "Origin",
+      "estado": "Status",
+      "ultimo_acceso": "Last sign-in",
+      "nunca_entro": "Never signed in",
+      "activa": "Active",
+      "desactivada": "Deactivated",
+      "dar_de_alta": "Add person",
+      "desactivar": "Deactivate",
+      "reactivar": "Reactivate",
+      "cargando": "Loading…",
+      "sin_contrasena": "Adding a person does not create a password: identity is verified through institutional SSO.",
+      "roles": {
+        "user": "User",
+        "informer": "Informer",
+        "admin": "Administrator",
+        "superadmin": "Superadministrator"
+      },
+      "origenes": {
+        "manual": "Added by hand",
+        "sso": "SSO"
+      }
+    }
   }
 }

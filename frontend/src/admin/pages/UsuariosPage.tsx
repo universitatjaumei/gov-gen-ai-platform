@@ -8,14 +8,10 @@ import {
   getListUsersApiV1HubUsersGetQueryKey,
 } from '@/shared/api/generated/hub-users/hub-users'
 import type { UsuarioRead } from '@/shared/api/generated/model'
+import { useAutoridadDelRol } from '@/shared/auth/useAutoridadDelRol'
 
 /** Los roles que ofrece el alta. Salen del contrato del servidor, que los valida. */
 const ROLES = ['user', 'informer', 'admin', 'superadmin'] as const
-
-interface Props {
-  /** Quién manda sobre el rol en este despliegue (`IDENTITY_ROLE_AUTHORITY`, IDE.1). */
-  autoridadDelRol: 'app' | 'idp'
-}
 
 /**
  * Quién existe en esta plataforma (IDE.4).
@@ -30,8 +26,10 @@ interface Props {
  * existiendo `SuperAdminAccount`, `AdminAccount` y `ClientAccount` sin unificar (IDE.2)—, así
  * que se dice, porque un listado que se lee como completo miente por omisión.
  */
-export function UsuariosPage({ autoridadDelRol }: Props) {
+export function UsuariosPage() {
   const { t } = useTranslation('admin')
+  // Quién manda sobre el rol lo dice el servidor (IDE.1), como los módulos concedidos.
+  const autoridadDelRol = useAutoridadDelRol()
   const queryClient = useQueryClient()
   const { data: personas, isLoading } = useListUsersApiV1HubUsersGet()
   const invalidar = () =>
