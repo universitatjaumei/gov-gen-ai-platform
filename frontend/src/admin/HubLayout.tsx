@@ -11,7 +11,6 @@ const HUB_SUBNAV = [
   { key: 'hub.vigencia', path: '/hub/vigencia' },
   { key: 'hub.reports', path: '/hub/reports' },
   { key: 'hub.prompt_templates', path: '/hub/prompts' },
-  { key: 'hub.ai_brain', path: '/hub/brain' },
   { key: 'admin:hub.test_scenarios.title', path: '/hub/test-scenarios' },
 ] as const
 

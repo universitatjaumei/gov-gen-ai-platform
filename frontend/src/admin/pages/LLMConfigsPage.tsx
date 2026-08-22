@@ -215,6 +215,13 @@ export function LLMConfigsPage() {
           </button>
         </div>
 
+        {/* PLAT.4 — quién consume los niveles. Esta pantalla vivía bajo el módulo Chatbots y
+            eso hacía creer que los niveles eran suyos: los usan también Informes y Curación,
+            así que cambiar el modelo de un nivel cambia el comportamiento de los tres. */}
+        <p className="text-sm text-muted-foreground">
+          {t('hub.llm_configs_alcance_de_los_niveles')}
+        </p>
+
         {isLoadingConfigs ? (
           <p className="text-sm text-muted-foreground">…</p>
         ) : configs.length === 0 ? (

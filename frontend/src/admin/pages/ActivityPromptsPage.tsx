@@ -12,7 +12,7 @@ import type { ActivityPromptOut } from '@/shared/api/generated/model'
 /**
  * Biblioteca de prompts de las **actividades de plataforma** — PRO.2.1.
  *
- * La biblioteca que ya existía (`/hub/prompts`, `/hub/brain`) sólo veía prompts de chatbot,
+ * La biblioteca que ya existía (`/hub/prompts`) sólo veía prompts de chatbot,
  * porque su tabla cuelga de uno. Los de las actividades del módulo de Informes —escribir un
  * script, auditarlo— vivían en Python: no se podían afinar sin desplegar ni se podía elegir
  * con qué nivel de modelo corre cada una.

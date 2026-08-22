@@ -91,7 +91,6 @@
     "chatbot_answer_template": "Answer template",
     "chatbot_answer_template_generic": "Generic",
     "chatbot_answer_template_institutional": "Institutional",
-    "ai_brain": "AI Brain",
     "activity_prompts": {
       "title": "Platform activity prompts",
       "intro": "Which activities exist, what model tier they run on and what they are told is declared in code. This screen stores the exceptions.",
@@ -108,19 +107,6 @@
       "reset": "Back to code defaults",
       "save_failed": "Could not save. Check that the variables in the text exist for this activity."
     },
-    "brain_select_chatbot": "— Select a chatbot —",
-    "brain_prompt_editor": "System Prompt Editor",
-    "brain_prompt_version": "Saved version:",
-    "brain_save_prompt": "Save new version",
-    "brain_model_selector": "AI Model",
-    "brain_model_select_label": "— Select model —",
-    "brain_set_default": "Set as default",
-    "brain_sandbox": "Live test",
-    "brain_sandbox_test": "Test model",
-    "brain_sandbox_testing": "Testing…",
-    "brain_sandbox_ok": "OK — {{ms}}ms",
-    "brain_sandbox_fail": "Error testing the model",
-    "brain_no_templates": "No system prompts for this chatbot",
     "subnav_aria": "Hub navigation",
     "filter_usage_aria": "Filter by usage type",
     "filter_chatbot_aria": "Filter by chatbot",
@@ -321,7 +307,8 @@
         "default_query_rewriting_enabled": "Query rewriting",
         "rewrite_llm_config_id": "Model that rewrites the query"
       }
-    }
+    },
+    "llm_configs_alcance_de_los_niveles": "Tiers (1, 2, 3) are not only for Chatbots: Reports —copilot, script proposal and audit, drafts— and Curation —crawling and recognition— consume them too. Changing a tier’s model changes the behaviour of all three modules."
   },
   "login": {
     "title": "Sign in",

@@ -164,20 +164,6 @@
     "chatbot_answer_template": "Plantilla de respuesta",
     "chatbot_answer_template_generic": "Genérica",
     "chatbot_answer_template_institutional": "Institucional",
-    "ai_brain": "Cerebro IA",
-    "brain_select_chatbot": "— Selecciona un chatbot —",
-    "brain_prompt_editor": "Editor de Prompt del Sistema",
-    "brain_prompt_version": "Versión guardada:",
-    "brain_save_prompt": "Guardar nueva versión",
-    "brain_model_selector": "Modelo IA",
-    "brain_model_select_label": "— Selecciona modelo —",
-    "brain_set_default": "Establecer por defecto",
-    "brain_sandbox": "Prueba en vivo",
-    "brain_sandbox_test": "Probar modelo",
-    "brain_sandbox_testing": "Probando…",
-    "brain_sandbox_ok": "OK — {{ms}}ms",
-    "brain_sandbox_fail": "Error al probar el modelo",
-    "brain_no_templates": "No hay prompts de sistema para este chatbot",
     "subnav_aria": "Navegación del Hub",
     "filter_usage_aria": "Filtrar por tipo de uso",
     "filter_chatbot_aria": "Filtrar por chatbot",
@@ -321,7 +307,8 @@
         "default_query_rewriting_enabled": "Reescritura de la consulta",
         "rewrite_llm_config_id": "Modelo que reescribe la consulta"
       }
-    }
+    },
+    "llm_configs_alcance_de_los_niveles": "Los niveles (1, 2, 3) no son solo de Chatbots: los consumen también Informes —copiloto, propuesta y auditoría de scripts, borradores— y Curación —rastreo y reconocimiento—. Cambiar el modelo de un nivel cambia el comportamiento de los tres módulos."
   },
   "login": {
     "title": "Iniciar sesión",

@@ -164,20 +164,6 @@
     "chatbot_answer_template": "Plantilla de resposta",
     "chatbot_answer_template_generic": "Genèrica",
     "chatbot_answer_template_institutional": "Institucional",
-    "ai_brain": "Cervell IA",
-    "brain_select_chatbot": "— Selecciona un chatbot —",
-    "brain_prompt_editor": "Editor de Prompt del Sistema",
-    "brain_prompt_version": "Versió guardada:",
-    "brain_save_prompt": "Guardar nova versió",
-    "brain_model_selector": "Model IA",
-    "brain_model_select_label": "— Selecciona model —",
-    "brain_set_default": "Establir per defecte",
-    "brain_sandbox": "Prova en viu",
-    "brain_sandbox_test": "Provar model",
-    "brain_sandbox_testing": "Provant…",
-    "brain_sandbox_ok": "OK — {{ms}}ms",
-    "brain_sandbox_fail": "Error en provar el model",
-    "brain_no_templates": "No hi ha prompts de sistema per a aquest chatbot",
     "subnav_aria": "Navegació del Hub",
     "filter_usage_aria": "Filtrar per tipus d'ús",
     "filter_chatbot_aria": "Filtrar per chatbot",
@@ -321,7 +307,8 @@
         "default_query_rewriting_enabled": "Reescriptura de la consulta",
         "rewrite_llm_config_id": "Model que reescriu la consulta"
       }
-    }
+    },
+    "llm_configs_alcance_de_los_niveles": "Els nivells (1, 2, 3) no són només de Chatbots: els consumeixen també Informes —copilot, proposta i auditoria de scripts, esborranys— i Curació —rastreig i reconeixement—. Canviar el model d’un nivell canvia el comportament dels tres mòduls."
   },
   "login": {
     "title": "Inicia la sessió",

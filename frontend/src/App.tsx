@@ -40,7 +40,6 @@ const VigenciaPage = lazy(() => import('@/admin/pages/VigenciaPage').then(m => (
 const ReportsPage = lazy(() => import('@/admin/pages/ReportsPage').then(m => ({ default: m.ReportsPage })))
 const LLMConfigsPage = lazy(() => import('@/admin/pages/LLMConfigsPage').then(m => ({ default: m.LLMConfigsPage })))
 const PromptsPage = lazy(() => import('@/admin/pages/PromptsPage').then(m => ({ default: m.PromptsPage })))
-const AIBrainPage = lazy(() => import('@/admin/pages/AIBrainPage').then(m => ({ default: m.AIBrainPage })))
 const ActivityPromptsPage = lazy(() => import('@/admin/pages/ActivityPromptsPage').then(m => ({ default: m.ActivityPromptsPage })))
 const RedaccionLayout = lazy(() => import('@/redaccion/RedaccionLayout').then(m => ({ default: m.RedaccionLayout })))
 const CurationSitesPage = lazy(() => import('@/curation/SitesPage').then(m => ({ default: m.SitesPage })))
@@ -114,7 +113,6 @@ function App() {
                     <Route path="vigencia" element={<VigenciaPage />} />
                     <Route path="reports" element={<ReportsPage />} />
                     <Route path="prompts" element={<PromptsPage />} />
-                    <Route path="brain" element={<AIBrainPage />} />
                     <Route path="test-scenarios" element={<TestScenariosPage />} />
                   </Route>
                   {/* PLAT.2 — la administración de la plataforma no es del módulo Chatbots.
