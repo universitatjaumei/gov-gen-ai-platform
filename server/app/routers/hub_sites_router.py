@@ -1,6 +1,7 @@
 """Router de curación — sitios rastreados, selecciones y candidatas (9Q.7, re-etiquetado en CUR.1).
 
 Deploy: edge.
+Módulo: curacion — los sitios rastreados son el módulo de curación.
 """
 from __future__ import annotations
 

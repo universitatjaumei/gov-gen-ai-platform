@@ -1,6 +1,7 @@
 """Escenarios de prueba de un chatbot y su veredicto humano (RAG.13).
 
 Deploy: edge
+Módulo: chatbots — los escenarios miden la calidad de un asistente.
 
 Complementa al dataset dorado de RAG.1, no lo duplica: el dorado mide **recuperación** con
 métricas automáticas y bloquea el build; esto mide la **respuesta** con juicio humano, que es

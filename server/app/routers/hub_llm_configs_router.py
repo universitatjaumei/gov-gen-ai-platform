@@ -7,6 +7,7 @@ test de conexión— en vez de construir un panel paralelo. Ver
 `docs/DECISION_MODELOS_EMBEDDING_RERANKER.md`.
 
 Deploy: cloud
+Módulo: plataforma — ya lo declaraba; proveedores y niveles son globales.
 """
 import time
 import uuid

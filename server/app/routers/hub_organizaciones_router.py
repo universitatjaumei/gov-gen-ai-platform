@@ -1,6 +1,18 @@
 """CRUD de organizaciones del Hub.
 
 Deploy: cloud
+Módulo: plataforma — con dos excepciones que **no** son un descuido (PLAT.5).
+
+`require_module` va **por endpoint** y no a nivel de router, porque dos cosas de aquí las
+consume otro módulo:
+
+- **Leer la lista** de organizaciones la necesitan el selector de `ChatbotsPage` y el de la
+  pantalla de valores por defecto, que viven en el módulo Chatbots. Administración de
+  plataforma es **crear, renombrar y borrar** una organización, no leer las que gestionas; SEC.2
+  ya acota la lista a las tuyas.
+- **Los valores por defecto de RAG** son configuración del módulo Chatbots aplicada a una
+  organización (PLAT.3), así que exigen `chatbots` y no `plataforma`. Su pantalla vive en
+  `/hub`, que es coherente.
 """
 
 import uuid
@@ -10,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import func, select, delete as sql_delete
 
-from server.app.api.deps import require_role
+from server.app.api.deps import require_module, require_role
 from server.app.core.auth.models import UserInfo
 from server.app.core.auth.tenancy import assert_org_access, scope_query_to_orgs
 from server.app.modules.agents_hub.database.connection import get_async_session
@@ -19,6 +31,10 @@ from server.app.modules.agents_hub.database.config_models import HubChatbot, Hub
 router = APIRouter(prefix="/hub/organizaciones", tags=["hub-organizaciones"])
 
 _require_admin = require_role("superadmin", "admin")
+#: Administrar la plataforma: crear, renombrar y borrar organizaciones.
+_de_plataforma = Depends(require_module("plataforma"))
+#: Configuración del módulo Chatbots aplicada a una organización (PLAT.3).
+_de_chatbots = Depends(require_module("chatbots"))
 
 
 class OrganizacionRead(BaseModel):
@@ -169,6 +185,7 @@ async def create_organizacion(
     body: OrganizacionCreate,
     _: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
+    _modulo=_de_plataforma,
 ):
     organizacion = HubOrganizacion(
         name=body.name,
@@ -190,6 +207,7 @@ async def update_organizacion(
     body: OrganizacionUpdate,
     user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
+    _modulo=_de_plataforma,
 ):
     organizacion = await session.get(HubOrganizacion, organizacion_id)
     if not organizacion:
@@ -217,6 +235,7 @@ async def get_valores_por_defecto(
     organizacion_id: uuid.UUID,
     user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
+    _modulo=_de_chatbots,
 ):
     """Los valores por defecto de RAG de una organización (PLAT.3).
 
@@ -241,6 +260,7 @@ async def update_valores_por_defecto(
     body: ValoresPorDefectoUpdate,
     user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
+    _modulo=_de_chatbots,
 ):
     """Cambia los valores por defecto, y **permite volver a heredar**.
 
@@ -269,6 +289,7 @@ async def delete_organizacion(
     organizacion_id: uuid.UUID,
     user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
+    _modulo=_de_plataforma,
 ):
     organizacion = await session.get(HubOrganizacion, organizacion_id)
     if not organizacion:

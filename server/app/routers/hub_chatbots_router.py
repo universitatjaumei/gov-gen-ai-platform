@@ -1,6 +1,7 @@
 """CRUD de chatbots del Hub + jerarquía router->hijos.
 
 Deploy: cloud
+Módulo: chatbots — ya lo declaraba a nivel de router.
 """
 
 import logging

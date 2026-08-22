@@ -1,6 +1,7 @@
 """Router de curación — auditoría de calidad de contenido web (9Q.8, re-etiquetado en CUR.1).
 
 Deploy: edge.
+Módulo: curacion — su propio docstring lo dice: «Router de curación». Los huecos que detecta alimentan la cola de revisión de contenido.
 
 Endpoints de cola de revisión de hallazgos, informe por sitio y descarga. Los huecos de
 corpus (RAG.14) y las caducidades (SYNC.2) cuelgan de un chatbot, no de un sitio, y viven en

@@ -1,5 +1,7 @@
 """
 Deploy: cloud
+Módulo: plataforma — los PAT son credenciales de máquina de la plataforma, y su pantalla vive
+en `/plataforma/tokens` (PLAT.2). A nivel de router: aquí no hay ningún endpoint público.
 
 Gestión de Personal Access Tokens (AUTH.3): emisión, listado y revocación. Solo
 admin/partner pueden emitir PAT; el token plano se devuelve una única vez.
@@ -11,7 +13,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 
-from server.app.api.deps import get_current_user, get_session
+from server.app.api.deps import get_current_user, get_session, require_module
 from server.app.core.auth.models import UserInfo
 from server.app.core.auth.pat.scopes import UnknownScopeError
 from server.app.core.auth.pat.service import (
@@ -20,7 +22,11 @@ from server.app.core.auth.pat.service import (
     PatService,
 )
 
-router = APIRouter(prefix="/auth/pats", tags=["auth-pat"])
+router = APIRouter(
+    prefix="/auth/pats",
+    tags=["auth-pat"],
+    dependencies=[Depends(require_module("plataforma"))],
+)
 
 
 class PatCreateRequest(BaseModel):

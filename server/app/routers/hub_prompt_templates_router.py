@@ -1,6 +1,7 @@
 """CRUD de prompt templates por chatbot.
 
 Deploy: cloud
+Módulo: chatbots — una plantilla cuelga de un chatbot (`chatbot_id` NOT NULL).
 """
 
 import uuid as _uuid

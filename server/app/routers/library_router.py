@@ -1,5 +1,6 @@
 """
 Deploy: cloud
+Módulo: plataforma — catálogo de la plataforma, no de un módulo.
 """
 
 from typing import Optional

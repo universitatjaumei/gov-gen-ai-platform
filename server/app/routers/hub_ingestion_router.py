@@ -1,6 +1,7 @@
 """Router de administración (Hub) para la ingestión de documentos.
 
 Deploy: cloud
+Módulo: chatbots — la ingesta alimenta el corpus de un chatbot.
 """
 
 import uuid

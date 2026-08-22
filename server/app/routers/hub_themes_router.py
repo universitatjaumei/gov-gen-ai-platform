@@ -1,6 +1,17 @@
 """Router para gestión de temas del chatbot.
 
 Deploy: cloud
+Módulo: plataforma — con **tres excepciones**, y ninguna es un descuido (PLAT.5).
+
+`require_module` depende de `get_current_user`, así que a nivel de router responderia 401 a lo
+que hoy funciona sin sesión. Va por endpoint, y estos tres se quedan fuera:
+
+- `get_theme_for_chatbot` y `get_theme_logo`: los consume el **widget público**, que no tiene
+  sesión ninguna — y un `<img>` no manda cabecera de autorización aunque la hubiera.
+- `get_resolved_theme`: es de donde sale la **marca de la cabecera del panel**, que pinta para
+  todo el mundo. Exigirle `plataforma` dejaría sin logotipo a quien solo tenga `informes`.
+- `get_preset_themes` se queda como estaba, sin auth: son cuatro etiquetas fijas y no revela nada.
+
 
 `get_theme_for_chatbot` es la excepción: la consume el widget público, que es tráfico
 edge (mismo consumidor que `hub_chat_router`). Se queda aquí porque hoy `DEPLOY_MODE=all`
@@ -31,6 +42,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from server.app.api.deps import (
     get_current_user,
     get_current_user_optional,
+    require_module,
     require_role,
 )
 from server.app.core.auth.chatbot_access import VIA_WIDGET, assert_chatbot_access
@@ -53,6 +65,8 @@ router = APIRouter(prefix="/hub/themes", tags=["hub-themes"])
 _MAX_LOGO_BYTES = 1024 * 1024
 
 _require_admin = require_role("superadmin", "admin")
+#: La guarda de módulo, por endpoint. Ver las tres excepciones en el docstring.
+_de_plataforma = Depends(require_module("plataforma"))
 _require_superadmin = require_role("superadmin")
 
 
@@ -304,6 +318,7 @@ async def get_themes(
     chatbot_id: str | None = None,
     user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
+    _modulo=_de_plataforma,
 ) -> list[dict]:
     """Lista los temas disponibles para el partner.
 
@@ -411,6 +426,7 @@ async def get_theme(
     theme_id: str,
     user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
+    _modulo=_de_plataforma,
 ) -> dict:
     """Obtiene un tema específico por ID.
 
@@ -434,6 +450,7 @@ async def create_theme(
     data: ThemeCreate,
     user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
+    _modulo=_de_plataforma,
 ) -> dict:
     """Crea un nuevo tema para un cliente o chatbot del partner."""
     # SEC.2: la organización viene del CUERPO de la petición, así que sin esto un admin
@@ -480,6 +497,7 @@ async def update_theme(
     data: ThemeUpdate,
     user: UserInfo = Depends(_require_superadmin),
     session: AsyncSession = Depends(get_async_session),
+    _modulo=_de_plataforma,
 ) -> dict:
     """Actualiza un tema existente."""
     tema = await session.get(HubTheme, _assert_id_de_tema(theme_id))
@@ -499,6 +517,7 @@ async def delete_theme(
     theme_id: str,
     user: UserInfo = Depends(_require_superadmin),
     session: AsyncSession = Depends(get_async_session),
+    _modulo=_de_plataforma,
 ) -> None:
     """Elimina un tema personalizado."""
     tema = await session.get(HubTheme, _assert_id_de_tema(theme_id))
@@ -516,6 +535,7 @@ async def apply_theme_to_chatbot(
     chatbot_id: uuid.UUID,
     user: UserInfo = Depends(_require_superadmin),
     session: AsyncSession = Depends(get_async_session),
+    _modulo=_de_plataforma,
 ) -> dict:
     """Aplica un tema a un chatbot específico.
 
@@ -548,6 +568,7 @@ async def upload_theme_logo(
     user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
     storage: StorageService = Depends(get_storage_service),
+    _modulo=_de_plataforma,
 ) -> LogoSubidoOut:
     """Sube el logotipo de un tema y lo deja apuntado en su `config`.
 

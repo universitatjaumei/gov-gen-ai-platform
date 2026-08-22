@@ -1,6 +1,7 @@
 """Biblioteca de prompts de las actividades de plataforma — PRO.2.1.
 
 Deploy: cloud
+Módulo: plataforma — actividades que no cuelgan de ningún chatbot (PRO.2.1).
 
 Hasta aquí la biblioteca (`/hub/prompts`, `/hub/brain`) sólo veía prompts **de chatbot**,
 porque `hub_prompt_templates.chatbot_id` es NOT NULL. Los prompts de las actividades del
