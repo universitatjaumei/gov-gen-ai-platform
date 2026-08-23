@@ -1,4 +1,5 @@
 import { useGetResolvedThemeApiV1HubThemesResolvedGet } from '@/shared/api/generated/hub-themes/hub-themes'
+import { useOrganizacionElegida } from '@/shared/organizacion/useOrganizacionElegida'
 import type { ThemeBranding } from '@/themes/types'
 
 /**
@@ -18,7 +19,13 @@ import type { ThemeBranding } from '@/themes/types'
  * la petición está en vuelo haría que la cabecera cambiara de forma en cada recarga.
  */
 export function useMarca(): { marca: ThemeBranding; cargando: boolean } {
-  const { data, isLoading } = useGetResolvedThemeApiV1HubThemesResolvedGet()
+  // REV.12 — la marca de la organización que se está mirando, no sólo la del token. Un
+  // superadministrador no pertenece a ninguna, así que hasta aquí veía siempre la de
+  // plataforma: configuraba el logotipo de la UJI y no lo veía en ninguna parte.
+  const { elegida } = useOrganizacionElegida()
+  const { data, isLoading } = useGetResolvedThemeApiV1HubThemesResolvedGet({
+    organizacion: elegida || undefined,
+  })
   const config = (data as { config?: Record<string, unknown> } | undefined)?.config
   const branding = config?.branding
 

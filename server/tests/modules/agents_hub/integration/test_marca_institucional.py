@@ -484,3 +484,108 @@ class TestElLogotipoSeSirveComoImagen:
             respuesta = await cliente.get(f"/api/v1/hub/themes/{tema.id}/logo")
 
         assert respuesta.status_code == 404
+
+
+class TestLaMarcaSigueALaOrganizacionElegida:
+    """REV.12 — un superadministrador ve la marca de la organización que está mirando.
+
+    El usuario configuró el logotipo y los colores de la UJI y **no los veía**, y preguntó si
+    tenía que reiniciar. No: la cascada funde el nivel de organización **sólo cuando quien
+    pregunta pertenece a una sola**, y en un superadministrador la lista vacía significa
+    «todas», así que responde con la marca de plataforma. Estaba escrito y era razonado — con
+    varias organizaciones no había forma de saber cuál es «su casa».
+
+    Lo que ha cambiado es que ahora sí la hay: REV.10 puso una organización elegida en la
+    cabecera, y el endpoint puede respetarla.
+    """
+
+    @pytest.mark.asyncio
+    async def test_should_resolve_the_theme_of_the_organisation_asked_for(self, db_session):
+        await _tema(
+            db_session,
+            name="Plataforma",
+            config={"name": "plataforma", "branding": {"logoAlt": "Gov Gen AI Platform"}},
+        )
+        org = await _organizacion(db_session)
+        await _tema(
+            db_session,
+            name="UJI",
+            organizacion_id=org.id,
+            config={"branding": {"logoUrl": "/api/v1/hub/themes/x/logo", "logoAlt": "UJI"}},
+        )
+
+        # Superadministrador: lista vacía, o sea «todas». El rol importa —`_principal` crea un
+        # `admin` por omisión—, porque un admin sin organizaciones tiene que recibir 403.
+        async with _cliente(
+            db_session, _principal(role="superadmin", organizacion_ids=[])
+        ) as cliente:
+            config = (
+                await cliente.get(f"/api/v1/hub/themes/resolved?organizacion={org.id}")
+            ).json()["config"]
+
+        assert config["branding"]["logoAlt"] == "UJI"
+        assert config["branding"]["logoUrl"]
+
+    @pytest.mark.asyncio
+    async def test_should_keep_answering_the_platform_mark_without_the_parameter(
+        self, db_session
+    ):
+        """Sin parámetro, el comportamiento de hoy: es lo que consume el widget y el panel de
+        quien no ha elegido nada todavía."""
+        await _tema(
+            db_session,
+            name="Plataforma",
+            config={"name": "plataforma", "branding": {"logoAlt": "Gov Gen AI Platform"}},
+        )
+        org = await _organizacion(db_session)
+        await _tema(
+            db_session,
+            name="UJI",
+            organizacion_id=org.id,
+            config={"branding": {"logoAlt": "UJI"}},
+        )
+
+        async with _cliente(
+            db_session, _principal(role="superadmin", organizacion_ids=[])
+        ) as cliente:
+            config = (await cliente.get("/api/v1/hub/themes/resolved")).json()["config"]
+
+        assert config["branding"]["logoAlt"] == "Gov Gen AI Platform"
+
+    @pytest.mark.asyncio
+    async def test_should_refuse_an_organisation_the_caller_cannot_see(self, db_session):
+        """**El test del prompt.** Un admin que pide otra organización recibe 403, **no** la
+        marca de plataforma. Devolver algo distinto de lo pedido esconde el fallo de permisos:
+        parecería que esa organización no tiene marca, cuando lo que pasa es que no puede
+        mirarla."""
+        ajena = await _organizacion(db_session)
+        propia = await _organizacion(db_session)
+
+        async with _cliente(
+            db_session, _principal(organizacion_ids=[propia.id])
+        ) as cliente:
+            respuesta = await cliente.get(
+                f"/api/v1/hub/themes/resolved?organizacion={ajena.id}"
+            )
+
+        assert respuesta.status_code == 403, respuesta.text
+
+    @pytest.mark.asyncio
+    async def test_should_let_an_admin_ask_for_its_own_organisation(self, db_session):
+        propia = await _organizacion(db_session)
+        await _tema(
+            db_session,
+            name="Propia",
+            organizacion_id=propia.id,
+            config={"branding": {"logoAlt": "La mía"}},
+        )
+
+        async with _cliente(
+            db_session, _principal(organizacion_ids=[propia.id])
+        ) as cliente:
+            respuesta = await cliente.get(
+                f"/api/v1/hub/themes/resolved?organizacion={propia.id}"
+            )
+
+        assert respuesta.status_code == 200, respuesta.text
+        assert respuesta.json()["config"]["branding"]["logoAlt"] == "La mía"

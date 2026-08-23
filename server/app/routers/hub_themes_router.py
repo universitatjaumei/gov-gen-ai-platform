@@ -456,6 +456,7 @@ async def get_theme_for_chatbot(
 
 @router.get("/resolved", response_model=TemaResueltoOut)
 async def get_resolved_theme(
+    organizacion: uuid.UUID | None = None,
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> TemaResueltoOut:
@@ -477,15 +478,34 @@ async def get_resolved_theme(
     plataforma = await _tema_mas_reciente(session, organizacion_id=None)
     config: dict = dict(plataforma.config or {}) if plataforma is not None else {}
 
-    if len(user.organizacion_ids) == 1:
+    organizacion_id: uuid.UUID | None = None
+
+    if organizacion is not None:
+        # REV.12 — la organización que se está mirando, y no la del token.
+        #
+        # El usuario configuró el logotipo de la UJI y no lo veía, y preguntó si tenía que
+        # reiniciar. No: la rama de abajo funde el nivel de organización sólo cuando quien
+        # pregunta pertenece a **una sola**, y en un superadministrador la lista vacía significa
+        # «todas». Era una decisión razonada —con varias no había forma de saber cuál es «su
+        # casa»— y lo que ha cambiado es que ahora sí la hay: REV.10 puso una organización
+        # elegida en la cabecera del panel.
+        #
+        # **Se comprueba el acceso y se responde 403**, en vez de caer a la marca de
+        # plataforma: devolver algo distinto de lo pedido escondería el fallo de permisos, y
+        # parecería que esa organización no tiene marca cuando lo que pasa es que no se puede
+        # mirar.
+        assert_org_access(user, organizacion)
+        organizacion_id = organizacion
+    elif len(user.organizacion_ids) == 1:
         try:
             organizacion_id = uuid.UUID(user.organizacion_ids[0])
         except ValueError:
             organizacion_id = None
-        if organizacion_id is not None:
-            propio = await _tema_mas_reciente(session, organizacion_id=organizacion_id)
-            if propio is not None:
-                config = _fusionar(config, propio.config or {})
+
+    if organizacion_id is not None:
+        propio = await _tema_mas_reciente(session, organizacion_id=organizacion_id)
+        if propio is not None:
+            config = _fusionar(config, propio.config or {})
 
     return TemaResueltoOut(config=config)
 

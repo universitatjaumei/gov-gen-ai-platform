@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useGetResolvedThemeApiV1HubThemesResolvedGet } from '@/shared/api/generated/hub-themes/hub-themes'
+import { useOrganizacionElegida } from '@/shared/organizacion/useOrganizacionElegida'
 
 import { aplicarColoresDelPanel } from './coloresDelPanel'
 
@@ -16,7 +17,13 @@ import { aplicarColoresDelPanel } from './coloresDelPanel'
  * misma consulta ya cacheada.
  */
 export function useColoresDelPanel(): void {
-  const { data } = useGetResolvedThemeApiV1HubThemesResolvedGet()
+  // REV.12 — la misma organización que la marca, y por el mismo motivo: si los colores
+  // siguieran a la plataforma y el logotipo a la organización, el panel mezclaría dos
+  // identidades.
+  const { elegida } = useOrganizacionElegida()
+  const { data } = useGetResolvedThemeApiV1HubThemesResolvedGet({
+    organizacion: elegida || undefined,
+  })
   const config = (data as { config?: Record<string, unknown> } | undefined)?.config
   const colores = config?.colors as Record<string, unknown> | undefined
 

@@ -32,7 +32,9 @@ vi.mock('@/shared/api/generated/hub-themes/hub-themes', () => ({
 // REV.10 — `AppLayout` lleva el selector de organización, así que consulta la lista. Sin el
 // doble, el `useQuery` revienta por falta de `QueryClientProvider` y el fallo parece del menú.
 vi.mock('@/shared/api/generated/hub-organizaciones/hub-organizaciones', () => ({
-  useListOrganizacionesApiV1HubOrganizacionesGet: () => ({ data: [] }),
+  useListOrganizacionesApiV1HubOrganizacionesGet: () => ({
+    data: [{ id: 'org-uji', name: 'Universitat Jaume I' }, { id: 'org-b', name: 'Otra' }],
+  }),
 }))
 
 const TOKEN =
@@ -109,5 +111,42 @@ describe('la marca del panel la decide el servidor', () => {
     const src = screen.getByRole('img').getAttribute('src') ?? ''
     expect(src.startsWith('/api/')).toBe(true)
     expect(src).not.toMatch(/assets|logo-uji/)
+  })
+})
+
+describe('REV.12 — la marca sigue a la organización elegida', () => {
+  it('should_ask_the_server_for_the_organisation_chosen_in_the_panel', () => {
+    // El usuario configuró el logotipo de la UJI y no lo veía: la cascada funde el nivel de
+    // organización sólo para quien pertenece a una sola, y un superadministrador no pertenece
+    // a ninguna. REV.10 puso la elección en la cabecera; esto la usa.
+    localStorage.setItem('organizacion-elegida', 'org-uji')
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <AppLayout />
+        </AuthProvider>
+      </MemoryRouter>
+    )
+
+    expect(vi.mocked(useGetResolvedThemeApiV1HubThemesResolvedGet)).toHaveBeenCalledWith(
+      expect.objectContaining({ organizacion: 'org-uji' })
+    )
+  })
+
+  it('should_ask_for_nothing_in_particular_when_none_is_chosen', () => {
+    // Sin elección, el comportamiento de siempre: la marca de plataforma. Mandar una cadena
+    // vacía sería pedir «la organización que se llama ""», que es un 422.
+    localStorage.clear()
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <AppLayout />
+        </AuthProvider>
+      </MemoryRouter>
+    )
+
+    expect(vi.mocked(useGetResolvedThemeApiV1HubThemesResolvedGet)).toHaveBeenCalledWith(
+      expect.objectContaining({ organizacion: undefined })
+    )
   })
 })
