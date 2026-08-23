@@ -375,6 +375,10 @@
       "dar_de_alta": "Dar de alta",
       "desactivar": "Desactivar",
       "reactivar": "Reactivar",
+      "eliminar": "Eliminar",
+      "confirmar": "Confirmar",
+      "cancelar": "Cancelar",
+      "confirmar_pregunta": "¿Eliminar definitivamente?",
       "cargando": "Cargando…",
       "sin_contrasena": "El alta no crea contraseña: la identidad se comprueba con el SSO institucional.",
       "roles": {
@@ -385,7 +389,8 @@
       },
       "origenes": {
         "manual": "Alta manual",
-        "sso": "SSO"
+        "sso": "SSO",
+        "superadmin": "Cuenta de instalación"
       }
     },
     "modulos_nav": "Módulos",

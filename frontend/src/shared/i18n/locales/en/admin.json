@@ -375,6 +375,10 @@
       "dar_de_alta": "Add person",
       "desactivar": "Deactivate",
       "reactivar": "Reactivate",
+      "eliminar": "Delete",
+      "confirmar": "Confirm",
+      "cancelar": "Cancel",
+      "confirmar_pregunta": "Delete permanently?",
       "cargando": "Loading…",
       "sin_contrasena": "Adding a person does not create a password: identity is verified through institutional SSO.",
       "roles": {
@@ -385,7 +389,8 @@
       },
       "origenes": {
         "manual": "Added by hand",
-        "sso": "SSO"
+        "sso": "SSO",
+        "superadmin": "Install account"
       }
     },
     "modulos_nav": "Modules",

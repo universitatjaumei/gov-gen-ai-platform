@@ -8,7 +8,9 @@ import {
   useListUsersApiV1HubUsersGet,
   useCreateUserApiV1HubUsersPost,
   useUpdateUserApiV1HubUsersUserIdPatch,
+  useDeleteUserApiV1HubUsersUserIdDelete as useBorrar,
 } from '@/shared/api/generated/hub-users/hub-users'
+import type { UsuarioRead } from '@/shared/api/generated/model'
 import { useAutoridadDelRol } from '@/shared/auth/useAutoridadDelRol'
 
 /**
@@ -30,6 +32,8 @@ vi.mock('@/shared/api/generated/hub-users/hub-users', () => ({
   useListUsersApiV1HubUsersGet: vi.fn(),
   useCreateUserApiV1HubUsersPost: vi.fn(),
   useUpdateUserApiV1HubUsersUserIdPatch: vi.fn(),
+  useDeleteUserApiV1HubUsersUserIdDelete: vi.fn(),
+  getListUsersApiV1HubUsersGetQueryKey: () => ['usuarios'],
 }))
 
 // La autoridad del rol la resuelve la pantalla contra el servidor, no la recibe por prop: un
@@ -39,7 +43,7 @@ vi.mock('@/shared/auth/useAutoridadDelRol', () => ({
   useAutoridadDelRol: vi.fn(),
 }))
 
-const PERSONAS = [
+const PERSONAS: UsuarioRead[] = [
   {
     id: '11111111-1111-1111-1111-111111111111',
     email: 'manual@uji.es',
@@ -51,6 +55,8 @@ const PERSONAS = [
     created_at: '2026-08-22T09:00:00Z',
     created_by: 'root',
     last_login_at: null,
+    puede_borrarse: true,
+    motivo_no_borrable: null,
   },
   {
     id: '22222222-2222-2222-2222-222222222222',
@@ -63,12 +69,15 @@ const PERSONAS = [
     created_at: '2026-08-01T09:00:00Z',
     created_by: null,
     last_login_at: '2026-08-20T10:00:00Z',
+    puede_borrarse: false,
+    motivo_no_borrable: 'Esta persona ya ha entrado.',
   },
 ]
 
 const mutar = vi.fn()
+const borrar = vi.fn()
 
-function conPersonas(personas = PERSONAS, autoridad = 'app') {
+function conPersonas(personas: UsuarioRead[] = PERSONAS, autoridad = 'app') {
   vi.mocked(useListUsersApiV1HubUsersGet).mockReturnValue({
     data: personas,
     isLoading: false,
@@ -82,6 +91,7 @@ function conPersonas(personas = PERSONAS, autoridad = 'app') {
     mutate: mutar,
     isPending: false,
   } as never)
+  vi.mocked(useBorrar).mockReturnValue({ mutate: borrar, isPending: false } as never)
   return autoridad
 }
 
@@ -91,6 +101,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   mutar.mockClear()
+  borrar.mockClear()
   conPersonas()
 })
 
@@ -206,10 +217,118 @@ describe('IDE.4 — alta y edición', () => {
     )
   })
 
-  it('should_not_offer_a_delete_action', () => {
+  it('should_not_offer_a_delete_action_for_someone_who_has_used_the_platform', () => {
     // Una persona que ya entró tiene rastro en interacciones, informes y concesiones.
+    //
+    // REV.8 acota este «no hay borrado» en vez de tirarlo: sigue siendo cierto para quien ya
+    // entró —que es de quien hablaba IDE.4— y deja de serlo para una fila creada a mano que
+    // nadie ha usado. Se comprueba **sobre esa fila** y no sobre la pantalla entera, que es
+    // lo que hacía este test cuando el borrado no existía para nadie.
     renderPage()
 
-    expect(screen.queryByRole('button', { name: /eliminar|borrar/i })).toBeNull()
+    const yaEntro = screen.getByTestId('persona-porsso@uji.es')
+    expect(
+      within(yaEntro).queryByRole('button', { name: /eliminar|borrar/i })
+    ).toBeNull()
+  })
+})
+
+/**
+ * REV.8 — borrar, y ver al superadministrador.
+ *
+ * IDE.4 decidió «desactivar, nunca borrar», con buen motivo: quien ya entró tiene rastro. Era
+ * absoluto de más — una fila creada a mano que nadie ha usado no tiene rastro de nada, y un
+ * correo mal escrito se quedaba en el listado para siempre.
+ *
+ * Y el superadministrador principal no aparecía: vive en `superadminaccount` y el listado leía
+ * sólo `hub_users`, así que la única cuenta real de una instalación nueva era invisible.
+ */
+const SUPERADMIN_DE_ARRANQUE: UsuarioRead = {
+  id: '33333333-3333-3333-3333-333333333333',
+  email: 'root@uji.es',
+  display_name: 'SuperAdmin de arranque',
+  role: 'superadmin',
+  organizacion_id: null,
+  is_active: true,
+  origen: 'superadmin',
+  created_at: '2026-01-01T09:00:00Z',
+  created_by: null,
+  last_login_at: null,
+  puede_borrarse: false,
+  motivo_no_borrable: 'Vive en otra tabla y se gestiona desde el servidor.',
+}
+
+describe('REV.8 — borrar a quien nunca entró', () => {
+  it('should_offer_deleting_someone_the_server_says_can_be_deleted', () => {
+    renderPage()
+
+    const fila = screen.getByTestId('persona-manual@uji.es')
+    expect(within(fila).getByRole('button', { name: /eliminar|borrar/i })).toBeDefined()
+  })
+
+  it('should_delete_after_confirming', () => {
+    // Con confirmación: es la única acción de esta pantalla que no se puede deshacer.
+    renderPage()
+
+    const fila = screen.getByTestId('persona-manual@uji.es')
+    fireEvent.click(within(fila).getByRole('button', { name: /eliminar|borrar/i }))
+    fireEvent.click(screen.getByRole('button', { name: /confirmar/i }))
+
+    expect(borrar).toHaveBeenCalledWith(
+      { userId: '11111111-1111-1111-1111-111111111111' },
+      expect.anything()
+    )
+  })
+
+  it('should_not_delete_if_the_confirmation_is_dismissed', () => {
+    renderPage()
+
+    const fila = screen.getByTestId('persona-manual@uji.es')
+    fireEvent.click(within(fila).getByRole('button', { name: /eliminar|borrar/i }))
+    fireEvent.click(screen.getByRole('button', { name: /cancelar/i }))
+
+    expect(borrar).not.toHaveBeenCalled()
+  })
+
+  it('should_say_why_a_row_cannot_be_deleted', () => {
+    // No basta con esconder el botón: sin el motivo, la fila se lee como «aquí no se puede
+    // hacer nada» y quien administra no sabe si es una regla o un fallo.
+    renderPage()
+
+    const fila = screen.getByTestId('persona-porsso@uji.es')
+    expect(fila.textContent).toMatch(/ya ha entrado/i)
+  })
+
+  it('should_take_the_decision_from_the_server_and_not_from_last_login', () => {
+    // **El test del prompt.** Si el React decidiera por `last_login_at`, esa regla viviría en
+    // dos sitios. Aquí el servidor dice que NO se puede borrar a alguien que nunca entró —un
+    // caso que hoy no se da, pero que llegará el día que haya más motivos— y la pantalla
+    // obedece en vez de recalcular.
+    conPersonas([
+      { ...PERSONAS[0], last_login_at: null, puede_borrarse: false, motivo_no_borrable: 'Da igual el motivo.' },
+    ])
+    renderPage()
+
+    const fila = screen.getByTestId('persona-manual@uji.es')
+    expect(within(fila).queryByRole('button', { name: /eliminar|borrar/i })).toBeNull()
+  })
+})
+
+describe('REV.8 — el superadministrador de arranque', () => {
+  it('should_show_it_in_the_listing', () => {
+    conPersonas([SUPERADMIN_DE_ARRANQUE, ...PERSONAS])
+    renderPage()
+
+    expect(screen.getByText('root@uji.es')).toBeDefined()
+  })
+
+  it('should_not_offer_deleting_or_deactivating_it', () => {
+    // Vive en otra tabla: los dos botones darían un 404 y parecerían un fallo.
+    conPersonas([SUPERADMIN_DE_ARRANQUE, ...PERSONAS])
+    renderPage()
+
+    const fila = screen.getByTestId('persona-root@uji.es')
+    expect(within(fila).queryByRole('button', { name: /eliminar|borrar/i })).toBeNull()
+    expect(within(fila).queryByRole('button', { name: /desactivar/i })).toBeNull()
   })
 })

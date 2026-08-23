@@ -5,10 +5,14 @@ import {
   useListUsersApiV1HubUsersGet,
   useCreateUserApiV1HubUsersPost,
   useUpdateUserApiV1HubUsersUserIdPatch,
+  useDeleteUserApiV1HubUsersUserIdDelete,
   getListUsersApiV1HubUsersGetQueryKey,
 } from '@/shared/api/generated/hub-users/hub-users'
 import type { UsuarioRead } from '@/shared/api/generated/model'
 import { useAutoridadDelRol } from '@/shared/auth/useAutoridadDelRol'
+
+/** El `origen` de las cuentas que vienen de `superadminaccount` y no de `hub_users` (REV.8). */
+const ORIGEN_DE_ARRANQUE = 'superadmin'
 
 /** Los roles que ofrece el alta. Salen del contrato del servidor, que los valida. */
 const ROLES = ['user', 'informer', 'admin', 'superadmin'] as const
@@ -37,10 +41,13 @@ export function UsuariosPage() {
 
   const { mutate: crear, isPending: creando } = useCreateUserApiV1HubUsersPost()
   const { mutate: actualizar } = useUpdateUserApiV1HubUsersUserIdPatch()
+  const { mutate: eliminar } = useDeleteUserApiV1HubUsersUserIdDelete()
 
   const [email, setEmail] = useState('')
   const [rol, setRol] = useState<string>('user')
   const [nombre, setNombre] = useState('')
+  /** La fila que espera confirmación de borrado. Estado de la pantalla, no del servidor. */
+  const [porConfirmar, setPorConfirmar] = useState<string | null>(null)
 
   function darDeAlta(evento: React.FormEvent) {
     evento.preventDefault()
@@ -55,6 +62,11 @@ export function UsuariosPage() {
         },
       }
     )
+  }
+
+  function borrarPersona(persona: UsuarioRead) {
+    setPorConfirmar(null)
+    eliminar({ userId: persona.id }, { onSuccess: invalidar })
   }
 
   function cambiarActividad(persona: UsuarioRead) {
@@ -150,7 +162,11 @@ export function UsuariosPage() {
           </thead>
           <tbody>
             {(personas ?? []).map((persona) => (
-              <tr key={persona.id} className="border-b">
+              <tr
+                key={persona.id}
+                data-testid={`persona-${persona.email}`}
+                className="border-b"
+              >
                 <td className="py-2">{persona.email}</td>
                 <td>{persona.display_name ?? '—'}</td>
                 <td>{t(`plataforma.usuarios.roles.${persona.role}` as Parameters<typeof t>[0])}</td>
@@ -167,18 +183,66 @@ export function UsuariosPage() {
                     ? t('plataforma.usuarios.activa')
                     : t('plataforma.usuarios.desactivada')}
                 </td>
-                <td className="text-right">
-                  {/* Desactivar, nunca borrar: quien ya entró tiene rastro en interacciones,
-                      informes y concesiones, y borrarlo lo dejaría sin dueño. */}
-                  <button
-                    type="button"
-                    onClick={() => cambiarActividad(persona)}
-                    className="text-xs underline"
-                  >
-                    {persona.is_active
-                      ? t('plataforma.usuarios.desactivar')
-                      : t('plataforma.usuarios.reactivar')}
-                  </button>
+                <td className="space-y-1 text-right">
+                  {porConfirmar === persona.id ? (
+                    /* Confirmación en la propia fila: borrar es la única acción de esta
+                       pantalla que no se puede deshacer. */
+                    <span className="flex flex-wrap items-center justify-end gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {t('plataforma.usuarios.confirmar_pregunta')}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => borrarPersona(persona)}
+                        className="text-xs font-medium text-destructive underline"
+                      >
+                        {t('plataforma.usuarios.confirmar')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPorConfirmar(null)}
+                        className="text-xs underline"
+                      >
+                        {t('plataforma.usuarios.cancelar')}
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="flex flex-wrap items-center justify-end gap-3">
+                      {/* La cuenta de arranque vive en otra tabla: desactivarla desde aquí
+                          daría un 404 y parecería un fallo de la pantalla. */}
+                      {persona.origen !== ORIGEN_DE_ARRANQUE && (
+                        <button
+                          type="button"
+                          onClick={() => cambiarActividad(persona)}
+                          className="text-xs underline"
+                        >
+                          {persona.is_active
+                            ? t('plataforma.usuarios.desactivar')
+                            : t('plataforma.usuarios.reactivar')}
+                        </button>
+                      )}
+                      {/* **Lo decide el servidor**, no esta pantalla: `puede_borrarse` viene en
+                          el contrato. Calcularlo aquí por `last_login_at` pondría la misma
+                          regla en dos sitios, y un día dirían cosas distintas. */}
+                      {persona.puede_borrarse && (
+                        <button
+                          type="button"
+                          onClick={() => setPorConfirmar(persona.id)}
+                          className="text-xs text-destructive underline"
+                        >
+                          {t('plataforma.usuarios.eliminar')}
+                        </button>
+                      )}
+                    </span>
+                  )}
+                  {/* El motivo, y no sólo la ausencia del botón: una fila sin acciones y sin
+                      explicación se lee como «aquí no se puede hacer nada», y quien administra
+                      no sabe si es una regla o algo roto. */}
+                  {!persona.puede_borrarse && persona.motivo_no_borrable && (
+                    <span className="block text-xs text-muted-foreground">
+                      {persona.motivo_no_borrable}
+                    </span>
+                  )}
                 </td>
               </tr>
             ))}

@@ -375,6 +375,10 @@
       "dar_de_alta": "Donar d’alta",
       "desactivar": "Desactivar",
       "reactivar": "Reactivar",
+      "eliminar": "Eliminar",
+      "confirmar": "Confirmar",
+      "cancelar": "Cancel·lar",
+      "confirmar_pregunta": "Eliminar definitivament?",
       "cargando": "Carregant…",
       "sin_contrasena": "L’alta no crea contrasenya: la identitat es comprova amb el SSO institucional.",
       "roles": {
@@ -385,7 +389,8 @@
       },
       "origenes": {
         "manual": "Alta manual",
-        "sso": "SSO"
+        "sso": "SSO",
+        "superadmin": "Compte d’instal·lació"
       }
     },
     "modulos_nav": "Mòduls",
