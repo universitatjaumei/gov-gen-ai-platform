@@ -407,9 +407,9 @@
       "nombre_por_defecto": "Tema",
       "heredado_de": "Heredado de {{nivel}}",
       "limites": "PNG o JPEG, hasta 1 MB. El SVG queda fuera a propósito: puede llevar scripts dentro, y el logotipo se sirve sin sesión.",
-      "guarda_antes_de_subir": "Este nivel todavía no tiene tema propio. Guarda un cambio antes de subir el logotipo.",
+      "sin_fichero": "Ningún fichero seleccionado",
       "sin_marca": "Sin logotipo",
-      "elegir_fichero": "Fichero del logotipo",
+      "elegir_fichero": "Elegir fichero…",
       "formato_rechazado": "Ese fichero es de tipo {{tipo}}. Solo se aceptan PNG y JPEG: el SVG puede llevar scripts dentro y el logotipo se sirve sin sesión.",
       "demasiado_grande": "El fichero pasa de 1 MB, que es el tope del servidor. Reduce la imagen antes de subirla."
     }

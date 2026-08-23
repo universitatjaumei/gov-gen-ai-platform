@@ -343,3 +343,84 @@ describe('PLAT.6 — la instalacion recien levantada', () => {
     expect(screen.getByTestId('campo-border').textContent).not.toMatch(/heredado/i)
   })
 })
+
+/**
+ * REV.4 — el selector de logotipo tenía que poder pulsarse.
+ *
+ * En una instalación recién levantada el nivel de plataforma no tiene tema propio, y el
+ * `<input type="file">` salía con `disabled`: «Tria un fitxer» en gris, inerte, con la
+ * explicación en un párrafo de 12 px debajo que nadie lee. Además el texto del botón lo pone
+ * el navegador —de ahí que saliera en valenciano con el panel en castellano— y va pegado al
+ * «no s'ha triat cap fitxer» en la misma línea.
+ */
+describe('REV.4 — elegir el fichero del logotipo', () => {
+  function elegir(nombre: string, tipo: string, bytes: number) {
+    const fichero = new File([new Uint8Array(bytes)], nombre, { type: tipo })
+    fireEvent.change(screen.getByTestId('logo-file'), { target: { files: [fichero] } })
+  }
+
+  it('should_offer_a_real_button_and_hide_the_native_control', () => {
+    // El control nativo no se puede estilar ni traducir: se oculta a la vista —no a los
+    // lectores de pantalla— y quien pulsa lo hace sobre una etiqueta con aspecto de botón.
+    renderPage()
+
+    const entrada = screen.getByTestId('logo-file') as HTMLInputElement
+    expect(entrada.className).toMatch(/sr-only/)
+
+    const boton = screen.getByTestId('logo-boton')
+    expect(boton.tagName).toBe('LABEL')
+    expect(boton.getAttribute('for')).toBe(entrada.id)
+  })
+
+  it('should_never_be_disabled', () => {
+    // Sin tema propio en este nivel tampoco: ahora se crea al vuelo.
+    vi.mocked(useGetThemesApiV1HubThemesGet).mockReturnValue({
+      data: [],
+      isLoading: false,
+    } as never)
+    renderPage()
+
+    expect((screen.getByTestId('logo-file') as HTMLInputElement).disabled).toBe(false)
+  })
+
+  it('should_show_the_chosen_file_name_on_its_own_line', () => {
+    renderPage()
+    elegir('escut.png', 'image/png', 2048)
+
+    expect(screen.getByTestId('logo-nombre').textContent).toMatch(/escut\.png/)
+  })
+
+  it('should_create_the_theme_on_the_fly_when_the_level_has_none', () => {
+    // **El test del prompt.** Antes esto era un callejón: para subir el logotipo hacía falta
+    // un tema, y para tener tema había que guardar colores que quizá nadie quería tocar.
+    vi.mocked(useGetThemesApiV1HubThemesGet).mockReturnValue({
+      data: [],
+      isLoading: false,
+    } as never)
+    renderPage()
+    elegir('escut.png', 'image/png', 2048)
+
+    expect(crear).toHaveBeenCalled()
+    expect(subirLogo).not.toHaveBeenCalled()
+
+    // Y cuando el servidor devuelve el tema recién creado, se sube sobre él.
+    const alCrear = crear.mock.calls[0][1] as { onSuccess: (t: { id: string }) => void }
+    alCrear.onSuccess({ id: 'tema-nuevo' })
+
+    expect(subirLogo).toHaveBeenCalledWith(
+      expect.objectContaining({ themeId: 'tema-nuevo' }),
+      expect.anything()
+    )
+  })
+
+  it('should_upload_straight_away_when_the_level_already_has_a_theme', () => {
+    renderPage()
+    elegir('escut.png', 'image/png', 2048)
+
+    expect(crear).not.toHaveBeenCalled()
+    expect(subirLogo).toHaveBeenCalledWith(
+      expect.objectContaining({ themeId: 'tema-plataforma' }),
+      expect.anything()
+    )
+  })
+})

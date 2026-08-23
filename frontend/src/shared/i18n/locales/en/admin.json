@@ -407,9 +407,9 @@
       "nombre_por_defecto": "Theme",
       "heredado_de": "Inherited from {{nivel}}",
       "limites": "PNG or JPEG, up to 1 MB. SVG is deliberately excluded: it can carry scripts, and the logo is served without a session.",
-      "guarda_antes_de_subir": "This level has no theme of its own yet. Save a change before uploading a logo.",
+      "sin_fichero": "No file selected",
       "sin_marca": "No logo",
-      "elegir_fichero": "Logo file",
+      "elegir_fichero": "Choose file…",
       "formato_rechazado": "That file is of type {{tipo}}. Only PNG and JPEG are accepted: SVG can carry scripts, and the logo is served without a session.",
       "demasiado_grande": "The file is over 1 MB, the server limit. Shrink the image before uploading it."
     }

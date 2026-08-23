@@ -407,9 +407,9 @@
       "nombre_por_defecto": "Tema",
       "heredado_de": "Heretat de {{nivel}}",
       "limites": "PNG o JPEG, fins a 1 MB. L’SVG queda fora a propòsit: pot portar scripts dins, i el logotip se serveix sense sessió.",
-      "guarda_antes_de_subir": "Aquest nivell encara no té tema propi. Guarda un canvi abans de pujar el logotip.",
+      "sin_fichero": "Cap fitxer seleccionat",
       "sin_marca": "Sense logotip",
-      "elegir_fichero": "Fitxer del logotip",
+      "elegir_fichero": "Triar fitxer…",
       "formato_rechazado": "Aquest fitxer és de tipus {{tipo}}. Només s’accepten PNG i JPEG: l’SVG pot portar scripts dins i el logotip se serveix sense sessió.",
       "demasiado_grande": "El fitxer passa d’1 MB, que és el tope del servidor. Redueix la imatge abans de pujar-la."
     }

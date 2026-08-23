@@ -123,6 +123,8 @@ export function IdentidadVisualPage() {
   const [chatbotId, setChatbotId] = useState('')
   const [edicion, setEdicion] = useState<Config>({})
   const [error, setError] = useState<string | null>(null)
+  /** El fichero elegido, para poder decirlo en su propia línea y no en la del botón. */
+  const [nombreFichero, setNombreFichero] = useState<string | null>(null)
 
   const lista = temas as unknown as Tema[]
   const orgElegida = organizacionId || String(organizaciones[0]?.id ?? '')
@@ -241,10 +243,15 @@ export function IdentidadVisualPage() {
    * El `accept` filtra el diálogo del sistema, no lo que llega: se puede arrastrar el fichero o
    * elegir «todos los archivos». Sin este corte el servidor responde 400 y la pantalla no dice
    * por qué — y el megabyte se sube igual antes de que lo rechacen.
+   *
+   * **REV.4 — y sin tema propio también se puede.** Antes esto exigía `propio` y el control
+   * salía deshabilitado: en una instalación recién levantada el nivel de plataforma no tiene
+   * tema, así que la única forma de subir el logotipo era guardar antes unos colores que quizá
+   * nadie quería tocar. Ahora el tema se crea al vuelo y el fichero se sube sobre el que salga.
    */
   function alElegirFichero(evento: React.ChangeEvent<HTMLInputElement>) {
     const fichero = evento.target.files?.[0]
-    if (!fichero || !propio) return
+    if (!fichero) return
 
     if (!FORMATOS.split(',').includes(fichero.type)) {
       setError(t('plataforma.identidad_visual.formato_rechazado', { tipo: fichero.type }))
@@ -256,7 +263,32 @@ export function IdentidadVisualPage() {
     }
 
     setError(null)
-    subirLogo({ themeId: propio.id, data: { file: fichero } }, { onSuccess: invalidar })
+    setNombreFichero(fichero.name)
+
+    if (propio) {
+      subirLogo({ themeId: propio.id, data: { file: fichero } }, { onSuccess: invalidar })
+      return
+    }
+
+    crear(
+      {
+        data: {
+          name: t('plataforma.identidad_visual.nombre_por_defecto'),
+          organizacion_id: nivel === 'plataforma' ? null : orgElegida,
+          chatbot_id: nivel === 'chatbot' ? botElegido : null,
+          // Sólo lo editado sin guardar, si lo hay. El tema nace para colgar de él el
+          // logotipo, no para congelar la paleta del padre.
+          config: { name: 'institucional', ...edicion } as never,
+        },
+      },
+      {
+        onSuccess: (creado: { id: string }) => {
+          setEdicion({})
+          invalidar()
+          subirLogo({ themeId: creado.id, data: { file: fichero } }, { onSuccess: invalidar })
+        },
+      }
+    )
   }
 
   const marca = (propios('branding') ?? {}) as { logoUrl?: string; logoAlt?: string }
@@ -414,18 +446,30 @@ export function IdentidadVisualPage() {
               <h3 className="text-sm font-semibold">
                 {t('plataforma.identidad_visual.logotipo')}
               </h3>
-              <label htmlFor="iv_logo" className="block text-sm">
-                {t('plataforma.identidad_visual.elegir_fichero')}
-              </label>
+              {/* El control nativo no se puede estilar ni traducir —«Tria un fitxer» lo pone
+                  el navegador, en su idioma, y va pegado al «no s'ha triat cap fitxer»—, así
+                  que se oculta a la vista con `sr-only` (no a los lectores de pantalla, que
+                  siguen viendo un input de fichero) y quien pulsa lo hace sobre la etiqueta. */}
               <input
                 id="iv_logo"
                 data-testid="logo-file"
                 type="file"
                 accept={FORMATOS}
-                disabled={!propio}
                 onChange={alElegirFichero}
-                className="text-sm"
+                className="sr-only"
               />
+              <label
+                htmlFor="iv_logo"
+                data-testid="logo-boton"
+                className="inline-block cursor-pointer rounded-md border border-primary px-3 py-1.5 text-sm font-medium text-primary hover:bg-accent focus-within:ring-2 focus-within:ring-ring"
+              >
+                {t('plataforma.identidad_visual.elegir_fichero')}
+              </label>
+              {/* En su propia línea: en el control nativo el nombre del fichero comparte
+                  renglón con el botón y se lee como parte de él. */}
+              <p data-testid="logo-nombre" className="text-xs text-muted-foreground">
+                {nombreFichero ?? t('plataforma.identidad_visual.sin_fichero')}
+              </p>
               {error && (
                 <p role="alert" className="text-sm text-destructive">
                   {error}
@@ -436,11 +480,6 @@ export function IdentidadVisualPage() {
               <p className="text-xs text-muted-foreground">
                 {t('plataforma.identidad_visual.limites')}
               </p>
-              {!propio && (
-                <p className="text-xs text-muted-foreground">
-                  {t('plataforma.identidad_visual.guarda_antes_de_subir')}
-                </p>
-              )}
             </section>
 
             <section className="space-y-2">
