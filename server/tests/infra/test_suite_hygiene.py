@@ -174,3 +174,62 @@ def test_should_not_import_nonexistent_project_modules():
         "tests importando módulos del proyecto que no existen en disco:\n  "
         + "\n  ".join(infractores)
     )
+
+
+# ──────── Ningún test construye su propio motor sobre la BD del desarrollador ────────
+
+#: El guardarraíl de arriba vigila `server_engine`, y por eso no vio venir el otro camino a la
+#: misma base: leer `DATABASE_URL` del entorno y construirse un engine con ella.
+#: `test_acs_issues_jwt_and_redirects` hacía exactamente eso —pedía el fixture `db`, que prepara
+#: una BD desechable, y acto seguido lo ignoraba—, así que en local pasaba contra el Postgres del
+#: desarrollador y le dejaba una fila de usuario real por ejecución: 97 acumuladas cuando se
+#: descubrió. En CI, donde no se ejecutan las migraciones, moría con
+#: `relation "superadminaccount" does not exist`.
+#:
+#: **`DATABASE_URL` y no `DATABASE_URL_`**: la comilla de cierre es obligatoria en el patrón.
+#: Sin ella esto cazaría también `DATABASE_URL_SYNC`, que dos tests de migraciones leen con
+#: motivo —Alembic necesita el DSN síncrono— y un guardarraíl con falsos positivos se desactiva.
+#:
+#: **Sólo la lectura.** `os.environ.setdefault("DATABASE_URL", ...)` es una escritura y queda
+#: fuera a propósito: `test_openapi_export.py` la usa para no conectar a ninguna parte.
+_DSN_DEL_ENTORNO = re.compile(
+    r"""(?:environ\.get|getenv)\s*\(\s*["']DATABASE_URL["']"""
+    r"""|environ\s*\[\s*["']DATABASE_URL["']\s*\]"""
+)
+
+
+#: Quién puede leerlo, y por qué. Lista explícita y no una heurística: distinguir «lo lee para
+#: escribir en esa base» de «lo lee para otra cosa» exige seguir la variable, y una heurística
+#: que lo intente dará los falsos positivos que desactivan el guardarraíl. Con una lista, añadir
+#: un caso obliga a justificarlo en el diff, que es justo la conversación que se quiere tener.
+_PUEDEN_LEER_EL_DSN = {
+    # La fixture desechable: `DATABASE_URL` es su conexión de administración para crear y
+    # borrar las bases `test_hub_*`. Sin leerlo no hay base desechable que dar a nadie.
+    _FIXTURE_DESECHABLE,
+    # Igual que la anterior, pero para su propia BD con las migraciones aplicadas: deriva el
+    # DSN de administración y crea una base aparte.
+    "tests/infra/test_bootstrap_seed.py",
+    # Inspecciona el esquema real ya migrado —sólo lectura, y se salta si no hay BD—: es lo
+    # que comprueba que el renombrado de tablas se aplicó de verdad.
+    "tests/api/test_migration_rename.py",
+    # Lo lee para AFIRMAR QUE NO ES ESA: es el test que vigila esta misma regla sobre la
+    # suite e2e (TST.2). Prohibírselo dejaría sin guardián al guardián.
+    "tests/modules/agents_hub/e2e/test_db_isolation.py",
+}
+
+
+def test_should_have_no_test_building_an_engine_from_the_environment_dsn():
+    infractores = []
+    for path in _ficheros_de_test():
+        relativa = path.relative_to(SERVER).as_posix()
+        if relativa in _PUEDEN_LEER_EL_DSN:
+            continue
+        texto = path.read_text(encoding="utf-8", errors="replace")
+        for m in _DSN_DEL_ENTORNO.finditer(texto):
+            linea = texto[: m.start()].count("\n") + 1
+            infractores.append(f"{relativa}:{linea}: {m.group(0).strip()}")
+    assert infractores == [], (
+        "tests leyendo `DATABASE_URL` del entorno para construirse un motor —esa es la BD "
+        "del desarrollador—; pide la fixture `db_url`, que da una base desechable:\n  "
+        + "\n  ".join(infractores)
+    )
