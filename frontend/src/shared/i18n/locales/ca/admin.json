@@ -120,8 +120,8 @@
     "provider_table_base_url": "Base URL",
     "prompt_templates": "Prompts del sistema",
     "activity_prompts": {
-      "title": "Prompts de les activitats de la plataforma",
-      "intro": "Quines activitats existeixen, amb quin nivell de model funcionen i què se'ls diu ho declara el codi. Ací es guarden les excepcions.",
+      "title": "Prompts",
+      "intro": "Tots els prompts del sistema en un lloc: els de les activitats de la plataforma i les plantilles de cada assistent. Cadascun s'edita ací i es guarda on viu.",
       "tier": "Nivell",
       "tier_label": "Nivell de model",
       "tier_default": "Per defecte: nivell {{tier}}",
@@ -145,7 +145,16 @@
       "save": "Guardar",
       "reset": "Tornar als valors del codi",
       "save_failed": "No s'ha pogut guardar. Comprova que les variables del text existisquen per a aquesta activitat.",
-      "ambito": "Configuració de plataforma: és comuna a totes les organitzacions, i per això aquesta pantalla no en pregunta cap."
+      "ambito": "Les activitats són configuració de plataforma, comuna a totes les organitzacions. Les plantilles pengen d'un assistent, i només es veuen les de les organitzacions que gestiones.",
+      "ambito_label": "Àmbit",
+      "ambito_todos": "Tots els prompts",
+      "ambito_plataforma": "De plataforma (activitats)",
+      "ambito_chatbot": "D'assistent (plantilles)",
+      "plantillas_intro": "Plantilles del sistema de cada assistent. Pengen d'un xatbot i van per idioma, així que s'editen ací però es guarden on viuen.",
+      "plantilla_idioma": "Idioma",
+      "plantilla_version": "Versió",
+      "plantilla_guardar_fallo": "No s'ha pogut guardar la plantilla.",
+      "prompt_base": "Prompt base de l'assistent"
     },
     "new_prompt_template": "Nou prompt",
     "no_prompt_templates": "No hi ha prompts creats",
@@ -358,7 +367,7 @@
   "plataforma": {
     "subnav_aria": "Navegació de l'administració de la plataforma",
     "modelos": "Models LLM",
-    "prompts_actividad": "Prompts d'activitat",
+    "prompts_actividad": "Prompts",
     "tokens": "Tokens d'accés",
     "usuarios_nav": "Persones",
     "usuarios": {

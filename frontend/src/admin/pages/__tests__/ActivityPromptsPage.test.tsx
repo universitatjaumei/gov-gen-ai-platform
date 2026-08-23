@@ -21,6 +21,19 @@ vi.mock('@/shared/api/generated/hub-activity-prompts/hub-activity-prompts', () =
   useResetActivityPrompt: vi.fn(),
   getListActivityPromptsQueryKey: () => ['activity-prompts'],
 }))
+// REV.13 — la pantalla enseña también las plantillas de asistente. Aquí se deja el catálogo
+// vacío a propósito: lo que este fichero defiende es la parte de actividades.
+vi.mock('@/shared/api/generated/hub-prompts-catalog/hub-prompts-catalog', () => ({
+  useListPromptsCatalog: () => ({ data: [], isPending: false }),
+  getListPromptsCatalogQueryKey: () => ['prompts-catalog'],
+}))
+vi.mock('@/shared/api/generated/hub-prompt-templates/hub-prompt-templates', () => ({
+  useUpdatePromptTemplateApiV1HubPromptTemplatesTemplateIdPatch: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+  }),
+}))
 
 import {
   useListActivityPrompts,

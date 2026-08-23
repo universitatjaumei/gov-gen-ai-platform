@@ -90,8 +90,8 @@
     "chatbot_answer_template_generic": "Generic",
     "chatbot_answer_template_institutional": "Institutional",
     "activity_prompts": {
-      "title": "Platform activity prompts",
-      "intro": "Which activities exist, what model tier they run on and what they are told is declared in code. This screen stores the exceptions.",
+      "title": "Prompts",
+      "intro": "Every system prompt in one place: the platform's activities and each assistant's templates. Each one is edited here and saved where it lives.",
       "tier": "Tier",
       "tier_label": "Model tier",
       "tier_default": "Default: tier {{tier}}",
@@ -115,7 +115,16 @@
       "save": "Save",
       "reset": "Back to code defaults",
       "save_failed": "Could not save. Check that the variables in the text exist for this activity.",
-      "ambito": "Platform configuration: it is shared by all organisations, which is why this screen does not ask for one."
+      "ambito": "Activities are platform configuration, shared by every organisation. Templates hang off an assistant, and you only see those of the organisations you manage.",
+      "ambito_label": "Scope",
+      "ambito_todos": "All prompts",
+      "ambito_plataforma": "Platform (activities)",
+      "ambito_chatbot": "Assistant (templates)",
+      "plantillas_intro": "Each assistant's system templates. They hang off a chatbot and vary by language, so they are edited here but saved where they live.",
+      "plantilla_idioma": "Language",
+      "plantilla_version": "Version",
+      "plantilla_guardar_fallo": "The template could not be saved.",
+      "prompt_base": "Assistant base prompt"
     },
     "subnav_aria": "Hub navigation",
     "filter_usage_aria": "Filter by usage type",
@@ -358,7 +367,7 @@
   "plataforma": {
     "subnav_aria": "Platform administration navigation",
     "modelos": "LLM models",
-    "prompts_actividad": "Activity prompts",
+    "prompts_actividad": "Prompts",
     "tokens": "Access tokens",
     "usuarios_nav": "People",
     "usuarios": {

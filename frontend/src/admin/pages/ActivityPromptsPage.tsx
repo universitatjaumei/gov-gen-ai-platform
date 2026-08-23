@@ -7,7 +7,13 @@ import {
   useResetActivityPrompt,
   getListActivityPromptsQueryKey,
 } from '@/shared/api/generated/hub-activity-prompts/hub-activity-prompts'
-import type { ActivityPromptOut } from '@/shared/api/generated/model'
+import {
+  useListPromptsCatalog,
+  getListPromptsCatalogQueryKey,
+} from '@/shared/api/generated/hub-prompts-catalog/hub-prompts-catalog'
+import { useUpdatePromptTemplateApiV1HubPromptTemplatesTemplateIdPatch } from '@/shared/api/generated/hub-prompt-templates/hub-prompt-templates'
+import { useUpdateChatbotApiV1HubChatbotsChatbotIdPatch } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
+import type { ActivityPromptOut, PromptDelCatalogo } from '@/shared/api/generated/model'
 
 /**
  * Biblioteca de prompts de las **actividades de plataforma** — PRO.2.1.
@@ -23,6 +29,13 @@ import type { ActivityPromptOut } from '@/shared/api/generated/model'
  *   («Por defecto: nivel 2»). Un hueco vacío no se puede interpretar.
  * - El texto por defecto se muestra como marcador, **no se copia** a la caja. Copiarlo
  *   congelaría el prompt: a partir de ahí, mejorarlo en el código no llegaría aquí.
+ *
+ * **REV.13 — y además las plantillas de los asistentes.** Quien revisó la plataforma preguntó
+ * por qué hay prompts del sistema en Chatbots y prompts de actividad aquí. Son dos modelos
+ * distintos —una plantilla cuelga de un chatbot y va por idioma; una actividad es única
+ * global—, así que unificar las tablas sería meter dos cosas en una. Lo que faltaba era
+ * **verlas juntas**: el catálogo (`/hub/prompts-catalog`) las agrega en sólo lectura y cada
+ * edición sigue yendo a su router, que es donde vive su regla.
  */
 const TIER_STYLES: Record<number, string> = {
   1: 'bg-green-100 text-green-800',
@@ -167,6 +180,89 @@ function ActividadCard({ actividad }: { actividad: ActivityPromptOut }) {
     </div>
   )
 }
+/**
+ * Un prompt de asistente —su prompt base o una de sus plantillas—, editable sin salir de aquí
+ * (REV.13).
+ *
+ * El catálogo es de **sólo lectura**, así que guardar sale hacia el router de cada uno: el
+ * prompt base es una columna de `hub_chatbots` y se guarda con un PATCH del chatbot; una
+ * plantilla vive en su tabla y se guarda con su `template_id`. Es lo que separa una pantalla
+ * unificada de un listado bonito que no deja tocar la mitad de lo que enseña.
+ */
+function PlantillaCard({ plantilla }: { plantilla: PromptDelCatalogo }) {
+  const { t } = useTranslation('admin')
+  const qc = useQueryClient()
+  const guardarPlantilla = useUpdatePromptTemplateApiV1HubPromptTemplatesTemplateIdPatch()
+  const guardarBase = useUpdateChatbotApiV1HubChatbotsChatbotIdPatch()
+
+  const esBase = plantilla.ambito === 'chatbot_base'
+  const guardar = esBase ? guardarBase : guardarPlantilla
+
+  const [texto, setTexto] = useState<string>(plantilla.template_text ?? '')
+  const id = esBase ? `base-${plantilla.chatbot_id}` : (plantilla.template_id as string)
+
+  return (
+    <div className="border rounded p-4 space-y-3 bg-card" data-testid={`plantilla-${id}`}>
+      <div className="flex items-center gap-2">
+        <span className="font-medium text-sm">
+          {esBase ? t('hub.activity_prompts.prompt_base') : plantilla.clave}
+        </span>
+        {plantilla.language && (
+          <span className="text-xs text-muted-foreground">
+            {t('hub.activity_prompts.plantilla_idioma')}: {plantilla.language}
+          </span>
+        )}
+        {plantilla.version != null && (
+          <span className="ml-auto text-xs text-muted-foreground">
+            {t('hub.activity_prompts.plantilla_version')} {plantilla.version}
+          </span>
+        )}
+      </div>
+
+      <textarea
+        data-testid={`texto-${id}`}
+        aria-label={`${plantilla.chatbot_nombre} · ${plantilla.clave}`}
+        value={texto}
+        onChange={e => setTexto(e.target.value)}
+        rows={8}
+        className="w-full text-xs font-mono border rounded p-2"
+      />
+
+      {guardar.isError && (
+        <p className="text-xs text-red-700" data-testid={`error-plantilla-${id}`}>
+          {t('hub.activity_prompts.plantilla_guardar_fallo')}
+        </p>
+      )}
+
+      <button
+        type="button"
+        data-testid={`guardar-${id}`}
+        disabled={guardar.isPending}
+        onClick={() => {
+          const invalidar = {
+            onSuccess: () =>
+              qc.invalidateQueries({ queryKey: getListPromptsCatalogQueryKey() }),
+          }
+          if (esBase) {
+            guardarBase.mutate(
+              { chatbotId: plantilla.chatbot_id as string, data: { system_prompt: texto } },
+              invalidar,
+            )
+          } else {
+            guardarPlantilla.mutate(
+              { templateId: plantilla.template_id as string, data: { template_text: texto } },
+              invalidar,
+            )
+          }
+        }}
+        className="px-3 py-1 text-sm bg-primary text-primary-foreground rounded disabled:opacity-50"
+      >
+        {t('hub.activity_prompts.save')}
+      </button>
+    </div>
+  )
+}
+
 
 /**
  * Sin tildes y en minúsculas, para que «grafico» encuentre «gráfico» (REV.7).
@@ -188,7 +284,12 @@ function normalizar(texto: string): string {
 export function ActivityPromptsPage() {
   const { t } = useTranslation('admin')
   const { data: actividades, isPending } = useListActivityPrompts()
+  // REV.13 — el mismo catálogo del que sale la vista de conjunto. Las actividades siguen
+  // viniendo de su endpoint porque llevan lo que el catálogo no puede llevar: el texto por
+  // defecto, las variables y de dónde sale el nivel efectivo.
+  const { data: catalogo } = useListPromptsCatalog()
 
+  const [ambito, setAmbito] = useState('')
   const [modulo, setModulo] = useState('')
   const [busqueda, setBusqueda] = useState('')
 
@@ -205,6 +306,7 @@ export function ActivityPromptsPage() {
 
   const visibles = useMemo(() => {
     const aguja = normalizar(busqueda.trim())
+    if (ambito === 'chatbot') return []
     return todas.filter(a => {
       if (modulo && a.modulo !== modulo) return false
       if (!aguja) return true
@@ -212,10 +314,40 @@ export function ActivityPromptsPage() {
       // `configuracion_de_grafico`, recuerda que había algo de gráficos.
       return normalizar(`${a.activity} ${a.purpose}`).includes(aguja)
     })
-  }, [todas, modulo, busqueda])
+  }, [todas, ambito, modulo, busqueda])
 
-  /** Con una sola actividad un buscador es ruido; el catálogo empieza pequeño. */
-  const merecenFiltros = todas.length > 1
+  /**
+   * Las plantillas de asistente, agrupadas por el suyo. El filtro de módulo **no se les
+   * aplica**: no tienen módulo, y hacer que un filtro que no les corresponde las esconda
+   * sería la clase de sorpresa que hace desconfiar de una pantalla.
+   */
+  const porChatbot = useMemo(() => {
+    if (ambito === 'plataforma') return []
+    const aguja = normalizar(busqueda.trim())
+    const grupos = new Map<string, { nombre: string; plantillas: PromptDelCatalogo[] }>()
+    for (const fila of catalogo ?? []) {
+      if (fila.ambito !== 'chatbot' && fila.ambito !== 'chatbot_base') continue
+      if (!fila.chatbot_id) continue
+      if (aguja && !normalizar(`${fila.clave} ${fila.chatbot_nombre ?? ''}`).includes(aguja)) {
+        continue
+      }
+      const grupo = grupos.get(fila.chatbot_id) ?? {
+        nombre: fila.chatbot_nombre ?? fila.chatbot_id,
+        plantillas: [],
+      }
+      grupo.plantillas.push(fila)
+      grupos.set(fila.chatbot_id, grupo)
+    }
+    return [...grupos.entries()].sort(([, a], [, b]) => a.nombre.localeCompare(b.nombre))
+  }, [catalogo, ambito, busqueda])
+
+  /**
+   * Con un solo prompt un buscador es ruido; el catálogo empieza pequeño. Se cuentan los dos
+   * ámbitos: con una actividad y cinco plantillas los filtros hacen falta igual (REV.13).
+   */
+  const cuantosHay =
+    todas.length + (catalogo ?? []).filter(f => f.ambito !== 'plataforma').length
+  const merecenFiltros = cuantosHay > 1
 
   const porModulo = useMemo(() => {
     const grupos = new Map<string, typeof visibles>()
@@ -255,6 +387,24 @@ export function ActivityPromptsPage() {
             />
           </div>
           <div className="flex flex-col gap-1">
+            <label htmlFor="ap_ambito" className="text-xs font-medium">
+              {t('hub.activity_prompts.ambito_label')}
+            </label>
+            <select
+              id="ap_ambito"
+              value={ambito}
+              onChange={e => setAmbito(e.target.value)}
+              className="rounded-md border px-2 py-1.5 text-sm bg-background"
+            >
+              <option value="">{t('hub.activity_prompts.ambito_todos')}</option>
+              <option value="plataforma">{t('hub.activity_prompts.ambito_plataforma')}</option>
+              <option value="chatbot">{t('hub.activity_prompts.ambito_chatbot')}</option>
+            </select>
+          </div>
+          {/* El módulo sólo existe en las actividades. Dejar el filtro puesto mientras se
+              miran plantillas invita a usarlo y a no entender por qué no hace nada. */}
+          {ambito !== 'chatbot' && (
+          <div className="flex flex-col gap-1">
             <label htmlFor="ap_modulo" className="text-xs font-medium">
               {t('hub.activity_prompts.modulo')}
             </label>
@@ -274,11 +424,12 @@ export function ActivityPromptsPage() {
               ))}
             </select>
           </div>
+          )}
         </div>
       )}
 
       {/* Una pantalla en blanco tras escribir se lee como «se ha roto». */}
-      {!isPending && visibles.length === 0 && (
+      {!isPending && visibles.length === 0 && porChatbot.length === 0 && (
         <p data-testid="sin-resultados" className="text-sm text-muted-foreground">
           {t('hub.activity_prompts.sin_resultados')}
         </p>
@@ -295,6 +446,24 @@ export function ActivityPromptsPage() {
           </h2>
           {delGrupo.map(actividad => (
             <ActividadCard key={actividad.activity} actividad={actividad} />
+          ))}
+        </section>
+      ))}
+
+      {porChatbot.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {t('hub.activity_prompts.plantillas_intro')}
+        </p>
+      )}
+
+      {porChatbot.map(([id, grupo]) => (
+        <section key={id} data-testid={`grupo-chatbot-${id}`} className="space-y-3">
+          <h2 className="text-sm font-semibold text-muted-foreground">{grupo.nombre}</h2>
+          {grupo.plantillas.map(plantilla => (
+            <PlantillaCard
+              key={plantilla.template_id ?? `base-${plantilla.chatbot_id}`}
+              plantilla={plantilla}
+            />
           ))}
         </section>
       ))}
