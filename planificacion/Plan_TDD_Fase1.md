@@ -9171,7 +9171,7 @@ norma. `content_class` ya lo modela; falta que llegue hasta la salida.
 
 ---
 
-## Bloque REV — Revisión humana de las respuestas del asistente interno (PENDIENTE)
+## Bloque RHR — Revisión humana de las respuestas del asistente interno (PENDIENTE)
 
 > **Contexto**: Gerencia quiere un asistente **para funcionarios, con identificación**, y poder
 > **revisar las respuestas** para valorar si son adecuadas o si conviene reformular las FAQ.
@@ -9193,7 +9193,7 @@ norma. `content_class` ya lo modela; falta que llegue hasta la salida.
 
 ---
 
-### Prompt REV.1 (RED/GREEN) — El veredicto de quien revisa, sobre conversaciones reales
+### Prompt RHR.1 (RED/GREEN) — El veredicto de quien revisa, sobre conversaciones reales
 
 **Modelo sugerido**: **Sonnet** — el patrón ya existe en el proyecto y se replica; sin
 decisiones de diseño abiertas.
@@ -9205,7 +9205,7 @@ constancia de quién lo dijo. El patrón existe literalmente en el proyecto —`
 escenarios de prueba, no sobre lo que se le respondió a una persona de verdad.
 
 ```
-# PROMPT REV.1 (RED/GREEN) — Que revisar deje rastro, y no sea leer un CSV
+# PROMPT RHR.1 (RED/GREEN) — Que revisar deje rastro, y no sea leer un CSV
 # Deploy: edge
 
 ## Modelo (operational_models.HubInteraction)
@@ -9245,7 +9245,7 @@ escenarios de prueba, no sobre lo que se le respondió a una persona de verdad.
 
 ---
 
-### Prompt REV.2 (CONDICIONAL) — Hilos de conversación persistentes
+### Prompt RHR.2 (CONDICIONAL) — Hilos de conversación persistentes
 
 **Modelo sugerido**: **Opus** — toca el contrato del chat, el modelo de datos y el frontend a
 la vez, y hay que decidir qué es una conversación sin romper la contabilidad por turno de
@@ -9271,7 +9271,7 @@ SEC.4.
 > reconsiderar OWUI, porque sería reconstruir un producto entero.
 
 ```
-# PROMPT REV.2 (CONDICIONAL) — Una conversación, no una ristra de turnos sueltos
+# PROMPT RHR.2 (CONDICIONAL) — Una conversación, no una ristra de turnos sueltos
 # Deploy: edge
 
 ## Lo que hay que decidir antes de escribir código
@@ -9284,7 +9284,7 @@ SEC.4.
   en la unidad de cuota sin rehacer eso.
 
 ## Y lo que NO cambia
-- La revisión de REV.1 sigue siendo por interacción: Gerencia valora respuestas, no hilos.
+- La revisión de RHR.1 sigue siendo por interacción: Gerencia valora respuestas, no hilos.
 - Un chatbot `public_anon` no gana historial por esto: no hay a quién atribuirlo.
 ```
 
@@ -9474,7 +9474,7 @@ donde la receta ya vive.
   del documento y no cambia; sin el, la guarda de espacio vectorial de RAG.9 —que corre en
   CADA consulta— pasaria a ser un JOIN).
 - `chunking_strategy` nueva, no nula, con CHECK `('structural','parent_child')` — mismo
-  vocabulario que `HubChatbot`, mismo motivo que en REV.1.
+  vocabulario que `HubChatbot`, mismo motivo que en RHR.1.
 - El indice `ix_hub_document_chunks_embedding_space` pasa a
   `(organizacion_id, embedding_model, embedding_dim, chunking_strategy)`.
 - `owner_id` (subidas temporales de usuario) **no se toca**: esos fragmentos son de una
@@ -16896,7 +16896,7 @@ justo al limpiar los chatbots de prueba antes del piloto.
 ## Qué se borra, y qué NO
 - SE BORRA: `hub_documents` del chatbot. Los `hub_document_chunks` caen solos
   (`fk_chunk_document_id` es ON DELETE CASCADE desde ING.0.2).
-- NO se borra: `hub_interactions`. Es registro de lo que pasó, no corpus; con REV.1 encima es
+- NO se borra: `hub_interactions`. Es registro de lo que pasó, no corpus; con RHR.1 encima es
   material de revisión. Un chatbot borrado no reescribe la historia de lo que contestó.
 - Todo en la MISMA transacción que el borrado del chatbot: media limpieza es peor que ninguna.
 
