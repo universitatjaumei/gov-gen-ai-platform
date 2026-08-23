@@ -90,6 +90,10 @@ describe('CAL.4 — i18n del panel admin', () => {
       // PLAT.6 — el nivel de la cascada visual, que la pantalla ofrece según el rol y usa
       // también para decir de qué nivel hereda cada campo.
       'plataforma.identidad_visual.niveles.',
+      // REV.7 — el módulo de cada actividad, iterando lo que devuelve el servidor: los
+      // módulos del desplegable salen de los datos y el catálogo crece cuando se cablea un
+      // consumidor nuevo, así que escribir las claves literales aquí sería congelarlo.
+      'hub.activity_prompts.modulos.',
     ]
 
     // Las formas plurales de i18next (`x_one` / `x_other`) tampoco aparecen literales: el

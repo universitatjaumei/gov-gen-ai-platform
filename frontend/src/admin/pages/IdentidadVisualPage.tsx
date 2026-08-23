@@ -9,6 +9,7 @@ import {
   useUploadThemeLogoApiV1HubThemesThemeIdLogoPost,
   useGetThemeDefaultsApiV1HubThemesDefaultsGet,
   getGetThemesApiV1HubThemesGetQueryKey,
+  getGetResolvedThemeApiV1HubThemesResolvedGetQueryKey,
 } from '@/shared/api/generated/hub-themes/hub-themes'
 import { useListOrganizacionesApiV1HubOrganizacionesGet } from '@/shared/api/generated/hub-organizaciones/hub-organizaciones'
 import { useListChatbotsApiV1HubChatbotsGet } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
@@ -159,8 +160,18 @@ export function IdentidadVisualPage() {
   const { mutate: crear } = useCreateThemeApiV1HubThemesPost()
   const { mutate: subirLogo } = useUploadThemeLogoApiV1HubThemesThemeIdLogoPost()
 
-  const invalidar = () =>
+  /**
+   * Se invalidan **las dos** consultas, y la segunda es la que importa (REV.9).
+   *
+   * Esta pantalla invalidaba sólo la lista de temas, así que al guardar un color el formulario
+   * se refrescaba y el panel seguía igual: los colores del panel salen de `/themes/resolved`,
+   * que es otra consulta y se quedaba en caché. Había que recargar a mano para ver el cambio,
+   * y eso se lee como «no se ha guardado».
+   */
+  const invalidar = () => {
     void qc.invalidateQueries({ queryKey: getGetThemesApiV1HubThemesGetQueryKey() })
+    void qc.invalidateQueries({ queryKey: getGetResolvedThemeApiV1HubThemesResolvedGetQueryKey() })
+  }
 
   /** Lo que este nivel define, más lo editado sin guardar. Nunca lo del padre. */
   function propios(grupo: string): Record<string, unknown> {

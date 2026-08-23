@@ -75,9 +75,29 @@ _require_superadmin = require_role("superadmin")
 # ============================================
 
 class ThemeColors(BaseModel):
-    primary: str = "#0066cc"
-    primaryHover: str = "#0052a3"
-    primaryLight: str = "#e6f0fa"
+    """La paleta de la institución, para el widget **y para el panel** (REV.9).
+
+    Hasta REV.9 esta paleta no pintaba el panel: sus dieciséis colores servían al widget, y el
+    panel se dibujaba con las variables Tailwind de `frontend/src/index.css`, escritas a mano.
+    O sea que había **dos fuentes de verdad que no se hablaban**, y la consecuencia era que se
+    podía cambiar cualquier color en «Identidad visual» y no cambiaba nada: el único consumidor
+    de la cascada era el logotipo. El usuario lo notó por el sitio por el que se nota —«el color
+    de fondo de la barra lateral no aparece en la selección»—, y no aparecía porque no existía.
+
+    Dos cambios, por eso:
+
+    - **Los valores por omisión son los de `index.css`**, no los de antes. `primary` era
+      `#0066cc` y el panel lleva `#0b5394` desde UX.5: con el default viejo, la pantalla enseñaba
+      un azul que no era el de la aplicación y aplicarlo habría cambiado la identidad sin que
+      nadie lo pidiera. Lo vigila un test que compara este fichero con `index.css`.
+    - **Los tokens del panel entran en la paleta** (`sidebar` y compañía). No van en un grupo
+      aparte: la identidad de una institución es una, y partirla en «colores del widget» y
+      «colores del panel» obliga a elegir dos veces el mismo azul.
+    """
+
+    primary: str = "#0b5394"
+    primaryHover: str = "#0a4a85"
+    primaryLight: str = "#e8f0f8"
     secondary: str = "#6c757d"
     background: str = "#ffffff"
     surface: str = "#f8f9fa"
@@ -89,8 +109,20 @@ class ThemeColors(BaseModel):
     warning: str = "#ffc107"
     botMessage: str = "#f1f3f4"
     botMessageText: str = "#212529"
-    userMessage: str = "#0066cc"
+    userMessage: str = "#0b5394"
     userMessageText: str = "#ffffff"
+    # --- El panel de administración (REV.9). Los nombres son los de la variable Tailwind que
+    # cada uno alimenta, para que la correspondencia se lea sin tener que buscarla.
+    primaryForeground: str = "#ffffff"
+    accent: str = "#e8f0f8"
+    accentForeground: str = "#0b5394"
+    ring: str = "#0b5394"
+    sidebar: str = "#0b5394"
+    sidebarForeground: str = "#eaf1f8"
+    sidebarPrimary: str = "#ffffff"
+    sidebarAccent: str = "#1266b3"
+    sidebarAccentForeground: str = "#ffffff"
+    sidebarBorder: str = "#2a6fae"
 
     model_config = {"extra": "allow"}
 

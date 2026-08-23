@@ -40,6 +40,7 @@ vi.mock('@/shared/api/generated/hub-themes/hub-themes', () => ({
   useUploadThemeLogoApiV1HubThemesThemeIdLogoPost: vi.fn(),
   useGetThemeDefaultsApiV1HubThemesDefaultsGet: vi.fn(),
   getGetThemesApiV1HubThemesGetQueryKey: () => ['temas'],
+  getGetResolvedThemeApiV1HubThemesResolvedGetQueryKey: () => ['tema-resuelto'],
 }))
 vi.mock('@/shared/api/generated/hub-organizaciones/hub-organizaciones', () => ({
   useListOrganizacionesApiV1HubOrganizacionesGet: vi.fn(),
@@ -422,5 +423,39 @@ describe('REV.4 — elegir el fichero del logotipo', () => {
       expect.objectContaining({ themeId: 'tema-plataforma' }),
       expect.anything()
     )
+  })
+})
+
+describe('REV.9 — guardar un color se ve sin recargar', () => {
+  it('should_invalidate_the_resolved_theme_and_not_only_the_list', async () => {
+    // Lo destapó la verificación en navegador: se guardaba el color, la fila quedaba bien en la
+    // base de datos y el panel seguía igual. Los colores del panel salen de
+    // `/themes/resolved`, que es OTRA consulta, y se quedaba en caché — había que recargar a
+    // mano, y eso se lee como «no se ha guardado».
+    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+    const cliente = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidadas: unknown[] = []
+    cliente.invalidateQueries = ((opciones: { queryKey: unknown }) => {
+      invalidadas.push(opciones.queryKey)
+      return Promise.resolve()
+    }) as never
+
+    const { MemoryRouter } = await import('react-router-dom')
+    render(
+      <QueryClientProvider client={cliente}>
+        <MemoryRouter>
+          <IdentidadVisualPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByTestId('color-primary'), { target: { value: '#123456' } })
+    fireEvent.click(screen.getByRole('button', { name: /guardar/i }))
+
+    const alGuardar = guardar.mock.calls[0][1] as { onSuccess: () => void }
+    alGuardar.onSuccess()
+
+    expect(invalidadas).toContainEqual(['temas'])
+    expect(invalidadas).toContainEqual(['tema-resuelto'])
   })
 })

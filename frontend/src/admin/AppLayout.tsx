@@ -4,6 +4,7 @@ import { useAuth } from '@/shared/auth'
 import { useModulos } from '@/shared/auth/useModulos'
 import { SUPPORTED_LANGUAGES } from '@/shared/i18n'
 import { useMarca } from '@/shared/marca/useMarca'
+import { useColoresDelPanel } from '@/shared/marca/useColoresDelPanel'
 
 /** El nombre de cada idioma EN ese idioma: quien busca su lengua la reconoce escrita así. */
 const IDIOMAS: Record<string, string> = {
@@ -41,6 +42,10 @@ export function AppLayout() {
   // La marca la resuelve la cascada del servidor. Aquí estaba importada como código, así
   // que el panel llevaba el logotipo de una institución concreta en cualquier despliegue.
   const { marca, cargando: cargandoMarca } = useMarca()
+  // REV.9 — y los colores, que hasta ahora no los consumía nadie: la cascada existía, la
+  // pantalla de identidad visual la editaba, y el panel se pintaba con las variables escritas
+  // a mano en `index.css`. Dos fuentes de verdad que no se hablaban.
+  useColoresDelPanel()
 
   return (
     <div className="flex h-screen">
