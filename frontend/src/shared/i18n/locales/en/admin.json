@@ -114,7 +114,8 @@
       "source_override": "overridden",
       "save": "Save",
       "reset": "Back to code defaults",
-      "save_failed": "Could not save. Check that the variables in the text exist for this activity."
+      "save_failed": "Could not save. Check that the variables in the text exist for this activity.",
+      "ambito": "Platform configuration: it is shared by all organisations, which is why this screen does not ask for one."
     },
     "subnav_aria": "Hub navigation",
     "filter_usage_aria": "Filter by usage type",
@@ -342,6 +343,7 @@
     "curation": "Curation",
     "main": "Main navigation",
     "language": "Language",
+    "organizacion": "Organisation",
     "plataforma": "Platform"
   },
   "no_encontrado": {
@@ -391,7 +393,9 @@
         "manual": "Added by hand",
         "sso": "SSO",
         "superadmin": "Install account"
-      }
+      },
+      "organizacion": "Organisation",
+      "sin_organizacion": "No organisation"
     },
     "modulos_nav": "Modules",
     "modulos": {

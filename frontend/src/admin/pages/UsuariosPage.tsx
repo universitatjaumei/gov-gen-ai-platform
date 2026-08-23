@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import {
@@ -10,6 +10,7 @@ import {
 } from '@/shared/api/generated/hub-users/hub-users'
 import type { UsuarioRead } from '@/shared/api/generated/model'
 import { useAutoridadDelRol } from '@/shared/auth/useAutoridadDelRol'
+import { useOrganizacionElegida } from '@/shared/organizacion/useOrganizacionElegida'
 
 /** El `origen` de las cuentas que vienen de `superadminaccount` y no de `hub_users` (REV.8). */
 const ORIGEN_DE_ARRANQUE = 'superadmin'
@@ -48,11 +49,36 @@ export function UsuariosPage() {
   const [nombre, setNombre] = useState('')
   /** La fila que espera confirmación de borrado. Estado de la pantalla, no del servidor. */
   const [porConfirmar, setPorConfirmar] = useState<string | null>(null)
+  /** El alta arranca en la organizacion sobre la que ya se esta trabajando (REV.10). */
+  const { organizaciones, elegida } = useOrganizacionElegida()
+  const [organizacionDelAlta, setOrganizacionDelAlta] = useState('')
+  useEffect(() => {
+    if (!organizacionDelAlta && elegida) setOrganizacionDelAlta(elegida)
+  }, [elegida, organizacionDelAlta])
+
+  /**
+   * El nombre de la organización de una fila, o que no tiene ninguna (REV.10).
+   *
+   * «Sin organización» y no una celda vacía: es una fila que hay que arreglar, no un dato que
+   * falte. Y si el id apunta a algo que ya no está, se enseña el id en bruto en vez de
+   * esconderlo: es la pista de que hay una fila huérfana.
+   */
+  function nombreDeOrganizacion(id: string | null | undefined): string {
+    if (!id) return t('plataforma.usuarios.sin_organizacion')
+    return organizaciones.find((o) => o.id === id)?.name ?? id
+  }
 
   function darDeAlta(evento: React.FormEvent) {
     evento.preventDefault()
     crear(
-      { data: { email, role: rol, display_name: nombre || null } },
+      {
+        data: {
+          email,
+          role: rol,
+          display_name: nombre || null,
+          organizacion_id: organizacionDelAlta || null,
+        },
+      },
       {
         onSuccess: () => {
           setEmail('')
@@ -131,6 +157,23 @@ export function UsuariosPage() {
             ))}
           </select>
         </div>
+        {organizaciones.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <label htmlFor="usuario_organizacion" className="text-sm font-medium">
+              {t('plataforma.usuarios.organizacion')}
+            </label>
+            <select
+              id="usuario_organizacion"
+              value={organizacionDelAlta}
+              onChange={(e) => setOrganizacionDelAlta(e.target.value)}
+              className="rounded-md border px-2 py-1 text-sm"
+            >
+              {organizaciones.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <button
           type="submit"
           disabled={creando}
@@ -154,6 +197,7 @@ export function UsuariosPage() {
               <th className="py-2">{t('plataforma.usuarios.correo')}</th>
               <th>{t('plataforma.usuarios.nombre')}</th>
               <th>{t('plataforma.usuarios.rol')}</th>
+              <th>{t('plataforma.usuarios.organizacion')}</th>
               <th>{t('plataforma.usuarios.origen')}</th>
               <th>{t('plataforma.usuarios.ultimo_acceso')}</th>
               <th>{t('plataforma.usuarios.estado')}</th>
@@ -170,6 +214,12 @@ export function UsuariosPage() {
                 <td className="py-2">{persona.email}</td>
                 <td>{persona.display_name ?? '—'}</td>
                 <td>{t(`plataforma.usuarios.roles.${persona.role}` as Parameters<typeof t>[0])}</td>
+                {/* REV.10 — la columna que faltaba. `organizacion_id` existía con su clave
+                    ajena desde AUTH.2 y la pantalla ni lo enseñaba ni lo pedía, así que se
+                    podía dar de alta a gente sin organización sin enterarse. «Sin
+                    organización» y no una celda vacía: es una fila que arreglar, no un dato
+                    que falte. */}
+                <td>{nombreDeOrganizacion(persona.organizacion_id)}</td>
                 <td>{t(`plataforma.usuarios.origenes.${persona.origen}` as Parameters<typeof t>[0])}</td>
                 {/* «Nunca» y no una celda vacía: que alguien no haya entrado todavía es lo
                     normal en una fila creada a mano, no un dato que falte. */}

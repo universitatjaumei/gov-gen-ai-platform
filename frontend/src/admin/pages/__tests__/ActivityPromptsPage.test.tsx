@@ -247,3 +247,15 @@ describe('REV.7 — buscar y filtrar las actividades', () => {
     expect(screen.queryByLabelText(/buscar/i)).toBeNull()
   })
 })
+
+describe('REV.10 — una pantalla sin selector de organización tiene que decir por qué', () => {
+  it('should_say_it_is_platform_wide', () => {
+    // El usuario preguntó dónde estaba el selector de organización aquí, y la respuesta es que
+    // no lo lleva: `HubActivityPrompt.activity` es único global, sin `organizacion_id`. Callarlo
+    // deja la duda de si falta el selector o es que no aplica.
+    conDosModulos()
+    wrap()
+
+    expect(document.body.textContent).toMatch(/todas las organizaciones|común a/i)
+  })
+})

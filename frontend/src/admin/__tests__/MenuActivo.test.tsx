@@ -8,6 +8,7 @@ import { HubLayout } from '../HubLayout'
 import { PlataformaLayout } from '../PlataformaLayout'
 import { useGetMeApiV1AuthMeGet } from '@/shared/api/generated/auth/auth'
 import { useGetResolvedThemeApiV1HubThemesResolvedGet } from '@/shared/api/generated/hub-themes/hub-themes'
+import { useListOrganizacionesApiV1HubOrganizacionesGet } from '@/shared/api/generated/hub-organizaciones/hub-organizaciones'
 
 /**
  * REV.3 — cómo se marca la opción activa en los tres menús.
@@ -27,6 +28,10 @@ vi.mock('@/shared/api/generated/auth/auth', () => ({
 
 vi.mock('@/shared/api/generated/hub-themes/hub-themes', () => ({
   useGetResolvedThemeApiV1HubThemesResolvedGet: vi.fn(),
+}))
+
+vi.mock('@/shared/api/generated/hub-organizaciones/hub-organizaciones', () => ({
+  useListOrganizacionesApiV1HubOrganizacionesGet: vi.fn(),
 }))
 
 const TOKEN =
@@ -51,6 +56,7 @@ beforeEach(() => {
     data: { config: {} },
     isLoading: false,
   } as never)
+  vi.mocked(useListOrganizacionesApiV1HubOrganizacionesGet).mockReturnValue({ data: [] } as never)
 })
 
 function activo(nombre: RegExp): HTMLElement {
@@ -127,5 +133,47 @@ describe('REV.3 — la opción activa se marca con negrita y barra, no con un re
     expect(clases).toMatch(/font-semibold/)
     expect(clases).toMatch(/border-b-2/)
     expect(clases).toMatch(/border-current/)
+  })
+})
+
+/**
+ * REV.10 — el selector de organización, en la cabecera y una sola vez.
+ *
+ * Cada pantalla lo resolvía a su manera: «Valores por defecto» con su propio selector,
+ * «Identidad visual» con otro, Vigencia por *chatbot*, Personas sin ninguno. Cambiar de
+ * organización obligaba a repetir la elección pantalla por pantalla.
+ */
+describe('REV.10 — la organización se elige una vez', () => {
+  function pintarConOrganizaciones(lista: { id: string; name: string }[]) {
+    vi.mocked(useListOrganizacionesApiV1HubOrganizacionesGet).mockReturnValue({
+      data: lista,
+    } as never)
+    return render(
+      <MemoryRouter initialEntries={['/hub']}>
+        <AuthProvider>
+          <AppLayout />
+        </AuthProvider>
+      </MemoryRouter>
+    )
+  }
+
+  it('should_offer_the_selector_in_the_sidebar', () => {
+    pintarConOrganizaciones([
+      { id: 'org-uji', name: 'Universitat Jaume I' },
+      { id: 'org-dipu', name: 'Diputación de Castellón' },
+    ])
+
+    const selector = screen.getByLabelText(/organización/i)
+    expect([...selector.querySelectorAll('option')].map(o => o.textContent)).toEqual([
+      'Universitat Jaume I',
+      'Diputación de Castellón',
+    ])
+  })
+
+  it('should_not_show_it_with_a_single_organisation', () => {
+    // Con una sola, un selector es ruido: es el mismo criterio que el buscador de REV.7.
+    pintarConOrganizaciones([{ id: 'org-uji', name: 'Universitat Jaume I' }])
+
+    expect(screen.queryByLabelText(/organización/i)).toBeNull()
   })
 })

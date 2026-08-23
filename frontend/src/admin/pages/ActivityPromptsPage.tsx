@@ -230,6 +230,11 @@ export function ActivityPromptsPage() {
       <div>
         <h1 className="text-lg font-semibold">{t('hub.activity_prompts.title')}</h1>
         <p className="text-sm text-muted-foreground">{t('hub.activity_prompts.intro')}</p>
+        {/* REV.10 — el ámbito, dicho. Esta pantalla no lleva selector de organización porque
+            no le corresponde: `HubActivityPrompt.activity` es único global, sin
+            `organizacion_id`. Callarlo deja la duda de si el selector falta o es que no
+            aplica — que es justo la pregunta que hizo quien la revisó. */}
+        <p className="text-xs text-muted-foreground">{t('hub.activity_prompts.ambito')}</p>
       </div>
 
       {isPending && <p className="text-sm text-muted-foreground">…</p>}

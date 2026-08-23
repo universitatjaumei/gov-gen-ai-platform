@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { useListOrganizacionesApiV1HubOrganizacionesGet } from '@/shared/api/generated/hub-organizaciones/hub-organizaciones'
+import { useOrganizacionElegida } from '@/shared/organizacion/useOrganizacionElegida'
 import {
   useGetValoresPorDefectoApiV1HubOrganizacionesOrganizacionIdValoresPorDefectoGet as useValores,
   useUpdateValoresPorDefectoApiV1HubOrganizacionesOrganizacionIdValoresPorDefectoPatch as useGuardarValores,
@@ -88,14 +88,19 @@ export function ValoresPorDefectoPage() {
   const { t: tc } = useTranslation('common')
   const qc = useQueryClient()
 
-  const { data: organizaciones = [] } = useListOrganizacionesApiV1HubOrganizacionesGet()
-  const [organizacionId, setOrganizacionId] = useState('')
-
-  useEffect(() => {
-    if (!organizacionId && organizaciones.length > 0) {
-      setOrganizacionId(String(organizaciones[0].id))
-    }
-  }, [organizaciones, organizacionId])
+  /**
+   * La organización sale de la elección compartida del panel (REV.10).
+   *
+   * Esta pantalla tenía su propio selector con su propio estado, «Identidad visual» tenía otro,
+   * y cambiar de organización obligaba a repetir la elección en cada una. El selector sigue
+   * aquí —es donde se está trabajando— pero escribe en la elección común, así que al cambiarlo
+   * también cambia el de la cabecera y el de las demás pantallas.
+   */
+  const {
+    organizaciones,
+    elegida: organizacionId,
+    elegir: setOrganizacionId,
+  } = useOrganizacionElegida()
 
   const { data: valores, isLoading } = useValores(organizacionId, {
     query: { enabled: Boolean(organizacionId) },

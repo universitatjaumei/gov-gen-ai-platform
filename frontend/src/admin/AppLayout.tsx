@@ -5,6 +5,7 @@ import { useModulos } from '@/shared/auth/useModulos'
 import { SUPPORTED_LANGUAGES } from '@/shared/i18n'
 import { useMarca } from '@/shared/marca/useMarca'
 import { useColoresDelPanel } from '@/shared/marca/useColoresDelPanel'
+import { useOrganizacionElegida } from '@/shared/organizacion/useOrganizacionElegida'
 
 /** El nombre de cada idioma EN ese idioma: quien busca su lengua la reconoce escrita así. */
 const IDIOMAS: Record<string, string> = {
@@ -46,6 +47,12 @@ export function AppLayout() {
   // pantalla de identidad visual la editaba, y el panel se pintaba con las variables escritas
   // a mano en `index.css`. Dos fuentes de verdad que no se hablaban.
   useColoresDelPanel()
+  const {
+    organizaciones,
+    elegida: organizacionElegida,
+    elegir: elegirOrganizacion,
+    hayVarias,
+  } = useOrganizacionElegida()
 
   return (
     <div className="flex h-screen">
@@ -93,6 +100,27 @@ export function AppLayout() {
         ))}
 
         <div className="mt-auto pt-4 border-t border-sidebar-border text-xs text-sidebar-foreground/80">
+          {/* REV.10 — de qué organización se habla, elegido UNA vez y no en cada pantalla.
+              Antes «Valores por defecto» tenía su selector, «Identidad visual» otro, Vigencia
+              elegía por chatbot y Personas no elegía nada, así que cambiar de organización
+              obligaba a repetir la elección. Con una sola no se ofrece: sería ruido. */}
+          {hayVarias && (
+            <>
+              <label htmlFor="organizacion" className="block mb-1">
+                {t('nav.organizacion')}
+              </label>
+              <select
+                id="organizacion"
+                value={organizacionElegida}
+                onChange={e => elegirOrganizacion(e.target.value)}
+                className="w-full mb-3 px-2 py-1 rounded-md bg-sidebar-accent text-sidebar-accent-foreground border border-sidebar-border"
+              >
+                {organizaciones.map(o => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </>
+          )}
           {/* El panel se traducía a tres idiomas y no había forma de cambiarlo: dependías
               de lo que el navegador dijera. El detector de i18next guarda la elección, así
               que basta con ofrecerla. */}

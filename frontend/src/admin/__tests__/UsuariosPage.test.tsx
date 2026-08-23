@@ -43,6 +43,15 @@ vi.mock('@/shared/auth/useAutoridadDelRol', () => ({
   useAutoridadDelRol: vi.fn(),
 }))
 
+vi.mock('@/shared/api/generated/hub-organizaciones/hub-organizaciones', () => ({
+  useListOrganizacionesApiV1HubOrganizacionesGet: () => ({
+    data: [
+      { id: 'org-uji', name: 'Universitat Jaume I' },
+      { id: 'org-dipu', name: 'Diputación de Castellón' },
+    ],
+  }),
+}))
+
 const PERSONAS: UsuarioRead[] = [
   {
     id: '11111111-1111-1111-1111-111111111111',
@@ -100,6 +109,7 @@ beforeAll(async () => {
 })
 
 beforeEach(() => {
+  localStorage.clear()
   mutar.mockClear()
   borrar.mockClear()
   conPersonas()
@@ -330,5 +340,57 @@ describe('REV.8 — el superadministrador de arranque', () => {
     const fila = screen.getByTestId('persona-root@uji.es')
     expect(within(fila).queryByRole('button', { name: /eliminar|borrar/i })).toBeNull()
     expect(within(fila).queryByRole('button', { name: /desactivar/i })).toBeNull()
+  })
+})
+
+/**
+ * REV.10 — a qué organización pertenece cada persona.
+ *
+ * `HubUser.organizacion_id` existe con su clave ajena desde AUTH.2 y **la pantalla no lo
+ * enseñaba ni lo pedía**: se podía dar de alta a gente sin organización sin enterarse, y no
+ * había forma de saber de quién era nadie. El usuario lo dijo así: «en personas no veo el
+ * selector de la organización».
+ */
+describe('REV.10 — la organización de cada persona', () => {
+  it('should_show_which_organisation_each_person_belongs_to', () => {
+    conPersonas([{ ...PERSONAS[0], organizacion_id: 'org-uji' }])
+    renderPage()
+
+    const fila = screen.getByTestId('persona-manual@uji.es')
+    expect(fila.textContent).toMatch(/Universitat Jaume I/)
+  })
+
+  it('should_say_when_someone_has_no_organisation', () => {
+    // Una celda vacía se lee como un dato que falta; esto es una fila que nadie asignó, y hay
+    // que poder verla para arreglarla.
+    conPersonas([{ ...PERSONAS[0], organizacion_id: null }])
+    renderPage()
+
+    const fila = screen.getByTestId('persona-manual@uji.es')
+    expect(fila.textContent).toMatch(/sin organización/i)
+  })
+
+  it('should_let_the_alta_choose_an_organisation', () => {
+    renderPage()
+
+    fireEvent.change(screen.getByLabelText(/correo/i), { target: { value: 'nueva@uji.es' } })
+    fireEvent.change(screen.getByLabelText(/^organización/i), { target: { value: 'org-dipu' } })
+    fireEvent.click(screen.getByRole('button', { name: /dar de alta/i }))
+
+    expect(mutar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ organizacion_id: 'org-dipu' }),
+      }),
+      expect.anything()
+    )
+  })
+
+  it('should_default_the_alta_to_the_organisation_chosen_in_the_panel', () => {
+    // La elección compartida de REV.10: si ya se está trabajando sobre una organización, el
+    // alta no tiene que volver a preguntarlo.
+    localStorage.setItem('organizacion-elegida', 'org-dipu')
+    renderPage()
+
+    expect((screen.getByLabelText(/^organización/i) as HTMLSelectElement).value).toBe('org-dipu')
   })
 })

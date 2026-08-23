@@ -29,6 +29,12 @@ vi.mock('@/shared/api/generated/hub-themes/hub-themes', () => ({
   useGetResolvedThemeApiV1HubThemesResolvedGet: vi.fn(),
 }))
 
+// REV.10 — `AppLayout` lleva el selector de organización, así que consulta la lista. Sin el
+// doble, el `useQuery` revienta por falta de `QueryClientProvider` y el fallo parece del menú.
+vi.mock('@/shared/api/generated/hub-organizaciones/hub-organizaciones', () => ({
+  useListOrganizacionesApiV1HubOrganizacionesGet: () => ({ data: [] }),
+}))
+
 const TOKEN =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
   btoa(JSON.stringify({ user_id: '1', email: 'admin@test.com', role: 'admin', exp: 9999999999 }))

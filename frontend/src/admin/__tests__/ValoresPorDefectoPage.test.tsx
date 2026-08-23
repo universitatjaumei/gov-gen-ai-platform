@@ -50,6 +50,9 @@ beforeAll(async () => {
 })
 
 beforeEach(() => {
+  // La organizacion elegida se recuerda en localStorage (REV.10): sin limpiarla, la eleccion
+  // de un test se filtra al siguiente y el fallo aparece lejos de su causa.
+  localStorage.clear()
   guardar.mockClear()
   vi.mocked(useListOrganizacionesApiV1HubOrganizacionesGet).mockReturnValue({
     data: ORGS,

@@ -144,7 +144,8 @@
       "source_override": "sobreescrito",
       "save": "Guardar",
       "reset": "Volver a los valores del código",
-      "save_failed": "No se pudo guardar. Revisa que las variables del texto existan para esta actividad."
+      "save_failed": "No se pudo guardar. Revisa que las variables del texto existan para esta actividad.",
+      "ambito": "Configuración de plataforma: es común a todas las organizaciones, y por eso esta pantalla no pregunta por ninguna."
     },
     "new_prompt_template": "Nuevo prompt",
     "no_prompt_templates": "No hay prompts creados",
@@ -342,6 +343,7 @@
     "curation": "Curación",
     "main": "Navegación principal",
     "language": "Idioma",
+    "organizacion": "Organización",
     "plataforma": "Plataforma"
   },
   "no_encontrado": {
@@ -391,7 +393,9 @@
         "manual": "Alta manual",
         "sso": "SSO",
         "superadmin": "Cuenta de instalación"
-      }
+      },
+      "organizacion": "Organización",
+      "sin_organizacion": "Sin organización"
     },
     "modulos_nav": "Módulos",
     "modulos": {
