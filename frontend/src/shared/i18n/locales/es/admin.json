@@ -127,6 +127,17 @@
       "tier_default": "Por defecto: nivel {{tier}}",
       "text_label": "Texto del prompt",
       "empty_means_code": "Si lo dejas vacío se usa el texto del código, y así seguirá mejorando cuando el código mejore.",
+      "buscar": "Buscar",
+      "buscar_pista": "Nombre o para qué sirve",
+      "modulo": "Módulo",
+      "todos_los_modulos": "Todos los módulos",
+      "sin_resultados": "Ninguna actividad coincide con la búsqueda.",
+      "modulos": {
+        "chatbots": "Chatbots y asistentes",
+        "curacion": "Curación de contenido",
+        "informes": "Informes",
+        "plataforma": "Administración de la plataforma"
+      },
       "detected_vars": "Variables detectadas",
       "available_vars": "Variables disponibles",
       "source_code": "código",

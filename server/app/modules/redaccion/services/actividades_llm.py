@@ -62,6 +62,24 @@ TIER_POR_ACTIVIDAD: dict[ActividadLLM, int] = {
 }
 
 
+#: De qué módulo de la plataforma es cada actividad (REV.7).
+#:
+#: El catálogo decía qué actividades existen, con qué nivel corren y para qué sirven, pero no de
+#: quién son. Con cuatro se puede vivir sin ello; el problema es que la pantalla no puede
+#: agrupar ni filtrar por algo que no está, y este catálogo **crece cuando se cablea un
+#: consumidor** — hoy son las cuatro de Informes, y Curación y Chatbots llegarán.
+#:
+#: Los códigos son los que ya usa la plataforma (`MODULOS_INICIALES`), no un vocabulario nuevo:
+#: si aquí pusiera «redaccion» y el menú dijera «informes», el filtro de la pantalla y las
+#: concesiones hablarían de cosas distintas. Lo fija un test.
+MODULO_POR_ACTIVIDAD: dict[ActividadLLM, str] = {
+    ActividadLLM.PROPUESTA_DE_SCRIPT: "informes",
+    ActividadLLM.AUDITORIA_DE_SCRIPT: "informes",
+    ActividadLLM.TRANSFORMACION_ETL: "informes",
+    ActividadLLM.CONFIGURACION_DE_GRAFICO: "informes",
+}
+
+
 #: Para qué sirve cada actividad, en una línea. Es lo que hace legible un 503 que dice
 #: «falta el nivel 2»: sin esto, quien lo lee no sabe qué se ha quedado sin hacer.
 PARA_QUE_SIRVE: dict[ActividadLLM, str] = {

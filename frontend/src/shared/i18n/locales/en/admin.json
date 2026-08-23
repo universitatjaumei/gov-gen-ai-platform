@@ -97,6 +97,17 @@
       "tier_default": "Default: tier {{tier}}",
       "text_label": "Prompt text",
       "empty_means_code": "Leave it empty to use the text from code, so it keeps improving as the code improves.",
+      "buscar": "Search",
+      "buscar_pista": "Name or what it does",
+      "modulo": "Module",
+      "todos_los_modulos": "All modules",
+      "sin_resultados": "No activity matches the search.",
+      "modulos": {
+        "chatbots": "Chatbots and assistants",
+        "curacion": "Content curation",
+        "informes": "Reports",
+        "plataforma": "Platform administration"
+      },
       "detected_vars": "Detected variables",
       "available_vars": "Available variables",
       "source_code": "code",

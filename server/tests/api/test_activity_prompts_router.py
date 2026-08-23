@@ -185,3 +185,22 @@ class TestPermisos:
             "/api/v1/hub/activity-prompts/propuesta_de_script",
             json={"override_tier": 3, "template_text": None},
         ).status_code == 403
+
+
+class TestElModuloViajaEnElContrato:
+    """REV.7 — la pantalla agrupa y filtra por módulo, así que el módulo tiene que llegar.
+
+    Deducirlo en el React a partir del nombre de la actividad sería inventarlo: el catálogo es
+    del servidor y crece cuando se cablea un consumidor nuevo.
+    """
+
+    def test_should_expose_the_module_of_each_activity(self, api) -> None:
+        client, _filas = api
+
+        cuerpo = client.get("/api/v1/hub/activity-prompts").json()
+
+        assert all(a.get("modulo") for a in cuerpo), (
+            "toda actividad tiene que decir de qué módulo es"
+        )
+        propuesta = next(a for a in cuerpo if a["activity"] == "propuesta_de_script")
+        assert propuesta["modulo"] == "informes"

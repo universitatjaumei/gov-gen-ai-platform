@@ -39,6 +39,7 @@ const PROPUESTA = {
   effective_tier: 2,
   tier_source: 'codigo',
   text_source: 'codigo',
+  modulo: 'informes',
 }
 
 function wrap() {
@@ -153,5 +154,96 @@ describe('ActivityPromptsPage', () => {
 
     const caja = screen.getByTestId('text-propuesta_de_script') as HTMLTextAreaElement
     expect(caja.value).toBe('')
+  })
+})
+
+/**
+ * REV.7 — encontrar una actividad cuando haya cuarenta.
+ *
+ * Hoy son cuatro y la pantalla las apila sin más. El catálogo crece cuando se cablea un
+ * consumidor —Curación y Chatbots están por llegar—, y una lista plana de cuarenta tarjetas con
+ * su caja de texto cada una no se recorre: se busca.
+ */
+const CURACION = {
+  activity: 'juez_semantico',
+  purpose: 'decide si dos páginas se contradicen',
+  default_tier: 3,
+  default_template: 'Compara las dos páginas y di si {criterio}.',
+  variables: ['criterio'],
+  override_tier: null,
+  template_text: null,
+  effective_tier: 3,
+  tier_source: 'codigo',
+  text_source: 'codigo',
+  modulo: 'curacion',
+}
+
+function conDosModulos() {
+  vi.mocked(useListActivityPrompts).mockReturnValue({
+    data: [PROPUESTA, CURACION] as never,
+    isPending: false,
+  } as never)
+}
+
+describe('REV.7 — buscar y filtrar las actividades', () => {
+  it('should_group_the_activities_by_module', () => {
+    // Agrupar es lo que hace que «¿qué le pide Curación al modelo?» se conteste de un vistazo.
+    conDosModulos()
+    wrap()
+
+    expect(screen.getByTestId('grupo-informes')).toBeDefined()
+    expect(screen.getByTestId('grupo-curacion')).toBeDefined()
+  })
+
+  it('should_filter_by_module', () => {
+    conDosModulos()
+    wrap()
+
+    fireEvent.change(screen.getByLabelText(/módulo/i), { target: { value: 'curacion' } })
+
+    expect(screen.queryByTestId('activity-propuesta_de_script')).toBeNull()
+    expect(screen.getByTestId('activity-juez_semantico')).toBeDefined()
+  })
+
+  it('should_find_an_activity_by_free_text_over_its_purpose', () => {
+    // Por el «para qué sirve» y no sólo por la clave: quien busca no recuerda
+    // `configuracion_de_grafico`, recuerda que había algo de gráficos.
+    conDosModulos()
+    wrap()
+
+    fireEvent.change(screen.getByLabelText(/buscar/i), { target: { value: 'contradicen' } })
+
+    expect(screen.getByTestId('activity-juez_semantico')).toBeDefined()
+    expect(screen.queryByTestId('activity-propuesta_de_script')).toBeNull()
+  })
+
+  it('should_find_an_activity_by_its_key_ignoring_case_and_accents', () => {
+    conDosModulos()
+    wrap()
+
+    fireEvent.change(screen.getByLabelText(/buscar/i), { target: { value: 'EXTRACCION' } })
+
+    expect(screen.getByTestId('activity-propuesta_de_script')).toBeDefined()
+  })
+
+  it('should_say_that_nothing_matched_instead_of_showing_an_empty_screen', () => {
+    // Una pantalla en blanco tras escribir se lee como «se ha roto».
+    conDosModulos()
+    wrap()
+
+    fireEvent.change(screen.getByLabelText(/buscar/i), { target: { value: 'zzzz' } })
+
+    expect(screen.getByTestId('sin-resultados')).toBeDefined()
+  })
+
+  it('should_not_show_the_filters_when_there_is_nothing_to_filter', () => {
+    // Con una sola actividad, un buscador es ruido.
+    vi.mocked(useListActivityPrompts).mockReturnValue({
+      data: [PROPUESTA] as never,
+      isPending: false,
+    } as never)
+    wrap()
+
+    expect(screen.queryByLabelText(/buscar/i)).toBeNull()
   })
 })

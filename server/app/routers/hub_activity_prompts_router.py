@@ -36,6 +36,7 @@ from server.app.core.auth.models import UserInfo
 from server.app.modules.agents_hub.database.config_models import HubActivityPrompt
 from server.app.modules.redaccion.services.actividades_llm import (
     ActividadLLM,
+    MODULO_POR_ACTIVIDAD,
     PARA_QUE_SIRVE,
     PROMPT_POR_ACTIVIDAD,
     TIER_POR_ACTIVIDAD,
@@ -51,6 +52,9 @@ class ActivityPromptOut(BaseModel):
 
     activity: str
     purpose: str
+    # De qué módulo es (REV.7). Va en el contrato porque la pantalla agrupa y filtra por él,
+    # y deducirlo del nombre de la actividad en el React sería inventarlo.
+    modulo: str
     default_tier: int
     default_template: str
     variables: list[str]
@@ -107,6 +111,7 @@ def _salida(
     return ActivityPromptOut(
         activity=str(actividad),
         purpose=PARA_QUE_SIRVE[actividad],
+        modulo=MODULO_POR_ACTIVIDAD[actividad],
         default_tier=TIER_POR_ACTIVIDAD[actividad],
         default_template=PROMPT_POR_ACTIVIDAD[actividad],
         variables=sorted(variables_de(actividad)),

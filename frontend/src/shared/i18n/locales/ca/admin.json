@@ -127,6 +127,17 @@
       "tier_default": "Per defecte: nivell {{tier}}",
       "text_label": "Text del prompt",
       "empty_means_code": "Si el deixes buit s'usa el text del codi, i així continuarà millorant quan el codi millore.",
+      "buscar": "Cercar",
+      "buscar_pista": "Nom o per a què serveix",
+      "modulo": "Mòdul",
+      "todos_los_modulos": "Tots els mòduls",
+      "sin_resultados": "Cap activitat coincideix amb la cerca.",
+      "modulos": {
+        "chatbots": "Chatbots i assistents",
+        "curacion": "Curació de contingut",
+        "informes": "Informes",
+        "plataforma": "Administració de la plataforma"
+      },
       "detected_vars": "Variables detectades",
       "available_vars": "Variables disponibles",
       "source_code": "codi",

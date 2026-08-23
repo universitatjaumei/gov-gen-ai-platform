@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import {
@@ -168,9 +168,62 @@ function ActividadCard({ actividad }: { actividad: ActivityPromptOut }) {
   )
 }
 
+/**
+ * Sin tildes y en minúsculas, para que «grafico» encuentre «gráfico» (REV.7).
+ *
+ * Quien busca teclea rápido y sin acentos; una búsqueda que exige escribir «configuración»
+ * con tilde no se usa dos veces.
+ */
+function normalizar(texto: string): string {
+  // `NFD` separa la letra de su tilde y `\p{Diacritic}` borra la tilde suelta. Se usa la
+  // propiedad Unicode y no un rango de caracteres literales: pegados en el fuente son
+  // invisibles, y un editor que «arregle» la codificación del fichero rompería la búsqueda
+  // sin dejar rastro de por qué.
+  return texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+}
+
 export function ActivityPromptsPage() {
   const { t } = useTranslation('admin')
   const { data: actividades, isPending } = useListActivityPrompts()
+
+  const [modulo, setModulo] = useState('')
+  const [busqueda, setBusqueda] = useState('')
+
+  const todas = actividades ?? []
+
+  /**
+   * Los módulos que de verdad hay, sacados de los datos y **no de una lista escrita aquí**:
+   * el catálogo de actividades es del servidor y crece cuando se cablea un consumidor nuevo.
+   */
+  const modulos = useMemo(
+    () => [...new Set(todas.map(a => a.modulo))].sort(),
+    [todas],
+  )
+
+  const visibles = useMemo(() => {
+    const aguja = normalizar(busqueda.trim())
+    return todas.filter(a => {
+      if (modulo && a.modulo !== modulo) return false
+      if (!aguja) return true
+      // Por la clave **y** por el «para qué sirve»: quien busca no recuerda
+      // `configuracion_de_grafico`, recuerda que había algo de gráficos.
+      return normalizar(`${a.activity} ${a.purpose}`).includes(aguja)
+    })
+  }, [todas, modulo, busqueda])
+
+  /** Con una sola actividad un buscador es ruido; el catálogo empieza pequeño. */
+  const merecenFiltros = todas.length > 1
+
+  const porModulo = useMemo(() => {
+    const grupos = new Map<string, typeof visibles>()
+    for (const actividad of visibles) {
+      grupos.set(actividad.modulo, [...(grupos.get(actividad.modulo) ?? []), actividad])
+    }
+    return [...grupos.entries()].sort(([a], [b]) => a.localeCompare(b))
+  }, [visibles])
 
   return (
     <div className="space-y-4" data-testid="activity-prompts-page">
@@ -181,8 +234,64 @@ export function ActivityPromptsPage() {
 
       {isPending && <p className="text-sm text-muted-foreground">…</p>}
 
-      {(actividades ?? []).map(actividad => (
-        <ActividadCard key={actividad.activity} actividad={actividad} />
+      {merecenFiltros && (
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="ap_busqueda" className="text-xs font-medium">
+              {t('hub.activity_prompts.buscar')}
+            </label>
+            <input
+              id="ap_busqueda"
+              type="search"
+              value={busqueda}
+              onChange={e => setBusqueda(e.target.value)}
+              placeholder={t('hub.activity_prompts.buscar_pista')}
+              className="w-64 rounded-md border px-2 py-1.5 text-sm bg-background"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="ap_modulo" className="text-xs font-medium">
+              {t('hub.activity_prompts.modulo')}
+            </label>
+            <select
+              id="ap_modulo"
+              value={modulo}
+              onChange={e => setModulo(e.target.value)}
+              className="rounded-md border px-2 py-1.5 text-sm bg-background"
+            >
+              <option value="">{t('hub.activity_prompts.todos_los_modulos')}</option>
+              {modulos.map(codigo => (
+                <option key={codigo} value={codigo}>
+                  {t(`hub.activity_prompts.modulos.${codigo}` as Parameters<typeof t>[0], {
+                    defaultValue: codigo,
+                  })}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
+      {/* Una pantalla en blanco tras escribir se lee como «se ha roto». */}
+      {!isPending && visibles.length === 0 && (
+        <p data-testid="sin-resultados" className="text-sm text-muted-foreground">
+          {t('hub.activity_prompts.sin_resultados')}
+        </p>
+      )}
+
+      {porModulo.map(([codigo, delGrupo]) => (
+        <section key={codigo} data-testid={`grupo-${codigo}`} className="space-y-3">
+          {/* El encabezado se pinta siempre que haya grupo, también con uno solo: dice de
+              quién es lo que hay debajo, que es la pregunta que trae aquí a la gente. */}
+          <h2 className="text-sm font-semibold text-muted-foreground">
+            {t(`hub.activity_prompts.modulos.${codigo}` as Parameters<typeof t>[0], {
+              defaultValue: codigo,
+            })}
+          </h2>
+          {delGrupo.map(actividad => (
+            <ActividadCard key={actividad.activity} actividad={actividad} />
+          ))}
+        </section>
       ))}
     </div>
   )

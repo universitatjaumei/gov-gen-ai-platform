@@ -220,3 +220,34 @@ async def test_should_usar_el_servicio_el_prompt_resuelto() -> None:
 
     mensajes = llm.ainvoke.await_args.args[0]
     assert mensajes[0]["content"].startswith("INSTRUCCIONES DE UN ADMINISTRADOR CON PRISA")
+
+
+class TestElModuloDeCadaActividad:
+    """REV.7 — de qué módulo es cada actividad.
+
+    El catálogo decía qué actividades existen, con qué nivel corren y para qué sirven, pero no
+    **de quién son**. Con cuatro da igual; el problema es que la pantalla no puede agrupar ni
+    filtrar por algo que no existe, y el catálogo crece cuando se cablea un consumidor —los de
+    Curación y Chatbots no están todavía—.
+    """
+
+    def test_should_declare_the_module_of_every_activity(self) -> None:
+        from server.app.modules.redaccion.services.actividades_llm import (
+            ActividadLLM,
+            MODULO_POR_ACTIVIDAD,
+        )
+
+        assert set(MODULO_POR_ACTIVIDAD) == set(ActividadLLM)
+        assert all(modulo.strip() for modulo in MODULO_POR_ACTIVIDAD.values())
+
+    def test_should_use_the_module_codes_the_platform_already_knows(self) -> None:
+        """No un vocabulario nuevo: los mismos códigos que concede `HubModuleGrant` y que
+        filtran las rutas del panel. Si aquí se inventara «redaccion» y allí fuera «informes»,
+        el filtro de la pantalla no cuadraría con el menú."""
+        from server.app.core.auth.modulos import MODULOS_INICIALES
+        from server.app.modules.redaccion.services.actividades_llm import (
+            MODULO_POR_ACTIVIDAD,
+        )
+
+        conocidos = {codigo for codigo, _etiqueta in MODULOS_INICIALES}
+        assert set(MODULO_POR_ACTIVIDAD.values()) <= conocidos
