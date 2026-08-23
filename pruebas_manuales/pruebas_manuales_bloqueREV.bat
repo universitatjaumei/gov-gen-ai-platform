@@ -3,13 +3,13 @@ chcp 65001 > nul
 cd /d "%~dp0.."
 
 echo ============================================================
-echo   PRUEBAS MANUALES - BLOQUE REV
-echo   Primer vistazo a Plataforma: correcciones de bajo riesgo
+echo   PRUEBAS MANUALES - BLOQUE REV  (REV.1 a REV.10)
+echo   Primer vistazo a Plataforma
 echo ============================================================
 echo.
-echo Este bloque se verifico entero en navegador durante el desarrollo.
-echo Lo que queda aqui es SOLO lo que una persona tiene que juzgar:
-echo el aspecto. Si el criterio visual no te convence, se cambia.
+echo Los diez prompts se verificaron en navegador durante el
+echo desarrollo. Lo que queda aqui es lo que tiene que juzgar una
+echo persona: el aspecto, y los flujos con datos reales tuyos.
 echo.
 pause
 
@@ -19,10 +19,13 @@ echo   REQUISITOS PREVIOS
 echo ------------------------------------------------------------
 echo.
 echo  1. Docker Desktop en marcha.
-echo  2. Base de datos de desarrollo arrancada:
-echo        docker start govgenai-dev-postgres-1
-echo  3. Servidor:   cd server ^&^& uv run uvicorn app.main:app --reload
-echo  4. Frontend:   cd frontend ^&^& npm run dev
+echo  2. Base de datos:  docker start govgenai-dev-postgres-1
+echo  3. MIGRACION NUEVA (REV.6). En una terminal:
+echo        cd server
+echo        uv run alembic upgrade head
+echo     Debe quedar en  p6i7j8k9l0m1 (head)
+echo  4. Servidor:   cd server ^&^& uv run uvicorn app.main:app --reload
+echo  5. Frontend:   cd frontend ^&^& npm run dev
 echo.
 pause
 
@@ -34,7 +37,8 @@ echo.
 curl -s -o nul -w "API  /health  ->  %%{http_code}\n" --max-time 5 http://127.0.0.1:8000/health
 curl -s -o nul -w "Front  :5173  ->  %%{http_code}\n" --max-time 5 http://127.0.0.1:5173/
 echo.
-echo Los dos deben dar 200. Si no, revisa los requisitos previos.
+echo Los dos deben dar 200. OJO: si tenias Vite abierto antes, puede
+echo haberse quedado en 5174 o 5176; mira lo que diga la terminal.
 echo.
 pause
 
@@ -43,99 +47,117 @@ echo ------------------------------------------------------------
 echo   1. EL ASPECTO DE LOS MENUS   (REV.3)
 echo ------------------------------------------------------------
 echo.
-echo Abre:  http://localhost:5173/plataforma/identidad-visual
+echo Abre:  /plataforma/identidad-visual
 echo.
 echo QUE MIRAR:
-echo   - En el menu azul de la izquierda, "Plataforma" va en negrita
-echo     y blanco, con una barra vertical blanca a su izquierda.
-echo     NO debe haber ningun recuadro de fondo.
-echo   - En la fila de pestanas de arriba, "Identidad visual" va en
-echo     negrita con un subrayado que continua la linea gris.
-echo   - Cambia de seccion varias veces: el menu NO debe moverse
-echo     ni un pixel.
+echo   - "Plataforma" en negrita y blanco, con barra vertical a su
+echo     izquierda. SIN recuadro de fondo.
+echo   - La pestana activa, en negrita y subrayada.
+echo   - Cambia de seccion: el menu NO debe moverse.
 echo.
-echo ESTO ES UNA DECISION DE GUSTO. Si prefieres otra cosa (barra mas
-echo gruesa, otro color, subrayado en vez de barra lateral), dilo.
+echo ES UNA DECISION DE GUSTO. Si prefieres otra cosa, dilo.
 echo.
 pause
 
 echo.
 echo ------------------------------------------------------------
-echo   2. EL BOTON DEL LOGOTIPO   (REV.4)
+echo   2. LOGOTIPO Y COLORES   (REV.4 y REV.9)
 echo ------------------------------------------------------------
 echo.
-echo En la misma pantalla, con Nivel = "Plataforma":
+echo En la misma pantalla, Nivel = "Plataforma":
+echo   - "Elegir fichero..." es un boton azul y se puede pulsar.
+echo   - Sube un PNG o JPEG de menos de 1 MB: sale en Vista previa.
+echo   - Cambia el color "sidebar": la barra lateral debe cambiar
+echo     AL GUARDAR, sin recargar la pagina.
 echo.
-echo QUE MIRAR:
-echo   - "Elegir fichero..." se ve como un boton con borde azul,
-echo     y se puede pulsar (antes salia gris e inerte).
-echo   - Debajo, en su propia linea, pone "Ningun fichero seleccionado".
-echo   - Pulsa y elige un PNG o JPEG de menos de 1 MB.
-echo   - El nombre del fichero aparece en esa segunda linea y el
-echo     logotipo sale en "Vista previa", sobre el azul del panel.
-echo.
-echo AVISO: subir un logotipo en el nivel Plataforma lo pone como marca
-echo de TODO el panel. Si solo estas probando, borra despues el tema
-echo desde la pantalla o pideme que lo retire.
+echo IMPORTANTE - por que tu logo de la UJI no se veia:
+echo   Lo pusiste en el nivel ORGANIZACION (UJI) y entras como
+echo   SUPERADMINISTRADOR, que no pertenece a ninguna organizacion.
+echo   La cascada solo aplica el nivel de organizacion a quien
+echo   pertenece a UNA. Ponlo en el nivel "Plataforma" y lo veras.
+echo   No hace falta reiniciar nada.
 echo.
 pause
 
 echo.
 echo ------------------------------------------------------------
-echo   3. LOS VALORES POR DEFECTO SE PUEDEN CAMBIAR   (REV.2)
+echo   3. VALORES POR DEFECTO EDITABLES   (REV.2)
 echo ------------------------------------------------------------
 echo.
-echo Abre:  http://localhost:5173/hub/valores-por-defecto
-echo.
-echo QUE MIRAR:
-echo   - Organizacion = "Universitat Jaume I".
-echo   - Cada valor tiene ahora su control: cajas de numero, casilla
-echo     para el reranker, area de texto para la plantilla.
-echo   - Cambia "Resultados minimos por defecto" de 2 a 3, haz clic
-echo     fuera del campo y RECARGA la pagina: debe seguir en 3.
-echo   - Devuelvelo a 2.
-echo   - En "Modo de retrieval por defecto", empieza a escribir: deben
-echo     salir sugerencias (RAG, MD_LONG_CONTEXT, MD_AGENT_SELECTOR).
-echo   - Abajo, los campos que ponen "Heredado de la plataforma" tienen
-echo     un enlace "Establecer valor propio" que despliega su control.
+echo Abre:  /hub/valores-por-defecto
+echo   - Cambia "Resultados minimos" de 2 a 3, clic fuera, RECARGA:
+echo     debe seguir en 3. Devuelvelo a 2.
+echo   - Los campos "Heredado de la plataforma" tienen un enlace
+echo     "Establecer valor propio".
 echo.
 pause
 
 echo.
 echo ------------------------------------------------------------
-echo   4. LA COLA DE VIGENCIA YA NO TE MANDA A INFORMES   (REV.5)
+echo   4. VIGENCIA: ENLACES Y VALIDACION   (REV.5 y REV.6)
 echo ------------------------------------------------------------
 echo.
-echo Abre:  http://localhost:5173/hub/vigencia
+echo Abre:  /hub/vigencia
+echo   - Los documentos del corpus (.md) NO son enlaces.
+echo   - Los que tienen URL real (BOE, DOGV) si lo son.
+echo   - Pulsa "Validar vigencia" en uno: la fila desaparece y el
+echo     contador baja en uno.
+echo   - Un documento "derogado" NO tiene boton: dice que procede
+echo     retirarlo. Es a proposito.
 echo.
-echo QUE MIRAR:
-echo   - Elige el chatbot que tenga corpus normativo.
-echo   - Los documentos del corpus (los que vienen de fichero .md)
-echo     salen como texto negro, SIN enlace y sin el iconito.
-echo   - Los que tienen URL real (BOE, DOGV) siguen siendo enlaces
-echo     azules y abren la pagina oficial en otra pestana.
+echo AVISO: validar deja tu nombre firmado en la base de datos. Hazlo
+echo solo sobre una norma que hayas comprobado de verdad.
 echo.
-echo CASO LIMITE - la direccion inventada:
-echo   Pega esto en la barra del navegador:
-echo   http://localhost:5173/hub/esto-no-existe
-echo   Debe salir "Esta direccion no existe" con un enlace
-echo   "Ir al inicio". ANTES te llevaba a Informes sin avisar.
+echo CASO LIMITE:  /hub/esto-no-existe  debe decir "Esta direccion
+echo no existe", no llevarte a Informes.
 echo.
 pause
 
 echo.
 echo ------------------------------------------------------------
-echo   LO QUE NO ESTA EN ESTE BLOQUE
+echo   5. PERSONAS   (REV.8 y REV.10)
 echo ------------------------------------------------------------
 echo.
-echo Del mismo repaso quedan abiertos, y NO se han tocado:
-echo   - Los colores de "Identidad visual" no pintan nada todavia:
-echo     la cascada solo la consume el logotipo.
-echo   - Personas: sin borrar, sin el superadministrador principal
-echo     y sin organizacion.
-echo   - Buscador en los prompts de actividad.
-echo   - Selector global de organizacion.
-echo   - Validar la vigencia desde la pantalla (no hay endpoint).
+echo Abre:  /plataforma/usuarios
+echo   - Aparece tu cuenta de superadministrador, marcada como
+echo     "Cuenta de instalacion" y sin botones.
+echo   - Da de alta a alguien con un correo de prueba y una
+echo     organizacion. Aparece con su organizacion en la columna.
+echo   - Pulsa "Eliminar": pide confirmar. Cancela, sigue ahi.
+echo     Vuelve a pulsar y confirma: desaparece.
+echo   - A alguien que YA haya entrado no le sale "Eliminar", y la
+echo     fila explica por que.
+echo.
+pause
+
+echo.
+echo ------------------------------------------------------------
+echo   6. BUSCADOR DE PROMPTS Y ORGANIZACION GLOBAL  (REV.7, REV.10)
+echo ------------------------------------------------------------
+echo.
+echo Abre:  /plataforma/prompts-actividad
+echo   - Hay caja de busqueda y filtro por modulo, agrupado por modulo.
+echo   - Escribe "grafico" SIN tilde: debe encontrar el de graficos.
+echo   - Dice que es configuracion comun a todas las organizaciones.
+echo.
+echo En la barra lateral, abajo, hay un selector "Organizacion".
+echo   - Cambialo y ve a /hub/valores-por-defecto: debe estar ya
+echo     elegida la misma.
+echo   - Se recuerda al recargar.
+echo.
+pause
+
+echo.
+echo ------------------------------------------------------------
+echo   LO QUE SIGUE ABIERTO
+echo ------------------------------------------------------------
+echo.
+echo Del mismo repaso, planteado por ti y NO abordado todavia:
+echo   - Organizaciones (crear/borrar) vive bajo Chatbots y deberia
+echo     estar en Plataforma. Su router ya exige "plataforma".
+echo   - El tema de una organizacion no lo ve un superadministrador
+echo     (ver el aviso del punto 2).
+echo   - Los prompts estan en dos pantallas con dos modelos distintos.
 echo.
 pause
 
