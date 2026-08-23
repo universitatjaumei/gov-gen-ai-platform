@@ -180,9 +180,7 @@ async def test_resolve_session_missing_email_raises(saml_ctx, db):
 # --------------------------------------------------------------------------- #
 # ACS completo: aserción firmada → JWT → redirect                               #
 # --------------------------------------------------------------------------- #
-def test_acs_issues_jwt_and_redirects(saml_ctx, db):
-    import os
-
+def test_acs_issues_jwt_and_redirects(saml_ctx, db, db_url):
     from sqlalchemy.ext.asyncio import create_async_engine
 
     from server.app.api.deps import get_session
@@ -191,16 +189,19 @@ def test_acs_issues_jwt_and_redirects(saml_ctx, db):
     from sqlmodel.ext.asyncio.session import AsyncSession
 
     email = f"ada-{_uid()}@uji.es"
-    db.track(email)  # el fixture db limpia esta fila en el teardown
 
-    database_url = os.environ.get(
-        "DATABASE_URL",
-        "postgresql+asyncpg://govgenai:govgenai_dev@localhost:5432/govgenai",
-    )
+    # Contra la BD desechable del test (`db_url`), no contra `DATABASE_URL`. La versión
+    # anterior leía el DSN del entorno y acababa apuntando al PostgreSQL del desarrollador:
+    # en local pasaba —ese servidor tiene el esquema migrado— y de paso dejaba escrita una
+    # fila de usuario real, que es lo que TST.2 vino a cerrar. En CI no se ejecutan las
+    # migraciones: el servicio de Postgres arranca vacío y el esquema lo crea el fixture
+    # `db` sobre la copia desechable, así que el test moría con
+    # `relation "superadminaccount" does not exist`. `db` ya ha hecho el `create_all` de
+    # SQLModel sobre esta misma BD, que es la que el router tiene que ver.
 
     async def _override_session():
         # Engine creado dentro del request → vive en el loop del TestClient.
-        eng = create_async_engine(database_url)
+        eng = create_async_engine(db_url)
         try:
             async with AsyncSession(eng) as s:
                 yield s

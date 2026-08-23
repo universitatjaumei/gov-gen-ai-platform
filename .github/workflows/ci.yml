@@ -85,6 +85,20 @@ jobs:
       - name: Lint (ruff)
         run: uv run ruff check app/
 
+      # El contrato OpenAPI está en `.gitignore` —es un artefacto generado, no se edita a
+      # mano— y `tests/test_openapi_export.py` comprueba que existe y que es OpenAPI 3.x.
+      # Mientras CI corría el 42% de la suite ese fichero no se colectaba; al pasar a
+      # `tests` entero (e0b2eb3) los dos tests de presencia se pusieron en rojo, porque en
+      # este job nadie ejecutaba el exportador: solo lo hace el job `contract`, que es otra
+      # máquina y otro checkout.
+      #
+      # Se genera aquí en vez de relajar los tests porque el exportador es offline (no
+      # levanta Uvicorn ni toca la BD), cuesta segundos, y de paso convierte en aserción
+      # real el `test_server_openapi_json_is_valid`, que hasta ahora se saltaba en CI por
+      # falta del fichero.
+      - name: Export OpenAPI schema (lo exige tests/test_openapi_export.py)
+        run: uv run python export_openapi.py
+
       # Unit + integration + e2e en UNA sola invocación de pytest, a propósito (TST.1):
       # separados en dos procesos, el estado filtrado entre tests —un mock asignado a
       # una clase, un singleton contaminado— es invisible para CI. Así fue como
