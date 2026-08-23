@@ -10776,6 +10776,130 @@ incrustación del widget que D.1 dejó pendiente.
 
 ---
 
+### Prompt D.7 (NUEVO) — Qué datos pasan al piloto, y por qué casi ninguno
+
+**Modelo sugerido**: **Opus** — la decisión está tomada (ver abajo), pero el exportador toca
+tres módulos y la guarda que impide llevarse datos de otra organización es de las que, si se
+escriben mal, no fallan: dejan pasar.
+
+**Objetivo**: hoy **no hay ningún mecanismo de selección**. `bootstrap.py` es el único camino de
+instalación nueva y crea lo mínimo (superadmin, organización de ejemplo, chatbot de ejemplo,
+prompts de bienvenida). No hay exportador, ni marca de «demo», ni lista de qué se lleva. Así que
+la pregunta «¿qué pasa al piloto?» sólo tiene hoy dos respuestas posibles, y las dos son malas:
+un volcado completo —que arrastra 29 informes de prueba y toda la basura de test— o empezar de
+cero, tirando el corpus de 548 documentos y 288 hallazgos de curación ya revisados.
+
+**Lo que este prompt separa, y es el fondo del asunto**: se están confundiendo dos cosas que
+viajan de forma distinta.
+
+1. **El catálogo que acompaña al producto** — las plantillas demo. **No se copian de la BD de
+   desarrollo**: se exportan a ficheros versionados en el repositorio y los siembra
+   `bootstrap.py --con-demo`. Así la demo es reproducible, se revisa en un diff y es la misma en
+   todos los despliegues. Es la misma regla que ya rige el vocabulario del corpus: lo que define
+   el producto es dato versionado, no una fila que alguien tenía en su portátil.
+2. **Los datos operativos que sí viajan** — corpus, vigencia, chatbots, curación. Eso es un
+   `pg_dump` **con lista explícita de tablas y filtrado por organización**, nunca completo.
+
+#### Decisiones ya tomadas por el usuario (2026-08-23), que este prompt NO vuelve a abrir
+
+- **Única organización que pasa: `Universitat Jaume I`.** Las otras cuatro de desarrollo
+  —`Organización Demo`, `Organizacion Camino 1`, `Organización de ejemplo`, `Organización
+  MAN.2`— no. Con ellas se quedan fuera el `Chatbot Demo` y sus 7 documentos.
+- **Pasan los tres asistentes de la UJI**, incluido `Gerència — assistent agèntic (proves)`
+  (127 docs, `MD_AGENT_SELECTOR`), **renombrado** para quitarle el «(proves)»: es el único sitio
+  donde se ejercita esa vía de recuperación.
+- **Pasa el corpus entero de la UJI** (548 documentos con sus fragmentos) y **la vigencia**
+  (`vigencia_validada_el`, `revisat_per`, `data_revisio_prevista`).
+- **Pasa el resultado de la curación.** El único sitio que existe, `Escola de Doctorat (RAS.5)`
+  —351 páginas y 288 hallazgos—, tiene **`organizacion_id` a NULO**, así que el filtro por
+  organización lo dejaría fuera: hay que **asignarlo a la UJI antes del volcado**. Es contenido
+  de la UJI (`www.uji.es/centres/escola-doctorat/`) y ese nulo es un descuido del alta, no una
+  decisión.
+- **No pasa ningún informe de prueba**: las 29 filas de `hub_workspaces` con sus bloques,
+  manifiestos y eventos de auditoría se quedan.
+- **No pasa ninguna persona.** `hub_users` se recrea por SSO al primer acceso, más el
+  superadministrador que crea `setup.sh`. (Las 97 filas `ada-*` que había las borró REV.1.)
+
+#### Las tres plantillas demo
+
+| # | Plantilla | Estado |
+|---|-----------|--------|
+| 1 | `Informe anual de seguimiento — Doctorado (criterios 1 y 2)` | Existe, v2, spec de 7.114 B. Se exporta tal cual |
+| 2 | Económica — saldo de cuentas de tesorería | **No existe.** La prepara el usuario en pruebas manuales y se exporta después |
+| 3 | Ejecución presupuestaria | Ver la corrección de abajo. Su juego de datos **ya está hecho** |
+
+> **Corrección que hay que tener presente al ejecutar esto.** Se eligió
+> `Ejecucion presupuestaria trimestral` por tener el nombre más limpio, y **está vacía**: su
+> `spec_json` son 2 bytes (`{}`). La que tiene el informe de verdad es
+> **`GUI3 ejecucion presupuestaria`** (5.242 B): hueco `budget_data` de tipo `excel`, conversión
+> de importes en formato español, columna calculada de porcentaje, orden descendente, tabla,
+> gráfico `barh` y resumen de IA con revisión obligatoria. Es la que se exporta, **renombrada**
+> —el prefijo `GUI3` es el nombre de un prompt de verificación, no de un producto—, y la vacía
+> se borra. La tercera candidata, `VER3 Informe presupuestario` (3.436 B), se descarta.
+>
+> Su juego de datos ficticio ya existe y está verificado contra las transformaciones reales de
+> la plantilla: `pruebas_manuales/datos/ejecucion_presupuestaria_demo.xlsx`, con su generador al
+> lado. Tres columnas —`Concepto`, `Credito Inicial`, `Obligaciones Reconocidas`—, doce
+> conceptos e importes **como texto en formato español con `€`**, a propósito: generarlos ya
+> numéricos no ejercitaría la conversión, que es la parte que se rompe en silencio con una hoja
+> real.
+
+```
+# PROMPT D.7 — Que lo que llega al piloto sea una decisión y no un descuido
+# Deploy: cloud (operación) + edge (los datos que viajan son del cliente)
+
+## RED — los tests primero
+
+### 1. El exportador de plantillas demo
+- `test_should_export_a_template_with_all_its_versions`: exporta a JSON el `spec_json` de cada
+  versión, no sólo la vigente. Una plantilla sin historial no se puede revertir.
+- `test_should_not_export_anything_that_is_not_on_the_demo_list`: la lista de plantillas demo es
+  **explícita y vive en el repositorio**, no se deduce de `is_global` ni de la fecha.
+- `test_should_refuse_to_export_a_template_with_an_empty_spec`: es exactamente el caso de
+  `Ejecucion presupuestaria trimestral`. Un `{}` exportado siembra una plantilla que se abre y
+  no tiene nada dentro, y el fallo aparece en el piloto y no aquí.
+- `test_should_round_trip`: exportar → sembrar en una BD limpia → el `spec_json` es idéntico.
+
+### 2. La siembra de la demo
+- `test_bootstrap_con_demo_seeds_the_three_templates` y su recíproco: **sin** `--con-demo` no se
+  siembra ninguna. Un piloto que no quiera las demos no debe tener que borrarlas.
+- `test_bootstrap_con_demo_is_idempotent`: dos ejecuciones no duplican. Misma regla que el resto
+  de `bootstrap.py`.
+
+### 3. El volcado operativo, que es donde está el riesgo
+- `test_should_dump_only_the_listed_tables`: lista explícita. Un `pg_dump` completo se lleva los
+  29 informes de prueba, y el día que alguien añada una tabla nueva se la llevaría también sin
+  que nadie lo decida.
+- `test_should_refuse_a_dump_containing_rows_of_another_organisation`: **la guarda que importa**.
+  Se comprueba sobre el volcado ya generado, no sobre la consulta que lo generó: un filtro mal
+  escrito produce un `WHERE` que pasa los tests de la consulta y datos de más en el fichero.
+- `test_should_carry_the_curation_site_once_it_belongs_to_the_organisation` y
+  `test_should_leave_out_a_site_with_no_organisation`: las dos caras del nulo de `Escola de
+  Doctorat`, para que asignarlo sea un paso consciente y no un efecto colateral.
+- `test_should_not_carry_any_workspace_or_person`: por nombre de tabla, y que falle si alguien
+  las añade a la lista.
+
+## GREEN — lo que hay que escribir
+
+- `server/app/scripts/exportar_plantillas_demo.py` → `server/app/data/plantillas_demo/*.json`,
+  con la lista de las tres en el propio módulo y el porqué de cada una.
+- `bootstrap.py --con-demo`, que las lee de ahí. **No** de la base de datos de nadie.
+- `scripts/volcado_piloto.sh`: la lista de tablas, el filtro por organización y la verificación
+  posterior sobre el fichero. Que imprima el recuento por tabla antes de escribir nada.
+- El renombrado de `GUI3 ejecucion presupuestaria` y el borrado de la plantilla vacía, como
+  migración de datos o como paso documentado del volcado — **no a mano en producción**.
+
+## Cierre
+- [ ] Las tres plantillas se siembran en una BD limpia y las tres **se abren y ejecutan**, la de
+      presupuesto con el `.xlsx` de `pruebas_manuales/datos/`
+- [ ] El volcado, restaurado en una BD limpia, deja exactamente: 1 organización, 3 chatbots,
+      548 documentos, 1 sitio, 351 páginas, 288 hallazgos, **0 informes y 0 personas**
+- [ ] `docs/DATOS_DEL_PILOTO.md` con la lista de tablas y el criterio, porque la próxima vez
+      que alguien migre no va a leer este prompt
+```
+
+---
+
 ### Prompt D.5-CR (SUPERSEDIDO) — CI/CD: pipeline GitHub Actions → Cloud Run
 
 > **No ejecutar.** Reemplazado por D.5-VM. Se conserva por los pasos de build y autenticación,
