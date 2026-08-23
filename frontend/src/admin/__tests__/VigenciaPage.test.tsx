@@ -6,7 +6,10 @@ import i18n from '@/shared/i18n'
 import { AuthProvider } from '@/shared/auth'
 import { VigenciaPage } from '../pages/VigenciaPage'
 import { useListChatbotsApiV1HubChatbotsGet } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
-import { useListPendingVigenciaApiV1HubIngestionChatbotIdVigenciaGet } from '@/shared/api/generated/hub-ingestion/hub-ingestion'
+import {
+  useListPendingVigenciaApiV1HubIngestionChatbotIdVigenciaGet,
+  useValidarVigenciaApiV1HubIngestionChatbotIdVigenciaDocumentIdValidarPost as useValidar,
+} from '@/shared/api/generated/hub-ingestion/hub-ingestion'
 
 /**
  * Pantalla de la cola de validación de vigencia (A7).
@@ -22,12 +25,16 @@ vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
 }))
 vi.mock('@/shared/api/generated/hub-ingestion/hub-ingestion', () => ({
   useListPendingVigenciaApiV1HubIngestionChatbotIdVigenciaGet: vi.fn(),
+  useValidarVigenciaApiV1HubIngestionChatbotIdVigenciaDocumentIdValidarPost: vi.fn(),
+  getListPendingVigenciaApiV1HubIngestionChatbotIdVigenciaGetQueryKey: () => ['vigencia'],
 }))
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
   btoa(JSON.stringify({ sub: '1', email: 'admin@test.com', role: 'admin', exp: 9999999999 }))
     .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_') +
   '.signature'
+
+const validar = vi.fn()
 
 const CHATBOTS = [
   { id: 'cb-1', name: 'Normativa UJI' },
@@ -72,6 +79,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(useValidar).mockReturnValue({ mutate: validar, isPending: false } as any)
   vi.mocked(useListChatbotsApiV1HubChatbotsGet).mockReturnValue({
     data: CHATBOTS,
     isLoading: false,
@@ -219,5 +227,67 @@ describe('REV.5 — sólo se enlaza lo que de verdad es un enlace', () => {
     const enlace = titulo.closest('a')
     expect(enlace).not.toBeNull()
     expect(enlace?.getAttribute('href')).toBe('https://www.uji.es/sindicatura.pdf')
+  })
+})
+
+/**
+ * REV.6 — la cola se puede tachar.
+ *
+ * Se veía qué documentos estaban pendientes y no había forma de validar ninguno:
+ * `vigencia_validada_el` y `revisat_per` sólo se leían en todo el servidor. El aviso que el
+ * asistente emite al citar un documento sin validar se repetía indefinidamente y el número de
+ * pendientes no bajaba nunca.
+ */
+describe('REV.6 — validar desde la cola', () => {
+  it('should_offer_validating_a_document_that_is_only_missing_the_check', async () => {
+    renderPage()
+
+    const fila = (await screen.findByText(/Reglament de la Sindicatura/)).closest('tr')!
+    fireEvent.click(within(fila).getByRole('button', { name: /validar/i }))
+
+    expect(validar).toHaveBeenCalledWith(
+      { chatbotId: 'cb-1', documentId: 'doc-1' },
+      expect.anything()
+    )
+  })
+
+  it('should_not_offer_validating_what_the_state_says_is_not_in_force', async () => {
+    // **El test del prompt.** Un documento derogado sigue en la cola por su estado, así que
+    // sellarlo no lo sacaría de ella: el botón parecería roto. Y lo que pide es retirarlo.
+    // El servidor responde 409; la pantalla ni siquiera lo ofrece.
+    renderPage()
+
+    const fila = (await screen.findByText(/Instrucció de contractes menors/)).closest('tr')!
+
+    expect(within(fila).queryByRole('button', { name: /validar/i })).toBeNull()
+  })
+
+  it('should_say_what_to_do_with_a_document_that_is_no_longer_in_force', async () => {
+    // Sin botón y sin explicación, la fila se lee como «aquí no se puede hacer nada».
+    renderPage()
+
+    const fila = (await screen.findByText(/Instrucció de contractes menors/)).closest('tr')!
+
+    expect(fila.textContent).toMatch(/retirar/i)
+  })
+})
+
+describe('REV.6 — cuando el servidor dice que no', () => {
+  it('should_say_why_instead_of_doing_nothing', async () => {
+    // Lo destapó la verificación en navegador: `require_role("admin")` devolvía 403 a un
+    // superadministrador y la pantalla se quedó exactamente igual, con las 41 filas intactas
+    // y sin decir nada. Una mutación sin `onError` convierte cualquier fallo del servidor en
+    // «el botón no hace nada», que es el síntoma que ya costó cuatro fallos en FIX.1.
+    vi.mocked(useValidar).mockReturnValue({
+      mutate: (_vars: unknown, opciones: { onError: (e: unknown) => void }) =>
+        opciones.onError({ detail: 'El documento está marcado como «derogat»' }),
+      isPending: false,
+    } as any)
+    renderPage()
+
+    const fila = (await screen.findByText(/Reglament de la Sindicatura/)).closest('tr')!
+    fireEvent.click(within(fila).getByRole('button', { name: /validar/i }))
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/derogat/)
   })
 })

@@ -1,9 +1,14 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, CheckCircle2, ExternalLink, Loader2 } from 'lucide-react'
 
 import { useListChatbotsApiV1HubChatbotsGet } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
-import { useListPendingVigenciaApiV1HubIngestionChatbotIdVigenciaGet } from '@/shared/api/generated/hub-ingestion/hub-ingestion'
+import {
+  useListPendingVigenciaApiV1HubIngestionChatbotIdVigenciaGet,
+  useValidarVigenciaApiV1HubIngestionChatbotIdVigenciaDocumentIdValidarPost as useValidarVigencia,
+  getListPendingVigenciaApiV1HubIngestionChatbotIdVigenciaGetQueryKey as claveDeVigencia,
+} from '@/shared/api/generated/hub-ingestion/hub-ingestion'
 import type { ChatbotRead, DocumentVigenciaOut } from '@/shared/api/generated/model'
 
 const MOTIU_ESTAT_NO_VIGENT = 'estat_no_vigent'
@@ -34,9 +39,11 @@ function esEnlaceExterno(url: string | null | undefined): url is string {
 export function VigenciaPage() {
   const { t } = useTranslation('admin')
   const { t: tc } = useTranslation('common')
+  const qc = useQueryClient()
 
   const [selectedChatbotId, setSelectedChatbotId] = useState<string>('')
   const [motiuFilter, setMotiuFilter] = useState<string>('')
+  const [error, setError] = useState<string | null>(null)
 
   const { data: chatbotsRaw, isLoading: isLoadingChatbots } = useListChatbotsApiV1HubChatbotsGet()
   const chatbots: ChatbotRead[] = (chatbotsRaw as unknown as ChatbotRead[] | undefined) ?? []
@@ -49,6 +56,34 @@ export function VigenciaPage() {
     selectedChatbotId,
     { query: { enabled: !!selectedChatbotId } },
   )
+
+  /**
+   * Validar es un `POST` por documento y no un guardado de la pantalla entera: cada fila es
+   * una decisión de una persona sobre una norma concreta, y agruparlas en un «guardar» haría
+   * que un fallo en la quinta dejara en duda las cuatro anteriores.
+   */
+  const { mutate: enviarValidacion, isPending: validando } = useValidarVigencia()
+
+  function validar(documentId: string) {
+    setError(null)
+    enviarValidacion(
+      { chatbotId: selectedChatbotId, documentId },
+      {
+        onSuccess: () => {
+          void qc.invalidateQueries({ queryKey: claveDeVigencia(selectedChatbotId) })
+        },
+        // Sin esto el botón falla **en silencio**: así se descubrió en la verificación que
+        // `require_role("admin")` devolvía 403 a un superadministrador —la pantalla se quedó
+        // exactamente igual, con las 41 filas intactas y sin decir nada—. Es el mismo patrón
+        // que FIX.1: una mutación sin `onError` convierte cualquier fallo del servidor en
+        // «el botón no hace nada».
+        onError: (e: unknown) => {
+          const detalle = (e as { detail?: string; message?: string })
+          setError(detalle?.detail ?? detalle?.message ?? t('hub.vigencia_error_validar'))
+        },
+      },
+    )
+  }
 
   const documentos: DocumentVigenciaOut[] = data?.documents ?? []
   const visibles = motiuFilter ? documentos.filter(d => d.motiu === motiuFilter) : documentos
@@ -96,6 +131,12 @@ export function VigenciaPage() {
         </div>
       ) : (
         <div className="space-y-4">
+          {error && (
+            <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
+            </p>
+          )}
+
           <div
             data-testid="vigencia-resumen"
             className="flex items-center gap-3 p-4 border rounded-lg bg-card"
@@ -136,6 +177,7 @@ export function VigenciaPage() {
                     <th className="px-4 py-3 font-medium">{t('hub.vigencia_motiu')}</th>
                     <th className="px-4 py-3 font-medium">{t('hub.vigencia_col_revisio')}</th>
                     <th className="px-4 py-3 font-medium">{t('hub.vigencia_col_revisat')}</th>
+                    <th className="px-4 py-3 font-medium">{t('hub.vigencia_col_accion')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -189,6 +231,38 @@ export function VigenciaPage() {
                       </td>
                       <td className="px-4 py-3 text-muted-foreground text-xs">
                         {doc.revisat_per ?? '—'}
+                        {/* Dos hechos distintos sobre dos momentos distintos: quién revisó el
+                            contenido —lo declara el frontmatter del corpus— y quién comprobó
+                            que la norma sigue en vigor. Sin esta línea, la firma de REV.6 se
+                            guardaría y no la vería nadie. */}
+                        {doc.vigencia_validada_per && (
+                          <span className="block text-xs text-muted-foreground/80">
+                            {t('hub.vigencia_validada_por', {
+                              persona: doc.vigencia_validada_per,
+                            })}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {doc.motiu === MOTIU_ESTAT_NO_VIGENT ? (
+                          /* Sin botón, y diciendo por qué. Este documento sigue en la cola
+                             por su estado, no por falta de sello: validarlo no lo sacaría de
+                             ella —el servidor responde 409— y lo que pide no es revisarlo,
+                             es retirarlo. Una fila sin acción y sin explicación se lee como
+                             «aquí no se puede hacer nada». */
+                          <span className="text-xs text-muted-foreground">
+                            {t('hub.vigencia_sugerencia_retirar')}
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={validando}
+                            onClick={() => validar(doc.id)}
+                            className="rounded-md border border-primary px-2 py-1 text-xs font-medium text-primary hover:bg-accent disabled:opacity-50"
+                          >
+                            {t('hub.vigencia_validar')}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

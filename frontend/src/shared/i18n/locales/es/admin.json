@@ -282,6 +282,11 @@
     "vigencia_col_estat": "Estado",
     "vigencia_col_revisio": "Revisión prevista",
     "vigencia_col_revisat": "Revisado por",
+    "vigencia_col_accion": "Acción",
+    "vigencia_validada_por": "Vigencia validada por {{persona}}",
+    "vigencia_error_validar": "No se ha podido validar. Vuelve a intentarlo o avisa a quien administra la plataforma.",
+    "vigencia_validar": "Validar vigencia",
+    "vigencia_sugerencia_retirar": "Procede retirarlo del corpus o corregir su estado",
     "valores_por_defecto_nav": "Valores por defecto",
     "valores_por_defecto": {
       "titulo": "Valores por defecto de recuperación",

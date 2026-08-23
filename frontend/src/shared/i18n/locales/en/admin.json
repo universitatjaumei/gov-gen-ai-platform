@@ -282,6 +282,11 @@
     "vigencia_col_estat": "Status",
     "vigencia_col_revisio": "Review due",
     "vigencia_col_revisat": "Reviewed by",
+    "vigencia_col_accion": "Action",
+    "vigencia_validada_por": "Currency validated by {{persona}}",
+    "vigencia_error_validar": "Could not validate. Try again, or tell whoever administers the platform.",
+    "vigencia_validar": "Validate currency",
+    "vigencia_sugerencia_retirar": "It should be removed from the corpus, or its state corrected",
     "valores_por_defecto_nav": "Retrieval defaults",
     "valores_por_defecto": {
       "titulo": "Retrieval defaults",

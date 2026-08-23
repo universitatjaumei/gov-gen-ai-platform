@@ -282,6 +282,11 @@
     "vigencia_col_estat": "Estat",
     "vigencia_col_revisio": "Revisió prevista",
     "vigencia_col_revisat": "Revisat per",
+    "vigencia_col_accion": "Acció",
+    "vigencia_validada_por": "Vigència validada per {{persona}}",
+    "vigencia_error_validar": "No s’ha pogut validar. Torna-ho a intentar o avisa qui administra la plataforma.",
+    "vigencia_validar": "Validar vigència",
+    "vigencia_sugerencia_retirar": "Cal retirar-lo del corpus o corregir-ne l’estat",
     "valores_por_defecto_nav": "Valors per defecte",
     "valores_por_defecto": {
       "titulo": "Valors per defecte de recuperació",

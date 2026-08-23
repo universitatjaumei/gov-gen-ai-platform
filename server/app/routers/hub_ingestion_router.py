@@ -5,7 +5,7 @@ Módulo: chatbots — la ingesta alimenta el corpus de un chatbot.
 """
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any
 
 from fastapi import (
@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.api.deps import get_current_user
+from server.app.api.deps import get_current_user, require_role
 from server.app.core.auth import UserInfo
 from server.app.core.auth.tenancy import assert_org_access
 from server.app.core.storage import FsspecStorageService, get_storage_service
@@ -123,6 +123,7 @@ class DocumentVigenciaOut(BaseModel):
     id_publicacio: str | None = None
     estat_vigencia: str | None = None
     vigencia_validada_el: datetime | None = None
+    vigencia_validada_per: str | None = None
     data_revisio_prevista: date | None = None
     revisat_per: str | None = None
     # Por qué está en la cola. Se calcula aquí y no en el cliente porque es la misma regla
@@ -355,6 +356,7 @@ async def list_pending_vigencia(
                 id_publicacio=d.id_publicacio,
                 estat_vigencia=d.estat_vigencia,
                 vigencia_validada_el=d.vigencia_validada_el,
+                vigencia_validada_per=d.vigencia_validada_per,
                 data_revisio_prevista=d.data_revisio_prevista,
                 revisat_per=d.revisat_per,
                 # El estado manda sobre la falta de validación: un documento derogado que
@@ -368,6 +370,78 @@ async def list_pending_vigencia(
             )
             for d in docs
         ],
+    )
+
+
+@router.post(
+    "/{chatbot_id}/vigencia/{document_id}/validar",
+    response_model=DocumentVigenciaOut,
+)
+async def validar_vigencia(
+    chatbot_id: uuid.UUID,
+    document_id: uuid.UUID,
+    session: AsyncSession = Depends(get_async_session),
+    current_user: UserInfo = Depends(require_role("superadmin", "admin")),
+):
+    """Deja constancia de que una persona ha comprobado la vigencia de un documento (REV.6).
+
+    La cola existía y **no se podía tachar**: `vigencia_validada_el` y `revisat_per` sólo se
+    leían —no había en todo el servidor un sitio que los escribiera—, así que el aviso que el
+    asistente emite al citar un documento sin validar se repetía indefinidamente y el número de
+    pendientes no bajaba nunca.
+
+    **No se valida lo que el estado dice que no está vigente.** Un documento derogado está en la
+    cola por su `estat_vigencia`, no por falta de sello, así que ponerle la fecha no lo sacaría
+    de ella: el botón parecería roto. Y lo que pide no es revisarlo, es retirarlo o corregir el
+    estado. De ahí el 409 en vez de un sellado que no serviría de nada.
+
+    **Reservado a administración**, a diferencia del resto de este router, que sólo exige sesión
+    y organización porque es anterior: esto no es una lectura, es un acto editorial que queda
+    firmado con un nombre en `revisat_per`.
+
+    Deploy: edge.
+    """
+    from server.app.modules.agents_hub.services.retrieval.vigencia import ESTAT_VIGENT
+
+    await _chatbot_autorizado(session, chatbot_id, current_user)
+
+    doc = await session.get(HubDocument, document_id)
+    if not doc or doc.chatbot_id != chatbot_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado."
+        )
+
+    if doc.estat_vigencia != ESTAT_VIGENT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"El documento está marcado como «{doc.estat_vigencia}», así que validar su "
+                "vigencia no lo sacaría de la cola. Lo que procede es retirarlo del corpus o "
+                "corregir su estado."
+            ),
+        )
+
+    doc.vigencia_validada_el = datetime.now(timezone.utc)
+    # En `vigencia_validada_per` y **nunca en `revisat_per`**: ese otro campo viene del
+    # frontmatter del corpus y es la revisión humana del contenido, obligatoria para la
+    # normativa. Pisarlo destruiría un dato del contrato y la pantalla enseñaría a quien pulsó
+    # el botón en lugar del revisor declarado en el documento. El correo y no el identificador
+    # interno, porque esta columna la lee una persona.
+    doc.vigencia_validada_per = current_user.email
+    await session.commit()
+
+    return DocumentVigenciaOut(
+        id=doc.id,
+        title=doc.title,
+        language=doc.language,
+        canonical_url=doc.canonical_url,
+        id_publicacio=doc.id_publicacio,
+        estat_vigencia=doc.estat_vigencia,
+        vigencia_validada_el=doc.vigencia_validada_el,
+        vigencia_validada_per=doc.vigencia_validada_per,
+        data_revisio_prevista=doc.data_revisio_prevista,
+        revisat_per=doc.revisat_per,
+        motiu="sense_validar",
     )
 
 

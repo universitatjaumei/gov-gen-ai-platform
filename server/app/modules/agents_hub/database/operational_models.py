@@ -286,6 +286,12 @@ class HubDocument(HubOperationalBase):
     vigencia_validada_el: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Quién firmó esa comprobación (REV.6). Columna propia y **no `revisat_per`**: ese campo
+    # viene del frontmatter del corpus y es la revisión humana del *contenido*, obligatoria
+    # para `content_class: regulation`. Escribir ahí al que valida la vigencia destruiría un
+    # dato que el contrato exige, y la pantalla pasaría a enseñar a quien pulsó el botón en
+    # lugar del revisor declarado.
+    vigencia_validada_per: Mapped[str | None] = mapped_column(String(255), nullable=True)
     revisat_per: Mapped[str | None] = mapped_column(String(255), nullable=True)
     revisat_el: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

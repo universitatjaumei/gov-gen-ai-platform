@@ -55,6 +55,9 @@ def _doc(**campos):
         id_publicacio="REG-999",
         estat_vigencia="vigent",
         vigencia_validada_el=None,
+        # REV.6 — quién firmó la validación de vigencia. Columna aparte de `revisat_per`,
+        # que es la revisión del contenido que declara el frontmatter del corpus.
+        vigencia_validada_per=None,
         data_revisio_prevista=None,
         revisat_per=None,
     )
@@ -181,3 +184,150 @@ class TestColaDeVigencia:
             )
 
         assert respuesta.status_code == 403, respuesta.text
+
+
+# ─────────────────────── REV.6: validar la vigencia desde la cola ───────────────────────
+
+def _token_de(role: str) -> str:
+    import os
+
+    os.environ.update(_JWT_ENV)
+    from server.app.core.auth import UserInfo, create_token
+
+    return create_token(
+        UserInfo(
+            user_id="quien-valida",
+            email="secretaria@uji.es",
+            role=role,
+            organizacion_ids=(ORG,),
+        )
+    )
+
+
+def _validar(documento, *, role: str = "admin", doc_id: str | None = None):
+    """POST de validación sobre `documento`, que puede ser `None` para simular «no existe»."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from server.app.modules.agents_hub.database.config_models import HubChatbot
+
+    session = AsyncMock()
+    chatbot = MagicMock()
+    chatbot.organizacion_id = uuid.UUID(ORG)
+
+    async def _get(modelo, clave):
+        return chatbot if modelo is HubChatbot else documento
+
+    session.get = AsyncMock(side_effect=_get)
+    session.commit = AsyncMock()
+
+    async def _sesion():
+        yield session
+
+    app = FastAPI()
+    app.dependency_overrides[get_async_session] = _sesion
+    app.include_router(ingestion_router, prefix="/api/v1")
+
+    objetivo = doc_id or (str(documento.id) if documento is not None else str(uuid.uuid4()))
+    with TestClient(app, raise_server_exceptions=False) as cliente:
+        respuesta = cliente.post(
+            f"/api/v1/hub/ingestion/{CHATBOT}/vigencia/{objetivo}/validar",
+            headers={"Authorization": f"Bearer {_token_de(role)}"},
+        )
+    return respuesta, session
+
+
+class TestValidarLaVigencia:
+    """Ver la cola sin poder tacharla no cierra nada (REV.6).
+
+    La pantalla listaba los documentos pendientes y `vigencia_validada_el` / `revisat_per`
+    **sólo se leían**: no había en todo el servidor un sitio que los escribiera, así que el
+    aviso del asistente se repetía para siempre y la cola no bajaba nunca.
+    """
+
+    def test_should_stamp_who_validated_it_and_when(self):
+        doc = _doc(chatbot_id=uuid.UUID(CHATBOT), vigencia_validada_el=None)
+
+        respuesta, session = _validar(doc)
+
+        assert respuesta.status_code == 200, respuesta.text
+        assert doc.vigencia_validada_el is not None
+        # En su columna propia, y el correo y no el identificador interno: esto lo lee una
+        # persona en la pantalla.
+        assert doc.vigencia_validada_per == "secretaria@uji.es"
+        session.commit.assert_awaited()
+
+    def test_should_not_touch_the_content_reviewer(self):
+        """**El defecto que destapó el navegador.** La primera versión escribía en
+        `revisat_per`, que parecía el sitio evidente y es el equivocado: ese campo viene del
+        frontmatter del corpus y es la revisión humana del **contenido**, obligatoria para
+        `content_class: regulation`. Pisarlo destruye un dato del contrato, y la columna
+        «Revisado por» de la pantalla pasaría a enseñar a quien pulsó el botón en lugar del
+        revisor declarado en el documento."""
+        doc = _doc(
+            chatbot_id=uuid.UUID(CHATBOT),
+            revisat_per="Modesto Fabra, administrador del corpus normatiu",
+        )
+
+        _validar(doc)
+
+        assert doc.revisat_per == "Modesto Fabra, administrador del corpus normatiu"
+
+    def test_should_return_the_document_as_it_quedo(self):
+        """Sin devolverlo, la pantalla tendría que recargar la cola entera para pintar
+        una fila, o adivinar la fecha que puso el servidor."""
+        doc = _doc(chatbot_id=uuid.UUID(CHATBOT), vigencia_validada_el=None)
+
+        cuerpo = _validar(doc)[0].json()
+
+        assert cuerpo["vigencia_validada_el"] is not None
+        assert cuerpo["vigencia_validada_per"] == "secretaria@uji.es"
+
+    def test_should_refuse_to_validate_what_the_state_says_is_not_in_force(self):
+        """**El test del prompt.** Un documento derogado sigue en la cola por su *estado*,
+        así que sellarlo como validado no lo saca de ella: el botón parecería roto. Y lo que
+        pide no es revisarlo, es retirarlo. Se rechaza diciendo eso."""
+        doc = _doc(chatbot_id=uuid.UUID(CHATBOT), estat_vigencia="derogat")
+
+        respuesta, session = _validar(doc)
+
+        assert respuesta.status_code == 409, respuesta.text
+        assert "derogat" in respuesta.text or "retir" in respuesta.text.lower()
+        assert doc.vigencia_validada_el is None
+        session.commit.assert_not_awaited()
+
+    def test_should_404_a_document_that_does_not_exist(self):
+        respuesta, _ = _validar(None)
+
+        assert respuesta.status_code == 404
+
+    def test_should_404_a_document_of_another_chatbot(self):
+        """Mismo criterio que `get_document`: el identificador no basta, tiene que ser de
+        este chatbot. Si no, el de otra organización se validaría por URL."""
+        doc = _doc(chatbot_id=uuid.uuid4())
+
+        respuesta, _ = _validar(doc)
+
+        assert respuesta.status_code == 404
+
+    def test_should_reserve_it_to_an_administrator(self):
+        """Validar la vigencia es un acto editorial que queda **firmado con un nombre**, no
+        una lectura. El resto del router sólo pide sesión y organización porque es anterior;
+        esto no hereda esa laxitud."""
+        doc = _doc(chatbot_id=uuid.UUID(CHATBOT))
+
+        respuesta, session = _validar(doc, role="user")
+
+        assert respuesta.status_code == 403, respuesta.text
+        session.commit.assert_not_awaited()
+
+    def test_should_let_a_superadmin_validate(self):
+        """**El defecto que destapó el navegador, el segundo.** `require_role` es coincidencia
+        exacta, no «este rol o superior», así que `require_role("admin")` devolvía 403 a un
+        superadministrador — que es precisamente quien administra la plataforma. La convención
+        de la casa es nombrar los dos, como `hub_organizaciones_router`."""
+        doc = _doc(chatbot_id=uuid.UUID(CHATBOT))
+
+        respuesta, _ = _validar(doc, role="superadmin")
+
+        assert respuesta.status_code == 200, respuesta.text
