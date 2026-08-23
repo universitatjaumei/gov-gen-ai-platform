@@ -162,3 +162,62 @@ describe('VigenciaPage', () => {
     expect(selector.textContent).toContain('Gerència')
   })
 })
+
+/**
+ * REV.5 — el enlace del documento llevaba a Informes.
+ *
+ * `canonical_url` no siempre es una URL: para los documentos del corpus normativo cargados
+ * desde carpeta es el nombre del fichero (`20260203_UJI_REC_Resolucio....md`). Como es
+ * relativo, el navegador lo resolvía contra la ruta actual y abría una pestaña en
+ * `/hub/20260203_....md`; ninguna ruta casaba, caía en el comodín `*` y `Aterrizaje` redirigía
+ * al primer módulo concedido — que en `RUTA_DEL_MODULO` es `informes`.
+ *
+ * La pantalla no puede saber a qué URL externa apuntar cuando no hay ninguna, así que deja de
+ * fingir que la hay.
+ */
+const CON_RUTA_LOCAL = {
+  total: 10,
+  pendents: 1,
+  documents: [
+    {
+      id: 'doc-3',
+      title: 'Resolució d’assimilació de càrrecs',
+      language: 'va',
+      canonical_url: '20260203_UJI_REC_Resolucio_assimilacio_carrecs.md',
+      id_publicacio: null,
+      estat_vigencia: 'vigent',
+      vigencia_validada_el: null,
+      data_revisio_prevista: null,
+      revisat_per: null,
+      motiu: 'sense_validar',
+    },
+  ],
+}
+
+describe('REV.5 — sólo se enlaza lo que de verdad es un enlace', () => {
+  it('should_not_link_a_document_whose_canonical_url_is_a_file_name', async () => {
+    renderPage(CON_RUTA_LOCAL)
+
+    const titulo = await screen.findByText(/Resolució d’assimilació/)
+    expect(titulo.closest('a')).toBeNull()
+  })
+
+  it('should_still_show_which_file_it_is', async () => {
+    // Dejar de enlazar no puede significar esconder el dato: sin el nombre del fichero no hay
+    // forma de ir a buscarlo.
+    renderPage(CON_RUTA_LOCAL)
+
+    expect(
+      await screen.findByText(/20260203_UJI_REC_Resolucio_assimilacio_carrecs\.md/)
+    ).toBeDefined()
+  })
+
+  it('should_keep_linking_a_real_external_url', async () => {
+    renderPage()
+
+    const titulo = await screen.findByText(/Reglament de la Sindicatura/)
+    const enlace = titulo.closest('a')
+    expect(enlace).not.toBeNull()
+    expect(enlace?.getAttribute('href')).toBe('https://www.uji.es/sindicatura.pdf')
+  })
+})

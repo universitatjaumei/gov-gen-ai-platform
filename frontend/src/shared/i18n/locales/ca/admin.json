@@ -328,6 +328,10 @@
     "language": "Idioma",
     "plataforma": "Plataforma"
   },
+  "no_encontrado": {
+    "texto": "L’adreça a la qual has arribat no correspon a cap pantalla. Comprova l’enllaç, o torna amb el menu de l’esquerra.",
+    "titulo": "Aquesta adreça no existeix"
+  },
   "sin_acceso": {
     "texto": "El teu compte existeix però no té cap mòdul concedit. Demana accés a qui administra la plataforma indicant què necessites: informes, chatbots o curació.",
     "titulo": "Encara no tens accés a cap mòdul"

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { noReintentarSiElServidorYaDecidio } from '@/shared/api/reintentos'
 import { Suspense, lazy } from 'react'
 import { AuthProvider, PrivateRoute } from '@/shared/auth'
-import { RutaDeModulo, Aterrizaje, SinAcceso } from '@/shared/auth/RutaDeModulo'
+import { RutaDeModulo, Aterrizaje, SinAcceso, NoEncontrado } from '@/shared/auth/RutaDeModulo'
 import { AppLayout } from '@/admin/AppLayout'
 import { HubLayout } from '@/admin/HubLayout'
 import { PlataformaLayout } from '@/admin/PlataformaLayout'
@@ -157,7 +157,11 @@ function App() {
                   <Route path="/redaccion/workspaces/:id" element={<WorkspacePage />} />
                 </Route>
               </Route>
-              <Route path="*" element={<Aterrizaje />} />
+              {/* REV.5 — una direccion que no existe se dice, no se redirige. Con `Aterrizaje` aqui,
+                  cualquier URL equivocada acababa en el primer modulo concedido: un 404
+                  disfrazado de redireccion, que es como el enlace de la cola de vigencia
+                  parecia llevar a Informes. La raiz sigue aterrizando; esto no. */}
+              <Route path="*" element={<NoEncontrado />} />
             </Routes>
           </Suspense>
         </AuthProvider>

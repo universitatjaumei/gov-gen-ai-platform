@@ -9,6 +9,18 @@ import type { ChatbotRead, DocumentVigenciaOut } from '@/shared/api/generated/mo
 const MOTIU_ESTAT_NO_VIGENT = 'estat_no_vigent'
 
 /**
+ * Si `canonical_url` es de verdad una dirección a la que ir (REV.5).
+ *
+ * Para los documentos del corpus normativo cargados desde carpeta, `canonical_url` es el nombre
+ * del fichero —`20260203_UJI_REC_Resolucio_assimilacio_carrecs.md`—, no una URL. Sólo `http` y
+ * `https`: un `javascript:` o un `data:` en ese campo se convertiría en un enlace ejecutable
+ * servido desde nuestro propio origen.
+ */
+function esEnlaceExterno(url: string | null | undefined): url is string {
+  return typeof url === 'string' && /^https?:\/\//i.test(url)
+}
+
+/**
  * Cola de validación de vigencia del corpus (A7).
  *
  * El asistente ya advierte cada vez que cita un documento cuya vigencia nadie ha comprobado
@@ -130,18 +142,32 @@ export function VigenciaPage() {
                   {visibles.map(doc => (
                     <tr key={doc.id} className="border-b last:border-0 hover:bg-accent/20">
                       <td className="px-4 py-3 max-w-[380px]">
-                        <a
-                          href={doc.canonical_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 font-medium text-primary hover:underline"
-                          title={doc.canonical_url}
-                        >
-                          <span className="truncate">{doc.title}</span>
-                          <ExternalLink className="w-3 h-3 shrink-0" />
-                        </a>
+                        {esEnlaceExterno(doc.canonical_url) ? (
+                          <a
+                            href={doc.canonical_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 font-medium text-primary hover:underline"
+                            title={doc.canonical_url}
+                          >
+                            <span className="truncate">{doc.title}</span>
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                          </a>
+                        ) : (
+                          /* Sin URL externa no se finge que la hay. Con `href` relativo el
+                             navegador lo resolvía contra la ruta actual, abría una pestaña en
+                             `/hub/<fichero>.md`, no casaba ninguna ruta y el comodín acababa
+                             redirigiendo a Informes. */
+                          <span className="block truncate font-medium" title={doc.canonical_url}>
+                            {doc.title}
+                          </span>
+                        )}
                         <span className="text-xs text-muted-foreground">
-                          {doc.id_publicacio ?? '—'} · {doc.language.toUpperCase()}
+                          {/* El origen del documento, que cuando no es una URL es el nombre
+                              del fichero del corpus: dejar de enlazarlo no puede significar
+                              esconderlo, porque es lo único con lo que ir a buscarlo. */}
+                          {doc.id_publicacio ?? doc.canonical_url ?? '—'} ·{' '}
+                          {doc.language.toUpperCase()}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">

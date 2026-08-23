@@ -328,6 +328,10 @@
     "language": "Idioma",
     "plataforma": "Plataforma"
   },
+  "no_encontrado": {
+    "texto": "La direccion a la que has llegado no corresponde a ninguna pantalla. Comprueba el enlace, o vuelve con el menu de la izquierda.",
+    "titulo": "Esta direccion no existe"
+  },
   "sin_acceso": {
     "texto": "Tu cuenta existe pero no tiene ningun modulo concedido. Pide acceso a quien administra la plataforma indicando que necesitas: informes, chatbots o curacion.",
     "titulo": "Todavia no tienes acceso a ningun modulo"

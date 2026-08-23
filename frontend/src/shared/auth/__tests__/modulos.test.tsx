@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import i18n from '@/shared/i18n'
 import { primeraRutaConcedida, moduloDeLaRuta } from '../useModulos'
-import { RutaDeModulo, Aterrizaje } from '../RutaDeModulo'
+import { RutaDeModulo, Aterrizaje, NoEncontrado } from '../RutaDeModulo'
 import { useGetMeApiV1AuthMeGet } from '@/shared/api/generated/auth/auth'
 
 /**
@@ -90,6 +90,44 @@ describe('INF.7 — una zona sin su módulo no se abre', () => {
   it('should_land_on_the_first_granted_module', async () => {
     conModulos(['informes'])
     pintar('/')
+    await waitFor(() => expect(screen.getByTestId('dentro-de-informes')).toBeDefined())
+  })
+})
+
+/**
+ * REV.5 — una dirección que no existe se dice, no se redirige.
+ *
+ * El comodín `*` montaba `Aterrizaje`, así que cualquier URL equivocada acababa en el primer
+ * módulo concedido. Lo destapó la cola de vigencia: el enlace de un documento del corpus lleva
+ * un nombre de fichero, el navegador lo resolvía como ruta relativa y la pestaña nueva
+ * aterrizaba en Informes. Parecía un fallo de Informes y era un 404 disfrazado.
+ */
+describe('REV.5 — una ruta que no existe', () => {
+  function pintarConComodin(ruta: string) {
+    return render(
+      <MemoryRouter initialEntries={[ruta]}>
+        <Routes>
+          <Route path="/" element={<Aterrizaje />} />
+          <Route path="/redaccion" element={<div data-testid="dentro-de-informes" />} />
+          <Route path="*" element={<NoEncontrado />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('should_say_the_address_does_not_exist_instead_of_redirecting', async () => {
+    conModulos(['informes'])
+    pintarConComodin('/hub/20260203_UJI_REC_Resolucio_assimilacio_carrecs.md')
+
+    await waitFor(() => expect(screen.getByTestId('no-encontrado')).toBeDefined())
+    expect(screen.queryByTestId('dentro-de-informes')).toBeNull()
+  })
+
+  it('should_still_land_on_the_root', async () => {
+    // Aterrizar sigue siendo lo correcto donde no se ha pedido nada concreto.
+    conModulos(['informes'])
+    pintarConComodin('/')
+
     await waitFor(() => expect(screen.getByTestId('dentro-de-informes')).toBeDefined())
   })
 })

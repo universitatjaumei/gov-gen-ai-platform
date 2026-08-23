@@ -21,13 +21,18 @@ const ESTATICOS_ESPERADOS = [
   'HubLayout',
   'CurationLayout',
   'PrivateRoute',
-  // INF.7 — `Aterrizaje` decide a qué módulo entra cada persona y está en la ruta índice **y**
-  // en el comodín, o sea que corre en practicamente toda entrada en frío: cargar por separado
-  // el componente que decide a dónde vas añade un viaje al servidor antes de poder ir a ningún
-  // sitio. `SinAcceso` son diez líneas de texto y vive al lado. Los dos caen en la misma razón
-  // que los envoltorios de arriba.
+  // INF.7 — `Aterrizaje` decide a qué módulo entra cada persona y está en la ruta índice, o sea
+  // que corre en practicamente toda entrada en frío: cargar por separado el componente que
+  // decide a dónde vas añade un viaje al servidor antes de poder ir a ningún sitio. `SinAcceso`
+  // son diez líneas de texto y vive al lado. Los dos caen en la misma razón que los envoltorios
+  // de arriba.
+  //
+  // REV.5 — `NoEncontrado` entra por lo mismo: diez líneas en el mismo módulo, y ahora ocupa el
+  // comodín que antes tenía `Aterrizaje`. Partirlo obligaría a descargar un chunk para decir
+  // que la dirección no existe.
   'Aterrizaje',
   'SinAcceso',
+  'NoEncontrado',
 ]
 
 describe('CAL.5 — carga por ruta', () => {

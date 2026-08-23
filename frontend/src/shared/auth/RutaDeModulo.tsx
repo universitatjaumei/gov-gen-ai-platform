@@ -37,6 +37,29 @@ export function Aterrizaje() {
   return <Navigate to={primeraRutaConcedida(modulos)} replace />
 }
 
+/**
+ * Una dirección que no existe (REV.5).
+ *
+ * El comodín `*` de las rutas montaba `Aterrizaje`, así que **cualquier URL equivocada acababa
+ * en el primer módulo concedido**, sin decir que la dirección no existía. Lo destapó la cola de
+ * vigencia: los documentos del corpus cargados desde carpeta llevan un nombre de fichero en
+ * `canonical_url`, el enlace lo resolvía como ruta relativa y la pestaña nueva aterrizaba en
+ * Informes — que es `informes`, el primero de `RUTA_DEL_MODULO`. Parecía un fallo del módulo de
+ * informes y era un 404 disfrazado de redirección.
+ *
+ * Aterrizar es lo correcto en la raíz, donde no se ha pedido nada concreto. En una ruta que no
+ * existe, no: hay que decirlo.
+ */
+export function NoEncontrado() {
+  const { t } = useTranslation('admin')
+  return (
+    <div className="p-8 max-w-lg" data-testid="no-encontrado">
+      <h1 className="text-lg font-medium mb-2">{t('no_encontrado.titulo')}</h1>
+      <p className="text-sm text-muted-foreground">{t('no_encontrado.texto')}</p>
+    </div>
+  )
+}
+
 /** Sin ningún módulo concedido no hay a dónde ir, y hay que decirlo en vez de rebotar. */
 export function SinAcceso() {
   const { t } = useTranslation('admin')
