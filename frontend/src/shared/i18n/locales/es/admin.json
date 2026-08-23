@@ -329,7 +329,8 @@
     "plataforma": "Plataforma"
   },
   "no_encontrado": {
-    "texto": "La direccion a la que has llegado no corresponde a ninguna pantalla. Comprueba el enlace, o vuelve con el menu de la izquierda.",
+    "texto": "La direccion a la que has llegado no corresponde a ninguna pantalla. Comprueba el enlace por si esta incompleto.",
+    "volver": "Ir al inicio",
     "titulo": "Esta direccion no existe"
   },
   "sin_acceso": {

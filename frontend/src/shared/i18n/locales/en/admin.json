@@ -329,7 +329,8 @@
     "plataforma": "Platform"
   },
   "no_encontrado": {
-    "texto": "The address you reached does not match any screen. Check the link, or go back using the menu on the left.",
+    "texto": "The address you reached does not match any screen. Check the link in case it is incomplete.",
+    "volver": "Go to the start",
     "titulo": "This address does not exist"
   },
   "sin_acceso": {

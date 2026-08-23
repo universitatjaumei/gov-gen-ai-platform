@@ -329,7 +329,8 @@
     "plataforma": "Plataforma"
   },
   "no_encontrado": {
-    "texto": "L’adreça a la qual has arribat no correspon a cap pantalla. Comprova l’enllaç, o torna amb el menu de l’esquerra.",
+    "texto": "L’adreça a la qual has arribat no correspon a cap pantalla. Comprova l’enllaç per si esta incomplet.",
+    "volver": "Anar a l’inici",
     "titulo": "Aquesta adreça no existeix"
   },
   "sin_acceso": {

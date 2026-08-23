@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { primeraRutaConcedida, useModulos } from './useModulos'
 
@@ -56,6 +56,12 @@ export function NoEncontrado() {
     <div className="p-8 max-w-lg" data-testid="no-encontrado">
       <h1 className="text-lg font-medium mb-2">{t('no_encontrado.titulo')}</h1>
       <p className="text-sm text-muted-foreground">{t('no_encontrado.texto')}</p>
+      {/* El comodín vive fuera del layout, así que aquí no hay menú lateral al que remitir:
+          sin esta salida, la pantalla es un callejón del que sólo se sale escribiendo una URL.
+          `Link` y no `<a>`, para no recargar la aplicación entera. */}
+      <Link to="/" className="mt-3 inline-block text-sm text-primary underline">
+        {t('no_encontrado.volver')}
+      </Link>
     </div>
   )
 }
