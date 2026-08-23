@@ -19,6 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from server.app.core.ambito import Ambito, declarar
 from server.app.modules.agents_hub.database.base import HubConfigBase
 
 
@@ -26,6 +27,11 @@ class HubProvider(HubConfigBase):
     """Proveedor dinámico de LLMs (Google, OpenRouter, LMStudio, etc.)."""
 
     __tablename__ = "hub_providers"
+
+    # MT.1 — **global hoy**, y el guardarraíl existe justo por esto: nació así sin que
+    # nadie lo decidiera. MT.2 lo pasa a heredable. Declarar ya lo que MT.2 hará sería
+    # una etiqueta que la base de datos no sostiene.
+    __ambito__ = Ambito.PLATAFORMA
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)  # e.g. google, openrouter, lmstudio
     name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -51,6 +57,9 @@ class HubLLMConfig(HubConfigBase):
     """
 
     __tablename__ = "hub_llm_configs"
+
+    # MT.1 — global hoy; MT.2 lo pasa a heredable (ver `HubProvider`).
+    __ambito__ = Ambito.PLATAFORMA
     __table_args__ = (
         CheckConstraint(
             "purpose IN ('chat', 'embedding', 'rerank')",
@@ -88,6 +97,10 @@ class HubOrganizacion(HubConfigBase):
     """Institución (organización) gestionada por un admin."""
 
     __tablename__ = "hub_organizaciones"
+
+    # MT.1 — el catálogo de organizaciones es de la plataforma: es el eje sobre el que se
+    # acota todo lo demás, no algo acotable.
+    __ambito__ = Ambito.PLATAFORMA
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -171,6 +184,10 @@ class HubVocabularyTerm(HubConfigBase):
     """
 
     __tablename__ = "hub_vocabulary_terms"
+
+    # MT.1 — `organizacion_id` NOT NULL desde ING.0.1: cada organización tiene el suyo y no
+    # hay vocabulario de plataforma que heredar.
+    __ambito__ = Ambito.ORGANIZACION
     __table_args__ = (
         UniqueConstraint(
             "organizacion_id", "axis", "codi", name="uq_vocabulary_org_axis_codi"
@@ -207,6 +224,9 @@ class HubChatbot(HubConfigBase):
     """Chatbot RAG asociado a una organización."""
 
     __tablename__ = "hub_chatbots"
+
+    # MT.1 — un asistente es siempre de una organización.
+    __ambito__ = Ambito.ORGANIZACION
     __table_args__ = (
         CheckConstraint(
             "retrieval_mode IN ('RAG', 'MD_LONG_CONTEXT', 'MD_AGENT_SELECTOR')",
@@ -348,6 +368,10 @@ class HubPromptTemplate(HubConfigBase):
     """Prompt parametrizable por chatbot, slug e idioma."""
 
     __tablename__ = "hub_prompt_templates"
+
+    # MT.1 — no tiene organización: la alcanza por su chatbot, que es lo que acota
+    # `/hub/prompts-catalog` desde REV.13.
+    __ambito__ = declarar(Ambito.DERIVADA, via="chatbot_id")
     __table_args__ = (
         UniqueConstraint(
             "chatbot_id", "slug", "language", name="uq_prompt_chatbot_slug_lang"
@@ -396,6 +420,10 @@ class HubActivityPrompt(HubConfigBase):
 
     __tablename__ = "hub_activity_prompts"
 
+    # MT.1 — `activity` es único global (PRO.2.1). Defendible para una actividad de
+    # plataforma; MT.6 lo hace heredable para que un municipio escriba el suyo.
+    __ambito__ = Ambito.PLATAFORMA
+
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
@@ -432,6 +460,10 @@ class HubUser(HubConfigBase):
     """
 
     __tablename__ = "hub_users"
+
+    # MT.1 — `organizacion_id` nullable: nulo es la cuenta que no pertenece a ninguna, o sea
+    # nivel plataforma. El filtro que falta lo pone MT.9, en la fase 2.
+    __ambito__ = Ambito.HEREDABLE
     __table_args__ = (
         # Dato con dos valores estables, cada uno con consumidor en el código: aquí sí va
         # `CheckConstraint`, mismo criterio que `purpose` en `HubLLMConfig`. Lo que no puede
@@ -491,6 +523,9 @@ class HubPersonalAccessToken(HubConfigBase):
 
     __tablename__ = "hub_personal_access_tokens"
 
+    # MT.1 — va por dueño y no dice sobre qué organización puede actuar. MT.5 le añade el eje.
+    __ambito__ = Ambito.PLATAFORMA
+
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
@@ -536,6 +571,9 @@ class HubTheme(HubConfigBase):
     """
 
     __tablename__ = "hub_themes"
+
+    # MT.1 — la cascada que ya funcionaba, y de la que sale el patrón: nulo = plataforma.
+    __ambito__ = Ambito.HEREDABLE
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -588,6 +626,9 @@ class HubWidgetKey(HubConfigBase):
 
     __tablename__ = "hub_widget_keys"
 
+    # MT.1 — la credencial es de un asistente concreto (SEC.8.5).
+    __ambito__ = declarar(Ambito.DERIVADA, via="chatbot_id")
+
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
@@ -627,6 +668,9 @@ class HubPlatformModule(HubConfigBase):
 
     __tablename__ = "hub_platform_modules"
 
+    # MT.1 — el catálogo de módulos es de la instalación entera.
+    __ambito__ = Ambito.PLATAFORMA
+
     code: Mapped[str] = mapped_column(String(50), primary_key=True)
     label: Mapped[str] = mapped_column(String(120), nullable=False)
     vigente: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -654,6 +698,10 @@ class HubModuleGrant(HubConfigBase):
     """
 
     __tablename__ = "hub_module_grants"
+
+    # MT.1 — hoy una concesión vale en **todas** las organizaciones, porque no nombra
+    # ninguna. MT.5 le añade el eje sin reinterpretar las que ya existen.
+    __ambito__ = Ambito.PLATAFORMA
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     subject_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
