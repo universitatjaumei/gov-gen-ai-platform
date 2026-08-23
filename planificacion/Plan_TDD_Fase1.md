@@ -10093,6 +10093,209 @@ dimensiona la VM en D.4, así que se mide, no se estima.
 
 ---
 
+## Bloque REV (continuación) — REV.11 a REV.13 (PENDIENTE)
+
+Los tres salen del segundo repaso del usuario (2026-08-23), después de cerrar REV.1–REV.10.
+Los tres tienen alcance cerrado y no dependen entre sí.
+
+### Prompt REV.11 (RED/GREEN) — Organizaciones vive bajo Chatbots y su router dice que es de Plataforma
+
+**Modelo sugerido**: **Sonnet** — es el movimiento de PLAT.2 otra vez, con el criterio ya fijado.
+
+**Objetivo**: `hub_organizaciones_router` protege crear, editar y borrar con
+`require_module("plataforma")`, y sólo los endpoints de valores por defecto con `chatbots` (así
+lo dejó PLAT.5 a propósito). Pero la **pantalla** vive en `/hub/organizaciones`, bajo
+`HubLayout`, que exige el módulo `chatbots`.
+
+La consecuencia es un fallo, no una incomodidad: **quien tenga `plataforma` y no `chatbots` no
+puede llegar a la pantalla que su propio módulo protege**. Es literalmente el caso de «Modelos
+LLM» que arregló PLAT.2, que se quedó sin mover porque entonces nadie miró esta pantalla.
+
+Y el argumento de fondo lo dio el usuario: la organización **sirve al resto de los módulos**, así
+que darla de alta es una operación general y no del módulo de asistentes.
+
+```
+# PROMPT REV.11 — La organización no es del módulo Chatbots
+# Deploy: cloud
+
+## RED
+- `test_should_reach_organisations_with_only_the_platform_module`: con `plataforma` y sin
+  `chatbots`, la ruta resuelve y la pantalla pinta.
+- `test_should_not_keep_the_old_route`: `/hub/organizaciones` ya no resuelve. **Sin
+  redirección**, que AGENTS.md prohíbe los shims y el panel es interno.
+- `test_should_keep_the_listing_readable_for_the_chatbots_module`: el `GET` de la lista sigue
+  siendo accesible con `chatbots`, porque lo consumen el selector de `ChatbotsPage`, el de
+  valores por defecto y el de la cabecera (REV.10). Esto ya lo fija PLAT.5; el test se repite
+  aquí porque mover la pantalla es justo la ocasión de romperlo sin querer.
+
+## GREEN
+- La ruta pasa a `/plataforma/organizaciones` y la entrada, de `HUB_SUBNAV` a
+  `PLATAFORMA_SUBNAV`.
+- Las claves i18n se mueven con ella; si alguna queda sin consumidor, la caza `CAL.4`.
+
+## Cierre
+- [ ] Verificado en navegador con las dos combinaciones de módulos
+- [ ] `grep -r "hub/organizaciones"` a cero fuera del historial
+```
+
+### Prompt REV.12 (RED/GREEN) — Un superadministrador no ve el tema de la organización que está mirando
+
+**Modelo sugerido**: **Sonnet** — una regla, un endpoint, y la pieza que falta ya existe.
+
+**Objetivo**: el usuario configuró el logotipo y los colores de la UJI y **no los veía**, y
+preguntó si tenía que reiniciar. No: `GET /hub/themes/resolved` funde el nivel de organización
+**sólo cuando quien pregunta pertenece a una sola**, y en un superadministrador la lista vacía
+significa «todas», así que responde con la marca de plataforma. Está escrito en el docstring y
+es una decisión razonada — con varias organizaciones no hay forma de saber cuál es «su casa».
+
+Lo que ha cambiado es que **ahora sí la hay**: REV.10 puso una organización elegida en la
+cabecera. El endpoint puede respetarla.
+
+```
+# PROMPT REV.12 — La marca que se ve es la de la organización que se está mirando
+# Deploy: cloud
+
+## RED
+- `test_should_resolve_the_theme_of_the_organisation_asked_for`: con `?organizacion=<id>`, un
+  superadministrador recibe la cascada plataforma → esa organización.
+- `test_should_refuse_an_organisation_the_caller_cannot_see`: un admin que pide otra
+  organización recibe 403, **no** la marca de plataforma. Devolver algo distinto de lo pedido
+  esconde el fallo de permisos.
+- `test_should_keep_answering_the_platform_mark_without_the_parameter`: sin parámetro, el
+  comportamiento de hoy, que es lo que consume el widget y el panel de quien no elige.
+
+## GREEN
+- Parámetro opcional en `/hub/themes/resolved`, validado con `assert_org_access`.
+- `useMarca` y `useColoresDelPanel` (REV.9) lo pasan desde `useOrganizacionElegida` (REV.10).
+- La pantalla de identidad visual dice, en el nivel «Organización», que lo que se está
+  editando es lo que verá quien pertenezca a ella — y el superadministrador, si la elige
+  arriba.
+
+## Cierre
+- [ ] Verificado en navegador: elegir UJI en la cabecera y ver su logotipo en el panel
+```
+
+### Prompt REV.13 (RED/GREEN) — Los prompts, en un sitio desde el que se vean todos
+
+**Modelo sugerido**: **Opus** — hay que unir dos modelos distintos sin fingir que son el mismo.
+
+**Objetivo**: hay dos pantallas y el usuario pregunta, con razón, por qué. La respuesta es que
+son **dos modelos distintos**, no el mismo dato en dos sitios:
+
+| Pantalla | Tabla | Ámbito |
+|---|---|---|
+| Chatbots → «Prompts del sistema» | `HubPromptTemplate` | Cuelga de **un chatbot** (`chatbot_id` NOT NULL), por idioma y versionado |
+| Plataforma → «Prompts de actividad» | `HubActivityPrompt` | `activity` **único global**, sin organización ni chatbot |
+
+Que en Plataforma sólo salgan los de Informes es correcto hoy: el catálogo tiene cuatro
+actividades y las cuatro son de ese módulo (REV.7 les puso el módulo encima). Los prompts de
+chatbot no están ahí porque **no son actividades**.
+
+Lo que pidió el usuario es la segunda opción que se le ofreció: **una pantalla desde la que se
+consulten, filtren y editen todos**.
+
+```
+# PROMPT REV.13 — Todos los prompts, con su ámbito a la vista
+# Deploy: cloud
+
+## RED
+- `test_should_list_both_kinds_with_their_scope`: la pantalla de plataforma lista actividades
+  Y plantillas de chatbot, cada una diciendo de qué es (plataforma / asistente «X»).
+- `test_should_filter_by_scope_and_by_chatbot`: el filtro de REV.7 gana el eje de ámbito.
+- `test_should_edit_a_chatbot_template_from_here`: editar arrastra el `chatbot_id`, que es lo
+  que hace que la plantilla exista. **Este es el test que importa**: sin él, la pantalla
+  unificada sería un listado bonito que no deja tocar la mitad de lo que enseña.
+- `test_should_not_offer_a_language_for_an_activity`: una actividad no tiene idioma y una
+  plantilla sí. Unir las dos vistas no puede significar inventarle campos a una de ellas.
+
+## GREEN
+- Un endpoint de sólo lectura que agrega los dos orígenes con un `ambito` explícito; **la
+  edición sigue yendo a su router**, que es donde vive la regla de cada uno.
+- La pantalla de Chatbots se queda como atajo (misma pantalla, filtro fijado a ese chatbot).
+
+## Cierre
+- [ ] Verificado en navegador editando una plantilla de chatbot desde Plataforma
+```
+
+---
+
+## Bloque MT — Multitenencia real: qué está aislado y qué no (PENDIENTE, planificado el 2026-08-23)
+
+Nace de una pregunta del usuario que vale más que los tres prompts de arriba: «cambio de
+organización y sigo viendo los mismos proveedores y modelos, las mismas personas, los mismos
+chatbots, los mismos prompts». El objetivo del diseño es que **una Diputación pueda desplegar
+una instancia por municipio**, con un superadministrador que da de alta organizaciones y un
+administrador por organización cuyas personas sólo ven lo suyo.
+
+### Lo que la auditoría del 2026-08-23 encontró
+
+**Lo que sí está bien** y conviene no tocar: el **núcleo operativo** está acotado, unas veces por
+`organizacion_id` y otras por el camino `chatbot_id` / `site_id` — chatbots, corpus, ingesta,
+vigencia, curación, temas, vocabulario, interacciones, feedback, escenarios de prueba, chat y
+cuotas—. Doce routers pasan por la capa de tenencia y `test_tenant_isolation.py` lo vigila. Eso
+es lo que filtraría contenido **entre municipios**, y no lo hace.
+
+**Lo que no**, con el detalle medido:
+
+1. **Modelos y proveedores son globales.** `hub_providers` (4 filas, y una de sus columnas es
+   `api_key`) y `hub_llm_configs` (7 filas repartidas en tres niveles) no tienen organización ni
+   camino hacia una. Una sola credencial para todos: en el modelo Diputación→municipios eso es
+   incorrecto por coste —el consumo de un municipio se factura al contrato de otro— y por
+   protección de datos, porque los prompts de un ayuntamiento viajan por el contrato ajeno.
+   `get_model_for_tier(tier, provider)` no recibe organización, y lo llaman **8 ficheros**.
+2. **El módulo Informes no tiene dimensión de organización, en absoluto.** `owner_kind` admite
+   `user`, `platform` y `superadmin`: **no existe `organizacion`**. Una plantilla es de una
+   persona o de todo el mundo. Son **51 endpoints y 7 modelos**.
+3. **Personas: el dato está y el filtro no.** `hub_users.organizacion_id` existe con su clave
+   ajena; `list_users` no filtra y además es sólo de superadministrador, así que **un
+   administrador no puede gestionar a la gente de su propia organización**.
+4. **Concesiones de módulo y tokens van por sujeto, sin organización.** Una concesión dice
+   «informes», no «informes en el ayuntamiento de X».
+5. **Prompts de actividad, globales por diseño.** Defendible para actividades de plataforma;
+   discutible cuando un municipio quiera su propia redacción.
+6. **El superadministrador lo ve todo y el selector no filtra.** `scope_query_to_orgs` no acota a
+   un superadministrador, **y eso es correcto como permiso**. Lo que falta es lo otro: una
+   **vista** que diga «ahora estoy trabajando sobre Vila-real». REV.10 puso el selector; nadie lo
+   consume todavía para filtrar listados.
+
+### El corte: lo que exige migración va antes del piloto, lo que es vista va después
+
+El piloto de la UJI es de **una sola organización**, así que nada de esto le afecta en
+funcionamiento. Lo que sí le afecta es el **orden**: añadir una columna a una tabla vacía es
+gratis, y añadirla cuando el piloto lleva meses de informes firmados y corpus cargado es una
+migración de datos con riesgo. De ahí el corte.
+
+#### MT fase 1 — el esquema (ANTES del piloto). 6–8 prompts
+
+Todo lo que después costaría una migración sobre datos vivos. **El comportamiento no cambia**:
+`organizacion_id` nulo significa «nivel plataforma» y se hereda, igual que la cascada de temas,
+así que el piloto sigue funcionando exactamente como hoy.
+
+- `organizacion_id` nullable en `hub_providers` y `hub_llm_configs`, con resolución en cascada
+  organización → plataforma. Es el único cambio con efecto real, y toca los 8 llamadores de
+  `get_model_for_tier`.
+- `organizacion` como valor de `owner_kind` y `organizacion_id` en `hub_report_templates` y
+  `hub_workspaces`.
+- Organización en `hub_module_grants` y `hub_personal_access_tokens`.
+- `organizacion_id` nullable en `hub_activity_prompts`, con la misma herencia.
+- La regla escrita **una vez** —«nulo es plataforma y se hereda»— y un guardarraíl que exija que
+  toda tabla nueva de configuración declare su ámbito, para no repetir esta auditoría.
+
+#### MT fase 2 — la vista y los permisos (DESPUÉS del piloto). 8–10 prompts
+
+- El selector de la cabecera filtra los listados de un superadministrador. Filtro, no permiso:
+  seguir viéndolo todo es correcto, verlo todo **a la vez** es lo que estorba.
+- Un administrador gestiona a las personas de su organización (hoy es sólo de superadministrador).
+- Pantallas de modelos, plantillas y prompts con su nivel elegible.
+- Alta de organización con su administrador, que es el flujo que describe el usuario.
+
+### Lo que este bloque NO hace, y hay que decirlo
+
+No convierte la instalación en multiinstancia: sigue siendo **una base de datos con
+organizaciones dentro**. Si una Diputación exige separación física por municipio —cada uno su
+base—, eso es el modo `edge` de la frontera que ya describe `AGENTS.md`, y es otra conversación.
+Lo que este bloque garantiza es que el modelo lógico aguante, que es el requisito de hoy.
+
 ## Fase Deploy — Despliegue Staging GCP (Subfase 1.B, PENDIENTE)
 
 > Nota: El Prompt D.6 (Edge node híbrido) pertenece a la Fase 3 y se detalla en Plan_TDD_Fase3.md.
