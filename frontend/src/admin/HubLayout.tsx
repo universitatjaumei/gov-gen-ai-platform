@@ -24,16 +24,19 @@ export function HubLayout() {
 
   return (
     <div className="space-y-4">
-      <nav aria-label={t('admin:hub.subnav_aria')} className="flex gap-1 border-b pb-2 flex-wrap">
+      <nav aria-label={t('admin:hub.subnav_aria')} className="flex gap-1 border-b flex-wrap">
         {HUB_SUBNAV.map(({ key, path }) => (
           <NavLink
             key={path}
             to={path}
+            /* REV.3 — pestaña subrayada, no recuadro. El `-mb-px` sube el subrayado sobre la
+               línea del `<nav>` para que sean la misma, y `border-transparent` en las
+               inactivas evita que la barra entera baile al cambiar de pestaña. */
             className={({ isActive }) =>
-              `px-3 py-1.5 rounded-md text-sm transition-colors ${
+              `-mb-px border-b-2 px-3 py-1.5 text-sm transition-colors ${
                 isActive
-                  ? 'bg-accent text-accent-foreground font-medium'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                  ? 'border-current font-semibold text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
               }`
             }
           >

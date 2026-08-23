@@ -70,11 +70,16 @@ export function AppLayout() {
           <NavLink
             key={key}
             to={path}
+            /* REV.3 — negrita y barra lateral del color del propio texto, sin relleno. El
+               recuadro anterior (`bg-sidebar-accent`) metía un segundo azul dentro del azul
+               de la marca y competía con el contenido. La barra se reserva también en los
+               inactivos con `border-transparent`: si sólo la tuviera el activo, cambiar de
+               sección desplazaría el menú entero dos píxeles. */
             className={({ isActive }) =>
-              `px-3 py-2 rounded-md text-sm transition-colors ${
+              `border-l-2 px-3 py-2 text-sm transition-colors ${
                 isActive
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                  : 'text-sidebar-foreground/80 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/60'
+                  ? 'border-current font-semibold text-sidebar-primary'
+                  : 'border-transparent text-sidebar-foreground/80 hover:text-sidebar-foreground'
               }`
             }
           >

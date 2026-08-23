@@ -29,16 +29,18 @@ export function PlataformaLayout() {
 
   return (
     <div className="space-y-4">
-      <nav aria-label={t('plataforma.subnav_aria')} className="flex gap-1 border-b pb-2 flex-wrap">
+      <nav aria-label={t('plataforma.subnav_aria')} className="flex gap-1 border-b flex-wrap">
         {PLATAFORMA_SUBNAV.map(({ key, path }) => (
           <NavLink
             key={path}
             to={path}
+            /* REV.3 — mismo criterio que la subnav de Chatbots: subrayado del color del texto
+               en vez de recuadro, y la barra reservada en las inactivas. */
             className={({ isActive }) =>
-              `px-3 py-1.5 rounded-md text-sm transition-colors ${
+              `-mb-px border-b-2 px-3 py-1.5 text-sm transition-colors ${
                 isActive
-                  ? 'bg-accent text-accent-foreground font-medium'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                  ? 'border-current font-semibold text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
               }`
             }
           >
