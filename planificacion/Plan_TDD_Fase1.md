@@ -10256,38 +10256,250 @@ es lo que filtraría contenido **entre municipios**, y no lo hace.
 6. **El superadministrador lo ve todo y el selector no filtra.** `scope_query_to_orgs` no acota a
    un superadministrador, **y eso es correcto como permiso**. Lo que falta es lo otro: una
    **vista** que diga «ahora estoy trabajando sobre Vila-real». REV.10 puso el selector; nadie lo
-   consume todavía para filtrar listados.
 
-### El corte: lo que exige migración va antes del piloto, lo que es vista va después
+### Decisión del usuario (2026-08-23): la fase 1 va ANTES del piloto
 
-El piloto de la UJI es de **una sola organización**, así que nada de esto le afecta en
-funcionamiento. Lo que sí le afecta es el **orden**: añadir una columna a una tabla vacía es
-gratis, y añadirla cuando el piloto lleva meses de informes firmados y corpus cargado es una
-migración de datos con riesgo. De ahí el corte.
+El corte no es por importancia, sino **por migración**. Añadir una columna a una tabla vacía es
+gratis; añadirla cuando el piloto lleva meses de informes firmados y corpus cargado es una
+migración de datos con riesgo. El piloto de la UJI es de una sola organización, así que en
+funcionamiento nada de esto le afecta: lo único que le afecta es el orden.
 
-#### MT fase 1 — el esquema (ANTES del piloto). 6–8 prompts
+**Invariante de la fase 1, y es lo que la hace segura**: `organizacion_id` nulo significa «nivel
+plataforma» y se hereda, igual que la cascada de temas. Con todas las filas existentes a nulo, el
+piloto se comporta **exactamente** como hoy. Si la Diputación no llega nunca, la fase 1 no habrá
+estorbado a nadie y no se habrán construido pantallas para un cliente que no existe.
 
-Todo lo que después costaría una migración sobre datos vivos. **El comportamiento no cambia**:
-`organizacion_id` nulo significa «nivel plataforma» y se hereda, igual que la cascada de temas,
-así que el piloto sigue funcionando exactamente como hoy.
+**Lo que ya está hecho y no hay que planificar**: las cuotas. `hub_usage_counters.subject_type`
+admite `organizacion` desde SEC.4, y hay tests que lo ejercitan (`test_should_429_when_
+organizacion_monthly_quota_exceeded`). No se toca.
 
-- `organizacion_id` nullable en `hub_providers` y `hub_llm_configs`, con resolución en cascada
-  organización → plataforma. Es el único cambio con efecto real, y toca los 8 llamadores de
-  `get_model_for_tier`.
-- `organizacion` como valor de `owner_kind` y `organizacion_id` en `hub_report_templates` y
-  `hub_workspaces`.
-- Organización en `hub_module_grants` y `hub_personal_access_tokens`.
-- `organizacion_id` nullable en `hub_activity_prompts`, con la misma herencia.
-- La regla escrita **una vez** —«nulo es plataforma y se hereda»— y un guardarraíl que exija que
-  toda tabla nueva de configuración declare su ámbito, para no repetir esta auditoría.
+---
 
-#### MT fase 2 — la vista y los permisos (DESPUÉS del piloto). 8–10 prompts
+#### MT fase 1 — el esquema (ANTES del piloto). 7 prompts
 
-- El selector de la cabecera filtra los listados de un superadministrador. Filtro, no permiso:
-  seguir viéndolo todo es correcto, verlo todo **a la vez** es lo que estorba.
-- Un administrador gestiona a las personas de su organización (hoy es sólo de superadministrador).
-- Pantallas de modelos, plantillas y prompts con su nivel elegible.
-- Alta de organización con su administrador, que es el flujo que describe el usuario.
+##### Prompt MT.1 (RED/GREEN) — La regla del ámbito, escrita una vez y vigilada
+
+**Modelo sugerido**: **Opus** — es la pieza de la que dependen las seis siguientes, y un
+guardarraíl mal planteado da falsos positivos y acaba desactivado.
+
+**Objetivo**: la cascada «nulo = plataforma, se hereda» ya existe **tres veces** —temas
+(`hub_themes`), valores por defecto de RAG (`HubOrganizacion.default_*`) y vocabulario— y cada
+una la implementa a su manera. Antes de añadirla a cinco tablas más, se escribe una vez.
+
+Y se pone un guardarraíl que **obligue a toda tabla nueva de configuración a declarar su
+ámbito**, que es lo que habría evitado esta auditoría: `hub_llm_configs` nació global sin que
+nadie lo decidiera, simplemente porque no había dónde decir lo contrario.
+
+```
+# PROMPT MT.1 — Que el ámbito de una tabla sea una decisión y no un olvido
+# Deploy: shared (la regla la usan cloud y edge)
+
+## RED
+- `test_should_resolve_the_organisation_level_over_the_platform_one`: dada una fila de
+  organización y otra de plataforma, gana la de organización campo a campo.
+- `test_should_fall_back_to_the_platform_row`: sin fila de organización, la de plataforma.
+- `test_should_not_merge_across_organisations`: la fila de otra organización no participa.
+  **Este es el test que importa**: una resolución que ordene mal el `ORDER BY` puede devolver
+  la configuración del municipio de al lado sin que nada falle.
+- `test_should_declare_the_scope_of_every_config_table`: recorre los modelos de
+  `HubConfigBase` y exige que cada uno declare su ámbito —`plataforma`, `organizacion` o
+  `heredable`— en un atributo de clase. Una tabla nueva sin declararlo pone el test rojo.
+
+## GREEN
+- `core/tenancy/ambito.py` con el resolvedor y el enum de ámbitos.
+- Las tres cascadas que ya existen **no se reescriben aquí**: se anota cuál sustituirá a cuál
+  y se hace en su prompt, para que este no toque comportamiento.
+
+## Cierre
+- [ ] El guardarraíl caza una tabla sintética sin ámbito declarado
+```
+
+##### Prompt MT.2 (RED/GREEN) — Proveedores y modelos dejan de ser globales
+
+**Modelo sugerido**: **Opus** — es el único cambio de la fase con efecto real, y toca la
+resolución que usan los tres módulos.
+
+**Objetivo**: `hub_providers` tiene cuatro filas y una de sus columnas es `api_key`. Una sola
+credencial para todos significa que, en el modelo Diputación→municipios, el consumo de un
+ayuntamiento se factura al contrato de otro y sus prompts viajan por ese contrato. No es
+incomodidad: es coste mal atribuido y protección de datos.
+
+`hub_llm_configs` es lo mismo un escalón arriba: siete filas en tres niveles, un juego para todos.
+
+```
+# PROMPT MT.2 — Cada organización con su proveedor y sus niveles
+# Deploy: cloud (configuración) — la consume edge por ConfigProvider
+
+## RED
+- `test_should_prefer_the_organisation_provider_over_the_platform_one`
+- `test_should_fall_back_to_the_platform_provider`: sin proveedor propio, el de plataforma.
+  Es lo que hace que el piloto siga funcionando sin tocar una fila.
+- `test_should_not_leak_an_api_key_across_organisations`: **el test que justifica el prompt**.
+  Resolver para la organización A nunca puede devolver la credencial de B.
+- `test_should_keep_one_default_per_tier_and_scope`: la unicidad de `is_default` pasa a ser
+  por (nivel, ámbito). Hoy es global y dos organizaciones no podrían tener cada una su
+  modelo por defecto.
+- `test_should_migrate_existing_rows_to_the_platform_level`: las 11 filas existentes quedan
+  a nulo, que es «plataforma».
+
+## GREEN
+- Migración: `organizacion_id` nullable en las dos tablas, índice, y la restricción única de
+  `is_default` reescrita por (tier, organizacion_id).
+- El resolvedor de MT.1 aplicado en `ConfigProvider`.
+
+## Cierre
+- [ ] `alembic downgrade` limpio
+- [ ] Suite completa: el comportamiento del piloto no cambia
+```
+
+##### Prompt MT.3 (RED/GREEN) — La organización llega hasta el modelo
+
+**Modelo sugerido**: **Opus** — ocho llamadores y tres módulos; el riesgo es dejar uno con la
+resolución vieja y no enterarse.
+
+**Objetivo**: `get_model_for_tier(tier, config_provider)` **no recibe la organización**, así que
+MT.2 no serviría de nada: la cascada estaría en la base y nadie le diría contra qué organización
+resolver. Lo llaman ocho ficheros —ingesta, copiloto, scripts, borradores, espacios de trabajo,
+el despachador de rastreo y el propio `model_factory`—.
+
+```
+# PROMPT MT.3 — Quien pide un modelo dice para quién
+# Deploy: shared
+
+## RED
+- `test_should_require_the_organisation_to_resolve_a_tier`: la firma la exige. No un
+  parámetro opcional con defecto: un opcional se olvida y el fallo es silencioso —resuelve
+  plataforma cuando debía resolver la organización— y eso no lo caza ningún test.
+- Un test por llamador que fije **de dónde** saca cada uno la organización: la ingesta del
+  chatbot, los de Informes del espacio de trabajo, el rastreo del sitio.
+- `test_should_have_no_caller_left_on_the_old_signature`: `grep` a cero.
+
+## GREEN
+- Firma nueva y los ocho llamadores.
+
+## Cierre
+- [ ] Suite completa verde con el comportamiento de hoy (todo a nivel plataforma)
+```
+
+##### Prompt MT.4 (RED/GREEN) — Informes gana la dimensión que no tiene
+
+**Modelo sugerido**: **Opus** — 51 endpoints y 7 modelos; hay que decidir qué se acota ahora y
+qué espera a la fase 2 sin dejar el esquema a medias.
+
+**Objetivo**: `owner_kind` admite `user`, `platform` y `superadmin`. **No existe
+`organizacion`**: una plantilla es de una persona o de todo el mundo. Es la carencia más
+profunda de las seis, porque no es un filtro que falte sino una dimensión que no está.
+
+Aquí se añade **sólo el esquema**: la UI y el filtrado van en la fase 2. Con `organizacion_id`
+nulo, las 23 plantillas de hoy siguen siendo de plataforma o de su persona, como ahora.
+
+```
+# PROMPT MT.4 — Una plantilla puede ser de una organización
+# Deploy: edge (los informes son datos del cliente)
+
+## RED
+- `test_should_accept_organizacion_as_an_owner_kind`
+- `test_should_reject_an_organisation_owner_without_organizacion_id`: coherencia entre las
+  dos columnas, en el modelo y en la base. Sin esto queda una plantilla «de organización» que
+  no dice de cuál.
+- `test_should_leave_existing_templates_untouched`: las 23 filas y sus versiones, intactas.
+- `test_should_carry_the_organisation_into_the_workspace`: un informe hecho con una plantilla
+  de organización pertenece a esa organización, no a la de quien lo abre.
+
+## GREEN
+- Migración sobre `hub_report_templates` y `hub_workspaces`; `CheckConstraint` del vocabulario
+  de `owner_kind` ampliado.
+
+## Cierre
+- [ ] Los 51 endpoints siguen respondiendo igual (fase 1 no cambia comportamiento)
+```
+
+##### Prompt MT.5 (RED/GREEN) — Una concesión dice en qué organización
+
+**Modelo sugerido**: **Sonnet** — el modelo de IDE.5 ya distingue sujetos; esto añade un eje.
+
+**Objetivo**: una concesión dice «informes», no «informes en el ayuntamiento de X». Con una
+organización da igual; con veinte, conceder un módulo a un grupo del IdP se lo concede en todas.
+Lo mismo con los tokens: `hub_personal_access_tokens` va por dueño y no dice sobre qué
+organización puede actuar.
+
+```
+# PROMPT MT.5 — El permiso dice dónde
+# Deploy: cloud
+
+## RED
+- `test_should_grant_a_module_only_in_one_organisation`
+- `test_should_keep_a_null_organisation_meaning_everywhere`: las concesiones de hoy siguen
+  valiendo en todas, que es lo que significan ahora. Reinterpretarlas en silencio sería
+  cambiarle los permisos a alguien sin decírselo.
+- `test_should_scope_a_token_to_an_organisation`
+- `test_should_refuse_a_token_acting_outside_its_organisation`: **el test que importa**, y va
+  contra el resolvedor real, no contra el DTO.
+
+## GREEN
+- `organizacion_id` nullable en las dos tablas y en la resolución de módulos.
+```
+
+##### Prompt MT.6 (RED/GREEN) — Los prompts de actividad, heredables
+
+**Modelo sugerido**: **Sonnet** — el patrón ya está en MT.1 y el modelo es pequeño.
+
+**Objetivo**: `HubActivityPrompt.activity` es único global. Es defendible para una actividad de
+plataforma y deja de serlo en cuanto un municipio quiera su propia redacción — que es
+exactamente lo que esta tabla existe para permitir, sólo que un escalón más arriba de lo que
+hace falta.
+
+```
+# PROMPT MT.6 — Un municipio puede escribir su propio prompt
+# Deploy: cloud
+
+## RED
+- La unicidad pasa de `activity` a `(activity, organizacion_id)`.
+- `test_should_inherit_the_platform_prompt`, `test_should_override_it_per_organisation`.
+- `test_should_keep_the_code_default_as_the_last_resort`: la cadena entera —organización →
+  plataforma → código— sin perder lo que PRO.2.1 fijó: el texto del código no se copia.
+```
+
+##### Prompt MT.7 — El inventario del ámbito, escrito donde se lee
+
+**Modelo sugerido**: **Sonnet** — documentación con un test detrás.
+
+**Objetivo**: cerrar la fase con `docs/MULTITENENCIA.md`: qué está acotado, por qué camino, y
+qué es deliberadamente de plataforma. Lo que hoy hay que reconstruir leyendo 31 tablas y 32
+routers, que es lo que costó esta auditoría.
+
+```
+# PROMPT MT.7 — Que la próxima auditoría dure diez minutos
+- Tabla por tabla: ámbito, camino hasta la organización, y router que lo aplica.
+- Enlazado desde AGENTS.md, junto a la frontera edge/cloud.
+- El test de MT.1 comprueba que el documento nombra todas las tablas de configuración.
+```
+
+---
+
+#### MT fase 2 — la vista y los permisos (DESPUÉS del piloto). 9 prompts
+
+No se detallan al nivel de los de arriba porque **dependen de cómo quede el piloto**: si la UJI
+acaba con una sola organización y sin administradores delegados, la mitad de estas pantallas
+cambian de forma. Se enumeran para que el alcance esté acotado y no aparezcan de sorpresa.
+
+- **MT.8** — El selector de la cabecera **filtra** los listados de un superadministrador. Filtro
+  y no permiso: seguir pudiendo verlo todo es correcto, verlo todo **a la vez** es lo que estorba.
+- **MT.9** — Un administrador gestiona a las personas de su organización. Hoy `list_users` es
+  sólo de superadministrador, así que un administrador no puede dar de alta a su propia gente.
+- **MT.10** — Pantalla de modelos y proveedores con el nivel elegible, y la credencial de cada
+  organización guardada como tal.
+- **MT.11** — Plantillas de informe con nivel de organización en la interfaz.
+- **MT.12** — Prompts (de actividad y de chatbot) con su nivel, sobre la pantalla unificada de
+  REV.13.
+- **MT.13** — Alta de organización **con su administrador**, que es el flujo que describe el
+  usuario: el superadministrador da de alta la organización y designa quién la administra.
+- **MT.14** — Concesiones por organización en la pantalla de módulos.
+- **MT.15** — Cuotas por organización en la interfaz. El modelo ya las soporta desde SEC.4; falta
+  poder verlas y fijarlas sin tocar la base.
+- **MT.16** — **Prueba de aislamiento de punta a punta con dos organizaciones**: dos
+  administradores, dos corpus, dos juegos de modelos, y la comprobación de que ninguno ve nada
+  del otro. Es el prompt que cierra el bloque y el único que demuestra que lo demás sirvió.
 
 ### Lo que este bloque NO hace, y hay que decirlo
 
