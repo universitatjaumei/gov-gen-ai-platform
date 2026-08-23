@@ -149,15 +149,43 @@ pause
 
 echo.
 echo ------------------------------------------------------------
-echo   LO QUE SIGUE ABIERTO
+echo   REV.11 a REV.13 - lo que quedaba abierto, ya cerrado
 echo ------------------------------------------------------------
 echo.
-echo Del mismo repaso, planteado por ti y NO abordado todavia:
-echo   - Organizaciones (crear/borrar) vive bajo Chatbots y deberia
-echo     estar en Plataforma. Su router ya exige "plataforma".
-echo   - El tema de una organizacion no lo ve un superadministrador
-echo     (ver el aviso del punto 2).
-echo   - Los prompts estan en dos pantallas con dos modelos distintos.
+echo Los tres los verifique yo en el navegador contra el servidor
+echo real. Aqui solo esta lo que no puedo juzgar yo.
+echo.
+echo REV.11 - Organizaciones esta ahora en Plataforma:
+echo   http://localhost:5173/plataforma/organizaciones
+echo   La ruta vieja /hub/organizaciones ya no existe.
+echo.
+echo REV.13 - Los prompts, todos en una pantalla:
+echo   http://localhost:5173/plataforma/prompts-actividad
+echo   El selector "Ambito" separa los de plataforma (actividades)
+echo   de los de asistente (prompt base + plantillas).
+echo   Ojo: en esta base hay CERO plantillas por actividad; lo que
+echo   se ve de cada asistente es su prompt base.
+echo.
+pause
+
+echo.
+echo ------------------------------------------------------------
+echo   LO UNICO QUE NECESITA TU JUICIO (REV.12)
+echo ------------------------------------------------------------
+echo.
+echo El logotipo y los colores de la UJI ya llegan al panel: eso
+echo lo comprobe. Lo que no puedo valorar yo es si la identidad
+echo visual resultante es la correcta.
+echo.
+echo   1. Entra en http://localhost:5173/plataforma/identidad-visual
+echo   2. Con la organizacion "Universitat Jaume I" elegida en el
+echo      selector de la barra lateral, mira el lateral y la cabecera.
+echo   3. Comprueba a ojo:
+echo      - El logotipo se lee bien sobre el fondo del lateral.
+echo      - El azul es el institucional, no uno parecido.
+echo      - El contraste del texto sobre el lateral es suficiente.
+echo   4. Cambia el selector a otra organizacion: la marca debe
+echo      cambiar SIN recargar la pagina.
 echo.
 pause
 
