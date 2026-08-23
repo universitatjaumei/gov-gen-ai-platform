@@ -14,6 +14,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import esAdmin from '@/shared/i18n/locales/es/admin.json'
 import { scopesForRole } from '@/admin/pages/AccessTokensPage'
 import { HubLayout } from '@/admin/HubLayout'
+import { PlataformaLayout } from '@/admin/PlataformaLayout'
 
 describe('ROL.2 — i18n keys', () => {
   it('should_use_i18n_keys_not_hardcoded_role_labels', () => {
@@ -35,6 +36,23 @@ describe('ROL.2 — i18n keys', () => {
 
 describe('ROL.2 — routing / navegación por Organización', () => {
   it('should_expose_organizaciones_route_not_clients', () => {
+    // Lo que fija ROL.2 es el **renombrado**: «clients» desapareció y la entrada se llama
+    // Organizaciones. Dónde vive esa entrada es otra decisión, y REV.11 la movió a Plataforma
+    // porque su router ya exigía ese módulo para crear y borrar.
+    const { container } = render(
+      <MemoryRouter initialEntries={['/plataforma/organizaciones']}>
+        <Routes>
+          <Route path="/plataforma" element={<PlataformaLayout />}>
+            <Route path="organizaciones" element={<div>stub</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(container.querySelector('a[href="/plataforma/organizaciones"]')).not.toBeNull()
+    expect(container.querySelector('a[href="/hub/clients"]')).toBeNull()
+  })
+
+  it('should_not_leave_a_clients_entry_in_the_chatbots_subnav', () => {
     const { container } = render(
       <MemoryRouter initialEntries={['/hub/chatbots']}>
         <Routes>
@@ -44,8 +62,8 @@ describe('ROL.2 — routing / navegación por Organización', () => {
         </Routes>
       </MemoryRouter>,
     )
-    expect(container.querySelector('a[href="/hub/organizaciones"]')).not.toBeNull()
     expect(container.querySelector('a[href="/hub/clients"]')).toBeNull()
+    expect(container.querySelector('a[href="/hub/organizaciones"]')).toBeNull()
   })
 })
 

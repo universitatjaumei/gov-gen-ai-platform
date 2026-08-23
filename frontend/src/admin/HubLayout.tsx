@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 
 const HUB_SUBNAV = [
   { key: 'hub.chatbots', path: '/hub/chatbots' },
-  { key: 'hub.organizaciones', path: '/hub/organizaciones' },
   // PLAT.3 — los `default_*` de RAG salieron de la pantalla de Organizaciones: son
   // configuración de este módulo aplicada a una organización, no identidad del inquilino.
   { key: 'hub.valores_por_defecto_nav', path: '/hub/valores-por-defecto' },

@@ -2,6 +2,11 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
 const PLATAFORMA_SUBNAV = [
+  // REV.11 — la organización sirve al resto de los módulos, así que darla de alta es una
+  // operación general y no del módulo de asistentes. Su router ya exigía `plataforma` para
+  // crear y borrar (PLAT.5), así que quien tenía ese módulo y no `chatbots` no llegaba a la
+  // pantalla que su propio módulo protege: el caso de «Modelos LLM» de PLAT.2 otra vez.
+  { key: 'hub.organizaciones', path: '/plataforma/organizaciones' },
   { key: 'plataforma.modelos', path: '/plataforma/modelos' },
   { key: 'plataforma.prompts_actividad', path: '/plataforma/prompts-actividad' },
   { key: 'plataforma.tokens', path: '/plataforma/tokens' },

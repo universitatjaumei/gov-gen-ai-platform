@@ -108,7 +108,6 @@ function App() {
                   <Route path="/hub" element={<RutaDeModulo modulo="chatbots"><HubLayout /></RutaDeModulo>}>
                     <Route index element={<Navigate to="/hub/chatbots" replace />} />
                     <Route path="chatbots" element={<ChatbotsPage />} />
-                    <Route path="organizaciones" element={<OrganizacionesPage />} />
                     <Route path="valores-por-defecto" element={<ValoresPorDefectoPage />} />
                     <Route path="documents" element={<DocumentsPage />} />
                     <Route path="vigencia" element={<VigenciaPage />} />
@@ -126,6 +125,10 @@ function App() {
                       Sin redirecciones desde las rutas viejas, que AGENTS.md prohíbe los shims. */}
                   <Route path="/plataforma" element={<RutaDeModulo modulo="plataforma"><PlataformaLayout /></RutaDeModulo>}>
                     <Route index element={<Navigate to="/plataforma/modelos" replace />} />
+                    {/* REV.11 — sale de /hub: su router ya exigia el modulo plataforma para
+                        crear y borrar, asi que aqui vivia detras de la guarda equivocada.
+                        Sin redireccion desde la ruta vieja, que AGENTS.md prohibe los shims. */}
+                    <Route path="organizaciones" element={<OrganizacionesPage />} />
                     <Route path="modelos" element={<LLMConfigsPage />} />
                     <Route path="prompts-actividad" element={<ActivityPromptsPage />} />
                     <Route path="tokens" element={<AccessTokensPage />} />

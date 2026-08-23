@@ -177,3 +177,45 @@ describe('REV.10 — la organización se elige una vez', () => {
     expect(screen.queryByLabelText(/organización/i)).toBeNull()
   })
 })
+
+/**
+ * REV.11 — Organizaciones no es del módulo Chatbots.
+ *
+ * `hub_organizaciones_router` protege crear, editar y borrar con `require_module("plataforma")`
+ * y sólo los valores por defecto con `chatbots` (PLAT.5). Pero la pantalla vivía en
+ * `/hub/organizaciones`, bajo `HubLayout`, que exige `chatbots`: **quien tenía `plataforma` y no
+ * `chatbots` no llegaba a la pantalla que su propio módulo protege**. Es el caso de «Modelos
+ * LLM» que arregló PLAT.2, que se quedó sin mover porque entonces nadie miró esta pantalla.
+ *
+ * Y el argumento de fondo: la organización sirve al resto de los módulos, así que darla de alta
+ * es una operación general y no del módulo de asistentes.
+ */
+describe('REV.11 — Organizaciones vive en Plataforma', () => {
+  it('should_offer_it_in_the_platform_subnav', () => {
+    render(
+      <MemoryRouter initialEntries={['/plataforma/organizaciones']}>
+        <Routes>
+          <Route path="/plataforma" element={<PlataformaLayout />}>
+            <Route path="organizaciones" element={<div />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    )
+
+    expect(screen.getByRole('link', { name: /organizaciones/i })).toBeDefined()
+  })
+
+  it('should_not_leave_it_in_the_chatbots_subnav', () => {
+    render(
+      <MemoryRouter initialEntries={['/hub/chatbots']}>
+        <Routes>
+          <Route path="/hub" element={<HubLayout />}>
+            <Route path="chatbots" element={<div />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    )
+
+    expect(screen.queryByRole('link', { name: /organizaciones/i })).toBeNull()
+  })
+})
