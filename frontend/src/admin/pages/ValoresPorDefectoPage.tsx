@@ -18,7 +18,55 @@ const HEREDABLES = [
 ] as const
 
 /**
- * Los valores por defecto de RAG de una organización (PLAT.3).
+ * Qué control pide cada campo (REV.2).
+ *
+ * Es la **única** lista de campos que queda escrita en el React, y está aquí porque el tipo no
+ * se puede deducir del dato: la mitad de estos campos valen `null` cuando heredan, y `null` no
+ * dice si lo que va debajo es un número o una casilla.
+ *
+ * Para que no se desincronice del contrato la vigila un test que la compara con la interfaz
+ * generada por Orval (`valoresPorDefectoRead.ts`): si el servidor añade un campo y nadie le da
+ * control, se pone rojo. Eso es lo que separa un mapa mantenido de una lista que miente.
+ */
+export const CONTROLES: Record<string, 'numero' | 'booleano' | 'texto' | 'texto-largo'> = {
+  default_public_graph_profile: 'texto',
+  default_retrieval_mode: 'texto',
+  default_language_mode: 'texto',
+  default_quality_threshold: 'numero',
+  default_min_retrieval_results: 'numero',
+  default_min_retrieval_score: 'numero',
+  default_reranker_enabled: 'booleano',
+  default_answer_template: 'texto-largo',
+  default_context_token_budget: 'numero',
+  default_chunk_size: 'numero',
+  default_chunk_overlap: 'numero',
+  default_chunking_strategy: 'texto',
+  default_query_rewriting_enabled: 'booleano',
+  rewrite_llm_config_id: 'texto',
+}
+
+/**
+ * Valores conocidos de los campos enumerados, en un `<datalist>` y **no en un `<select>`**.
+ *
+ * El contrato declara estos cuatro campos como `string` libre, así que un desplegable perdería
+ * en silencio cualquier valor que esta lista no conociera —justo al abrir la pantalla, sin que
+ * nadie lo pidiera—. Es el mismo criterio, y por el mismo motivo, que la lista de tipografías
+ * de Identidad visual. Cuando el servidor los declare como enumeración cerrada, esto puede
+ * pasar a `<select>` generado del contrato y dejar de vivir aquí.
+ */
+const SUGERENCIAS: Record<string, readonly string[]> = {
+  default_public_graph_profile: [
+    'PUBLIC_KB_RICH',
+    'PUBLIC_PORTAL_ROUTER',
+    'PUBLIC_PORTAL_AGGREGATOR',
+  ],
+  default_retrieval_mode: ['RAG', 'MD_LONG_CONTEXT', 'MD_AGENT_SELECTOR'],
+  default_language_mode: ['prefer', 'strict', 'neutral'],
+  default_chunking_strategy: ['structural', 'parent_child'],
+}
+
+/**
+ * Los valores por defecto de RAG de una organización (PLAT.3, editables en REV.2).
  *
  * Vivían dentro de la pantalla de Organizaciones, y por eso esa pantalla acabó bajo el módulo
  * Chatbots: la mayoría de sus campos eran de Chatbots. Aquí están donde pertenecen —el perfil de
@@ -30,6 +78,10 @@ const HEREDABLES = [
  * defecto de la plataforma», y hasta PLAT.3 el `PATCH` descartaba el `null` explícito
  * (`exclude_none`), así que una vez fijado un valor propio no había vuelta atrás por API. El
  * botón de cada campo heredable manda ese `null`.
+ *
+ * **REV.2 — y se pueden cambiar.** Hasta aquí la pantalla los pintaba con `String(valor)`: se
+ * veía la configuración y no se podía tocar, así que cambiar el tamaño de fragmento de una
+ * organización exigía ir por API. El `PATCH` ya lo aceptaba; sólo faltaba el control.
  */
 export function ValoresPorDefectoPage() {
   const { t } = useTranslation('admin')
@@ -50,6 +102,16 @@ export function ValoresPorDefectoPage() {
   })
   const { mutate: guardar, isPending } = useGuardarValores()
 
+  /**
+   * Los campos heredados a los que alguien ha pedido darles valor propio.
+   *
+   * Sin esto, «heredado» es un callejón sin salida: se puede volver a heredar pero no salir de
+   * ahí. Es estado de la pantalla y no del servidor —todavía no se ha guardado nada—, y se
+   * limpia al cambiar de organización porque lo que se abrió pertenecía a la anterior.
+   */
+  const [desplegados, setDesplegados] = useState<Set<string>>(new Set())
+  useEffect(() => setDesplegados(new Set()), [organizacionId])
+
   function cambiar(campo: string, valor: unknown) {
     guardar(
       { organizacionId, data: { [campo]: valor } },
@@ -58,6 +120,29 @@ export function ValoresPorDefectoPage() {
           void qc.invalidateQueries({ queryKey: claveDeValores(organizacionId) }),
       }
     )
+  }
+
+  /**
+   * Guarda al salir del campo, y **sólo si el valor ha cambiado**.
+   *
+   * Pasar por un campo con el tabulador no es editarlo: guardar ahí escribiría un valor propio
+   * sobre un campo que sólo estaba heredando, que es precisamente la decisión que esta pantalla
+   * existe para hacer explícita.
+   */
+  function alSalirDelCampo(campo: string, crudo: string, original: unknown) {
+    const tipo = CONTROLES[campo]
+    if (tipo === 'numero') {
+      if (crudo.trim() === '') return
+      const numero = Number(crudo)
+      // Un texto que no es número no se manda: el servidor respondería 422 y la pantalla
+      // no sabría decir por qué. `<input type="number">` ya lo evita en la mayoría de
+      // navegadores, pero no en todos ni con el teclado numérico de un móvil.
+      if (Number.isNaN(numero) || numero === original) return
+      cambiar(campo, numero)
+      return
+    }
+    if (crudo === original || (original == null && crudo === '')) return
+    cambiar(campo, crudo)
   }
 
   return (
@@ -92,6 +177,11 @@ export function ValoresPorDefectoPage() {
           {Object.entries(valores).map(([campo, valor]) => {
             const heredable = (HEREDABLES as readonly string[]).includes(campo)
             const heredado = valor === null
+            const tipo = CONTROLES[campo]
+            const editable = tipo !== undefined && (!heredado || desplegados.has(campo))
+            const sugerencias = SUGERENCIAS[campo]
+            const idLista = sugerencias ? `vpd_${campo}_opciones` : undefined
+
             return (
               <div
                 key={campo}
@@ -101,22 +191,74 @@ export function ValoresPorDefectoPage() {
                 {/* La etiqueta traducida, con el nombre tecnico como reserva: si el
                     contrato crece con un campo nuevo, la fila aparece igual —con su nombre
                     crudo— en vez de quedarse vacia o reventar. */}
-                <span className="w-72 shrink-0">
+                <label htmlFor={`vpd_${campo}`} className="w-72 shrink-0">
                   {t(`hub.valores_por_defecto.campos.${campo}` as Parameters<typeof t>[0], {
                     defaultValue: campo,
                   })}
-                </span>
+                </label>
+
                 <span className="flex-1">
-                  {/* «Heredado» y no una celda vacía: `null` aquí es una decisión, no un dato
-                      que falte, y confundirlas es lo que hace que nadie se atreva a tocarlo. */}
-                  {heredado ? (
+                  {editable ? (
+                    tipo === 'booleano' ? (
+                      <input
+                        id={`vpd_${campo}`}
+                        type="checkbox"
+                        checked={valor === true}
+                        disabled={isPending}
+                        onChange={(e) => cambiar(campo, e.target.checked)}
+                        className="h-4 w-4 rounded border"
+                      />
+                    ) : tipo === 'texto-largo' ? (
+                      <textarea
+                        id={`vpd_${campo}`}
+                        defaultValue={valor == null ? '' : String(valor)}
+                        disabled={isPending}
+                        rows={3}
+                        onBlur={(e) => alSalirDelCampo(campo, e.target.value, valor)}
+                        className="w-full rounded border px-2 py-1 text-sm"
+                      />
+                    ) : (
+                      <input
+                        id={`vpd_${campo}`}
+                        type={tipo === 'numero' ? 'number' : 'text'}
+                        // `step="any"`: tres de estos campos son decimales (umbrales y
+                        // puntuaciones) y el paso entero por omisión los rechazaría.
+                        step={tipo === 'numero' ? 'any' : undefined}
+                        list={idLista}
+                        defaultValue={valor == null ? '' : String(valor)}
+                        disabled={isPending}
+                        onBlur={(e) => alSalirDelCampo(campo, e.target.value, valor)}
+                        className="w-full max-w-xs rounded border px-2 py-1 text-sm"
+                      />
+                    )
+                  ) : (
+                    /* «Heredado» y no una celda vacía: `null` aquí es una decisión, no un dato
+                       que falte, y confundirlas es lo que hace que nadie se atreva a tocarlo. */
                     <em className="text-muted-foreground">
                       {t('hub.valores_por_defecto.heredado')}
                     </em>
-                  ) : (
-                    String(valor)
+                  )}
+                  {sugerencias && (
+                    <datalist id={idLista}>
+                      {sugerencias.map((opcion) => (
+                        <option key={opcion} value={opcion} />
+                      ))}
+                    </datalist>
                   )}
                 </span>
+
+                {heredado && tipo !== undefined && !desplegados.has(campo) && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDesplegados((previo) => new Set(previo).add(campo))
+                    }
+                    className="text-xs underline"
+                  >
+                    {t('hub.valores_por_defecto.establecer_valor')}
+                  </button>
+                )}
+
                 {heredable && !heredado && (
                   <button
                     type="button"

@@ -1,8 +1,9 @@
+import { readFileSync } from 'node:fs'
 import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest'
 import { render, screen, within, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import i18n from '@/shared/i18n'
-import { ValoresPorDefectoPage } from '../pages/ValoresPorDefectoPage'
+import { ValoresPorDefectoPage, CONTROLES } from '../pages/ValoresPorDefectoPage'
 import {
   useListOrganizacionesApiV1HubOrganizacionesGet,
   useGetValoresPorDefectoApiV1HubOrganizacionesOrganizacionIdValoresPorDefectoGet as useValores,
@@ -99,11 +100,21 @@ describe('PLAT.3 — la pantalla de valores por defecto', () => {
     const conValorPropio = screen.getByTestId('default_chunk_size')
     expect(within(conValorPropio).getByRole('button', { name: /heredar/i })).toBeDefined()
 
-    // Ya heredado: no hay nada que devolver.
-    expect(within(screen.getByTestId('default_chunk_overlap')).queryByRole('button')).toBeNull()
+    // Ya heredado: no hay nada que devolver. Se busca el botón POR SU NOMBRE porque desde
+    // REV.2 una fila heredada sí tiene otro botón —el de tomar valor propio—, y un
+    // `queryByRole('button')` a secas confundiría las dos cosas.
+    expect(
+      within(screen.getByTestId('default_chunk_overlap')).queryByRole('button', {
+        name: /volver a heredar/i,
+      })
+    ).toBeNull()
 
     // No heredable: el reranker no tiene defecto de plataforma que heredar.
-    expect(within(screen.getByTestId('default_reranker_enabled')).queryByRole('button')).toBeNull()
+    expect(
+      within(screen.getByTestId('default_reranker_enabled')).queryByRole('button', {
+        name: /volver a heredar/i,
+      })
+    ).toBeNull()
   })
 
   it('should_send_an_explicit_null_when_going_back_to_inheriting', () => {
@@ -145,5 +156,111 @@ describe('PLAT.3 — la pantalla de valores por defecto', () => {
     renderPage()
 
     expect(document.body.textContent).toMatch(/no es identidad|Chatbots/i)
+  })
+})
+
+/**
+ * REV.2 — los valores se pueden cambiar.
+ *
+ * La pantalla los pintaba con `String(valor)` y el único botón era «volver a heredar»: se veía
+ * la configuración y no se podía tocar, así que para cambiar el tamaño de fragmento de una
+ * organización había que ir por API. El `PATCH` ya lo aceptaba todo desde PLAT.3; lo que
+ * faltaba era el control.
+ */
+describe('REV.2 — editar los valores por defecto', () => {
+  it('should_render_a_number_input_for_a_numeric_field', () => {
+    renderPage()
+
+    const campo = within(screen.getByTestId('default_chunk_size')).getByRole('spinbutton')
+    expect((campo as HTMLInputElement).value).toBe('500')
+  })
+
+  it('should_render_a_checkbox_for_a_boolean_field', () => {
+    renderPage()
+
+    const campo = within(screen.getByTestId('default_reranker_enabled')).getByRole('checkbox')
+    expect((campo as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('should_send_a_number_and_not_a_string', () => {
+    // **El test del prompt.** `<input>` devuelve siempre texto; mandar "800" donde el contrato
+    // declara un entero es un 422 que sólo aparece en tiempo de ejecución.
+    renderPage()
+
+    const campo = within(screen.getByTestId('default_chunk_size')).getByRole('spinbutton')
+    fireEvent.change(campo, { target: { value: '800' } })
+    fireEvent.blur(campo)
+
+    expect(guardar).toHaveBeenCalledWith(
+      { organizacionId: 'org-1', data: { default_chunk_size: 800 } },
+      expect.anything()
+    )
+  })
+
+  it('should_send_a_boolean_for_a_checkbox', () => {
+    renderPage()
+
+    fireEvent.click(within(screen.getByTestId('default_reranker_enabled')).getByRole('checkbox'))
+
+    expect(guardar).toHaveBeenCalledWith(
+      { organizacionId: 'org-1', data: { default_reranker_enabled: true } },
+      expect.anything()
+    )
+  })
+
+  it('should_not_save_a_value_that_has_not_changed', () => {
+    // Salir de un campo sin tocarlo no es una edición, y guardarlo escribiría un valor propio
+    // sobre un campo que sólo estaba de paso.
+    renderPage()
+
+    const campo = within(screen.getByTestId('default_chunk_size')).getByRole('spinbutton')
+    fireEvent.blur(campo)
+
+    expect(guardar).not.toHaveBeenCalled()
+  })
+
+  it('should_let_an_inherited_field_take_its_own_value', () => {
+    // Heredado no puede ser un callejón sin salida: se entra y se sale.
+    renderPage()
+
+    const fila = screen.getByTestId('default_chunk_overlap')
+    expect(within(fila).queryByRole('spinbutton')).toBeNull()
+
+    fireEvent.click(within(fila).getByRole('button', { name: /valor propio/i }))
+
+    expect(within(fila).getByRole('spinbutton')).toBeDefined()
+  })
+
+  it('should_offer_the_known_options_for_an_enumerated_field', () => {
+    // Sugerencias en un `datalist`, no un `<select>`: el contrato declara estos campos como
+    // `string` libre, y un desplegable perdería en silencio un valor que no conociera. Es el
+    // mismo criterio que la lista de tipografías de Identidad visual.
+    renderPage()
+
+    // `combobox` y no `textbox`: un `<input type="text">` con `list` expone rol combobox
+    // (HTML-AAM). Que el rol cambie es justo la señal de que hay sugerencias asociadas.
+    const campo = within(screen.getByTestId('default_retrieval_mode')).getByRole('combobox')
+    const lista = campo.getAttribute('list')
+    expect(lista).toBeTruthy()
+    const opciones = [...document.querySelectorAll(`#${lista} option`)].map(o =>
+      o.getAttribute('value')
+    )
+    expect(opciones).toContain('MD_LONG_CONTEXT')
+  })
+
+  it('should_know_a_control_for_every_field_of_the_contract', () => {
+    // El mapa de controles es la única lista de campos que queda escrita en el React, así que
+    // se comprueba contra el contrato generado: si el servidor añade un campo y nadie le da
+    // control, esto se pone rojo en vez de pintar la fila sin poder editarla.
+    // Ruta desde la raíz del frontend, que es el `cwd` de vitest. Con `import.meta.url` el
+    // entorno jsdom da una URL http y `readFileSync` la rechaza.
+    const contrato = readFileSync(
+      'src/shared/api/generated/model/valoresPorDefectoRead.ts',
+      'utf-8'
+    )
+    const campos = [...contrato.matchAll(/^\s{2}(\w+)\??:/gm)].map(m => m[1])
+
+    expect(campos.length).toBeGreaterThan(10)
+    expect(campos.filter(c => !(c in CONTROLES))).toEqual([])
   })
 })

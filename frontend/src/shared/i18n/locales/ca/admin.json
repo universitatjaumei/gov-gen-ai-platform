@@ -289,6 +289,7 @@
       "organizacion": "Organització",
       "heredado": "Heretat de la plataforma",
       "volver_a_heredar": "Tornar a heretar",
+      "establecer_valor": "Establir valor propi",
       "campos": {
         "default_public_graph_profile": "Perfil de graf per defecte",
         "default_retrieval_mode": "Mode de recuperació per defecte",

@@ -289,6 +289,7 @@
       "organizacion": "Organización",
       "heredado": "Heredado de la plataforma",
       "volver_a_heredar": "Volver a heredar",
+      "establecer_valor": "Establecer valor propio",
       "campos": {
         "default_public_graph_profile": "Perfil de grafo por defecto",
         "default_retrieval_mode": "Modo de retrieval por defecto",
