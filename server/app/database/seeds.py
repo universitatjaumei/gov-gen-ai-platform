@@ -8,8 +8,12 @@ Este módulo crea los datos iniciales necesarios para desarrollo:
 - Licencia de desarrollo con cuota amplia
 
 Credenciales de desarrollo:
-  SuperAdmin: fabra@uji.es  /  admin1234
-  Admin:      dev@automatia.local  /  (cualquiera — login admin no verifica pwd, lo arregla SEC.1)
+  SuperAdmin: DEV_ADMIN_EMAIL (por omisión `admin@example.local`) / DEV_ADMIN_PASSWORD
+  Admin:      dev@automatia.local / hash de DEV_ADMIN_PASSWORD
+
+**El login de administrador sí verifica la contraseña** desde SEC.1. Esta cabecera afirmaba lo
+contrario —que valía cualquiera— desde antes de que ese prompt existiera, y un comentario que
+describe un agujero ya cerrado hace perder el tiempo a quien audita el código.
 
 La clave de licencia de desarrollo es: DEV_LICENSE_KEY_12345
 """
@@ -32,8 +36,18 @@ from automatia_shared.enums import LicenseStatus
 
 # Constante para desarrollo - usar en tests y desarrollo local
 DEV_LICENSE_KEY = "DEV_LICENSE_KEY_12345"
-DEV_ADMIN_EMAIL = "fabra@uji.es"
-DEV_ADMIN_PASSWORD = "admin1234"
+
+# AIS.2 — por entorno y con un valor neutro por omisión. Aquí había un correo real, el del
+# mantenedor del principal, así que **todo fork que arrancara en local creaba un
+# superadministrador con el correo de otra persona** — y quien lo heredara tendría que averiguar
+# por qué. Es exactamente lo que `CONTRIBUTING.md` manda dejar en el fork: configuración de una
+# institución (aquí, de una persona) fuera del repositorio principal.
+#
+# Sigue siendo una credencial **pública y de desarrollo**: la protección no es que sea secreta,
+# es el gate de `seed_multitenancy_defaults` (SEC.8.0), que no siembra nada fuera de
+# `ENVIRONMENT=development`.
+DEV_ADMIN_EMAIL = os.getenv("DEV_ADMIN_EMAIL", "admin@example.local")
+DEV_ADMIN_PASSWORD = os.getenv("DEV_ADMIN_PASSWORD", "admin1234")
 
 
 async def seed_multitenancy_defaults():
@@ -44,7 +58,7 @@ async def seed_multitenancy_defaults():
     no duplicará los datos.
 
     Crea:
-    - 1 SuperAdminAccount (fabra@uji.es / admin1234)
+    - 1 SuperAdminAccount (DEV_ADMIN_EMAIL / DEV_ADMIN_PASSWORD)
     - 1 AdminAccount (partner_dev, ex-partner)
     - 1 ClientAccount (client_dev)
     - 1 License (lic_dev) con 10M tokens de cuota

@@ -1,8 +1,12 @@
 """Punto de entrada FastAPI standalone del servidor Gov Gen AI.
 
-Registra los routers de la plataforma migrada (Hub, redacción, automation API…).
-Los routers automation/telemetry quedan pendientes de registrar aquí mientras se
-completa la migración de su capa de servicio (AIBrainService).
+Registra los routers de la plataforma, repartidos entre `_register_cloud` y `_register_edge`
+según `DEPLOY_MODE` (ver `AGENTS.md` §Frontera Edge-Cloud).
+
+**AIS.2 — esta cabecera decía que los routers `automation`/`telemetry` «quedan pendientes de
+registrar aquí»**. No están pendientes: se **borraron** en ROL.1 (`6e78b35`), junto con
+`AIBrainService`. Es lo primero que lee quien abre el punto de entrada del servidor, y mandaba a
+buscar trabajo que ya no existe.
 """
 
 from contextlib import asynccontextmanager

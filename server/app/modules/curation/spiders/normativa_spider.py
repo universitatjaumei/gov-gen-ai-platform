@@ -1,6 +1,17 @@
-"""Spider especializado para normativa institucional (BOE, DOGV, UJI).
+"""Spider especializado para boletines de normativa (BOE, DOGV y portales con su marcado).
 
 Deploy: edge
+
+**AIS.2 — aquí había una tercera entrada con el nombre de una institución**, y sus tres
+selectores eran un **duplicado exacto** de los de `boe`: no describía otro marcado, describía el
+mismo con otra etiqueta. Un tipo de fuente dice qué **forma** tiene el portal —de ahí que `boe` y
+`dogv` compartan selectores y sigan siendo dos, porque son dos boletines reconocibles—, no de
+quién es; y el portal propio de cada institución es material de fork (`CONTRIBUTING.md`).
+
+Lo que queda pendiente y es más grande que este prompt: **los selectores deberían ser dato del
+sitio** (`hub_web_sites`), como ya lo son los criterios de curación desde CUR.2.1. Mientras vivan
+aquí, un portal con otro marcado obliga a tocar el principal, que es exactamente lo que la
+gobernanza quiere evitar.
 """
 import re
 from dataclasses import dataclass
@@ -17,11 +28,6 @@ SELECTORS: dict[str, dict[str, str]] = {
         "texto": "div.texto-articulado",
     },
     "dogv": {
-        "titulo": "h1.documento-tit",
-        "fecha": "span.publicado",
-        "texto": "div.texto-articulado",
-    },
-    "uji": {
         "titulo": "h1.documento-tit",
         "fecha": "span.publicado",
         "texto": "div.texto-articulado",

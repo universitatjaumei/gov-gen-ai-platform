@@ -44,6 +44,13 @@ class ActividadLLM(StrEnum):
     AUDITORIA_DE_SCRIPT = "auditoria_de_script"
     TRANSFORMACION_ETL = "transformacion_etl"
     CONFIGURACION_DE_GRAFICO = "configuracion_de_grafico"
+    # AIS.2 — las dos de redacción de SEG.2. Vivían en `redactor_de_bloques` y eran las únicas
+    # del módulo que no se podían afinar sin desplegar, lo que importa aquí por una razón que no
+    # es de comodidad: su texto **presuponía el tipo de administración**, así que un ayuntamiento
+    # no tenía forma de corregirlo. La clave no lleva `_v1`: el sufijo pertenece al identificador
+    # de plantilla (`valoracion_de_tendencia_v1`), que viaja al manifiesto y no se renombra.
+    VALORACION_DE_TENDENCIA = "valoracion_de_tendencia"
+    RESUMEN_DE_RESULTADOS = "resumen_de_resultados"
 
 
 #: Nivel por defecto de cada actividad. Los niveles son 1 (rápido), 2 (lógica) y 3 (supervisión).
@@ -59,6 +66,11 @@ TIER_POR_ACTIVIDAD: dict[ActividadLLM, int] = {
     # Elegir el gráfico y su presentación es la misma tarea que la anterior: rellenar un
     # contrato cerrado a partir de una frase. Nivel 2.
     ActividadLLM.CONFIGURACION_DE_GRAFICO: 2,
+    # Redactar prosa a partir de una tabla que ya está calculada es la tarea más barata de las
+    # seis: nivel 1, que es además el que `workspaces_router` ya pedía para el redactor. Subirlo
+    # es una decisión legítima de cada organización, y ahora se puede tomar sin desplegar.
+    ActividadLLM.VALORACION_DE_TENDENCIA: 1,
+    ActividadLLM.RESUMEN_DE_RESULTADOS: 1,
 }
 
 
@@ -77,6 +89,8 @@ MODULO_POR_ACTIVIDAD: dict[ActividadLLM, str] = {
     ActividadLLM.AUDITORIA_DE_SCRIPT: "informes",
     ActividadLLM.TRANSFORMACION_ETL: "informes",
     ActividadLLM.CONFIGURACION_DE_GRAFICO: "informes",
+    ActividadLLM.VALORACION_DE_TENDENCIA: "informes",
+    ActividadLLM.RESUMEN_DE_RESULTADOS: "informes",
 }
 
 
@@ -87,6 +101,8 @@ PARA_QUE_SIRVE: dict[ActividadLLM, str] = {
     ActividadLLM.AUDITORIA_DE_SCRIPT: "audita el script escrito",
     ActividadLLM.TRANSFORMACION_ETL: "traduce a operaciones lo que hay que transformar",
     ActividadLLM.CONFIGURACION_DE_GRAFICO: "elige el gráfico y su presentación",
+    ActividadLLM.VALORACION_DE_TENDENCIA: "valora la evolución de los indicadores de una tabla",
+    ActividadLLM.RESUMEN_DE_RESULTADOS: "resume los resultados de las tablas de un apartado",
 }
 
 
@@ -212,11 +228,31 @@ ESQUEMA DE LOS DATOS:
 {esquema_de_datos}"""
 
 
+def _prompts_de_redaccion() -> tuple[str, str]:
+    """Los dos textos de redacción, importados donde SEG.2 los escribió (AIS.2).
+
+    El import va dentro de la función y no arriba **por dirección de dependencia**: este módulo
+    es el catálogo y no debería depender de un servicio en tiempo de importación. Traerlos aquí
+    en vez de copiarlos evita lo que este mismo fichero prohíbe para la base de datos —duplicar
+    el texto por defecto—, que es como un prompt acaba teniendo dos versiones que divergen.
+    """
+    from server.app.modules.redaccion.services.redactor_de_bloques import (
+        PROMPT_TEXTO_RESUMEN,
+        PROMPT_TEXTO_VALORACION,
+    )
+
+    return PROMPT_TEXTO_VALORACION, PROMPT_TEXTO_RESUMEN
+
+
+_VALORACION, _RESUMEN = _prompts_de_redaccion()
+
 PROMPT_POR_ACTIVIDAD: dict[ActividadLLM, str] = {
     ActividadLLM.PROPUESTA_DE_SCRIPT: _PROMPT_PROPUESTA,
     ActividadLLM.AUDITORIA_DE_SCRIPT: _PROMPT_AUDITORIA,
     ActividadLLM.TRANSFORMACION_ETL: _PROMPT_ETL,
     ActividadLLM.CONFIGURACION_DE_GRAFICO: _PROMPT_GRAFICO,
+    ActividadLLM.VALORACION_DE_TENDENCIA: _VALORACION,
+    ActividadLLM.RESUMEN_DE_RESULTADOS: _RESUMEN,
 }
 
 
@@ -234,6 +270,11 @@ VARIABLES_POR_ACTIVIDAD: dict[ActividadLLM, tuple[str, ...]] = {
     ActividadLLM.AUDITORIA_DE_SCRIPT: (),
     ActividadLLM.TRANSFORMACION_ETL: ("esquema_de_operaciones", "esquema_de_datos"),
     ActividadLLM.CONFIGURACION_DE_GRAFICO: ("esquema_de_configuracion", "esquema_de_datos"),
+    # Las dos de redacción no llevan variables: el contexto no se interpola en la instrucción,
+    # viaja como mensaje aparte (`--- DATOS EXTRAÍDOS ---`). Van declaradas igual, porque el test
+    # exige que **toda** actividad diga cuáles tiene: una que falte es la que nadie revisa.
+    ActividadLLM.VALORACION_DE_TENDENCIA: (),
+    ActividadLLM.RESUMEN_DE_RESULTADOS: (),
 }
 
 

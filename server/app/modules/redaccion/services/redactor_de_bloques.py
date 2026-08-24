@@ -16,8 +16,14 @@ from typing import Any
 
 from server.app.core.llm_text import texto_de
 
-_SISTEMA = (
-    "Eres un redactor de informes institucionales de una universidad pública. Redactas en "
+#: El prompt de sistema por omisión.
+#:
+#: **AIS.2 — decía «de una universidad pública»**, y el destinatario declarado del proyecto son
+#: varias administraciones y en particular **entidades locales**: un ayuntamiento que generara un
+#: informe recibía texto que le decía al modelo que es una universidad. «Administración pública»
+#: cubre a las dos sin presumir de cuál se trata, que es lo que pide `CONTRIBUTING.md`.
+SISTEMA_POR_DEFECTO = (
+    "Eres un redactor de informes institucionales de una administración pública. Redactas en "
     "la lengua del contexto que se te da. Te apoyas ÚNICAMENTE en los datos del contexto: "
     "no añades cifras, fechas ni nombres que no aparezcan en él, y si un dato falta lo dices "
     "en vez de inventarlo. El tono es sobrio y administrativo, sin adjetivos valorativos."
@@ -33,7 +39,10 @@ PROMPT_RESUMEN_DE_RESULTADOS = "resumen_de_resultados_v1"
 # usaba con una gema de Gemini. Allí iban en mayúsculas porque era lo único que había para
 # defenderlas; cada una viene de un fallo observado —tablas inventadas, resúmenes que omitían—
 # y no de una preferencia de estilo.
-_VALORACION_DE_TENDENCIA = (
+#: AIS.2 — público, porque el catálogo de actividades lo importa para poder sobreescribirlo.
+#: El texto se queda aquí, donde lo escribió SEG.2 con sus razones al lado, en vez de moverse:
+#: cada una de sus reglas viene de un fallo observado y no de una preferencia de estilo.
+PROMPT_TEXTO_VALORACION = _VALORACION_DE_TENDENCIA = (
     "Valora la evolución de los indicadores de la tabla del contexto, comparando el último "
     "curso o ejercicio con los anteriores.\n"
     "\n"
@@ -66,7 +75,7 @@ _VALORACION_DE_TENDENCIA = (
     "No reproduzcas la tabla: ya está en el informe. Interprétala."
 )
 
-_RESUMEN_DE_RESULTADOS = (
+PROMPT_TEXTO_RESUMEN = _RESUMEN_DE_RESULTADOS = (
     "Resume los resultados que muestran las tablas del contexto, que pueden ser varias tablas "
     "de un mismo apartado.\n"
     "\n"
@@ -124,19 +133,50 @@ class RedactorDeBloques:
 
     `model_name` no es decorativo: el nodo lo guarda en el bloque como `model_used`, y es lo
     que permite saber con qué modelo se redactó un informe meses después.
+
+    **AIS.2 — `instrucciones` y `sistema` entran por el constructor.** Antes la instrucción salía
+    de un `dict` de este módulo y el prompt de sistema era una constante, así que los dos prompts
+    de redacción eran los únicos del módulo que **no se podían afinar sin desplegar**: el
+    mecanismo de MT.6 existía y a estos no llegaba. Se resuelven donde hay sesión y organización
+    —`workspaces_router`— y se entregan ya resueltos, para que `generate` siga sin tocar la base
+    de datos: es un método que corre dentro de un nodo del grafo.
+
+    Los valores por omisión mantienen el comportamiento de antes, que es lo que permite que los
+    tests del grafo construyan un redactor con dos argumentos.
     """
 
-    def __init__(self, modelo: Any, model_name: str) -> None:
+    def __init__(
+        self,
+        modelo: Any,
+        model_name: str,
+        *,
+        sistema: str | None = None,
+        instrucciones: dict[str, str] | None = None,
+    ) -> None:
         self._modelo = modelo
         self.model_name = model_name
+        self._sistema = sistema or SISTEMA_POR_DEFECTO
+        self._instrucciones = instrucciones or {}
+
+    def instruccion(self, prompt_id: str) -> str:
+        """La instrucción que se va a usar: la resuelta si la hay, y si no la del catálogo.
+
+        Un override en blanco **no** gana: `resolver_actividad` ya devuelve el texto del código
+        cuando la fila está vacía, y repetir aquí la comprobación evita que un `dict` construido
+        a mano en otro sitio deje al modelo sin instrucción.
+        """
+        propia = self._instrucciones.get(prompt_id)
+        if propia and propia.strip():
+            return propia
+        return instruccion_para(prompt_id)
 
     async def generate(self, prompt: str, context: str) -> str:
         respuesta = await self._modelo.ainvoke([
-            {"role": "system", "content": _SISTEMA},
+            {"role": "system", "content": self._sistema},
             {
                 "role": "user",
                 "content": (
-                    f"{instruccion_para(prompt)}\n\n"
+                    f"{self.instruccion(prompt)}\n\n"
                     f"--- DATOS EXTRAÍDOS ---\n{context}"
                 ),
             },

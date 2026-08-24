@@ -6,7 +6,11 @@ from server.app.modules.curation.spider import GenericSpider
 from server.app.modules.curation.spiders.normativa_spider import NormativaSpider
 from server.app.modules.curation.spiders.procedimientos_spider import ProcedimientosSpider
 
-_NORMATIVA_SOURCE_TYPES = frozenset({"boe", "dogv", "uji"})
+# AIS.2 — sin el nombre de ninguna institución. El tipo describe la **forma** del portal y no de
+# quién es: la entrada que se retiró tenía los mismos tres selectores que `boe`, así que no
+# añadía un marcado, añadía un alias. El portal propio de una institución se rastrea con
+# `generic` —o con su tipo en el fork—, que es lo que `CONTRIBUTING.md` pide.
+_NORMATIVA_SOURCE_TYPES = frozenset({"boe", "dogv"})
 
 
 class SpiderFactory:

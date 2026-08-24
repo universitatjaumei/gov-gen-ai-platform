@@ -554,15 +554,45 @@ async def generar_borrador_en_segundo_plano(workspace_id: uuid.UUID) -> None:
 
 
 async def _redactor_de_bloques(session: AsyncSession, *, organizacion_id: Any = None):
-    """Modelo de la cascada, adaptado al protocolo que espera el nodo de redacción."""
+    """Modelo de la cascada, adaptado al protocolo que espera el nodo de redacción.
+
+    **AIS.2 — aquí se resuelven también las instrucciones.** Es el único sitio del camino de
+    redacción donde hay sesión y organización a la vez, y por eso los dos prompts de SEG.2 se
+    resuelven aquí y se entregan ya hechos: `generate()` corre dentro de un nodo del grafo y no
+    debería tocar la base de datos. Sin esto el catálogo de actividades sería decorativo para
+    estos dos —el override existiría en la tabla y no llegaría nunca al modelo—.
+    """
     from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
     from server.app.modules.agents_hub.services.model_factory import get_model_for_tier
-    from server.app.modules.redaccion.services.redactor_de_bloques import RedactorDeBloques
-
-    modelo = await get_model_for_tier(
-        1, LocalConfigProvider(session), organizacion_id=organizacion_id
+    from server.app.modules.redaccion.services.actividades_llm import (
+        ActividadLLM,
+        resolver_actividad,
     )
-    return RedactorDeBloques(modelo, nombre_del_modelo(modelo))
+    from server.app.modules.redaccion.services.redactor_de_bloques import (
+        PROMPT_RESUMEN_DE_RESULTADOS,
+        PROMPT_VALORACION_DE_TENDENCIA,
+        RedactorDeBloques,
+    )
+
+    proveedor = LocalConfigProvider(session)
+    modelo = await get_model_for_tier(1, proveedor, organizacion_id=organizacion_id)
+
+    # La clave del `dict` es el **identificador de plantilla** que viaja en el `spec` y en el
+    # manifiesto, no la clave de la actividad: son dos vocabularios y el nodo habla el primero.
+    por_plantilla = {
+        PROMPT_VALORACION_DE_TENDENCIA: ActividadLLM.VALORACION_DE_TENDENCIA,
+        PROMPT_RESUMEN_DE_RESULTADOS: ActividadLLM.RESUMEN_DE_RESULTADOS,
+    }
+    instrucciones = {}
+    for plantilla_id, actividad in por_plantilla.items():
+        resuelta = await resolver_actividad(
+            actividad, proveedor, organizacion_id=organizacion_id
+        )
+        instrucciones[plantilla_id] = resuelta.template_text
+
+    return RedactorDeBloques(
+        modelo, nombre_del_modelo(modelo), instrucciones=instrucciones
+    )
 
 
 @router.patch(
