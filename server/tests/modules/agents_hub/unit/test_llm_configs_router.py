@@ -219,5 +219,5 @@ class TestLLMConfigsRouter:
             "server.app.modules.agents_hub.services.model_factory._build_model",
             return_value=MagicMock(),
         ) as mock_build:
-            asyncio.run(get_model_for_tier(1, config_provider))
+            asyncio.run(get_model_for_tier(1, config_provider, organizacion_id=None))
             mock_build.assert_called_once_with(cfg)

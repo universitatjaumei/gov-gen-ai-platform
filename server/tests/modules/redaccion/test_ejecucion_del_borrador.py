@@ -79,7 +79,6 @@ async def _sembrar(session, spec: ReportTemplateSpec | None = None) -> uuid.UUID
         name=f"Plantilla {uuid.uuid4().hex[:6]}",
         report_profile="GENERIC_REPORT",
         owner_kind="platform",
-        is_global=True,
     )
     session.add(plantilla)
     await session.flush()

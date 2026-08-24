@@ -40,7 +40,6 @@ async def _workspace_con_bloque_de_ia(session: AsyncSession) -> tuple[uuid.UUID,
         name="Informe de seguimiento (prueba SEG.4)",
         report_profile="GENERIC_REPORT",
         owner_kind="platform",
-        is_global=True,
     )
     session.add(plantilla)
     await session.flush()

@@ -11,7 +11,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from server.app.core.auth.models import UserInfo
 from server.app.modules.redaccion.services.llm_spec_service import LLMSpecService
+
+#: MT.3 — el `Depends` resuelve el modelo para la organización de quien pide. Un
+#: superadministrador no pertenece a ninguna, así que resuelve el nivel de plataforma, que es
+#: lo que este fichero comprueba.
+_SIN_ORGANIZACION = UserInfo(
+    user_id="1", email="root@uji.es", role="superadmin", organizacion_ids=()
+)
 
 
 class TestLaDependencia:
@@ -24,13 +32,15 @@ class TestLaDependencia:
         modelo = MagicMock()
         modelo.model_name = "gemini-2.5-flash"
 
-        async def _modelo_falso(_tier, _provider):
+        async def _modelo_falso(_tier, _provider, *, organizacion_id=None):
             return modelo
 
         original = router_modulo.get_model_for_tier
         router_modulo.get_model_for_tier = _modelo_falso
         try:
-            servicio = await router_modulo.get_llm_spec_service(session=MagicMock())
+            servicio = await router_modulo.get_llm_spec_service(
+                session=MagicMock(), current_user=_SIN_ORGANIZACION
+            )
         finally:
             router_modulo.get_model_for_tier = original
 
@@ -44,14 +54,16 @@ class TestLaDependencia:
 
         import server.app.routers.redaccion.llm_drafts_router as router_modulo
 
-        async def _revienta(_tier, _provider):
+        async def _revienta(_tier, _provider, *, organizacion_id=None):
             raise ValueError("No hay configuracion LLM por defecto para tier 1")
 
         original = router_modulo.get_model_for_tier
         router_modulo.get_model_for_tier = _revienta
         try:
             with pytest.raises(HTTPException) as fallo:
-                await router_modulo.get_llm_spec_service(session=MagicMock())
+                await router_modulo.get_llm_spec_service(
+                session=MagicMock(), current_user=_SIN_ORGANIZACION
+            )
         finally:
             router_modulo.get_model_for_tier = original
 

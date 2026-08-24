@@ -23,6 +23,11 @@ from server.app.api.deps import (
 )
 from server.app.api.deps import require_module
 from server.app.core.auth.models import UserInfo
+from server.app.core.auth.tenancy import (
+    orgs_del_principal,
+    organizacion_unica_de,
+    puede_acceder,
+)
 from server.app.routers.redaccion._actor import es_propietario, user_to_uuid
 from server.app.modules.redaccion.contracts.template import ReportTemplateSpec
 from server.app.modules.redaccion.contracts.ui import ReportUIContract
@@ -140,6 +145,10 @@ _KIND_TO_SEVERITY: dict[str, str] = {
 # DTOs — templates / workspaces (9R.7.3)
 # ---------------------------------------------------------------------------
 
+#: MT.4 — el escalón de en medio de la escalera usuario → organización → plataforma.
+OWNER_ORGANIZACION = "organizacion"
+
+
 class TemplateOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -147,6 +156,13 @@ class TemplateOut(BaseModel):
     report_profile: str
     owner_kind: str
     is_global: bool
+    # MT.4 — de qué organización es, cuando lo es. Va en el contrato porque la pantalla tiene
+    # que poder decir de quién es cada plantilla; deducirlo del `owner_kind` en el React sería
+    # inventarlo.
+    organizacion_id: uuid.UUID | None = None
+    #: MT.4.2 — de dónde salió esta copia, si salió de alguna.
+    derivado_de: uuid.UUID | None = None
+    version_de_origen: int | None = None
     current_version_id: uuid.UUID | None = None
     created_at: datetime
     #: GUI.1 — retirada. La pantalla necesita distinguir «no está» de «está retirada».
@@ -218,12 +234,18 @@ async def list_templates(
     GUI.1 — las archivadas quedan fuera por defecto. Esa es la razón de ser del archivado:
     quitarlas de la vista sin quitarlas de los informes que las usaron.
     """
-    condiciones = [
-        or_(
-            HubReportTemplate.is_global.is_(True),
-            HubReportTemplate.owner_id == user_to_uuid(user.user_id),
-        )
+    # MT.4 — tres niveles, y el de plataforma **se sigue viendo desde todas las
+    # organizaciones**: es lo que permite que la Diputación comparta una plantilla, y en esta
+    # base son 20 de 23 filas. Quitarlo al añadir el escalón de en medio habría sido cambiar
+    # el comportamiento sin que nadie lo pidiera.
+    visibles = [
+        HubReportTemplate.is_global.is_(True),
+        HubReportTemplate.owner_id == user_to_uuid(user.user_id),
     ]
+    mias = orgs_del_principal(user)
+    if mias:
+        visibles.append(HubReportTemplate.organizacion_id.in_(mias))
+    condiciones = [or_(*visibles)]
     if not include_archived:
         condiciones.append(HubReportTemplate.archived_at.is_(None))
     result = await session.execute(select(HubReportTemplate).where(and_(*condiciones)))
@@ -238,6 +260,9 @@ def _template_out(t: HubReportTemplate) -> TemplateOut:
         report_profile=t.report_profile,
         owner_kind=t.owner_kind,
         is_global=t.is_global,
+        organizacion_id=t.organizacion_id,
+        derivado_de=t.derivado_de,
+        version_de_origen=t.version_de_origen,
         current_version_id=t.current_version_id,
         created_at=t.created_at,
         archived=t.archived_at is not None,
@@ -282,6 +307,16 @@ def _exigir_poder_sobre(user: UserInfo, plantilla: HubReportTemplate) -> None:
     """
     if user.role == "superadmin":
         return
+    # MT.4 — lo que el arreglo del 2026-08-24 no pudo comprobar porque no había columna: un
+    # administrador gestiona lo de **su** organización. Va antes que la comprobación del nivel
+    # de plataforma porque una plantilla de organización no es de plataforma, y después que el
+    # superadministrador porque ése no está acotado por diseño.
+    if (
+        plantilla.owner_kind == OWNER_ORGANIZACION
+        and user.role == "admin"
+        and puede_acceder(user, plantilla.organizacion_id)
+    ):
+        return
     if plantilla.is_global or plantilla.owner_kind in ("platform", "superadmin"):
         raise HTTPException(
             status_code=403,
@@ -290,7 +325,7 @@ def _exigir_poder_sobre(user: UserInfo, plantilla: HubReportTemplate) -> None:
                 "message": (
                     "Esta plantilla es de la plataforma y la comparten todas las "
                     "organizaciones: sólo un superadministrador puede cambiarla o retirarla. "
-                    "Haz una copia si necesitas una versión propia."
+                    "Bifúrcala si necesitas una versión propia de tu organización."
                 ),
             },
         )
@@ -364,6 +399,85 @@ async def archive_template(
 
 
 @router.post(
+    "/templates/{template_id}/fork",
+    response_model=TemplateOut,
+    status_code=201,
+    operation_id="forkTemplate",
+)
+async def fork_template(
+    template_id: uuid.UUID,
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> TemplateOut:
+    """Copia una plantilla heredada al nivel de la organización de quien pide (MT.4).
+
+    **Sin esto, «heredado» significaría «mírala y no la toques».** El arreglo del 2026-08-24
+    dejó las plantillas de plataforma a mano sólo del superadministrador, y eso es correcto para
+    *modificarlas* —son de todos— pero deja a un municipio sin forma de adaptar la de su
+    Diputación. Adaptar es otra operación, y necesita su propia salida.
+
+    **Copia, no mueve**: el original queda intacto para los demás. Y **se lleva la versión
+    vigente**, porque una bifurcación sin contenido es una plantilla vacía con el nombre de otra
+    — se abriría sin nada dentro y el fallo aparecería en el piloto, no aquí.
+
+    Anota la procedencia (`derivado_de`, `version_de_origen`), que es lo que permite decir
+    después «la Diputación ha publicado una v4 y tú te quedaste en la v3».
+    """
+    _exigir_admin(user)
+    original = await _plantilla_o_404(session, template_id)
+
+    destino = organizacion_unica_de(user)
+    if destino is None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "SIN_ORGANIZACION_DESTINO",
+                "message": (
+                    "Bifurcar una plantilla la copia al nivel de una organización, y no hay "
+                    "ninguna a la que copiarla: tu cuenta no pertenece a una sola. Elige la "
+                    "organización antes de bifurcar."
+                ),
+            },
+        )
+
+    version = None
+    if original.current_version_id is not None:
+        version = await ReportTemplateVersionRepo(session).get(original.current_version_id)
+
+    copia = HubReportTemplate(
+        name=original.name,
+        description=original.description,
+        report_profile=original.report_profile,
+        owner_kind=OWNER_ORGANIZACION,
+        owner_id=user_to_uuid(user.user_id),
+        organizacion_id=destino,
+        derivado_de=original.id,
+        version_de_origen=version.version if version is not None else None,
+    )
+    repo = ReportTemplateRepo(session)
+    copia = await repo.save(copia)
+
+    nueva_version_id = None
+    if version is not None:
+        nueva = await ReportTemplateVersionRepo(session).save(
+            HubReportTemplateVersion(
+                template_id=copia.id,
+                version=1,
+                spec_json=version.spec_json,
+                created_by=user_to_uuid(user.user_id),
+            )
+        )
+        # Capturado antes del commit: `expire_on_commit` lo dejaría expirado y leerlo después
+        # es un `MissingGreenlet` (el fallo que VER.4 encontró cinco veces en este módulo).
+        nueva_version_id = nueva.id
+        await repo.update_status(copia.id, nueva_version_id)
+
+    await session.commit()
+    await session.refresh(copia)
+    return _template_out(copia)
+
+
+@router.post(
     "/templates/{template_id}/restore",
     response_model=TemplateOut,
     operation_id="restoreTemplate",
@@ -404,7 +518,12 @@ async def create_template(
         report_profile=body.report_profile,
         owner_kind=body.owner_kind,
         owner_id=user_to_uuid(user.user_id),
-        is_global=(body.owner_kind == "platform"),
+        # MT.4 — `organizacion_id` sólo cuando el nivel es de organización, que es lo que exige
+        # el CHECK. En los demás niveles nulo: una de plataforma no es de ninguna, y una
+        # personal se identifica por su dueño.
+        organizacion_id=(
+            organizacion_unica_de(user) if body.owner_kind == OWNER_ORGANIZACION else None
+        ),
     )
     template_repo = ReportTemplateRepo(session)
     template = await template_repo.save(template)
@@ -430,6 +549,7 @@ async def create_template(
         report_profile=template.report_profile,
         owner_kind=template.owner_kind,
         is_global=template.is_global,
+        organizacion_id=template.organizacion_id,
         current_version_id=version_id,
         created_at=template.created_at,
     )

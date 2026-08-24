@@ -4,10 +4,11 @@ import uuid
 from dataclasses import dataclass
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from server.app.core.ambito import de_esta_organizacion, de_plataforma
 from server.app.modules.agents_hub.database.config_models import (
     HubActivityPrompt,
     HubChatbot,
@@ -38,7 +39,9 @@ class ConfigProvider(Protocol):
 
     async def get_chatbot(self, chatbot_id: uuid.UUID) -> HubChatbot | None: ...
     async def get_llm_config(self, llm_config_id: uuid.UUID) -> HubLLMConfig | None: ...
-    async def get_llm_config_for_tier(self, tier: int) -> HubLLMConfig | None: ...
+    async def get_llm_config_for_tier(
+        self, tier: int, *, organizacion_id: uuid.UUID | None
+    ) -> HubLLMConfig | None: ...
     async def get_activity_prompt(self, activity: str) -> ActivityPromptOverride | None: ...
     async def list_active_chatbots(self, organizacion_id: uuid.UUID) -> list[HubChatbot]: ...
     async def get_retrieval_mode(self, chatbot_id: uuid.UUID) -> str: ...
@@ -69,8 +72,10 @@ class LocalConfigProvider:
         )
         return result.scalars().first()
 
-    async def get_llm_config_for_tier(self, tier: int) -> HubLLMConfig | None:
-        """Configuración de **conversación** marcada como default para un tier.
+    async def get_llm_config_for_tier(
+        self, tier: int, *, organizacion_id: uuid.UUID | None
+    ) -> HubLLMConfig | None:
+        """Configuración de **conversación** marcada como default para un tier y organización.
 
         El filtro por `purpose` no es defensivo: sin él, la configuración de embeddings del
         piloto —marcada por defecto en el nivel 1 al montar Vertex— se devolvía a quien pedía
@@ -79,16 +84,30 @@ class LocalConfigProvider:
         que resuelven modelo por nivel: el analizador de HTML de la ingesta y la redacción
         de bloques.
         """
-        result = await self.session.execute(
-            select(HubLLMConfig)
-            .options(selectinload(HubLLMConfig.provider_rel))
-            .where(
-                HubLLMConfig.tier == tier,
-                HubLLMConfig.is_default.is_(True),
-                HubLLMConfig.purpose == "chat",
+        candidatas = (
+            await self.session.execute(
+                select(HubLLMConfig)
+                .options(selectinload(HubLLMConfig.provider_rel))
+                .where(
+                    HubLLMConfig.tier == tier,
+                    HubLLMConfig.is_default.is_(True),
+                    HubLLMConfig.purpose == "chat",
+                    # MT.3 — sólo las dos filas que pueden participar. `or_` y no
+                    # `IN (org, None)`, porque `NULL IN (...)` en SQL es nulo y no traería la
+                    # de plataforma, que es el caso normal.
+                    or_(
+                        HubLLMConfig.organizacion_id == organizacion_id,
+                        HubLLMConfig.organizacion_id.is_(None),
+                    )
+                    if organizacion_id is not None
+                    else HubLLMConfig.organizacion_id.is_(None),
+                )
             )
-        )
-        return result.scalars().first()
+        ).scalars().all()
+
+        # MT.3 — la cascada de MT.1: la suya gana, y si no la de plataforma. Nunca la de otra:
+        # el filtro de arriba ya las dejó fuera, y esto elige entre las dos que quedan.
+        return de_esta_organizacion(candidatas, organizacion_id) or de_plataforma(candidatas)
 
     async def get_activity_prompt(self, activity: str) -> ActivityPromptOverride | None:
         """El override de una actividad de plataforma, si alguien lo ha guardado (PRO.2.1).

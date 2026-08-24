@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, require_role
 from server.app.core.auth import UserInfo
-from server.app.core.auth.tenancy import assert_org_access
+from server.app.core.auth.tenancy import assert_org_access, organizacion_unica_de
 from server.app.core.storage import FsspecStorageService, get_storage_service
 from server.app.core.uploads import (
     UploadKind,
@@ -188,13 +188,25 @@ class AnalyzeHtmlOut(BaseModel):
 router = APIRouter(prefix="/hub/ingestion", tags=["hub-ingestion"])
 
 
-async def _get_llm_service(session: AsyncSession = Depends(get_async_session)):
+async def _get_llm_service(
+    session: AsyncSession = Depends(get_async_session),
+    current_user: UserInfo = Depends(get_current_user),
+):
+    """MT.3 — el analizador de HTML resuelve el modelo para la organización de quien pide.
+
+    No hay chatbot todavía: esto se usa **antes** de configurar la ingesta, para proponer
+    selectores mirando una página. Así que la organización sale del actor, y con `None`
+    —varias organizaciones o superadministrador— cae al nivel de plataforma, que es el
+    comportamiento de siempre.
+    """
     from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
     from server.app.modules.agents_hub.services.model_factory import get_model_for_tier
     from server.app.modules.agents_hub.services.html_analyzer_service import LangChainLLMAdapter
 
     provider = LocalConfigProvider(session)
-    model = await get_model_for_tier(1, provider)
+    model = await get_model_for_tier(
+        1, provider, organizacion_id=organizacion_unica_de(current_user)
+    )
     return LangChainLLMAdapter(model)
 
 

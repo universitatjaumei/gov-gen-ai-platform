@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, get_session, require_role, require_module
 from server.app.core.auth.models import UserInfo
+from server.app.core.auth.tenancy import organizacion_unica_de
 from server.app.routers.redaccion._actor import (
     nombre_del_modelo,
     user_to_uuid as _user_to_uuid,
@@ -101,6 +102,7 @@ class ApproveAsWorkspaceResponse(BaseModel):
 
 async def get_llm_spec_service(
     session: AsyncSession = Depends(get_session),
+    current_user: UserInfo = Depends(get_current_user),
 ) -> LLMSpecService:
     """El servicio de propuesta de plantillas, con el modelo de la cascada (VER.2).
 
@@ -115,7 +117,12 @@ async def get_llm_spec_service(
     from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
 
     try:
-        modelo = await get_model_for_tier(1, LocalConfigProvider(session))
+        # MT.3 — el modelo de la organización de quien describe el informe.
+        modelo = await get_model_for_tier(
+            1,
+            LocalConfigProvider(session),
+            organizacion_id=organizacion_unica_de(current_user),
+        )
     except Exception as fallo:  # noqa: BLE001
         raise HTTPException(
             status_code=503,
@@ -219,9 +226,12 @@ async def approve_as_template(
         id=template_id,
         name=body.name,
         report_profile=normalized.proposed_profile,
-        owner_kind=user.role,
+        # MT.4 — `is_global` dejó de ser columna: el nivel lo dice `owner_kind`, y «global»
+        # significa nivel de plataforma. Antes se guardaban los dos, así que una plantilla
+        # podía quedar como `owner_kind='superadmin'` **y** global a la vez, que son dos
+        # niveles distintos escritos en la misma fila.
+        owner_kind="platform" if body.is_global else user.role,
         owner_id=owner_uuid,
-        is_global=body.is_global,
         current_version_id=version_id,
     )
     version = HubReportTemplateVersion(
@@ -275,7 +285,6 @@ async def approve_as_workspace(
         report_profile=normalized.proposed_profile,
         owner_kind="user",
         owner_id=owner_uuid,
-        is_global=False,
         current_version_id=version_id,
     )
     version = HubReportTemplateVersion(

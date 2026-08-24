@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, get_session, require_module
 from server.app.core.auth.models import UserInfo
+from server.app.core.auth.tenancy import organizacion_unica_de
 from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
 from server.app.modules.agents_hub.services.model_factory import get_model_for_tier
 from server.app.modules.redaccion.services.actividades_llm import (
@@ -78,7 +79,9 @@ router = APIRouter(prefix="/redaccion/scripts", tags=["redaccion-scripts"],
 # DI overrides
 # ---------------------------------------------------------------------------
 
-async def _modelo_de(actividad: ActividadLLM, proveedor: Any):
+async def _modelo_de(
+    actividad: ActividadLLM, proveedor: Any, *, organizacion_id: Any = None
+):
     """El modelo y el prompt de una actividad, resueltos (PRO.2 + PRO.2.1).
 
     El nivel sale del catálogo de código y la biblioteca de prompts puede sobreescribirlo, así
@@ -90,7 +93,9 @@ async def _modelo_de(actividad: ActividadLLM, proveedor: Any):
     """
     resuelta = await resolver_actividad(actividad, proveedor)
     try:
-        modelo = await get_model_for_tier(resuelta.tier, proveedor)
+        modelo = await get_model_for_tier(
+            resuelta.tier, proveedor, organizacion_id=organizacion_id
+        )
     except Exception as fallo:  # noqa: BLE001
         raise HTTPException(
             status_code=503,
@@ -104,6 +109,7 @@ async def _modelo_de(actividad: ActividadLLM, proveedor: Any):
 
 async def get_script_proposal_service(
     session: AsyncSession = Depends(get_session),
+    current_user: UserInfo = Depends(get_current_user),
 ) -> ScriptProposalService:
     """El servicio de propuesta, con dos modelos de dos niveles distintos (PRO.2).
 
@@ -112,8 +118,15 @@ async def get_script_proposal_service(
     encima de la determinista de PRO.1, nunca en su lugar.
     """
     proveedor = LocalConfigProvider(session)
-    redactor, propuesta = await _modelo_de(ActividadLLM.PROPUESTA_DE_SCRIPT, proveedor)
-    auditor, auditoria = await _modelo_de(ActividadLLM.AUDITORIA_DE_SCRIPT, proveedor)
+    # MT.3 — los dos niveles se resuelven para la misma organización: quien escribe el script y
+    # quien lo audita tienen que salir del mismo contrato, o el consumo se reparte entre dos.
+    de_quien = organizacion_unica_de(current_user)
+    redactor, propuesta = await _modelo_de(
+        ActividadLLM.PROPUESTA_DE_SCRIPT, proveedor, organizacion_id=de_quien
+    )
+    auditor, auditoria = await _modelo_de(
+        ActividadLLM.AUDITORIA_DE_SCRIPT, proveedor, organizacion_id=de_quien
+    )
 
     return ScriptProposalService(
         llm=redactor,

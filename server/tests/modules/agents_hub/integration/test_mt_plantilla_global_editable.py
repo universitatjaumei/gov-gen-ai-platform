@@ -48,7 +48,6 @@ async def _plantilla_de_plataforma(session) -> HubReportTemplate:
         report_profile="seguimiento",
         owner_kind="platform",
         owner_id=None,
-        is_global=True,
     )
     session.add(fila)
     await session.commit()
@@ -90,7 +89,6 @@ async def test_should_not_let_a_foreign_admin_touch_a_users_template(db_session)
         report_profile="seguimiento",
         owner_kind="user",
         owner_id=uuid.uuid4(),
-        is_global=False,
     )
     db_session.add(fila)
     await db_session.commit()

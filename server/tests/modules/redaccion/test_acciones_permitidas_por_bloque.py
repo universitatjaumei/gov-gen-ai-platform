@@ -53,7 +53,6 @@ async def _workspace_con_bloque(session, *, status: str, failure_kind: str | Non
         name=f"P {uuid.uuid4().hex[:6]}",
         report_profile="GENERIC_REPORT",
         owner_kind="platform",
-        is_global=True,
     )
     session.add(plantilla)
     await session.flush()

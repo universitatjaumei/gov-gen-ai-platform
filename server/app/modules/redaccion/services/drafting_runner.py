@@ -81,7 +81,9 @@ def construir_grafo(
     )
 
 
-async def resolver_modelo_de_etl(session: Any) -> tuple[Any, str, str]:
+async def resolver_modelo_de_etl(
+    session: Any, *, organizacion_id: Any = None
+) -> tuple[Any, str, str]:
     """El modelo de la actividad de transformación, con su nivel y su nombre.
 
     El nivel sale del catálogo de actividades (nivel 2, porque transformar es programar) y la
@@ -100,7 +102,9 @@ async def resolver_modelo_de_etl(session: Any) -> tuple[Any, str, str]:
     proveedor = LocalConfigProvider(session)
     resuelta = await resolver_actividad(ActividadLLM.TRANSFORMACION_ETL, proveedor)
     try:
-        modelo = await get_model_for_tier(resuelta.tier, proveedor)
+        modelo = await get_model_for_tier(
+            resuelta.tier, proveedor, organizacion_id=organizacion_id
+        )
     except Exception as fallo:  # noqa: BLE001
         _log.warning(
             "Sin modelo para el nivel %s: los bloques de transformación en modo IA fallarán "
@@ -248,7 +252,12 @@ async def ejecutar_borrador(
             select(HubWorkspaceBlock).where(HubWorkspaceBlock.workspace_id == workspace_id)
         )).scalars().all()
 
-        etl_llm, etl_model_name, etl_prompt = await resolver_modelo_de_etl(session)
+        # MT.3 — sin organización todavía: `hub_workspaces` no la tiene hasta MT.4, y esto
+        # corre dentro de la ejecución del borrador, sin actor a mano. `None` = plataforma,
+        # que es el comportamiento de siempre.
+        etl_llm, etl_model_name, etl_prompt = await resolver_modelo_de_etl(
+            session, organizacion_id=None
+        )
         grafo = construir_grafo(
             session,
             llm_service,

@@ -177,7 +177,7 @@ class SemanticDetectorDispatcher:
                 return []
 
             criterios = getattr(sitio, "config_json", None) or {}
-            llm = await self._resolver_llm(session)
+            llm = await self._resolver_llm(session, sitio)
             embedding = await self._resolver_embeddings(session, sitio)
 
             detector = (self._detector_factory or self._detector_de_verdad)(
@@ -211,7 +211,10 @@ class SemanticDetectorDispatcher:
 
         return ContentFindingRepo(session)
 
-    async def _resolver_llm(self, session: Any) -> Any:
+    async def _resolver_llm(self, session: Any, sitio: Any = None) -> Any:
+        """MT.3 — el modelo se resuelve para la organización **del sitio**, que es quien paga
+        el rastreo. `HubWebSite.organizacion_id` la tiene, así que este llamador no espera a
+        nadie."""
         if self._llm_factory is not None:
             resultado = self._llm_factory(session)
             return await resultado if hasattr(resultado, "__await__") else resultado
@@ -222,7 +225,11 @@ class SemanticDetectorDispatcher:
         from server.app.modules.agents_hub.services.model_factory import get_model_for_tier
         from server.app.modules.curation.semantic_detector import JuezDeContenidoWeb
 
-        modelo = await get_model_for_tier(1, LocalConfigProvider(session))
+        modelo = await get_model_for_tier(
+            1,
+            LocalConfigProvider(session),
+            organizacion_id=getattr(sitio, "organizacion_id", None),
+        )
         nombre = getattr(modelo, "model_name", None) or getattr(modelo, "model", "desconocido")
         # `JuezDeContenidoWeb` y no `RedactorDeBloques`: cumplen el mismo protocolo con semánticas
         # distintas —el segundo entiende su primer argumento como el **id** de una plantilla— y

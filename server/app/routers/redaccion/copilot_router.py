@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, get_session, require_module
 from server.app.core.auth.models import UserInfo
+from server.app.core.auth.tenancy import organizacion_unica_de
 from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
 from server.app.modules.agents_hub.services.embedding_resolver import (
     resolve_embedding_service,
@@ -42,6 +43,7 @@ _retriever: DocsRetriever | None = None
 
 async def get_copilot_service(
     session: AsyncSession = Depends(get_session),
+    current_user: UserInfo = Depends(get_current_user),
 ) -> CopilotService:
     """El copiloto con su modelo y su servicio de embeddings (PRO.6).
 
@@ -54,7 +56,12 @@ async def get_copilot_service(
     global _retriever
 
     try:
-        modelo = await get_model_for_tier(1, LocalConfigProvider(session))
+        # MT.3 — el modelo de la organización de quien pregunta.
+        modelo = await get_model_for_tier(
+            1,
+            LocalConfigProvider(session),
+            organizacion_id=organizacion_unica_de(current_user),
+        )
     except Exception as fallo:  # noqa: BLE001
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

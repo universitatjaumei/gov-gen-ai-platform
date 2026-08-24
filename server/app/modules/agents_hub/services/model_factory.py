@@ -17,9 +17,24 @@ DEFAULT_API_KEY_ENV_BY_PROVIDER_ID: dict[str, str] = {
 }
 
 
-async def get_model_for_tier(tier: int, config_provider: ConfigProvider):
-    """Devuelve el modelo marcado como is_default para el tier indicado."""
-    config = await config_provider.get_llm_config_for_tier(tier)
+async def get_model_for_tier(
+    tier: int, config_provider: ConfigProvider, *, organizacion_id: uuid.UUID | None
+):
+    """El modelo marcado por defecto para ese nivel **y esa organización** (MT.3).
+
+    `organizacion_id` es **obligatorio y sin valor por omisión**, y es la decisión del prompt.
+    Un opcional se olvida, y el fallo es silencioso: resolvería el modelo de la plataforma
+    cuando debía resolver el del municipio, la respuesta llegaría igual de bien escrita y el
+    consumo se cargaría al contrato equivocado. Nada falla, así que no lo caza ningún test. Con
+    el parámetro obligatorio, el sitio que no sepa la respuesta **tiene que escribir que no la
+    sabe**, y eso se ve en una revisión.
+
+    `None` significa «nivel plataforma», que es el comportamiento de antes de MT.2 y el del
+    piloto, cuyas siete configuraciones están todas a nulo.
+    """
+    config = await config_provider.get_llm_config_for_tier(
+        tier, organizacion_id=organizacion_id
+    )
     if config is None:
         raise ValueError(f"No hay configuración LLM por defecto para tier {tier}")
     return _build_model(config)

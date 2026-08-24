@@ -20,6 +20,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from server.app.core.auth.models import UserInfo
+
 
 # ---------------------------------------------------------------------------
 # El catálogo de actividades
@@ -55,6 +57,15 @@ class _ModeloFalso:
     model_name: str
 
 
+#: MT.3 — al llamar la dependencia a mano hay que darle lo que le daría la inyección: sin
+#: `current_user`, `organizacion_id` se resolvería sobre el objeto `Depends` y reventaría. Un
+#: superadministrador no pertenece a ninguna organización, así que se resuelve el nivel de
+#: plataforma, que es lo que estos tests comprueban.
+_SIN_ORGANIZACION = UserInfo(
+    user_id="1", email="root@uji.es", role="superadmin", organizacion_ids=()
+)
+
+
 class TestRaizDeComposicion:
     """`get_script_proposal_service` era un stub que devolvía 503 siempre."""
 
@@ -65,7 +76,7 @@ class TestRaizDeComposicion:
 
         pedidos: list[int] = []
 
-        async def _modelo(tier: int, _proveedor: Any):
+        async def _modelo(tier: int, _proveedor: Any, *, organizacion_id=None):
             pedidos.append(tier)
             return _ModeloFalso(model_name=f"modelo-de-nivel-{tier}")
 
@@ -81,7 +92,9 @@ class TestRaizDeComposicion:
     ) -> None:
         from server.app.routers.redaccion.scripts_router import get_script_proposal_service
 
-        servicio = await get_script_proposal_service(session=MagicMock())
+        servicio = await get_script_proposal_service(
+            session=MagicMock(), current_user=_SIN_ORGANIZACION
+        )
 
         assert niveles_pedidos == [2, 3], (
             "el que escribe es el de nivel 2 y el que audita el de nivel 3, en ese orden"
@@ -102,7 +115,9 @@ class TestRaizDeComposicion:
             1,
         )
 
-        await get_script_proposal_service(session=MagicMock())
+        await get_script_proposal_service(
+            session=MagicMock(), current_user=_SIN_ORGANIZACION
+        )
 
         assert niveles_pedidos == [1, 3]
 
@@ -112,7 +127,7 @@ class TestRaizDeComposicion:
 
         from server.app.routers.redaccion import scripts_router
 
-        async def _sin_nivel_2(tier: int, _proveedor: Any):
+        async def _sin_nivel_2(tier: int, _proveedor: Any, *, organizacion_id=None):
             if tier == 2:
                 raise ValueError("No hay configuración LLM por defecto para tier 2")
             return _ModeloFalso(model_name="ok")
@@ -123,7 +138,9 @@ class TestRaizDeComposicion:
         )
 
         with pytest.raises(HTTPException) as fallo:
-            await scripts_router.get_script_proposal_service(session=MagicMock())
+            await scripts_router.get_script_proposal_service(
+            session=MagicMock(), current_user=_SIN_ORGANIZACION
+        )
 
         assert fallo.value.status_code == 503
         detalle = str(fallo.value.detail)
@@ -138,7 +155,7 @@ class TestRaizDeComposicion:
 
         from server.app.routers.redaccion import scripts_router
 
-        async def _sin_nivel_3(tier: int, _proveedor: Any):
+        async def _sin_nivel_3(tier: int, _proveedor: Any, *, organizacion_id=None):
             if tier == 3:
                 raise ValueError("No hay configuración LLM por defecto para tier 3")
             return _ModeloFalso(model_name="ok")
@@ -149,7 +166,9 @@ class TestRaizDeComposicion:
         )
 
         with pytest.raises(HTTPException) as fallo:
-            await scripts_router.get_script_proposal_service(session=MagicMock())
+            await scripts_router.get_script_proposal_service(
+            session=MagicMock(), current_user=_SIN_ORGANIZACION
+        )
 
         assert fallo.value.status_code == 503
         detalle = str(fallo.value.detail)

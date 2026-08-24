@@ -11,6 +11,7 @@ from typing import Any
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
@@ -19,6 +20,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column
 
 from server.app.modules.agents_hub.database.base import HubOperationalBase
@@ -29,9 +31,29 @@ def _now() -> datetime:
 
 
 class HubReportTemplate(HubOperationalBase):
-    """Plantilla de informe. El campo current_version_id se gestiona a nivel de app."""
+    """Plantilla de informe. El campo current_version_id se gestiona a nivel de app.
+
+    **MT.4 — la escalera de elevación completa: usuario → organización → plataforma.** Los dos
+    extremos existían desde 9R (`owner_kind` admitía `user`, `platform` y `superadmin`) y faltaba
+    el de en medio, que es el que hace falta en cuanto una Diputación despliega para varios
+    municipios: una plantilla podía ser de una persona o de todo el mundo, y nada intermedio.
+
+    **`is_global` ya no es columna.** Se calculaba en el router como `owner_kind == "platform"`,
+    así que dos sitios guardaban el mismo hecho y podían discrepar sin que nada avisara. Ahora es
+    un `hybrid_property`, que sirve igual en Python y en SQL — que es lo que hacía falta, porque
+    el listado filtra por él.
+    """
 
     __tablename__ = "hub_report_templates"
+    __table_args__ = (
+        # MT.4 — coherencia entre las dos columnas, **en la base y no sólo en el modelo**: una
+        # plantilla «de organización» que no dice de cuál no la encuentra ninguna consulta ni la
+        # excluye ninguna, así que se cuela en los dos lados.
+        CheckConstraint(
+            "owner_kind <> 'organizacion' OR organizacion_id IS NOT NULL",
+            name="ck_report_template_organizacion_coherente",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -41,7 +63,36 @@ class HubReportTemplate(HubOperationalBase):
     report_profile: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     owner_kind: Mapped[str] = mapped_column(String(20), nullable=False)
     owner_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    is_global: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # MT.4 — el escalón de en medio. Nulo en los demás niveles: una de plataforma no es de
+    # ninguna organización, y una personal se identifica por su dueño.
+    organizacion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
+    # MT.4.2 — de dónde salió esta copia. **`ON DELETE SET NULL` y no CASCADE**: con CASCADE,
+    # retirar la plantilla de la Diputación borraría las de los municipios que la adaptaron. La
+    # procedencia es una anotación histórica, no una dependencia.
+    derivado_de: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_report_templates.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    #: Con qué versión del original se bifurcó. Es lo que permite decir «hay una v4 y tienes la v3».
+    version_de_origen: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    @hybrid_property
+    def is_global(self) -> bool:
+        """Del nivel de plataforma. **Derivado, no guardado** (MT.4).
+
+        Se conserva el nombre porque está en el contrato y lo consume el frontend; lo que
+        desaparece es la columna, que era el mismo hecho escrito dos veces.
+        """
+        return self.owner_kind == "platform"
+
+    @is_global.expression
+    def is_global(cls):  # noqa: N805 - la firma la fija SQLAlchemy
+        return cls.owner_kind == "platform"
+
     # Sin FK a hub_report_template_versions para evitar circularidad; se aplica en app
     current_version_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True

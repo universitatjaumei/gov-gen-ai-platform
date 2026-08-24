@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pytest
 
+from server.app.core.auth.models import UserInfo
+
 
 class _EmbeddingDeMentira:
     """Cuenta llamadas para poder afirmar que el índice se construye una vez."""
@@ -186,6 +188,14 @@ class TestElModuloPrefiereNoExcluye:
         assert await retriever.retrieve("bots", module="redaccion") == []
 
 
+#: MT.3 — el `Depends` resuelve el modelo para la organización de quien pregunta. Al llamarlo a
+#: mano hay que darle lo que le daría la inyección; un superadministrador no pertenece a ninguna,
+#: así que resuelve el nivel de plataforma, que es lo que este fichero comprueba.
+_SIN_ORGANIZACION = UserInfo(
+    user_id="1", email="root@uji.es", role="superadmin", organizacion_ids=()
+)
+
+
 class TestLaPuertaDelServicio:
     async def test_should_decir_el_503_que_falta_el_modelo(self, monkeypatch) -> None:
         from fastapi import HTTPException
@@ -201,7 +211,9 @@ class TestLaPuertaDelServicio:
         )
 
         with pytest.raises(HTTPException) as fallo:
-            await copilot_router.get_copilot_service(session=object())
+            await copilot_router.get_copilot_service(
+            session=object(), current_user=_SIN_ORGANIZACION
+        )
 
         assert fallo.value.status_code == 503
         assert "modelo" in str(fallo.value.detail).lower()
@@ -221,7 +233,9 @@ class TestLaPuertaDelServicio:
         monkeypatch.setattr(copilot_router, "resolve_embedding_service", _sin_embeddings)
 
         with pytest.raises(HTTPException) as fallo:
-            await copilot_router.get_copilot_service(session=object())
+            await copilot_router.get_copilot_service(
+            session=object(), current_user=_SIN_ORGANIZACION
+        )
 
         assert fallo.value.status_code == 503
         assert "embedding" in str(fallo.value.detail).lower()
@@ -238,8 +252,12 @@ class TestLaPuertaDelServicio:
         monkeypatch.setattr(copilot_router, "get_model_for_tier", _modelo)
         monkeypatch.setattr(copilot_router, "resolve_embedding_service", _embeddings)
 
-        servicio = await copilot_router.get_copilot_service(session=object())
-        otro = await copilot_router.get_copilot_service(session=object())
+        servicio = await copilot_router.get_copilot_service(
+            session=object(), current_user=_SIN_ORGANIZACION
+        )
+        otro = await copilot_router.get_copilot_service(
+            session=object(), current_user=_SIN_ORGANIZACION
+        )
 
         assert servicio is not None
         # El servicio se construye cada vez —así un cambio de modelo en el panel tiene efecto

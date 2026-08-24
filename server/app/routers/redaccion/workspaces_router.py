@@ -527,7 +527,14 @@ async def generar_borrador_en_segundo_plano(workspace_id: uuid.UUID) -> None:
     try:
         async for bg_session in get_session():
             try:
-                redactor = await _redactor_de_bloques(bg_session)
+                # MT.3 — `None` es «nivel plataforma», y aquí es lo único honesto **por ahora**:
+                # esto corre en una tarea de fondo, cuando la sesión de la petición ya se cerró,
+                # y el workspace no tiene organización hasta MT.4. Va escrito y no omitido
+                # porque el parámetro es obligatorio: así este sitio declara que no lo sabe, en
+                # vez de resolver plataforma sin que nadie se entere.
+                redactor = await _redactor_de_bloques(
+                    bg_session, organizacion_id=None
+                )
             except Exception as fallo:  # noqa: BLE001
                 await marcar_error(workspace_id, bg_session, f"modelo no disponible: {fallo}")
                 return
@@ -538,13 +545,15 @@ async def generar_borrador_en_segundo_plano(workspace_id: uuid.UUID) -> None:
         )
 
 
-async def _redactor_de_bloques(session: AsyncSession):
+async def _redactor_de_bloques(session: AsyncSession, *, organizacion_id: Any = None):
     """Modelo de la cascada, adaptado al protocolo que espera el nodo de redacción."""
     from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
     from server.app.modules.agents_hub.services.model_factory import get_model_for_tier
     from server.app.modules.redaccion.services.redactor_de_bloques import RedactorDeBloques
 
-    modelo = await get_model_for_tier(1, LocalConfigProvider(session))
+    modelo = await get_model_for_tier(
+        1, LocalConfigProvider(session), organizacion_id=organizacion_id
+    )
     return RedactorDeBloques(modelo, nombre_del_modelo(modelo))
 
 

@@ -130,9 +130,10 @@ def _seed_template_and_version(
         id=template_id,
         name="Test Template",
         report_profile="GENERIC_REPORT",
+        # MT.4 — el nivel lo dice `owner_kind` y `is_global` se deriva de él, así que ya no se
+        # asigna: eran el mismo hecho en dos sitios.
         owner_kind="platform" if is_global else "user",
         owner_id=owner_id,
-        is_global=is_global,
         current_version_id=version_id,
     )
 

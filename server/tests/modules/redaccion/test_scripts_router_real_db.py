@@ -58,7 +58,6 @@ async def _plantilla_global(session) -> uuid.UUID:
         name="Plantilla destino global",
         report_profile="GENERIC_REPORT",
         owner_kind="platform",
-        is_global=True,
     )
     session.add(template)
     await session.flush()

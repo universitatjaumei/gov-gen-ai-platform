@@ -66,7 +66,7 @@ async def test_should_ignore_an_embedding_config_marked_as_default(db_url):
                           modelo="gemini-2.5-flash", tier=9)
             await session.commit()
 
-            elegida = await LocalConfigProvider(session).get_llm_config_for_tier(9)
+            elegida = await LocalConfigProvider(session).get_llm_config_for_tier(9, organizacion_id=None)
 
             assert elegida is not None
             assert elegida.purpose == "chat"
@@ -87,6 +87,6 @@ async def test_should_return_nothing_when_the_only_default_is_not_for_chat(db_ur
                           modelo="gemini-embedding-001", tier=8)
             await session.commit()
 
-            assert await LocalConfigProvider(session).get_llm_config_for_tier(8) is None
+            assert await LocalConfigProvider(session).get_llm_config_for_tier(8, organizacion_id=None) is None
     finally:
         await engine.dispose()

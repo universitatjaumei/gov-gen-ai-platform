@@ -70,6 +70,22 @@ def orgs_del_principal(sujeto: Any) -> tuple[uuid.UUID, ...]:
     return tuple(validos)
 
 
+def organizacion_unica_de(sujeto: Any) -> uuid.UUID | None:
+    """La organización de un principal **cuando pertenece a una sola**; `None` si no.
+
+    Sirve a MT.3: los llamadores de Informes tienen que decir para qué organización piden un
+    modelo, y hasta que MT.4 le dé la dimensión al módulo lo único que hay es quien pide.
+
+    **Sólo con una.** Con varias no hay forma de saber cuál es «la suya», y en un
+    superadministrador la lista vacía significa «todas» (ver `UserInfo.organizacion_ids`): en
+    los dos casos la respuesta honesta es `None`, que en la cascada quiere decir «plataforma» —
+    y que además es el comportamiento de hoy. Es el mismo criterio con el que REV.12 resolvió
+    la marca institucional, y por la misma razón.
+    """
+    orgs = orgs_del_principal(sujeto)
+    return orgs[0] if len(orgs) == 1 else None
+
+
 def scope_query_to_orgs(stmt, sujeto: Any, model, columna: str = "organizacion_id"):
     """Acota un SELECT a las organizaciones del principal. El superadmin no se acota.
 

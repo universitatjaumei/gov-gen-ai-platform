@@ -35,7 +35,6 @@ async def _plantilla_version(session) -> uuid.UUID:
         name="Plantilla de prueba",
         report_profile="GENERIC_REPORT",
         owner_kind="platform",
-        is_global=True,
     )
     session.add(template)
     await session.flush()
