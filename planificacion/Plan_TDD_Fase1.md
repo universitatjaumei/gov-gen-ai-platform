@@ -11385,6 +11385,69 @@ incrustación del widget que D.1 dejó pendiente.
 
 ---
 
+### Prompt D.6.1 (NUEVO) — El buscador y las normas publicadas, servidos desde el mismo sitio
+
+**Modelo sugerido**: **Sonnet** — despliegue de estáticos y una variable de entorno; las
+decisiones están cerradas.
+
+**Objetivo**: hoy `CORPUS_SITE_BASE_URL` apunta a `http://127.0.0.1:4174`, así que **las citas
+del asistente sólo funcionan en la máquina de quien lo desarrolla**. Medido el 2026-08-24
+sobre el lote ujirag: 16 de 25 respuestas llevaban enlaces a localhost. Es bloqueante para
+cualquier prueba con personas reales, y el asistente sin cita verificable no es el producto.
+
+Lo que falta no es sólo cambiar la variable: hay que **publicar a dónde apunta**. El buscador
+(`cercador.html`) y los HTML por norma —los que producen las anclas `#art-N` que el contrato
+de citas exige— viven hoy en la carpeta de curación de un portátil.
+
+**Decisión del usuario (2026-08-24)**: el buscador y los HTML de las normas se sirven desde la
+**misma VM** del despliegue, y los enlaces apuntan al **bucket** donde estén las normas. En el
+buscador y/o en los HTML se **incrusta el widget** de los chatbots, para que distintas personas
+los prueben sobre la norma que están leyendo.
+
+```
+# PROMPT D.6.1 — Publicar el corpus navegable y llevar el widget hasta él
+# Deploy: cloud
+
+## Publicación de los estáticos
+- El paquete publicable es el que ya produce la curación: `cercador.html`, `html/<slug>.html`
+  y los PDF. NO se regenera aquí ni se cambia su formato: este prompt lo publica, no lo
+  produce. La frontera sigue siendo `docs/CONTRATO_MD_CORPUS.md`.
+- Suben a un bucket de GCS con versionado (el mismo criterio de D.6-VM para documentos).
+- Se sirven por HTTPS bajo un dominio estable. La URL de una norma NO puede cambiar entre
+  publicaciones: es la que el asistente cita y la que la gente guarda.
+- Subida idempotente y con `Cache-Control` explícito: un HTML de norma cambia cuando cambia
+  la norma, no cada día.
+
+## La variable deja de ser un apaño local
+- `CORPUS_SITE_BASE_URL` pasa a la URL pública en el despliegue, y se documenta junto a las
+  demás variables de entorno.
+- Comprobación de humo tras desplegar: pedir al asistente una consulta cuya respuesta cite un
+  artículo y **abrir el enlace**. El ancla tiene que llevar al artículo, no a la portada.
+
+## El widget, dentro del corpus navegable
+- Incrustar el widget en `cercador.html` y en la plantilla de `html/<slug>.html`, con
+  `data-chatbot-id` y `data-widget-key` — la credencial de SITIO de SEC.8.5, que sólo abre
+  chatbots `public_anon`.
+- Poder incrustar **más de un chatbot** para comparar: es el escenario de prueba que pidió el
+  usuario, gente distinta probando sobre la misma norma.
+- El widget NO puede romper la página si el servidor no responde: la lectura de la norma es
+  el servicio principal y el asistente es un añadido.
+
+## Tests
+# should_publish_every_html_the_manifest_declares   (nada se queda sin subir)
+# should_keep_canonical_urls_stable_between_publications
+# should_read_corpus_site_base_url_from_the_environment  (sin valor por defecto de localhost)
+# should_embed_the_widget_without_blocking_page_render
+
+## Cierre
+- [ ] Una cita del asistente abre el artículo correcto en el sitio público
+- [ ] `CORPUS_SITE_BASE_URL` no contiene `127.0.0.1` en ningún entorno desplegado
+- [ ] El widget responde desde una norma abierta en el buscador
+- [ ] Documentado cómo se republica el corpus cuando la curación entrega una versión nueva
+```
+
+---
+
 ### Prompt D.7 (NUEVO) — Qué datos pasan al piloto, y por qué casi ninguno
 
 **Modelo sugerido**: **Opus** — la decisión está tomada (ver abajo), pero el exportador toca
@@ -16308,6 +16371,182 @@ indexa como documentos distintos coexistiendo por (canonical_url, language)
 ## Criterio de done
 - [ ] RAG.1 sin regresión; anotar el efecto de la desduplicación bilingüe en el top-k
 - [ ] Una respuesta real con la advertencia de vigencia, pegada en el cierre
+```
+
+---
+
+### Prompt RAG.15 (NUEVO, RED/GREEN) — El asistente contesta con un solo fragmento
+
+**Modelo sugerido**: **Sonnet** — el defecto está localizado y medido; lo que hay que decidir
+después (qué valor de `top_k`) se decide con el dorado delante.
+
+**Objetivo**: `retrieval_top_k` **no lo lee ningún pipeline**. En
+`rag_vector_pipeline.py:69` la estrategia se construye así:
+
+```python
+return VectorRetrievalStrategy(
+    session=deps.session,
+    embedding_service=deps.embedder,
+    top_k=cfg.min_retrieval_results,      # <- no es retrieval_top_k
+    min_score=getattr(cfg, "min_retrieval_score", 0.0) or 0.0,
+    reranker=reranker,
+)
+```
+
+Dos consecuencias, las dos medidas el 2026-08-24 sobre el chatbot `Normativa UJI`:
+
+1. **El asistente responde con UN fragmento.** `min_retrieval_results` valía 1, así que el
+   `top_k` efectivo era 1. En el lote ujirag: 25 de 25 respuestas con exactamente una fuente
+   antes de tocar nada, y 20 de 20 después. Sobre un corpus de 23.306 fragmentos, la respuesta
+   se compone leyendo uno.
+2. **`retrieval_top_k` es configuración muerta y editable.** Está en el modelo
+   (`config_models.py:386`), en el alta y en la edición del router
+   (`hub_chatbots_router.py:66,126,177,324`) y por tanto en el panel: un admin puede cambiar
+   un número que no hace nada, y creer que ha ajustado la recuperación.
+
+Y un efecto de segundo orden que confundió el diagnóstico del umbral: como
+`top_k == min_retrieval_results`, la comprobación `len(items) >= min_retrieval_results` del
+quality gate sólo se cumple cuando se recuperan **exactamente** todos los que caben, y si falta
+uno el score se **multiplica por 0,5**. Subir el mínimo no endurecía un mínimo: ampliaba la
+recuperación y a la vez hacía más probable el castigo.
+
+```
+# PROMPT RAG.15 (RED/GREEN) — top_k es top_k, y el minimo es un minimo
+# Deploy: edge
+
+## Cambios
+- `_construir_estrategia` pasa `top_k=cfg.retrieval_top_k`. `min_retrieval_results` vuelve a
+  ser lo que su nombre dice: el minimo de resultados por debajo del cual el quality gate
+  penaliza.
+- Revisar los otros pipelines por el mismo error: `md_long_context_pipeline` y
+  `md_agent_selector_pipeline` tambien construyen su recuperacion.
+- Con el reranker encendido, `pool_size(top_k)` pasa a ser `max(30, top_k*3)`: comprobar que
+  el pool sigue siendo razonable con top_k=8 y anotar el coste por consulta del Ranking API.
+
+## Decidir con datos, no de memoria
+- El valor de `retrieval_top_k` se elige ejecutando el dorado de RAG.1 y el lote ujirag con
+  varios valores, igual que se hizo con el umbral. NO dar por bueno el 8 por defecto sin
+  medirlo: se escribio cuando nadie lo leia.
+- Con mas contexto por respuesta, el `quality_threshold` de 0,50 —calibrado sobre respuestas de
+  un solo fragmento— hay que volver a mirarlo. Los dos numeros se mueven juntos.
+
+## Tests (RED primero)
+# should_pass_retrieval_top_k_to_the_strategy
+# should_not_use_min_retrieval_results_as_top_k
+# should_penalise_only_when_fewer_items_than_the_minimum   (el gate, desacoplado del top_k)
+
+## Cierre
+- [ ] Una respuesta del lote ujirag cita mas de un documento cuando la pregunta lo pide
+- [ ] Dorado de RAG.1 sin regresion, con las cifras del antes y el despues anotadas
+- [ ] `retrieval_top_k` del panel cambia el comportamiento de verdad (probarlo)
+- [ ] Reevaluado el umbral tras el cambio, con el lote ujirag delante
+```
+
+---
+
+### Prompt VIS.4 (NUEVO, RED/GREEN) — Primero vigente, después lengua
+
+**Modelo sugerido**: **Sonnet** — una regla de prioridad acotada, con el caso de prueba ya
+medido.
+
+**Objetivo**: `PreferLanguagePolicy` resuelve bien lo que se le pidió —si no hay evidencia en
+la lengua de la pregunta, busca otra vez y acepta la otra lengua— pero **no distingue dos
+cosas que en la UJI no son la misma**: que la única versión disponible esté en otra lengua, y
+que esté en otro curso académico.
+
+Medido el 2026-08-24 en el corpus real: las directrices académicas de **2026/2027 sólo existen
+en castellano** y las de **2025/2026 sólo en valencià**, las cuatro marcadas vigentes y
+validadas. Con la política actual, «usa la otra lengua» y «usa una versión anterior» son la
+misma acción, y para quien pregunta son cosas muy distintas.
+
+**Decisión del usuario (2026-08-24)**: entre dos versiones de la misma norma manda **primero la
+vigente y después la lengua**. Si la vigente sólo existe en la otra lengua, se cita la vigente
+y se advierte de la lengua; nunca al revés.
+
+```
+# PROMPT VIS.4 (RED/GREEN) — La preferencia de lengua opera DENTRO de la versión vigente
+# Deploy: edge
+
+## Regla
+- La preferencia de lengua se aplica **entre versiones equivalentes en vigencia**, no entre
+  versiones de distinta vigencia.
+- Orden: (1) vigente en la lengua de la pregunta; (2) vigente en la otra lengua, con aviso de
+  lengua; (3) no vigente en la lengua de la pregunta, con el aviso de vigencia que ya existe;
+  (4) el resto.
+- No se inventa una jerarquía nueva: `estat_vigencia` y `vigencia_validada_el` ya están en el
+  documento y VIS.3 ya los consume.
+
+## Dónde
+- `PreferLanguagePolicy` en `strategies/protocols.py`. `StrictLanguagePolicy` no cambia: filtra
+  a la lengua del usuario por definición, y ahí la vigencia no compite con nada.
+
+## Tests (RED primero)
+# should_prefer_the_current_version_even_if_it_is_in_the_other_language
+# should_prefer_the_query_language_between_two_current_versions
+# should_warn_about_language_when_only_the_other_language_is_current
+# should_not_change_behaviour_when_there_is_a_single_version   (el caso de hoy)
+
+## Nota sobre la medición
+Con el corpus actual esta regla **no cambia ningún resultado**, porque cada norma tiene una
+sola versión: el emparejamiento bilingüe está incompleto (47 traducciones sin declarar de qué
+norma son versión). Empezará a decidir en cuanto entren las que faltan, y por eso conviene
+tenerla escrita antes y no después.
+
+## Cierre
+- [ ] El lote ujirag sin regresión (20/25 al cerrar el 2026-08-24)
+- [ ] Un caso con dos versiones sembradas a mano que demuestre el orden
+```
+
+---
+
+### Prompt VIS.5 (NUEVO, RED/GREEN) — El aviso de traducción avisa de lo que no es
+
+**Modelo sugerido**: **Sonnet** — un bug acotado con tres defectos visibles y su redacción.
+
+**Objetivo**: `_build_translation_warning` (`api/v1/hub_chat.py:168`) llega al usuario —el
+widget lo pinta— pero **dice lo contrario de lo que hace falta**:
+
+```python
+def _build_translation_warning(language: str) -> str | None:
+    if not language or language == "es":
+        return None
+    lang_names = {"ca": "catalan", "en": "ingles", "fr": "frances"}
+    return f"⚠️ La pregunta se detecto en {lang_display}. La respuesta puede estar en ese idioma."
+```
+
+Tres defectos, cada uno con su consecuencia:
+
+1. **Avisa del idioma de la pregunta, no del de la fuente.** Que alguien pregunte en valencià
+   no es una anomalía en la UJI. Lo que hay que decirle es que **la norma que se le cita está
+   en castellano**, porque el enlace le va a llevar a un documento en otra lengua.
+2. **Se calla si la pregunta es en castellano** (`language == "es"` → `None`). Es justo el caso
+   más frecuente del corpus real: 195 de 290 normas sólo existen en valencià, así que preguntar
+   en castellano y recibir una norma en valencià es lo habitual — y nunca avisa.
+3. **Está redactado en castellano y sin acentos**, y se le muestra a quien acaba de escribir en
+   valencià.
+
+```
+# PROMPT VIS.5 (RED/GREEN) — El aviso sale de la lengua de la FUENTE
+# Deploy: edge
+
+## Cambios
+- El aviso se deriva de `context_source_language` —que el CoreGraph ya calcula y ya viaja en
+  `translation_warning`— y no de la lengua de la pregunta.
+- Se emite siempre que la lengua de la fuente difiera de la de la pregunta, en las dos
+  direcciones. Sin la excepción del castellano.
+- Redactado en la lengua de la pregunta, con acentos.
+- Que el escenario de prueba (`hub_test_scenarios_router`) y el ejecutor del lote lo expongan:
+  hoy los dos pasan `translation_warning: False` y el defecto era invisible desde ahí.
+
+## Tests (RED primero)
+# should_warn_when_the_source_language_differs_from_the_question
+# should_warn_when_asking_in_spanish_and_citing_a_valencian_norm   (el caso que se callaba)
+# should_not_warn_when_both_match
+# should_write_the_warning_in_the_language_of_the_question
+
+## Cierre
+- [ ] Una consulta real en castellano sobre una norma que sólo existe en valencià muestra el
+      aviso, con la captura pegada
 ```
 
 ---

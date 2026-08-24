@@ -80,8 +80,16 @@
 ## 👉 EMPEZAR AQUÍ EL PRÓXIMO DÍA (actualizado 2026-08-22, al mover PLAT e IDE delante del despliegue)
 
 **Cursor actual: AIS.2** (actualizado el 2026-08-24 al cerrar AIS.1). El orden hasta el
-despliegue es **~~SEC.9 (7 prompts)~~ ✅ → AIS (AIS.1 ✅, quedan 7) → VIS.4→VIS.5 → Deploy/D.0**.
+despliegue es **~~SEC.9 (7 prompts)~~ ✅ → AIS (AIS.1 ✅, quedan 7) → RAG.15 → VIS.4→VIS.5 → Deploy/D.0**.
 
+> **RAG.15 va primero de los tres**: `retrieval_top_k` **no lo lee ningún pipeline** —la
+> estrategia se construye con `top_k=cfg.min_retrieval_results`—, así que el asistente responde
+> con **un solo fragmento** sobre un corpus de 23.306. Medido: 25 de 25 respuestas con una sola
+> fuente. Va delante de VIS.4/VIS.5 porque cambia la anchura del contexto, y con ella los scores
+> y la calibración del umbral: medir lo otro antes sería medir sobre una base que va a moverse.
+> Y `retrieval_top_k` es editable desde el panel, así que hoy un admin puede ajustar un número
+> que no hace nada.
+>
 > **VIS.4 y VIS.5 se intercalan entre AIS y Deploy** (decisión del usuario, 2026-08-24). Salen de
 > medir el asistente normativo contra el lote ujirag y **van antes del despliegue a propósito**:
 > las dos tocan lo que ve quien pregunta —qué versión se le cita y de qué se le avisa— y el piloto
