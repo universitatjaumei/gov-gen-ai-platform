@@ -10,6 +10,32 @@
 > limpio), verificación directa de los hallazgos críticos, y ejecución de las dos suites de
 > tests. Cuando un hallazgo lo señalan dos auditorías independientes se indica, porque eleva la
 > confianza. Las cifras de tests son **medidas en esta sesión**, no heredadas del historial.
+>
+> ---
+>
+> ## ⚠️ Estado de este informe (actualizado el 2026-08-24, mismo día)
+>
+> **El Bloque SEC.9 ya se ejecutó**, así que la sección 3 y los puntos 1–5 y 11 del plan de acción
+> describen fallos **ya corregidos**. Se conservan tal cual —un informe de auditoría que se reescribe
+> a medida que se arregla deja de poder auditarse a sí mismo—, pero al leerlos hay que saber que:
+>
+> - `library_router` exige identidad y la deriva del token; `/push` y `/sign_manifest` son de
+>   superadministrador (SEC.9.1).
+> - `HubProviderOut` ya no lleva `api_key` y `hub_llm_configs` pasa por la capa de tenencia (SEC.9.2).
+> - El escritor de prompts de actividad respeta la organización (SEC.9.3).
+> - La credencial literal desapareció **con su columna**: la base guarda un puntero (SEC.9.4).
+> - **El gate de aislamiento recorre el árbol de routers** en vez de una lista fija, y pasó de 4
+>   ficheros a 9 y de ~40 a 133 tests que bloquean el despliegue (SEC.9.5).
+> - Los cinco controles «declarados y no aplicados» se aplican (SEC.9.6).
+> - **MT.16 se adelantó**: dos organizaciones reales, sobre BD real, sin verse (SEC.9.7).
+>
+> Suite tras el bloque: **backend 3056 passed / 1 skipped / 0 fallos** (24:34, `-n0`) y **frontend
+> 645 passed / 0 fallos sobre 246 ficheros**. La cifra del frontend se tomó con el reporter JSON
+> propio de vitest y no con la salida filtrada por el proxy de shell, que en esta sesión dio tres
+> recuentos distintos (598, 626, 645) para el mismo estado del árbol; el «598» del §2.4 viene de
+> esa salida filtrada, así que **la medición fiable es 645**.
+> **El Bloque AIS (§5 y puntos 6–10, 12–14) sigue pendiente**, y con él el único hallazgo que
+> bloquea de facto el modelo open source: la paleta del panel.
 
 ---
 

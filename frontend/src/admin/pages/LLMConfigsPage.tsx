@@ -462,6 +462,23 @@ const providerSchema = z.object({
 })
 type ProviderFormValues = z.infer<typeof providerSchema>
 
+/**
+ * Lo que se manda al guardar un proveedor (SEC.9.2).
+ *
+ * Dejar el campo de la clave vacío significa «no la cambies», **no «bórrala»**. Desde que la
+ * clave dejó de viajar en el contrato, el formulario arranca vacío al editar, así que sin esto
+ * cambiarle el nombre a un proveedor le borraría la credencial — y el fallo no aparecería al
+ * guardar, sino en la siguiente llamada al modelo.
+ *
+ * Función pura y exportada a propósito: es una decisión con consecuencias y así se puede fijar
+ * con un test, igual que `scopesForRole`.
+ */
+export function payloadDeProveedor(values: ProviderFormValues) {
+  if (values.api_key) return values
+  const { api_key: _omitida, ...resto } = values
+  return resto
+}
+
 function ProvidersSection({ providers, isLoading }: { providers: HubProviderOut[], isLoading: boolean }) {
   const { t } = useTranslation('admin')
   const { t: tc } = useTranslation('common')
@@ -513,11 +530,7 @@ function ProvidersSection({ providers, isLoading }: { providers: HubProviderOut[
   function closeDialog() { setDialogOpen(false); setEditing(null) }
 
   function onSubmit(values: ProviderFormValues) {
-    // Dejar el campo vacío significa «no la cambies», no «bórrala». Sin esto, editar el nombre
-    // de un proveedor le borraría la credencial, y el fallo aparecería en la siguiente llamada
-    // al modelo y no al guardar.
-    const { api_key, ...resto } = values
-    const data = api_key ? values : resto
+    const data = payloadDeProveedor(values)
     if (editing) updateMutation.mutate({ providerId: editing.id, data })
     else createMutation.mutate({ data })
   }
