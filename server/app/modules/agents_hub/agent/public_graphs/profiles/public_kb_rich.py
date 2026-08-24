@@ -50,7 +50,15 @@ REGLAS DE CITA (obligatorias):
    "No tengo informacion suficiente en los documentos disponibles para responder a esta
    pregunta con citas verificables." NO inventes informacion ni cites documentos no
    recuperados.
-4. NUNCA inventes URLs ni titulos. Usa SOLO los proporcionados en el contexto."""
+4. NUNCA inventes URLs ni titulos. Usa SOLO los proporcionados en el contexto.
+5. COPIA la URL EXACTAMENTE como aparece en la linea `URL:` del documento, sin anadir ni
+   quitar un solo caracter. En particular, NO le anadas un ancla (`#...`) que no venga ya
+   en esa linea: si el fragmento que has leido pertenece a un apartado mas concreto, dilo
+   en el TEXTO del enlace, no en la direccion.
+6. Nombra en el texto el articulo, apartado o seccion del que sale cada afirmacion, para
+   que quien lee pueda localizarla dentro de la norma:
+   `[Directrius academiques, art. 1.7.a](url)`. Si el documento no se divide en articulos,
+   nombra el apartado tal y como aparezca."""
 
 RANK_AND_VALIDITY_RULES = """\
 REGLAS DE RANGO Y VIGENCIA (obligatorias):
@@ -102,7 +110,16 @@ class GenericAnswerTemplateStrategy:
         for item in items:
             lineas.append(f"## {item.title or item.source_id}")
             if item.source_url:
-                lineas.append(f"_URL: {item.source_url}_")
+                # La URL va SOLA en su linea y sin marcado alrededor. Estuvo en cursiva
+                # (`_URL: ..._`) y el guion bajo de cierre, pegado al final de la direccion,
+                # se colaba en la cita que escribia el modelo: `...#art-1_`. La comparacion
+                # exacta fallaba y se descartaba la respuesta ENTERA.
+                #
+                # Medido el 2026-08-24 sobre el lote ujirag: seis de cada ocho descartes por
+                # citas eran esto y nada mas. Y de forma intermitente, porque depende de si
+                # el modelo arrastra el caracter en esa generacion — que es el peor modo de
+                # fallo posible, el que no se reproduce cuando alguien va a mirarlo.
+                lineas.append(f"URL: {item.source_url}")
             # VIS.3: marcado por documento, no aviso general. El modelo necesita saber de
             # CUAL de las normas se duda para poder redactarlo con naturalidad; el aviso
             # que garantiza que se diga lo pone el CoreGraph sobre la respuesta.

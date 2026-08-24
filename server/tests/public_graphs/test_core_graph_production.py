@@ -178,6 +178,29 @@ class TestCitationContract:
         )
 
 
+    async def test_should_not_report_fallback_when_only_the_anchor_was_degraded(self):
+        """Degradar un ancla ajusta la respuesta; no es rendirse.
+
+        `incumplio_citas` se calculaba comparando el texto validado con el original, así que
+        cualquier ajuste contaba como sustitución. Con la degradación de anclas eso pasó de
+        ser una equivalencia cierta a ser falsa, y arrastraba dos consecuencias: la respuesta
+        se contabilizaba como fallback aunque el usuario la recibía entera, y —peor— se
+        saltaba el aviso de vigencia, que sólo se añade cuando el contrato NO sustituyó.
+        """
+        graph = _graph(
+            _cfg(quality_threshold=0.1),
+            items=[_evidence(url="https://ej.es/permisos#art-1", title="Permisos")],
+            llm=_llm("Tienes 22 días [Permisos, art. 1.3](https://ej.es/permisos#art-1.3)."),
+        )
+
+        state = await graph.run("¿Cuántos días?", str(uuid.uuid4()))
+
+        assert "22 días" in state["answer"]
+        assert "(https://ej.es/permisos)" in state["answer"]
+        assert state["fallback_used"] is False
+        assert state["fallback_reason"] is None
+
+
 # ───────────────────────────── Loop agéntico portado ─────────────────────────────
 
 

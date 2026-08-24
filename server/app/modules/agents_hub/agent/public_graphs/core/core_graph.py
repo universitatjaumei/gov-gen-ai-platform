@@ -236,8 +236,24 @@ class CoreGraph:
                 answer = response.content if hasattr(response, "content") else str(response)
                 citables = items
 
-            validated = enforce_citation_contract(answer, citables, self.cfg.retrieval_mode)
-            incumplio_citas = validated != answer
+            # UX.4: el mensaje de «no lo sé» es del chatbot. Esta rama lo ignoraba y
+            # devolvía el texto fijo en castellano; el `fallback_node` de abajo sí lo
+            # respetaba, así que el mismo asistente contestaba dos cosas distintas según
+            # por dónde se rindiera.
+            sin_respuesta = (
+                getattr(self.cfg, "no_answer_message", None) or NO_CITATION_FALLBACK
+            )
+            validated = enforce_citation_contract(
+                answer,
+                citables,
+                self.cfg.retrieval_mode,
+                no_answer_message=sin_respuesta,
+            )
+            # Se compara contra el mensaje de rendición, no contra la respuesta original:
+            # el contrato ahora también AJUSTA —degrada al documento una cita cuyo ancla no
+            # reconoce— y un ajuste no es rendirse. Compararlo con el original contaba esos
+            # ajustes como fallback y, peor, se saltaba el aviso de vigencia de abajo.
+            incumplio_citas = validated == sin_respuesta
             # VIS.3: el aviso de vigencia se AÑADE aquí, después del contrato de citas y
             # sobre la evidencia realmente citable. No es una instrucción al modelo: una
             # instrucción se cumple casi siempre, y «casi siempre» no basta para decir si
