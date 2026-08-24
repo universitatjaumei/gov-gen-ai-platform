@@ -29,7 +29,7 @@ from server.app.modules.agents_hub.database.operational_models import (
     HubWebSite,
 )
 from server.app.modules.curation.contracts import ContentFinding
-from server.app.modules.redaccion.services.llm_spec_service import _extract_json
+from server.app.core.llm_json import extraer_json as _extract_json
 
 _TEXT_LIMIT = 2000  # chars enviados al juez por documento
 _SIGNAL_TEXT_LIMIT = 500  # chars guardados en el signal del hallazgo

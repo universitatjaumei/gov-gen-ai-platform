@@ -29,7 +29,7 @@ from server.app.modules.agents_hub.database.config_models import (
     HubModuleGrant as ModuleGrant,
     HubPlatformModule as PlatformModule,
 )
-from server.app.routers.redaccion._actor import user_to_uuid
+from server.app.core.identidad import user_to_uuid
 
 TIPO_USUARIO = "usuario"
 TIPO_GRUPO = "grupo"

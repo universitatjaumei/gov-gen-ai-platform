@@ -10,11 +10,10 @@ from __future__ import annotations
 import uuid
 
 
-def user_to_uuid(user_id: str) -> uuid.UUID:
-    try:
-        return uuid.UUID(user_id)
-    except ValueError:
-        return uuid.uuid5(uuid.NAMESPACE_DNS, user_id)
+# AIS.3 — la definición se fue a `core/identidad.py`: la importaba `core/auth/modulos_service.py`,
+# o sea la autorización dependiendo del router de un módulo. Se re-exporta porque es el nombre con
+# el que la conocen los seis sitios de este módulo que la usan.
+from server.app.core.identidad import user_to_uuid  # noqa: E402,F401
 
 
 def nombre_del_modelo(modelo) -> str:

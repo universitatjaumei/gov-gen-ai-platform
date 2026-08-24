@@ -41,14 +41,10 @@ _require_superadmin = require_role(UserRole.SUPERADMIN.value)
 _ROLES = tuple(r.value for r in UserRole)
 
 
-def normalizar_correo(correo: str) -> str:
-    """La forma canónica de un correo, para guardarlo y para buscarlo.
-
-    Vive aquí y la usa también el ACS de SAML: si las dos formas de normalizar se separan,
-    `Fabra@UJI.es` dado de alta a mano y `fabra@uji.es` que llega del IdP dejan de ser la misma
-    persona, y el alta manual se convierte en una fila muerta que nadie relaciona con nadie.
-    """
-    return correo.strip().lower()
+# AIS.3 — la definición se fue a `core/identidad.py`. Vivía aquí y la importaba el ACS de SAML,
+# o sea `core/` dependiendo de un router. Se re-exporta porque es el nombre que usa el resto de
+# este fichero; quien la necesite fuera, la trae de `core`.
+from server.app.core.identidad import normalizar_correo  # noqa: E402
 
 
 # ============================================

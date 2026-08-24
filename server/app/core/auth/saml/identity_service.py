@@ -128,7 +128,7 @@ class SamlIdentityService:
         # La misma normalización que usa el alta manual (IDE.3), importada de allí y no
         # reescrita: si las dos se separan, una persona dada de alta como `Fabra@UJI.es` deja
         # de ser la que llega del IdP como `fabra@uji.es`, y el alta se queda muerta.
-        from server.app.routers.hub_users_router import normalizar_correo
+        from server.app.core.identidad import normalizar_correo
 
         email = normalizar_correo(email)
 

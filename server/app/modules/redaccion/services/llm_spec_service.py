@@ -208,11 +208,11 @@ def _esquema_del_contrato() -> str:
     )
 
 
-def _extract_json(text: str) -> str:
-    m = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
-    if m:
-        return m.group(1).strip()
-    return text.strip()
+# AIS.3 — la definición se fue a `core/llm_json.py`. Era una función privada de este fichero de
+# la que tiraba `modules/curation/semantic_detector.py`, o sea el único import módulo→módulo sin
+# justificación: no es que curación necesitara algo de Informes, es que la utilidad estaba en el
+# sitio equivocado. Se conserva el nombre local porque es el que usa el resto del fichero.
+from server.app.core.llm_json import extraer_json as _extract_json  # noqa: E402
 
 
 #: Un solo reintento: si la segunda tampoco valida, el problema no es de forma.
