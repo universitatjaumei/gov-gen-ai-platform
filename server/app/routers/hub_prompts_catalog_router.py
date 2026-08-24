@@ -8,8 +8,10 @@ modelos distintos**, no el mismo dato en dos sitios:
 
 - `HubPromptTemplate` cuelga de **un chatbot** (`chatbot_id` NOT NULL), va por idioma y está
   versionada. Por eso vive bajo el módulo Chatbots.
-- `HubActivityPrompt` tiene `activity` **único global**. Es configuración de plataforma, y el
-  catálogo de actividades lo declara el código (`actividades_llm.py`).
+- `HubActivityPrompt` va por actividad, y el catálogo de actividades lo declara el código
+  (`actividades_llm.py`). **Desde MT.6 su clave es `(activity, organizacion_id)`**: la
+  configuración se hereda organización → plataforma → código, así que `activity` ya no es único
+  global — esta línea lo decía y dejó de ser cierto (corregido en SEC.9.5).
 - Y hay un tercero que no es ninguna tabla de prompts: el **prompt base** de cada asistente,
   que es una columna de `hub_chatbots`. Es el que de verdad se ve hoy en la pantalla de
   Chatbots —las plantillas por actividad están vacías en la mayoría de despliegues—, así que
@@ -35,7 +37,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.api.deps import get_current_user, get_session
+from server.app.api.deps import get_current_user, get_session, require_module
 from server.app.core.auth.models import UserInfo
 from server.app.core.auth.tenancy import scope_query_to_orgs
 from server.app.modules.agents_hub.database.config_models import (
@@ -48,7 +50,14 @@ from server.app.modules.redaccion.services.actividades_llm import (
     PARA_QUE_SIRVE,
 )
 
-router = APIRouter(prefix="/hub/prompts-catalog", tags=["hub-prompts-catalog"])
+router = APIRouter(
+    prefix="/hub/prompts-catalog",
+    tags=["hub-prompts-catalog"],
+    # SEC.9.5 — el docstring declaraba «Módulo: plataforma» y nada lo exigía. La pantalla que
+    # consume esto ya pide `plataforma` desde SEC.9.3 (los prompts de actividad), así que la
+    # guarda alinea el router con la sección donde vive.
+    dependencies=[Depends(require_module("plataforma"))],
+)
 
 AMBITO_PLATAFORMA = "plataforma"
 AMBITO_CHATBOT_BASE = "chatbot_base"

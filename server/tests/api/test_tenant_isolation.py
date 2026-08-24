@@ -645,7 +645,11 @@ class TestNingunEndpointSeSaltaLaFrontera:
         "hub_chatbots_router.py",
         "hub_themes_router.py",
         "hub_ingestion_router.py",
-        "hub_feedback_router.py",
+        # SEC.9.5 — este vive en `api/v1/hub_feedback.py`, no en `routers/`. El nombre estaba
+        # mal escrito y el `continue` de abajo lo saltaba **en silencio**, así que llevaba desde
+        # SEC.2 pareciendo vigilado sin estarlo. Ahora se resuelve en los dos directorios, y un
+        # nombre que no exista pone el test en rojo en vez de desaparecer.
+        "hub_feedback.py",
         # SEC.8.1 — los que llegaron después y se quedaron fuera de la capa.
         "hub_organizaciones_router.py",
         "hub_test_scenarios_router.py",
@@ -654,13 +658,27 @@ class TestNingunEndpointSeSaltaLaFrontera:
         "hub_prompt_templates_router.py",
     )
 
+    # Los dos sitios donde viven routers. `test_router_inventory_is_walked.py` (SEC.9.5) los
+    # recorre enteros; esta lista se conserva porque nombra los que manejan datos **de
+    # organización**, que es una afirmación más fuerte que «tiene endpoints».
+    _DIRECTORIOS = (Path("app/routers"), Path("app/api/v1"))
+
+    def _ruta_de(self, nombre: str) -> Path | None:
+        for base in self._DIRECTORIOS:
+            if (base / nombre).is_file():
+                return base / nombre
+        return None
+
+    def test_should_not_watch_a_router_that_does_not_exist(self):
+        """Un nombre mal escrito aquí es peor que no tenerlo: parece cubierto y no lo está."""
+        inexistentes = [n for n in self.ROUTERS if self._ruta_de(n) is None]
+        assert inexistentes == [], f"esta lista nombra ficheros que no existen: {inexistentes}"
+
     def test_should_import_the_tenancy_layer_in_every_org_scoped_router(self):
-        base = Path("app/routers")
         faltan = []
         for nombre in self.ROUTERS:
-            ruta = base / nombre
-            if not ruta.is_file():
-                continue
+            ruta = self._ruta_de(nombre)
+            assert ruta is not None, f"{nombre} no existe: corrige la lista"
             texto = ruta.read_text(encoding="utf-8")
             if "tenancy" not in texto:
                 faltan.append(nombre)
