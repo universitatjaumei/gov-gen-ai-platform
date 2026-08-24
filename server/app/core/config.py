@@ -173,3 +173,15 @@ def _assert_configuracion_de_produccion(ajustes: Settings) -> None:
             "las variables de entorno del proceso. En producción usa el sandbox aislado "
             "(SANDBOX_MODE=http, servicio script-sandbox)."
         )
+
+    # SEC.9.6 — el gate anterior mira `sandbox_mode`, y `sandbox_client` elige el ejecutor
+    # local **también** con `TESTING=1`, sea cual sea el modo. Así que con
+    # ENVIRONMENT=production, SANDBOX_MODE=http y TESTING=1 el arranque no protestaba y los
+    # scripts corrían en el host: exactamente el escenario que este gate dice evitar, alcanzado
+    # por otra puerta.
+    if os.getenv("TESTING") == "1":
+        raise RuntimeError(
+            "TESTING=1 en producción hace que el sandbox use el ejecutor local aunque "
+            "SANDBOX_MODE sea 'http', así que los scripts correrían en el host. "
+            "Quita TESTING del entorno de producción."
+        )

@@ -54,10 +54,8 @@ _SIN_ACOTAR = {
         "de superadministrador. La dimensión de organización de las concesiones (MT.5) está "
         "en la tabla y todavía no la consume nadie: es MT.14"
     ),
-    "hub_agents_router.py": (
-        "SEC.9.6 lo arregla: hoy ignora el workspace_id de la ruta y filtra por user_id, así "
-        "que ni acota ni exporta lo que se le pide"
-    ),
+    # `hub_agents_router.py` estuvo aquí hasta SEC.9.6, que le puso el filtro por el
+    # `workspace_id` de la ruta y `assert_chatbot_org_access`. Ya no necesita exención.
     "edge_sync.py": (
         "dos stubs 501. **Cuando se implemente nace abierto si nadie mira**: GET /edge/config "
         "está diseñado para servir un snapshot de configuración cloud"

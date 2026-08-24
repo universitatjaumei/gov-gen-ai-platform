@@ -31,6 +31,9 @@ from server.app.modules.agents_hub.database.config_models import HubChatbot, Hub
 router = APIRouter(prefix="/hub/organizaciones", tags=["hub-organizaciones"])
 
 _require_admin = require_role("superadmin", "admin")
+# SEC.9.6 — dar de alta una organización es un acto de la plataforma: fija `partner_id`, que no
+# se puede derivar del token porque ROL.1 retiró la dimensión de *partner* del principal.
+_require_superadmin = require_role("superadmin")
 #: Administrar la plataforma: crear, renombrar y borrar organizaciones.
 _de_plataforma = Depends(require_module("plataforma"))
 #: Configuración del módulo Chatbots aplicada a una organización (PLAT.3).
@@ -180,10 +183,20 @@ async def list_organizaciones(
 @router.post("", response_model=OrganizacionRead, status_code=status.HTTP_201_CREATED)
 async def create_organizacion(
     body: OrganizacionCreate,
-    _: UserInfo = Depends(_require_admin),
+    _: UserInfo = Depends(_require_superadmin),
     session=Depends(get_async_session),
     _modulo=_de_plataforma,
 ):
+    """Da de alta una organización. **Sólo superadministrador** (SEC.9.6).
+
+    `partner_id` viene del cuerpo y no se puede derivar del actor: ROL.1 retiró la dimensión de
+    *partner* del principal, así que no hay nada en el token con lo que comprobarlo. Con un
+    administrador cualquiera pudiendo escribirlo, eso significaba adscribir una organización
+    nueva al partner de otro. La respuesta no es inventarle un claim: es que **crear una
+    organización es un acto de la plataforma** —el mismo criterio que MT.13 aplica al flujo de
+    alta con su administrador—, y ahí `partner_id` del cuerpo es legítimo porque quien lo
+    escribe es la autoridad de la instalación.
+    """
     organizacion = HubOrganizacion(
         name=body.name,
         partner_id=body.partner_id,

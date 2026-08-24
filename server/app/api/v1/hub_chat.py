@@ -46,7 +46,7 @@ from server.app.modules.agents_hub.agent.router_node import build_route_to_subag
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.core.chatbot_availability import assert_chatbot_available
 from server.app.core.quotas import assert_within_quota, contabilizar_interaccion
-from server.app.core.rate_limit import limitar_chat
+from server.app.core.rate_limit import ip_de, limitar_chat
 from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion
 from server.app.modules.agents_hub.database.operational_models import HubInteraction
 from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
@@ -305,9 +305,21 @@ async def chat_stream(
     # cuenta tokens y necesita ir a la BD. Las dos por actor efectivo: si se contaran por
     # credencial, un cliente de confianza que atiende a cien personas se llevaría el límite
     # y la cuota de una sola.
-    limitar_chat(http_request, actor_id=actor.subject_id, chatbot_id=chatbot_id)
+    # SEC.9.6 — para el widget, `actor.subject_id` es `widget:{chatbot_id}`, el MISMO para todos
+    # los visitantes anónimos: un solo visitante agotaba el cupo de peticiones de todos los
+    # demás. Pasando `None` el limitador cae a la IP, que es su comportamiento para el tráfico
+    # sin identidad. Y `ip=` en las dos llamadas de cuota es lo que hace que
+    # `anon_ip_daily_token_quota` deje de ser código muerto.
+    ip_del_visitante = ip_de(http_request)
+    limitar_chat(
+        http_request,
+        actor_id=None if es_widget else actor.subject_id,
+        chatbot_id=chatbot_id,
+    )
     organizacion = await session.get(HubOrganizacion, chatbot.organizacion_id)
-    await assert_within_quota(session, actor, chatbot, organizacion)
+    await assert_within_quota(
+        session, actor, chatbot, organizacion, ip=ip_del_visitante if es_widget else None
+    )
 
     embedding_service = await resolve_embedding_service(session, chatbot_id)
 
@@ -512,7 +524,13 @@ async def chat_stream(
         # El consumo va en el MISMO commit que la interacción, no en un segundo write: si
         # se separaran, un fallo entre los dos dejaría respuestas servidas sin contabilizar
         # —o al revés— y la cuota dejaría de cuadrar con lo que el usuario ha recibido.
-        await contabilizar_interaccion(session, actor, chatbot, total_tokens)
+        await contabilizar_interaccion(
+            session,
+            actor,
+            chatbot,
+            total_tokens,
+            ip=ip_del_visitante if es_widget else None,
+        )
         await session.commit()
 
         translation_warning = (

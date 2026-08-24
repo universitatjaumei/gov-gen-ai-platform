@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from server.app.api.deps import get_current_user, get_session, require_role, require_module
 from server.app.core.auth.models import UserInfo
 from server.app.core.auth.tenancy import organizacion_unica_de
+from server.app.core.uploads import read_within_limit
 from server.app.routers.redaccion._actor import (
     nombre_del_modelo,
     user_to_uuid as _user_to_uuid,
@@ -158,9 +159,11 @@ async def describe_sample_file(
     va a enviar** antes de enviarlo, que en una herramienta cuyos usuarios desconfían de mandar
     datos a un LLM no es un detalle.
 
-    El fichero **no se guarda**: se lee, se resume y se descarta.
+    El fichero **no se guarda**: se lee, se resume y se descarta. Pero se lee **con tope**
+    (SEC.9.6): que no se persista no impide que un fichero grande agote la memoria del proceso
+    mientras se resume, y éste era el único `UploadFile` que quedó fuera de SEC.6 y SEC.8.2.
     """
-    contenido = await file.read()
+    contenido = await read_within_limit(file)
     try:
         return resumen_de_la_muestra(contenido, file.filename or "sin-nombre")
     except MuestraIlegibleError as fallo:

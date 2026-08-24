@@ -44,17 +44,27 @@ async def export_agent_workspace(
     Requiere que el workspace tenga un final_document generado por el grafo LangGraph.
     Deploy: edge
     """
+    from server.app.core.auth.tenancy import assert_chatbot_org_access
     from server.app.modules.agents_hub.database.connection import get_async_session
     from server.app.modules.agents_hub.database.operational_models import HubInteraction
     from sqlalchemy import select
 
+    # SEC.9.6 — antes esta consulta era `where(user_id == user.user_id).limit(1)`: **ignoraba el
+    # `workspace_id` de la ruta** y devolvía una interacción cualquiera del usuario, presentada
+    # como el workspace pedido. No era sólo un fallo de autorización: el DOCX exportado no era
+    # el documento que se había pedido, y nada lo delataba.
     async for session in get_async_session():
         result = await session.execute(
             select(HubInteraction).where(
+                HubInteraction.id == workspace_id,
                 HubInteraction.user_id == user.user_id,
-            ).limit(1)
+            )
         )
         interaction = result.scalar_one_or_none()
+        if interaction is not None:
+            # `hub_interactions` se acota por su chatbot (docs/MULTITENENCIA.md), así que la
+            # propiedad no basta: la organización manda.
+            await assert_chatbot_org_access(session, interaction.chatbot_id, user)
         break
 
     if interaction is None:

@@ -24,11 +24,16 @@ services:
     env_file:
       - server/.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-govgenai}:${POSTGRES_PASSWORD:-govgenai_dev}@postgres:5432/${POSTGRES_DB:-govgenai}
-      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-govgenai}:${POSTGRES_PASSWORD:-govgenai_dev}@postgres:5432/${POSTGRES_DB:-govgenai}
+      # SEC.9.6 — sin `:-` en ningún secreto. Los servicios `postgres` y `minio` ya exigían la
+      # variable; aquí había un valor por omisión publicado en el repositorio, así que un `.env`
+      # incompleto no fallaba: levantaba producción con `govgenai_dev` / `minioadmin_dev`. Que
+      # el fallo fuera «ruidoso» —la app no conectaría— sólo vale mientras no haya una base
+      # sembrada en desarrollo con esa misma contraseña, y entonces arranca del todo.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?falta POSTGRES_USER}:${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?falta POSTGRES_DB}
+      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?falta POSTGRES_USER}:${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?falta POSTGRES_DB}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin_dev}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?falta MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?falta MINIO_ROOT_PASSWORD}
       MINIO_ENDPOINT: minio:9000
       ENVIRONMENT: production
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -126,8 +131,10 @@ services:
       dockerfile: Dockerfile
     container_name: govgenai_migrate
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-govgenai}:${POSTGRES_PASSWORD:-govgenai_dev}@postgres:5432/${POSTGRES_DB:-govgenai}
-      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-govgenai}:${POSTGRES_PASSWORD:-govgenai_dev}@postgres:5432/${POSTGRES_DB:-govgenai}
+      # SEC.9.6 — mismo criterio que en `app`: si falta la variable, el compose se detiene en vez
+      # de aplicar migraciones contra una base con credenciales del repositorio.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?falta POSTGRES_USER}:${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?falta POSTGRES_DB}
+      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?falta POSTGRES_USER}:${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?falta POSTGRES_DB}
     working_dir: /app/server
     command: ["alembic", "upgrade", "head"]
     depends_on:

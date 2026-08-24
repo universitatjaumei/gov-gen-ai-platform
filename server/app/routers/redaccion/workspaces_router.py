@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.api.deps import get_current_user, get_session
+from server.app.api.deps import get_current_user, get_session, require_module
 from server.app.core.auth.models import UserInfo
 from server.app.core.storage import StorageService, get_storage_service
 from server.app.core.uploads import read_within_limit, sanitizar_nombre
@@ -65,7 +65,15 @@ from server.app.modules.redaccion.database.repos import (
     WorkspaceRepo,
 )
 
-router = APIRouter(prefix="/redaccion/workspaces", tags=["redaccion-workspaces"])
+router = APIRouter(
+    prefix="/redaccion/workspaces",
+    tags=["redaccion-workspaces"],
+    # SEC.9.6 — era el único router de `redaccion/` sin la guarda de módulo de INF.7. La
+    # propiedad del informe sí se comprobaba (`es_propietario`), así que el impacto era
+    # saltarse la frontera de módulos, no ver informes ajenos; pero un router que se salta la
+    # frontera hace que la frontera dependa de qué fichero toques.
+    dependencies=[Depends(require_module("informes"))],
+)
 
 _sm = BlockStateMachine()
 

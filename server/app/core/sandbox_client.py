@@ -462,6 +462,35 @@ print(json.dumps(_r, default=str))
 """
 
 
+#: Lo único que un intérprete necesita para arrancar. Todo lo demás —secretos incluidos— se
+#: queda fuera del subproceso (SEC.9.6).
+_VARIABLES_QUE_PASAN = ("PATH", "SYSTEMROOT", "TEMP", "TMP", "LANG", "LC_ALL", "PYTHONIOENCODING")
+
+
+def _entorno_minimo() -> dict[str, str]:
+    """El entorno del subproceso, construido por lista blanca y no por herencia.
+
+    Por lista blanca a propósito: una lista negra («quita `JWT_SECRET_KEY`, `DATABASE_URL`…»)
+    hay que ampliarla cada vez que aparece un secreto nuevo, y nadie se acuerda. Con lista
+    blanca, el secreto que se añada mañana ya no viaja.
+    """
+    entorno = {
+        nombre: os.environ[nombre]
+        for nombre in _VARIABLES_QUE_PASAN
+        if nombre in os.environ
+    }
+    entorno.setdefault("PYTHONIOENCODING", "utf-8")
+
+    # Un «hogar» de usar y tirar. Varias librerías escriben caché en el perfil del usuario
+    # —matplotlib es la que lo destapó: sin sitio donde escribir su configuración, ni se
+    # importa—. Apuntarlas al temporal las deja funcionar **y** es mejor aislamiento que
+    # heredar `USERPROFILE`, que le daría al script el escritorio de quien ejecuta el servidor.
+    temporal = tempfile.gettempdir()
+    for variable in ("MPLCONFIGDIR", "HOME", "USERPROFILE", "XDG_CACHE_HOME"):
+        entorno.setdefault(variable, temporal)
+    return entorno
+
+
 def _run_sync(
     wrapper_code: str | None,
     timeout: int,
@@ -470,6 +499,7 @@ def _run_sync(
 ) -> dict[str, Any]:
     """Ejecuta un wrapper en un subproceso síncrono. Devuelve {returncode, stdout, stderr}."""
     tmp_path: str | None = None
+
     try:
         if script_path:
             run_path = script_path
@@ -484,6 +514,12 @@ def _run_sync(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            # SEC.9.6 — sin `env=`, el subproceso hereda `os.environ` entero: `JWT_SECRET_KEY`,
+            # `DATABASE_URL` y `AUTOMATIA_SIGNING_KEY` quedaban al alcance de un script
+            # generado por un modelo. El ejecutor local es de desarrollo, así que esto no
+            # sustituye al aislamiento del servicio `script-sandbox`; lo que hace es que el
+            # modo de desarrollo no reparta los secretos del desarrollador.
+            env=_entorno_minimo(),
         )
         try:
             stdout, stderr = proc.communicate(timeout=timeout)
