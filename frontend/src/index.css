@@ -64,14 +64,29 @@
     --input: oklch(0.922 0 0);
     --radius: 0.625rem;
 
-    /* ── Identidad del proyecto (UX.5) — azul #0b5394 ──────────────
+    /* ── Marca del proyecto (UX.5; semilla añadida en AIS.1) — azul #0b5394 ────────
      *
      * Es la paleta de los documentos y paneles de esta misma casa. Antes había aquí un
      * turquesa que **no llegaba a verse**: `AppLayout` pintaba el lateral con `bg-card`
      * —blanco— en vez de `bg-sidebar`, así que la identidad estaba declarada y sin aplicar.
      *
      * En hexadecimal y no en oklch a propósito: estos valores se comparan a ojo contra el
-     * proyecto del que salen, y en oklch nadie puede hacer esa comprobación. */
+     * proyecto del que salen, y en oklch nadie puede hacer esa comprobación.
+     *
+     * **`--marca` es la semilla, y existe para que el modo oscuro derive de ella** en vez de
+     * escribir su propia paleta a mano — que es cómo el bloque `.dark` acabó con el turquesa y
+     * el azul marino de una institución concreta, o sea con una marca distinta según el modo.
+     *
+     * Vale lo mismo que `--primary`, y los dos están escritos: REV.9 ata los literales de este
+     * bloque al contrato del servidor (`test_rev9_la_paleta_es_una.py` los compara como texto),
+     * así que poner aquí `var(--marca)` dejaría ese test comparando una función CSS contra un
+     * hexadecimal. Que no se separen lo vigila `paletaDelPanelNoEsDeNadie.test.ts`.
+     *
+     * Nada de esto es la identidad de un despliegue: la de cada organización llega por la
+     * cascada del servidor, que desde REV.9 escribe estas mismas variables en línea sobre
+     * `:root` —y por eso gana a este fichero y también al bloque `.dark`—. Lo de aquí es lo
+     * que se ve mientras la cascada está en vuelo y cuando no hay ningún tema. */
+    --marca: #0b5394;
     --primary: #0b5394;
     --primary-foreground: #ffffff;
     --accent: #e8f0f8;
@@ -112,22 +127,37 @@
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
 
-    /* ── UJI brand — turquoise slightly lighter for dark bg ──── */
-    --primary: oklch(0.70 0.10 211);
-    --primary-foreground: oklch(0.10 0.04 244);
-    --accent: oklch(0.22 0.06 211);
-    --accent-foreground: oklch(0.85 0.045 211);
-    --ring: oklch(0.64 0.105 211);
+    /* ── La misma marca, aclarada para fondo oscuro (AIS.1) ────────────────────
+     *
+     * Aquí había una paleta escrita a mano y rotulada con la marca de **una institución
+     * concreta**: su turquesa (hue 211) y su azul marino (hue 244). Y no era sólo una etiqueta
+     * de más: el bloque claro pasó al azul del proyecto en UX.5 y este se quedó como estaba,
+     * así que **cambiar a modo oscuro no oscurecía la identidad, la sustituía por otra**.
+     * El detalle de qué había y por qué se fue está en el test que lo vigila.
+     *
+     * Ahora todo sale de `--marca` con `color-mix`, así que los dos modos son la misma marca
+     * por construcción y no porque alguien mantenga dos listas a la vez. Lo que queda en
+     * neutro puro —blancos y grises sin croma— es a propósito: un texto casi blanco sobre un
+     * lateral oscuro no es identidad de nadie, y teñirlo sólo bajaría el contraste.
+     *
+     * Mezcla en `srgb` y no en `oklch` porque los valores de partida son hexadecimales y así la
+     * mezcla se puede comprobar a ojo, que es la misma razón por la que el bloque claro no está
+     * en oklch. */
+    --primary: color-mix(in srgb, var(--marca) 55%, white);
+    --primary-foreground: color-mix(in srgb, var(--marca) 25%, black);
+    --accent: color-mix(in srgb, var(--marca) 28%, black);
+    --accent-foreground: color-mix(in srgb, var(--marca) 35%, white);
+    --ring: color-mix(in srgb, var(--marca) 55%, white);
 
-    /* ── UJI brand — navy sidebar (darker in dark mode) ──────── */
-    --sidebar: oklch(0.13 0.055 244);
+    /* ── Lateral: la marca al fondo, que es lo que da unidad al panel ─── */
+    --sidebar: color-mix(in srgb, var(--marca) 40%, black);
     --sidebar-foreground: oklch(0.92 0 0);
-    --sidebar-primary: oklch(0.70 0.10 211);
-    --sidebar-primary-foreground: oklch(0.10 0.04 244);
-    --sidebar-accent: oklch(0.18 0.06 244);
+    --sidebar-primary: color-mix(in srgb, var(--marca) 55%, white);
+    --sidebar-primary-foreground: color-mix(in srgb, var(--marca) 25%, black);
+    --sidebar-accent: color-mix(in srgb, var(--marca) 55%, black);
     --sidebar-accent-foreground: oklch(0.92 0 0);
     --sidebar-border: oklch(1 0 0 / 8%);
-    --sidebar-ring: oklch(0.64 0.105 211);
+    --sidebar-ring: color-mix(in srgb, var(--marca) 55%, white);
 
     /* ── Charts ──────────────────────────────────────────────── */
     --chart-1: oklch(0.70 0.10 211);

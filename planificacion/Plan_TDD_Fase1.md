@@ -15036,15 +15036,35 @@ piloto (las caras —code-splitting, descomponer `ChatbotsPage`— quedan post-p
   el event loop en async def to_pdf).
 - db.py:13-16 y connection.py:18-19: DATABASE_URL sin fallback con credenciales; si falta,
   RuntimeError explícito (como JWT_SECRET_KEY), no conectar a ciegas a una BD conocida.
+- **Guardarraíl del extra `local-models`** (añadido el 2026-08-24, ver más abajo): un test en
+  tests/infra que afirme que `server/uv.lock` fija `torch`, `torchvision` y
+  `sentence-transformers`.
 
 ## Tests (RED primero)
 # should_fail_loudly_when_database_url_is_absent
 # should_not_block_the_event_loop_on_pdf_export
 # should_configure_application_logging_at_startup
+# should_pin_the_local_models_stack_in_the_server_lock
 
 ## Cierre
 - [ ] grep de print( en server/app = 0 (o solo en scripts de CLI).
 ```
+
+> **Por qué el guardarraíl del lock entra aquí** (decisión del usuario, 2026-08-24). Salió de una
+> alarma que resultó ser falsa y dejó un hueco real. El `uv.lock` **de la raíz** apareció con 558
+> líneas borradas y la lectura razonable fue «la pila de torch desapareciendo por un `uv sync` sin
+> el extra» — la trampa que ya está anotada en la memoria del proyecto. Al mirarlo no era eso: ese
+> lock es del proyecto `automatia`, el legado NiceGUI de la raíz, y lo que se iba era **el árbol de
+> Docling** poniéndose al día con EXT.3 (`docling-core`, `rapidocr`, `opencv`, `omegaconf`… más
+> `accelerate` y `torchvision`, que allí sólo eran alcanzables a través de Docling). `server/uv.lock`
+> —el que copia el `Dockerfile` y usa CI— está intacto y fija los tres paquetes. **Así que revertir
+> habría sido lo contrario de lo que se quería**: volver a fijar el árbol que EXT.3 retiró, en un
+> fichero que además desaparece con el Bloque NIC.
+>
+> Lo que sí quedó al descubierto: **CI hace `uv sync --frozen` sin `--extra local-models`**, así que
+> el camino de los modelos locales no se ejercita en ninguna parte. El `--frozen` del `Dockerfile`
+> protege la imagen —una inconsistencia falla en voz alta—, pero la instalación local de un edge no
+> tiene nada que la vigile. El test es estático (lee el lock, no instala nada) y cuesta tres líneas.
 
 ---
 
