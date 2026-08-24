@@ -1,389 +1,504 @@
 # Valoración del proyecto — Gov Gen AI Platform
 
-> Informe de valoración global: estado de la Fase 1, calidad del desarrollo, seguridad,
-> sentido del producto y análisis de la planificación pendiente (Fases 2 y 3).
-> Fecha: 2026-07-11. Basado en `planificacion/PROJECT_STATE.md`, los tres planes TDD, `Arquitectura.md`,
-> `planificacion/PLAN_DESARROLLO.md`, los documentos de cambios y una auditoría del código actual
-> (backend, frontend y seguridad).
+> Auditoría previa al despliegue del piloto: estado del desarrollo, seguridad, separación por
+> organizaciones (multitenencia) y aislamiento del núcleo respecto de la configuración para el
+> modelo de desarrollo colaborativo (fork/upstream) que declaran `README.md` y `CONTRIBUTING.md`.
+> Fecha: 2026-08-24. Cursor del proyecto: **Deploy/D.0** (fase 1 del Bloque MT cerrada, `b705bfa`).
+> Sustituye a la valoración del 2026-07-11.
+>
+> Método: cuatro auditorías de solo lectura sobre el árbol en `main` @ `b705bfa` (working tree
+> limpio), verificación directa de los hallazgos críticos, y ejecución de las dos suites de
+> tests. Cuando un hallazgo lo señalan dos auditorías independientes se indica, porque eleva la
+> confianza. Las cifras de tests son **medidas en esta sesión**, no heredadas del historial.
 
 ---
 
 ## 1. Resumen ejecutivo
 
-El proyecto está en un estado **notablemente maduro para un desarrollo en solitario**: la
-Fase 1 está funcionalmente completa salvo dos bloques (Autoinstalación y Deploy GCP), con
-~943 tests backend y ~209 tests frontend en verde, disciplina TDD real, contrato OpenAPI +
-Orval operativo, frontera edge/cloud implementada en código (no solo en papel) y bloques
-avanzados que no estaban en el plan original (SSO SAML, PAT, servidor MCP, calidad de
-contenido web, sandbox de scripts).
+Han pasado seis semanas y muchos bloques desde la valoración de julio, y el cambio de fondo es
+que **aquella auditoría cumplió su función**: los dos fallos críticos que bloqueaban el
+despliegue (login sin contraseña y ausencia de aislamiento multi-tenant) están corregidos, y no
+de boquilla —hay commits con borrados masivos, migraciones, y sobre todo **tests de guardarraíl
+sobre el árbol** que impiden la recaída—. El proyecto llega a la puerta del piloto en un estado
+sólido y con una disciplina de ingeniería poco habitual para un desarrollo prácticamente en
+solitario.
 
-Las dos conclusiones principales de esta valoración son:
+Dicho eso, esta auditoría **no da luz verde incondicional al despliegue**. Las tres conclusiones:
 
-1. **La seguridad es el bloqueante real antes de cualquier despliegue**, no la
-   funcionalidad pendiente. Se han encontrado dos fallos graves (login de partner sin
-   contraseña y ausencia de aislamiento multi-tenant en los endpoints) que invalidan la
-   promesa central de la plataforma —multi-tenancy para administraciones públicas— hasta
-   que se corrijan. Recomiendo insertar un **Bloque SEC** de endurecimiento entre el
-   cursor actual (11.1) y el Deploy GCP.
+1. **La seguridad estructural está resuelta; la regresión está en los bordes nuevos.** Los diez
+   hallazgos de julio (A1–A5, widget, temas, uploads, docs, JWT) están resueltos o
+   sustancialmente mitigados. Pero los bloques recientes (MT, PLAT, REV) han abierto agujeros
+   nuevos que **tres de las cuatro auditorías encontraron por separado**: un router de biblioteca
+   (`library_router`) **completamente sin autenticar** que incluye un oráculo de firma RSA, la
+   clave de proveedor LLM **devuelta en claro** por la API, y dos routers de configuración sin
+   filtro por organización. Ninguno estaba en julio: son deuda introducida después. Son
+   bloqueantes de despliegue con datos reales, pero baratos de cerrar (un bloque SEC.9 corto).
 
-2. **La planificación de Fases 2 y 3 es sólida en diseño pero optimista en volumen**:
-   `client_app/` conserva 489 ficheros Python (~6,2 MB) sin migrar, mientras el plan de
-   Fase 2 enumera explícitamente solo una fracción. Conviene hacer un inventario de
-   migración medible antes de arrancar la Fase 2 y decidir de forma definitiva la
-   nomenclatura de roles (SuperAdmin/Admin/Organización), que la documentación da por
-   aplicada pero el código no refleja.
+2. **La separación por organizaciones es robusta en su núcleo y frágil en su superficie.** Las
+   dos capas que hacen cumplir la frontera (`tenancy.py` y `ambito.py`) son de calidad muy alta,
+   fail-closed en los casos difíciles, y el widget/chat público —la superficie más expuesta— está
+   bien cerrado. Pero el esquema de MT.1–MT.7 metió la *dimensión* de organización en las tablas
+   sin que todos los routers la *usen* todavía, y el inventario de `docs/MULTITENENCIA.md`
+   presenta como funcionalidad viva algunas columnas que aún no consume nadie. Es coherente con la
+   decisión declarada («meter el esquema antes del piloto, la vista y los permisos después»), pero
+   hay que separar con precisión lo que es hueco documentado (fase 2) de lo que es fuga real.
+
+3. **El aislamiento núcleo/configuración es genuino, con una grieta concreta que sí importa para
+   el modelo open source.** El mecanismo de fork/upstream está encarnado en código real
+   (vocabulario como dato, prompts con default-en-código y override-en-BD, branding en BD con un
+   test que prohíbe que la marca viaje al repo). Pero la paleta de color del panel de
+   administración está hardcodeada como «UJI brand» en `index.css` y la cascada de temas no la
+   alcanza: otro ayuntamiento que despliegue el principal tendría el panel con los colores de la
+   UJI y sin pantalla para cambiarlos. Es el único hallazgo que **bloquea de facto** el uso del
+   principal tal cual. Falta, además, implementar el §13 de la AGPL (enlace al fuente en la
+   interfaz y en el widget) y varias piezas de infraestructura de contribución.
+
+**Recomendación:** insertar un **Bloque SEC.9** (endurecimiento de la 3ª auditoría, 4–6 prompts)
+entre el cursor actual y D.0, más un puñado de arreglos de aislamiento OSS de coste bajo. El
+resto es deuda conocida y acotada que puede acompañar al piloto documentada.
 
 ---
 
-## 2. Fase 1 — Qué se ha construido y valoración
+## 2. Estado del desarrollo
 
-### 2.1 Completado (según planificacion/PROJECT_STATE.md, verificado contra el código)
+### 2.1 Dónde está el proyecto
 
-| Bloque | Contenido | Valoración |
+El cursor está en **Deploy/D.0**. Antes del piloto quedan, por decisión del usuario, los bloques
+PLAT (administración de plataforma), IDE (identidad y permisos) y MT (multitenencia), **los tres
+ya completos**, más el propio despliegue. La fase 1 del Bloque MT (MT.1–MT.7) cerró el 2026-08-24
+y era lo único que el usuario puso explícitamente delante del piloto; la fase 2 de MT (vista y
+permisos, MT.8–MT.21) queda para después, porque depende de cómo resulte el piloto.
+
+Los tres módulos de usuario del MVP están construidos y verificados de punta a punta en navegador
+en sesiones anteriores: **Chatbots** (RAG en tres niveles, widget embebible, chat identificado),
+**Informes** (extracción determinista + valoración de IA aprobada por humano) y **Curación**
+(rastreo de portal, detección de contenido caducado, selección de corpus). Los dos módulos
+previstos y aún no existentes —Automatización de procesos y Gestor de expedientes— están
+correctamente marcados como no construidos en el README.
+
+### 2.2 Los problemas de calidad de julio: qué se resolvió
+
+Los tres problemas estructurales grandes del §3 de la valoración anterior están **genuinamente
+resueltos**, con la diferencia clave de que hay tests que impiden la recaída:
+
+| Problema de julio | Estado | Evidencia |
 |---|---|---|
-| 9B — Chatbots públicos | RAG híbrido, LangGraph, chat SSE, widget embebible, spiders | Núcleo del MVP, operativo |
-| 9R — Redacción Contract-First | `ReportTemplateSpec`, SDUI, DraftingCoreGraph, pipelines | El mejor código del proyecto: SDUI real con Zod dinámico y tests de contrato |
-| Fase 10 — Temas | Cascada Plataforma→Cliente→Chatbot, presets, editor | Completo |
-| 1C — Privacidad/Export | Exportación DOCX, políticas | Completo con salvedad (§4, anonimización no persiste el mapa) |
-| Fase 13 — NER reversible | Hook pre/post-LLM en redacción | Completo (motor); Vault Edge queda para F2.A |
-| Fase 20 — WCAG | 9/9 tests a11y, gate CI, checklist | Buen nivel para esta etapa |
-| SBX — Sandbox scripts | Microservicio aislado (read-only, cap_drop ALL, no-root) | Bien endurecido; referencia a seguir |
-| 9Q — Calidad contenido web | Crawler, detectores, RAG consciente de calidad, informes | Diferenciador de producto valioso |
-| AUTH — SAML + PAT | SP SAML 2.0 (python3-saml), provisioning JIT, PAT con scopes | Implementación correcta (sha256, compare_digest, revocación) |
-| MCP — Servidor stdio | 16 tools + 5 resources, gating HITL con `confirm`/`dry_run` | Muy bien diseñado (paquete aislado, 0 imports de server/app) |
+| `api/v1/automation.py` (1.189 LOC, 19 endpoints, DI violada, sin registrar) | **Resuelto** | Borrado en `6e78b35` (ROL.1), −1189 LOC. El fichero no existe. |
+| `server/app/ui/` (21 ficheros NiceGUI en árbol activo) | **Resuelto** | Retirado a `_legacy_nicegui/` (CAL.1). 3 tests de cuarentena lo vigilan. |
+| `AIBrainService` monolítico (~1.082 LOC) | **Resuelto** (la clase no existe) | Ver deuda nueva D1: el módulo sustituto quedó sin cablear. |
+| Shims `init_db`/alias en `seeds.py` | **Resuelto** | Guardarraíl `test_no_legacy_shims.py`. |
+| Capa API manual del frontend (fetch crudo, tipos a mano) | **Resuelto** (estructural) | Migrado a Orval con guardarraíl `contractFirstApi.test.ts`. Ver D2: queda una isla que es un bug. |
+| Scopes calculados en cliente (`AccessTokensPage`) | **Resuelto** | `scopesForRole()`, función pura testeable. |
+| `ca/admin.json` al ~25 % | **Resuelto** | Paridad **exacta**: 854 claves × 3 locales, 0 huecos, con guardarraíl de cobertura. |
+| `DocumentsPage.tsx` (1.019 LOC) | **Resuelto** | Descompuesta a 287 LOC + 12 módulos con tests. |
 
-### 2.2 Pendiente dentro de Fase 1
+La brecha más grave de todas —que CI ejecutaba solo el 42 % de los tests, invalidando todas las
+cifras— también está cerrada: `ci.yml` ejecuta ahora `pytest tests` entero con `-n0`, más dos
+gates separados que bloquean el despliegue (aislamiento entre organizaciones y regresión de
+retrieval).
 
-- **Fase 11 — Autoinstalación** (cursor actual: 11.1): generador `.env`, compose de
-  producción, init script. Prerrequisito de la distribución como software libre.
-- **Deploy GCP (D.1–D.5)**: primer despliegue real.
-- **Bloque ING — Ingesta multi-formato** (backlog, bloqueado por la curación del corpus
-  de normativa por parte del usuario). Ojo: sin este bloque el piloto no tiene su corpus
-  real de ~300 documentos; es backlog en el plan pero es **crítico para el valor del
-  piloto**. La Fase 0 (script de carga masiva) es barata y desbloquea todo.
+### 2.3 Deuda de calidad que sigue pendiente
 
-### 2.3 Divergencias documentación ↔ código detectadas
+Ninguna es bloqueante por sí sola para un piloto, pero conviene tenerlas a la vista:
 
-1. **Nomenclatura de roles no aplicada.** `Arquitectura.md` §5 y `planificacion/PLAN_DESARROLLO.md`
-   ("refactor de nomenclatura aplicado en Fase 1") dan por hecho el renombrado
-   Partner→Admin, Client→Organización. El código sigue usando `PartnerAccount`,
-   `HubClient` y roles `admin`/`partner`. No es un problema en sí, pero **hay que decidir
-   ya**: o se ejecuta el renombrado (Bloque 2 de `CAMBIOS_ARQUITECTURA.md`) antes de la
-   Fase 2 —cuando el coste es mínimo—, o se actualiza la documentación para reflejar la
-   nomenclatura real. Renombrar después de construir Expedientes (Fase 3, que introduce
-   `responsable_rol` por todas partes) multiplicará el coste.
-2. **`frontend/src/agent/` no existe** y `frontend/src/automation/` son carpetas vacías;
-   en cambio existe `frontend/src/redaccion/` (el módulo más desarrollado) que no figura
-   en el mapa de módulos de `AGENTS.md`. Actualizar `AGENTS.md` evita que futuros agentes
-   de programación coloquen código en el sitio equivocado.
-3. **OIDC no existe**; solo SAML. Los planes de F3 citan "Auth OIDC/SAML" como
-   prerrequisito — con SAML+JWT es suficiente, pero conviene ajustar el texto.
+- **Higiene de arranque y observabilidad.** 157 llamadas a `print()` en `server/app/` y **sin
+  configuración de logging de la aplicación** (el único `basicConfig` está dentro de un script).
+  En el piloto la observabilidad será stdout sin niveles ni timestamps. Además, el `except
+  Exception` del arranque del scheduler de calidad (`main.py:156`) se traga cualquier fallo con un
+  `print` y devuelve `None`.
+- **`subprocess.run` síncrono en `async def to_pdf`** (`curation/report_exporter.py:108`): bloquea
+  el event loop durante la conversión de LibreOffice. Envolver en `asyncio.to_thread`.
+- **`create_all` en el lifespan** (`main.py:260-261`) conviviendo con 72 migraciones Alembic.
+  Mitigado en producción por un servicio `migrate` en `docker-compose.prod.yml`, pero el `CMD` del
+  `Dockerfile` no ejecuta `alembic upgrade head`: un despliegue que arranque la imagen sin ese
+  compose (Kubernetes, `docker run`) se apoyará silenciosamente en `create_all` y divergirá.
+- **Fallback de `DATABASE_URL` con credenciales en claro** (`db.py:13-16` y
+  `connection.py:18-19`): si la variable falta, el servidor arranca contra una BD conocida en
+  silencio en vez de fallar. `JWT_SECRET_KEY` sí falla duro; `DATABASE_URL` debería también.
+- **Sin code-splitting en el frontend**: 0 `React.lazy` en ~31.500 líneas de `.tsx`; todo va a un
+  bundle único junto con ~500 KB de clientes Orval. Coste de primera carga relevante para equipos
+  y redes modestas de una administración local. Barato de arreglar con lazy routes.
+- **`client_app/`**: 469 ficheros `.py` (era 489; −4 %). Es peso muerto en el repo, **no en el
+  artefacto** (el `Dockerfile` no lo copia). Su retirada está asignada al Bloque NIC, después del
+  despliegue. No bloquea.
+- **Persistencia del mapa de anonimización**: `save_state`/`load_state` siguen siendo no-op
+  (`anonymization/service.py:231-237`). El mapa se produce en memoria pero no sobrevive al
+  proceso, así que **re-identificar un informe generado ayer es imposible** y no queda rastro de
+  auditoría del mapeo. Si el piloto maneja datos reales de ciudadanos por el flujo de Informes,
+  esto merece una decisión explícita **antes** de arrancar, no un descubrimiento a posteriori.
 
----
+### 2.4 Cifras de tests (medidas en esta sesión)
 
-## 3. Calidad del desarrollo
-
-### 3.1 Fortalezas
-
-- **Frontera edge/cloud real**: `DEPLOY_MODE` con `_register_cloud`/`_register_edge`,
-  routers etiquetados, doble `DeclarativeBase` (`HubConfigBase`/`HubOperationalBase`) sin
-  ningún `relationship()` cross-base, y tests de frontera (`test_deploy_mode`,
-  `edge_boundary`). Es raro ver esta disciplina mantenida durante 60+ prompts.
-- **Contract-First operativo**: OpenAPI exportado (109 paths), Orval con `tags-split`,
-  SDUI en redacción verificado por tests ("el test falla si busca un campo hardcodeado").
-- **StorageService/fsspec bien diseñado** (Protocol + `asyncio.to_thread`), portable a GCS.
-- **Suite de tests amplia**: ~943 backend + ~209 frontend + a11y con axe-core, con
-  separación unit/integration/e2e.
-
-### 3.2 Problemas principales (backend)
-
-1. **`api/v1/automation.py` (1.189 LOC, 19 endpoints) instancia `AIBrainService()` a mano
-   en ~18 endpoints y llama a métodos privados** (`_validate_license`,
-   `_resolve_server_config`) a través de la frontera HTTP. Viola las dos reglas de
-   `AGENTS.md` (DI obligatoria; sin acceso a internos). Además **este router y
-   `telemetry_router` no están registrados en `main.py`**: son 1.200+ líneas de
-   superficie muerta. Decisión pendiente: registrarlos como edge (la tabla de AGENTS.md
-   dice que `/automation/*` es edge) tras refactorizarlos, o retirarlos hasta la Fase 2.
-2. **`server/app/ui/` contiene 21 ficheros NiceGUI** (p. ej. `admin_security.py`, 1.035
-   LOC) dentro del árbol activo del servidor, sin importadores, pero con tests
-   (`test_admin_*_ui.py`) que los mantienen vivos. Según las propias reglas del proyecto
-   deberían ir a `_legacy_nicegui/` (o borrarse, Caso B) junto con sus tests.
-3. **`AIBrainService` monolítico (1.082 LOC)** con responsabilidades mezcladas (RPA,
-   visión, generación de scripts, forensics) y prácticamente sin tests funcionales. Igual
-   `cortex.py` y `extraction_strategies.py` (767 LOC). Este código es justo el que la
-   Fase 2 va a tocar: partir el servicio ANTES de migrar la UI sobre él ahorrará dolor.
-4. **Shims prohibidos por AGENTS.md**: `init_db = init_server_db` (`db.py:31-32`) y alias
-   "legacy" en `seeds.py:174-176`. Menor, pero contradice la norma "borra, no comentes".
-5. **Bloqueo del event loop**: `subprocess.run(["libreoffice", ...])` síncrono dentro de
-   `async def to_pdf` (`report_exporter.py:84`); envolver en `asyncio.to_thread`. Nota
-   adicional: LibreOffice no existirá en Cloud Run — la degradación a DOCX ya prevista
-   será el camino real; considerar un microservicio de conversión si el PDF importa.
-6. **Higiene menor**: `print()` como logging en `ai_brain.py`/`main.py` (sin logging
-   estructurado), fallback de `DATABASE_URL` con credenciales en `db.py:15`,
-   `create_all` en el lifespan en lugar de confiar solo en Alembic, ~99 `except Exception`
-   con algunos swallows silenciosos (scheduler de calidad incluido), y scripts ad-hoc
-   sueltos en `tests/` (`reproduce_client_id.py`).
-
-### 3.3 Problemas principales (frontend)
-
-1. **Capa API manual paralela a Orval**: `shared/api/{ingestion,clients,feedback,llmConfigs,promptTemplates}.ts`
-   con `fetch` crudo, `API_BASE` hardcodeado a `localhost:8000`, tipos escritos a mano
-   (`IngestionJob`, `HubDocument`) y un `// TODO CF.4: migrar` literal. Es la principal
-   violación de la regla Contract-First y afecta a la página más grande
-   (`DocumentsPage.tsx`). Migrar estos 5 módulos a hooks Orval debería ser un prompt
-   propio antes de seguir añadiendo pantallas.
-2. **Lógica de autorización replicada en cliente**: `AccessTokensPage.tsx:25-28` calcula
-   scopes con `if (role === 'admin')` ("espejo del backend"). Contradice la regla
-   HATEOAS del proyecto; el backend debería servir los scopes permitidos.
-3. **Strings hardcodeados en español** en `LLMConfigsPage` (~22), `ChatbotsPage` (~12),
-   `DocumentsPage` (constantes con etiquetas), pese al mandato i18n. Y el **catalán del
-   namespace admin está al ~25 %** (34 líneas vs 130 es/en) — relevante siendo la UJI el
-   piloto.
-4. **Componentes gigantes**: `DocumentsPage.tsx` 1.019 líneas (upload + fuentes + spiders
-   + jobs en un componente). Descomponer antes de que el Bloque ING Fase 3 lo haga crecer.
-5. **Bundle admin monolítico de ~927 KB** sin code-splitting (imports estáticos en
-   `App.tsx`, sin `React.lazy`). Barato de arreglar con lazy routes.
-6. **Widget**: errores silenciosos en `useChat.ts` (fallo de red = mensaje vacío sin
-   aviso), sin Shadow DOM (los estilos del host pueden romper el widget), input sin
-   `aria-label`. El feedback hace POST sin cabecera de autorización contra un endpoint
-   que exige auth — o está roto o acabará abierto; alinear (ver §4, M-widget).
+- **Frontend**: 598 tests, 0 fallos (vitest en serie, `--no-file-parallelism`).
+- **Backend**: 2978 tests passed, 1 skipped, 0 fallos (pytest completo desde Git Bash, `-n0`, con
+  Docker levantado; 24 min 05 s). La suite entera está verde con las regresiones de seguridad y
+  multitenencia de este informe presentes: **ningún test las cubre**, que es precisamente el
+  problema de método del §3.3.
+- 315 ficheros de test en `server/tests/`, 95 en el frontend. 72 migraciones Alembic.
+- Solo 14 marcas TODO/FIXME en todo el backend (2 de ellas los no-op de anonimización) y **cero**
+  en el código de producción del frontend. Cifra inusualmente baja para ~50 K + ~31 K LOC.
 
 ---
 
-## 4. Seguridad — hallazgos priorizados
+## 3. Seguridad
 
-> La base es mejor que la media (bcrypt, PAT correcto, ORM parametrizado, DOMPurify,
-> JWT sin secreto por defecto, sandbox de scripts ejemplar), pero hay dos fallos que
-> **deben corregirse antes de cualquier despliegue con datos reales**.
+> Verificación de los diez hallazgos de julio contra el código actual, más los hallazgos nuevos
+> introducidos por los bloques posteriores. La base sigue siendo mejor que la media (bcrypt, PAT
+> correcto, ORM parametrizado, JWT sin secreto por defecto, sandbox de scripts, cabeceras de
+> seguridad, CORS por entorno). El problema ya no es la base: es que la superficie creció más
+> rápido que el gate que la vigila.
 
-### Críticos (bloqueantes de despliegue)
+### 3.1 Hallazgos de julio — estado
 
-- **A1 — Login de partner sin contraseña.** `auth_router.py:59-82`: `login_partner` emite
-  JWT comprobando solo que el partner existe y está activo; `PartnerAccount` ni siquiera
-  tiene campo de contraseña. Conocer un email de partner basta para obtener un token de
-  rol `partner`. Corregir (hash bcrypt como en admin) o deshabilitar el endpoint y forzar
-  SAML/PAT.
-- **A2 — Sin aislamiento multi-tenant.** El JWT (`UserInfo`) no lleva `partner_id`/
-  `client_id`, y los endpoints no filtran por tenant: `list_chatbots` devuelve todos los
-  chatbots de todos los clientes; update/delete/corpus-stats operan sobre cualquier
-  `chatbot_id`; `hub_feedback` permite a un partner leer conversaciones (posible PII
-  ciudadana) de otro; `hub_themes` filtra por un `client_id` que envía el propio cliente.
-  Mitigación: claims de tenant en el token + filtro obligatorio en una capa de
-  repositorio común + **test de regresión de aislamiento como gate de CI** (un partner A
-  no puede leer/escribir recursos del partner B).
-- **A3 — Secretos vivos en `.env` del árbol de trabajo**: `GOOGLE_API_KEY`,
-  `OPENROUTER_API_KEY` y la clave RSA privada de firma de scripts. No está en git (bien),
-  pero deben **rotarse** y pasar a un gestor de secretos; verificar el historial
-  (`git log --all -- .env`). La clave de firma debe regenerarse.
+| # | Hallazgo | Estado | Nota |
+|---|---|---|---|
+| A1 | Login de partner/admin sin contraseña | **Resuelto** | bcrypt + hash señuelo anti-timing + rate limit por IP antes de tocar la BD (`auth_router.py:60-144`). Ningún login local sin credencial. |
+| A2 | Sin aislamiento multi-tenant | **Parcial** | Claim `orgs` en JWT (fail-closed), capa única `tenancy.py`, gate de CI propio. Pero cuatro routers nuevos quedan fuera — ver 3.2. |
+| A3 | Secretos en `.env` | **Resuelto** estructural | `.env` en `.gitignore`, `generate_env.sh` con `openssl rand`, nunca commiteado. Residuos: fallback de `DATABASE_URL` (§2.3) y la rotación de credenciales no es verificable desde el código. |
+| A4 | CORS `allow_origins=["*"]` | **Resuelto** | Por entorno; en producción el `*` se descarta aunque venga en la variable (`core/cors.py`). |
+| A5 | Sin rate limiting ni cuotas | **Parcial** | Implementado y probado (`rate_limit.py`, `quotas.py`, `hub_usage_counters`). Pero la cuota por IP del anónimo del widget nunca se aplica — ver NUEVO-6. |
+| — | Widget: bearer privilegiado en `data-token` | **Resuelto** | `HubWidgetKey` con SHA-256, revocable, scope `public_anon`, atada al chatbot de la ruta. |
+| — | Temas sin auth + path traversal con `unlink` | **Resuelto** | Temas en BD; desapareció el almacén de ficheros y todo `unlink`. `theme_id` validado como UUID. |
+| — | Uploads sin magic bytes ni límite | **Parcial** | `core/uploads.py` con magic bytes, corte en streaming, anti-traversal. Falta un endpoint — ver NUEVO-5. |
+| — | Docs FastAPI + cabeceras de seguridad | **Resuelto** | Docs off en producción; HSTS/CSP/X-Frame-Options/nosniff, también en errores. |
+| — | JWT + placeholder SAML | **Resuelto** | Sin default inseguro (rechaza valores de ejemplo y <32 car.); SAML con `wantAssertionsSigned` + `validate_cert`. |
+| — | Sandbox de scripts (gate prod + auditor AST) | **Parcial** | Ambos existen. El gate se salta con `TESTING=1` — ver NUEVO-7. |
+| — | Sembrado de desarrollo (`admin1234`) | **Resuelto** | Solo se siembra si `ENVIRONMENT=development`; bootstrap de producción aparte. |
 
-### Altos
+### 3.2 Hallazgos nuevos (introducidos después de julio)
 
-- **A4 — CORS `allow_origins=["*"]`** sin distinción por entorno (`main.py:190-196`).
-- **A5 — Sin rate limiting** en login, chat (coste LLM) e ingesta. Para un chatbot
-  público esto es además control de coste: cuotas por chatbot/IP son imprescindibles
-  antes del piloto.
+Ordenados por severidad. Los tres primeros son **bloqueantes de despliegue con datos reales**.
 
-### Medios
+- **CRÍTICO — `library_router` completamente sin autenticación** (verificado directamente;
+  coincidencia de 3 auditorías). `server/app/routers/library_router.py`, montado en
+  `/api/v1/library/*`. Ninguno de sus 4 endpoints tiene `get_current_user`, `require_role` ni
+  `require_module`:
+  - `GET /manifest` y `GET /download/{item_id}` deciden la visibilidad por las cabeceras
+    `X-Client-Id`, `X-Partner-Id`, `X-Client-Groups` — **que pone el propio cliente**. La
+    identidad de tenant es autodeclarada; devuelve el código ejecutable de la automatización de
+    cualquier cliente.
+  - `POST /push` (`:113`) publica una automatización arbitraria **y el servidor la firma** con la
+    clave privada de la plataforma. Inyección firmada en la cadena de suministro.
+  - `POST /sign_manifest` (`:171`) es un **oráculo de firma abierto**: se le pasa un JSON y un
+    `partner_id` (ambos del cuerpo) y devuelve la firma RSA-SHA256 hecha con
+    `AUTOMATIA_SIGNING_KEY`.
+  - Agravante: el test `test_plat5_frontera_de_modulos.py` declara este router como `plataforma`
+    pero solo comprueba que la cadena aparezca en el **docstring**, no que haya un `Depends`. El
+    check pasa en verde sobre un router abierto.
+  - Arreglo: `dependencies=[Depends(require_module("plataforma")), Depends(require_admin)]` en el
+    `APIRouter`, derivar la tenencia del token, y restringir `/push` y `/sign_manifest` a
+    superadmin.
 
-- **Widget**: el token bearer va en `data-token` visible en el HTML del host y es
-  reutilizable contra toda la API (agravado por A2); el scope usado es `chat:test`.
-  Diseñar **tokens efímeros por dominio y chatbot** con scope `chat:public` (el plan de
-  Deploy ya menciona `data-api-key` en D.1 — adelantar su diseño).
-- **Temas**: `GET /hub/themes/{theme_id}` sin auth y `theme_id` sin validar usado para
-  construir rutas de fichero (posible traversal; el DELETE hace `unlink`). Validar como
-  UUID + `resolve()` bajo `THEMES_DIR`.
-- **Chat**: mensajes y respuestas se persisten en claro y van a Langfuse con `user_id`;
-  no hay minimización de PII en el flujo de chat (la decisión 12 excluye el chatbot
-  público de la anonimización, pero conviene política de retención y aviso, y valorar
-  detección básica de PII en logs).
-- **Uploads**: validación solo por `content-type` (spoofeable) y `file.read()` sin límite
-  de tamaño → DoS de memoria. El propio análisis del Bloque ING ya prevé validación por
-  magic bytes compartida: adelantarla.
-- **Prompt injection indirecta vía RAG**: contenido crawleado se inyecta sin delimitación
-  de confianza. Delimitar el contexto como no confiable y reforzar `citation_validator`.
-- **Docs FastAPI expuestas** y sin cabeceras de seguridad (HSTS, X-Frame-Options/CSP).
-- **Anonimización sin persistencia del mapa** (`anonymization/service.py:232,236`, no-op
-  MVP): la reversibilidad prometida no sobrevive a la sesión; enlazar con Vault Edge (F2.A.4).
+- **ALTO — La clave del proveedor LLM se devuelve en claro por la API** (verificado
+  directamente). `HubProviderOut.api_key` (`hub_llm_configs_router.py:44`) y `GET /providers`
+  devuelven la fila ORM tal cual. `HubProvider.api_key` es ámbito `plataforma`, así que cualquier
+  `admin` de cualquier organización lee la clave del proveedor de la plataforma en claro (y
+  `PATCH` se la puede cambiar). Arreglo: quitar `api_key` de `HubProviderOut`.
 
-### Bajos
+- **ALTO — `hub_activity_prompts_router` sin filtro de organización** (coincidencia de 2
+  auditorías). MT.6 dio a la tabla la dimensión de organización (`(activity, organizacion_id)`
+  con `NULLS NOT DISTINCT`) y el *lector* la respeta, pero el *escritor* no: `_fila()`
+  (`:126-130`) consulta solo por `activity`. Consecuencia: un `admin` de cualquier organización
+  puede leer, **sobrescribir o borrar** el prompt de plataforma que heredan todas las
+  organizaciones (cross-tenant write + inyección de prompt al LLM). El router no tiene
+  `require_module` y ningún test de aislamiento lo cubre.
 
-Defaults débiles en `docker-compose.yml` (minioadmin, `admin123`, `ENCRYPTION_KEY` de
-ceros con `${VAR:-default}`), JWT sin revocación (valorar `jti` + denylist o refresh
-cortos; recordar volver `JWT_EXPIRATION_MINUTES` a 60 en prod), PAT sin caducidad máxima.
+- **ALTO — `hub_llm_configs_router` (MT.2) sin tenancy.** `list_llm_configs` sin
+  `scope_query_to_orgs` (un admin ve las configuraciones de todas las organizaciones);
+  `create_llm_config` acepta `organizacion_id` del cuerpo sin validarlo contra el token (un admin
+  crea un modelo en otra organización, o de plataforma que heredan todas); `update`/`delete` por
+  id sin `assert_org_access`. Es exactamente lo contrario del criterio «el cuerpo propone, el
+  token dispone» que `hub_themes_router` ya aplica bien. Mitigante: el router exige
+  `require_module("plataforma")`.
 
-**Recomendación concreta: crear un Bloque SEC (6–8 prompts TDD) e insertarlo entre 11.x y
-D.1**, con este orden: A1 → A2 (+test de aislamiento en CI) → A3 (rotación) → A5/A4 →
-token de widget → uploads/headers/docs. El Deploy GCP sin esto publicaría los fallos.
+- **MEDIO-ALTO — `hub_provider_credentials` (MT.2): la clave literal se guarda sin cifrar.**
+  `api_key` en `String(255)` en texto plano cuando `metodo='clave'`. No hay cifrado en reposo en
+  ningún punto (0 coincidencias de Fernet/encrypt/KMS). **No se expone por HTTP** (no hay router
+  para esa tabla), así que el riesgo es un volcado de BD o la sincronización cloud→edge. Hoy es
+  teórico (no hay filas); sube a real el día que el piloto cree la primera credencial. Decisión:
+  cifrar en reposo, o restringir el `CHECK` a los métodos que no guardan el secreto en la base
+  (nombre de variable de entorno / ADC), que es lo que el propio módulo recomienda.
 
----
+- **MEDIO** — un grupo de hallazgos de severidad media, todos con arreglo acotado:
+  - **NUEVO-5**: subida sin límite de tamaño en `POST /redaccion/llm-drafts/sample`
+    (`llm_drafts_router.py:163`, `file.read()` sin `read_within_limit`). El único endpoint de
+    `UploadFile` que quedó fuera de SEC.6/SEC.8.2.
+  - **NUEVO-6**: los controles de SEC.4 para el anónimo del widget están declarados y no
+    aplicados: `anon_ip_daily_token_quota` es código muerto (nunca se pasa `ip=`), y todos los
+    visitantes anónimos de un chatbot comparten un único cubo de rate limit, así que un visitante
+    puede dejar el widget sin servicio para el resto.
+  - **NUEVO-7**: el gate de producción del sandbox se salta con `TESTING=1`, y `subprocess.Popen`
+    no pasa `env=`, heredando `JWT_SECRET_KEY`/`DATABASE_URL`/`AUTOMATIA_SIGNING_KEY`.
+  - **NUEVO-8**: endpoints post-SEC.8 con el usuario declarado y sin usar (`hub_agents_router`
+    ignora `workspace_id` y exporta una interacción cualquiera; tres endpoints de
+    `hub_redaccion_router` con `_user` sin usar; `workspaces_router` sin `require_module`;
+    `hub_organizaciones_router` acepta `partner_id` del cuerpo sin validar).
+  - **NUEVO-9**: `docker-compose.prod.yml` con contraseñas por defecto (`:-govgenai_dev`,
+    `:-minioadmin_dev`) en el servicio `app`. El fichero de producción no debería llevar ni un
+    `:-` en un secreto.
 
-## 5. Valoración de la planificación pendiente
+- **BAJO** — `HubWidgetKey` y los PAT sin caducidad obligatoria (solo revocación); documentación
+  que miente sobre el estado de seguridad (`seeds.py:12` dice que el login no verifica contraseña;
+  `hub_prompts_catalog_router.py:11` dice que `activity` es «único global», ya falso desde MT.6).
 
-### 5.1 Fase 2 — Automatización, Thin Client y migración NiceGUI
+### 3.3 La lección de método
 
-**Lo que está bien planteado:**
-
-- La **Guía 9C.0** (tabla de clasificación NiceGUI→FastAPI/React + checklist de cierre)
-  es excelente: convierte cada migración en un procedimiento repetible.
-- La secuencia del extractor PDF (9.12b.0 auditoría → 9.12b backend → 9.13 UI, con la
-  Guía 9C.1 de 12 pasos bloqueantes) gestiona bien el riesgo de la migración más densa
-  (2.370 líneas). El aviso de que 9.12b quedó casi vacío tras 9R.5.9 demuestra que el
-  plan se mantiene vivo.
-- El patrón GitLab Runner para el Thin Client y la separación firma-en-Edge /
-  ejecución-en-local (FASE 14) son la decisión arquitectónica correcta.
-- Diferir RPA web (FASE 21) y microservicios (FASE 22 con criterios de activación
-  medibles) es buena disciplina anti-sobreingeniería.
-
-**Riesgos y mejoras propuestas:**
-
-1. **Volumen infraestimado.** El plan enumera ~5.000 LOC de servicios legacy a migrar,
-   pero `client_app/` tiene 489 ficheros (~6,2 MB). Antes de arrancar F2, generar un
-   **inventario de migración** (fichero → destino → fase → LOC) y añadirlo a
-   `planificacion/PROJECT_STATE.md`; lo que no tenga destino es Caso B (borrar). Sin inventario, el
-   "criterio de éxito 2.B" (client_app/app/ui vacío) no es verificable de forma incremental.
-2. **Prerrequisito de calidad**: refactorizar `AIBrainService`/`automation.py` (DI,
-   partición, registro del router) como prompt 0 de la Fase 2, antes de construir UI
-   React encima. Migrar UI sobre un backend que viola DI consolida el problema.
-3. **FASE 14/15/16/18 sin TDD detallado** (reconocido en el plan). El prompt 2A.2
-   (Secure Pairing) debe considerarse **bloqueante de 9.16 en producción**, no opcional:
-   un thin client que ejecuta scripts con un `AGENT_TOKEN` estático de `.env` reproduce a
-   escala local el problema A1. Diseñar el enrolment de un solo uso desde el principio.
-4. **El esqueleto de 9.16** (`websockets.connect` en bucle simple) necesita reconexión
-   con backoff, heartbeat y cola de jobs pendientes; conviene decirlo en el prompt para
-   que el agente no entregue el happy path.
-5. **Dependencia cruzada**: 2C.0 (MCP Client) es prerrequisito bloqueante de la Fase 3
-   (adaptadores) — está bien señalado; sugiero moverlo al principio de 2.C para
-   des-arriesgar F3.
-6. La decisión de Zustand para Focus Mode (9.12a) está bien justificada; nótese que
-   `CAMBIOS_PLANIFICACION.md` lo reubicaba en `frontend/src/shared/layout/` como
-   infraestructura transversal — el plan de F2 aún lo sitúa en `src/automation/state/`;
-   unificar antes de implementar.
-
-### 5.2 Fase 3 — Gestor de Expedientes
-
-**Lo que está bien planteado:**
-
-- Las **directrices HATEOAS** (acciones_permitidas calculadas en servidor, tests RED que
-  prohíben `if (fase === ...)` en el frontend) son exactamente la lección aprendida del
-  hallazgo 3.3.2 de este informe — aplicarlas retroactivamente a AccessTokensPage.
-- La cadena de auditoría SHA-256 encadenada (E3), los Snapshots con `as_of_date` (3B.5,
-  fundamentación jurídica Ley 39/2015 impecable) y el Fairness Audit (3B.6, RIA Art. 13)
-  son diferenciadores regulatorios reales frente a cualquier alternativa comercial.
-- Exponer los sistemas legacy (UJI, G400) como **servidores MCP** aísla bien la
-  plataforma; la experiencia ya ganada con el Bloque MCP de F1 reduce el riesgo.
-
-**Riesgos y mejoras propuestas:**
-
-1. **El multi-tenant roto (A2) es incompatible con expedientes.** Los expedientes
-   contienen datos personales sensibles; llegar a F3 sin aislamiento por Organización y
-   sin claims de tenant en el token sería inaceptable. Otro motivo para el Bloque SEC.
-2. **Checkpointing LangGraph**: E2 propone tabla propia `langgraph_checkpoints`; valorar
-   `langgraph-checkpoint-postgres` oficial antes de implementarlo a mano (menos código,
-   compatibilidad con `interrupt`/resume de NodoHuman).
-3. **El log "inmutable"** de `audit_expediente` se protege solo por ausencia de endpoints
-   UPDATE/DELETE; para valor probatorio real, añadir además privilegios de BD (rol de app
-   sin UPDATE/DELETE sobre esa tabla) y/o anclaje periódico del hash de cabeza.
-4. **E4 (frontend, 3 semanas) depende de "OIDC/SAML activo"** — ya cubierto por el
-   Bloque AUTH, actualizar el prerrequisito.
-5. La capa **ENI/ENS (E5)** es la de mayor incertidumbre externa (DIR3, eEMGDE, CSV,
-   validación XSD): recomendo un spike temprano de acceso real a las APIs de UJI y G400
-   (credenciales, entornos de prueba) al inicio de F3, no al final, porque el riesgo no
-   es de código sino de dependencia institucional.
-6. **3B.6 Fairness**: el test propuesto (umbral 0.7) es un buen inicio, pero definir qué
-   metadatos de colectivo se capturan (y su base jurídica RGPD para capturarlos) antes de
-   implementar el scorer; de lo contrario el dashboard no tendrá datos que agrupar.
-
-### 5.3 Cambios propuestos en CAMBIOS_ARQUITECTURA.md — estado
-
-| Bloque | Estado real | Recomendación |
-|---|---|---|
-| 1. Filosofía Hermes (Skill Library, SkillExtractor, memoria de estilo) | Recogido en Arquitectura §2.4/§3.4 y en F2.C.3/2.C.7; no implementado | Mantener en F2.C; activar cache semántico solo con métricas (como ya prevé el plan) |
-| 2. Renombrado de roles | **No aplicado en código**; sí en documentación | Decidir antes de F2 (ver §2.3) |
-| 3. Delimitación Cloud/Local de ejecución | Invariantes documentados en ambos planes (2.C nota, 3C.0) | Correcto; convertir el invariante en test automático cuando exista el Thin Client |
-| 4. Anonimización selectiva por políticas | Modelado previsto (1C.2); motor NER migrado; **vault/persistencia del mapa pendiente** | Cerrar la persistencia cifrada del mapa en F2.A.4; hasta entonces documentar la limitación |
-| 5. Spider Skills modulares | Parcialmente cubierto por 9Q (sites/selecciones); el registro `BaseSpiderSkill`+`SpiderRegistry` como tal no existe | Reevaluar si sigue siendo necesario tras 9Q o si se funde con el Bloque ING |
+Los cuatro agujeros vivos de aislamiento (`library`, `llm-configs`, `activity-prompts`,
+`llm-drafts`) están precisamente **donde el gate de CI no mira**. El paso «Access control gate»
+de `ci.yml` cubre una lista fija de routers que no incluye ninguno de los añadidos en REV ni MT, y
+el guardarraíl estático de `test_tenant_isolation.py` es también una lista de nombres que se salta
+en silencio los ficheros que no encuentra. El patrón bueno ya existe en el propio proyecto
+(`tablas_sin_ambito()` recorre el registro de modelos en vez de una lista): **aplicar ese mismo
+patrón al inventario de routers** —recorrer `app/routers` + `app/api/v1` con una lista de
+exenciones explícita— habría cazado estos cuatro hallazgos sin necesidad de una auditoría.
 
 ---
 
-## 6. Sentido y utilidad del producto
+## 4. Separación por organizaciones (multitenencia)
 
-**La propuesta de valor es sólida y está bien diferenciada** para el nicho de
-administraciones públicas españolas:
+> El diseño existe para que una Diputación pueda desplegar una instancia para varios municipios,
+> cada uno con su administrador, sin que ninguno vea los datos de otro. La pregunta es si esa
+> promesa se sostiene hoy.
 
-- Chatbots RAG multilingües (CA/ES/EN) con **citas trazables** — la trazabilidad es lo
-  que separa un chatbot institucional defendible de un juguete.
-- Redacción asistida con contrato SDUI, anonimización y exportación editable — encaja con
-  el flujo real del empleado público (revisar en Word/Drive, no en la plataforma).
-- Expedientes con HITL, explicabilidad y auditoría encadenada — el enfoque RIA/ENS/ENI es
-  una barrera de entrada frente a competidores genéricos y el argumento de venta a
-  cualquier AAPP.
-- Soberanía del dato (edge/cloud, vault en Edge, determinista-first) — coherente con el
-  requisito regulatorio y creíble porque la frontera ya existe en código.
-- Dual-license AGPLv3 — apropiado para subvención y adopción institucional.
+### 4.1 El núcleo: robusto y bien probado
 
-**Sugerencias de producto** (más allá del código):
+Las dos capas que hacen cumplir la frontera son de calidad **muy alta**, y están correctamente
+separadas (una decide *quién ve qué*, la otra *qué fila gana*):
 
-1. **Priorizar el corpus real (Bloque ING Fase 0) por encima de casi todo lo demás no-SEC**:
-   un piloto con la normativa UJI real ingerida vale más que cualquier feature nueva, y
-   la Fase 0 (script de carga) es un día de trabajo una vez curada la carpeta.
-2. **Métricas de calidad visibles desde el día 1 del piloto**: RAGAS ya existe; añadir un
-   panel simple de "tasa de respuesta con cita válida / feedback medio / preguntas sin
-   respuesta" dará el argumento cuantitativo para la fase de difusión (paper, agosto 2026).
-3. **Kit de adopción**: cuando se abra el repo (AGPLv3, sept. 2026), la Fase 11 debería
-   incluir además un `INSTALL.md` de 15 minutos y un chatbot demo con corpus público de
-   ejemplo; la barrera de adopción de otras instituciones será la instalación, no la
-   funcionalidad.
-4. **Retención y aviso legal del chat público**: definir política de retención de
-   `HubInteraction` y texto informativo RGPD en el widget antes del piloto.
-5. El roadmap (piloto sept. 2026, F2 en 2027, F3 en 2027-28) es realista **si** la Fase 2
-   se acota con el inventario de migración; el patrón observado en F1 (63 prompts frente
-   a 55 planificados, con bloques nuevos insertados) sugiere reservar ~20 % de margen.
+- **`core/auth/tenancy.py`** es fail-closed en los tres casos difíciles: un principal sin
+  organizaciones da un `IN ()` vacío (no ve nada) en vez del listado entero —que era el hallazgo
+  A2—; `assert_org_access(None)` deniega; un UUID de claim inválido degrada a «no ve nada», no a
+  «no filtra». La asimetría «vacío = todas» solo para el superadministrador está fijada por los
+  dos lados en los tests.
+- **`core/ambito.py`** resuelve la cascada plataforma→organización **campo a campo** (no fila
+  entera) y distingue `None` («heredar») de `""` («vaciar»), sin lo cual no se podría vaciar un
+  valor heredado desde la pantalla. Usa `or_(... , is_(None))` en vez de `IN (X, None)` porque
+  `NULL IN (...)` no traería la fila de plataforma.
+- **El guardarraíl MT.1** obliga a las 14 tablas de `HubConfigBase` a declarar su `__ambito__`
+  recorriendo el registro de modelos (no una lista), comprueba que la declaración **no se hereda**
+  de la clase padre, y exige coherencia entre la etiqueta y el esquema (heredable ⇒ columna
+  nullable). MT.7 añade un test que mantiene honesto el inventario de `docs/MULTITENENCIA.md`. Es
+  la parte más sólida del bloque.
+- **El widget y el chat público** —la superficie más expuesta— están **muy bien cerrados**: la
+  credencial de sitio se ata al chatbot de la ruta, el actor anónimo no lleva organizaciones (no
+  puede escalar por identidad), y la organización se deriva siempre del chatbot, nunca del cliente.
+
+El núcleo operativo (chatbots, corpus, ingesta, curación, temas, vocabulario, interacciones,
+feedback, escenarios, chat y cuotas) está acotado y hay una docena de routers que pasan por la
+capa de tenencia, vigilados por `test_tenant_isolation.py`. **Eso es lo que filtraría contenido
+entre municipios, y lo hace.**
+
+### 4.2 La superficie: dimensión metida, filtro a medias
+
+El Bloque MT metió el *esquema* (la columna `organizacion_id`) en las tablas antes del piloto —una
+decisión correcta: añadir una columna a una tabla casi vacía es gratis, con meses de datos es una
+migración con riesgo— pero eso deja una ventana en la que la dimensión existe y no todos los
+routers la usan. Hay que separar tres categorías:
+
+**Huecos documentados como fase 2 (correctos, no son fugas hoy):**
+- El superadministrador ve todo sin filtrar (MT.8): correcto como *permiso*; falta la *vista*.
+- El listado de personas sin filtrar por organización (MT.9): el router de usuarios es hoy solo
+  para superadministrador, así que un admin recibe 403 en todo. Falta funcionalidad, no hay fuga.
+- Las pantallas de modelos/plantillas/prompts/concesiones/cuotas (MT.10–MT.15).
+
+**Bien cerrado (verificado):**
+- MT.3 (`get_model_for_tier` recibe la organización, obligatoria, en los 7 llamadores).
+- MT.4 en plantillas de informe (`hub_report_templates` filtra por organización + nivel plataforma).
+- MT.5 en la lógica de los PAT (acotan y nunca amplían; las organizaciones del dueño se resuelven
+  en cada validación, no se congelan).
+
+**Huecos NO documentados (el inventario los presenta como funcionalidad viva):**
+- Los routers de `hub_activity_prompts` y `hub_llm_configs` (ya en §3.2 como hallazgos de
+  seguridad: son al mismo tiempo el fallo de multitenencia).
+- **`hub_workspaces.organizacion_id` no se escribe ni se lee**: `docs/MULTITENENCIA.md` lo declara
+  acotado por organización, pero nadie rellena la columna y el acceso real es por propiedad
+  (`es_propietario`), que hoy es *más* estrecho —así que no es fuga—, pero el inventario miente y
+  ningún test lo caza (MT.7 solo vigila `HubConfigBase`, no las tablas operacionales).
+- **MT.5 está inerte en toda su superficie**: las columnas `organizacion_id` de `HubModuleGrant` y
+  `HubPersonalAccessToken` existen pero ni `PatCreateRequest` ni `ConcesionCreate` las exponen, y
+  el camino de enforcement (`require_module`) no las usa. Es coherente con «MT.5 no cambia
+  comportamiento», pero el inventario no lo dice.
+- La cola de revisión de scripts de Informes (`scripts_router`) se protege por rol y no por
+  pertenencia: un admin de A puede listar, reejecutar, aprobar y rechazar las propuestas de script
+  de B, incluido el código y los datos de prueba del otro municipio.
+
+### 4.3 Valoración de robustez por capa
+
+| Capa | Robustez |
+|---|---|
+| `tenancy.py` / `ambito.py` / guardarraíl MT.1 | **Muy alta** |
+| Servicios de resolución (MT.2/MT.3/MT.6, `credenciales_llm`, `config_provider`) | **Alta** |
+| Routers de Chatbots / Curación / Temas | **Alta** (SEC.2 + SEC.8.1 con tests HTTP) |
+| Routers de Informes (`redaccion/`) | **Media** (propiedad sí, organización no; `hub_workspaces.organizacion_id` muerto) |
+| Routers de Plataforma (`llm_configs`, `activity_prompts`) | **Baja** (fuga real, §3.2) |
+| Widget / chat público | **Muy alta** |
+| `library_router` | **Nula** (sin autenticación, §3.2) |
+| Red de tests | **Alta en la capa, media en la superficie** (el guardarraíl de routers es una lista fija que no incluye ningún router REV/MT) |
 
 ---
 
-## 7. Plan de acción recomendado (priorizado)
+## 5. Aislamiento núcleo/configuración para el desarrollo colaborativo
 
-**Inmediato (antes de continuar con 11.1):**
-1. Corregir **A1** (login partner) — medio día, riesgo crítico.
-2. Rotar credenciales del `.env` y regenerar la clave RSA de firma (**A3**).
+> `README.md` y `CONTRIBUTING.md` declaran un modelo de un principal (upstream) multiorganización
+> y un fork por institución, donde **lo específico de una institución no entra en el principal**.
+> La pregunta: ¿está el núcleo suficientemente aislado de la configuración para que eso sea
+> viable?
 
-**Bloque SEC (nuevo, entre Fase 11 y Deploy GCP):**
-3. Claims de tenant en JWT + filtrado obligatorio por tenant + test de aislamiento en CI (**A2**).
-4. Rate limiting + cuotas LLM por chatbot (**A5**); CORS por entorno (**A4**).
-5. Token efímero de widget por dominio/chatbot (`chat:public`), alineado con D.1.
-6. Uploads (magic bytes + límite de tamaño), auth y validación en `GET /hub/themes/{id}`,
-   docs off en prod + cabeceras de seguridad.
+### 5.1 El mecanismo es real y de calidad alta
 
-**Deuda de calidad (intercalable, prompts pequeños):**
-7. Retirar `server/app/ui/` + sus tests a `_legacy_nicegui/`; borrar `app/modules/extraccion/`
-   huérfano; eliminar shims `init_db`/seeds.
-8. Migrar los 5 módulos API manuales del frontend a Orval (cierra el TODO CF.4);
-   descomponer `DocumentsPage`; completar `ca/admin.json`; lazy routes.
-9. Decidir y ejecutar (o descartar formalmente) el renombrado de roles; actualizar
-   `AGENTS.md` con `src/redaccion/`.
+El proyecto no solo tiene la separación: la tiene escrita, razonada y **testada**. Varias piezas
+son el modelo fork/upstream correctamente encarnado en código:
 
-**Preparación de Fase 2:**
-10. Inventario de migración de `client_app/` (fichero→destino→LOC) en `planificacion/PROJECT_STATE.md`.
-11. Prompt 0 de F2: refactor DI/partición de `AIBrainService` + registro (o retirada) de
-    `automation.py`/`telemetry_router`.
-12. Detallar TDD de FASE 14 con Secure Pairing (2A.2) como parte del scaffolding, no como
-    añadido posterior.
+- **Vocabulario del corpus como dato en tabla** (`hub_vocabulary_terms`), con los *ejes* en Enum
+  (pocos, estables, añadir uno exige código) y los *términos* como dato (cambian sin tocar
+  código). Carga por CSV con `--organizacion-id` obligatorio, idempotente, con `supersede_term`
+  para renombrar sin perder historia. Es exactamente lo que necesita el modelo: el corpus y su
+  vocabulario se quedan en el fork como dato.
+- **Prompts con default-en-código y override-en-BD**, con la cascada resolviendo `template_text`
+  y `override_tier` por separado (un municipio puede querer el texto de la plataforma con un
+  modelo más caro). El texto por defecto **no se copia** a la BD, así que las mejoras del
+  principal llegan al fork; un texto en blanco vuelve al código, así que se puede deshacer desde
+  la pantalla sin SQL.
+- **Branding en BD** (`hub_themes` en `HubConfigBase`), con un test —`marcaNoViajaEnElRepo.test.ts`—
+  que **prohíbe cualquier imagen en `src/assets/` y cualquier import de imagen desde el código**.
+  Ese test nació de una regresión real ya corregida (había una excepción en `.gitignore` que hacía
+  viajar la marca al repo). Es el guardarraíl exacto que se necesita para el problema de §5.2.
+- **Criterios de curación como dato por sitio** (`stale_days`, umbral de contenido pobre, política
+  de series), con un test que documenta la misma auditoría que este informe, ya hecha para ese
+  módulo.
+- **Doble base ORM con inventario exhaustivo** (`test_edge_boundary.py` afirma la igualdad exacta
+  del conjunto de tablas de cada base), **`ConfigProvider` usado de verdad** (devuelve DTOs, no
+  modelos ORM, para no filtrar el símbolo de config a los módulos), y **SAML/SSO enteramente
+  configurable** (cero metadata institucional en el repo, JIT y mapeo de grupos→roles por
+  entorno).
 
-**Fase 3 (cuando llegue):**
-13. Spike temprano de acceso real a APIs UJI/G400/DIR3; valorar
-    `langgraph-checkpoint-postgres`; inmutabilidad de `audit_expediente` también a nivel
-    de privilegios de BD.
+### 5.2 Lo que bloquea de facto, y lo que es material de fork
+
+**BLOQUEANTE — la paleta de marca UJI está hardcodeada en el panel y la cascada de temas no la
+alcanza.** `frontend/src/index.css` define, con el comentario literal «UJI brand», los tokens
+`--primary`, `--sidebar`, `--accent`, `--chart-*` que consumen todas las utilidades del panel. Hay
+**dos sistemas de theming disjuntos**: la cascada de temas (`hub_themes`) escribe `--color-*` y
+alcanza el widget y el logotipo, pero el cromo del panel resuelve contra los `--*` de `index.css`,
+que siguen siendo el turquesa/azul marino de la UJI, sin pantalla que los cambie. Un ayuntamiento
+que despliegue el principal tiene un panel con los colores corporativos de la UJI y tendría que
+editar `index.css` —la divergencia en código que la gobernanza quiere evitar—. Es más llamativo
+porque **el proyecto ya libró y ganó esta batalla para el logotipo**: lo sacó del bundle; los
+colores del panel se quedaron. Arreglo: llevar la paleta a la cascada (o a una neutra) y añadir un
+test hermano de `marcaNoViajaEnElRepo` que prohíba marca institucional en los tokens de
+`index.css`.
+
+**Material de fork que se coló en el principal (severo, no bloqueante):**
+- Credencial de desarrollo con el correo personal del autor (`DEV_ADMIN_EMAIL = "fabra@uji.es"` en
+  `seeds.py:35`); solo se siembra en `development`, pero todo fork que arranque en local crea un
+  superadmin con el correo del mantenedor del upstream. Arreglo: leerlo de entorno con default
+  neutro.
+- `"uji"` en el `frozenset` de tipos de fuente de spiders (`spider_factory.py:9`), donde además
+  sus selectores son un duplicado exacto de `boe`; y un spider de un portal concreto
+  (`procedimientos_spider.py`, «procedimientos.uji.es»), que es literalmente «integración con un
+  sistema interno que solo esa institución tiene». Los selectores deberían ser dato
+  (`hub_web_sites`), no un dict de módulo.
+- Prompt de sistema con presunción institucional no sobreescribible («Eres un redactor de informes
+  institucionales de una universidad pública», `redactor_de_bloques.py:19`): los otros prompts sí
+  son overrideables vía `hub_activity_prompts`; estos dos no están en el catálogo. Un ayuntamiento
+  que genere informes recibe texto que le dice al modelo que es una universidad. Arreglo: dos
+  entradas más en `ActividadLLM` (el mecanismo ya existe).
+- Menor: nombres de clase con `Uji` en un punto de extensión genérico
+  (`UjiDualSourceRetrievalStrategy`), textos de ayuda i18n que usan `www.uji.es` como ejemplo
+  (visibles al usuario en los tres idiomas), stopwords del anonimizador con sesgo de contexto
+  investigador. Todo cosmético o de nomenclatura.
+
+Lo verificado **limpio**: `migrations/`, `scripts/`, `.env.example` y `mcp_server/` (código) tienen
+cero ocurrencias institucionales; no hay metadata SAML de la UJI, ni allowlist de dominio de
+correo, ni logotipo en el bundle; los seeds del hub son genéricos («Organización Demo»).
+
+### 5.3 La grieta de arquitectura: `core/` importa de `modules/` y de `routers/`
+
+`CONTRIBUTING.md` regula que un módulo no importe de otro módulo, pero **la dirección inversa no
+está regulada ni testada**, y `core/` importa de `modules/` en 18 sitios. Dos de ellos son
+`core/` importando de `routers/` (`modulos_service.py:32` y `saml/identity_service.py:131`), lo
+que invierte la jerarquía por completo: la capa de autenticación depende de la capa HTTP de un
+módulo. Para el modelo de gobernanza esto importa: `core/` es la capa que un fork más va a querer
+no tocar, y hoy arrastra `modules.agents_hub.database.config_models` y `routers.redaccion`. Además
+hay dos cruces entre módulos (`curation → agents_hub` y `curation → redaccion`) que la regla
+prohíbe sin que nada lo detecte. **El hueco de tests de frontera más claro** es un test de
+dirección de imports: `core/` no importa de `modules/` ni de `routers/`, y los módulos no se
+importan entre sí (o se declara `agents_hub` como segunda capa base y se regula explícitamente).
+
+### 5.4 Infraestructura de contribución
+
+**Sólido y presente:** `LICENSE` (AGPL-3.0 íntegra), `DCO`, `.github/workflows/dco.yml`
+(ejemplar: verifica PR y push, exige que la firma coincida con el autor), `ci.yml` (ejemplar),
+`.env.example` (243 líneas, neutral), `generate_env.sh`, `setup.sh`, y la gobernanza documentada
+con la distinción jurídicamente correcta entre lo que la licencia obliga y lo que el proyecto
+pide.
+
+**Ausente:**
+- **`.github/PULL_REQUEST_TEMPLATE.md`** con la pregunta «¿por qué es generalizable y no material
+  de fork?». Es el filtro central de la gobernanza y hoy depende de que el contribuyente haya
+  leído el manual. La intervención de mayor rendimiento por menor coste de todo el informe.
+- **`SECURITY.md`** — para software de administración pública bajo ENS, sin canal de divulgación
+  responsable, es lo primero que echará en falta quien lo audite antes de un pliego.
+- **`CODEOWNERS`** (hace exigible la revisión de mantenedor sobre `core/`, `migrations/` y la
+  frontera), plantillas de issues, `CODE_OF_CONDUCT.md`, `dependabot.yml`.
+- **El §13 de la AGPL no está implementado** (el propio README lo admite): no existe `SOURCE_URL`
+  ni enlace al fuente en el pie del panel ni en el widget —«el caso que se olvida», según el
+  propio README—. El patrón ya está en uso en el proyecto (`CORPUS_SITE_BASE_URL`: variable de
+  entorno, vacío = desactivado); replicarlo.
+
+---
+
+## 6. Plan de acción recomendado (priorizado)
+
+**Bloqueante de despliegue con datos reales — Bloque SEC.9 (nuevo, entre el cursor y D.0):**
+1. `library_router`: añadir autenticación al `APIRouter`, derivar la tenencia del token, restringir
+   `/push` y `/sign_manifest` a superadmin. Convertir el check de módulos de `test_plat5` de
+   docstring a `dependencies` reales.
+2. Quitar `api_key` de `HubProviderOut`.
+3. `hub_activity_prompts_router` y `hub_llm_configs_router`: aplicar `scope_query_to_orgs` /
+   `assert_org_access` y validar `organizacion_id` del cuerpo contra el token (el patrón de
+   `hub_themes_router` ya existe).
+4. Cifrar en reposo `hub_provider_credentials.api_key`, o restringir el `CHECK` a los métodos que
+   no guardan el secreto en la base.
+5. **Convertir el gate de aislamiento en un recorrido del árbol de routers** con lista de
+   exenciones explícita (patrón `tablas_sin_ambito`), y añadir al gate de CI los routers hoy
+   ausentes. Es lo que evita la próxima regresión de esta clase.
+
+**Antes del piloto, coste bajo:**
+6. Sacar la paleta UJI de `index.css` a la cascada de temas + test hermano de `marcaNoViajaEnElRepo`.
+7. `DEV_ADMIN_EMAIL` por entorno; docstrings de seguridad falsos corregidos (`seeds.py:12`,
+   `main.py:3-6`, `hub_prompts_catalog_router.py:11`).
+8. `SECURITY.md` + `PULL_REQUEST_TEMPLATE.md` + `CODEOWNERS`.
+9. Arreglar el bug del 401 en el panel de anonimización (D2): cambiar un import a la versión Orval
+   ya generada.
+10. **Decidir la persistencia del mapa de anonimización** si el piloto maneja datos reales de
+    ciudadanos por Informes (§2.3). No es un arreglo: es una decisión con consecuencias legales.
+11. NUEVO-5 a NUEVO-9 (uploads, cuota anónima, gate del sandbox con `TESTING`, `_user` sin usar,
+    contraseñas por defecto del compose de producción).
+
+**Deuda de calidad, intercalable o post-piloto:**
+12. Implementar el §13 de la AGPL (`SOURCE_URL` en panel y widget).
+13. Test de dirección de imports (`core/` no importa de `modules/`/`routers/`); decidir cablear o
+    borrar `modules/automation/` (D1, 1.401 LOC sin consumidor).
+14. Higiene: logging estructurado en vez de 157 `print()`, `subprocess` en `to_thread`, fallback
+    de `DATABASE_URL` que falle en vez de conectar a ciegas, code-splitting del frontend,
+    descomponer `ChatbotsPage.tsx` (1.059 LOC, el nuevo fichero monolítico).
 
 ---
 
 ## Anexo — Referencias de código citadas
 
-Los hallazgos de seguridad y calidad referencian ficheros concretos, entre otros:
-`server/app/routers/auth_router.py:59-82` (A1), `server/app/routers/hub_chatbots_router.py:125-268`
-y `server/app/api/v1/hub_feedback.py:48-66` (A2), `server/app/main.py:190-196` (CORS),
-`server/app/routers/hub_themes_router.py:113-184` (temas), `server/app/api/v1/ingestion.py:31-43`
-(uploads), `server/app/api/v1/automation.py` (DI/router muerto), `server/app/ui/` (NiceGUI
-en árbol activo), `frontend/src/shared/api/ingestion.ts` (API manual),
-`frontend/src/admin/pages/AccessTokensPage.tsx:25-28` (scopes en cliente),
-`frontend/src/widget/hooks/useChat.ts` (errores silenciosos + token),
-`server/app/modules/redaccion/services/anonymization/service.py:232,236` (mapa no persistido).
+Seguridad: `server/app/routers/library_router.py:21,33,113,171` (sin auth + oráculo de firma),
+`server/app/routers/hub_llm_configs_router.py:44,64,229,285` (api_key expuesta + sin tenancy),
+`server/app/routers/hub_activity_prompts_router.py:126` (prompt de plataforma escribible),
+`server/app/modules/agents_hub/database/config_models.py:183-185` (credencial sin cifrar),
+`server/app/routers/redaccion/llm_drafts_router.py:163` (upload sin límite),
+`server/app/core/quotas.py:119-124` + `server/app/api/v1/hub_chat.py:310` (cuota anónima muerta),
+`server/app/core/sandbox_client.py:518` (gate con `TESTING=1`), `docker-compose.prod.yml:27,31`.
+Multitenencia: `server/app/core/auth/tenancy.py:39-99`, `server/app/core/ambito.py:97-189`,
+`server/tests/core/test_mt1_ambito.py`, `server/tests/api/test_tenant_isolation.py`,
+`docs/MULTITENENCIA.md` (inventario). Aislamiento OSS: `frontend/src/index.css:115,122` (paleta
+UJI), `frontend/src/__tests__/marcaNoViajaEnElRepo.test.ts` (guardarraíl de marca),
+`server/app/database/seeds.py:35`, `server/app/modules/redaccion/services/redactor_de_bloques.py:19`,
+`server/app/core/auth/modulos_service.py:32` + `saml/identity_service.py:131` (core→routers).
+Calidad: `server/app/modules/redaccion/services/anonymization/service.py:231-237` (mapa no-op),
+`frontend/src/redaccion/hooks/useAnonymizationApi.ts:22` (401), `server/app/main.py:3-6,260-261`.
