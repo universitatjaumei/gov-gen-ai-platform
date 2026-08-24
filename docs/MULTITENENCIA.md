@@ -46,7 +46,7 @@ vacío»), sin lo cual no se puede vaciar un valor heredado desde la pantalla.
 | `hub_organizaciones` | `plataforma` | — | Es el eje sobre el que se acota todo lo demás, no algo acotable. |
 | `hub_platform_modules` | `plataforma` | — | Catálogo de módulos de la instalación. |
 | `hub_providers` | `plataforma` | — | **A propósito**: es un catálogo de *tipos* (Google, Vertex, Ollama, OpenRouter). Google es Google en todos los municipios. Lo que se separa es la credencial. |
-| `hub_provider_credentials` | `heredable` | `organizacion_id` | MT.2. Con qué credencial habla cada organización. Tres métodos: clave literal, **nombre** de variable de entorno (el único que da credenciales por organización sin meter secretos en la base) y ADC. |
+| `hub_provider_credentials` | `heredable` | `organizacion_id` | MT.2. Con qué credencial habla cada organización. **Dos métodos desde SEC.9.4**: **nombre** de variable de entorno y ADC. El tercero —la clave literal en la base— se retiró con su columna: lo que se guarda es *dónde* está el secreto, no el secreto, así que un volcado o la sincronización cloud→edge dejan de ser sensibles por construcción. El autoservicio del panel que eso cuesta se recupera en MT.10 con un `SecretProvider`. |
 | `hub_llm_configs` | `heredable` | `organizacion_id` | MT.2. `is_default` es único por (nivel, propósito, organización). |
 | `hub_chatbots` | `organizacion` | `organizacion_id` | Un asistente es siempre de una organización. |
 | `hub_vocabulary_terms` | `organizacion` | `organizacion_id` | Cada organización tiene su vocabulario; no hay nivel de plataforma que heredar. |

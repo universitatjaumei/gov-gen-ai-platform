@@ -13,9 +13,16 @@ cada una su Google — haría falta cambiar la clave primaria de una tabla con c
 `api_key`**. Lo que tiene que separarse por organización es la credencial, no el catálogo.
 
 Así que la credencial se va a su propia tabla, heredable por la cascada de MT.1, y declara **cómo**
-se obtiene. Los tres métodos son los que ya están en uso hoy:
+se obtiene.
 
-- `clave`: la clave literal, en la base de datos.
+> **SEC.9.4 retiró el método `clave`** —la clave literal en la base de datos—, así que los tests
+> de este fichero usan `variable_de_entorno` donde antes usaban `clave`. La razón está en
+> `test_sec94_la_base_no_guarda_secretos.py`: ninguno de los dos métodos que quedan guarda un
+> secreto, y eso hace que un volcado o la sincronización cloud→edge dejen de ser sensibles por
+> construcción, en vez de por acordarse de cifrarlos.
+
+Los métodos vigentes:
+
 - `variable_de_entorno`: la base guarda **el nombre** de la variable, no el secreto. Es la que
   sirve al despliegue en GCP —Secret Manager monta una variable por organización— y la única que
   permite credenciales por organización sin meter secretos en la base.
@@ -81,17 +88,19 @@ class TestLaCredencialEsDeQuienLaPaga:
 
     @pytest.mark.asyncio
     async def test_should_prefer_the_organisation_credential_over_the_platform_one(
-        self, db_session
+        self, db_session, monkeypatch
     ):
+        monkeypatch.setenv("CLAVE_DE_PLATAFORMA", "la-de-plataforma")
+        monkeypatch.setenv("CLAVE_DE_VILA_REAL", "la-de-vila-real")
         proveedor = await _proveedor(db_session)
         una = await _organizacion(db_session, "Vila-real")
         await _credencial(
             db_session, proveedor, None,
-            metodo=MetodoDeCredencial.CLAVE, api_key="la-de-plataforma",
+            metodo=MetodoDeCredencial.VARIABLE_DE_ENTORNO, secret_env="CLAVE_DE_PLATAFORMA",
         )
         await _credencial(
             db_session, proveedor, una,
-            metodo=MetodoDeCredencial.CLAVE, api_key="la-de-vila-real",
+            metodo=MetodoDeCredencial.VARIABLE_DE_ENTORNO, secret_env="CLAVE_DE_VILA_REAL",
         )
 
         resuelta = await resolver_credencial(db_session, proveedor.id, una.id)
@@ -99,14 +108,15 @@ class TestLaCredencialEsDeQuienLaPaga:
         assert resuelta.api_key == "la-de-vila-real"
 
     @pytest.mark.asyncio
-    async def test_should_fall_back_to_the_platform_credential(self, db_session):
+    async def test_should_fall_back_to_the_platform_credential(self, db_session, monkeypatch):
         """Sin credencial propia, la de plataforma. **Es lo que hace segura la fase 1**: sin
         ninguna fila en la tabla nueva, el piloto se comporta exactamente como hoy."""
+        monkeypatch.setenv("CLAVE_DE_PLATAFORMA", "la-de-plataforma")
         proveedor = await _proveedor(db_session)
         una = await _organizacion(db_session, "Borriana")
         await _credencial(
             db_session, proveedor, None,
-            metodo=MetodoDeCredencial.CLAVE, api_key="la-de-plataforma",
+            metodo=MetodoDeCredencial.VARIABLE_DE_ENTORNO, secret_env="CLAVE_DE_PLATAFORMA",
         )
 
         resuelta = await resolver_credencial(db_session, proveedor.id, una.id)
@@ -114,16 +124,19 @@ class TestLaCredencialEsDeQuienLaPaga:
         assert resuelta.api_key == "la-de-plataforma"
 
     @pytest.mark.asyncio
-    async def test_should_not_leak_an_api_key_across_organisations(self, db_session):
+    async def test_should_not_leak_an_api_key_across_organisations(
+        self, db_session, monkeypatch
+    ):
         """**El test que justifica el prompt.** Resolver para A no puede devolver la
         credencial de B, ni por un `ORDER BY` mal puesto ni por un `first()` sobre un listado
         sin filtrar. Lo que está en juego es el secreto de otro contrato."""
+        monkeypatch.setenv("CLAVE_DE_NULES", "secreto-de-nules")
         proveedor = await _proveedor(db_session)
         una = await _organizacion(db_session, "Onda")
         otra = await _organizacion(db_session, "Nules")
         await _credencial(
             db_session, proveedor, otra,
-            metodo=MetodoDeCredencial.CLAVE, api_key="secreto-de-nules",
+            metodo=MetodoDeCredencial.VARIABLE_DE_ENTORNO, secret_env="CLAVE_DE_NULES",
         )
 
         resuelta = await resolver_credencial(db_session, proveedor.id, una.id)
@@ -183,15 +196,19 @@ class TestLaCredencialEsDeQuienLaPaga:
         assert resuelta.falta is None, "ADC sin clave no es una carencia"
 
     @pytest.mark.asyncio
-    async def test_should_override_the_base_url_per_organisation(self, db_session):
+    async def test_should_override_the_base_url_per_organisation(
+        self, db_session, monkeypatch
+    ):
         """Un municipio con su propio Ollama en su propia red: el catálogo da la `base_url`
         por omisión y la credencial la puede cambiar, porque el «dónde» y el «con qué» son la
         misma decisión de contrato."""
+        monkeypatch.setenv("CLAVE_DE_VINAROS", "k")
         proveedor = await _proveedor(db_session, tipo="openai_compatible")
         una = await _organizacion(db_session, "Vinaròs")
         await _credencial(
             db_session, proveedor, una,
-            metodo=MetodoDeCredencial.CLAVE, api_key="k", base_url="http://ollama.vinaros:11434/v1",
+            metodo=MetodoDeCredencial.VARIABLE_DE_ENTORNO, secret_env="CLAVE_DE_VINAROS",
+            base_url="http://ollama.vinaros:11434/v1",
         )
 
         resuelta = await resolver_credencial(db_session, proveedor.id, una.id)
@@ -332,12 +349,14 @@ class TestElEsquemaDiceLaVerdad:
 
         proveedor = await _proveedor(db_session)
         await _credencial(
-            db_session, proveedor, None, metodo=MetodoDeCredencial.CLAVE, api_key="una"
+            db_session, proveedor, None,
+            metodo=MetodoDeCredencial.VARIABLE_DE_ENTORNO, secret_env="UNA",
         )
 
         with pytest.raises(IntegrityError):
             await _credencial(
-                db_session, proveedor, None, metodo=MetodoDeCredencial.CLAVE, api_key="otra"
+                db_session, proveedor, None,
+                metodo=MetodoDeCredencial.VARIABLE_DE_ENTORNO, secret_env="OTRA",
             )
         await db_session.rollback()
 

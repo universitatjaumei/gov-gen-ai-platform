@@ -106,18 +106,17 @@ async def resolver_credencial(
     return _resolver_fila(fila, modo_de_despliegue=modo_de_despliegue)
 
 
+def _de_quien(fila: HubProviderCredential) -> str:
+    """De qué nivel es la credencial, para poder nombrarlo en el fallo."""
+    if fila.organizacion_id is None:
+        return "credencial de plataforma"
+    return f"credencial de la organización {fila.organizacion_id}"
+
+
 def _resolver_fila(
     fila: HubProviderCredential, *, modo_de_despliegue: str | None
 ) -> CredencialDeProveedor:
     metodo = MetodoDeCredencial(fila.metodo)
-
-    if metodo is MetodoDeCredencial.CLAVE:
-        return CredencialDeProveedor(
-            metodo=metodo,
-            api_key=fila.api_key,
-            base_url=fila.base_url,
-            falta=None if fila.api_key else "la credencial declara una clave y está vacía",
-        )
 
     if metodo is MetodoDeCredencial.VARIABLE_DE_ENTORNO:
         nombre = (fila.secret_env or "").strip()
@@ -125,7 +124,9 @@ def _resolver_fila(
         if not nombre:
             falta = "la credencial declara una variable de entorno y no dice cuál"
         elif not valor:
-            falta = f"la variable de entorno {nombre} no está definida"
+            # Dice **cuál** falta y **de quién** es (SEC.9.4). Con una variable por organización,
+            # «no está definida» a secas no permite arreglarlo sin ir a mirar la tabla.
+            falta = f"la variable de entorno {nombre} no está definida ({_de_quien(fila)})"
         else:
             falta = None
         return CredencialDeProveedor(

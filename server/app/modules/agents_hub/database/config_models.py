@@ -107,16 +107,24 @@ class HubLLMConfig(HubConfigBase):
 
 
 class MetodoDeCredencial(StrEnum):
-    """Cómo se obtiene la credencial de un proveedor (MT.2).
+    """Cómo se obtiene la credencial de un proveedor (MT.2, restringido en SEC.9.4).
 
     **Lleva `CheckConstraint`, al contrario que el vocabulario del corpus** (CLAUDE.md §5): son
-    tres valores estables, cada uno con su rama en `model_factory`, y añadir un cuarto exige
-    escribir la rama que lo consuma — así que el CHECK no estorba a nadie. Mismo criterio que
-    `purpose` en esta misma tabla y `nivell_acces` en ING.0.2.
+    valores estables, cada uno con su rama en `model_factory`, y añadir uno exige escribir la
+    rama que lo consuma — así que el CHECK no estorba a nadie. Mismo criterio que `purpose` en
+    esta misma tabla y `nivell_acces` en ING.0.2.
+
+    **SEC.9.4 retiró `clave`**, que guardaba la clave literal en la base de datos. Ninguno de los
+    dos que quedan guarda un secreto: uno guarda **el nombre** de la variable donde está, y el
+    otro no guarda nada. Así, un volcado, una copia o el payload de la sincronización cloud→edge
+    dejan de ser sensibles por construcción, en vez de por acordarse de cifrarlos.
+
+    El coste es el autoservicio del panel —dar de alta una credencial deja de ser un formulario—,
+    y su recuperación está anotada en **MT.10** con un `SecretProvider` que guarda el nombre del
+    recurso y no el valor. Descartado a propósito: cifrar en reposo, que mueve el secreto al
+    entorno del mismo proceso que lo descifra y añade gestión de clave para siempre.
     """
 
-    #: La clave literal, guardada en la base de datos.
-    CLAVE = "clave"
     #: La base guarda **el nombre** de la variable de entorno; el secreto vive fuera.
     VARIABLE_DE_ENTORNO = "variable_de_entorno"
     #: Sin clave: las credenciales del entorno de ejecución (ADC de Vertex).
@@ -151,8 +159,10 @@ class HubProviderCredential(HubConfigBase):
     # tengan la suya. Es lo que hace que el piloto no note nada: hoy no hay ninguna fila.
     __ambito__ = Ambito.HEREDABLE
     __table_args__ = (
+        # SEC.9.4 — sin `clave`: es el CHECK el que impide que el método vuelva por un INSERT a
+        # mano cuando ya no hay ni columna donde poner el secreto.
         CheckConstraint(
-            "metodo IN ('clave', 'variable_de_entorno', 'entorno_de_ejecucion')",
+            "metodo IN ('variable_de_entorno', 'entorno_de_ejecucion')",
             name="ck_provider_credential_metodo",
         ),
         # `NULLS NOT DISTINCT` (Postgres 15+) es lo que hace valer la unicidad **también en el
@@ -181,8 +191,8 @@ class HubProviderCredential(HubConfigBase):
         index=True,
     )
     metodo: Mapped[str] = mapped_column(String(30), nullable=False)
-    #: Sólo con `metodo='clave'`. Es un secreto en reposo: preferir `secret_env`.
-    api_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # SEC.9.4 — aquí había un `api_key` en texto plano, para `metodo='clave'`. No hay columna
+    # que lo sustituya **a propósito**: lo que se guarda es dónde está el secreto, no el secreto.
     #: Sólo con `metodo='variable_de_entorno'`: **el nombre**, nunca el valor.
     secret_env: Mapped[str | None] = mapped_column(String(255), nullable=True)
     #: Cambia la del catálogo. Un municipio con su propio Ollama en su propia red.
