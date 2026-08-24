@@ -16,11 +16,16 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
 from server.app.api.deps import require_role, require_module
 from server.app.core.auth.models import UserInfo
+from server.app.core.auth.tenancy import (
+    assert_org_access,
+    orgs_del_principal,
+    organizacion_unica_de,
+)
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.config_models import HubChatbot, HubLLMConfig, HubProvider
 from server.app.modules.agents_hub.services.model_factory import _build_model
@@ -34,14 +39,71 @@ router = APIRouter(prefix="/hub/llm-configs", tags=["hub-llm-configs"],
 )
 
 _require_admin = require_role("superadmin", "admin")
+# SEC.9.2 — un proveedor es de ámbito `plataforma`: crearlo, cambiarlo o borrarlo afecta a TODAS
+# las organizaciones. Leerlo lo necesita cualquier administrador (para elegirlo al configurar un
+# modelo); escribirlo no es cosa de quien administra una sola.
+_require_superadmin = require_role("superadmin")
+
+
+def _ambito_de_escritura(user: UserInfo, pedido: uuid.UUID | None) -> uuid.UUID | None:
+    """A qué organización pertenece lo que se está escribiendo (SEC.9.2).
+
+    El cuerpo propone y el token dispone, con dos reglas:
+
+    - **Nulo lo reserva el superadministrador**, porque una fila sin organización es la de
+      plataforma y la heredan todas. Antes, `organizacion_id` venía del cuerpo sin comprobarse:
+      un administrador podía crear el modelo por defecto de la instalación entera.
+    - Un administrador que no la nombra escribe **en la suya**. Y si gestiona varias, no hay «la
+      suya»: se le pregunta con un 400 en vez de elegir por él, que acabaría escribiendo en una
+      organización que no ha nombrado — o, peor, en plataforma.
+    """
+    if getattr(user, "is_superadmin", False):
+        return pedido
+    if pedido is None:
+        propia = organizacion_unica_de(user)
+        if propia is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Indica la organización: tu cuenta gestiona varias, y la configuración "
+                    "sin organización es la de plataforma."
+                ),
+            )
+        return propia
+    assert_org_access(user, pedido)
+    return pedido
+
+
+def _assert_puede_tocar(user: UserInfo, config: HubLLMConfig) -> None:
+    """403 si la configuración no es suya (SEC.9.2).
+
+    `organizacion_id` nulo significa «de la plataforma»: cambiarla o borrarla cambia el modelo
+    de las demás organizaciones, así que es del superadministrador. Con `assert_org_access` a
+    secas no bastaría, porque `None` allí sólo dice «no se puede decidir».
+    """
+    if getattr(user, "is_superadmin", False):
+        return
+    if config.organizacion_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="La configuración de plataforma la gestiona el superadministrador",
+        )
+    assert_org_access(user, config.organizacion_id)
 
 
 class HubProviderOut(BaseModel):
+    """Proveedor **sin su clave** (SEC.9.2).
+
+    `api_key` estaba en este contrato, y como `hub_providers` es de plataforma, cualquier
+    administrador de cualquier organización leía en claro la credencial de la instalación con un
+    `GET`. Un secreto no vuelve por donde entró: para cambiarlo se manda uno nuevo, y para saber
+    si hay uno puesto no hace falta verlo.
+    """
+
     id: str
     name: str
     provider_type: str
     base_url: str | None
-    api_key: str | None
 
     model_config = {"from_attributes": True}
 
@@ -74,7 +136,7 @@ async def list_providers(
 @router.post("/providers", response_model=HubProviderOut, status_code=status.HTTP_201_CREATED)
 async def create_provider(
     body: HubProviderCreate,
-    _: UserInfo = Depends(_require_admin),
+    _: UserInfo = Depends(_require_superadmin),
     session=Depends(get_async_session),
 ):
     """Crea un nuevo proveedor."""
@@ -94,7 +156,7 @@ async def create_provider(
 async def update_provider(
     provider_id: str,
     body: HubProviderUpdate,
-    _: UserInfo = Depends(_require_admin),
+    _: UserInfo = Depends(_require_superadmin),
     session=Depends(get_async_session),
 ):
     """Actualiza un proveedor existente."""
@@ -113,7 +175,7 @@ async def update_provider(
 @router.delete("/providers/{provider_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_provider(
     provider_id: str,
-    _: UserInfo = Depends(_require_admin),
+    _: UserInfo = Depends(_require_superadmin),
     session=Depends(get_async_session),
 ):
     """Elimina un proveedor si no está en uso."""
@@ -228,12 +290,25 @@ class LLMConfigUpdate(BaseModel):
 
 @router.get("", response_model=list[LLMConfigRead])
 async def list_llm_configs(
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
-    result = await session.execute(
-        select(HubLLMConfig).order_by(HubLLMConfig.tier, HubLLMConfig.label)
-    )
+    """Los modelos de sus organizaciones **y los de plataforma**, que se heredan (SEC.9.2).
+
+    No se usa `scope_query_to_orgs`: `hub_llm_configs` es `heredable`, y acotar sólo a las
+    organizaciones del principal escondería el nivel de plataforma —que hoy es el único que
+    existe— y dejaría la pantalla vacía. El `or_` es el mismo patrón que `config_provider`, y por
+    la misma razón: `NULL IN (...)` es nulo en SQL, así que un `IN` no trae la fila de plataforma.
+    """
+    stmt = select(HubLLMConfig).order_by(HubLLMConfig.tier, HubLLMConfig.label)
+    if not user.is_superadmin:
+        stmt = stmt.where(
+            or_(
+                HubLLMConfig.organizacion_id.in_(orgs_del_principal(user)),
+                HubLLMConfig.organizacion_id.is_(None),
+            )
+        )
+    result = await session.execute(stmt)
     return result.scalars().all()
 
 
@@ -285,18 +360,24 @@ async def _relevar_default(
 @router.post("", response_model=LLMConfigRead, status_code=status.HTTP_201_CREATED)
 async def create_llm_config(
     body: LLMConfigCreate,
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
+    # SEC.9.2: la organización se resuelve ANTES del relevo. Si no, un administrador degradaría
+    # la marca de «por defecto» de una organización en la que no puede escribir, y el 403 llegaría
+    # después de haber tocado sus filas.
+    organizacion_id = _ambito_de_escritura(user, body.organizacion_id)
+
     if body.is_default:
         await _relevar_default(
             session,
             body.tier,
             purpose=body.purpose,
-            organizacion_id=getattr(body, "organizacion_id", None),
+            organizacion_id=organizacion_id,
         )
 
     payload = body.model_dump()
+    payload["organizacion_id"] = organizacion_id
     # Defaults operativos para precisión: Tier 1 => 0.1, Tier 2/3 => 0.0
     if "temperature" not in body.model_fields_set:
         payload["temperature"] = 0.1 if body.tier == 1 else 0.0
@@ -312,12 +393,13 @@ async def create_llm_config(
 async def update_llm_config(
     config_id: uuid.UUID,
     body: LLMConfigUpdate,
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
     config = await session.get(HubLLMConfig, config_id)
     if not config:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found")
+    _assert_puede_tocar(user, config)
 
     target_tier = body.tier if body.tier is not None else config.tier
     if body.is_default is True:
@@ -340,12 +422,13 @@ async def update_llm_config(
 @router.delete("/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_llm_config(
     config_id: uuid.UUID,
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
     config = await session.get(HubLLMConfig, config_id)
     if not config:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found")
+    _assert_puede_tocar(user, config)
 
     in_use = await session.execute(
         select(HubChatbot).where(HubChatbot.llm_config_id == config_id)
@@ -363,7 +446,7 @@ async def delete_llm_config(
 @router.post("/{config_id}/test", response_model=LLMConnectionTestOut)
 async def test_llm_connection(
     config_id: uuid.UUID,
-    _: UserInfo = Depends(_require_admin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
 ):
     config = await session.scalar(
@@ -373,6 +456,9 @@ async def test_llm_connection(
     )
     if not config:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Config not found")
+    # El más caro de los cuatro: probar **gasta la credencial** de quien sea dueño de la fila, y
+    # de paso confirma al llamante que esa clave es válida.
+    _assert_puede_tocar(user, config)
 
     try:
         model = _build_model(config)

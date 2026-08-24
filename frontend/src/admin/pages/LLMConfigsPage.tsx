@@ -504,15 +504,22 @@ function ProvidersSection({ providers, isLoading }: { providers: HubProviderOut[
 
   function openEdit(p: HubProviderOut) {
     setEditing(p)
-    reset({ id: p.id, name: p.name, provider_type: p.provider_type, base_url: p.base_url || '', api_key: p.api_key || '' })
+    // SEC.9.2: la clave ya no viaja en el contrato, así que el campo arranca vacío. Un secreto
+    // no vuelve por donde entró: para cambiarlo se escribe uno nuevo.
+    reset({ id: p.id, name: p.name, provider_type: p.provider_type, base_url: p.base_url || '', api_key: '' })
     setDialogOpen(true)
   }
 
   function closeDialog() { setDialogOpen(false); setEditing(null) }
 
   function onSubmit(values: ProviderFormValues) {
-    if (editing) updateMutation.mutate({ providerId: editing.id, data: values })
-    else createMutation.mutate({ data: values })
+    // Dejar el campo vacío significa «no la cambies», no «bórrala». Sin esto, editar el nombre
+    // de un proveedor le borraría la credencial, y el fallo aparecería en la siguiente llamada
+    // al modelo y no al guardar.
+    const { api_key, ...resto } = values
+    const data = api_key ? values : resto
+    if (editing) updateMutation.mutate({ providerId: editing.id, data })
+    else createMutation.mutate({ data })
   }
 
   return (

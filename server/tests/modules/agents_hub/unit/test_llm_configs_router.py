@@ -20,11 +20,21 @@ _JWT_ENV = {
 }
 
 
-def _make_token(role: str = "admin") -> str:
+def _make_token(role: str = "superadmin") -> str:
+    """SEC.9.2 — el rol por omisión pasa a superadministrador.
+
+    Estos tests manejan configuración **de plataforma** (`organizacion_id=None`), que es la que
+    heredan todas las organizaciones. Desde SEC.9.2 escribir ahí es del superadministrador: un
+    administrador que no nombra organización escribe en la suya, y con un claim vacío —como
+    tenía esta fixture— no hay «la suya», así que recibe un 400 pidiéndosela.
+
+    El aislamiento por organización de este router lo cubre
+    `tests/api/test_llm_configs_isolation.py`; aquí se prueba el CRUD y el relevo de defectos.
+    """
     import os
     os.environ.update(_JWT_ENV)
     from server.app.core.auth import UserInfo, create_token
-    return create_token(UserInfo(user_id="admin-1", email="admin@test.com", role=role))
+    return create_token(UserInfo(user_id="root-1", email="root@test.com", role=role))
 
 
 def _make_config(**kwargs) -> HubLLMConfig:
