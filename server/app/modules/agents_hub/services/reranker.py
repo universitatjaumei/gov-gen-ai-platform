@@ -33,6 +33,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from server.app.modules.agents_hub.database.config_models import HubLLMConfig, HubProvider
 
 PURPOSE_RERANK = "rerank"
+PROVIDER_TYPE_VERTEX_RANKING = "discovery_engine"
+
+# El Ranking API es global: no tiene réplica regional propia como Vertex AI, y pedirle una
+# región devuelve 404. Verificado el 2026-08-24 contra `uji-teclab`.
+LOCATION_RANKING = "global"
+RANKING_CONFIG = "default_ranking_config"
+MODELO_RANKING_POR_DEFECTO = "semantic-ranker-default-004"
+SCOPE_CLOUD = "https://www.googleapis.com/auth/cloud-platform"
 
 # El pool que se le ofrece al reranker. Con `top_k` candidatos no habría nada que reordenar:
 # el reranker solo puede mejorar lo que le llega.
@@ -131,8 +139,110 @@ class LocalReranker:
         return puntuados[:top_k]
 
 
+class VertexRankingReranker:
+    """Ranking API de Vertex (Discovery Engine). **El reranker del despliegue.**
+
+    Autentica con **ADC**, igual que `VertexEmbeddingService`: no hay clave que repartir ni
+    rotar. Habla por `httpx.AsyncClient` y no por el cliente de `google-cloud-discoveryengine`
+    porque ese es síncrono, y envolverlo en un hilo para cumplir la regla de asincronía total
+    de `AGENTS.md` añadiría una dependencia de ~100 MB para acabar haciendo un POST.
+
+    **Sus scores ya vienen en [0,1] y NO se normalizan.** Es la diferencia de contrato con
+    `LocalReranker`, cuyo cross-encoder devuelve logits y sí necesita la sigmoide. Medido el
+    2026-08-24: 0,7944 / 0,0504 / 0,01 sobre tres candidatos en valenciano. Pasar eso por
+    `normalize_score` convertiría el 0,01 en 0,502 y el packer de RAG.5 vería un candidato
+    irrelevante como mediano.
+    """
+
+    def __init__(
+        self,
+        model_name: str | None = None,
+        project: str | None = None,
+        credenciales: Any = None,
+        cliente_factory: Any = None,
+    ) -> None:
+        import os
+
+        self._model_name = model_name or MODELO_RANKING_POR_DEFECTO
+        self._project = project if project is not None else os.getenv(
+            "GOOGLE_CLOUD_PROJECT", ""
+        )
+        if not self._project:
+            raise RuntimeError(
+                "El Ranking API de Vertex necesita saber contra qué proyecto habla, y "
+                "GOOGLE_CLOUD_PROJECT no está definida. Ponla en el entorno y autentícate "
+                "con:\n    gcloud auth application-default login\n"
+                "No hace falta ninguna clave de API: usa las credenciales por defecto de la "
+                "aplicación (ADC)."
+            )
+        self._credenciales = credenciales
+        self._cliente_factory = cliente_factory
+
+    @property
+    def model_name(self) -> str:
+        return self._model_name
+
+    @property
+    def url(self) -> str:
+        return (
+            "https://discoveryengine.googleapis.com/v1/projects/"
+            f"{self._project}/locations/{LOCATION_RANKING}/rankingConfigs/"
+            f"{RANKING_CONFIG}:rank"
+        )
+
+    def _token(self) -> str:
+        if self._credenciales is None:
+            import google.auth
+
+            self._credenciales, _ = google.auth.default(scopes=[SCOPE_CLOUD])
+        if not getattr(self._credenciales, "valid", False):
+            from google.auth.transport.requests import Request
+
+            self._credenciales.refresh(Request())
+        return self._credenciales.token
+
+    def _cliente(self):
+        if self._cliente_factory is not None:
+            return self._cliente_factory()
+        import httpx
+
+        return httpx.AsyncClient(timeout=20.0)
+
+    async def rerank(
+        self, query: str, candidates: list[str], top_k: int
+    ) -> list[RerankResult]:
+        # Sin candidatos no hay nada que reordenar, y el API rechaza la petición vacía:
+        # llamar sería pagar una consulta para no obtener nada.
+        if not candidates:
+            return []
+
+        cuerpo = {
+            "model": self._model_name,
+            "topN": top_k,
+            "query": query,
+            # El id es la posición en la lista de entrada: es lo que permite devolver
+            # índices del protocolo después de que el API reordene.
+            "records": [
+                {"id": str(i), "content": texto} for i, texto in enumerate(candidates)
+            ],
+        }
+        cabeceras = {"Authorization": f"Bearer {self._token()}"}
+
+        async with self._cliente() as cliente:
+            respuesta = await cliente.post(self.url, json=cuerpo, headers=cabeceras)
+            respuesta.raise_for_status()
+            datos = respuesta.json()
+
+        return [
+            RerankResult(index=int(registro["id"]), score=float(registro.get("score", 0.0)))
+            for registro in datos.get("records", [])
+        ][:top_k]
+
+
 async def resolve_reranker(
-    session: AsyncSession, chatbot_id: uuid.UUID | None = None
+    session: AsyncSession,
+    chatbot_id: uuid.UUID | None = None,
+    credenciales: Any = None,
 ) -> Any:
     """Reranker configurado, o excepción explícita. Nunca None.
 
@@ -157,11 +267,16 @@ async def resolve_reranker(
     proveedor = await session.get(HubProvider, config.provider)
     tipo = getattr(proveedor, "provider_type", None)
 
+    if tipo == PROVIDER_TYPE_VERTEX_RANKING:
+        return VertexRankingReranker(
+            model_name=config.model_name, credenciales=credenciales
+        )
+
     if tipo == "local":
         return LocalReranker(model_name=config.model_name)
 
     raise RerankerProviderNotSupported(
         f"El proveedor '{config.provider}' es de tipo '{tipo}', y no hay adaptador de "
-        "reranking para ese tipo. El adaptador del Ranking API de Vertex "
-        "('discovery_engine') llega en RAG.6b, que necesita el servicio habilitado por D.0."
+        f"reranking para ese tipo. Los que hay: '{PROVIDER_TYPE_VERTEX_RANKING}' (Ranking "
+        "API de Vertex, el del despliegue) y 'local' (cross-encoder BGE, opción de edge)."
     )

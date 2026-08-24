@@ -633,7 +633,12 @@ cd frontend; npm run generate:api
 > 3. **Bloque MAN, parte local** (3) — MAN.1→MAN.3. Van **después de CUR** a propósito: CUR mueve módulos, y escribir los guiones antes sería documentar una estructura que está a punto de cambiar. Y van **antes del Deploy** porque un fallo encontrado en local cuesta un prompt; encontrado en producción cuesta un despliegue.
 > 4. **Deploy GCP** (6) — D.0 primero, que habilita los nueve servicios de una vez —decisión del usuario del 2026-08-01— y sin el cual D.1-D.5 asumen APIs encendidas que nadie encendió.
 > 5. **MAN.4** (1) — campaña contra el entorno desplegado. SSO SAML real, sistemas externos, Cloud Run/Cloud SQL/GCS y edge vs cloud. **No se puede empezar antes de D.5.**
-> 6. **RAG.6b** (1) — adaptador de Vertex y medición del valenciano. **Después de D.0 y no antes**: el Ranking API vive en Discovery Engine.
+> 6. ~~**RAG.6b** (1)~~ ✅ **HECHO el 2026-08-24, adelantado a petición del usuario.** No hubo que
+>    esperar a D.0: `discoveryengine.googleapis.com` ya estaba habilitado en `uji-teclab`. Se
+>    adelantó porque hacía falta para medir el asistente normativo en local contra el lote
+>    dorado de 25 consultas reales. **Los dos riesgos abiertos, cerrados con datos**: el
+>    valenciano funciona (documento correcto 0,7944 frente a señuelo 0,0504) y los scores del
+>    Ranking API **ya vienen en [0,1]**, así que `normalize_score` NO se les aplica.
 > 7. **Bloque OWUI** (3) — OWUI.1→OWUI.3, post-deploy.
 >
 > **La carga del corpus v1 no bloquea a ninguno de estos** y no es un prompt, pero sí desbloquea dos mediciones que están anotadas y sin hacer: BGE-M3 contra Google a 1024 en valenciano (que **no** necesita el deploy, porque los embeddings van por API key de Gemini) y la traza del asistente con corpus real.
