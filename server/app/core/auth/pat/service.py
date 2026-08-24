@@ -129,13 +129,19 @@ class PatService:
         # organización le seguiría valiendo un token emitido antes, que es una revocación
         # que no revoca. Resolverlas aquí cuesta una consulta por validación y siempre dice
         # la verdad de hoy.
+        # MT.5 — y si el token declara una organización, **acota** ese alcance. Nunca amplía:
+        # la intersección la hace `acota_a_la_organizacion`, así que un token cuya organización
+        # ya no gestiona su dueño se queda sin ninguna, que es lo que tiene que pasar.
+        from server.app.core.auth.pat.principal import acota_a_la_organizacion
+
+        dueno = UserInfo(
+            user_id=pat.owner_id,
+            email=pat.owner_email,
+            role=pat.owner_role,
+            organizacion_ids=await self._orgs_del_dueno(pat.owner_role, pat.owner_id),
+        )
         principal = PatPrincipal(
-            user_info=UserInfo(
-                user_id=pat.owner_id,
-                email=pat.owner_email,
-                role=pat.owner_role,
-                organizacion_ids=await self._orgs_del_dueno(pat.owner_role, pat.owner_id),
-            ),
+            user_info=acota_a_la_organizacion(dueno, pat),
             scopes=list(pat.scopes),
         )
         pat.last_used_at = datetime.now(timezone.utc)

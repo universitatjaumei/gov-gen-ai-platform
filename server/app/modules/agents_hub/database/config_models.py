@@ -522,15 +522,37 @@ class HubActivityPrompt(HubConfigBase):
 
     __tablename__ = "hub_activity_prompts"
 
-    # MT.1 — `activity` es único global (PRO.2.1). Defendible para una actividad de
-    # plataforma; MT.6 lo hace heredable para que un municipio escriba el suyo.
-    __ambito__ = Ambito.PLATAFORMA
+    # MT.6 — heredable: la cadena es organización → plataforma → código, y **el texto del
+    # código nunca se copia a una fila**. `activity` era único global, que es defendible para
+    # una actividad de plataforma y deja de serlo en cuanto un municipio quiere su redacción.
+    __ambito__ = Ambito.HEREDABLE
+    __table_args__ = (
+        # La organización entra en la clave, con `NULLS NOT DISTINCT` para que la unicidad valga
+        # también en el nivel de plataforma —el de todas las filas de hoy—: en Postgres
+        # `NULL != NULL`, y dos overrides del mismo ámbito serían dos respuestas a una pregunta
+        # con una sola. Es la misma trampa que el docstring de arriba advertía sobre
+        # `chatbot_id` nullable, y aquí se evita con la cláusula en vez de con otra tabla.
+        UniqueConstraint(
+            "activity",
+            "organizacion_id",
+            name="uq_activity_prompt_scope",
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    # La clave estable de la actividad (`ActividadLLM.value`). Única: una actividad, un override.
-    activity: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    # La clave estable de la actividad (`ActividadLLM.value`). Ya no es única por sí sola: la
+    # unicidad es por (actividad, organización) desde MT.6.
+    activity: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    #: MT.6 — de quién es este override. **Nulo = de la plataforma, y se hereda.**
+    organizacion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_organizaciones.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     template_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     override_tier: Mapped[int | None] = mapped_column(Integer, nullable=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -625,8 +647,9 @@ class HubPersonalAccessToken(HubConfigBase):
 
     __tablename__ = "hub_personal_access_tokens"
 
-    # MT.1 — va por dueño y no dice sobre qué organización puede actuar. MT.5 le añade el eje.
-    __ambito__ = Ambito.PLATAFORMA
+    # MT.5 — heredable: nulo = vale donde valga su dueño, que es lo que significan los que ya
+    # existen. Acotarlos en la migración habría roto integraciones que funcionan sin avisar.
+    __ambito__ = Ambito.HEREDABLE
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -640,6 +663,17 @@ class HubPersonalAccessToken(HubConfigBase):
     )
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     scopes: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
+    #: MT.5 — sobre qué organización puede actuar. **Nulo = donde pueda su dueño**, que es el
+    #: comportamiento de SEC.2 y el de los tokens que ya existen. Cuando lo declara, **acota**:
+    #: nunca amplía, porque el alcance del dueño se sigue resolviendo en cada validación y un
+    #: token que sobreviviera a la retirada de una organización sería una revocación que no
+    #: revoca.
+    organizacion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_organizaciones.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -801,9 +835,10 @@ class HubModuleGrant(HubConfigBase):
 
     __tablename__ = "hub_module_grants"
 
-    # MT.1 — hoy una concesión vale en **todas** las organizaciones, porque no nombra
-    # ninguna. MT.5 le añade el eje sin reinterpretar las que ya existen.
-    __ambito__ = Ambito.PLATAFORMA
+    # MT.5 — heredable: **nulo significa «en todas»**, que es lo que significan las
+    # concesiones de hoy. Reinterpretarlas en silencio como «en ninguna» le quitaría los
+    # permisos a todo el mundo en una migración, y como «en la primera» sería inventárselo.
+    __ambito__ = Ambito.HEREDABLE
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     subject_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
@@ -813,6 +848,16 @@ class HubModuleGrant(HubConfigBase):
         String(10), nullable=False, default="usuario", server_default="usuario"
     )
     module_code: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    #: MT.5 — en qué organización vale. **Nulo = en todas**, que es lo que valen las de hoy.
+    #: Es un eje perpendicular al de `subject_type`: aquél dice a **quién** se concede y éste
+    #: **dónde**, y hacen falta los dos —conceder un módulo a un grupo del IdP se lo concedía
+    #: en las veinte organizaciones de una Diputación a la vez—.
+    organizacion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_organizaciones.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     granted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
@@ -822,8 +867,17 @@ class HubModuleGrant(HubConfigBase):
     __table_args__ = (
         # El tipo entra en la clave: sin él, un grupo cuyo nombre coincidiera con el UUID de
         # una persona no podría convivir con la concesión de esa persona.
+        # MT.5 — la organización entra en la clave: la misma persona con el mismo módulo en
+        # dos organizaciones son **dos** concesiones legítimas. Con `NULLS NOT DISTINCT`, para
+        # que la unicidad valga también en el nivel «en todas» —el de todas las filas de hoy—:
+        # en Postgres `NULL != NULL`, así que sin ella dos duplicados idénticos pasarían.
         UniqueConstraint(
-            "subject_type", "subject_id", "module_code", name="uq_grant_subject_type_module"
+            "subject_type",
+            "subject_id",
+            "module_code",
+            "organizacion_id",
+            name="uq_grant_subject_type_module",
+            postgresql_nulls_not_distinct=True,
         ),
         CheckConstraint(
             "subject_type IN ('usuario', 'grupo')", name="ck_grant_subject_type"

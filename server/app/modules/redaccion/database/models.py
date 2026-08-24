@@ -180,6 +180,12 @@ class HubWorkspace(HubOperationalBase):
         nullable=False,
     )
     owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    # MT.4 — de qué organización es este informe. Nulo = de nadie en concreto, que es lo que
+    # significan los 29 que ya existen. La rellena quien crea el informe a partir de la
+    # organización de la plantilla o de quien lo abre; la pantalla que lo elige es fase 2.
+    organizacion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
     inputs_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     warnings_json: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)

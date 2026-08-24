@@ -154,13 +154,20 @@ class ReportTemplateContract(BaseModel):
     """Contrato serializable de una plantilla de informe.
 
     Las plantillas globales (is_global=True) solo pueden pertenecer a la plataforma.
+
+    **MT.4 — el vocabulario de `owner_kind` es el del modelo**, y `HubReportTemplate` usa
+    `organizacion`. Aquí estaba escrito `organization`, en inglés, desde antes de que ese nivel
+    existiera de verdad: dos grafías del mismo valor en dos sitios, que no molestaban porque este
+    contrato todavía no tiene consumidor —lo tendrá cuando MT.20 exporte plantillas entre
+    instalaciones—. Alineado ahora, porque el día que alguien valide una fila real el fallo sería
+    un `ValueError` por una letra.
     """
 
     id: UUID
     name: str
     description: str | None = None
     report_profile: ReportProfileId
-    owner_kind: Literal["platform", "organization", "user"]
+    owner_kind: Literal["platform", "organizacion", "superadmin", "user"]
     owner_id: UUID | None = None
     is_global: bool = False
     current_version_id: UUID

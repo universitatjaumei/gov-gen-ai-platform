@@ -367,6 +367,24 @@ Contexto completo de la estrategia de recuperación en tres niveles: bloques **I
 
 ---
 
+## Frontera entre organizaciones (multitenencia)
+
+**El inventario vive en [`docs/MULTITENENCIA.md`](docs/MULTITENENCIA.md)**: tabla por tabla, qué
+ámbito tiene, por qué camino se llega a su organización y qué es de plataforma a propósito. Lo
+mantiene honesto un test (`tests/core/test_mt7_el_inventario_esta_escrito.py`), así que se puede
+leer como verdad y no como una foto vieja.
+
+Dos reglas duras al escribir código nuevo:
+
+- **Toda tabla de `HubConfigBase` declara su ámbito** en `__ambito__` (`plataforma`,
+  `organizacion`, `heredable` o `derivada`). Una que no lo declare pone rojo el guardarraíl de
+  MT.1. `hub_llm_configs` nació global sin que nadie lo decidiera, simplemente porque no había
+  dónde decir lo contrario, y averiguarlo costó leer 31 tablas y 32 routers.
+- **No se confunden las dos capas**: `core/auth/tenancy.py` decide **quién puede ver qué** (403 y
+  acotación de listados, recibe un principal) y `core/ambito.py` decide **qué fila gana** cuando la
+  configuración está puesta en dos niveles (no recibe principal). En `heredable`, **nulo significa
+  plataforma y se hereda**.
+
 ## Frontera Edge-Cloud (preparación del despliegue híbrido)
 
 El sistema se despliega en dos modos:

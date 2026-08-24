@@ -66,8 +66,37 @@ def _condicion_del_sujeto(user: UserInfo):
     return or_(*vias) if len(vias) > 1 else vias[0]
 
 
-async def modulos_del_usuario(session: AsyncSession, user: UserInfo) -> list[str]:
-    """Los códigos de módulo que este usuario puede usar, en orden estable.
+def _condicion_del_ambito(organizacion_id):
+    """Las concesiones que valen en esta organización (MT.5).
+
+    **Nulo en la fila significa «en todas»**, que es lo que significan las concesiones de hoy, así
+    que siempre entran. Y `organizacion_id=None` en la pregunta significa «sin acotar»: devuelve
+    todo lo que la persona tenga en cualquier sitio, que es como preguntaban los sitios que aún
+    no saben la organización — y es lo que hace que MT.5 no cambie comportamiento.
+
+    `is_(None)` y no `== None`: en SQL `NULL = NULL` es nulo y no verdadero, así que un `==`
+    dejaría fuera precisamente las filas de hoy.
+    """
+    if organizacion_id is None:
+        return None
+    return or_(
+        ModuleGrant.organizacion_id.is_(None),
+        ModuleGrant.organizacion_id == organizacion_id,
+    )
+
+
+def _condiciones(user: UserInfo, organizacion_id) -> list:
+    condiciones = [_condicion_del_sujeto(user)]
+    del_ambito = _condicion_del_ambito(organizacion_id)
+    if del_ambito is not None:
+        condiciones.append(del_ambito)
+    return condiciones
+
+
+async def modulos_del_usuario(
+    session: AsyncSession, user: UserInfo, *, organizacion_id=None
+) -> list[str]:
+    """Los códigos de módulo que este usuario puede usar **en una organización**, en orden estable.
 
     El superadmin entra en todos los módulos vigentes **sin concesión explícita**: es el rol de
     la plataforma, y hacerlo depender de una fila deja una instalación recién creada con un
@@ -85,7 +114,7 @@ async def modulos_del_usuario(session: AsyncSession, user: UserInfo) -> list[str
     concedidos = set(
         (
             await session.execute(
-                select(ModuleGrant.module_code).where(_condicion_del_sujeto(user))
+                select(ModuleGrant.module_code).where(*_condiciones(user, organizacion_id))
             )
         ).scalars().all()
     )
@@ -93,7 +122,7 @@ async def modulos_del_usuario(session: AsyncSession, user: UserInfo) -> list[str
 
 
 async def modulos_con_origen(
-    session: AsyncSession, user: UserInfo
+    session: AsyncSession, user: UserInfo, *, organizacion_id=None
 ) -> dict[str, list[dict[str, str]]]:
     """Cada módulo concedido y **de dónde le viene** (IDE.5).
 
@@ -108,23 +137,37 @@ async def modulos_con_origen(
 
     if user.role == ROL_CON_ACCESO_TOTAL:
         return {
-            codigo: [{"tipo": "rol", "sujeto": ROL_CON_ACCESO_TOTAL}]
+            codigo: [
+                {"tipo": "rol", "sujeto": ROL_CON_ACCESO_TOTAL, "organizacion": ""}
+            ]
             for codigo in sorted(vigentes)
         }
 
     filas = (
         await session.execute(
             select(
-                ModuleGrant.module_code, ModuleGrant.subject_type, ModuleGrant.subject_id
-            ).where(_condicion_del_sujeto(user))
+                ModuleGrant.module_code,
+                ModuleGrant.subject_type,
+                ModuleGrant.subject_id,
+                ModuleGrant.organizacion_id,
+            ).where(*_condiciones(user, organizacion_id))
         )
     ).all()
 
     origen: dict[str, list[dict[str, str]]] = {}
-    for modulo, tipo, sujeto in filas:
+    for modulo, tipo, sujeto, organizacion in filas:
         if modulo not in vigentes:
             continue
-        origen.setdefault(modulo, []).append({"tipo": tipo, "sujeto": sujeto})
+        # MT.5 — el origen dice también **dónde** vale. Con dos ejes, «informes por ser PDI» no
+        # se puede retirar a ciegas: hay que saber si afecta a un ayuntamiento o a los veinte.
+        # Cadena vacía y no `None` para que el contrato no cambie de tipo por fila.
+        origen.setdefault(modulo, []).append(
+            {
+                "tipo": tipo,
+                "sujeto": sujeto,
+                "organizacion": str(organizacion) if organizacion else "",
+            }
+        )
     return origen
 
 

@@ -228,8 +228,14 @@ class TestElOrigenDeCadaModuloSeVe:
 
         origen = await modulos_con_origen(db_session, _principal(user_id, "PDI"))
 
-        assert origen["informes"] == [{"tipo": "usuario", "sujeto": str(user_to_uuid(user_id))}]
-        assert origen["chatbots"] == [{"tipo": "grupo", "sujeto": "PDI"}]
+        # MT.5 — el origen dice también **dónde** vale, y estas concesiones no nombran
+        # organización: valen en todas, que es lo que significan las de siempre.
+        assert origen["informes"] == [
+            {"tipo": "usuario", "sujeto": str(user_to_uuid(user_id)), "organizacion": ""}
+        ]
+        assert origen["chatbots"] == [
+            {"tipo": "grupo", "sujeto": "PDI", "organizacion": ""}
+        ]
 
     @pytest.mark.asyncio
     async def test_should_list_both_origins_when_a_module_comes_twice(self, db_session):
@@ -259,4 +265,8 @@ class TestElOrigenDeCadaModuloSeVe:
         origen = await modulos_con_origen(db_session, root)
 
         assert set(origen) == {"chatbots", "curacion", "informes", "plataforma"}
-        assert all(o == [{"tipo": "rol", "sujeto": "superadmin"}] for o in origen.values())
+        # MT.5 — mismo campo que las demás filas, vacío: el superadministrador vale en todas.
+        assert all(
+            o == [{"tipo": "rol", "sujeto": "superadmin", "organizacion": ""}]
+            for o in origen.values()
+        )

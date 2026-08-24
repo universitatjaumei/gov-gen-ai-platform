@@ -279,16 +279,33 @@ class ActividadResuelta:
     origen_del_texto: Literal["codigo", "override"]
 
 
-async def resolver_actividad(actividad: ActividadLLM, proveedor: Any) -> ActividadResuelta:
+async def resolver_actividad(
+    actividad: ActividadLLM, proveedor: Any, *, organizacion_id: Any = None
+) -> ActividadResuelta:
     """Resuelve nivel y prompt de una actividad contra el `ConfigProvider`.
 
     Un proveedor que no sepa de actividades —o una fila que no exista— deja el código como
     está: la biblioteca añade excepciones, no requisitos.
+
+    **MT.6 — la cadena es organización → plataforma → código**, y el último no se pierde: el
+    texto del código no se copia a ninguna fila, así que mejorarlo sigue llegando a todos los
+    que no lo hayan sobreescrito.
+
+    `organizacion_id` es opcional aquí, al contrario que en `get_model_for_tier`, y la razón es
+    la asimetría del riesgo: resolver el nivel de plataforma cuando había uno de organización
+    devuelve **el prompt de la plataforma**, que es un texto correcto y revisado; el mismo
+    despiste con el modelo carga el consumo al contrato de otro. Lo que sí hay son dobles de
+    proveedor en los tests que no aceptan el argumento, y forzarlo aquí los rompería sin ganar
+    nada.
     """
     override = None
     obtener = getattr(proveedor, "get_activity_prompt", None)
     if obtener is not None:
-        override = await obtener(str(actividad))
+        try:
+            override = await obtener(str(actividad), organizacion_id=organizacion_id)
+        except TypeError:
+            # Un proveedor anterior a MT.6 —o un doble de test— sólo acepta la actividad.
+            override = await obtener(str(actividad))
 
     tier = TIER_POR_ACTIVIDAD[actividad]
     origen_del_tier: Literal["codigo", "override"] = "codigo"

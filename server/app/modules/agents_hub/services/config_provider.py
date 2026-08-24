@@ -8,7 +8,11 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.core.ambito import de_esta_organizacion, de_plataforma
+from server.app.core.ambito import (
+    de_esta_organizacion,
+    de_plataforma,
+    resolver_cascada,
+)
 from server.app.modules.agents_hub.database.config_models import (
     HubActivityPrompt,
     HubChatbot,
@@ -42,7 +46,9 @@ class ConfigProvider(Protocol):
     async def get_llm_config_for_tier(
         self, tier: int, *, organizacion_id: uuid.UUID | None
     ) -> HubLLMConfig | None: ...
-    async def get_activity_prompt(self, activity: str) -> ActivityPromptOverride | None: ...
+    async def get_activity_prompt(
+        self, activity: str, *, organizacion_id: uuid.UUID | None = None
+    ) -> ActivityPromptOverride | None: ...
     async def list_active_chatbots(self, organizacion_id: uuid.UUID) -> list[HubChatbot]: ...
     async def get_retrieval_mode(self, chatbot_id: uuid.UUID) -> str: ...
     async def list_vocabulary(
@@ -109,20 +115,42 @@ class LocalConfigProvider:
         # el filtro de arriba ya las dejó fuera, y esto elige entre las dos que quedan.
         return de_esta_organizacion(candidatas, organizacion_id) or de_plataforma(candidatas)
 
-    async def get_activity_prompt(self, activity: str) -> ActivityPromptOverride | None:
-        """El override de una actividad de plataforma, si alguien lo ha guardado (PRO.2.1).
+    async def get_activity_prompt(
+        self, activity: str, *, organizacion_id: uuid.UUID | None = None
+    ) -> ActivityPromptOverride | None:
+        """El override de una actividad, si alguien lo ha guardado (PRO.2.1, MT.6).
 
         `None` es el caso normal: qué actividades existen y con qué nivel y prompt corren lo
         dice el código, y esta tabla sólo guarda excepciones.
+
+        **MT.6 — los dos campos se heredan por separado.** Un municipio puede querer el texto de
+        la plataforma con un modelo más caro, y obligarle a copiar el texto para cambiar el nivel
+        lo congelaría igual que copiarlo del código: a partir de ahí, mejorar el de plataforma no
+        le llegaría. Por eso se resuelve campo a campo con la cascada de MT.1 y no eligiendo una
+        fila entera.
         """
-        result = await self.session.execute(
-            select(HubActivityPrompt).where(HubActivityPrompt.activity == activity)
-        )
-        fila = result.scalars().first()
-        if fila is None:
+        consulta = select(HubActivityPrompt).where(HubActivityPrompt.activity == activity)
+        if organizacion_id is None:
+            consulta = consulta.where(HubActivityPrompt.organizacion_id.is_(None))
+        else:
+            # `or_` y no `IN (org, None)`: `NULL IN (...)` en SQL es nulo, así que no traería la
+            # fila de plataforma — que es la que existe hoy y la que se hereda.
+            consulta = consulta.where(
+                or_(
+                    HubActivityPrompt.organizacion_id == organizacion_id,
+                    HubActivityPrompt.organizacion_id.is_(None),
+                )
+            )
+
+        filas = list((await self.session.execute(consulta)).scalars())
+        if not filas:
             return None
+        resuelto = resolver_cascada(
+            filas, organizacion_id, campos=("template_text", "override_tier")
+        )
         return ActivityPromptOverride(
-            template_text=fila.template_text, override_tier=fila.override_tier
+            template_text=resuelto["template_text"],
+            override_tier=resuelto["override_tier"],
         )
 
     async def list_active_chatbots(self, organizacion_id: uuid.UUID) -> list[HubChatbot]:

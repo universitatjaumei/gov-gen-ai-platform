@@ -22,7 +22,7 @@ import pytest
 
 
 class _ProveedorSinFilas:
-    async def get_activity_prompt(self, activity: str):
+    async def get_activity_prompt(self, activity: str, *, organizacion_id=None):
         return None
 
 
@@ -37,7 +37,7 @@ class _ProveedorConFila:
         )
         self.pedido: str | None = None
 
-    async def get_activity_prompt(self, activity: str):
+    async def get_activity_prompt(self, activity: str, *, organizacion_id=None):
         self.pedido = activity
         return self._override
 
