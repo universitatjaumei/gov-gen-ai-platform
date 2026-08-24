@@ -41,6 +41,11 @@ def _make_config(**kwargs) -> HubLLMConfig:
         is_default=True,
         purpose="chat",  # MOD.1: la tabla ya no es implicitamente de chat
         output_dimensionality=None,
+        # MT.2 — nulo = de la plataforma. Hay que asignarlo aunque el doble lleve `spec`: el
+        # `spec` protege de nombrar un atributo que no existe, no de olvidarse de darle valor
+        # a uno que sí — y sin valor devuelve un MagicMock, que revienta la validación de la
+        # respuesta con un `uuid_type` difícil de leer.
+        organizacion_id=None,
     )
     defaults.update(kwargs)
     m = MagicMock(spec=HubLLMConfig)

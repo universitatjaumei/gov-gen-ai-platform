@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime, timezone
+from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import (
@@ -28,9 +29,13 @@ class HubProvider(HubConfigBase):
 
     __tablename__ = "hub_providers"
 
-    # MT.1 — **global hoy**, y el guardarraíl existe justo por esto: nació así sin que
-    # nadie lo decidiera. MT.2 lo pasa a heredable. Declarar ya lo que MT.2 hará sería
-    # una etiqueta que la base de datos no sostiene.
+    # MT.2 — **sigue siendo de plataforma, y es una decisión**: al mirar las cuatro filas
+    # reales resulta que esta tabla es un catálogo de **tipos** (Google, Vertex, Ollama,
+    # OpenRouter) y ninguna tiene `api_key`. Google es Google en todos los municipios. Lo que
+    # se separa por organización es la credencial, y vive en `HubProviderCredential`.
+    #
+    # `api_key` y `base_url` se quedan aquí como el nivel de plataforma de siempre: quitarlas
+    # rompería la cadena que el piloto usa hoy, y MT.2 no cambia comportamiento.
     __ambito__ = Ambito.PLATAFORMA
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)  # e.g. google, openrouter, lmstudio
@@ -58,8 +63,9 @@ class HubLLMConfig(HubConfigBase):
 
     __tablename__ = "hub_llm_configs"
 
-    # MT.1 — global hoy; MT.2 lo pasa a heredable (ver `HubProvider`).
-    __ambito__ = Ambito.PLATAFORMA
+    # MT.2 — heredable: nulo = plataforma, y se hereda. Los siete modelos de hoy quedan a
+    # nulo, que es la condición para que el piloto no note la migración.
+    __ambito__ = Ambito.HEREDABLE
     __table_args__ = (
         CheckConstraint(
             "purpose IN ('chat', 'embedding', 'rerank')",
@@ -69,6 +75,13 @@ class HubLLMConfig(HubConfigBase):
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # MT.2 — de quién es este modelo. Nulo = de la plataforma, y lo heredan todas.
+    organizacion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_organizaciones.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
     provider: Mapped[str] = mapped_column(
         String(50), ForeignKey("hub_providers.id"), nullable=False
@@ -91,6 +104,95 @@ class HubLLMConfig(HubConfigBase):
 
     chatbots: Mapped[list["HubChatbot"]] = relationship(back_populates="llm_config")
     provider_rel: Mapped["HubProvider"] = relationship(back_populates="llm_configs")
+
+
+class MetodoDeCredencial(StrEnum):
+    """Cómo se obtiene la credencial de un proveedor (MT.2).
+
+    **Lleva `CheckConstraint`, al contrario que el vocabulario del corpus** (CLAUDE.md §5): son
+    tres valores estables, cada uno con su rama en `model_factory`, y añadir un cuarto exige
+    escribir la rama que lo consuma — así que el CHECK no estorba a nadie. Mismo criterio que
+    `purpose` en esta misma tabla y `nivell_acces` en ING.0.2.
+    """
+
+    #: La clave literal, guardada en la base de datos.
+    CLAVE = "clave"
+    #: La base guarda **el nombre** de la variable de entorno; el secreto vive fuera.
+    VARIABLE_DE_ENTORNO = "variable_de_entorno"
+    #: Sin clave: las credenciales del entorno de ejecución (ADC de Vertex).
+    ENTORNO_DE_EJECUCION = "entorno_de_ejecucion"
+
+
+class HubProviderCredential(HubConfigBase):
+    """Con qué credencial habla una organización con un proveedor (MT.2).
+
+    Deploy: cloud — es configuración y se sincroniza cloud→edge. Los módulos edge no la
+    importan: la leen por `resolver_credencial`.
+
+    Nace de que `hub_providers` tenía una sola `api_key` para toda la instalación. En el modelo
+    Diputación→municipios eso significa que el consumo de un ayuntamiento se factura al contrato
+    de otro y que sus prompts viajan por ese contrato: coste mal atribuido y protección de datos,
+    no incomodidad.
+
+    **Es tabla aparte y no una columna en `hub_providers`, y es una decisión.** Aquella tabla es
+    un catálogo de *tipos* con clave primaria de texto (`google`, `vertex`): añadirle
+    `organizacion_id` no permitiría dos Googles, y permitirlo exigía cambiar su clave primaria
+    con una clave ajena por medio y romper `/providers/{provider_id}`. Lo que tiene que separarse
+    es la credencial.
+
+    **`variable_de_entorno` es el método que sirve al despliegue en GCP**: la base guarda el
+    nombre (`GOOGLE_API_KEY_ONDA`) y Secret Manager monta el valor. Es la única forma de tener
+    credenciales por organización sin meter secretos en la base de datos.
+    """
+
+    __tablename__ = "hub_provider_credentials"
+
+    # MT.1/MT.2 — nulo = la credencial de plataforma, y la heredan las organizaciones que no
+    # tengan la suya. Es lo que hace que el piloto no note nada: hoy no hay ninguna fila.
+    __ambito__ = Ambito.HEREDABLE
+    __table_args__ = (
+        CheckConstraint(
+            "metodo IN ('clave', 'variable_de_entorno', 'entorno_de_ejecucion')",
+            name="ck_provider_credential_metodo",
+        ),
+        # `NULLS NOT DISTINCT` (Postgres 15+) es lo que hace valer la unicidad **también en el
+        # nivel de plataforma**: sin ella, `NULL != NULL` dejaría meter dos filas de plataforma
+        # para el mismo proveedor sin protestar — y ése es el caso más probable, porque hoy es
+        # el único nivel que existe. Dos filas serían dos respuestas a una pregunta con una
+        # sola, y cuál gana lo decidiría el `ORDER BY`.
+        UniqueConstraint(
+            "provider_id",
+            "organizacion_id",
+            name="uq_provider_credential_scope",
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    provider_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("hub_providers.id", ondelete="CASCADE"), nullable=False
+    )
+    organizacion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_organizaciones.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    metodo: Mapped[str] = mapped_column(String(30), nullable=False)
+    #: Sólo con `metodo='clave'`. Es un secreto en reposo: preferir `secret_env`.
+    api_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: Sólo con `metodo='variable_de_entorno'`: **el nombre**, nunca el valor.
+    secret_env: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: Cambia la del catálogo. Un municipio con su propio Ollama en su propia red.
+    base_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 
 
 class HubOrganizacion(HubConfigBase):

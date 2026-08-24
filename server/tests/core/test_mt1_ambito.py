@@ -184,17 +184,25 @@ class TestElAmbitoSeDeclara:
         assert declarado.ambito is Ambito.DERIVADA
         assert declarado.via == "chatbot_id"
 
-    def test_should_declare_today_and_not_what_mt2_will_change(self):
-        """`hub_llm_configs` y `hub_providers` son **globales hoy**. Declararlos ya como
-        heredables sería una declaración que la base de datos no sostiene, y el diff de MT.2
-        dejaría de enseñar la decisión que MT.2 toma."""
+    def test_should_declare_what_the_schema_sustains(self):
+        """La etiqueta dice lo que la base de datos sostiene, no lo que se desea.
+
+        Este test nació en MT.1 exigiendo `PLATAFORMA` en las dos, porque entonces las dos eran
+        globales y declararlas heredables habría sido una etiqueta sin columna detrás. MT.2 le
+        dio la columna a `hub_llm_configs`, así que ahora es heredable — y `hub_providers`
+        **sigue siendo de plataforma**, esta vez por decisión y no por olvido: es un catálogo de
+        tipos, y Google es Google en todos los municipios. Lo que se separó por organización es
+        la credencial, en `HubProviderCredential`.
+        """
         from server.app.modules.agents_hub.database.config_models import (
             HubLLMConfig,
             HubProvider,
+            HubProviderCredential,
         )
 
-        assert ambito_de(HubLLMConfig).ambito is Ambito.PLATAFORMA
+        assert ambito_de(HubLLMConfig).ambito is Ambito.HEREDABLE
         assert ambito_de(HubProvider).ambito is Ambito.PLATAFORMA
+        assert ambito_de(HubProviderCredential).ambito is Ambito.HEREDABLE
 
     def test_should_not_claim_a_heredable_scope_without_the_column(self):
         """Coherencia entre la etiqueta y el esquema: `HEREDABLE` significa

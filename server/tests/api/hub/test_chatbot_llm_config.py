@@ -49,6 +49,11 @@ def _chatbot() -> SimpleNamespace:
 def _config(config_id: uuid.UUID, *, tier: int = 1, is_default: bool = False):
     return SimpleNamespace(
         id=config_id,
+        # MT.2 — el doble tiene que llevar la columna nueva: sin ella, `config.organizacion_id`
+        # es un AttributeError y el endpoint devuelve 500. Es el mismo riesgo que anotó
+        # `project_external_client_mock_spec`, en versión casera: un doble sin `spec` no avisa
+        # de que el modelo ha cambiado, lo descubre el 500.
+        organizacion_id=None,
         provider="google",
         model_name="gemini-2.5-flash",
         temperature=0.1,

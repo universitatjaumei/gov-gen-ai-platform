@@ -256,6 +256,55 @@ def _exigir_admin(user: UserInfo) -> None:
         raise HTTPException(status_code=403, detail="Only admin can manage templates")
 
 
+def _exigir_poder_sobre(user: UserInfo, plantilla: HubReportTemplate) -> None:
+    """Quién puede tocar **esta** plantilla, y no sólo «quién es administrador».
+
+    Encontrado el 2026-08-24 al valorar la reutilización de plantillas entre municipios, y
+    comprobado con tres tests: `_exigir_admin` sólo miraba el rol, y después
+    `_plantilla_o_404` traía la plantilla **por id, sin comprobar de quién es**. O sea que
+    cualquier administrador podía renombrar la plantilla de plataforma, **archivarla** —lo que
+    la saca de la lista de todos y bloquea crear informes nuevos con ella (409
+    `TEMPLATE_ARCHIVED`)— o renombrar la plantilla personal de otra persona.
+
+    Con una sola organización no se nota. En el modelo Diputación→municipios significa que el
+    administrador de un ayuntamiento retira la plantilla compartida de todos los demás.
+
+    Es un agujero de hoy y no una función pendiente, así que se cierra ahora aunque el arreglo
+    **completo** necesite la dimensión que MT.4 añade:
+
+    - Una plantilla de plataforma la gestiona **sólo el superadministrador**: es de todos, y
+      «de todos» no puede querer decir «de cualquiera».
+    - Una plantilla de una persona, su dueño (o el superadministrador).
+    - Un administrador **sin** relación con la plantilla, 403. Hoy no hay contra qué
+      comprobarlo: las plantillas no tienen `organizacion_id` hasta MT.4, y hasta entonces
+      «administrador» sólo significa «administrador de algún sitio». Cuando lo tengan, aquí
+      entra el administrador de la organización dueña.
+    """
+    if user.role == "superadmin":
+        return
+    if plantilla.is_global or plantilla.owner_kind in ("platform", "superadmin"):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "PLANTILLA_DE_PLATAFORMA",
+                "message": (
+                    "Esta plantilla es de la plataforma y la comparten todas las "
+                    "organizaciones: sólo un superadministrador puede cambiarla o retirarla. "
+                    "Haz una copia si necesitas una versión propia."
+                ),
+            },
+        )
+    if plantilla.owner_id is not None and plantilla.owner_id == user_to_uuid(user.user_id):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail={
+            "code": "PLANTILLA_AJENA",
+            "message": "Esta plantilla no es tuya.",
+        },
+    )
+
+
 @router.patch(
     "/templates/{template_id}",
     response_model=TemplateOut,
@@ -274,6 +323,7 @@ async def patch_template(
     """
     _exigir_admin(user)
     plantilla = await _plantilla_o_404(session, template_id)
+    _exigir_poder_sobre(user, plantilla)
 
     if body.name is not None:
         plantilla.name = body.name
@@ -306,6 +356,7 @@ async def archive_template(
     """
     _exigir_admin(user)
     plantilla = await _plantilla_o_404(session, template_id)
+    _exigir_poder_sobre(user, plantilla)
     if plantilla.archived_at is None:
         plantilla.archived_at = datetime.now(UTC)
         await session.commit()
@@ -325,6 +376,7 @@ async def restore_template(
     """Devuelve a las listas una plantilla archivada por error."""
     _exigir_admin(user)
     plantilla = await _plantilla_o_404(session, template_id)
+    _exigir_poder_sobre(user, plantilla)
     plantilla.archived_at = None
     await session.commit()
     await session.refresh(plantilla)

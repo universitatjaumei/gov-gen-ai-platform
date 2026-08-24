@@ -10381,6 +10381,115 @@ el despachador de rastreo y el propio `model_factory`—.
 - [ ] Suite completa verde con el comportamiento de hoy (todo a nivel plataforma)
 ```
 
+### Reutilizar configuración entre organizaciones (planteado por el usuario el 2026-08-24)
+
+Pregunta del usuario: en un despliegue de una Diputación para varios municipios —o de una empresa
+que les preste servicio— tiene sentido **reutilizar plantillas de informe y configuración de
+chatbots, nunca datos**. ¿Elevar a plataforma, o exportar e importar? Y añade que cuando existan
+**automatizaciones** y **expedientes** hará falta también allí, y que en plantillas la elevación
+es doble porque las diseña un usuario o un administrador.
+
+Con cuatro módulos, esto no es una función: es un **mecanismo**, y conviene decidirlo una vez.
+
+#### Lo que ya existe
+
+**Las plantillas de informe ya tienen nivel de plataforma**: `owner_kind ∈ {user, platform,
+superadmin}` más `is_global`, y `list_templates` devuelve `is_global OR owner_id == yo`. Lo que
+falta es el escalón de en medio, que es lo que MT.4 añade. La doble elevación del usuario es, por
+tanto, **usuario → organización → plataforma**, con el primero y el último ya construidos.
+
+Los chatbots **no** lo tienen: `hub_chatbots.organizacion_id` es NOT NULL.
+
+De paso, una redundancia que hay que limpiar al tocarlo: `is_global` se calcula en el router como
+`owner_kind == "platform"`, así que dos columnas guardan el mismo hecho y pueden discrepar.
+
+#### La distinción que decide el diseño
+
+No es «compartir sí o no», es **compartir por referencia** frente a **copiar al instanciar**:
+
+| | Una fila, muchos lectores | Una fila por organización |
+|---|---|---|
+| Sirve cuando | el objeto es **sólo configuración** | el objeto **acumula datos propios** |
+| Arreglar el original | llega a todos | hay que reaplicarlo |
+| Riesgo | quien edita lo cambia para todos | divergencia silenciosa |
+
+| Módulo | Unidad reutilizable | Mecanismo | Por qué |
+|---|---|---|---|
+| **Informes** | plantilla (`spec_json`) | referencia + bifurcar al editar | es configuración; los informes son filas aparte |
+| **Chatbots** | definición del asistente | **copia** | un chatbot posee corpus, conversaciones, feedback y clave de widget |
+| **Automatizaciones** | script / flujo | referencia | el código es configuración; las ejecuciones son por organización |
+| **Expedientes** | plantilla de procedimiento | referencia | el expediente es dato, y no se comparte nunca |
+
+**Los chatbots son el caso que hay que no equivocar**: elevar un chatbot a plataforma no comparte
+su configuración, comparte **el chatbot** —un corpus y un registro de conversaciones para todos
+los municipios—, que es justo el «nunca datos». Lo que hace falta ahí es una *plantilla de
+asistente* que cada organización materializa en su propio chatbot. Es coherente con la decisión
+ya tomada de que **el corpus no se comparte entre chatbots**.
+
+#### «Para todas» y «para un grupo», con un solo mecanismo
+
+El usuario distingue configuraciones que valen para todas y otras que sólo para un grupo —«las que
+compartan una herramienta de gestión»—. Eso no es un club, es **compatibilidad**: una plantilla
+que lee exportaciones de G400 sólo sirve donde hay G400. Así que un solo eje:
+
+- la organización declara **qué tiene** (`capacidades: {gestion: "G400"}`),
+- el artefacto de catálogo declara **qué necesita** (`requiere: {gestion: "G400"}`),
+- sin condiciones = para todas.
+
+Frente a una tabla de grupos, esto evita que alguien mantenga la pertenencia a mano y que derive:
+el sistema **deduce** quién puede consumirlo. Si algún día aparece un grupo arbitrario («los del
+plan avanzado»), es otra etiqueta. **Comparación plana clave→valor, no expresiones**, que es lo que
+impide que degenere en un motor de reglas.
+
+#### Exportar/importar no es la alternativa: es el otro caso
+
+- **Dentro de una instalación**: el nivel de plataforma es mejor, porque conserva la procedencia y
+  permite propagar un arreglo.
+- **Entre instalaciones** (una empresa con un despliegue `edge` por municipio, sin base común): el
+  nivel de plataforma no existe, y exportar/importar es la **única** opción.
+
+Y de aquí sale la decisión que hace barato el futuro: **la unidad de reutilización es un `spec`
+serializable y versionado, no una fila a la que se apunta.** Con eso, exportar es escribir ese
+mismo `spec` a un fichero. Las plantillas de informe ya lo son (`spec_json`); la configuración de
+un chatbot está repartida en columnas, así que ahí el `spec` hay que definirlo — y es la razón de
+que la plantilla de asistente sea tabla nueva y no un `organizacion_id` nullable en
+`hub_chatbots`.
+
+#### Qué entra ahora y qué no
+
+Criterio de la fase 1: **coste de migración**, no importancia.
+
+| Pieza | ¿Ahora? | Por qué |
+|---|---|---|
+| **Procedencia** (`derivado_de` + versión de origen) en lo que se instancia por copia | **Sí — MT.4.2** | Lo único **irrecuperable**: cuando los municipios tengan copias sin constancia de su origen, «la Diputación corrigió el prompt, propágalo» es imposible para siempre. Cuestan dos columnas nullable |
+| Nivel `organizacion` en `owner_kind` + doble elevación | **Sí — MT.4** | CHECK y columna sobre tabla que tras el piloto tendrá filas vivas |
+| El agujero de editar lo global | **Ya arreglado (2026-08-24)** | Era de hoy, no de mañana. Ver abajo |
+| `capacidades` / `requiere` | **No** | Casi gratis ahora y casi gratis después: pocas filas y configuración. Va en la fase 2 (MT.17) |
+| Catálogo, instanciación, pantallas, exportar/importar | **No** | Empiezan vacíos: cero riesgo de migración. Fase 2 (MT.18–MT.20) |
+
+Orden de recorte si hay que ajustar: primero exportar/importar (diferirlo es gratis, es el mismo
+`spec`), después el reparto por grupo. **La procedencia no se recorta**: es la más barata de
+construir y la única cuyo olvido no se deshace.
+
+#### Hallazgo del 2026-08-24: cualquier administrador podía retirar la plantilla de todos
+
+Comprobado con tres tests antes de afirmarlo, y **arreglado en el momento** porque no era una
+carencia futura sino un agujero en producción. `_exigir_admin` miraba **sólo el rol** y después
+`_plantilla_o_404` traía la plantilla **por id, sin comprobar de quién es**. Resultado: un
+administrador de cualquier organización podía renombrar la plantilla de plataforma, **archivarla**
+—lo que la saca de la lista de todos y bloquea crear informes nuevos con ella— o renombrar la
+plantilla personal de otra persona. Con una sola organización no se nota; en el modelo
+Diputación→municipios, el administrador de un ayuntamiento retira la plantilla compartida de los
+demás.
+
+Cerrado con `_exigir_poder_sobre`: la de plataforma, sólo el superadministrador; la de una
+persona, su dueño; un administrador sin relación con ella, 403. **El arreglo completo necesita
+MT.4**: hasta que las plantillas tengan `organizacion_id`, «administrador» sólo significa
+«administrador de algún sitio», y no hay contra qué comprobarlo. Cuando lo tengan, aquí entra el
+administrador de la organización dueña.
+
+---
+
 ##### Prompt MT.4 (RED/GREEN) — Informes gana la dimensión que no tiene
 
 **Modelo sugerido**: **Opus** — 51 endpoints y 7 modelos; hay que decidir qué se acota ahora y
@@ -10392,6 +10501,11 @@ profunda de las seis, porque no es un filtro que falte sino una dimensión que n
 
 Aquí se añade **sólo el esquema**: la UI y el filtrado van en la fase 2. Con `organizacion_id`
 nulo, las 23 plantillas de hoy siguen siendo de plataforma o de su persona, como ahora.
+
+**Ampliado el 2026-08-24** con la doble elevación que planteó el usuario: las plantillas las
+diseña un usuario **o** un administrador, así que la escalera completa es **usuario →
+organización → plataforma**, y los dos extremos ya existen. Lo que MT.4 añade es el escalón de en
+medio; elevar y bajar por esa escalera es una operación, no un campo que se edita a mano.
 
 ```
 # PROMPT MT.4 — Una plantilla puede ser de una organización
@@ -10405,13 +10519,62 @@ nulo, las 23 plantillas de hoy siguen siendo de plataforma o de su persona, como
 - `test_should_leave_existing_templates_untouched`: las 23 filas y sus versiones, intactas.
 - `test_should_carry_the_organisation_into_the_workspace`: un informe hecho con una plantilla
   de organización pertenece a esa organización, no a la de quien lo abre.
+- `test_should_keep_the_platform_level_visible_to_everyone`: **el que protege lo que ya
+  funciona**. El nivel de plataforma existe desde antes de MT y es lo que permite que la
+  Diputación comparta una plantilla; añadir el escalón de en medio no puede dejar de verlo.
+- `test_should_let_an_admin_manage_only_the_templates_of_their_organisation`: aquí entra el
+  administrador en `_exigir_poder_sobre`, que hoy no puede porque no hay columna contra la
+  que comprobar (ver el hallazgo del 2026-08-24, arriba).
+- `test_should_fork_when_editing_an_inherited_template`: editar lo heredado **bifurca**, no
+  modifica el original. Sin esto, «reutilizable» significa «el primero que lo toque lo cambia
+  para todos», y con `is_global` protegido a superadministrador el efecto sería el contrario:
+  nadie puede adaptarlo.
+- `test_should_collapse_is_global_into_one_source_of_truth`: `is_global` se calcula hoy en el
+  router como `owner_kind == "platform"`. Dos columnas con el mismo hecho terminan
+  discrepando; una de las dos manda, y lo dice un test.
 
 ## GREEN
 - Migración sobre `hub_report_templates` y `hub_workspaces`; `CheckConstraint` del vocabulario
   de `owner_kind` ampliado.
+- `_exigir_poder_sobre` completa con el eje de organización.
 
 ## Cierre
 - [ ] Los 51 endpoints siguen respondiendo igual (fase 1 no cambia comportamiento)
+- [ ] Las plantillas de plataforma siguen viéndose desde todas las organizaciones
+```
+
+##### Prompt MT.4.2 (RED/GREEN) — De dónde salió esta copia
+
+**Modelo sugerido**: **Sonnet** — dos columnas y su significado; el alcance está cerrado.
+
+**Objetivo**: es la **única** pieza de la reutilización cuyo olvido no se deshace. Lo que se
+instancia por copia —un chatbot desde una plantilla de asistente, y luego los flujos y los
+procedimientos— tiene que decir de dónde salió y con qué versión. Sin eso, en cuanto haya copias
+repartidas, «la Diputación ha corregido el prompt del asistente, propágalo» deja de ser posible
+para siempre: no hay forma de reconstruir el parentesco a posteriori.
+
+Cuesta dos columnas nullable y no cambia comportamiento: hoy nada instancia nada, así que quedan
+a nulo. Va **ahora** por eso: después habría que inventarse la procedencia de filas vivas.
+
+```
+# PROMPT MT.4.2 — La procedencia de lo copiado
+# Deploy: cloud (chatbots) / edge (plantillas de informe)
+
+## RED
+- `test_should_record_where_a_copy_came_from`: `derivado_de` + `version_de_origen`.
+- `test_should_survive_the_original_being_deleted`: `ON DELETE SET NULL`, no CASCADE. **Este
+  es el test que importa**: con CASCADE, retirar la plantilla de la Diputación borraría los
+  chatbots de los municipios. La procedencia es una anotación histórica, no una dependencia.
+- `test_should_leave_everything_null_today`: nada instancia nada todavía.
+- `test_should_tell_which_copies_are_behind`: dada una versión nueva del original, qué copias
+  se quedaron en una anterior. Es la consulta para la que existen las dos columnas; sin ella
+  serían dos campos que nadie lee.
+
+## GREEN
+- Migración: las dos columnas donde se instancia por copia.
+
+## Cierre
+- [ ] `alembic downgrade` limpio
 ```
 
 ##### Prompt MT.5 (RED/GREEN) — Una concesión dice en qué organización
@@ -10500,6 +10663,29 @@ cambian de forma. Se enumeran para que el alcance esté acotado y no aparezcan d
 - **MT.16** — **Prueba de aislamiento de punta a punta con dos organizaciones**: dos
   administradores, dos corpus, dos juegos de modelos, y la comprobación de que ninguno ve nada
   del otro. Es el prompt que cierra el bloque y el único que demuestra que lo demás sirvió.
+
+**Añadidos el 2026-08-24**, de la conversación sobre reutilizar configuración entre municipios.
+Van en la fase 2 porque **todos empiezan vacíos**: no hay datos que migrar, así que esperar no
+cuesta nada. Lo único de esa conversación que sí entra antes del piloto es la procedencia
+(MT.4.2), porque es lo que no se puede reconstruir después.
+
+- **MT.17** — `capacidades` en la organización y `requiere` en el artefacto de catálogo, que es
+  cómo se resuelve «esto vale para todas» y «esto sólo para las que compartan G400» con un solo
+  mecanismo. Comparación plana clave→valor, **no expresiones**.
+- **MT.18** — **Plantilla de asistente**: el `spec` de una configuración de chatbot —prompt base,
+  nivel de modelo, modo de recuperación, troceado, modo de acceso— como artefacto de catálogo, y
+  la operación que lo materializa en un chatbot de una organización. **Tabla nueva y no un
+  `organizacion_id` nullable en `hub_chatbots`**: un chatbot posee corpus y conversaciones, así que
+  compartir la fila compartiría los datos. La copia anota su procedencia (MT.4.2).
+- **MT.19** — Pantalla del catálogo: qué hay elevado, quién lo consume, qué copias se han quedado
+  atrás respecto a la versión vigente.
+- **MT.20** — **Exportar e importar** el `spec` de un artefacto de catálogo. No es alternativa al
+  nivel de plataforma: sirve **entre instalaciones**, que es el caso de una empresa con un
+  despliegue `edge` por municipio y sin base de datos común. Si MT.18 define bien el `spec`, esto
+  es escribirlo a un fichero y validarlo al leerlo.
+- **MT.21** — El mismo mecanismo aplicado a **automatizaciones** y **expedientes** cuando esos
+  módulos existan: el script y la plantilla de procedimiento se comparten por referencia; la
+  ejecución y el expediente son datos de la organización y no se comparten nunca.
 
 ### Lo que este bloque NO hace, y hay que decirlo
 

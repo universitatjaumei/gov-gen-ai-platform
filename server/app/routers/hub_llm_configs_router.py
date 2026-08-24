@@ -176,6 +176,10 @@ async def list_available_models(
 
 class LLMConfigRead(BaseModel):
     id: uuid.UUID
+    # MT.2 — de quién es este modelo. Nulo = de la plataforma, y lo heredan todas. Va en
+    # el contrato porque sin él la columna sería inalcanzable desde la API; la pantalla
+    # que lo deja elegir es MT.10, en la fase 2.
+    organizacion_id: uuid.UUID | None = None
     provider: str
     model_name: str
     temperature: float
@@ -192,6 +196,10 @@ class LLMConfigRead(BaseModel):
 
 
 class LLMConfigCreate(BaseModel):
+    # MT.2 — de quién es este modelo. Nulo = de la plataforma, y lo heredan todas. Va en
+    # el contrato porque sin él la columna sería inalcanzable desde la API; la pantalla
+    # que lo deja elegir es MT.10, en la fase 2.
+    organizacion_id: uuid.UUID | None = None
     provider: str
     model_name: str
     temperature: float = 0.1
@@ -229,8 +237,15 @@ async def list_llm_configs(
     return result.scalars().all()
 
 
-async def _relevar_default(session, tier: int, excepto: uuid.UUID | None = None) -> None:
-    """Quita la marca de defecto a las demás configuraciones del mismo tier (FIX.1).
+async def _relevar_default(
+    session,
+    tier: int,
+    *,
+    purpose: str,
+    organizacion_id: uuid.UUID | None,
+    excepto: uuid.UUID | None = None,
+) -> None:
+    """Quita la marca de defecto a las demás del mismo tier, propósito y ámbito (FIX.1, MT.2).
 
     Antes esto era un 409: «ya existe una por defecto para el tier N». Convertía «quiero que
     esta sea la de por defecto» en dos peticiones y, entre la una y la otra, un momento sin
@@ -239,8 +254,26 @@ async def _relevar_default(session, tier: int, excepto: uuid.UUID | None = None)
 
     El relevo ocurre en la misma transacción que la promoción, así que o hay exactamente una
     o no hay cambio.
+
+    **MT.2 le añade los dos ejes que le faltaban, y el primero era un fallo real.** Degradaba
+    por `tier` a secas, ignorando `purpose`: hoy conviven un chat nivel 1 y un embedding nivel 1
+    marcados por defecto, así que promover uno de chat desde la pantalla dejaba la plataforma
+    **sin modelo de embeddings**, y eso no se nota hasta la siguiente ingesta. El segundo eje es
+    la organización: sin él, promover el nivel 1 de un municipio degradaría el del vecino.
+
+    `organizacion_id` se compara con `is_(None)` y no con `==`, porque en SQL `NULL = NULL` es
+    nulo y no verdadero: con `==` el relevo del nivel de plataforma —el único que existe hoy— no
+    encontraría nada y dejaría dos por defecto.
     """
-    condiciones = [HubLLMConfig.tier == tier, HubLLMConfig.is_default.is_(True)]
+    condiciones = [
+        HubLLMConfig.tier == tier,
+        HubLLMConfig.purpose == purpose,
+        HubLLMConfig.is_default.is_(True),
+    ]
+    if organizacion_id is None:
+        condiciones.append(HubLLMConfig.organizacion_id.is_(None))
+    else:
+        condiciones.append(HubLLMConfig.organizacion_id == organizacion_id)
     if excepto is not None:
         condiciones.append(HubLLMConfig.id != excepto)
 
@@ -256,7 +289,12 @@ async def create_llm_config(
     session=Depends(get_async_session),
 ):
     if body.is_default:
-        await _relevar_default(session, body.tier)
+        await _relevar_default(
+            session,
+            body.tier,
+            purpose=body.purpose,
+            organizacion_id=getattr(body, "organizacion_id", None),
+        )
 
     payload = body.model_dump()
     # Defaults operativos para precisión: Tier 1 => 0.1, Tier 2/3 => 0.0
@@ -283,7 +321,13 @@ async def update_llm_config(
 
     target_tier = body.tier if body.tier is not None else config.tier
     if body.is_default is True:
-        await _relevar_default(session, target_tier, excepto=config_id)
+        await _relevar_default(
+            session,
+            target_tier,
+            purpose=body.purpose if body.purpose is not None else config.purpose,
+            organizacion_id=config.organizacion_id,
+            excepto=config_id,
+        )
 
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(config, field, value)

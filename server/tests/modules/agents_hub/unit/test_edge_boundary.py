@@ -42,6 +42,11 @@ def test_config_base_contains_only_config_models() -> None:
         # que también es identidad administrativa y no contenido.
         "hub_platform_modules",
         "hub_module_grants",
+        # MT.2 — con qué credencial habla una organización con un proveedor. Es configuración
+        # administrativa del lado cloud, y **el edge la necesita** para construir el cliente
+        # del modelo. No contiene dato del cliente final: o una clave, o el nombre de una
+        # variable de entorno, o nada (ADC).
+        "hub_provider_credentials",
     }
 
 def test_operational_base_contains_only_operational_models() -> None:
