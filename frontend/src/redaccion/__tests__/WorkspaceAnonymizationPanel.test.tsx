@@ -16,7 +16,8 @@ import { WorkspaceAnonymizationPanel } from '../components/WorkspaceAnonymizatio
 const mockPatchMutate = vi.fn()
 const mockReAnalyzeMutate = vi.fn()
 
-vi.mock('../hooks/useAnonymizationApi', () => ({
+vi.mock('@/shared/api/generated/redaccion-anonymization/redaccion-anonymization', () => ({
+  getGetAnonymizationSummaryQueryKey: (id: string) => ['anon-summary', id],
   useGetAnonymizationSummary: vi.fn(),
   usePatchAnonymizationMode: vi.fn(),
   useReAnalyzeAnonymization: vi.fn(),
@@ -26,7 +27,7 @@ import {
   useGetAnonymizationSummary,
   usePatchAnonymizationMode,
   useReAnalyzeAnonymization,
-} from '../hooks/useAnonymizationApi'
+} from '@/shared/api/generated/redaccion-anonymization/redaccion-anonymization'
 
 // ---------------------------------------------------------------------------
 // Helpers

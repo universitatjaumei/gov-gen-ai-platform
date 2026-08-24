@@ -32,7 +32,24 @@ const MANUAL_API_MODULES = [
   'shared/api/llmConfigs.ts',
   'shared/api/promptTemplates.ts',
   'shared/layout/copilot/copilotApi.ts',
+  // AIS.4 — el séptimo, que esta lista no vigilaba porque nadie lo añadió. Llamaba a tres
+  // endpoints autenticados con `fetch` crudo y sin credencial, así que devolvían 401 y el panel
+  // de anonimización no funcionaba desde el navegador. Ver el test de más abajo: una lista de
+  // nombres sólo protege de lo que alguien recordó apuntar, y por eso ahora hay una regla que
+  // los **descubre**.
+  'redaccion/hooks/useAnonymizationApi.ts',
 ]
+
+/**
+ * Directorios cuyo código llama a la API por el cliente generado, sin excepciones.
+ *
+ * El widget queda fuera **con razón escrita** (ver el test): es un bundle IIFE aparte que usa
+ * SSE, que axios no cubre. `admin/pages/LoginPage.tsx` también, porque ocurre antes de haber
+ * credencial que interceptar.
+ */
+const SIN_FETCH_A_MANO = ['redaccion', 'curation', 'admin']
+
+const EXENTOS_DE_FETCH = ['admin/pages/LoginPage.tsx']
 
 function sourceFiles(): string[] {
   const out: string[] = []
@@ -115,6 +132,35 @@ describe('CAL.2 — capa API generada desde el contrato', () => {
       construyenAuth,
       'La cabecera Authorization solo puede construirse en client.ts (interceptor).',
     ).toEqual(['shared/api/client.ts'])
+  })
+
+  it('should_discover_hand_written_api_calls_instead_of_listing_them', () => {
+    /**
+     * AIS.4 — la regla que faltaba, y el fallo de método que la justifica.
+     *
+     * Este fichero comprobaba dos cosas y ninguna cazaba `useAnonymizationApi.ts`: la lista de
+     * módulos manuales no lo incluía —porque se escribió antes y nadie lo añadió—, y la
+     * comprobación de la credencial busca ficheros que **mencionen** la cabecera, así que aquel
+     * pasaba **precisamente por no construirla**. Un guardarraíl que sólo mira lo que alguien
+     * recordó apuntar no protege de lo que nadie recordó.
+     *
+     * Esto lo invierte: se recorre el árbol y se exige que ningún módulo de pantalla llame a la
+     * API por su cuenta. Lo que sea excepción, se declara arriba con su motivo.
+     */
+    const culpables = sourceFiles()
+      .map(rel)
+      .filter((f) => SIN_FETCH_A_MANO.some((d) => f.startsWith(`${d}/`)))
+      .filter((f) => !f.split('/').includes('__tests__'))
+      .filter((f) => !EXENTOS_DE_FETCH.includes(f))
+      .filter((f) => /\bfetch\s*\(/.test(readFileSync(join(SRC, f), 'utf-8')))
+      .sort()
+
+    expect(
+      culpables,
+      'estos ficheros de pantalla llaman a la API con `fetch` a mano: la credencial la pone el ' +
+        'interceptor de client.ts, así que un fetch propio se la salta y el endpoint responde ' +
+        '401 sin que nada lo delate hasta que alguien abre la pantalla',
+    ).toEqual([])
   })
 
   it('should_type_ingestion_job_from_generated_model', () => {

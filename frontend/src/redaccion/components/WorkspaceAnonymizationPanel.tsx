@@ -4,11 +4,19 @@
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useQueryClient } from '@tanstack/react-query'
+
+import type { AnonymizationMode } from '@/shared/api/generated/model'
+// AIS.4 — el cliente generado, no un módulo a mano. El anterior llamaba con `fetch` crudo y sin
+// credencial, así que los tres endpoints —que exigen sesión y módulo— devolvían 401 y este panel
+// no funcionaba desde el navegador. El hook generado pasa por el interceptor de
+// `shared/api/client.ts`, que es el único sitio donde se construye la cabecera.
 import {
+  getGetAnonymizationSummaryQueryKey,
   useGetAnonymizationSummary,
   usePatchAnonymizationMode,
   useReAnalyzeAnonymization,
-} from '../hooks/useAnonymizationApi'
+} from '@/shared/api/generated/redaccion-anonymization/redaccion-anonymization'
 
 interface WorkspaceAnonymizationPanelProps {
   workspaceId: string
@@ -31,9 +39,18 @@ export function WorkspaceAnonymizationPanel({
   const { t } = useTranslation('redaccion')
   const isLocked = LOCKED_STATUSES.has(workspaceStatus)
 
+  const qc = useQueryClient()
   const { data: summary, isLoading } = useGetAnonymizationSummary(workspaceId)
-  const patchMode = usePatchAnonymizationMode(workspaceId)
-  const reAnalyze = useReAnalyzeAnonymization(workspaceId)
+
+  // La invalidación la hacía el módulo manual en su `onSuccess`; el cliente generado no opina
+  // sobre la caché, así que se declara aquí — y con la clave que él mismo construye, no con una
+  // cadena escrita a mano que dejaría de coincidir en cuanto cambiara la ruta.
+  const refrescarResumen = () => {
+    qc.invalidateQueries({ queryKey: getGetAnonymizationSummaryQueryKey(workspaceId) })
+  }
+
+  const patchMode = usePatchAnonymizationMode({ mutation: { onSuccess: refrescarResumen } })
+  const reAnalyze = useReAnalyzeAnonymization({ mutation: { onSuccess: refrescarResumen } })
 
   const currentMode = summary?.current_workspace_mode ?? 'replace'
   const [selectedMode, setSelectedMode] = useState<string>(currentMode)
@@ -44,11 +61,12 @@ export function WorkspaceAnonymizationPanel({
   }
 
   const handleApplyMode = () => {
-    patchMode.mutate({ mode: selectedMode })
+    // El hook generado recibe la ruta y el cuerpo juntos: el `workspaceId` ya no va curried.
+    patchMode.mutate({ workspaceId, data: { mode: selectedMode as AnonymizationMode } })
   }
 
   const handleReAnalyze = () => {
-    reAnalyze.mutate()
+    reAnalyze.mutate({ workspaceId })
   }
 
   if (isLoading) {
