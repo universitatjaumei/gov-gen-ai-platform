@@ -118,16 +118,21 @@ class TestGuardasAMedias:
             "frontera de módulos de INF.7 deja la pantalla accesible a quien no tiene el módulo"
         )
 
-    def test_should_reserve_creating_an_organisation_for_the_superadmin(self):
-        """`partner_id` no se puede derivar del actor: ROL.1 retiró la dimensión de *partner*
-        del principal, así que no hay nada en el token con lo que comprobarlo. La respuesta no
-        es inventarle un claim, es que dar de alta una organización sea un acto de la
-        plataforma — y ahí el `partner_id` del cuerpo lo escribe la autoridad de la instalación."""
+    def test_should_not_take_the_partner_from_the_body(self):
+        """`partner_id` no es descriptivo: **decide quién verá la organización**.
+
+        `_orgs_del_admin` resuelve el claim `organizacion_ids` con
+        `WHERE partner_id == <su partner>`, así que aceptarlo del cuerpo dejaba a un
+        administrador plantar una organización dentro del ámbito de otro. Y no hace falta
+        inventar nada para arreglarlo: el partner de un administrador **es** su `user_id`, tal y
+        como lo emite `login_admin`. El superadministrador sí puede decirlo (flujo de MT.13).
+        """
         texto = Path("app/routers/hub_organizaciones_router.py").read_text(encoding="utf-8")
-        cuerpo = texto.split("async def create_organizacion", 1)[1][:400]
-        assert "_require_superadmin" in cuerpo, (
-            "create_organizacion admite rol admin y toma partner_id del cuerpo: un "
-            "administrador adscribe una organización nueva al partner de otro"
+        cuerpo = texto.split("async def create_organizacion", 1)[1][:1600]
+        assert "body.partner_id if user.is_superadmin else user.user_id" in cuerpo, (
+            "create_organizacion toma partner_id del cuerpo sin derivarlo del actor: un "
+            "administrador adscribe la organización nueva al ámbito de otro, y a partir del "
+            "siguiente inicio de sesión le aparece al otro como suya"
         )
 
 

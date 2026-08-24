@@ -173,6 +173,7 @@ jobs:
             tests/api/test_library_router_auth.py \
             tests/api/test_llm_configs_isolation.py \
             tests/api/test_activity_prompts_isolation.py \
+            tests/modules/agents_hub/integration/test_mt16_aislamiento_dos_organizaciones.py \
             tests/api/test_chatbot_access_mode.py \
             tests/core/auth/test_delegated_actor.py \
             tests/api/test_auth_login.py \

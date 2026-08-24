@@ -183,23 +183,27 @@ async def list_organizaciones(
 @router.post("", response_model=OrganizacionRead, status_code=status.HTTP_201_CREATED)
 async def create_organizacion(
     body: OrganizacionCreate,
-    _: UserInfo = Depends(_require_superadmin),
+    user: UserInfo = Depends(_require_admin),
     session=Depends(get_async_session),
     _modulo=_de_plataforma,
 ):
-    """Da de alta una organización. **Sólo superadministrador** (SEC.9.6).
+    """Da de alta una organización. El `partner_id` **lo pone el token**, no el cuerpo (SEC.9.6).
 
-    `partner_id` viene del cuerpo y no se puede derivar del actor: ROL.1 retiró la dimensión de
-    *partner* del principal, así que no hay nada en el token con lo que comprobarlo. Con un
-    administrador cualquiera pudiendo escribirlo, eso significaba adscribir una organización
-    nueva al partner de otro. La respuesta no es inventarle un claim: es que **crear una
-    organización es un acto de la plataforma** —el mismo criterio que MT.13 aplica al flujo de
-    alta con su administrador—, y ahí `partner_id` del cuerpo es legítimo porque quien lo
-    escribe es la autoridad de la instalación.
+    `partner_id` no es un campo descriptivo: es el que decide **quién verá esta organización**.
+    `_orgs_del_admin` (`auth_router`) resuelve el claim `organizacion_ids` de un administrador
+    con `WHERE HubOrganizacion.partner_id == <su partner>`, así que aceptarlo del cuerpo dejaba
+    a un administrador **plantar una organización dentro del ámbito de otro** — que a partir del
+    siguiente inicio de sesión aparecería en el listado del otro como suya.
     """
+    # El partner de un administrador **es** su `user_id`: así lo emite `login_admin`
+    # (`user_id=admin.partner_id`). O sea que no hay que inventarle un claim ni consultar la
+    # tabla: ya viaja en el token. El superadministrador sí puede decir de quién es, porque es
+    # la autoridad de la instalación y es el flujo que describe MT.13.
+    partner_id = body.partner_id if user.is_superadmin else user.user_id
+
     organizacion = HubOrganizacion(
         name=body.name,
-        partner_id=body.partner_id,
+        partner_id=partner_id,
         is_active=body.is_active,
     )
     session.add(organizacion)
