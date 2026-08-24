@@ -4,7 +4,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
+from server.app.core.auth.models import UserInfo
 from server.app.routers.library_router import SignManifestRequest, sign_manifest
+
+# SEC.9.1: `sign_manifest` dejó de ser invocable sin identidad — era un oráculo de firma RSA
+# abierto. La guarda es una dependencia de FastAPI, así que al llamar a la función directamente
+# hay que pasar el principal que la app habría inyectado.
+_SUPERADMIN = UserInfo(user_id="root", email="root@example.org", role="superadmin")
 
 
 @pytest.mark.asyncio
@@ -21,7 +27,7 @@ async def test_sign_manifest_success():
             partner_id="p_001",
         )
 
-        result = await sign_manifest(request)
+        result = await sign_manifest(request, _SUPERADMIN)
 
         assert result["signature"] == "mock_signature_base64"
         assert result["algorithm"] == "RSA-SHA256"
@@ -36,12 +42,18 @@ async def test_sign_manifest_invalid_json():
     )
 
     with pytest.raises(HTTPException) as exc:
-        await sign_manifest(request)
+        await sign_manifest(request, _SUPERADMIN)
     assert exc.value.status_code == 400
 
 
 @pytest.mark.asyncio
 async def test_sign_manifest_missing_id():
+    """Un manifiesto sin `id` es una petición mal formada, así que **400 y no 500**.
+
+    Antes daba 500 porque el `ValueError` caía en el `except Exception` genérico —que además
+    devolvía `str(e)` al cliente—. SEC.9.1 lo separa: el error del llamante se le atribuye al
+    llamante, y el detalle interno deja de viajar en la respuesta.
+    """
     manifest_data = {"content": "no id"}
     request = SignManifestRequest(
         manifest_json=json.dumps(manifest_data),
@@ -49,5 +61,5 @@ async def test_sign_manifest_missing_id():
     )
 
     with pytest.raises(HTTPException) as exc:
-        await sign_manifest(request)
-    assert exc.value.status_code == 500  # ValueError interno
+        await sign_manifest(request, _SUPERADMIN)
+    assert exc.value.status_code == 400

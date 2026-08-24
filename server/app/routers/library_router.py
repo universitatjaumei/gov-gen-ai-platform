@@ -1,14 +1,25 @@
 """
 Deploy: cloud
 Módulo: plataforma — catálogo de la plataforma, no de un módulo.
+
+**SEC.9.1**: este router no tenía ninguna dependencia de identidad. La visibilidad la decidían
+`X-Client-Id`, `X-Partner-Id` y `X-Client-Groups` —cabeceras que pone quien llama—, así que
+bastaba declarar el id del dueño para descargar el código de la automatización de otra
+organización; `POST /push` publicaba un artefacto arbitrario **y el servidor lo firmaba** con la
+clave de la plataforma, y `POST /sign_manifest` era un oráculo de firma abierto.
+
+Ahora la tenencia **sale del token** y firmar es cosa del superadministrador. La guarda se declara
+en el `APIRouter` y no en el docstring: el inventario de PLAT.5 se validaba leyendo docstrings y
+este fichero decía «Módulo: plataforma» estando abierto de par en par.
 """
 
-from typing import Optional
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
-from server.app.database.db import server_engine
+
+from server.app.api.deps import get_session, require_module, require_role
+from server.app.core.auth.models import UserInfo
 from server.app.services.library_service import LibraryService
 from server.app.services.manifest_signature_service import (
     manifest_signature_service,
@@ -18,12 +29,16 @@ from automatia_shared.dtos import AutomationBlueprintDTO
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1/library", tags=["library"])
+# La guarda del router: identidad + módulo de plataforma para TODOS los endpoints. Los dos que
+# firman suben además a superadministrador, en su propia dependencia.
+router = APIRouter(
+    prefix="/v1/library",
+    tags=["library"],
+    dependencies=[Depends(require_module("plataforma"))],
+)
 
-
-async def get_session() -> AsyncSession:
-    async with AsyncSession(server_engine) as session:
-        yield session
+_require_admin = require_role("superadmin", "admin")
+_require_superadmin = require_role("superadmin")
 
 
 async def get_service(session: AsyncSession = Depends(get_session)) -> LibraryService:
@@ -32,67 +47,49 @@ async def get_service(session: AsyncSession = Depends(get_session)) -> LibrarySe
 
 @router.get("/manifest")
 async def get_manifest(
-    x_client_id: Optional[str] = Header(None),
-    x_partner_id: Optional[str] = Header(None),
-    x_client_groups: Optional[str] = Header("[]"),  # JSON string list
+    user: UserInfo = Depends(_require_admin),
     service: LibraryService = Depends(get_service),
 ):
-    import json
-
-    try:
-        groups = json.loads(x_client_groups)
-    except Exception:
-        groups = []
-
+    """Catálogo visible para quien pregunta, acotado por las organizaciones de su token."""
     items = await service.get_visible_automations(
-        client_id=x_client_id, partner_id=x_partner_id, client_groups=groups
+        client_ids=user.organizacion_ids,
+        client_groups=user.saml_groups,
+        is_superadmin=user.is_superadmin,
     )
 
-    # Return lightweight manifest
-    manifest = []
-    for item in items:
-        manifest.append(
-            {
-                "id": item.id,
-                "name": item.name,
-                "version": item.version,
-                "updated_at": item.updated_at,
-                "is_workflow": item.is_workflow,
-            }
-        )
-    return manifest
+    return [
+        {
+            "id": item.id,
+            "name": item.name,
+            "version": item.version,
+            "updated_at": item.updated_at,
+            "is_workflow": item.is_workflow,
+        }
+        for item in items
+    ]
 
 
 @router.get("/download/{item_id}", response_model=AutomationBlueprintDTO)
 async def download_automation(
     item_id: str,
-    x_client_id: Optional[str] = Header(None),
-    x_partner_id: Optional[str] = Header(None),
-    x_client_groups: Optional[str] = Header("[]"),
+    user: UserInfo = Depends(_require_admin),
     service: LibraryService = Depends(get_service),
 ):
-    # Retrieve item
     item = await service.get_by_id(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Automation not found")
 
-    # Verify access (Re-use logic or check returned list)
-    # Ideally reuse get_visible_automations to ensure security policies
-    import json
-
-    try:
-        groups = json.loads(x_client_groups)
-    except Exception:
-        groups = []
-
+    # La visibilidad se resuelve con la MISMA consulta que el manifiesto: si se comprobara
+    # aquí a mano, las dos reglas se separarían en cuanto una de las dos cambiara.
     visible = await service.get_visible_automations(
-        client_id=x_client_id, partner_id=x_partner_id, client_groups=groups
+        client_ids=user.organizacion_ids,
+        client_groups=user.saml_groups,
+        is_superadmin=user.is_superadmin,
     )
 
     if not any(v.id == item_id for v in visible):
         raise HTTPException(status_code=403, detail="Access denied to this automation")
 
-    # Map model to DTO
     return AutomationBlueprintDTO(
         id=item.id,
         name=item.name,
@@ -112,13 +109,16 @@ async def download_automation(
 
 @router.post("/push")
 async def push_automation(
-    dto: AutomationBlueprintDTO, service: LibraryService = Depends(get_service)
+    dto: AutomationBlueprintDTO,
+    _: UserInfo = Depends(_require_superadmin),
+    service: LibraryService = Depends(get_service),
 ):
     """
     Publica una automatización en la biblioteca central.
 
-    El servidor firma automáticamente el manifiesto con la clave del Partner/Sistema
-    antes de persistirlo, garantizando la integridad del contenido distribuido.
+    El servidor firma el manifiesto con la clave de la plataforma antes de persistirlo, así que
+    **es un acto de la plataforma**: sólo el superadministrador. Abierto, era inyección firmada
+    en la cadena de suministro — cualquiera dejaba un artefacto distribuible y con firma válida.
     """
     data = dto.model_dump()
 
@@ -126,32 +126,30 @@ async def push_automation(
     if "metadata" in data:
         data["metadata_json"] = data.pop("metadata")
 
-    # --- FIRMA DEL MANIFIESTO ---
-    # Extraer campos relevantes para la firma (excluir metadatos volátiles)
     signable_data = manifest_signature_service.get_signable_fields(data)
 
     try:
         signature = manifest_signature_service.sign_manifest(signable_data)
         if signature:
             data["signature"] = signature
-            logger.info(f"Manifiesto firmado exitosamente: {data.get('id')}")
+            logger.info("Manifiesto firmado exitosamente: %s", data.get("id"))
         else:
             # Servicio no configurado - continuar sin firma (modo desarrollo)
             logger.warning(
-                f"Manifiesto guardado sin firma (servicio no configurado): {data.get('id')}"
+                "Manifiesto guardado sin firma (servicio no configurado): %s",
+                data.get("id"),
             )
     except SignatureConfigError as e:
-        logger.error(f"Error de configuración al firmar: {e}")
+        logger.error("Error de configuración al firmar: %s", e)
         raise HTTPException(
             status_code=500,
             detail="Error de configuración del servicio de firmas. Contacte al administrador.",
         )
     except Exception as e:
-        logger.error(f"Error inesperado al firmar manifiesto: {e}")
+        logger.error("Error inesperado al firmar manifiesto: %s", e)
         raise HTTPException(
             status_code=500, detail="Error interno al procesar la firma del manifiesto."
         )
-    # --- FIN FIRMA ---
 
     saved = await service.save_master(data)
 
@@ -169,26 +167,32 @@ class SignManifestRequest(BaseModel):
 
 
 @router.post("/sign_manifest")
-async def sign_manifest(request: SignManifestRequest):
+async def sign_manifest(
+    request: SignManifestRequest,
+    _: UserInfo = Depends(_require_superadmin),
+):
     """
-    Firma un manifiesto usando la clave privada del partner/sistema.
-    Este endpoint se usa para obtener una firma sin necesariamente guardar
-    el artefacto completo en la librería (útil para distribución P2P o validación previa).
+    Firma un manifiesto con la clave de la plataforma, sin persistir el artefacto (distribución
+    P2P o validación previa).
+
+    **Sólo superadministrador**: sin guarda, esto era un oráculo de firma — se le pasaba un JSON
+    arbitrario y devolvía su firma RSA-SHA256 hecha con `AUTOMATIA_SIGNING_KEY`.
+
+    `partner_id` sigue viniendo del cuerpo **a propósito**: es a quién va destinado el artefacto,
+    no quién firma. Quien firma es la plataforma, y eso ya lo garantiza la guarda; derivarlo del
+    actor exigiría una dimensión de *partner* en el principal que no existe desde ROL.1.
     """
     import json
 
     try:
         manifest_dict = json.loads(request.manifest_json)
 
-        # Validar consistencia básica
         if "id" not in manifest_dict:
             raise ValueError("Manifiesto debe contener 'id'")
 
-        # Inyectar partner_id en el manifiesto para la firma si no está o es distinto
-        # (La firma vincula el contenido al partner que firma)
+        # La firma vincula el contenido al destinatario declarado.
         manifest_dict["partner_id"] = request.partner_id
 
-        # Obtener campos firmables
         signable_data = manifest_signature_service.get_signable_fields(manifest_dict)
 
         signature = manifest_signature_service.sign_manifest(signable_data)
@@ -199,17 +203,19 @@ async def sign_manifest(request: SignManifestRequest):
         return {
             "signature": signature,
             "algorithm": "RSA-SHA256",
-            "key_id": "default",  # TODO: Support multiple keys
+            "key_id": "default",
             "partner_id": request.partner_id,
         }
 
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON in manifest_json")
     except SignatureConfigError as e:
-        logger.error(f"Error configuration signing: {e}")
+        logger.error("Error configuration signing: %s", e)
         raise HTTPException(
             status_code=500, detail="Signature service configuration error"
         )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Error signing manifest: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error signing manifest: %s", e)
+        raise HTTPException(status_code=500, detail="Error interno al firmar el manifiesto")

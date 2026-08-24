@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional, Sequence
 from sqlmodel import select, or_
 from sqlmodel.ext.asyncio.session import AsyncSession
 from server.app.database.models import AutomationLibrary
@@ -18,23 +18,31 @@ class LibraryService:
 
     async def get_visible_automations(
         self,
-        client_id: Optional[str] = None,
-        partner_id: Optional[str] = None,
-        client_groups: List[str] = None,
+        client_ids: Sequence[str] | None = None,
+        client_groups: Sequence[str] | None = None,
         is_superadmin: bool = False,
     ) -> List[AutomationLibrary]:
         """
         Recupera las automatizaciones visibles para el solicitante según su contexto.
 
-        Aplica reglas de filtrado multinivel:
-        1. Superadmins: Ven todo el catálogo.
-        2. Clientes: Ven sus propios recursos y los compartidos por su Partner o el Sistema.
+        1. Superadministrador: ve el catálogo entero.
+        2. Cualquier otro: lo de **sus** organizaciones y las plantillas de sistema.
+
+        **SEC.9.1 — `client_ids` en plural, y sin `partner_id`.** Antes recibía un `client_id` y
+        un `partner_id` que el router sacaba de cabeceras HTTP, o sea del propio llamante. Ahora
+        vienen del token, donde la tenencia es una tupla de organizaciones y **no hay dimensión
+        de *partner***: ROL.1 la retiró del principal. Así que la rama que hacía visibles los
+        artefactos de un partner —y con ella el cruce de `access_groups`— desaparece.
+
+        Es un **estrechamiento deliberado**: nadie ve menos de lo suyo, y lo que se pierde es una
+        vía de compartición cuyo control lo ponía quien pedía. Compartir configuración entre
+        organizaciones es justo lo que diseñan MT.17–MT.21 (`capacidades`/`requiere`), y ahí el
+        criterio lo pone la plataforma, no una cabecera.
 
         Args:
-            client_id: ID del cliente que solicita.
-            partner_id: ID del partner del cliente.
-            client_groups: Grupos de acceso a los que pertenece el cliente.
-            is_superadmin: Flag de privilegios elevados.
+            client_ids: organizaciones del principal (claim del token).
+            client_groups: grupos que el IdP declara para el principal.
+            is_superadmin: privilegios elevados (ve todo).
 
         Returns:
             List[AutomationLibrary]: Lista de automatizaciones autorizadas.
@@ -44,20 +52,11 @@ class LibraryService:
             results = await self.session.exec(statement)
             return results.all()
 
-        client_groups = client_groups or []
+        propias = [str(c) for c in (client_ids or [])]
 
-        # Base query: Get everything that *might* be visible
-        # 1. Owned by client
-        # 2. Owned by partner
-        # 3. System templates
         conditions = []
-
-        if client_id:
-            conditions.append(AutomationLibrary.client_id == client_id)
-
-        if partner_id:
-            conditions.append(AutomationLibrary.partner_id == partner_id)
-
+        if propias:
+            conditions.append(AutomationLibrary.client_id.in_(propias))
         conditions.append(AutomationLibrary.is_system_template)
 
         statement = select(AutomationLibrary).where(or_(*conditions))
@@ -65,25 +64,12 @@ class LibraryService:
         results = await self.session.exec(statement)
         candidates = results.all()
 
-        # Python-side filtering for access_groups (JSON logic)
-        visible_items = []
-        for item in candidates:
-            # 1. Always show own items and system templates
-            if item.client_id == client_id or item.is_system_template:
-                visible_items.append(item)
-                continue
-
-            # 2. Partner items: check access groups
-            if item.partner_id == partner_id:
-                if not item.access_groups:  # No restriction
-                    visible_items.append(item)
-                else:
-                    # Check intersection
-                    # item.access_groups is a JSON-decoded list (thanks to SQLModel/Pydantic)
-                    if any(group in item.access_groups for group in client_groups):
-                        visible_items.append(item)
-
-        return visible_items
+        return [
+            item
+            for item in candidates
+            if (item.client_id is not None and str(item.client_id) in propias)
+            or item.is_system_template
+        ]
 
     async def get_by_id(self, item_id: str) -> Optional[AutomationLibrary]:
         return await self.session.get(AutomationLibrary, item_id)
