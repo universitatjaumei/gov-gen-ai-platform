@@ -290,3 +290,96 @@ class TestElHechoLlegaAQuienRevisa:
 
         assert "reformulada" in RunRead.model_fields
         assert "reformulated_query" in RunRead.model_fields
+
+
+class TestUnaConsultaAMediasNoSeUsa:
+    """**Este fallo ocurrió de verdad y no lo cazó nadie.**
+
+    `get_rewrite_model` traía un tope de salida de 100 tokens, escrito para un modelo que no
+    razona. `gemini-2.5-flash` —el del piloto— sí razona, y los tokens de razonamiento se cuentan
+    contra ese mismo presupuesto, así que a la salida visible no le quedaba nada: medido el
+    2026-08-25, las reformulaciones llegaban como «Cont», «Adquisición» y «Contrato menor de».
+
+    Y pasaba inadvertido, que es lo peor: media palabra no está vacía ni pasa de 300 caracteres,
+    así que `_es_anomala` la aceptaba, y buscar con media palabra devuelve resultados plausibles
+    y equivocados.
+    """
+
+    @pytest.mark.asyncio
+    async def test_should_discard_a_reformulation_cut_off_by_the_token_budget(self):
+        from server.app.modules.agents_hub.agent.public_graphs.core.query_rewriter import (
+            reformular_al_vocabulario_normativo,
+        )
+
+        truncada = MagicMock(content="Cont")
+        truncada.response_metadata = {"finish_reason": "MAX_TOKENS"}
+        truncada.additional_kwargs = {}
+        llm = MagicMock()
+        llm.ainvoke = AsyncMock(return_value=truncada)
+
+        assert await reformular_al_vocabulario_normativo("compra de 6.500 euros", llm) is None
+
+    @pytest.mark.asyncio
+    async def test_should_keep_a_reformulation_that_finished_normally(self):
+        from server.app.modules.agents_hub.agent.public_graphs.core.query_rewriter import (
+            reformular_al_vocabulario_normativo,
+        )
+
+        completa = MagicMock(content="contracte menor de subministrament")
+        completa.response_metadata = {"finish_reason": "STOP"}
+        completa.additional_kwargs = {}
+        llm = MagicMock()
+        llm.ainvoke = AsyncMock(return_value=completa)
+
+        assert await reformular_al_vocabulario_normativo("compra de 6.500 euros", llm) == (
+            "contracte menor de subministrament"
+        )
+
+    @pytest.mark.asyncio
+    async def test_should_discard_a_truncated_rewrite_too(self):
+        """La reescritura de seguimiento de RAG.10 llevaba el mismo tope y el mismo defecto."""
+        from server.app.modules.agents_hub.agent.public_graphs.core.query_rewriter import (
+            reescribir_consulta,
+        )
+
+        truncada = MagicMock(content="I si")
+        truncada.response_metadata = {"finish_reason": "MAX_TOKENS"}
+        truncada.additional_kwargs = {}
+        llm = MagicMock()
+        llm.ainvoke = AsyncMock(return_value=truncada)
+
+        original = "i si és a l'estranger?"
+        assert await reescribir_consulta(original, ["a: uno", "b: dos"], llm) == original
+
+    def test_should_leave_room_for_the_reasoning_tokens(self):
+        """El tope no puede volver a 100: es la causa raíz, no el síntoma."""
+        import inspect
+
+        from server.app.modules.agents_hub.services.model_factory import get_rewrite_model
+
+        tope = inspect.signature(get_rewrite_model).parameters["max_tokens"].default
+        assert tope >= 512, (
+            "un modelo que razona gasta el presupuesto de salida razonando; con 100 la "
+            "reformulación llegaba truncada a media palabra"
+        )
+
+    def test_should_give_the_reformulation_a_longer_deadline_than_the_rewrite(self):
+        """**El segundo fallo silencioso de este prompt, y del mismo tipo que el primero.**
+
+        Al subir el presupuesto de salida a 512 tokens el modelo empezó a devolver la
+        reformulación correcta —«contrato menor de suministro»— pero tardando 2,4-2,6 s, y el
+        plazo era de 2,0: se mataban **todas**, con un síntoma idéntico a no tener reformulación.
+
+        Los dos plazos no pueden ser el mismo porque el compromiso no es el mismo: la reescritura
+        de seguimiento corre en el camino crítico de cada turno, y la reformulación sólo cuando la
+        puerta ya ha rechazado, o sea que la alternativa a esperar es no responder.
+        """
+        from server.app.modules.agents_hub.agent.public_graphs.core.query_rewriter import (
+            TIMEOUT_DE_REFORMULACION,
+            TIMEOUT_POR_DEFECTO,
+        )
+
+        assert TIMEOUT_DE_REFORMULACION > TIMEOUT_POR_DEFECTO
+        assert TIMEOUT_DE_REFORMULACION >= 4.0, (
+            "medido: con 512 tokens de salida la reformulación tarda 2,4-2,6 s"
+        )

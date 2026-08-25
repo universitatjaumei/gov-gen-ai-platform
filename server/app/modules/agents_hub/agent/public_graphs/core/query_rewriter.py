@@ -28,6 +28,18 @@ logger = logging.getLogger(__name__)
 # antecedente en conversaciones que van y vienen sobre dos normas.
 MAX_MENSAJES = 10
 TIMEOUT_POR_DEFECTO = 2.0
+# RES.2 — la reformulación tiene su propio plazo, y más largo, porque el compromiso es otro.
+#
+# Los 2 s de arriba se eligieron para la reescritura de seguimiento, que corre en el camino
+# crítico de **cada** turno: allí, esperar es peor que buscar con la pregunta tal cual. La
+# reformulación sólo se ejecuta cuando la puerta ya ha rechazado, así que la alternativa a esperar
+# no es «una respuesta un poco peor», es **ninguna respuesta**.
+#
+# Y hay una medida detrás: con el presupuesto de salida en 512 tokens, `gemini-2.5-flash` tarda
+# 2,4-2,6 s en devolver la reformulación correcta («contrato menor de suministro»). Con 2 s se
+# mataba **todas**, y el síntoma era idéntico a no tener reformulación: exactamente el fallo que
+# esto viene a corregir, otra vez y por otro motivo.
+TIMEOUT_DE_REFORMULACION = 8.0
 # Una consulta de búsqueda no pasa de una línea. Más largo que esto es que el modelo se ha
 # puesto a explicar, y buscar con una explicación es peor que buscar con la pregunta.
 MAX_CARACTERES = 300
@@ -84,6 +96,33 @@ def _es_anomala(texto: str) -> bool:
     return not texto.strip() or len(texto) > MAX_CARACTERES
 
 
+# Motivos de parada que significan «el modelo no había acabado». Se comparan en minúsculas y por
+# subcadena porque cada proveedor los escribe a su manera (`MAX_TOKENS`, `length`, `max_output`).
+_MOTIVOS_DE_TRUNCAMIENTO = ("max_token", "max_output", "length")
+
+
+def _fue_truncada(respuesta) -> bool:
+    """Si el modelo se quedó a medias por agotar el presupuesto de salida.
+
+    **Esta guarda existe porque el fallo ocurrió y no lo cazó nadie.** Los modelos que razonan
+    gastan tokens de razonamiento contra `max_output_tokens`, así que con el tope de 100 que había
+    la salida visible se cortaba: medido el 2026-08-25, las reformulaciones llegaban como «Cont» o
+    «Contrato menor de». Un texto truncado no está vacío ni pasa de 300 caracteres, así que
+    `_es_anomala` lo aceptaba, y buscar con media palabra da resultados plausibles y equivocados —
+    el peor modo de fallo, el que no se nota.
+    """
+    for contenedor in (
+        getattr(respuesta, "response_metadata", None),
+        getattr(respuesta, "additional_kwargs", None),
+    ):
+        if not isinstance(contenedor, dict):
+            continue
+        motivo = str(contenedor.get("finish_reason") or "").lower()
+        if any(m in motivo for m in _MOTIVOS_DE_TRUNCAMIENTO):
+            return True
+    return False
+
+
 async def reescribir_consulta(
     consulta: str,
     historial: list[str],
@@ -110,6 +149,12 @@ async def reescribir_consulta(
         logger.warning("Reescritura descartada por error del modelo: %s", fallo)
         return consulta
 
+    # Misma guarda que en la reformulación, y por el mismo motivo: este paso llevaba el mismo
+    # tope de 100 tokens, así que llevaba truncando consultas de seguimiento en silencio.
+    if _fue_truncada(respuesta):
+        logger.warning("Reescritura descartada: el modelo agotó el tope de salida")
+        return consulta
+
     texto = getattr(respuesta, "content", None)
     texto = texto if isinstance(texto, str) else str(respuesta)
     if _es_anomala(texto):
@@ -122,7 +167,7 @@ async def reescribir_consulta(
 async def reformular_al_vocabulario_normativo(
     consulta: str,
     llm,
-    timeout: float = TIMEOUT_POR_DEFECTO,
+    timeout: float = TIMEOUT_DE_REFORMULACION,
 ) -> str | None:
     """La consulta escrita como la escribiría la norma, o `None` si no se pudo.
 
@@ -145,6 +190,10 @@ async def reformular_al_vocabulario_normativo(
         return None
     except Exception as fallo:  # noqa: BLE001 - cualquier fallo del proveedor cae aquí
         logger.warning("Reformulación descartada por error del modelo: %s", fallo)
+        return None
+
+    if _fue_truncada(respuesta):
+        logger.warning("Reformulación descartada: el modelo agotó el tope de salida")
         return None
 
     texto = getattr(respuesta, "content", None)

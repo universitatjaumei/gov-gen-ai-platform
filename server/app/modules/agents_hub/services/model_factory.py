@@ -68,7 +68,7 @@ async def get_rewrite_model(
     chatbot_id: uuid.UUID,
     config_provider: ConfigProvider,
     rewrite_llm_config_id: uuid.UUID | None = None,
-    max_tokens: int = 100,
+    max_tokens: int = 512,
 ):
     """Modelo para reescribir la consulta de búsqueda (RAG.10).
 
@@ -76,6 +76,15 @@ async def get_rewrite_model(
     propósito. Si no, se cae al del chatbot **con el tope de salida bajado**, porque la
     reescritura devuelve una línea y pagar el `max_tokens` del modelo de respuesta por una
     línea es tirar dinero y latencia en el camino crítico de cada turno.
+
+    **El tope era 100 y lo subió RES.2, porque estaba truncando en silencio.** Los modelos
+    que razonan —`gemini-2.5-flash`, que es el del piloto— gastan tokens de razonamiento
+    contra este mismo presupuesto, así que a la salida visible no le quedaba casi nada:
+    medido el 2026-08-25, las reformulaciones salían como «Cont», «Adquisición» y «Contrato
+    menor de». Y no lo cazaba nada, porque un texto truncado no está vacío ni pasa de 300
+    caracteres. 512 deja sitio al razonamiento y sigue siendo una línea de salida; la guarda
+    contra truncamiento vive en `query_rewriter`, para que esto no pueda volver a pasar
+    inadvertido.
     """
     if rewrite_llm_config_id is not None:
         config = await config_provider.get_llm_config(rewrite_llm_config_id)
