@@ -82,7 +82,41 @@
 
 **Cursor actual: RES.4** (actualizado el 2026-08-25, al cerrar RES.3). El orden hasta el
 despliegue es **~~SEC.9~~ ✅ → ~~AIS~~ ✅ → ~~RAG.15~~ ✅ → ~~VIS.4~~ ✅ → ~~VIS.5~~ ✅ →
-~~RES.1~~ ✅ → ~~RES.2~~ ✅ → ~~RES.3~~ ✅ → **RES.4** → RES.5 → Deploy/D.0**.
+~~RES.1~~ ✅ → ~~RES.2~~ ✅ → ~~RES.3~~ ✅ → ~~RES.4~~ ✅ → **RES.5** → Deploy/D.0**.
+
+> ✅ **RES.4 hecho (2026-08-25). Valor elegido con las cifras delante: `retrieval_top_k = 3` en los
+> dos chatbots.** Con la puerta desacoplada, la anchura ya sólo decide contexto, y se midió con el
+> grafo completo:
+>
+> | | responden | se rinden | docs citados | fuente única |
+> |---|---|---|---|---|
+> | Normativa `top_k=5` | 20/25 | 5 (4 puerta, 1 cita) | 3,60 | 0 |
+> | Normativa `top_k=3` | **22/25** | 3 (todas puerta) | 2,59 | 2 |
+> | Gerencia `top_k=3` | **6/7** | 1 | — | 0 |
+>
+> Los rechazos están **anidados**: todo lo que falla con 3 falla con 5. La calidad es
+> **indistinguible** —4-2 con **12 de 25 veredictos dados la vuelta** al invertir el orden, más
+> ruido que en la tanda anterior—, así que decide la cobertura. **El coste está mirado una por una**:
+> en las dos respuestas de fuente única con 3, la versión con 5 cita un segundo documento pertinente
+> (en ORI-10, una *Instrucció* de diciembre de 2025 del Vicerectorat). Se acepta: una respuesta con
+> una norma correcta vale más que ninguna, y `respuesta_incompleta` es 4 de 25 en el catálogo de los
+> informadores frente a los 15 de `curso_caducado`, que es el modo que estrechar **reduce**.
+>
+> ✅ **Y la decisión pendiente del umbral 0,35 de Gerencia se ha resuelto sola: no hay que
+> tocarlo.** Con la puerta sobre el mejor fragmento responde 6 de 7 con ese mismo valor, y la que
+> falla lo hace con 0,152 — no la recupera ningún umbral razonable. RES.1 hizo innecesario bajarlo.
+>
+> **Las tres de Normativa que siguen sin respuesta** tienen nota 0,405 / 0,458 / 0,30 contra un
+> umbral de 0,50 — más altas que su mejor fragmento sin reformular, o sea que **RES.2 ayuda incluso
+> donde no llega**. Bajar el umbral a 0,45 recuperaría una y a 0,40 dos; **no se ha tocado**, porque
+> cambia qué evidencia se considera suficiente y eso es decisión del usuario.
+>
+> **Corrección de RES.3 que salió de la suite completa** (`aeedf5c`): `hub_lexicon_pairs` nació en
+> `HubConfigBase` y el guardarraíl de la frontera lo rechazó **con razón**. `termino_de_usuario` es
+> literalmente lo que escribió una persona, y la configuración se sincroniza cloud→edge: ponerla ahí
+> obligaba a que el texto de las preguntas del cliente existiera en el cloud. Lo que decide el lado
+> no es «es vocabulario» —`hub_vocabulary_terms` es configuración y está bien— sino si lleva dentro
+> texto de alguien. Movida a `HubOperationalBase`, sin las dos FK y sin `__ambito__`.
 
 > ✅ **RES.1, RES.2 y RES.3 hechos (2026-08-25).** Medido en la batería de Gerencia con el grafo
 > completo: **de 2 respuestas de 7 a 6 que pasan la puerta**. RES.1 (puerta con el mejor fragmento)
