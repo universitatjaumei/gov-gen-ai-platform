@@ -729,3 +729,96 @@ class HubTestRun(HubOperationalBase):
     verdict_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     scenario: Mapped["HubTestScenario"] = relationship(back_populates="runs")
+
+
+class HubLexiconPair(HubOperationalBase):
+    """Par léxico: cómo lo dice una persona y cómo lo dice la norma (RES.3).
+
+    Existe porque la recuperación falla por vocabulario, no por corpus. Medido el 2026-08-25:
+    «quiero tramitar una compra de un equipo de 6.500 euros» puntúa 0,126 contra un corpus que
+    llama a eso «expedients de contractes menors», y no comparten ni una palabra clave — así que
+    ni el vector se parece ni la rama léxica tiene de dónde agarrarse. La misma consulta escrita
+    con los términos de la norma puntúa 0,640.
+
+    **Es OPERACIONAL, y estuvo mal puesta.** Nació en `HubConfigBase`, por analogía con
+    `hub_vocabulary_terms` —que también es vocabulario revisable—, y el guardarraíl de la frontera
+    edge-cloud lo rechazó con razón: `termino_de_usuario` **es literalmente lo que escribió una
+    persona**. `HubConfigBase` se sincroniza cloud→edge, así que ponerla ahí obligaba a que el
+    texto de las preguntas del cliente existiera en el cloud, que es exactamente lo que el modo
+    edge+cloud está montado para evitar. El vocabulario institucional (ámbitos, submaterias) no
+    contiene texto de nadie; esto sí.
+
+    Consecuencia práctica: se cura **en el edge**, por quien administra ese asistente, y no viaja.
+    En un despliegue con varios edge cada uno aprende de sus propios usuarios, que además es lo
+    correcto: el vocabulario de los usuarios de un cliente es dato de ese cliente.
+
+    Por eso tampoco declara `__ambito__` —ningún modelo operacional lo hace, y MT.1 recorre sólo
+    `HubConfigBase`— ni lleva FK a `hub_organizaciones`: los modelos operacionales referencian por
+    id sin FK, para que las dos bases sigan siendo separables. El acotado por organización lo
+    garantizan el código y su test.
+
+    **El candidato no lo inventa nadie.** Lo produce RES.2 cada vez que una reformulación rescata
+    una pregunta: el par llega ya validado por el hecho de haber funcionado, y a la persona sólo
+    se le pide aprobar o rechazar. Ésa es la diferencia con el intento anterior —pedir a los
+    servicios que redactaran lotes de preguntas y respuestas en hojas Excel—, que fracasó porque
+    pedía inventar en frío.
+
+    **Se proyecta sobre `bilingual_terms`, que alimenta el `tsvector` como columna generada.** O
+    sea: aplicar un par aprobado es un `UPDATE` y el índice se regenera solo, sin recalcular
+    ningún embedding. Y la proyección es **derivada**: se puede reconstruir entera desde esta
+    tabla, así que quitar un término cuesta lo mismo que ponerlo. Sin esa propiedad, en seis meses
+    nadie sabe de dónde salió un término y «reclasificar» vuelve a ser «reindexar».
+
+    Misma forma revisable que `HubVocabularyTerm` (`vigent`, `substituit_per_codi`) y por lo
+    mismo: renombrar y fusionar sin migración. Y sin `Enum` ni `CheckConstraint` sobre los
+    términos, que son dato y están para revisarse.
+    """
+
+    __tablename__ = "hub_lexicon_pairs"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organizacion_id",
+            "document_id",
+            "termino_de_usuario",
+            name="uq_lexicon_org_doc_termino",
+        ),
+        # Estados con consumidor en el código y valores estables: aquí sí va CheckConstraint.
+        # Lo que no puede llevarlo son los términos.
+        CheckConstraint(
+            "estado IN ('propuesto', 'aprobado', 'rechazado')",
+            name="ck_lexicon_estado",
+        ),
+        CheckConstraint(
+            "origen IN ('reformulacion', 'manual')", name="ck_lexicon_origen"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    #: Sin FK, como el resto de los modelos operacionales: las dos bases tienen que poder vivir
+    #: separadas. El acotado lo hace el código, y hay un test que lo comprueba.
+    organizacion_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    #: El documento que respondió. El par se ancla a él y no a la consulta, porque la proyección
+    #: escribe sobre los trozos de ESE documento: así se sabe siempre qué quitar al rechazarlo.
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    #: Lo que escribió la persona. Texto libre a propósito: es lenguaje real, no un código.
+    termino_de_usuario: Mapped[str] = mapped_column(Text, nullable=False)
+    #: La consulta que sí encontró el documento.
+    termino_normativo: Mapped[str] = mapped_column(Text, nullable=False)
+    estado: Mapped[str] = mapped_column(String(20), nullable=False, default="propuesto")
+    origen: Mapped[str] = mapped_column(String(20), nullable=False, default="reformulacion")
+    vigent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    substituit_per_codi: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    revisado_por: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    revisado_el: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )

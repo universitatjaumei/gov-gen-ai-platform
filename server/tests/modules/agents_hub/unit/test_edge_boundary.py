@@ -79,6 +79,19 @@ def test_operational_base_contains_only_operational_models() -> None:
         # consultas reales dentro, así que no salen del edge.
         "hub_test_scenarios",
         "hub_test_runs",
+        # RES.3 — pares léxicos «como lo dice una persona / como lo dice la norma». **Nacieron en
+        # `HubConfigBase` y este test lo rechazó con razón**: `termino_de_usuario` es literalmente
+        # lo que escribió alguien, y la configuración se sincroniza cloud→edge, así que ponerlos
+        # ahí obligaba a que el texto de las preguntas del cliente existiera en el cloud. Mismo
+        # motivo que `hub_test_scenarios`, que está dos líneas más arriba por lo mismo.
+        #
+        # No es que el vocabulario sea operacional: `hub_vocabulary_terms` (ámbitos, submaterias)
+        # es configuración y está bien donde está, porque **no contiene texto de nadie**. Lo que
+        # decide el lado no es «es vocabulario», es «lleva dentro lo que escribió una persona».
+        #
+        # Consecuencia asumida: se cura en el edge y no viaja, así que con varios edge cada uno
+        # aprende de sus propios usuarios. Que además es lo correcto.
+        "hub_lexicon_pairs",
         # SEC.4 — consumo por sujeto y ventana. Operacional y no configuración: el LÍMITE
         # se configura y viaja cloud→edge, pero lo GASTADO es dato del cliente final y no
         # sale del edge. Un contador colgado de `HubChatbot` se habría sincronizado con la

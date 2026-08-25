@@ -22,13 +22,10 @@ import uuid
 import pytest
 from sqlalchemy import select
 
-from server.app.modules.agents_hub.database.config_models import (
-    Ambito,
-    HubLexiconPair,
-)
 from server.app.modules.agents_hub.database.operational_models import (
     HubDocument,
     HubDocumentChunk,
+    HubLexiconPair,
 )
 from server.app.modules.agents_hub.services.lexicon import (
     aprobar_par,
@@ -38,13 +35,32 @@ from server.app.modules.agents_hub.services.lexicon import (
 )
 
 
-class TestLaTablaDeclaraSuAmbito:
-    """Lo exige MT.1 y el guardarraíl lo caza si falta; se afirma aquí para que el motivo se lea
-    junto al modelo: un par léxico es de una organización, y filtrarse entre organizaciones
-    significaría que el vocabulario de un cliente cambia las búsquedas de otro."""
+class TestLaTablaEstaDelLadoQueLeToca:
+    """**La tabla nació en `HubConfigBase` y el guardarraíl de la frontera lo rechazó con razón.**
 
-    def test_should_declare_the_scope_of_the_new_table(self):
-        assert HubLexiconPair.__ambito__ == Ambito.ORGANIZACION
+    `termino_de_usuario` es literalmente lo que escribió una persona, y la configuración se
+    sincroniza cloud→edge: ponerla ahí obligaba a que el texto de las preguntas del cliente
+    existiera en el cloud, que es exactamente lo que el modo edge+cloud está montado para evitar.
+    Mismo motivo por el que `hub_test_scenarios` es operacional.
+
+    Lo que decide el lado no es «es vocabulario» —`hub_vocabulary_terms` es configuración y está
+    bien—, es **si lleva dentro lo que escribió una persona**.
+    """
+
+    def test_should_live_on_the_operational_side(self):
+        from server.app.modules.agents_hub.database.base import (
+            HubConfigBase,
+            HubOperationalBase,
+        )
+
+        assert issubclass(HubLexiconPair, HubOperationalBase)
+        assert not issubclass(HubLexiconPair, HubConfigBase)
+
+    def test_should_not_reference_config_tables_with_a_foreign_key(self):
+        """Ningún modelo operacional de este esquema lo hace: las dos bases tienen que poder
+        vivir separadas, y el acotado por organización lo garantiza el código."""
+        for columna in ("organizacion_id", "document_id"):
+            assert not HubLexiconPair.__table__.columns[columna].foreign_keys
 
     def test_should_not_express_the_terms_as_an_enum(self):
         """El vocabulario es dato, no código: está para revisarse."""

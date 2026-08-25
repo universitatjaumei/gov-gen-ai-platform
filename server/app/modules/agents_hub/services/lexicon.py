@@ -20,8 +20,10 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select, update
 
-from server.app.modules.agents_hub.database.config_models import HubLexiconPair
-from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
+from server.app.modules.agents_hub.database.operational_models import (
+    HubDocumentChunk,
+    HubLexiconPair,
+)
 
 
 async def proponer_par(

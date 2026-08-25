@@ -4,6 +4,10 @@ La recuperación falla por vocabulario, no por corpus: «quiero tramitar una com
 6.500 euros» puntúa 0,126 contra un corpus que llama a eso «expedients de contractes menors». Esta
 tabla guarda el par —lo que dijo la persona, la consulta que funcionó— y su estado de revisión.
 
+Es **operacional**, no configuracion: `termino_de_usuario` es literalmente lo que escribio una
+persona, y `HubConfigBase` se sincroniza cloud->edge, asi que ponerla ahi obligaria a que el
+texto de las preguntas del cliente existiera en el cloud. Lo cazo el guardarrail de la frontera.
+
 Se proyecta sobre `hub_document_chunks.bilingual_terms`, que ya alimenta el `tsvector` como columna
 generada, así que aplicar un par aprobado es un `UPDATE` y no exige recalcular embeddings. Y la
 proyección es **derivada**: se reconstruye entera desde aquí, de modo que quitar un término cuesta
@@ -31,9 +35,11 @@ def upgrade() -> None:
         # Sin `server_default`: el id lo pone el modelo con `uuid.uuid4`, igual que el resto de
         # las tablas del esquema. `gen_random_uuid()` exigiría pgcrypto y no aporta nada aquí.
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        # Sin FK a `hub_organizaciones`: la tabla es OPERACIONAL y los modelos operacionales
+        # referencian por id sin FK, para que las dos bases sigan siendo separables.
         sa.Column("organizacion_id", postgresql.UUID(as_uuid=True), nullable=False),
-        # Sin FK a `hub_documents`: es operacional y esta tabla es de configuración. La frontera
-        # edge-cloud prohíbe la navegación entre las dos bases; se consulta por id.
+        # Sin FK a `hub_documents` tampoco: los modelos operacionales de este esquema no llevan
+        # ninguna FK entre bases, y añadir la primera aquí no es el sitio para estrenarlo.
         sa.Column("document_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("termino_de_usuario", sa.Text(), nullable=False),
         sa.Column("termino_normativo", sa.Text(), nullable=False),
@@ -52,9 +58,6 @@ def upgrade() -> None:
             sa.DateTime(timezone=True),
             nullable=False,
             server_default=sa.text("now()"),
-        ),
-        sa.ForeignKeyConstraint(
-            ["organizacion_id"], ["hub_organizaciones.id"], ondelete="CASCADE"
         ),
         sa.UniqueConstraint(
             "organizacion_id",
