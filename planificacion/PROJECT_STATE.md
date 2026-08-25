@@ -101,15 +101,26 @@ y **ya no queda nada delante**.
 > y sin eso el texto que ve el ciudadano no aparecía en ninguna herramienta de revisión. Migración
 > `w3p4q5r6s7t8` aplicada.
 
-> ⚠️ **RAG.15 deja una medición abierta, y es deliberado.** El código está arreglado y sin
-> regresión en el dorado de RAG.1 (40 tests), pero **elegir el valor de `retrieval_top_k` exige
-> ejecutar el lote ujirag con varios valores**, y ese ejecutor (`_local/golden/ejecutar_ujirag.py`)
-> hace 25 llamadas reales al modelo por configuración, con las credenciales del usuario, y escribe
-> `HubTestRun` en su base. **No se lanza sin que el usuario lo decida**: es gasto real y material
-> de evaluación de un cliente. El valor queda en **8** —el mismo que el modelo ya declaraba— y
-> **consta como no medido**, que es lo que el prompt pedía no dar por bueno en silencio. Con el
-> valor nuevo hay que **volver a mirar el `quality_threshold` de 0,50**: se calibró sobre
-> respuestas de un solo fragmento, y los dos números se mueven juntos.
+> ✅ **La medición que RAG.15 dejó abierta está hecha (2026-08-25).** Informe en
+> `docs/MEDICION_RETRIEVAL_TOP_K.html`. Se midió **sólo la recuperación**, con un barrido nuevo
+> (`_local/golden/barrido_topk.py`) que aplica cada valor con `dataclasses.replace` sobre la
+> configuración efectiva: así no hacen falta las 25 llamadas al modelo por configuración que
+> frenaban esto, ni se escribe `HubTestRun` en la base del usuario. **Recomendado: 5.** Es el valor
+> más bajo que deja en **cero** las respuestas de fuente única (con 3 quedan 3 de 25), y el que
+> menos respuestas pierde por el filtro.
+>
+> **Lo que la medición destapó, y no estaba previsto**: el `quality_gate` compara
+> `quality_threshold` contra la **media** de las puntuaciones (`core_graph.merge_node`), así que
+> ensanchar la búsqueda **baja mecánicamente la nota que decide si se responde**. Con el `8` de hoy
+> **10 de las 25 consultas caen a la respuesta de cortesía**; con 5 caen 7 y con 3, 6. La nota que
+> este bloque escribió —«los dos números se mueven juntos»— resulta ser más literal de lo que
+> parecía: no es que haga falta recalibrar, es que **un mando mueve al otro por construcción**. La
+> salida razonable es puntuar sobre el mejor fragmento o la media de los tres primeros, de modo que
+> la cola informe el contexto sin votar sobre si hay respuesta. **No está hecho**: merece su propio
+> prompt y no se coló en una medición.
+>
+> **El valor sigue en 8 en la base**: cambiarlo es configuración de un chatbot del usuario, y la
+> decisión es suya. Es un `UPDATE` sobre `hub_chatbots.retrieval_top_k` y no exige reindexar.
 
 > **RAG.15 va primero de los tres**: `retrieval_top_k` **no lo lee ningún pipeline** —la
 > estrategia se construye con `top_k=cfg.min_retrieval_results`—, así que el asistente responde

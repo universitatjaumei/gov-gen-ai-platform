@@ -1,0 +1,611 @@
+<meta charset="utf-8">
+<title>Qué valor darle a retrieval_top_k</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;600&display=swap">
+
+<style>
+:root {
+    --marca:        #0b5394;
+    --marca-suave:  #e8eef6;
+    --fondo:        #f6f7f9;
+    --superficie:   #ffffff;
+    --tinta:        #151b23;
+    --tinta-media:  #4c5866;
+    --tinta-tenue:  #7a8593;
+    --filete:       #dde1e7;
+    --filete-fino:  #eaedf1;
+    --bien:         #1c6b42;
+    --mal:          #9c3520;
+    --sombra:       0 1px 2px rgba(21, 27, 35, .05), 0 8px 24px -16px rgba(21, 27, 35, .18);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --marca:        #6ea3dc;
+        --marca-suave:  #16233180;
+        --fondo:        #0e1319;
+        --superficie:   #151b23;
+        --tinta:        #e6e9ee;
+        --tinta-media:  #a3aebc;
+        --tinta-tenue:  #78838f;
+        --filete:       #2a323c;
+        --filete-fino:  #1f262e;
+        --bien:         #6cc08c;
+        --mal:          #e08a72;
+        --sombra:       0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .7);
+    }
+}
+
+:root[data-theme="dark"] {
+    --marca:        #6ea3dc;
+    --marca-suave:  #16233180;
+    --fondo:        #0e1319;
+    --superficie:   #151b23;
+    --tinta:        #e6e9ee;
+    --tinta-media:  #a3aebc;
+    --tinta-tenue:  #78838f;
+    --filete:       #2a323c;
+    --filete-fino:  #1f262e;
+    --bien:         #6cc08c;
+    --mal:          #e08a72;
+    --sombra:       0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .7);
+}
+
+body {
+    background: var(--fondo);
+    color: var(--tinta);
+    font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+}
+
+.hoja {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: clamp(2.5rem, 6vw, 5rem) clamp(1.15rem, 4vw, 2rem) 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2.75rem;
+}
+
+/* ---------- cabecera ---------- */
+
+.cabecera {
+    display: flex;
+    flex-direction: column;
+    gap: .9rem;
+    border-bottom: 2px solid var(--marca);
+    padding-bottom: 1.6rem;
+}
+
+.eyebrow {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--marca);
+}
+
+h1 {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: clamp(1.85rem, 5.2vw, 2.6rem);
+    font-weight: 700;
+    line-height: 1.12;
+    letter-spacing: -.021em;
+    text-wrap: balance;
+    margin: 0;
+}
+
+h1 code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .8em;
+    font-weight: 600;
+    letter-spacing: -.01em;
+    /* Sin el chip de `code`: a tamaño de titular el fondo se lee como un recuadro suelto.
+       La monoespaciada ya distingue el nombre del parámetro del resto de la frase. */
+    background: none;
+    padding: 0;
+}
+
+.ficha {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: .85rem 1.5rem;
+    margin-top: .4rem;
+}
+
+.ficha div {
+    display: flex;
+    flex-direction: column;
+    gap: .12rem;
+}
+
+.ficha dt {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--tinta-tenue);
+}
+
+.ficha dd {
+    margin: 0;
+    font-size: .95rem;
+    color: var(--tinta-media);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------- veredicto ---------- */
+
+.veredicto {
+    background: var(--superficie);
+    border: 1px solid var(--filete);
+    border-left: 4px solid var(--marca);
+    border-radius: 3px;
+    box-shadow: var(--sombra);
+    padding: 1.6rem 1.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: .85rem;
+}
+
+.veredicto .cifra {
+    display: flex;
+    align-items: baseline;
+    gap: .7rem;
+    flex-wrap: wrap;
+}
+
+.veredicto .cifra strong {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 2.6rem;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--marca);
+    letter-spacing: -.03em;
+}
+
+.veredicto .cifra span {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .78rem;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--tinta-tenue);
+}
+
+.veredicto p {
+    margin: 0;
+    color: var(--tinta-media);
+}
+
+.veredicto p + p {
+    margin-top: -.15rem;
+}
+
+/* ---------- texto ---------- */
+
+h2 {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: 1.28rem;
+    font-weight: 600;
+    letter-spacing: -.011em;
+    line-height: 1.25;
+    text-wrap: balance;
+    margin: 0 0 .9rem;
+}
+
+h3 {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .95rem;
+    font-weight: 600;
+    margin: 0 0 .45rem;
+}
+
+section > p, section > ul, section > ol {
+    margin: 0 0 1rem;
+}
+
+section > *:last-child {
+    margin-bottom: 0;
+}
+
+ul, ol {
+    padding-left: 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+}
+
+li::marker {
+    color: var(--tinta-tenue);
+}
+
+strong {
+    font-weight: 600;
+}
+
+code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .85em;
+    background: var(--marca-suave);
+    padding: .1em .34em;
+    border-radius: 2px;
+}
+
+a {
+    color: var(--marca);
+    text-underline-offset: .15em;
+}
+
+a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--marca);
+    outline-offset: 3px;
+    border-radius: 2px;
+}
+
+.nota {
+    font-size: .9rem;
+    color: var(--tinta-tenue);
+    line-height: 1.55;
+}
+
+/* ---------- tablas ---------- */
+
+.tabla-marco {
+    overflow-x: auto;
+    border: 1px solid var(--filete);
+    border-radius: 3px;
+    background: var(--superficie);
+    box-shadow: var(--sombra);
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 34rem;
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .84rem;
+    font-variant-numeric: tabular-nums;
+}
+
+caption {
+    caption-side: top;
+    text-align: left;
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--tinta-tenue);
+    padding: .85rem 1rem .55rem;
+}
+
+th, td {
+    padding: .62rem 1rem;
+    text-align: right;
+    border-bottom: 1px solid var(--filete-fino);
+}
+
+thead th {
+    font-weight: 600;
+    font-size: .7rem;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--tinta-tenue);
+    border-bottom: 1px solid var(--filete);
+    vertical-align: bottom;
+}
+
+th[scope="row"] {
+    text-align: left;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-weight: 600;
+    font-size: .88rem;
+    color: var(--tinta);
+    white-space: nowrap;
+}
+
+tbody tr:last-child th, tbody tr:last-child td {
+    border-bottom: none;
+}
+
+tr.recomendada th[scope="row"],
+tr.recomendada td {
+    background: var(--marca-suave);
+}
+
+tr.recomendada th[scope="row"] {
+    box-shadow: inset 3px 0 0 var(--marca);
+    color: var(--marca);
+}
+
+.marca-actual {
+    display: block;
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .6rem;
+    font-weight: 600;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--tinta-tenue);
+}
+
+tr.recomendada .marca-actual {
+    color: var(--marca);
+}
+
+/* barra dentro de la celda: la proporción también se lee de un vistazo */
+.proporcion {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: .5rem;
+}
+
+.barra {
+    display: block;
+    width: 3.4rem;
+    height: .42rem;
+    border-radius: 1px;
+    background: var(--filete);
+    overflow: hidden;
+    flex: none;
+}
+
+.barra i {
+    display: block;
+    height: 100%;
+    background: var(--marca);
+}
+
+.baja i { background: var(--mal); }
+
+/* ---------- detalle plegable ---------- */
+
+details {
+    background: var(--superficie);
+    border: 1px solid var(--filete);
+    border-radius: 3px;
+    padding: 0 1.1rem;
+}
+
+summary {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .84rem;
+    font-weight: 600;
+    padding: .85rem 0;
+    cursor: pointer;
+    color: var(--tinta-media);
+}
+
+details[open] summary {
+    border-bottom: 1px solid var(--filete-fino);
+    margin-bottom: .9rem;
+}
+
+details pre {
+    overflow-x: auto;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .78rem;
+    line-height: 1.6;
+    color: var(--tinta-media);
+    margin: 0 0 1rem;
+}
+
+/* ---------- pie ---------- */
+
+.pie {
+    border-top: 1px solid var(--filete);
+    padding-top: 1.3rem;
+    font-size: .82rem;
+    color: var(--tinta-tenue);
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="hoja">
+
+    <header class="cabecera">
+        <p class="eyebrow">Medición · RAG.15</p>
+        <h1>Qué valor darle a <code>retrieval_top_k</code></h1>
+        <dl class="ficha">
+            <div><dt>Fecha</dt><dd>25 de agosto de 2026</dd></div>
+            <div><dt>Chatbot</dt><dd>Normativa UJI</dd></div>
+            <div><dt>Corpus</dt><dd>23.306 fragmentos</dd></div>
+            <div><dt>Consultas</dt><dd>25 (lote ujirag-2024)</dd></div>
+            <div><dt>Valor actual</dt><dd>8</dd></div>
+            <div><dt>Reranker</dt><dd>Vertex Ranking API</dd></div>
+        </dl>
+    </header>
+
+    <section class="veredicto">
+        <div class="cifra">
+            <strong>5</strong>
+            <span>valor recomendado</span>
+        </div>
+        <p>Es el valor más bajo que elimina por completo las respuestas apoyadas en <strong>un
+        solo documento</strong>, y el que menos respuestas pierde por el filtro de calidad.
+        Bajarlo a 3 devuelve 3 de 25 consultas a la fuente única; subirlo a 8 —el valor de hoy—
+        no encuentra nada nuevo y hace que el asistente se niegue a responder <strong>cuatro
+        veces más</strong>.</p>
+    </section>
+
+    <section>
+        <h2>Lo que se midió sobre el corpus real</h2>
+        <p>Cuatro configuraciones sobre las mismas 25 consultas, midiendo sólo la recuperación:
+        cuántos documentos llegan al contexto, cuánto ocupan y con qué puntuación. La puntuación
+        es la del reranker, en el rango [0, 1].</p>
+
+        <div class="tabla-marco">
+            <table>
+                <caption>Corpus real · 25 consultas por configuración</caption>
+                <thead>
+                    <tr>
+                        <th scope="col"><code>top_k</code></th>
+                        <th scope="col">Documentos<br>(media)</th>
+                        <th scope="col">Tokens de<br>contexto</th>
+                        <th scope="col">Punt.<br>media</th>
+                        <th scope="col">Punt. del<br>último</th>
+                        <th scope="col">Superan el<br>filtro</th>
+                        <th scope="col">Con una<br>sola fuente</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <th scope="row">3</th>
+                        <td>2,48</td>
+                        <td>491</td>
+                        <td>0,618</td>
+                        <td>0,595</td>
+                        <td><span class="proporcion">19/25<span class="barra"><i style="width:76%"></i></span></span></td>
+                        <td>3</td>
+                    </tr>
+                    <tr class="recomendada">
+                        <th scope="row">5<span class="marca-actual">recomendado</span></th>
+                        <td>3,60</td>
+                        <td>720</td>
+                        <td>0,577</td>
+                        <td>0,493</td>
+                        <td><span class="proporcion">18/25<span class="barra"><i style="width:72%"></i></span></span></td>
+                        <td>0</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">8<span class="marca-actual">actual</span></th>
+                        <td>4,72</td>
+                        <td>930</td>
+                        <td>0,528</td>
+                        <td>0,389</td>
+                        <td><span class="proporcion">15/25<span class="barra baja"><i style="width:60%"></i></span></span></td>
+                        <td>0</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">12</th>
+                        <td>5,92</td>
+                        <td>1.153</td>
+                        <td>0,489</td>
+                        <td>0,329</td>
+                        <td><span class="proporcion">13/25<span class="barra baja"><i style="width:52%"></i></span></span></td>
+                        <td>0</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p class="nota">La puntuación del <em>mejor</em> documento es 0,640 en las cuatro
+        configuraciones: ampliar la búsqueda nunca encontró una fuente mejor que la que ya
+        aparecía con <code>top_k=3</code>. Y salen menos documentos que fragmentos pedidos
+        —4,72 con <code>top_k=8</code>— porque el perfil <code>PUBLIC_KB_RICH</code> agrupa por
+        documento: varios de los fragmentos recuperados son del mismo texto.</p>
+    </section>
+
+    <section>
+        <h2>Las tres cosas que dice la tabla</h2>
+        <ol>
+            <li><strong>Con 3 el asistente se queda corto.</strong> Tres de las 25 consultas
+            componen la respuesta con un único documento, que es exactamente el defecto que
+            RAG.15 acaba de corregir. Con 5 no queda ninguna.</li>
+
+            <li><strong>Pasado 5, lo que entra es ruido.</strong> Cada escalón añade poco más de
+            un documento, y el último que entra vale cada vez menos: 0,49 con
+            <code>top_k=5</code>, 0,39 con 8, 0,33 con 12 — frente al 0,64 del mejor.</li>
+
+            <li><strong>Y ese ruido cuesta respuestas.</strong> El filtro de calidad compara
+            <code>quality_threshold</code> (0,5 en este chatbot) contra la <em>media</em> de las
+            puntuaciones. Los fragmentos flojos de la cola arrastran la media hacia abajo, así
+            que con el valor de hoy 10 de las 25 consultas caen a la respuesta de cortesía;
+            con 5 caen 7.</li>
+        </ol>
+    </section>
+
+    <section>
+        <h2>Contraste con el lote dorado</h2>
+        <p>El mismo barrido sobre el lote dorado —corpus de prueba, con la respuesta correcta
+        anotada— confirma que ampliar la búsqueda no <em>encuentra</em> nada más:</p>
+
+        <div class="tabla-marco">
+            <table>
+                <caption>Lote dorado · métricas con verdad conocida</caption>
+                <thead>
+                    <tr>
+                        <th scope="col"><code>top_k</code></th>
+                        <th scope="col">recall@5</th>
+                        <th scope="col">recall@10</th>
+                        <th scope="col">MRR</th>
+                        <th scope="col">Precisión</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><th scope="row">3</th><td>0,96</td><td>0,96</td><td>0,94</td><td>0,320</td></tr>
+                    <tr class="recomendada"><th scope="row">5</th><td>0,96</td><td>0,96</td><td>0,94</td><td>0,192</td></tr>
+                    <tr><th scope="row">8</th><td>0,96</td><td>0,96</td><td>0,94</td><td>0,120</td></tr>
+                    <tr><th scope="row">12</th><td>0,96</td><td>0,96</td><td>0,94</td><td>0,080</td></tr>
+                    <tr><th scope="row">20</th><td>0,96</td><td>0,96</td><td>0,94</td><td>0,048</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p class="nota">Cobertura y orden son <strong>planos</strong>: el documento correcto ya
+        estaba entre los tres primeros. La precisión cae porque el lote tiene un documento
+        relevante por consulta, así que pedir más plazas sólo las llena de fallos — es aritmética,
+        no un hallazgo. El hallazgo es la línea plana de encima.</p>
+    </section>
+
+    <section>
+        <h2>Un efecto de diseño que conviene decidir aparte</h2>
+        <p>El filtro promedia <em>todas</em> las puntuaciones, así que
+        <code>quality_threshold</code> y <code>retrieval_top_k</code> están acoplados: ensanchar
+        la búsqueda baja mecánicamente la nota que decide si se responde. Son dos mandos con
+        propósitos distintos —uno mide confianza, el otro amplitud— y hoy uno mueve al otro.</p>
+        <p>Mientras siga así, cualquier ajuste de <code>retrieval_top_k</code> obliga a
+        reconsiderar el umbral. La alternativa razonable es puntuar sobre el mejor fragmento, o
+        sobre la media de los tres primeros, de modo que la cola informe el contexto sin votar
+        sobre si hay respuesta. <strong>No está hecho</strong>: es una propuesta que merece su
+        propio prompt, no un cambio a colar aquí.</p>
+        <p class="nota">Relacionado: <code>min_retrieval_score</code> (0,3) actúa sobre la
+        similitud coseno en la consulta SQL, no sobre la puntuación del reranker que el filtro
+        promedia. Son dos escalas distintas y el umbral bajo no acota la de arriba.</p>
+    </section>
+
+    <section>
+        <h2>Qué no mide esto</h2>
+        <ul>
+            <li><strong>La calidad de la respuesta escrita.</strong> El barrido llega hasta la
+            recuperación. Si el modelo redacta mejor con 3,6 documentos que con 4,7 —o si se
+            pierde con los de en medio— aquí no se ve.</li>
+            <li><strong>Consultas fuera del lote.</strong> Son 25 preguntas reales con veredicto
+            de informadores, no una muestra representativa del uso.</li>
+            <li><strong>Otros chatbots.</strong> Está medido sobre Normativa UJI. Un corpus con
+            documentos más cortos repartiría distinto los fragmentos entre documentos.</li>
+        </ul>
+    </section>
+
+    <details>
+        <summary>Cómo reproducirlo</summary>
+        <pre>uv run --project server python _local/golden/barrido_topk.py \
+    --chatbot-id d18ffad7-3235-4673-a67e-17af90b6189a \
+    --dataset _local/golden/escenarios_ujirag_2024.json \
+    --salida _local/golden/barrido_topk_real.json</pre>
+        <p class="nota">El guion mide sólo la recuperación y no toca la base: aplica cada valor
+        con <code>dataclasses.replace</code> sobre la configuración efectiva. Una pasada completa
+        del grafo costaría 25 llamadas al modelo por configuración para decidir algo que se
+        resuelve un paso antes. Vive en <code>_local/</code>, fuera del repositorio, porque opera
+        contra el corpus y las credenciales reales; la salida por consulta queda en el JSON.</p>
+    </details>
+
+    <footer class="pie">
+        <p>Gov Gen AI Platform · medición asociada al prompt RAG.15.</p>
+        <p>Cambiar el valor es un <code>UPDATE</code> sobre <code>hub_chatbots.retrieval_top_k</code>,
+        o el defecto de plataforma en <code>config_resolver.py</code>. No exige reindexar.</p>
+    </footer>
+
+</div>
