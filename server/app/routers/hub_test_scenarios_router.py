@@ -103,6 +103,10 @@ class RunRead(BaseModel):
     answer: str
     sources: list
     bypass_snapshot: dict | None
+    #: VIS.5 — el aviso de lengua tal y como lo vio quien preguntó, o `None` si no hubo. En el
+    #: contrato porque quien revisa una respuesta tiene que ver **lo mismo** que el ciudadano:
+    #: sin esto, un aviso que dice algo equivocado no aparece en ninguna herramienta de revisión.
+    translation_warning: str | None = None
     verdict: Verdict | None
     verdict_note: str | None
     verdict_by: str | None
@@ -277,15 +281,33 @@ async def run_scenario(
         "quality_score": 0.0,
         "fallback_used": False,
         "translation_warning": False,
+        "context_source_language": None,
         "fallback_reason": None,
         "sources": [],
     })
+
+    # VIS.5 — el mismo aviso que vería quien pregunta, redactado igual. Se construye aquí y no
+    # se copia el booleano: lo que hay que poder revisar es **el texto**, que es lo que llega al
+    # ciudadano; el flag sólo dice que hubo uno.
+    from server.app.api.v1.hub_chat import _build_translation_warning
+
+    # La lengua de la pregunta la **detecta el grafo** y vive en el estado como `language`; el
+    # escenario no la declara, y pedírsela al autor sería pedirle un dato que el sistema ya sabe
+    # sacar del propio texto.
+    aviso = (
+        _build_translation_warning(
+            estado.get("context_source_language"), estado.get("language")
+        )
+        if estado.get("translation_warning")
+        else None
+    )
 
     run = HubTestRun(
         scenario_id=escenario.id,
         answer=estado.get("answer") or "",
         sources=[_serializar(s) for s in (estado.get("sources") or [])],
         bypass_snapshot=estado.get("bypass"),
+        translation_warning=aviso,
     )
     session.add(run)
     await session.commit()

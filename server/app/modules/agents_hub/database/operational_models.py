@@ -708,6 +708,14 @@ class HubTestRun(HubOperationalBase):
     # y la configuracion resuelta EN EL MOMENTO de la ejecucion. Sin esto, un run de hace un
     # mes no se puede explicar, porque la configuracion ya no es la misma.
     bypass_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # VIS.5 — el aviso de lengua que se le dio (o no) a quien preguntó, tal cual.
+    #
+    # Se guarda porque **la pantalla de escenarios y el lote son las dos herramientas con las que
+    # se mira si el asistente responde bien**, y el aviso no llegaba a ninguna de las dos: el
+    # defecto —avisar de la lengua de la pregunta en vez de la de la norma, y callarse justo en
+    # el caso más frecuente— era invisible desde ahí. Un texto que se le muestra al ciudadano y
+    # que ninguna herramienta de revisión enseña es un texto que nadie revisa.
+    translation_warning: Mapped[str | None] = mapped_column(Text, nullable=True)
     verdict: Mapped[str | None] = mapped_column(String(10), nullable=True)
     verdict_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     verdict_by: Mapped[str | None] = mapped_column(String(255), nullable=True)

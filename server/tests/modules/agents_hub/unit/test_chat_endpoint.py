@@ -386,7 +386,16 @@ class TestChatEndpointSSE:
             {
                 "event": "on_chain_end",
                 "name": "merge",
-                "data": {"output": {"translation_warning": True}},
+                # VIS.5 — el nodo emite también **en qué lengua está la evidencia**, que es con
+                # la que se redacta el aviso. Antes el texto se construía con la lengua de la
+                # pregunta, que es la que quien pregunta ya conoce; sin este dato no hay aviso,
+                # porque no se puede afirmar que las dos lenguas difieran.
+                "data": {
+                    "output": {
+                        "translation_warning": True,
+                        "context_source_language": "es",
+                    }
+                },
             },
             {
                 "event": "on_chain_end",

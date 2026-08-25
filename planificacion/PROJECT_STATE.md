@@ -79,11 +79,27 @@
 
 ## 👉 EMPEZAR AQUÍ EL PRÓXIMO DÍA (actualizado 2026-08-22, al mover PLAT e IDE delante del despliegue)
 
-**Cursor actual: VIS.4** (actualizado el 2026-08-25 al cerrar RAG.15). El orden hasta el
-despliegue es **~~SEC.9 (7 prompts)~~ ✅ → ~~AIS (8 prompts)~~ ✅ → ~~RAG.15~~ ✅ → VIS.4→VIS.5 → Deploy/D.0**.
+**Cursor actual: Deploy/D.0** (actualizado el 2026-08-25 al cerrar VIS.5). El orden hasta el
+despliegue era **~~SEC.9~~ ✅ → ~~AIS~~ ✅ → ~~RAG.15~~ ✅ → ~~VIS.4~~ ✅ → ~~VIS.5~~ ✅ → Deploy/D.0**,
+y **ya no queda nada delante**.
 
-**Modelo sugerido para el próximo prompt**: **Sonnet** para VIS.4 — una regla de prioridad acotada,
-con el caso de prueba ya medido.
+**Modelo sugerido para el próximo prompt**: **Sonnet** para D.0.
+
+> **VIS.4 y VIS.5 hechos (2026-08-25).** VIS.4: la preferencia de lengua opera **dentro de la misma
+> vigencia**, no por encima de ella — antes «usa la otra lengua» y «usa una versión anterior» eran
+> la misma acción, y para quien pregunta son cosas muy distintas: citar lo que ya no rige en su
+> lengua es un error de fondo, y citar lo vigente en otra lengua es una incomodidad que además se
+> avisa. `prefer` **ordena** en vez de filtrar, con la señal de vigencia que VIS.3 ya pone en cada
+> evidencia, y conservando la relevancia dentro de cada grupo. Con el corpus de hoy **no cambia
+> ningún resultado** (cada norma tiene una sola versión), y ése es el motivo de escribirlo antes:
+> cuando el emparejamiento bilingüe se complete, nadie estará mirando esta parte. VIS.5: el aviso
+> **sale de la lengua de la fuente**, se emite en las dos direcciones —antes se callaba cuando la
+> pregunta era en castellano, que es el caso más frecuente del corpus, y el grafo sí había decidido
+> avisar— y se redacta en la lengua de quien pregunta, con acentos. **Matiz que aclaró la
+> implementación**: el `translation_warning: False` de los dos ejecutores es el estado *inicial*
+> del grafo y se sobrescribe; lo que de verdad faltaba es que el **resultado** guardara el aviso,
+> y sin eso el texto que ve el ciudadano no aparecía en ninguna herramienta de revisión. Migración
+> `w3p4q5r6s7t8` aplicada.
 
 > ⚠️ **RAG.15 deja una medición abierta, y es deliberado.** El código está arreglado y sin
 > regresión en el dorado de RAG.1 (40 tests), pero **elegir el valor de `retrieval_top_k` exige

@@ -78,6 +78,10 @@ class CoreGraphState(TypedDict):
     quality_score: float
     fallback_used: bool
     translation_warning: bool
+    # VIS.5 — en qué lengua está la evidencia que se ha citado. Viaja junto al aviso porque el
+    # texto que ve el usuario se redacta con ella: sin este dato, el chat sólo sabía «hay que
+    # avisar» y acababa hablando de la lengua de la pregunta.
+    context_source_language: str | None
     fallback_reason: str | None     # 'quality_gate' | 'citation' | None (RAG.2)
     sources: list                  # list[EvidenceItem] citables emitidas en el done SSE
 
@@ -174,6 +178,11 @@ class CoreGraph:
                 "merged_items": items,
                 "quality_score": score,
                 "translation_warning": translation_warning,
+                # VIS.5 — **qué** lengua, no sólo que hay que avisar. El booleano llegaba hasta
+                # el chat y allí el texto se construía con la lengua de la PREGUNTA, que es la
+                # que quien pregunta ya conoce; lo que necesita saber es en qué lengua está la
+                # norma a la que le lleva el enlace. El dato existía aquí y no viajaba.
+                "context_source_language": context_source_language,
             }
 
         def quality_gate(
@@ -396,6 +405,7 @@ class CoreGraph:
             "quality_score": 0.0,
             "fallback_used": False,
             "translation_warning": False,
+            "context_source_language": None,
             "fallback_reason": None,
             "sources": [],
         }

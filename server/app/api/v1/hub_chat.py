@@ -165,12 +165,49 @@ def _tokens_estimados(texto: str) -> int:
     return max(1, len(texto or "") // 4) if texto else 0
 
 
-def _build_translation_warning(language: str) -> str | None:
-    if not language or language == "es":
+#: Cómo se llama cada lengua **en la lengua de quien lee el aviso** (VIS.5).
+#:
+#: Tres tablas y no una: el aviso se le muestra a quien acaba de escribir en su lengua, así que
+#: decirle «catalan» en castellano —y encima sin tilde— convierte una advertencia útil en una
+#: impertinencia. La lengua de la fuente se nombra dentro de la frase, luego hay que declinarla
+#: en cada idioma.
+_NOMBRE_DE_LA_LENGUA: dict[str, dict[str, str]] = {
+    "ca": {"ca": "valencià", "es": "castellà", "en": "anglès", "fr": "francès"},
+    "es": {"ca": "valenciano", "es": "castellano", "en": "inglés", "fr": "francés"},
+    "en": {"ca": "Valencian", "es": "Spanish", "en": "English", "fr": "French"},
+}
+
+_PLANTILLA_DEL_AVISO: dict[str, str] = {
+    "ca": "⚠️ La normativa citada està en {lengua}. L'enllaç porta al document original.",
+    "es": "⚠️ La normativa citada está en {lengua}. El enlace lleva al documento original.",
+    "en": "⚠️ The cited regulation is in {lengua}. The link opens the original document.",
+}
+
+
+def _build_translation_warning(
+    lengua_de_la_fuente: str | None, lengua_de_la_pregunta: str | None
+) -> str | None:
+    """El aviso de que la norma citada está en otra lengua (VIS.5).
+
+    **Sale de la lengua de la FUENTE, no de la de la pregunta.** Antes decía «la pregunta se
+    detectó en catalán», que no es información: quien ha escrito en valencià ya sabe en qué
+    lengua escribe. Lo que necesita saber es que el enlace le lleva a un documento en castellano.
+
+    Y **se emite en las dos direcciones**. La versión anterior devolvía `None` cuando la pregunta
+    era en castellano, que es justo el caso más frecuente de este corpus —195 de 290 normas sólo
+    existen en valencià—: el grafo decidía que había que avisar y el texto se descartaba después.
+
+    Sin una de las dos lenguas no se avisa: no se puede afirmar que difieran, y un aviso falso
+    sobre el idioma de una norma erosiona la confianza en los que sí son ciertos.
+    """
+    if not lengua_de_la_fuente or not lengua_de_la_pregunta:
         return None
-    lang_names = {"ca": "catalan", "en": "ingles", "fr": "frances"}
-    lang_display = lang_names.get(language, language)
-    return f"⚠️ La pregunta se detecto en {lang_display}. La respuesta puede estar en ese idioma."
+    if lengua_de_la_fuente == lengua_de_la_pregunta:
+        return None
+
+    plantilla = _PLANTILLA_DEL_AVISO.get(lengua_de_la_pregunta, _PLANTILLA_DEL_AVISO["es"])
+    nombres = _NOMBRE_DE_LA_LENGUA.get(lengua_de_la_pregunta, _NOMBRE_DE_LA_LENGUA["es"])
+    return plantilla.format(lengua=nombres.get(lengua_de_la_fuente, lengua_de_la_fuente))
 
 
 def _es_citable(source) -> bool:
@@ -434,6 +471,9 @@ async def chat_stream(
         final_sources: list = []
         language_fallback = False
         detected_language = "es"
+        # VIS.5 — `None` hasta que el grafo diga en qué lengua está la evidencia. Sin ella no se
+        # avisa: no se puede afirmar que difiera de la de la pregunta.
+        lengua_de_la_fuente: str | None = None
         fallback_reason: str | None = None
         fallback_answer: str | None = None
 
@@ -476,6 +516,8 @@ async def chat_stream(
                 elif kind == "on_chain_end" and name == "merge":
                     output = event.get("data", {}).get("output") or {}
                     language_fallback = bool(output.get("translation_warning"))
+                    # VIS.5 — la lengua de la fuente, que es con la que se redacta el aviso.
+                    lengua_de_la_fuente = output.get("context_source_language")
 
                 elif kind == "on_chat_model_end":
                     # SEC.4: el uso real, tal como lo declara el proveedor. Se acumula en
@@ -534,7 +576,9 @@ async def chat_stream(
         await session.commit()
 
         translation_warning = (
-            _build_translation_warning(detected_language) if language_fallback else None
+            _build_translation_warning(lengua_de_la_fuente, detected_language)
+            if language_fallback
+            else None
         )
         yield _sse(
             "done",
