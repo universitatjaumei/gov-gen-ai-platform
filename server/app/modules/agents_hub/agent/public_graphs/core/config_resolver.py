@@ -16,6 +16,11 @@ class PublicGraphConfig:
     retrieval_mode: str
     language_mode: str
     quality_threshold: float
+    # Cuántos resultados hacen falta para **no penalizar** la respuesta en el gate de calidad. Es
+    # un suelo, no una anchura — ver `retrieval_top_k` más abajo, que es su pareja y con la que se
+    # confundía: mezclarlos hacía que subir el mínimo ampliara la recuperación **y** a la vez
+    # hiciera más probable el castigo, porque `len(items) >= min` sólo se cumplía recuperando
+    # exactamente todos los que cabían.
     min_retrieval_results: int
     min_retrieval_score: float
     reranker_enabled: bool
@@ -60,6 +65,16 @@ class PublicGraphConfig:
     # rápido— y no tiene sentido repetirlo en cada chatbot. None = usar el del chatbot con
     # el tope de salida bajado.
     rewrite_llm_config_id: uuid.UUID | None = None
+    # RAG.15 — **cuántos fragmentos se recuperan**. No estaba en esta configuración: vivía en
+    # `hub_chatbots.retrieval_top_k`, se podía editar desde el panel y **no llegaba hasta aquí**,
+    # así que ningún pipeline podía leerlo y los dos que construían la recuperación usaban
+    # `min_retrieval_results` en su lugar.
+    #
+    # Va en el bloque con valor por omisión y no junto a su pareja de arriba por una razón
+    # prosaica: un campo obligatorio aquí rompe a todo el que construya la configuración a mano,
+    # y hay unos cuantos dobles de test que sólo declaran lo que les interesa. El 8 es el mismo
+    # que ya declaraba el modelo, así que nada cambia de valor — sólo empieza a leerse.
+    retrieval_top_k: int = 8
 
 
 _PLATFORM_DEFAULTS = PublicGraphConfig(
@@ -67,6 +82,11 @@ _PLATFORM_DEFAULTS = PublicGraphConfig(
     retrieval_mode="RAG",
     language_mode="prefer",
     quality_threshold=0.6,
+    # RAG.15 — el mismo 8 que ya declaraba `hub_chatbots.retrieval_top_k` desde que se escribió.
+    # Se conserva el valor **y se deja dicho que no está medido**: nadie lo leía, así que nunca
+    # se comprobó contra el dorado. Elegirlo con datos es el trabajo que el prompt deja abierto,
+    # y hacerlo exige el corpus real cargado.
+    retrieval_top_k=8,
     min_retrieval_results=2,
     # RAG.5: el umbral está implementado y probado, pero **desactivado por defecto**, y el
     # 0.0 es una decisión con medición detrás. Con el default anterior (0,25) el dataset
@@ -145,6 +165,11 @@ async def get_effective_public_graph_config(
         "no_answer_message":     chatbot.no_answer_message,
         "language_mode":         chatbot.language_mode,
         "quality_threshold":     chatbot.quality_threshold,
+        # RAG.15 — la anchura del chatbot entra por fin en la configuración efectiva. No hay
+        # capa de organización para ella porque `hub_organizaciones` no declara
+        # `default_retrieval_top_k`: añadirla es una columna nueva y una decisión de producto que
+        # este prompt no necesita, así que la cadena es chatbot → plataforma.
+        "retrieval_top_k":       chatbot.retrieval_top_k,
         "min_retrieval_results": chatbot.min_retrieval_results,
         "min_retrieval_score":   chatbot.min_retrieval_score,
         "reranker_enabled":      chatbot.reranker_enabled,

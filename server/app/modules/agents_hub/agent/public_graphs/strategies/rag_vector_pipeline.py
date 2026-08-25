@@ -66,7 +66,11 @@ class RagVectorPipeline:
         return VectorRetrievalStrategy(
             session=deps.session,
             embedding_service=deps.embedder,
-            top_k=cfg.min_retrieval_results,
+            # RAG.15 — la ANCHURA, no el mínimo. Aquí iba `cfg.min_retrieval_results`, que en el
+            # piloto valía 1: el asistente componía cada respuesta leyendo **un** fragmento de un
+            # corpus de 23.306, y las 25 consultas del lote citaban una sola fuente. Los dos
+            # números existían y significaban cosas distintas; sólo se leía uno.
+            top_k=getattr(cfg, "retrieval_top_k", None) or cfg.min_retrieval_results,
             min_score=getattr(cfg, "min_retrieval_score", 0.0) or 0.0,
             reranker=reranker,
         )

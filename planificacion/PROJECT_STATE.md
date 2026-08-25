@@ -79,16 +79,21 @@
 
 ## 👉 EMPEZAR AQUÍ EL PRÓXIMO DÍA (actualizado 2026-08-22, al mover PLAT e IDE delante del despliegue)
 
-**Cursor actual: RAG.15** (actualizado el 2026-08-25 al cerrar el bloque AIS). El orden hasta el
-despliegue es **~~SEC.9 (7 prompts)~~ ✅ → ~~AIS (8 prompts)~~ ✅ → RAG.15 → VIS.4→VIS.5 → Deploy/D.0**.
+**Cursor actual: VIS.4** (actualizado el 2026-08-25 al cerrar RAG.15). El orden hasta el
+despliegue es **~~SEC.9 (7 prompts)~~ ✅ → ~~AIS (8 prompts)~~ ✅ → ~~RAG.15~~ ✅ → VIS.4→VIS.5 → Deploy/D.0**.
 
-**Modelo sugerido para el próximo prompt**: **Sonnet** para RAG.15.
+**Modelo sugerido para el próximo prompt**: **Sonnet** para VIS.4 — una regla de prioridad acotada,
+con el caso de prueba ya medido.
 
-> **Prerrequisito que conviene comprobar antes de empezar RAG.15**: sus criterios de cierre exigen
-> medir con el **dorado de RAG.1 y el lote ujirag**, y eso necesita el corpus real cargado y los
-> embeddings de Vertex disponibles. El cambio de código y sus tests no dependen de ello; la
-> **elección del valor** de `retrieval_top_k` sí — y el prompt dice expresamente que no se dé por
-> bueno el 8 por defecto sin medirlo, «se escribió cuando nadie lo leía».
+> ⚠️ **RAG.15 deja una medición abierta, y es deliberado.** El código está arreglado y sin
+> regresión en el dorado de RAG.1 (40 tests), pero **elegir el valor de `retrieval_top_k` exige
+> ejecutar el lote ujirag con varios valores**, y ese ejecutor (`_local/golden/ejecutar_ujirag.py`)
+> hace 25 llamadas reales al modelo por configuración, con las credenciales del usuario, y escribe
+> `HubTestRun` en su base. **No se lanza sin que el usuario lo decida**: es gasto real y material
+> de evaluación de un cliente. El valor queda en **8** —el mismo que el modelo ya declaraba— y
+> **consta como no medido**, que es lo que el prompt pedía no dar por bueno en silencio. Con el
+> valor nuevo hay que **volver a mirar el `quality_threshold` de 0,50**: se calibró sobre
+> respuestas de un solo fragmento, y los dos números se mueven juntos.
 
 > **RAG.15 va primero de los tres**: `retrieval_top_k` **no lo lee ningún pipeline** —la
 > estrategia se construye con `top_k=cfg.min_retrieval_results`—, así que el asistente responde

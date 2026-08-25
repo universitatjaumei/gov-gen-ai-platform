@@ -127,7 +127,14 @@ def _buscador_de_fragmentos(cfg: Any, deps: Any):
         VectorRetrievalStrategy(
             session=deps.session,
             embedding_service=embedder,
-            top_k=getattr(cfg, "min_retrieval_results", 5) or 5,
+            # RAG.15 — el mismo error que en `rag_vector_pipeline`: aquí iba
+            # `min_retrieval_results`, que es el suelo del gate de calidad y no la anchura de la
+            # recuperación. Arreglar sólo uno de los dos habría dejado este decidiendo cuántos
+            # fragmentos lee otro perfil de grafo, y el síntoma sería el mismo sin la causa a la
+            # vista. Lo vigila un test que recorre el árbol.
+            top_k=getattr(cfg, "retrieval_top_k", None)
+            or getattr(cfg, "min_retrieval_results", 5)
+            or 5,
         )
     )
 
