@@ -87,6 +87,16 @@ request* y también los de cada *push* a `main`, y falla si falta la firma o si 
 autor del commit. Queda fuera el historial anterior al 2026-08-21, que es cuando se adoptó la
 política. Una política que nadie comprueba se incumple sin que nadie lo note.
 
+### Dónde está cada pieza del proceso
+
+| Fichero | Para qué |
+|---|---|
+| [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) | La plantilla del *pull request*. Su primera pregunta es «¿por qué esto es generalizable?», que es la que decide si el cambio entra en el principal o se queda en el fork. |
+| [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE) | Fallo y propuesta. Preguntan por el fork y el modo de despliegue, que es lo primero que hace falta saber en un proyecto multiorganización: el mismo código se comporta distinto según cómo esté configurado. |
+| [`SECURITY.md`](SECURITY.md) | Cómo comunicar un fallo de seguridad **en privado**. No abras un issue público para algo explotable: lo convierte en instrucciones para quien todavía no ha actualizado. |
+| [`.github/CODEOWNERS`](.github/CODEOWNERS) | Qué exige revisión de mantenedor: el núcleo, la frontera entre organizaciones, las migraciones y los guardarraíles. Romper cualquiera de esos afecta a todos los despliegues a la vez. |
+| [`DCO`](DCO) | El certificado de origen, explicado más arriba. |
+
 ### Cómo se prepara la contribución
 
 - Se sincroniza con el principal antes de empezar, y se trabaja sobre rama, no sobre `main`.
