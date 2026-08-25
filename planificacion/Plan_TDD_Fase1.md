@@ -16903,7 +16903,32 @@ al modelo), `comparar_topk_respuestas.py` (comparación ciega con juez y doble v
 
 ---
 
-### Prompt RES.5 (medición → RED/GREEN) — Una respuesta correcta que no cita en formato no es una respuesta inventada
+### Prompt RES.5 ✅ EJECUTADO Y CERRADO SIN IMPLEMENTAR (2026-08-25) — Una respuesta correcta que no cita en formato no es una respuesta inventada
+
+> ✅ **Paso 1 hecho: 96 ejecuciones (3 tandas × 32 consultas), 85 pasaron la puerta y
+> `citation` no aparece ni una vez.** Los 11 rechazos son todos de la puerta. Aplicando la regla
+> acordada —el paso 2 se implementa si hay al menos un descarte cuya respuesta mencione el título
+> literal de un documento recuperado—, hay cero, así que **no se implementa**. El paso 3 estaba
+> aplazado por diseño.
+>
+> **Lo que la cifra NO dice es «no pasa nunca».** Cero en 85 es compatible con una tasa real de
+> hasta el **4,4%**, y el caso se observó una vez —REAL-07 con `top_k=5`— antes de cerrar RES.4.
+> Queda como **línea base** para repetirlo con tráfico del piloto sobre
+> `hub_interactions.fallback_reason`, que es donde el dato saldrá gratis y con intervalo estrecho.
+>
+> **Hipótesis de por qué ya no aparece, y es hipótesis**: RES.4 dejó `retrieval_top_k = 3`, o sea
+> menos URLs compitiendo en el contexto, y citar una bien es más fácil. REAL-07 responde ahora en
+> las tres tandas con nota 0,626 estable, cuando antes aparecía y desaparecía.
+>
+> **Verificación del propio instrumento, porque hacía falta**: se comprobó aparte que el producto
+> SÍ registra el descarte —una respuesta que cita con corchetes y sin URL da `fallback_used=True`
+> y `motivo='citation'`—, así que el cero sale de la contabilidad del producto y no de la ausencia
+> de contabilidad. La sonda dejó 3 registros de 96 que no se pudieron reconciliar con el estado
+> final; no afectan a la cifra, porque la cifra se lee de `fallback_reason` y no de la sonda, pero
+> quedan anotados: **la clasificación de motivos de esa sonda no es de fiar** y habría que
+> depurarla antes de usarla para decidir algo.
+
+**El prompt original queda abajo tal cual, para cuando el piloto dé la tasa.**
 
 **Modelo sugerido**: **Sonnet** — el defecto está localizado y el prompt lleva la decisión escrita;
 lo único abierto es si merece la pena, y eso lo contesta la medición del primer paso.
@@ -16930,8 +16955,23 @@ el contrato no puede distinguirlo de una respuesta inventada porque sólo mira e
 
 > ⚠️ **Es intermitente y no se sabe cuánto pasa.** La misma consulta, repetida, sí citó y pasó. Y
 > el trabajo de citas del 2026-08-24 dejó los descartes en **0 sobre 25**. Por eso el primer paso
-> de este prompt es medir, y **puede terminar en «no se hace»**: si ocurre una vez de cada
-> cincuenta, la maquinaria no vale la complejidad que añade.
+> de este prompt es medir.
+>
+> **Corrección del 2026-08-25, decisión del usuario: el listón NO es un porcentaje.** La versión
+> anterior ponía «< 2% ⇒ no se hace», y al preguntarse si debía ser 4% o 5% salió que **la medición
+> no puede distinguir esas cifras**. Tres tandas dan ~84 respuestas que pasan la puerta, y con esa
+> muestra el intervalo de confianza al 95% de **cero** eventos llega hasta el **4,4%**; el de cuatro
+> eventos (4,8%) va de 1,9% a 11,6%. Para separar el 2% del 5% harían falta ~25 tandas (700
+> respuestas). Poner el listón en cualquier punto de ese rango es elegir entre números que el dato
+> no resuelve — y con un listón del 5%, observar 4 descartes diría «no implementar» cuando la tasa
+> real podría ser del 11%.
+>
+> Y había un segundo defecto en aquella redacción: **un solo listón para dos pasos con costes muy
+> distintos**. Se sustituye por dos reglas, cada una a la altura de lo que cuesta su paso.
+>
+> Hay además una asimetría que empuja: un descarte no es cosmético, es un **«no tengo información
+> suficiente» falso** cuando el sistema sí la tenía y sí había redactado bien. Es la misma cosa que
+> el usuario declaró inaceptable al 40%; al 2-5% le toca a uno de cada 20-50.
 
 ```
 # PROMPT RES.5 (medicion -> RED/GREEN) — Primero medir cuanto pasa, y solo despues arreglarlo
@@ -16946,11 +16986,23 @@ el contrato no puede distinguirlo de una respuesta inventada porque sólo mira e
   (b) hay enlaces pero ninguno resiste ni la degradacion al documento.
 - Anotar tambien cuantas veces el modelo NOMBRA un documento recuperado en prosa (titulo literal),
   que es lo que decide si el paso 2 sirve para algo.
-- **Puerta de decision, y hay que respetarla**: si la tasa es < 2% de las respuestas que pasan el
-  gate, se cierra el prompt con la cifra anotada y NO se implementa. Un arreglo para un caso de
-  cada cincuenta añade una rama que nadie va a volver a leer.
 
-## PASO 2 — Enlazado determinista (solo si el paso 1 lo justifica)
+## Las dos reglas de decision (sustituyen al liston del 2%, que no era medible)
+- **Paso 2 — criterio CUALITATIVO, no estadistico.** Se implementa si aparece **al menos un**
+  descarte cuya respuesta mencione el titulo literal de un documento recuperado: o sea, prueba de
+  que el mecanismo disparia. Cuesta ~20 lineas, cero llamadas al modelo, cero latencia, y es la
+  misma forma que `degradar_anclas`, que ya existe y ya se confia en ella. Con ese coste, el lado
+  malo de equivocarse es despreciable y el bueno es que alguien reciba una respuesta real en vez de
+  un «no lo se» falso. Pedirle un porcentaje a un cambio de veinte lineas es pedir precision que la
+  muestra no da para tomar una decision que no la necesita.
+- **Paso 3 — APLAZADO a datos del piloto.** El reintento si merece un liston de verdad —rama nueva
+  del grafo, guarda contra bucles, llamada extra y espera justo donde el usuario ya esperaba—, y
+  84 muestras no pueden darlo. `hub_interactions.fallback_reason` **ya registra el motivo**, asi que
+  cuando el piloto tenga trafico una consulta sobre unos miles de conversaciones dara la tasa con
+  un intervalo estrecho y sin coste. Hasta entonces NO se implementa el paso 3: se anota la cifra
+  de las tres tandas como linea base y se deja la consulta escrita para repetirla con datos reales.
+
+## PASO 2 — Enlazado determinista (segun la regla de arriba)
 - Si la respuesta menciona **literalmente** el titulo de un documento recuperado, se convierte esa
   mencion en enlace a su URL antes de evaluar el contrato.
 - Es el mismo criterio que `degradar_anclas` y por eso es seguro: **no acepta un puntero vago,
@@ -16960,12 +17012,16 @@ el contrato no puede distinguirlo de una respuesta inventada porque sólo mira e
   «el reglamento de indemnizaciones» en vez del titulo completo, no lo caza — y arreglar ESO seria
   emparejamiento difuso, que es otra cosa y con otro riesgo.
 
-## PASO 3 — Un reintento, y uno solo (solo si el paso 2 no basta)
-- Si tras el enlazado sigue sin haber cita valida, se regenera **una vez** con la instruccion de
-  citas reforzada, y se vuelve a evaluar. Si tampoco, entonces si: fallback.
-- Misma forma que RES.2 y por el mismo motivo: **se paga solo cuando falla**, y con guarda contra
-  bucles. La instruccion reforzada no sustituye a `CITATION_RULES`, se añade delante.
+## PASO 3 — Un reintento, y uno solo — APLAZADO, no descartado
+- **No se implementa en este prompt.** Queda escrito para cuando el piloto de la tasa real.
+- Diseño acordado, para no volver a decidirlo: si tras el enlazado sigue sin haber cita valida, se
+  regenera **una vez** con la instruccion de citas reforzada y se vuelve a evaluar; si tampoco,
+  entonces si, fallback. Misma forma que RES.2 y por el mismo motivo —se paga solo cuando falla—,
+  con guarda contra bucles, y la instruccion reforzada se añade delante de `CITATION_RULES`, no la
+  sustituye.
 - Ataca la causa real: el modelo olvido el formato, no el contenido.
+- Condicion para retomarlo: tasa medida sobre trafico real del piloto, con intervalo estrecho, y
+  que el paso 2 no haya bastado.
 
 ## Lo que este prompt NO hace, y son decisiones, no olvidos
 - **No adjunta las fuentes y conserva la respuesta.** Es la opcion facil y la peor: pone una lista
@@ -16977,22 +17033,20 @@ el contrato no puede distinguirlo de una respuesta inventada porque sólo mira e
 - **No toca las dos guardas que se quedan**: citar un documento no recuperado sigue siendo rechazo,
   y una respuesta sin ninguna fuente localizable sigue siendo rechazo.
 
-## Tests (RED primero, en el paso 2 y 3)
+## Tests (RED primero) — solo del paso 2; los del 3 llegan cuando llegue el 3
 # should_link_a_literal_title_mention_to_its_document
 # should_not_link_a_title_that_was_never_retrieved
 # should_not_touch_an_answer_that_already_cites_correctly
+# should_prefer_the_anchor_url_when_the_document_has_one
 # should_keep_rejecting_a_citation_to_a_document_never_retrieved
 # should_keep_rejecting_an_answer_with_no_locatable_source
-# should_retry_the_generation_once_and_only_once
-# should_not_retry_when_the_deterministic_linking_already_worked
-# should_fall_back_when_the_retry_also_fails_to_cite
 
 ## Cierre
-- [ ] La cifra del paso 1, con las tres tandas y los dos motivos separados
-- [ ] Si se implemento: cuantas respuestas se recuperan, y **cuantas llamadas extra al modelo
-      cuesta** por respuesta recuperada
-- [ ] REAL-07 responde de forma estable en tres tandas seguidas (era intermitente)
+- [ ] La cifra del paso 1, con las tres tandas y los dos motivos separados, anotada como **linea
+      base** para repetirla con trafico del piloto
+- [ ] Cuantas respuestas recupera el enlazado determinista, y con **cero** llamadas extra al modelo
 - [ ] Ninguna respuesta nueva cita un documento que no se recupero (comprobado, no supuesto)
+- [ ] La consulta sobre `hub_interactions.fallback_reason` escrita y guardada, para el paso 3
 ```
 
 ---
