@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import delete as sql_delete
 from sqlalchemy import func
 from sqlalchemy import select
@@ -143,7 +143,17 @@ class ChatbotCreate(BaseModel):
     anon_ip_daily_token_quota: int | None = None
     public_graph_profile: str = "PUBLIC_KB_RICH"
     language_mode: str = "prefer"
-    quality_threshold: float = 0.6
+    # RES.1: se compara contra el MEJOR fragmento, no contra la media. El texto va en el contrato
+    # porque es lo que lee quien ajusta el número desde el panel, y el significado cambió.
+    quality_threshold: float = Field(
+        default=0.6,
+        description=(
+            "Nota mínima para responder. Se compara contra la puntuación del mejor fragmento "
+            "recuperado: «¿tengo al menos una fuente buena?». Hasta el 2026-08-25 se comparaba "
+            "contra la media de todos los fragmentos, así que con el mismo número el filtro es "
+            "ahora más permisivo."
+        ),
+    )
     min_retrieval_results: int = 2
     min_retrieval_score: float = 0.0
     reranker_enabled: bool = False

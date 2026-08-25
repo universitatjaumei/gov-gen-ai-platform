@@ -716,6 +716,14 @@ class HubTestRun(HubOperationalBase):
     # el caso más frecuente— era invisible desde ahí. Un texto que se le muestra al ciudadano y
     # que ninguna herramienta de revisión enseña es un texto que nadie revisa.
     translation_warning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # RES.2 — si la respuesta salió de la segunda búsqueda y con qué consulta. Se guarda por el
+    # mismo motivo que el aviso de lengua: distingue dos cosas que quien revisa necesita
+    # distinguir —«el corpus no lo tiene» y «el corpus lo tiene y la pregunta no lo encontraba tal
+    # como se hizo»— y sin el dato las dos se leen igual. Además es la materia prima de RES.3: el
+    # par (lo que escribió la persona, la consulta que funcionó) ya viene validado por haber
+    # funcionado.
+    reformulada: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    reformulated_query: Mapped[str | None] = mapped_column(Text, nullable=True)
     verdict: Mapped[str | None] = mapped_column(String(10), nullable=True)
     verdict_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     verdict_by: Mapped[str | None] = mapped_column(String(255), nullable=True)

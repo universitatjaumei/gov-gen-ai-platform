@@ -451,6 +451,11 @@ class HubChatbot(HubConfigBase):
     # --- Campos del grafo público (9B.2) ---
     public_graph_profile: Mapped[str] = mapped_column(String(50), nullable=False, default="PUBLIC_KB_RICH")
     language_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="prefer")
+    # RES.1 — se compara contra la puntuación del **mejor** fragmento recuperado, no contra la
+    # media de todos. O sea: «¿tengo al menos una fuente buena?», no «¿son buenas de media?».
+    # Antes era la media, y eso hacía que ensanchar `retrieval_top_k` bajara la nota y el
+    # asistente contestara menos: quien puso un valor antes del 2026-08-25 lo puso con el otro
+    # significado, y con el mismo número el filtro es ahora más permisivo.
     quality_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.6)
     min_retrieval_results: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     min_retrieval_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)

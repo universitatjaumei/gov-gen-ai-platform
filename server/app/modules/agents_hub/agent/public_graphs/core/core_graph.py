@@ -35,6 +35,7 @@ from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_cont
 from server.app.modules.agents_hub.agent.public_graphs.core.query_rewriter import (
     necesita_reescritura,
     reescribir_consulta,
+    reformular_al_vocabulario_normativo,
 )
 from server.app.modules.agents_hub.services.retrieval.vigencia import (
     aviso_para as aviso_de_vigencia,
@@ -65,6 +66,13 @@ class CoreGraphState(TypedDict):
     # bien. None significa «se buscó con lo que escribió el usuario» — y hay que poder
     # distinguirlo, porque es lo que se lee en la traza y en el bypass de RAG.11.
     rewritten_query: str | None
+    # RES.2 — la consulta escrita como la escribiría la norma, cuando la primera pasada no llegó
+    # al umbral. Es también la guarda contra bucles: si está puesta, se viene de la segunda
+    # pasada y no hay tercera. Tampoco llega a la generación, por lo mismo que la reescritura.
+    reformulated_query: str | None
+    # Si la respuesta salió de esa segunda pasada. Va en el contrato porque una respuesta
+    # rescatada reformulando no se revisa igual que una directa.
+    reformulada: bool
     # RAG.11: ejecutar todo el pipeline y pararse ANTES de invocar al modelo.
     debug_bypass: bool
     # RAG.13: compone la MISMA instantánea pero **sin** detener el grafo. Es lo que permite
@@ -76,6 +84,10 @@ class CoreGraphState(TypedDict):
     merged_items: list             # list[EvidenceItem]
     answer: str | None
     quality_score: float
+    # RES.1 — qué fragmento fijó la nota. Con la media no había nada que señalar; con el mejor
+    # fragmento sí, y sin este dato depurar una respuesta rechazada pasa de leer un número a
+    # reproducir la consulta contra el corpus real.
+    quality_source: dict | None
     fallback_used: bool
     translation_warning: bool
     # VIS.5 — en qué lengua está la evidencia que se ha citado. Viaja junto al aviso porque el
@@ -124,7 +136,10 @@ class CoreGraph:
 
         async def detect_language_node(state: CoreGraphState) -> dict:
             lang = self.language_policy.detect(state["query"])
-            return {"language": lang}
+            # RES.2: la bandera se normaliza en la entrada para que «no hubo reformulación» sea
+            # `False` y no la ausencia de la clave. Quien lee el contrato no debería tener que
+            # distinguir esas dos cosas.
+            return {"language": lang, "reformulada": False}
 
         async def rewrite_query_node(state: CoreGraphState) -> dict:
             """Passthrough salvo que el flag esté encendido Y haya conversación previa."""
@@ -140,10 +155,36 @@ class CoreGraph:
             # evita que la traza y el bypass muestren un paso que no ocurrió.
             return {"rewritten_query": reescrita if reescrita != state["query"] else None}
 
+        async def reformular_node(state: CoreGraphState) -> dict:
+            """RES.2 — la consulta escrita como la escribiría la norma, para volver a buscar.
+
+            Se llega aquí **sólo** cuando la primera pasada no superó el umbral, y por eso el
+            paso es rentable: normalizar siempre costaría una llamada al modelo en el camino
+            crítico de todas las consultas, y esto se paga en el 28% de las de Normativa y el
+            71% de las de Gerencia.
+            """
+            reformulada = await reformular_al_vocabulario_normativo(
+                state["query"], self.rewrite_llm
+            )
+            if reformulada is None:
+                # Ni se marca la bandera ni se vuelve a buscar: repetir la búsqueda con lo mismo
+                # sería pagar una consulta al corpus para obtener el resultado que ya se tiene.
+                return {}
+            return {"reformulated_query": reformulada, "reformulada": True}
+
+        def hubo_reformulacion(
+            state: CoreGraphState,
+        ) -> Literal["retrieve", "fallback"]:
+            return "retrieve" if state.get("reformulated_query") else "fallback"
+
         async def retrieve_node(state: CoreGraphState) -> dict:
             output = await self.retrieval_strategy.retrieve(
-                # Se BUSCA con la reescrita; a partir de aquí nadie más la ve.
-                state.get("rewritten_query") or state["query"],
+                # Se BUSCA con la reescrita o con la reformulada; a partir de aquí nadie más las
+                # ve. La reformulación manda sobre la reescritura porque es posterior: se produjo
+                # justo porque lo anterior no encontró nada.
+                state.get("reformulated_query")
+                or state.get("rewritten_query")
+                or state["query"],
                 state["chatbot_id"],
                 self.cfg,
                 self.deps,
@@ -166,17 +207,41 @@ class CoreGraph:
                 query_language, context_source_language
             )
 
+            quality_source: dict | None = None
             if not items:
                 score = 0.0
             else:
-                scores = [i.score for i in items if i.score is not None]
-                avg = sum(scores) / len(scores) if scores else 0.5
+                # RES.1 — la nota es la del MEJOR fragmento, no la media de todos.
+                #
+                # Con la media, la cola votaba sobre si hay respuesta: cada fragmento flojo que
+                # entraba bajaba la nota, así que `retrieval_top_k` —un mando de amplitud—
+                # decidía de rebote cuántas preguntas se contestan. Medido el 2026-08-25 sobre
+                # las dos baterías reales: con la media, 18 de 25 y 2 de 7; con el mejor, 20 y 4,
+                # y **con cualquier anchura** (2, 3, 5 u 8 dan lo mismo). Ése es el punto: que la
+                # anchura deje de decidir.
+                #
+                # El caso que lo retrata: SGE-01 tenía un fragmento de 0,637 con un umbral de
+                # 0,50 y se rendía, porque los tres de detrás bajaban la media a 0,371. La
+                # evidencia estaba y la enterraba el promedio.
+                #
+                # Corolario que hay que tener presente: `quality_threshold` pasa a significar
+                # «tengo al menos una fuente buena» en vez de «mis fuentes son buenas de media».
+                puntuados = [i for i in items if i.score is not None]
+                if puntuados:
+                    mejor = max(puntuados, key=lambda i: i.score)
+                    nota = mejor.score
+                    quality_source = {"title": mejor.title, "score": mejor.score}
+                else:
+                    nota = 0.5
+                # La penalización por número de resultados mide otra cosa —cuántos hay— y se
+                # queda: desacoplarla del `top_k` fue justo lo que arregló RAG.15.
                 count_ok = len(items) >= self.cfg.min_retrieval_results
-                score = avg if count_ok else avg * 0.5
+                score = nota if count_ok else nota * 0.5
 
             return {
                 "merged_items": items,
                 "quality_score": score,
+                "quality_source": quality_source,
                 "translation_warning": translation_warning,
                 # VIS.5 — **qué** lengua, no sólo que hay que avisar. El booleano llegaba hasta
                 # el chat y allí el texto se construía con la lengua de la PREGUNTA, que es la
@@ -187,14 +252,20 @@ class CoreGraph:
 
         def quality_gate(
             state: CoreGraphState,
-        ) -> Literal["generate_answer", "fallback"]:
+        ) -> Literal["generate_answer", "reformular", "fallback"]:
             # RAG.11: en bypass el gate INFORMA pero no desvía. Si desviara, el caso que
             # más interesa depurar —puntuación baja— sería justo el que no enseña ningún
-            # prompt, que es lo único que el bypass existe para enseñar.
+            # prompt, que es lo único que el bypass existe para enseñar. Por lo mismo tampoco
+            # dispara la reformulación: el prompt que se quiere ver es el de ESTA consulta.
             if state.get("debug_bypass"):
                 return "generate_answer"
             if state["quality_score"] >= self.cfg.quality_threshold:
                 return "generate_answer"
+            # RES.2 — una segunda pasada, y una sola. La guarda contra bucles es la propia
+            # `reformulated_query`: si ya está puesta, se viene de la segunda pasada y no hay
+            # tercera. Sin ella esto es un bucle infinito con coste por vuelta.
+            if self.rewrite_llm is not None and not state.get("reformulated_query"):
+                return "reformular"
             return "fallback"
 
         async def generate_answer_node(state: CoreGraphState) -> dict:
@@ -302,6 +373,7 @@ class CoreGraph:
         graph.add_node("rewrite_query", rewrite_query_node)
         graph.add_node("retrieve", retrieve_node)
         graph.add_node("merge", merge_node)
+        graph.add_node("reformular", reformular_node)
         graph.add_node("generate_answer", generate_answer_node)
         graph.add_node("fallback", fallback_node)
         graph.add_node("log", log_node)
@@ -313,7 +385,18 @@ class CoreGraph:
         graph.add_conditional_edges(
             "merge",
             quality_gate,
-            {"generate_answer": "generate_answer", "fallback": "fallback"},
+            {
+                "generate_answer": "generate_answer",
+                "reformular": "reformular",
+                "fallback": "fallback",
+            },
+        )
+        # RES.2 — la segunda pasada. Si el reformulador no devolvió nada, se va directo al
+        # fallback sin volver a buscar, y por eso este nodo también tiene arista condicional.
+        graph.add_conditional_edges(
+            "reformular",
+            hubo_reformulacion,
+            {"retrieve": "retrieve", "fallback": "fallback"},
         )
         graph.add_edge("generate_answer", "log")
         graph.add_edge("log", END)

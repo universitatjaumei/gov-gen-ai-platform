@@ -100,3 +100,28 @@ enseña ningún prompt.
 - **No evita el resto de guardas.** Si el corpus está embebido con otro modelo, el bypass
   devuelve el mismo `409` que una consulta normal (RAG.9): depurar no es motivo para leer un
   espacio vectorial que no es el del corpus.
+
+## De dónde sale la nota del gate (RES.1, 2026-08-25)
+
+**Es la puntuación del MEJOR fragmento recuperado, no la media de todos.** La pregunta que hace el
+filtro es «¿tengo al menos una fuente buena?».
+
+Hasta el 2026-08-25 era la media, y eso tenía una consecuencia que nadie decidió: cada fragmento
+flojo que entraba bajaba la nota, así que **`retrieval_top_k` —un mando de amplitud— decidía de
+rebote cuántas preguntas se contestan**. Medido sobre las dos baterías reales: con la media, 18 de
+25 y 2 de 7; con el mejor, 20 y 4, y **con cualquier anchura**. El caso que lo retrata es `SGE-01`,
+con un fragmento de 0,637 y un umbral de 0,50: se rendía porque los tres de detrás bajaban la media
+a 0,371.
+
+Dos cosas que conviene tener presentes al depurar:
+
+- **`quality_threshold` cambió de significado.** Un valor puesto antes de esa fecha se eligió con el
+  otro criterio, así que con el mismo número el filtro es ahora **más permisivo**.
+- **`quality_source` dice qué fragmento fijó la nota** (título y puntuación), y sale en la traza.
+  Con la media no había nada que señalar; con el mejor sí, y sin ese dato una respuesta rechazada
+  era un número sin explicación.
+
+Lo que **no** cambió: la penalización por número de resultados
+(`len(items) < min_retrieval_results` ⇒ nota × 0,5) mide otra cosa y sigue igual. Y
+`min_retrieval_score` actúa sobre la similitud coseno en la consulta SQL, que es **otra escala**: no
+acota la puntuación del reranker que el gate compara.

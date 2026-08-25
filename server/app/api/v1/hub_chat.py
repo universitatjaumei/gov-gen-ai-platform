@@ -8,7 +8,8 @@ Protocolo SSE:
   event: status   data: {"node": "<node_name>", "msg": "<mensaje_progreso>"}
   event: token    data: {"delta": "<fragmento>"}
   event: done     data: {"interaction_id": "<uuid>", "sources": [...],
-                          "language_fallback": bool, "translation_warning": str | null}
+                          "language_fallback": bool, "translation_warning": str | null,
+                          "reformulada": bool}
   event: error    data: {"message": "<descripcion>"}
 
 Deploy: edge
@@ -431,8 +432,11 @@ async def chat_stream(
         "merged_items": [],
         "answer": None,
         "quality_score": 0.0,
+        "quality_source": None,
         "fallback_used": False,
         "translation_warning": False,
+        "reformulated_query": None,
+        "reformulada": False,
         "fallback_reason": None,
         "sources": [],
     }
@@ -474,6 +478,9 @@ async def chat_stream(
         # VIS.5 — `None` hasta que el grafo diga en qué lengua está la evidencia. Sin ella no se
         # avisa: no se puede afirmar que difiera de la de la pregunta.
         lengua_de_la_fuente: str | None = None
+        # RES.2 — si la respuesta salió de la segunda pasada. Falso mientras nadie lo diga: el
+        # nodo `reformular` sólo se ejecuta cuando la primera pasada no llegó al umbral.
+        reformulada = False
         fallback_reason: str | None = None
         fallback_answer: str | None = None
 
@@ -518,6 +525,12 @@ async def chat_stream(
                     language_fallback = bool(output.get("translation_warning"))
                     # VIS.5 — la lengua de la fuente, que es con la que se redacta el aviso.
                     lengua_de_la_fuente = output.get("context_source_language")
+
+                elif kind == "on_chain_end" and name == "reformular":
+                    # RES.2 — el hecho viaja, el texto de producto no se decide aquí. Una
+                    # respuesta rescatada reformulando no se revisa igual que una directa.
+                    output = event.get("data", {}).get("output") or {}
+                    reformulada = bool(output.get("reformulada"))
 
                 elif kind == "on_chat_model_end":
                     # SEC.4: el uso real, tal como lo declara el proveedor. Se acumula en
@@ -587,6 +600,7 @@ async def chat_stream(
                 "sources": final_sources,
                 "language_fallback": language_fallback,
                 "translation_warning": translation_warning,
+                "reformulada": reformulada,
             },
         )
 

@@ -47,6 +47,30 @@ Conversación:
 Consulta de búsqueda:"""
 
 
+# RES.2 — otra tarea, otra plantilla. La de arriba resuelve pronombres y referencias con el turno
+# anterior; en una primera pregunta no hay pronombres que resolver. Lo que falla ahí es el
+# VOCABULARIO: quien pregunta dice lo que quiere hacer («quiero tramitar una compra de 6.500
+# euros») y la norma dice cómo se llama el expediente («contracte menor de subministrament»). No
+# comparten ni una palabra clave, así que la rama léxica no tiene de dónde agarrarse y el vector
+# apunta a otro sitio. Medido: reformulada así, esa consulta pasa de 0,126 a 0,640.
+PLANTILLA_NORMATIVA = """Eres un traductor de consultas al lenguaje de la normativa administrativa.
+
+El usuario describe lo que quiere hacer. Tu tarea es escribir la consulta de búsqueda con los
+términos con los que la norma nombraría ese trámite, ese documento o esa figura jurídica.
+
+Reglas:
+- Responde ÚNICAMENTE con la consulta, sin comillas y sin explicaciones.
+- Usa el vocabulario de la norma, no el del usuario: nombres de expediente, de procedimiento o de
+  figura jurídica.
+- No inventes cifras, artículos ni referencias que el usuario no haya dado.
+- Mantén el idioma del mensaje del usuario.
+- Una sola línea.
+
+Mensaje del usuario: {consulta}
+
+Consulta de búsqueda:"""
+
+
 def necesita_reescritura(habilitado: bool, historial: list[str]) -> bool:
     """Solo con el flag encendido y al menos dos turnos previos.
 
@@ -93,3 +117,44 @@ async def reescribir_consulta(
         return consulta
 
     return texto.strip()
+
+
+async def reformular_al_vocabulario_normativo(
+    consulta: str,
+    llm,
+    timeout: float = TIMEOUT_POR_DEFECTO,
+) -> str | None:
+    """La consulta escrita como la escribiría la norma, o `None` si no se pudo.
+
+    Devuelve `None` y no la consulta original —al contrario que `reescribir_consulta`— porque
+    quien llama tiene que poder distinguir «no hay reformulación» de «hay una que resultó ser
+    idéntica»: en el primer caso repetir la búsqueda es pagar una consulta al corpus para obtener
+    el resultado que ya se tiene.
+
+    Los tres motivos de descarte son los mismos y por lo mismo: excepción del proveedor, tardanza
+    y respuesta que no parece una consulta. El chat no se cae por esto.
+    """
+    prompt = PLANTILLA_NORMATIVA.format(consulta=consulta)
+
+    try:
+        respuesta = await asyncio.wait_for(
+            llm.ainvoke([{"role": "user", "content": prompt}]), timeout=timeout
+        )
+    except asyncio.TimeoutError:
+        logger.warning("Reformulación descartada: el modelo tardó más de %ss", timeout)
+        return None
+    except Exception as fallo:  # noqa: BLE001 - cualquier fallo del proveedor cae aquí
+        logger.warning("Reformulación descartada por error del modelo: %s", fallo)
+        return None
+
+    texto = getattr(respuesta, "content", None)
+    texto = texto if isinstance(texto, str) else str(respuesta)
+    if _es_anomala(texto):
+        logger.warning("Reformulación descartada por respuesta anómala (%s car.)", len(texto))
+        return None
+
+    reformulada = texto.strip()
+    if reformulada == consulta.strip():
+        logger.info("Reformulación idéntica a la consulta: no se repite la búsqueda")
+        return None
+    return reformulada

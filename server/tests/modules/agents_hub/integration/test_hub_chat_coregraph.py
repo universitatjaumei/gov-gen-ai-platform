@@ -250,6 +250,11 @@ class TestSseContract:
             "sources",
             "language_fallback",
             "translation_warning",
+            # RES.2 — clave nueva y aditiva: dice si la respuesta salió de la segunda búsqueda,
+            # con la consulta reformulada. Va en el `done` y no en un evento propio justo para
+            # no introducir un tipo nuevo, que es lo que la línea de arriba prohíbe. Que el
+            # widget lo muestre o no es decisión de producto; el backend expone el hecho.
+            "reformulada",
         }
         assert set(done["sources"][0].keys()) == {"document_id", "title", "url", "score"}
         uuid.UUID(done["interaction_id"])

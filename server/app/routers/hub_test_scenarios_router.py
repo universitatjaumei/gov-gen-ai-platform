@@ -107,6 +107,11 @@ class RunRead(BaseModel):
     #: contrato porque quien revisa una respuesta tiene que ver **lo mismo** que el ciudadano:
     #: sin esto, un aviso que dice algo equivocado no aparece en ninguna herramienta de revisión.
     translation_warning: str | None = None
+    #: RES.2 — si la respuesta salió de la segunda búsqueda, con la consulta reformulada. Va en el
+    #: contrato porque distingue dos situaciones que no se revisan igual: «el corpus no lo tiene»
+    #: y «el corpus lo tiene y la pregunta no lo encontraba tal como se hizo».
+    reformulada: bool = False
+    reformulated_query: str | None = None
     verdict: Verdict | None
     verdict_note: str | None
     verdict_by: str | None
@@ -279,8 +284,11 @@ async def run_scenario(
         "merged_items": [],
         "answer": None,
         "quality_score": 0.0,
+        "quality_source": None,
         "fallback_used": False,
         "translation_warning": False,
+        "reformulated_query": None,
+        "reformulada": False,
         "context_source_language": None,
         "fallback_reason": None,
         "sources": [],
@@ -308,6 +316,11 @@ async def run_scenario(
         sources=[_serializar(s) for s in (estado.get("sources") or [])],
         bypass_snapshot=estado.get("bypass"),
         translation_warning=aviso,
+        # RES.2 — quien revisa tiene que saber si la respuesta salió de la primera búsqueda o de
+        # la segunda. Una rescatada reformulando dice algo distinto sobre el corpus: que la
+        # información estaba y la pregunta no la encontraba tal como se hizo.
+        reformulada=bool(estado.get("reformulada")),
+        reformulated_query=estado.get("reformulated_query"),
     )
     session.add(run)
     await session.commit()
