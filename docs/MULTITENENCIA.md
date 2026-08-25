@@ -50,6 +50,7 @@ vacío»), sin lo cual no se puede vaciar un valor heredado desde la pantalla.
 | `hub_llm_configs` | `heredable` | `organizacion_id` | MT.2. `is_default` es único por (nivel, propósito, organización). |
 | `hub_chatbots` | `organizacion` | `organizacion_id` | Un asistente es siempre de una organización. |
 | `hub_vocabulary_terms` | `organizacion` | `organizacion_id` | Cada organización tiene su vocabulario; no hay nivel de plataforma que heredar. |
+| `hub_lexicon_pairs` | `organizacion` | `organizacion_id` | RES.3 — pares «como lo dice una persona / como lo dice la norma». Es vocabulario también, y por el mismo motivo no se hereda: el léxico de un cliente no puede cambiar las búsquedas de otro. `document_id` va **sin FK** porque `hub_documents` es operacional y la frontera edge-cloud prohíbe navegar entre las dos bases. |
 | `hub_prompt_templates` | `derivada` | `chatbot_id` | Cuelga de un chatbot, por idioma y versionada. Lo acota `/hub/prompts-catalog` (REV.13). |
 | `hub_widget_keys` | `derivada` | `chatbot_id` | La credencial pública de un asistente concreto (SEC.8.5). |
 | `hub_activity_prompts` | `heredable` | `organizacion_id` | MT.6. Cadena organización → plataforma → **código**; el texto del código nunca se copia a una fila. |
