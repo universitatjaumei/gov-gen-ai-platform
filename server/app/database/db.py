@@ -10,10 +10,38 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 # Import models to register them with SQLModel metadata
 from server.app.database import models  # noqa: F401
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL",
-    "postgresql+asyncpg://govgenai:govgenai_dev@localhost:5432/govgenai",
-)
+#: DSN de desarrollo. Es local y su credencial está publicada en el repositorio, igual que la
+#: cuenta de desarrollo de `seeds.py`: no es un secreto, es un valor de conveniencia.
+_DSN_DE_DESARROLLO = "postgresql+asyncpg://govgenai:govgenai_dev@localhost:5432/govgenai"
+
+
+def _dsn() -> str:
+    """El DSN, con el valor de desarrollo **sólo fuera de producción** (AIS.8).
+
+    El fallback existe porque sin él no se puede arrancar en local ni correr la suite sin montar
+    un `.env`, y eso es una fricción real que se paga todos los días. Lo que no puede pasar es
+    que **producción** arranque con él: un despliegue al que se le olvide `DATABASE_URL` no
+    fallaría, se conectaría a otra base con una credencial que cualquiera puede leer aquí, y el
+    síntoma sería «faltan datos» en vez de «falta configuración».
+
+    Es el mismo criterio con el que SEC.8.0 cerró el sembrado de la cuenta de desarrollo y con el
+    que `core/config.py` rechaza el `JWT_SECRET_KEY` de ejemplo: el valor cómodo se conserva
+    donde es cómodo y se prohíbe donde es peligroso.
+    """
+    declarado = os.environ.get("DATABASE_URL")
+    if declarado:
+        return declarado
+    if os.getenv("ENVIRONMENT", "development") == "production":
+        raise RuntimeError(
+            "Falta DATABASE_URL en producción. No se usa el DSN de desarrollo como reserva: "
+            "arrancaría contra otra base de datos con una credencial publicada en el "
+            "repositorio, y el fallo se vería como datos que faltan y no como configuración "
+            "que falta."
+        )
+    return _DSN_DE_DESARROLLO
+
+
+DATABASE_URL = _dsn()
 
 server_engine = create_async_engine(DATABASE_URL, echo=False, future=True)
 

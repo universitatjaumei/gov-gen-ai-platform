@@ -14,10 +14,13 @@ from sqlalchemy.ext.asyncio import (
 
 def create_async_engine(url: str | None = None, **kwargs: Any) -> AsyncEngine:
     if url is None:
-        url = os.environ.get(
-            "DATABASE_URL",
-            "postgresql+asyncpg://govgenai:govgenai_dev@localhost:5432/govgenai",
-        )
+        # AIS.8 — el mismo DSN de reserva vivía escrito dos veces, aquí y en `database/db.py`.
+        # Dos copias del mismo valor por omisión acaban divergiendo, y la que no se toque
+        # seguirá conectando a la base vieja sin que nadie lo note. Se resuelve en un sitio, y
+        # ahí es donde está la guarda que lo prohíbe en producción.
+        from server.app.database.db import _dsn
+
+        url = _dsn()
     return sa_create_async_engine(url, echo=False, pool_pre_ping=True, **kwargs)
 
 

@@ -8,6 +8,7 @@ con un aviso en los headers (degradación documentada).
 """
 from __future__ import annotations
 
+import asyncio
 import io
 import shutil
 from typing import Any
@@ -97,7 +98,14 @@ class WebQualityReportExporter:
         if ejecutable is None:
             return docx_bytes
 
-        try:
+        def _convertir() -> bytes | None:
+            """La conversión, entera y síncrona, para poder mandarla a un hilo.
+
+            Va dentro de la función y no fuera porque el fichero temporal, la escritura y la
+            lectura pertenecen al mismo bloque: sacar sólo el `subprocess.run` dejaría las dos
+            operaciones de disco bloqueando el bucle igual, y son las que tardan con un informe
+            grande.
+            """
             with tempfile.TemporaryDirectory() as tmpdir:
                 docx_path = os.path.join(tmpdir, "report.docx")
                 pdf_path = os.path.join(tmpdir, "report.pdf")
@@ -119,6 +127,16 @@ class WebQualityReportExporter:
                 if result.returncode == 0 and os.path.exists(pdf_path):
                     with open(pdf_path, "rb") as fh:
                         return fh.read()
+            return None
+
+        try:
+            # AIS.8 — en un hilo. Esto es `async def` y llamaba a LibreOffice de forma síncrona,
+            # así que **bloqueaba el bucle de eventos hasta 30 segundos**: mientras un informe se
+            # convertía, el servidor entero dejaba de atender peticiones. No es un detalle de
+            # estilo, es la regla de asincronía total de AGENTS.md, y aquí el coste era medible.
+            pdf = await asyncio.to_thread(_convertir)
+            if pdf is not None:
+                return pdf
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 

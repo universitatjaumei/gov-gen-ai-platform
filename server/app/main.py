@@ -58,6 +58,44 @@ from server.app.routers.hub_content_quality_router import router as hub_content_
 from server.app.routers.hub_test_scenarios_router import router as hub_test_scenarios_router
 
 
+_log = logging.getLogger("govgenai")
+
+
+def configurar_logging() -> None:
+    """La configuración de logging de la aplicación (AIS.8).
+
+    Hasta aquí **no había ninguna**: el único `basicConfig` del proyecto vivía dentro de un
+    script de reingesta, así que en el servidor los mensajes salían por `print` —157 de ellos—
+    sin nivel, sin marca de tiempo y sin forma de subir o bajar el detalle. En el piloto eso
+    significa que la única observabilidad es la consola, y que un fallo intermitente no deja
+    rastro con el que volver.
+
+    **No usa `basicConfig(force=True)`, y la razón la encontró la suite.** `force=True` *elimina*
+    los manejadores que ya hubiera, y eso incluye el que instala pytest para capturar registros:
+    dos tests se pusieron en rojo —uno afirmando que un arranque fallido deja su causa en el log,
+    justo lo que este prompt viene a mejorar—. Un mecanismo de observabilidad que apaga a otro no
+    es observabilidad.
+
+    Así que se configura **sin destruir**: se fija el nivel y se le pone el formato a los
+    manejadores que haya —los de uvicorn, que llega antes— y sólo se añade uno si no hay ninguno.
+    El resultado en producción es el mismo y deja de pisar a nadie.
+
+    El nivel sale de `LOG_LEVEL`, que ya está en el compose de producción y en `.env.example`.
+    """
+    nivel = getattr(logging, (os.getenv("LOG_LEVEL") or "INFO").upper(), logging.INFO)
+    formato = logging.Formatter("%(asctime)s %(levelname)-8s %(name)s — %(message)s")
+
+    raiz = logging.getLogger()
+    raiz.setLevel(nivel)
+    if not raiz.handlers:
+        manejador = logging.StreamHandler()
+        manejador.setFormatter(formato)
+        raiz.addHandler(manejador)
+    else:
+        for manejador in raiz.handlers:
+            manejador.setFormatter(formato)
+
+
 async def _init_hub_db() -> None:
     """Crea las tablas de agents_hub (config y operacionales) si no existen."""
     from server.app.modules.agents_hub.database.connection import create_async_engine as hub_engine
@@ -155,10 +193,17 @@ def _start_quality_scheduler():
         set_quality_job(job)
         from server.app.routers.hub_content_quality_router import set_quality_job as set_cq_job
         set_cq_job(job)
-        print(f"[STARTUP] Content quality scheduler started (every {settings.content_quality_interval_hours}h)")
+        _log.info(
+            "Planificador de calidad de contenido arrancado (cada %sh)",
+            settings.content_quality_interval_hours,
+        )
         return scheduler
-    except Exception as exc:
-        print(f"[STARTUP] Content quality scheduler failed to start: {exc}")
+    except Exception:
+        # AIS.8 — `exception` y no `print(exc)`. Esto se tragaba el fallo con una línea sin
+        # traza: el planificador es lo que mantiene vigilado el corpus, así que arrancar sin él
+        # es una degradación silenciosa que sólo se nota semanas después, cuando alguien
+        # pregunta por qué no hay hallazgos nuevos.
+        _log.exception("El planificador de calidad de contenido no arrancó")
         return None
 
 
@@ -261,6 +306,10 @@ async def lifespan(app: FastAPI):
 
 @asynccontextmanager
 async def _arranque(app: FastAPI):
+    # Lo primero, antes de que nada tenga algo que decir: si se configurara después, los
+    # mensajes del propio arranque —que son los que más falta hacen cuando algo va mal— se
+    # perderían o saldrían con el formato de otro.
+    configurar_logging()
     await init_server_db()
     await _init_hub_db()
     await _fail_zombie_jobs()
@@ -276,9 +325,9 @@ async def _arranque(app: FastAPI):
     import asyncio
 
     # Initial refresh at startup (legacy behavior)
-    print("[STARTUP] Refreshing AI model cache...")
+    _log.info("Refrescando la caché de modelos de IA")
     await refresh_model_cache()
-    print("[STARTUP] Updating model prices...")
+    _log.info("Actualizando precios de los modelos")
     await update_prices_from_openrouter()
 
     # Background loop for 24h refresh
