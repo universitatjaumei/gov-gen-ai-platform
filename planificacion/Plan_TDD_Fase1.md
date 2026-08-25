@@ -16582,7 +16582,13 @@ Tres defectos, cada uno con su consecuencia:
 > rescata una pregunta es, exactamente, el par que hay que aprender—; y la anchura al final, cuando
 > ya no dependa de dos mandos a la vez.
 >
-> **Modelo sugerido siguiente**: RES.1 **Sonnet**, RES.2 y RES.3 **Opus**, RES.4 **Sonnet**.
+> **Modelo sugerido siguiente**: RES.1 **Sonnet**, RES.2 y RES.3 **Opus**, RES.4 y RES.5 **Sonnet**.
+>
+> **RES.5 se añadió el 2026-08-25, cerrando RES.2, y no estaba previsto.** Al medir apareció que el
+> contrato de citas descarta respuestas **correctas** cuando el modelo nombra la norma en prosa en
+> vez de emitir un enlace: REAL-07 con nota 0,626 —la puerta la dejó pasar— y
+> `fallback_reason = "citation"`. Va al final del bloque y **empieza por medir la frecuencia**,
+> porque es intermitente y puede terminar en «no se hace».
 
 ### Lo que este bloque NO hace
 
@@ -16893,6 +16899,100 @@ al modelo), `comparar_topk_respuestas.py` (comparación ciega con juez y doble v
 - [ ] Umbrales reevaluados y la decision del 0,35 resuelta
 - [ ] Cuantas de las 32 consultas reales quedan sin respuesta, una por una y con su causa
 - [ ] Hoja de validacion regenerada y lista para enviar
+```
+
+---
+
+### Prompt RES.5 (medición → RED/GREEN) — Una respuesta correcta que no cita en formato no es una respuesta inventada
+
+**Modelo sugerido**: **Sonnet** — el defecto está localizado y el prompt lleva la decisión escrita;
+lo único abierto es si merece la pena, y eso lo contesta la medición del primer paso.
+
+**Objetivo**: el contrato de citas descarta respuestas **correctas** cuando el modelo nombra la
+norma en prosa en vez de emitir un enlace markdown. Encontrado el 2026-08-25 cerrando RES.2, en la
+consulta REAL-07 del `economicoadministratiu` («com es justifica una dieta d'un curs amb ingressos
+externs?»): nota de calidad **0,626** —muy por encima del umbral de 0,35, o sea que la puerta la
+dejó pasar— y `fallback_reason = "citation"`.
+
+Lo que había escrito el modelo, capturado espiando `enforce_citation_contract`:
+
+> «...les factures corresponents (a les quals es refereix **l'article 8 del mateix reglament**)...»
+
+Y las tres URLs que se le permitían citar estaban ahí y eran las correctas: el `REGLAMENT SOBRE
+INDEMNITZACIONS PER RAÓ DEL SERVEI` con su ancla `#art-17`, el DOGV y el BOE. **No citó mal: no
+citó en el formato que el contrato sabe leer.**
+
+El arreglo del 2026-08-24 sigue en su sitio y funciona —`degradar_anclas` reescribe al documento la
+cita cuyo ancla no reconoce—. Lo que queda intacto son las dos cosas que el propio docstring
+declara: citar un documento que nunca se recuperó, y **no citar nada**. Este caso es el segundo, y
+el contrato no puede distinguirlo de una respuesta inventada porque sólo mira enlaces
+`[texto](url)`.
+
+> ⚠️ **Es intermitente y no se sabe cuánto pasa.** La misma consulta, repetida, sí citó y pasó. Y
+> el trabajo de citas del 2026-08-24 dejó los descartes en **0 sobre 25**. Por eso el primer paso
+> de este prompt es medir, y **puede terminar en «no se hace»**: si ocurre una vez de cada
+> cincuenta, la maquinaria no vale la complejidad que añade.
+
+```
+# PROMPT RES.5 (medicion -> RED/GREEN) — Primero medir cuanto pasa, y solo despues arreglarlo
+# Deploy: edge
+
+## PASO 1 — Medir la frecuencia. Sin esto no se implementa nada.
+- Ejecutar el lote ujirag (25) y la bateria de Gerencia (7) **tres veces cada uno**, contando
+  cuantas respuestas caen con `fallback_reason == "citation"` **teniendo nota por encima del
+  umbral** — que es el caso que interesa: la puerta dijo si y el contrato dijo no.
+- Distinguir los dos motivos, porque piden arreglos distintos:
+  (a) no hay ningun enlace markdown en la respuesta;
+  (b) hay enlaces pero ninguno resiste ni la degradacion al documento.
+- Anotar tambien cuantas veces el modelo NOMBRA un documento recuperado en prosa (titulo literal),
+  que es lo que decide si el paso 2 sirve para algo.
+- **Puerta de decision, y hay que respetarla**: si la tasa es < 2% de las respuestas que pasan el
+  gate, se cierra el prompt con la cifra anotada y NO se implementa. Un arreglo para un caso de
+  cada cincuenta añade una rama que nadie va a volver a leer.
+
+## PASO 2 — Enlazado determinista (solo si el paso 1 lo justifica)
+- Si la respuesta menciona **literalmente** el titulo de un documento recuperado, se convierte esa
+  mencion en enlace a su URL antes de evaluar el contrato.
+- Es el mismo criterio que `degradar_anclas` y por eso es seguro: **no acepta un puntero vago,
+  crea uno verificable**. El documento SI se recupero y SI se leyo.
+- Coste cero: ni llamadas al modelo ni latencia.
+- Limite conocido y aceptado: solo dispara cuando el titulo aparece tal cual. Si el modelo escribe
+  «el reglamento de indemnizaciones» en vez del titulo completo, no lo caza — y arreglar ESO seria
+  emparejamiento difuso, que es otra cosa y con otro riesgo.
+
+## PASO 3 — Un reintento, y uno solo (solo si el paso 2 no basta)
+- Si tras el enlazado sigue sin haber cita valida, se regenera **una vez** con la instruccion de
+  citas reforzada, y se vuelve a evaluar. Si tampoco, entonces si: fallback.
+- Misma forma que RES.2 y por el mismo motivo: **se paga solo cuando falla**, y con guarda contra
+  bucles. La instruccion reforzada no sustituye a `CITATION_RULES`, se añade delante.
+- Ataca la causa real: el modelo olvido el formato, no el contenido.
+
+## Lo que este prompt NO hace, y son decisiones, no olvidos
+- **No adjunta las fuentes y conserva la respuesta.** Es la opcion facil y la peor: pone una lista
+  de fuentes plausible debajo de afirmaciones que no estan atadas a ninguna en concreto. Fabrica la
+  apariencia de respaldo, y la medicion del 2026-08-25 dijo que en este corpus una cita segura y
+  equivocada cuesta mas que una respuesta corta (`curso_caducado` en 15 de 25 escenarios).
+- **No acepta referencias en prosa como cita.** «El articulo 8 del mismo reglamento» no es un
+  puntero verificable, y producir punteros verificables es para lo que existe el modulo.
+- **No toca las dos guardas que se quedan**: citar un documento no recuperado sigue siendo rechazo,
+  y una respuesta sin ninguna fuente localizable sigue siendo rechazo.
+
+## Tests (RED primero, en el paso 2 y 3)
+# should_link_a_literal_title_mention_to_its_document
+# should_not_link_a_title_that_was_never_retrieved
+# should_not_touch_an_answer_that_already_cites_correctly
+# should_keep_rejecting_a_citation_to_a_document_never_retrieved
+# should_keep_rejecting_an_answer_with_no_locatable_source
+# should_retry_the_generation_once_and_only_once
+# should_not_retry_when_the_deterministic_linking_already_worked
+# should_fall_back_when_the_retry_also_fails_to_cite
+
+## Cierre
+- [ ] La cifra del paso 1, con las tres tandas y los dos motivos separados
+- [ ] Si se implemento: cuantas respuestas se recuperan, y **cuantas llamadas extra al modelo
+      cuesta** por respuesta recuperada
+- [ ] REAL-07 responde de forma estable en tres tandas seguidas (era intermitente)
+- [ ] Ninguna respuesta nueva cita un documento que no se recupero (comprobado, no supuesto)
 ```
 
 ---

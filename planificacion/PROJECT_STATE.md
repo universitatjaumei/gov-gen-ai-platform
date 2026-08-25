@@ -57,7 +57,7 @@
 | Bloque OWUI — Carcasa de chat desechable (adaptador compatible-OpenAI + Pipe) | — | ❌ | — | ❌ **DESCARTADO el 2026-08-11** (decisión del usuario). **Reconsiderado el mismo día** con el caso de Gerencia (asistente interno revisable) y **confirmado el descarte**: OWUI no aporta la revisión, duplicaría el registro de conversaciones y debilitaría la cadena de identidad. Lo que sí daba hecho —hilos persistentes— queda como REV.2 condicional. Se reabriría solo si Gerencia quiere un espacio de trabajo conversacional (hilos largos, adjuntos, prompts guardados, compartir) y no un asistente de preguntas con fuente. Cuatro razones: se pierde la identidad institucional —que SEC.8.6 y el hallazgo #3 de MAN.2 acaban de construir—, actualizar OWUI cuesta, consume recursos de la VM única, y el público al que servía (personal interno, con historial y UX rica) ya está servido o es más barato de añadir al frontend propio. **El adaptador compatible-OpenAI también se aparca**: tiene valor independiente, pero solo si aparece un consumidor concreto; sin él es código especulativo. El andamiaje (scope `chat:completions`, PAT, identidad delegada) ya está desde SEC.2.1 si algún día se reabre. Lo que se pierde, dicho sin adornos: historial de conversaciones y UX de chat rica. Registro original abajo. ~~Pendiente — OWUI.1-OWUI.3 (post-deploy). Añadido 2026-07-24 desde `docs/DECISION_OPENWEBUI_CARCASA_CHAT.md`.~~ Adaptador `/v1/chat/completions`+`/v1/models` sobre el grafo, contrato de citas P6 + anonimización P7, Pipe delgado. Reglas: OWUI llama al backend, la gobernanza no vive en OWUI. **Ampliado 2026-07-27**: `/v1/models` filtrado por `assert_chatbot_access`, cabecera `X-GovGenAI-Actor` firmada emitida por el Pipe (decisión (a)), traducción de 429/403 a errores OpenAI, y sección obligatoria "Lo que NO se usa de OWUI" (ni Groups para autorizar, ni LiteLLM, ni plugins de token-tracking) |
 | Bloque ING.0 — Fundamentos del corpus normativo | ING.0.5 ✅ | — | — | ✅ Completo — **replanificado 2026-07-28**: de 2 prompts a **5** (ING.0.1 vocabulario como dato, ING.0.2 modelo de datos del documento, ING.0.3 front-matter + manifiesto, ING.0.4 chunker 5 niveles + anclas, **ING.0.5 Opus** reconciliador + CLI). Los antiguos ING.0.1/ING.0.2 (nunca ejecutados) quedan sustituidos; su contenido se conserva ampliado en ING.0.3 e ING.0.5. Motivo en el historial 2026-07-28 |
 | Bloque VIS — Vistas del fundamento único (recuperación por metadatos) | VIS.3 ✅ | VIS.4 | Sonnet | ▶ **Reabierto el 2026-08-24** con VIS.4 (primero vigente, después lengua) y VIS.5 (el aviso de traducción avisa del idioma de la pregunta, no del de la fuente), los dos entre AIS y Deploy. Lo anterior, completo — VIS.1 (filtro de metadatos en SQL, fail-closed) + VIS.2 (Niveles 0/1/2: índice de submaterias, selección escalonada, inyección de subconjunto con recorte) + VIS.3 (canónica única, derogados fuera de la recuperación, advertencia de vigencia garantizada por el grafo). Detalle en el historial 2026-07-31 |
-| **Bloque RES** — Que el asistente responda | — | **RES.1** | Sonnet (RES.2 y RES.3 Opus) | ▶ **Añadido el 2026-08-25 y va ANTES de Deploy.** Medir RAG.15 dejó al asistente contestando **18 de 25** en Normativa y **2 de 7** en Gerencia, y el usuario lo rechazó: «no resulta aceptable un sistema que no contesta a casi la mitad de las preguntas». Diagnóstico cerrado en `docs/DIAGNOSTICO_POR_QUE_NO_CONTESTA.html`: **dos defectos y ninguno es la anchura**. (1) La puerta promedia todas las puntuaciones, así que la cola vota; puntuarla sobre **el mejor fragmento** da 20/25 y 4/7 **con cualquier anchura** — la columna es plana en 2, 3, 5 y 8. `top_k=2` contesta lo mismo pero con 6/25 y 5/7 de fuente única, y un suelo relativo al mejor se probó y da peor. (2) **No hay normalización en la primera pregunta**: `query_rewriting_enabled` está en `t` en los tres chatbots pero `necesita_reescritura` exige dos turnos previos, así que `rewritten_query` fue `None` en las 14 ejecuciones medidas; reformulada al vocabulario de la norma, una consulta pasa de 0,126 a 0,640. **RES.1** la puerta con el mejor fragmento (y `quality_threshold` cambia de significado, hay que escribirlo donde se lea) · **RES.2** segunda búsqueda con la consulta reformulada, **sólo al fallar** (28% de las consultas en Normativa, 71% en Gerencia), con guarda contra bucles y prompt nuevo —el de `query_rewriter` resuelve pronombres, que no es esto— · **RES.3** expansión léxica sobre `bilingual_terms`, que **ya está cableado al `tsvector` como columna generada**, con los candidatos que produce RES.2 y una persona que sólo aprueba o rechaza · **RES.4** medir la anchura y los umbrales cuando ya no dependan de dos mandos, y regenerar la batería de Gerencia. **Decisión pendiente del usuario**: el umbral 0,35 del `economicoadministratiu` |
+| **Bloque RES** — Que el asistente responda | RES.3 ✅ | **RES.4** | Sonnet | ▶ **Añadido el 2026-08-25 y va ANTES de Deploy. RES.1-RES.3 completos el mismo día**: en la batería de Gerencia, de **2 respuestas de 7 a 6 que pasan la puerta**. **RES.5 añadido al cerrar RES.2** (el contrato de citas descarta respuestas correctas que nombran la norma en prosa; empieza midiendo la frecuencia y puede terminar en «no se hace»). Medir RAG.15 dejó al asistente contestando **18 de 25** en Normativa y **2 de 7** en Gerencia, y el usuario lo rechazó: «no resulta aceptable un sistema que no contesta a casi la mitad de las preguntas». Diagnóstico cerrado en `docs/DIAGNOSTICO_POR_QUE_NO_CONTESTA.html`: **dos defectos y ninguno es la anchura**. (1) La puerta promedia todas las puntuaciones, así que la cola vota; puntuarla sobre **el mejor fragmento** da 20/25 y 4/7 **con cualquier anchura** — la columna es plana en 2, 3, 5 y 8. `top_k=2` contesta lo mismo pero con 6/25 y 5/7 de fuente única, y un suelo relativo al mejor se probó y da peor. (2) **No hay normalización en la primera pregunta**: `query_rewriting_enabled` está en `t` en los tres chatbots pero `necesita_reescritura` exige dos turnos previos, así que `rewritten_query` fue `None` en las 14 ejecuciones medidas; reformulada al vocabulario de la norma, una consulta pasa de 0,126 a 0,640. **RES.1** la puerta con el mejor fragmento (y `quality_threshold` cambia de significado, hay que escribirlo donde se lea) · **RES.2** segunda búsqueda con la consulta reformulada, **sólo al fallar** (28% de las consultas en Normativa, 71% en Gerencia), con guarda contra bucles y prompt nuevo —el de `query_rewriter` resuelve pronombres, que no es esto— · **RES.3** expansión léxica sobre `bilingual_terms`, que **ya está cableado al `tsvector` como columna generada**, con los candidatos que produce RES.2 y una persona que sólo aprueba o rechaza · **RES.4** medir la anchura y los umbrales cuando ya no dependan de dos mandos, y regenerar la batería de Gerencia. **Decisión pendiente del usuario**: el umbral 0,35 del `economicoadministratiu` |
 | **Bloque DET** — Desempate determinista del retriever | DET.1 ✅ | — | — | ✅ Completo — **añadido y ejecutado el 2026-08-02** al cuadrar la deuda del cierre de RAG. El orden de dos fragmentos empatados lo decidía el plan de la consulta, o sea que decidía **qué norma se cita**. Desempate por `content_hash` (no por `id`, que es uuid4 y cambia en cada reingesta): **en SQL en la rama léxica**, **en Python tras el LIMIT en la vectorial**, porque un `ORDER BY embedding <=> $1, id` **inutiliza el índice HNSW** de RAG.3 (medido: pasa a `Seq Scan + Sort`). 5 tests nuevos, baseline regenerada y ya estable |
 | Bloque SYNC — Sostenibilidad de la vigencia del corpus | SYNC.2 ✅ | — | — | ✅ **Completo (2026-08-02)** — SYNC.1 (fuente MCP sobre el reconciliador de ING.0.5, con `content_hash` de transporte para que el coste sea proporcional a los cambios) + SYNC.2 (caducidad activa: `data_revisio_prevista` vencida ⇒ finding `revisio_vencuda`, con default de 1 año al ingerir). Suite completa **1500 passed, 1 skipped, 0 failed**. Detalle en el historial. ~~planificado 2026-07-28~~ |
 | Bloque TST — Fiabilidad de la suite de tests | TST.4 ✅ | — | — | ✅ Completo — **TST.4 añadido el 2026-08-01** (coste de la verificación: sin cobertura por defecto, `-n auto`, BD por `TEMPLATE`; política escalonada en CLAUDE.md). TST.1 (mocks sobre la clase, no el event_loop) + TST.2 (BD desechable en e2e/auth/pipeline, residuos limpiados) + TST.3 (cero rojos preexistentes). 4 guardarraíles en `tests/infra/test_suite_hygiene.py`. Detalle en historial 2026-07-30 |
@@ -80,9 +80,51 @@
 
 ## 👉 EMPEZAR AQUÍ EL PRÓXIMO DÍA (actualizado 2026-08-22, al mover PLAT e IDE delante del despliegue)
 
-**Cursor actual: RES.1** (actualizado el 2026-08-25, al escribir el Bloque RES). El orden hasta el
-despliegue es **~~SEC.9~~ ✅ → ~~AIS~~ ✅ → ~~RAG.15~~ ✅ → ~~VIS.4~~ ✅ → ~~VIS.5~~ ✅ → **RES.1 →
-RES.2 → RES.3 → RES.4** → Deploy/D.0**.
+**Cursor actual: RES.4** (actualizado el 2026-08-25, al cerrar RES.3). El orden hasta el
+despliegue es **~~SEC.9~~ ✅ → ~~AIS~~ ✅ → ~~RAG.15~~ ✅ → ~~VIS.4~~ ✅ → ~~VIS.5~~ ✅ →
+~~RES.1~~ ✅ → ~~RES.2~~ ✅ → ~~RES.3~~ ✅ → **RES.4** → RES.5 → Deploy/D.0**.
+
+> ✅ **RES.1, RES.2 y RES.3 hechos (2026-08-25).** Medido en la batería de Gerencia con el grafo
+> completo: **de 2 respuestas de 7 a 6 que pasan la puerta**. RES.1 (puerta con el mejor fragmento)
+> llevó de 2 a 4; RES.2 (segunda búsqueda al fallar) de 4 a 6. La séptima —REAL-03, portátil de
+> alta gama— sigue por debajo del umbral incluso reformulada (0,201 contra 0,35).
+>
+> **Dos fallos silenciosos encontrados verificando RES.2, y los dos del mismo tipo**: síntoma
+> idéntico a no tener reformulación, que es justo lo que el prompt venía a corregir. (1)
+> `get_rewrite_model` traía `max_tokens=100`, escrito para un modelo que no razona;
+> `gemini-2.5-flash` sí razona y esos tokens salen del mismo presupuesto, así que las
+> reformulaciones llegaban como «Cont» y «Contrato menor de» — y no lo cazaba nada, porque media
+> palabra no está vacía ni pasa de 300 caracteres. (2) Al subirlo a 512 el modelo devuelve la
+> reformulación correcta pero tarda 2,4-2,6 s, y el plazo era 2,0: se mataban **todas**. Ahora la
+> reformulación tiene su propio plazo de 8 s, porque su compromiso es otro —sólo corre cuando la
+> puerta ya rechazó, o sea que la alternativa a esperar es no responder— y hay una guarda por
+> `finish_reason` para que un truncamiento no pueda volver a pasar inadvertido. Esa guarda vale
+> también para la reescritura de RAG.10, que llevaba el mismo tope y el mismo defecto.
+>
+> **Hallazgo que se convirtió en RES.5**: REAL-07 se rinde con nota 0,626 —muy por encima del
+> umbral, o sea que la puerta la dejó pasar— por el **contrato de citas**. Espiando
+> `enforce_citation_contract` se ve la causa: el modelo escribe «...a les quals es refereix
+> **l'article 8 del mateix reglament**...», o sea **nombra la norma en prosa en vez de emitir un
+> enlace**, mientras las tres URLs permitidas estaban ahí y eran las correctas. No citó mal: no
+> citó en el formato que el contrato sabe leer, y el contrato no puede distinguir eso de una
+> respuesta inventada porque sólo mira enlaces `[texto](url)`.
+>
+> La degradación del ancla al documento (2026-08-24) **sigue puesta y funciona**; lo que queda
+> intacto son las dos guardas que su docstring declara —citar un documento no recuperado, y no
+> citar nada—, y esto es la segunda. **Es intermitente**: la misma consulta repetida sí citó.
+>
+> **RES.5 empieza por medir la frecuencia y puede terminar en «no se hace»**: tres tandas de cada
+> lote, separando los dos motivos, y una puerta de decisión en el 2% de las respuestas que pasan el
+> gate. Si se implementa, el orden es enlazado determinista del título literal —que **crea** un
+> puntero verificable en vez de aceptar uno vago, coste cero— y sólo si no basta, un reintento con
+> la instrucción reforzada, que se paga sólo al fallar. **Descartado a propósito**: adjuntar las
+> fuentes y conservar la respuesta, porque fabrica la apariencia de respaldo bajo afirmaciones que
+> no están atadas a ninguna fuente concreta.
+>
+> **Desviación de método documentada**: RES.1 y RES.2 fueron en **un commit** (`a99e16f`) y no en
+> dos. Los dos cambian `merge_node` y `quality_gate` en el mismo fichero y se implementaron
+> seguidos; separar los *hunks* habría dejado un commit cuyo código no cubren sus tests. Queda
+> dicho porque la regla de un commit por prompt existe para poder volver a un punto exacto.
 
 **RES se mete delante de Deploy a propósito.** Medir RAG.15 dejó al asistente contestando 18 de 25
 en Normativa y 2 de 7 en Gerencia, y el usuario lo rechazó con el criterio correcto: «no resulta
