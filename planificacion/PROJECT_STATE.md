@@ -126,10 +126,24 @@ despliegue es **~~SEC.9~~ ✅ → ~~AIS~~ ✅ → ~~RAG.15~~ ✅ → ~~VIS.4~~ �
 > tocarlo.** Con la puerta sobre el mejor fragmento responde 6 de 7 con ese mismo valor, y la que
 > falla lo hace con 0,152 — no la recupera ningún umbral razonable. RES.1 hizo innecesario bajarlo.
 >
-> **Las tres de Normativa que siguen sin respuesta** tienen nota 0,405 / 0,458 / 0,30 contra un
-> umbral de 0,50 — más altas que su mejor fragmento sin reformular, o sea que **RES.2 ayuda incluso
-> donde no llega**. Bajar el umbral a 0,45 recuperaría una y a 0,40 dos; **no se ha tocado**, porque
-> cambia qué evidencia se considera suficiente y eso es decisión del usuario.
+> ✅ **Umbral de Normativa bajado a 0,40 (decisión del usuario, 2026-08-26).** Las tres que
+> callaban tenían nota 0,405 / 0,458 / 0,30 contra 0,50. Lo decisivo fue el veredicto del
+> informador sobre **ORI-04**: «INCORRECTA por falso desconocimiento — contestó *no disposem
+> d'informació* cuando la información SÍ está en el corpus» (art. 3.4 del Reglament sobre
+> reconeixement). O sea que **negarse a responderla era exactamente el defecto que el lote existe
+> para cazar**, reproducido con otro mecanismo.
+>
+> Y un dato que quita peso al miedo habitual: **el umbral no filtra las preguntas fuera del
+> corpus**. De las tres marcadas así en el lote, dos contestan con 0,795 y 0,547 — la nota no
+> detecta «esto no está en el corpus», así que bajarla no desmantela una protección que
+> funcionara. Lo que sí protege es SGE-04 (0,30, `colectivo_equivocado` + `citas_irrelevantes`),
+> y 0,40 lo deja fuera con 0,10 de margen. Es además el hueco más ancho de la distribución
+> (`0,30 · 0,405 · 0,458 | 0,526 · 0,547 …`).
+>
+> **Dos límites dichos al decidir**: ORI-04 pasa por 0,005, y **las notas no son estables entre
+> tandas** (ORI-13 dio 0,76 y 0,533 con la misma consulta), así que entrará unas veces sí y otras
+> no. Y el lote son 25 preguntas legítimas: **no permite estimar cuántas respuestas equivocadas
+> admite un listón más bajo**. Gerencia se queda en 0,35: la que falla allí lo hace con 0,152.
 >
 > **Corrección de RES.3 que salió de la suite completa** (`aeedf5c`): `hub_lexicon_pairs` nació en
 > `HubConfigBase` y el guardarraíl de la frontera lo rechazó **con razón**. `termino_de_usuario` es
