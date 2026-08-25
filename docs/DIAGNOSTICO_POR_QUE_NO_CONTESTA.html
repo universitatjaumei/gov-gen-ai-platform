@@ -1,0 +1,492 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Por qué el asistente no contesta</title>
+
+<style>
+/* Fichero autónomo: sin tipografías remotas, sin scripts externos, sin nada que necesite red.
+   Se puede adjuntar a un correo y abrir con doble clic. */
+:root {
+    --marca:        #0b5394;
+    --marca-suave:  #e8eef6;
+    --fondo:        #f6f7f9;
+    --superficie:   #ffffff;
+    --tinta:        #151b23;
+    --tinta-media:  #4c5866;
+    --tinta-tenue:  #6f7a88;
+    --filete:       #d7dce3;
+    --filete-fino:  #e8ebef;
+    --bien:         #1c6b42;
+    --bien-suave:   #e7f2ec;
+    --mal:          #9c3520;
+    --mal-suave:    #f9ecea;
+    --sans: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --mono: "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--fondo);
+    color: var(--tinta);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-text-size-adjust: 100%;
+}
+
+.hoja {
+    max-width: 47rem;
+    margin: 0 auto;
+    padding: clamp(2rem, 6vw, 4.5rem) clamp(1.1rem, 4vw, 2rem) 5rem;
+}
+
+section, header, footer { margin-bottom: 2.75rem; }
+
+.cabecera {
+    border-bottom: 2px solid var(--marca);
+    padding-bottom: 1.5rem;
+}
+
+.eyebrow {
+    font-family: var(--sans);
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--marca);
+    margin: 0 0 .7rem;
+}
+
+h1 {
+    font-family: var(--sans);
+    font-size: clamp(1.75rem, 5vw, 2.45rem);
+    font-weight: 700;
+    line-height: 1.14;
+    letter-spacing: -.02em;
+    margin: 0 0 1rem;
+}
+
+.ficha {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: .8rem 1.4rem;
+    margin: 0;
+}
+
+.ficha div { display: block; }
+
+.ficha dt {
+    font-family: var(--sans);
+    font-size: .67rem;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--tinta-tenue);
+}
+
+.ficha dd {
+    margin: .1rem 0 0;
+    font-size: .93rem;
+    color: var(--tinta-media);
+    font-variant-numeric: tabular-nums;
+}
+
+h2 {
+    font-family: var(--sans);
+    font-size: 1.26rem;
+    font-weight: 700;
+    letter-spacing: -.011em;
+    line-height: 1.25;
+    margin: 0 0 .85rem;
+}
+
+h3 {
+    font-family: var(--sans);
+    font-size: .98rem;
+    font-weight: 700;
+    margin: 1.5rem 0 .4rem;
+}
+
+p, ul, ol { margin: 0 0 1rem; }
+section > *:last-child, .caja > *:last-child { margin-bottom: 0; }
+
+ul, ol { padding-left: 1.2rem; }
+li { margin-bottom: .5rem; }
+li::marker { color: var(--tinta-tenue); }
+
+strong { font-weight: 700; }
+
+code {
+    font-family: var(--mono);
+    font-size: .85em;
+    background: var(--marca-suave);
+    padding: .1em .34em;
+    border-radius: 2px;
+}
+
+.caja {
+    background: var(--superficie);
+    border: 1px solid var(--filete);
+    border-left: 4px solid var(--marca);
+    border-radius: 3px;
+    padding: 1.5rem 1.6rem;
+}
+
+.caja.grave { border-left-color: var(--mal); background: var(--mal-suave); }
+.caja.buena { border-left-color: var(--bien); background: var(--bien-suave); }
+
+.titular {
+    font-family: var(--sans);
+    font-size: 1.12rem;
+    font-weight: 700;
+    line-height: 1.32;
+    margin: 0 0 .75rem;
+}
+
+.caja.grave .titular { color: var(--mal); }
+.caja.buena .titular { color: var(--bien); }
+
+.tabla-marco {
+    overflow-x: auto;
+    border: 1px solid var(--filete);
+    border-radius: 3px;
+    background: var(--superficie);
+    margin-bottom: 1rem;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 30rem;
+    font-family: var(--sans);
+    font-size: .83rem;
+    font-variant-numeric: tabular-nums;
+}
+
+caption {
+    caption-side: top;
+    text-align: left;
+    font-family: var(--sans);
+    font-size: .69rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--tinta-tenue);
+    padding: .8rem 1rem .5rem;
+}
+
+th, td {
+    padding: .58rem 1rem;
+    text-align: right;
+    border-bottom: 1px solid var(--filete-fino);
+}
+
+thead th {
+    font-weight: 700;
+    font-size: .69rem;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--tinta-tenue);
+    border-bottom: 1px solid var(--filete);
+    vertical-align: bottom;
+}
+
+th[scope="row"] { text-align: left; font-weight: 700; font-size: .82rem; }
+tbody tr:last-child th, tbody tr:last-child td { border-bottom: none; }
+
+tr.gana th[scope="row"] { box-shadow: inset 3px 0 0 var(--marca); color: var(--marca); }
+tr.gana td { background: var(--marca-suave); font-weight: 700; }
+td.malo { color: var(--mal); }
+td.bueno { color: var(--bien); font-weight: 700; }
+.tenue { color: var(--tinta-tenue); font-weight: 400; }
+
+.nota { font-size: .89rem; color: var(--tinta-tenue); line-height: 1.55; }
+
+.pasos { counter-reset: paso; list-style: none; padding: 0; }
+
+.pasos li {
+    counter-increment: paso;
+    position: relative;
+    padding-left: 2.5rem;
+    margin-bottom: 1.1rem;
+}
+
+.pasos li::before {
+    content: counter(paso);
+    position: absolute;
+    left: 0;
+    top: .1rem;
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 50%;
+    background: var(--marca);
+    color: #fff;
+    font-family: var(--sans);
+    font-size: .82rem;
+    font-weight: 700;
+    display: grid;
+    place-items: center;
+}
+
+.pasos li h3 { margin: 0 0 .2rem; }
+
+.pie {
+    border-top: 1px solid var(--filete);
+    padding-top: 1.2rem;
+    font-size: .82rem;
+    color: var(--tinta-tenue);
+    margin-bottom: 0;
+}
+
+.pie p { margin: 0 0 .3rem; }
+
+@media print {
+    body { background: #fff; font-size: 11pt; }
+    .caja, .tabla-marco { break-inside: avoid; }
+}
+</style>
+
+<div class="hoja">
+
+<header class="cabecera">
+    <p class="eyebrow">Diagnóstico · asistentes normativos</p>
+    <h1>Por qué el asistente no contesta, y por qué no es la anchura</h1>
+    <dl class="ficha">
+        <div><dt>Fecha</dt><dd>25 de agosto de 2026</dd></div>
+        <div><dt>Chatbots</dt><dd>Normativa UJI · economicoadministratiu</dd></div>
+        <div><dt>Consultas</dt><dd>25 + 7, todas reales</dd></div>
+        <div><dt>Coste</dt><dd>sin llamadas al modelo</dd></div>
+    </dl>
+</header>
+
+<section class="caja">
+    <p class="titular">Hay dos defectos, son independientes, y ninguno de los dos es
+    <code>retrieval_top_k</code>.</p>
+    <p><strong>Uno.</strong> El filtro de calidad compara el umbral contra la <em>media de todas</em>
+    las puntuaciones, así que los fragmentos flojos de la cola votan sobre si hay respuesta. Hay
+    consultas con un fragmento de 0,64 que se rechazan porque la media es 0,37.</p>
+    <p><strong>Dos.</strong> No existe normalización de la consulta en la primera pregunta. La
+    reescritura está <em>encendida</em> en los tres chatbots, pero el paso exige dos turnos previos
+    de conversación: se diseñó para resolver referencias de seguimiento. Una pregunta redactada como
+    intención («quiero tramitar una compra de 6.500 euros») se busca tal cual contra un corpus
+    redactado como norma («expedients de contractes menors»), y no comparten ni una palabra.</p>
+    <p><strong>La corrección con mejor relación coste/efecto es la primera</strong>: puntuar la
+    puerta sobre el <em>mejor</em> fragmento en vez de la media. No cuesta ninguna llamada al
+    modelo, y sube de 18 a 20 respuestas de 25 en Normativa y de 2 a 4 de 7 en Gerencia.</p>
+</section>
+
+<section>
+    <h2>La rejilla: anchura contra política de la puerta</h2>
+    <p>Cada celda es cuántas consultas obtendrían respuesta. Se calcula sobre las mismas
+    puntuaciones ya medidas, así que comparar políticas no cuesta nada.</p>
+
+    <div class="tabla-marco">
+        <table>
+            <caption>Normativa UJI · 25 consultas · umbral 0,50</caption>
+            <thead>
+                <tr>
+                    <th scope="col"><code>top_k</code></th>
+                    <th scope="col">Docs<br>(media)</th>
+                    <th scope="col">Una sola<br>fuente</th>
+                    <th scope="col">Media de todas<br><span class="tenue">como está hoy</span></th>
+                    <th scope="col">Mejor fragmento<br><span class="tenue">propuesta</span></th>
+                    <th scope="col">Media<br>de 3</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <th scope="row">2</th><td>1,76</td><td class="malo">6</td>
+                    <td>20</td><td>20</td><td>20</td>
+                </tr>
+                <tr>
+                    <th scope="row">3</th><td>2,48</td><td class="malo">3</td>
+                    <td>19</td><td>20</td><td>19</td>
+                </tr>
+                <tr class="gana">
+                    <th scope="row">5</th><td>3,60</td><td class="bueno">0</td>
+                    <td>18</td><td>20</td><td>18</td>
+                </tr>
+                <tr>
+                    <th scope="row">8</th><td>4,72</td><td class="bueno">0</td>
+                    <td class="malo">15</td><td>20</td><td>18</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="tabla-marco">
+        <table>
+            <caption>economicoadministratiu · 7 consultas reales · umbral 0,35</caption>
+            <thead>
+                <tr>
+                    <th scope="col"><code>top_k</code></th>
+                    <th scope="col">Docs<br>(media)</th>
+                    <th scope="col">Una sola<br>fuente</th>
+                    <th scope="col">Media de todas<br><span class="tenue">como está hoy</span></th>
+                    <th scope="col">Mejor fragmento<br><span class="tenue">propuesta</span></th>
+                    <th scope="col">Media<br>de 3</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <th scope="row">2</th><td>1,29</td><td class="malo">5</td>
+                    <td>4</td><td>4</td><td>4</td>
+                </tr>
+                <tr>
+                    <th scope="row">3</th><td>2,14</td><td class="malo">1</td>
+                    <td>3</td><td>4</td><td>3</td>
+                </tr>
+                <tr class="gana">
+                    <th scope="row">5</th><td>2,71</td><td class="bueno">0</td>
+                    <td class="malo">2</td><td>4</td><td>2</td>
+                </tr>
+                <tr>
+                    <th scope="row">8</th><td>4,00</td><td class="bueno">0</td>
+                    <td class="malo">2</td><td>4</td><td>2</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <p><strong>La columna del mejor fragmento es plana</strong>: 20 y 4 con cualquier anchura. Eso
+    es exactamente lo que hay que conseguir — que la anchura deje de decidir si se contesta y vuelva
+    a ser lo que dice su nombre.</p>
+
+    <p><strong>Bajar a <code>top_k = 2</code> no es la salida</strong>, aunque la primera fila lo
+    sugiera. Contesta lo mismo, sí, pero con <strong>6 de 25</strong> y <strong>5 de 7</strong>
+    respuestas apoyadas en un único documento: cambia un defecto por el que se acababa de corregir.
+    Con la puerta arreglada se consiguen las mismas respuestas sin ninguna fuente única.</p>
+
+    <p class="nota">También se probó un <em>suelo relativo</em> —descartar los fragmentos que
+    puntúen por debajo del 60% o el 75% del mejor— con la idea de recortar la cola contaminante. Da
+    peor: 19 de 25 en vez de 20, y reintroduce fuentes únicas porque recorta el contexto. Se
+    descarta.</p>
+</section>
+
+<section>
+    <h2>Las que no contesta: ¿falta el documento?</h2>
+    <p>No. Se comprobó buscando directamente en el corpus, y luego midiendo qué pasa si la misma
+    pregunta se escribe con el vocabulario de la norma.</p>
+
+    <div class="tabla-marco">
+        <table>
+            <caption>economicoadministratiu · pregunta tal cual contra pregunta reformulada</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Pregunta</th>
+                    <th scope="col">Mejor<br>tal cual</th>
+                    <th scope="col">Mejor<br>reformulada</th>
+                    <th scope="col">¿Contesta?</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <th scope="row">Compra de un equipo de 6.500 €</th>
+                    <td class="malo">0,126</td><td class="bueno">0,640</td><td>Sí</td>
+                </tr>
+                <tr>
+                    <th scope="row">Contratar un servicio de 6.500 €</th>
+                    <td class="malo">0,172</td><td class="bueno">0,643</td><td>Sí</td>
+                </tr>
+                <tr>
+                    <th scope="row">Requisitos de los contratos menores</th>
+                    <td class="malo">0,354</td><td class="bueno">0,775</td><td>Sí</td>
+                </tr>
+                <tr>
+                    <th scope="row">Dieta con ingresos externos</th>
+                    <td>0,626</td><td>0,466</td><td>Sí</td>
+                </tr>
+                <tr>
+                    <th scope="row">Portátil y equipo de alta gama</th>
+                    <td class="malo">0,157</td><td>0,267</td><td>No, pero acierta el documento</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <p>Dos preguntas multiplican su puntuación por <strong>cinco</strong> sólo por estar escritas de
+    otra manera. Y la última, aunque no llegue al umbral, recupera «CIRCULAR DE GERÈNCIA SOBRE
+    COMPRA D'EQUIPAMENT TECNOLÒGIC DE CONSUM D'ALTA GAMA PER A ÚS INDIVIDUAL» — el documento exacto
+    de la pregunta. La recuperación acierta y lo que falla es la nota.</p>
+
+    <p class="nota"><strong>Estas reformulaciones se escribieron a mano conociendo el corpus</strong>,
+    así que los 0,64 son un techo y no lo que dará un reformulador automático. Sirven para probar
+    dónde está el problema, no para prometer el resultado.</p>
+</section>
+
+<section>
+    <h2>El plan, en el orden en que conviene hacerlo</h2>
+    <ol class="pasos">
+        <li>
+            <h3>Puntuar la puerta con el mejor fragmento</h3>
+            <p>Es un cambio pequeño y localizado, no cuesta llamadas al modelo y se mide con lo que
+            ya hay. Lleva Normativa de 18 a 20 y Gerencia de 2 a 4. Además <strong>desacopla</strong>
+            el umbral de la anchura, que hoy se mueven juntos sin que nadie lo decidiera.</p>
+            <p class="nota">Matiz de diseño: con el mejor fragmento la puerta pasa a significar
+            «tengo una fuente buena» en vez de «tengo un conjunto coherente». Es la pregunta
+            correcta para un asistente que cita, pero conviene mantener la anchura en 5 para que el
+            contexto no se llene de cola: el juez ya identificó que los documentos de más
+            contaminan con normas de otro curso.</p>
+        </li>
+        <li>
+            <h3>Segunda búsqueda con la consulta reformulada, sólo cuando la primera falla</h3>
+            <p>Buscar → la puerta rechaza → reformular con el modelo → buscar otra vez → responder,
+            o rendirse ahora sí. <strong>Sólo se paga cuando hace falta</strong>: se dispararía en
+            el 28% de las consultas de Normativa y el 71% de las de Gerencia, y en el resto la
+            latencia no se toca.</p>
+            <p>El contrato ya lo contempla: <code>LanguagePolicy</code> declara
+            <code>needs_secondary_search(...)</code>, tiene tests propios y <strong>el grafo no lo
+            llama nunca</strong>. Es completar un mecanismo previsto, no inventarlo. El modelo
+            también existe: <code>get_rewrite_model</code> está construido con un tope de 100
+            <em>tokens</em> justo para devolver una línea.</p>
+            <p class="nota">La plantilla actual <strong>no sirve tal cual</strong>: está escrita para
+            resolver pronombres con el contexto anterior. Aquí hace falta otra cosa —traducir
+            intención a vocabulario normativo—, y por tanto otro prompt.</p>
+        </li>
+        <li>
+            <h3>Expansión léxica, alimentada por el uso</h3>
+            <p>El hueco <strong>ya existe y ya está cableado</strong>: <code>hub_document_chunks</code>
+            tiene una columna <code>bilingual_terms</code>, y el <code>tsvector</code> es una columna
+            generada sobre <code>content || ' ' || bilingual_terms</code>. Escribir términos ahí es
+            un <code>UPDATE</code>; el índice se regenera solo y <strong>no hay que volver a
+            calcular embeddings</strong>.</p>
+            <p>El material de partida no lo inventa nadie: sale de las preguntas que realmente se
+            hicieron y realmente fallaron. Un modelo propone el par en lote y fuera del camino
+            crítico, y a la persona sólo se le pide <strong>aprobar o rechazar</strong>.</p>
+            <p class="nota">Por eso esto no repetiría el intento de los lotes en Excel: aquel método
+            pedía <em>inventar</em> pares en frío, que es trabajo alto y sin recompensa visible. Es
+            el mismo giro que hizo funcionar la curación del corpus — revisar hallazgos en vez de
+            redactar desde cero. Las columnas del bucle ya están:
+            <code>hub_interactions</code> lleva <code>feedback_score</code>,
+            <code>review_verdict</code> y <code>review_note</code>.</p>
+        </li>
+        <li>
+            <h3>Y entonces sí, volver a medir la anchura</h3>
+            <p>Con la puerta arreglada, medir 3, 4 y 5 de una vez y decidir por calidad de la
+            respuesta, que es lo único que la anchura debería estar decidiendo. Medirlo antes es
+            medir sobre una base que se va a mover.</p>
+        </li>
+    </ol>
+</section>
+
+<section class="caja buena">
+    <p class="titular">Lo que esto significa para «todas las preguntas deberían encontrar
+    respuesta»</p>
+    <p>Con la puerta arreglada, 20 de 25 y 4 de 7. De las que quedan, la reformulación rescató 4 de
+    5 en Gerencia cuando se probó a mano. Sólo una consulta de Normativa (ORI-04, reconocimiento de
+    asignaturas de ciclo formativo) puntúa 0,17 en su mejor fragmento incluso con la anchura amplia,
+    y ése es el único caso que apunta a hueco de corpus — con la advertencia de que una puntuación
+    baja no prueba ausencia: la pregunta del portátil también puntuaba 0,157 y el documento
+    estaba.</p>
+</section>
+
+<footer class="pie">
+    <p>Universitat Jaume I · Gov Gen AI Platform. Medido el 25 de agosto de 2026 sobre los corpus de
+    23.306 y 14.198 fragmentos.</p>
+    <p>Fichero autónomo: no necesita conexión ni descarga ninguna. Se puede reenviar y archivar tal
+    cual.</p>
+</footer>
+
+</div>

@@ -165,6 +165,33 @@ y **ya no queda nada delante**.
 > nada con ningún umbral** y el reranker no actúa. No es que recupere mejor: es uno con filtro
 > contra otro sin filtro.
 >
+> 🔴 **Y el diagnóstico que sale de rechazar ese resultado (2026-08-25).** El usuario no aceptó
+> «18 de 25» —«no es aceptable un sistema que no contesta a casi la mitad»— y afirmó que **todas
+> sus preguntas tienen respuesta en el corpus**. Comprobado por SQL: los documentos están.
+> Informe autónomo en `docs/DIAGNOSTICO_POR_QUE_NO_CONTESTA.html`. **Dos defectos, y `top_k` no es
+> ninguno**:
+>
+> 1. **La puerta promedia.** Puntuarla sobre **el mejor fragmento** da **20/25 y 4/7 con cualquier
+>    anchura** (la columna es plana en 2, 3, 5 y 8) frente a 18 y 2 hoy. `top_k=2` contesta lo
+>    mismo pero con 6/25 y 5/7 de **fuente única**: cambia un defecto por el que se acababa de
+>    corregir. Un *suelo relativo* al mejor se probó y **da peor** (19, y reintroduce fuente única).
+> 2. **No hay normalización en la primera pregunta.** `query_rewriting_enabled` está en `t` en los
+>    tres chatbots, pero `necesita_reescritura` exige **dos turnos previos**: `rewritten_query` fue
+>    `None` en las 14 ejecuciones medidas. Reformulada a mano al vocabulario de la norma, REAL-04
+>    pasa de 0,126 a **0,640**; 4 de las 5 mudas de Gerencia pasarían. **Aviso**: esas
+>    reformulaciones se escribieron conociendo el corpus, así que son un techo.
+>
+> **Tres piezas que ya existen y abaratan el arreglo**: `LanguagePolicy` **declara
+> `needs_secondary_search(...)`, tiene tests y `core_graph` no lo llama nunca** —el escalón
+> «si falla, reformula y reintenta» es completar lo previsto—; `get_rewrite_model` ya está con tope
+> de 100 tokens; y **`hub_document_chunks.bilingual_terms`** es el hueco de la expansión léxica ya
+> cableado al `tsv` (columna generada), así que ampliarla es un `UPDATE` sin re-embeber.
+>
+> **Orden propuesto**: puerta → escalón de reformulación (se paga sólo al fallar: 28% en Normativa,
+> 71% en Gerencia) → expansión léxica alimentada por `feedback_score`/`review_verdict`, que ya son
+> columnas de `hub_interactions` → **y entonces** medir la anchura, que hoy sería medir sobre una
+> base que se va a mover. **Nada de esto está implementado**: falta escribir los prompts.
+>
 > **Batería de validación entregada a Gerencia**: `docs/VALIDACION_GERENCIA.html`, publicada como
 > artifact con la capacidad `artifact` (la página guarda versiones de sí misma, así que los
 > veredictos vuelven) y `downloads` como respaldo si quien valida entra en sólo lectura. Siete
