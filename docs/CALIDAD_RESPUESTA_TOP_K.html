@@ -1,0 +1,538 @@
+<meta charset="utf-8">
+<title>Redacta mejor con menos documentos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;600&display=swap">
+
+<style>
+:root {
+    --marca:        #0b5394;
+    --marca-suave:  #e8eef6;
+    --fondo:        #f6f7f9;
+    --superficie:   #ffffff;
+    --tinta:        #151b23;
+    --tinta-media:  #4c5866;
+    --tinta-tenue:  #7a8593;
+    --filete:       #dde1e7;
+    --filete-fino:  #eaedf1;
+    --bien:         #1c6b42;
+    --mal:          #9c3520;
+    --mal-suave:    #f7ecea;
+    --sombra:       0 1px 2px rgba(21, 27, 35, .05), 0 8px 24px -16px rgba(21, 27, 35, .18);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --marca:        #6ea3dc;
+        --marca-suave:  #16233180;
+        --fondo:        #0e1319;
+        --superficie:   #151b23;
+        --tinta:        #e6e9ee;
+        --tinta-media:  #a3aebc;
+        --tinta-tenue:  #78838f;
+        --filete:       #2a323c;
+        --filete-fino:  #1f262e;
+        --bien:         #6cc08c;
+        --mal:          #e08a72;
+        --mal-suave:    #2a1d1980;
+        --sombra:       0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .7);
+    }
+}
+
+:root[data-theme="dark"] {
+    --marca:        #6ea3dc;
+    --marca-suave:  #16233180;
+    --fondo:        #0e1319;
+    --superficie:   #151b23;
+    --tinta:        #e6e9ee;
+    --tinta-media:  #a3aebc;
+    --tinta-tenue:  #78838f;
+    --filete:       #2a323c;
+    --filete-fino:  #1f262e;
+    --bien:         #6cc08c;
+    --mal:          #e08a72;
+    --mal-suave:    #2a1d1980;
+    --sombra:       0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .7);
+}
+
+body {
+    background: var(--fondo);
+    color: var(--tinta);
+    font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+}
+
+.hoja {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: clamp(2.5rem, 6vw, 5rem) clamp(1.15rem, 4vw, 2rem) 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2.75rem;
+}
+
+.cabecera {
+    display: flex;
+    flex-direction: column;
+    gap: .9rem;
+    border-bottom: 2px solid var(--marca);
+    padding-bottom: 1.6rem;
+}
+
+.eyebrow {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--marca);
+}
+
+h1 {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: clamp(1.85rem, 5.2vw, 2.6rem);
+    font-weight: 700;
+    line-height: 1.12;
+    letter-spacing: -.021em;
+    text-wrap: balance;
+    margin: 0;
+}
+
+.ficha {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: .85rem 1.5rem;
+    margin-top: .4rem;
+}
+
+.ficha div { display: flex; flex-direction: column; gap: .12rem; }
+
+.ficha dt {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--tinta-tenue);
+}
+
+.ficha dd {
+    margin: 0;
+    font-size: .95rem;
+    color: var(--tinta-media);
+    font-variant-numeric: tabular-nums;
+}
+
+.veredicto {
+    background: var(--superficie);
+    border: 1px solid var(--filete);
+    border-left: 4px solid var(--marca);
+    border-radius: 3px;
+    box-shadow: var(--sombra);
+    padding: 1.6rem 1.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: .85rem;
+}
+
+.veredicto .titular {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: 1.15rem;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -.008em;
+    text-wrap: balance;
+}
+
+.veredicto p { margin: 0; color: var(--tinta-media); }
+
+h2 {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: 1.28rem;
+    font-weight: 600;
+    letter-spacing: -.011em;
+    line-height: 1.25;
+    text-wrap: balance;
+    margin: 0 0 .9rem;
+}
+
+section > p, section > ul, section > ol, section > .tabla-marco { margin: 0 0 1rem; }
+section > *:last-child { margin-bottom: 0; }
+
+ul, ol {
+    padding-left: 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+}
+
+li::marker { color: var(--tinta-tenue); }
+strong { font-weight: 600; }
+
+code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .85em;
+    background: var(--marca-suave);
+    padding: .1em .34em;
+    border-radius: 2px;
+}
+
+a { color: var(--marca); text-underline-offset: .15em; }
+a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--marca);
+    outline-offset: 3px;
+    border-radius: 2px;
+}
+
+.nota { font-size: .9rem; color: var(--tinta-tenue); line-height: 1.55; }
+
+.tabla-marco {
+    overflow-x: auto;
+    border: 1px solid var(--filete);
+    border-radius: 3px;
+    background: var(--superficie);
+    box-shadow: var(--sombra);
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 30rem;
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .84rem;
+    font-variant-numeric: tabular-nums;
+}
+
+caption {
+    caption-side: top;
+    text-align: left;
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--tinta-tenue);
+    padding: .85rem 1rem .55rem;
+}
+
+th, td { padding: .62rem 1rem; text-align: right; border-bottom: 1px solid var(--filete-fino); }
+
+thead th {
+    font-weight: 600;
+    font-size: .7rem;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--tinta-tenue);
+    border-bottom: 1px solid var(--filete);
+    vertical-align: bottom;
+}
+
+th[scope="row"] {
+    text-align: left;
+    font-weight: 600;
+    font-size: .82rem;
+    color: var(--tinta);
+}
+
+tbody tr:last-child th, tbody tr:last-child td { border-bottom: none; }
+
+td.gana { color: var(--marca); font-weight: 600; }
+td.pierde { color: var(--tinta-tenue); }
+.col-marcada { background: var(--marca-suave); }
+
+/* mecanismo: dos columnas de ejemplos reales del juez */
+.mecanismo {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 1rem;
+}
+
+.caso {
+    background: var(--superficie);
+    border: 1px solid var(--filete);
+    border-radius: 3px;
+    padding: 1.1rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: .55rem;
+}
+
+.caso.contamina { border-top: 3px solid var(--mal); }
+.caso.completa { border-top: 3px solid var(--bien); }
+
+.caso h3 {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .74rem;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    margin: 0;
+}
+
+.caso.contamina h3 { color: var(--mal); }
+.caso.completa h3 { color: var(--bien); }
+
+.caso blockquote {
+    margin: 0;
+    font-size: .93rem;
+    line-height: 1.5;
+    color: var(--tinta-media);
+    font-style: italic;
+}
+
+.caso .fuente {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .7rem;
+    color: var(--tinta-tenue);
+    font-style: normal;
+}
+
+details {
+    background: var(--superficie);
+    border: 1px solid var(--filete);
+    border-radius: 3px;
+    padding: 0 1.1rem;
+}
+
+summary {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .84rem;
+    font-weight: 600;
+    padding: .85rem 0;
+    cursor: pointer;
+    color: var(--tinta-media);
+}
+
+details[open] summary {
+    border-bottom: 1px solid var(--filete-fino);
+    margin-bottom: .9rem;
+}
+
+details pre {
+    overflow-x: auto;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .78rem;
+    line-height: 1.6;
+    color: var(--tinta-media);
+    margin: 0 0 1rem;
+}
+
+.pie {
+    border-top: 1px solid var(--filete);
+    padding-top: 1.3rem;
+    font-size: .82rem;
+    color: var(--tinta-tenue);
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="hoja">
+
+    <header class="cabecera">
+        <p class="eyebrow">Medición · calidad de la respuesta</p>
+        <h1>Redacta mejor con menos documentos</h1>
+        <dl class="ficha">
+            <div><dt>Fecha</dt><dd>25 de agosto de 2026</dd></div>
+            <div><dt>Chatbot</dt><dd>Normativa UJI</dd></div>
+            <div><dt>Comparación</dt><dd><code>top_k</code> 5 contra 8</dd></div>
+            <div><dt>Llamadas al modelo</dt><dd>50 + 50 del juez</dd></div>
+            <div><dt>Redacta</dt><dd>gemini-2.5-flash</dd></div>
+            <div><dt>Juzga</dt><dd>gemini-2.5-pro</dd></div>
+        </dl>
+    </header>
+
+    <section class="veredicto">
+        <p class="titular">No: cuando las dos configuraciones responden, el juez no las distingue.
+        Toda la ventaja medible del 5 es que <strong>se rinde tres veces menos</strong>.</p>
+        <p>De los 15 casos en que ambas contestan, gana el 5 en cuatro y el 8 en tres, con dos
+        empates y <strong>seis en los que el veredicto cambió al invertir el orden</strong> —o sea,
+        ruido—. La diferencia sale de otro sitio: el 5 responde 18 de 25 y el 8 responde 15.</p>
+        <p>Pero el empate es sólo el promedio. Mirando <em>por qué</em> gana cada uno aparece un
+        mecanismo asimétrico, y ése sí decide: <strong>los documentos que el 8 añade unas veces
+        completan la respuesta y otras la contaminan con normas de otro curso</strong> — y en este
+        corpus contaminar cuesta mucho más que quedarse corto.</p>
+    </section>
+
+    <section>
+        <h2>Los datos duros</h2>
+
+        <div class="tabla-marco">
+            <table>
+                <caption>25 consultas del lote ujirag-2024, grafo completo</caption>
+                <thead>
+                    <tr>
+                        <th scope="col"></th>
+                        <th scope="col" class="col-marcada"><code>top_k</code> = 5</th>
+                        <th scope="col"><code>top_k</code> = 8</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <th scope="row">Responde</th>
+                        <td class="col-marcada gana">18 / 25</td>
+                        <td class="pierde">15 / 25</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Se rinde</th>
+                        <td class="col-marcada gana">7</td>
+                        <td class="pierde">10</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Nota de calidad (media)</th>
+                        <td class="col-marcada gana">0,575</td>
+                        <td class="pierde">0,522</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Cumple la rúbrica<br><span class="nota">sobre 50 juicios</span></th>
+                        <td class="col-marcada gana">25</td>
+                        <td class="pierde">17</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Fuentes citadas (media)</th>
+                        <td class="col-marcada">2,72</td>
+                        <td>3,08</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Longitud (caracteres)</th>
+                        <td class="col-marcada">2.102</td>
+                        <td>2.565</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="tabla-marco">
+            <table>
+                <caption>Veredictos del juez, por situación</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Situación</th>
+                        <th scope="col">Casos</th>
+                        <th scope="col">Gana 5</th>
+                        <th scope="col">Gana 8</th>
+                        <th scope="col">Empate</th>
+                        <th scope="col">Sin acuerdo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><th scope="row">Ambas responden</th><td>15</td><td>4</td><td>3</td><td>2</td><td>6</td></tr>
+                    <tr><th scope="row">Sólo responde el 5</th><td>3</td><td class="gana">3</td><td>0</td><td>0</td><td>0</td></tr>
+                    <tr><th scope="row">Sólo responde el 8</th><td>0</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+                    <tr><th scope="row">Ninguna responde</th><td>7</td><td>0</td><td>0</td><td>7</td><td>0</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p class="nota"><strong>La fila de los ceros es la que informa</strong>: no hay ni un caso
+        en que el 8 responda y el 5 se calle. Los rechazos están anidados —los 10 del 8 contienen
+        los 7 del 5—, así que ampliar la búsqueda no rescata ninguna consulta: sólo pierde tres.</p>
+    </section>
+
+    <section>
+        <h2>El mecanismo, en palabras del juez</h2>
+        <p>Los siete casos decididos con ambas respondiendo se reparten en dos motivos limpios, y
+        no son simétricos en consecuencia:</p>
+
+        <div class="mecanismo">
+            <div class="caso contamina">
+                <h3>El 8 contamina · 4 casos</h3>
+                <blockquote>«La respuesta A corrige el error de citar fuentes incorrectas,
+                mientras que la B persiste en el error citando directrices de un curso futuro.»
+                <span class="fuente">ORI-05</span></blockquote>
+                <blockquote>«La respuesta B comete el error explícito que se debía corregir: citar
+                normativas de cursos académicos distintos.»
+                <span class="fuente">SGE-03</span></blockquote>
+                <blockquote>«B añade una referencia final a un documento que no tiene relación con
+                la pregunta.» <span class="fuente">ORI-15</span></blockquote>
+            </div>
+            <div class="caso completa">
+                <h3>El 8 completa · 3 casos</h3>
+                <blockquote>«La respuesta B es más completa, ya que distingue explícitamente entre
+                grados/másteres y enseñanzas propias, que tienen plazos diferentes.»
+                <span class="fuente">ORI-12</span></blockquote>
+                <blockquote>«B es más exhaustiva al enumerar más tipos de certificados
+                específicos.» <span class="fuente">ORI-20</span></blockquote>
+            </div>
+        </div>
+
+        <p><strong>Cuatro contra tres es un empate; el coste de cada uno no lo es.</strong> El
+        propio lote cataloga los modos de fallo que anotaron los informadores, y el reparto no deja
+        mucho margen de interpretación: <code>curso_caducado</code> —citar las directrices de un
+        curso que ya no rige— aparece en <strong>15 de los 25 escenarios</strong> y el documento lo
+        llama «el defecto más repetido del ensayo». <code>respuesta_incompleta</code> aparece en
+        <strong>4</strong>.</p>
+
+        <p>Es decir: el fallo que los documentos extra agravan es el más frecuente y el más grave
+        del corpus, y el que corrigen es cuatro veces menos común. En un asistente de normativa una
+        cita segura y equivocada cuesta más que una respuesta corta, porque quien la lee no tiene
+        cómo saber que está mal.</p>
+    </section>
+
+    <section>
+        <h2>Dos cosas que la medición valida de paso</h2>
+        <ul>
+            <li><strong>El barrido barato acertó.</strong> La medición de recuperación —sin
+            llamadas al modelo— predijo 18 respuestas con el 5 y 15 con el 8. El grafo completo,
+            reescritura de consulta incluida, dio <strong>exactamente 18 y 15</strong>. Para
+            decidir sobre el filtro de calidad, el barrido de recuperación es un sustituto fiable y
+            cuesta tres órdenes de magnitud menos.</li>
+
+            <li><strong>Juzgar dos veces era necesario.</strong> En 6 de los 25 pares el veredicto
+            se dio la vuelta al intercambiar el orden de las respuestas en el prompt. Con una sola
+            vuelta habría reportado un ganador que no existe — y en la situación que más importa,
+            «ambas responden», ese ruido son 6 de 15 casos.</li>
+        </ul>
+    </section>
+
+    <section>
+        <h2>Lo que sigue abierto</h2>
+        <ul>
+            <li><strong>Siete consultas sin respuesta, incluso con el 5.</strong> No es un problema
+            de <code>top_k</code>: son las mismas siete con las dos configuraciones. Parte son
+            huecos del corpus y parte es el filtro de calidad, que sigue promediando todas las
+            puntuaciones.</li>
+            <li><strong>El filtro sigue acoplado a la anchura.</strong> Es el hallazgo del informe
+            anterior y esta medición lo confirma en respuestas, no en puntuaciones: bajar
+            <code>top_k</code> no mejoró la redacción, mejoró la <em>disposición a responder</em>.
+            Mientras el filtro promedie la cola, elegir la anchura es elegir de rebote cuántas
+            preguntas se contestan, que es una decisión que nadie tomó a propósito.</li>
+        </ul>
+    </section>
+
+    <details>
+        <summary>Cómo se midió, y por qué así</summary>
+        <pre>uv run --project server python _local/golden/comparar_topk_respuestas.py \
+    --chatbot-id d18ffad7-3235-4673-a67e-17af90b6189a \
+    --dataset _local/golden/escenarios_ujirag_2024.json \
+    --valores 5,8 \
+    --salida _local/golden/comparativa_topk_respuestas.json</pre>
+        <p class="nota">El valor se inyecta parcheando el resolvedor de configuración, no la base:
+        el chatbot conserva su valor real mientras se mide, y una interrupción no lo deja en un
+        número que nadie eligió. La generación se guarda antes de juzgar, para no volver a pagarla
+        si el juez falla.</p>
+        <p class="nota">Tres decisiones contra sesgos conocidos: <strong>juez distinto</strong> del
+        modelo que redactó (un modelo que se juzga a sí mismo se prefiere);
+        <strong>doble vuelta con el orden intercambiado</strong>, contando sólo los veredictos que
+        coinciden; y <strong>a ciegas</strong>, sin decirle al juez qué configuración produjo cada
+        respuesta. La referencia es el «QUÉ DEBE CONTESTAR» que escribieron los informadores, no el
+        criterio del juez.</p>
+        <p class="nota">No escribe <code>HubTestRun</code>: el panel de escenarios no tiene dónde
+        anotar con qué configuración se generó una respuesta, así que cincuenta filas
+        indistinguibles ensuciarían justo la herramienta con la que se revisan las de verdad.</p>
+    </details>
+
+    <footer class="pie">
+        <p>Gov Gen AI Platform · continuación de
+        <em>Qué valor darle a <code>retrieval_top_k</code></em>.</p>
+        <p>El valor está aplicado: <code>Normativa UJI</code> tiene <code>retrieval_top_k = 5</code>.</p>
+    </footer>
+
+</div>

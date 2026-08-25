@@ -119,8 +119,59 @@ y **ya no queda nada delante**.
 > la cola informe el contexto sin votar sobre si hay respuesta. **No está hecho**: merece su propio
 > prompt y no se coló en una medición.
 >
-> **El valor sigue en 8 en la base**: cambiarlo es configuración de un chatbot del usuario, y la
-> decisión es suya. Es un `UPDATE` sobre `hub_chatbots.retrieval_top_k` y no exige reindexar.
+> **Aplicado el 2026-08-25 por decisión del usuario**: `retrieval_top_k = 5` en `Normativa UJI` y
+> en `assistent economicoadministratiu`.
+>
+> ✅ **Y medida también la calidad de la RESPUESTA** (`docs/CALIDAD_RESPUESTA_TOP_K.html`), que era
+> lo que el barrido de recuperación no podía ver. 50 llamadas al modelo más 50 del juez, comparación
+> ciega por pares con `gemini-2.5-pro` —distinto del `gemini-2.5-flash` que redacta— y **doble
+> vuelta con el orden intercambiado**. Respuesta: **el modelo NO redacta mejor con menos
+> documentos**. Cuando las dos configuraciones contestan, 4-3 con 6 veredictos que se dan la vuelta
+> al invertir el orden: ruido. Toda la ventaja del 5 es que **responde 18 de 25 frente a 15**, y
+> **no hay ni un caso en que el 8 responda y el 5 se calle** —los rechazos están anidados—.
+>
+> Lo que sí tiene señal es el **motivo** de cada victoria, y es asimétrico: el 8 gana cuando sus
+> documentos extra completan (distinguir grado/máster/enseñanzas propias) y pierde cuando
+> contaminan con normas de otro curso. Cuatro contra tres empata, **el coste no**: el propio lote
+> cataloga `curso_caducado` en 15 de 25 escenarios y lo llama «el defecto más repetido del ensayo»,
+> frente a 4 de `respuesta_incompleta`. Se elige 5 por riesgo, no por calidad media.
+>
+> **Dos validaciones de método**: el barrido barato predijo 18 y 15 respuestas y el grafo completo
+> dio exactamente 18 y 15 —reescritura de consulta incluida—, así que **para decidir sobre el filtro
+> el barrido de recuperación sustituye a las llamadas al modelo**; y juzgar dos veces era
+> imprescindible, porque con una sola vuelta habría reportado un ganador inexistente en 6 de 25.
+
+> ⚠️ **RAG.15 dejó mudo al `assistent economicoadministratiu`, y no se vio.** Informe en
+> `docs/GERENCIA_TOP_K_Y_UMBRAL.html`. Sus seis preguntas reales son del 15-16 de agosto, o sea
+> **anteriores al arreglo**: entonces la anchura efectiva era 1, el filtro promediaba un solo
+> fragmento y le salía la nota del mejor (0,427 sobre un umbral de 0,35), así que contestó las seis.
+> Con la anchura arreglada entran 4-5 fragmentos, la media baja a 0,282 y el umbral la rechaza:
+> medido con el grafo completo, **se rinde en 5 de 7 preguntas, con anchura 5 y con 8 igual**.
+>
+> Es la misma raíz que el acoplamiento de arriba, y aquí se ve como una **regresión que introdujo
+> una corrección**: arreglar un mando movió otro que nadie estaba mirando. La lección operativa es
+> que un chatbot cuyo corpus puntúa bajo no puede compartir la calibración de uno que puntúa alto,
+> mientras el umbral se compare contra una media.
+>
+> **`top_k = 5` aplicado igualmente** (no rescata ninguna pregunta, pero evita el relleno: en la
+> única que ambas contestan, el 8 dobla el texto —2.034 → 4.458 caracteres— y baja su propia nota
+> de 0,69 a 0,50). **El umbral NO se ha tocado**: bajarlo a 0,30 lleva de 2 a 4 respuestas de 7
+> —las dos que puntuaban 0,311 y 0,327—, pero cambia qué evidencia se considera suficiente para
+> afirmar algo, y eso es decisión del usuario. Las otras tres puntúan 0,11-0,12 y parecen huecos
+> del corpus.
+>
+> **Dato para leer la comparación con el agéntico**: responde 7 de 7 porque
+> `md_agent_selector_pipeline` asigna `score = 1.0` fijo, así que **su filtro no puede rechazar
+> nada con ningún umbral** y el reranker no actúa. No es que recupere mejor: es uno con filtro
+> contra otro sin filtro.
+>
+> **Batería de validación entregada a Gerencia**: `docs/VALIDACION_GERENCIA.html`, publicada como
+> artifact con la capacidad `artifact` (la página guarda versiones de sí misma, así que los
+> veredictos vuelven) y `downloads` como respaldo si quien valida entra en sólo lectura. Siete
+> preguntas × cuatro configuraciones, **a ciegas y con el orden permutado por pregunta**. Aquí no
+> hay juez porque **en Gerencia no existe una lista de respuestas validadas**: las preguntas sirven,
+> las respuestas de hoy no tienen por qué ser las adecuadas, y de lo que Gerencia marque saldrán
+> los tests.
 
 > **RAG.15 va primero de los tres**: `retrieval_top_k` **no lo lee ningún pipeline** —la
 > estrategia se construye con `top_k=cfg.min_retrieval_results`—, así que el asistente responde

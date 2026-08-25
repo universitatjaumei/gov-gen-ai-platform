@@ -1,0 +1,471 @@
+<meta charset="utf-8">
+<title>Al asistente de Gerencia lo calla el umbral</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;600&display=swap">
+
+<style>
+:root {
+    --marca:        #0b5394;
+    --marca-suave:  #e8eef6;
+    --fondo:        #f6f7f9;
+    --superficie:   #ffffff;
+    --tinta:        #151b23;
+    --tinta-media:  #4c5866;
+    --tinta-tenue:  #7a8593;
+    --filete:       #dde1e7;
+    --filete-fino:  #eaedf1;
+    --bien:         #1c6b42;
+    --mal:          #9c3520;
+    --mal-suave:    #f9ecea;
+    --sombra:       0 1px 2px rgba(21, 27, 35, .05), 0 8px 24px -16px rgba(21, 27, 35, .18);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --marca:        #6ea3dc;
+        --marca-suave:  #16233180;
+        --fondo:        #0e1319;
+        --superficie:   #151b23;
+        --tinta:        #e6e9ee;
+        --tinta-media:  #a3aebc;
+        --tinta-tenue:  #78838f;
+        --filete:       #2a323c;
+        --filete-fino:  #1f262e;
+        --bien:         #6cc08c;
+        --mal:          #e08a72;
+        --mal-suave:    #2a1a1680;
+        --sombra:       0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .7);
+    }
+}
+
+:root[data-theme="dark"] {
+    --marca:        #6ea3dc;
+    --marca-suave:  #16233180;
+    --fondo:        #0e1319;
+    --superficie:   #151b23;
+    --tinta:        #e6e9ee;
+    --tinta-media:  #a3aebc;
+    --tinta-tenue:  #78838f;
+    --filete:       #2a323c;
+    --filete-fino:  #1f262e;
+    --bien:         #6cc08c;
+    --mal:          #e08a72;
+    --mal-suave:    #2a1a1680;
+    --sombra:       0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .7);
+}
+
+body {
+    background: var(--fondo);
+    color: var(--tinta);
+    font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+}
+
+.hoja {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: clamp(2.5rem, 6vw, 5rem) clamp(1.15rem, 4vw, 2rem) 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2.75rem;
+}
+
+.cabecera {
+    display: flex;
+    flex-direction: column;
+    gap: .9rem;
+    border-bottom: 2px solid var(--marca);
+    padding-bottom: 1.6rem;
+}
+
+.eyebrow {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--marca);
+}
+
+h1 {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: clamp(1.8rem, 5vw, 2.5rem);
+    font-weight: 700;
+    line-height: 1.13;
+    letter-spacing: -.021em;
+    text-wrap: balance;
+    margin: 0;
+}
+
+.ficha {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: .85rem 1.5rem;
+    margin-top: .4rem;
+}
+
+.ficha div { display: flex; flex-direction: column; gap: .12rem; }
+
+.ficha dt {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--tinta-tenue);
+}
+
+.ficha dd {
+    margin: 0;
+    font-size: .95rem;
+    color: var(--tinta-media);
+    font-variant-numeric: tabular-nums;
+}
+
+.alerta {
+    background: var(--mal-suave);
+    border: 1px solid var(--mal);
+    border-left-width: 4px;
+    border-radius: 3px;
+    padding: 1.5rem 1.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: .8rem;
+}
+
+.alerta .titular {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: 1.15rem;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--mal);
+    text-wrap: balance;
+}
+
+.alerta p { margin: 0; color: var(--tinta-media); }
+
+h2 {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: 1.28rem;
+    font-weight: 600;
+    letter-spacing: -.011em;
+    line-height: 1.25;
+    text-wrap: balance;
+    margin: 0 0 .9rem;
+}
+
+section > p, section > ul, section > ol, section > .tabla-marco { margin: 0 0 1rem; }
+section > *:last-child { margin-bottom: 0; }
+
+ul, ol { padding-left: 1.15rem; display: flex; flex-direction: column; gap: .6rem; }
+li::marker { color: var(--tinta-tenue); }
+strong { font-weight: 600; }
+
+code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .85em;
+    background: var(--marca-suave);
+    padding: .1em .34em;
+    border-radius: 2px;
+}
+
+a { color: var(--marca); text-underline-offset: .15em; }
+a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--marca);
+    outline-offset: 3px;
+    border-radius: 2px;
+}
+
+.nota { font-size: .9rem; color: var(--tinta-tenue); line-height: 1.55; }
+
+.tabla-marco {
+    overflow-x: auto;
+    border: 1px solid var(--filete);
+    border-radius: 3px;
+    background: var(--superficie);
+    box-shadow: var(--sombra);
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 32rem;
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .84rem;
+    font-variant-numeric: tabular-nums;
+}
+
+caption {
+    caption-side: top;
+    text-align: left;
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--tinta-tenue);
+    padding: .85rem 1rem .55rem;
+}
+
+th, td { padding: .62rem 1rem; text-align: right; border-bottom: 1px solid var(--filete-fino); }
+
+thead th {
+    font-weight: 600;
+    font-size: .7rem;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--tinta-tenue);
+    border-bottom: 1px solid var(--filete);
+    vertical-align: bottom;
+}
+
+th[scope="row"] { text-align: left; font-weight: 600; font-size: .82rem; color: var(--tinta); }
+tbody tr:last-child th, tbody tr:last-child td { border-bottom: none; }
+
+tr.actual th[scope="row"] { box-shadow: inset 3px 0 0 var(--mal); color: var(--mal); }
+tr.propuesta th[scope="row"] { box-shadow: inset 3px 0 0 var(--marca); color: var(--marca); }
+tr.propuesta td, tr.propuesta th[scope="row"] { background: var(--marca-suave); }
+
+.barra { display: inline-flex; align-items: center; gap: .5rem; }
+.pista {
+    display: block;
+    width: 3.4rem;
+    height: .42rem;
+    border-radius: 1px;
+    background: var(--filete);
+    overflow: hidden;
+    flex: none;
+}
+.pista i { display: block; height: 100%; background: var(--marca); }
+.baja i { background: var(--mal); }
+
+.opcion {
+    background: var(--superficie);
+    border: 1px solid var(--filete);
+    border-radius: 3px;
+    padding: 1.1rem 1.25rem;
+    box-shadow: var(--sombra);
+}
+
+.opcion h3 {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .95rem;
+    font-weight: 600;
+    margin: 0 0 .4rem;
+}
+
+.opcion p { margin: 0 0 .5rem; color: var(--tinta-media); font-size: .95rem; }
+.opcion p:last-child { margin-bottom: 0; }
+.opcion.recomendada { border-left: 4px solid var(--marca); }
+.opcion.recomendada h3 { color: var(--marca); }
+
+.opciones { display: flex; flex-direction: column; gap: .85rem; }
+
+details {
+    background: var(--superficie);
+    border: 1px solid var(--filete);
+    border-radius: 3px;
+    padding: 0 1.1rem;
+}
+
+summary {
+    font-family: "Libre Franklin", system-ui, sans-serif;
+    font-size: .84rem;
+    font-weight: 600;
+    padding: .85rem 0;
+    cursor: pointer;
+    color: var(--tinta-media);
+}
+
+details[open] summary { border-bottom: 1px solid var(--filete-fino); margin-bottom: .9rem; }
+
+details pre {
+    overflow-x: auto;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .78rem;
+    line-height: 1.6;
+    color: var(--tinta-media);
+    margin: 0 0 1rem;
+}
+
+.pie {
+    border-top: 1px solid var(--filete);
+    padding-top: 1.3rem;
+    font-size: .82rem;
+    color: var(--tinta-tenue);
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="hoja">
+
+    <header class="cabecera">
+        <p class="eyebrow">Medición · Gerència</p>
+        <h1>Al asistente de Gerencia lo calla el umbral, no la anchura</h1>
+        <dl class="ficha">
+            <div><dt>Fecha</dt><dd>25 de agosto de 2026</dd></div>
+            <div><dt>Chatbot</dt><dd>assistent economicoadministratiu</dd></div>
+            <div><dt>Corpus</dt><dd>14.198 fragmentos</dd></div>
+            <div><dt>Batería</dt><dd>7 preguntas reales</dd></div>
+            <div><dt>Umbral actual</dt><dd>0,35</dd></div>
+            <div><dt>Comparación</dt><dd>4 configuraciones</dd></div>
+        </dl>
+    </header>
+
+    <section class="alerta">
+        <p class="titular">Arreglar <code>retrieval_top_k</code> dejó mudo a este chatbot, y no se
+        vio porque nadie volvió a preguntarle.</p>
+        <p>Sus seis preguntas reales son del 15 y 16 de agosto, <strong>antes de RAG.15</strong>.
+        Entonces la anchura efectiva era <strong>1</strong> —el defecto que RAG.15 corrigió—, así
+        que el filtro de calidad promediaba <em>un solo</em> fragmento y le salía la nota del mejor:
+        <strong>0,427</strong>, por encima de su umbral de 0,35. Contestó las seis.</p>
+        <p>Con la anchura arreglada entran cuatro o cinco fragmentos, la media baja a
+        <strong>0,282</strong> y el umbral la rechaza. Medido con el grafo completo:
+        <strong>se rinde en 5 de las 7 preguntas</strong>, y da igual que la anchura sea 5 u 8.</p>
+    </section>
+
+    <section>
+        <h2>Las cuatro configuraciones, medidas</h2>
+
+        <div class="tabla-marco">
+            <table>
+                <caption>7 preguntas reales · grafo completo, con reescritura de consulta</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Configuración</th>
+                        <th scope="col">Responde</th>
+                        <th scope="col">Se rinde</th>
+                        <th scope="col">Documentos<br>(media)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="actual">
+                        <th scope="row">RAG · <code>top_k</code> 8 · umbral 0,35<br>
+                            <span class="nota">como estaba</span></th>
+                        <td><span class="barra">2/7<span class="pista baja"><i style="width:29%"></i></span></span></td>
+                        <td>5</td>
+                        <td>4,00</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">RAG · <code>top_k</code> 5 · umbral 0,35<br>
+                            <span class="nota">aplicado hoy</span></th>
+                        <td><span class="barra">2/7<span class="pista baja"><i style="width:29%"></i></span></span></td>
+                        <td>5</td>
+                        <td>2,71</td>
+                    </tr>
+                    <tr class="propuesta">
+                        <th scope="row">RAG · <code>top_k</code> 5 · umbral 0,30<br>
+                            <span class="nota">propuesta</span></th>
+                        <td><span class="barra">4/7<span class="pista"><i style="width:57%"></i></span></span></td>
+                        <td>3</td>
+                        <td>2,71</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Agéntico<br>
+                            <span class="nota">otro pipeline</span></th>
+                        <td><span class="barra">7/7<span class="pista"><i style="width:100%"></i></span></span></td>
+                        <td>0</td>
+                        <td>2,86</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p><strong>Las dos primeras filas son idénticas en cobertura</strong>: cambiar la anchura de
+        8 a 5 no rescata ni pierde una sola pregunta aquí. Lo que sí cambia es cuánto rellena. En la
+        única pregunta que las dos contestan bien, el 8 pasa de 2 documentos y 2.034 caracteres a
+        4 documentos y <strong>4.458</strong>, y su nota de calidad cae de 0,69 a 0,50: el doble de
+        texto con la mitad de confianza.</p>
+
+        <p class="nota">Por eso <code>top_k = 5</code> queda aplicado igualmente. No arregla la
+        mudez, pero cuesta cero y evita el relleno.</p>
+    </section>
+
+    <section>
+        <h2>Por qué el agéntico contesta a todo</h2>
+        <p>No es que recupere mejor. Su pipeline
+        (<code>md_agent_selector</code>) selecciona documentos enteros y les asigna
+        <strong><code>score = 1.0</code> fijo</strong>, así que el filtro de calidad
+        <strong>no puede rechazar nada</strong> con ningún umbral. El reranker tampoco actúa.</p>
+        <p>Es un dato importante para leer la batería: la comparación no es «un asistente que
+        recupera bien contra otro que recupera mal», es <strong>uno con filtro de calidad contra
+        otro sin él</strong>. El agéntico responde siempre porque no tiene cómo callarse — lo cual
+        puede ser lo correcto para funcionarios que saben valorar una norma, o puede significar que
+        responde también cuando no debería. Eso es exactamente lo que hay que preguntarle a
+        Gerencia.</p>
+    </section>
+
+    <section>
+        <h2>Qué hacer con el umbral</h2>
+        <p>Las tres preguntas que siguen sin respuesta con 0,30 puntúan 0,11, 0,12 y 0,12: están muy
+        lejos de cualquier umbral razonable y parecen huecos del corpus, no un problema de
+        calibración. Las dos que 0,30 recupera puntuaban 0,311 y 0,327 — justo debajo del listón.</p>
+
+        <div class="opciones">
+            <div class="opcion recomendada">
+                <h3>Bajar el umbral a 0,30</h3>
+                <p>Pasa de 2 a 4 respuestas de 7. Es coherente con el criterio que ya se aplicó al
+                elegir 0,35 para este chatbot frente al 0,50 de Normativa: sus usuarios son
+                funcionarios, y es preferible enseñarles una norma para que la valoren que no
+                enseñarles ninguna.</p>
+                <p><strong>No está aplicado</strong>: cambia qué evidencia se considera suficiente
+                para afirmar algo, y esa es una decisión tuya, no una consecuencia de una medición.</p>
+            </div>
+            <div class="opcion">
+                <h3>Dejarlo en 0,35 y arreglar el filtro</h3>
+                <p>La causa de fondo es que el filtro promedia <em>todas</em> las puntuaciones, así
+                que la cola arrastra la nota. Puntuar sobre el mejor fragmento —o sobre la media de
+                los tres primeros— haría que el umbral signifique «tengo una fuente buena» en vez
+                de «tengo un montón de fuentes parecidas».</p>
+                <p>Es la solución correcta y la más lenta: toca el núcleo del grafo y afecta a
+                todos los chatbots. Merece su propio prompt.</p>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h2>La batería, y para qué sirve</h2>
+        <p>Las siete preguntas están contestadas por las cuatro configuraciones y montadas en una
+        hoja de validación: cada pregunta con sus cuatro respuestas <strong>sin identificar</strong>
+        y en orden distinto, para que el juicio vaya sobre lo que dice cada una y no sobre cuál se
+        espera que gane.</p>
+        <p>Aquí <strong>no hay veredicto automático</strong>, y es la diferencia con la medición de
+        Normativa: en Gerencia no existe una lista de respuestas validadas, así que no hay verdad
+        contra la que puntuar. Las preguntas sirven; las respuestas de hoy no tienen por qué ser las
+        adecuadas. Lo que Gerencia marque es lo que convertirá esta batería en tests automáticos.</p>
+    </section>
+
+    <details>
+        <summary>Cómo se midió</summary>
+        <pre>uv run --project server python _local/golden/bateria_gerencia.py \
+    --dataset _local/golden/consultas_gerencia_econadm.json \
+    --variante rag_k5=722aaa10-...:5 \
+    --variante rag_k8=722aaa10-...:8 \
+    --variante agentico=a47f8f83-... \
+    --salida _local/golden/bateria_gerencia.json</pre>
+        <p class="nota">Las preguntas salen de <code>hub_interactions</code> —las seis reales que se
+        le hicieron— más el único escenario de prueba que tenía guardado. La anchura y el umbral se
+        inyectan parcheando el resolvedor de configuración, no escribiendo en la base: así se puede
+        enseñar lo que el RAG <em>sí sabe decir</em> con 0,30 sin haber cambiado antes una decisión
+        que no es mía.</p>
+        <p class="nota">Un barrido previo de recuperación sobre estas mismas 7 consultas predijo
+        2/7 con las dos anchuras, y el grafo completo dio 2/7. Igual que en Normativa, la medición
+        barata acierta el resultado del filtro.</p>
+    </details>
+
+    <footer class="pie">
+        <p>Gov Gen AI Platform · tercera parte de la serie sobre
+        <code>retrieval_top_k</code>.</p>
+        <p>Aplicado: <code>retrieval_top_k = 5</code>. Pendiente de decisión: el umbral.</p>
+    </footer>
+
+</div>
