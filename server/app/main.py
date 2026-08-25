@@ -379,3 +379,27 @@ if DEPLOY_MODE in ("edge", "all"):
 @app.get("/health")
 async def health() -> dict:
     return {"status": "healthy"}
+
+
+@app.get("/api/v1/instancia")
+async def instancia() -> dict:
+    """Metadatos públicos de este despliegue (AIS.6).
+
+    Hoy sólo lleva el **enlace al código fuente que exige el §13 de la AGPL**: quien ejecuta una
+    versión modificada del programa y la ofrece por red tiene que dar su fuente a los usuarios de
+    **esa** instancia.
+
+    **Público y sin credencial a propósito.** La obligación es frente a quien usa el programa
+    remotamente, y eso incluye a la ciudadanía que escribe en el widget embebido —el caso que el
+    README señala como el que se olvida—. Un endpoint autenticado dejaría fuera precisamente a
+    los usuarios más numerosos. No expone nada sensible: es una URL que quien despliega ha
+    decidido publicar.
+
+    **Sale de `SOURCE_URL` y no de una constante** porque el §13 pide el *Corresponding Source*
+    de esa versión —el fork, en el commit desplegado—, no el del proyecto de origen. Una URL fija
+    al principal haría que cualquier despliegue modificado incumpliera mientras cree que cumple.
+
+    Vacía = sin enlace: quien despliega el código **sin modificar** no queda sujeto a esta
+    obligación concreta, así que forzar un valor sería inventarse un requisito.
+    """
+    return {"source_url": (os.getenv("SOURCE_URL") or "").strip() or None}

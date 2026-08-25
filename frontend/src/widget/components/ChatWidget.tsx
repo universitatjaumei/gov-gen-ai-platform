@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useTranslation } from 'react-i18next'
 import { useChat, type SourceRef } from '../hooks/useChat'
+import { EnlaceAlFuente } from '@/shared/licencia/EnlaceAlFuente'
 
 // Identidad del proyecto (UX.2). Los mismos valores que usa el resto de la plataforma;
 // `--color-primary` los pisa cuando el chatbot trae tema propio (SEC.8.6).
@@ -425,6 +426,17 @@ export function ChatWidget({ chatbotId, apiUrl, lang, widgetKey, model }: Props)
       >
         {model ? t('ai_disclaimer_model', { model }) : t('ai_disclaimer')}
       </p>
+
+      {/* AIS.6 — el §13 de la AGPL, y **éste es el caso que se olvida**: la obligación es
+          frente a quien usa el programa por red, y la ciudadanía que escribe en este widget lo
+          está usando. Ponerlo sólo en el panel dejaría fuera justo a los usuarios más
+          numerosos. Vacío `SOURCE_URL`, no se pinta nada. */}
+      <div style={{ padding: '0 0.75rem 0.6rem' }}>
+        <EnlaceAlFuente
+          className=""
+          style={{ color: GRIS, fontSize: '0.7rem', textDecoration: 'underline' }}
+        />
+      </div>
 
       {/* La animación necesita `@keyframes`, que un `style` en línea no puede declarar. */}
       <style>{'@keyframes govgenai-parpadeo{0%,100%{opacity:.25}50%{opacity:1}}'}</style>

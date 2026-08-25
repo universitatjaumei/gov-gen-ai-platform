@@ -5,6 +5,7 @@ import { useModulos } from '@/shared/auth/useModulos'
 import { SUPPORTED_LANGUAGES } from '@/shared/i18n'
 import { useMarca } from '@/shared/marca/useMarca'
 import { useColoresDelPanel } from '@/shared/marca/useColoresDelPanel'
+import { EnlaceAlFuente } from '@/shared/licencia/EnlaceAlFuente'
 import { useOrganizacionElegida } from '@/shared/organizacion/useOrganizacionElegida'
 
 /** El nombre de cada idioma EN ese idioma: quien busca su lengua la reconoce escrita así. */
@@ -145,6 +146,10 @@ export function AppLayout() {
           >
             {tc('logout')}
           </button>
+          {/* AIS.6 — el §13 de la AGPL: quien despliega una versión modificada tiene que
+              ofrecer su fuente a los usuarios de **esa** instancia. Sale de `SOURCE_URL`, y
+              si está vacía no se pinta nada. */}
+          <EnlaceAlFuente className="mt-2 inline-block underline hover:no-underline" />
         </div>
       </nav>
 

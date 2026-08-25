@@ -14,5 +14,8 @@
   "language": "Idioma",
   "confirm_delete": "¿Confirmar eliminación?",
   "no_results": "Sin resultados",
-  "continue": "Continuar"
+  "continue": "Continuar",
+  "licencia": {
+    "codigo_fuente": "Código fuente"
+  }
 }
