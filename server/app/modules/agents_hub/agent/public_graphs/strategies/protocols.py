@@ -99,8 +99,26 @@ class LanguagePolicy(Protocol):
         ...
 
 
+def _no_se_puede_presentar_como_vigente(item: EvidenceItem) -> bool:
+    """La señal de vigencia que VIS.3 ya pone en cada evidencia (VIS.4).
+
+    Se lee de `metadata` y no se recalcula: el dato lo tiene la capa de recuperación, que es la
+    que ve el documento, y duplicar aquí la regla —`estat_vigencia` distinto de `vigent`, o sin
+    validar— las dejaría discrepando en cuanto una de las dos cambiara.
+
+    Ausente cuenta como **vigente**: los pipelines que no marcan vigencia son los que no manejan
+    corpus normativo, y ahí esta ordenación no debe alterar nada.
+    """
+    from server.app.modules.agents_hub.services.retrieval.vigencia import CLAVE_METADATO
+
+    return bool((item.metadata or {}).get(CLAVE_METADATO, False))
+
+
 class PreferLanguagePolicy:
-    """prefer: prioriza el idioma del usuario; omite doble búsqueda si ya hay evidencia."""
+    """prefer: prioriza el idioma del usuario **dentro de la misma vigencia** (VIS.4).
+
+    Omite la doble búsqueda si ya hay evidencia en la lengua de la pregunta.
+    """
 
     def detect(self, query: str) -> str | None:
         return None  # subclases con detector real anulan este método
@@ -119,7 +137,30 @@ class PreferLanguagePolicy:
         query_language: str | None,
         items: list[EvidenceItem],
     ) -> list[EvidenceItem]:
-        return items  # prefer no filtra: pasa todos los items
+        """No filtra: **ordena**. Primero vigente, después lengua (VIS.4).
+
+        `prefer` sigue pasando todos los items —quitar evidencia sería cambiar de política— pero
+        el orden decide qué entra en el contexto cuando hay que recortar, y ahí estaba el
+        problema: la preferencia de lengua no distinguía «la única versión está en otra lengua»
+        de «la única versión de tu lengua es de otro curso», y son cosas muy distintas para quien
+        pregunta. Citar lo que ya no rige en la lengua correcta es un error de fondo; citar lo
+        vigente en otra lengua es una incomodidad, y encima se avisa.
+
+        Así que la lengua opera **dentro** de la misma vigencia y no por encima de ella. Dentro
+        de cada grupo se conserva el orden que traían —la relevancia—, porque esta regla añade un
+        criterio por encima del que ya había, no lo sustituye: por eso `sorted` con clave, que es
+        estable, y no una reordenación completa.
+        """
+        if query_language is None:
+            return items
+
+        def prioridad(item: EvidenceItem) -> tuple[int, int]:
+            # 0 antes que 1: menor ordena primero.
+            no_vigente = 1 if _no_se_puede_presentar_como_vigente(item) else 0
+            otra_lengua = 0 if item.language == query_language else 1
+            return (no_vigente, otra_lengua)
+
+        return sorted(items, key=prioridad)
 
     def should_warn_translation(
         self,

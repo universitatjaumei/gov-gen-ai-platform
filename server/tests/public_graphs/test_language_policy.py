@@ -41,10 +41,20 @@ class TestPreferLanguagePolicy:
         assert policy.needs_secondary_search(None, []) is False
 
     def test_prefer_filter_items_returns_all(self):
-        """prefer no filtra items: devuelve la lista original intacta."""
+        """prefer no filtra items: no pierde ninguno.
+
+        **VIS.4 cambió el orden a propósito**, así que este test ya no puede comparar la lista
+        entera: la preferencia de lengua pasa a operar *dentro* de la misma vigencia —primero lo
+        vigente, después la lengua—, y eso reordena. Lo que sigue siendo cierto, y es lo que
+        distingue `prefer` de `strict`, es que **no se descarta evidencia**.
+        """
         policy = PreferLanguagePolicy()
         items = [_ITEM_ES, _ITEM_CA, _ITEM_NO_LANG]
-        assert policy.filter_items("ca", items) == items
+
+        assert sorted(
+            policy.filter_items("ca", items), key=id
+        ) == sorted(items, key=id)
+        # Sin lengua de pregunta no hay nada que priorizar, así que ni siquiera se reordena.
         assert policy.filter_items(None, items) == items
 
 
