@@ -53,14 +53,26 @@ PiiType = Literal[
 
 
 class AnonymizationMode(str, Enum):
-    """Modo de operación de la anonimización por workspace.
+    """Modo de operación de la anonimización, heredado de la organización (AIS.5).
 
     - OFF: PII real al LLM (sólo dev/test — viola RGPD en producción).
     - DETECT_ONLY: detecta y audita conteos, pero NO sustituye en el prompt.
-    - REPLACE: sustituye con Faker antes del LLM y revierte el output (default).
+    - REPLACE: sustituye con Faker antes del LLM y deshace la sustitución **dentro de la misma
+      ejecución** (default).
     - REPLACE_WITH_DISPOSITION_7: como REPLACE pero DNI/NIE/Passport se
       enmascaran (***NNNNX) en lugar de fakerizar → irreversible para esos
       tipos. Conforme a LOPDGDD Disposición Adicional 7ª.
+
+    **Hasta dónde llega la reversión de REPLACE, dicho en vez de dado por hecho.** El mapa
+    sintético→real vive **en memoria, durante la ejecución**: eso basta para lo que el flujo
+    necesita —el texto vuelve con los nombres reales en el mismo informe que lo pidió— y **no
+    permite re-identificar después**. Un informe generado ayer no se puede deshacer: el mapa no
+    se guarda en ningún sitio, a propósito. La persistencia cifrada es F2.A.4 (Vault Edge) y
+    llegará cuando haya un caso que la necesite; hasta entonces esto no es una carencia sino el
+    alcance, y decirlo aquí evita que alguien construya encima de una promesa más ancha.
+
+    El modo lo fija la organización y el informe sólo puede **endurecerlo**: ver
+    `anonymization/politica.py`.
     """
 
     OFF = "off"

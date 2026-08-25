@@ -220,6 +220,17 @@ class HubOrganizacion(HubConfigBase):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     partner_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # AIS.5 — la política de anonimización de los informes de esta organización.
+    #
+    # Vive aquí y no en el informe porque el usuario lo dijo así: el modo «depende del contrato
+    # con el proveedor LLM y del tipo de datos», y ninguna de las dos cosas es una decisión por
+    # informe. Quien crea uno no tiene por qué saber qué permite el contrato de su casa.
+    #
+    # **Nulo = la organización no lo ha fijado**, y entonces manda el valor del código
+    # (`politica.MODO_POR_DEFECTO`, hoy `replace`). Es la misma semántica de `core/ambito.py`
+    # para el resto de la configuración heredable, y es lo que hace que el piloto no note nada.
+    # Un informe puede **endurecerlo, nunca relajarlo**.
+    anonymization_mode: Mapped[str | None] = mapped_column(String(40), nullable=True)
     # --- Defaults del grafo público (cascada hacia chatbots) ---
     default_public_graph_profile: Mapped[str] = mapped_column(String(50), nullable=False, default="PUBLIC_KB_RICH")
     default_retrieval_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="RAG")

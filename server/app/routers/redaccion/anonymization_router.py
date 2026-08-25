@@ -25,6 +25,10 @@ from server.app.modules.redaccion.database.models import (
     HubWorkspace,
     HubWorkspaceAuditEvent,
 )
+from server.app.modules.redaccion.services.anonymization.politica import (
+    modo_efectivo,
+    motivo_de_no_relajar,
+)
 from server.app.modules.redaccion.services.anonymization.run_context import (
     AnonymizationMode,
     AnonymizationSummary,
@@ -63,6 +67,10 @@ class AnonymizationModeResponse(BaseModel):
     workspace_id: uuid.UUID
     mode: AnonymizationMode
     updated_at: datetime
+    #: AIS.5 — por qué el modo aplicado no es el pedido, o `None` si sí lo es. Va en el contrato
+    #: porque la regla la impone el servidor y el frontend no puede deducirla: sin esto, pedir
+    #: `off` y seguir viendo `replace` se lee como una pantalla rota.
+    motivo: str | None = None
 
 
 class ReAnalyzeResponse(BaseModel):
@@ -95,6 +103,31 @@ async def _get_workspace_checked(
     if not es_propietario(user.user_id, workspace.owner_id):
         raise HTTPException(status_code=403, detail="Forbidden")
     return workspace
+
+
+async def _modo_de_la_organizacion(
+    workspace: HubWorkspace, session: AsyncSession
+) -> AnonymizationMode | None:
+    """El suelo que fija la organización del informe, o **`None` si no ha fijado ninguno** (AIS.5).
+
+    Devuelve `None` y no el valor del código a propósito, y es la distinción que sostiene el
+    prompt: `MODO_POR_DEFECTO` es un **valor por omisión**, no un mínimo. Si esta función
+    resolviera «sin política» como `replace`, ese valor pasaría a ser un suelo y nadie podría
+    elegir `off` en una instalación recién montada — la anonimización sería obligatoria con otro
+    nombre, que es lo contrario de lo que se decidió.
+
+    Se resuelve con una consulta y no navegando por una relación: `HubWorkspace` es operacional
+    y `HubOrganizacion` es de configuración, y la frontera edge/cloud prohíbe `relationship()`
+    entre las dos bases (`AGENTS.md` §Frontera Edge-Cloud).
+    """
+    from server.app.modules.agents_hub.database.config_models import HubOrganizacion
+
+    if workspace.organizacion_id is None:
+        return None
+
+    organizacion = await session.get(HubOrganizacion, workspace.organizacion_id)
+    declarado = getattr(organizacion, "anonymization_mode", None)
+    return AnonymizationMode(declarado) if declarado else None
 
 
 async def _get_last_manifest(
@@ -174,7 +207,13 @@ async def patch_anonymization_mode(
 ) -> AnonymizationModeResponse:
     """Cambia el modo de anonimización del workspace.
 
-    - 200: modo actualizado.
+    **El informe endurece, no relaja** (AIS.5). El suelo lo pone la organización, porque el modo
+    depende del contrato con el proveedor y del tipo de datos, y ninguna de las dos cosas es una
+    decisión de quien redacta un informe concreto. Pedir un modo menos protector no es un error
+    del cliente —la pantalla ofrece los cuatro— así que **no es un 4xx**: se aplica el suelo y se
+    devuelve el motivo, que es lo que evita que alguien crea que la pantalla no funciona.
+
+    - 200: modo actualizado (o mantenido, con `motivo` explicando por qué).
     - 422: workspace en ejecución (drafting/in_review/assembled/exported).
     - 403: usuario no es owner.
     """
@@ -186,8 +225,12 @@ async def patch_anonymization_mode(
             detail="MODE_LOCKED_DURING_EXECUTION",
         )
 
+    heredado = await _modo_de_la_organizacion(workspace, session)
+    efectivo = modo_efectivo(heredado=heredado, pedido=body.mode)
+    motivo = motivo_de_no_relajar(heredado=heredado, pedido=body.mode)
+
     old_mode = workspace.anonymization_mode
-    workspace.anonymization_mode = body.mode.value
+    workspace.anonymization_mode = efectivo.value
     updated_at = datetime.now(timezone.utc)
 
     audit_event = HubWorkspaceAuditEvent(
@@ -195,17 +238,27 @@ async def patch_anonymization_mode(
         block_id=None,
         event="anonymization_mode_changed",
         from_status=old_mode,
-        to_status=body.mode.value,
+        to_status=efectivo.value,
         actor=user.user_id,
-        metadata_json={"old_mode": old_mode, "new_mode": body.mode.value},
+        # Se registra lo PEDIDO además de lo aplicado: si sólo constara el resultado, una
+        # auditoría no podría distinguir «eligió replace» de «pidió off y el suelo lo subió».
+        metadata_json={
+            "old_mode": old_mode,
+            "new_mode": efectivo.value,
+            "modo_pedido": body.mode.value,
+            # `None` cuando la organización no ha fijado política: es un dato distinto de
+            # «fijó replace», y la auditoría tiene que poder distinguirlos.
+            "modo_heredado": heredado.value if heredado else None,
+        },
     )
     session.add(audit_event)
     await session.commit()
 
     return AnonymizationModeResponse(
         workspace_id=workspace_id,
-        mode=body.mode,
+        mode=efectivo,
         updated_at=updated_at,
+        motivo=motivo,
     )
 
 

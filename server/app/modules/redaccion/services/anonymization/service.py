@@ -225,13 +225,15 @@ class AnonymizerService:
         return f"{parts[0][0]}." if parts else value
 
     # ------------------------------------------------------------------
-    # Estado: stubs marcados para post-MVP
+    # AIS.5 — aquí había `save_state`/`load_state`, dos no-op sin un solo consumidor.
+    #
+    # Se retiran, no se completan, y la razón es la decisión del usuario del 2026-08-24: el
+    # piloto no trata datos de ciudadanos y la anonimización es configurable, así que **no hay
+    # bóveda cifrada antes del piloto**. La persistencia del mapa es F2.A.4 (Vault Edge) y se
+    # escribirá cuando haya quien la consuma.
+    #
+    # Se borran en vez de dejarlos marcados porque un método que existe, se puede llamar y no
+    # hace nada es peor que su ausencia: invita a creer que el mapa se guardó. El alcance real
+    # —la reversión vale dentro de la ejecución y no después— está dicho en el docstring de
+    # `AnonymizationMode`, que es donde lo lee quien elige el modo.
     # ------------------------------------------------------------------
-
-    async def save_state(self, _path_or_ref: Any) -> None:
-        """No-op MVP. TODO post-MVP: persistencia cifrada del mapa de anonimización."""
-        return None
-
-    async def load_state(self, _path_or_ref: Any) -> None:
-        """No-op MVP. TODO post-MVP: rehidratación del mapa cifrado."""
-        return None
