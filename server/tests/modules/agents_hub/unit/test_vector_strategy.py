@@ -148,13 +148,24 @@ class TestVectorRetrievalStrategy:
         assert src.title == "reglamento.pdf"
         assert src.url == "https://servidor.com/reglamento.pdf"
 
-    async def test_normalizes_rrf_score_to_0_1_scale_without_reranker(self):
-        """Sin reranker, `hybrid_search` devuelve escala RRF (techo 1/(k+1) ~= 0.0164): el
-        quality gate del CoreGraph compara contra `quality_threshold` en escala [0,1] (ver
-        los mocks de `test_core_graph.py`, que usan score=0.9), así que un score en escala
-        RRF sin normalizar nunca alcanzaria el umbral por defecto (0.6) por buena que sea
-        la coincidencia real. Antes de este test, `Source.score` pasaba el valor RRF tal
-        cual: un match perfecto (rank 1 en las dos ramas) llegaba como ~0.016, no ~1.0."""
+    async def test_does_not_derive_the_gate_score_from_the_rrf_fusion(self):
+        """HIB.J — la nota del gate ya NO se deriva de la fusión, ni normalizada.
+
+        Este test decía lo contrario y pasaba: comprobaba que la fusión en su **techo
+        teórico** (rango 1 en las dos ramas) se normalizara a 1,0. La fórmula era correcta y
+        la conclusión falsa, porque ese techo exige que el MISMO fragmento salga por vector
+        y por léxico, y con troceado fino no ocurre nunca. En la práctica el ganador es
+        siempre el rango 1 vectorial y la nota normalizada valía **exactamente
+        `vector_weight`**: medido, 0,7 en las 25 consultas del lote del 2026-08-26.
+
+        Así que el sucesor honesto de aquel test es este: con la fusión en su techo pero sin
+        similitud coseno, la nota NO se inventa a partir de la fusión. Queda 0,0 y decide la
+        puerta. La nota buena la da `relevance`, y eso lo cubre
+        `test_vector_strategy_pool_y_nota.py`.
+
+        Se conserva —en vez de borrarse— porque es el guardarraíl contra reintroducir la
+        normalización: quien la vuelva a poner, rompe aquí.
+        """
         from server.app.modules.agents_hub.services.retrieval.vector_strategy import (
             VectorRetrievalStrategy,
         )
@@ -181,7 +192,7 @@ class TestVectorRetrievalStrategy:
             strategy = VectorRetrievalStrategy(session, embedding_svc)
             ctx = await strategy.get_context("consulta", uuid.uuid4())
 
-        assert ctx.sources[0].score == pytest.approx(1.0)
+        assert ctx.sources[0].score == pytest.approx(0.0)
 
     async def test_does_not_renormalize_reranker_scores(self):
         """Con reranker, el score YA está en [0,1] (RAG.6a lo sustituye); normalizarlo

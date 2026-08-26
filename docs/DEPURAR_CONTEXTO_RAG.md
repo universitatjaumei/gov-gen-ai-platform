@@ -125,3 +125,58 @@ Lo que **no** cambió: la penalización por número de resultados
 (`len(items) < min_retrieval_results` ⇒ nota × 0,5) mide otra cosa y sigue igual. Y
 `min_retrieval_score` actúa sobre la similitud coseno en la consulta SQL, que es **otra escala**: no
 acota la puntuación del reranker que el gate compara.
+
+## La nota volvió a medir algo (HIB.J, 2026-08-26)
+
+RES.1 arregló *qué fragmento* fija la nota. HIB.J arregló *qué número* es esa nota, que sin
+reranker no medía nada.
+
+**El defecto, medido.** Al apagar el reranker en HIB.A, la nota pasó a ser la fusión RRF
+normalizada por su techo teórico. Sobre las 25 consultas del lote valía **exactamente 0,7 en las
+25**: un solo valor distinto. Y 0,7 es `vector_weight`. El motivo no es un número escrito a mano:
+el ganador de la fusión es siempre el fragmento de rango 1 de la rama vectorial, que aporta
+`vector_weight · 1/(k+1)`, y al dividir por `RRF_MAX_SCORE = 1/(k+1)` queda `vector_weight`. El
+techo teórico exige que **el mismo fragmento** salga por vector y por léxico, y con troceado fino
+no ocurre nunca.
+
+Una puerta que lee una constante no es una puerta: con umbral ≤ 0,7 pasaba todo, con umbral > 0,7
+no pasaba nada. Es el mismo defecto que el `score = 1.0` fijo del modo agéntico, por otra vía.
+
+**El arreglo.** La nota es ahora la **similitud coseno** del mejor fragmento del documento
+(`SearchResult.relevance`, que `hybrid_search` conserva en vez de perderla al sobrescribir
+`score`). La **ordenación** sigue siendo la fusión RRF, que es lo que combina léxico y vector.
+Con reranker la nota sigue siendo la del reranker. Efecto colateral bienvenido: con y sin
+reranker el umbral significa lo mismo, así que desaparece la asimetría que HIB.A tuvo que
+declarar como trampa al comparar.
+
+**El segundo defecto, también medido.** El pool de candidatos era
+`pool_size(top_k) if reranker else top_k`, así que apagar el reranker lo encogió de 30 fragmentos
+a 3 —dos cambios en una línea—. Como después se agrupa por documento, `top_k = 3` dejaba de
+significar tres documentos. Ahora el pool es `candidate_k` (nulo = `pool_size(top_k)`) y no
+depende del reranker, y `top_k` se aplica **tras agrupar**, en documentos.
+
+| Con `top_k = 3` | Antes | Después |
+|---|---|---|
+| Valores distintos de la nota (25 consultas) | **1** | **25** |
+| Documentos por consulta | 1 doc ×6, 2 ×13, 3 ×6 | 2 doc ×1, 3 ×24 |
+| Consultas con un solo documento | **6 de 25** | **0** |
+
+**Punto de operación provisional** (Normativa UJI): `retrieval_top_k = 3`, `candidate_k` nulo
+(⇒ 30), `quality_threshold` **0,40 → 0,60**.
+
+La curva completa, sobre las notas medidas: umbrales de 0,40 a 0,68 no callan ninguna; 0,70 calla
+3; 0,72 calla 4; 0,74 calla 7; 0,76 calla 17; 0,80 calla las 25. Las notas van de 0,6917 a 0,7854.
+
+**Por qué 0,60 y por qué es provisional.** Las 25 del lote son preguntas reales de informadores y
+**todas tienen respuesta en el corpus** —lo comprobó el bloque RES por SQL—, así que en este lote
+cada silencio es un fallo y la medición no puede elegir el umbral: cualquier valor por encima de
+0,68 sólo añade silencios falsos. El 0,60 se elige porque queda por debajo del mínimo observado
+con margen (no depende de que ese mínimo sea representativo) y porque deja la puerta **capaz** de
+actuar si algún día llega evidencia con relevancia realmente baja, cosa que en este lote no pasa.
+En la escala nueva, el 0,40 anterior es un umbral que no podría actuar ni con evidencia mala.
+
+**Sobre el lote no cambia nada**: ninguna de las 25 cae por debajo de 0,60. El cambio tiene efecto
+potencial fuera del lote, y eso es lo único que se afirma. El punto definitivo se elige con el
+lote de HIB.G, que tendrá negativos, y con el piloto.
+
+Instrumental: `_local/golden/rejilla_hibj.py` → `_local/golden/rejilla_hibj.json`.

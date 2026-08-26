@@ -46,6 +46,7 @@ class VectorRetrievalStrategy:
         metadata_filter: MetadataFilter | None = None,
         min_score: float = 0.0,
         reranker: Any = None,
+        candidate_k: int | None = None,
     ):
         self._session = session
         self._embedding = embedding_service
@@ -56,6 +57,12 @@ class VectorRetrievalStrategy:
         # RAG.6a: None = sin reranking. Lo inyecta el pipeline solo si cfg.reranker_enabled,
         # así que la estrategia no tiene que conocer el flag.
         self._reranker = reranker
+        # HIB.J: cuántos FRAGMENTOS se le piden al híbrido, frente a `top_k`, que son los
+        # DOCUMENTOS que acaban llegando al modelo. Antes el pool valía
+        # `pool_size(top_k) if reranker else top_k`, así que apagar el reranker lo encogía
+        # de 30 a 3 —dos cambios en una línea—. Medido sobre el lote: 19 de 25 consultas
+        # recibieron menos documentos que `top_k`, y 6 uno solo.
+        self._candidate_k = candidate_k if candidate_k is not None else pool_size(top_k)
 
     async def get_context(
         self,
@@ -64,9 +71,12 @@ class VectorRetrievalStrategy:
         language: str | None = None,
     ) -> RetrievalContext:
         query_embedding = await self._embedding.embed(query)
-        # RAG.6a: con reranker se pide un pool ampliado. Pedirle `top_k` candidatos a un
-        # reranker es pedirle que reordene lo que ya está elegido: no puede mejorar nada.
-        candidatos = pool_size(self._top_k) if self._reranker else self._top_k
+        # HIB.J: el pool ya no depende de si hay reranker. Se pide siempre `candidate_k`
+        # fragmentos, RRF los ordena, y el reranker —si está— los reordena. La razón de
+        # RAG.6a sigue valiendo (pedirle `top_k` a un reranker es pedirle que reordene lo ya
+        # elegido) y ahora vale también sin él: con troceado fino, `top_k` fragmentos pueden
+        # ser un solo documento.
+        candidatos = self._candidate_k
         results = await self._retriever.hybrid_search(
             query=query,
             query_embedding=query_embedding,
@@ -131,15 +141,34 @@ class VectorRetrievalStrategy:
             # Va delante del contenido y es texto de la evidencia, no una instrucción al
             # modelo: CRITERIS §1.4 pide resolver antes del modelo lo que se pueda resolver.
             excerpt = hidratar_desplazamiento(excerpt, doc, best.metadata)
-            # Sin reranker, `best.score` es la fusion RRF de HybridRetriever (escala
-            # ~1/60, no [0,1]): normalizar aqui es lo que hace comparable el score contra
-            # `quality_threshold`. Con reranker el score YA esta en [0,1] (RAG.6a lo
-            # sustituye en `_aplicar_reranker`) y normalizarlo otra vez lo desfiguraria.
-            score = (
-                best.score
-                if self._reranker is not None
-                else min(1.0, best.score / RRF_MAX_SCORE)
-            )
+            # HIB.J — la nota que llega al quality gate es una MAGNITUD DE RELEVANCIA, no
+            # una posición.
+            #
+            # Con reranker sigue siendo la del reranker, que ya está en [0,1]. Sin él era
+            # la fusión RRF normalizada por su techo teórico, y eso resultó ser una
+            # **constante igual a `vector_weight`**: medido, 0,7 en las 25 consultas del
+            # lote. El techo teórico (rango 1 en las dos ramas) exige que el mismo fragmento
+            # salga por vector y por léxico, y con troceado fino no ocurre; el ganador es
+            # siempre el rango 1 vectorial, que aporta `vector_weight · 1/(k+1)`.
+            #
+            # Una puerta que lee una constante no es una puerta: con umbral ≤ 0,7 pasaba
+            # todo y con umbral > 0,7 no pasaba nada. Se sustituye por la similitud coseno
+            # del mejor fragmento del documento, que es lo que `Source.score` dice ser
+            # («relevancia [0, 1]») y lo que el contrato de `hybrid_search` ya pedía para
+            # este consumidor. Efecto colateral bienvenido: con y sin reranker el umbral
+            # pasa a significar lo mismo, y desaparece la asimetría que HIB.A tuvo que
+            # declarar como trampa.
+            #
+            # Sin ninguna relevancia —fragmentos sólo de la rama léxica— la nota es 0,0 y
+            # decide la puerta: heredar una constante que la deja pasar es el defecto que
+            # este prompt quita.
+            if self._reranker is not None:
+                score = best.score
+            else:
+                relevancias = [
+                    c.relevance for c in chunks if c.relevance is not None
+                ]
+                score = max(relevancias) if relevancias else 0.0
             sources.append(Source(
                 document_id=doc.id if doc else uuid.uuid4(),
                 title=title,
@@ -157,7 +186,18 @@ class VectorRetrievalStrategy:
             ))
             total_tokens += len(excerpt) // 4
 
-        sources.sort(key=lambda s: s.score, reverse=True)
+        # HIB.J — el orden lo decide la RECUPERACIÓN (fusión RRF, o el reranker si está), y
+        # ya viene dado: `by_doc` se llena recorriendo `results` ordenados, así que la
+        # inserción sigue al mejor rango de cada documento. Antes se reordenaba aquí por
+        # `score`, que era equivalente mientras el score fuera la fusión; ahora el score es
+        # la relevancia coseno y reordenar por ella desharía parte de la contribución
+        # léxica que la fusión aporta —y que la ablación de HIB.A mostró que vale—.
+        #
+        # `top_k` se aplica AQUÍ y en documentos, que es lo que el mando dice ser. El recorte
+        # va después de agrupar: cortar el pool antes es lo que hacía que pedir 3 fragmentos
+        # devolviera un solo documento.
+        sources = sources[: self._top_k]
+        total_tokens = sum(len(s.excerpt) // 4 for s in sources)
         return RetrievalContext(sources=sources, mode=self.mode, total_tokens=total_tokens)
 
     async def _aplicar_reranker(self, query: str, results: list) -> list:
@@ -171,8 +211,12 @@ class VectorRetrievalStrategy:
         cuenta: añade una llamada de red por consulta y nadie ha medido todavía cuánto pesa.
         """
         inicio = perf_counter()
+        # HIB.J: se le piden TODOS los candidatos reordenados, no `top_k`. Ahora `top_k`
+        # cuenta documentos y el recorte se hace tras agrupar; truncar aquí a `top_k`
+        # fragmentos dejaría menos documentos de los pedidos, que es el mismo defecto que
+        # este prompt corrige en el pool.
         clasificados = await self._reranker.rerank(
-            query, [r.content for r in results], self._top_k
+            query, [r.content for r in results], len(results)
         )
         transcurrido_ms = (perf_counter() - inicio) * 1000
 

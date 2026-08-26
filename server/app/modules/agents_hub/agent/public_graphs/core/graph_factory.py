@@ -135,6 +135,8 @@ def _buscador_de_fragmentos(cfg: Any, deps: Any):
             top_k=getattr(cfg, "retrieval_top_k", None)
             or getattr(cfg, "min_retrieval_results", 5)
             or 5,
+            # HIB.J — igual que en `rag_vector_pipeline`: `None` lo deriva la estrategia.
+            candidate_k=getattr(cfg, "candidate_k", None),
         )
     )
 

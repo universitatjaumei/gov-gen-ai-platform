@@ -73,6 +73,8 @@ class RagVectorPipeline:
             top_k=getattr(cfg, "retrieval_top_k", None) or cfg.min_retrieval_results,
             min_score=getattr(cfg, "min_retrieval_score", 0.0) or 0.0,
             reranker=reranker,
+            # HIB.J — `None` deja que la estrategia lo derive con `pool_size(top_k)`.
+            candidate_k=getattr(cfg, "candidate_k", None),
         )
 
     async def run(

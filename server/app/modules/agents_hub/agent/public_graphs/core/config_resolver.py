@@ -75,6 +75,15 @@ class PublicGraphConfig:
     # y hay unos cuantos dobles de test que sólo declaran lo que les interesa. El 8 es el mismo
     # que ya declaraba el modelo, así que nada cambia de valor — sólo empieza a leerse.
     retrieval_top_k: int = 8
+    # HIB.J — cuántos FRAGMENTOS se le piden al híbrido, frente a `retrieval_top_k`, que son
+    # los DOCUMENTOS que llegan al modelo. `None` = derivarlo de `retrieval_top_k` con
+    # `pool_size()`, que es el comportamiento por omisión y el único que hay hoy configurado.
+    #
+    # Existe como mando propio porque hasta este prompt el pool dependía de si había
+    # reranker: apagarlo lo encogía de 30 a 3 sin que nadie lo pidiera, y con ello `top_k`
+    # dejaba de significar documentos. Un mando que se puede subir sin tocar el reranker es
+    # lo que separa esos dos cambios para siempre.
+    candidate_k: int | None = None
 
 
 _PLATFORM_DEFAULTS = PublicGraphConfig(
@@ -170,6 +179,9 @@ async def get_effective_public_graph_config(
         # `default_retrieval_top_k`: añadirla es una columna nueva y una decisión de producto que
         # este prompt no necesita, así que la cadena es chatbot → plataforma.
         "retrieval_top_k":       chatbot.retrieval_top_k,
+        # HIB.J — misma cadena que `retrieval_top_k`: chatbot → plataforma, sin capa de
+        # organización, porque `hub_organizaciones` tampoco declara un defecto para esto.
+        "candidate_k":           chatbot.candidate_k,
         "min_retrieval_results": chatbot.min_retrieval_results,
         "min_retrieval_score":   chatbot.min_retrieval_score,
         "reranker_enabled":      chatbot.reranker_enabled,

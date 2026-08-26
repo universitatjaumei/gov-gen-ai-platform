@@ -50,6 +50,20 @@ class SearchResult:
     # RAG.8: sección completa a la que pertenece el fragmento, con la estrategia
     # 'parent_child'. Se busca con el hijo y se responde con el padre.
     parent_content: str | None = None
+    # HIB.J: la **similitud coseno** del fragmento, que `hybrid_search` conserva en vez de
+    # perderla al sobrescribir `score` con la nota de fusión.
+    #
+    # Existen las dos porque miden cosas distintas y cada control necesita la suya:
+    # `score` es posición relativa (ordena), `relevance` es magnitud de parecido (juzga).
+    # El quality gate necesitaba la segunda y estaba leyendo la primera normalizada, que es
+    # **constante e igual a `vector_weight`** —medido: 0,7 en las 25 consultas del lote—,
+    # porque el ganador de la fusión es siempre el rango 1 de la rama vectorial y el techo
+    # teórico exige que el mismo fragmento salga también en la léxica, que con troceado
+    # fino no pasa.
+    #
+    # `None` cuando el fragmento sólo lo trajo la rama léxica: `ts_rank_cd` no es una
+    # similitud y afirmar que lo es sería inventarse el dato.
+    relevance: float | None = None
 
 
 class HybridRetriever:
@@ -225,8 +239,13 @@ class HybridRetriever:
 
         k = 60
         scores: dict[uuid.UUID, tuple[SearchResult, float]] = {}
+        # HIB.J: la similitud coseno de la rama vectorial se guarda ANTES de que la fusión
+        # sobrescriba `score`. Sólo la tienen los fragmentos que salieron por vector: la nota
+        # de la rama léxica es `ts_rank_cd`, que ordena pero no mide parecido.
+        relevancias: dict[uuid.UUID, float] = {}
         for rank, r in enumerate(vector_results):
             scores[r.id] = (r, vector_weight * (1 / (k + rank + 1)))
+            relevancias[r.id] = r.score
         for rank, r in enumerate(keyword_results):
             rrf = (1 - vector_weight) * (1 / (k + rank + 1))
             if r.id in scores:
@@ -244,6 +263,7 @@ class HybridRetriever:
                 score=s,
                 metadata=r.metadata,
                 parent_content=r.parent_content,
+                relevance=relevancias.get(r.id),
             )
             for r, s in sorted_results[:top_k]
         ]

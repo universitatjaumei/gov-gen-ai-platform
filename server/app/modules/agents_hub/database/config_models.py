@@ -395,6 +395,12 @@ class HubChatbot(HubConfigBase):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     retrieval_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="RAG")
     retrieval_top_k: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
+    # HIB.J — fragmentos que se le piden al híbrido, frente a `retrieval_top_k`, que son los
+    # documentos que llegan al modelo. **Nullable a propósito**: NULL significa «derívalo de
+    # `retrieval_top_k`», que es lo que hace `pool_size()`, y no «cero candidatos». Un
+    # defecto numérico aquí congelaría el valor de todos los chatbots existentes en el que
+    # tuviera el día de la migración.
+    candidate_k: Mapped[int | None] = mapped_column(Integer, nullable=True)
     use_prompt_caching: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     cache_ttl: Mapped[int] = mapped_column(Integer, nullable=False, default=3600)
     kind: Mapped[str] = mapped_column(String(20), nullable=False, default="atomic")
