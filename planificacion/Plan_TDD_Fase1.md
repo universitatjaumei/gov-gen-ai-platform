@@ -22423,9 +22423,17 @@ Si solo se compara el recuento de respuestas, se estara midiendo el cambio de es
 
 ---
 
+> **Ampliado el 2026-08-26 (segunda vez), con HIB.A cerrado.** El reranker se apagó por
+> medición, y apagarlo cambió dos cosas más que nadie pidió (ver HIB.J). Además, el bloque sólo
+> dejaba listo el asistente de Normativa; el usuario quiere abrir **también** el piloto de
+> Gerencia, se use o no para el artículo. Lo que sigue: ajustes a HIB.B–HIB.F, y diez prompts
+> nuevos (HIB.G–HIB.P) en dos ramas. **Orden de ejecución recomendado al final del bloque.**
+
 ### Prompt HIB.B (RED/GREEN) — La reformulación no se emite como si fuera la respuesta
 
-**Modelo sugerido**: **Sonnet** — dos defectos encadenados en un fichero, ambos localizados.
+**Modelo sugerido**: **Opus** (antes Sonnet) — la revisión del 2026-08-26 encontró dos decisiones
+que el prompt daba por hechas: qué nodos pueden emitir tokens, y cómo se «sustituye» algo que
+ya viajó por SSE. Ver «Ajuste» dentro del prompt.
 
 **Objetivo**: es el defecto **más visible** de todos, y por eso sube: quien pruebe el piloto y
 haga una pregunta que la puerta rechace ve una línea suelta en castellano —la consulta
@@ -22448,13 +22456,35 @@ contratación menor`, `fallback_reason = quality_gate`.
 Antes de RES.2 el modelo de reescritura casi nunca corria: `necesita_reescritura` exige dos
 turnos previos. RES.2 lo puso en el camino del 28% de las consultas de Normativa.
 
+## Ajuste del 2026-08-26 (2): dos decisiones que el prompt daba por hechas
+
+1. **La lista de nodos que emiten tokens no se escribe a mano.** Filtrar por
+   `langgraph_node == "generate_answer"` enmudece cualquier otro nodo que genere la respuesta
+   (long-context, agentico, los que vengan). Paso 0: inventariar en `core_graph.py` que nodos
+   producen la respuesta final; la lista permitida se DERIVA del grafo (misma regla que P1 del
+   marco: un catalogo escrito en un prompt diverge del sistema en el primer cambio), y un test
+   se pone rojo cuando aparece un nodo generador sin declarar.
+2. **Por SSE no se retira lo ya enviado.** «Sustituir lo que hubiera llegado antes» no es
+   implementable solo en el servidor. Con el filtro de nodos puesto, el unico camino en que
+   llegan tokens y luego hay rendicion es el **contrato de citas**, que corre despues de
+   generar. Decision que hay que tomar en el prompt, con recomendacion:
+   - **(recomendada)** retener los tokens de `generate_answer` hasta que el contrato pase, y
+     emitir de golpe la respuesta o la rendicion. Una sola fuente de verdad, sin tocar el
+     contrato SSE que RAG.2 fijo por snapshot. Precio: latencia percibida en la primera
+     palabra; medirla.
+   - alternativa: evento nuevo de descarte en el contrato SSE + cambio en el widget. Mas
+     complejo y toca un contrato con snapshot.
+
 ## Tests (RED primero)
 # should_not_stream_tokens_from_the_rewrite_model
+# should_derive_the_allowed_nodes_from_the_graph
+# should_fail_when_a_generating_node_is_not_declared
 # should_emit_the_no_answer_message_even_if_other_nodes_streamed
 # should_store_what_the_user_saw
 
 ## Criterio de done
 - [ ] Verificado en el widget del sitio del corpus con una consulta que la puerta rechace
+- [ ] La decision sobre la retencion tomada y escrita, con la latencia a primera palabra medida
 ```
 
 ---
@@ -22484,13 +22514,25 @@ No mezclar esto con la reformulacion de RES.2, que responde a otra pregunta —l
 no encontro nada— y tiene su propia plantilla y su propio plazo. Son dos mecanismos con dos
 razones; fundirlos es como se consigue un nodo que nadie entiende.
 
+## Ajuste del 2026-08-26 (2)
+- **Depende de HIB.B.** Este prompt lleva la reescritura de un 28% de las consultas a casi
+  todos los turnos no iniciales; si entra antes que HIB.B multiplica el defecto mas visible.
+  El orden ya es el bueno; queda escrito para que un reordenamiento no lo rompa.
+- **Una repregunta autocontenida no se toca.** Con un solo turno previo, el caso comun pasa a
+  ser la pregunta que no necesita antecedente; reescribirla introduce deriva. Test nuevo.
+- **El criterio de coste se escribe antes de medir**: se acepta hasta +N ms de latencia mediana
+  y +M tokens por turno. **Fijado por el usuario el 2026-08-26: N = 800 ms, M = 400 tokens.**
+  Si se supera, se reporta y se decide; no se da por bueno en silencio.
+
 ## Tests (RED primero)
 # should_rewrite_the_query_on_the_second_turn
 # should_not_rewrite_on_the_very_first_question
+# should_not_change_a_self_contained_follow_up
 # should_keep_the_subject_of_the_previous_turn
 
 ## Criterio de done
 - [ ] El caso del doctorado internacional, reproducido y verde
+- [ ] Coste medido sobre el lote de HIB.G contra el criterio escrito
 ```
 
 ---
@@ -22516,6 +22558,13 @@ mecanismo, no adorno.
 ## Paso 0 (obligatorio)
 Comprobar en el codigo si la cita del modo agentico lleva ancla. Si la lleva, cerrar el prompt
 con la comprobacion escrita y pasar al siguiente.
+
+Lectura del 2026-08-26 (2), a confirmar en el paso 0: `md_agent_selector_pipeline.py:79` emite
+`source_url=d.canonical_url` sin ancla en el indice, y el agentico inyecta documentos enteros
+via `read_document`, asi que **puede no haber fragmento del que sacar el ancla**. El paso 0
+anota POR QUE hay o no hay ancla, porque eso decide si el arreglo es posible en este modo:
+si no hay fragmento, la fuente del ancla es la puntuacion de `search_knowledge` (HIB.E) o no
+hay arreglo, y eso se documenta como limite del modo.
 
 ## Cambio, si procede
 - La cita del modo agentico pasa por `url_de_cita`, igual que el RAG.
@@ -22570,8 +22619,14 @@ defendible, porque no se sabe que se esta comprando con el.
 # should_surrender_when_no_document_reaches_the_threshold
 # should_answer_when_the_best_document_reaches_the_threshold
 
+## Ajuste del 2026-08-26 (2): el lote
+La «bateria de Gerencia» son **7 consultas** sin fuente esperada
+(`_local/golden/consultas_gerencia_econadm.json`: solo `name` y `prompt`). Barrer un umbral
+sobre 7 observaciones no produce una curva: produce tres puntos de siete. **Este prompt se
+ejecuta sobre el lote de Gerencia de HIB.G** (30-40 consultas, con negativos), no antes.
+
 ## Criterio de done
-- [ ] Bateria de Gerencia con 2-3 umbrales y las dos columnas
+- [ ] Lote de Gerencia (HIB.G) con 2-3 umbrales y las dos columnas
 - [ ] `docs/INFORME_CHATBOTS_NORMATIVA_Y_GERENCIA.html` actualizado: la asimetria desaparece
 ```
 
@@ -22601,22 +22656,577 @@ dependa de cuántas veces se dispara nuestro propio contrato.
 ## Por que en `_local/` y no en el repo
 Opera contra el corpus real y las credenciales, como el resto del instrumental de evaluacion.
 
+## Ajuste del 2026-08-26 (2): tres cosas sin las que la metrica no es defendible
+1. **La remision sale del denominador.** HIB.0 legitimo nombrar una norma sin enlazarla. Si la
+   precision de cita cuenta toda referencia, cada respuesta que menciona correctamente la Ley
+   9/2017 pierde precision por algo que el contrato permite a proposito. Cita de fundamento
+   entra en la metrica; remision se cuenta aparte y se reporta aparte.
+2. **El juez de la metrica se valida antes de creerselo.** ALCE usa un modelo de implicacion
+   textual, no la misma familia que genera; usar el mismo modelo invita a la autopreferencia.
+   Antes de la primera cifra: 20-30 afirmaciones etiquetadas a mano (sostenida / no sostenida
+   por el fragmento) y la concordancia del juez con esa etiqueta. Si baja de 0,8 de acuerdo
+   simple, se cambia de juez o de plantilla, no se publica la cifra.
+3. **Tanda de referencia declarada.** Las tandas guardadas son de antes de HIB.0 y de antes de
+   apagar el reranker. Sirven para construir el instrumento; la cifra que se reporta se toma
+   sobre el lote de HIB.G con la configuracion vigente.
+
 ## Criterio de done
-- [ ] Las tandas de hoy medidas con la metrica nueva
+- [ ] Juez validado contra las 20-30 afirmaciones etiquetadas, con su acuerdo anotado
+- [ ] Las tandas de hoy medidas con la metrica nueva (construccion del instrumento)
+- [ ] El lote de HIB.G medido con la configuracion vigente (cifra de referencia)
 - [ ] El informe deja de citar «descartes» como medida de calidad
 ```
 
 ---
 
+---
+
+## Rama común — instrumentación que los dos pilotos necesitan
+
+### Prompt HIB.G (DATOS + RED/GREEN) — El lote de configuración: fuente esperada por artículo, clases y negativos
+
+**Modelo sugerido**: **Opus** — decidir qué es «fuente esperada» cuando la respuesta cruza dos
+normas, y qué cuenta como negativo, es criterio; y el lote fija lo que todo lo demás puede medir.
+
+**Objetivo**: hoy hay dos lotes y ninguno sirve para medir sin un humano delante. El de
+Normativa (25, `escenarios_ujirag_2024.json`) tiene la fuente esperada **en prosa**
+(`expectation_note`), sin negativos, de un solo dominio y sin balance por lengua. El de Gerencia
+son **7** consultas con `name` y `prompt`. Sin fuente esperada estructurada, ni HIB.E ni HIB.F ni
+ninguna ablación se re-ejecutan sin volver a pedir trabajo a los informadores.
+
+**Lo que NO se hace**: escribir un lote nuevo desde el corpus. Una pregunta redactada mirando el
+artículo comparte su vocabulario e **infla la recuperación léxica**; es la diferencia documentada
+entre los lotes generados (ObliQA) y los de preguntas reales (BSARD). Las 25 reales se conservan
+y se enriquecen; lo que se añade se marca por procedencia.
+
+```
+# PROMPT HIB.G (DATOS + RED/GREEN) — Un lote que se pueda medir sin un humano delante
+# Deploy: edge (instrumental en _local/golden/, formato en el repo)
+
+## Formato de escenario (extiende el actual, no lo sustituye)
+Cada escenario anade a `name`, `prompt`, `history`, `expectation_note`:
+- `expected_sources`: lista de {`canonical_url` o `document_id`, `anchor`}, en DOS conjuntos:
+  `required` (sin ellos la respuesta es incorrecta) y `acceptable` (pueden aparecer sin penalizar).
+  El ancla es la del articulo, no del documento: permite medir HIB.D y la precision de cita.
+- `answerable`: true | false. Si false, `refusal_reason`: fuera_de_alcance | premisa_falsa |
+  vigencia_no_validada | dato_no_normativo.
+- `kind`: articulo_unico | varios_articulos | tabla_o_dato | seguimiento | negativo.
+- `language`: ca | es.
+- `domain`: para Normativa, la submateria del vocabulario vigente; para Gerencia, uno de
+  contratacion | subvenciones | presupuesto | patrimonio | personal.
+- `provenance`: real | informador | equipo_provisional | sintetico.
+- `reference_answer`: breve, para resolver desacuerdos entre informadores, no prosa pulida.
+
+## Tamanos y composicion
+- Normativa: 60-80. Las 25 reales + ampliacion. ~25% negativos. Balance ca/es. 8-10 escenarios
+  de dos turnos (para HIB.C). Al menos 5 de tipo tabla_o_dato.
+- Gerencia: 30-40. Las 7 reales + candidatas sacadas de las interacciones ya guardadas
+  (`hub_interactions` del asistente economico-administrativo) + negativos escritos a proposito.
+  Los cinco dominios representados. Al menos 5 tabla_o_dato (limites, umbrales, plazos).
+
+## Quien anota
+La fuente esperada la anota un informador. Si no hay tiempo antes de los ensayos, la anota el
+equipo y se marca `provenance: equipo_provisional`; el informador confirma o corrige despues y
+la marca cambia. **Una cifra sobre fuentes anotadas por quien afino el sistema no se publica.**
+
+## Afinado y informe se separan
+El lote AFINA (top_k, umbral, reranker); el PILOTO informa. Si se elige la configuracion sobre el
+lote y se reporta sobre el lote, es conjunto de entrenamiento. Queda escrito en el `meta`.
+
+## Reutiliza
+La taxonomia `failure_modes` del `meta` actual (curso_caducado, ambito_equivocado...) se conserva
+y se usa para etiquetar los fallos; es la mejor parte del lote de 25 y no se reescribe.
+
+## Tests (RED primero) — sobre el formato, en el repo
+# should_reject_a_scenario_without_expected_sources_when_answerable
+# should_reject_an_unanswerable_scenario_without_refusal_reason
+# should_require_language_kind_and_provenance
+# should_accept_the_existing_25_after_enrichment
+
+## Criterio de done
+- [ ] Normativa 60-80 y Gerencia 30-40 en `_local/golden/`, validados por el esquema
+- [ ] Composicion reportada: por kind, language, domain, provenance, answerable
+- [ ] `ejecutar_ujirag.py` (o su sucesor) calcula automaticamente: fuente esperada en el
+      conjunto recuperado (si/no), ancla correcta (si/no), y rendicion correcta en los negativos
+- [ ] Ninguna cifra del lote se reporta sin la columna de procedencia
+```
+
+---
+
+### Prompt HIB.H (RED/GREEN) — El panel de revisión captura la solución, no sólo el veredicto
+
+**Modelo sugerido**: **Opus** — hay que decidir la forma del dato (varios artículos por respuesta,
+distinción necesario/aceptable) y es una migración que el piloto va a llenar.
+
+**Objetivo**: `HubInteraction` guarda `review_verdict`, `review_note`, `review_by`, `review_at`
+(REV.1), y `HubTestScenario` guarda `expectation_note` en prosa. **No hay ningún campo para el
+artículo esperado ni para la respuesta de referencia.** El usuario quiere que los informadores
+den la solución: sin sitio estructurado donde ponerla, cada consulta revisada vale una vez; con
+él, cada ablación posterior se mide sin volver a molestar a nadie, y el piloto produce juicios de
+relevancia —que es lo que convierte sus datos en banco de pruebas publicable.
+
+```
+# PROMPT HIB.H (RED/GREEN) — La revision deja una referencia reutilizable
+# Deploy: edge (tabla operacional) + frontend admin
+
+## Cambio en datos
+- `hub_interactions`: `review_expected_sources` JSONB nullable (misma forma que
+  `expected_sources` de HIB.G: required/acceptable con url+anchor) y `review_reference_answer`
+  Text nullable. **Nullable y sin default**: NULL es «no anotado», no lista vacia.
+- `hub_test_scenarios`: `expected_sources` JSONB nullable con la MISMA forma. Un solo esquema
+  para las dos tablas, validado por el mismo modelo Pydantic; dos formas divergirian.
+- `expectation_note` se conserva: es la nota que lee quien juzga, y HubTestScenario ya explica
+  por que no se convierte en asercion. Lo estructurado es ADEMAS, no en lugar de.
+- Migracion Alembic; `alembic upgrade`.
+
+## Cambio en API y UI
+- `ReviewVerdictRequest` admite `expected_sources` y `reference_answer` opcionales.
+- `InteractionReviewOut` los devuelve. Contrato regenerado (Orval).
+- `RevisionInteraccionesPage`: selector de fuente esperada que **elige entre los documentos del
+  corpus del chatbot** (busqueda por titulo, y el ancla de la lista de articulos del documento),
+  nunca texto libre: una URL escrita a mano no casa con `canonical_url` y la metrica se pierde.
+  Casilla «tambien aceptable». Campo de respuesta de referencia. i18n en las tres lenguas.
+- Exportacion CSV incluye los campos nuevos.
+
+## Lo que se pide de todo y lo que se pide de una parte (para el piloto)
+- De TODAS: el veredicto. Es rapido y es la metrica primaria.
+- De las UNICAS tras deduplicar: fuente esperada y respuesta breve.
+- De ~100: doble evaluacion (para la kappa de HIB.K). El panel muestra si una interaccion ya
+  tiene revision de otra persona SOLO despues de guardar la propia (ciego).
+
+## Tests (RED primero)
+# should_store_expected_sources_with_required_and_acceptable
+# should_reject_an_expected_source_not_in_the_chatbot_corpus
+# should_keep_null_when_the_reviewer_gives_no_sources
+# should_export_expected_sources_in_the_csv
+# should_hide_other_reviewers_verdicts_until_own_is_saved
+# frontend: should_pick_sources_from_the_corpus_not_free_text
+
+## Criterio de done
+- [ ] Migracion aplicada, `alembic current` mostrado
+- [ ] Verificado en navegador: revisar una interaccion, elegir dos articulos, exportar CSV
+- [ ] `docs/MULTITENENCIA.md` sin cambios de ambito (la tabla ya es operacional) — comprobado
+```
+
+---
+
+### Prompt HIB.I (RED/GREEN) — Cada interacción guarda lo que hace falta para re-correr una ablación
+
+**Modelo sugerido**: **Sonnet** — la lista de campos está cerrada; el trabajo es llevarlos del
+grafo a `interaction_metadata` y fijarlos por snapshot.
+
+**Objetivo**: `hub_chat.py` guarda `interaction_metadata={"usage_source": ...}` y nada más. Con
+el piloto en marcha ya es tarde para los datos que no se guardaron: sin los identificadores y
+puntuaciones de lo recuperado no se puede saber, meses después, si una respuesta mala fue de
+recuperación o de redacción, ni re-ejecutar una ablación sobre las mismas consultas.
+
+```
+# PROMPT HIB.I (RED/GREEN) — La traza que permite volver atras
+# Deploy: edge
+
+## Cambio
+`interaction_metadata` pasa a llevar, ademas de `usage_source`:
+- `retrieval_mode`, `chunking_strategy`, `retrieval_top_k`, `quality_threshold`,
+  `reranker_enabled` — la configuracion VIGENTE en esa respuesta, no un puntero a la del chatbot,
+  que cambia.
+- `retrieved`: lista de {document_id, chunk_id, anchor, score} de lo que llego al modelo, en el
+  orden en que llego, y `dropped_count` del packer.
+- `best_score` y `gate_passed`.
+- `language`, `source_language`, `translation_warning`.
+- `turn_index` y `rewritten_query` (si HIB.C reescribio), `reformulada` (RES.2).
+- `last_index_level` (agentico).
+- `latency_ms` total y `first_token_ms`.
+- `fallback_reason` ya existe como columna; no se duplica.
+
+## Lo que NO se guarda
+El contenido de los fragmentos: ya esta en `hub_document_chunks` por `chunk_id`, y duplicarlo
+multiplica la tabla por el tamano del contexto.
+
+## Por que JSONB y no columnas
+Son campos de diagnostico cuya lista va a crecer con cada prompt de medicion; una migracion por
+campo es lo que hace que dejen de anadirse. Las CLAVES se fijan por snapshot en un test para que
+un cambio silencioso rompa.
+
+## Tests (RED primero)
+# should_store_the_effective_configuration_of_the_answer
+# should_store_retrieved_ids_scores_and_anchors_in_order
+# should_store_turn_index_and_rewritten_query
+# should_keep_the_metadata_keys_stable (snapshot)
+
+## Criterio de done
+- [ ] Una consulta real en la base con todos los campos; mostrada
+- [ ] `_local/golden/` puede reconstruir «que se recupero» de una interaccion sin re-ejecutarla
+```
+
+---
+
+### Prompt HIB.J (RED/GREEN + MEDICIÓN) — Apagar el reranker apagó también el pool; recalibrar en la escala RRF
+
+**Modelo sugerido**: **Opus** — qué significa la puerta de calidad en la escala RRF es una
+decisión de diseño, no un ajuste; y hay que separar dos cambios que hoy van juntos en una línea.
+
+**Objetivo**: HIB.A apagó el reranker con cuatro ejes coincidiendo, y bien. Pero en
+`vector_strategy.py:69`:
+
+    candidatos = pool_size(self._top_k) if self._reranker else self._top_k
+
+con `POOL_MINIMO = 30` y `top_k = 3`, el híbrido pedía **30** fragmentos y ahora pide **3**. Justo
+después se agrupa por `document_id` y se queda el mejor fragmento de cada documento: con
+`parent_child` (60.859 fragmentos / 297 documentos) los 3 mejores pueden salir del mismo
+documento, así que `top_k = 3` ya no significa tres documentos sino «hasta tres, probablemente
+menos». Y `top_k = 3` lo eligió RES.4 **con el reranker encendido**: está descalibrado.
+
+Segundo efecto: sin reranker, `score = min(1, rrf / RRF_MAX_SCORE)` mide **coincidencia de rango
+entre las dos ramas**, no relevancia. Un documento en el top-3 de ambas ramas da ≈0,98; uno que
+aparece sólo en una da ≈0,50. Con umbral 0,40, **las dos situaciones pasan**: la predicción es
+que la puerta ha dejado de rechazar casi nada. Es el mismo defecto que HIB.E arregla en el
+agéntico —puerta que es teatro— reapareciendo en el RAG por otra vía. Se comprueba en cinco
+minutos sobre la tanda «sin reranker» de HIB.A, cuyas notas están guardadas.
+
+**Va antes que HIB.B**: la verificación de HIB.B es «una consulta que la puerta rechace», y hoy
+no se sabe si la puerta rechaza algo.
+
+```
+# PROMPT HIB.J (RED/GREEN + MEDICION) — Dos cambios que iban en una linea
+# Deploy: edge
+
+## Paso 0 (medicion, cinco minutos)
+Sobre la tanda sin reranker de HIB.A: distribucion de `best_score` normalizado, cuantas
+consultas quedaron bajo 0,40, y cuantos DOCUMENTOS DISTINTOS llegaron al modelo por consulta.
+Se anota antes de tocar nada.
+
+## Cambio de codigo
+- El pool de candidatos deja de depender del reranker: `candidate_k` explicito en la
+  configuracion del chatbot (heredable plataforma -> organizacion -> chatbot, como el resto),
+  con defecto `pool_size(top_k)`. RRF ordena el pool; el reranker, si esta, reordena. Apagar el
+  reranker ya no encoge el pool.
+- La agrupacion por documento se hace SOBRE el pool, y `top_k` pasa a significar lo que dice:
+  documentos distintos que llegan al modelo.
+
+## Medicion
+- Barrido de `top_k` in {2, 3, 4} x umbral in {0,50; 0,65; 0,80} en la escala RRF. Umbrales
+  altos a proposito: si la nota es casi binaria, el punto util esta arriba.
+- **Sobre que lote**: HIB.J va antes que HIB.G (orden aprobado), asi que la rejilla se ejecuta
+  sobre las 25 actuales y la columna «contesto y no debia» queda VACIA y se dice: sin negativos
+  no se puede rellenar. El punto de operacion que salga es provisional por partida doble, y la
+  rejilla se REPITE sobre el lote de HIB.G cuando exista (es una tarea de HIB.G, no de este
+  prompt). Lo que si decide este prompt con las 25: el codigo, el pool y los documentos
+  distintos por consulta.
+- Dos columnas por celda, como en HIB.E: «callo y habia respuesta» y «contesto y no debia».
+  Los negativos del lote son lo que hace medible la segunda.
+- Documentos distintos inyectados por consulta, media y minimo: es el numero que cambio en
+  silencio y no se ve en ningun otro eje.
+
+## Decision
+Se elige un punto de operacion PROVISIONAL para Normativa y se marca como tal: el definitivo
+sale del piloto. Se registra como cambio de configuracion (marco §7), con la cifra que lo
+justifica.
+
+## Tests (RED primero)
+# should_keep_the_candidate_pool_when_the_reranker_is_off
+# should_count_top_k_in_distinct_documents_not_chunks
+# should_inherit_candidate_k_through_the_cascade
+# should_keep_the_rrf_normalisation_unchanged (regresion)
+
+## Criterio de done
+- [ ] Paso 0 anotado con sus cifras ANTES del cambio
+- [ ] Rejilla 3x3 con las dos columnas y los documentos distintos por consulta
+- [ ] Punto de operacion provisional elegido y justificado; `docs/GERENCIA_TOP_K_Y_UMBRAL.html`
+      o sucesor actualizado
+```
+
+---
+
+### Prompt HIB.K (PROCESO + MEDICIÓN) — La rúbrica se calibra con los informadores antes de medir el sistema
+
+**Modelo sugerido**: **Sonnet** — el trabajo es organizar la calibración y calcular la
+concordancia; el criterio está cerrado.
+
+**Objetivo**: el juez de HIB.A puntúa «contra la rúbrica del informador» y el de HIB.F hará lo
+mismo. Si la concordancia entre informadores es desconocida, las dos métricas descansan sobre un
+instrumento sin validar. La literatura avisa de que en dimensiones subjetivas los humanos entre
+sí quedan en kappa ≈0,34; en objetivas suben a 0,53–0,61 [35]. Ninguna n arregla una rúbrica
+inestable: se estaría midiendo con precisión creciente una opinión que cambia.
+
+```
+# PROMPT HIB.K (PROCESO + MEDICION) — Primero medir al que mide
+# Deploy: n/a (instrumental en _local/golden/ y documento)
+
+## Que se hace
+- Rubrica escrita en una pagina, con la metrica primaria BINARIA: «utilizable tal cual» /
+  «no utilizable». Secundarias (completitud, exactitud de la cita, tono) aparte y como tales.
+- 40-60 respuestas del lote de HIB.G, dos informadores, a ciegas y en orden aleatorio.
+- Kappa de Cohen sobre la primaria; acuerdo simple sobre las secundarias.
+- Si kappa < 0,6: se leen los desacuerdos, se reescribe la rubrica, se repite sobre otras 20.
+  No se toca el sistema hasta que la rubrica se sostenga.
+
+## Que se guarda
+- La rubrica versionada en `docs/` (es lo que el piloto y el articulo van a citar).
+- La kappa con su intervalo. Con 40-60 items el intervalo es ±0,13-0,15: sirve para decidir si
+  la rubrica vale, NO para publicar la cifra; para eso hacen falta ~100 doblemente evaluados,
+  que los dara el piloto (HIB.H).
+
+## Criterio de done
+- [ ] Rubrica en `docs/RUBRICA_INFORMADORES.md`, versionada
+- [ ] Kappa calculada y anotada con su n y su intervalo
+- [ ] El juez LLM de `_local/golden/` puntua contra ESA rubrica, y su acuerdo con los
+      informadores sobre las mismas 40-60 queda anotado
+```
+
+---
+
+## Rama Gerencia — dejar los dos asistentes económico-administrativos listos para el piloto
+
+> El asistente RAG de Gerencia sigue en `structural` sin padre y el agéntico responde siempre.
+> Esta rama los lleva al mismo grado de madurez que Normativa. **Los dos se abren al piloto
+> sobre las mismas consultas**, con la estrategia en la traza (HIB.I): es la comparación
+> controlada interna que el informe de literatura pide, y no cuesta más que lo que ya se va a
+> pedir a los informadores.
+
+### Prompt HIB.L (DECISIÓN + RED/GREEN) — Techo del padre en las normas externas
+
+**Modelo sugerido**: **Opus** — es la decisión aplazada del 2026-08-26 y tiene dos salidas
+razonables con costes distintos.
+
+**Objetivo**: los padres de las normas externas llegan a **236.691 caracteres (~59.000 tokens)**.
+El packer tiene presupuesto de 128.000 y corta con criterio: con `top_k = 3`, dos padres largos
+lo llenan y el tercero cae (`dropped_count`). No es un fallo de corrección, es de coste y de
+latencia: ~118.000 tokens de entrada por consulta, que en un piloto con funcionarios es dinero
+visible y una espera visible. El usuario aplazó la decisión con un argumento válido —para el
+asistente económico-administrativo, el contexto completo de la norma estatal es lo adecuado—;
+este prompt la toma con cifras.
+
+```
+# PROMPT HIB.L (DECISION + RED/GREEN) — Cuanto padre cabe
+# Deploy: edge
+
+## Paso 0 (medicion)
+Sobre las 22 normas externas: distribucion del tamano de sus secciones-padre (caracteres y
+tokens estimados). Cuantas superan 8.000, 16.000, 32.000 tokens. Cual es la unidad estructural
+inmediatamente inferior (capitulo -> articulo) y su distribucion.
+
+## Opciones, con recomendacion
+- **(recomendada)** Padre = la unidad estructural mas fina que quepa en un techo por documento
+  (`parent_max_tokens`, heredable, defecto 8.000). Para normas UJI el padre sigue siendo la
+  seccion (caben); para una ley estatal el padre baja a capitulo o articulo. El techo es
+  configuracion, no codigo, y se decide por chatbot: Gerencia puede subirlo.
+- Alternativa: techo duro por truncado del padre. Mas simple, pero corta articulos por la mitad
+  y eso es exactamente lo que el padre existe para evitar.
+
+## Lo que hay que decir donde se lea
+Bajar el padre a capitulo en una ley estatal NO es «menos contexto»: con un techo de 8.000 el
+modelo recibe el capitulo entero, que es la unidad que un jurista lee. Lo que se pierde es la
+ley completa, que a 59.000 tokens tampoco se leia entera: se cortaba en el packer sin que nadie
+lo viera.
+
+## Tests (RED primero)
+# should_choose_the_finest_structural_unit_under_the_token_cap
+# should_keep_the_section_as_parent_when_it_fits
+# should_inherit_parent_max_tokens_through_the_cascade
+# should_never_split_an_article_in_two_parents
+
+## Criterio de done
+- [ ] Paso 0 con la distribucion
+- [ ] Decision tomada y escrita en `docs/DECISION_MODELOS_EMBEDDING_RERANKER.md` o documento
+      propio, con el coste por consulta antes y despues (tokens y ms)
+```
+
+---
+
+### Prompt HIB.M (MEDICIÓN) — La ablación del reranker, sobre el corpus de Gerencia
+
+**Modelo sugerido**: **Sonnet** — mismo instrumental y mismo criterio escrito que HIB.A, sobre
+otro lote.
+
+**Objetivo**: la decisión de HIB.A **no se traslada**: otro corpus, normas estatales largas,
+castellano, y consultas de tabla («¿cuál es el límite de un contrato menor?»), que es justo el
+patrón donde el léxico y el vector se comportan distinto. Lo que se midió en Normativa dice qué
+esperar; no dice qué pasa aquí.
+
+```
+# PROMPT HIB.M (MEDICION) — Lo mismo, en el otro corpus
+# Deploy: edge
+
+## Que se ejecuta
+- El lote de Gerencia de HIB.G sobre el asistente RAG de Gerencia, con y sin reranker.
+- Con el pool desacoplado de HIB.J, para que la ablacion mida el reranker y no el pool.
+- Mismos ejes que HIB.A: fuente esperada en el conjunto recuperado, solapamiento (Jaccard) de
+  documentos, juez a ciegas con doble vuelta, descartes por citas. Y uno mas que HIB.A no tenia:
+  **rendicion correcta en los negativos**, porque este lote los tiene.
+
+## Criterio de decision, escrito ANTES
+El de HIB.A, palabra por palabra. Si empatan, se queda apagado por coherencia con Normativa y
+por coste, y se anota.
+
+## Criterio de done
+- [ ] Las dos tandas en `_local/golden/`
+- [ ] Decision segun el criterio, con sus cifras
+- [ ] Anotado que se vuelve a medir con el lote del piloto (decision del usuario 2026-08-26)
+```
+
+---
+
+### Prompt HIB.N (RED/GREEN) — Gerencia pasa a `parent_child` reutilizando lo ya embebido
+
+**Modelo sugerido**: **Opus** — la copia entre corpus es la clase de operación en la que un
+metadato mal remapeado rompe la recuperación en silencio.
+
+**Objetivo**: el antiguo HIB.6, que el bloque reescrito aplazó «hasta después de HIB.A». HIB.A
+está cerrado y HIB.L fija el techo del padre; ahora se sabe con qué configuración re-trocear.
+Las 22 normas externas están en los tres chatbots **con `content_hash` idéntico** (comprobado el
+2026-08-26) y las de Normativa UJI ya están troceadas con padre.
+
+```
+# PROMPT HIB.N (RED/GREEN) — Lo mismo no se embebe dos veces
+# Deploy: edge
+
+## Cambio
+- Script de copia: los fragmentos de un documento de un chatbot se copian a su gemelo de otro
+  chatbot cuando coinciden `content_hash` Y la estrategia de troceado Y el techo del padre
+  (HIB.L). Si difiere cualquiera de los tres, se niega y lo dice.
+- Se remapean `chatbot_id`, `document_id` Y el `document_id` que va DENTRO de `chunk_metadata`.
+  Sin lo tercero, la agrupacion por documento del retrieval se rompe sin dar ningun error.
+- Lo propio de Gerencia (102 documentos, 4.388 fragmentos hoy) SI se re-ingiere, con el padre
+  y el techo de HIB.L.
+- El agentico NO se re-trocea: lee `markdown_content`.
+
+## Cuentas (a confirmar al ejecutar)
+Copiar ~27.353 fragmentos por chatbot a coste cero; re-embeber ~11.000. El 71% ya pagado —si el
+techo de HIB.L no ha cambiado el troceado de las externas; si lo cambio, esas tambien se
+re-embeben y la cuenta se rehace ANTES de lanzar.
+
+## Tests (RED primero)
+# should_copy_chunks_only_when_hash_strategy_and_cap_match
+# should_remap_the_document_id_inside_chunk_metadata
+# should_refuse_to_copy_when_the_chunking_strategy_differs
+# should_be_idempotent
+# should_leave_zero_chunks_with_inconsistent_document_id
+
+## Criterio de done
+- [ ] Lote de Gerencia (HIB.G) antes y despues, con fuente esperada en el conjunto recuperado
+- [ ] Cero fragmentos con `document_id` inconsistente entre columna y metadato (consulta SQL
+      mostrada)
+- [ ] Coste real de embeddings anotado
+```
+
+---
+
+### Prompt HIB.O (DATOS + RED/GREEN) — La vigencia de las normas externas se valida antes de abrir
+
+**Modelo sugerido**: **Sonnet** — el mecanismo (REV.6) existe; el trabajo es alimentarlo y
+comprobar el efecto.
+
+**Objetivo**: el aviso de vigencia salta si `vigencia_validada_el IS NULL`. Las normas del BOE
+consolidado tienen vigencia comprobable en la fuente oficial; si entran sin validar, el
+asistente pondrá aviso en casi todas sus respuestas ante funcionarios que saben que la Ley 9/2017
+está vigente. **Un aviso que sale siempre deja de informar**: se quema el mecanismo justo en el
+piloto donde más importa. Con 312 de 314 fichas en «vigent?», el aviso es correcto en Normativa;
+en Gerencia hay 22 documentos donde puede y debe quitarse.
+
+```
+# PROMPT HIB.O (DATOS + RED/GREEN) — Que el aviso salga cuando toca
+# Deploy: edge
+
+## Que se hace
+- Lista de las 22 normas externas con su URL de consolidado oficial (BOE / DOGV) y su fecha de
+  ultima modificacion segun la fuente. Quien valida es una persona (Gerencia o Secretaria
+  General): el equipo prepara la lista, no firma la validacion.
+- Por cada una validada: `estat_vigencia = 'vigent'`, `vigencia_validada_el`,
+  `vigencia_validada_per` via la pantalla de REV.6 o su endpoint. Sin tocar `revisat_per`, que
+  es otra cosa (el comentario del modelo lo explica).
+- Comprobacion: una consulta del lote de Gerencia cuya fuente esperada sea una externa
+  validada NO lleva aviso; una cuya fuente sea una norma UJI sin validar SI lo lleva.
+
+## Lo que este prompt NO hace
+No valida las normas UJI: eso es de Secretaria General y esta en la lista de lo que se le pide.
+
+## Tests (RED primero)
+# should_not_warn_when_the_cited_document_is_validated_and_in_force
+# should_still_warn_when_any_cited_document_is_unvalidated
+
+## Criterio de done
+- [ ] Las 22 con su URL de consolidado en un fichero de `_local/` (no en el repo: es dato)
+- [ ] Las validadas por la persona responsable, con fecha y firma, en la base
+- [ ] Proporcion de respuestas del lote de Gerencia con aviso, antes y despues
+```
+
+---
+
+### Prompt HIB.P (MEDICIÓN + CONFIG) — Punto de operación provisional de los dos asistentes de Gerencia
+
+**Modelo sugerido**: **Sonnet** — con HIB.E, HIB.J y HIB.M cerrados, la curva ya existe; el
+trabajo es elegir el punto y registrarlo como manda el marco.
+
+**Objetivo**: HIB.E produce la curva del agéntico pero **no fija el umbral** —dice que se elige
+con el lote de los informadores—. El piloto, sin embargo, **abre con un umbral**, y hoy es 0,50
+puesto cuando la puerta no hacía nada. Hace falta un punto de operación provisional para los dos
+asistentes, marcado como tal, y registrado donde el marco dice que van los cambios de
+configuración (§7).
+
+```
+# PROMPT HIB.P (MEDICION + CONFIG) — Con que abre Gerencia
+# Deploy: edge (configuracion)
+
+## Que se hace
+- RAG de Gerencia: rejilla top_k x umbral en la escala que quede tras HIB.M (RRF o reranker),
+  sobre el lote de HIB.G, con las dos columnas. Igual que HIB.J para Normativa.
+- Agentico de Gerencia: sobre la curva de HIB.E, elegir el punto.
+- Criterio de eleccion escrito ANTES de mirar la rejilla: se prefiere el punto que minimiza
+  «contesto y no debia» sujeto a que «callo y habia respuesta» no supere X% (X lo fija el
+  usuario; propuesta 15%). Un funcionario que recibe un dato de contratacion equivocado actua
+  sobre el; uno que recibe una rendicion pregunta a la Unidad.
+- Los dos puntos se registran como cambio de configuracion versionado, con autoria y con la
+  cifra, y se marcan «provisional hasta el cierre del piloto».
+
+## Criterio de done
+- [ ] Rejilla del RAG y curva del agentico, con las dos columnas
+- [ ] Puntos elegidos segun el criterio escrito, registrados
+- [ ] `docs/INFORME_CHATBOTS_NORMATIVA_Y_GERENCIA.html` con la configuracion de apertura de los
+      cuatro asistentes (dos de Normativa, dos de Gerencia) en una tabla
+```
+
+---
+
+## Orden de ejecución (2026-08-26, segunda revisión — **aprobado por el usuario: HIB.J antes de HIB.B**)
+
+Hay dos dependencias duras que reordenan el bloque: **HIB.J va antes que HIB.B** (la verificación
+de HIB.B necesita una puerta que rechace algo) y **HIB.G va antes que cualquier medición** (HIB.E,
+HIB.F, HIB.J, HIB.M, HIB.P se ejecutan sobre su lote).
+
+| Paso | Prompt | Por qué aquí |
+|---|---|---|
+| 1 | **HIB.J** | Apagar el reranker encogió el pool 10× y descalibró umbral y `top_k`; sin esto, B no se puede verificar |
+| 2 | **HIB.G** | El lote; todo lo que mide depende de él. Puede empezar en paralelo con J |
+| 3 | **HIB.B**, **HIB.C** | Los dos defectos visibles, comunes a los cuatro asistentes |
+| 4 | **HIB.H**, **HIB.I** | Instrumentación que hay que tener ANTES de la primera consulta del piloto |
+| 5 | **HIB.K** | Rúbrica calibrada; sin ella las métricas de F no tienen suelo |
+| 6 | **HIB.F** | Métrica de citas sobre el lote de G |
+| — | **Normativa listo para abrir** | |
+| 7 | **HIB.L** → **HIB.M** → **HIB.N** | Gerencia: techo del padre, ablación en su corpus, re-troceado. En este orden para no embeber dos veces |
+| 8 | **HIB.D** → **HIB.E** | Agéntico: ancla y nota real, sobre el lote de G |
+| 9 | **HIB.O**, **HIB.P** | Vigencia de las externas y punto de operación |
+| — | **Gerencia listo para abrir** | |
+
+Si hay que abrir Gerencia antes de completar la rama, el mínimo es **L + O + P** con el
+asistente en `structural`, declarando en el informe que entra sin padre y con el reranker sin
+medir en su corpus. M y N pueden hacerse con el piloto abierto **sólo si se registran como
+cambio de configuración y se reporta por tandas** (regla 5 del diseño de ensayos).
+
+## Tres cosas que ya existen y no necesitan prompt
+
+- **Aviso de IA (RIA art. 50, en vigor desde el 2 de agosto de 2026)**: existe en el widget en
+  las tres lenguas (`ai_disclaimer` en `ChatWidget.tsx:427`). Al cerrar el bloque, el `.bat`
+  comprueba una sola cosa: que se ve **antes** de la primera respuesta, no sólo al pie del hilo.
+- **Presupuesto de contexto**: el packer ya corta con criterio y deja `dropped_count`; el padre
+  gigante degrada, no rompe. HIB.L decide cuánto se paga, no si funciona.
+- **Panel de revisión y escenarios de prueba** (REV.1, RAG.13): existen; HIB.H les añade el
+  campo que falta, no los rehace.
+
 ## Lo que sale del bloque, y por qué
 
 - **«Darle vectores al agéntico»** (el antiguo HIB.1): se cae, ya los tiene vía `search_knowledge`.
   Lo que quedaba —ordenar el catálogo por puntuación— es menor y no es lo que arregla el 7 de 7.
-- **Gerencia a `parent_child` con copia de fragmentos**: se aplaza hasta después de HIB.A.
-  Re-trocear antes de saber si el reranker aporta es pagar embeddings para una configuración que
-  puede cambiar. La comprobación que lo hace barato sigue en pie: las 22 normas externas están en
-  los tres chatbots con `content_hash` idéntico, así que serán 27.353 fragmentos copiados y ~11.000
-  recalculados.
+- **Gerencia a `parent_child`**: ya no sale; es HIB.N, después de HIB.A (cerrado) y de HIB.L.
 
 ## Candidatos con prompt propio, para después
 
