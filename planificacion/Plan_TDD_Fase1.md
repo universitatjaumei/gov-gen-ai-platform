@@ -22338,3 +22338,330 @@ esto es triar, no borrar a bulto. Borrarlos sin leerlos pierde trabajo por hacer
 - [ ] `MCP_SERVER.md` y `mcp.md` unificados
 - [ ] `docs/README.md` sin enlaces rotos
 ```
+
+---
+
+# Bloque HIB — el selector agéntico se apoya en vectores, y el contrato de citas deja de tirar respuestas buenas
+
+> **De dónde sale**: la sesión del 2026-08-26. Tres mediciones sobre el lote ujirag-2024 con el
+> corpus de Normativa UJI re-troceado a `parent_child` (23.306 → 60.859 fragmentos, 297
+> documentos, 0 errores), más las consultas reales que el usuario hizo con Secretaría General.
+>
+> **Lo que el padre arregló, medido**: el juez a ciegas con doble vuelta da **12 de 25** contra
+> **8 de 25** cumpliendo la rúbrica del informador, y gana el enfrentamiento **11 a 6** con sólo
+> 3 desacuerdos entre vueltas (frente a 12 en la comparación de `top_k`). El caso que trajo el
+> usuario —quórum del Consell de Govern— pasa de citar «art. 8, Comissions» a **«art. 5.8»** con
+> el ancla correcta. **Aviso estadístico**: 11-6 da p=0,33 y la mejora de rúbrica p=0,39. La
+> dirección es consistente en dos métricas y los motivos son del tipo esperado, pero **25
+> consultas no demuestran nada**; no se reporte como demostrado.
+>
+> **Lo que el padre rompió, medido**: los descartes por el contrato de citas van **1 → 2 → 5**
+> en las tres tandas. En la última son el **20 % de las consultas**, y las tres nuevas tienen la
+> nota de recuperación IDÉNTICA a la tanda anterior: no es el corpus, es lo que el modelo
+> escribe. Es hoy el modo de fallo dominante.
+
+## Orden y por qué
+
+**HIB.0 va primero y es el más urgente**: mientras el contrato tire una de cada cinco respuestas
+buenas, cualquier otra medición se hace sobre ruido. HIB.1–HIB.3 son el híbrido del selector.
+HIB.4–HIB.6 son defectos ya diagnosticados que esperan desde la reunión con Secretaría General.
+
+---
+
+### Prompt HIB.0 (RED/GREEN) — El contrato de citas no tira la respuesta por una remisión a otra norma
+
+**Modelo sugerido**: **Opus** — hay que decidir qué es «citar algo que no se te dio» cuando el
+contexto trae dentro remisiones legítimas, y esa decisión define qué garantiza el producto.
+
+**Objetivo**: `enforce_citation_contract` admite sólo las URLs de los documentos recuperados. Con
+`parent_child` el fragmento inyectado es el artículo entero, que **contiene remisiones a otras
+normas** («conforme al artículo 118 de la Ley 9/2017»). El modelo las escribe como enlace, el
+contrato no las reconoce y **descarta la respuesta completa**, sustituyéndola por el mensaje de
+rendición. Medido sobre el lote: 1 descarte con `structural`, 2 con padre, **5 con padre** en la
+tercera tanda, con la recuperación sin cambios.
+
+```
+# PROMPT HIB.0 (RED/GREEN) — Una remision no es una cita falsa
+# Deploy: edge
+
+## El problema, en una linea
+El contrato no distingue «cita un documento que no se te dio» —que es el fraude que existe para
+cazar— de «menciona una norma que el propio texto recuperado nombra», que es lo que hace
+cualquier jurista al leer un articulo con remisiones.
+
+## La regla, en las palabras del usuario (2026-08-26)
+> «La respuesta debe tener una cita de la norma principal y, en su caso, de las otras normas
+> recuperadas y utilizadas para redactar la respuesta, pero **no de las normas citadas por las
+> normas utilizadas** en la redaccion de la respuesta.»
+
+Es la regla que hay que escribir en `CITATION_RULES` y la que el contrato tiene que hacer
+cumplir. Lo que el contrato NO puede hacer es garantizar que el modelo la obedezca siempre: por
+eso lo que cambia de verdad en este prompt es **la reaccion ante el incumplimiento**, de tirar la
+respuesta a quitar el enlace.
+
+## Cambio
+- Distinguir DOS clases de referencia en la respuesta:
+  1. **Cita de fundamento**: enlace a un documento del conjunto recuperado. Es la que el
+     contrato exige y sigue exigiendo: al menos una, o se rinde.
+  2. **Remision**: mencion de una norma que NO esta en el conjunto recuperado. Se permite
+     **sin enlace**, en texto plano, y el contrato la degrada quitandole el enlace en vez de
+     tirar la respuesta entera.
+- La regla se escribe tambien en `CITATION_RULES`, para que el modelo sepa de antemano que una
+  norma que no se le ha entregado se nombra pero no se enlaza.
+- `fallback_reason='citation'` se reserva para lo que de verdad lo merece: **cero** citas de
+  fundamento, o una cita de fundamento a un documento que no se recupero.
+
+## Por que degradar y no tirar
+Es la misma decision que ya se tomo el 2026-08-24 con el ancla desconocida: degradar al
+documento en vez de descartar la respuesta. Una respuesta correcta que ademas menciona la ley
+estatal de la que cuelga el reglamento es MEJOR que la misma respuesta sin la mencion, y muy
+mejor que el mensaje de rendicion.
+
+## Tests (RED primero)
+# should_keep_the_answer_when_it_mentions_a_norm_outside_the_retrieved_set
+# should_strip_the_link_of_a_reference_outside_the_retrieved_set
+# should_still_reject_when_there_is_no_grounded_citation_at_all
+# should_still_reject_a_grounded_citation_to_a_document_never_retrieved
+# should_not_count_a_stripped_reference_as_a_grounded_citation
+
+## Criterio de done
+- [ ] El lote de 25 vuelve a 0-1 descartes por citas con el corpus con padre
+- [ ] Las cinco descartadas de la tanda del 2026-08-26 se recuperan, o se explica por que no
+- [ ] `docs/DEPURAR_CONTEXTO_RAG.md` documenta las dos clases de referencia
+```
+
+---
+
+### Prompt HIB.1 (RED/GREEN) — El selector agéntico recibe una lista corta puntuada por vectores
+
+**Modelo sugerido**: **Opus** — es un nodo nuevo en una estrategia que hoy no consulta vectores, y
+la decisión de «añadir sin sustituir» hay que sostenerla en el código y en el prompt del sistema.
+
+**Objetivo**: `AgenticRetrievalStrategy` elige documentos leyendo un **catálogo de fichas**
+(título, `resum_router`, rango, submaterias). No consulta los embeddings **en ningún momento**,
+aunque el chatbot tiene 14.208 fragmentos ya calculados. Consecuencia: `md_agent_selector_pipeline`
+asigna `score = 1.0` fijo a cada ítem, la media siempre vale 1 y **su quality gate no puede
+rechazar nada con ningún umbral**.
+
+```
+# PROMPT HIB.1 (RED/GREEN) — Vectores para acortar la lista, catalogo para no perder lo que el vector no ve
+# Deploy: edge
+
+## Cambio
+- Nueva herramienta del selector: `rank_documents(query)` -> lista de documentos ordenada por la
+  **puntuacion del mejor fragmento** de cada uno, con esa puntuacion incluida.
+- Reutiliza `HybridRetriever` + el reranker si el chatbot lo tiene: es el mismo camino que ya usa
+  el RAG, no una segunda implementacion.
+- Los fragmentos se usan SOLO para puntuar y ordenar. Lo que se inyecta sigue siendo el
+  documento entero via `read_document`: es lo que distingue a este modo y no se toca.
+
+## La restriccion que NO se puede saltar
+`rank_documents` **se anade** al catalogo, no lo sustituye. El informe de estrategia de Gerencia
+ya documento el caso que la busqueda semantica falla y el catalogo acierta: «quien firma esto»
+es una consulta de tabla. Si el vector manda, esa consulta empeora. El prompt del sistema debe
+decir cuando conviene cada via.
+
+## Tests (RED primero)
+# should_rank_documents_by_their_best_chunk_score
+# should_keep_the_catalogue_tool_available_alongside_the_ranking
+# should_apply_the_same_metadata_filter_as_the_rag_pipeline
+# should_use_the_reranker_when_the_chatbot_has_it_enabled
+# should_return_empty_without_raising_when_the_chatbot_has_no_chunks
+
+## Criterio de done
+- [ ] La bateria de Gerencia (7 consultas) ejecutada antes y despues, con las fuentes de cada una
+- [ ] Documentado que los fragmentos del agentico dejan de ser peso muerto
+```
+
+---
+
+### Prompt HIB.2 (RED/GREEN) — El quality gate del agéntico deja de ser teatro
+
+**Modelo sugerido**: **Sonnet** — el cambio es de dos líneas una vez existe HIB.1; lo delicado es
+el efecto, que está enumerado.
+
+**Objetivo**: con `score = 1.0` fijo (`md_agent_selector_pipeline.py:82`) el agéntico **responde
+siempre**. Su 7 de 7 frente al 6 de 7 del RAG no mide recuperación: mide la ausencia de filtro.
+
+```
+# PROMPT HIB.2 (RED/GREEN) — Una nota de verdad, y la puerta empieza a existir
+# Deploy: edge
+
+## Cambio
+- El `EvidenceItem` que emite el pipeline agentico lleva la puntuacion real del documento, la
+  que produce `rank_documents` (HIB.1), en vez de 1.0.
+- Con eso, `quality_threshold` empieza a actuar en este modo por primera vez.
+
+## Lo que hay que decir donde se lea
+- El agentico PASARA A RENDIRSE en consultas que hoy contesta. Eso es la funcion, no la averia.
+- El umbral del agentico esta hoy en 0,50 y se puso cuando no hacia nada: **hay que elegirlo con
+  la bateria delante**, no heredarlo.
+- Hasta que este prompt entre, cualquier comparacion RAG-contra-agentico es asimetrica y el
+  informe debe seguir diciendolo.
+
+## Tests (RED primero)
+# should_carry_the_real_score_into_the_evidence_item
+# should_surrender_when_no_document_reaches_the_threshold
+# should_answer_when_the_best_document_reaches_the_threshold
+
+## Criterio de done
+- [ ] Bateria de Gerencia con 2-3 umbrales, y el elegido justificado con las cifras
+- [ ] `docs/INFORME_CHATBOTS_NORMATIVA_Y_GERENCIA.html` actualizado: la asimetria desaparece
+```
+
+---
+
+### Prompt HIB.3 (RED/GREEN) — Las citas del agéntico abren el artículo, no el documento
+
+**Modelo sugerido**: **Sonnet** — alcance cerrado.
+
+**Objetivo**: el pipeline agéntico cita `canonical_url` **sin ancla**, así que una respuesta suya
+abre la norma por el principio. El RAG lleva el ancla desde PUB.3.
+
+```
+# PROMPT HIB.3 (RED/GREEN) — El ancla tambien en el modo selector
+# Deploy: edge
+
+## Cambio
+- La cita del modo agentico pasa por `url_de_cita`, igual que el RAG: sitio publicado con ancla
+  si esta configurado, diario oficial si es norma externa, PDF si no hay nada.
+- El ancla sale del **fragmento mejor puntuado** de ese documento (HIB.1 ya lo tiene a mano).
+  Sin HIB.1 no hay de donde sacarla: por eso este prompt va despues.
+
+## Tests (RED primero)
+# should_cite_with_the_anchor_of_the_best_ranked_chunk
+# should_fall_back_to_the_document_url_when_the_chunk_has_no_anchor
+# should_send_an_external_norm_to_its_official_gazette
+
+## Criterio de done
+- [ ] Verificado en navegador: una cita del agentico abre el articulo
+```
+
+---
+
+### Prompt HIB.4 (RED/GREEN) — La reformulación no se emite como si fuera la respuesta
+
+**Modelo sugerido**: **Sonnet** — dos defectos encadenados en un fichero, ambos localizados.
+
+**Objetivo**: en `hub_chat.py`, `on_chat_model_stream` emite los tokens de **cualquier** llamada
+al modelo, incluida la reformulación de RES.2. Y el mensaje de rendición sólo se emite
+`if fallback_answer and not collected_tokens`, así que cuando la reformulación ya dejó tokens
+**nunca se muestra**. Reproducido el 2026-08-26: pregunta sobre conservación de expedientes →
+respuesta `plazo de conservación expedientes contratación menor`, `fallback_reason=quality_gate`.
+
+```
+# PROMPT HIB.4 (RED/GREEN) — Al usuario solo le llegan los tokens de la respuesta
+# Deploy: edge
+
+## Cambio
+- Filtrar `on_chat_model_stream` por `event["metadata"]["langgraph_node"]`: solo se emiten los
+  tokens de `generate_answer`.
+- El mensaje de rendicion se emite SIEMPRE que haya `fallback_answer`, sustituyendo lo que
+  hubiera llegado antes, no solo cuando no llego nada.
+- `assistant_message` guarda lo mismo que vio el usuario: hoy guarda la reformulacion.
+
+## Por que no se noto antes
+Antes de RES.2 el modelo de reescritura casi nunca corria: `necesita_reescritura` exige dos
+turnos previos. RES.2 lo puso en el camino del 28% de las consultas de Normativa.
+
+## Tests (RED primero)
+# should_not_stream_tokens_from_the_rewrite_model
+# should_emit_the_no_answer_message_even_if_other_nodes_streamed
+# should_store_what_the_user_saw
+
+## Criterio de done
+- [ ] Verificado en el widget del sitio del corpus con una consulta que la puerta rechace
+```
+
+---
+
+### Prompt HIB.5 (RED/GREEN) — El seguimiento conserva el contexto de la pregunta anterior
+
+**Modelo sugerido**: **Opus** — hay que decidir cuándo una pregunta es continuación, y eso es
+diseño, no ajuste.
+
+**Objetivo**: `necesita_reescritura` exige **dos turnos previos**, así que en el segundo turno no
+actúa. Caso real del 2026-08-26: «requisitos para la mención de doctorado internacional» →
+«¿hacen falta requisitos adicionales para el acto de defensa?» → el asistente contesta con
+**tesis confidenciales y cotutela**, porque busca la segunda pregunta sin el contexto de la
+primera.
+
+```
+# PROMPT HIB.5 (RED/GREEN) — Una repregunta es una repregunta desde el primer turno
+# Deploy: edge
+
+## Cambio
+- `necesita_reescritura` pasa a exigir **un** turno previo, no dos.
+- Se paga una llamada al modelo de reescritura en cada turno que no sea el primero. Medir el
+  coste real en la bateria antes de darlo por bueno.
+
+## La trampa a evitar
+No mezclar esto con la reformulacion de RES.2, que responde a otra pregunta (la primera consulta
+no encontro nada) y tiene su propia plantilla y su propio plazo. Son dos mecanismos con dos
+razones; fundirlos es como se consigue un nodo que nadie entiende.
+
+## Tests (RED primero)
+# should_rewrite_the_query_on_the_second_turn
+# should_not_rewrite_on_the_very_first_question
+# should_keep_the_subject_of_the_previous_turn
+
+## Criterio de done
+- [ ] El caso del doctorado internacional, reproducido y verde
+```
+
+---
+
+### Prompt HIB.6 (RED/GREEN) — Gerencia pasa a `parent_child` reutilizando lo ya embebido
+
+**Modelo sugerido**: **Opus** — la copia entre corpus es la clase de operación en la que un
+metadato mal remapeado rompe la recuperación en silencio.
+
+**Objetivo**: el asistente económico-administrativo sigue en `structural` y sin padre. Las 22
+normas externas están en los tres chatbots **con `content_hash` idéntico** (comprobado el
+2026-08-26), y las de Normativa UJI ya están troceadas con padre.
+
+```
+# PROMPT HIB.6 (RED/GREEN) — Lo mismo no se embebe dos veces
+# Deploy: edge
+
+## Cambio
+- Script de copia: los fragmentos de un documento de un chatbot se copian a su gemelo de otro
+  chatbot cuando el `content_hash` del documento coincide.
+- Se remapean `chatbot_id`, `document_id` **y el `document_id` que va DENTRO de
+  `chunk_metadata`**. Sin lo tercero, la agrupacion por documento del retrieval se rompe sin dar
+  ningun error.
+- Lo propio de Gerencia (102 documentos, 4.388 fragmentos hoy) si se re-ingiere.
+
+## Cuentas
+- Copiar: 27.353 fragmentos por chatbot, coste cero.
+- Re-embeber: ~11.000 fragmentos. El 71% del trabajo ya esta pagado.
+
+## Lo que este prompt NO hace
+El chatbot agentico NO se re-trocea: su estrategia lee `markdown_content`, nunca fragmentos, y
+para puntuar documentos (HIB.1) el troceado fino de hoy vale igual.
+
+## Tests (RED primero)
+# should_copy_chunks_only_when_the_content_hash_matches
+# should_remap_the_document_id_inside_chunk_metadata
+# should_refuse_to_copy_when_the_chunking_strategy_differs
+# should_be_idempotent
+
+## Criterio de done
+- [ ] Bateria de Gerencia antes y despues
+- [ ] Cero fragmentos con `document_id` inconsistente entre columna y metadato
+```
+
+---
+
+## Lo que este bloque NO hace
+
+- **No decide sobre las leyes estatales en el corpus de Normativa UJI.** Medido el 2026-08-26:
+  quitarlas cambia la recuperación en **3 de 25** consultas y sólo una de verdad (SGE-02, de
+  0,364 a 0,641 y de callar a contestar). Ninguna respuesta citaba el BOE con ellas dentro. La
+  decisión espera a las pruebas del usuario y, si hace falta, al criterio de Secretaría General.
+  Quedan apagadas con `us_assistents='no'`, que se revierte con un `UPDATE`.
+- **No pone techo al tamaño del padre.** Los padres de las normas externas llegan a 236.691
+  caracteres (~59.000 tokens). Decisión aplazada a propósito por el usuario: para el asistente
+  económico-administrativo, el contexto completo de la norma estatal es lo adecuado.
+- **No toca `top_k` ni ningún umbral.** Se recalibran cuando HIB.0 deje de tirar respuestas
+  buenas, no antes: hoy cualquier medida se hace sobre ruido.
