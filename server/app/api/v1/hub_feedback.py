@@ -25,6 +25,10 @@ from server.app.core.auth.tenancy import assert_chatbot_org_access, assert_org_a
 from server.app.modules.agents_hub.database.config_models import HubChatbot
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.operational_models import HubInteraction
+# HIB.H — el mismo modelo que valida el lote de evaluación valida lo que anota el informador.
+# Dos formas para la misma idea divergen, y con ellas se cae el instrumental que cruza
+# conversaciones reales con escenarios de prueba.
+from server.app.modules.agents_hub.evaluation.escenario_contrato import ExpectedSources
 from server.app.modules.agents_hub.services.feedback_service import FeedbackService
 
 router = APIRouter(prefix="/hub/feedback", tags=["hub-feedback"])
@@ -44,6 +48,15 @@ class ReviewVerdictRequest(BaseModel):
 
     verdict: Literal["good", "bad", "mixed"]
     note: str | None = Field(None, max_length=2000)
+    # HIB.H — la solución, no sólo el veredicto. Opcionales porque se piden de distintas
+    # cosas: el veredicto de TODAS las conversaciones (es la métrica primaria y tiene que ser
+    # rápido), la fuente esperada sólo de las únicas tras deduplicar. Exigirlas siempre
+    # convertiría la revisión en un formulario y nadie la completaría.
+    #
+    # El tipo es el MISMO que valida el lote de evaluación (HIB.G): un solo esquema para las
+    # conversaciones reales y para los escenarios de prueba.
+    expected_sources: ExpectedSources | None = None
+    reference_answer: str | None = Field(None, max_length=4000)
 
     @model_validator(mode="after")
     def _exigir_motivo_cuando_es_malo(self) -> "ReviewVerdictRequest":
@@ -80,6 +93,10 @@ class InteractionReviewOut(BaseModel):
     review_note: str | None = None
     review_by: str | None = None
     review_at: datetime | None = None
+    # HIB.H — se devuelven para que la pantalla pueda mostrar lo ya anotado sin una segunda
+    # llamada, y para que la exportación las lleve.
+    review_expected_sources: dict | None = None
+    review_reference_answer: str | None = None
 
 
 @router.post("/{interaction_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -138,6 +155,14 @@ async def review_interaction(
         verdict=request.verdict,
         note=request.note,
         reviewer=user.email,
+        # HIB.H — `None` viaja como `None` y no como `{}`: el servicio distingue «no anotado»
+        # de «anotado sin fuentes», y esa distinción es el denominador de las cifras.
+        expected_sources=(
+            request.expected_sources.model_dump(exclude_none=True)
+            if request.expected_sources is not None
+            else None
+        ),
+        reference_answer=request.reference_answer,
     )
     # `run_id` es UUID en la fila y `str` en el contrato (mismo shape que el GET de más
     # abajo): devolver la fila del ORM tal cual dejaba que FastAPI intentara servir un UUID
@@ -156,6 +181,8 @@ async def review_interaction(
         review_note=revisada.review_note,
         review_by=revisada.review_by,
         review_at=revisada.review_at,
+        review_expected_sources=revisada.review_expected_sources,
+        review_reference_answer=revisada.review_reference_answer,
     )
 
 

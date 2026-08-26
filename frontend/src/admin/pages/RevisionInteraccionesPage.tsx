@@ -48,8 +48,26 @@ function exportToCsv(chatbotId: string, interactions: InteractionReviewOut[]) {
     'review_note',
     'review_by',
     'review_at',
+    // HIB.H: la fuente esperada y la respuesta de referencia salen también. Son lo que
+    // convierte la revisión en algo medible más de una vez, y si no viajan en la
+    // exportación se quedan dentro de la aplicación igual que le pasaba al veredicto.
+    'review_expected_required',
+    'review_expected_acceptable',
+    'review_reference_answer',
   ]
   const escape = (s: string) => `"${s.replace(/"/g, '""')}"`
+  // Documento y ancla juntos, separados por «|» entre fuentes: una hoja de cálculo no puede
+  // con una lista anidada, y el ancla sin su documento no identifica ningún artículo.
+  const fuentes = (lista: unknown): string =>
+    Array.isArray(lista)
+      ? lista
+          .map((f) => {
+            const r = f as { canonical_url?: string; document_id?: string; anchor?: string }
+            const doc = r.canonical_url ?? r.document_id ?? ''
+            return r.anchor ? `${doc}#${r.anchor}` : doc
+          })
+          .join(' | ')
+      : ''
   const rows = interactions.map((i) => [
     i.created_at,
     escape(i.user_message),
@@ -60,6 +78,13 @@ function exportToCsv(chatbotId: string, interactions: InteractionReviewOut[]) {
     escape(i.review_note ?? ''),
     i.review_by ?? '',
     i.review_at ?? '',
+    escape(
+      fuentes((i.review_expected_sources as { required?: unknown } | null)?.required),
+    ),
+    escape(
+      fuentes((i.review_expected_sources as { acceptable?: unknown } | null)?.acceptable),
+    ),
+    escape(i.review_reference_answer ?? ''),
   ])
   const csv = [header, ...rows].map((r) => r.join(',')).join('\n')
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })

@@ -91,6 +91,17 @@ class ExpectedSource(BaseModel):
             raise ValueError(
                 "una fuente esperada necesita `document_id` o `canonical_url`"
             )
+        # HIB.H — el título de la norma escrito a mano no es un identificador. Casa con nada,
+        # así que la fuente esperada nunca aparecería «en lo recuperado» y el fallo se leería
+        # como un fallo de recuperación: se pierde la métrica sin dar ningún error. En la UI
+        # esto se elige del corpus; aquí se rechaza la forma.
+        if self.canonical_url and not self.canonical_url.startswith(
+            ("http://", "https://")
+        ):
+            raise ValueError(
+                "`canonical_url` tiene que ser una URL; el documento se elige del corpus, "
+                "no se escribe a mano"
+            )
         return self
 
 

@@ -56,6 +56,12 @@ def _interaccion(**kw):
     m.review_note = kw.get("review_note", None)
     m.review_by = kw.get("review_by", None)
     m.review_at = kw.get("review_at", None)
+    # HIB.H — declarados explícitamente aunque este fichero no los use: un `MagicMock` sin
+    # `spec` fabrica un hijo para cualquier atributo que se le pida, así que al añadirlos al
+    # modelo el contrato de salida recibía dos mocks donde promete dict y str. El fallo no
+    # estaba en el código nuevo sino en una fixture que no describía la fila.
+    m.review_expected_sources = kw.get("review_expected_sources", None)
+    m.review_reference_answer = kw.get("review_reference_answer", None)
     m.created_at = kw.get("created_at", datetime.now(timezone.utc))
     return m
 

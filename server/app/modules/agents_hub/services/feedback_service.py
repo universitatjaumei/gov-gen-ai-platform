@@ -81,6 +81,8 @@ class FeedbackService:
         verdict: str,
         note: str | None,
         reviewer: str,
+        expected_sources: dict | None = None,
+        reference_answer: str | None = None,
     ) -> HubInteraction:
         """Anota el veredicto sobre la interacción ya cargada y comprobada.
 
@@ -92,5 +94,13 @@ class FeedbackService:
         interaction.review_note = note
         interaction.review_by = reviewer
         interaction.review_at = datetime.now(timezone.utc)
+        # HIB.H — sólo se escriben si vienen. Un `None` no borra lo que otra revisión anotó:
+        # el veredicto se pide de todas las conversaciones y la fuente esperada sólo de
+        # algunas, así que la mayoría de los PATCH llegan sin ella, y machacar con nulo
+        # perdería la anotación cara cada vez que alguien reconfirma un veredicto.
+        if expected_sources is not None:
+            interaction.review_expected_sources = expected_sources
+        if reference_answer is not None:
+            interaction.review_reference_answer = reference_answer
         await self.session.commit()
         return interaction

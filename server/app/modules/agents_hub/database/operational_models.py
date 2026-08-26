@@ -490,6 +490,22 @@ class HubInteraction(HubOperationalBase):
     review_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # --- La solución, no sólo el veredicto (HIB.H) ---
+    # Con el veredicto solo, cada conversación revisada vale una vez: la siguiente ablación
+    # exige volver a pedir juicio humano sobre las mismas preguntas, y por eso las ablaciones
+    # no se hacían. Con la fuente esperada estructurada, `escenario_metricas.py` calcula sola
+    # si el documento esperado entró en lo recuperado, si el ancla abre el artículo correcto y
+    # si un negativo se rechazó como debía.
+    #
+    # Misma forma que `expected_sources` de `HubTestScenario` y del contrato de HIB.G,
+    # validada por el mismo modelo Pydantic: dos formas para la misma idea divergen, y con
+    # ellas se cae el instrumental que cruza conversaciones reales con escenarios de prueba.
+    #
+    # **NULL es «no anotado», no lista vacía.** Una lista vacía afirmaría que el informador
+    # miró y decidió que no hay fuente esperada, que es otra cosa. La diferencia es el
+    # denominador de «cuántas están anotadas».
+    review_expected_sources: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    review_reference_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class HubUsageCounter(HubOperationalBase):
@@ -663,6 +679,11 @@ class HubTestScenario(HubOperationalBase):
     # convertirlo en una asercion exigiria un criterio de igualdad entre respuestas de un
     # LLM, y ese criterio es el problema, no la solucion. Es la nota que lee quien juzga.
     expectation_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # HIB.H — lo mismo que la nota anterior dice en prosa, en forma comprobable: documento y
+    # ancla del artículo, en `required` y `acceptable`. **Se añade, no sustituye**: la nota
+    # sigue siendo lo que lee quien juzga y su valor —el motivo del fallo— no cabe en un
+    # identificador. Misma forma que `HubInteraction.review_expected_sources`.
+    expected_sources: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
