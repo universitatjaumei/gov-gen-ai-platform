@@ -7,7 +7,6 @@ identidad ni requerir migracion.
 """
 from __future__ import annotations
 
-import uuid
 
 
 # AIS.3 — la definición se fue a `core/identidad.py`: la importaba `core/auth/modulos_service.py`,

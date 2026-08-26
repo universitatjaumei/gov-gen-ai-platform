@@ -58,9 +58,25 @@ const DONE_WITH_SOURCES = {
 
 const fetchMock = vi.fn()
 
+// El widget monta `EnlaceAlFuente` (AIS.6), que pide `/api/v1/instancia` al cargarse. Con un
+// único mock compartido, esa petición se comía el `mockResolvedValueOnce` que cada test tenía
+// preparado para la respuesta del chat, así que el chat recibía `undefined` y 18 tests caían
+// con «Unable to find an element with the text».
+//
+// Se enruta por URL en vez de añadir un `Once` de más al principio de cada test: así el test
+// declara sólo lo suyo, y montar mañana otro componente que pida algo al arrancar no vuelve a
+// desplazar la cola. Lo destapó CI.
+const fetchEnrutado = vi.fn((entrada: RequestInfo | URL, ...resto: unknown[]) => {
+  const url = typeof entrada === 'string' ? entrada : String((entrada as Request).url ?? entrada)
+  if (url.includes('/instancia')) {
+    return Promise.resolve(new Response(JSON.stringify({ source_url: null })))
+  }
+  return fetchMock(entrada, ...resto)
+})
+
 beforeAll(async () => {
   await i18n.changeLanguage('es')
-  vi.stubGlobal('fetch', fetchMock)
+  vi.stubGlobal('fetch', fetchEnrutado)
 })
 
 afterEach(() => {

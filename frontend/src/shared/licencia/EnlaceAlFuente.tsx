@@ -43,14 +43,27 @@ export function EnlaceAlFuente({ className, style }: EnlaceAlFuenteProps) {
     let vivo = true
     // Sin react-query a propósito: esto lo consume también el widget, que es un bundle aparte
     // y no monta el proveedor. Es una petición por carga y sin credencial.
-    fetch(`${BASE_DE_LA_API}/api/v1/instancia`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (vivo) setUrl(d?.source_url ?? null)
-      })
-      .catch(() => {
-        // Que no se pueda leer no rompe la pantalla: el enlace no aparece y ya está.
-      })
+    //
+    // Envuelto en `async` y con `try` alrededor de la propia llamada, no sólo con `.catch()`:
+    // el widget se embebe en webs ajenas, donde `fetch` puede estar parcheado, restringido por
+    // CSP o devolver algo que no es una promesa. Con la cadena `.then()` a pelo, un `fetch` que
+    // no devolviera promesa lanzaba `Cannot read properties of undefined (reading 'then')`
+    // **de forma síncrona dentro del efecto**, o sea que se llevaba por delante el árbol entero
+    // en vez de dejar el enlace sin pintar. Lo destapó CI: 25 tests del widget en rojo.
+    //
+    // La regla que ya estaba escrita abajo —«que no se pueda leer no rompe la pantalla»— es la
+    // correcta; lo que fallaba es que la forma del código no la cumplía en todos los casos.
+    const leer = async () => {
+      try {
+        const respuesta = await fetch(`${BASE_DE_LA_API}/api/v1/instancia`)
+        if (!respuesta?.ok) return
+        const datos = await respuesta.json()
+        if (vivo) setUrl(datos?.source_url ?? null)
+      } catch {
+        // El enlace no aparece y ya está.
+      }
+    }
+    void leer()
     return () => {
       vivo = false
     }

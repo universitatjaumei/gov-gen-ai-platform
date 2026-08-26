@@ -7,7 +7,6 @@ de DraftValidator (9R.4.2).
 from __future__ import annotations
 
 import json
-import re
 from functools import lru_cache
 from typing import Any, Literal, get_args
 

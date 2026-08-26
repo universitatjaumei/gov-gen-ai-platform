@@ -101,3 +101,41 @@ describe('el §13 llega a los dos sitios donde hay usuarios', () => {
     ).toMatch(/EnlaceAlFuente/)
   })
 })
+
+describe('cuando el fetch del sitio anfitrion no se comporta', () => {
+  /**
+   * **Esto rompió 25 tests del widget en CI y habría roto el widget en producción.**
+   *
+   * El componente encadenaba `fetch(...).then(...)` directamente. En una web ajena —que es
+   * donde vive el widget— `fetch` puede estar parcheado, restringido por CSP o devolver algo
+   * que no es una promesa, y entonces el `.then()` lanza **de forma síncrona dentro del
+   * efecto**: se lleva por delante el árbol de React entero en vez de dejar el enlace sin
+   * pintar.
+   *
+   * La regla ya estaba escrita en el componente —«que no se pueda leer no rompe la pantalla»—;
+   * lo que fallaba era que la forma del código no la cumplía en todos los casos.
+   */
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('should_not_crash_when_fetch_returns_something_that_is_not_a_promise', () => {
+    // `vi.fn()` sin implementación devuelve `undefined`: exactamente el caso de CI.
+    expect(() => render(<EnlaceAlFuente />)).not.toThrow()
+    expect(screen.queryByTestId('enlace-al-fuente')).toBeNull()
+  })
+
+  it('should_not_crash_when_fetch_rejects', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('bloqueado por CSP')))
+
+    render(<EnlaceAlFuente />)
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('enlace-al-fuente')).toBeNull()
+    })
+  })
+})
