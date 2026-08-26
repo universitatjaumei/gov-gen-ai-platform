@@ -170,3 +170,204 @@ class TestCitaDegradadaAlDocumento:
         )
 
         assert resultado == propio
+
+
+class TestRemisionesAOtrasNormas:
+    """HIB.0 — una remision no es una cita falsa.
+
+    La regla, en palabras del usuario (2026-08-26): la respuesta debe citar la norma
+    principal y, en su caso, las otras normas recuperadas y utilizadas para redactarla,
+    pero NO las normas citadas por esas normas.
+
+    Con `parent_child` el fragmento inyectado es el articulo entero, que trae dentro
+    remisiones («conforme al articulo 118 de la Ley 9/2017»). El modelo las enlaza. Antes de
+    este cambio, el contrato tiraba la respuesta ENTERA por eso: medido sobre el lote
+    ujirag-2024, los descartes por citas pasaron de 1 con `structural` a 5 de 25 con padre,
+    con la recuperacion sin cambios.
+    """
+
+    def test_should_keep_the_answer_when_it_mentions_a_norm_outside_the_retrieved_set(self):
+        from server.app.modules.agents_hub.agent.citation_validator import (
+            enforce_citation_contract,
+        )
+
+        texto = (
+            "El termini es de sis anys [Reglament, art. 9](https://uji.es/reg.html#art-9), "
+            "conforme a l'article 118 de la "
+            "[Llei 9/2017](https://boe.es/buscar/act.php?id=BOE-A-2017-12902)."
+        )
+        fuentes = [_make_source("https://uji.es/reg.html#art-9")]
+
+        resultado = enforce_citation_contract(texto, fuentes, "RAG")
+
+        assert "sis anys" in resultado
+        assert "[Reglament, art. 9](https://uji.es/reg.html#art-9)" in resultado
+
+    def test_should_strip_the_link_of_a_reference_outside_the_retrieved_set(self):
+        """La mencion se conserva; lo que se va es el enlace, que apunta a un texto que al
+        modelo no se le entrego y que por tanto no puede fundamentar nada."""
+        from server.app.modules.agents_hub.agent.citation_validator import (
+            enforce_citation_contract,
+        )
+
+        texto = (
+            "Segons el [Reglament, art. 9](https://uji.es/reg.html#art-9) i la "
+            "[Llei 9/2017](https://boe.es/buscar/act.php?id=BOE-A-2017-12902)."
+        )
+        fuentes = [_make_source("https://uji.es/reg.html#art-9")]
+
+        resultado = enforce_citation_contract(texto, fuentes, "RAG")
+
+        assert "boe.es" not in resultado
+        assert "Llei 9/2017" in resultado
+
+    def test_should_still_reject_when_there_is_no_grounded_citation_at_all(self):
+        """Si TODO lo que cita esta fuera del conjunto recuperado, no hay fundamento y se
+        rinde: quitar los enlaces no puede convertir una respuesta sin apoyo en una valida."""
+        from server.app.modules.agents_hub.agent.citation_validator import (
+            NO_CITATION_FALLBACK,
+            enforce_citation_contract,
+        )
+
+        texto = "Ho regula la [Llei 9/2017](https://boe.es/buscar/act.php?id=BOE-A-2017-12902)."
+        fuentes = [_make_source("https://uji.es/reg.html#art-9")]
+
+        assert enforce_citation_contract(texto, fuentes, "RAG") == NO_CITATION_FALLBACK
+
+    def test_should_not_count_a_stripped_reference_as_a_grounded_citation(self):
+        """El orden importa: primero se despoja, despues se comprueba que quede fundamento.
+        Al reves, una remision enlazada contaria como cita y el contrato dejaria de proteger."""
+        from server.app.modules.agents_hub.agent.citation_validator import (
+            enforce_citation_contract,
+        )
+
+        texto = "Ho regula la [Llei 9/2017](https://boe.es/x)."
+        fuentes = [_make_source("https://uji.es/reg.html#art-9")]
+        propio = "No he trobat fonament suficient."
+
+        assert enforce_citation_contract(texto, fuentes, "RAG", propio) == propio
+
+    def test_should_degrade_the_anchor_before_stripping_the_link(self):
+        """Un enlace al documento CORRECTO con un ancla que no es la recuperada se degrada al
+        documento (2026-08-24) y sobrevive: no se despoja como si fuera una remision."""
+        from server.app.modules.agents_hub.agent.citation_validator import (
+            enforce_citation_contract,
+        )
+
+        texto = "Segons el [Reglament, art. 9.2](https://uji.es/reg.html#art-9-2)."
+        fuentes = [_make_source("https://uji.es/reg.html#art-9")]
+
+        resultado = enforce_citation_contract(texto, fuentes, "RAG")
+
+        assert "(https://uji.es/reg.html)" in resultado
+        assert "Reglament, art. 9.2" in resultado
+
+
+class TestEnlazadoDeterministaDeCitasEnProsa:
+    """HIB.0 — el modelo nombra bien la norma pero se deja la URL, y la respuesta se tira.
+
+    Medido con la sonda el 2026-08-26 sobre SGE-01: el modelo respondio con detalle y correcto
+    —1,5 creditos ECTS por claustral, 80% de asistencia— citando asi:
+
+        [Reglamento sobre reconocimiento y transferencia de creditos..., ANEXO II, apartado 3]
+
+    Corchetes sin URL: no es un enlace markdown, el contrato no encuentra ninguna cita valida y
+    descarta la respuesta entera. RES.5 ya habia previsto esta forma y aplazo el enlazado
+    determinista porque midio CERO casos en 85 respuestas; ese cero ha caducado.
+
+    La regla que esto respeta (usuario, 2026-08-26): se enlaza la norma que se USA. Un titulo
+    que no esta entre lo recuperado NO se enlaza, aunque el modelo lo escriba entre corchetes.
+    """
+
+    TITULO = (
+        "Reglamento sobre reconocimiento y transferencia de creditos en los estudios "
+        "universitarios oficiales de grado y máster en la Universitat Jaume I"
+    )
+    URL = "http://127.0.0.1:4174/html/es_Reglamento_sobre_reconocimiento.html#annex-2"
+
+    def _fuente(self):
+        import uuid as _uuid
+
+        from server.app.modules.agents_hub.services.retrieval.types import Source
+
+        return Source(
+            document_id=_uuid.uuid4(), title=self.TITULO, url=self.URL,
+            excerpt="texto", score=1.0,
+        )
+
+    def test_should_link_a_prose_citation_that_names_a_retrieved_document(self):
+        from server.app.modules.agents_hub.agent.citation_validator import (
+            enforce_citation_contract,
+        )
+
+        texto = (
+            f"Pots convalidar 1,5 credits ECTS [{self.TITULO}, ANEXO II, apartado 3]."
+        )
+
+        resultado = enforce_citation_contract(texto, [self._fuente()], "RAG")
+
+        assert self.URL in resultado
+        assert "1,5 credits" in resultado
+
+    def test_should_keep_the_prose_detail_after_the_title(self):
+        """«ANEXO II, apartado 3» es informacion que el lector necesita: el enlace se anade,
+        el detalle no se pierde."""
+        from server.app.modules.agents_hub.agent.citation_validator import (
+            enforce_citation_contract,
+        )
+
+        texto = f"Segons [{self.TITULO}, ANEXO II, apartado 3]."
+
+        resultado = enforce_citation_contract(texto, [self._fuente()], "RAG")
+
+        assert "ANEXO II, apartado 3" in resultado
+
+    def test_should_not_link_a_prose_citation_of_a_document_not_retrieved(self):
+        """El enlazado determinista NO amplia lo citable: solo pone la URL de lo que ya se
+        recupero. Una norma que el articulo menciona sigue sin enlace."""
+        from server.app.modules.agents_hub.agent.citation_validator import (
+            NO_CITATION_FALLBACK,
+            enforce_citation_contract,
+        )
+
+        texto = "Ho regula la [Llei 9/2017, de 8 de novembre, de Contractes, art. 118]."
+
+        resultado = enforce_citation_contract(texto, [self._fuente()], "RAG")
+
+        assert resultado == NO_CITATION_FALLBACK
+
+    def test_should_prefer_the_longest_matching_title(self):
+        """Dos normas cuyo titulo empieza igual: gana la mas especifica, no la primera."""
+        import uuid as _uuid
+
+        from server.app.modules.agents_hub.agent.citation_validator import (
+            enforce_citation_contract,
+        )
+        from server.app.modules.agents_hub.services.retrieval.types import Source
+
+        corto = Source(
+            document_id=_uuid.uuid4(), title="Reglament de permanencia",
+            url="https://uji.es/corto.html", excerpt="t", score=1.0,
+        )
+        largo = Source(
+            document_id=_uuid.uuid4(),
+            title="Reglament de permanencia per als estudis de grau i master",
+            url="https://uji.es/largo.html", excerpt="t", score=1.0,
+        )
+        texto = "Segons el [Reglament de permanencia per als estudis de grau i master, art. 4]."
+
+        resultado = enforce_citation_contract(texto, [corto, largo], "RAG")
+
+        assert "https://uji.es/largo.html" in resultado
+        assert "https://uji.es/corto.html" not in resultado
+
+    def test_should_leave_an_existing_markdown_link_untouched(self):
+        from server.app.modules.agents_hub.agent.citation_validator import (
+            enforce_citation_contract,
+        )
+
+        texto = f"Segons [{self.TITULO}]({self.URL})."
+
+        resultado = enforce_citation_contract(texto, [self._fuente()], "RAG")
+
+        assert resultado == texto
