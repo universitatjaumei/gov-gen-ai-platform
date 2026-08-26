@@ -17,6 +17,7 @@ Deploy: edge
 
 import json
 import uuid
+from time import perf_counter
 from typing import AsyncIterator, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -50,6 +51,7 @@ from server.app.core.quotas import assert_within_quota, contabilizar_interaccion
 from server.app.core.rate_limit import ip_de, limitar_chat
 from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion
 from server.app.modules.agents_hub.database.operational_models import HubInteraction
+from server.app.modules.agents_hub.evaluation.traza import construye_traza
 from server.app.modules.agents_hub.services.config_provider import LocalConfigProvider
 from server.app.modules.agents_hub.services.embedding_resolver import (
     resolve_embedding_service,
@@ -471,6 +473,10 @@ async def chat_stream(
 
     async def event_generator() -> AsyncIterator[str]:
         uso = {"prompt": 0, "completion": 0, "source": "estimated"}
+        # HIB.I — el reloj arranca aquí, antes del primer evento del grafo: la latencia que
+        # importa es la que espera quien pregunta, no la del nodo más lento.
+        inicio = perf_counter()
+        primer_token_ms: int | None = None
         collected_tokens: list[str] = []
         final_sources: list = []
         language_fallback = False
@@ -483,6 +489,10 @@ async def chat_stream(
         reformulada = False
         fallback_reason: str | None = None
         fallback_answer: str | None = None
+        # HIB.I — lo que la traza necesita y hasta ahora no salía de este generador.
+        best_score: float | None = None
+        gate_passed: bool | None = None
+        consulta_reescrita: str | None = None
 
         try:
             if router_status_message:
@@ -503,6 +513,8 @@ async def chat_stream(
                     if chunk is not None:
                         delta = chunk.content if hasattr(chunk, "content") else str(chunk)
                         if delta:
+                            if primer_token_ms is None:
+                                primer_token_ms = int((perf_counter() - inicio) * 1000)
                             collected_tokens.append(delta)
                             yield _sse("token", {"delta": delta})
 
@@ -515,6 +527,15 @@ async def chat_stream(
                     fallback_reason = output.get("fallback_reason")
                     if output.get("fallback_used"):
                         fallback_answer = output.get("answer")
+                    # HIB.I — la nota y la decisión de la puerta, tal como quedaron. Se leen
+                    # del nodo final porque es el único punto donde ya están las dos.
+                    nota_final = output.get("quality_score")
+                    if nota_final is not None:
+                        best_score = nota_final
+                        gate_passed = nota_final >= getattr(
+                            core_graph.cfg, "quality_threshold", 0.0
+                        )
+                    consulta_reescrita = output.get("rewritten_query") or consulta_reescrita
 
                 elif kind == "on_chain_end" and name == "detect_language":
                     output = event.get("data", {}).get("output") or {}
@@ -573,7 +594,29 @@ async def chat_stream(
             fallback_reason=fallback_reason,
             prompt_tokens=uso["prompt"] or None,
             completion_tokens=uso["completion"] or None,
-            interaction_metadata={"usage_source": uso["source"]},
+            # HIB.I — la traza de diagnóstico. Con el piloto en marcha ya es tarde para los
+            # datos que no se guardaron: sin los identificadores y las puntuaciones de lo
+            # recuperado no se puede saber, meses después, si una respuesta mala fue de
+            # recuperación o de redacción, ni re-ejecutar una ablación sobre las mismas
+            # consultas sin volver a pedir trabajo a los informadores.
+            interaction_metadata=construye_traza(
+                cfg=core_graph.cfg,
+                fuentes=final_sources,
+                usage_source=uso["source"],
+                best_score=best_score,
+                gate_passed=gate_passed,
+                language=detected_language,
+                source_language=lengua_de_la_fuente,
+                translation_warning=language_fallback,
+                # El turno que se está respondiendo, contando desde 1. Es lo que permite
+                # separar «falla la primera pregunta» de «falla el seguimiento», que es
+                # justo la distinción que HIB.C viene a arreglar.
+                turn_index=len(request.history) + 1,
+                rewritten_query=consulta_reescrita,
+                reformulada=reformulada,
+                latency_ms=int((perf_counter() - inicio) * 1000),
+                first_token_ms=primer_token_ms,
+            ),
         )
         session.add(interaction)
         # El consumo va en el MISMO commit que la interacción, no en un segundo write: si
