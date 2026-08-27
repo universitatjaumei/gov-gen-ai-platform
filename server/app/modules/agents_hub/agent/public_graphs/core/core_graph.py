@@ -389,6 +389,10 @@ class CoreGraph:
                         "juzgadas": fundamento.juzgadas,
                         "con_fundamento": fundamento.con_fundamento,
                         "juez_fallo": fundamento.juez_fallo,
+                        # El detalle viaja para que un rechazo se pueda explicar sin repetir
+                        # la tanda. Se recorta cada afirmacion, no la lista: cuantas fallaron
+                        # es tan informativo como cuales.
+                        "detalle": fundamento.detalle,
                     }
                     if fundamento is not None else None
                 ),

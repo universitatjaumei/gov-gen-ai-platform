@@ -23409,8 +23409,41 @@ contestables tras reformular. Si son pocos, reintentar no compensa y se descarta
 # should_not_count_a_remission_as_an_ungrounded_claim
 # should_record_the_check_in_the_trace
 
+## MEDIDO el 2026-08-28 — NO SE DESPLIEGA, y por que
+
+Dos tandas de 48 escenarios, con la comprobacion apagada y encendida:
+
+| | apagada | encendida |
+|---|---|---|
+| negativos declinados | 7/18 | **10/18** |
+| respuestas buenas rechazadas | 0/30 | **10/30** |
+
+Caza 3 negativos mas y rechaza **10 de las 30 respuestas correctas**. El criterio escrito antes
+de medir era «si pasa de 2 de 30, no se despliega». Son 10: **no se despliega**.
+
+**Y la causa no es un fallo suelto.** De las 33 afirmaciones de los 9 contestables rechazados,
+**19 estaban LOCALIZADAS** —el juez vio la ventana correcta del articulo citado— y las rechazo
+igualmente; 14 cayeron por la regla de la cifra ausente. En ORI-06 y SGE-01 **todas** las
+afirmaciones estaban localizadas y el juez dijo «no» a todas.
+
+Lo que falla es el **grano**: la comprobacion evalua **frases enteras contra UN solo documento
+citado**, y las respuestas reales meten varios hechos y varias citas en la misma frase. Una frase
+con tres hechos de dos normas distintas no la sostiene ninguna de las dos por separado.
+
+## Lo que haria falta para que funcione, y no es un parche
+1. **Descomponer en afirmaciones ATOMICAS**, un hecho cada una, en vez de partir por frases. Es
+   la definicion de ALCE y es lo que el instrumento de `_local/golden/precision_de_cita.py` si
+   hace —con una llamada al modelo por respuesta— y lo que la version del grafo no hace.
+2. **Comprobar cada afirmacion contra TODAS las fuentes que cita**, no contra la primera. Hoy
+   `_fuente_de` toma el primer enlace de la frase, y ORI-16 llevaba dos en una.
+3. Y volver a medir el acuerdo del juez **sobre afirmaciones atomicas reales**, no sobre las 24
+   etiquetadas a mano, que son inequivocas por construccion y donde acordo 24 de 24.
+
+Hasta entonces queda **apagada** y el piloto abre sin ella. La abstencion sigue siendo el hueco:
+lo que hoy la produce es el contrato de citas, con 7 de 18 y sin falsos positivos.
+
 ## Criterio de done
-- [ ] Medido sobre los 11 negativos que hoy se contestan: cuantos caza (cifra REAL, no estimada)
+- [x] Medido sobre los 11 negativos que hoy se contestan: cuantos caza (cifra REAL, no estimada)
 - [ ] Medido sobre los 30 contestables: cuantos rechaza indebidamente. Si pasa de 2, no se
       despliega y se revisa la plantilla del juez
 - [ ] Latencia del primer token con y sin la comprobacion, sobre la misma muestra

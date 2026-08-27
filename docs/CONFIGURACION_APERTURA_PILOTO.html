@@ -1,0 +1,344 @@
+<meta charset="utf-8">
+<title>Configuración de apertura</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;600&display=swap">
+
+<style>
+:root {
+    --marca:#0b5394; --marca-suave:#e8eef6; --fondo:#f6f7f9; --superficie:#ffffff;
+    --tinta:#151b23; --tinta-media:#4c5866; --tinta-tenue:#7a8593;
+    --filete:#dde1e7; --filete-fino:#eaedf1;
+    --bien:#1c6b42; --bien-suave:#e8f2ec; --mal:#9c3520; --mal-suave:#f9ecea;
+    --aviso:#8a5b12; --aviso-suave:#f8f1e3;
+    --sombra:0 1px 2px rgba(21,27,35,.05), 0 8px 24px -16px rgba(21,27,35,.18);
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --marca:#6ea3dc; --marca-suave:#16233180; --fondo:#0e1319; --superficie:#151b23;
+        --tinta:#e6e9ee; --tinta-media:#a3aebc; --tinta-tenue:#78838f;
+        --filete:#2a323c; --filete-fino:#1f262e;
+        --bien:#6cc08c; --bien-suave:#16261d80; --mal:#e08a72; --mal-suave:#2a1a1680;
+        --aviso:#d9ab5f; --aviso-suave:#2a221280;
+        --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+    }
+}
+:root[data-theme="dark"] {
+    --marca:#6ea3dc; --marca-suave:#16233180; --fondo:#0e1319; --superficie:#151b23;
+    --tinta:#e6e9ee; --tinta-media:#a3aebc; --tinta-tenue:#78838f;
+    --filete:#2a323c; --filete-fino:#1f262e;
+    --bien:#6cc08c; --bien-suave:#16261d80; --mal:#e08a72; --mal-suave:#2a1a1680;
+    --aviso:#d9ab5f; --aviso-suave:#2a221280;
+    --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+}
+body{background:var(--fondo);color:var(--tinta);
+  font-family:"Source Serif 4",Georgia,serif;font-size:17px;line-height:1.62;
+  -webkit-font-smoothing:antialiased}
+.hoja{max-width:47rem;margin:0 auto;
+  padding:clamp(2.5rem,6vw,5rem) clamp(1.15rem,4vw,2rem) 6rem;
+  display:flex;flex-direction:column;gap:2.75rem}
+.cabecera{display:flex;flex-direction:column;gap:.9rem;
+  border-bottom:2px solid var(--marca);padding-bottom:1.6rem}
+.eyebrow{font-family:"Libre Franklin",system-ui,sans-serif;font-size:.72rem;font-weight:600;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--marca);margin:0}
+h1{font-family:"Libre Franklin",system-ui,sans-serif;font-size:clamp(1.8rem,5vw,2.5rem);
+  font-weight:700;line-height:1.13;letter-spacing:-.021em;text-wrap:balance;margin:0}
+.entradilla{margin:0;color:var(--tinta-media);font-size:1.06rem}
+.ficha{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));
+  gap:.85rem 1.5rem;margin:.4rem 0 0}
+.ficha div{display:flex;flex-direction:column;gap:.12rem}
+.ficha dt{font-family:"Libre Franklin",system-ui,sans-serif;font-size:.68rem;font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--tinta-tenue)}
+.ficha dd{margin:0;font-size:.95rem;color:var(--tinta-media);font-variant-numeric:tabular-nums}
+.veredicto{background:var(--marca-suave);border:1px solid var(--marca);border-left-width:4px;
+  border-radius:3px;padding:1.5rem 1.7rem;display:flex;flex-direction:column;gap:.8rem}
+.veredicto .titular{font-family:"Libre Franklin",system-ui,sans-serif;font-size:1.15rem;
+  font-weight:600;line-height:1.3;color:var(--marca);text-wrap:balance}
+.veredicto p{margin:0;color:var(--tinta-media)}
+.alerta{background:var(--aviso-suave);border:1px solid var(--aviso);border-left-width:4px;
+  border-radius:3px;padding:1.25rem 1.5rem}
+.alerta p{margin:0;color:var(--tinta-media);font-size:.95rem}
+.alerta p + p{margin-top:.6rem}
+.alerta .titular{font-family:"Libre Franklin",system-ui,sans-serif;font-size:.95rem;
+  font-weight:600;color:var(--aviso);display:block;margin-bottom:.4rem}
+h2{font-family:"Libre Franklin",system-ui,sans-serif;font-size:1.28rem;font-weight:600;
+  letter-spacing:-.011em;line-height:1.25;text-wrap:balance;margin:0 0 .9rem}
+h3{font-family:"Libre Franklin",system-ui,sans-serif;font-size:1rem;font-weight:600;
+  margin:1.7rem 0 .5rem;text-wrap:balance}
+section > p,section > ul,section > ol,section > .tabla-marco{margin:0 0 1rem}
+section > *:last-child{margin-bottom:0}
+ul,ol{padding-left:1.15rem;display:flex;flex-direction:column;gap:.6rem}
+li::marker{color:var(--tinta-tenue)}
+strong,b{font-weight:600}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.85em;
+  background:var(--marca-suave);padding:.1em .34em;border-radius:2px}
+a{color:var(--marca);text-underline-offset:.15em}
+.nota{font-size:.9rem;color:var(--tinta-tenue);line-height:1.55}
+.tabla-marco{overflow-x:auto;border:1px solid var(--filete);border-radius:3px;
+  background:var(--superficie);box-shadow:var(--sombra)}
+table{border-collapse:collapse;width:100%;min-width:34rem;
+  font-family:"Libre Franklin",system-ui,sans-serif;font-size:.83rem;
+  font-variant-numeric:tabular-nums}
+caption{caption-side:top;text-align:left;font-family:"Libre Franklin",system-ui,sans-serif;
+  font-size:.7rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--tinta-tenue);padding:.85rem 1rem .55rem}
+th,td{padding:.6rem .9rem;text-align:left;border-bottom:1px solid var(--filete-fino);
+  vertical-align:top}
+thead th{font-weight:600;font-size:.69rem;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--tinta-tenue);border-bottom:1px solid var(--filete);vertical-align:bottom}
+th[scope="row"]{font-weight:600;font-size:.82rem;color:var(--tinta)}
+td.num,th.num{text-align:right}
+tbody tr:last-child th,tbody tr:last-child td{border-bottom:none}
+tr.destacada td,tr.destacada th[scope="row"]{background:var(--marca-suave)}
+tr.mala td,tr.mala th[scope="row"]{background:var(--mal-suave)}
+tr.buena td,tr.buena th[scope="row"]{background:var(--bien-suave)}
+.sello{font-family:"Libre Franklin",system-ui,sans-serif;font-size:.67rem;font-weight:600;
+  letter-spacing:.04em;text-transform:uppercase;padding:.14rem .4rem;border-radius:2px;
+  white-space:nowrap}
+.sello.si{background:var(--bien-suave);color:var(--bien)}
+.sello.no{background:var(--mal-suave);color:var(--mal)}
+.pie{border-top:1px solid var(--filete);padding-top:1.3rem;font-size:.82rem;
+  color:var(--tinta-tenue);display:flex;flex-direction:column;gap:.4rem}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="hoja">
+
+<header class="cabecera">
+    <p class="eyebrow">Piloto · configuración de apertura</p>
+    <h1>Con qué abren los cuatro asistentes, y las diecisiete pruebas que llevaron a cada
+    número</h1>
+    <p class="entradilla">Ningún valor de esta configuración se hereda de un defecto: todos se
+    eligieron con una medición delante o se dejaron como estaban <b>después</b> de medir que
+    cambiarlos no compraba nada. Y donde la medición dijo que no, se dejó apagado.</p>
+    <dl class="ficha">
+        <div><dt>Fecha</dt><dd>28 de agosto de 2026</dd></div>
+        <div><dt>Bloque</dt><dd>HIB · 15 prompts</dd></div>
+        <div><dt>Escenarios medidos</dt><dd>48 + 18</dd></div>
+        <div><dt>Ejecuciones del lote</dt><dd>13</dd></div>
+    </dl>
+</header>
+
+<div class="veredicto">
+    <p class="titular">Recuperar la norma correcta funciona. Declinar no, y no lo arregla ningún
+    mando de configuración.</p>
+    <p>21 de los 21 escenarios cuya fuente esperada está bien anotada recuperan la norma
+    correcta. El síntoma que abrió el bloque —«las normas seleccionadas no siempre aciertan»— era
+    el síntoma de otra cosa.</p>
+    <p>El asistente de Normativa <b>nunca calla teniendo la respuesta</b> (30 de 30) y
+    <b>contesta 11 de las 18 preguntas que debería declinar</b>. Eso es lo que el piloto tiene
+    que resolver, y este bloque deja medido que no se resuelve moviendo umbrales.</p>
+</div>
+
+<section>
+    <h2>La configuración, tal como está en la base</h2>
+    <div class="tabla-marco">
+    <table>
+        <caption>Leído de <code>hub_chatbots</code> el 2026-08-28</caption>
+        <thead><tr>
+            <th scope="col">Asistente</th><th scope="col">Modo</th>
+            <th scope="col" class="num">Umbral</th><th scope="col" class="num">top_k</th>
+            <th scope="col">Reranker</th><th scope="col">Troceado</th>
+            <th scope="col">Reescritura</th><th scope="col">Fundamento</th>
+            <th scope="col" class="num">Fragmentos</th>
+        </tr></thead>
+        <tbody>
+            <tr class="destacada">
+                <th scope="row">Normativa UJI</th><td>RAG</td>
+                <td class="num"><b>0,65</b></td><td class="num">3</td>
+                <td><span class="sello no">off</span></td><td><code>parent_child</code></td>
+                <td><span class="sello si">on</span></td>
+                <td><span class="sello no">off</span></td><td class="num">60.859</td>
+            </tr>
+            <tr class="destacada">
+                <th scope="row">Gerencia · RAG</th><td>RAG</td>
+                <td class="num"><b>0,69</b></td><td class="num">3</td>
+                <td><span class="sello no">off</span></td><td><code>parent_child</code></td>
+                <td><span class="sello si">on</span></td>
+                <td><span class="sello no">off</span></td><td class="num">38.536</td>
+            </tr>
+            <tr>
+                <th scope="row">Gerencia · agéntico</th><td>MD_AGENT_SELECTOR</td>
+                <td class="num">0,50</td><td class="num">8</td>
+                <td><span class="sello no">off</span></td><td><code>structural</code></td>
+                <td><span class="sello si">on</span></td>
+                <td><span class="sello no">off</span></td><td class="num">14.208</td>
+            </tr>
+            <tr>
+                <th scope="row">Chatbot Demo</th><td>RAG</td>
+                <td class="num">0,60</td><td class="num">8</td>
+                <td><span class="sello no">off</span></td><td>—</td>
+                <td>heredado</td><td><span class="sello no">off</span></td><td class="num">15</td>
+            </tr>
+        </tbody>
+    </table>
+    </div>
+    <p class="nota">Un chatbot que se cree hoy nace con umbral <b>0,65</b>, <code>top_k = 3</code>,
+    reranker apagado, reescritura de consulta activada y comprobación de fundamento apagada. Eso
+    exigió mover el defecto de la <b>columna</b> y no sólo el de plataforma: `quality_threshold`
+    es <code>NOT NULL</code>, y una columna no nula gana siempre a la capa de arriba.</p>
+</section>
+
+<section>
+    <h2>De dónde sale cada número</h2>
+
+    <h3>Umbral: 0,65 en Normativa y 0,69 en Gerencia, distintos a propósito</h3>
+    <p>La curva se calculó <b>sin generar nada</b>, porque la puerta es <code>nota ≥ umbral</code>
+    y las notas del lote estaban guardadas:</p>
+    <div class="tabla-marco">
+    <table>
+        <caption>Qué compra cada umbral, y qué cuesta</caption>
+        <thead><tr><th scope="col">Umbral</th>
+        <th scope="col" class="num">Normativa: declina bien</th>
+        <th scope="col" class="num">pierde</th>
+        <th scope="col" class="num">Gerencia: declina bien</th>
+        <th scope="col" class="num">pierde</th></tr></thead>
+        <tbody>
+            <tr><th scope="row">0,35 (Gerencia antes)</th><td class="num">—</td><td class="num">—</td>
+                <td class="num">0/5</td><td class="num">0 %</td></tr>
+            <tr><th scope="row">0,60 (Normativa antes)</th><td class="num">0/18</td>
+                <td class="num">0 %</td><td class="num">0/5</td><td class="num">0 %</td></tr>
+            <tr class="buena"><th scope="row">0,65</th><td class="num"><b>2/18</b></td>
+                <td class="num"><b>0 %</b></td><td class="num">1/5</td><td class="num">0 %</td></tr>
+            <tr class="buena"><th scope="row">0,69</th><td class="num">—</td><td class="num">—</td>
+                <td class="num"><b>3/5</b></td><td class="num"><b>0 %</b></td></tr>
+            <tr><th scope="row">0,72</th><td class="num">10/18</td><td class="num">17 %</td>
+                <td class="num">3/5</td><td class="num">23 %</td></tr>
+            <tr class="mala"><th scope="row">0,75</th><td class="num">16/18</td>
+                <td class="num">50 %</td><td class="num">4/5</td><td class="num">69 %</td></tr>
+        </tbody>
+    </table>
+    </div>
+    <p>Los dos son <b>el último punto que no cuesta nada</b>. Y son distintos porque las notas de
+    los dos asistentes viven en rangos distintos —mediana 0,594 en Gerencia contra ~0,74 en
+    Normativa, porque sus consultas y su corpus no comparten lengua ni registro—: el mismo número
+    no compra lo mismo. <b>El punto de operación no se hereda</b> ni entre asistentes ni entre
+    troceados.</p>
+    <p>El criterio se escribió <b>antes</b> de ver la rejilla: minimizar «contestó y no debía»
+    sujeto a que «calló y había respuesta» no pase del 15 %. Con la rejilla delante siempre hay
+    una lectura que favorece al número que ya gustaba.</p>
+
+    <h3><code>top_k</code> = 3, y por qué antes no significaba nada</h3>
+    <p>Estaba en 8 «sin medir, porque nadie lo leía». Y no lo leía nadie porque apagar el reranker
+    encogía el pool de 30 a 3 sin que nadie lo pidiera, así que <code>top_k</code> dejaba de
+    contar documentos. Desacoplado el pool, <code>top_k = 3</code> entrega de verdad tres
+    documentos: 2,96 de media sobre las 25 consultas y ninguna con uno solo.</p>
+
+    <h3>Reranker apagado en los dos corpus, medido dos veces</h3>
+    <div class="tabla-marco">
+    <table>
+        <caption>Ablación con el pool ya desacoplado</caption>
+        <thead><tr><th scope="col"></th><th scope="col" class="num">Fuente requerida</th>
+        <th scope="col" class="num">Contestó sin deber</th></tr></thead>
+        <tbody>
+            <tr class="buena"><th scope="row">Gerencia, apagado</th><td class="num">9/13</td>
+                <td class="num">2</td></tr>
+            <tr class="mala"><th scope="row">Gerencia, encendido</th><td class="num">8/13</td>
+                <td class="num">3</td></tr>
+        </tbody>
+    </table>
+    </div>
+    <p>Resta en los dos ejes, igual que en Normativa. El criterio de la ablación anterior se
+    aplicó palabra por palabra: si hubieran empatado, también se queda apagado, por coherencia y
+    por coste.</p>
+
+    <h3>Troceado <code>parent_child</code>, y el techo del padre en 8.000 tokens</h3>
+    <p>El corpus de Gerencia pasó de 14.198 a 38.536 fragmentos <b>con coste de embeddings
+    cero</b>: sus 124 documentos tienen gemelo exacto por <code>content_hash</code> en Normativa,
+    así que se copiaron sus fragmentos remapeando los <b>tres</b> identificadores. El tercero
+    —el <code>document_id</code> que va dentro del metadato— es el único cuyo olvido no da error:
+    la agrupación por documento del retrieval usa el metadato y no la columna. Verificado en SQL:
+    <b>0 fragmentos incoherentes</b>.</p>
+    <p>Y el techo del padre se aplicó a Normativa con un <code>UPDATE</code>, porque
+    <code>parent_content</code> no entra en el embedding: <b>179,8 → 54,5 millones</b> de tokens
+    de padre almacenados para un corpus de 2,1 millones, y <b>ninguna métrica se movió</b> —mismas
+    fuentes, mismas anclas, misma nota a tres decimales—.</p>
+</section>
+
+<section>
+    <h2>Lo que se probó y se descartó</h2>
+    <div class="tabla-marco">
+    <table>
+        <caption>Cinco mecanismos medidos para mejorar la abstención</caption>
+        <thead><tr><th scope="col">Mecanismo</th><th scope="col">Resultado</th>
+        <th scope="col">Veredicto</th></tr></thead>
+        <tbody>
+            <tr><th scope="row">Subir el umbral</th>
+                <td>0,65 compra 2 de 18 gratis; los cinco casos de contratación puntúan
+                0,742-0,787, por encima de casi cualquier respuesta correcta</td>
+                <td><b>Aplicado, con techo</b></td></tr>
+            <tr class="mala"><th scope="row">La nota de calidad como señal</th>
+                <td>no separa: los fallos puntúan 0,643-0,787 y los aciertos 0,692-0,805, con los
+                fallos de mediana <b>más alta</b></td>
+                <td>Descartado</td></tr>
+            <tr class="mala"><th scope="row">La brecha entre el 1.º y el 2.º</th>
+                <td>0,020 en los fallos contra 0,010 en los aciertos: <b>al revés</b></td>
+                <td>Descartado</td></tr>
+            <tr class="mala"><th scope="row">«La mejor evidencia es un documento vetado»</th>
+                <td>gana en 2 de 8 negativos y en 1 de 6 contestables</td>
+                <td>Descartado</td></tr>
+            <tr class="mala"><th scope="row">Comprobar el fundamento de la cita</th>
+                <td>caza 3 negativos más y <b>rechaza 10 de 30 respuestas correctas</b></td>
+                <td>Implementado y <b>apagado</b></td></tr>
+        </tbody>
+    </table>
+    </div>
+    <p>El criterio del último estaba escrito antes de medirlo: «si rechaza más de 2 de las 30
+    contestables, no se despliega». Rechazó 10.</p>
+    <p>Y la causa no es un fallo suelto: de las 33 afirmaciones de los 9 contestables rechazados,
+    <b>19 estaban localizadas</b> —el juez vio la ventana correcta del artículo citado— y las
+    rechazó igualmente. Lo que falla es el <b>grano</b>: evalúa frases enteras contra un solo
+    documento citado, y las respuestas reales meten varios hechos y varias citas en la misma
+    frase. Arreglarlo pide descomponer en afirmaciones atómicas y comprobar cada una contra todas
+    sus fuentes, que no es un parche.</p>
+
+    <h3>El mecanismo que sí abstiene, y nadie había medido</h3>
+    <p>La puerta de calidad de Normativa rechazó <b>cero de 48</b>. Los 7 rechazos correctos los
+    produjo el <b>contrato de citas</b>, con precisión perfecta: ni un rechazo indebido sobre 30
+    contestables. En Gerencia al revés — los 5 rechazos eran todos de la puerta y ninguno del
+    contrato.</p>
+</section>
+
+<section>
+    <h2>La cifra que obliga a abrir el piloto</h2>
+    <div class="alerta">
+        <span class="titular">El ruido del mecanismo es mayor que lo que se estaba midiendo</span>
+        <p>El contrato de citas disparó <b>7 veces en una tanda y 4 en otra</b>, sobre los mismos
+        48 escenarios y con la misma configuración: <b>±3 sobre 18</b>. Que el modelo produzca una
+        cita formalmente válida varía entre ejecuciones.</p>
+        <p>Así que <b>ninguna comparación de ±2 en una sola tanda significa nada</b>, y varias de
+        las diferencias de este informe están en ese orden. Ordenan candidatos; no certifican
+        ninguno. Con 18 negativos no se decide, por bien que se mida.</p>
+    </div>
+</section>
+
+<section>
+    <h2>Lo que el piloto tiene que producir</h2>
+    <ol>
+        <li><b>Negativos anotados por informadores.</b> Los 18 de hoy son 12 sintéticos y 6
+        reales; las fuentes esperadas las anotó quien desarrolla. Ninguna cifra de este informe es
+        publicable hasta que un informador las confirme.</li>
+        <li><b>Los cinco escenarios sin anotar</b> (<code>pendientes_de_anotar.json</code>), que
+        son exactamente los cinco fallos de recuperación. Es lo primero que hay que darle a un
+        informador.</li>
+        <li><b>La concordancia entre informadores</b> —HIB.K, aplazado— que necesita dos personas
+        y sin la cual no hay cifra de calidad publicable.</li>
+        <li><b>Pares léxicos reales.</b> El circuito de aprobación existe y tiene <b>0 filas</b>:
+        los 48.752 fragmentos con términos bilingües los reciben del corpus curado. El piloto los
+        va a producir en cantidad.</li>
+        <li><b>La cola de latencia del proveedor</b>: 4 de 14 observaciones pasaron de 10
+        segundos, una a 45 con sólo 13.000 tokens de contexto. Es varianza de la API, no del
+        contexto, y es el riesgo que este bloque destapó y no cuantificó.</li>
+    </ol>
+</section>
+
+<footer class="pie">
+    <p>Detalle en <code>docs/BLOQUE_HIB_CIERRE.html</code>,
+    <code>docs/GERENCIA_CIERRE_BLOQUE_HIB.html</code> y
+    <code>docs/EXPERIMENTO_GRANULARIDAD_CONTEXTO.html</code>. Cambios de configuración
+    versionados en <code>_local/golden/registro_configuracion.json</code>.</p>
+    <p>Los lotes viven en <code>_local/</code> y no en el repositorio: son consultas reales de
+    personas identificables contra el corpus y las credenciales reales.</p>
+</footer>
+
+</div>
