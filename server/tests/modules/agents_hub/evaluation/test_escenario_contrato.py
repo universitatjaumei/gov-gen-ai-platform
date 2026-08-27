@@ -153,3 +153,69 @@ class TestElLoteSeSabeDescribir:
         """El lote afina; el piloto informa. Si nadie lo declara, se confunden."""
         lote = Lote(name="prueba", scenarios=[Escenario(**_escenario())])
         assert lote.uso == "afinado"
+
+
+class TestLasVeinticincoRealesSobrevivenAlEnriquecimiento:
+    """El lote de 25 con veredicto de informadores es el único material con juicio profesional
+    que hay. Enriquecerlo tiene que ser aditivo: si el contrato obligara a reescribirlo, se
+    perdería lo único que no se puede volver a fabricar."""
+
+    def test_should_accept_the_existing_25_after_enrichment(self):
+        legado = {
+            "name": "ORI-01 — Permanencia en grado: creditos minimos a superar",
+            "prompt": "Quants credits he de superar en un grau?",
+            "history": None,
+            "expectation_note": "VEREDICTO ANTERIOR (Unitat d'Orientacio): INCORRECTA...",
+            "meta": {"failure_modes": ["ambito_equivocado"]},
+        }
+        esc = Escenario.model_validate(_escenario(**legado))
+        assert esc.expectation_note.startswith("VEREDICTO ANTERIOR")
+        assert esc.meta == {"failure_modes": ["ambito_equivocado"]}
+
+    def test_should_keep_the_informer_prose_when_there_is_also_a_reference_answer(self):
+        """La prosa del informador y la respuesta de referencia coexisten: la segunda resuelve
+        desacuerdos, y sustituir la primera por ella borraría el veredicto original."""
+        esc = Escenario.model_validate(
+            _escenario(
+                expectation_note="QUE DEBE CONTESTAR: el 20 % de los creditos matriculados.",
+                reference_answer="20 % de los creditos matriculados.",
+            )
+        )
+        assert esc.expectation_note and esc.reference_answer
+
+    def test_should_identify_an_unpublished_document_without_faking_a_url(self):
+        """Las circulares e instrucciones propias de Gerencia no están publicadas y su
+        `canonical_url` es una ruta local. La fuente esperada se identifica por `document_id`
+        y deja la URL fuera; inventarle un `https://` la haría casar con nada."""
+        fuente = ExpectedSource(
+            document_id="43272ee8-0000-0000-0000-000000000000", anchor="div-3"
+        )
+        assert fuente.canonical_url is None
+
+        with pytest.raises(ValidationError):
+            ExpectedSource(
+                document_id="43272ee8-0000-0000-0000-000000000000",
+                canonical_url="C:/corpus/instruccio_contractes_menors.md",
+            )
+
+    def test_should_let_the_same_question_be_a_negative_in_one_lot_and_answerable_in_another(
+        self,
+    ):
+        """Seis preguntas reales llegaron al asistente de Normativa siendo de Gerencia. Allí no
+        son contestables —sus leyes están con `us_assistents='no'`— y aquí sí. El contrato no
+        puede atar la contestabilidad a la pregunta, porque depende del corpus del asistente."""
+        pregunta = "Quins son els requisits per a la contractacio menor?"
+        negativo = Escenario.model_validate({
+            "name": "XDO-04",
+            "prompt": pregunta,
+            "kind": Kind.NEGATIVO,
+            "language": "ca",
+            "provenance": Provenance.REAL,
+            "answerable": False,
+            "refusal_reason": RefusalReason.FUERA_DE_ALCANCE,
+        })
+        positivo = Escenario.model_validate(
+            _escenario(name="GXD-04", prompt=pregunta, kind=Kind.VARIOS_ARTICULOS)
+        )
+        assert negativo.prompt == positivo.prompt
+        assert negativo.answerable is False and positivo.answerable is True

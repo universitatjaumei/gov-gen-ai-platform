@@ -22751,6 +22751,38 @@ y se usa para etiquetar los fallos; es la mejor parte del lote de 25 y no se ree
 - [ ] Ninguna cifra del lote se reporta sin la columna de procedencia
 ```
 
+**DESVIACIÓN DOCUMENTADA (2026-08-27) — los tamaños, a cambio de la procedencia.** Los lotes
+salieron con **48 escenarios en Normativa y 18 en Gerencia**, no 60-80 y 30-40. El prompt pedía
+ese volumen y a la vez prohibía redactar preguntas mirando el articulado, porque una pregunta
+escrita desde la norma comparte su vocabulario e infla la recuperación léxica. Con los
+informadores de vacaciones las dos cosas no se podían cumplir, y se cumplió la segunda: **36 de
+los 48 escenarios de Normativa los escribió una persona que quería una respuesta** (25 del
+ensayo con veredicto + 10 llegadas por el widget + 1 más) y ninguno se inventó.
+
+Tres cosas que salieron de hacerlo así y no estaban previstas:
+
+- **Seis preguntas reales llegaron al asistente equivocado**, y son el mejor negativo del lote.
+  Preguntaban por contratación menor y crédito presupuestario al asistente de Normativa, donde
+  las 24 leyes estatales y autonómicas que lo regulan están con `us_assistents='no'` —el
+  reconciliador las retiró al salir de su manifiesto, correctamente, porque son de Gerencia—. El
+  asistente no puede verlas, así que lo correcto es **declinar y remitir**; lo que hizo fue
+  contestar con la norma de la UJI más parecida. Las mismas seis entran en el lote de Gerencia
+  como **contestables**, con `meta.gemelo_negativo`: un par que sólo se distingue por el corpus
+  del asistente prueba la rendición por ámbito en los dos sentidos.
+- **El mandato del Síndic de Greuges se preguntó siete veces** por el widget, dos con fallback
+  por *quality gate*, y la fuente está en el corpus (`Reglament de la Sindicatura de Greuges`,
+  art. 9). Es la consulta real más repetida y la que peor iba.
+- **Cinco contestables se quedaron sin fuente esperada** (ORI-12, ORI-18, SGE-03, SGE-04,
+  REA-06, y REAL-07 en Gerencia). No entran en el lote —sin fuente no miden nada— y esperan en
+  `_local/golden/pendientes_de_anotar.json`. Relajar el contrato para meterlas habría dado un
+  lote más grande y menos medible.
+
+La anotación es `equipo_provisional`: se localizó el candidato con `resolver_fuentes.py`
+—búsqueda conjuntiva **por los términos de lo que el informador exige, no por las palabras de
+la pregunta**, para no construir la verdad con el mismo criterio léxico que luego se mide— y se
+verificó **leyendo el artículo**. De las 30 fuentes de Normativa, 9 llevan ancla verificada;
+el resto exige a nivel de norma, que es justamente el nivel de la queja que abrió esto.
+
 ---
 
 ### Prompt HIB.H (RED/GREEN) — El panel de revisión captura la solución, no sólo el veredicto

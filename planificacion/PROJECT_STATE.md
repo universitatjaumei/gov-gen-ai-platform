@@ -81,7 +81,7 @@
 
 ## 👉 EMPEZAR AQUÍ EL PRÓXIMO DÍA (actualizado 2026-08-22, al mover PLAT e IDE delante del despliegue)
 
-**Cursor actual: HIB.M** (rama de Gerencia; **bloqueado**: necesita el lote de HIB.G anotado) (HIB.G ▶ parcial: falta la anotación de los informadores) (actualizado el 2026-08-26; el bloque HIB se antepuso a Deploy/D.0 el 2026-08-26 y hasta hoy sólo constaba en `HISTORIAL.md`). **Modelo sugerido para el próximo prompt: Sonnet** (HIB.M, mismo instrumental que HIB.A). Antes de HIB, el orden hasta el
+**Cursor actual: HIB.N** (rama de Gerencia). **HIB.G ✅ completo el 2026-08-27**: los dos lotes existen, validan y se miden solos (`medir_lote.py`), con la fuente esperada anotada por el equipo (`equipo_provisional`) porque los informadores están de vacaciones. Desbloquea HIB.M y HIB.P. **HIB.K se aplaza**: la kappa entre informadores necesita dos informadores y es bloqueante para publicar, no para abrir el piloto. La anotación de informador sigue pendiente y con ella la publicabilidad de cualquier cifra del lote (actualizado el 2026-08-26; el bloque HIB se antepuso a Deploy/D.0 el 2026-08-26 y hasta hoy sólo constaba en `HISTORIAL.md`). **Modelo sugerido para el próximo prompt: Sonnet** (HIB.M, mismo instrumental que HIB.A). Antes de HIB, el orden hasta el
 despliegue es **~~SEC.9~~ ✅ → ~~AIS~~ ✅ → ~~RAG.15~~ ✅ → ~~VIS.4~~ ✅ → ~~VIS.5~~ ✅ →
 ~~RES.1~~ ✅ → ~~RES.2~~ ✅ → ~~RES.3~~ ✅ → ~~RES.4~~ ✅ → ~~RES.5~~ ✅ → **Deploy/D.0**.
 **El bloque RES está completo y ya no queda nada delante del despliegue.**
