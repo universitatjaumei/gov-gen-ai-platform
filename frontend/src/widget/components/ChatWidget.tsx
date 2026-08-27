@@ -145,6 +145,7 @@ export function ChatWidget({ chatbotId, apiUrl, lang, widgetKey, model }: Props)
     sources,
     interactionId,
     sendMessage,
+    resetConversation,
   } = useChat(chatbotId, apiUrl, lang, widgetKey)
 
   const lastAssistantIdx = [...messages].map((m, i) => ({ m, i })).reverse().find(({ m }) => m.role === 'assistant')?.i ?? -1
@@ -263,6 +264,28 @@ export function ChatWidget({ chatbotId, apiUrl, lang, widgetKey, model }: Props)
         {/* Título propio y no `widget_open`: esa es la etiqueta del botón que abre —«Obri
             el xat»—, y como encabezado del panel ya abierto no dice nada. */}
         <span style={{ fontWeight: 600, fontSize: '0.9rem', flex: 1 }}>{t('widget_title')}</span>
+        {/* HIB.C — empezar de cero. Necesario desde que el historial viaja al servidor: sin
+            esto, una pregunta de otro tema se reescribe contra el tema anterior. Sólo se
+            ofrece si hay algo que reiniciar, para no poner un mando inerte en la cabecera. */}
+        {messages.length > 0 && (
+          <button
+            type="button"
+            onClick={resetConversation}
+            aria-label={t('widget_new_conversation')}
+            title={t('widget_new_conversation')}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#ffffff',
+              cursor: 'pointer',
+              fontSize: '1rem',
+              lineHeight: 1,
+              padding: '0.15rem 0.3rem',
+            }}
+          >
+            &#8635;
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setOpen(false)}

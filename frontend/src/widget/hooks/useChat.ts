@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 
 export interface Message {
   role: 'user' | 'assistant'
@@ -33,7 +33,21 @@ export interface UseChatReturn {
   sources: SourceRef[]
   interactionId: string | null
   sendMessage: (text: string) => Promise<void>
+  /** HIB.C — vacía el hilo. Necesario desde que el historial viaja: sin esto, una pregunta
+   *  de otro tema se reescribe contra el tema anterior. */
+  resetConversation: () => void
 }
+
+/** Cinco intercambios, decisión del usuario (2026-08-27). Diez entradas, porque cada
+ *  intercambio son dos: la pregunta y la respuesta. El contrato admite hasta 50. */
+const HISTORIAL_MAX_ENTRADAS = 10
+
+/** Media hora sin actividad y el hilo se vacía solo.
+ *
+ *  Cubre lo que el botón no cubre: el hilo que nadie reinició y sigue ahí una hora después,
+ *  en un equipo compartido —un aula, la biblioteca— o simplemente sobre otro tema. Cerrar el
+ *  panel NO vacía: cerrar no significa «he terminado». */
+const CADUCIDAD_MS = 30 * 60 * 1000
 
 export function useChat(chatbotId: string, apiUrl: string, lang: string, widgetKey?: string): UseChatReturn {
   const [messages, setMessages] = useState<Message[]>([])
@@ -43,6 +57,38 @@ export function useChat(chatbotId: string, apiUrl: string, lang: string, widgetK
   const [sources, setSources] = useState<SourceRef[]>([])
   const [interactionId, setInteractionId] = useState<string | null>(null)
   const isStreamingRef = useRef(false)
+  // HIB.C — los turnos previos, en un ref y no leídos del estado.
+  //
+  // `sendMessage` es un `useCallback` cuyas dependencias no incluyen `messages` a propósito:
+  // añadirlas recrearía la función en cada token que llega. Leer `messages` desde dentro
+  // capturaría el valor del render en que se creó el callback, que es justo el turno
+  // anterior al que se está enviando.
+  const messagesRef = useRef<Message[]>([])
+
+  // El ref sigue al estado, y no se escribe a mano al enviar: la respuesta del asistente se
+  // rellena token a token DESPUÉS, así que asignarlo sólo al enviar dejaba el turno anterior
+  // con la respuesta vacía y el historial viajaba mutilado. Al leerlo en `sendMessage` el ref
+  // vale lo que valía en el último render, que es exactamente los turnos previos.
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+
+  const resetConversation = useCallback(() => {
+    messagesRef.current = []
+    setMessages([])
+    setSources([])
+    setInteractionId(null)
+    setTranslationWarning(null)
+    setCurrentNodeStatus(null)
+  }, [])
+
+  // Caducidad por inactividad. El temporizador se reinicia con cada turno porque la
+  // dependencia es `messages`: mientras la conversación avanza no caduca.
+  useEffect(() => {
+    if (messages.length === 0) return
+    const temporizador = setTimeout(resetConversation, CADUCIDAD_MS)
+    return () => clearTimeout(temporizador)
+  }, [messages, resetConversation])
 
   const sendMessage = useCallback(async (text: string) => {
     if (isStreamingRef.current) return
@@ -52,6 +98,11 @@ export function useChat(chatbotId: string, apiUrl: string, lang: string, widgetK
     setTranslationWarning(null)
     setSources([])
     setInteractionId(null)
+    // HIB.C — el historial se toma ANTES de añadir el turno nuevo: enviar la pregunta actual
+    // también dentro de `history` haría que el reescritor la tomara como su propio
+    // antecedente.
+    const historial = messagesRef.current.slice(-HISTORIAL_MAX_ENTRADAS)
+
     setMessages(prev => [
       ...prev,
       { role: 'user', content: text },
@@ -64,7 +115,7 @@ export function useChat(chatbotId: string, apiUrl: string, lang: string, widgetK
       const response = await fetch(`${apiUrl}/hub/chat/${chatbotId}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ message: text, lang }),
+        body: JSON.stringify({ message: text, lang, history: historial }),
       })
 
       if (!response.body) throw new Error('No response body')
@@ -148,5 +199,5 @@ export function useChat(chatbotId: string, apiUrl: string, lang: string, widgetK
     }
   }, [chatbotId, apiUrl, lang, widgetKey])
 
-  return { messages, currentNodeStatus, isStreaming, translationWarning, sources, interactionId, sendMessage }
+  return { messages, currentNodeStatus, isStreaming, translationWarning, sources, interactionId, sendMessage, resetConversation }
 }

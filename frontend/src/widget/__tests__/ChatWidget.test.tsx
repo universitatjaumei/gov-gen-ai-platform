@@ -348,6 +348,140 @@ describe('ChatWidget — pregunta y respuesta se distinguen (UX.2)', () => {
   })
 })
 
+describe('ChatWidget — el seguimiento lleva el contexto (HIB.C)', () => {
+  // La premisa del prompt era que `necesita_reescritura` exigía dos turnos previos y que por
+  // eso el segundo turno no se reescribía. Falso: el historial se aplana a 'rol: texto' por
+  // turno, así que un intercambio completo YA son dos entradas. El defecto real es que **el
+  // widget no enviaba historial**: el cuerpo era `{ message, lang }`, así que `request.history`
+  // llegaba siempre vacío, la reescritura nunca corría y cada pregunta se trataba como la
+  // primera. De ahí el caso del doctorado internacional del 2026-08-26.
+  //
+  // Cinco intercambios, decisión del usuario (2026-08-27): tres se juzgó poco para el hábito
+  // de un chat, y el modelo de reescritura es pequeño.
+  async function enviarYResponder(texto: string, respuesta: string) {
+    fetchMock.mockResolvedValueOnce(
+      makeSseResponse([
+        { event: 'token', data: { delta: respuesta } },
+        { event: 'done', data: DONE_EVENT },
+      ]),
+    )
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: texto } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    await waitFor(() => {
+      expect(screen.getAllByTestId('turn-assistant').at(-1)).toHaveTextContent(respuesta)
+    })
+  }
+
+  function cuerpoDeLaLlamada(indice: number): Record<string, unknown> {
+    return JSON.parse(String(fetchMock.mock.calls[indice][1].body))
+  }
+
+  test('should_not_send_history_on_the_first_question', async () => {
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    await enviarYResponder('Primera', 'R1.')
+
+    expect(cuerpoDeLaLlamada(0).history).toEqual([])
+  })
+
+  test('should_send_the_previous_turns_on_a_follow_up', async () => {
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    await enviarYResponder('Requisits per a la menció de doctorat internacional', 'R1.')
+    await enviarYResponder('Fan falta requisits addicionals per a l’acte de defensa?', 'R2.')
+
+    const historial = cuerpoDeLaLlamada(1).history as Array<{ role: string; content: string }>
+    expect(historial).toHaveLength(2)
+    expect(historial[0]).toEqual({
+      role: 'user',
+      content: 'Requisits per a la menció de doctorat internacional',
+    })
+    expect(historial[1]).toEqual({ role: 'assistant', content: 'R1.' })
+  })
+
+  test('should_cap_the_history_at_five_exchanges', async () => {
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    for (let i = 1; i <= 7; i++) {
+      await enviarYResponder(`Pregunta ${i}`, `R${i}.`)
+    }
+
+    // La octava llamada lleva los cinco intercambios anteriores: diez entradas.
+    const historial = cuerpoDeLaLlamada(6).history as Array<{ role: string; content: string }>
+    expect(historial).toHaveLength(10)
+    // Y son los ÚLTIMOS cinco, no los primeros.
+    expect(historial[0]).toEqual({ role: 'user', content: 'Pregunta 2' })
+    expect(historial.at(-1)).toEqual({ role: 'assistant', content: 'R6.' })
+  })
+
+  test('should_offer_a_way_to_start_a_new_conversation', async () => {
+    // Sin esto, enviar historial convierte un hilo viejo en contaminación: una pregunta de
+    // otro tema se reescribe contra el tema anterior. Y en un equipo compartido —un aula, la
+    // biblioteca— quien se sienta después ve las preguntas del anterior.
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    await enviarYResponder('Primera', 'R1.')
+
+    fireEvent.click(screen.getByRole('button', { name: /nova conversa|nueva conversación|new conversation/i }))
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('turn-user')).not.toBeInTheDocument()
+    })
+  })
+
+  test('should_not_send_the_previous_thread_after_a_reset', async () => {
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    await enviarYResponder('Primera', 'R1.')
+    fireEvent.click(screen.getByRole('button', { name: /nova conversa|nueva conversación|new conversation/i }))
+    await enviarYResponder('Tema distinto', 'R2.')
+
+    expect(cuerpoDeLaLlamada(1).history).toEqual([])
+  })
+
+  test('should_keep_the_thread_when_the_panel_is_closed_and_reopened', async () => {
+    // Cerrar no significa «he terminado»: quien cierra para mirar otra cosa y vuelve no
+    // debería perder el hilo. Decisión del usuario (2026-08-27).
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    await enviarYResponder('Primera', 'R1.')
+    fireEvent.click(screen.getByRole('button', { name: /tanca|cerrar|close/i }))
+    fireEvent.click(screen.getByTestId('widget-launcher'))
+
+    expect(screen.getByTestId('turn-user')).toHaveTextContent('Primera')
+  })
+
+  test('should_expire_the_thread_after_thirty_minutes_without_activity', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+      await enviarYResponder('Primera', 'R1.')
+
+      await act(async () => {
+        vi.advanceTimersByTime(30 * 60 * 1000 + 1000)
+      })
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('turn-user')).not.toBeInTheDocument()
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('should_not_send_the_question_being_asked_as_part_of_the_history', async () => {
+    // Enviarla dos veces —en `message` y en `history`— haría que el reescritor la tomara
+    // como su propio antecedente.
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    await enviarYResponder('Primera', 'R1.')
+    await enviarYResponder('Segunda', 'R2.')
+
+    const historial = cuerpoDeLaLlamada(1).history as Array<{ content: string }>
+    expect(historial.map(h => h.content)).not.toContain('Segunda')
+  })
+})
+
 describe('ChatWidget — una respuesta descartada no se queda en pantalla (HIB.B)', () => {
   test('should_replace_the_streamed_answer_when_the_server_discards_it', async () => {
     // El contrato de citas corre DENTRO de `generate_answer`, después de generar, así que

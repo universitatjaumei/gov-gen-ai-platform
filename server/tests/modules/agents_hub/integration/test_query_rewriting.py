@@ -145,13 +145,26 @@ class TestReescritura:
 
     @pytest.mark.asyncio
     async def test_should_skip_rewriting_on_first_turn(self):
-        """Sin turnos previos no hay nada que resolver, y llamar al LLM sería pagar por nada."""
+        """Sin turnos previos no hay nada que resolver, y llamar al LLM sería pagar por nada.
+
+        **HIB.C — dos entradas son UN intercambio, no dos turnos.** El prompt de HIB.C partía
+        de que este umbral de 2 dejaba el segundo turno sin reescribir, y es falso: el
+        historial se aplana a `'rol: texto'` **por turno**, así que una pregunta y su
+        respuesta ya son dos entradas y la segunda pregunta SÍ se reescribe. El umbral se
+        queda en 2 y este test lo documenta para que nadie lo baje creyendo que arregla algo.
+
+        El defecto real estaba en el widget, que no enviaba historial: ver
+        `test_should_send_the_previous_turns_on_a_follow_up` en `ChatWidget.test.tsx`.
+        """
         from server.app.modules.agents_hub.agent.public_graphs.core.query_rewriter import (
             necesita_reescritura,
         )
 
         assert necesita_reescritura(True, []) is False
+        # Una sola entrada es media conversación: o falta la respuesta, o falta la pregunta.
         assert necesita_reescritura(True, ["usuario: hola"]) is False
+        # Un intercambio completo — lo que el widget envía tras el primer turno.
+        assert necesita_reescritura(True, ["usuario: hola", "assistant: hola"]) is True
         assert necesita_reescritura(True, list(HISTORIAL)) is True
 
     def test_should_skip_rewriting_when_disabled(self):
