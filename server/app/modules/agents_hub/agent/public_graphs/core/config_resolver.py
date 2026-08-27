@@ -77,6 +77,7 @@ class PublicGraphConfig:
     # Aquí y no en la columna del chatbot porque ésta SÍ es nullable, y en la cascada nulo
     # significa heredar. Un chatbot que lo quiera apagado lo pone en False y gana.
     query_rewriting_enabled: bool = True
+    grounding_check_enabled: bool = False
     # LLM de reescritura, configurable en la organización porque es otro modelo —pequeño y
     # rápido— y no tiene sentido repetirlo en cada chatbot. None = usar el del chatbot con
     # el tope de salida bajado.
@@ -115,6 +116,11 @@ _PLATFORM_DEFAULTS = PublicGraphConfig(
     # respuesta correcta—, asi que ningun umbral los alcanza. El resto del margen esta en
     # comprobar el fundamento de la cita, no aqui.
     quality_threshold=0.65,
+    # HIB.S — APAGADA de entrada, a proposito. La comprobacion de fundamento cuesta una llamada
+    # por respuesta y puede descartar respuestas buenas; se enciende cuando este medido cuantos
+    # de los 11 negativos caza y cuantos de los 30 contestables rechaza indebidamente. Si pasa
+    # de 2 de esos 30, no se despliega.
+    grounding_check_enabled=False,
     # RAG.15 lo dejó en 8 diciendo que no estaba medido, porque nadie lo leía. HIB.Q lo baja a
     # **3**, que es el valor elegido con el lote delante: con `parent_child` y el pool ya
     # desacoplado del reranker (HIB.J), `top_k = 3` entrega de verdad tres documentos —2,96 de
@@ -192,6 +198,7 @@ async def get_effective_public_graph_config(
             "chunk_overlap":         organizacion.default_chunk_overlap,
             "chunking_strategy":     organizacion.default_chunking_strategy,
             "query_rewriting_enabled": organizacion.default_query_rewriting_enabled,
+            "grounding_check_enabled": organizacion.default_grounding_check_enabled,
             "rewrite_llm_config_id": organizacion.rewrite_llm_config_id,
         })
 
@@ -219,6 +226,7 @@ async def get_effective_public_graph_config(
         "chunk_overlap":         chatbot.chunk_overlap,
         "chunking_strategy":     chatbot.chunking_strategy,
         "query_rewriting_enabled": chatbot.query_rewriting_enabled,
+        "grounding_check_enabled": chatbot.grounding_check_enabled,
     })
 
     if config.retrieval_mode == "MD_AGENT_SELECTOR":

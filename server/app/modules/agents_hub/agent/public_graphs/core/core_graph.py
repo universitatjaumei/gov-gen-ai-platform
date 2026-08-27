@@ -32,6 +32,11 @@ from server.app.modules.agents_hub.agent.citation_validator import (
 from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_contract import (
     EvidenceItem,
 )
+from server.app.modules.agents_hub.agent.grounding_check import (
+    fuente_desde_evidencia,
+    hay_fundamento,
+    juez_de_modelo,
+)
 from server.app.modules.agents_hub.agent.public_graphs.core.query_rewriter import (
     necesita_reescritura,
     reescribir_consulta,
@@ -66,6 +71,7 @@ class CoreGraphState(TypedDict):
     # bien. None significa «se buscó con lo que escribió el usuario» — y hay que poder
     # distinguirlo, porque es lo que se lee en la traza y en el bypass de RAG.11.
     rewritten_query: str | None
+    grounding: dict | None
     # RES.2 — la consulta escrita como la escribiría la norma, cuando la primera pasada no llegó
     # al umbral. Es también la guarda contra bucles: si está puesta, se viene de la segunda
     # pasada y no hay tercera. Tampoco llega a la generación, por lo mismo que la reescritura.
@@ -334,19 +340,58 @@ class CoreGraph:
             # reconoce— y un ajuste no es rendirse. Compararlo con el original contaba esos
             # ajustes como fallback y, peor, se saltaba el aviso de vigencia de abajo.
             incumplio_citas = validated == sin_respuesta
+            sin_fundamento = False
             # VIS.3: el aviso de vigencia se AÑADE aquí, después del contrato de citas y
             # sobre la evidencia realmente citable. No es una instrucción al modelo: una
             # instrucción se cumple casi siempre, y «casi siempre» no basta para decir si
             # una norma rige. Si el fallback ya sustituyó la respuesta, no hay nada citado
             # de lo que advertir.
-            if not incumplio_citas:
+            # HIB.S — el contrato pregunta «¿ha citado?»; esto pregunta «¿lo que cita lo
+            # sostiene?». Va DESPUES del contrato y solo si el contrato paso: si la respuesta
+            # ya se descarto por no citar, no hay nada que fundamentar.
+            #
+            # APAGADO por defecto (`grounding_check_enabled`). Una puerta que puede descartar
+            # respuestas no se enciende por el hecho de existir, y el interruptor es ademas lo
+            # que permite medir la latencia del primer token con y sin ella.
+            fundamento = None
+            if (
+                not incumplio_citas
+                and getattr(self.cfg, "grounding_check_enabled", False)
+                and self.llm is not None
+            ):
+                fundamento = await hay_fundamento(
+                    texto=validated,
+                    fuentes=[fuente_desde_evidencia(i) for i in citables],
+                    juez=juez_de_modelo(self.llm),
+                )
+                if not fundamento.sostenida:
+                    validated = sin_respuesta
+                    sin_fundamento = True
+
+            if not incumplio_citas and not sin_fundamento:
                 aviso = aviso_de_vigencia(citables)
                 if aviso:
                     validated = f"{validated}\n\n{aviso}"
             return {
                 "answer": validated,
-                "fallback_used": incumplio_citas,
-                "fallback_reason": "citation" if incumplio_citas else None,
+                "fallback_used": incumplio_citas or sin_fundamento,
+                # El motivo distingue las dos puertas. Sin eso la traza de HIB.I no permite
+                # saber cual rechazo, y toda la medicion de esta rama se basa en contarlas
+                # por separado: el contrato acierta 7 de 18 sin falsos positivos, y lo que
+                # hay que medir es cuanto suma la comprobacion de fundamento sobre eso.
+                "fallback_reason": (
+                    "citation" if incumplio_citas
+                    else "grounding" if sin_fundamento
+                    else None
+                ),
+                "grounding": (
+                    {
+                        "juzgadas": fundamento.juzgadas,
+                        "con_fundamento": fundamento.con_fundamento,
+                        "juez_fallo": fundamento.juez_fallo,
+                    }
+                    if fundamento is not None else None
+                ),
                 "sources": citables,
                 "bypass": instantanea,
             }

@@ -255,6 +255,14 @@ class HubOrganizacion(HubConfigBase):
     default_query_rewriting_enabled: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True
     )
+    # HIB.S — la comprobacion de fundamento de la cita. NULL = heredar de la plataforma, que
+    # entra APAGADA: una puerta que puede descartar respuestas no se enciende por existir.
+    # Nullable por el mismo motivo que la de arriba, y ademas porque el criterio de cierre del
+    # prompt exige medir la latencia del primer token con y sin ella — sin interruptor, esa
+    # medicion no se puede hacer.
+    default_grounding_check_enabled: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
     # Modelo con el que se reescribe: pequeno y rapido, distinto del que responde. Vive en
     # la organizacion porque repetirlo en cada chatbot solo multiplicaria sitios donde
     # olvidarlo. NULL = usar el del chatbot con el tope de salida bajado.
@@ -488,6 +496,10 @@ class HubChatbot(HubConfigBase):
     # RAG.10. NULL = heredar; un False no nulo haria que el chatbot pisara siempre a la
     # organizacion y encender la reescritura por organizacion no llegaria a ningun sitio.
     query_rewriting_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # HIB.S — NULL = heredar. El coste de equivocarse no es el mismo en todos los asistentes:
+    # un funcionario que recibe un umbral de contratacion equivocado actua sobre el, y un
+    # estudiante que recibe una rendicion pregunta en Infocampus.
+    grounding_check_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     parent_chatbot_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("hub_chatbots.id", ondelete="SET NULL"),
