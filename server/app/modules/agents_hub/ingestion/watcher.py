@@ -252,6 +252,9 @@ class IngestionWatcher:
                 chunk_size=int(cfg.chunk_size),
                 chunk_overlap=int(cfg.chunk_overlap),
                 strategy=str(cfg.chunking_strategy),
+                # HIB.L — si no llega hasta aquí, el techo es decorativo: es el mismo defecto
+                # que este método arregló para `chunk_size`.
+                parent_max_tokens=int(getattr(cfg, "parent_max_tokens", 8000) or 8000),
             )
         except Exception:  # pragma: no cover - la ingesta no cae por la config de troceado
             logger.warning(

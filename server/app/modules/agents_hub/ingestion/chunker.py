@@ -144,6 +144,7 @@ class MarkdownChunker:
         enricher: ContextEnricher | None = None,
         strategy: str = "structural",
         chunk_size_child: int = 400,
+        parent_max_tokens: int = 8000,
     ):
         from langchain_text_splitters import (
             MarkdownHeaderTextSplitter,
@@ -159,6 +160,31 @@ class MarkdownChunker:
         # mejor, y se responde con el padre, que trae el contexto que al hijo le falta.
         self.strategy = strategy
         self.chunk_size_child = chunk_size_child
+        # HIB.L — techo del padre, medido y no supuesto. Sobre los 10.614 padres del corpus de
+        # Normativa la mediana son **205 tokens** y el p90 **710**; sólo 24 pasan de 8.000.
+        #
+        # Pero contar padres engaña: lo que cuesta son los **fragmentos**, porque cada hijo
+        # arrastra su padre y uno gigante va pegado a todos los hijos de su sección. Medido:
+        # **5.172 de 60.859 fragmentos (8,5 %)** arrastraban un padre de más de 8.000 tokens,
+        # en 11 documentos; el coste medio del padre por fragmento era de **2.955 tokens** y
+        # el peor caso con `top_k = 3` sumaba **177.516 — el 139 % del presupuesto**, así que
+        # el packer descartaba evidencia en silencio. Con el techo: 895 de media y 19 % en el
+        # peor caso.
+        #
+        # La cola es de dos clases, y ninguna tiene unidad estructural más fina a la que bajar.
+        #
+        # **8 preámbulos**, incluido uno de 59.172 tokens: no tienen encabezados internos —los
+        # números romanos son texto— y además no son normativos. Y **16 artículos o anexos**
+        # reales, casi todos de leyes de acompañamiento cuyos artículos modifican otras leyes
+        # enteras (`art-119` de la Ley 6/2024 son 21.484 tokens): un artículo ya ES la unidad
+        # mínima.
+        #
+        # Qué se hace con lo que no cabe: **el hijo se queda sin padre** y responde con su
+        # propio texto, como en `structural`. No se subdivide ni se trunca, así que ningún
+        # artículo acaba partido en dos padres —dos hijos del mismo artículo recibirían
+        # contextos distintos e incompatibles— y se renuncia al contexto ampliado justo donde
+        # no era ni asequible ni útil.
+        self.parent_max_tokens = parent_max_tokens
         self.child_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size_child,
             chunk_overlap=min(chunk_overlap, chunk_size_child // 4),
@@ -417,6 +443,9 @@ class MarkdownChunker:
             }
 
             seccion = strip_anchor_tokens(doc.page_content)
+            # HIB.L — el techo se comprueba por SECCIÓN y no por documento: el artículo de al
+            # lado no paga el preámbulo gigante de su misma ley.
+            cabe_como_padre = len(seccion) // 4 <= self.parent_max_tokens
             piezas = self._trocear_seccion(seccion)
             if self.strategy == "parent_child":
                 # El padre es la SECCION estructural entera, no la pieza: la unidad que da
@@ -439,7 +468,9 @@ class MarkdownChunker:
                             self.enricher.enrich(content, texto),
                         ),
                         parent_content=(
-                            seccion if self.strategy == "parent_child" else ""
+                            seccion
+                            if self.strategy == "parent_child" and cabe_como_padre
+                            else ""
                         ),
                     )
                 )

@@ -56,6 +56,15 @@ class PublicGraphConfig:
     chunk_size: int = 1000
     chunk_overlap: int = 100
     chunking_strategy: str = "structural"
+    # HIB.L — techo del padre en `parent_child`, en tokens. Medido: la mediana de los 10.614
+    # padres del corpus son 205 tokens y sólo 24 pasan de 8.000, así que este número no
+    # recorta el caso normal —acota una cola de preámbulos y artículos-ómnibus—. La sección
+    # que no cabe deja al hijo sin padre; no se subdivide ni se trunca.
+    #
+    # Configurable por chatbot porque Gerencia puede querer subirlo: para una norma estatal
+    # el contexto amplio es lo adecuado, y ése fue el argumento con el que el usuario aplazó
+    # esta decisión el 2026-08-26.
+    parent_max_tokens: int = 8000
     # RAG.10: reescritura de la consulta con el historial antes de recuperar. **False de
     # plataforma**, por el mismo motivo que `reranker_enabled` y `min_retrieval_score`:
     # cuesta una llamada al LLM por turno de seguimiento y su ganancia no se ha medido

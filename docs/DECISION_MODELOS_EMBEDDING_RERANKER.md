@@ -143,3 +143,57 @@ hay que re-embeberlo, no darlo por bueno.
 **Se adopta en los dos lados o en ninguno**, y la decisión de indexado vive en una sola
 función (`embed_para_indexar`) que comparten la ingesta y el re-embebido. Dos copias de esa
 decisión es como se acaba con medio corpus embebido de una forma y medio de otra.
+
+---
+
+## Techo del padre en `parent_child` (HIB.L, 2026-08-27)
+
+`parent_max_tokens`, heredable por la cascada, **defecto 8.000**. Cuando una sección lo supera,
+el hijo **se queda sin padre** y responde con su propio texto, como en `structural`. No se
+subdivide y no se trunca.
+
+### Por qué no se baja el padre a una unidad más fina
+
+Era la opción que el prompt recomendaba, y **no es aplicable**. Los 24 padres que pasan de 8.000
+tokens son de dos clases y ninguna tiene unidad estructural inferior:
+
+- **8 preámbulos** (ancla `preambul`), incluidos los dos mayores: 59.172 y 45.329 tokens. Un
+  preámbulo no tiene encabezados internos —los números romanos son texto corrido— y además no
+  es normativo.
+- **16 artículos y anexos reales**, casi todos de leyes de acompañamiento cuyos artículos
+  modifican otras leyes enteras: `art-119` de la Ley 6/2024 son 21.484 tokens. Un artículo ya
+  **es** la unidad mínima.
+
+Truncar quedaba descartado de antemano: parte artículos por la mitad, que es exactamente lo que
+el padre existe para evitar. Y partirlo en dos padres haría que dos hijos del mismo artículo
+recibieran contextos distintos e incompatibles.
+
+### Las cifras, y una corrección de método
+
+| | |
+|---|---|
+| padres distintos | 10.614 |
+| mediana / p90 | **205** / **710** tokens |
+| padres > 8.000 | 24 (**0,2 %**) |
+| **fragmentos** que arrastran uno | 5.172 de 60.859 (**8,50 %**) |
+| documentos afectados | **11** |
+| coste medio del padre por fragmento | **2.955 → 895** tokens |
+| peor caso con `top_k = 3` | **177.516 (139 % del presupuesto)** → 23.946 (19 %) |
+
+**Contar padres distintos engaña.** Lo que cuesta son los fragmentos, porque cada hijo arrastra
+su padre y uno gigante va pegado a todos los hijos de su sección: el preámbulo de la Ley 6/2024
+se repite en cada uno de los suyos. Por padres el problema parecía del 0,2 %; por fragmentos es
+del 8,5 %. Y el peor caso al 139 % del presupuesto significa que **el packer estaba descartando
+evidencia en silencio**, salvo por `dropped_count`.
+
+### Qué NO decide este cambio
+
+**13 de los padres que pasan de 4.000 tokens son preámbulos, y un preámbulo no es normativo.**
+Que el asistente pueda citarlo como fundamento de una respuesta es una cuestión de curación del
+corpus —¿entra en el consultable?—, no del techo del padre. Va a Secretaría General.
+
+### Efecto pendiente
+
+El techo actúa **al trocear**, así que los corpus ya ingeridos conservan sus padres grandes
+hasta que se re-troceen. Para Gerencia eso pasa en HIB.N, que por eso va después de este
+prompt: re-trocear antes habría sido pagar embeddings dos veces.
