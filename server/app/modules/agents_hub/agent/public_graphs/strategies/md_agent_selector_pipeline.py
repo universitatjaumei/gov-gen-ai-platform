@@ -18,17 +18,20 @@ Deploy: edge
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from collections import Counter
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_contract import (
     EvidenceItem,
     RetrievalResult,
 )
 from server.app.modules.agents_hub.services.retrieval.metadata_filter import MetadataFilter
+
+logger = logging.getLogger(__name__)
 
 INDEX_TITLE_MAX = 300
 
@@ -43,7 +46,9 @@ def _dominant_language(items: list[EvidenceItem]) -> str | None:
 class IndexProvider(Protocol):
     """Construye el índice que se ofrece al selector como evidencia inicial."""
 
-    async def build_index(self, chatbot_id: str, deps) -> list[EvidenceItem]: ...
+    async def build_index(
+        self, chatbot_id: str, deps, query: str = ""
+    ) -> list[EvidenceItem]: ...
 
 
 class DocumentIndexProvider:
@@ -59,8 +64,13 @@ class DocumentIndexProvider:
     def __init__(self, metadata_filter: MetadataFilter | None = None) -> None:
         self._filter = metadata_filter if metadata_filter is not None else MetadataFilter()
 
-    async def build_index(self, chatbot_id: str, deps) -> list[EvidenceItem]:
-        from server.app.modules.agents_hub.database.operational_models import HubDocument
+    async def build_index(
+        self, chatbot_id: str, deps, query: str = ""
+    ) -> list[EvidenceItem]:
+        from server.app.modules.agents_hub.database.operational_models import (
+            HubDocument,
+            HubDocumentChunk,
+        )
 
         cid = uuid.UUID(chatbot_id) if isinstance(chatbot_id, str) else chatbot_id
         stmt = (
@@ -72,6 +82,49 @@ class DocumentIndexProvider:
         result = await deps.session.execute(stmt)
         documentos = list(result.scalars().all())
 
+        # HIB.E — la nota de cada entrada es la mejor similitud coseno entre la consulta y los
+        # fragmentos de ESE documento.
+        #
+        # Antes era `1.0` fija, y como el quality gate del CoreGraph toma el maximo de
+        # `merged_items` —que en este modo es este indice—, el agentico **contestaba siempre**
+        # con cualquier umbral. Su 7 de 7 frente al 6 de 7 del RAG no media recuperacion: media
+        # la ausencia de filtro.
+        #
+        # Contra los fragmentos y no contra el documento entero por dos razones: el documento
+        # entero no tiene vector —el agentico lee `markdown_content`— y un articulo que
+        # contesta bien dentro de una ley de 279.425 tokens se diluiria en cualquier promedio.
+        #
+        # Y en la MISMA escala que la rama vectorial, que es lo que permite que un umbral de
+        # 0,65 signifique lo mismo en los dos asistentes de Gerencia. Sin eso, la comparacion
+        # entre ellos —que es el objeto de toda esta rama— no querria decir nada.
+        notas: dict[uuid.UUID, float] = {}
+        self.scores_medidos = False
+        embedder = getattr(deps, "embedder", None)
+        if query and embedder is not None and documentos:
+            try:
+                vector = await embedder.embed(query)
+                distancia = HubDocumentChunk.embedding.cosine_distance(vector)
+                q = (
+                    select(
+                        HubDocumentChunk.document_id,
+                        func.min(distancia).label("d"),
+                    )
+                    .where(
+                        HubDocumentChunk.document_id.in_([d.id for d in documentos])
+                    )
+                    .group_by(HubDocumentChunk.document_id)
+                )
+                for doc_id, d in (await deps.session.execute(q)).all():
+                    notas[doc_id] = 1.0 - float(d)
+                self.scores_medidos = True
+            except Exception:  # noqa: BLE001
+                # Sin embedder o con la consulta caida, el indice sale plano y se DICE. Una
+                # nota sin medir indistinguible de una medida es lo que sostuvo durante un
+                # informe entero la conclusion de que el agentico iba mejor que el RAG.
+                logger.warning("no se pudieron puntuar las entradas del indice", exc_info=False)
+                notas = {}
+                self.scores_medidos = False
+
         return [
             EvidenceItem(
                 source_id=str(d.id),
@@ -79,8 +132,8 @@ class DocumentIndexProvider:
                 source_url=d.canonical_url,
                 title=d.title,
                 language=d.language,
-                score=1.0,
-                metadata={"index_entry": True},
+                score=notas.get(d.id, 1.0),
+                metadata={"index_entry": True, "score_medido": d.id in notas},
             )
             for d in documentos
         ]
@@ -101,13 +154,18 @@ class MdAgentSelectorPipeline:
         cfg,
         deps,
     ) -> RetrievalResult:
-        items = await self._index_provider.build_index(chatbot_id, deps)
+        items = await self._index_provider.build_index(chatbot_id, deps, query=query)
         return RetrievalResult(
             items=items,
             debug={
                 "pipeline_mode": "MD_AGENT_SELECTOR",
                 "index_entries": len(items),
                 "index_provider": type(self._index_provider).__name__,
+                # Si el indice salio plano hay que poder distinguir «no habia con que medir»
+                # de «se midio y salio plano». Sin la marca, la traza de HIB.I no lo dice.
+                "index_scores_medidos": getattr(
+                    self._index_provider, "scores_medidos", None
+                ),
             },
             context_source_language=_dominant_language(items),
         )
