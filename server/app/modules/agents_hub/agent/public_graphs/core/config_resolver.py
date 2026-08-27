@@ -60,7 +60,14 @@ class PublicGraphConfig:
     # plataforma**, por el mismo motivo que `reranker_enabled` y `min_retrieval_score`:
     # cuesta una llamada al LLM por turno de seguimiento y su ganancia no se ha medido
     # todavía contra el corpus real. Se enciende por chatbot cuando el gate lo respalde.
-    query_rewriting_enabled: bool = False
+    # HIB.Q — **True desde el 2026-08-27**, y el motivo es HIB.C: el widget envía ya los cinco
+    # últimos intercambios, así que con el flag apagado un chatbot nuevo recibiría el historial
+    # y no lo reescribiría. Llegaría la fontanería y no la función: el seguimiento no
+    # funcionaría y no habría ningún error que lo delatara.
+    #
+    # Aquí y no en la columna del chatbot porque ésta SÍ es nullable, y en la cascada nulo
+    # significa heredar. Un chatbot que lo quiera apagado lo pone en False y gana.
+    query_rewriting_enabled: bool = True
     # LLM de reescritura, configurable en la organización porque es otro modelo —pequeño y
     # rápido— y no tiene sentido repetirlo en cada chatbot. None = usar el del chatbot con
     # el tope de salida bajado.
@@ -74,7 +81,7 @@ class PublicGraphConfig:
     # prosaica: un campo obligatorio aquí rompe a todo el que construya la configuración a mano,
     # y hay unos cuantos dobles de test que sólo declaran lo que les interesa. El 8 es el mismo
     # que ya declaraba el modelo, así que nada cambia de valor — sólo empieza a leerse.
-    retrieval_top_k: int = 8
+    retrieval_top_k: int = 3
     # HIB.J — cuántos FRAGMENTOS se le piden al híbrido, frente a `retrieval_top_k`, que son
     # los DOCUMENTOS que llegan al modelo. `None` = derivarlo de `retrieval_top_k` con
     # `pool_size()`, que es el comportamiento por omisión y el único que hay hoy configurado.
@@ -91,11 +98,15 @@ _PLATFORM_DEFAULTS = PublicGraphConfig(
     retrieval_mode="RAG",
     language_mode="prefer",
     quality_threshold=0.6,
-    # RAG.15 — el mismo 8 que ya declaraba `hub_chatbots.retrieval_top_k` desde que se escribió.
-    # Se conserva el valor **y se deja dicho que no está medido**: nadie lo leía, así que nunca
-    # se comprobó contra el dorado. Elegirlo con datos es el trabajo que el prompt deja abierto,
-    # y hacerlo exige el corpus real cargado.
-    retrieval_top_k=8,
+    # RAG.15 lo dejó en 8 diciendo que no estaba medido, porque nadie lo leía. HIB.Q lo baja a
+    # **3**, que es el valor elegido con el lote delante: con `parent_child` y el pool ya
+    # desacoplado del reranker (HIB.J), `top_k = 3` entrega de verdad tres documentos —2,96 de
+    # media sobre las 25 consultas, y ninguna con uno solo— mientras que 8 serían ocho
+    # documentos enteros.
+    #
+    # Va también en el defecto de la columna del chatbot: aquí sólo actúa si la fila trae
+    # nulo, y esa columna es NOT NULL.
+    retrieval_top_k=3,
     min_retrieval_results=2,
     # RAG.5: el umbral está implementado y probado, pero **desactivado por defecto**, y el
     # 0.0 es una decisión con medición detrás. Con el default anterior (0,25) el dataset

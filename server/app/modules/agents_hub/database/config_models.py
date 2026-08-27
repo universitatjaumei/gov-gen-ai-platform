@@ -394,7 +394,17 @@ class HubChatbot(HubConfigBase):
     theme_config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     retrieval_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="RAG")
-    retrieval_top_k: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
+    # HIB.Q — tres, no ocho, y el defecto está AQUÍ y no sólo en la plataforma: `_apply_layer`
+    # aplica los valores no nulos de cada capa, así que una columna NOT NULL del chatbot gana
+    # siempre al defecto de plataforma. Cambiar sólo `_PLATFORM_DEFAULTS` no habría movido
+    # nada para ningún chatbot.
+    #
+    # Por qué tres: hasta HIB.J este mando daba menos documentos de los que decía —el pool se
+    # encogía a `top_k` fragmentos y luego se agrupaba por documento—, y ahora significa ocho
+    # documentos **enteros**; con `parent_child` eso es casi el triple del contexto y del coste
+    # que se eligió midiendo para Normativa. Sin `server_default` a propósito: un defecto de
+    # columna sólo actúa al insertar, así que los chatbots que ya existen no se tocan.
+    retrieval_top_k: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     # HIB.J — fragmentos que se le piden al híbrido, frente a `retrieval_top_k`, que son los
     # documentos que llegan al modelo. **Nullable a propósito**: NULL significa «derívalo de
     # `retrieval_top_k`», que es lo que hace `pool_size()`, y no «cero candidatos». Un

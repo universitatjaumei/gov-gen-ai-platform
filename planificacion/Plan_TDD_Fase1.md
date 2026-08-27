@@ -23187,6 +23187,56 @@ configuración (§7).
 
 ---
 
+### Prompt HIB.Q (RED/GREEN) — Un chatbot nuevo nace con lo que se ha medido
+
+**Modelo sugerido**: **Sonnet** — alcance cerrado; lo delicado es una trampa de la cascada, ya
+localizada.
+
+**De dónde sale**: pregunta del usuario del 2026-08-27 al cerrar HIB.C. Los cambios de HIB.J,
+HIB.B, HIB.C y HIB.I son código y los hereda cualquier chatbot; pero tres parámetros son
+configuración por chatbot, y ahí un chatbot nuevo hereda el **valor por omisión**, no lo que se
+puso a mano en Normativa.
+
+```
+# PROMPT HIB.Q (RED/GREEN) — Los defectos, alineados con lo medido
+# Deploy: edge (configuracion)
+
+## La trampa que decide como se arregla
+`_apply_layer` aplica solo los valores NO NULOS de cada capa, asi que una columna NOT NULL del
+chatbot gana SIEMPRE al defecto de plataforma. `retrieval_top_k` es NOT NULL con defecto 8:
+tocar solo `_PLATFORM_DEFAULTS` no habria movido nada para ningun chatbot. Hay que mover el
+defecto de la COLUMNA. `query_rewriting_enabled` si es nullable, y ahi nulo significa heredar.
+
+## Cambio
+- `HubChatbot.retrieval_top_k`: defecto 8 -> 3, y el mismo 3 en `_PLATFORM_DEFAULTS` y en el
+  dataclass, para que no haya dos numeros para la misma anchura.
+- `query_rewriting_enabled` en la configuracion de plataforma: False -> True. Sin esto, desde
+  HIB.C un chatbot nuevo RECIBE el historial y no lo reescribe: llega la fontaneria y no la
+  funcion, y no hay ningun error que lo delate.
+- **Sin `server_default` y sin migracion**: un defecto de columna solo actua al insertar, asi
+  que los chatbots que ya existen no se tocan. Es lo que se quiere.
+
+## Lo que NO cambia, y por que
+- `min_retrieval_results` se queda en 2. El 1 de Normativa fue un apano de desarrollo con un
+  corpus de un solo documento, no una decision.
+- `quality_threshold` ya estaba en 0,6, que es el punto que eligio HIB.J — por casualidad y no
+  por diseno, y conviene decirlo.
+- `reranker_enabled` ya estaba en False, coherente con lo que midio HIB.A.
+
+## Tests (RED primero)
+# should_default_the_width_to_three_documents
+# should_default_to_rewriting_the_query
+# should_align_the_platform_default_with_the_column
+# should_let_a_chatbot_override_the_platform_width
+# should_not_change_the_chatbots_that_already_exist
+
+## Criterio de done
+- [ ] Los tres valores vivos que siguen en la escala vieja, anotados para HIB.E, HIB.M y HIB.P:
+      Gerencia RAG con umbral 0,35 y reranker True, y el agentico con 0,5
+```
+
+---
+
 ## Orden de ejecución (2026-08-26, segunda revisión — **aprobado por el usuario: HIB.J antes de HIB.B**)
 
 Hay dos dependencias duras que reordenan el bloque: **HIB.J va antes que HIB.B** (la verificación
