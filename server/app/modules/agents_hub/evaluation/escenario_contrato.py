@@ -50,6 +50,15 @@ class RefusalReason(StrEnum):
 
     FUERA_DE_ALCANCE = "fuera_de_alcance"
     PREMISA_FALSA = "premisa_falsa"
+    """La pregunta da por hecho algo que no es cierto **y la correccion no se puede
+    fundamentar en el corpus** — casi siempre porque hay que probar una inexistencia («que
+    examen propio de acceso hace la UJI», y no hace ninguno).
+
+    Cuando el hecho que refuta la premisa SI esta en el corpus, el escenario **no es esto**:
+    es contestable con `debe_refutar=True` y la fuente que lo refuta. Medido el 2026-08-27,
+    confundir las dos cosas costo dos falsos fallos: a «puedo partir una factura de 60.000 en
+    cuatro de 15.000» el asistente contesto «no, el art. 99.2 lo prohibe expresamente», que es
+    la respuesta ideal, y la metrica lo conto como no haberse rendido."""
     VIGENCIA_NO_VALIDADA = "vigencia_no_validada"
     DATO_NO_NORMATIVO = "dato_no_normativo"
 
@@ -138,8 +147,21 @@ class Escenario(BaseModel):
     provenance: Provenance
     reference_answer: str | None = None
 
+    debe_refutar: bool = False
+    """La respuesta correcta **niega la premisa de la pregunta** citando lo que la refuta.
+
+    Es contestable —no se rinde— pero contestar «si» seria el fallo grave. Sin este campo el
+    caso solo se podia expresar como negativo, y entonces la unica respuesta correcta posible
+    contaba como error."""
+
     @model_validator(mode="after")
     def _coherencia(self) -> Escenario:
+        if self.debe_refutar and not self.answerable:
+            raise ValueError(
+                "`debe_refutar` es para escenarios CONTESTABLES: refutar es contestar. Si la "
+                "correccion no se puede fundamentar, el escenario es un negativo con "
+                "`refusal_reason=premisa_falsa`"
+            )
         if self.language not in ("ca", "es"):
             raise ValueError("`language` tiene que ser 'ca' o 'es'")
 

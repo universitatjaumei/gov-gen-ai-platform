@@ -219,3 +219,31 @@ class TestLasVeinticincoRealesSobrevivenAlEnriquecimiento:
         )
         assert negativo.prompt == positivo.prompt
         assert negativo.answerable is False and positivo.answerable is True
+
+
+class TestUnaPremisaFalsaSeRefutaContestando:
+    """Medido el 2026-08-27: modelar «puedo partir una factura de 60.000 en cuatro de 15.000»
+    como negativo hizo que la respuesta ideal —«no, el art. 99.2 lo prohíbe expresamente»—
+    contara como fallo. Refutar es contestar, y el contrato tiene que poder decirlo."""
+
+    def test_should_accept_an_answerable_scenario_that_must_deny_the_premise(self):
+        esc = Escenario.model_validate(_escenario(debe_refutar=True))
+        assert esc.answerable is True and esc.debe_refutar is True
+
+    def test_should_default_to_not_demanding_a_refutation(self):
+        assert Escenario.model_validate(_escenario()).debe_refutar is False
+
+    def test_should_reject_a_refutation_on_an_unanswerable_scenario(self):
+        """Si la refutación no se puede fundamentar en el corpus, el escenario es un negativo
+        con `premisa_falsa`; pedirle que refute sería exigir una cita imposible."""
+        with pytest.raises(ValidationError):
+            Escenario.model_validate({
+                "name": "NEG-03",
+                "prompt": "Quin examen propi d'acces fa la UJI?",
+                "kind": Kind.NEGATIVO,
+                "language": "ca",
+                "provenance": Provenance.SINTETICO,
+                "answerable": False,
+                "refusal_reason": RefusalReason.PREMISA_FALSA,
+                "debe_refutar": True,
+            })
