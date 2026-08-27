@@ -235,7 +235,7 @@ class HubOrganizacion(HubConfigBase):
     default_public_graph_profile: Mapped[str] = mapped_column(String(50), nullable=False, default="PUBLIC_KB_RICH")
     default_retrieval_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="RAG")
     default_language_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="prefer")
-    default_quality_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.6)
+    default_quality_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.65)
     default_min_retrieval_results: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     default_min_retrieval_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     default_reranker_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -472,7 +472,7 @@ class HubChatbot(HubConfigBase):
     # Antes era la media, y eso hacía que ensanchar `retrieval_top_k` bajara la nota y el
     # asistente contestara menos: quien puso un valor antes del 2026-08-25 lo puso con el otro
     # significado, y con el mismo número el filtro es ahora más permisivo.
-    quality_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.6)
+    quality_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.65)
     min_retrieval_results: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     min_retrieval_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     reranker_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

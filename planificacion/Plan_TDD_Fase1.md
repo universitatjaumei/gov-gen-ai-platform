@@ -22630,6 +22630,23 @@ ejecuta sobre el lote de Gerencia de HIB.G** (30-40 consultas, con negativos), n
 - [ ] `docs/INFORME_CHATBOTS_NORMATIVA_Y_GERENCIA.html` actualizado: la asimetria desaparece
 ```
 
+**DECIDIDO AL EJECUTAR (2026-08-27) — con qué se puntúa.** El prompt pedía «la puntuación real
+del documento» sin decir cuál. Es **similitud coseno entre la consulta y el fragmento más
+parecido del documento leído**, y la elección no es libre: HIB.J puso al *quality gate* a leer
+coseno en la rama vectorial, y con escalas distintas un umbral de 0,50 significaría una cosa en
+el RAG y otra en el agéntico — con lo que la comparación entre los dos asistentes de Gerencia,
+que es el objeto de toda la rama, no querría decir nada.
+
+Contra los **fragmentos** y no contra el documento entero por dos razones: el agéntico lee
+`markdown_content` y ese texto no tiene vector, y un artículo que contesta bien dentro de una ley
+de 279.425 tokens se diluiría en cualquier promedio del documento.
+
+**Y cuando no se puede medir, se dice.** Sin embedder o con un documento sin fragmentos la nota
+sigue en 1.0 pero queda marcada con `score_sin_medir`. Una nota inventada indistinguible de una
+medida es lo que sostuvo la conclusión de que el agéntico iba mejor que el RAG durante un informe
+entero. Y un puntuador roto no tumba la respuesta: rendirse porque no se pudo puntuar cambiaría
+un fallo de instrumentación por un fallo de servicio.
+
 ---
 
 ### Prompt HIB.F (RED/GREEN) — Medir el contrato de citas por lo que garantiza, no por lo que rompe
@@ -23141,6 +23158,33 @@ re-embeben y la cuenta se rehace ANTES de lanzar.
 - [ ] Coste real de embeddings anotado
 ```
 
+**CORRECCIÓN DEL PROMPT (2026-08-27) — el permiso de copia no se puede dar comparando
+configuraciones.** El prompt decía «cuando coinciden `content_hash` Y la estrategia de troceado
+Y el techo del padre». Los dos últimos, leídos de la configuración, dan luz verde en falso: la
+configuración de Normativa **declara** techo de 8.000 tokens y sus datos **tienen** padres de
+59.172, porque sus fragmentos se crearon antes de que HIB.L fijara ese techo. Comparar lo que se
+pretendía habría metido en Gerencia padres que su propio techo prohíbe.
+
+`chunk_copier.se_puede_copiar` comprueba por eso **los datos**: que ningún fragmento traiga un
+padre por encima del techo del destino, y que la presencia o ausencia de padre case con la
+estrategia del destino en los dos sentidos. Y cuando se niega, dice cuál es el arreglo.
+
+**Las cuentas del prompt no se sostienen, y salen mejor.** Decía «copiar ~27.353 fragmentos por
+chatbot y re-embeber ~11.000», sobre la premisa de que Gerencia tenía 102 documentos propios sin
+gemelo. Medido: **los 124 documentos de Gerencia tienen gemelo exacto por `content_hash` en
+Normativa, ninguno queda fuera**, así que el coste de embeddings de esta operación es **cero**.
+
+**Y el techo se aplica con un `UPDATE`, no re-embebiendo.** `parent_content` se guarda aparte y
+no entra en `embedding_text` —que se construye con el texto del hijo más el título y los
+encabezados—, así que alinear los datos con la decisión de HIB.L cuesta una sentencia. Se
+revierte re-troceando desde `markdown_content`, que sigue completo: se pierde tiempo, no dinero.
+Alcance medido antes de tocar nada: **5.172 de 60.859 fragmentos (8,5 %)** arrastran un padre
+por encima del techo, y son **125 de los 180 millones** de tokens de padre almacenados para un
+corpus de 2,1 millones —la amplificación viene de que cada hijo guarda su padre entero—.
+
+El código y sus 11 tests entraron en el commit `499ec35`, agrupados por error con la corrección
+del contrato de HIB.G.
+
 ---
 
 ### Prompt HIB.O (DATOS + RED/GREEN) — La vigencia de las normas externas se valida antes de abrir
@@ -23215,6 +23259,134 @@ configuración (§7).
 - [ ] Puntos elegidos segun el criterio escrito, registrados
 - [ ] `docs/INFORME_CHATBOTS_NORMATIVA_Y_GERENCIA.html` con la configuracion de apertura de los
       cuatro asistentes (dos de Normativa, dos de Gerencia) en una tabla
+```
+
+---
+
+### Prompt HIB.R (CONFIG + RED/GREEN) — El umbral a 0,65, que es lo único que el umbral puede comprar barato
+
+**Modelo sugerido**: **Sonnet** — el punto ya está elegido sobre la curva; el trabajo es moverlo
+en los tres sitios y no dejar dos números para el mismo mando.
+
+**De dónde sale**: decisión del usuario del 2026-08-27, tomada sobre la curva de las dos columnas
+calculada del lote de 48 escenarios de Normativa. La curva se pudo calcular **sin volver a
+generar nada**, porque la puerta es `nota >= umbral` y las notas estaban guardadas.
+
+| umbral | declina bien (de 18) | contestables perdidos |
+|---|---|---|
+| 0,60 (vigente) | 0 | 0 % |
+| **0,65** | **2** | **0 %** |
+| 0,70 | 4 | 7 % |
+| 0,72 | 10 | 17 % |
+| 0,75 | 16 | 50 % |
+
+```
+# PROMPT HIB.R (CONFIG + RED/GREEN) — El punto que no cuesta nada
+# Deploy: edge (configuracion)
+
+## Cambio
+- Defecto de columna `HubChatbot.quality_threshold` y `HubOrganizacion.default_quality_threshold`:
+  0,60 -> 0,65. **Sin `server_default` y sin migracion**: un defecto de columna solo actua al
+  insertar, y los cuatro chatbots que ya existen tienen su umbral puesto a mano o medido.
+- `_PLATFORM_DEFAULTS.quality_threshold`: 0,60 -> 0,65. No porque haga falta —la columna gana,
+  por la trampa que documento HIB.Q— sino para que no haya dos numeros para el mismo mando.
+- Valor VIVO de Normativa UJI: 0,60 -> 0,65, con la cifra que lo justifica en el registro.
+- Gerencia NO se toca: su 0,35 esta en la escala vieja y lo elige HIB.P.
+
+## Lo que este prompt NO arregla, y hay que decirlo donde se lea
+Los cinco casos de contratacion que el asistente contesta y no deberia puntuan **0,742-0,787**,
+por encima de casi cualquier respuesta correcta. **Ningun umbral los alcanza** sin llevarse por
+delante la mitad de lo bueno. El umbral no es donde esta el margen.
+
+## Tests (RED primero)
+# should_default_the_quality_threshold_to_sixty_five
+# should_align_the_organization_default_with_the_chatbot_column
+# should_align_the_platform_default_too
+# should_not_carry_a_server_default_that_would_touch_existing_rows
+
+## Criterio de done
+- [ ] Los tres defectos a 0,65 y el valor vivo de Normativa cambiado
+- [ ] El cambio registrado con su cifra y su autoria (§7 del marco)
+- [ ] Medido sobre el lote DESPUES del cambio: dos negativos mas y cero contestables perdidos
+```
+
+---
+
+### Prompt HIB.S (RED/GREEN + MEDICIÓN) — El contrato de citas comprueba el fundamento, no sólo que se cite
+
+**Modelo sugerido**: **Opus** — es una puerta nueva en el camino de la respuesta, con coste de
+latencia y riesgo de rechazar lo bueno; y la decisión de qué hacer cuando el juez duda es de
+criterio.
+
+**De dónde sale**: es el mecanismo que quedó en pie después de descartar los otros tres, medidos
+el 2026-08-27 sobre el lote de 48 de Normativa. El asistente **contesta 11 de las 18 preguntas
+que debería declinar**, y ninguna señal del lado de la recuperación distingue esos 11 de los 30
+que sí debía contestar:
+
+- **La nota de calidad no separa.** Los 11 puntúan 0,643-0,787; los 30 correctos, 0,692-0,805.
+  Los negativos mal contestados puntúan de mediana **más alto** (0,715) que los correctos más
+  bajos.
+- **La brecha entre el primero y el segundo tampoco**, y va al revés: 0,020 de mediana en los
+  fallos contra 0,010 en los aciertos.
+- **Ni el número de fuentes** (3 y 3), **ni la media de las notas** (0,704 contra 0,734).
+- **Ni «la mejor evidencia es un documento vetado»**, que se propuso y se midió: el documento
+  con `us_assistents='no'` gana al permitido en 2 de 8 negativos y en 1 de 6 contestables. No
+  discrimina.
+
+**Y el hallazgo que dice dónde sí está el margen**: la puerta de calidad rechazó **cero de 48**.
+Los 7 rechazos correctos los produjo el **contrato de citas** (`fallback_reason='citation'`), con
+**precisión perfecta**: 7 aciertos y ni un rechazo indebido sobre 30 contestables. El contrato
+funciona; lo que le falta es alcance. Hoy pregunta «¿ha citado?» y los 11 fallos **citan** —citan
+normas de la UJI que hablan de contratos para una pregunta de contratos—.
+
+```
+# PROMPT HIB.S (RED/GREEN + MEDICION) — De «cito» a «lo que cito lo sostiene»
+# Deploy: edge
+
+## Cambio
+- Una comprobacion mas en `enforce_citation_contract` (o inmediatamente despues, dentro de
+  `generate_answer_node`): por cada afirmacion de FUNDAMENTO de la respuesta, se comprueba que
+  el fragmento citado la sostenga. Si NINGUNA afirmacion de fundamento se sostiene, la respuesta
+  se descarta y habla el fallback, igual que cuando hoy no hay cita valida.
+- El instrumento ya existe y esta validado: `_local/golden/precision_de_cita.py`, cuyo juez
+  acuerda **24 de 24** con las 24 afirmaciones etiquetadas a mano (Wilson 95 %: 0,86-1,00),
+  incluidos los casos duros de esta forma exacta —una afirmacion cierta en el mundo pero ausente
+  del fragmento citado, y una cierta en otra fila del mismo anexo—. Lo que este prompt hace es
+  llevarlo del banco de evaluacion al camino de la respuesta.
+
+## Las tres decisiones de criterio, y por que asi
+1. **El umbral de descarte es «ninguna sostenida», no «todas sostenidas».** Una respuesta larga
+   con ocho afirmaciones y siete sostenidas es utilizable; exigir las ocho convertiria la puerta
+   en un generador de rendiciones. Se empieza por el extremo conservador y se mueve con datos.
+2. **Cuando el juez no contesta o contesta ilegible, la respuesta PASA.** Un fallo del juez es
+   un fallo de instrumentacion, y cambiarlo por una rendicion seria cambiarlo por un fallo de
+   servicio. Se registra en la traza (HIB.I) para poder contar cuantas veces pasa.
+3. **La remision no entra.** HIB.0 legitimo nombrar una norma sin enlazarla; una respuesta que
+   remite correctamente a la Ley 9/2017 no puede perder por eso.
+
+## El coste, que hay que medir y no estimar
+Una llamada mas por respuesta. Medido en el experimento de granularidad, la latencia la manda la
+SALIDA (r=+0,997) y no la entrada (r=-0,109), asi que una llamada de juicio con salida corta
+—un JSON de dos campos— deberia costar poco. **Hay que medirlo**, y hay que medirlo sobre el
+primer token percibido, no sobre el total: si la comprobacion va DESPUES de generar, el usuario
+ya ha visto la respuesta entera cuando se decide descartarla, y eso es peor que esperar.
+**Decision de diseno pendiente**: o se comprueba antes de emitir (mas latencia percibida) o se
+emite y se retira (el evento `discard` de HIB.B ya existe y el widget ya sabe vaciar la burbuja).
+
+## Tests (RED primero)
+# should_discard_the_answer_when_no_grounded_claim_survives
+# should_keep_an_answer_with_some_claims_grounded
+# should_let_the_answer_through_when_the_judge_fails
+# should_not_count_a_remission_as_an_ungrounded_claim
+# should_record_the_check_in_the_trace
+
+## Criterio de done
+- [ ] Medido sobre los 11 negativos que hoy se contestan: cuantos caza (cifra REAL, no estimada)
+- [ ] Medido sobre los 30 contestables: cuantos rechaza indebidamente. Si pasa de 2, no se
+      despliega y se revisa la plantilla del juez
+- [ ] Latencia del primer token con y sin la comprobacion, sobre la misma muestra
+- [ ] Decidido y escrito si comprueba antes de emitir o emite y retira
+- [ ] La cifra de precision de cita del lote, con la reserva del juez anotada
 ```
 
 ---

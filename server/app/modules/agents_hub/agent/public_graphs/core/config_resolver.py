@@ -106,7 +106,15 @@ _PLATFORM_DEFAULTS = PublicGraphConfig(
     profile="PUBLIC_KB_RICH",
     retrieval_mode="RAG",
     language_mode="prefer",
-    quality_threshold=0.6,
+    # HIB.R — 0,65 y no 0,60. Elegido sobre la curva de las dos columnas del lote de 48: es el
+    # unico punto que declina dos negativos mas **sin perder ninguna respuesta buena**. Subir a
+    # 0,70 caza cuatro pero cuesta el 7 %, y a 0,72 caza diez y cuesta el 17 %.
+    #
+    # Y es todo lo que este mando puede comprar barato: los cinco casos de contratacion que el
+    # asistente contesta y no deberia puntuan 0,742-0,787 —por encima de casi cualquier
+    # respuesta correcta—, asi que ningun umbral los alcanza. El resto del margen esta en
+    # comprobar el fundamento de la cita, no aqui.
+    quality_threshold=0.65,
     # RAG.15 lo dejó en 8 diciendo que no estaba medido, porque nadie lo leía. HIB.Q lo baja a
     # **3**, que es el valor elegido con el lote delante: con `parent_child` y el pool ya
     # desacoplado del reranker (HIB.J), `top_k = 3` entrega de verdad tres documentos —2,96 de
