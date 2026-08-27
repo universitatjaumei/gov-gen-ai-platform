@@ -15,6 +15,7 @@ Deploy: edge
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Any, Protocol
 
@@ -25,6 +26,8 @@ from server.app.core.llm_text import texto_de
 from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_contract import (
     EvidenceItem,
 )
+
+logger = logging.getLogger(__name__)
 
 MAX_ITERACIONES = 10
 EXCERPT_MAX = 500
@@ -92,11 +95,16 @@ class AgenticLoop:
         tools: list[Any],
         max_iterations: int = MAX_ITERACIONES,
         searcher: FragmentSearcher | None = None,
+        relevance_scorer: Any | None = None,
     ) -> None:
         self._reader = reader
         self._tools = tools
         self._max_iterations = max_iterations
         self._searcher = searcher
+        # HIB.E — con qué se puntúa un documento que el agente decidió leer. Sin esto la
+        # evidencia salía con `score=1.0` fija y el quality gate del CoreGraph no podía
+        # rechazar nada con ningún umbral: el agéntico contestaba siempre.
+        self._relevance_scorer = relevance_scorer
 
     async def run(
         self,
@@ -126,10 +134,32 @@ class AgenticLoop:
             # tool hasta agotar las iteraciones, devolviendo una respuesta en blanco.
             mensajes.append(respuesta)
             for llamada in tool_calls:
-                salida = await self._ejecutar(llamada, chatbot_id, language, leidas)
+                salida = await self._ejecutar(
+                    llamada, chatbot_id, language, leidas, query=query
+                )
                 mensajes.append(ToolMessage(content=salida, tool_call_id=llamada["id"]))
 
         return leidas, ""
+
+    async def _puntua(self, query: str, doc_id: str) -> tuple[float, bool]:
+        """La relevancia del documento para la consulta, y si se pudo medir.
+
+        Es **similitud coseno**, la misma magnitud que HIB.J puso a leer al quality gate en la
+        rama vectorial. Tenía que ser la misma o un umbral de 0,50 significaría una cosa en el
+        RAG y otra en el agéntico, y la comparación entre los dos asistentes —que es lo que
+        hay que decidir— no querría decir nada.
+
+        Un puntuador roto **no tumba la respuesta**: devuelve la nota sin medir y lo marca.
+        Rendirse porque no se pudo puntuar cambiaría un fallo de instrumentación por un fallo
+        de servicio.
+        """
+        if self._relevance_scorer is None or not query:
+            return 1.0, False
+        try:
+            return float(await self._relevance_scorer(query, doc_id)), True
+        except Exception:  # noqa: BLE001
+            logger.warning("no se pudo puntuar el documento %s; nota sin medir", doc_id)
+            return 1.0, False
 
     async def _ejecutar(
         self,
@@ -137,6 +167,7 @@ class AgenticLoop:
         chatbot_id: str,
         language: str | None,
         leidas: list[EvidenceItem],
+        query: str = "",
     ) -> str:
         nombre = llamada["name"]
         args = llamada.get("args", {})
@@ -154,6 +185,7 @@ class AgenticLoop:
             texto = documento["markdown_content"]
             tokens = int(documento.get("token_count") or 0)
             truncada = tokens > LIMITE_LECTURA_TOKENS
+            nota, medida = await self._puntua(query, doc_id)
             leidas.append(
                 EvidenceItem(
                     source_id=doc_id,
@@ -161,7 +193,7 @@ class AgenticLoop:
                     source_url=documento["url"],
                     title=documento["title"],
                     language=documento.get("language"),
-                    score=1.0,
+                    score=nota,
                     # VIS.2: qué escalón del índice sirvió este documento. Sin esto, el
                     # retroceso escalonado no se puede medir sobre respuestas reales, y
                     # una estrategia que no se mide no se ajusta.
@@ -170,6 +202,10 @@ class AgenticLoop:
                             self._reader, "last_index_level", None
                         ),
                         "lectura_truncada": truncada,
+                        # HIB.E — si la nota no se pudo medir, se dice. Una nota inventada que
+                        # no se distingue de una medida es lo que hizo que el agéntico
+                        # pareciera mejor que el RAG durante un informe entero.
+                        "score_sin_medir": not medida,
                     },
                 )
             )
@@ -188,6 +224,7 @@ class AgenticLoop:
         chatbot_id: str,
         language: str | None,
         leidas: list[EvidenceItem],
+        query: str = "",
     ) -> str:
         """Fragmentos que respondan a la consulta, para lo que no cabe entero.
 

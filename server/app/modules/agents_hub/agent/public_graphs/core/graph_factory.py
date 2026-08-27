@@ -102,7 +102,59 @@ def build_agentic_loop_if_needed(cfg: Any, deps: Any):
         reader=_ReaderDesdeEstrategia(estrategia),
         tools=estrategia.get_agent_tools(),
         searcher=_buscador_de_fragmentos(cfg, deps),
+        relevance_scorer=_puntuador_de_relevancia(deps),
     )
+
+
+def _puntuador_de_relevancia(deps: Any):
+    """La nota real de un documento que el agente leyó, o None si no hay con qué medirla.
+
+    HIB.E: la evidencia del agéntico salía con `score=1.0` fija, así que el quality gate del
+    CoreGraph no podía rechazar nada con ningún umbral. Se puntúa con la **similitud coseno**
+    entre la consulta y el fragmento más parecido del documento, que es la misma magnitud que
+    HIB.J puso a leer al gate en la rama vectorial: si fueran escalas distintas, un umbral de
+    0,50 significaría una cosa en el RAG y otra aquí, y la comparación entre los dos asistentes
+    no querría decir nada.
+
+    Se mide contra los FRAGMENTOS y no contra el documento entero porque el documento entero no
+    tiene vector —el agéntico lee `markdown_content`, no fragmentos— y porque un artículo que
+    contesta bien la consulta dentro de una ley de 279.425 tokens quedaría diluido en cualquier
+    promedio del documento.
+    """
+    embedder = getattr(deps, "embedder", None)
+    session = getattr(deps, "session", None)
+    if embedder is None or session is None:
+        return None
+
+    async def puntua(query: str, document_id: str) -> float:
+        import uuid as _uuid
+
+        from sqlalchemy import select
+
+        from server.app.modules.agents_hub.database.operational_models import (
+            HubDocumentChunk,
+        )
+
+        # `PURPOSE_QUERY` explícito aunque ya sea el defecto de `embed`: Vertex distingue
+        # RETRIEVAL_QUERY de RETRIEVAL_DOCUMENT, y esta nota tiene que salir en la misma
+        # escala que la del gate vectorial. Escrito, un cambio del defecto no la desplaza en
+        # silencio respecto a `VectorRetrievalStrategy`, que embebe la consulta igual.
+        vector = await embedder.embed(query, purpose=PURPOSE_QUERY)
+        distancia = HubDocumentChunk.embedding.cosine_distance(vector)
+        stmt = (
+            select(distancia)
+            .where(HubDocumentChunk.document_id == _uuid.UUID(document_id))
+            .order_by(distancia)
+            .limit(1)
+        )
+        mejor = (await session.execute(stmt)).scalar()
+        if mejor is None:
+            # Un documento sin fragmentos: el agéntico puede leerlo igual, pero no hay con qué
+            # puntuarlo. Se propaga como no medible en vez de fabricar un 0, que lo rechazaría.
+            raise ValueError(f"el documento {document_id} no tiene fragmentos que puntuar")
+        return 1.0 - float(mejor)
+
+    return puntua
 
 
 def _buscador_de_fragmentos(cfg: Any, deps: Any):
