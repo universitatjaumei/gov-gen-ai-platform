@@ -1,0 +1,319 @@
+<meta charset="utf-8">
+<title>Cierre del bloque HIB</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;600&display=swap">
+
+<style>
+:root {
+    --marca:#0b5394; --marca-suave:#e8eef6; --fondo:#f6f7f9; --superficie:#ffffff;
+    --tinta:#151b23; --tinta-media:#4c5866; --tinta-tenue:#7a8593;
+    --filete:#dde1e7; --filete-fino:#eaedf1;
+    --bien:#1c6b42; --bien-suave:#e8f2ec; --mal:#9c3520; --mal-suave:#f9ecea;
+    --aviso:#8a5b12; --aviso-suave:#f8f1e3;
+    --sombra:0 1px 2px rgba(21,27,35,.05), 0 8px 24px -16px rgba(21,27,35,.18);
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --marca:#6ea3dc; --marca-suave:#16233180; --fondo:#0e1319; --superficie:#151b23;
+        --tinta:#e6e9ee; --tinta-media:#a3aebc; --tinta-tenue:#78838f;
+        --filete:#2a323c; --filete-fino:#1f262e;
+        --bien:#6cc08c; --bien-suave:#16261d80; --mal:#e08a72; --mal-suave:#2a1a1680;
+        --aviso:#d9ab5f; --aviso-suave:#2a221280;
+        --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+    }
+}
+:root[data-theme="dark"] {
+    --marca:#6ea3dc; --marca-suave:#16233180; --fondo:#0e1319; --superficie:#151b23;
+    --tinta:#e6e9ee; --tinta-media:#a3aebc; --tinta-tenue:#78838f;
+    --filete:#2a323c; --filete-fino:#1f262e;
+    --bien:#6cc08c; --bien-suave:#16261d80; --mal:#e08a72; --mal-suave:#2a1a1680;
+    --aviso:#d9ab5f; --aviso-suave:#2a221280;
+    --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+}
+body{background:var(--fondo);color:var(--tinta);
+  font-family:"Source Serif 4",Georgia,serif;font-size:17px;line-height:1.62;
+  -webkit-font-smoothing:antialiased}
+.hoja{max-width:46rem;margin:0 auto;
+  padding:clamp(2.5rem,6vw,5rem) clamp(1.15rem,4vw,2rem) 6rem;
+  display:flex;flex-direction:column;gap:2.75rem}
+.cabecera{display:flex;flex-direction:column;gap:.9rem;
+  border-bottom:2px solid var(--marca);padding-bottom:1.6rem}
+.eyebrow{font-family:"Libre Franklin",system-ui,sans-serif;font-size:.72rem;font-weight:600;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--marca);margin:0}
+h1{font-family:"Libre Franklin",system-ui,sans-serif;font-size:clamp(1.8rem,5vw,2.5rem);
+  font-weight:700;line-height:1.13;letter-spacing:-.021em;text-wrap:balance;margin:0}
+.entradilla{margin:0;color:var(--tinta-media);font-size:1.06rem}
+.ficha{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));
+  gap:.85rem 1.5rem;margin:.4rem 0 0}
+.ficha div{display:flex;flex-direction:column;gap:.12rem}
+.ficha dt{font-family:"Libre Franklin",system-ui,sans-serif;font-size:.68rem;font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--tinta-tenue)}
+.ficha dd{margin:0;font-size:.95rem;color:var(--tinta-media);font-variant-numeric:tabular-nums}
+.veredicto{background:var(--marca-suave);border:1px solid var(--marca);border-left-width:4px;
+  border-radius:3px;padding:1.5rem 1.7rem;display:flex;flex-direction:column;gap:.8rem}
+.veredicto .titular{font-family:"Libre Franklin",system-ui,sans-serif;font-size:1.15rem;
+  font-weight:600;line-height:1.3;color:var(--marca);text-wrap:balance}
+.veredicto p{margin:0;color:var(--tinta-media)}
+.alerta{background:var(--aviso-suave);border:1px solid var(--aviso);border-left-width:4px;
+  border-radius:3px;padding:1.25rem 1.5rem}
+.alerta p{margin:0;color:var(--tinta-media);font-size:.95rem}
+.alerta p + p{margin-top:.6rem}
+.alerta .titular{font-family:"Libre Franklin",system-ui,sans-serif;font-size:.95rem;
+  font-weight:600;color:var(--aviso);display:block;margin-bottom:.4rem}
+h2{font-family:"Libre Franklin",system-ui,sans-serif;font-size:1.28rem;font-weight:600;
+  letter-spacing:-.011em;line-height:1.25;text-wrap:balance;margin:0 0 .9rem}
+h3{font-family:"Libre Franklin",system-ui,sans-serif;font-size:1rem;font-weight:600;
+  margin:1.7rem 0 .5rem;text-wrap:balance}
+section > p,section > ul,section > ol,section > .tabla-marco{margin:0 0 1rem}
+section > *:last-child{margin-bottom:0}
+ul,ol{padding-left:1.15rem;display:flex;flex-direction:column;gap:.6rem}
+li::marker{color:var(--tinta-tenue)}
+strong,b{font-weight:600}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.85em;
+  background:var(--marca-suave);padding:.1em .34em;border-radius:2px}
+a{color:var(--marca);text-underline-offset:.15em}
+.nota{font-size:.9rem;color:var(--tinta-tenue);line-height:1.55}
+.tabla-marco{overflow-x:auto;border:1px solid var(--filete);border-radius:3px;
+  background:var(--superficie);box-shadow:var(--sombra)}
+table{border-collapse:collapse;width:100%;min-width:32rem;
+  font-family:"Libre Franklin",system-ui,sans-serif;font-size:.84rem;
+  font-variant-numeric:tabular-nums}
+caption{caption-side:top;text-align:left;font-family:"Libre Franklin",system-ui,sans-serif;
+  font-size:.7rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--tinta-tenue);padding:.85rem 1rem .55rem}
+th,td{padding:.62rem 1rem;text-align:left;border-bottom:1px solid var(--filete-fino);
+  vertical-align:top}
+thead th{font-weight:600;font-size:.7rem;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--tinta-tenue);border-bottom:1px solid var(--filete);vertical-align:bottom}
+th[scope="row"]{font-weight:600;font-size:.82rem;color:var(--tinta)}
+td.num,th.num{text-align:right}
+tbody tr:last-child th,tbody tr:last-child td{border-bottom:none}
+tr.destacada td,tr.destacada th[scope="row"]{background:var(--marca-suave)}
+tr.mala td,tr.mala th[scope="row"]{background:var(--mal-suave)}
+tr.buena td,tr.buena th[scope="row"]{background:var(--bien-suave)}
+.pie{border-top:1px solid var(--filete);padding-top:1.3rem;font-size:.82rem;
+  color:var(--tinta-tenue);display:flex;flex-direction:column;gap:.4rem}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="hoja">
+
+<header class="cabecera">
+    <p class="eyebrow">Bloque HIB · informe de cierre</p>
+    <h1>Lo que hacía falta medir para abrir el piloto, y qué dijo al medirlo</h1>
+    <p class="entradilla">Dos lotes que se miden sin nadie delante, tres métricas que no
+    dependen de opinión, y un resultado que da la vuelta al diagnóstico de partida: recuperar la
+    norma correcta funciona; lo que falla es <b>declinar</b>.</p>
+    <dl class="ficha">
+        <div><dt>Fecha</dt><dd>27 de agosto de 2026</dd></div>
+        <div><dt>Prompts cerrados</dt><dd>A · B · C · D · E · G · I · J · L · N · O · Q</dd></div>
+        <div><dt>Aplazado</dt><dd>HIB.K</dd></div>
+        <div><dt>Escenarios medidos</dt><dd>48 + 18</dd></div>
+    </dl>
+</header>
+
+<div class="veredicto">
+    <p class="titular">La norma correcta entra en 21 de los 21 escenarios que están bien
+    anotados. El problema no es encontrar; es callar.</p>
+    <p>Los cinco fallos de recuperación de Normativa caen <b>todos</b> en el nivel más débil de
+    anotación —el que se dedujo del ámbito sin leer el artículo—, así que el 83 % de titular
+    subestima la recuperación y la incertidumbre que queda es de la anotación, no del sistema.</p>
+    <p>En cambio el asistente <b>contesta 11 de las 18 preguntas que debería declinar</b>, y
+    cinco de ellas son consultas reales de contratación que llegaron al asistente equivocado. Eso
+    es la asimetría de abstención que la revisión de literatura señalaba como el hueco del campo,
+    y aquí está medida.</p>
+</div>
+
+<section>
+    <h2>Cómo se puede medir esto sin informadores</h2>
+    <p>Los informadores están de vacaciones y el piloto no puede esperar. Lo que lo desbloquea no
+    es prescindir del criterio humano: es <b>cambiar qué se mide</b>.</p>
+    <p>Juzgar la prosa de una respuesta exige una rúbrica humana, y el experimento de granularidad
+    dejó ver lo que cuesta: el juez LLM discrepa consigo mismo entre el 12 % y el 28 % de las
+    veces según la configuración, y la rúbrica disponible es de 2024 y en algún caso penaliza a
+    quien acierta con la norma de 2026. Sobre eso no se decide nada.</p>
+    <p>Las tres métricas de este bloque no dependen de opinión:</p>
+    <div class="tabla-marco">
+    <table>
+        <caption>Qué mide cada una, y cómo se resuelve</caption>
+        <thead><tr><th scope="col">Métrica</th><th scope="col">Pregunta</th>
+        <th scope="col">Se decide comparando</th></tr></thead>
+        <tbody>
+            <tr><th scope="row">Fuente requerida recuperada</th>
+                <td>¿Entró en lo recuperado la norma que contesta?</td>
+                <td>identificadores de documento</td></tr>
+            <tr><th scope="row">Ancla correcta</th>
+                <td>¿La cita abre el artículo, o el documento por la primera hoja?</td>
+                <td>el ancla de la URL</td></tr>
+            <tr><th scope="row">Rendición correcta</th>
+                <td>¿Calló cuando debía y contestó cuando debía?</td>
+                <td>el fallback del grafo</td></tr>
+        </tbody>
+    </table>
+    </div>
+    <p>La primera es, además, exactamente la métrica del síntoma reportado —«las normas
+    seleccionadas no siempre aciertan»—. La segunda sólo cuenta cuando el documento esperado sí se
+    recuperó, para no cobrar dos veces el mismo fallo.</p>
+</section>
+
+<section>
+    <h2>Los lotes: menos volumen, más señal</h2>
+    <p>El prompt pedía 60-80 escenarios de Normativa y 30-40 de Gerencia, y a la vez prohibía
+    redactar preguntas mirando el articulado, porque una pregunta escrita desde la norma comparte
+    su vocabulario e <b>infla la recuperación léxica</b>. Las dos cosas juntas no se podían
+    cumplir sin informadores, y se cumplió la segunda.</p>
+    <div class="tabla-marco">
+    <table>
+        <caption>Procedencia de cada escenario</caption>
+        <thead><tr><th scope="col">De dónde sale</th><th scope="col" class="num">Normativa</th>
+        <th scope="col" class="num">Gerencia</th></tr></thead>
+        <tbody>
+            <tr><th scope="row">Las 25 del ensayo con veredicto de informadores</th>
+                <td class="num">25</td><td class="num">—</td></tr>
+            <tr><th scope="row">Llegadas por el widget</th>
+                <td class="num">10</td><td class="num">7</td></tr>
+            <tr><th scope="row">Llegadas al asistente equivocado</th>
+                <td class="num">6, negativos</td><td class="num">6, contestables</td></tr>
+            <tr><th scope="row">Negativos escritos a propósito</th>
+                <td class="num">12</td><td class="num">5</td></tr>
+            <tr class="destacada"><th scope="row">Total, y cuántos los escribió una persona
+                que quería una respuesta</th>
+                <td class="num"><b>48</b> · 36 reales</td>
+                <td class="num"><b>18</b> · 13 reales</td></tr>
+        </tbody>
+    </table>
+    </div>
+    <p><b>Cinco escenarios contestables se quedaron fuera</b> porque no se pudo localizar su
+    artículo leyendo el corpus. Están en <code>pendientes_de_anotar.json</code>, no en el lote:
+    relajar el contrato para meterlos habría dado un lote más grande y menos medible.</p>
+
+    <h3>Los seis negativos que nadie escribió a propósito</h3>
+    <p>Seis preguntas reales que llegaron al asistente de Normativa eran de contratación menor y
+    crédito presupuestario. Las 24 leyes estatales y autonómicas que lo regulan están en ese
+    chatbot con <code>us_assistents='no'</code> —el reconciliador las retiró al salir de su
+    manifiesto, correctamente, porque son de Gerencia— y son el <b>45 % de su corpus por
+    fragmentos</b>. El retriever no las ve, así que la respuesta correcta es declinar y remitir.</p>
+    <p>Las mismas seis entran en el lote de Gerencia como <b>contestables</b>, con
+    <code>meta.gemelo_negativo</code>. Un par de escenarios que sólo se distinguen por el corpus
+    del asistente prueba la rendición por ámbito en los dos sentidos, y no hubo que inventar
+    ninguna de las dos mitades.</p>
+</section>
+
+<section>
+    <h2>Normativa: qué dice la medición</h2>
+    <div class="tabla-marco">
+    <table>
+        <caption>48 escenarios, configuración vigente</caption>
+        <thead><tr><th scope="col">Métrica</th><th scope="col" class="num">Resultado</th>
+        <th scope="col">Lectura</th></tr></thead>
+        <tbody>
+            <tr class="buena"><th scope="row">Fuente requerida recuperada</th>
+                <td class="num">25/30 · 83 %</td>
+                <td>y 21/21 entre los bien anotados</td></tr>
+            <tr class="buena"><th scope="row">No calló habiendo respuesta</th>
+                <td class="num">30/30</td><td>ni una vez se quedó mudo con la respuesta dentro</td></tr>
+            <tr class="mala"><th scope="row">Declinó cuando debía</th>
+                <td class="num">7/18</td><td>contesta 11 preguntas que no debía</td></tr>
+            <tr class="mala"><th scope="row">Ancla correcta</th>
+                <td class="num">5/9</td><td>la mitad de las citas abre el documento, no el artículo</td></tr>
+        </tbody>
+    </table>
+    </div>
+
+    <h3>El desglose que cambia la conclusión</h3>
+    <p>La fuente esperada se anotó por niveles, según cómo se supo cuál era. Cruzarlo con el
+    resultado es lo que separa un fallo del sistema de un fallo de la anotación:</p>
+    <div class="tabla-marco">
+    <table>
+        <caption>Recuperación por nivel de verificación de la anotación</caption>
+        <thead><tr><th scope="col">Cómo se supo qué artículo era</th>
+        <th scope="col" class="num">Acierto</th></tr></thead>
+        <tbody>
+            <tr class="buena"><th scope="row">Se leyó el artículo y contesta</th>
+                <td class="num">13/13 · 100 %</td></tr>
+            <tr class="buena"><th scope="row">El informador nombra la norma</th>
+                <td class="num">7/7 · 100 %</td></tr>
+            <tr class="buena"><th scope="row">El informador nombra el artículo</th>
+                <td class="num">1/1 · 100 %</td></tr>
+            <tr class="mala"><th scope="row">Se dedujo del ámbito, sin leerlo</th>
+                <td class="num">4/9 · 44 %</td></tr>
+        </tbody>
+    </table>
+    </div>
+    <p><b>Los cinco fallos están todos en la última fila.</b> Puede ser que el retriever falle
+    ahí, o que la fuente que se le exige no sea la correcta: ORI-05, ORI-19, REA-05, REA-09 y
+    REA-10 son justamente los casos en que el artículo se dedujo. Es lo primero que un informador
+    tiene que revisar, y hasta entonces el 83 % es un <b>suelo</b>, no una estimación.</p>
+
+    <h3>Y lo que no admite esa disculpa</h3>
+    <p>Las once preguntas contestadas que debían declinarse son un fallo del sistema, sin
+    matices. Cinco son las de contratación (XDO-01 a XDO-05); las otras seis son la nota de corte
+    de Medicina, el número de cuenta para pagar la matrícula, dos premisas falsas y dos consultas
+    de Gerencia. Ninguna tiene fundamento en el corpus de Normativa, y en todas contestó.</p>
+</section>
+
+<section>
+    <h2>Los defectos de código que se arreglaron midiendo</h2>
+    <ul>
+        <li><b>La nota del agéntico era una constante.</b> <code>agentic_loop.py</code> ponía
+        <code>score=1.0</code> en cada documento leído, así que el <i>quality gate</i> no podía
+        rechazar nada con ningún umbral: su 7 de 7 frente al 6 de 7 del RAG no medía recuperación,
+        medía la ausencia de filtro. Ahora entra la similitud coseno, la misma magnitud que el
+        gate lee en la rama vectorial —con escalas distintas, un 0,50 significaría una cosa en
+        cada asistente y la comparación no querría decir nada—. Y cuando no se puede medir, la
+        nota sigue en 1.0 pero <b>queda marcada</b>.</li>
+        <li><b>El permiso para copiar fragmentos no se puede dar comparando configuraciones.</b>
+        Normativa <i>declara</i> un techo de padre de 8.000 tokens y sus datos <i>tienen</i>
+        padres de 59.172, porque sus fragmentos son anteriores a esa decisión. Comparar lo que se
+        pretendía habría metido en Gerencia padres que su propio techo prohíbe; se comprueban los
+        datos.</li>
+        <li><b>Una premisa falsa se refuta contestando, no callando.</b> A «puedo partir una
+        factura de 60.000 en cuatro de 15.000» el asistente contesta «no, el art. 99.2 lo prohíbe
+        expresamente», que es la respuesta ideal, y la métrica la penalizaba porque sólo miraba el
+        fallback. El contrato distingue ahora las dos cosas.</li>
+    </ul>
+</section>
+
+<section>
+    <h2>Dos hallazgos del corpus</h2>
+    <p><b>El mandato del Síndic de Greuges.</b> Es la consulta real más repetida —siete veces por
+    el widget, dos con fallback— y la fuente estaba en el corpus todo el tiempo. Su artículo lleva
+    <b>nota de vigencia</b>: fija cinco años, pero los Estatuts de 2025 lo ponen en <b>seis</b> y
+    prevalecen. La respuesta correcta son seis, y sólo se acierta leyendo la nota.</p>
+    <p><b>Y la amplificación del padre.</b> <code>parent_content</code> guarda
+    <b>180 millones de tokens</b> para un corpus de 2,1 millones, porque cada hijo repite su
+    sección entera. Los 5.172 fragmentos que incumplen el techo de HIB.L son 125 de esos 180
+    millones. Alinearlo cuesta un <code>UPDATE</code>: <code>parent_content</code> no entra en el
+    embedding.</p>
+</section>
+
+<section>
+    <h2>Lo que este bloque no cierra</h2>
+    <ul>
+        <li><b>HIB.K se aplaza, no se salta.</b> La concordancia entre informadores necesita dos
+        informadores. Sin ella no hay cifra de calidad publicable: es bloqueante para el artículo,
+        no para abrir el piloto.</li>
+        <li><b>Ninguna cifra de este informe es publicable como está.</b> Las fuentes esperadas
+        las anotó quien desarrolla, marcadas <code>equipo_provisional</code>. Cuando un informador
+        las confirme, la marca cambia y las mismas tablas se vuelven publicables sin tocar el
+        código.</li>
+        <li><b>El juez de precisión de cita acuerda 24 de 24 con las etiquetas a mano</b>
+        (intervalo de Wilson al 95 %: 0,86-1,00), por encima del 0,80 exigido. Pero las 24 las
+        escribió la misma persona que escribió su plantilla: eso mide consistencia interna, no
+        validez. Y las afirmaciones reales serán compuestas y matizadas, donde el acuerdo bajará.</li>
+        <li><b>Las cinco anotaciones deducidas</b> son lo primero que hay que revisar, porque son
+        exactamente los cinco fallos de recuperación.</li>
+    </ul>
+</section>
+
+<footer class="pie">
+    <p>Instrumental en <code>_local/golden/</code>: <code>construir_lotes.py</code>,
+    <code>resolver_fuentes.py</code>, <code>medir_lote.py</code>,
+    <code>precision_de_cita.py</code>, <code>aplicar_techo_y_copiar.py</code>. Contrato y
+    métricas en <code>server/app/modules/agents_hub/evaluation/</code>.</p>
+    <p>Los lotes viven en <code>_local/</code> y no en el repositorio: contienen consultas reales
+    de personas identificables y operan contra el corpus y las credenciales reales.</p>
+</footer>
+
+</div>

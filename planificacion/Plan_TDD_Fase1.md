@@ -23343,6 +23343,15 @@ normas de la UJI que hablan de contratos para una pregunta de contratos—.
 # PROMPT HIB.S (RED/GREEN + MEDICION) — De «cito» a «lo que cito lo sostiene»
 # Deploy: edge
 
+## Lo que NO es esto, para no confundirlo con lo que ya hay
+El **puente lexico bilingue** (RAG.4 / RES.3) no transforma la consulta: la pasa tal cual a
+`websearch_to_tsquery` e **indexa el documento bajo las dos formas** —los pares `despesa`/`gasto`
+van a `bilingual_terms` y `tsv` es una columna generada sobre `content || ' ' || bilingual_terms`—.
+Por eso cambiar un par cuesta un `UPDATE` y no un reembebido. Medido el 2026-08-27: 48.752 de
+113.618 fragmentos tienen terminos bilingues, **todos del front-matter del `.md` curado**, porque
+`HubLexiconPair` tiene **0 filas**: el circuito de aprobacion de pares nuevos a partir de terminos
+reales de usuario existe y nunca se ha usado.
+
 ## Cambio
 - Una comprobacion mas en `enforce_citation_contract` (o inmediatamente despues, dentro de
   `generate_answer_node`): por cada afirmacion de FUNDAMENTO de la respuesta, se comprueba que
@@ -23372,6 +23381,26 @@ primer token percibido, no sobre el total: si la comprobacion va DESPUES de gene
 ya ha visto la respuesta entera cuando se decide descartarla, y eso es peor que esperar.
 **Decision de diseno pendiente**: o se comprueba antes de emitir (mas latencia percibida) o se
 emite y se retira (el evento `discard` de HIB.B ya existe y el widget ya sabe vaciar la burbuja).
+
+## Convergencia con la reformulacion al vocabulario normativo (pregunta del usuario, 2026-08-27)
+`reformular_node` ya normaliza la consulta al vocabulario de las normas con una llamada al
+modelo, y esta bien que se pague solo cuando hace falta: normalizar siempre costaria una llamada
+en el camino critico de todas las consultas, y el propio comentario del nodo dice que se pagaba
+en el 28 % de las de Normativa y el 71 % de las de Gerencia.
+
+**Pero su disparador es la puerta de calidad, y la puerta rechazo CERO de 48.** Los 7 rechazos
+fueron del contrato de citas, que actua DESPUES de generar — demasiado tarde para reformular y
+volver a buscar. Asi que la normalizacion se ejecuto en ~0 de 48 consultas: esta bien construida
+y colgada de un disparador que no dispara.
+
+La comprobacion de fundamento detecta exactamente «lo recuperado no sostiene lo que la respuesta
+afirma», que es **la misma señal** que deberia disparar una segunda busqueda con la consulta
+normalizada. Un solo mecanismo puede alimentar las dos cosas: **reformular y reintentar antes de
+rendirse**, en vez de rendirse directamente.
+
+No se implementa en este prompt —cambia el camino de la respuesta y su latencia dos veces en vez
+de una— pero se mide: de los 11 negativos que la puerta nueva descarte, cuantos habrian sido
+contestables tras reformular. Si son pocos, reintentar no compensa y se descarta por escrito.
 
 ## Tests (RED primero)
 # should_discard_the_answer_when_no_grounded_claim_survives

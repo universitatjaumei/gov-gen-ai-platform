@@ -1,0 +1,319 @@
+<meta charset="utf-8">
+<title>Gerencia al cerrar HIB</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;600&display=swap">
+
+<style>
+:root {
+    --marca:#0b5394; --marca-suave:#e8eef6; --fondo:#f6f7f9; --superficie:#ffffff;
+    --tinta:#151b23; --tinta-media:#4c5866; --tinta-tenue:#7a8593;
+    --filete:#dde1e7; --filete-fino:#eaedf1;
+    --bien:#1c6b42; --bien-suave:#e8f2ec; --mal:#9c3520; --mal-suave:#f9ecea;
+    --aviso:#8a5b12; --aviso-suave:#f8f1e3;
+    --sombra:0 1px 2px rgba(21,27,35,.05), 0 8px 24px -16px rgba(21,27,35,.18);
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --marca:#6ea3dc; --marca-suave:#16233180; --fondo:#0e1319; --superficie:#151b23;
+        --tinta:#e6e9ee; --tinta-media:#a3aebc; --tinta-tenue:#78838f;
+        --filete:#2a323c; --filete-fino:#1f262e;
+        --bien:#6cc08c; --bien-suave:#16261d80; --mal:#e08a72; --mal-suave:#2a1a1680;
+        --aviso:#d9ab5f; --aviso-suave:#2a221280;
+        --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+    }
+}
+:root[data-theme="dark"] {
+    --marca:#6ea3dc; --marca-suave:#16233180; --fondo:#0e1319; --superficie:#151b23;
+    --tinta:#e6e9ee; --tinta-media:#a3aebc; --tinta-tenue:#78838f;
+    --filete:#2a323c; --filete-fino:#1f262e;
+    --bien:#6cc08c; --bien-suave:#16261d80; --mal:#e08a72; --mal-suave:#2a1a1680;
+    --aviso:#d9ab5f; --aviso-suave:#2a221280;
+    --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+}
+body{background:var(--fondo);color:var(--tinta);
+  font-family:"Source Serif 4",Georgia,serif;font-size:17px;line-height:1.62;
+  -webkit-font-smoothing:antialiased}
+.hoja{max-width:46rem;margin:0 auto;
+  padding:clamp(2.5rem,6vw,5rem) clamp(1.15rem,4vw,2rem) 6rem;
+  display:flex;flex-direction:column;gap:2.75rem}
+.cabecera{display:flex;flex-direction:column;gap:.9rem;
+  border-bottom:2px solid var(--marca);padding-bottom:1.6rem}
+.eyebrow{font-family:"Libre Franklin",system-ui,sans-serif;font-size:.72rem;font-weight:600;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--marca);margin:0}
+h1{font-family:"Libre Franklin",system-ui,sans-serif;font-size:clamp(1.8rem,5vw,2.5rem);
+  font-weight:700;line-height:1.13;letter-spacing:-.021em;text-wrap:balance;margin:0}
+.entradilla{margin:0;color:var(--tinta-media);font-size:1.06rem}
+.ficha{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));
+  gap:.85rem 1.5rem;margin:.4rem 0 0}
+.ficha div{display:flex;flex-direction:column;gap:.12rem}
+.ficha dt{font-family:"Libre Franklin",system-ui,sans-serif;font-size:.68rem;font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--tinta-tenue)}
+.ficha dd{margin:0;font-size:.95rem;color:var(--tinta-media);font-variant-numeric:tabular-nums}
+.veredicto{background:var(--marca-suave);border:1px solid var(--marca);border-left-width:4px;
+  border-radius:3px;padding:1.5rem 1.7rem;display:flex;flex-direction:column;gap:.8rem}
+.veredicto .titular{font-family:"Libre Franklin",system-ui,sans-serif;font-size:1.15rem;
+  font-weight:600;line-height:1.3;color:var(--marca);text-wrap:balance}
+.veredicto p{margin:0;color:var(--tinta-media)}
+.alerta{background:var(--aviso-suave);border:1px solid var(--aviso);border-left-width:4px;
+  border-radius:3px;padding:1.25rem 1.5rem}
+.alerta p{margin:0;color:var(--tinta-media);font-size:.95rem}
+.alerta p + p{margin-top:.6rem}
+.alerta .titular{font-family:"Libre Franklin",system-ui,sans-serif;font-size:.95rem;
+  font-weight:600;color:var(--aviso);display:block;margin-bottom:.4rem}
+h2{font-family:"Libre Franklin",system-ui,sans-serif;font-size:1.28rem;font-weight:600;
+  letter-spacing:-.011em;line-height:1.25;text-wrap:balance;margin:0 0 .9rem}
+h3{font-family:"Libre Franklin",system-ui,sans-serif;font-size:1rem;font-weight:600;
+  margin:1.7rem 0 .5rem;text-wrap:balance}
+section > p,section > ul,section > ol,section > .tabla-marco{margin:0 0 1rem}
+section > *:last-child{margin-bottom:0}
+ul,ol{padding-left:1.15rem;display:flex;flex-direction:column;gap:.6rem}
+li::marker{color:var(--tinta-tenue)}
+strong,b{font-weight:600}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.85em;
+  background:var(--marca-suave);padding:.1em .34em;border-radius:2px}
+a{color:var(--marca);text-underline-offset:.15em}
+.nota{font-size:.9rem;color:var(--tinta-tenue);line-height:1.55}
+.tabla-marco{overflow-x:auto;border:1px solid var(--filete);border-radius:3px;
+  background:var(--superficie);box-shadow:var(--sombra)}
+table{border-collapse:collapse;width:100%;min-width:30rem;
+  font-family:"Libre Franklin",system-ui,sans-serif;font-size:.84rem;
+  font-variant-numeric:tabular-nums}
+caption{caption-side:top;text-align:left;font-family:"Libre Franklin",system-ui,sans-serif;
+  font-size:.7rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--tinta-tenue);padding:.85rem 1rem .55rem}
+th,td{padding:.62rem 1rem;text-align:left;border-bottom:1px solid var(--filete-fino);
+  vertical-align:top}
+thead th{font-weight:600;font-size:.7rem;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--tinta-tenue);border-bottom:1px solid var(--filete);vertical-align:bottom}
+th[scope="row"]{font-weight:600;font-size:.82rem;color:var(--tinta)}
+td.num,th.num{text-align:right}
+tbody tr:last-child th,tbody tr:last-child td{border-bottom:none}
+tr.destacada td,tr.destacada th[scope="row"]{background:var(--marca-suave)}
+tr.mala td,tr.mala th[scope="row"]{background:var(--mal-suave)}
+tr.buena td,tr.buena th[scope="row"]{background:var(--bien-suave)}
+.pie{border-top:1px solid var(--filete);padding-top:1.3rem;font-size:.82rem;
+  color:var(--tinta-tenue);display:flex;flex-direction:column;gap:.4rem}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="hoja">
+
+<header class="cabecera">
+    <p class="eyebrow">Rama de Gerencia · cierre del bloque HIB</p>
+    <h1>Los dos asistentes económico-administrativos, y por qué mejorar la recuperación empeoró
+    la abstención</h1>
+    <p class="entradilla">El corpus de Gerencia pasó a <code>parent_child</code> con coste de
+    embeddings <b>cero</b>, y con ello recupera mejor. Pero su puerta de calidad dejó de morder:
+    de rechazar 5 de 18 pasó a rechazar <b>ninguno</b>. El mismo cambio que mejora una cosa
+    desmonta la otra, y ese es el hallazgo que ordena todo lo demás.</p>
+    <dl class="ficha">
+        <div><dt>Fecha</dt><dd>27 de agosto de 2026</dd></div>
+        <div><dt>Prompts</dt><dd>M · N · P · E</dd></div>
+        <div><dt>Lote</dt><dd>18 escenarios · 13 contestables</dd></div>
+        <div><dt>Fragmentos</dt><dd>14.198 → 38.536</dd></div>
+    </dl>
+</header>
+
+<div class="veredicto">
+    <p class="titular">La abstención de Gerencia la producía la puerta de calidad, y el
+    re-troceado la anuló sin que nada avisara.</p>
+    <p>Con <code>structural</code>, los 5 rechazos del lote eran todos <code>quality_gate</code>
+    y ninguno del contrato de citas. Con <code>parent_child</code> las notas subieron —la mediana
+    de 0,567 a 0,594, y casos concretos mucho más— y el umbral de 0,35 quedó por debajo de todo:
+    <b>0 rechazos de 18</b>.</p>
+    <p>El punto de operación no se hereda de un troceado a otro. Recalculado sobre las notas
+    nuevas, <b>0,69 declina 3 de los 5 negativos sin perder ninguna respuesta correcta</b>.</p>
+</div>
+
+<section>
+    <h2>Lo que el re-troceado costó y lo que dio</h2>
+    <p>HIB.N preveía copiar ~27.000 fragmentos ya embebidos y re-embeber ~11.000. Medido: los
+    <b>124 documentos de Gerencia tienen gemelo exacto por <code>content_hash</code> en
+    Normativa</b>, ninguno queda fuera, así que <b>el coste de embeddings es cero</b>.</p>
+    <div class="tabla-marco">
+    <table>
+        <caption>Corpus de Gerencia, antes y después de la copia</caption>
+        <thead><tr><th scope="col"></th><th scope="col" class="num">structural</th>
+        <th scope="col" class="num">parent_child</th></tr></thead>
+        <tbody>
+            <tr><th scope="row">Fragmentos</th><td class="num">14.198</td>
+                <td class="num">38.536</td></tr>
+            <tr><th scope="row">Con padre</th><td class="num">0</td><td class="num">todos</td></tr>
+            <tr><th scope="row">Padres sobre el techo de 8.000</th><td class="num">0</td>
+                <td class="num">0</td></tr>
+            <tr><th scope="row"><code>document_id</code> incoherente</th><td class="num">—</td>
+                <td class="num"><b>0</b></td></tr>
+            <tr><th scope="row">Coste de embeddings</th><td class="num">—</td>
+                <td class="num"><b>0</b></td></tr>
+        </tbody>
+    </table>
+    </div>
+    <p>El cero de incoherentes es el criterio que HIB.N pedía comprobar en SQL: es el que caza
+    el fallo silencioso de no remapear el <code>document_id</code> que va <b>dentro</b> del
+    metadato del fragmento. La agrupación por documento del retrieval usa ese metadato y no la
+    columna, así que olvidarlo mezcla los dos corpus y hace salir la cita con el título
+    equivocado <b>sin dar ningún error</b>.</p>
+
+    <h3>El permiso de copia se comprueba en los datos, no en la configuración</h3>
+    <p>El prompt decía «cuando coincidan el hash, la estrategia y el techo del padre». Los dos
+    últimos, leídos de la configuración, dan luz verde en falso: Normativa <b>declaraba</b> techo
+    de 8.000 tokens y <b>tenía</b> padres de 59.172, porque sus fragmentos son anteriores a esa
+    decisión. Comparar lo que se pretendía habría metido en Gerencia padres que su propio techo
+    prohíbe.</p>
+</section>
+
+<section>
+    <h2>El resultado, y su lectura incómoda</h2>
+    <div class="tabla-marco">
+    <table>
+        <caption>Mismo lote, misma configuración salvo el troceado (reranker apagado, umbral
+        0,35)</caption>
+        <thead><tr><th scope="col">Métrica</th><th scope="col" class="num">structural</th>
+        <th scope="col" class="num">parent_child</th></tr></thead>
+        <tbody>
+            <tr class="buena"><th scope="row">Fuente requerida recuperada</th>
+                <td class="num">9/13</td><td class="num"><b>11/13</b></td></tr>
+            <tr class="buena"><th scope="row">Calló habiendo respuesta</th>
+                <td class="num">2</td><td class="num"><b>0</b></td></tr>
+            <tr class="mala"><th scope="row">Contestó sin deber</th>
+                <td class="num">2 de 5</td><td class="num"><b>5 de 5</b></td></tr>
+            <tr><th scope="row">Ancla correcta</th><td class="num">0/4</td>
+                <td class="num">0/5</td></tr>
+            <tr><th scope="row">Rechazos, y de qué puerta</th>
+                <td class="num">5, todos <code>quality_gate</code></td>
+                <td class="num">0</td></tr>
+        </tbody>
+    </table>
+    </div>
+    <p>Recupera mejor y no calla nunca de más. Y contesta las cinco preguntas que debía declinar,
+    porque la única puerta que estaba rechazando dejó de alcanzar.</p>
+
+    <h3>El ancla es 0 en las dos, y no es culpa del troceado</h3>
+    <p>Predije que la copia arreglaría el ancla y <b>no la movió</b>. La causa está en las URL
+    citadas: las normas propias de Gerencia se citan al sitio publicado
+    (<code>…/html/…_Circular_11_05_atencios_protocol_laries.html</code>) <b>sin fragmento</b>,
+    mientras las estatales van al BOE <b>con</b> ancla (<code>#a118</code>, <code>#a72</code>).
+    El ancla de Gerencia no depende del troceado sino de que sus normas propias no estén
+    publicadas en un sitio con anclas por artículo.</p>
+</section>
+
+<section>
+    <h2>El reranker también resta aquí</h2>
+    <p>Ablación con el pool ya desacoplado de HIB.J, para que mida el reranker y no el pool:</p>
+    <div class="tabla-marco">
+    <table>
+        <caption>Reranker sobre el lote de Gerencia</caption>
+        <thead><tr><th scope="col"></th><th scope="col" class="num">Fuente requerida</th>
+        <th scope="col" class="num">Contestó sin deber</th></tr></thead>
+        <tbody>
+            <tr class="buena"><th scope="row">Apagado</th><td class="num">9/13</td>
+                <td class="num">2</td></tr>
+            <tr class="mala"><th scope="row">Encendido</th><td class="num">8/13</td>
+                <td class="num">3</td></tr>
+        </tbody>
+    </table>
+    </div>
+    <p>Empeora en los dos ejes. Por el criterio de HIB.A, aplicado palabra por palabra,
+    <b>se queda apagado</b>: y si hubieran empatado, también, por coherencia con Normativa y por
+    coste. Se vuelve a medir con el lote del piloto.</p>
+    <div class="alerta">
+        <span class="titular">Y una advertencia sobre esta cifra</span>
+        <p>La primera versión de esta ablación estaba <b>contaminada</b>: un barrido que se mató
+        con <code>TaskStop</code> dejó <code>reranker_enabled=True</code> en la base, porque la
+        restauración vivía en un <code>finally</code> y un proceso matado no lo ejecuta. Durante
+        un rato se comparó <code>structural</code> sin reranker contra <code>parent_child</code>
+        <b>con</b> reranker, y con el reranker la nota que llega a la puerta es la del reranker
+        y no el coseno — otra escala.</p>
+        <p>Corregido de raíz: el valor previo se escribe <b>en disco</b> antes de mutar y se
+        restaura <b>al arrancar</b> la tanda siguiente, con aviso. Al arrancar y no al terminar,
+        porque el caso que hay que cubrir es precisamente que la vez anterior no terminara.</p>
+    </div>
+</section>
+
+<section>
+    <h2>El agéntico contra el RAG</h2>
+    <p>Es la comparación controlada interna que la revisión de literatura pedía, y hasta ahora
+    era <b>asimétrica por construcción</b>: la evidencia del agéntico salía con
+    <code>score=1.0</code> fija, así que su puerta no podía rechazar nada con ningún umbral. Su
+    7 de 7 frente al 6 de 7 del RAG no medía recuperación: medía la ausencia de filtro.</p>
+    <div class="tabla-marco">
+    <table>
+        <caption>Mismo lote, los dos asistentes</caption>
+        <thead><tr><th scope="col"></th><th scope="col" class="num">Fuente requerida</th>
+        <th scope="col" class="num">Calló habiendo respuesta</th>
+        <th scope="col" class="num">Contestó sin deber</th></tr></thead>
+        <tbody>
+            <tr><th scope="row">RAG (<code>parent_child</code>)</th><td class="num">11/13</td>
+                <td class="num">0</td><td class="num">5 de 5</td></tr>
+            <tr><th scope="row">Agéntico</th><td class="num"><b>12-13/13</b></td>
+                <td class="num">0</td><td class="num">4-5 de 6</td></tr>
+        </tbody>
+    </table>
+    </div>
+    <p><b>El agéntico encuentra mejor y declina igual de mal.</b> Y su nota resultó ser
+    <code>1.000</code> exacta en las tres tandas del barrido de umbral, lo que delató que el
+    arreglo estaba en el sitio equivocado: se había puesto la similitud en los documentos que el
+    agente <b>lee</b>, y la puerta mira el máximo del <b>índice</b> que devuelve el pipeline. Ya
+    está corregido donde toca.</p>
+    <p>Y con la nota corregida la predicción es que <b>el umbral seguirá sin separar</b>: será el
+    mejor parecido del corpus con la pregunta, y para una pregunta fuera de ámbito eso sigue
+    siendo alto. Queda escrita para contrastarla al repetir el barrido.</p>
+</section>
+
+<section>
+    <h2>Configuración de apertura</h2>
+    <div class="tabla-marco">
+    <table>
+        <caption>Los cuatro asistentes al cerrar el bloque</caption>
+        <thead><tr><th scope="col">Asistente</th><th scope="col">Modo</th>
+        <th scope="col" class="num">Umbral</th><th scope="col" class="num">top_k</th>
+        <th scope="col">Reranker</th><th scope="col">Troceado</th></tr></thead>
+        <tbody>
+            <tr><th scope="row">Normativa UJI</th><td>RAG</td><td class="num">0,65</td>
+                <td class="num">3</td><td>apagado</td><td><code>parent_child</code></td></tr>
+            <tr class="destacada"><th scope="row">Gerencia · RAG</th><td>RAG</td>
+                <td class="num">0,69</td><td class="num">3</td><td>apagado</td>
+                <td><code>parent_child</code></td></tr>
+            <tr><th scope="row">Gerencia · agéntico</th><td>MD_AGENT_SELECTOR</td>
+                <td class="num">0,50</td><td class="num">8</td><td>apagado</td>
+                <td>—</td></tr>
+            <tr><th scope="row">Chatbot Demo</th><td>RAG</td><td class="num">0,60</td>
+                <td class="num">8</td><td>apagado</td><td>—</td></tr>
+        </tbody>
+    </table>
+    </div>
+    <p class="nota">Los umbrales de Normativa y del RAG de Gerencia son <b>distintos a
+    propósito</b>: sus notas viven en rangos distintos —la mediana de Gerencia es 0,567 y la de
+    Normativa ~0,74, porque sus consultas y su corpus no comparten lengua ni registro— así que el
+    mismo número no compra lo mismo. El del agéntico queda pendiente de repetir su barrido con la
+    nota corregida. Todos <b>provisionales hasta el cierre del piloto</b>.</p>
+</section>
+
+<section>
+    <h2>Lo que este bloque deja pendiente en Gerencia</h2>
+    <ul>
+        <li><b>La abstención sigue siendo el hueco</b>, y ahora mayor que antes: 5 de 5 negativos
+        contestados con el troceado nuevo, que 0,69 baja a 2 de 5. Lo que queda por encima de eso
+        es la comprobación de fundamento de la cita (HIB.S), ya implementada y apagada.</li>
+        <li><b>El ancla exige publicar las normas propias</b> en un sitio con anclas por artículo.
+        No es un problema de recuperación ni de troceado.</li>
+        <li><b>El barrido del agéntico hay que repetirlo</b> con la nota ya real.</li>
+        <li><b>Cinco escenarios sin anotar</b> —uno de Gerencia, REAL-07— esperan a un informador
+        en <code>pendientes_de_anotar.json</code>.</li>
+        <li><b>Nada de esto es publicable</b> tal cual: las fuentes esperadas las anotó quien
+        desarrolla, marcadas <code>equipo_provisional</code>. Con 13 escenarios contestables y 5
+        negativos, estas cifras <b>ordenan candidatos, no certifican ninguno</b>.</li>
+    </ul>
+</section>
+
+<footer class="pie">
+    <p>Instrumental en <code>_local/golden/</code>: <code>medir_lote.py</code>,
+    <code>aplicar_techo_y_copiar.py</code>, <code>construir_lotes.py</code>. Código en
+    <code>server/app/modules/agents_hub/ingestion/chunk_copier.py</code> y
+    <code>agent/grounding_check.py</code>.</p>
+    <p>El lote vive en <code>_local/</code> y no en el repositorio: son consultas reales de
+    personas identificables contra el corpus y las credenciales reales.</p>
+</footer>
+
+</div>
