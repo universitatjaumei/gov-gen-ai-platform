@@ -109,6 +109,21 @@ export function useChat(chatbotId: string, apiUrl: string, lang: string, widgetK
                 }
                 return prev
               })
+            } else if (currentEvent === 'discard') {
+              // HIB.B: el contrato de citas corre después de generar, así que cuando
+              // rechaza sus tokens ya se han pintado. Por SSE no se retira lo enviado, así
+              // que el servidor avisa y aquí se vacía la burbuja: el mensaje de rendición
+              // llega justo después como un `token` normal.
+              //
+              // Vaciar y no borrar la burbuja: si se quitara, el `token` siguiente no
+              // encontraría un mensaje de asistente al que añadirse y se perdería.
+              setMessages(prev => {
+                const last = prev[prev.length - 1]
+                if (last?.role === 'assistant') {
+                  return [...prev.slice(0, -1), { ...last, content: '' }]
+                }
+                return prev
+              })
             } else if (currentEvent === 'done') {
               setSources((payload.sources as SourceRef[]) ?? [])
               setInteractionId(payload.interaction_id as string)

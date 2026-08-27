@@ -348,6 +348,55 @@ describe('ChatWidget — pregunta y respuesta se distinguen (UX.2)', () => {
   })
 })
 
+describe('ChatWidget — una respuesta descartada no se queda en pantalla (HIB.B)', () => {
+  test('should_replace_the_streamed_answer_when_the_server_discards_it', async () => {
+    // El contrato de citas corre DENTRO de `generate_answer`, después de generar, así que
+    // cuando rechaza sus tokens ya se han pintado. Por SSE no se retira lo enviado: el
+    // servidor manda `discard` y aquí se vacía la burbuja antes de que llegue el mensaje
+    // de rendición. Sin esto, quien pregunta se queda con la respuesta que el contrato
+    // acaba de descartar — y encima con apariencia de buena.
+    fetchMock.mockResolvedValueOnce(
+      makeSseResponse([
+        { event: 'token', data: { delta: 'Segons l’article 4, has de superar el 20%.' } },
+        { event: 'discard', data: { reason: 'citation' } },
+        { event: 'token', data: { delta: 'No tinc fonament per a respondre.' } },
+        { event: 'done', data: DONE_EVENT },
+      ]),
+    )
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    const respuesta = await screen.findByTestId('turn-assistant')
+    await waitFor(() => {
+      expect(respuesta).toHaveTextContent('No tinc fonament per a respondre.')
+    })
+    expect(respuesta).not.toHaveTextContent('has de superar el 20%')
+  })
+
+  test('should_keep_the_bubble_so_the_rendition_has_somewhere_to_land', async () => {
+    // Se vacía, no se borra: si se quitara la burbuja, el `token` siguiente no encontraría
+    // un mensaje de asistente al que añadirse y el mensaje de rendición se perdería.
+    fetchMock.mockResolvedValueOnce(
+      makeSseResponse([
+        { event: 'token', data: { delta: 'Text que es descarta.' } },
+        { event: 'discard', data: { reason: 'quality_gate' } },
+        { event: 'done', data: DONE_EVENT },
+      ]),
+    )
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Pregunta' } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+
+    const respuesta = await screen.findByTestId('turn-assistant')
+    await waitFor(() => {
+      expect(respuesta).not.toHaveTextContent('Text que es descarta')
+    })
+  })
+})
+
 describe('ChatWidget', () => {
   test('should_display_user_and_assistant_messages', async () => {
     fetchMock.mockResolvedValueOnce(

@@ -509,6 +509,20 @@ async def chat_stream(
                     yield _sse("status", {"node": name, "msg": NODE_STATUS_MESSAGES[name]})
 
                 elif kind == "on_chat_model_stream":
+                    # HIB.B — sólo los tokens de los nodos que producen LA RESPUESTA.
+                    #
+                    # Antes se emitía cualquier llamada al modelo, y en el grafo hay tres que
+                    # no son la respuesta: `rewrite_query` (RAG.10), `reformular` (RES.2) y,
+                    # en el modo agéntico, el selector que corre dentro de `retrieve`. Quien
+                    # preguntaba veía la consulta reformulada como si fuera la contestación.
+                    #
+                    # La lista se DERIVA de `_FINAL_NODES`, que ya es la fuente de verdad de
+                    # qué nodos producen la respuesta y que el manejador del estado final ya
+                    # usa: quien añada un nodo generador tiene que declararlo ahí de todos
+                    # modos. Una lista propia aquí divergiría en el primer cambio.
+                    nodo = (event.get("metadata") or {}).get("langgraph_node")
+                    if nodo is not None and nodo not in _FINAL_NODES:
+                        continue
                     chunk = event.get("data", {}).get("chunk")
                     if chunk is not None:
                         delta = chunk.content if hasattr(chunk, "content") else str(chunk)
@@ -570,10 +584,26 @@ async def chat_stream(
 
         # El fallback y el mensaje del validador de citas no pasan por el stream de tokens
         # del LLM, así que hay que emitirlos aquí para que el usuario vea una respuesta.
-        if fallback_answer and not collected_tokens:
+        #
+        # HIB.B — se emite SIEMPRE que haya rendición, no sólo cuando no llegó nada. La
+        # condición `and not collected_tokens` era el segundo defecto: el contrato de citas
+        # corre *dentro* de `generate_answer`, después de generar, así que cuando rechaza los
+        # tokens ya han salido — y entonces el mensaje de rendición no se mostraba nunca y el
+        # usuario se quedaba con la respuesta que el contrato acababa de descartar.
+        #
+        # Por SSE no se retira lo ya enviado, así que se le dice al cliente que lo descarte.
+        # La alternativa —retener los tokens hasta validar— costaría el streaming en todas
+        # las respuestas: medido en HIB.I, el primer token pasaría de 780 ms a 2.140 ms, y el
+        # contrato rechaza en torno al 4 % de las consultas. Decisión del usuario, 2026-08-26.
+        if fallback_answer:
+            if collected_tokens:
+                yield _sse("discard", {"reason": fallback_reason or "fallback"})
+                collected_tokens.clear()
             collected_tokens.append(fallback_answer)
             yield _sse("token", {"delta": fallback_answer})
 
+        # HIB.B — lo que se guarda es lo que el usuario vio. Antes guardaba la reformulación,
+        # así que quien revisaba juzgaba una respuesta que nadie recibió.
         assistant_message = "".join(collected_tokens)
 
         # SEC.4: si el proveedor no declaró uso, se estima por longitud y **se marca**. Una
