@@ -40,13 +40,24 @@ class _JuezFalso:
         return self._respuestas.pop(0) if self._respuestas else None
 
 
-def _fuente(titulo: str = "Reglament de permanencia", texto: str = "Article 4...") -> dict:
+_EXTRACTO = (
+    "##### Article 4. Permanencia en primer curs" + chr(10) +
+    "Cal superar un minim del 20% dels credits matriculats. "
+    "El termini per a anul-lar la matricula acaba el 15 de desembre."
+)
+
+
+def _fuente(titulo: str = "Reglament de permanencia", texto: str = _EXTRACTO) -> dict:
     """Una fuente recuperada tal como llega del grafo.
 
     La URL se construye con un *slug* y no con el título: una URL no lleva espacios, y el
     extractor de afirmaciones los rechaza con razón. La primera versión de este fixture los
     metía, así que el extractor no encontraba ninguna cita y el test decía que la respuesta
     pasaba — un fallo del dato de prueba disfrazado de fallo del código.
+
+    Y el extracto CONTIENE las cifras que las afirmaciones de abajo citan. La primera versión
+    era el marcador «Article 4...», y con la regla de la cifra ausente eso rechazaba todo sin
+    llegar a preguntar al juez: los tests que querían ejercitar al juez no lo ejercitaban.
     """
     slug = titulo.lower().replace(" ", "-").replace("/", "-")
     return {
@@ -163,3 +174,54 @@ class TestQueSeLeDaAlJuez:
         assert v.juzgadas == 1 and v.con_fundamento == 0
         assert v.sostenida is False
         assert juez.vistas == []
+
+
+@pytest.mark.asyncio
+class TestLaCifraQueNoEstaEnElArticuloQueCita:
+    """La regla que salvo el proposito de la comprobacion, y que casi se pierde.
+
+    La guarda contra el bilinguismo —si no se localiza el termino, no se rechaza— desactivaba lo
+    principal: una respuesta que INVENTA una cifra ausente de su cita tambien queda «no
+    localizada», y habria pasado. Es el caso ORI-16 del reves.
+
+    Lo que separa los dos casos es que **las cifras no se traducen**. «1,12», «20 %» y «15.000»
+    son las mismas en valenciano y en castellano; las palabras no.
+    """
+
+    async def test_should_reject_an_invented_figure_without_asking_the_judge(self):
+        juez = _JuezFalso([True])  # si se le preguntara, diria que si
+        v = await hay_fundamento(
+            texto="El cost de l'asseguranca escolar es d'1,12 euros "
+            "[Reglament de permanencia](https://www.uji.es/reglament-de-permanencia#art-4).",
+            fuentes=[_fuente()],
+            juez=juez,
+        )
+        assert v.sostenida is False
+        assert juez.vistas == [], "no hace falta preguntar: la cifra no esta en el articulo"
+        assert "cifra" in v.detalle[0]["motivo"]
+
+    async def test_should_accept_the_same_figure_written_with_another_separator(self):
+        """«15.000» y «15000» son la misma cifra. Sin normalizar, el rechazo seria por como esta
+        escrita y no por lo que dice."""
+        juez = _JuezFalso([True])
+        v = await hay_fundamento(
+            texto="El termini acaba el 15 de desembre "
+            "[Reglament de permanencia](https://www.uji.es/reglament-de-permanencia#art-4).",
+            fuentes=[_fuente()],
+            juez=juez,
+        )
+        assert v.sostenida is True
+        assert juez.vistas, "la cifra si esta: aqui el juez decide"
+
+    async def test_should_not_reject_a_wording_difference_between_languages(self):
+        """Sin cifras, una afirmacion cuyas palabras no aparecen puede ser la lengua: «seis
+        anos» donde la norma dice «sis anys». Eso no se rechaza."""
+        juez = _JuezFalso([False])
+        v = await hay_fundamento(
+            texto="El mandato es de duracion determinada "
+            "[Sindicatura](https://www.uji.es/sindicatura#art-9).",
+            fuentes=[_fuente("Sindicatura", texto="La durada del mandat es de sis anys.")],
+            juez=juez,
+        )
+        assert v.sostenida is True
+        assert v.juez_fallo is True

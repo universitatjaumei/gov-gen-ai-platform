@@ -50,6 +50,149 @@ ENLACE = re.compile(r"\[([^\]]{1,300})\]\((https?://[^)\s]+)\)")
 _HUECO = "\x00ENLACE{}\x00"
 
 
+# Palabras largas que en texto normativo aparecen en todas partes. Sin esta lista, «siguiente» o
+# «establecido» localizarian cualquier afirmacion en cualquier articulo, la ventana caeria en el
+# primer parrafo y volveriamos al prefijo ciego que esto viene a arreglar.
+_COMUNES = frozenset({
+    "siguiente", "siguientes", "establecido", "establecida", "establecidos", "establecidas",
+    "correspondiente", "correspondientes", "estudiantado", "universitat", "universidad",
+    "academico", "academica", "academicos", "academicas", "solicitud", "solicitar",
+    "cualquier", "tambien", "conforme", "previsto", "prevista", "aplicable", "necesario",
+    "necesaria", "documentacion", "estudiante", "estudiantes", "seguiente", "regulado",
+    "normativa", "reglamento", "articulo", "article", "apartado", "presente",
+})
+
+# Un numero es lo que identifica un dato normativo: un umbral, un plazo, un porcentaje, un
+# importe. Se captura con su separador decimal y su signo de porcentaje porque «1,12» y «112»
+# son cosas distintas, y «20 %» no es «20».
+_NUMERO = re.compile(r"\d+(?:[.,]\d+)*\s*%?")
+_PALABRA = re.compile(r"[^\W\d_]{7,}", re.UNICODE)
+
+
+def _sin_acentos(texto: str) -> str:
+    import unicodedata
+
+    t = unicodedata.normalize("NFKD", texto or "").lower()
+    return "".join(c for c in t if not unicodedata.combining(c))
+
+
+def _cifra_normal(bruto: str) -> str:
+    """La cifra sin separadores de millar y con la coma decimal unificada.
+
+    «15.000» y «15000» son la misma cifra, y «1,12» y «1.12» tambien. Sin normalizar, buscar la
+    cifra de la afirmacion en el articulo falla por como esta escrita y no por lo que dice.
+    """
+    limpio = re.sub(r"[^0-9,.]", "", bruto)
+    # Los puntos son separadores de millar en este corpus; la coma es el decimal.
+    entero, _, decimal = limpio.replace(".", "").partition(",")
+    return f"{entero},{decimal}" if decimal else entero
+
+
+def _cifras(texto: str) -> list[str]:
+    return [_cifra_normal(n) for n in _NUMERO.findall(texto) if any(c.isdigit() for c in n)]
+
+
+def _terminos_distintivos(afirmacion: str) -> list[str]:
+    """Los numeros y las palabras largas poco comunes de la afirmacion, en ese orden.
+
+    Los numeros primero porque son los que fijan el dato: si «1,12» esta en el articulo, la
+    ventana correcta es la de «1,12» y no la de una palabra que sale seis veces.
+    """
+    numeros = [n.strip() for n in _NUMERO.findall(afirmacion)]
+    palabras = [
+        p for p in _PALABRA.findall(afirmacion) if _sin_acentos(p) not in _COMUNES
+    ]
+    return numeros + palabras
+
+
+def ventana_relevante(
+    afirmacion: str, fragmento: str, ancho: int = 1500, cabecera: int = 400
+) -> tuple[str, bool]:
+    """La parte del articulo que importa para esta afirmacion, y si se localizo.
+
+    **El defecto que esto corrige.** La comprobacion rechazo dos respuestas correctas de
+    Normativa. ORI-16 decia «la quota de l'assegurança escolar es d'1,12 euros» y el juez
+    dictamino que el extracto no lo sostenia: la frase esta en el caracter **21.915** del
+    documento, dentro de un padre de **21.324 caracteres**, y al juez se le daban los primeros
+    **8.000**. Dijo la verdad sobre lo que se le dio. Un prefijo ciego de un articulo largo no
+    es el articulo: es su principio, que casi nunca contiene el dato.
+
+    **El encabezado va siempre**, porque sin el el juez ve un parrafo sin dueno y pierde el eje
+    del ambito —grado cuando la afirmacion es de master—, que es el fallo que la informadora
+    anoto en ORI-01.
+
+    `localizado=False` significa «no se pudo situar», no «sin fundamento»: lo decide
+    `estado_de_localizacion`, que es quien distingue los dos casos.
+    """
+    texto, estado = _ventana(afirmacion, fragmento, ancho, cabecera)
+    return texto, estado == "localizado"
+
+
+def estado_de_localizacion(afirmacion: str, fragmento: str) -> str:
+    """`localizado` | `cifra_ausente` | `no_localizado`.
+
+    **Los tres estados existen por un defecto que casi se cuela.** La primera version devolvia
+    un booleano y trataba «no localizado» como «no se pudo decidir», para que un desencuentro de
+    lengua —«seis anos» donde la norma dice «sis anys»— no se convirtiera en un rechazo. Pero eso
+    desactivaba el proposito principal de la comprobacion: una respuesta que **inventa** una
+    cifra ausente de su cita tambien queda «no localizada», y habria pasado. Es el caso ORI-16
+    del reves.
+
+    Lo que separa los dos casos es que **las cifras no se traducen**. «1,12», «20 %» y «15.000»
+    son las mismas en valenciano y en castellano; las palabras no. Asi que:
+
+    - la afirmacion trae cifras y **ninguna** esta en el extracto -> `cifra_ausente`, que es un
+      rechazo, y **gratis**: no hace falta preguntarle a nadie;
+    - no trae cifras y sus palabras no aparecen -> `no_localizado`, que no rechaza, porque puede
+      ser la lengua.
+    """
+    if not fragmento:
+        return "no_localizado"
+    plano = _sin_acentos(fragmento)
+    cifras_afirmadas = _cifras(afirmacion)
+    if cifras_afirmadas:
+        cifras_del_texto = set(_cifras(fragmento))
+        if any(c in cifras_del_texto for c in cifras_afirmadas):
+            return "localizado"
+        return "cifra_ausente"
+    for termino in _terminos_distintivos(afirmacion):
+        if _sin_acentos(termino) in plano:
+            return "localizado"
+    return "no_localizado"
+
+
+def _ventana(
+    afirmacion: str, fragmento: str, ancho: int, cabecera: int
+) -> tuple[str, str]:
+    estado = estado_de_localizacion(afirmacion, fragmento)
+    if not fragmento:
+        return "", estado
+
+    plano = _sin_acentos(fragmento)
+    posiciones: list[int] = []
+    if estado == "localizado":
+        for termino in _cifras(afirmacion) or _terminos_distintivos(afirmacion):
+            i = plano.find(_sin_acentos(termino))
+            if i >= 0:
+                posiciones.append(i)
+            if len(posiciones) >= 2:
+                break
+
+    if len(fragmento) <= max(ancho * 2, 4000):
+        return fragmento, estado
+    if not posiciones:
+        return fragmento[:8000], estado
+
+    trozos = [fragmento[:cabecera]]
+    for i in sorted(posiciones):
+        ini = max(cabecera, i - ancho // 2)
+        trozos.append(fragmento[ini : i + ancho // 2])
+    # El separador avisa al juez de que hay un salto: sin el, dos tramos distantes del
+    # articulo se leen como un parrafo continuo y puede atribuir a uno lo que dice el otro.
+    separador = chr(10) + "[...]" + chr(10)
+    return separador.join(trozos), estado
+
+
 class Juez(Protocol):
     """Decide si un fragmento sostiene una afirmación. `None` si no pudo decidir."""
 
@@ -149,14 +292,33 @@ async def hay_fundamento(
             detalle.append({"afirmacion": frase[:200], "sostenida": False,
                             "motivo": "la fuente citada no esta entre las recuperadas"})
             continue
+        extracto = str(fuente.get("excerpt") or "")
+        estado = estado_de_localizacion(frase, extracto)
+        if estado == "cifra_ausente":
+            # La afirmacion da una cifra y esa cifra no esta en el articulo que cita. Las cifras
+            # no se traducen, asi que esto no puede ser un desencuentro de lengua: es un dato
+            # que el modelo trajo de otro sitio. Se rechaza **sin gastar una llamada**.
+            detalle.append({"afirmacion": frase[:200], "sostenida": False,
+                            "motivo": "la cifra que afirma no esta en el articulo que cita"})
+            continue
+        ventana, localizado = _ventana(frase, extracto, 1500, 400)
+        localizado = estado == "localizado"
         try:
-            veredicto = await juez(frase, str(fuente.get("excerpt") or ""))
+            veredicto = await juez(frase, ventana)
         except Exception:  # noqa: BLE001
+            veredicto = None
+        if veredicto is False and not localizado:
+            # No se encontro en el extracto ninguno de los terminos de la afirmacion, asi que
+            # lo que el juez ha visto es un tramo cualquiera del articulo. Un «no» sobre eso no
+            # es un rechazo: es no haber podido decidir. El corpus es bilingue y la respuesta
+            # sigue la lengua de la pregunta —«seis anos» no aparece donde dice «sis anys»—, y
+            # sin esta guarda un desencuentro de lengua se convierte en una rendicion.
             veredicto = None
         if veredicto is None:
             sin_veredicto += 1
             detalle.append({"afirmacion": frase[:200], "sostenida": None,
-                            "motivo": "el juez no pudo decidir"})
+                            "motivo": ("no se localizo el dato en el extracto"
+                                       if not localizado else "el juez no pudo decidir")})
             continue
         if veredicto:
             con_fundamento += 1
@@ -201,7 +363,7 @@ Responde SOLO con un objeto JSON, sin vallas de codigo:
 {{"sostenida": true|false}}"""
 
 
-def juez_de_modelo(llm: Any, limite_fragmento: int = 8000) -> Juez:
+def juez_de_modelo(llm: Any, limite_fragmento: int = 12000) -> Juez:
     """Un juez que pregunta al modelo con el fragmento delante.
 
     La plantilla es la **misma** que se valido en el banco de `_local/golden/`, donde acordo
@@ -215,6 +377,9 @@ def juez_de_modelo(llm: Any, limite_fragmento: int = 8000) -> Juez:
     """
 
     async def juez(afirmacion: str, fragmento: str) -> bool | None:
+        # El `limite_fragmento` es una red de seguridad, no el mecanismo de acotado: lo que
+        # llega aqui ya viene acotado por `ventana_relevante`. Recortar a ciegas era el defecto
+        # que rechazo dos respuestas correctas de Normativa.
         from server.app.core.llm_json import extraer_json
 
         if not fragmento.strip():
