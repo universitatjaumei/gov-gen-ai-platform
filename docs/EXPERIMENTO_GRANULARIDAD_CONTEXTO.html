@@ -1,0 +1,452 @@
+<meta charset="utf-8">
+<title>Granularidad del contexto</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;600&display=swap">
+
+<style>
+:root {
+    --marca:#0b5394; --marca-suave:#e8eef6; --fondo:#f6f7f9; --superficie:#ffffff;
+    --tinta:#151b23; --tinta-media:#4c5866; --tinta-tenue:#7a8593;
+    --filete:#dde1e7; --filete-fino:#eaedf1;
+    --bien:#1c6b42; --bien-suave:#e8f2ec; --mal:#9c3520; --mal-suave:#f9ecea;
+    --aviso:#8a5b12; --aviso-suave:#f8f1e3;
+    --sombra:0 1px 2px rgba(21,27,35,.05), 0 8px 24px -16px rgba(21,27,35,.18);
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --marca:#6ea3dc; --marca-suave:#16233180; --fondo:#0e1319; --superficie:#151b23;
+        --tinta:#e6e9ee; --tinta-media:#a3aebc; --tinta-tenue:#78838f;
+        --filete:#2a323c; --filete-fino:#1f262e;
+        --bien:#6cc08c; --bien-suave:#16261d80; --mal:#e08a72; --mal-suave:#2a1a1680;
+        --aviso:#d9ab5f; --aviso-suave:#2a221280;
+        --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+    }
+}
+:root[data-theme="dark"] {
+    --marca:#6ea3dc; --marca-suave:#16233180; --fondo:#0e1319; --superficie:#151b23;
+    --tinta:#e6e9ee; --tinta-media:#a3aebc; --tinta-tenue:#78838f;
+    --filete:#2a323c; --filete-fino:#1f262e;
+    --bien:#6cc08c; --bien-suave:#16261d80; --mal:#e08a72; --mal-suave:#2a1a1680;
+    --aviso:#d9ab5f; --aviso-suave:#2a221280;
+    --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+}
+body{background:var(--fondo);color:var(--tinta);
+  font-family:"Source Serif 4",Georgia,serif;font-size:17px;line-height:1.62;
+  -webkit-font-smoothing:antialiased}
+.hoja{max-width:46rem;margin:0 auto;
+  padding:clamp(2.5rem,6vw,5rem) clamp(1.15rem,4vw,2rem) 6rem;
+  display:flex;flex-direction:column;gap:2.75rem}
+.cabecera{display:flex;flex-direction:column;gap:.9rem;
+  border-bottom:2px solid var(--marca);padding-bottom:1.6rem}
+.eyebrow{font-family:"Libre Franklin",system-ui,sans-serif;font-size:.72rem;font-weight:600;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--marca);margin:0}
+h1{font-family:"Libre Franklin",system-ui,sans-serif;font-size:clamp(1.8rem,5vw,2.5rem);
+  font-weight:700;line-height:1.13;letter-spacing:-.021em;text-wrap:balance;margin:0}
+.entradilla{margin:0;color:var(--tinta-media);font-size:1.06rem}
+.ficha{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));
+  gap:.85rem 1.5rem;margin:.4rem 0 0}
+.ficha div{display:flex;flex-direction:column;gap:.12rem}
+.ficha dt{font-family:"Libre Franklin",system-ui,sans-serif;font-size:.68rem;font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--tinta-tenue)}
+.ficha dd{margin:0;font-size:.95rem;color:var(--tinta-media);font-variant-numeric:tabular-nums}
+.veredicto{background:var(--marca-suave);border:1px solid var(--marca);border-left-width:4px;
+  border-radius:3px;padding:1.5rem 1.7rem;display:flex;flex-direction:column;gap:.8rem}
+.veredicto .titular{font-family:"Libre Franklin",system-ui,sans-serif;font-size:1.15rem;
+  font-weight:600;line-height:1.3;color:var(--marca);text-wrap:balance}
+.veredicto p{margin:0;color:var(--tinta-media)}
+.alerta{background:var(--aviso-suave);border:1px solid var(--aviso);border-left-width:4px;
+  border-radius:3px;padding:1.25rem 1.5rem}
+.alerta p{margin:0;color:var(--tinta-media);font-size:.95rem}
+.alerta p + p{margin-top:.6rem}
+.alerta .titular{font-family:"Libre Franklin",system-ui,sans-serif;font-size:.95rem;
+  font-weight:600;color:var(--aviso);display:block;margin-bottom:.4rem}
+h2{font-family:"Libre Franklin",system-ui,sans-serif;font-size:1.28rem;font-weight:600;
+  letter-spacing:-.011em;line-height:1.25;text-wrap:balance;margin:0 0 .9rem}
+h3{font-family:"Libre Franklin",system-ui,sans-serif;font-size:1rem;font-weight:600;
+  margin:1.7rem 0 .5rem;text-wrap:balance}
+section > p,section > ul,section > ol,section > .tabla-marco{margin:0 0 1rem}
+section > *:last-child{margin-bottom:0}
+ul,ol{padding-left:1.15rem;display:flex;flex-direction:column;gap:.6rem}
+li::marker{color:var(--tinta-tenue)}
+strong,b{font-weight:600}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.85em;
+  background:var(--marca-suave);padding:.1em .34em;border-radius:2px}
+a{color:var(--marca);text-underline-offset:.15em}
+.nota{font-size:.9rem;color:var(--tinta-tenue);line-height:1.55}
+.tabla-marco{overflow-x:auto;border:1px solid var(--filete);border-radius:3px;
+  background:var(--superficie);box-shadow:var(--sombra)}
+table{border-collapse:collapse;width:100%;min-width:34rem;
+  font-family:"Libre Franklin",system-ui,sans-serif;font-size:.84rem;
+  font-variant-numeric:tabular-nums}
+caption{caption-side:top;text-align:left;font-family:"Libre Franklin",system-ui,sans-serif;
+  font-size:.7rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--tinta-tenue);padding:.85rem 1rem .55rem}
+th,td{padding:.62rem 1rem;text-align:left;border-bottom:1px solid var(--filete-fino);
+  vertical-align:top}
+thead th{font-weight:600;font-size:.7rem;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--tinta-tenue);border-bottom:1px solid var(--filete);vertical-align:bottom}
+th[scope="row"]{font-weight:600;font-size:.82rem;color:var(--tinta)}
+td.num,th.num{text-align:right}
+tbody tr:last-child th,tbody tr:last-child td{border-bottom:none}
+tr.destacada td,tr.destacada th[scope="row"]{background:var(--marca-suave)}
+tr.mala td,tr.mala th[scope="row"]{background:var(--mal-suave)}
+.sello{font-family:"Libre Franklin",system-ui,sans-serif;font-size:.68rem;font-weight:600;
+  letter-spacing:.04em;text-transform:uppercase;padding:.16rem .45rem;border-radius:2px;
+  white-space:nowrap}
+.sello.si{background:var(--bien-suave);color:var(--bien)}
+.sello.no{background:var(--mal-suave);color:var(--mal)}
+.sello.mix{background:var(--aviso-suave);color:var(--aviso)}
+.opcion{background:var(--superficie);border:1px solid var(--filete);border-radius:3px;
+  padding:1.1rem 1.25rem;box-shadow:var(--sombra)}
+.opcion h3{font-size:.95rem;margin:0 0 .4rem}
+.opcion p{margin:0 0 .5rem;color:var(--tinta-media);font-size:.95rem}
+.opcion p:last-child{margin-bottom:0}
+.opcion.recomendada{border-left:4px solid var(--marca)}
+.opcion.recomendada h3{color:var(--marca)}
+.opciones{display:flex;flex-direction:column;gap:.85rem}
+.pie{border-top:1px solid var(--filete);padding-top:1.3rem;font-size:.82rem;
+  color:var(--tinta-tenue);display:flex;flex-direction:column;gap:.4rem}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="hoja">
+
+<header class="cabecera">
+    <p class="eyebrow">Experimento · configuración de apertura del piloto</p>
+    <h1>Cuánto contexto hay que inyectar, y qué puede decidir un lote de 25</h1>
+    <p class="entradilla">Siete configuraciones sobre las mismas 25 consultas, con el mismo
+    modelo y la misma plantilla. La comparación que abrió esta investigación —Gemini con el
+    corpus subido contra nuestro RAG— se invierte al medirla: <b>Gemini es la peor de las siete
+    columnas</b>. Y la configuración que ya está en producción empata con la mejor de las
+    nuevas.</p>
+    <dl class="ficha">
+        <div><dt>Fecha</dt><dd>27 de agosto de 2026</dd></div>
+        <div><dt>Modelo</dt><dd>gemini-2.5-flash</dd></div>
+        <div><dt>Consultas</dt><dd>25 (lote ujirag-2024)</dd></div>
+        <div><dt>Generaciones</dt><dd>125 + 342 del juez</dd></div>
+    </dl>
+</header>
+
+<div class="veredicto">
+    <p class="titular">El experimento no puede elegir la estrategia, y saberlo es su resultado
+    más útil.</p>
+    <p>De las veintiuna comparaciones emparejadas, <b>sólo una es distinguible del azar</b>:
+    inyectar cinco normas enteras gana a Gemini <b>7 a 0</b> (p=0,016). Todo lo demás cae entre
+    p=0,18 y p=1,00, con <b>2 a 6 pares discordantes</b> donde harían falta ~47 para tener
+    potencia del 80 %. Era lo previsto: está calculado en
+    <code>docs/LITERATURA_ASISTENTES_NORMATIVA.html</code>.</p>
+    <p>Y hay dos razones además del tamaño de muestra, las dos corregibles: <b>el corpus tenía
+    dos cursos académicos coexistiendo</b> marcados como vigentes, y <b>la rúbrica del
+    informador es de 2024</b> y en al menos un caso penaliza a las respuestas que aciertan con
+    la norma de 2026.</p>
+</div>
+
+<section>
+    <h2>Las siete columnas</h2>
+    <p>Todas con <code>gemini-2.5-flash</code>. Las cuatro primeras comparten selección
+    (vector) y plantilla, así que entre ellas sólo cambia <b>cuánto contexto se inyecta</b>.</p>
+    <div class="tabla-marco">
+    <table>
+        <caption>Calidad contra la rúbrica del informador, coste y latencia</caption>
+        <thead>
+            <tr>
+                <th scope="col">Columna</th>
+                <th scope="col" class="num">Cumple</th>
+                <th scope="col" class="num">Tasa</th>
+                <th scope="col" class="num">Juez discrepa</th>
+                <th scope="col" class="num">Entrada media</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th scope="row">D · agéntico</th>
+                <td class="num">13 / 17</td><td class="num"><b>76 %</b></td>
+                <td class="num">8 de 25</td><td class="num">—</td>
+            </tr>
+            <tr class="destacada">
+                <th scope="row">C · norma entera ×5</th>
+                <td class="num">15 / 22</td><td class="num"><b>68 %</b></td>
+                <td class="num">3 de 25</td><td class="num">63.278</td>
+            </tr>
+            <tr class="destacada">
+                <th scope="row">P · producción actual</th>
+                <td class="num">15 / 22</td><td class="num"><b>68 %</b></td>
+                <td class="num">3 de 25</td><td class="num">~9.500</td>
+            </tr>
+            <tr>
+                <th scope="row">A · artículo ×3</th>
+                <td class="num">12 / 21</td><td class="num">57 %</td>
+                <td class="num">4 de 25</td><td class="num">9.462</td>
+            </tr>
+            <tr>
+                <th scope="row">B · norma entera ×3</th>
+                <td class="num">10 / 20</td><td class="num">50 %</td>
+                <td class="num">5 de 25</td><td class="num">41.141</td>
+            </tr>
+            <tr>
+                <th scope="row">E · submateria entera</th>
+                <td class="num">9 / 18</td><td class="num">50 %</td>
+                <td class="num">7 de 25</td><td class="num">211.363</td>
+            </tr>
+            <tr class="mala">
+                <th scope="row">G · Gemini Flash 3.6</th>
+                <td class="num">6 / 18</td><td class="num"><b>33 %</b></td>
+                <td class="num">4 de 25</td><td class="num">—</td>
+            </tr>
+        </tbody>
+    </table>
+    </div>
+    <p class="nota">«Cumple» son los veredictos firmes: el juez evaluó cada respuesta dos veces
+    con el orden de los criterios invertido y sólo cuenta lo que coincidió. La columna de
+    discrepancias es la medida de cuánto vale el juez, y por eso se publica al lado.</p>
+
+    <h3>Las comparaciones emparejadas</h3>
+    <div class="tabla-marco">
+    <table>
+        <caption>McNemar exacto bilateral, sobre las mismas 25 consultas</caption>
+        <thead>
+            <tr><th scope="col">Comparación</th><th scope="col" class="num">Gana</th>
+            <th scope="col" class="num">Pierde</th><th scope="col" class="num">Discordantes</th>
+            <th scope="col" class="num">p</th></tr>
+        </thead>
+        <tbody>
+            <tr class="destacada">
+                <th scope="row">C contra Gemini</th>
+                <td class="num">7</td><td class="num">0</td><td class="num">7</td>
+                <td class="num"><b>0,016</b></td>
+            </tr>
+            <tr><th scope="row">A contra Gemini</th>
+                <td class="num">7</td><td class="num">2</td><td class="num">9</td>
+                <td class="num">0,180</td></tr>
+            <tr><th scope="row">C contra A</th>
+                <td class="num">3</td><td class="num">1</td><td class="num">4</td>
+                <td class="num">0,625</td></tr>
+            <tr><th scope="row">Producción contra A</th>
+                <td class="num">4</td><td class="num">2</td><td class="num">6</td>
+                <td class="num">0,688</td></tr>
+            <tr><th scope="row">C contra producción</th>
+                <td class="num">2</td><td class="num">2</td><td class="num">4</td>
+                <td class="num">1,000</td></tr>
+            <tr><th scope="row">D contra A</th>
+                <td class="num">2</td><td class="num">1</td><td class="num">3</td>
+                <td class="num">1,000</td></tr>
+            <tr><th scope="row">B contra A</th>
+                <td class="num">0</td><td class="num">2</td><td class="num">2</td>
+                <td class="num">0,500</td></tr>
+            <tr><th scope="row">E contra A</th>
+                <td class="num">1</td><td class="num">1</td><td class="num">2</td>
+                <td class="num">1,000</td></tr>
+        </tbody>
+    </table>
+    </div>
+</section>
+
+<section>
+    <h2>Los tres hallazgos que importan</h2>
+
+    <h3>1. Gemini con el corpus subido es la peor columna, no la mejor</h3>
+    <p>La comparación que motivó todo esto se invierte al medirla con criterio. Tres cosas la
+    explican, y ninguna es «el modelo es peor»:</p>
+    <ul>
+        <li><b>No fue inyección de contexto.</b> El corpus unido son <b>2,1 M de tokens</b> y la
+        ventana de Flash es 1 M. Gemini usó su propia recuperación sobre el fichero: sus citas
+        son trozos («Cercador de Normativa», <code>val_Reglament_del_Serv…</code>), no artículos.
+        Lo que se comparó fue nuestro RAG contra el RAG de Google.</li>
+        <li><b>Su primera respuesta estaba inventada.</b> En la de permanencia dio 12 ECTS, el
+        50 % y dos cursos sin matricularse: nada de eso está en el reglamento. Hicieron falta
+        dos correcciones para llegar al 20 % y a los artículos 4 y 5.</li>
+        <li><b>La instrucción la ponía la persona.</b> «Contesta mirant en les fonts adjuntes i
+        indicant norma i article», escrito a mano en cada pregunta. Un estudiante no la escribe;
+        en nuestro sistema eso va en el prompt del sistema.</li>
+    </ul>
+    <div class="alerta">
+        <span class="titular">Y una salvedad que juega en contra de esta conclusión</span>
+        <p>La rúbrica es de 2024. En ORI-02, Gemini cita el Reglament de reconeixement de abril
+        de 2026 (art. 6.5, 12 créditos) y la informadora esperaba «mínimo 6 y máximo 10 %».
+        <b>Si el reglamento cambió, la rúbrica está desfasada y penaliza a quien acierta</b> — y
+        Gemini es de las que aciertan ahí. Parte de su 33 % puede ser eso, no error.</p>
+    </div>
+
+    <h3>2. La producción actual ya rinde como la mejor configuración nueva</h3>
+    <p>Producción y C empatan al <b>68 %</b>, con 2 a 2 en los discordantes (p=1,000). Así que
+    <b>ninguna de las cinco celdas nuevas mejora lo que ya está desplegado</b> en este lote — y C
+    cuesta <b>6,7 veces más</b> tokens de entrada.</p>
+    <p>Hay un detalle incómodo dentro: A y producción usan la misma anchura (tres documentos con
+    <code>parent_child</code>, o sea el artículo) y se diferencian en la plantilla y en pasar o
+    no por el grafo. Producción, con la plantilla vieja, saca 68 % contra el 57 % de A.
+    <b>La plantilla nueva no ayudó</b>; con 6 discordantes y p=0,688 tampoco se puede afirmar que
+    perjudique, pero desde luego no es donde está la mejora.</p>
+
+    <h3>3. El defecto del corpus contaminó al juez, no sólo a las respuestas</h3>
+    <p>Las <b>Directrices académicas</b> estaban en el corpus consultable en <b>dos cursos, uno
+    por lengua</b>: la valenciana de 2025/2026 y la castellana de 2026/2027, las dos marcadas
+    <code>vigent</code> y sin sustitución declarada. Los motivos del juez se contradicen entre
+    consultas por esa causa:</p>
+    <ul>
+        <li>En <b>ORI-09</b> elogia a C por citar «las directrices de máster <b>para el curso
+        2026/2027</b>, evitando el error» y condena a A por citar «directrices <b>futuras</b>
+        (2026/2027) en lugar de las vigentes».</li>
+        <li>En <b>ORI-16</b> elogia a C por citar «directrices del curso <b>2025/2026</b>, lo que
+        indica que la información está actualizada» y condena a A por «citas a directrices de
+        cursos futuros».</li>
+    </ul>
+    <p>El mismo documento es acierto y error según la pregunta. Con dos cursos vigentes a la vez,
+    ni el asistente ni el juez podían saber cuál regía. <code>curso_caducado</code> está
+    etiquetado en <b>15 de las 25</b> consultas del lote: es el modo de fallo dominante.</p>
+    <p>Dos de las tres consultas en que C gana a A (<b>ORI-09</b> y <b>ORI-16</b>) son disputas de
+    curso, y la única en que C pierde (<b>ORI-05</b>) es que sus documentos de más le trajeron
+    <b>los dos cursos a la vez</b>. Es decir: <b>la diferencia medida entre C y A es, en su mayor
+    parte, el defecto del corpus</b>.</p>
+    <p><b>Corregido el mismo día del experimento</b>, después de generarlo: las Directrices de
+    2025/2026 quedan con <code>us_assistents='no'</code> y <code>estat_vigencia='no_vigent'</code>,
+    con la norma que las sustituye y la firma de quien lo decidió en <code>doc_metadata</code>.
+    Siguen en el corpus para el buscador de normativa, que sí debe permitir reconstruir la norma
+    vigente en una fecha.</p>
+</section>
+
+<section>
+    <h2>Coste y latencia</h2>
+    <p>El coste sí es concluyente, porque no depende del juez.</p>
+    <div class="tabla-marco">
+    <table>
+        <caption>Tokens de entrada por consulta, y lo que suponen en un piloto</caption>
+        <thead>
+            <tr><th scope="col">Celda</th><th scope="col" class="num">Entrada media</th>
+            <th scope="col" class="num">Sobre A</th>
+            <th scope="col" class="num">1.000 consultas</th></tr>
+        </thead>
+        <tbody>
+            <tr><th scope="row">A · artículo ×3</th><td class="num">9.462</td>
+                <td class="num">1,0×</td><td class="num">9,5 M</td></tr>
+            <tr><th scope="row">B · norma ×3</th><td class="num">41.141</td>
+                <td class="num">4,3×</td><td class="num">41,1 M</td></tr>
+            <tr class="destacada"><th scope="row">C · norma ×5</th><td class="num">63.278</td>
+                <td class="num">6,7×</td><td class="num">63,3 M</td></tr>
+            <tr><th scope="row">E · submateria</th><td class="num">211.363</td>
+                <td class="num">22,3×</td><td class="num">211,4 M</td></tr>
+        </tbody>
+    </table>
+    </div>
+
+    <h3>La latencia no la manda el contexto</h3>
+    <p>Sobre las 100 observaciones, la latencia total correlaciona con los tokens de
+    <b>salida a +0,997</b> y con los de <b>entrada a −0,109</b>. La celda E parecía la más rápida
+    porque contestaba corto (1.180 tokens frente a 2.302 de A), no porque su contexto ayudara.</p>
+    <p>Y esa medida era la equivocada: se tomó <b>sin streaming</b>, y en producción la respuesta
+    se emite token a token. Lo que espera quien pregunta es el <b>primer token</b>, y ahí sí pesa
+    el contexto. Medido con <code>astream</code>, emparejado por consulta:</p>
+    <div class="tabla-marco">
+    <table>
+        <caption>Primer token, mediana de 14 consultas emparejadas</caption>
+        <thead><tr><th scope="col">Celda</th><th scope="col" class="num">Contexto</th>
+        <th scope="col" class="num">Primer token</th></tr></thead>
+        <tbody>
+            <tr><th scope="row">A · artículo ×3</th><td class="num">4.722 tok</td>
+                <td class="num">3,1 s</td></tr>
+            <tr><th scope="row">B · norma ×3</th><td class="num">32.399 tok</td>
+                <td class="num">4,0 s</td></tr>
+        </tbody>
+    </table>
+    </div>
+    <p><b>Siete veces más contexto cuesta entre 0,7 y 1,2 segundos de primer token.</b> Es
+    asumible, y desplaza el problema: para bajar la latencia percibida hay que acortar o
+    escalonar la <b>salida</b>, no recortar el contexto.</p>
+    <div class="alerta">
+        <span class="titular">El riesgo real de latencia es la cola de la API</span>
+        <p>De 14 observaciones, <b>4 se fueron por encima de 10 segundos</b>, una a 45 con sólo
+        13.000 tokens de contexto. Eso no es <i>prefill</i>: es varianza del proveedor, medida
+        justo después de lanzarle 125 generaciones. <b>Esa cola es un riesgo de piloto mayor que
+        el tamaño del contexto</b> y hay que medirla en condiciones normales antes de abrir.</p>
+    </div>
+</section>
+
+<section>
+    <h2>Lo que este experimento no mide</h2>
+    <ul>
+        <li><b>Las celdas A, B, C y E no llevan enlaces: 0 de 25.</b> Se ejecutaron con llamada
+        directa al modelo, sin el contrato de citas ni <code>url_de_cita</code> ni el aviso de
+        vigencia. D y producción van por el grafo y llevan <b>25 de 25</b>, con ancla en 19 y 20.
+        La comparación de granularidad es limpia entre las cuatro porque a todas les falta lo
+        mismo, pero <b>ninguna es desplegable tal como está medida</b>.</li>
+        <li><b>El juez no es la verdad.</b> Puntúa contra <code>expectation_note</code>, prosa de
+        informadores de 2024. Discrepa consigo mismo entre 3 y 8 veces de 25 según la columna: en
+        E, el 28 %.</li>
+        <li><b>D lidera con la peor fiabilidad.</b> Su 76 % sale de 17 veredictos firmes de 25:
+        tiene 8 discrepancias, la cifra más alta de las siete. Además su nota interna sigue
+        siendo <code>score = 1.0</code> fijo, así que su puerta de calidad no rechaza nada — es
+        lo que HIB.E viene a arreglar.</li>
+        <li><b>El corpus se limpió después.</b> Las Directrices caducadas estaban dentro cuando
+        se generaron las 125 respuestas, y caían justo en las posiciones 4-5 que distinguen C de
+        B. Repetir C con el corpus limpio es ahora barato: el banco existe.</li>
+    </ul>
+</section>
+
+<section>
+    <h2>La decisión, y con qué condiciones</h2>
+    <div class="opciones">
+        <div class="opcion recomendada">
+            <h3>Normativa abre con C: cinco normas enteras del top-k</h3>
+            <p>Decisión del usuario, y es defendible: la configuración de apertura no tiene que
+            ser la óptima, tiene que ser defendible y <b>producir datos</b>. C es nominalmente la
+            mejor de las nuevas, su coste está dado por asumible, y su único fallo medido
+            —ORI-05, los dos cursos a la vez— <b>ya está corregido</b>.</p>
+            <p><b>Pero los datos no dicen que mejore lo desplegado</b>: empata con producción,
+            2 a 2, a 6,7 veces el coste de entrada. Se abre con C para recoger datos con la
+            configuración más rica, no porque esté medido que gane.</p>
+        </div>
+        <div class="opcion">
+            <h3>Gerencia: composición 3 + 2-3, y no antes de HIB.N</h3>
+            <p>Allí la granularidad por tamaño <b>no funciona</b>: las externas van de 689 a
+            279.425 tokens, con el p25 en 11.786, así que cualquier techo que deje pasar el 92 %
+            de las propias mete enteras 9 o 10 de las 25 estatales. La regla que sí funciona es
+            de composición: <b>3 normas propias enteras + 2-3 artículos de las estatales</b>,
+            que al p75 son 41.776 tokens (33 % del presupuesto) y al p90, 68.458 (53 %).</p>
+            <p>Requiere dos cosas que no están: que la selección <b>distinga las dos clases al
+            elegir</b> —hoy el vector devuelve un ranking mezclado— y que Gerencia tenga
+            artículos, porque sigue en <code>structural</code>. Eso es <b>HIB.N</b>, con
+            <code>parent_max_tokens</code> en 8.000 para que el artículo de una ley estatal sea el
+            artículo y no la ley.</p>
+        </div>
+    </div>
+    <h3>Dos condiciones para abrir Normativa con C</h3>
+    <ol>
+        <li><b>Implementar C dentro del grafo.</b> Tal como se midió no hereda el contrato de
+        citas, el ancla ni el aviso de vigencia. Es una estrategia de recuperación que inyecta el
+        documento entero en vez del artículo: <code>VectorRetrievalStrategy</code> cambiando qué
+        pone en <code>excerpt</code>.</li>
+        <li><b>Medir la cola de latencia del proveedor</b> en condiciones normales. Es el riesgo
+        que este experimento destapó y no cuantificó.</li>
+    </ol>
+</section>
+
+<section>
+    <h2>Qué medir con la muestra grande</h2>
+    <ol>
+        <li><b>Repetir C y A con el corpus limpio.</b> Es la comparación que este experimento no
+        pudo hacer: dos de las tres victorias de C eran disputas de curso ya resueltas.</li>
+        <li><b>Reanotar la rúbrica.</b> ORI-02 falla en las cinco celdas, incluidas las que citan
+        el artículo correcto de 2026. Mientras la referencia sea de 2024, el juez penaliza los
+        aciertos. Es <b>HIB.G</b>, y los dashboards ya llevan las 24 propuestas de Gemini
+        precargadas para que el informador confirme o corrija en vez de redactar.</li>
+        <li><b>Llegar a los pares discordantes que hacen falta.</b> Con 150 consultas y la
+        discordancia observada, una diferencia moderada empieza a ser detectable; con 25 y de 2 a
+        6 discordantes, no.</li>
+        <li><b>La caché de contexto</b>, apagada en los cuatro chatbots. Con C son 63.000 tokens
+        de normas que se repiten entre consultas del mismo tema: es el caso para el que existe, y
+        nunca se ha medido.</li>
+    </ol>
+</section>
+
+<footer class="pie">
+    <p>Instrumental en <code>_local/golden/</code>:
+    <code>experimento_granularidad.py</code>, <code>juzgar_granularidad.py</code>,
+    <code>latencia_primer_token.py</code>, <code>precargar_gemini.py</code>. Datos en
+    <code>experimento_granularidad.json</code>, <code>veredictos_granularidad.json</code>,
+    <code>latencia_primer_token.json</code>.</p>
+    <p>Ninguna cifra de calidad de este informe es una medición certificada: son 25 consultas,
+    un juez que discrepa consigo mismo entre el 12 % y el 28 % de las veces, y una rúbrica de
+    2024. Ordenan siete configuraciones; no certifican ninguna.</p>
+</footer>
+
+</div>
