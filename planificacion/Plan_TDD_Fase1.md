@@ -23605,6 +23605,7 @@ medir después:
 | **Vigencia: `suprimit`** | «el artículo suprimido no se cita como vigente» | El troceador guarda `estat=suprimit` en el chunk y **nadie lo consume** (lo dice `vigencia.py:110`). Son 3 fragmentos en Normativa: poco, pero el mecanismo no existe | `chunker.py:432`, `vigencia.py` |
 | **Vigencia: validación** | «la validación humana la escribe el panel» | El reconciliador **pisa** `vigencia_validada_el` con la fecha del `.md` en cada pasada (249 documentos), y `revisat_el` compara *aware* contra *naive*: **292 «actualizaciones» falsas por pasada**, que ocultan las 24 reales | `reconciler.py:_difiere`, `hub_ingestion_router.py:392` |
 | **Emparejamiento** | «las parejas están hechas» | Paquete: **57** parejas, todas resueltas (0 rotas), no canónica siempre `es`. Excel de SG: 55 filas `parella`, 180 «sense versió en l'altra llengua», **14 parejas con una versión validada y otra no**, 7 con ninguna. PRG-003 pasa de `parcialment_derogat` a `vigent` en este corpus: **contradice** el caso de referencia de `INGESTA.md` | `parelles_i_vigencies.xlsx` |
+| **Operativa de actualización** | «hay un procedimiento para dar de alta una norma» | Los siete pasos de `INGESTA.md` existen, pero el segundo —la ficha— **no tiene herramienta**: hay **12 `alta_*.py`, uno por lote**, y ninguno genérico. Y `correccions_cataleg.json` no puede crear campos (bien hecho), así que poner una causa nueva tampoco se declara. **El alta no es un procedimiento: es un programa que se reescribe** | los 12 `alta_*.py`; `aplica_correccions_cataleg.py` |
 | **Coste** | «cada asistente embebe lo suyo» | `chunk_copier.py` (HIB.N) sabe copiar fragmentos entre gemelos con permiso empírico y **tiene cero llamadores**. Los 6 nuevos de Gerencia son subconjunto de los 19 de Normativa: ~142k tokens repetidos ×3 | `chunk_copier.py` |
 
 **Tres cosas funcionan como se pensaba y no necesitan prompt**: el hash sobre el cuerpo (reetiquetar
@@ -23621,6 +23622,7 @@ ACT.3  una sola versión por norma, la de la lengua     (el cambio de comportami
 ACT.4  solo `vigent` se recupera; causa y suprimit     (sin migración; lectura A del 28-08)
 ACT.5  copiar en vez de embeber                        (abarata la ingesta que cierra el bloque)
 ACT.6  un comando, y la ingesta real                   (cierre: el corpus del 27-08 en los cuatro)
+ACT.7  alta y baja de norma sin escribir un programa    (lado corpus; va con ACT.0, no bloquea)
 ```
 
 ACT.2 y ACT.3 van **antes** de la ingesta y no después: este corpus sube las parejas de 33 a 57,
@@ -23998,6 +24000,85 @@ con el corpus del 27-08 en los cuatro chatbots de desarrollo.
 ## Criterio de done
 - Corpus del 27-08 en los cuatro chatbots de desarrollo, segunda pasada a cero, y la medicion
   de ACT.3 repetida sobre el corpus nuevo (las 57 parejas) sin ninguna cita doble.
+```
+
+---
+
+### Prompt ACT.7 (CORPUS) — Dar de alta una norma y cambiar su vigencia, con un comando cada cosa
+
+**Modelo sugerido**: **Opus** — hay que decidir qué es declaración y qué es acción en un corpus con
+doce programas de alta escritos uno por lote, y equivocarse aquí deja un decimotercero.
+
+**Objetivo**: ACT.1–ACT.6 arreglan la **reingesta**; esta es la otra mitad, la **actualización**. Hoy
+dar de alta una norma son los siete pasos de `INGESTA.md` §«Una norma nova», de los que el segundo
+—la ficha del catálogo— **no tiene herramienta**: se ha resuelto escribiendo un programa nuevo cada
+vez. Hay **doce** `alta_*.py` en el corpus, uno por lote (`alta_directrius_curs_2026_2027.py`,
+`alta_versions_valencianes_2026_08{,b,c}.py`, `alta_fitxes_gerencia_2026_08{,b}.py`…), y ninguno
+genérico. El alta no es un procedimiento: es un programa que se reescribe. Con cada norma nueva, el
+coste no baja.
+
+Y cambiar una vigencia tiene el problema simétrico: `correccions_cataleg.json` corrige un campo que
+la ficha **ya tiene** —se niega a crear campos, y hace bien—, así que poner una causa a una norma
+que aún no la lleva no se puede declarar: hay que volver a escribir un programa.
+
+```
+# PROMPT ACT.7 (CORPUS) — `alta_norma.py` y `vigencia.py`
+# Deploy: — (repositorio de curacion, no este)
+
+## 1. `vigencia.py` — cambiar el estado de una norma, con su causa
+    python vigencia.py NOR-001 --estat vigent --motiu ""            # en sec
+    python vigencia.py ALT-059 --estat no_vigent --motiu fi-de-mandat --aplica
+    python vigencia.py RES-006 --estat no_vigent --motiu derogacio-expressa \
+                       --derogada-per RES-005 --aplica
+- Valida el motiu contra `vocabulari/motius_no_vigencia.csv` y **exige** `--derogada-per` cuando
+  la causa es `derogacio-expressa` y `--substituida-per` cuando es `substitucio`: una derogacion
+  expresa sin la norma que deroga es una afirmacion que nadie puede comprobar.
+- Rechaza `--motiu` sobre una norma que queda `vigent`, y exige `--motiu` cuando el estado deja de
+  serlo, salvo `--motiu-pendent "<por que aun no se sabe>"`, que lo deja explicito en vez de vacio.
+- Es el DUENO del campo: crea `motiu_no_vigencia`/`derogada_per`/`substituida_per` en la ficha si
+  no estan, que es justo lo que `aplica_correccions_cataleg.py` no debe hacer. Idempotente, en
+  seco por defecto, copia de seguridad antes de escribir, y reescribe JSON **y** CSV.
+- Deja rastro en `correccions_cataleg.json` con `motiu` y `confirmat` (quien y cuando), que es
+  como el corpus registra las decisiones humanas. Sin esto, dentro de un ano nadie sabe si la
+  causa la decidio una persona o la dedujo un programa.
+- `alta_motiu_no_vigencia.py` se RETIRA al terminar: era el alta del campo, y su trabajo lo hace
+  ahora esto. Es codigo muerto en cuanto exista `vigencia.py`.
+
+## 2. `alta_norma.py` — la ficha, sin escribir un programa
+    python alta_norma.py fitxa_REG-140.json --aplica
+- Un JSON por norma con los campos que decide una persona (`id_publicacio`, `titol`, `tipus`,
+  `organ_emissor`, `data_aprovacio`, `estat_vigencia`, `url_publicacio`, `ambit`, `submateries`,
+  `resum`, `publicar_al_portal`) y nada mas: lo derivable se deriva.
+- Valida ANTES de escribir: id libre y de la serie correcta, ambito y submaterias contra el
+  vocabulario, `url_publicacio` que no colisione con otra ficha (es el defecto que VIS.3 caza
+  tarde: NOR-006 y NOR-007 compartian URL sin ser la misma norma), y el `.md` de origen presente.
+- Admite VARIAS fichas en un fichero, que es como llegan de verdad: los lotes de 2026-08 fueron
+  de 19 y de 13, y por eso se escribieron programas.
+- **Los doce `alta_*.py` no se borran en este prompt.** Son el registro de lo que se dio de alta
+  y cuando; borrarlos es perder la trazabilidad de doce lotes. Se marcan como historicos en su
+  docstring y no se escriben mas.
+
+## 3. Lo que este prompt NO hace, y por que
+- No convierte el PDF ni construye las paginas: eso ya es `passa_el_pipeline.py`. `alta_norma.py`
+  y `vigencia.py` terminan diciendo «ahora: python passa_el_pipeline.py --aplica», como hace hoy
+  `aplica_correccions_cataleg.py`.
+- No decide la vigencia ni la clasificacion. Son juicios; el programa comprueba que lo escrito es
+  coherente, no lo inventa.
+
+## Tests (RED primero)
+- `vigencia.py` sobre una ficha sin el campo lo crea; sobre una que ya lo tiene igual, no escribe
+  (idempotencia) y lo dice.
+- `derogacio-expressa` sin `--derogada-per` → error, nada escrito.
+- Un motiu que no esta en el vocabulario → error que enumera los validos.
+- `alta_norma.py` con una `url_publicacio` que ya usa otra ficha → error nombrando las dos.
+- Con un id repetido → error. Con un ambito inexistente → error que enumera los validos.
+- Tras `alta_norma.py` + `passa_el_pipeline.py`, la ficha nueva pasa el validador real de ingesta.
+
+## Criterio de done
+- Dar de alta una norma de prueba y retirarla despues, sin escribir ni una linea de Python, y con
+  el pipeline en verde en las dos pasadas. Se pega la sesion entera en el commit.
+- `INGESTA.md` §«Una norma nova» reescrita con los dos comandos, y §«Una norma que deroga una
+  altra» con `vigencia.py`.
 ```
 
 ---
