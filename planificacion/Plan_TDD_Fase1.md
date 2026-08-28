@@ -21515,7 +21515,7 @@ Cuando NiceGUI se va, se quedan colgando cosas que solo existian por el:
 
 ## Criterio de done
 - [ ] `grep -ri nicegui` a cero en dependencias y configuracion
-- [ ] `uv sync` y la suite completa verdes desde cero
+- [ ] `uv sync --locked` y la suite completa verdes desde cero
 - [ ] `README.md` refleja la estructura real
 ```
 

@@ -303,6 +303,24 @@ para confirmar que la revisión ha quedado registrada.
 
 ---
 
+## Dependencias: relockear va en el mismo commit
+
+**Si un prompt modifica las dependencias de un `pyproject.toml`, `uv lock` en ese proyecto va en
+el mismo commit.**
+
+Lo exige CI, que instala con `uv sync --locked` en sus dos pasos de instalación. El flag está ahí
+porque sin él `uv sync` **vuelve a resolver en silencio** —«The project is re-locked before syncing
+unless `--locked` or `--frozen` is provided», dice uv— y un lock que no corresponde a su manifiesto
+no daba ningún síntoma: el `uv.lock` de la raíz vivió así **17 días** desde que EXT.3 retiró Docling,
+visible sólo como un fichero modificado que reaparecía en el árbol y que, por prudencia, nadie
+commiteaba.
+
+Corolario práctico: **no compruebes con `uv sync` a secas**, que relockea y por tanto siempre pasa.
+Lo que dice la verdad es `uv lock --check` (no escribe) o `uv sync --locked` (falla si no cuadra).
+Sin esto, el rojo aparece en el push y no en local.
+
+---
+
 ## Estándares de desarrollo
 
 - **TDD obligatorio**: escribe el test antes del código de producción. No hay PR sin tests.
