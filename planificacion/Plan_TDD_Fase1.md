@@ -24111,6 +24111,63 @@ que aún no la lleva no se puede declarar: hay que volver a escribir un programa
 
 ---
 
+### Prompt ACT.8 (CÓDIGO) — El agéntico también trocea lo que ingiere
+
+**Modelo sugerido**: **Sonnet** — la decisión ya está tomada (el usuario, 2026-08-28); lo que
+queda es cambiar una condición en tres sitios y reindexar un asistente.
+
+**Objetivo**: la ingesta trocea y embebe **sólo en modo RAG**, y el banco agéntico está en
+`MD_AGENT_SELECTOR`. Al actualizar el corpus, sus 6 documentos nuevos entraron **sin un solo
+fragmento**. La premisa —«los otros dos modos no embeben nada»— está escrita igual en tres sitios
+y fue una decisión, pero es **anterior** a que el agéntico tuviera búsqueda por fragmentos: su
+herramienta `search_knowledge` consulta justamente eso, y HIB reparó sus 14.198 fragmentos
+dejando escrito que «no son peso muerto».
+
+Sin esto, su búsqueda por fragmentos es ciega a lo que se ingiera desde ahora, **y una reingesta
+de un documento ya troceado le borraría los fragmentos que tiene** —el `else` los borra—.
+
+```
+# PROMPT ACT.8 (CODIGO) — Quien tiene busqueda por fragmentos, los tiene
+# Deploy: edge
+
+## La pregunta correcta no es el modo, es si el asistente busca por fragmentos
+`RAG` y `MD_AGENT_SELECTOR` los usan: el primero como su unica via, el segundo a traves de
+`search_knowledge`. `MD_LONG_CONTEXT` no: inyecta documentos enteros y no consulta el indice
+vectorial nunca. Asi que la condicion deja de preguntar «¿es RAG?» y pasa a preguntar «¿este
+modo busca por fragmentos?», que es lo que de verdad decide si hay que trocear.
+
+## Cambio, en los tres sitios que hoy dicen lo mismo
+- `MODES_QUE_BUSQUEN_PER_FRAGMENTS = ("RAG", "MD_AGENT_SELECTOR")`, en un solo sitio, y los tres
+  lo importan. Que la premisa estuviera repetida tres veces es por lo que envejecio sin que
+  nadie la revisara.
+- `watcher.process_source`: trocea si el modo esta en el conjunto. **El `else` que BORRA los
+  fragmentos** se queda solo para los modos que de verdad no los usan.
+- `corpus_recalculator`: igual.
+- `hub_chatbots_router`: exigir servicio de embeddings operativo al crear tambien en
+  `MD_AGENT_SELECTOR`. Crear un asistente que no va a poder trocear es fallar tarde.
+
+## Lo que NO cambia
+- `MD_LONG_CONTEXT` sigue sin embeber, y su `else` sigue borrando: es el unico modo que de
+  verdad no consulta fragmentos.
+- Ningun asistente en produccion se toca: los dos son RAG. Esto afecta a un banco de
+  comparacion.
+
+## Tests (RED primero)
+- `process_source` con `MD_AGENT_SELECTOR` crea fragmentos (hoy son 0).
+- `process_source` con `MD_LONG_CONTEXT` NO crea fragmentos y borra los que hubiera.
+- Reingerir un documento en `MD_AGENT_SELECTOR` no deja el documento sin fragmentos, que es el
+  defecto latente: hoy el `else` se los llevaria.
+- `corpus_recalculator` en `MD_AGENT_SELECTOR` devuelve `chunks_created > 0` y `deleted == 0`.
+
+## Criterio de done
+- Los 6 documentos del banco agentico con fragmentos, y **cero documentos sin fragmentos** en
+  los cuatro asistentes.
+- La suite de `modules/agents_hub`, `public_graphs` y `api` en verde.
+- §12.4 del informe reescrito: deja de ser un hueco abierto.
+```
+
+---
+
 ## Candidatos con prompt propio, para después
 
 - **Botón «Actualizar corpus» en la pestaña Documentos.** La pantalla útil no es «ingerir» sino

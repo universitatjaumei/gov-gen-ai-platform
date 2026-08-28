@@ -25,6 +25,9 @@ from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
 from server.app.modules.agents_hub.services.corpus_purge import purgar_corpus_del_chatbot
 from server.app.modules.agents_hub.services.corpus_recalculator import recalculate_corpus
 from server.app.modules.agents_hub.services.corpus_recommender import recommend_retrieval_mode
+from server.app.modules.agents_hub.ingestion.watcher import (
+    MODOS_QUE_BUSCAN_POR_FRAGMENTOS,
+)
 from server.app.modules.agents_hub.services.embedding_resolver import (
     resolve_embedding_service,
 )
@@ -309,9 +312,10 @@ async def create_chatbot(
     assert_org_access(user, body.organizacion_id)
 
     # RAG.9: fallar al crear es barato; fallar a mitad de una ingesta de miles de documentos
-    # no. Solo en modo RAG: los otros dos no embeben nada, y exigirles un servicio operativo
-    # sería inventarles un requisito que no tienen.
-    if body.retrieval_mode == "RAG":
+    # no. Sólo para los modos que CONSULTAN el índice vectorial (ACT.8): a `MD_LONG_CONTEXT`,
+    # que inyecta documentos enteros, exigirle un servicio de embeddings operativo sería
+    # inventarle un requisito que no tiene.
+    if body.retrieval_mode in MODOS_QUE_BUSCAN_POR_FRAGMENTOS:
         try:
             await resolve_embedding_service(session)
         except Exception as fallo:

@@ -402,7 +402,13 @@ class TestValidacionAlCrearChatbot:
             app.dependency_overrides.pop(get_current_user, None)
             app.dependency_overrides.pop(get_async_session, None)
 
-    def test_should_not_require_embeddings_for_a_non_rag_chatbot(self):
+    def test_should_not_require_embeddings_for_long_context(self):
+        """ACT.8 — el modo del ejemplo era `MD_AGENT_SELECTOR`, y ese SI los necesita.
+
+        `MD_LONG_CONTEXT` es el unico que de verdad no consulta el indice vectorial: inyecta
+        documentos enteros. Exigirle un servicio de embeddings operativo seria inventarle un
+        requisito que no tiene; exigirselo al agentico es fallar pronto en vez de tarde.
+        """
         from unittest.mock import AsyncMock, MagicMock, patch
 
         from fastapi.testclient import TestClient
@@ -442,7 +448,7 @@ class TestValidacionAlCrearChatbot:
                         "organizacion_id": ORG_PRUEBA,
                         "llm_config_id": str(uuid.uuid4()),
                         "system_prompt": "Ets un assistent.",
-                        "retrieval_mode": "MD_AGENT_SELECTOR",
+                        "retrieval_mode": "MD_LONG_CONTEXT",
                     },
                 )
             assert resp.status_code == 201

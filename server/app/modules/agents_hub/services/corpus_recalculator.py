@@ -9,7 +9,10 @@ from server.app.modules.agents_hub.database.operational_models import (
     HubDocument,
     HubDocumentChunk,
 )
-from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+from server.app.modules.agents_hub.ingestion.watcher import (
+    MODOS_QUE_BUSCAN_POR_FRAGMENTOS,
+    IngestionWatcher,
+)
 
 
 async def recalculate_corpus(
@@ -29,7 +32,7 @@ async def recalculate_corpus(
     )
     docs = list(docs_result.scalars().all())
 
-    if retrieval_mode == "RAG":
+    if retrieval_mode in MODOS_QUE_BUSCAN_POR_FRAGMENTOS:
         watcher = IngestionWatcher(
             session=session,
             embedding_service=embedding_service,

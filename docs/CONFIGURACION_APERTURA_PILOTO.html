@@ -1039,24 +1039,33 @@ Gerencia.</pre>
     ahora manda el corpus sólo cuando trae la firma, y si no la trae se conserva lo que puso la
     persona.</p>
 
-    <h3>12.4 · Un hueco abierto: el asistente agéntico no trocea lo que ingiere</h3>
+    <h3>12.4 · El asistente agéntico no troceaba lo que ingería. Ya lo hace</h3>
+    <p>De los seis documentos nuevos que recibió el banco agéntico, los <b>seis se quedaron sin
+    fragmentos</b>. La ingesta troceaba y embebía <b>sólo en modo RAG</b>, y ese asistente está en
+    <code>MD_AGENT_SELECTOR</code>; el informe decía <code>ingeridos=6</code> sin mentir, porque el
+    documento sí entró.</p>
+    <p>La premisa —«los otros dos modos no embeben nada»— estaba escrita igual en <b>tres sitios</b>
+    del código, así que fue una decisión. Pero es <b>anterior</b> a que el agéntico tuviera búsqueda
+    por fragmentos: su herramienta <code>search_knowledge</code> consulta justamente el índice
+    vectorial, y el bloque HIB reparó sus 14.198 fragmentos dejando escrito que «no son peso
+    muerto». Que la premisa viviera repetida tres veces es por lo que envejeció sin que nadie la
+    revisara; ahora se declara una vez y la importan los tres.</p>
     <div class="alerta">
-        <span class="titular">Apareció al ingerir, y no lo resuelve el bloque</span>
-        <p>De los seis documentos nuevos que recibió el banco agéntico, los <b>seis se quedaron sin
-        fragmentos</b>. La ingesta trocea y embebe <b>sólo en modo RAG</b>, y ese asistente está en
-        <code>MD_AGENT_SELECTOR</code>. La premisa —«los otros dos modos no embeben nada»— está
-        escrita igual en tres sitios del código, así que fue una decisión; pero es <b>anterior</b>
-        a que el agéntico tuviera búsqueda por fragmentos, y hoy su herramienta
-        <code>search_knowledge</code> consulta justamente eso. Sus 14.208 fragmentos actuales
-        vienen de antes y se repararon en el bloque HIB, que dejó dicho que «no son peso
-        muerto».</p>
-        <p><b>Consecuencia</b>: la búsqueda por fragmentos del agéntico es ciega a lo que se
-        ingiera desde ahora, y una reingesta de un documento ya troceado <b>le borraría</b> los
-        fragmentos. Afecta sólo a un banco de comparación, no a los dos asistentes en producción,
-        pero invalidaría cualquier medición que compare al agéntico con los otros sobre el corpus
-        nuevo. Decidir si <code>MD_AGENT_SELECTOR</code> debe embeber es una decisión de diseño con
-        coste en embeddings, y se deja anotada aquí en vez de tomarla de paso.</p>
+        <span class="titular">Y el hueco tapaba algo peor</span>
+        <p>La rama que no trocea <b>borra</b> los fragmentos que hubiera. Cuando el cuerpo de una
+        norma cambia, la ingesta sustituye el documento por uno nuevo — que nacía sin índice. El
+        agéntico habría ido <b>perdiendo sus 14.208 fragmentos norma a norma</b>, según se fueran
+        actualizando, y <code>search_knowledge</code> habría dejado de verlas sin que nada avisara.
+        No era un hueco de seis documentos: era una fuga lenta.</p>
     </div>
+    <p>La condición dejó de preguntar «¿es RAG?» y pregunta <b>«¿este modo busca por
+    fragmentos?»</b>, que es lo que de verdad decide si hay que trocear: <code>RAG</code> los usa
+    como única vía y <code>MD_AGENT_SELECTOR</code> a través de <code>search_knowledge</code>.
+    <code>MD_LONG_CONTEXT</code> sigue fuera y su borrado sigue siendo correcto: inyecta documentos
+    enteros y no consulta el índice nunca.</p>
+    <p class="nota">Aplicado y medido: <b>cero documentos sin fragmentos</b> en los cuatro
+    asistentes. El agéntico pasa de 14.208 a <b>14.459</b>. Ningún asistente en producción se tocó:
+    los dos son RAG.</p>
 
     <h3>12.5 · Lo que espera a Secretaría General</h3>
     <ol>
@@ -1069,11 +1078,17 @@ Gerencia.</pre>
         <li><b>Nueve parejas sin validar ninguna de sus dos versiones</b>, que son las que
         necesitan el panel de vigencia:
         <div class="tabla-marco" style="margin-top:.6rem"><table>
-            <thead><tr><th>Pareja</th><th>Pareja</th><th>Pareja</th></tr></thead>
+            <thead><tr><th>Pareja</th><th>Estado declarado</th><th>Norma</th></tr></thead>
             <tbody>
-            <tr><td><code>CRI-002</code></td><td><code>FAQ-001</code></td><td><code>GES-001</code></td></tr>
-            <tr><td><code>PLA-001 / PLA-002</code></td><td><code>PLA-003</code></td><td><code>PLA-004</code></td></tr>
-            <tr><td><code>PRC-007</code></td><td><code>RES-003</code></td><td><code>RES-006</code></td></tr>
+            <tr><td><code>CRI-002 / CRI-002-val</code></td><td>vigent</td><td>Criterios para la contratación de personal externo a los másteres universitarios</td></tr>
+            <tr><td><code>FAQ-001 / FAQ-001-val</code></td><td>vigent</td><td>Preguntas frecuentes de la UGITJ sobre gestión de proyectos</td></tr>
+            <tr><td><code>GES-001 / GES-001-val</code></td><td>vigent</td><td>Procedimiento para la gestión económica de cursos, jornadas, etc., organizadas por la UJI y que se financian total o parcialmente con los ingresos de las personas asistentes</td></tr>
+            <tr><td><code>PLA-001 / PLA-002</code></td><td>vigent</td><td>Plan de medidas antifraude de la Universitat Jaume I</td></tr>
+            <tr><td><code>PLA-003 / PLA-003-val</code></td><td>vigent</td><td>Plan Estratégico de Subvenciones 2023-25 de la Universitat Jaume I</td></tr>
+            <tr><td><code>PLA-004 / PLA-004-val</code></td><td>vigent</td><td>Plan de acción CoARA 2024-2027 de la Universitat Jaume I</td></tr>
+            <tr><td><code>PRC-007 / PRC-007-val</code></td><td>vigent</td><td>Procedimiento de gestión de las situaciones de conflicto de intereses de la Universitat Jaume I</td></tr>
+            <tr><td><code>RES-003 / RES-003-val</code></td><td>vigent</td><td>Resolución de 30 de marzo de 2026, del Rectorado, por la cual se aprueba la política de seguridad de la información</td></tr>
+            <tr><td><code>RES-006 / RES-006-val</code></td><td>no vigent</td><td>Resolución de 9 de junio de 2026, del Rectorado, de delegación de competencias en vicerrectorados, secretaría general y gerencia — <b>derogada por RES-005</b>: validarla es confirmar que ya NO rige</td></tr>
             </tbody>
         </table></div>
         <p style="margin:.5rem 0 0">Validar <b>una</b> de las dos versiones de cada pareja basta:

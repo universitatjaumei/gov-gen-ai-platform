@@ -141,7 +141,13 @@ class TestIngestionCreatesDocuments:
         assert n_chunks == 0
         embedding_svc.embed.assert_not_called()
 
-    async def test_upload_in_agentic_mode_skips_chunks(self):
+    async def test_upload_in_agentic_mode_also_chunks(self):
+        """ACT.8 — era `..._skips_chunks`, y ese «skip» era el defecto.
+
+        El agentico busca por fragmentos con `search_knowledge`, asi que saltarselos dejaba su
+        indice ciego a todo lo que se ingiriera. Y como la rama que no trocea BORRA, se habria
+        ido vaciando norma a norma segun se actualizaran.
+        """
         from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
 
         session = _make_session_for_new_doc()
@@ -160,8 +166,10 @@ class TestIngestionCreatesDocuments:
             prefetched_content="# Norma\n\nTexto.",
         )
 
-        assert n_chunks == 0
-        embedding_svc.embed.assert_not_called()
+        # Se afirma sobre los fragmentos y no sobre `embed`: el watcher embebe por lote
+        # (`embed_para_indexar`), y un `AsyncMock` fabrica el metodo que se le pida, asi que
+        # exigir `embed` seria afirmar un detalle de implementacion que hoy no es cierto.
+        assert n_chunks > 0
 
     async def test_re_upload_same_content_is_idempotent(self):
         from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
