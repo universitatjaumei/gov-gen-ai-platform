@@ -73,12 +73,29 @@ def _lineas_con_institucion(ruta: Path, *, solo_codigo: bool) -> list[str]:
 
 class TestLaCredencialDeDesarrolloNoEsDeNadie:
 
-    def test_should_read_the_dev_superadmin_email_from_the_environment(self):
+    def test_should_read_the_dev_superadmin_email_from_the_environment(self, monkeypatch):
+        """Lo que vigila AIS.2 es el valor POR DEFECTO, no el que resuelve esta máquina.
+
+        La versión anterior leía `seeds.DEV_ADMIN_EMAIL` ya resuelto, y `core/config.py` vuelca
+        `server/.env` al entorno del proceso: un desarrollador que ponga
+        `DEV_ADMIN_EMAIL=alguien@su-universidad.es` en su `.env` —que está en `.gitignore` y es
+        **exactamente** lo que el propio AIS.2 manda hacer al fork— ponía este guardarraíl en
+        rojo sin que el repositorio publicara nada institucional.
+
+        El defecto era del test, no del código: confundía «lo que se publica» con «lo que corre
+        aquí», que es justo la distinción que AIS.2 existe para mantener. Se comprueba sin
+        entorno, que es lo que ve quien clona.
+        """
+        import importlib
+
+        monkeypatch.delenv("DEV_ADMIN_EMAIL", raising=False)
         from server.app.database import seeds
 
-        assert not _INSTITUCIONES.search(seeds.DEV_ADMIN_EMAIL), (
-            f"DEV_ADMIN_EMAIL vale {seeds.DEV_ADMIN_EMAIL!r}: todo fork que arranque en local "
-            "crea un superadministrador con el correo del mantenedor del principal"
+        por_defecto = importlib.reload(seeds).DEV_ADMIN_EMAIL
+        assert not _INSTITUCIONES.search(por_defecto), (
+            f"el DEV_ADMIN_EMAIL por defecto vale {por_defecto!r}: todo fork que arranque en "
+            "local sin configurar nada crea un superadministrador con el correo del mantenedor "
+            "del principal"
         )
 
     def test_should_let_a_fork_choose_its_own_dev_credential(self, monkeypatch):

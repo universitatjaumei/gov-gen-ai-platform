@@ -93,13 +93,59 @@ class ReconcileReport:
         )
 
 
-def _metadata_objetivo(entry: CorpusDocumentEntry) -> dict:
+def _a_utc(valor):
+    """Un `datetime` siempre con zona, en UTC. Lo demás, tal cual.
+
+    ACT.1 — **el defecto que hacía mentir al informe.** Las columnas de fecha son
+    `timestamp with time zone` y el front-matter trae fechas desnudas (`revisat_el:
+    '2026-08-10'`), así que la comparación era *aware* contra *naive*, y en Python eso NUNCA
+    es igual: `datetime(2026,8,10) != datetime(2026,8,10, tzinfo=utc)`. No es un desfase que
+    se cure aplicando la pasada, es estructural.
+
+    Medido sobre el corpus real el 2026-08-28: **292 de 292 «actualizaciones de metadatos»
+    eran esto**, y con ese ruido las 24 diferencias reales no se veían. No costaba embeddings
+    —el hash es del cuerpo—, pero volvía a escribir el puente bilingüe del corpus entero en
+    cada pasada y dejaba el informe inservible como instrumento.
+
+    Naive se interpreta como UTC y no como hora local: la fecha viene de un `.md` que declara
+    un día, no un instante, y hacerla depender de la zona de la máquina que reconcilia
+    convertiría el mismo paquete en dos resultados distintos.
+    """
+    if isinstance(valor, datetime):
+        return (
+            valor.replace(tzinfo=timezone.utc)
+            if valor.tzinfo is None
+            else valor.astimezone(timezone.utc)
+        )
+    return valor
+
+
+def _corpus_declara_validacion(entry: CorpusDocumentEntry) -> bool:
+    """Si la validación de vigencia viaja con el corpus, o la puso una persona en el panel.
+
+    Los dos sistemas escriben el mismo campo: el panel (`hub_ingestion_router.validar_vigencia`)
+    y el front-matter. Hasta ACT.1 ganaba el último en pasar, que era siempre el reconciliador,
+    así que **cada pasada borraba la validación humana** y la sustituía por la fecha del `.md`
+    —249 documentos del corpus real—. Ahora la regla se dice en voz alta: manda el corpus cuando
+    trae `vigencia_validada_per` (es la firma de Secretaría General viajando con el documento);
+    si no lo trae, no hay nada que imponer y se conserva lo que hay.
+    """
+    # Es un campo DECLARADO del contrato (`manifest.py`), no una clave de `extra`:
+    # buscarlo en `extra` devolvia siempre False y el corpus nunca ganaba.
+    return bool(getattr(entry, "vigencia_validada_per", None))
+
+
+def _metadata_objetivo(entry: CorpusDocumentEntry, doc: HubDocument | None = None) -> dict:
     """`doc_metadata` que le corresponde a la entrada: `extra` + los campos no-columna."""
     salida = dict(entry.extra)
     for campo in _A_METADATA:
         valor = getattr(entry, campo, None)
         if valor is not None:
             salida[campo] = valor.isoformat() if hasattr(valor, "isoformat") else valor
+    if doc is not None and not _corpus_declara_validacion(entry):
+        anterior = (doc.doc_metadata or {}).get("vigencia_validada_per")
+        if anterior:
+            salida["vigencia_validada_per"] = anterior
     return salida
 
 
@@ -113,18 +159,22 @@ def _difiere(doc: HubDocument, entry: CorpusDocumentEntry, title: str) -> bool:
         # fecha y nada venciera jamás.
         if campo == "data_revisio_prevista" and entry.data_revisio_prevista is None:
             continue
-        if getattr(doc, campo) != getattr(entry, campo):
+        if campo == "vigencia_validada_el" and not _corpus_declara_validacion(entry):
+            continue
+        if _a_utc(getattr(doc, campo)) != _a_utc(getattr(entry, campo)):
             return True
     for campo in _COLUMNAS_ARRAY:
         if list(getattr(doc, campo) or []) != list(getattr(entry, campo) or []):
             return True
-    return (doc.doc_metadata or {}) != _metadata_objetivo(entry)
+    return (doc.doc_metadata or {}) != _metadata_objetivo(entry, doc)
 
 
 def _aplicar(doc: HubDocument, entry: CorpusDocumentEntry, title: str) -> None:
     doc.title = title
     for campo in _COLUMNAS:
-        setattr(doc, campo, getattr(entry, campo))
+        if campo == "vigencia_validada_el" and not _corpus_declara_validacion(entry):
+            continue
+        setattr(doc, campo, _a_utc(getattr(entry, campo)))
     # SYNC.2: sin fecha de revisión no hay caducidad posible y el documento envejecería en
     # silencio, que es el riesgo nº1 del informe (312 de 314 fichas dicen «vigent?»). Se
     # rellena solo si no hay ninguna: renovarla en cada pasada equivaldría a no tenerla.
@@ -134,7 +184,7 @@ def _aplicar(doc: HubDocument, entry: CorpusDocumentEntry, title: str) -> None:
         )
     for campo in _COLUMNAS_ARRAY:
         setattr(doc, campo, list(getattr(entry, campo) or []))
-    doc.doc_metadata = _metadata_objetivo(entry)
+    doc.doc_metadata = _metadata_objetivo(entry, doc)
     doc.source_kind = entry.extra.get("source_kind", "publicacio")
 
 

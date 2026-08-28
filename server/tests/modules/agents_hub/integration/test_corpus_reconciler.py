@@ -657,3 +657,144 @@ class TestVersionIdiomatica:
         assert docs["REG-601-es"].versio_idiomatica_de == docs["REG-601"].id
         assert docs["REG-601-es"].canonica is False
         assert docs["REG-601"].canonica is True
+
+
+# ───────────────────── ACT.1 — el informe dice la verdad ─────────────────────
+#
+# Una pasada sobre un corpus SIN CAMBIOS reportaba 292 «actualizaciones de metadatos» sobre
+# el corpus real. No eran cambios: la columna es `timestamp with time zone` y el front-matter
+# trae fechas desnudas, así que `_difiere` comparaba un datetime *aware* contra uno *naive*,
+# y en Python eso NUNCA es igual. Con ese ruido, las 24 diferencias reales no se veían.
+#
+# El segundo defecto es peor porque pierde trabajo humano: el panel de vigencia
+# (`hub_ingestion_router.validar_vigencia`) escribe `vigencia_validada_el`, y el reconciliador
+# lo pisaba con la fecha del `.md` en cada pasada.
+
+
+class TestIdempotenciaDeFechas:
+
+    @pytest.mark.asyncio
+    async def test_una_segunda_pasada_sin_cambios_no_actualiza_metadatos(
+        self, db_session, tmp_path
+    ):
+        """El invariante del bloque: reconciliar dos veces lo mismo no cambia nada."""
+        _escribir(
+            tmp_path,
+            "REG-701",
+            extra=(
+                "content_class: regulation\n"
+                "revisat_per: Modesto Fabra\n"
+                "revisat_el: '2026-08-10'\n"
+            ),
+        )
+        chatbot_id = uuid.uuid4()
+
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        informe = await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        assert informe.metadatos_actualizados == 0, informe.detalle
+        assert informe.omitidos == 1
+
+    @pytest.mark.asyncio
+    async def test_la_fecha_naive_del_md_no_difiere_de_la_aware_guardada(
+        self, db_session, tmp_path
+    ):
+        """`revisat_el: '2026-08-10'` contra lo que la BD devuelve, que lleva zona."""
+        from datetime import datetime, timezone
+
+        from server.app.modules.agents_hub.ingestion.corpus.reconciler import _difiere
+        from server.app.modules.agents_hub.ingestion.corpus.manifest import (
+            CorpusDocumentEntry,
+        )
+
+        class _Doc:
+            title = "Norma"
+            doc_metadata: dict = {}
+            ambits_secundaris: list = []
+            submateries: list = []
+            submateries_internes: list = []
+
+        doc = _Doc()
+        entrada = CorpusDocumentEntry(
+            relative_path="x.md",
+            source_url="https://www.uji.es/x",
+            language="ca",
+            title="Norma",
+            content_class="regulation",
+            revisat_per="Modesto Fabra",
+            revisat_el=datetime(2026, 8, 10),
+        )
+        for campo in (
+            "content_class", "ambit_principal", "nivell_acces", "us_assistents",
+            "canonica", "estat_vigencia", "revisat_per", "vigencia_validada_el",
+            "data_revisio_prevista", "id_publicacio",
+        ):
+            setattr(doc, campo, getattr(entrada, campo))
+        doc.doc_metadata = {"relative_path": "x.md"}
+        # Lo que Postgres devuelve para un `timestamptz` escrito desde la fecha desnuda.
+        doc.revisat_el = datetime(2026, 8, 10, tzinfo=timezone.utc)
+
+        assert _difiere(doc, entrada, "Norma") is False
+
+    @pytest.mark.asyncio
+    async def test_no_pisa_la_validacion_que_escribio_una_persona(
+        self, db_session, tmp_path
+    ):
+        """Sin `vigencia_validada_per` en el .md, manda lo que puso el panel."""
+        from datetime import datetime, timezone
+
+        _escribir(tmp_path, "REG-702")
+        chatbot_id = uuid.uuid4()
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        docs = await _documentos(db_session, chatbot_id)
+        validado = datetime(2026, 8, 27, 6, 41, 56, tzinfo=timezone.utc)
+        docs["REG-702"].vigencia_validada_el = validado
+        docs["REG-702"].doc_metadata = {
+            **(docs["REG-702"].doc_metadata or {}),
+            "vigencia_validada_per": "Una persona, desde el panel",
+        }
+        await db_session.commit()
+
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        docs = await _documentos(db_session, chatbot_id)
+        assert docs["REG-702"].vigencia_validada_el == validado
+        assert (
+            docs["REG-702"].doc_metadata.get("vigencia_validada_per")
+            == "Una persona, desde el panel"
+        )
+
+    @pytest.mark.asyncio
+    async def test_la_validacion_que_viaja_con_el_corpus_si_manda(
+        self, db_session, tmp_path
+    ):
+        """Si el .md la trae, es la de Secretaría General y gana."""
+        _escribir(tmp_path, "REG-703")
+        chatbot_id = uuid.uuid4()
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        _escribir(
+            tmp_path,
+            "REG-703",
+            extra=(
+                "vigencia_validada_per: Secretaria General\n"
+                "vigencia_validada_el: '2026-08-11'\n"
+            ),
+        )
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        docs = await _documentos(db_session, chatbot_id)
+        assert docs["REG-703"].vigencia_validada_el is not None
+        assert docs["REG-703"].vigencia_validada_el.date().isoformat() == "2026-08-11"
+        assert (
+            docs["REG-703"].doc_metadata.get("vigencia_validada_per")
+            == "Secretaria General"
+        )
