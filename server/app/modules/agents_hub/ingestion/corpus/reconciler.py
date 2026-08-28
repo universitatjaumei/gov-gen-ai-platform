@@ -159,15 +159,19 @@ def _a_utc(valor):
     return valor
 
 
-#: Metadatos que NO vienen del `.md` y que hay que conservar cuando el corpus no habla de
-#: validacion: los escribe el panel de vigencia (`vigencia_validada_per`) o la propagacion entre
-#: hermanas idiomaticas (`vigencia_validada_des_de`, ACT.6). Sin conservarlos, cada pasada los
-#: quitaria y la siguiente los volveria a poner: exactamente el ruido que ACT.1 elimino.
-_METADATOS_QUE_NO_VIENEN_DEL_CORPUS = (
-    "vigencia_validada_per",
-    "vigencia_validada_des_de",
-    "data_revisio_des_de",
-)
+#: Metadatos que NO vienen del `.md`, y **de que depende conservar cada uno**. Los escribe el
+#: panel de vigencia o la propagacion entre hermanas idiomaticas (ACT.6, ACT.9). Sin conservarlos,
+#: cada pasada los quitaria y la siguiente los volveria a poner: el ruido que ACT.1 elimino.
+#:
+#: La condicion es POR CAMPO y no una sola para todos, y ahi hubo un defecto: `data_revisio_des_de`
+#: colgaba de «el corpus no declara validacion», que no tiene nada que ver con el. En PLA-003-val
+#: —validada Y con la fecha heredada— la condicion se cumplia al reves y la marca se perdia y se
+#: reponia en cada pasada.
+_METADATOS_QUE_NO_VIENEN_DEL_CORPUS = {
+    "vigencia_validada_per": "vigencia_validada_per",
+    "vigencia_validada_des_de": "vigencia_validada_per",
+    "data_revisio_des_de": "data_revisio_prevista",
+}
 
 
 def _corpus_declara_validacion(entry: CorpusDocumentEntry) -> bool:
@@ -192,8 +196,10 @@ def _metadata_objetivo(entry: CorpusDocumentEntry, doc: HubDocument | None = Non
         valor = getattr(entry, campo, None)
         if valor is not None:
             salida[campo] = valor.isoformat() if hasattr(valor, "isoformat") else valor
-    if doc is not None and not _corpus_declara_validacion(entry):
-        for campo in _METADATOS_QUE_NO_VIENEN_DEL_CORPUS:
+    if doc is not None:
+        for campo, lo_declara_el_corpus in _METADATOS_QUE_NO_VIENEN_DEL_CORPUS.items():
+            if getattr(entry, lo_declara_el_corpus, None) is not None:
+                continue  # el corpus habla de eso: manda el corpus
             anterior = (doc.doc_metadata or {}).get(campo)
             if anterior:
                 salida[campo] = anterior
