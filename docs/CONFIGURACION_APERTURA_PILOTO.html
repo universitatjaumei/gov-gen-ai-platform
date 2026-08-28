@@ -117,7 +117,7 @@ pre b{color:var(--tinta);font-weight:600}
 
 <header class="cabecera">
     <p class="eyebrow">Piloto · configuración de apertura</p>
-    <h1>Con qué abren los cuatro asistentes, y las diecisiete pruebas que llevaron a cada
+    <h1>Con qué abre el piloto, y las veinte pruebas que llevaron a cada
     número</h1>
     <p class="entradilla">Ningún valor de esta configuración se hereda de un defecto: todos se
     eligieron con una medición delante o se dejaron como estaban <b>después</b> de medir que
@@ -126,7 +126,7 @@ pre b{color:var(--tinta);font-weight:600}
         <div><dt>Fecha</dt><dd>28 de agosto de 2026</dd></div>
         <div><dt>Bloque</dt><dd>HIB · 15 prompts</dd></div>
         <div><dt>Escenarios medidos</dt><dd>48 + 18</dd></div>
-        <div><dt>Ejecuciones del lote</dt><dd>13</dd></div>
+        <div><dt>Ejecuciones del lote</dt><dd>21</dd></div>
     </dl>
 </header>
 
@@ -145,7 +145,9 @@ pre b{color:var(--tinta);font-weight:600}
     <h2>La configuración, tal como está en la base</h2>
     <div class="tabla-marco">
     <table>
-        <caption>Leído de <code>hub_chatbots</code> el 2026-08-28</caption>
+        <caption>Leído de <code>hub_chatbots</code> el 2026-08-28. «Banco» = con
+        <code>is_active=False</code>: fuera de la vista de los usuarios, dentro del alcance del
+        medidor</caption>
         <thead><tr>
             <th scope="col">Asistente</th><th scope="col">Modo</th>
             <th scope="col" class="num">Umbral</th><th scope="col" class="num">top_k</th>
@@ -169,11 +171,20 @@ pre b{color:var(--tinta);font-weight:600}
                 <td><span class="sello no">off</span></td><td class="num">38.536</td>
             </tr>
             <tr>
-                <th scope="row">Gerencia · agéntico</th><td>MD_AGENT_SELECTOR</td>
+                <th scope="row">Gerencia · agéntico <span class="sello no">banco</span></th>
+                <td>MD_AGENT_SELECTOR</td>
                 <td class="num">0,50</td><td class="num">8</td>
                 <td><span class="sello no">off</span></td><td><code>structural</code></td>
                 <td><span class="sello si">on</span></td>
                 <td><span class="sello no">off</span></td><td class="num">14.208</td>
+            </tr>
+            <tr>
+                <th scope="row">Gerencia · inyección <span class="sello no">banco</span></th>
+                <td>RAG + norma entera</td>
+                <td class="num">0,69</td><td class="num">5</td>
+                <td><span class="sello no">off</span></td><td><code>parent_child</code></td>
+                <td><span class="sello si">on</span></td>
+                <td><span class="sello no">off</span></td><td class="num">38.536</td>
             </tr>
             <tr>
                 <th scope="row">Chatbot Demo</th><td>RAG</td>
@@ -690,6 +701,127 @@ Gerencia.</pre>
     depende del asistente: Infocampus atiende al público y no al personal de Gerencia. «No lo sé» a
     secas deja a quien pregunta en el mismo sitio en el que estaba; decirle a quién preguntar es el
     servicio.</p>
+</section>
+
+<section>
+    <h2>Por qué Gerencia abre con un solo asistente</h2>
+    <p>Gerencia tenía dos asistentes sobre el mismo corpus —RAG y agéntico— y este bloque añadió
+    un tercero para probar la inyección de norma entera. Al piloto sale <b>sólo el RAG</b>. Los
+    otros dos quedan con <code>is_active=False</code>, que es la semántica exacta que hace falta:
+    fuera de la vista de los usuarios y <b>dentro del alcance del banco</b>, porque el medidor
+    construye el grafo con <code>GraphFactory</code> y no consulta ese campo.</p>
+
+    <h3>La razón de método, que es la que decide</h3>
+    <p>Los usuarios de Gerencia son <b>funcionarios, pocos</b>. Repartirlos entre tres asistentes
+    fragmenta el poco tráfico que hay, y nadie les ha pedido que comparen. La comparación no
+    necesita tres chatbots en producción: necesita <b>uno recogiendo preguntas reales</b> y los
+    otros dos <b>reproduciéndolas en diferido</b>. Eso es un diseño emparejado —misma pregunta,
+    mismo corpus, mismo usuario— y es el que necesita menos muestra para decidir; es también el
+    único que permite McNemar. Y se puede repetir con cualquier estrategia futura sobre las mismas
+    preguntas acumuladas, que es exactamente lo que el piloto tiene que producir.</p>
+
+    <h3>Las tres estrategias, medidas sobre el mismo lote y el mismo código</h3>
+    <div class="tabla-marco">
+    <table>
+        <caption>Lote de Gerencia · 13 contestables y 5 negativos · corpus y código corregidos</caption>
+        <thead><tr><th scope="col">Estrategia</th><th scope="col" class="num">Fuente requerida</th>
+        <th scope="col" class="num">Ancla</th><th scope="col" class="num">Calló habiendo respuesta</th>
+        <th scope="col" class="num">Contestó sin deber</th></tr></thead>
+        <tbody>
+            <tr class="destacada"><th scope="row">RAG — top-3, el artículo</th>
+                <td class="num"><b>11/13</b></td><td class="num">0/5</td>
+                <td class="num">1</td><td class="num">4 de 5</td></tr>
+            <tr><th scope="row">Agéntico — el modelo elige y lee entero</th>
+                <td class="num"><b>11/13</b></td><td class="num">0/5</td>
+                <td class="num">2</td><td class="num">5 de 5</td></tr>
+            <tr class="mala"><th scope="row">Inyección — top-5, la norma entera</th>
+                <td class="num">7/13</td><td class="num">0/1</td>
+                <td class="num">1</td><td class="num">4 de 5</td></tr>
+        </tbody>
+    </table>
+    </div>
+    <p>Tres lecturas, en orden de firmeza:</p>
+    <ul>
+        <li><b>La inyección de norma entera recupera peor</b>, y no es artefacto: sus documentos
+        casan por <code>content_hash</code>, las URL son las mismas y el código es el mismo. Con
+        <code>top_k=5</code> entran dos documentos más y la métrica exige <b>todas</b> las fuentes
+        requeridas del escenario: lo que entra de más desplaza a lo que hacía falta. Es coherente
+        con lo que el experimento de granularidad ya insinuaba — <b>inyectar más texto no mejora
+        monótonamente</b>; allí la submateria entera, 22 veces más contexto, midió lo mismo que 3
+        normas.</li>
+        <li><b>El agéntico ya no gana.</b> Empata en recuperación y declina peor. Toda su ventaja
+        aparente del bloque venía de dos defectos, y con los dos corregidos la comparación que se
+        perseguía desde tres bloques da <b>empate en encontrar y ventaja del RAG en callar</b>.</li>
+        <li><b>El ancla es 0 en las tres</b>, y no depende de la estrategia: las normas propias de
+        Gerencia se citan al sitio publicado <b>sin fragmento</b>, mientras las estatales van al
+        BOE con <code>#a118</code>. Es un problema de publicación.</li>
+    </ul>
+    <div class="alerta">
+        <span class="titular">Cómo leer el empate</span>
+        <p>El agéntico dio <b>13/13</b> en una ejecución y <b>11/13</b> en la siguiente, con el
+        mismo lote y sólo el arreglo del agrupamiento en medio. Esa diferencia de dos escenarios
+        es la varianza medida del propio mecanismo: <b>±3 sobre 18</b>. Así que el empate no
+        significa «exactamente iguales», significa <b>indistinguibles con este lote</b>.</p>
+        <p>Lo que sí es firme porque no depende del lote: el RAG es el único de los tres cuyas
+        cifras nunca estuvieron contaminadas.</p>
+    </div>
+</section>
+
+<section>
+    <h2>El defecto que invalidó las cifras del agéntico</h2>
+    <p>Al medir el tercer asistente salió <b>1 de 13</b> fuentes requeridas frente a 11 de los
+    otros dos. Antes de reportarlo se comprobó, y no era la estrategia: las URL recuperadas eran
+    <b>idénticas</b> en las tres. Tirando de ahí apareció algo más grande.</p>
+    <p><b>El asistente agéntico tenía 14.198 de sus 14.208 fragmentos con
+    <code>chunk_metadata["document_id"]</code> apuntando a documentos del chatbot RAG.</b> Los
+    fragmentos eran suyos —la columna <code>chatbot_id</code> estaba bien, así que la búsqueda los
+    filtraba correctamente— pero <code>VectorRetrievalStrategy</code> agrupaba por el
+    <code>document_id</code> del <b>metadato</b>, así que cargaba las filas del hermano y la cita
+    salía con su título. <b>Sin ningún error.</b></p>
+    <p>Por el camino se descartaron tres explicaciones mejores que la real: el retriever <b>sí</b>
+    filtra por chatbot, el índice del agéntico <b>sólo</b> ofrece documentos propios, y
+    <code>read()</code> —que efectivamente no comprueba el dueño— está documentado como deliberado
+    y su premisa se cumple.</p>
+
+    <h3>Qué invalida</h3>
+    <p>Todas las cifras del agéntico de este bloque, incluido <b>su primer puesto en el
+    experimento de granularidad</b> con 76 %. Se midieron citando documentos de otro corpus. Con
+    contenido casi idéntico las respuestas no eran falsas, pero «agéntico contra RAG» no comparaba
+    dos corpus: comparaba <b>dos formas de leer el mismo</b>.</p>
+
+    <h3>El arreglo, en dos capas</h3>
+    <div class="paso">
+        <div class="n">datos</div>
+        <div>14.198 fragmentos remapeados con un <code>UPDATE</code> del metadato:
+        <code>parent_content</code> y <code>embedding</code> no se tocan, así que <b>no cuesta
+        embeddings</b>. Verificado con una segunda pasada independiente: los cinco corpus
+        coherentes.</div>
+
+        <div class="n">causa</div>
+        <div>La agrupación lee ahora la <b>columna</b> <code>document_id</code> y deja el metadato
+        como repliegue para los fragmentos legados. La columna la sostiene la base de datos con
+        una clave ajena; el metadato es una copia denormalizada escrita al trocear. <b>Cuando dos
+        copias del mismo dato pueden discrepar, se lee la que no se puede corromper sin que la
+        base se queje.</b></div>
+    </div>
+    <p>La columna hubo que llevarla por <b>tres</b> puntos, no uno: las dos búsquedas base y —el
+    que importaba— la <b>fusión RRF</b>, que reconstruye el resultado desde cero. Si el dato se
+    hubiera caído ahí, los tests unitarios habrían pasado igual y el arreglo no habría servido de
+    nada en producción.</p>
+
+    <h3>Y lo que más importa del hallazgo</h3>
+    <p><b>El guardarraíl ya existía.</b> <code>chunk_copier.incoherentes()</code> compara
+    exactamente eso, y la consulta equivalente estaba en el guion del techo del padre. Sólo se
+    había pasado por los corpus que la copia tocaba. <i>Un invariante que sólo se comprueba donde
+    se sospecha no es un invariante</i>: ahora se pasa por los cinco.</p>
+    <p>El mismo día apareció una segunda versión del mismo patrón. El puntuador de relevancia del
+    agéntico usaba una constante sin importarla; cada llamada lanzaba <code>NameError</code>, y la
+    guarda puesta a propósito para que un puntuador roto no tumbara la respuesta lo <b>tragaba</b>
+    y devolvía la nota sin medir. <b>El arreglo estuvo inerte hasta que el linter lo señaló</b>, y
+    su único síntoma era un <code>score_sin_medir=True</code> que nadie miraba. La lección no es
+    «pasa el linter»: es que <b>una guarda defensiva convierte un fallo de programación en un
+    comportamiento degradado silencioso</b>, y donde hay una guarda así hace falta un test que
+    compruebe que el camino bueno funciona, no sólo que el malo no explota.</p>
 </section>
 
 <footer class="pie">

@@ -50,6 +50,12 @@ class SearchResult:
     # RAG.8: sección completa a la que pertenece el fragmento, con la estrategia
     # 'parent_child'. Se busca con el hijo y se responde con el padre.
     parent_content: str | None = None
+    # HIB.U: el `document_id` de la COLUMNA, que es el que la base sostiene con una clave
+    # ajena. Viajaba solo dentro de `metadata`, que es una copia denormalizada escrita al
+    # trocear, y cuando las dos discrepan la agrupacion cargaba el documento equivocado: el
+    # agentico de Gerencia tenia 14.198 de 14.208 fragmentos apuntando a documentos de OTRO
+    # chatbot, y la cita salia con su titulo sin dar ningun error.
+    document_id: uuid.UUID | None = None
     # HIB.J: la **similitud coseno** del fragmento, que `hybrid_search` conserva en vez de
     # perderla al sobrescribir `score` con la nota de fusión.
     #
@@ -137,6 +143,7 @@ class HybridRetriever:
                 score=float(row.score),
                 metadata=row.HubDocumentChunk.chunk_metadata or {},
                 parent_content=row.HubDocumentChunk.parent_content,
+                document_id=row.HubDocumentChunk.document_id,
             )
             for row in filas
         ]
@@ -196,6 +203,7 @@ class HybridRetriever:
                 score=float(fila.rank) / maximo,
                 metadata=fila.HubDocumentChunk.chunk_metadata or {},
                 parent_content=fila.HubDocumentChunk.parent_content,
+                document_id=fila.HubDocumentChunk.document_id,
             )
             for fila in filas
         ]
@@ -263,6 +271,7 @@ class HybridRetriever:
                 score=s,
                 metadata=r.metadata,
                 parent_content=r.parent_content,
+                document_id=r.document_id,
                 relevance=relevancias.get(r.id),
             )
             for r, s in sorted_results[:top_k]

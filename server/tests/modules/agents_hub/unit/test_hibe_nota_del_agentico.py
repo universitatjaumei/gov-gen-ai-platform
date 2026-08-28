@@ -122,3 +122,73 @@ class TestLaNotaQueLlegaAlaPuerta:
 
         assert leidas[0].metadata["index_fallback_level"] == 1
         assert leidas[0].metadata["lectura_truncada"] is False
+
+
+@pytest.mark.asyncio
+class TestElPuntuadorDevuelveUnNumeroDeVerdad:
+    """Por qué hacía falta ejercitar el camino BUENO, y no sólo el malo.
+
+    `_puntuador_de_relevancia` usaba `PURPOSE_QUERY` sin importarlo. Cada llamada lanzaba
+    `NameError`, y el `except Exception` de `_puntua` —puesto a propósito para que un puntuador
+    roto no tumbara la respuesta— lo tragaba y devolvía la nota sin medir. **El arreglo de HIB.E
+    estuvo inerte**, con el único síntoma de un `score_sin_medir=True` que nadie miraba.
+
+    Lo cazó `ruff`, no un test. Y la lección no es «pasa el linter», porque el linter no ve un
+    `KeyError` ni un campo renombrado: es que **una guarda defensiva convierte un fallo de
+    programación en un comportamiento degradado silencioso**, y donde hay una guarda así hace
+    falta un test que compruebe que el camino bueno **produce el número**, no sólo que el malo no
+    explota. Los tres tests de arriba comprobaban lo segundo.
+    """
+
+    async def test_should_return_a_cosine_and_not_swallow_a_programming_error(self):
+        class _Embedder:
+            async def embed(self, texto, purpose=None):
+                return [0.1] * 1024
+
+        class _Resultado:
+            def scalar(self):
+                return 0.26  # distancia coseno
+
+        class _Sesion:
+            async def execute(self, stmt):
+                return _Resultado()
+
+        class _Deps:
+            embedder = _Embedder()
+            session = _Sesion()
+
+        from server.app.modules.agents_hub.agent.public_graphs.core.graph_factory import (
+            _puntuador_de_relevancia,
+        )
+
+        puntua = _puntuador_de_relevancia(_Deps())
+        assert puntua is not None
+        # Si faltara un import, esto lanzaría NameError aquí —donde se ve— en vez de quedar
+        # tragado por el `except` del bucle agéntico.
+        assert await puntua("Quants credits?", str(uuid.uuid4())) == pytest.approx(0.74)
+
+    async def test_should_refuse_to_score_a_document_without_chunks(self):
+        """Un documento sin fragmentos no se puede puntuar. Se propaga como no medible en vez
+        de fabricar un 0, que lo rechazaría en la puerta."""
+        class _Resultado:
+            def scalar(self):
+                return None
+
+        class _Deps:
+            class embedder:
+                @staticmethod
+                async def embed(texto, purpose=None):
+                    return [0.1] * 1024
+
+            class session:
+                @staticmethod
+                async def execute(stmt):
+                    return _Resultado()
+
+        from server.app.modules.agents_hub.agent.public_graphs.core.graph_factory import (
+            _puntuador_de_relevancia,
+        )
+
+        puntua = _puntuador_de_relevancia(_Deps())
+        with pytest.raises(ValueError):
+            await puntua("x", str(uuid.uuid4()))

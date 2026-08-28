@@ -35,6 +35,38 @@ logger = logging.getLogger(__name__)
 RRF_MAX_SCORE = 1.0 / (RRF_K + 1)
 
 
+def documento_del_fragmento(fragmento: Any) -> uuid.UUID | None:
+    """De que documento es este fragmento: la COLUMNA primero, el metadato como repliegue.
+
+    **El fallo que esto hace imposible.** El `document_id` vive en dos sitios: la columna, que
+    la base sostiene con una clave ajena, y `chunk_metadata`, que es una copia denormalizada
+    escrita al trocear. La agrupacion leia el metadato, y el 2026-08-28 se encontro que el
+    asistente agentico de Gerencia tenia **14.198 de sus 14.208 fragmentos** con ese metadato
+    apuntando a documentos del chatbot **RAG**: los fragmentos eran suyos —la columna
+    `chatbot_id` estaba bien y la busqueda los filtraba— pero al agrupar se cargaban las filas
+    del hermano y **la cita salia con su titulo**, sin ningun error.
+
+    Cuando dos copias del mismo dato pueden discrepar, se lee la que no se puede corromper sin
+    que la base se queje.
+
+    El metadato se conserva como repliegue por los fragmentos legados, creados cuando la columna
+    no existia. Ese es el motivo por el que la agrupacion lo miraba: era el unico que habia, y
+    siguio mirandolo despues.
+    """
+    columna = getattr(fragmento, "document_id", None)
+    if columna:
+        return columna if isinstance(columna, uuid.UUID) else uuid.UUID(str(columna))
+    crudo = (getattr(fragmento, "metadata", None) or {}).get("document_id")
+    if not crudo:
+        return None
+    try:
+        return uuid.UUID(str(crudo))
+    except (ValueError, AttributeError, TypeError):
+        # Un metadato ilegible no puede agrupar: mejor un documento sin identificar —que la
+        # estrategia ya sabe tratar— que una excepcion en el camino de la respuesta.
+        return None
+
+
 class VectorRetrievalStrategy:
     mode = "RAG"
 
@@ -127,12 +159,11 @@ class VectorRetrievalStrategy:
         if self._reranker is not None:
             results = await self._aplicar_reranker(query, results)
 
-        # Group chunks by document_id (from metadata or None for legacy chunks)
+        # HIB.U: se agrupa por la COLUMNA `document_id`, con el metadato solo como repliegue
+        # para los fragmentos legados. Ver `documento_del_fragmento`.
         by_doc: dict[uuid.UUID | None, list] = defaultdict(list)
         for r in results:
-            raw_id = r.metadata.get("document_id")
-            doc_id = uuid.UUID(raw_id) if raw_id else None
-            by_doc[doc_id].append(r)
+            by_doc[documento_del_fragmento(r)].append(r)
 
         # Bulk-load documents
         doc_ids = [d for d in by_doc.keys() if d is not None]

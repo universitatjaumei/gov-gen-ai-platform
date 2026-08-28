@@ -134,6 +134,7 @@ def _puntuador_de_relevancia(deps: Any):
         from server.app.modules.agents_hub.database.operational_models import (
             HubDocumentChunk,
         )
+        from server.app.modules.agents_hub.services.embedding_service import PURPOSE_QUERY
 
         # `PURPOSE_QUERY` explícito aunque ya sea el defecto de `embed`: Vertex distingue
         # RETRIEVAL_QUERY de RETRIEVAL_DOCUMENT, y esta nota tiene que salir en la misma
