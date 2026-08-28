@@ -119,6 +119,8 @@ class ReconcileReport:
     retirados: int = 0
     poda_omitida_por_no_censo: bool = False
     motivos_omision: list[str] = field(default_factory=list)
+    #: ACT.6 — los cambios que alteran QUE se recupera, uno a uno, para poder confirmarlos.
+    cambios_de_estado: list[str] = field(default_factory=list)
     detalle: list[str] = field(default_factory=list)
 
     def render(self) -> str:
@@ -157,6 +159,16 @@ def _a_utc(valor):
     return valor
 
 
+#: Metadatos que NO vienen del `.md` y que hay que conservar cuando el corpus no habla de
+#: validacion: los escribe el panel de vigencia (`vigencia_validada_per`) o la propagacion entre
+#: hermanas idiomaticas (`vigencia_validada_des_de`, ACT.6). Sin conservarlos, cada pasada los
+#: quitaria y la siguiente los volveria a poner: exactamente el ruido que ACT.1 elimino.
+_METADATOS_QUE_NO_VIENEN_DEL_CORPUS = (
+    "vigencia_validada_per",
+    "vigencia_validada_des_de",
+)
+
+
 def _corpus_declara_validacion(entry: CorpusDocumentEntry) -> bool:
     """Si la validación de vigencia viaja con el corpus, o la puso una persona en el panel.
 
@@ -180,10 +192,31 @@ def _metadata_objetivo(entry: CorpusDocumentEntry, doc: HubDocument | None = Non
         if valor is not None:
             salida[campo] = valor.isoformat() if hasattr(valor, "isoformat") else valor
     if doc is not None and not _corpus_declara_validacion(entry):
-        anterior = (doc.doc_metadata or {}).get("vigencia_validada_per")
-        if anterior:
-            salida["vigencia_validada_per"] = anterior
+        for campo in _METADATOS_QUE_NO_VIENEN_DEL_CORPUS:
+            anterior = (doc.doc_metadata or {}).get(campo)
+            if anterior:
+                salida[campo] = anterior
     return salida
+
+
+#: Campos cuyo cambio altera QUE se recupera o COMO se cita, y por tanto merecen verse uno a uno
+#: antes de aplicar una actualizacion. El resto de metadatos es reetiquetado y no cambia respuestas.
+CAMBIOS_QUE_SE_NOTAN = ("us_assistents", "estat_vigencia", "nivell_acces", "content_class")
+
+
+def cambios_de_estado(doc: HubDocument, entry: CorpusDocumentEntry) -> list[str]:
+    """Los cambios que una persona tiene que ver antes de decir que si.
+
+    Sin esto, el informe dice «= (metadatos)» y una norma que se apaga o que deja de estar
+    vigente se lee igual que una a la que se le corrige el resumen. Es como las 22 normas
+    externas volvieron a encenderse sin que nadie lo decidiera.
+    """
+    fuera = []
+    for campo in CAMBIOS_QUE_SE_NOTAN:
+        antes, ahora = getattr(doc, campo, None), getattr(entry, campo, None)
+        if antes != ahora:
+            fuera.append(f"{campo}: {antes} -> {ahora}")
+    return fuera
 
 
 def _difiere(doc: HubDocument, entry: CorpusDocumentEntry, title: str) -> bool:
@@ -223,6 +256,36 @@ def _aplicar(doc: HubDocument, entry: CorpusDocumentEntry, title: str) -> None:
         setattr(doc, campo, list(getattr(entry, campo) or []))
     doc.doc_metadata = _metadata_objetivo(entry, doc)
     doc.source_kind = entry.extra.get("source_kind", "publicacio")
+
+
+def _compartir_la_validacion(parejas: list[tuple[HubDocument, HubDocument]]) -> None:
+    """La validacion de vigencia es de la NORMA, no de una de sus lenguas (ACT.6).
+
+    Lo que una persona confirma cuando valida es **que la norma rige**, y eso no depende de en
+    que idioma estaba el ejemplar que tenia delante. Tratarlo como un dato del texto producia
+    una incoherencia visible: medido sobre el corpus real, **14 de las 57 parejas** tenian la
+    castellana validada y la valenciana no, y desde ACT.3 —que elige la version por la lengua de
+    la pregunta— eso significaba que la misma norma llevaba el aviso «la vigencia no esta
+    validada» en valenciano y no en castellano.
+
+    Solo se comparte cuando UNA de las dos la tiene: con las dos validadas no hay nada que
+    compartir y se respeta la fecha de cada una; con ninguna, compartir seria fabricar una
+    validacion que nadie ha hecho.
+
+    Queda escrito de DONDE viene (`vigencia_validada_des_de`), para que una auditoria no la
+    confunda con una validacion hecha sobre ese ejemplar.
+    """
+    for uno, otro in parejas:
+        for origen, destino in ((uno, otro), (otro, uno)):
+            if origen.vigencia_validada_el is None or destino.vigencia_validada_el is not None:
+                continue
+            destino.vigencia_validada_el = origen.vigencia_validada_el
+            metadatos = dict(destino.doc_metadata or {})
+            quien = (origen.doc_metadata or {}).get("vigencia_validada_per")
+            if quien:
+                metadatos["vigencia_validada_per"] = quien
+            metadatos["vigencia_validada_des_de"] = origen.id_publicacio
+            destino.doc_metadata = metadatos
 
 
 class CorpusReconciler:
@@ -354,7 +417,16 @@ class CorpusReconciler:
             # vuelve a trocear ni a embeber — es el invariante de CLAUDE.md §5.
             if _difiere(existente, entry, title):
                 informe.metadatos_actualizados += 1
-                informe.detalle.append(f"= {entry.relative_path} (metadatos)")
+                notables = cambios_de_estado(existente, entry)
+                if notables:
+                    informe.cambios_de_estado.append(
+                        f"{entry.id_publicacio or entry.relative_path}: {'; '.join(notables)}"
+                    )
+                    informe.detalle.append(
+                        f"! {entry.relative_path} ({'; '.join(notables)})"
+                    )
+                else:
+                    informe.detalle.append(f"= {entry.relative_path} (metadatos)")
                 if not dry_run:
                     _aplicar(existente, entry, title)
                     # El puente bilingüe vive denormalizado en los chunks (RAG.4). Aquí es
@@ -544,11 +616,17 @@ class CorpusReconciler:
                 HubDocument.id_publicacio.in_(referencias),
             )
         )
-        por_id = {d.id_publicacio: d.id for d in filas.scalars().all()}
+        por_id_completo = list(filas.scalars().all())
+        por_id_completo_por_publicacio = {d.id_publicacio: d for d in por_id_completo}
+        por_uuid = {d.id: d for d in por_id_completo}
+        emparejadas: list[tuple[HubDocument, HubDocument]] = []
         for doc, ref in pendientes:
-            destino = por_id.get(ref)
-            if destino and destino != doc.id:
-                doc.versio_idiomatica_de = destino
+            hermana = por_id_completo_por_publicacio.get(ref)
+            if hermana is not None and hermana.id != doc.id:
+                doc.versio_idiomatica_de = hermana.id
+                emparejadas.append((doc, hermana))
+        await self._session.flush()
+        _compartir_la_validacion(emparejadas)
         await self._session.flush()
 
     async def _podar(

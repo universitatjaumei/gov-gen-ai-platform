@@ -57,14 +57,20 @@ class TestQueCuentaComoDeriva:
         assert agrupar_divergencias([_copia(uuid.uuid4(), "hash-1", HOY)]) == []
 
     def test_should_not_group_different_norms_together(self):
-        """Se agrupa por `canonical_url`: dos normas distintas no son una deriva."""
+        """Dos normas distintas no son una deriva.
+
+        ACT.6: la clave pasó a ser `id_publicacio` —la URL daba 17 falsos positivos con las
+        parejas bilingües que la comparten—, así que «distintas» se dice con el identificador.
+        """
         from server.app.modules.agents_hub.ingestion.divergence_detector import agrupar_divergencias
 
         a, b = uuid.uuid4(), uuid.uuid4()
         divergencias = agrupar_divergencias(
             [
-                _copia(a, "hash-1", HOY, canonical_url="https://uji.es/a"),
-                _copia(b, "hash-2", HOY, canonical_url="https://uji.es/b"),
+                _copia(a, "hash-1", HOY, id_publicacio="REG-001",
+                       canonical_url="https://uji.es/a"),
+                _copia(b, "hash-2", HOY, id_publicacio="REG-002",
+                       canonical_url="https://uji.es/b"),
             ]
         )
 
@@ -214,3 +220,66 @@ class TestLaPersistencia:
         assert n == 1
         session.add.assert_not_called()
         assert abierto.signal_json["hash_vigent"] == "hash-nuevo"
+
+
+class TestDosLenguasNoSonUnaDeriva:
+    """ACT.6 — **17 falsos positivos, medidos sobre el corpus real el 2026-08-28.**
+
+    El detector agrupaba por `canonical_url`, y hay 5 parejas bilingües del corpus de la UJI
+    que **comparten URL**: la misma norma publicada en una sola dirección (una página de
+    preguntas frecuentes, un PDF del DOGV con las dos lenguas dentro). El grupo salía con dos
+    hashes distintos —claro: son dos textos— y el detector lo llamaba «copia fuera de
+    sincronía», mandando a recargar unos asistentes que estaban perfectamente al día.
+
+    Es la misma confusión que ACT.3 acaba de quitarle a VIS.3: **compartir URL no significa ser
+    el mismo documento**. La identidad de una versión es `id_publicacio`, que las separa
+    (`FAQ-001` y `FAQ-001-val`); la URL sólo vale cuando no hay identificador.
+
+    Un aviso que salta siempre deja de avisar, así que esto no es cosmético: 17 avisos falsos
+    entrenan a no mirar los que sí son ciertos.
+    """
+
+    def test_should_not_flag_two_language_versions_sharing_one_url(self):
+        from server.app.modules.agents_hub.ingestion.divergence_detector import (
+            agrupar_divergencias,
+        )
+
+        cb = uuid.uuid4()
+        divergencias = agrupar_divergencias([
+            _copia(cb, "aaaa", HOY, id_publicacio="FAQ-001", title="FAQ (es)"),
+            _copia(cb, "bbbb", AYER, id_publicacio="FAQ-001-val", title="FAQ (val)"),
+        ])
+
+        assert divergencias == [], (
+            "dos versiones lingüísticas de la misma norma tienen textos distintos por "
+            "definición: no es una deriva entre copias"
+        )
+
+    def test_should_still_flag_a_real_drift_between_assistants(self):
+        """La deriva que sí existe: la MISMA versión, distinta en dos asistentes."""
+        from server.app.modules.agents_hub.ingestion.divergence_detector import (
+            agrupar_divergencias,
+        )
+
+        a, b = uuid.uuid4(), uuid.uuid4()
+        divergencias = agrupar_divergencias([
+            _copia(a, "aaaa", HOY, id_publicacio="FAQ-001"),
+            _copia(b, "bbbb", AYER, id_publicacio="FAQ-001"),
+        ])
+
+        assert len(divergencias) == 1
+        assert divergencias[0].id_publicacio == "FAQ-001"
+
+    def test_should_fall_back_to_the_url_without_an_identifier(self):
+        """El corpus rastreado no tiene `id_publicacio`, y allí la URL es lo que hay."""
+        from server.app.modules.agents_hub.ingestion.divergence_detector import (
+            agrupar_divergencias,
+        )
+
+        a, b = uuid.uuid4(), uuid.uuid4()
+        divergencias = agrupar_divergencias([
+            _copia(a, "aaaa", HOY, id_publicacio=None),
+            _copia(b, "bbbb", AYER, id_publicacio=None),
+        ])
+
+        assert len(divergencias) == 1

@@ -112,12 +112,23 @@ def agrupar_divergencias(copias: list[CopiaDeDocumento]) -> list[Divergencia]:
     aviso es correcto —quién está atrasado, cuándo no se puede saber, cuándo es grave— se
     prueba sin base de datos.
     """
+    # ACT.6 — LA IDENTIDAD DE UNA VERSION ES `id_publicacio`, NO LA URL.
+    #
+    # Agrupar por `canonical_url` daba 17 falsos positivos sobre el corpus real: hay 5 parejas
+    # bilingues que COMPARTEN URL —la misma norma publicada en una sola direccion: una pagina de
+    # preguntas frecuentes, un PDF del DOGV con las dos lenguas dentro—. El grupo salia con dos
+    # hashes distintos, claro, porque son dos textos, y el detector mandaba recargar asistentes
+    # que estaban al dia. Es la misma confusion que ACT.3 le quito a VIS.3: compartir URL no es
+    # ser el mismo documento.
+    #
+    # La URL sigue siendo la clave cuando no hay identificador, que es el caso del corpus
+    # rastreado por el modulo de curacion.
     por_norma: dict[str, list[CopiaDeDocumento]] = defaultdict(list)
     for copia in copias:
-        por_norma[copia.canonical_url].append(copia)
+        por_norma[copia.id_publicacio or copia.canonical_url].append(copia)
 
     divergencias: list[Divergencia] = []
-    for canonical_url, grupo in por_norma.items():
+    for clave, grupo in por_norma.items():
         if len({c.content_hash for c in grupo}) < 2:
             continue
 
@@ -142,7 +153,9 @@ def agrupar_divergencias(copias: list[CopiaDeDocumento]) -> list[Divergencia]:
             divergencias.append(
                 Divergencia(
                     chatbot_id=copia.chatbot_id,
-                    canonical_url=canonical_url,
+                    # La URL de la copia, no la clave del grupo: con `id_publicacio`
+                    # como clave, la del grupo ya no es una URL.
+                    canonical_url=copia.canonical_url,
                     title=copia.title,
                     id_publicacio=copia.id_publicacio,
                     document_id=copia.document_id,

@@ -963,3 +963,170 @@ class TestCopiarEnVezDeEmbeber:
 
         assert informe.copiados == 0
         assert embedding.llamadas > 0
+
+
+# ────────── ACT.6 — la validación es de la NORMA, no de una de sus lenguas ──────────
+#
+# Decisión del responsable del corpus (2026-08-28): «si una norma está emparejada, la
+# validación de cualquiera afecta a las dos».
+#
+# Es evidente en cuanto se dice: lo que una persona confirma es que **la norma rige**, y eso no
+# depende de en qué idioma esté el ejemplar que tenía delante. Que el aviso de vigencia dijera
+# una cosa en castellano y otra en valenciano sobre la misma norma era un artefacto de tratar
+# la validación como si fuera del texto.
+#
+# Medido antes del arreglo: de las 57 parejas del corpus real, **14 tenían la castellana
+# validada y la valenciana no** — y desde ACT.3, que elige la versión por la lengua de la
+# pregunta, eso significaba que preguntar en valenciano por COD-001 llevaba el aviso «la
+# vigencia no está validada» y preguntar en castellano no.
+
+
+class TestLaValidacionEsDeLaNorma:
+
+    @pytest.mark.asyncio
+    async def test_should_share_the_validation_with_the_language_sibling(
+        self, db_session, tmp_path
+    ):
+        _escribir(
+            tmp_path,
+            "REG-901",
+            extra=(
+                "vigencia_validada_per: Modesto Fabra\n"
+                "vigencia_validada_el: '2026-07-31'\n"
+            ),
+        )
+        _escribir(
+            tmp_path,
+            "REG-901-es",
+            extra="versio_idiomatica_de: REG-901\n",
+        )
+        chatbot_id = uuid.uuid4()
+
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        docs = await _documentos(db_session, chatbot_id)
+        hermana = docs["REG-901-es"]
+        assert hermana.vigencia_validada_el is not None, (
+            "la hermana sin validar hereda la validación: lo que se confirmó es que la NORMA "
+            "rige, no que rija su versión castellana"
+        )
+        assert hermana.vigencia_validada_el == docs["REG-901"].vigencia_validada_el
+        assert (
+            hermana.doc_metadata.get("vigencia_validada_des_de") == "REG-901"
+        ), "queda dicho de dónde viene, para que una auditoría no la crea validada de origen"
+
+    @pytest.mark.asyncio
+    async def test_should_not_warn_in_either_language(self, db_session, tmp_path):
+        """La consecuencia que se buscaba: el mismo aviso en las dos lenguas."""
+        from server.app.modules.agents_hub.services.retrieval.vigencia import (
+            vigencia_no_validada,
+        )
+
+        _escribir(
+            tmp_path, "REG-902",
+            extra=(
+                "vigencia_validada_per: Modesto Fabra\n"
+                "vigencia_validada_el: '2026-07-31'\n"
+            ),
+        )
+        _escribir(tmp_path, "REG-902-es", extra="versio_idiomatica_de: REG-902\n")
+        chatbot_id = uuid.uuid4()
+
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        docs = await _documentos(db_session, chatbot_id)
+        for idn in ("REG-902", "REG-902-es"):
+            doc = docs[idn]
+            assert vigencia_no_validada(doc.estat_vigencia, doc.vigencia_validada_el) is False
+
+    @pytest.mark.asyncio
+    async def test_should_propagate_in_either_direction(self, db_session, tmp_path):
+        """El corpus declara el enlace en un solo lado; la validación puede estar en el otro."""
+        _escribir(tmp_path, "REG-903")
+        _escribir(
+            tmp_path, "REG-903-es",
+            extra=(
+                "versio_idiomatica_de: REG-903\n"
+                "vigencia_validada_per: Modesto Fabra\n"
+                "vigencia_validada_el: '2026-07-31'\n"
+            ),
+        )
+        chatbot_id = uuid.uuid4()
+
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        docs = await _documentos(db_session, chatbot_id)
+        assert docs["REG-903"].vigencia_validada_el is not None
+
+    @pytest.mark.asyncio
+    async def test_should_not_invent_a_validation_when_neither_has_one(
+        self, db_session, tmp_path
+    ):
+        """Dos sin validar siguen sin validar: compartir no es fabricar."""
+        _escribir(tmp_path, "REG-904")
+        _escribir(tmp_path, "REG-904-es", extra="versio_idiomatica_de: REG-904\n")
+        chatbot_id = uuid.uuid4()
+
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        docs = await _documentos(db_session, chatbot_id)
+        assert docs["REG-904"].vigencia_validada_el is None
+        assert docs["REG-904-es"].vigencia_validada_el is None
+
+    @pytest.mark.asyncio
+    async def test_should_leave_each_one_when_both_are_validated(
+        self, db_session, tmp_path
+    ):
+        """Con las dos validadas no hay nada que compartir, y no se pisa ninguna."""
+        _escribir(
+            tmp_path, "REG-905",
+            extra=(
+                "vigencia_validada_per: Modesto Fabra\n"
+                "vigencia_validada_el: '2026-07-31'\n"
+            ),
+        )
+        _escribir(
+            tmp_path, "REG-905-es",
+            extra=(
+                "versio_idiomatica_de: REG-905\n"
+                "vigencia_validada_per: Secretaria General\n"
+                "vigencia_validada_el: '2026-08-11'\n"
+            ),
+        )
+        chatbot_id = uuid.uuid4()
+
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        docs = await _documentos(db_session, chatbot_id)
+        assert docs["REG-905"].vigencia_validada_el.date().isoformat() == "2026-07-31"
+        assert docs["REG-905-es"].vigencia_validada_el.date().isoformat() == "2026-08-11"
+        assert "vigencia_validada_des_de" not in (docs["REG-905"].doc_metadata or {})
+
+    @pytest.mark.asyncio
+    async def test_should_stay_idempotent_after_sharing(self, db_session, tmp_path):
+        """Compartir escribe metadatos que el corpus no declara: si no se conservan, cada
+        pasada los quita y los vuelve a poner, que es el ruido que ACT.1 vino a eliminar."""
+        _escribir(
+            tmp_path, "REG-906",
+            extra=(
+                "vigencia_validada_per: Modesto Fabra\n"
+                "vigencia_validada_el: '2026-07-31'\n"
+            ),
+        )
+        _escribir(tmp_path, "REG-906-es", extra="versio_idiomatica_de: REG-906\n")
+        chatbot_id = uuid.uuid4()
+
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        informe = await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        assert informe.metadatos_actualizados == 0, informe.detalle
+        docs = await _documentos(db_session, chatbot_id)
+        assert docs["REG-906-es"].vigencia_validada_el is not None
