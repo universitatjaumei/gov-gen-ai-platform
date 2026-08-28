@@ -117,113 +117,172 @@ pre b{color:var(--tinta);font-weight:600}
 
 <header class="cabecera">
     <p class="eyebrow">Piloto · configuración de apertura</p>
-    <h1>Con qué abre el piloto, y las veinte pruebas que llevaron a cada
-    número</h1>
-    <p class="entradilla">Ningún valor de esta configuración se hereda de un defecto: todos se
-    eligieron con una medición delante o se dejaron como estaban <b>después</b> de medir que
-    cambiarlos no compraba nada. Y donde la medición dijo que no, se dejó apagado.</p>
+    <h1>Con qué abre el piloto, y qué medición decidió cada valor</h1>
+    <p class="entradilla">El piloto abre con <b>dos asistentes en producción</b> —normativa
+    pública y económico-administrativo— y <b>dos bancos de comparación</b> que no ven usuarios.
+    Ningún valor de esta configuración se hereda de un defecto: todos se eligieron con una
+    medición delante, o se dejaron como estaban <b>después</b> de medir que cambiarlos no compraba
+    nada. Y donde la medición dijo que no, se dejó apagado.</p>
     <dl class="ficha">
-        <div><dt>Fecha</dt><dd>28 de agosto de 2026</dd></div>
-        <div><dt>Bloque</dt><dd>HIB · 15 prompts</dd></div>
-        <div><dt>Escenarios medidos</dt><dd>48 + 18</dd></div>
-        <div><dt>Ejecuciones del lote</dt><dd>21</dd></div>
+        <div><dt>Estado</dt><dd>28 de agosto de 2026</dd></div>
+        <div><dt>En producción</dt><dd>2 asistentes</dd></div>
+        <div><dt>Bancos</dt><dd>2, sin usuarios</dd></div>
+        <div><dt>Escenarios de medida</dt><dd>48 + 18</dd></div>
     </dl>
 </header>
 
 <div class="veredicto">
     <p class="titular">Recuperar la norma correcta funciona. Declinar no, y no lo arregla ningún
     mando de configuración.</p>
-    <p>21 de los 21 escenarios cuya fuente esperada está bien anotada recuperan la norma
-    correcta. El síntoma que abrió el bloque —«las normas seleccionadas no siempre aciertan»— era
-    el síntoma de otra cosa.</p>
-    <p>El asistente de Normativa <b>nunca calla teniendo la respuesta</b> (30 de 30) y
-    <b>contesta 11 de las 18 preguntas que debería declinar</b>. Eso es lo que el piloto tiene
-    que resolver, y este bloque deja medido que no se resuelve moviendo umbrales.</p>
+    <p>De los 21 escenarios cuya fuente esperada está bien anotada, <b>los 21</b> recuperan la
+    norma correcta. El síntoma que abrió esta investigación —«las normas seleccionadas no siempre
+    aciertan»— era el síntoma de otra cosa.</p>
+    <p>El asistente de normativa <b>nunca calla teniendo la respuesta</b> (30 de 30) y
+    <b>contesta 11 de las 18 preguntas que debería declinar</b>. Eso es lo que el piloto tiene que
+    resolver, y aquí queda medido que no se resuelve moviendo umbrales: se probaron cinco
+    mecanismos y cuatro no discriminan.</p>
 </div>
 
 <section>
-    <h2>La configuración, tal como está en la base</h2>
+    <h2>1 · La configuración definitiva</h2>
     <div class="tabla-marco">
     <table>
-        <caption>Leído de <code>hub_chatbots</code> el 2026-08-28. «Banco» = con
-        <code>is_active=False</code>: fuera de la vista de los usuarios, dentro del alcance del
-        medidor</caption>
+        <caption>Leído de <code>hub_chatbots</code></caption>
         <thead><tr>
-            <th scope="col">Asistente</th><th scope="col">Modo</th>
+            <th scope="col">Asistente</th><th scope="col">Recuperación</th>
             <th scope="col" class="num">Umbral</th><th scope="col" class="num">top_k</th>
             <th scope="col">Reranker</th><th scope="col">Troceado</th>
-            <th scope="col">Reescritura</th><th scope="col">Fundamento</th>
             <th scope="col" class="num">Fragmentos</th>
         </tr></thead>
         <tbody>
+            <tr class="grupo"><th scope="row" colspan="7">En producción</th></tr>
             <tr class="destacada">
-                <th scope="row">Normativa UJI</th><td>RAG</td>
+                <th scope="row">Normativa UJI<br><span class="nota">público, sin
+                identificación</span></th>
+                <td>RAG · el artículo</td>
                 <td class="num"><b>0,65</b></td><td class="num">3</td>
                 <td><span class="sello no">off</span></td><td><code>parent_child</code></td>
-                <td><span class="sello si">on</span></td>
-                <td><span class="sello no">off</span></td><td class="num">60.859</td>
+                <td class="num">60.859</td>
             </tr>
             <tr class="destacada">
-                <th scope="row">Gerencia · RAG</th><td>RAG</td>
+                <th scope="row">Gerencia · económico-administrativo<br><span class="nota">personal
+                identificado</span></th>
+                <td>RAG · el artículo</td>
                 <td class="num"><b>0,69</b></td><td class="num">3</td>
                 <td><span class="sello no">off</span></td><td><code>parent_child</code></td>
-                <td><span class="sello si">on</span></td>
-                <td><span class="sello no">off</span></td><td class="num">38.536</td>
+                <td class="num">38.536</td>
             </tr>
+            <tr class="grupo"><th scope="row" colspan="7">Bancos de comparación ·
+                <code>is_active=False</code></th></tr>
             <tr>
-                <th scope="row">Gerencia · agéntico <span class="sello no">banco</span></th>
-                <td>MD_AGENT_SELECTOR</td>
+                <th scope="row">Gerencia · agéntico</th>
+                <td>el modelo elige y lee entero</td>
                 <td class="num">0,50</td><td class="num">8</td>
                 <td><span class="sello no">off</span></td><td><code>structural</code></td>
-                <td><span class="sello si">on</span></td>
-                <td><span class="sello no">off</span></td><td class="num">14.208</td>
+                <td class="num">14.208</td>
             </tr>
             <tr>
-                <th scope="row">Gerencia · inyección <span class="sello no">banco</span></th>
-                <td>RAG + norma entera</td>
+                <th scope="row">Gerencia · inyección</th>
+                <td>RAG · la norma entera</td>
                 <td class="num">0,69</td><td class="num">5</td>
                 <td><span class="sello no">off</span></td><td><code>parent_child</code></td>
-                <td><span class="sello si">on</span></td>
-                <td><span class="sello no">off</span></td><td class="num">38.536</td>
-            </tr>
-            <tr>
-                <th scope="row">Chatbot Demo</th><td>RAG</td>
-                <td class="num">0,60</td><td class="num">8</td>
-                <td><span class="sello no">off</span></td><td>—</td>
-                <td>heredado</td><td><span class="sello no">off</span></td><td class="num">15</td>
+                <td class="num">38.536</td>
             </tr>
         </tbody>
     </table>
     </div>
-    <p class="nota">Un chatbot que se cree hoy nace con umbral <b>0,65</b>, <code>top_k = 3</code>,
-    reranker apagado, reescritura de consulta activada y comprobación de fundamento apagada. Eso
-    exigió mover el defecto de la <b>columna</b> y no sólo el de plataforma: `quality_threshold`
-    es <code>NOT NULL</code>, y una columna no nula gana siempre a la capa de arriba.</p>
+    <p>En los cuatro: <b>reescritura conversacional de la consulta activada</b> y
+    <b>comprobación de fundamento de la cita apagada</b> (§4). Los dos bancos están con
+    <code>is_active=False</code>, que es la semántica exacta que hace falta: <b>fuera de la vista
+    de los usuarios y dentro del alcance del medidor</b>, porque el banco construye el grafo
+    directamente y no consulta ese campo.</p>
+    <p class="nota">Existe además un «Chatbot Demo» de desarrollo, con 15 fragmentos y la
+    configuración por defecto; no forma parte del piloto. Y un asistente que se cree hoy nace con
+    umbral 0,65, <code>top_k = 3</code>, reranker apagado, reescritura activada y comprobación de
+    fundamento apagada: eso exigió mover el defecto de la <b>columna</b> y no sólo el de
+    plataforma, porque <code>quality_threshold</code> es <code>NOT NULL</code> y una columna no
+    nula gana siempre a la capa de arriba.</p>
 </section>
 
 <section>
-    <h2>De dónde sale cada número</h2>
-
-    <h3>Umbral: 0,65 en Normativa y 0,69 en Gerencia, distintos a propósito</h3>
-    <p>La curva se calculó <b>sin generar nada</b>, porque la puerta es <code>nota ≥ umbral</code>
-    y las notas del lote estaban guardadas:</p>
+    <h2>2 · Por qué Gerencia abre con un solo asistente</h2>
+    <p>Gerencia tiene tres asistentes sobre el mismo corpus: el RAG, el agéntico y el de
+    inyección de norma entera. Al piloto sale <b>sólo el RAG</b>, y la razón principal es de
+    método, no de resultado.</p>
+    <p>Los usuarios de Gerencia son <b>funcionarios, pocos</b>. Repartirlos entre tres asistentes
+    fragmenta el poco tráfico que hay, y nadie les ha pedido que comparen. La comparación no
+    necesita tres asistentes en producción: necesita <b>uno recogiendo preguntas reales</b> y los
+    otros dos <b>reproduciéndolas en diferido</b>. Eso es un diseño emparejado —misma pregunta,
+    mismo corpus, mismo usuario—, es el que necesita menos muestra para decidir, es el único que
+    permite un contraste emparejado, y se puede repetir con cualquier estrategia futura sobre las
+    mismas preguntas acumuladas.</p>
+    <p>A esa razón se le suman dos de resultado: el RAG es el que <b>mejor recupera</b> de los
+    tres, y es el único cuyas cifras <b>nunca estuvieron contaminadas</b> por los dos defectos de
+    §7.</p>
     <div class="tabla-marco">
     <table>
-        <caption>Qué compra cada umbral, y qué cuesta</caption>
-        <thead><tr><th scope="col">Umbral</th>
-        <th scope="col" class="num">Normativa: declina bien</th>
-        <th scope="col" class="num">pierde</th>
-        <th scope="col" class="num">Gerencia: declina bien</th>
-        <th scope="col" class="num">pierde</th></tr></thead>
+        <caption>Las tres estrategias · mismo lote, mismo corpus, mismo código</caption>
+        <thead><tr><th scope="col">Estrategia</th><th scope="col" class="num">Fuente requerida</th>
+        <th scope="col" class="num">Ancla</th>
+        <th scope="col" class="num">Calló habiendo respuesta</th>
+        <th scope="col" class="num">Contestó sin deber</th></tr></thead>
         <tbody>
-            <tr><th scope="row">0,35 (Gerencia antes)</th><td class="num">—</td><td class="num">—</td>
+            <tr class="destacada"><th scope="row">RAG — top-3, el artículo</th>
+                <td class="num"><b>11/13</b></td><td class="num">0/5</td>
+                <td class="num">1</td><td class="num">4 de 5</td></tr>
+            <tr><th scope="row">Agéntico — el modelo elige</th>
+                <td class="num"><b>11/13</b></td><td class="num">0/5</td>
+                <td class="num">2</td><td class="num">5 de 5</td></tr>
+            <tr class="mala"><th scope="row">Inyección — top-5, la norma entera</th>
+                <td class="num">7/13</td><td class="num">0/1</td>
+                <td class="num">1</td><td class="num">4 de 5</td></tr>
+        </tbody>
+    </table>
+    </div>
+    <ul>
+        <li><b>La inyección de norma entera recupera peor</b>, y no es artefacto: sus documentos
+        casan por <code>content_hash</code>, las URL son las mismas y el código es el mismo. Con
+        <code>top_k=5</code> entran dos documentos más y la métrica exige <b>todas</b> las fuentes
+        requeridas del escenario: lo que entra de más desplaza a lo que hacía falta.</li>
+        <li><b>El agéntico empata en encontrar y declina peor.</b> Contesta los cinco negativos.
+        Toda su ventaja aparente en mediciones anteriores venía de los dos defectos de §7.</li>
+        <li><b>El ancla es 0 en las tres</b>, y no depende de la estrategia: las normas propias de
+        Gerencia se citan al sitio publicado <b>sin fragmento</b>, mientras las estatales van al
+        BOE con <code>#a118</code>. Es un problema de publicación.</li>
+    </ul>
+    <div class="alerta">
+        <span class="titular">Cómo leer el empate entre RAG y agéntico</span>
+        <p>El agéntico dio <b>13 de 13</b> en una ejecución y <b>11 de 13</b> en la siguiente, con
+        el mismo lote. Esa diferencia de dos escenarios es la varianza medida del propio mecanismo
+        —<b>±3 sobre 18</b>, §6—. El empate no significa «exactamente iguales»: significa
+        <b>indistinguibles con este lote</b>.</p>
+    </div>
+</section>
+
+<section>
+    <h2>3 · De dónde sale cada número</h2>
+
+    <h3>Umbral de calidad: 0,65 y 0,69, distintos a propósito</h3>
+    <p>La curva se calculó <b>sin generar nada</b>, porque la puerta es <code>nota ≥ umbral</code>
+    y las notas del lote estaban guardadas. Se busca el último punto que no cuesta ninguna
+    respuesta correcta:</p>
+    <div class="tabla-marco">
+    <table>
+        <caption>Qué compra cada umbral y qué cuesta</caption>
+        <thead><tr><th scope="col">Umbral</th>
+        <th scope="col" class="num">Normativa: declina bien</th><th scope="col" class="num">pierde</th>
+        <th scope="col" class="num">Gerencia: declina bien</th><th scope="col" class="num">pierde</th>
+        </tr></thead>
+        <tbody>
+            <tr><th scope="row">0,60</th><td class="num">0/18</td><td class="num">0 %</td>
                 <td class="num">0/5</td><td class="num">0 %</td></tr>
-            <tr><th scope="row">0,60 (Normativa antes)</th><td class="num">0/18</td>
-                <td class="num">0 %</td><td class="num">0/5</td><td class="num">0 %</td></tr>
-            <tr class="buena"><th scope="row">0,65</th><td class="num"><b>2/18</b></td>
+            <tr class="buena"><th scope="row">0,65 · Normativa</th><td class="num"><b>2/18</b></td>
                 <td class="num"><b>0 %</b></td><td class="num">1/5</td><td class="num">0 %</td></tr>
-            <tr class="buena"><th scope="row">0,69</th><td class="num">—</td><td class="num">—</td>
-                <td class="num"><b>3/5</b></td><td class="num"><b>0 %</b></td></tr>
+            <tr class="buena"><th scope="row">0,69 · Gerencia</th><td class="num">—</td>
+                <td class="num">—</td><td class="num"><b>3/5</b></td>
+                <td class="num"><b>0 %</b></td></tr>
+            <tr><th scope="row">0,70</th><td class="num">4/18</td><td class="num">7 %</td>
+                <td class="num">3/5</td><td class="num">8 %</td></tr>
             <tr><th scope="row">0,72</th><td class="num">10/18</td><td class="num">17 %</td>
                 <td class="num">3/5</td><td class="num">23 %</td></tr>
             <tr class="mala"><th scope="row">0,75</th><td class="num">16/18</td>
@@ -231,57 +290,68 @@ pre b{color:var(--tinta);font-weight:600}
         </tbody>
     </table>
     </div>
-    <p>Los dos son <b>el último punto que no cuesta nada</b>. Y son distintos porque las notas de
-    los dos asistentes viven en rangos distintos —mediana 0,594 en Gerencia contra ~0,74 en
-    Normativa, porque sus consultas y su corpus no comparten lengua ni registro—: el mismo número
-    no compra lo mismo. <b>El punto de operación no se hereda</b> ni entre asistentes ni entre
-    troceados.</p>
+    <p>Son distintos porque <b>las notas de los dos asistentes viven en rangos distintos</b>
+    —mediana 0,594 en Gerencia contra ~0,74 en Normativa, porque sus consultas y su corpus no
+    comparten lengua ni registro—: el mismo número no compra lo mismo. <b>El punto de operación no
+    se hereda</b> ni entre asistentes ni entre troceados; el 0,35 que Gerencia arrastraba dejó de
+    morder en cuanto su corpus cambió de troceado, y hubo que reelegirlo.</p>
     <p>El criterio se escribió <b>antes</b> de ver la rejilla: minimizar «contestó y no debía»
-    sujeto a que «calló y había respuesta» no pase del 15 %. Con la rejilla delante siempre hay
-    una lectura que favorece al número que ya gustaba.</p>
+    sujeto a que «calló y había respuesta» no pase del 15 %. Con la rejilla delante siempre hay una
+    lectura que favorece al número que ya gustaba.</p>
 
     <h3><code>top_k</code> = 3, y por qué antes no significaba nada</h3>
     <p>Estaba en 8 «sin medir, porque nadie lo leía». Y no lo leía nadie porque apagar el reranker
-    encogía el pool de 30 a 3 sin que nadie lo pidiera, así que <code>top_k</code> dejaba de
-    contar documentos. Desacoplado el pool, <code>top_k = 3</code> entrega de verdad tres
-    documentos: 2,96 de media sobre las 25 consultas y ninguna con uno solo.</p>
+    encogía el pool de candidatos de 30 a 3 sin que nadie lo pidiera, así que <code>top_k</code>
+    dejaba de contar documentos: <b>19 de 25 consultas recibían menos documentos que
+    <code>top_k</code>, y 6 uno solo</b>. Desacoplado el pool, <code>top_k = 3</code> entrega de
+    verdad tres documentos —2,96 de media, ninguna consulta con uno solo—.</p>
 
-    <h3>Reranker apagado en los dos corpus, medido dos veces</h3>
+    <h3>Reranker apagado, medido en los dos corpus</h3>
     <div class="tabla-marco">
     <table>
-        <caption>Ablación con el pool ya desacoplado</caption>
+        <caption>Ablación con el pool ya desacoplado · lote de Gerencia</caption>
         <thead><tr><th scope="col"></th><th scope="col" class="num">Fuente requerida</th>
         <th scope="col" class="num">Contestó sin deber</th></tr></thead>
         <tbody>
-            <tr class="buena"><th scope="row">Gerencia, apagado</th><td class="num">9/13</td>
+            <tr class="buena"><th scope="row">Apagado</th><td class="num">9/13</td>
                 <td class="num">2</td></tr>
-            <tr class="mala"><th scope="row">Gerencia, encendido</th><td class="num">8/13</td>
+            <tr class="mala"><th scope="row">Encendido</th><td class="num">8/13</td>
                 <td class="num">3</td></tr>
         </tbody>
     </table>
     </div>
-    <p>Resta en los dos ejes, igual que en Normativa. El criterio de la ablación anterior se
-    aplicó palabra por palabra: si hubieran empatado, también se queda apagado, por coherencia y
-    por coste.</p>
+    <p>Resta en los dos ejes, igual que en el corpus de normativa. El criterio se aplicó palabra
+    por palabra: si hubieran empatado, también se queda apagado, por coherencia y por coste.</p>
 
-    <h3>Troceado <code>parent_child</code>, y el techo del padre en 8.000 tokens</h3>
+    <h3>Troceado <code>parent_child</code> y techo del padre en 8.000 tokens</h3>
     <p>El corpus de Gerencia pasó de 14.198 a 38.536 fragmentos <b>con coste de embeddings
-    cero</b>: sus 124 documentos tienen gemelo exacto por <code>content_hash</code> en Normativa,
-    así que se copiaron sus fragmentos remapeando los <b>tres</b> identificadores. El tercero
-    —el <code>document_id</code> que va dentro del metadato— es el único cuyo olvido no da error:
-    la agrupación por documento del retrieval usa el metadato y no la columna. Verificado en SQL:
-    <b>0 fragmentos incoherentes</b>.</p>
-    <p>Y el techo del padre se aplicó a Normativa con un <code>UPDATE</code>, porque
-    <code>parent_content</code> no entra en el embedding: <b>179,8 → 54,5 millones</b> de tokens
-    de padre almacenados para un corpus de 2,1 millones, y <b>ninguna métrica se movió</b> —mismas
-    fuentes, mismas anclas, misma nota a tres decimales—.</p>
+    cero</b>: sus 124 documentos tienen gemelo exacto por <code>content_hash</code> en el corpus de
+    normativa, así que se copiaron sus fragmentos remapeando los <b>tres</b> identificadores.</p>
+    <p>El tercero —el <code>document_id</code> que va <b>dentro</b> del metadato del fragmento— es
+    el único cuyo olvido no da error, y es exactamente el defecto que §7 documenta. Verificado en
+    SQL tras la copia: <b>0 fragmentos incoherentes</b>.</p>
+    <p>Y el techo del padre se aplicó con un <code>UPDATE</code>, porque
+    <code>parent_content</code> no entra en el embedding: <b>179,8 → 54,5 millones</b> de tokens de
+    padre almacenados para un corpus de 2,1 millones, y <b>ninguna métrica se movió</b> — mismas
+    fuentes, mismas anclas, misma nota a tres decimales. La comprobación se pudo acotar a los 7
+    escenarios de 48 que podían verse afectados precisamente porque el mecanismo dice que la
+    recuperación no puede cambiar.</p>
 </section>
 
 <section>
-    <h2>Lo que se probó y se descartó</h2>
+    <h2>4 · La abstención: cinco mecanismos, cuatro descartados</h2>
+    <p>Es el hueco real y el que el piloto tiene que cerrar. Lo primero que hubo que averiguar es
+    <b>qué puerta abstiene de verdad hoy</b>, y la respuesta no era la esperada.</p>
+    <div class="veredicto">
+        <p class="titular">La puerta de calidad rechazó cero de 48. Los 7 rechazos correctos los
+        hizo el contrato de citas, con precisión perfecta.</p>
+        <p>Ni un rechazo indebido sobre 30 escenarios contestables. En el corpus de Gerencia pasa
+        al contrario —los 5 rechazos eran todos de la puerta y ninguno del contrato— porque sus
+        notas viven en otro rango. Al contrato no le falta acierto: le falta <b>alcance</b>.</p>
+    </div>
     <div class="tabla-marco">
     <table>
-        <caption>Cinco mecanismos medidos para mejorar la abstención</caption>
+        <caption>Los cinco mecanismos medidos</caption>
         <thead><tr><th scope="col">Mecanismo</th><th scope="col">Resultado</th>
         <th scope="col">Veredicto</th></tr></thead>
         <tbody>
@@ -291,14 +361,12 @@ pre b{color:var(--tinta);font-weight:600}
                 <td><b>Aplicado, con techo</b></td></tr>
             <tr class="mala"><th scope="row">La nota de calidad como señal</th>
                 <td>no separa: los fallos puntúan 0,643-0,787 y los aciertos 0,692-0,805, con los
-                fallos de mediana <b>más alta</b></td>
-                <td>Descartado</td></tr>
+                fallos de mediana <b>más alta</b></td><td>Descartado</td></tr>
             <tr class="mala"><th scope="row">La brecha entre el 1.º y el 2.º</th>
                 <td>0,020 en los fallos contra 0,010 en los aciertos: <b>al revés</b></td>
                 <td>Descartado</td></tr>
             <tr class="mala"><th scope="row">«La mejor evidencia es un documento vetado»</th>
-                <td>gana en 2 de 8 negativos y en 1 de 6 contestables</td>
-                <td>Descartado</td></tr>
+                <td>gana en 2 de 8 negativos y en 1 de 6 contestables</td><td>Descartado</td></tr>
             <tr class="mala"><th scope="row">Comprobar el fundamento de la cita</th>
                 <td>caza 3 negativos más y <b>rechaza 10 de 30 respuestas correctas</b></td>
                 <td>Implementado y <b>apagado</b></td></tr>
@@ -306,254 +374,252 @@ pre b{color:var(--tinta);font-weight:600}
     </table>
     </div>
     <p>El criterio del último estaba escrito antes de medirlo: «si rechaza más de 2 de las 30
-    contestables, no se despliega». Rechazó 10.</p>
-    <p>Y la causa no es un fallo suelto: de las 33 afirmaciones de los 9 contestables rechazados,
-    <b>19 estaban localizadas</b> —el juez vio la ventana correcta del artículo citado— y las
-    rechazó igualmente. Lo que falla es el <b>grano</b>: evalúa frases enteras contra un solo
-    documento citado, y las respuestas reales meten varios hechos y varias citas en la misma
-    frase. Arreglarlo pide descomponer en afirmaciones atómicas y comprobar cada una contra todas
-    sus fuentes, que no es un parche.</p>
-
-    <h3>El mecanismo que sí abstiene, y nadie había medido</h3>
-    <p>La puerta de calidad de Normativa rechazó <b>cero de 48</b>. Los 7 rechazos correctos los
-    produjo el <b>contrato de citas</b>, con precisión perfecta: ni un rechazo indebido sobre 30
-    contestables. En Gerencia al revés — los 5 rechazos eran todos de la puerta y ninguno del
-    contrato.</p>
+    contestables, no se despliega». Rechazó 10. Y la causa no es un fallo suelto: de las 33
+    afirmaciones de los 9 contestables rechazados, <b>19 estaban localizadas</b> —el juez vio la
+    ventana correcta del artículo citado— y las rechazó igualmente. Lo que falla es el <b>grano</b>:
+    evalúa frases enteras contra un solo documento citado, y las respuestas reales meten varios
+    hechos y varias citas en la misma frase. Arreglarlo pide descomponer en afirmaciones atómicas y
+    comprobar cada una contra todas sus fuentes, que ya no es un parche.</p>
+    <p>Queda implementado y apagado detrás de un interruptor por asistente, con su instrumental y
+    su juez validado —24 de 24 contra etiquetas hechas a mano, intervalo de Wilson 0,86-1,00—, para
+    cuando el piloto dé material con el que rehacerlo.</p>
 </section>
 
 <section>
-    <h2>La cifra que obliga a abrir el piloto</h2>
+    <h2>5 · Qué texto inyectar: el experimento de granularidad</h2>
+    <p>Antes de elegir el troceado y la anchura se midió cuánto contexto darle al modelo: siete
+    configuraciones sobre las <b>mismas 25 consultas</b>, el <b>mismo modelo</b> y la <b>misma
+    plantilla</b>. Entre las de inyección sólo cambia cuánto texto entra.</p>
+    <div class="tabla-marco">
+    <table>
+        <caption>Calidad contra la rúbrica del informador · coste de entrada</caption>
+        <thead><tr><th scope="col">Qué se inyecta</th><th scope="col" class="num">Tasa</th>
+        <th scope="col" class="num">Juez discrepa</th>
+        <th scope="col" class="num">Entrada media</th></tr></thead>
+        <tbody>
+            <tr class="destacada"><th scope="row">5 normas enteras, top-k vectorial</th>
+                <td class="num"><b>68 %</b></td><td class="num">3 de 25</td>
+                <td class="num">63.278</td></tr>
+            <tr class="destacada"><th scope="row">El artículo, top-3 (la de producción)</th>
+                <td class="num"><b>68 %</b></td><td class="num">3</td>
+                <td class="num">~9.500</td></tr>
+            <tr><th scope="row">3 artículos</th><td class="num">57 %</td><td class="num">4</td>
+                <td class="num">9.462</td></tr>
+            <tr class="mala"><th scope="row">3 normas enteras</th><td class="num">50 %</td>
+                <td class="num">5</td><td class="num">41.141</td></tr>
+            <tr class="mala"><th scope="row">La submateria entera</th><td class="num">50 %</td>
+                <td class="num">7</td><td class="num">211.363</td></tr>
+            <tr class="mala"><th scope="row">Gemini con el corpus subido</th><td class="num">30 %</td>
+                <td class="num">4</td><td class="num">—</td></tr>
+        </tbody>
+    </table>
+    </div>
+    <p>De las comparaciones emparejadas, <b>sólo una es distinguible del azar</b>: las 5 normas
+    enteras ganan a Gemini <b>7 a 0</b>, p=0,016. El resto cae entre p=0,18 y p=1,00, con 2 a 6
+    pares discordantes donde harían falta unos 47. La tabla <b>ordena candidatos y no certifica
+    ninguno</b>.</p>
+    <p>Tres cosas sí se sostienen, y las tres se aplicaron:</p>
+    <ul>
+        <li><b>Inyectar más texto no mejora monótonamente.</b> Cinco normas es el punto bueno de
+        esa familia y tres está por debajo — 50 %, peor incluso que el artículo ×3. Y la submateria
+        entera, 22 veces más contexto que el artículo, midió también 50 % con la peor fiabilidad
+        del juez. El techo no es el presupuesto: es que el modelo se pierde.</li>
+        <li><b>La producción ya empata con la mejor de las alternativas</b>, a <b>6,7 veces
+        menos</b> coste de entrada. Por eso el piloto abre con ella y no con la inyección.</li>
+        <li><b>La latencia no la manda el contexto sino la salida</b>: correlación +0,997 con los
+        tokens de salida y −0,109 con los de entrada. Siete veces más contexto cuesta entre 0,7 y
+        1,2 segundos de primer token.</li>
+    </ul>
+    <div class="alerta">
+        <span class="titular">Dos columnas de aquel experimento no valen, y una de ellas iba
+        primera</span>
+        <p>La columna del <b>agéntico</b> midió 76 % y quedó primera. Está <b>invalidada</b>: se
+        midió con los dos defectos de §7 —citaba documentos de otro corpus y su nota de calidad era
+        una constante—. Con ambos corregidos empata con el RAG y declina peor (§2).</p>
+        <p>Y las celdas de inyección se ejecutaron <b>fuera del grafo</b>, con una llamada directa
+        al modelo, así que salieron con <b>0 enlaces de 25</b>: sin contrato de citas, sin ancla y
+        sin aviso de vigencia. La comparación entre ellas es limpia —a todas les falta lo mismo—
+        pero ninguna era desplegable tal como se midió. Eso es lo que motivó implementar la
+        inyección <b>dentro</b> del grafo, como un mando de la estrategia vectorial y no como una
+        estrategia aparte: así hereda las cuatro cosas que les faltaban.</p>
+    </div>
+    <p class="nota">El modo de contexto largo que ya existía en el código <b>no sirve</b> para
+    esto: selecciona por <b>fecha de creación</b> hasta llenar el presupuesto e <b>ignora la
+    consulta</b>. Para un corpus con leyes estatales de 279.425 tokens, eso es arbitrario.</p>
+</section>
+
+<section>
+    <h2>6 · La cifra que obliga a abrir el piloto</h2>
     <div class="alerta">
         <span class="titular">El ruido del mecanismo es mayor que lo que se estaba midiendo</span>
         <p>El contrato de citas disparó <b>7 veces en una tanda y 4 en otra</b>, sobre los mismos
         48 escenarios y con la misma configuración: <b>±3 sobre 18</b>. Que el modelo produzca una
         cita formalmente válida varía entre ejecuciones.</p>
         <p>Así que <b>ninguna comparación de ±2 en una sola tanda significa nada</b>, y varias de
-        las diferencias de este informe están en ese orden. Ordenan candidatos; no certifican
-        ninguno. Con 18 negativos no se decide, por bien que se mida.</p>
+        las diferencias de este informe están en ese orden. Con 18 negativos no se decide, por bien
+        que se mida.</p>
     </div>
-</section>
-
-<section>
-    <h2>Lo que el piloto tiene que producir</h2>
-    <ol>
-        <li><b>Negativos anotados por informadores.</b> Los 18 de hoy son 12 sintéticos y 6
-        reales; las fuentes esperadas las anotó quien desarrolla. Ninguna cifra de este informe es
-        publicable hasta que un informador las confirme.</li>
-        <li><b>Los cinco escenarios sin anotar</b> (<code>pendientes_de_anotar.json</code>), que
-        son exactamente los cinco fallos de recuperación. Es lo primero que hay que darle a un
-        informador.</li>
-        <li><b>La concordancia entre informadores</b> —HIB.K, aplazado— que necesita dos personas
-        y sin la cual no hay cifra de calidad publicable.</li>
-        <li><b>Pares léxicos reales.</b> El circuito de aprobación existe y tiene <b>0 filas</b>:
-        los 48.752 fragmentos con términos bilingües los reciben del corpus curado. El piloto los
-        va a producir en cantidad.</li>
-        <li><b>La cola de latencia del proveedor</b>: 4 de 14 observaciones pasaron de 10
-        segundos, una a 45 con sólo 13.000 tokens de contexto. Es varianza de la API, no del
-        contexto, y es el riesgo que este bloque destapó y no cuantificó.</li>
-    </ol>
-</section>
-
-<section>
-    <h2>Qué texto inyectar: las siete columnas del experimento de granularidad</h2>
-    <p>La pregunta era cuánto contexto darle al modelo, y se midió en vez de decidirse. Siete
-    configuraciones sobre las <b>mismas 25 consultas</b>, el <b>mismo modelo</b>
-    (<code>gemini-2.5-flash</code>) y la <b>misma plantilla</b>: entre las cuatro primeras sólo
-    cambia cuánto texto se inyecta.</p>
+    <p>A eso se añade que las fuentes esperadas del lote las anotó quien desarrolla, no un
+    informador. Está marcado como tal en los datos, y la regla es dura: <b>ninguna cifra que
+    dependa de esa anotación se publica</b> sin que un informador la confirme. Lo que sí es sólido
+    es el desglose por nivel de anotación:</p>
     <div class="tabla-marco">
     <table>
-        <caption>Calidad contra la rúbrica del informador, coste de entrada</caption>
-        <thead><tr><th scope="col">Qué se inyecta</th><th scope="col" class="num">Cumple</th>
-        <th scope="col" class="num">Tasa</th><th scope="col" class="num">Juez discrepa</th>
-        <th scope="col" class="num">Entrada media</th></tr></thead>
+        <caption>Recuperación según cómo se supo qué artículo era</caption>
+        <thead><tr><th scope="col">Cómo se supo</th><th scope="col" class="num">Acierto</th></tr></thead>
         <tbody>
-            <tr><th scope="row">D · el agéntico elige y lee entero</th>
-                <td class="num">13/17</td><td class="num"><b>76 %</b></td>
-                <td class="num">8 de 25</td><td class="num">—</td></tr>
-            <tr class="destacada"><th scope="row">C · 5 normas enteras, top-k vectorial</th>
-                <td class="num">15/22</td><td class="num"><b>68 %</b></td>
-                <td class="num">3</td><td class="num">63.278</td></tr>
-            <tr><th scope="row">P · producción (el artículo, top-3)</th>
-                <td class="num">15/22</td><td class="num">68 %</td>
-                <td class="num">3</td><td class="num">~9.500</td></tr>
-            <tr><th scope="row">A · 3 artículos</th>
-                <td class="num">12/21</td><td class="num">57 %</td>
-                <td class="num">4</td><td class="num">9.462</td></tr>
-            <tr class="mala"><th scope="row">B · 3 normas enteras</th>
-                <td class="num">10/20</td><td class="num">50 %</td>
-                <td class="num">5</td><td class="num">41.141</td></tr>
-            <tr class="mala"><th scope="row">E · la submateria entera</th>
-                <td class="num">9/18</td><td class="num">50 %</td>
-                <td class="num">7</td><td class="num">211.363</td></tr>
-            <tr class="mala"><th scope="row">G · Gemini con el corpus subido</th>
-                <td class="num">6/20</td><td class="num">30 %</td>
-                <td class="num">4</td><td class="num">—</td></tr>
+            <tr class="buena"><th scope="row">Se leyó el artículo y contesta</th>
+                <td class="num">13/13 · 100 %</td></tr>
+            <tr class="buena"><th scope="row">El informador nombra la norma</th>
+                <td class="num">7/7 · 100 %</td></tr>
+            <tr class="buena"><th scope="row">El informador nombra el artículo</th>
+                <td class="num">1/1 · 100 %</td></tr>
+            <tr class="mala"><th scope="row">Se dedujo del ámbito, sin leerlo</th>
+                <td class="num">4/9 · 44 %</td></tr>
         </tbody>
     </table>
     </div>
-
-    <h3>Lo que se puede concluir y lo que no</h3>
-    <p>De las veintiuna comparaciones emparejadas (McNemar exacto), <b>sólo una es distinguible
-    del azar</b>: las 5 normas enteras ganan a Gemini <b>7 a 0</b>, p=0,016. Todo lo demás cae
-    entre p=0,18 y p=1,00, con 2 a 6 pares discordantes donde harían falta unos 47 para tener
-    potencia. Así que el orden de la tabla <b>ordena candidatos y no certifica ninguno</b>.</p>
-    <p>Tres cosas sí se sostienen:</p>
-    <ul>
-        <li><b>Cinco normas enteras es el punto bueno de esa familia, no tres.</b> B (3 normas)
-        midió 50 %, por debajo incluso del artículo ×3. Inyectar más texto no mejora
-        monótonamente: hay un punto y B está por debajo.</li>
-        <li><b>Más contexto del necesario empeora.</b> E inyecta la submateria entera —211.363
-        tokens de media, 22 veces A— y midió 50 % con la peor fiabilidad del juez (7
-        discrepancias). El techo no es el presupuesto: es que el modelo se pierde.</li>
-        <li><b>La producción actual ya empata con la mejor de las nuevas</b>, 2 a 2 en los pares
-        discordantes (p=1,000), a <b>6,7 veces menos</b> coste de entrada. Por eso el piloto abre
-        con ella.</li>
-    </ul>
-
-    <h3>La comparación con el agéntico</h3>
-    <p>El agéntico salió <b>nominalmente el primero</b> (76 %), y conviene decir con qué reservas:
-    su tasa sale de <b>17 veredictos firmes de 25</b> —8 discrepancias, la peor fiabilidad de las
-    siete columnas— y su comparación emparejada con el artículo ×3 da p=1,000. Además, cuando se
-    midió, <b>su nota de calidad era una constante</b>: la evidencia salía con
-    <code>score=1.0</code> fija, así que su puerta no rechazaba nada con ningún umbral y su
-    ventaja incluía la ausencia de filtro. Eso ya está corregido, y su barrido de umbral está
-    pendiente de repetir.</p>
-    <p>Sobre el lote de Gerencia, con la nota ya real y el corpus en <code>parent_child</code>:</p>
-    <div class="tabla-marco">
-    <table>
-        <caption>Los dos asistentes de Gerencia, mismo lote de 18</caption>
-        <thead><tr><th scope="col"></th><th scope="col" class="num">Fuente requerida</th>
-        <th scope="col" class="num">Calló habiendo respuesta</th>
-        <th scope="col" class="num">Contestó sin deber</th></tr></thead>
-        <tbody>
-            <tr><th scope="row">RAG</th><td class="num">11/13</td><td class="num">0</td>
-                <td class="num">5 de 5</td></tr>
-            <tr><th scope="row">Agéntico</th><td class="num"><b>12-13/13</b></td>
-                <td class="num">0</td><td class="num">4-5 de 6</td></tr>
-        </tbody>
-    </table>
-    </div>
-    <p><b>Encuentra mejor y declina igual de mal.</b> Es el intercambio que el piloto tiene que
-    resolver, y es la razón de que la rama de Gerencia tenga dos asistentes sobre el mismo corpus
-    en vez de uno.</p>
-
-    <h3>Lo que la medición dejó sin implementar, y ahora se implementa</h3>
-    <div class="alerta">
-        <span class="titular">Las celdas de inyección se midieron fuera del grafo</span>
-        <p>A, B, C y E se ejecutaron con una llamada directa al modelo, así que <b>no llevan
-        contrato de citas, ni ancla, ni aviso de vigencia: 0 enlaces de 25</b>. D y producción van
-        por el grafo y llevan 25 de 25, con ancla en 19 y 20. La comparación de granularidad es
-        limpia entre las cuatro —a todas les falta lo mismo— pero <b>ninguna era desplegable tal
-        como se midió</b>.</p>
-        <p>Y el modo <code>MD_LONG_CONTEXT</code> que ya existía <b>no sirve</b> para esto:
-        selecciona por <b>fecha de creación</b> hasta llenar el presupuesto e <b>ignora la
-        consulta</b>. Para un corpus de 124 documentos con leyes estatales de 279.425 tokens, eso
-        es arbitrario.</p>
-    </div>
-    <p>De ahí la pieza que este informe deja en marcha: <b>selección vectorial por top-k más
-    inyección del documento entero</b>, dentro del grafo, heredando el contrato de citas, el ancla
-    y el aviso de vigencia. Se prueba en un <b>tercer asistente de Gerencia</b> sobre el mismo
-    corpus, con <b>5 normas</b> —el punto que midió mejor—, para que la comparación siga siendo
-    entre tres métodos sobre el mismo lote y no entre dos.</p>
+    <p><b>Los cinco fallos de recuperación están todos en la última fila.</b> Puede ser que el
+    sistema falle ahí, o que la fuente que se le exige no sea la correcta. Hasta que un informador
+    los revise, el 83 % de titular es un <b>suelo</b> y no una estimación.</p>
 </section>
 
 <section>
-    <h2>El grafo: qué hace cada paso y cuál decide sin modelo</h2>
-    <p>Los tres asistentes ejecutan <b>el mismo grafo</b>, <code>CoreGraph</code>. Lo que cambia
-    entre ellos son las estrategias que se le inyectan —de recuperación, de fusión, de plantilla y
-    de idioma— y no el flujo. Esa separación es lo que permite que el RAG y el agéntico de Gerencia
-    sean comparables: comparten la puerta de calidad, el contrato de citas y el aviso de
-    vigencia.</p>
+    <h2>7 · Dos defectos que invalidaron mediciones</h2>
+    <p>Los dos aparecieron al negarse a reportar una cifra que no se entendía, y los dos
+    <b>invalidan números que figuran en informes anteriores</b>. Se recogen aquí porque explican
+    por qué la configuración final no coincide con la que aquellos informes sugerían.</p>
+
+    <h3>Un asistente citaba el corpus de su hermano</h3>
+    <p>El asistente agéntico tenía <b>14.198 de sus 14.208 fragmentos</b> con el
+    <code>document_id</code> de su metadato apuntando a documentos del asistente RAG. Los
+    fragmentos eran suyos —la columna que los adscribe estaba bien, así que la búsqueda los
+    filtraba correctamente— pero la agrupación por documento leía el <b>metadato</b>, cargaba las
+    filas del hermano y la cita salía con su título. <b>Sin ningún error.</b></p>
+    <p>Se descartaron tres explicaciones mejores que la real: el retriever <b>sí</b> filtra por
+    asistente, el índice del agéntico <b>sólo</b> ofrece documentos propios, y la lectura por
+    identificador —que efectivamente no comprueba el dueño— está documentada como deliberada y su
+    premisa se cumple.</p>
+    <div class="paso">
+        <div class="n">datos</div>
+        <div>14.198 fragmentos remapeados con un <code>UPDATE</code> del metadato:
+        <code>parent_content</code> y el embedding no se tocan, así que <b>no cuesta
+        embeddings</b>. Verificado con una segunda pasada independiente: los cinco corpus
+        coherentes.</div>
+
+        <div class="n">causa</div>
+        <div>La agrupación lee ahora la <b>columna</b>, con el metadato como repliegue para los
+        fragmentos legados. La columna la sostiene la base de datos con una clave ajena; el metadato
+        es una copia denormalizada escrita al trocear. <b>Cuando dos copias del mismo dato pueden
+        discrepar, se lee la que no se puede corromper sin que la base se queje.</b> Hubo que llevar
+        la columna por <b>tres</b> puntos —las dos búsquedas base y la fusión RRF, que reconstruye
+        el resultado desde cero—; caerse ahí habría dejado los tests en verde y el arreglo inerte en
+        producción.</div>
+    </div>
+    <p><b>Y lo que más importa: el guardarraíl ya existía.</b> La comprobación de coherencia estaba
+    escrita y probada, y sólo se pasaba por los corpus que una copia tocaba. <i>Un invariante que
+    sólo se comprueba donde se sospecha no es un invariante</i>: ahora se pasa por los cinco.</p>
+
+    <h3>Una guarda defensiva escondía un fallo de programación</h3>
+    <p>El puntuador de relevancia del agéntico usaba una constante sin importarla. Cada llamada
+    lanzaba un error de nombre, y la guarda puesta <b>a propósito</b> —para que un puntuador roto no
+    tumbara la respuesta— lo tragaba y devolvía la nota sin medir. El arreglo estuvo <b>inerte</b>
+    hasta que el linter lo señaló, y su único síntoma era una marca de «sin medir» que nadie
+    miraba.</p>
+    <p>La lección no es «pasa el linter», porque el linter no ve un campo renombrado ni una firma
+    cambiada: es que <b>una guarda defensiva convierte un fallo de programación en degradación
+    silenciosa</b>. Donde hay una guarda así hace falta un test que compruebe que el camino bueno
+    <b>produce el resultado</b>, no sólo que el malo no explota. Los tres tests que había
+    comprobaban lo segundo.</p>
+</section>
+
+<section>
+    <h2>8 · El grafo: qué hace cada paso y cuál decide sin modelo</h2>
+    <p>Los cuatro asistentes ejecutan <b>el mismo grafo</b>. Lo que cambia entre ellos son las
+    estrategias que se le inyectan —de recuperación, de fusión, de plantilla y de idioma— y no el
+    flujo. Esa separación es lo que permite que las tres estrategias de Gerencia sean comparables:
+    comparten la puerta de calidad, el contrato de citas y el aviso de vigencia.</p>
 <pre>detect_language → rewrite_query → retrieve → merge → <b>[puerta de calidad]</b>
                                                       ├→ generate_answer → log → FIN
                                                       ├→ reformular → retrieve  (una sola vez)
                                                       └→ fallback → FIN</pre>
-
     <div class="paso">
         <div class="n">1 · determinista</div>
-        <div><b><code>detect_language</code></b> — detecta la lengua de la pregunta con
-        <code>langdetect</code>. No hay llamada al modelo. De aquí sale la instrucción «Responde
-        en …» y el filtro de evidencias por idioma.</div>
+        <div><b>Detección de lengua</b> de la pregunta. Sin llamada al modelo. De aquí sale la
+        instrucción «Responde en …» y el filtro de evidencias por idioma.</div>
 
         <div class="n">2 · modelo</div>
-        <div><b><code>rewrite_query</code></b> — reescribe la pregunta con el <b>historial</b> para
-        que se entienda sola («y para máster?» → pregunta completa). <b>Sólo se ejecuta si hay
-        conversación previa</b>, y con un modelo pequeño distinto del que responde. Sin historial
-        es un paso vacío.</div>
+        <div><b>Reescritura con el historial</b>, para que la pregunta se entienda sola («y para
+        máster?» → pregunta completa). <b>Sólo si hay conversación previa</b>, y con un modelo
+        pequeño distinto del que responde.</div>
 
         <div class="n">3 · determinista</div>
-        <div><b><code>retrieve</code></b> — la estrategia inyectada. Busca con la reformulada si la
-        hay, y si no con la reescrita, y si no con la original. Ninguna decisión la toma un modelo:
-        es búsqueda vectorial más léxica, fusión RRF, filtros de metadatos y recorte a
-        <code>top_k</code> documentos.</div>
+        <div><b>Recuperación</b>: búsqueda vectorial más léxica, fusión RRF, filtros de metadatos y
+        recorte a <code>top_k</code> documentos. Busca con la reformulada si la hay, y si no con la
+        reescrita, y si no con la original.</div>
 
         <div class="n">4 · determinista</div>
-        <div><b><code>merge</code></b> — agrupa por documento, filtra por idioma y <b>calcula la
-        nota</b>: la del <b>mejor</b> fragmento, no la media. Con la media, la cola de resultados
-        votaba sobre si hay respuesta, y <code>top_k</code> —un mando de amplitud— decidía de
-        rebote cuántas preguntas se contestan.</div>
+        <div><b>Fusión y nota</b>: agrupa por documento, filtra por idioma y calcula la nota como la
+        del <b>mejor</b> fragmento, no la media. Con la media, la cola de resultados votaba sobre si
+        hay respuesta y <code>top_k</code> —un mando de amplitud— decidía de rebote cuántas
+        preguntas se contestan.</div>
 
         <div class="n">5 · determinista</div>
-        <div><b>Puerta de calidad</b> — compara la nota contra el umbral. Tres salidas: responder,
-        reformular, o rendirse. Es una comparación numérica: no interviene ningún modelo.</div>
+        <div><b>Puerta de calidad</b>: compara la nota contra el umbral. Tres salidas —responder,
+        reformular, rendirse— y es una comparación numérica.</div>
 
         <div class="n">6 · modelo</div>
-        <div><b><code>reformular</code></b> — sólo si la puerta falló. Traduce la consulta al
-        vocabulario de la norma y se vuelve a buscar <b>una sola vez</b>; la guarda contra bucles
-        es que la consulta reformulada ya esté puesta. Si el reformulador no devuelve nada, no se
-        repite la búsqueda: sería pagar una consulta para obtener lo que ya se tiene.</div>
+        <div><b>Reformulación al vocabulario de la norma</b>, sólo si la puerta falló, y se vuelve a
+        buscar <b>una sola vez</b>. Se paga sólo cuando hace falta: normalizar siempre costaría una
+        llamada en el camino crítico de todas las consultas.</div>
 
         <div class="n">7 · modelo</div>
-        <div><b><code>generate_answer</code></b> — la única llamada que redacta. Recibe el
-        <i>system prompt</i> del anexo y las evidencias, y devuelve texto con citas.</div>
+        <div><b>Redacción</b>: la única llamada que escribe. Recibe el <i>system prompt</i> del §10
+        y las evidencias.</div>
 
         <div class="n">8 · determinista</div>
-        <div><b>Contrato de citas</b> — dentro del mismo nodo, sobre el texto ya generado. Cuatro
-        pasos en un orden que <b>es</b> el contrato (apartado siguiente).</div>
+        <div><b>Contrato de citas</b> (§9), sobre el texto ya generado.</div>
 
         <div class="n">9 · determinista</div>
-        <div><b>Aviso de vigencia</b> — se <b>añade</b> al final si alguna evidencia citada tiene
-        la vigencia sin validar, y nombra los documentos afectados. No es una instrucción al
-        modelo: una instrucción se cumple casi siempre, y «casi siempre» no basta para decir si una
-        norma rige.</div>
+        <div><b>Aviso de vigencia</b>: se <b>añade</b> si alguna evidencia citada tiene la vigencia
+        sin validar, y nombra los documentos afectados. No es una instrucción al modelo: una
+        instrucción se cumple casi siempre, y «casi siempre» no basta para decir si una norma
+        rige.</div>
 
         <div class="n">10 · determinista</div>
-        <div><b><code>log</code></b> — persiste la interacción con su traza: consulta, reescritas,
-        nota, motivo del fallback, fuentes y tiempos.</div>
+        <div><b>Registro</b> de la interacción con su traza: consulta, reescritas, nota, motivo del
+        fallback, fuentes y tiempos.</div>
     </div>
-
     <p>De los diez pasos, <b>siete son deterministas</b> y tres llaman al modelo — y de esos tres,
     dos sólo se ejecutan en condiciones concretas. Es la propiedad que hace el sistema auditable:
     la decisión de <b>si hay respuesta</b> y la de <b>qué cita es válida</b> no las toma un
     modelo.</p>
-
-    <h3>Lo que cambia entre los tres</h3>
     <div class="tabla-marco">
     <table>
         <caption>Misma orquestación, estrategias distintas</caption>
         <thead><tr><th scope="col"></th><th scope="col">Qué recupera</th>
         <th scope="col">Quién elige</th><th scope="col">Qué llega al modelo</th></tr></thead>
         <tbody>
-            <tr><th scope="row">Normativa · RAG</th>
-                <td>vectorial + léxica, fusión RRF</td>
+            <tr><th scope="row">RAG</th><td>vectorial + léxica, fusión RRF</td>
                 <td>el código: 3 documentos por nota</td>
-                <td>el artículo (padre del fragmento), con su URL y su marca de vigencia</td></tr>
-            <tr><th scope="row">Gerencia · RAG</th>
-                <td>igual</td><td>igual</td><td>igual</td></tr>
-            <tr><th scope="row">Gerencia · agéntico</th>
+                <td>el artículo —el padre del fragmento— con su URL y su marca de
+                vigencia</td></tr>
+            <tr><th scope="row">Inyección</th><td>igual</td>
+                <td>el código: 5 documentos por nota</td>
+                <td>la norma <b>entera</b>, por el mismo camino y con las mismas garantías</td></tr>
+            <tr><th scope="row">Agéntico</th>
                 <td>índice de materias, y el modelo lee lo que decide</td>
-                <td><b>el modelo</b>, con <code>list_documents</code> y
-                <code>read_document</code></td>
+                <td><b>el modelo</b>, con dos herramientas</td>
                 <td>los documentos <b>enteros</b> que haya leído</td></tr>
         </tbody>
     </table>
     </div>
-    <p>Y por eso el agéntico lleva reglas de rango y vigencia que el RAG no necesita: él elige qué
-    leer, mientras el RAG recibe ya filtrado lo que puede citar.</p>
+    <p>Y por eso el agéntico lleva reglas de rango y vigencia que los otros no necesitan: él elige
+    qué leer, mientras los demás reciben ya filtrado lo que pueden citar.</p>
 </section>
 
 <section>
-    <h2>El contrato de citas, paso a paso</h2>
+    <h2>9 · El contrato de citas, paso a paso</h2>
     <p>Se aplica sobre la respuesta ya escrita, con el conjunto de URL efectivamente recuperadas
     como única referencia. <b>El orden es el contrato</b>, y cada paso está donde está porque
     ponerlo en otro sitio rompió algo medido:</p>
@@ -572,32 +638,30 @@ pre b{color:var(--tinta);font-weight:600}
         contrato no encontraba ninguna cita válida y <b>tiraba la respuesta entera</b>.</div>
 
         <div class="n">3 · despojar</div>
-        <div><b>Lo que apunta fuera del conjunto recuperado pierde el enlace, no la mención.</b>
-        Con <code>parent_child</code> el fragmento inyectado es el artículo entero y trae dentro sus
+        <div><b>Lo que apunta fuera del conjunto recuperado pierde el enlace, no la mención.</b> Con
+        <code>parent_child</code> el fragmento inyectado es el artículo entero y trae dentro sus
         remisiones —«conforme al artículo 118 de la Ley 9/2017»—; el modelo las enlaza. La regla: se
         cita la norma principal y las demás recuperadas y usadas, <b>pero no las normas citadas por
         esas normas</b>.</div>
 
         <div class="n">4 · comprobar</div>
         <div><b>¿Queda al menos una cita válida?</b> Si no, la respuesta se sustituye por el mensaje
-        de rendición del propio chatbot. Va <b>la última</b>, sobre el texto ya despojado: al revés,
-        una remisión enlazada contaría como cita válida y el contrato dejaría de proteger justo de
-        lo que existe para proteger.</div>
+        de rendición del propio asistente. Va <b>la última</b>, sobre el texto ya despojado: al
+        revés, una remisión enlazada contaría como cita válida y el contrato dejaría de proteger
+        justo de lo que existe para proteger.</div>
     </div>
     <p>Lo que sigue atrapando, que es para lo que existe: <b>citar un documento que nunca se
-    recuperó, y no citar nada</b>. Y es, medido, <b>la única puerta que produce abstención</b> en
-    Normativa: 7 rechazos de 18 negativos sin un solo rechazo indebido sobre 30 contestables,
-    mientras la puerta de calidad rechazaba cero de 48.</p>
+    recuperó, y no citar nada</b>.</p>
 </section>
 
 <section>
-    <h2>Anexo · El prompt, literal</h2>
-    <p>El <i>system prompt</i> se compone en un solo sitio y en este orden: el prompt del chatbot,
-    la instrucción de idioma, las reglas de cita, y las evidencias con su URL y su marca de
-    vigencia. Tener dos sitios donde se componía era la razón por la que las reglas de cita y el
+    <h2>10 · Anexo · El prompt, literal</h2>
+    <p>El <i>system prompt</i> se compone en un solo sitio y en este orden: el prompt del
+    asistente, la instrucción de idioma, las reglas de cita, y las evidencias con su URL y su marca
+    de vigencia. Tener dos sitios donde se componía era la razón por la que las reglas de cita y el
     bloque de fuentes podían divergir.</p>
 
-    <h3>Reglas de cita — idénticas para los tres asistentes</h3>
+    <h3>Reglas de cita — idénticas para los cuatro asistentes</h3>
 <pre>REGLAS DE CITA (obligatorias):
 1. Cada afirmacion factual basada en los documentos debe ir seguida de una cita en formato
    markdown `[titulo del documento](url)`. La cita va al final de la frase citada.
@@ -618,10 +682,11 @@ pre b{color:var(--tinta);font-weight:600}
     <p class="nota">La regla 5 no es cosmética. La URL viaja sola en su línea y sin marcado
     alrededor porque estuvo en cursiva y el guion bajo de cierre se colaba en la cita
     (<code>…#art-1_</code>): la comparación exacta fallaba y se descartaba la respuesta entera.
-    Seis de cada ocho descartes por citas eran eso y nada más — y de forma intermitente, según si
-    el modelo arrastraba el carácter en esa generación, que es el peor modo de fallo posible.</p>
+    <b>Seis de cada ocho descartes por citas eran eso y nada más</b> — y de forma intermitente,
+    según si el modelo arrastraba el carácter en esa generación, que es el peor modo de fallo
+    posible.</p>
 
-    <h3>Prompt del asistente de Normativa</h3>
+    <h3>Prompt del asistente de normativa</h3>
 <pre>Ets l'assistent de normativa de la Universitat Jaume I. Respons a persones que no
 s'identifiquen: ciutadania, estudiantat i personal.
 
@@ -638,7 +703,7 @@ Regles:
 4. No dones assessorament juridic ni interpretes el que la norma no diu: informes del que diu.
 5. Respon en la llengua de la pregunta.</pre>
 
-    <h3>Prompt de los dos asistentes de Gerencia — idéntico en ambos</h3>
+    <h3>Prompt de los tres asistentes de Gerencia — idéntico en los tres</h3>
 <pre>Ets l'assistent economicoadministratiu de la Gerencia de la Universitat Jaume I. Respons a
 personal identificat de Gerencia i de les unitats administratives, que coneix el vocabulari
 de gestio i pot contrastar el que li dius.
@@ -655,10 +720,11 @@ Regles:
 5. Les preguntes frequents son orientatives, no norma: quan les cites, remet tambe a la
    norma que les soste.
 6. Respon en la llengua de la pregunta.</pre>
-    <p class="nota">La diferencia con Normativa no es de estilo, es de público. El de Gerencia
-    <b>puede contrastar</b> lo que se le dice, así que su regla 1 admite una pista con su fuente y
-    su regla 4 pide cobertura parcial antes que silencio. El de Normativa contesta a quien no se
-    identifica, y por eso responde <b>sólo</b> con lo recuperado y remite a Infocampus.</p>
+    <p class="nota">La diferencia con el de normativa no es de estilo, es de <b>público</b>. El de
+    Gerencia atiende a personal que <b>puede contrastar</b> lo que se le dice, así que su regla 1
+    admite una pista con su fuente y su regla 4 pide cobertura parcial antes que silencio. El de
+    normativa contesta a quien no se identifica, y por eso responde <b>sólo</b> con lo recuperado y
+    remite a Infocampus.</p>
 
     <h3>Reglas añadidas sólo al agéntico</h3>
 <pre>REGLAS DE RANGO Y VIGENCIA (obligatorias):
@@ -668,15 +734,16 @@ Regles:
    documento citado no esta validada, advierte de ello en la respuesta.
 3. No cites una norma derogada como si estuviera en vigor, ni siquiera si la recuperas.</pre>
     <p>Van con el <b>índice de materias</b> —58 submaterias, unos 2,3k tokens; el catálogo de
-    fichas completo son ~72k y no cabe— y con la instrucción de usar
-    <code>list_documents(submateries=[…])</code> y <code>read_document(document_id=…)</code>.</p>
+    fichas completo son ~72k y no cabe— y con la instrucción de usar las dos herramientas de
+    listado y lectura. Las necesita porque <b>él elige qué leer</b>; los otros reciben ya filtrado
+    lo que pueden citar.</p>
 
     <h3>Cómo llega cada evidencia al modelo</h3>
 <pre>## &lt;título del documento&gt;
 URL: &lt;dirección exacta, sola en su línea&gt;
 _[VIGENCIA NO VALIDADA: dilo si citas este documento]_   ← sólo si aplica
 
-&lt;el artículo entero: el padre del fragmento recuperado&gt;</pre>
+&lt;el artículo entero, o la norma entera en el banco de inyección&gt;</pre>
     <p class="nota">La marca de vigencia va <b>por documento</b> y no como aviso general, porque el
     modelo necesita saber de cuál de las normas se duda para redactarlo con naturalidad. El aviso
     que <i>garantiza</i> que se diga lo pone el código encima de la respuesta, después.</p>
@@ -689,7 +756,7 @@ Documentos afectados: &lt;títulos&gt;.</pre>
     <p class="nota">Nombra los documentos porque un aviso genérico no dice de qué norma se duda, y
     quien lee necesita saber cuál de las citas tiene que confirmar.</p>
 
-    <h3>Mensaje de rendición — uno por chatbot</h3>
+    <h3>Mensaje de rendición — uno por asistente</h3>
 <pre><b>Normativa:</b> No he trobat en la normativa publicada fonament suficient per a respondre
 aixo amb una cita verificable. Per a una consulta atesa per una persona, contacta amb
 Infocampus: https://www.uji.es/serveis/infocampus/
@@ -697,140 +764,50 @@ Infocampus: https://www.uji.es/serveis/infocampus/
 <b>Gerencia:</b> No he trobat en la normativa carregada fonament suficient per a respondre
 aixo amb una cita verificable. Pots reformular la pregunta o consultar-ho directament amb
 Gerencia.</pre>
-    <p class="nota">Es configurable por chatbot y no una constante, porque a quién preguntar
+    <p class="nota">Es configurable por asistente y no una constante, porque a quién preguntar
     depende del asistente: Infocampus atiende al público y no al personal de Gerencia. «No lo sé» a
     secas deja a quien pregunta en el mismo sitio en el que estaba; decirle a quién preguntar es el
     servicio.</p>
 </section>
 
 <section>
-    <h2>Por qué Gerencia abre con un solo asistente</h2>
-    <p>Gerencia tenía dos asistentes sobre el mismo corpus —RAG y agéntico— y este bloque añadió
-    un tercero para probar la inyección de norma entera. Al piloto sale <b>sólo el RAG</b>. Los
-    otros dos quedan con <code>is_active=False</code>, que es la semántica exacta que hace falta:
-    fuera de la vista de los usuarios y <b>dentro del alcance del banco</b>, porque el medidor
-    construye el grafo con <code>GraphFactory</code> y no consulta ese campo.</p>
-
-    <h3>La razón de método, que es la que decide</h3>
-    <p>Los usuarios de Gerencia son <b>funcionarios, pocos</b>. Repartirlos entre tres asistentes
-    fragmenta el poco tráfico que hay, y nadie les ha pedido que comparen. La comparación no
-    necesita tres chatbots en producción: necesita <b>uno recogiendo preguntas reales</b> y los
-    otros dos <b>reproduciéndolas en diferido</b>. Eso es un diseño emparejado —misma pregunta,
-    mismo corpus, mismo usuario— y es el que necesita menos muestra para decidir; es también el
-    único que permite McNemar. Y se puede repetir con cualquier estrategia futura sobre las mismas
-    preguntas acumuladas, que es exactamente lo que el piloto tiene que producir.</p>
-
-    <h3>Las tres estrategias, medidas sobre el mismo lote y el mismo código</h3>
-    <div class="tabla-marco">
-    <table>
-        <caption>Lote de Gerencia · 13 contestables y 5 negativos · corpus y código corregidos</caption>
-        <thead><tr><th scope="col">Estrategia</th><th scope="col" class="num">Fuente requerida</th>
-        <th scope="col" class="num">Ancla</th><th scope="col" class="num">Calló habiendo respuesta</th>
-        <th scope="col" class="num">Contestó sin deber</th></tr></thead>
-        <tbody>
-            <tr class="destacada"><th scope="row">RAG — top-3, el artículo</th>
-                <td class="num"><b>11/13</b></td><td class="num">0/5</td>
-                <td class="num">1</td><td class="num">4 de 5</td></tr>
-            <tr><th scope="row">Agéntico — el modelo elige y lee entero</th>
-                <td class="num"><b>11/13</b></td><td class="num">0/5</td>
-                <td class="num">2</td><td class="num">5 de 5</td></tr>
-            <tr class="mala"><th scope="row">Inyección — top-5, la norma entera</th>
-                <td class="num">7/13</td><td class="num">0/1</td>
-                <td class="num">1</td><td class="num">4 de 5</td></tr>
-        </tbody>
-    </table>
-    </div>
-    <p>Tres lecturas, en orden de firmeza:</p>
-    <ul>
-        <li><b>La inyección de norma entera recupera peor</b>, y no es artefacto: sus documentos
-        casan por <code>content_hash</code>, las URL son las mismas y el código es el mismo. Con
-        <code>top_k=5</code> entran dos documentos más y la métrica exige <b>todas</b> las fuentes
-        requeridas del escenario: lo que entra de más desplaza a lo que hacía falta. Es coherente
-        con lo que el experimento de granularidad ya insinuaba — <b>inyectar más texto no mejora
-        monótonamente</b>; allí la submateria entera, 22 veces más contexto, midió lo mismo que 3
-        normas.</li>
-        <li><b>El agéntico ya no gana.</b> Empata en recuperación y declina peor. Toda su ventaja
-        aparente del bloque venía de dos defectos, y con los dos corregidos la comparación que se
-        perseguía desde tres bloques da <b>empate en encontrar y ventaja del RAG en callar</b>.</li>
-        <li><b>El ancla es 0 en las tres</b>, y no depende de la estrategia: las normas propias de
-        Gerencia se citan al sitio publicado <b>sin fragmento</b>, mientras las estatales van al
-        BOE con <code>#a118</code>. Es un problema de publicación.</li>
-    </ul>
-    <div class="alerta">
-        <span class="titular">Cómo leer el empate</span>
-        <p>El agéntico dio <b>13/13</b> en una ejecución y <b>11/13</b> en la siguiente, con el
-        mismo lote y sólo el arreglo del agrupamiento en medio. Esa diferencia de dos escenarios
-        es la varianza medida del propio mecanismo: <b>±3 sobre 18</b>. Así que el empate no
-        significa «exactamente iguales», significa <b>indistinguibles con este lote</b>.</p>
-        <p>Lo que sí es firme porque no depende del lote: el RAG es el único de los tres cuyas
-        cifras nunca estuvieron contaminadas.</p>
-    </div>
-</section>
-
-<section>
-    <h2>El defecto que invalidó las cifras del agéntico</h2>
-    <p>Al medir el tercer asistente salió <b>1 de 13</b> fuentes requeridas frente a 11 de los
-    otros dos. Antes de reportarlo se comprobó, y no era la estrategia: las URL recuperadas eran
-    <b>idénticas</b> en las tres. Tirando de ahí apareció algo más grande.</p>
-    <p><b>El asistente agéntico tenía 14.198 de sus 14.208 fragmentos con
-    <code>chunk_metadata["document_id"]</code> apuntando a documentos del chatbot RAG.</b> Los
-    fragmentos eran suyos —la columna <code>chatbot_id</code> estaba bien, así que la búsqueda los
-    filtraba correctamente— pero <code>VectorRetrievalStrategy</code> agrupaba por el
-    <code>document_id</code> del <b>metadato</b>, así que cargaba las filas del hermano y la cita
-    salía con su título. <b>Sin ningún error.</b></p>
-    <p>Por el camino se descartaron tres explicaciones mejores que la real: el retriever <b>sí</b>
-    filtra por chatbot, el índice del agéntico <b>sólo</b> ofrece documentos propios, y
-    <code>read()</code> —que efectivamente no comprueba el dueño— está documentado como deliberado
-    y su premisa se cumple.</p>
-
-    <h3>Qué invalida</h3>
-    <p>Todas las cifras del agéntico de este bloque, incluido <b>su primer puesto en el
-    experimento de granularidad</b> con 76 %. Se midieron citando documentos de otro corpus. Con
-    contenido casi idéntico las respuestas no eran falsas, pero «agéntico contra RAG» no comparaba
-    dos corpus: comparaba <b>dos formas de leer el mismo</b>.</p>
-
-    <h3>El arreglo, en dos capas</h3>
-    <div class="paso">
-        <div class="n">datos</div>
-        <div>14.198 fragmentos remapeados con un <code>UPDATE</code> del metadato:
-        <code>parent_content</code> y <code>embedding</code> no se tocan, así que <b>no cuesta
-        embeddings</b>. Verificado con una segunda pasada independiente: los cinco corpus
-        coherentes.</div>
-
-        <div class="n">causa</div>
-        <div>La agrupación lee ahora la <b>columna</b> <code>document_id</code> y deja el metadato
-        como repliegue para los fragmentos legados. La columna la sostiene la base de datos con
-        una clave ajena; el metadato es una copia denormalizada escrita al trocear. <b>Cuando dos
-        copias del mismo dato pueden discrepar, se lee la que no se puede corromper sin que la
-        base se queje.</b></div>
-    </div>
-    <p>La columna hubo que llevarla por <b>tres</b> puntos, no uno: las dos búsquedas base y —el
-    que importaba— la <b>fusión RRF</b>, que reconstruye el resultado desde cero. Si el dato se
-    hubiera caído ahí, los tests unitarios habrían pasado igual y el arreglo no habría servido de
-    nada en producción.</p>
-
-    <h3>Y lo que más importa del hallazgo</h3>
-    <p><b>El guardarraíl ya existía.</b> <code>chunk_copier.incoherentes()</code> compara
-    exactamente eso, y la consulta equivalente estaba en el guion del techo del padre. Sólo se
-    había pasado por los corpus que la copia tocaba. <i>Un invariante que sólo se comprueba donde
-    se sospecha no es un invariante</i>: ahora se pasa por los cinco.</p>
-    <p>El mismo día apareció una segunda versión del mismo patrón. El puntuador de relevancia del
-    agéntico usaba una constante sin importarla; cada llamada lanzaba <code>NameError</code>, y la
-    guarda puesta a propósito para que un puntuador roto no tumbara la respuesta lo <b>tragaba</b>
-    y devolvía la nota sin medir. <b>El arreglo estuvo inerte hasta que el linter lo señaló</b>, y
-    su único síntoma era un <code>score_sin_medir=True</code> que nadie miraba. La lección no es
-    «pasa el linter»: es que <b>una guarda defensiva convierte un fallo de programación en un
-    comportamiento degradado silencioso</b>, y donde hay una guarda así hace falta un test que
-    compruebe que el camino bueno funciona, no sólo que el malo no explota.</p>
+    <h2>11 · Lo que el piloto tiene que producir</h2>
+    <ol>
+        <li><b>Preguntas reales en cantidad.</b> Es lo que permite reproducir las tres estrategias
+        de Gerencia sobre el mismo conjunto y decidir entre ellas, que con 18 escenarios no se
+        puede.</li>
+        <li><b>Negativos anotados por informadores.</b> Los 18 de hoy son 12 sintéticos y 6 reales,
+        y las fuentes esperadas las anotó quien desarrolla. Ninguna cifra de este informe es
+        publicable hasta que un informador las confirme.</li>
+        <li><b>Los seis escenarios sin anotar</b>, que incluyen los cinco fallos de recuperación.
+        Se anotan <b>junto a las preguntas del piloto</b> y no antes: seis casos aislados obligan a
+        fijar criterio en el vacío, y así se estropeó la rúbrica que hoy penaliza aciertos.</li>
+        <li><b>La concordancia entre informadores</b>, que necesita dos personas y sin la cual no
+        hay cifra de calidad publicable.</li>
+        <li><b>Material para rehacer la comprobación de fundamento</b> con afirmaciones atómicas,
+        que es lo que la medición dijo que le falta.</li>
+        <li><b>Pares léxicos reales.</b> El circuito de aprobación existe y tiene <b>0 filas</b>:
+        los 48.752 fragmentos con términos bilingües los reciben del corpus curado.</li>
+        <li><b>La cola de latencia del proveedor</b>: 4 de 14 observaciones pasaron de 10 segundos,
+        una a 45 con sólo 13.000 tokens de contexto. Es varianza de la API, no del contexto, y es
+        el riesgo que estas mediciones destaparon sin cuantificar.</li>
+    </ol>
+    <p>Y una tarea que no depende del piloto: <b>publicar el sitio del corpus de Gerencia</b>. Su
+    ancla es 0 de 5 porque sus normas propias se citan sin fragmento, y eso no lo arregla ninguna
+    estrategia de recuperación.</p>
 </section>
 
 <footer class="pie">
-    <p>Detalle en <code>docs/BLOQUE_HIB_CIERRE.html</code>,
+    <p>Documento de estado: refleja la configuración vigente y la medición que la respalda, no el
+    orden en que se descubrió. Los informes de las mediciones intermedias
+    —<code>docs/BLOQUE_HIB_CIERRE.html</code>,
     <code>docs/GERENCIA_CIERRE_BLOQUE_HIB.html</code> y
-    <code>docs/EXPERIMENTO_GRANULARIDAD_CONTEXTO.html</code>. Cambios de configuración
-    versionados en <code>_local/golden/registro_configuracion.json</code>.</p>
-    <p>Los lotes viven en <code>_local/</code> y no en el repositorio: son consultas reales de
-    personas identificables contra el corpus y las credenciales reales.</p>
+    <code>docs/EXPERIMENTO_GRANULARIDAD_CONTEXTO.html</code>— conservan las cifras tal como se
+    obtuvieron, incluidas las que §7 invalida.</p>
+    <p>Cambios de configuración versionados con su cifra y su autoría en
+    <code>_local/golden/registro_configuracion.json</code>. Los lotes de medida viven en
+    <code>_local/</code> y no en el repositorio: son consultas reales de personas identificables
+    contra el corpus y las credenciales reales.</p>
 </footer>
 
 </div>
