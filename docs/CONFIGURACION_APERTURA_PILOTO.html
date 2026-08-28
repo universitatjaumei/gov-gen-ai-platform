@@ -896,8 +896,21 @@ Gerencia.</pre>
     <p>La regla se traduce a una sola condición al recuperar: <i>quédate con la versión en la
     lengua de la pregunta; si esa norma no la tiene, quédate con la que existe</i>. Las dos ramas
     se excluyen, así que <b>por construcción nunca sobreviven las dos versiones</b>.
-    <code>canonica</code> deja de filtrar y se queda como dato. Lo que hace falta del lado del
-    corpus es que <b>el emparejamiento esté completo</b>: lo que no esté emparejado seguirá
+    Y <b>el campo <code>canonica</code> se retira</b>: las dos versiones publicadas son oficiales
+    —la norma se aprueba en valenciano salvo algún reglamento del Consell Social, y el Reglament de
+    Política Lingüística manda traducir algunas, traducción que publica Secretaría General o el
+    órgano que dictó la resolución—, así que no hay jerarquía entre ellas y llamar «canónica» a una
+    invita a leer que la otra vale menos. Lo único relevante es si existe traducción oficial y en
+    qué lengua está cada versión, y las dos cosas ya están en el corpus.</p>
+    <p>El campo tampoco sostiene la guarda que parecía sostener. VIS.3 —«una sola versión canónica
+    por norma»— agrupa por URL, y <b>de las 57 parejas, 47 tienen <code>url_oficial</code>
+    distinta</b>: cada lengua su PDF. En 47 de 57 <code>canonica</code> no interviene. Lo que esa
+    guarda detecta de verdad no son versiones lingüísticas sino <b>dos documentos que reclaman la
+    misma URL</b>, que es el defecto real que cazó: NOR-006 y NOR-007, dos normas distintas con la
+    misma <code>url_publicacio</code>. Reescrita como «es un defecto que dos documentos compartan
+    URL <i>y no sean hermanos idiomáticos</i>», la guarda gana fuerza, porque ya no se puede
+    silenciar por accidente marcando algo como no canónico.</p>
+    <p>Lo que sí hace falta del lado del corpus es que <b>el emparejamiento esté completo</b>: lo que no esté emparejado seguirá
     citándose doble. En el paquete del 27 de agosto las 57 parejas están resueltas; el Excel de
     revisión (<code>parelles_i_vigencies.xlsx</code>) tiene 55 filas de pareja, y las dos de
     diferencia hay que cuadrarlas.</p>

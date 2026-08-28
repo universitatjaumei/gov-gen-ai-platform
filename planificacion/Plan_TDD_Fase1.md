@@ -23598,7 +23598,7 @@ medir después:
 | **Normas externas** | «decidimos excluirlas de Normativa» | La decisión vive **sólo en la columna** `us_assistents` de la BD; el corpus dice `si` en las dos carpetas y `assistents.json` declara `normatiu.tot: true` sobre `md_externes`. Cada reconciliación propone deshacerlo (24 `EXT-*`, 27.623 fragmentos ya embebidos) | `assistents.json`; `reconciler.py:_difiere` |
 | **Idioma: filtro** | «si pregunta en castellano, busca en castellano» | La recuperación **no recibe la lengua**: `rag_vector_pipeline.py:91` llama `get_context` sin `language`. Ambas versiones compiten en el top-k | `rag_vector_pipeline.py:91` |
 | **Idioma: `prefer`** | «prioriza la lengua del usuario» | Ordena, **no descarta** (`protocols.py:139`). Con `top_k=3` y `parent_child` caben las dos versiones → se citan las dos | `protocols.py:117-175` |
-| **Idioma: `canonica`** | «es la versión de referencia» | Es un **filtro duro** (`metadata_filter.py:89`): `canonica=false` nunca se recupera. Son 33 castellanas hoy y **57 con este corpus** → preguntar en castellano por una norma bilingüe devuelve la valenciana | `metadata_filter.py:89` |
+| **Idioma: `canonica`** | «es la versión de referencia» | Es un **filtro duro** (`metadata_filter.py:89`): `canonica=false` nunca se recupera. Son 33 castellanas hoy y **57 con este corpus** → preguntar en castellano por una norma bilingüe devuelve la valenciana. **Se retira (28-08)**: las dos versiones son oficiales y no hay jerarquía; de las 57 parejas **47 tienen URL distinta**, así que ni siquiera sostiene a VIS.3 | `metadata_filter.py:89` |
 | **Idioma: códigos** | `ca` y `val` son lo mismo | `langdetect` dice `ca`, el corpus dice `val`; **nunca casan**. Ya se tropezó (`graph_factory.py:203`) y se resolvió *no usando* la lengua. `prefer` mete todo en «otra lengua» en las preguntas en valenciano, y `_NOMBRE_DE_LA_LENGUA` no tiene `val`: el aviso puede salir «está en val» | `graph_factory.py:203`, `hub_chat.py:177` |
 | **Vigencia por curso** | «la del curso pasado no se recupera» | En la BD, DIR-003/004 están `no_vigent` (a mano). El corpus las pone `vigent` + `vigencia_curs: substituida`, y **`vigencia_curs` no existe en el repo** (0 coincidencias) → **al ingerir, las directrices de dos cursos vuelven a competir**. **Resuelto por criterio el 28-08 (lectura A)**: la del curso pasado es `no_vigent` con causa temporal; `vigencia_curs` sobra y se retira del corpus | `manifest.py`, `metadata_filter.py` |
 | **Vigencia: `no_vigent`** | — | Sólo `derogat` exacto se excluye. `no_vigent` (INS-019 y 2 más) **se recupera con aviso**. **Decidido el 28-08**: `no_vigent` es el estado y `derogat` una de sus causas (`motiu_no_vigencia`, vocabulario como dato); sólo `vigent` se recupera | `metadata_filter.py:95` |
@@ -23774,7 +23774,7 @@ tres estrategias y redefine qué significa `canonica`.
 **Objetivo**: la regla del usuario, literal: *cuando una norma tiene las dos versiones aprobadas,
 las dos son oficiales; se busca, se envía al modelo y se cita **la de la lengua de la pregunta**;
 si solo existe en la otra, se usa esa y se avisa. Nunca las dos.* Hoy `canonica` excluye la
-castellana siempre y `prefer` deja pasar las dos.
+castellana siempre y `prefer` deja pasar las dos. Y `canonica` se retira: ver mas abajo.
 
 ```
 # PROMPT ACT.3 (CODIGO) — Canonica por lengua, resuelta en tiempo de consulta
@@ -23789,12 +23789,37 @@ WHERE y no despues del top-k, porque una version descartada en Python ya ha cons
 «Hermana» es `versio_idiomatica_de` en cualquiera de los dos sentidos (el corpus lo declara
 solo en la no canonica).
 
-## Que deja de hacer `canonica`
-- Deja de ser filtro de recuperacion. `include_non_canonical` se retira del MetadataFilter
-  (borrar, no comentar). `canonica` se queda como DATO: cual es la version aprobada de
-  referencia, util al citar y para el sitio publicado.
-- Sin lengua detectada (None): se recupera la canonica, que es la regla de hoy y la unica
-  razonable sin saber en que lengua se pregunta.
+## `canonica` se RETIRA (decision del usuario, 28-08-2026)
+Las dos versiones publicadas son OFICIALES: a l'UJI la norma s'aprova en valencia (salvo algun
+reglamento del Consell Social) y el Reglament de Politica Linguistica manda traducir algunas; la
+traduccion la publica Secretaria General o el organo que dicto la resolucion. No hay jerarquia
+entre ellas, y llamar «canonica» a una invita a leer que la otra vale menos. Lo unico relevante es
+si existe traduccion oficial y en que lengua esta cada version, y las dos cosas ya estan: la
+segunda en `language`, que sale del front-matter y es `nullable=False`.
+
+- Se retira `HubDocument.canonica`, el campo del contrato, `include_non_canonical` del
+  MetadataFilter y la exposicion en `read_document`. Borrar, no comentar. Migracion Alembic.
+- El emparejamiento se queda: es lo que la regla necesita. `versio_idiomatica_de` sigue
+  declarandose en un solo lado y el codigo ya lo resuelve en los dos sentidos
+  (`agentic_strategy._variant_id`); su direccion pasa a ser un detalle de escritura y **no una
+  afirmacion de autoridad**, y asi se documenta.
+- No hay rama de repliegue por «lengua no detectada»: el grafo detecta SIEMPRE
+  (`detect_language_node`, y `detect_language` tiene `default='es'`). El unico `detect` que
+  devuelve None es el de `language_mode: none`, que significa «sin tratamiento de lengua» por
+  configuracion explicita: alli la regla no aplica, y no hay nada que repletar.
+
+## VIS.3 se rehace, y se hace mas fuerte
+Hoy la guarda agrupa por `source_url` y **salta las no canonicas**, asi que `canonica` funciona
+como silenciador. Medido sobre el corpus del 27-08: de las **57 parejas, 47 tienen `url_oficial`
+distinta** —cada lengua su PDF— y solo **5 comparten URL**. Es decir, en 47 de 57 `canonica` no
+interviene, y lo que la guarda detecta de verdad no son versiones linguisticas sino **dos
+documentos que reclaman la misma URL**, que es el defecto real que cazo (NOR-006 y NOR-007, dos
+normas distintas con la misma `url_publicacio`).
+
+La regla nueva dice eso mismo, sin `canonica`: **es un defecto que dos documentos compartan
+`source_url` y NO sean hermanos idiomaticos**. Gana fuerza, porque ya no se puede silenciar por
+accidente marcando algo como no canonico. El mensaje de error nombra las dos rutas y dice si les
+falta el emparejamiento o si son normas distintas.
 
 ## Lo que NO se hace, y por que
 - NO se usa el parametro `language` de `hybrid_search`: es un filtro duro y con `es` desaparecen
@@ -23812,7 +23837,10 @@ solo en la no canonica).
 ## Tests (RED primero)
 - Corpus de fixture con: norma A (val+es emparejadas), norma B (solo val), norma C (solo es).
   Pregunta `es` → recupera A-es, B-val, C-es. Pregunta `val` → A-val, B-val, C-es. Nunca A-es y
-  A-val a la vez. Sin lengua → las canonicas.
+  A-val a la vez.
+- VIS.3: dos documentos con la misma `source_url` y sin emparejar → error que los nombra; los
+  mismos dos emparejados → pasa. Es el caso de las 5 parejas que comparten URL (FAQ-001,
+  CNV-001, GES-001, REG-127, REG-101) y del defecto NOR-006/NOR-007.
 - El agentico (`list_documents`) muestra UNA ficha por norma, la de la lengua de la pregunta.
 - La condicion se comprueba en las TRES estrategias (RAG, long-context, agentico) con el mismo
   fixture: el defecto de HIB.U se colo por llevar un cambio a dos de tres puntos.
