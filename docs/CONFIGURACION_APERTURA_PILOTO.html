@@ -149,7 +149,7 @@ pre b{color:var(--tinta);font-weight:600}
     <h2>1 · La configuración definitiva</h2>
     <div class="tabla-marco">
     <table>
-        <caption>Leído de <code>hub_chatbots</code></caption>
+        <caption>Leído de <code>hub_chatbots</code> el 28 de agosto de 2026, después de la actualización del corpus (bloque ACT)</caption>
         <thead><tr>
             <th scope="col">Asistente</th><th scope="col">Recuperación</th>
             <th scope="col" class="num">Umbral</th><th scope="col" class="num">top_k</th>
@@ -164,7 +164,7 @@ pre b{color:var(--tinta);font-weight:600}
                 <td>RAG · el artículo</td>
                 <td class="num"><b>0,65</b></td><td class="num">3</td>
                 <td><span class="sello no">off</span></td><td><code>parent_child</code></td>
-                <td class="num">60.859</td>
+                <td class="num">63.293</td>
             </tr>
             <tr class="destacada">
                 <th scope="row">Gerencia · económico-administrativo<br><span class="nota">personal
@@ -172,7 +172,7 @@ pre b{color:var(--tinta);font-weight:600}
                 <td>RAG · el artículo</td>
                 <td class="num"><b>0,69</b></td><td class="num">3</td>
                 <td><span class="sello no">off</span></td><td><code>parent_child</code></td>
-                <td class="num">38.536</td>
+                <td class="num">39.196</td>
             </tr>
             <tr class="grupo"><th scope="row" colspan="7">Bancos de comparación ·
                 <code>is_active=False</code></th></tr>
@@ -491,6 +491,11 @@ pre b{color:var(--tinta);font-weight:600}
     <p>Los dos aparecieron al negarse a reportar una cifra que no se entendía, y los dos
     <b>invalidan números que figuran en informes anteriores</b>. Se recogen aquí porque explican
     por qué la configuración final no coincide con la que aquellos informes sugerían.</p>
+    <p class="nota">No fueron los últimos. El bloque ACT (§12) añadió tres más del mismo tipo, y
+    ninguno era lo que parecía: 292 «actualizaciones» por pasada que eran una comparación de fechas
+    mal planteada, 17 avisos de deriva entre asistentes <b>sin que ninguna norma divergiera</b>, y
+    una regla de vigencia que 52 tests en rojo desmintieron. <b>Cuando una cifra sale extrema,
+    sospechar del instrumento antes que del sistema</b> ha salido rentable cinco de cinco veces.</p>
 
     <h3>Un asistente citaba el corpus de su hermano</h3>
     <p>El asistente agéntico tenía <b>14.198 de sus 14.208 fragmentos</b> con el
@@ -547,8 +552,13 @@ pre b{color:var(--tinta);font-weight:600}
                                                       └→ fallback → FIN</pre>
     <div class="paso">
         <div class="n">1 · determinista</div>
-        <div><b>Detección de lengua</b> de la pregunta. Sin llamada al modelo. De aquí sale la
-        instrucción «Responde en …» y el filtro de evidencias por idioma.</div>
+        <div><b>Detección de lengua</b> de la pregunta. Sin llamada al modelo. De aquí salen tres
+        cosas: la instrucción «Responde en …», el orden de las evidencias y —desde el bloque ACT—
+        <b>cuál de las dos versiones de una norma bilingüe se busca</b> (12.2).
+        <p style="margin:.4rem 0 0" class="nota">El código que sale de aquí es el <b>del corpus</b>
+        (<code>val</code>), no el del detector (<code>ca</code>). Mientras convivieron los dos,
+        nada coincidía: el orden por lengua no hacía nada en las preguntas en valenciano y el aviso
+        de traducción saltaba siempre.</p></div>
 
         <div class="n">2 · modelo</div>
         <div><b>Reescritura con el historial</b>, para que la pregunta se entienda sola («y para
@@ -558,11 +568,19 @@ pre b{color:var(--tinta);font-weight:600}
         <div class="n">3 · determinista</div>
         <div><b>Recuperación</b>: búsqueda vectorial más léxica, fusión RRF, filtros de metadatos y
         recorte a <code>top_k</code> documentos. Busca con la reformulada si la hay, y si no con la
-        reescrita, y si no con la original.</div>
+        reescrita, y si no con la original.
+        <p style="margin:.4rem 0 0" class="nota">Los filtros van en el <code>WHERE</code>, antes del
+        recorte: lo que se descarta después ya ha ocupado una plaza del <code>top_k</code>. Ahí
+        entran el nivel de acceso, la materia, <b>la versión que corresponde a la lengua</b> (12.2),
+        <b>lo que ya no rige</b> —norma y artículo— (12.3) y las páginas superseded.</p></div>
 
         <div class="n">4 · determinista</div>
-        <div><b>Fusión y nota</b>: agrupa por documento, filtra por idioma y calcula la nota como la
-        del <b>mejor</b> fragmento, no la media. Con la media, la cola de resultados votaba sobre si
+        <div><b>Fusión y nota</b>: agrupa por documento y calcula la nota como la del
+        <b>mejor</b> fragmento, no la media.
+        <p style="margin:.4rem 0 0" class="nota">Aquí <b>ya no se filtra por idioma</b>: la lengua
+        se resolvió en el paso 3, donde debía. Lo que queda es una <b>ordenación</b> —primero lo
+        vigente, después lo de la lengua de quien pregunta—, que decide qué entra en el contexto
+        cuando hay que recortar.</p> Con la media, la cola de resultados votaba sobre si
         hay respuesta y <code>top_k</code> —un mando de amplitud— decidía de rebote cuántas
         preguntas se contestan.</div>
 
@@ -586,7 +604,11 @@ pre b{color:var(--tinta);font-weight:600}
         <div><b>Aviso de vigencia</b>: se <b>añade</b> si alguna evidencia citada tiene la vigencia
         sin validar, y nombra los documentos afectados. No es una instrucción al modelo: una
         instrucción se cumple casi siempre, y «casi siempre» no basta para decir si una norma
-        rige.</div>
+        rige.
+        <p style="margin:.4rem 0 0" class="nota">La regla se simplificó en el bloque ACT: avisa
+        cuando <b>nadie ha confirmado</b> que la norma rige, y ya no cuando el estado no es
+        exactamente «vigente». Lo segundo tenía sentido mientras lo no vigente llegaba al modelo;
+        ahora el paso 3 lo deja fuera.</p></div>
 
         <div class="n">10 · determinista</div>
         <div><b>Registro</b> de la interacción con su traza: consulta, reescritas, nota, motivo del
@@ -789,7 +811,7 @@ Gerencia.</pre>
         <li><b>Material para rehacer la comprobación de fundamento</b> con afirmaciones atómicas,
         que es lo que la medición dijo que le falta.</li>
         <li><b>Pares léxicos reales.</b> El circuito de aprobación existe y tiene <b>0 filas</b>:
-        los 48.752 fragmentos con términos bilingües los reciben del corpus curado.</li>
+        los <b>63.561</b> fragmentos con términos bilingües los reciben del corpus curado (eran 48.752 antes de la actualización del 27 de agosto).</li>
         <li><b>La cola de latencia del proveedor</b>: 4 de 14 observaciones pasaron de 10 segundos,
         una a 45 con sólo 13.000 tokens de contexto. Es varianza de la API, no del contexto, y es
         el riesgo que estas mediciones destaparon sin cuantificar.</li>
@@ -800,379 +822,252 @@ Gerencia.</pre>
 </section>
 
 <section>
-    <h2>12 · Tres decisiones del corpus que faltan antes de abrir: normas externas, lengua y vigencia</h2>
-    <p><b>Añadido el 28 de agosto de 2026</b>, tras una auditoría del código y de la configuración
-    hecha con el corpus del 27 de agosto (317 documentos en Normativa, 130 en Gerencia) contra la
-    base de datos de desarrollo, en modo de sólo lectura. <b>No se ha ingerido nada.</b> Los §1 a
-    §11 fijan los parámetros de los asistentes; este apartado recoge lo que los parámetros no
-    cubren: <b>qué normas ve cada asistente, en qué lengua las devuelve y qué entiende por
-    vigente</b>. Las tres son decisiones de Secretaría General y del responsable del corpus, no
-    del código; lo que el código hace hoy se describe para que la decisión se tome sabiendo qué
-    hay que cambiar. El plan de trabajo que las implementa es el <b>Bloque ACT</b> de
-    <code>planificacion/Plan_TDD_Fase1.md</code>.</p>
+    <h2>12 · Qué normas ve cada asistente, en qué lengua responde y qué entiende por vigente</h2>
+    <p><b>Estado a 28 de agosto de 2026, después del bloque ACT.</b> Los §1 a §11 fijan los
+    parámetros de los asistentes; este apartado describe lo que los parámetros no cubren y que
+    decide igual o más: qué normas ve cada uno, en qué lengua las devuelve y qué considera
+    vigente. Las tres cosas estaban decididas y ninguna de las tres estaba escrita donde el
+    sistema la leyera; el bloque ACT las implementó y <b>el corpus del 27 de agosto ya está
+    ingerido en los cuatro asistentes</b>. Lo que queda para Secretaría General está en 12.5.</p>
 
     <div class="alerta">
-        <span class="titular">Por qué la auditoría se hizo ahora</span>
-        <p>Al preparar la actualización del corpus apareció que <b>24 normas externas que se habían
-        excluido del asistente de normativa volvían a proponerse como incluidas</b>, sin que nadie
-        las hubiera tocado. La razón es que la exclusión vivía sólo en la base de datos y no en el
-        corpus. Tirar de ese hilo mostró que la lengua y la vigencia tenían el mismo problema:
-        <b>lo decidido y lo que el sistema hace no coinciden, y ninguna medición lo habría
-        dicho</b>, porque las 25 consultas del lote son casi todas en valenciano y sobre normas
-        de una sola lengua.</p>
+        <span class="titular">Cómo apareció todo esto</span>
+        <p>Al preparar la actualización del corpus, <b>24 normas externas que se habían excluido
+        del asistente de normativa volvían a proponerse como incluidas</b>, sin que nadie las
+        hubiera tocado: la exclusión vivía sólo en la base de datos y el corpus decía lo contrario.
+        Tirar de ese hilo mostró que la lengua y la vigencia tenían el mismo problema —lo decidido
+        y lo que el sistema hacía no coincidían— y que <b>ninguna medición lo habría dicho</b>,
+        porque las 25 consultas del lote son casi todas en valenciano y sobre normas de una sola
+        lengua.</p>
     </div>
 
-    <h3>12.1 · Normas externas: ¿entran en el asistente de normativa?</h3>
+    <h3>12.1 · Normas externas: fuera de normativa, dentro de Gerencia</h3>
     <p>El corpus trae <b>22 normas estatales y autonómicas</b> (LOSU, Ley de Contratos, Ley de
     Procedimiento, el Decreto 80/2025 de indemnizaciones…). En los tres asistentes de Gerencia
-    <b>están y deben estar</b>: ayudan a entender y aplicar las normas propias, y las cuantías
-    que la gente pregunta —dietas, plazos— muchas veces están allí. En el asistente de normativa
-    se decidió <b>excluirlas</b>: es un asistente sobre normativa <i>universitaria</i>, y con las
-    externas dentro los fragmentos de la ley estatal competían con los de la norma propia y la
-    tapaban. Hoy están excluidas en la base de datos (<code>us_assistents = no</code> en las 22)
-    pero <b>el corpus dice lo contrario</b>: <code>assistents.json</code> declara que Normativa
-    toma <code>md_externes</code> entero. Cada actualización propondrá reactivarlas.</p>
+    <b>están y deben estar</b>: ayudan a entender y aplicar las normas propias, y las cuantías que
+    la gente pregunta —dietas, plazos— muchas veces están allí. En el asistente de normativa
+    <b>están fuera</b>: es un asistente sobre normativa <i>universitaria</i>, y con las externas
+    dentro los fragmentos de la ley estatal competían con los de la norma propia y la tapaban.</p>
+    <p>Lo que cambió el 28 de agosto no es la decisión, es <b>dónde vive</b>. Estaba sólo en la
+    columna <code>us_assistents</code> de la base de datos mientras <code>assistents.json</code>
+    declaraba que Normativa toma las externas enteras, así que cada actualización proponía
+    deshacerla. Ahora está escrita donde el reconciliador la lee, y el paquete de normativa pasó de
+    317 documentos a <b>295</b>. Gerencia sigue en 130, con las 22.</p>
     <div class="tabla-marco"><table>
-        <thead><tr><th>Opción</th><th>Qué gana</th><th>Qué cuesta</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Opción</th><th>Qué gana</th><th>Qué cuesta</th></tr></thead>
         <tbody>
         <tr><td><b>Excluirlas</b> del asistente de normativa</td>
-            <td>Las respuestas se centran en la norma propia, que es el objeto del asistente. Menos
-            ruido en el top-k.</td>
+            <td>Las respuestas se centran en la norma propia, que es el objeto del asistente.</td>
             <td>Una pregunta cuya respuesta esté en la LOSU y no en los Estatutos se queda sin
-            responder o remite fuera.</td>
-            <td><b>Configuración actual</b> en la base de datos; pendiente de escribirla en el
-            corpus (ACT.0).</td></tr>
+            responder o remite fuera.</td></tr>
         <tr><td><b>Incluirlas</b> todas</td>
-            <td>Respuestas más completas y con la norma de rango superior citada.</td>
-            <td>Los 27.623 fragmentos externos son el <b>45 %</b> del índice: la ley estatal
-            tapa la norma propia. Es lo que se midió y motivó la exclusión.</td>
-            <td>Es lo que el corpus declara hoy, por omisión.</td></tr>
-        <tr><td><b>Un subconjunto</b> (LOSU y las generales sí; LCSP, tributaria y RRHH no)</td>
+            <td>Respuestas más completas, con la norma de rango superior citada.</td>
+            <td>Los 27.623 fragmentos externos son el <b>45 %</b> del índice: la ley estatal tapa
+            la norma propia. Es lo que se midió y motivó la exclusión.</td></tr>
+        <tr><td><b>Un subconjunto</b>: LOSU y las generales sí; contratación, tributaria y RRHH
+            no</td>
             <td>Lo que da contexto entra; lo que compite por materia queda para Gerencia.</td>
-            <td>Hay que decidir norma a norma y revisarlo cuando entren externas nuevas.</td>
-            <td><b>A discutir con Secretaría General.</b> Se puede expresar como excepciones en
-            <code>assistents.json</code> sin tocar código.</td></tr>
+            <td>Hay que decidir norma a norma y revisarlo cuando entren externas nuevas.</td></tr>
         </tbody>
     </table></div>
-    <p class="nota">Las 22 ya están troceadas y embebidas en Normativa: cualquiera de las tres
-    opciones cuesta cero en embeddings. Lo que cuesta es decidirla y escribirla donde el
-    reconciliador la lea.</p>
+    <p class="nota">La tercera es la que queda por decidir, y no cuesta código: son identificadores
+    en una lista de excepciones del corpus. Las 22 siguen troceadas y embebidas en Normativa,
+    apagadas, así que volver a encender un subconjunto no cuesta ni un token de embedding.</p>
 
-    <h3>12.2 · Lengua: un corpus bilingüe con la mitad sin traducir</h3>
+    <h3>12.2 · Lengua: se responde con la versión de la lengua de la pregunta</h3>
     <p>Del corpus, <b>55 normas existen en las dos lenguas</b> (57 parejas en el paquete de
     ingesta), <b>157 sólo en valenciano y 23 sólo en castellano</b>. Quien pregunta lo hace
-    indistintamente en una u otra y espera la respuesta en la suya. La regla que se quiere, tal
-    como la formuló el responsable del corpus:</p>
+    indistintamente en una u otra y espera la respuesta en la suya.</p>
     <div class="veredicto">
-        <div class="titular">Cuando una norma tiene las dos versiones aprobadas, las dos son oficiales.
-        Se busca, se envía al modelo y se cita <u>sólo</u> la de la lengua de la pregunta. Si la
-        norma existe en una sola lengua, se usa esa y se avisa de que la cita está en la otra.
-        Nunca las dos versiones a la vez.</div>
-        <p>El aviso basta: al citarse la norma, quien lee ya ve que el enlace lleva a un texto en
-        la otra lengua.</p>
+        <div class="titular">Cuando una norma tiene las dos versiones aprobadas, las dos son
+        oficiales. Se busca, se envía al modelo y se cita <u>sólo</u> la de la lengua de la
+        pregunta. Si la norma existe en una sola lengua, se usa esa y se avisa. Nunca las dos.</div>
+        <p>A l'UJI la normativa s'aprova en valencià —salvo algún reglamento del Consell Social— y
+        el Reglament de Política Lingüística manda traducir algunas; la traducción la publica
+        Secretaría General o el órgano que dictó la resolución. No hay una versión que valga más
+        que la otra.</p>
     </div>
-    <p><b>Lo que el sistema hace hoy no es eso</b>, y son cuatro cosas distintas:</p>
+    <p>La regla es una condición al recuperar, y va en el <code>WHERE</code>: <i>quédate con la
+    versión en la lengua de la pregunta; si esa norma no la tiene, quédate con la que existe</i>.
+    Las dos ramas se excluyen, así que <b>por construcción nunca sobreviven las dos versiones</b>.
+    Medido sobre el corpus real tras la ingesta: <b>232 documentos recuperables en cada lengua y
+    0 parejas devuelven las dos versiones</b>, ni preguntando en castellano ni en valenciano.</p>
+    <h4>Lo que había antes, y por qué no se veía</h4>
     <div class="paso">
         <div class="n">1</div>
-        <div>La recuperación <b>no recibe la lengua de la pregunta</b>. Las dos versiones de una
-        norma bilingüe compiten en el top-k por parecido, y con <code>top_k = 3</code> caben las
-        dos. Es el origen de las respuestas que citaban la versión castellana y la valenciana como
-        si fueran dos normas.</div>
+        <div>La recuperación <b>no recibía la lengua de la pregunta</b>. Las dos versiones de una
+        norma bilingüe competían en el top-k por parecido, y con <code>top_k = 3</code> cabían las
+        dos: es el origen de las respuestas que citaban la castellana y la valenciana como si
+        fueran dos normas distintas.</div>
         <div class="n">2</div>
-        <div>El modo de lengua <code>prefer</code>, que llevan los cinco asistentes, <b>ordena pero
-        no descarta</b>: pone delante lo vigente y luego lo de la lengua del usuario, y deja pasar
-        todo.</div>
+        <div>El modo de lengua <code>prefer</code> <b>ordenaba pero no descartaba</b>, así que
+        dejaba pasar las dos.</div>
         <div class="n">3</div>
-        <div>El campo <code>canonica</code> —que marca la versión valenciana como la aprobada de
-        referencia— <b>se usa como filtro duro</b>: la versión castellana de una norma bilingüe
-        <b>no se recupera nunca</b>. Hoy son 33 normas; con el corpus nuevo, <b>57</b>. Preguntar
-        en castellano por una de ellas devuelve el texto valenciano: lo contrario de la regla.</div>
+        <div>El campo <code>canonica</code> —que marcaba la versión valenciana como la de
+        referencia— era un <b>filtro duro</b>: la castellana de una norma bilingüe <b>no se
+        recuperaba nunca</b>, así que preguntar en castellano devolvía el texto valenciano. Con el
+        corpus del 27 de agosto eso pasaba de 33 normas a 57. <b>El campo se retiró</b>: no hay
+        jerarquía entre dos versiones oficiales y su nombre invitaba a leer lo contrario.</div>
         <div class="n">4</div>
-        <div>El detector de lengua dice <code>ca</code> y el corpus dice <code>val</code>. <b>Nunca
-        coinciden.</b> Ya se tropezó con ello y se resolvió no usando la lengua en la búsqueda. El
-        efecto que queda: en las preguntas en valenciano el orden por lengua no hace nada, y el
-        aviso de traducción no tiene nombre para <code>val</code>.</div>
+        <div>El detector de lengua decía <code>ca</code> y el corpus dice <code>val</code>:
+        <b>nunca coincidían</b>. Ya se había tropezado con ello y se resolvió dejando de usar la
+        lengua en la búsqueda. Quedaban dos efectos vivos: en las preguntas en valenciano la
+        ordenación por lengua no hacía nada, y el aviso de traducción saltaba siempre —y sin nombre
+        para <code>val</code>, salía «está en <b>val</b>»—. Ahora se traduce en un solo punto, la
+        detección.</div>
     </div>
-    <p>La regla se traduce a una sola condición al recuperar: <i>quédate con la versión en la
-    lengua de la pregunta; si esa norma no la tiene, quédate con la que existe</i>. Las dos ramas
-    se excluyen, así que <b>por construcción nunca sobreviven las dos versiones</b>.
-    Y <b>el campo <code>canonica</code> se retira</b>: las dos versiones publicadas son oficiales
-    —la norma se aprueba en valenciano salvo algún reglamento del Consell Social, y el Reglament de
-    Política Lingüística manda traducir algunas, traducción que publica Secretaría General o el
-    órgano que dictó la resolución—, así que no hay jerarquía entre ellas y llamar «canónica» a una
-    invita a leer que la otra vale menos. Lo único relevante es si existe traducción oficial y en
-    qué lengua está cada versión, y las dos cosas ya están en el corpus.</p>
-    <p>El campo tampoco sostiene la guarda que parecía sostener. VIS.3 —«una sola versión canónica
-    por norma»— agrupa por URL, y <b>de las 57 parejas, 47 tienen <code>url_oficial</code>
-    distinta</b>: cada lengua su PDF. En 47 de 57 <code>canonica</code> no interviene. Lo que esa
-    guarda detecta de verdad no son versiones lingüísticas sino <b>dos documentos que reclaman la
-    misma URL</b>, que es el defecto real que cazó: NOR-006 y NOR-007, dos normas distintas con la
-    misma <code>url_publicacio</code>. Reescrita como «es un defecto que dos documentos compartan
-    URL <i>y no sean hermanos idiomáticos</i>», la guarda gana fuerza, porque ya no se puede
-    silenciar por accidente marcando algo como no canónico.</p>
-    <p>Lo que sí hace falta del lado del corpus es que <b>el emparejamiento esté completo</b>: lo que no esté emparejado seguirá
-    citándose doble. En el paquete del 27 de agosto las 57 parejas están resueltas; el Excel de
-    revisión (<code>parelles_i_vigencies.xlsx</code>) tiene 55 filas de pareja, y las dos de
-    diferencia hay que cuadrarlas.</p>
+    <p class="nota">Los tests no lo vieron porque estaban escritos con <code>ca</code> en los dos
+    lados: pasaban mientras producción fallaba. Un test que confirma la premisa equivocada no
+    protege de nada.</p>
+    <p><b>Lo que la regla exige del corpus</b> es que el emparejamiento esté completo: lo que no
+    esté emparejado seguiría citándose doble. En el paquete del 27 de agosto las <b>57 parejas</b>
+    están declaradas y resueltas. Compartir URL, en cambio, no significa ser la misma norma: de las
+    57 parejas <b>47 tienen <code>url_oficial</code> distinta</b> —cada lengua su PDF— y sólo 5
+    comparten dirección. Esa confusión producía dos falsos positivos que ya no existen: la guarda
+    del paquete daba por duplicadas normas que no lo son, y el detector de deriva entre asistentes
+    daba <b>17 avisos sin que ninguna norma divergiera de verdad</b>.</p>
 
     <h3>12.3 · Vigencia: un estado, una causa y las marcas por artículo</h3>
-    <p><b>Modelo acordado el 28 de agosto</b> (lectura A, en la discusión con el responsable del
-    corpus). <i>Vigente</i> significa <b>que rige ahora</b>. Una norma es vigente o no lo es; si no
-    lo es, hay una <b>causa</b>, y la derogación es sólo una de ellas: también deja de regir la
-    norma temporal cuyo plazo o curso ha terminado, la que servía a un programa que ha acabado, o
-    la dictada por un cargo cuyo mandato ha cesado. Y lo que ocurre <b>dentro</b> de una norma
-    vigente —un artículo suprimido, un artículo cuyo contenido desplaza una norma superior— se
-    marca en el artículo, no en la norma: la norma sigue vigente en todo lo demás.</p>
+    <p><b>«Vigente» significa que rige hoy.</b> Una norma es vigente o no lo es; si no lo es, hay
+    una <b>causa</b>, y la derogación es sólo una de ellas: también deja de regir la norma temporal
+    cuyo plazo terminó, la que servía a un programa que ha finalizado y la dictada por un cargo
+    cuyo mandato ha cesado. Y lo que ocurre <b>dentro</b> de una norma vigente —un artículo
+    suprimido, uno cuyo contenido desplaza una norma superior— se marca en el artículo, no en la
+    norma.</p>
     <div class="tabla-marco"><table>
-        <thead><tr><th>Nivel</th><th>Campo</th><th>Valores</th><th>Efecto en el asistente</th></tr></thead>
+        <thead><tr><th>Nivel</th><th>Campo</th><th>Valores</th><th>Efecto</th></tr></thead>
         <tbody>
         <tr><td><b>Norma</b></td><td><code>estat_vigencia</code></td>
-            <td><code>vigent</code> · <code>no_vigent</code> · <code>futur</code> (aprobada, aún no
-            en vigor)</td>
-            <td><b>Sólo <code>vigent</code> entra en la búsqueda.</b> Las demás siguen legibles por
-            identificador: preguntar qué regía el curso pasado es legítimo, y el asistente puede
-            leerla si se la piden.</td></tr>
+            <td><code>vigent</code> · <code>no_vigent</code> · <code>futur</code></td>
+            <td>Se excluye de la búsqueda <b>lo que afirma que ya no rige</b>. Sigue legible por
+            identificador: preguntar qué regía el curso pasado es legítimo.</td></tr>
         <tr><td><b>Norma no vigente</b></td><td><code>motiu_no_vigencia</code></td>
-            <td>Vocabulario cerrado y revisable, propuesto más abajo</td>
-            <td>No filtra. Decide <b>qué dice</b> el asistente al hablar de ella: «derogada por X»
-            no es lo mismo que «era la del curso 2025/26; la vigente es Y».</td></tr>
-        <tr><td><b>Norma no vigente</b></td><td><code>derogada_per</code> / <code>substituida_per</code></td>
-            <td>Identificador de la norma que la releva</td>
+            <td>Vocabulario cerrado de seis causas, validado al ingerir</td>
+            <td>No filtra. Decide <b>qué dice</b> el asistente: «derogada por X» no es lo mismo que
+            «era la del curso 2025/26; la vigente es Y».</td></tr>
+        <tr><td><b>Norma no vigente</b></td><td><code>derogada_per</code> ·
+            <code>substituida_per</code></td>
+            <td>Identificador de la que la releva</td>
             <td>Permite remitir a la vigente en la misma respuesta.</td></tr>
         <tr><td><b>Norma vigente transitoriamente</b></td><td><code>vigencia_transitoria</code></td>
-            <td>Quién la sustituye (norma y ancla), <b>hasta cuándo</b>, <b>a quién</b> y <b>qué
-            apartados</b> siguen aplicándose</td>
-            <td>Sigue siendo <code>vigent</code> y se recupera; sus apartados llevan el aviso
-            delante, como los desplazados. Al vencer, <code>data_revisio_prevista</code> la saca a
-            revisión y pasa a <code>no_vigent</code> con un <code>UPDATE</code>.</td></tr>
-        <tr><td><b>Artículo</b></td><td>clase en el encabezado + nota</td>
+            <td>Quién la sustituye, hasta cuándo, a quién y qué apartados</td>
+            <td>Sigue siendo <code>vigent</code> y se recupera, con el aviso delante.</td></tr>
+        <tr><td><b>Artículo</b></td><td>clase en el encabezado</td>
             <td><code>.suprimit</code> / <code>.derogat</code> · <code>.desplacat</code> ·
-            <code>.transitori</code> · <code>.modificat</code></td>
-            <td>El artículo suprimido o derogado <b>no se recupera</b>; el desplazado y el
-            transitorio se recuperan <b>con el aviso delante</b>, como ya se hace con los
-            desplazados (PIL.3, 880 fragmentos).</td></tr>
+            <code>.transitori</code></td>
+            <td>El suprimido o derogado <b>no se recupera</b>; el desplazado y el transitorio sí,
+            con su aviso delante.</td></tr>
         </tbody>
     </table></div>
-    <p>Tres consecuencias que conviene ver escritas:</p>
-    <ul>
-        <li><b>«Parcialmente derogada» deja de ser un estado de la norma.</b> La norma es vigente y
-        la parte derogada se marca en el artículo, igual que los desplazados. Hoy el corpus tiene
-        una así (NOR-001). PRG-003 —que también lo era— es en realidad el caso siguiente, la
-        vigencia transitoria, y se resuelve como se describe más abajo.</li>
-        <li><b>Las directrices del curso pasado son <code>no_vigent</code></b> con causa «fin de
-        vigencia temporal», <code>curs_academic</code> y <code>substituida_per</code>. El paquete
-        del 27 de agosto las declara vigentes y las separa con un campo nuevo,
-        <code>vigencia_curs</code>, que bajo este modelo <b>sobra</b>: un solo eje decide qué se
-        recupera. Hay que cambiar el catálogo, <code>vigencia_cursos.py</code> y
-        <code>INGESTA.md</code>, que argumenta la lectura contraria.</li>
-        <li><b>El código se simplifica.</b> El filtro pasa de «todo menos <code>derogat</code>» a
-        «sólo <code>vigent</code>»; la causa no necesita columna porque nada filtra por ella; el
-        aviso de vigencia no validada queda para lo que nadie ha confirmado, porque lo no vigente
-        ya no llega al modelo. Sin migración.</li>
-    </ul>
+    <p><b>Un documento sin <code>estat_vigencia</code> se recupera</b>, y eso es deliberado: no es
+    una norma que haya dejado de aplicarse, es un documento que no tiene ese ciclo de vida —una
+    página rastreada, un PDF que alguien sube para preguntarle cosas—. La primera versión de la
+    regla exigía el estado y <b>52 tests en rojo</b> mostraron que eso vaciaba el índice de todo
+    chatbot que no se alimente del corpus curado. Se excluye lo que <i>afirma</i> que ya no rige,
+    no lo que calla.</p>
 
-    <h3>Propuesta de vocabulario para <code>motiu_no_vigencia</code></h3>
-    <p>Seis causas, sacadas de lo que el catálogo ya dice en <code>observacions</code> y de las
-    situaciones que el responsable del corpus enumeró. Es <b>dato, no código</b> (misma regla que
-    ámbitos y submaterias): vive en <code>vocabulari/</code> con <code>vigent</code> y
-    <code>substituit_per_codi</code>, y se puede renombrar o fusionar sin reindexar.</p>
+    <h4>Las seis causas</h4>
+    <p>Son <b>dato y no código</b> —viven en un CSV del corpus, con <code>vigent</code> y
+    <code>substituit_per_codi</code> para renombrar y fusionar sin reindexar— y se validan al
+    ingerir: una errata como <code>fi_de_mandat</code> por <code>fi-de-mandat</code> aborta la
+    carga y la enumera, en vez de viajar a la base de datos sin que nadie se entere.</p>
     <div class="tabla-marco"><table>
-        <thead><tr><th>Código</th><th>Qué significa</th><th>Caso del corpus</th><th>Qué dice el asistente</th></tr></thead>
+        <thead><tr><th>Código</th><th>Qué significa</th><th>Caso del corpus</th></tr></thead>
         <tbody>
         <tr><td><code>derogacio-expressa</code></td>
-            <td>Una norma posterior la deroga y lo dice.</td>
-            <td>RES-006, derogada por RES-005 en su apartado vigésimo.</td>
-            <td>«Derogada por [norma], de [fecha]. La vigente es […]».</td></tr>
+            <td>Una norma posterior la deroga y lo dice. Exige nombrarla.</td>
+            <td>RES-006, derogada por RES-005 en su apartado vigésimo</td></tr>
         <tr><td><code>substitucio</code></td>
-            <td>Una norma posterior regula la misma materia y la desplaza entera, sin cláusula
-            derogatoria expresa (derogación tácita).</td>
-            <td>Programas y planes reaprobados sin derogar el anterior.</td>
-            <td>«Sustituida por [norma]; no hay derogación expresa».</td></tr>
+            <td>Una posterior regula la misma materia y la desplaza entera, sin cláusula
+            derogatoria.</td>
+            <td>Programas y planes reaprobados</td></tr>
         <tr><td><code>fi-de-vigencia-temporal</code></td>
-            <td>Nació con plazo —un curso, un ejercicio, un periodo— y el plazo terminó.</td>
-            <td>DIR-003 y DIR-004 (directrices 2025/26); presupuestos de ejercicios cerrados.</td>
-            <td>«Era la del curso [X]; la del curso actual es [Y]». Sigue legible para consultas
-            históricas.</td></tr>
+            <td>Nació con plazo —un curso, un ejercicio— y terminó.</td>
+            <td>DIR-003 y DIR-004, directrices del curso 2025/2026</td></tr>
         <tr><td><code>extincio-de-l-objecte</code></td>
-            <td>Lo que la sostenía —un programa, una financiación, un órgano— ha dejado de
-            existir; nadie la derogó.</td>
-            <td>INS-019 (el programa Next Generation ha finalizado).</td>
-            <td>«Sin efecto: [objeto] ha finalizado».</td></tr>
+            <td>El programa, la financiación o el órgano que la sostenía ya no existe.</td>
+            <td>INS-019: el programa Next Generation ha finalizado</td></tr>
         <tr><td><code>fi-de-mandat</code></td>
-            <td>Dictada por un cargo para su mandato (delegaciones de competencias, instrucciones
-            de un vicerrectorado) y el mandato cesó sin norma que la releve.</td>
-            <td>Delegaciones de competencias anteriores a la vigente.</td>
-            <td>«Decayó con el mandato de [órgano]».</td></tr>
+            <td>Dictada por un cargo para su mandato, y el mandato cesó sin norma que la
+            releve.</td>
+            <td>ALT-059: delegación de la anterior secretaria general</td></tr>
         <tr><td><code>anul-lacio</code></td>
-            <td>Anulada por resolución judicial o administrativa. Distinta de la derogación: el
-            efecto puede ser desde el origen.</td>
-            <td>Ninguno hoy. Se incluye porque su efecto jurídico no es el de ninguna otra.</td>
-            <td>«Anulada por [resolución]».</td></tr>
+            <td>Anulada por resolución judicial o administrativa; el efecto puede ser desde el
+            origen.</td>
+            <td>Ninguno hoy</td></tr>
         </tbody>
     </table></div>
-    <p class="nota">Lo que <b>no</b> está en la lista, a propósito: el desplazamiento por norma
-    superior. No es una causa de no vigencia —la norma sigue vigente— sino una marca de artículo,
-    y ya tiene su mecanismo. Y «derogación parcial» tampoco: es <code>vigent</code> más artículos
-    marcados.</p>
+    <p class="nota">Rellenarlas no fue una anotación masiva: de las 290 fichas, <b>284 están
+    vigentes</b>, así que la causa sólo la necesitaban seis. Tres se transcribieron de lo que
+    <code>observacions</code> ya decía en prosa, dos las deriva sola la declaración de normas de
+    curso, y <b>una sola exigió una decisión nueva</b> (ALT-059). El campo no añade trabajo: mueve
+    a un código el porqué que ya se escribía donde ningún programa podía consultarlo.</p>
 
-    <h3>Qué cuesta rellenar la causa, y por qué no es una anotación masiva</h3>
-    <p>La objeción natural a añadir un campo a un corpus de 290 fichas es que <b>rellenarlo a mano
-    sea inviable</b>, y que entonces sólo sirva para las normas nuevas. Aquí no ocurre, y la razón
-    es aritmética: <b>284 de las 290 fichas están vigentes</b>. Una causa de no vigencia sólo la
-    necesita lo que no está vigente, y eso hoy son <b>seis documentos</b>. Lo confirman dos fuentes
-    independientes: el Excel de revisión (4 derogadas, 1 no vigente, 1 parcialmente derogada) y el
-    propio paquete de ingesta.</p>
-    <p>Aplicando el modelo de 12.3 a esos seis, más los dos que cambian de estado, el trabajo
-    completo es:</p>
-    <div class="tabla-marco"><table>
-        <thead><tr><th>Documento</th><th>Hoy</th><th>Con el modelo nuevo</th><th>De dónde sale la causa</th></tr></thead>
-        <tbody>
-        <tr><td>DIR-003, DIR-004<br><span class="nota">directrices 2025/26</span></td>
-            <td><code>vigent</code> + <code>vigencia_curs: substituida</code></td>
-            <td><code>no_vigent</code> · <code>fi-de-vigencia-temporal</code></td>
-            <td><b>Automático.</b> Ya está declarado en <code>vigencia_cursos.json</code>: la
-            familia, los miembros y la fecha de efecto. El generador que hoy escribe
-            <code>vigencia_curs</code> escribe el estado y la causa. <b>Y vale para todos los cursos
-            futuros sin tocar nada.</b></td></tr>
-        <tr><td>RES-006 y su versión valenciana</td>
-            <td><code>derogat</code></td>
-            <td><code>no_vigent</code> · <code>derogacio-expressa</code> · <code>derogada_per:
-            RES-005</code></td>
-            <td><b>Ya escrito</b>, en prosa, en <code>observacions</code>: «DEROGADA per la
-            Resolució de 25 de juny de 2026 (RES-005), que ho diu expressament al seu apartat
-            vigèsim». Se transcribe.</td></tr>
-        <tr><td>INS-019</td>
-            <td><code>no_vigent</code></td>
-            <td><code>no_vigent</code> · <code>extincio-de-l-objecte</code></td>
-            <td><b>Ya escrito</b>: «El programa Next Generation que la sostenia ja ha
-            finalitzat».</td></tr>
-        <tr><td>ALT-059</td>
-            <td><code>derogat</code></td>
-            <td><code>no_vigent</code> · causa por determinar</td>
-            <td><b>La única que pide una persona.</b> Su <code>observacions</code> sólo dice «Títol
-            modificat».</td></tr>
-        <tr><td>NOR-001</td>
-            <td><code>parcialment_derogat</code></td>
-            <td><code>vigent</code> + artículos marcados</td>
-            <td>No necesita causa: deja de ser un estado de norma. Pide revisar qué artículos son
-            los derogados.</td></tr>
-        <tr><td>PRG-003, PRG-004</td>
-            <td><code>vigent</code> / <code>derogat</code></td>
-            <td>Las dos <code>vigent</code>; PRG-003 con <code>vigencia_transitoria</code></td>
-            <td><b>Resuelto el 28 de agosto</b> con el texto de la disposición transitoria primera
-            (ver más abajo).</td></tr>
-        </tbody>
-    </table></div>
-    <p>Nueve documentos en total, de los que <b>uno</b> —ALT-059— exige una decisión que hoy no
-    está tomada. No es una migración: es un rato.</p>
+    <h4>La norma sustituida que sigue rigiendo para algunos</h4>
+    <p>El caso que el modelo no tenía. El <i>Programa de suport a les activitats d'investigació,
+    innovació i transferència del PDI</i> de 2024 (<b>PRG-004</b>) sustituye al de 2021
+    (<b>PRG-003</b>) <b>sin cláusula derogatoria</b>, pero su <b>disposición transitoria
+    primera</b> mantiene, para el profesorado que en la fecha de aprobación tuviera <b>un único
+    sexenio vivo</b>, el reconocimiento del programa de 2021 durante <b>tres cursos (2024/25 a
+    2026/27)</b>, mientras el sexenio siga vigente. El de 2024 empeoraba a ese colectivo en las
+    reducciones; se le conserva la norma más favorable.</p>
+    <p><b>Las dos rigen</b>, así que las dos son <code>vigent</code> y las dos se recuperan. Si
+    PRG-003 no entrara en la búsqueda, una profesora con un sexenio vivo que pregunte por su
+    reducción recibiría el régimen de PRG-004, que para ella es el equivocado. Lo que hace falta es
+    que quien lea el artículo sepa <b>a quién</b> y <b>hasta cuándo</b> se le aplica, y eso lo pone
+    el aviso, delante del texto.</p>
+    <p class="nota">Declarar los apartados que continúan es <b>opcional</b>. Las secciones de
+    PRG-003 no van numeradas y por tanto no tienen ancla, así que su declaración vale a nivel de
+    documento: el aviso acompaña a todos sus fragmentos y se cita el documento entero, que es la
+    regla general del corpus. Menos preciso, pero cierto. Y al vencer, el 1 de agosto de 2027, la
+    norma pasa a no vigente con causa «sustitución»: es un cambio de metadatos, sin reindexar.</p>
 
-    <div class="veredicto">
-        <div class="titular">El campo no añade una decisión: mueve una que ya se toma.</div>
-        <p>Declarar que una norma ha dejado de regir <b>ya es</b> un acto humano, y hoy el porqué
-        <b>ya se escribe</b> — en texto libre, dentro de <code>observacions</code>, donde ningún
-        programa puede consultarlo y donde el asistente no lo ve. Lo que se propone es escribirlo en
-        un código en lugar de en prosa. El coste marginal de rellenar la causa en el momento en que
-        alguien decide el estado es prácticamente cero; el beneficio es que el asistente pueda
-        distinguir «derogada por X» de «era la del curso pasado, la vigente es Y», que son dos
-        respuestas distintas para quien pregunta.</p>
+    <h4>La validación de vigencia es de la norma, no de una de sus lenguas</h4>
+    <p>El aviso «la vigencia no está validada» salta cuando <b>nadie ha confirmado</b> que la norma
+    rige. Y lo que una persona confirma cuando valida es <b>que la norma rige</b>, no que rija su
+    ejemplar castellano: eso no depende del idioma del texto que tenía delante.</p>
+    <p>Tratarlo como un dato del texto producía una incoherencia visible. De las 57 parejas,
+    <b>14 tenían la castellana validada y la valenciana no</b>, y desde que la respuesta se elige
+    por la lengua de la pregunta eso significaba que <b>la misma norma llevaba el aviso en
+    valenciano y no en castellano</b> — COD-001, REG-124, las directrices de grado y de máster y
+    otras diez. Ahora la validación se comparte entre las dos versiones emparejadas, dejando
+    escrito de dónde viene para que una auditoría no la confunda con una validación hecha sobre ese
+    ejemplar. Aplicado y medido: <b>0 parejas discrepan, 14 heredaron</b>.</p>
+    <p class="nota">Un defecto de mecanismo que se corrigió de paso: la actualización del corpus
+    <b>sobreescribía la fecha de validación</b> que una persona había puesto desde el panel, con la
+    del fichero —249 documentos—. Los dos sistemas escriben el mismo campo y ganaba el último;
+    ahora manda el corpus sólo cuando trae la firma, y si no la trae se conserva lo que puso la
+    persona.</p>
+
+    <h3>12.4 · Un hueco abierto: el asistente agéntico no trocea lo que ingiere</h3>
+    <div class="alerta">
+        <span class="titular">Apareció al ingerir, y no lo resuelve el bloque</span>
+        <p>De los seis documentos nuevos que recibió el banco agéntico, los <b>seis se quedaron sin
+        fragmentos</b>. La ingesta trocea y embebe <b>sólo en modo RAG</b>, y ese asistente está en
+        <code>MD_AGENT_SELECTOR</code>. La premisa —«los otros dos modos no embeben nada»— está
+        escrita igual en tres sitios del código, así que fue una decisión; pero es <b>anterior</b>
+        a que el agéntico tuviera búsqueda por fragmentos, y hoy su herramienta
+        <code>search_knowledge</code> consulta justamente eso. Sus 14.208 fragmentos actuales
+        vienen de antes y se repararon en el bloque HIB, que dejó dicho que «no son peso
+        muerto».</p>
+        <p><b>Consecuencia</b>: la búsqueda por fragmentos del agéntico es ciega a lo que se
+        ingiera desde ahora, y una reingesta de un documento ya troceado <b>le borraría</b> los
+        fragmentos. Afecta sólo a un banco de comparación, no a los dos asistentes en producción,
+        pero invalidaría cualquier medición que compare al agéntico con los otros sobre el corpus
+        nuevo. Decidir si <code>MD_AGENT_SELECTOR</code> debe embeber es una decisión de diseño con
+        coste en embeddings, y se deja anotada aquí en vez de tomarla de paso.</p>
     </div>
 
-    <h4>Tres reglas que hacen que esto no se atasque</h4>
-    <ul>
-        <li><b>La causa es opcional y nunca bloquea.</b> Una norma <code>no_vigent</code> sin causa
-        se ingiere igual y el asistente dice lo genérico: «ya no está vigente». El campo enriquece
-        cuando está; no es un requisito del contrato como sí lo son <code>revisat_per</code> o
-        <code>estat_vigencia</code>. Así se puede rellenar de forma incremental, y ALT-059 no
-        detiene nada mientras no se decida.</li>
-        <li><b>Lo que se puede derivar, se deriva.</b> La sucesión por curso académico sale entera
-        de una declaración que ya existe. La derogación expresa se puede proponer automáticamente a
-        partir de la cláusula derogatoria de la norma que deroga, para que una persona la confirme
-        —el mismo patrón que ya se usa con las notas de consolidación—.</li>
-        <li><b>Las normas nuevas nacen con él.</b> El alta de una norma en el catálogo ya incluye
-        fijar <code>estat_vigencia</code> a mano (paso 2 del procedimiento de alta). Añadir la causa
-        cuando el estado no es «vigente» es un campo más en una decisión que ya se estaba
-        tomando.</li>
-    </ul>
-    <p class="nota">Queda una pregunta abierta que el piloto no resuelve y el tiempo sí: <b>a qué
-    ritmo envejece el corpus</b>. La revisión periódica ya existe —cada ficha lleva
-    <code>data_revisio_prevista</code> y la curación avisa cuando vence—, así que el número de
-    normas que pasan a no vigentes cada año se podrá medir en vez de estimar. Si resultara ser alto,
-    la conclusión no sería retirar el campo sino automatizar más la propuesta de causa.</p>
-
-    <h3>El caso que faltaba: la norma sustituida que sigue rigiendo para algunos</h3>
-    <p>El <i>Programa de suport a les activitats d'investigació i d'innovació i transferència del
-    PDI</i> de 2024 (<b>PRG-004</b>) sustituye al de 2021 (<b>PRG-003</b>) <b>sin cláusula
-    derogatoria</b> —derogación tácita— pero su <b>disposición transitoria primera</b> mantiene, para
-    el profesorado que en la fecha de aprobación tuviera <b>un único sexenio vivo</b>, el
-    reconocimiento del programa de 2021 durante <b>tres cursos (2024/25 a 2026/27)</b>, mientras el
-    sexenio siga vigente. El de 2024 empeoraba a ese colectivo en las reducciones; se le conserva la
-    norma más favorable. Así que <b>las dos rigen hoy</b>: PRG-004 para todos, y una sección de
-    PRG-003 para un colectivo, hasta el 31 de julio de 2027.</p>
-    <p>El corpus del 27 de agosto lo tenía al revés (PRG-004 <code>derogat</code>, PRG-003
-    <code>vigent</code> sin más). Cómo queda:</p>
-    <div class="paso">
-        <div class="n">PRG-004</div>
-        <div><code>estat_vigencia: vigent</code>; <code>substitueix: [PRG-003]</code>. Sus secciones
-        de reconocimiento ganan ancla (hoy sólo la tienen <code>dt-1</code> y el anexo), para que la
-        transitoria y la sección de sexenios sean citables.</div>
-        <div class="n">PRG-003</div>
-        <div><code>estat_vigencia: vigent</code> con <code>vigencia_transitoria</code>: la sustituye
-        PRG-004 (<code>dt-1</code>, 27-02-2024), <b>hasta</b> 2027-07-31, <b>a quien</b> tuviera un
-        único sexenio vivo en esa fecha, y <b>sólo</b> la sección «Reducción por sexenios».
-        <code>data_revisio_prevista: 2027-08-01</code>, que es el mecanismo que ya existe para que
-        la curación la saque a revisión cuando venza.</div>
-        <div class="n">artículos</div>
-        <div>La sección de sexenios lleva <code>.transitori</code> y la nota editorial, como los
-        desplazados: quien la recupere lee primero a quién y hasta cuándo se aplica. Las otras
-        cuatro reducciones, la introducción y el anexo llevan <code>.derogat</code>: sustituidas por
-        PRG-004, no se recuperan, pero el texto se conserva y sigue legible por identificador. Las
-        secciones de PRG-003 no tienen ancla (no van numeradas); se declaran en
-        <code>ancores_declarades.json</code>. Si una norma transitoria no tiene anclas, la
-        declaración vale a nivel de documento: el aviso acompaña a todos sus fragmentos y se cita el
-        documento entero, que es la regla general del corpus.</div>
-        <div class="n">al vencer</div>
-        <div>1 de agosto de 2027: <code>no_vigent</code>, causa <code>substitucio</code>, y se retira
-        el bloque transitorio. Es un cambio de metadatos: un <code>UPDATE</code>, sin reindexar.</div>
-    </div>
-    <p class="nota">Por qué <code>vigent</code> y no <code>no_vigent</code>: si PRG-003 no entra en la
-    búsqueda, una profesora con un sexenio vivo que pregunte por su reducción recibe el régimen de
-    PRG-004, que para ella es el equivocado. Con las dos dentro y el aviso delante, la respuesta
-    correcta —«depende de tu situación: si tenías un único sexenio vivo el 27-02-2024, la de
-    2021»— es posible. Es exactamente el criterio que se aplicó a los artículos desplazados.</p>
-
-    <p><b>La validación humana de la vigencia</b> es la otra mitad. El aviso «vigencia no
-    validada» salta cuando nadie ha confirmado el estado: hoy son <b>63 normas de 290</b>
-    pendientes según el Excel de revisión —las 37 no publicadas y las añadidas después del 31 de
-    julio—. Y hay un defecto de mecanismo: la actualización del corpus <b>sobreescribe la fecha de
-    validación</b> que una persona puso desde el panel, con la fecha que trae el fichero. Los dos
-    sistemas escriben el mismo campo y gana el último. Se arregla en ACT.1 dando precedencia a la
-    validación que viaja con el corpus cuando existe, y conservando la del panel cuando no.</p>
-
-    <h3>12.4 · Lo que se le pide a Secretaría General</h3>
+    <h3>12.5 · Lo que espera a Secretaría General</h3>
     <ol>
-        <li><b>Externas.</b> Cuál de las tres opciones de 12.1 para el asistente de normativa. Si es
-        el subconjunto, la lista.</li>
-        <li><b>Lengua.</b> Confirmar la regla de 12.2 tal como está escrita. Es la que se va a
-        implementar.</li>
-        <li><b>Emparejamiento: las 14 que discrepaban ya no discrepan, y no había que
-        validarlas.</b> El Excel marcaba 14 parejas con la versión castellana validada y la
-        valenciana no. Desde que la respuesta se elige por la lengua de la pregunta (12.2), eso
-        significaba que <b>la misma norma llevaba el aviso «la vigencia no está validada» en
-        valenciano y no en castellano</b> — COD-001, REG-124, las directrices de grado y de máster
-        y otras diez.
-        <p style="margin:.5rem 0 0">La corrección es de concepto y la decidió el responsable del
-        corpus el 28 de agosto: <b>lo que una persona valida es que la NORMA rige</b>, y eso no
-        depende de en qué idioma estaba el ejemplar que tenía delante. Ahora la validación se
-        comparte entre las dos versiones emparejadas, dejando escrito de dónde viene
-        (<code>vigencia_validada_des_de</code>) para que una auditoría no la confunda con una
-        validación hecha sobre ese ejemplar. Aplicado y medido: <b>0 parejas discrepan, 14
-        heredaron</b>. No hacía falta trabajo de Secretaría General para esas 14; hacía falta
-        dejar de tratar la vigencia como un dato del texto.</p></li>
-
-        <li><b>Lo que sí queda por validar.</b> De los 294 documentos que alimentan al asistente
-        normativo, <b>53 no tienen la vigencia confirmada por nadie</b> — la mayoría son las
-        internas no publicadas—. De ellos, <b>9 parejas no tienen validada ninguna de sus dos
-        versiones</b>, y ésas sí necesitan el panel de vigencia:
+        <li><b>Externas.</b> Si algún subconjunto vuelve al asistente de normativa, y cuál. Hoy la
+        configuración es excluirlas todas. Cero código: es una lista de identificadores.</li>
+        <li><b>Lengua.</b> Confirmar la regla de 12.2 tal como está escrita. Es la que está en
+        marcha.</li>
+        <li><b>Vigencia.</b> Validar el modelo de 12.3 —un estado, una causa, marcas por
+        artículo— y el vocabulario de seis causas.</li>
+        <li><b>Nueve parejas sin validar ninguna de sus dos versiones</b>, que son las que
+        necesitan el panel de vigencia:
         <div class="tabla-marco" style="margin-top:.6rem"><table>
             <thead><tr><th>Pareja</th><th>Pareja</th><th>Pareja</th></tr></thead>
             <tbody>
@@ -1182,25 +1077,22 @@ Gerencia.</pre>
             </tbody>
         </table></div>
         <p style="margin:.5rem 0 0">Validar <b>una</b> de las dos versiones de cada pareja basta:
-        la otra la hereda. Son nueve decisiones, no dieciocho.</p></li>
-        <li><b>Vigencia: el modelo de 12.3</b> —un estado, una causa, marcas por artículo— y el
-        vocabulario de causas propuesto. Acordado con el responsable del corpus el 28 de agosto;
-        falta la validación de Secretaría General. <b>Lo que cuesta aplicarlo está medido</b>: nueve
-        documentos, de los que uno solo (ALT-059) exige una decisión nueva.</li>
-        <li><b>PRG-003 y PRG-004: confirmado el 28 de agosto</b> con el texto de la transitoria
-        primera. Queda como se describe en 12.3 («la norma sustituida que sigue rigiendo para
-        algunos»). Lo que se le pide a Secretaría General es sólo <b>validar la lectura de la
-        transitoria</b>: que el colectivo es «un único sexenio vivo el 27-02-2024», que el alcance es
-        la sección de sexenios y no el programa entero, y que el fin es el curso 2026/27.</li>
+        la otra la hereda. Son nueve decisiones, no dieciocho. En total quedan 53 documentos de 294
+        sin confirmar, y la mayoría son las internas no publicadas.</p></li>
+        <li><b>La disposición transitoria de PRG-004.</b> Confirmar la lectura: que el colectivo es
+        «un único sexenio vivo el 27-02-2024», que el alcance es la reducción por sexenios y no el
+        programa entero, y que el fin es el curso 2026/2027.</li>
     </ol>
     <p class="nota">Ninguna de las cinco cambia el diseño: cambian un parámetro, una lista o un
-    estado. Por eso se pueden implementar antes de tener la respuesta, con la opción recomendada,
-    y ajustar después sin reindexar nada: el texto embebido no lleva ninguno de estos campos.</p>
+    estado. Por eso están implementadas con la opción acordada y se pueden ajustar después sin
+    reindexar nada — el texto que se embebe no lleva ninguno de estos campos.</p>
 </section>
 
 <footer class="pie">
     <p>Documento de estado: refleja la configuración vigente y la medición que la respalda, no el
-    orden en que se descubrió. Los informes de las mediciones intermedias
+    orden en que se descubrió. <b>Actualizado el 28 de agosto de 2026 tras el bloque ACT</b>, que
+    cambió qué normas ve cada asistente, en qué lengua responde y qué entiende por vigente: §12 lo
+    describe entero, y §1 y §8 se ajustaron a lo que el sistema hace ahora. Los informes de las mediciones intermedias
     —<code>docs/BLOQUE_HIB_CIERRE.html</code>,
     <code>docs/GERENCIA_CIERRE_BLOQUE_HIB.html</code> y
     <code>docs/EXPERIMENTO_GRANULARIDAD_CONTEXTO.html</code>— conservan las cifras tal como se
