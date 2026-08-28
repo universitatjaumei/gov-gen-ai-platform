@@ -47,6 +47,7 @@ class VectorRetrievalStrategy:
         min_score: float = 0.0,
         reranker: Any = None,
         candidate_k: int | None = None,
+        inject_whole_document: bool = False,
     ):
         self._session = session
         self._embedding = embedding_service
@@ -63,6 +64,38 @@ class VectorRetrievalStrategy:
         # de 30 a 3 —dos cambios en una línea—. Medido sobre el lote: 19 de 25 consultas
         # recibieron menos documentos que `top_k`, y 6 uno solo.
         self._candidate_k = candidate_k if candidate_k is not None else pool_size(top_k)
+        # HIB.T: qué texto se le entrega al modelo por cada documento elegido — el artículo
+        # (el padre del fragmento) o la norma ENTERA.
+        #
+        # No es una estrategia aparte a propósito. El experimento de granularidad midió que
+        # cinco normas enteras seleccionadas por este mismo top-k eran la única celda que ganaba
+        # a Gemini de forma significativa (7 a 0, p=0,016), pero se midió con una llamada directa
+        # al modelo y por eso salió con **0 enlaces de 25**: sin contrato de citas, sin ancla y
+        # sin aviso de vigencia. Un mando aquí las hereda las cuatro; una estrategia nueva las
+        # habría vuelto a dejar fuera.
+        #
+        # Y el modo `MD_LONG_CONTEXT` que ya existía no sirve para esto: selecciona por fecha de
+        # creación hasta llenar el presupuesto e **ignora la consulta**.
+        self.inject_whole_document = bool(inject_whole_document)
+
+    def _texto_de_evidencia(self, best: Any, doc: Any) -> str:
+        """El texto que se le entrega al modelo por este documento.
+
+        Con `inject_whole_document` la evidencia es la norma completa; sin él, el artículo —que
+        es lo que RAG.8 (small-to-big) buscaba: se encuentra con el hijo, más específico, y se
+        responde con la sección entera, que trae el contexto que al hijo le falta.
+
+        Los repliegues no son defensivos, son los tres casos reales: un fragmento temporal o de
+        legado **no tiene documento**, un documento puede no tener `markdown_content`, y un
+        fragmento sin padre existe desde que HIB.L puso techo. Sin ellos el `excerpt` saldría
+        vacío y la respuesta se quedaría sin fundamento **sin dar ningún error**, que es el modo
+        de fallo que este bloque lleva cazando.
+        """
+        if self.inject_whole_document and doc is not None:
+            entero = getattr(doc, "markdown_content", None)
+            if entero:
+                return entero
+        return best.parent_content or best.content
 
     async def get_context(
         self,
@@ -130,7 +163,7 @@ class VectorRetrievalStrategy:
             # que ya se hacía: es un superconjunto. Y se mantiene así a propósito, porque
             # emitir una entrada por padre duplicaría documentos en el `sources` del evento
             # SSE `done`, contrato que RAG.2 fijó por snapshot.
-            excerpt = best.parent_content or best.content
+            excerpt = self._texto_de_evidencia(best, doc)
             # PIL.3: el aviso de que este artículo está DESPLAZADO por una norma posterior.
             #
             # El corpus lo escribe dentro del texto del artículo, pero un artículo se parte

@@ -263,6 +263,11 @@ class HubOrganizacion(HubConfigBase):
     default_grounding_check_enabled: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True
     )
+    # HIB.T — el artículo o la norma entera. NULL = heredar de la plataforma, que entra en
+    # False: los tres asistentes en producción inyectan el artículo.
+    default_inject_whole_document: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
     # Modelo con el que se reescribe: pequeno y rapido, distinto del que responde. Vive en
     # la organizacion porque repetirlo en cada chatbot solo multiplicaria sitios donde
     # olvidarlo. NULL = usar el del chatbot con el tope de salida bajado.
@@ -500,6 +505,9 @@ class HubChatbot(HubConfigBase):
     # un funcionario que recibe un umbral de contratacion equivocado actua sobre el, y un
     # estudiante que recibe una rendicion pregunta en Infocampus.
     grounding_check_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # HIB.T — NULL = heredar. Existe para el tercer asistente de Gerencia, que es el banco con
+    # el que se comparan las tres estrategias sobre el mismo lote y el mismo corpus.
+    inject_whole_document: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     parent_chatbot_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("hub_chatbots.id", ondelete="SET NULL"),

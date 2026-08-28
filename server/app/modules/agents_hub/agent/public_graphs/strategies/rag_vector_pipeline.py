@@ -75,6 +75,9 @@ class RagVectorPipeline:
             reranker=reranker,
             # HIB.J — `None` deja que la estrategia lo derive con `pool_size(top_k)`.
             candidate_k=getattr(cfg, "candidate_k", None),
+            # HIB.T — el artículo o la norma entera. Va por la cascada, no por el modo: la
+            # selección es la misma y sólo cambia qué texto se entrega.
+            inject_whole_document=bool(getattr(cfg, "inject_whole_document", False)),
         )
 
     async def run(

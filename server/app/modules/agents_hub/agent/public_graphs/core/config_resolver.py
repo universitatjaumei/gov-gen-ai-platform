@@ -78,6 +78,7 @@ class PublicGraphConfig:
     # significa heredar. Un chatbot que lo quiera apagado lo pone en False y gana.
     query_rewriting_enabled: bool = True
     grounding_check_enabled: bool = False
+    inject_whole_document: bool = False
     # LLM de reescritura, configurable en la organización porque es otro modelo —pequeño y
     # rápido— y no tiene sentido repetirlo en cada chatbot. None = usar el del chatbot con
     # el tope de salida bajado.
@@ -121,6 +122,9 @@ _PLATFORM_DEFAULTS = PublicGraphConfig(
     # de los 11 negativos caza y cuantos de los 30 contestables rechaza indebidamente. Si pasa
     # de 2 de esos 30, no se despliega.
     grounding_check_enabled=False,
+    # HIB.T — el artículo, no la norma entera. Los tres asistentes en producción siguen así; el
+    # mando existe para el banco de comparación de Gerencia.
+    inject_whole_document=False,
     # RAG.15 lo dejó en 8 diciendo que no estaba medido, porque nadie lo leía. HIB.Q lo baja a
     # **3**, que es el valor elegido con el lote delante: con `parent_child` y el pool ya
     # desacoplado del reranker (HIB.J), `top_k = 3` entrega de verdad tres documentos —2,96 de
@@ -199,6 +203,7 @@ async def get_effective_public_graph_config(
             "chunking_strategy":     organizacion.default_chunking_strategy,
             "query_rewriting_enabled": organizacion.default_query_rewriting_enabled,
             "grounding_check_enabled": organizacion.default_grounding_check_enabled,
+            "inject_whole_document": organizacion.default_inject_whole_document,
             "rewrite_llm_config_id": organizacion.rewrite_llm_config_id,
         })
 
@@ -227,6 +232,7 @@ async def get_effective_public_graph_config(
         "chunking_strategy":     chatbot.chunking_strategy,
         "query_rewriting_enabled": chatbot.query_rewriting_enabled,
         "grounding_check_enabled": chatbot.grounding_check_enabled,
+        "inject_whole_document": chatbot.inject_whole_document,
     })
 
     if config.retrieval_mode == "MD_AGENT_SELECTOR":
