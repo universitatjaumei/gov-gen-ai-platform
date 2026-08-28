@@ -108,8 +108,15 @@ class TestLosEjesDelAnalisisSonObligatorios:
             with pytest.raises(ValidationError):
                 Escenario(**datos)
 
-    def test_should_reject_a_language_outside_ca_and_es(self):
-        with pytest.raises(ValidationError, match="'ca' o 'es'"):
+    def test_should_normalise_ca_to_the_corpus_code(self):
+        """ACT.2: `val` es el codigo del corpus. `ca` se sigue aceptando —los lotes de
+        `_local/golden/` estan escritos asi y son el instrumento de medida— pero se normaliza,
+        para que el recuento por lengua no parta en dos la misma lengua."""
+        assert Escenario(**_escenario(name="ORI-99", language="ca")).language == "val"
+        assert Escenario(**_escenario(name="ORI-98", language="val")).language == "val"
+
+    def test_should_reject_a_language_outside_val_and_es(self):
+        with pytest.raises(ValidationError, match="'val' o 'es'"):
             Escenario(**_escenario(language="en"))
 
     def test_should_require_history_on_a_follow_up_scenario(self):
@@ -144,7 +151,8 @@ class TestElLoteSeSabeDescribir:
         )
         c = lote.composicion()
         assert c["total"] == 3
-        assert c["language"] == {"ca": 1, "es": 2}
+        # `ca` entra y se cuenta como `val`: es la misma lengua (ACT.2).
+        assert c["language"] == {"val": 1, "es": 2}
         assert c["answerable"] == {"False": 1, "True": 2}
         assert c["con_fuente_requerida"] == 2
         assert c["con_ancla"] == 2

@@ -24,17 +24,21 @@ import pytest
 from server.app.api.v1.hub_chat import _build_translation_warning
 
 
+# ACT.2 (2026-08-28): este fichero estaba escrito con `ca` en las DOS direcciones, y por eso no
+# vio el defecto que arreglo ACT.2: la lengua de la fuente que llega de verdad es `val` —la del
+# corpus—, no `ca`. Con `ca` en los dos lados los tests pasaban y produccion fallaba, que es la
+# peor combinacion posible. Ahora usan el codigo real.
 class TestElAvisoSaleDeLaLenguaDeLaFuente:
 
     def test_should_warn_when_the_source_language_differs_from_the_question(self):
-        aviso = _build_translation_warning(lengua_de_la_fuente="es", lengua_de_la_pregunta="ca")
+        aviso = _build_translation_warning(lengua_de_la_fuente="es", lengua_de_la_pregunta="val")
 
         assert aviso is not None
         assert "castellà" in aviso.lower() or "castellano" in aviso.lower()
 
     def test_should_warn_when_asking_in_spanish_and_citing_a_valencian_norm(self):
         """**El caso que se callaba**, y es el más frecuente del corpus real."""
-        aviso = _build_translation_warning(lengua_de_la_fuente="ca", lengua_de_la_pregunta="es")
+        aviso = _build_translation_warning(lengua_de_la_fuente="val", lengua_de_la_pregunta="es")
 
         assert aviso is not None, (
             "preguntar en castellano y recibir una norma en valencià es lo habitual en este "
@@ -43,27 +47,27 @@ class TestElAvisoSaleDeLaLenguaDeLaFuente:
         assert "valenci" in aviso.lower()
 
     def test_should_not_warn_when_both_match(self):
-        assert _build_translation_warning(lengua_de_la_fuente="ca", lengua_de_la_pregunta="ca") is None
+        assert _build_translation_warning(lengua_de_la_fuente="val", lengua_de_la_pregunta="val") is None
         assert _build_translation_warning(lengua_de_la_fuente="es", lengua_de_la_pregunta="es") is None
 
     def test_should_not_warn_without_enough_information(self):
         """Sin saber una de las dos lenguas no se puede afirmar que difieran, y un aviso falso
         sobre el idioma de una norma erosiona la confianza en los que sí son ciertos."""
-        assert _build_translation_warning(lengua_de_la_fuente=None, lengua_de_la_pregunta="ca") is None
-        assert _build_translation_warning(lengua_de_la_fuente="ca", lengua_de_la_pregunta=None) is None
+        assert _build_translation_warning(lengua_de_la_fuente=None, lengua_de_la_pregunta="val") is None
+        assert _build_translation_warning(lengua_de_la_fuente="val", lengua_de_la_pregunta=None) is None
 
 
 class TestElAvisoSeEscribeEnLaLenguaDeQuienPregunta:
 
     def test_should_write_the_warning_in_the_language_of_the_question(self):
         en_valenciano = _build_translation_warning(
-            lengua_de_la_fuente="es", lengua_de_la_pregunta="ca"
+            lengua_de_la_fuente="es", lengua_de_la_pregunta="val"
         )
         en_castellano = _build_translation_warning(
-            lengua_de_la_fuente="ca", lengua_de_la_pregunta="es"
+            lengua_de_la_fuente="val", lengua_de_la_pregunta="es"
         )
         en_ingles = _build_translation_warning(
-            lengua_de_la_fuente="ca", lengua_de_la_pregunta="en"
+            lengua_de_la_fuente="val", lengua_de_la_pregunta="en"
         )
 
         # Cada uno en su lengua: mostrarle castellano a quien acaba de escribir en valencià es
@@ -72,7 +76,7 @@ class TestElAvisoSeEscribeEnLaLenguaDeQuienPregunta:
         assert "está" in en_castellano
         assert "is in" in en_ingles.lower() or "written in" in en_ingles.lower()
 
-    @pytest.mark.parametrize("pregunta", ["ca", "es", "en"])
+    @pytest.mark.parametrize("pregunta", ["val", "es", "en"])
     def test_should_write_it_with_accents(self, pregunta: str):
         """El texto anterior estaba sin acentos («se detecto», «catalan», «ingles»), lo que en
         un aviso institucional se lee como descuido."""

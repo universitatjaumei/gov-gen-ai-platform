@@ -174,14 +174,21 @@ def _tokens_estimados(texto: str) -> int:
 #: decirle «catalan» en castellano —y encima sin tilde— convierte una advertencia útil en una
 #: impertinencia. La lengua de la fuente se nombra dentro de la frase, luego hay que declinarla
 #: en cada idioma.
+# ACT.2: la clave del valenciano es `val`, la del CORPUS, y `ca` ya no aparece. La versión
+# anterior estaba escrita en `ca` en las dos direcciones, así que:
+#   · como lengua de la FUENTE nunca acertaba —los documentos llevan `val`— y el nombre salía con
+#     el código crudo: «⚠️ La normativa citada está en val»;
+#   · como lengua de la PREGUNTA tampoco, en cuanto el detector pasó a normalizar.
+# Dos claves para la misma lengua es lo que estaba roto; no se duplican, se traduce en la
+# frontera (`services/language_detector.py`).
 _NOMBRE_DE_LA_LENGUA: dict[str, dict[str, str]] = {
-    "ca": {"ca": "valencià", "es": "castellà", "en": "anglès", "fr": "francès"},
-    "es": {"ca": "valenciano", "es": "castellano", "en": "inglés", "fr": "francés"},
-    "en": {"ca": "Valencian", "es": "Spanish", "en": "English", "fr": "French"},
+    "val": {"val": "valencià", "es": "castellà", "en": "anglès", "fr": "francès"},
+    "es": {"val": "valenciano", "es": "castellano", "en": "inglés", "fr": "francés"},
+    "en": {"val": "Valencian", "es": "Spanish", "en": "English", "fr": "French"},
 }
 
 _PLANTILLA_DEL_AVISO: dict[str, str] = {
-    "ca": "⚠️ La normativa citada està en {lengua}. L'enllaç porta al document original.",
+    "val": "⚠️ La normativa citada està en {lengua}. L'enllaç porta al document original.",
     "es": "⚠️ La normativa citada está en {lengua}. El enlace lleva al documento original.",
     "en": "⚠️ The cited regulation is in {lengua}. The link opens the original document.",
 }

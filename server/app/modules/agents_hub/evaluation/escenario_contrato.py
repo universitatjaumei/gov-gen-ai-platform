@@ -162,8 +162,14 @@ class Escenario(BaseModel):
                 "correccion no se puede fundamentar, el escenario es un negativo con "
                 "`refusal_reason=premisa_falsa`"
             )
-        if self.language not in ("ca", "es"):
-            raise ValueError("`language` tiene que ser 'ca' o 'es'")
+        # ACT.2: el codigo del valenciano en este sistema es `val`, el del corpus. Se sigue
+        # aceptando `ca` —los lotes de `_local/golden/` estan escritos asi y son el instrumento
+        # de medida, no se invalidan por un cambio de vocabulario— pero se normaliza, para que
+        # el recuento por lengua del informe no parta en dos la misma lengua.
+        if self.language == "ca":
+            object.__setattr__(self, "language", "val")
+        if self.language not in ("val", "es"):
+            raise ValueError("`language` tiene que ser 'val' o 'es'")
 
         if self.answerable:
             # Sin fuente esperada no hay precisión de cita: sólo opinión. Es la razón de ser
