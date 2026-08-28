@@ -188,6 +188,68 @@ async def _reconciliar(session, directorio: Path, chatbot_id, **kwargs):
     return await reconciler.reconcile(fuente, chatbot_id, **kwargs)
 
 
+async def _chatbot(session, organizacion_id=None):
+    """Un chatbot de verdad en la BD: ACT.5 necesita saber de que organizacion es.
+
+    Se monta la cadena entera —proveedor, config de LLM, organizacion— porque las claves
+    ajenas la exigen; es el mismo montaje que `test_embedding_resolution`.
+    """
+    from server.app.modules.agents_hub.database.config_models import (
+        HubChatbot,
+        HubLLMConfig,
+        HubOrganizacion,
+        HubProvider,
+    )
+
+    await session.merge(
+        HubProvider(id="google", name="Google", provider_type="google_genai")
+    )
+    llm = HubLLMConfig(provider="google", model_name="gemini-flash", purpose="chat")
+    session.add(llm)
+    if organizacion_id is None:
+        org = HubOrganizacion(name="UJI", partner_id="partner_dev")
+        session.add(org)
+        await session.flush()
+        organizacion_id = org.id
+    await session.flush()
+    cb = HubChatbot(
+        organizacion_id=organizacion_id, llm_config_id=llm.id,
+        name=f"Chatbot {uuid.uuid4().hex[:6]}", system_prompt="x", sources=[],
+    )
+    session.add(cb)
+    await session.flush()
+    return cb.id
+
+
+async def _dos_chatbots_de_la_misma_organizacion(session):
+    from server.app.modules.agents_hub.database.config_models import HubOrganizacion
+
+    org = HubOrganizacion(name="UJI", partner_id="partner_dev")
+    session.add(org)
+    await session.flush()
+    return await _chatbot(session, org.id), await _chatbot(session, org.id)
+
+
+async def _fragmentos(session, chatbot_id):
+    from server.app.modules.agents_hub.database.operational_models import HubDocumentChunk
+
+    filas = (
+        await session.execute(
+            select(HubDocumentChunk).where(HubDocumentChunk.chatbot_id == chatbot_id)
+        )
+    ).scalars().all()
+    return [
+        {
+            "chatbot_id": f.chatbot_id,
+            "document_id": f.document_id,
+            "chunk_metadata": f.chunk_metadata,
+            "embedding": list(f.embedding) if f.embedding is not None else None,
+            "parent_content": f.parent_content,
+        }
+        for f in filas
+    ]
+
+
 async def _documentos(session, chatbot_id):
     from server.app.modules.agents_hub.database.operational_models import HubDocument
 
@@ -799,3 +861,105 @@ class TestIdempotenciaDeFechas:
             docs["REG-703"].doc_metadata.get("vigencia_validada_per")
             == "Secretaria General"
         )
+
+
+# ───────────────────── ACT.5 — copiar en vez de embeber ─────────────────────
+#
+# El corpus NO se comparte entre chatbots: cada uno tiene sus documentos y sus fragmentos, y es
+# una decisión tomada. Pero cuando dos chatbots tienen el MISMO documento —mismo
+# `content_hash`— el vector del fragmento es el mismo, y volver a embeberlo cuesta GPU y horas
+# para obtener el mismo número.
+#
+# `chunk_copier.py` (HIB.N) sabía decidirlo y remapearlo desde el 2026-08-27, con tests propios,
+# y **tenía cero llamadores**: el reconciliador embebía siempre. Medido sobre la actualización
+# del 27-08: los 6 documentos nuevos de Gerencia son un subconjunto estricto de los 19 de
+# Normativa, así que se embeberían cuatro veces.
+
+
+class TestCopiarEnVezDeEmbeber:
+
+    @pytest.mark.asyncio
+    async def test_should_copy_the_chunks_from_a_twin_instead_of_embedding(
+        self, db_session, tmp_path
+    ):
+        """El segundo chatbot no llama al servicio de embeddings ni una vez."""
+        _escribir(tmp_path, "REG-801", body="El text de la norma que es repetix.")
+        origen, destino = await _dos_chatbots_de_la_misma_organizacion(db_session)
+
+        primero = _FakeEmbedding()
+        await _reconciliar(db_session, tmp_path, origen, embedding=primero)
+        await db_session.commit()
+
+        segundo = _FakeEmbedding()
+        informe = await _reconciliar(db_session, tmp_path, destino, embedding=segundo)
+        await db_session.commit()
+
+        assert primero.llamadas > 0, "el primero sí que embebe"
+        assert segundo.llamadas == 0, (
+            f"el gemelo ha llamado {segundo.llamadas} veces al embedding para obtener los "
+            "mismos vectores"
+        )
+        assert informe.copiados == 1
+        assert informe.ingeridos == 0
+        assert any("copiado de" in d for d in informe.detalle), informe.detalle
+
+    @pytest.mark.asyncio
+    async def test_should_leave_the_copy_coherent(self, db_session, tmp_path):
+        """La columna `document_id` y su metadato apuntan al documento del DESTINO.
+
+        Es la lección de HIB.U: copiar sin remapear el metadato deja fragmentos que apuntan al
+        documento del otro chatbot, la agrupación los junta con los del otro corpus y la cita
+        sale con el título equivocado, **sin ningún error**.
+        """
+        from server.app.modules.agents_hub.ingestion.chunk_copier import incoherentes
+
+        _escribir(tmp_path, "REG-802", body="Text que es copia.")
+        origen, destino = await _dos_chatbots_de_la_misma_organizacion(db_session)
+
+        await _reconciliar(db_session, tmp_path, origen)
+        await db_session.commit()
+        await _reconciliar(db_session, tmp_path, destino)
+        await db_session.commit()
+
+        copiados = await _fragmentos(db_session, destino)
+        originales = await _fragmentos(db_session, origen)
+
+        assert copiados, "no se ha copiado ningún fragmento"
+        assert len(copiados) == len(originales)
+        assert incoherentes(copiados) == []
+        docs = await _documentos(db_session, destino)
+        assert {str(f["document_id"]) for f in copiados} == {str(docs["REG-802"].id)}
+        assert all(f["chatbot_id"] == destino for f in copiados)
+        # El vector es el mismo: es justamente lo que se ahorra.
+        assert [f["embedding"] for f in copiados] == [f["embedding"] for f in originales]
+
+    @pytest.mark.asyncio
+    async def test_should_embed_when_there_is_no_twin(self, db_session, tmp_path):
+        """Sin gemelo no hay atajo, y el informe no habla de copias."""
+        _escribir(tmp_path, "REG-803")
+        _, destino = await _dos_chatbots_de_la_misma_organizacion(db_session)
+
+        embedding = _FakeEmbedding()
+        informe = await _reconciliar(db_session, tmp_path, destino, embedding=embedding)
+        await db_session.commit()
+
+        assert embedding.llamadas > 0
+        assert informe.copiados == 0
+        assert informe.ingeridos == 1
+
+    @pytest.mark.asyncio
+    async def test_should_not_copy_across_organisations(self, db_session, tmp_path):
+        """El corpus de una organización no alimenta a otra, ni siquiera para ahorrar."""
+        _escribir(tmp_path, "REG-804")
+        origen, _ = await _dos_chatbots_de_la_misma_organizacion(db_session)
+        ajeno = await _chatbot(db_session)  # otra organización, con su propia fila
+
+        await _reconciliar(db_session, tmp_path, origen)
+        await db_session.commit()
+
+        embedding = _FakeEmbedding()
+        informe = await _reconciliar(db_session, tmp_path, ajeno, embedding=embedding)
+        await db_session.commit()
+
+        assert informe.copiados == 0
+        assert embedding.llamadas > 0

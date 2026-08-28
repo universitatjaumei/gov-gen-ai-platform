@@ -31,6 +31,11 @@ from server.app.modules.agents_hub.database.operational_models import (
 from server.app.modules.agents_hub.ingestion.bilingual_bridge import (
     refrescar_puente_bilingue,
 )
+from server.app.modules.agents_hub.ingestion.chunk_copier import (
+    incoherentes,
+    remapea,
+    se_puede_copiar,
+)
 from server.app.modules.agents_hub.ingestion.corpus.frontmatter import hash_markdown_body
 from server.app.modules.agents_hub.ingestion.corpus.manifest import CorpusDocumentEntry
 from server.app.modules.agents_hub.ingestion.corpus.source import CorpusSource
@@ -72,6 +77,32 @@ _A_METADATA = (
 )
 
 
+#: Columnas del fragmento que se COPIAN tal cual. Fuera quedan `id` (se genera), los tres
+#: identificadores que `remapea` reescribe, y `tsv`, que es una columna generada por Postgres.
+#: `bilingual_terms` tambien se copia: es del documento, y el mismo documento tiene los mismos.
+_COLUMNAS_DEL_FRAGMENTO = (
+    "content",
+    "source_url",
+    "content_hash",
+    "embedding",
+    "chunk_metadata",
+    "language",
+    "is_temporary",
+    "owner_id",
+    "bilingual_terms",
+    "embedding_model",
+    "embedding_dim",
+    "parent_content",
+    "embedding_text",
+    "embedding_task_type",
+)
+
+
+def _fragmento_a_dict(fragmento) -> dict:
+    """El fragmento como lo espera `chunk_copier`, sin los identificadores del origen."""
+    return {campo: getattr(fragmento, campo) for campo in _COLUMNAS_DEL_FRAGMENTO}
+
+
 class PruneThresholdExceeded(Exception):
     """La poda afectaría a más documentos de los que el umbral permite sin confirmar."""
 
@@ -80,6 +111,8 @@ class PruneThresholdExceeded(Exception):
 class ReconcileReport:
     ingeridos: int = 0
     reingeridos: int = 0
+    #: ACT.5 — documentos cuyos fragmentos se copiaron de un gemelo en vez de embeberse.
+    copiados: int = 0
     metadatos_actualizados: int = 0
     omitidos: int = 0
     rechazados: int = 0
@@ -90,7 +123,8 @@ class ReconcileReport:
 
     def render(self) -> str:
         return (
-            f"ingeridos={self.ingeridos} reingeridos={self.reingeridos} "
+            f"ingeridos={self.ingeridos} copiados={self.copiados} "
+            f"reingeridos={self.reingeridos} "
             f"metadatos={self.metadatos_actualizados} omitidos={self.omitidos} "
             f"rechazados={self.rechazados} retirados={self.retirados}"
         )
@@ -270,6 +304,31 @@ class CorpusReconciler:
                 content_hash = hash_markdown_body(body)
 
             if existente is None:
+                # ACT.5 — si un gemelo de la misma organización ya lo tiene embebido, se copia.
+                # En seco no se consulta: el plan diría «copiado» y luego el gemelo podría no
+                # estar (el orden del descriptor manda), y prometer un ahorro que no se cumple
+                # es peor que no prometerlo.
+                copiado = None
+                if not dry_run:
+                    copiado, motivo = await self._copiar_fragmentos(
+                        entry, chatbot_id, content_hash, title, url
+                    )
+                    if motivo:
+                        informe.motivos_omision.append(
+                            f"{entry.relative_path}: no se pudo copiar ({motivo}); se embebe"
+                        )
+                if copiado is not None:
+                    informe.copiados += 1
+                    informe.detalle.append(f"≈ {entry.relative_path} (copiado de un gemelo)")
+                    _aplicar(copiado, entry, title)
+                    await self._session.flush()
+                    await refrescar_puente_bilingue(self._session, copiado)
+                    copiado.last_seen_at = datetime.now(timezone.utc)
+                    emparejados.add(copiado.id)
+                    if entry.versio_idiomatica_de:
+                        pendientes_de_enlazar.append((copiado, entry.versio_idiomatica_de))
+                    continue
+
                 informe.ingeridos += 1
                 informe.detalle.append(f"+ {entry.relative_path}")
                 if not dry_run:
@@ -334,6 +393,116 @@ class CorpusReconciler:
             await self._session.flush()
 
         return informe
+
+    async def _gemelo_con_fragmentos(
+        self, chatbot_id: uuid.UUID, content_hash: str
+    ) -> tuple[HubDocument, list[dict]] | None:
+        """Un documento IDENTICO ya embebido en otro chatbot de la MISMA organizacion.
+
+        El corpus no se comparte entre chatbots —cada uno tiene sus filas, y es una decision
+        tomada—, pero cuando el documento es el mismo el vector tambien lo es, y volver a
+        calcularlo cuesta GPU y horas para obtener el mismo numero.
+
+        **Nunca entre organizaciones**: el corpus de una no alimenta a otra ni para ahorrar.
+        """
+        from server.app.modules.agents_hub.database.config_models import HubChatbot
+        from server.app.modules.agents_hub.database.operational_models import (
+            HubDocumentChunk,
+        )
+
+        organizacion = await self._session.scalar(
+            select(HubChatbot.organizacion_id).where(HubChatbot.id == chatbot_id)
+        )
+        if organizacion is None:
+            return None
+
+        hermanos = select(HubChatbot.id).where(
+            HubChatbot.organizacion_id == organizacion, HubChatbot.id != chatbot_id
+        )
+        candidato = (
+            await self._session.execute(
+                select(HubDocument)
+                .where(
+                    HubDocument.content_hash == content_hash,
+                    HubDocument.chatbot_id.in_(hermanos),
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if candidato is None:
+            return None
+
+        filas = (
+            await self._session.execute(
+                select(HubDocumentChunk).where(
+                    HubDocumentChunk.document_id == candidato.id
+                )
+            )
+        ).scalars().all()
+        if not filas:
+            return None
+        return candidato, [_fragmento_a_dict(f) for f in filas]
+
+    async def _copiar_fragmentos(
+        self,
+        entry: CorpusDocumentEntry,
+        chatbot_id: uuid.UUID,
+        content_hash: str,
+        title: str,
+        url: str,
+    ) -> tuple[HubDocument | None, str | None]:
+        """El documento destino con los fragmentos del gemelo, o (None, motivo)."""
+        from server.app.modules.agents_hub.agent.public_graphs.core.config_resolver import (
+            get_effective_public_graph_config,
+        )
+        from server.app.modules.agents_hub.database.operational_models import (
+            HubDocumentChunk,
+        )
+
+        gemelo = await self._gemelo_con_fragmentos(chatbot_id, content_hash)
+        if gemelo is None:
+            return None, None
+        origen, fragmentos = gemelo
+
+        # El permiso se decide sobre los DATOS y no sobre la configuracion (HIB.N): la
+        # configuracion de Normativa dice 8.000 tokens y sus fragmentos tienen padres de
+        # 59.172, porque se trocearon antes de que HIB.L fijara ese techo.
+        try:
+            cfg = await get_effective_public_graph_config(chatbot_id, self._session)
+            estrategia = str(cfg.chunking_strategy)
+            techo = int(getattr(cfg, "parent_max_tokens", 8000) or 8000)
+        except Exception:  # pragma: no cover - sin config no se arriesga una copia
+            return None, "no se pudo resolver la configuracion de troceado del destino"
+
+        veredicto = se_puede_copiar(
+            hash_origen=origen.content_hash,
+            hash_destino=content_hash,
+            estrategia_destino=estrategia,
+            techo_destino=techo,
+            fragmentos=fragmentos,
+        )
+        if not veredicto.copiable:
+            return None, veredicto.motivo
+
+        doc = HubDocument(
+            chatbot_id=chatbot_id,
+            title=title,
+            canonical_url=url,
+            markdown_content=origen.markdown_content,
+            content_hash=content_hash,
+            language=entry.language,
+            source_kind=entry.extra.get("source_kind", "publicacio"),
+            token_count=origen.token_count,
+        )
+        self._session.add(doc)
+        await self._session.flush()
+
+        for fragmento in fragmentos:
+            self._session.add(HubDocumentChunk(**remapea(
+                fragmento, chatbot_id=chatbot_id, document_id=doc.id
+            )))
+        await self._session.flush()
+        return doc, None
 
     async def _ingerir(
         self,
