@@ -28,7 +28,10 @@ from server.app.modules.agents_hub.database.operational_models import (
     HubDocument,
     HubDocumentChunk,
 )
-from server.app.modules.agents_hub.services.retrieval.vigencia import ESTAT_DEROGAT
+from server.app.modules.agents_hub.services.retrieval.vigencia import (
+    ESTATS_DE_ARTICULO_QUE_NO_RIGEN,
+    ESTATS_QUE_NO_RIGEN,
+)
 
 # Orden de menos a mas restringido. Un actor de nivel N ve los documentos de nivel <= N.
 NIVELLS_ACCES = ("public", "intern", "restringit")
@@ -124,15 +127,29 @@ class MetadataFilter:
             conditions.append(
                 or_(HubDocument.language == self.query_language, sin_hermana_en_esa_lengua)
             )
-        # Derogado no se recupera nunca, ni con el filtro mas abierto: no es una preferencia
-        # de recuperacion sino un hecho sobre la norma (VIS.3). Sigue siendo legible por id
-        # explicito con read_document, porque citar la norma que YA no rige es una consulta
-        # legitima. Solo excluye 'derogat' exacto: el catalogo real trae 'vigent?' y otros
-        # estados dudosos, que se advierten en la respuesta y no se ocultan.
+        # ACT.4 — SOLO LO QUE RIGE HOY ENTRA EN LA BUSQUEDA.
+        #
+        # Antes se excluia `derogat` EXACTO, asi que `no_vigent` se recuperaba —con aviso— sin
+        # que nadie lo hubiera decidido, y un documento SIN estado tambien. Con la lectura A
+        # (2026-08-28) el estado es uno y la causa va aparte: una norma es `vigent`, `no_vigent`
+        # o `futur`, y solo la primera contesta.
+        #
+        # Es una lista de EXCLUSION y no de admision, y la diferencia importa: un documento sin
+        # `estat_vigencia` no es una norma que se haya dejado de aplicar, es un documento que no
+        # tiene ese ciclo de vida —una pagina rastreada por el modulo de curacion, un PDF que
+        # alguien sube para preguntarle cosas—. Exigir `= 'vigent'` los borraba del indice a
+        # todos.
+        #
+        # `vigent?` y `parcialment_derogat` se quedan dentro: el primero es la duda del catalogo
+        # original, que se ADVIERTE y no se oculta, y el segundo dice que una parte si rige.
+        #
+        # `no_vigent` y `futur` siguen siendo legibles por id con `read_document`: citar la
+        # norma que YA no rige es una consulta legitima, y alguien preguntara que se aplicaba en
+        # un ejercicio anterior. Lo resuelve el agentico leyendola, no el top-k.
         conditions.append(
             or_(
                 HubDocument.estat_vigencia.is_(None),
-                HubDocument.estat_vigencia != ESTAT_DEROGAT,
+                HubDocument.estat_vigencia.notin_(list(ESTATS_QUE_NO_RIGEN)),
             )
         )
         if not self.include_superseded:
@@ -153,9 +170,25 @@ class MetadataFilter:
         legados) no se filtran por taxonomia: no tienen metadatos que consultar y ya
         estan acotados por `owner_id`.
         """
-        return or_(
-            HubDocumentChunk.document_id.is_(None),
-            and_(*self.document_conditions()),
+        # ACT.4: un articulo suprimido o derogado DENTRO de una norma vigente no se cita como
+        # vigente. El troceador ya escribia `estat` en el fragmento y nadie lo consumia, que es
+        # lo que `vigencia.py` documentaba como pendiente. Son 3 fragmentos en Normativa hoy; el
+        # coste es una condicion y el beneficio es que el mecanismo exista antes de que sean 300.
+        #
+        # `.desplacat` y `.transitori` NO se excluyen: esos articulos SI rigen, con matices, y lo
+        # que necesitan es el aviso delante (lo pone `hidratar_avisos_de_vigencia`).
+        articulo_en_vigor = or_(
+            HubDocumentChunk.chunk_metadata["estat"].astext.is_(None),
+            ~HubDocumentChunk.chunk_metadata["estat"].astext.in_(
+                list(ESTATS_DE_ARTICULO_QUE_NO_RIGEN)
+            ),
+        )
+        return and_(
+            articulo_en_vigor,
+            or_(
+                HubDocumentChunk.document_id.is_(None),
+                and_(*self.document_conditions()),
+            ),
         )
 
 

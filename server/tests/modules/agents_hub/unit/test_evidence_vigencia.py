@@ -167,8 +167,11 @@ class TestIntegracionConLaRecuperacion:
         )
         from server.app.modules.agents_hub.services.retrieval import vector_strategy
 
-        assert "hidratar_desplazamiento" in vector_strategy.__dict__ or hasattr(
-            vector_strategy, "hidratar_desplazamiento"
+        # ACT.4: `hidratar_desplazamiento` paso a ser una de las dos hidrataciones que hace
+        # `hidratar_avisos_de_vigencia` —la otra es la vigencia transitoria—, y es esa la que
+        # llama la estrategia.
+        assert "hidratar_avisos_de_vigencia" in vector_strategy.__dict__ or hasattr(
+            vector_strategy, "hidratar_avisos_de_vigencia"
         ), "vector_strategy no hidrata el aviso"
         assert callable(hidratar_desplazamiento)
         assert uuid  # el import existe para fijar que este test vive en la ruta RAG

@@ -63,6 +63,10 @@ _A_METADATA = (
     "relative_path",
     "motiu_exclusio",
     "vigencia_validada_per",
+    # ACT.4: la causa de la no vigencia no necesita columna porque NADA filtra por
+    # ella. La lee `read_document` para que el asistente pueda decir «derogada por X»
+    # en vez de «ya no esta vigente», que son respuestas distintas.
+    "motiu_no_vigencia",
     "original_pdf_sha256",
     "converter",
 )

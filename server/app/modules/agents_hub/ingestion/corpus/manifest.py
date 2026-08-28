@@ -106,6 +106,12 @@ class CorpusDocumentEntry(BaseModel):
     versio_idiomatica_de: str | None = None
     # --- Vigencia
     estat_vigencia: str | None = None
+    # ACT.4 — la CAUSA, no el estado. Es campo declarado y no una clave de `extra` para que
+    # `assert_vocabulary` la valide: un `extra` acepta cualquier cosa, y una errata
+    # (`fi_de_mandat` por `fi-de-mandat`) viajaria a la base de datos sin que nadie se enterara.
+    # `derogada_per` y `substituida_per` se quedan en `extra`: son referencias, como
+    # `relacionada_amb`, y no hay vocabulario contra el que validarlas.
+    motiu_no_vigencia: str | None = None
     vigencia_validada_per: str | None = None
     vigencia_validada_el: datetime | None = None
     data_revisio_prevista: date | None = None
@@ -300,6 +306,7 @@ def load_manifest(path: Path | str) -> CorpusManifest:
 _CAMPOS_POR_EJE: dict[str, tuple[str, ...]] = {
     "ambit": ("ambit_principal", "ambits_secundaris"),
     "submateria": ("submateries", "submateries_internes"),
+    "motiu_no_vigencia": ("motiu_no_vigencia",),
 }
 
 

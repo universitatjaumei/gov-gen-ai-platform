@@ -28,6 +28,9 @@ class VocabularyAxis(StrEnum):
     RANG = "rang"
     COLECTIU = "colectiu"
     TIPUS = "tipus"
+    # ACT.4: la CAUSA de la no vigencia. Eje nuevo porque anadirlo exige codigo que
+    # lo consuma; sus terminos son dato y viven en `vocabulari/motius_no_vigencia.csv`.
+    MOTIU_NO_VIGENCIA = "motiu_no_vigencia"
 
 
 @dataclass(frozen=True)

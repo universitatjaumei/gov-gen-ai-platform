@@ -54,7 +54,13 @@ async def _chunk(session, chatbot_id: uuid.UUID, doc, content: str, embedding=No
         source_url=doc.canonical_url if doc is not None else "file://pujada.pdf",
         content_hash=uuid.uuid4().hex + uuid.uuid4().hex,
         embedding=embedding if embedding is not None else _emb(0),
-        chunk_metadata={"document_id": str(doc.id)} if doc is not None else {},
+        # HIB.U: la agrupacion por documento lee la COLUMNA, con el metadato como
+        # repliegue. Quien pase `chunk_metadata` anade sus claves, no lo sustituye:
+        # perder `document_id` aqui haria que la cita saliera con el titulo de otro.
+        chunk_metadata={
+            **({"document_id": str(doc.id)} if doc is not None else {}),
+            **(kwargs.pop("chunk_metadata", None) or {}),
+        },
         language=kwargs.pop("language", "ca"),
         # RAG.9: la procedencia es NOT NULL. Por defecto, la del servicio local, que es de
         # donde salió todo el corpus real hasta MOD.2; los tests que prueban el desajuste la

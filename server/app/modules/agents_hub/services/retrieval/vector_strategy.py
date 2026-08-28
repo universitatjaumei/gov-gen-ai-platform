@@ -22,7 +22,7 @@ from server.app.modules.agents_hub.services.retrieval.metadata_filter import (
     con_lengua as _con_lengua,
 )
 from server.app.modules.agents_hub.services.retrieval.vigencia import (
-    hidratar_desplazamiento,
+    hidratar_avisos_de_vigencia,
     marca_de_vigencia,
 )
 from server.app.modules.agents_hub.services.retriever import RRF_K, HybridRetriever
@@ -212,7 +212,7 @@ class VectorRetrievalStrategy:
             #
             # Va delante del contenido y es texto de la evidencia, no una instrucción al
             # modelo: CRITERIS §1.4 pide resolver antes del modelo lo que se pueda resolver.
-            excerpt = hidratar_desplazamiento(excerpt, doc, best.metadata)
+            excerpt = hidratar_avisos_de_vigencia(excerpt, doc, best.metadata)
             # HIB.J — la nota que llega al quality gate es una MAGNITUD DE RELEVANCIA, no
             # una posición.
             #

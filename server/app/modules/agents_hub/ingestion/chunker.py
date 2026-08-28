@@ -49,7 +49,10 @@ _ANCORA = re.compile(
 _CLASE = re.compile(r"\.([A-Za-z][A-Za-z0-9_-]*)")
 # Estados de consolidación conocidos. Se nombran para que un filtro pueda usarlos; el
 # resto de clases se conserva en `classes` sin interpretarlas.
-ESTADOS_CONSOLIDACION = ("suprimit", "modificat", "afegit")
+# `derogat` entra en ACT.4: un articulo derogado dentro de una norma vigente es el
+# mismo caso que uno suprimido, y el corpus lo marca asi en las derogaciones
+# parciales, que ya no son un estado de norma sino marcas de articulo.
+ESTADOS_CONSOLIDACION = ("suprimit", "derogat", "modificat", "afegit")
 # Ancla vacía o mal formada: se limpia del texto pero no produce ancla.
 _ANCORA_ROTA = re.compile(r"\s*\{#[^}]*\}")
 
