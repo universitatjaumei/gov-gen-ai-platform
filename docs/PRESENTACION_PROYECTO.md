@@ -5,8 +5,8 @@
 > construido y verificado a día de hoy, y qué está previsto. No es documentación técnica: para
 > cada tema remite al documento especializado correspondiente (§10).
 >
-> **Fecha**: 18 de agosto de 2026. Las cifras de este documento corresponden a esa fecha y son
-> medidas, no estimadas.
+> **Fecha**: 26 de agosto de 2026. Las cifras de este documento corresponden a esa fecha y son
+> medidas, no estimadas. Cuando una cifra procede de una ejecución concreta, se dice cuál.
 
 ---
 
@@ -31,9 +31,11 @@ puede garantizar por diseño, no la gobernanza institucional de la IA. El invent
 el registro de sistemas y la asignación de responsabilidades se gestionan **fuera** de ella, y §7
 explica por qué esa separación es deliberada.
 
-El primer despliegue piloto es la **Universitat Jaume I**, con dos asistentes en marcha sobre
-corpus normativo real, y el proyecto se publicará como **software libre (AGPLv3)** con licencia
-dual comercial, de modo que cualquier institución pueda autoalojarlo.
+El primer despliegue piloto es la **Universitat Jaume I**, con tres asistentes en marcha sobre
+corpus normativo real —uno público sobre normativa propia y dos internos de Gerencia, montados
+para comparar dos métodos de recuperación—. El proyecto adoptó en agosto de 2026 la licencia
+**AGPL-3.0-or-later** con licencia dual comercial; el repositorio sigue privado hasta la apertura
+prevista, de modo que después cualquier institución pueda autoalojarlo.
 
 ## 2. Por qué es distinto: cinco decisiones estructurales
 
@@ -77,8 +79,17 @@ multiproveedor, almacenamiento portable, frontera edge/cloud):
 Chatbots multilingües (valenciano, castellano, inglés) sobre corpus documental propio, con
 **citas trazables al fragmento de origen**. Incluye:
 
-- **Búsqueda híbrida** (semántica y léxica combinadas) con **reordenación** de los resultados y
-  **reescritura conversacional** de la consulta.
+- **Búsqueda híbrida** (semántica y léxica combinadas) con **reordenación** de los resultados por
+  un reordenador multilingüe de nube —verificado sobre valenciano— y **reescritura conversacional**
+  de la consulta.
+- **Segunda búsqueda cuando la primera no basta**: si el filtro de calidad rechaza lo recuperado,
+  la consulta se traduce al vocabulario de la norma y se vuelve a buscar una sola vez. Se paga
+  solo cuando hace falta —el 28 % de las consultas del asistente público y el 71 % de las del
+  interno—, y existe porque una pregunta escrita como intención («quiero tramitar una compra de
+  6.500 euros») no comparte ni una palabra con el texto que la regula.
+- **Un umbral de calidad que decide con la mejor fuente**, no con el promedio de todas. Promediar
+  hacía que la cola de resultados votara sobre si hay respuesta, y convertía un parámetro de
+  amplitud en el mando que decidía cuántas preguntas se contestan.
 - **Selección escalonada por metadatos**, en tres niveles: un índice de materias acota primero el
   ámbito, se elige el subconjunto pertinente y solo entonces se consulta. Evita que una pregunta de
   un área traiga fundamento de otra, y reduce lo que viaja al modelo.
@@ -86,9 +97,12 @@ Chatbots multilingües (valenciano, castellano, inglés) sobre corpus documental
   fuera del índice consultable y aviso explícito cuando la norma aplicable ha sido desplazada. El
   desempate entre fragmentos equivalentes es determinista, para que la misma consulta cite siempre
   las mismas fuentes en el mismo orden.
-- **Calidad medida, no supuesta**: un conjunto de consultas de referencia con las fuentes que
-  deberían recuperarse actúa como **puerta de integración continua**. Ningún cambio del motor de
-  recuperación se acepta si degrada la calidad por debajo de la línea base registrada.
+- **Calidad medida, no supuesta**, en dos niveles que conviene no confundir. En **integración
+  continua** hay una puerta que mide el *mecanismo* de recuperación —fusión híbrida, filtros,
+  ranking— sobre un corpus de prueba con un embedding determinista: corre en segundos y falla si
+  la exhaustividad o el orden empeoran más de 0,02 respecto a la línea base versionada. La calidad
+  **sobre el corpus real** se mide aparte y a mano, con un lote de consultas reales que llevan el
+  veredicto escrito por la persona que las hizo (§5).
 - **Widget embebible** en webs institucionales y **modo identificado** para personal interno.
 - **Preguntas frecuentes como contenido citable**, con autoridad propia frente al resto del
   corpus.
@@ -137,6 +151,17 @@ alcance limitado para clientes máquina), **personalización visual en cascada**
 **servidor MCP** (16 herramientas) que permite administrar la plataforma desde agentes de IA con
 confirmación humana en las operaciones sensibles.
 
+A esa base se le añadieron en agosto de 2026 dos piezas que el modelo multiinstitución exigía:
+
+- **Frontera entre organizaciones explícita.** Cada tabla declara a qué ámbito pertenece
+  —plataforma, organización, heredable o derivada— y una prueba lo vigila. Proveedores, modelos,
+  prompts y permisos dejaron de ser globales: un ayuntamiento puede escribir sus propias
+  instrucciones sin tocar las de otro, y lo que no está definido a su nivel se hereda del
+  superior. El inventario tabla por tabla está escrito y comprobado por prueba, no deducido.
+- **Administración separada por planos**: la gestión de la plataforma (organizaciones, personas,
+  módulos concedidos) se separó de la administración de cada asistente, con concesión de módulos
+  a una persona o a un grupo del proveedor de identidad.
+
 ## 4. Arquitectura y despliegue
 
 Monorepo con backend **FastAPI** (Python asíncrono, contrato OpenAPI como única fuente de verdad),
@@ -150,23 +175,30 @@ cero, y porque a igualdad de coste añadía restricciones. La aplicación pesa ~
 instancia pequeña: los modelos de embeddings locales son una dependencia **opcional**, necesaria
 solo cuando la institución exige que el cálculo no salga de su perímetro.
 
-## 5. Estado de desarrollo (agosto de 2026)
+## 5. Estado de desarrollo (26 de agosto de 2026)
 
 El proyecto se ha desarrollado **en solitario**, con disciplina de desarrollo guiado por pruebas
 (la prueba antes del código) y asistencia de agentes de programación sujetos a reglas de
 arquitectura escritas y verificables.
 
-**Cifras medidas el 18 de agosto de 2026**: **2.284 pruebas de backend** y **329 de frontend** en
-verde, sin fallos. La verificación no es solo automática: cada módulo con interfaz se recorre en
-navegador antes de darlo por cerrado, y las pruebas manuales humanas se reservan para lo que una
-máquina no puede juzgar (identidad visual, calidad editorial, sistemas externos reales).
+**Cifras medidas.** La última ejecución completa de la suite de backend, el 25 de agosto, dio
+**3.166 pruebas en verde**, una omitida y una en rojo —un guardarraíl de arquitectura, corregido
+acto seguido; la suite completa no se ha vuelto a ejecutar después del arreglo, así que la última
+sin ningún rojo es la del día anterior, con **3.107**—. En frontend, **661 pruebas en verde** el
+26 de agosto. Desde el 22 de agosto la **integración continua ejecuta la suite entera**: hasta
+entonces corría el 42 % de ella, y lo hace sin paralelismo a propósito, porque repartir las
+pruebas entre procesos esconde el estado que se filtra de una a otra.
+
+La verificación no es solo automática: cada módulo con interfaz se recorre en navegador antes de
+darlo por cerrado, y las pruebas manuales humanas se reservan para lo que una máquina no puede
+juzgar (identidad visual, calidad editorial, sistemas externos reales).
 
 **Funcionalmente completo y verificado:**
 
 | Área | Estado |
 |---|---|
 | Asistentes informativos con citas | ✅ En marcha sobre corpus real |
-| Búsqueda híbrida, selección por metadatos y calidad medida | ✅ Con puerta de calidad en integración continua |
+| Búsqueda híbrida, selección por metadatos y calidad medida | ✅ Puerta de regresión del mecanismo en integración continua; la calidad sobre el corpus real se mide a mano con el lote de consultas reales |
 | Curación de contenido web | ✅ Módulo propio completo |
 | Informes: plantillas, extracción, transformación, gráficos, exportación | ✅ Recorrido completo verificado de punta a punta |
 | Ejecución aislada de código generado | ✅ Microservicio endurecido, doble auditoría |
@@ -177,22 +209,58 @@ máquina no puede juzgar (identidad visual, calidad editorial, sistemas externos
 | Personalización visual institucional | ✅ |
 | Servidor MCP para administración asistida | ✅ 16 herramientas |
 | Autoinstalación y distribución | ✅ Instalación en un paso, prerrequisito del software libre |
-| Endurecimiento de seguridad | ✅ Dos rondas de auditoría cerradas |
+| Endurecimiento de seguridad | ✅ Tres rondas de auditoría cerradas, la última previa al despliegue |
+| Frontera entre organizaciones | ✅ Ámbito declarado tabla por tabla, con inventario escrito y vigilado por prueba |
+| Administración de plataforma e identidad | ✅ Organizaciones, personas y concesión de módulos, separadas de la administración de cada asistente |
 
-**El piloto, con datos reales.** El corpus normativo de la Universitat Jaume I está cargado:
-**37.504 fragmentos** indexados a partir de la normativa propia y de la documentación de Gerencia,
-clasificados por ámbito y materia. Hay **dos asistentes** en funcionamiento: uno sobre normativa
-propia y otro para personal de Gerencia, este con identificación previa. Los embeddings se calculan
-por API del proveedor de nube, con adaptador propio y proceso por lotes.
+**El piloto, con datos reales.** El corpus normativo de la Universitat Jaume I está cargado y
+clasificado por ámbito y materia:
+
+| Asistente | Acceso | Corpus |
+|---|---|---|
+| Normativa propia | Público, sin identificarse | 297 documentos / 23.306 fragmentos |
+| Gerencia — económico-administrativo | Personal identificado | 124 documentos / 14.198 fragmentos |
+| Gerencia — selección de documentos completos (pruebas) | Personal identificado | 127 documentos / 14.208 fragmentos |
+
+Los dos últimos comparten corpus a propósito: existen para comparar **dos métodos de
+recuperación** sobre el mismo material. Los embeddings y la reordenación se calculan por API del
+proveedor de nube, con adaptador propio y proceso por lotes; los modelos locales siguen siendo una
+dependencia opcional para quien exija que el cálculo no salga de su perímetro.
+
+El **sitio de publicación del corpus** —portada, buscador y una página por norma con sus anclas—
+está construido y hace de anfitrión del asistente público: quien lee una norma puede preguntar
+sobre ella sin salir de la página, y la cita de la respuesta abre el artículo concreto.
+
+**Qué dice la medición del asistente.** Se ha medido con **25 consultas reales del ensayo del
+sistema anterior**, cada una con el veredicto escrito por la persona que la hizo, y con las
+**7 consultas reales** que el personal de Gerencia hizo a su asistente. Los resultados, y esto es
+lo que hay que leer con cuidado:
+
+- El asistente público **contesta 22 de 25** consultas, frente a 18 antes del último bloque de
+  trabajo. Contestar no es acertar: con la rúbrica del informador y un juez automático,
+  **cumplen 9 de 25**. La distancia entre ambas cifras es el trabajo que queda.
+- El asistente interno de Gerencia **contesta 6 de 7**. Su gemelo de pruebas contesta 7 de 7,
+  pero **no porque recupere mejor**: su método no puntúa lo que recupera, así que su filtro de
+  calidad no puede rechazar nada. Cuál de los dos acierta más lo tiene que decir Gerencia, y para
+  eso hay una hoja de validación a ciegas ya generada y pendiente de sus veredictos.
+- El defecto dominante del sistema anterior era **citar el curso académico equivocado** —15 de las
+  25 consultas—, y eso ordena la configuración actual: se prefiere un contexto estrecho y limpio a
+  uno amplio que mezcla normas de cursos distintos.
+
+El detalle, con la configuración de cada asistente y la tabla consulta a consulta, está en
+`docs/INFORME_CHATBOTS_NORMATIVA_Y_GERENCIA.html`.
 
 **Lo que queda antes del despliegue con usuarios reales:**
 
-1. **Despliegue de producción** en la infraestructura descrita (§4).
-2. **Revisión humana de las respuestas del asistente interno**: un circuito para que el personal
-   marque respuestas y esa señal alimente la mejora del corpus.
-3. **Reordenación de resultados en valenciano** medida con el proveedor de nube, pendiente del
-   despliegue para poder compararla.
-4. **Pruebas manuales finales** con datos e infraestructura reales.
+1. **Despliegue de producción** en la infraestructura descrita (§4). Es lo único que queda por
+   delante: los bloques de saneamiento, endurecimiento y calidad de respuesta previstos antes del
+   despliegue están cerrados.
+2. **Validación humana de los asistentes de Gerencia**: la hoja está generada; faltan los
+   veredictos, y de lo que marquen saldrán las pruebas de regresión.
+3. **Lote de consultas de referencia para Gerencia**: siete preguntas no son una medida. El
+   mecanismo de carga es el mismo que ya se usa con el asistente público.
+4. **Publicar el sitio del corpus**, para que las citas dejen de apuntar a una dirección local.
+5. **Pruebas manuales finales** con datos e infraestructura reales.
 
 ## 6. Lo que viene
 
@@ -255,11 +323,19 @@ distinción de planos y detalla qué obligaciones vive en cada uno.
 
 ## 8. Licencia y distribución
 
-**AGPLv3** con licencia dual comercial para partners. La autoinstalación en un paso ya está
-resuelta, que era el prerrequisito real de la distribución: un proyecto que no se puede instalar
-sin su autor no es software libre en la práctica. El objetivo es que otra administración pueda
-levantar la plataforma en su propia infraestructura, con su corpus y su identidad visual, sin
-depender del equipo original.
+**AGPL-3.0-or-later** con licencia dual comercial para partners, adoptada en agosto de 2026 con
+la Universitat Jaume I como titular. La autoinstalación en un paso ya está resuelta, que era el
+prerrequisito real de la distribución: un proyecto que no se puede instalar sin su autor no es
+software libre en la práctica. El objetivo es que otra administración pueda levantar la plataforma
+en su propia infraestructura, con su corpus y su identidad visual, sin depender del equipo
+original.
+
+Dos consecuencias de esa licencia ya están implementadas, y no son trámite: **la procedencia de
+cada aportación se certifica** en el propio historial —una comprobación automática rechaza lo que
+no la lleve, y la regla se aplica también al mantenedor, porque quien se exceptúa de su política
+la deja sin fuerza— y **el enlace al código fuente que exige el artículo 13 de la AGPL viaja con
+la aplicación**, incluido el widget que se incrusta en webs ajenas, que es el caso que se olvida.
+El repositorio permanece privado hasta la apertura prevista.
 
 ## 9. Cómo verlo
 
@@ -268,19 +344,31 @@ El punto de entrada recomendado para una demostración es el asistente sobre nor
 creer sin verlo— seguido de la generación de un informe a partir de una hoja de cálculo real, que
 enseña el determinismo y la revisión humana en el mismo recorrido.
 
+El asistente se enseña mejor **dentro del sitio de publicación del corpus** que en una pantalla de
+administración: se abre el buscador de normativa, se pregunta desde la propia norma que se está
+leyendo, y la cita de la respuesta abre el artículo exacto. Ese recorrido enseña de una vez las
+tres cosas que distinguen al sistema —fuente verificable, apertura por el artículo y aviso cuando
+la norma aplicable ha sido desplazada— sin pedirle a nadie que se fíe.
+
 ## 10. Documentación disponible
 
 | Documento | Qué contiene |
 |---|---|
-| `Arquitectura.md` | Arquitectura funcional y técnica: módulos, roles, frontera cloud/edge/local, privacidad, decisiones estructurales |
-| `MARCO_GOBERNANZA_IA.md` | Marco normativo interno: principios de gobernanza, mecanismos que los implementan, evidencia generada y clasificación de riesgo por caso de uso |
+| `docs/Arquitectura.md` | Arquitectura funcional y técnica: módulos, roles, frontera cloud/edge/local, privacidad, decisiones estructurales |
+| `docs/MARCO_GOBERNANZA_IA.md` | Marco normativo interno: principios de gobernanza, mecanismos que los implementan, evidencia generada y clasificación de riesgo por caso de uso |
 | `docs/EU_GOVERNANCE_CONCEPT_NOTE.md` | Proyección del marco de gobernanza hacia consorcios y financiación europea |
+| `docs/INFORME_CHATBOTS_NORMATIVA_Y_GERENCIA.html` | Configuración de los tres asistentes, pruebas realizadas y comparación con el sistema anterior, consulta a consulta |
+| `docs/MULTITENENCIA.md` | Inventario del ámbito tabla por tabla: qué es de la plataforma, qué de cada organización y por qué camino se llega a ella |
+| `docs/METODOLOGIA_AGENTICA.md` | Cómo se desarrolla: ejecución por bloques, verificación en navegador y qué se reserva al juicio humano |
+| `docs/CONTRATO_MD_CORPUS.md` | Contrato del material que entra al corpus, y el pipeline de curación que lo produce |
+| `docs/DESPLIEGUE_PROTOTIPO_GCP.md` | Plan del despliegue del piloto: piezas, orden, variables y riesgos |
 | `planificacion/PLAN_DESARROLLO.md` | Plan de desarrollo del conjunto y decisiones durables (licencias, stack, identidad) |
-| `VALORACION_PROYECTO.md` | Auditoría global del proyecto: calidad, seguridad y sentido de producto |
+| `docs/VALORACION_PROYECTO.md` | Auditoría global del proyecto: calidad, seguridad y sentido de producto |
 | `docs/SANDBOX_SECURITY.md` | Aislamiento de la ejecución de código |
 | `docs/REDACCION_CONTRACT_FIRST.md` | Contrato del módulo de informes |
 | `docs/A11Y_CHECKLIST.md` | Verificación de accesibilidad |
 | `planificacion/PROJECT_STATE.md` | Estado vivo del desarrollo, al día |
+| `planificacion/HISTORIAL.md` | Por qué cada cosa se hizo como se hizo: desviaciones, defectos encontrados al verificar y decisiones con su razón |
 
 ---
 
