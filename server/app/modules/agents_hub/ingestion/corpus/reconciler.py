@@ -47,7 +47,6 @@ _COLUMNAS = (
     "ambit_principal",
     "nivell_acces",
     "us_assistents",
-    "canonica",
     "estat_vigencia",
     "revisat_per",
     "revisat_el",

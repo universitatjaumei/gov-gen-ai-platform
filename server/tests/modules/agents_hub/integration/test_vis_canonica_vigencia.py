@@ -22,28 +22,44 @@ from server.tests.modules.agents_hub.integration.test_metadata_filter import (
 )
 
 
-class TestCanonica:
+class TestUnaVersionPorNorma:
+    """ACT.3 reemplaza a la canonica: la version que vuelve es la de la LENGUA de la pregunta.
+
+    Estos tests decian «solo la canonica se recupera», que era cierto y era el defecto: la
+    version castellana de una norma bilingue no volvia nunca, asi que preguntar en castellano
+    daba el texto valenciano. Lo que se conserva de VIS.3 es el invariante que de verdad
+    importaba —**el mismo contenido no puede ocupar dos plazas del top-k**— y ahora se cumple
+    sin declarar que una version vale mas que la otra.
+    """
 
     @pytest.mark.asyncio
-    async def test_should_retrieve_only_canonical_version_by_default(self, db_session):
-        """El mismo contenido en dos lenguas no puede ocupar dos plazas del top-k."""
+    async def test_should_retrieve_one_version_only(self, db_session):
+        """El invariante que VIS.3 protegia, ahora resuelto por la lengua."""
+        from server.app.modules.agents_hub.services.retrieval.metadata_filter import (
+            MetadataFilter,
+        )
         from server.app.modules.agents_hub.services.retriever import HybridRetriever
 
         cb = uuid.uuid4()
-        canonica = await _documento(
-            db_session, cb, title="Reglament (ca)", language="ca", canonica=True
+        val = await _documento(db_session, cb, title="Reglament", language="val")
+        es = await _documento(
+            db_session, cb, title="Reglamento", language="es",
+            versio_idiomatica_de=val.id,
         )
-        variante = await _documento(
-            db_session, cb, title="Reglamento (es)", language="es",
-            canonica=False, versio_idiomatica_de=canonica.id,
-        )
-        await _chunk(db_session, cb, canonica, "Article 1 del reglament")
-        await _chunk(db_session, cb, variante, "Articulo 1 del reglamento", language="es")
+        await _chunk(db_session, cb, val, "Article 1 del reglament")
+        await _chunk(db_session, cb, es, "Articulo 1 del reglamento", language="es")
         await db_session.commit()
 
-        results = await HybridRetriever(db_session).vector_search(_emb(0), cb, top_k=10)
+        retriever = HybridRetriever(db_session)
+        en_val = await retriever.vector_search(
+            _emb(0), cb, top_k=10, metadata_filter=MetadataFilter(query_language="val")
+        )
+        en_es = await retriever.vector_search(
+            _emb(0), cb, top_k=10, metadata_filter=MetadataFilter(query_language="es")
+        )
 
-        assert [r.content for r in results] == ["Article 1 del reglament"]
+        assert [r.content for r in en_val] == ["Article 1 del reglament"]
+        assert [r.content for r in en_es] == ["Articulo 1 del reglamento"]
 
     @pytest.mark.asyncio
     async def test_should_read_language_variant_by_id_on_demand(self, db_session):
@@ -53,45 +69,47 @@ class TestCanonica:
         )
 
         cb = uuid.uuid4()
-        canonica = await _documento(
-            db_session, cb, title="Reglament (ca)", language="ca", canonica=True,
-        )
-        variante = await _documento(
-            db_session, cb, title="Reglamento (es)", language="es",
-            canonica=False, versio_idiomatica_de=canonica.id,
+        val = await _documento(db_session, cb, title="Reglament", language="val")
+        es = await _documento(
+            db_session, cb, title="Reglamento", language="es",
+            versio_idiomatica_de=val.id,
             markdown_content="# Reglamento\n\nArticulo 1.",
         )
         await db_session.commit()
 
         estrategia = AgenticRetrievalStrategy(db_session)
 
-        # La canónica declara dónde está su hermana, que es lo que permite pedirla
-        ficha = await estrategia.read(canonica.id)
-        assert ficha["variant_id"] == str(variante.id)
+        # El emparejamiento declara donde esta la hermana, en los dos sentidos.
+        assert (await estrategia.read(val.id))["variant_id"] == str(es.id)
+        assert (await estrategia.read(es.id))["variant_id"] == str(val.id)
 
-        # Y la hermana se lee por id explícito, aunque no sea canónica
-        leida = await estrategia.read(variante.id)
+        leida = await estrategia.read(es.id)
         assert "Articulo 1" in leida["markdown_content"]
         assert leida["language"] == "es"
 
     @pytest.mark.asyncio
-    async def test_should_not_list_language_variant_in_the_index(self, db_session):
-        """La variante es legible por id, pero no compite en el índice del selector."""
+    async def test_should_list_only_the_version_of_the_query_language(self, db_session):
+        """El indice del agentico ensena UNA ficha por norma, no la canonica."""
         from server.app.modules.agents_hub.services.retrieval.agentic_strategy import (
             AgenticRetrievalStrategy,
         )
 
         cb = uuid.uuid4()
-        canonica = await _documento(db_session, cb, title="Reglament (ca)", language="ca")
+        val = await _documento(db_session, cb, title="Reglament", language="val")
         await _documento(
-            db_session, cb, title="Reglamento (es)", language="es",
-            canonica=False, versio_idiomatica_de=canonica.id,
+            db_session, cb, title="Reglamento", language="es",
+            versio_idiomatica_de=val.id,
         )
         await db_session.commit()
 
-        fichas = await AgenticRetrievalStrategy(db_session).list_index(cb, language=None)
+        estrategia = AgenticRetrievalStrategy(db_session)
 
-        assert [f["title"] for f in fichas] == ["Reglament (ca)"]
+        assert [f["title"] for f in await estrategia.list_index(cb, language="val")] == [
+            "Reglament"
+        ]
+        assert [f["title"] for f in await estrategia.list_index(cb, language="es")] == [
+            "Reglamento"
+        ]
 
 
 class TestDerogats:
@@ -118,7 +136,7 @@ class TestDerogats:
         abierto = await retriever.vector_search(
             _emb(0), cb, top_k=10,
             metadata_filter=MetadataFilter(
-                include_non_canonical=True, include_superseded=True,
+                include_superseded=True,
                 max_nivell_acces="restringit",
             ),
         )

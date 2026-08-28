@@ -40,7 +40,6 @@ class TestPersistencia:
 
         assert doc.nivell_acces == "public"
         assert doc.us_assistents == "si"
-        assert doc.canonica is True
         assert doc.content_class == "generic"
         assert doc.submateries == []
         assert doc.doc_metadata == {}

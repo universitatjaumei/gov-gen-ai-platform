@@ -49,6 +49,7 @@ class RetrievalStrategy(Protocol):
         chatbot_id: str,
         cfg: "PublicGraphConfig",
         deps: "GraphDeps",
+        language: str | None = None,
     ) -> RetrievalOutput: ...
 
 
@@ -249,7 +250,8 @@ class PipelineRetrievalStrategy:
         chatbot_id: str,
         cfg: "PublicGraphConfig",
         deps: "GraphDeps",
+        language: str | None = None,
     ) -> RetrievalOutput:
         pipeline = get_pipeline(cfg.retrieval_mode)
-        result = await pipeline.run(query, chatbot_id, cfg, deps)
+        result = await pipeline.run(query, chatbot_id, cfg, deps, language=language)
         return RetrievalOutput(buckets=[result])

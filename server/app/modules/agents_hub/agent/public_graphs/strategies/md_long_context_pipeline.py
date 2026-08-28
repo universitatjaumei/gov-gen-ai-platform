@@ -46,13 +46,14 @@ class MdLongContextPipeline:
         chatbot_id: str,
         cfg,
         deps,
+        language: str | None = None,
     ) -> RetrievalResult:
         cid = uuid.UUID(chatbot_id) if isinstance(chatbot_id, str) else chatbot_id
         strategy = LongContextRetrievalStrategy(
             session=deps.session,
             token_limit=getattr(cfg, "context_token_budget", None) or LONG_CONTEXT_TOKEN_LIMIT,
         )
-        ctx = await strategy.get_context(query=query, chatbot_id=cid)
+        ctx = await strategy.get_context(query=query, chatbot_id=cid, language=language)
         items = [_source_to_evidence(s) for s in ctx.sources]
         return RetrievalResult(
             items=items,

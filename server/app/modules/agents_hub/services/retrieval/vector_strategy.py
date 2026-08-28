@@ -18,6 +18,9 @@ from server.app.modules.agents_hub.services.retrieval.citations import (
 )
 from server.app.modules.agents_hub.services.retrieval.metadata_filter import MetadataFilter
 from server.app.modules.agents_hub.services.retrieval.types import RetrievalContext, Source
+from server.app.modules.agents_hub.services.retrieval.metadata_filter import (
+    con_lengua as _con_lengua,
+)
 from server.app.modules.agents_hub.services.retrieval.vigencia import (
     hidratar_desplazamiento,
     marca_de_vigencia,
@@ -147,10 +150,15 @@ class VectorRetrievalStrategy:
             query_embedding=query_embedding,
             chatbot_id=chatbot_id,
             top_k=candidatos,
-            language=language,
-            # El filtro incluye la exclusión de páginas superseded (9Q.6) y el nivel de
-            # acceso del actor (VIS.1); el defecto es cerrado.
-            metadata_filter=self._filter,
+            language=None,
+            # El filtro incluye la exclusión de páginas superseded (9Q.6), el nivel de acceso
+            # del actor (VIS.1) y, desde ACT.3, la regla de lengua: una sola versión por norma,
+            # la de quien pregunta. El defecto es cerrado.
+            #
+            # `language=None` a propósito: el parámetro del retriever es un filtro DURO sobre la
+            # lengua del fragmento y con él desaparecerían las 195 normas que sólo existen en
+            # valenciano. Lo que hace falta es la regla de la hermana, y va en el filtro.
+            metadata_filter=_con_lengua(self._filter, language),
             min_score=self._min_score,
         )
         if not results:

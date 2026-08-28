@@ -65,7 +65,7 @@ def _grafo(*, llm, quality_threshold: float = 0.0, items=None):
     ]
 
     class _Retrieval:
-        async def retrieve(self, query, chatbot_id, cfg, deps):
+        async def retrieve(self, query, chatbot_id, cfg, deps, language=None):
             from server.app.modules.agents_hub.agent.public_graphs.strategies.protocols import (
                 RetrievalResult,
             )

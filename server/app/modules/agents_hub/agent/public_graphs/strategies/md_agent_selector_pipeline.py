@@ -47,7 +47,7 @@ class IndexProvider(Protocol):
     """Construye el índice que se ofrece al selector como evidencia inicial."""
 
     async def build_index(
-        self, chatbot_id: str, deps, query: str = ""
+        self, chatbot_id: str, deps, query: str = "", language: str | None = None
     ) -> list[EvidenceItem]: ...
 
 
@@ -65,18 +65,24 @@ class DocumentIndexProvider:
         self._filter = metadata_filter if metadata_filter is not None else MetadataFilter()
 
     async def build_index(
-        self, chatbot_id: str, deps, query: str = ""
+        self, chatbot_id: str, deps, query: str = "", language: str | None = None
     ) -> list[EvidenceItem]:
+        from dataclasses import replace
+
         from server.app.modules.agents_hub.database.operational_models import (
             HubDocument,
             HubDocumentChunk,
         )
 
         cid = uuid.UUID(chatbot_id) if isinstance(chatbot_id, str) else chatbot_id
+        # ACT.3: el indice ensena UNA ficha por norma, la de la lengua de la pregunta. Si
+        # ensenara las dos, el selector tendria que elegir entre dos entradas identicas y
+        # podria leer y citar las dos.
+        filtro = replace(self._filter, query_language=language) if language else self._filter
         stmt = (
             select(HubDocument)
             .where(HubDocument.chatbot_id == cid)
-            .where(*self._filter.document_conditions())
+            .where(*filtro.document_conditions())
             .order_by(HubDocument.title)
         )
         result = await deps.session.execute(stmt)
@@ -153,8 +159,11 @@ class MdAgentSelectorPipeline:
         chatbot_id: str,
         cfg,
         deps,
+        language: str | None = None,
     ) -> RetrievalResult:
-        items = await self._index_provider.build_index(chatbot_id, deps, query=query)
+        items = await self._index_provider.build_index(
+            chatbot_id, deps, query=query, language=language
+        )
         return RetrievalResult(
             items=items,
             debug={

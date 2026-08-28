@@ -14,6 +14,9 @@ from server.app.modules.agents_hub.database.config_models import HubChatbot
 from server.app.modules.agents_hub.database.operational_models import HubDocument
 from server.app.modules.agents_hub.services.retrieval.metadata_filter import MetadataFilter
 from server.app.modules.agents_hub.services.retrieval.types import RetrievalContext, Source
+from server.app.modules.agents_hub.services.retrieval.metadata_filter import (
+    con_lengua as _con_lengua,
+)
 from server.app.modules.agents_hub.services.retrieval.vigencia import marca_de_vigencia
 
 
@@ -45,9 +48,10 @@ class LongContextRetrievalStrategy:
         cache_ttl = int(getattr(chatbot, "cache_ttl", 3600) or 3600)
 
         stmt = select(HubDocument).where(HubDocument.chatbot_id == chatbot_id)
-        if language:
-            stmt = stmt.where(HubDocument.language == language)
-        stmt = stmt.where(*self._filter.document_conditions())
+        # ACT.3: la lengua entra por la REGLA de la hermana, no como filtro duro. Un
+        # `language == 'es'` haria desaparecer las 195 normas que solo existen en valenciano,
+        # que es la trampa documentada en `graph_factory.py`.
+        stmt = stmt.where(*_con_lengua(self._filter, language).document_conditions())
         stmt = stmt.order_by(HubDocument.created_at)
         result = await self._session.execute(stmt)
         documents = list(result.scalars().all())

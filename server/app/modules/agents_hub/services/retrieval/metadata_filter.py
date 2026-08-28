@@ -18,9 +18,10 @@ Dos reglas del bloque VIS que este modulo hace cumplir:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from sqlalchemy import ColumnElement, and_, or_, select
+from sqlalchemy.orm import aliased
 
 from server.app.modules.agents_hub.database.operational_models import (
     HubCrawledPage,
@@ -45,8 +46,11 @@ class MetadataFilter:
     ambits: tuple[str, ...] = ()
     submateries: tuple[str, ...] = ()
     max_nivell_acces: str = "public"
-    include_non_canonical: bool = False
     include_superseded: bool = False
+    #: Lengua de la pregunta, en el codigo del CORPUS (`val`, `es`...). ACT.3: decide cual de
+    #: las dos versiones de una norma bilingue se recupera. `None` = sin regla de lengua, que
+    #: es lo que significa `language_mode: none`.
+    query_language: str | None = None
 
     def __post_init__(self) -> None:
         # La normalizacion vive aqui y no en `for_actor` para que el fail-closed valga
@@ -86,8 +90,40 @@ class MetadataFilter:
                     HubDocument.submateries_internes.overlap(list(self.submateries)),
                 )
             )
-        if not self.include_non_canonical:
-            conditions.append(HubDocument.canonica.is_(True))
+        # ACT.3 — UNA SOLA VERSION POR NORMA: LA DE LA LENGUA DE QUIEN PREGUNTA.
+        #
+        # Las dos versiones publicadas son OFICIALES: a l'UJI la norma s'aprova en valencia
+        # (salvo algun reglament del Consell Social) i el Reglament de Politica Linguistica
+        # manda traduir-ne algunes; la traduccio la publica Secretaria General o l'organ que
+        # va dictar la resolucio. No hay jerarquia entre ellas, asi que el `canonica` que
+        # excluia la castellana SIEMPRE —33 normas, 57 con el corpus del 27-08— se retiro: hacia
+        # que preguntar en castellano devolviera el texto valenciano.
+        #
+        # La regla es: quedate con la version en la lengua de la pregunta; si esa norma no la
+        # tiene, quedate con la que existe. Las dos ramas son EXCLUYENTES por construccion, asi
+        # que nunca sobreviven las dos y no pueden citarse las dos.
+        #
+        # Va en el WHERE y no despues del top-k (regla 1 de este modulo): una version descartada
+        # en Python ya ha consumido una plaza.
+        #
+        # «Hermana» se resuelve en los DOS sentidos: el corpus declara `versio_idiomatica_de` en
+        # un solo lado y su direccion es un detalle de escritura, no una afirmacion de autoridad.
+        if self.query_language:
+            hermana = aliased(HubDocument)
+            sin_hermana_en_esa_lengua = ~(
+                select(hermana.id)
+                .where(
+                    or_(
+                        hermana.id == HubDocument.versio_idiomatica_de,
+                        hermana.versio_idiomatica_de == HubDocument.id,
+                    ),
+                    hermana.language == self.query_language,
+                )
+                .exists()
+            )
+            conditions.append(
+                or_(HubDocument.language == self.query_language, sin_hermana_en_esa_lengua)
+            )
         # Derogado no se recupera nunca, ni con el filtro mas abierto: no es una preferencia
         # de recuperacion sino un hecho sobre la norma (VIS.3). Sigue siendo legible por id
         # explicito con read_document, porque citar la norma que YA no rige es una consulta
@@ -121,3 +157,15 @@ class MetadataFilter:
             HubDocumentChunk.document_id.is_(None),
             and_(*self.document_conditions()),
         )
+
+
+def con_lengua(filtro: MetadataFilter, language: str | None) -> MetadataFilter:
+    """El mismo filtro, acotado a la lengua de ESTA pregunta.
+
+    El `MetadataFilter` se construye una vez, con el actor, cuando todavia no se sabe en que
+    lengua se va a preguntar; la lengua es de cada consulta. Por eso se copia en vez de
+    guardarse: el filtro es inmutable a proposito, y mutarlo lo compartiria entre consultas.
+    """
+    if not language:
+        return filtro
+    return replace(filtro, query_language=language)

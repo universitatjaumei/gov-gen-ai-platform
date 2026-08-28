@@ -86,7 +86,7 @@ def _grafo(cfg, tandas, reformulador=None):
 
     retrieval = MagicMock()
 
-    async def _retrieve(consulta, chatbot_id, config, deps):
+    async def _retrieve(consulta, chatbot_id, config, deps, language=None):
         consultas_buscadas.append(consulta)
         return RetrievalOutput(buckets=[])
 

@@ -253,7 +253,6 @@ class TestRetriever:
         retriever = HybridRetriever(db_session)
         abierto = MetadataFilter(
             max_nivell_acces="restringit",
-            include_non_canonical=True,
             include_superseded=True,
         )
 
@@ -321,31 +320,39 @@ class TestRetriever:
         assert [r.content for r in results] == ["Contracte pujat per l'usuari"]
 
     @pytest.mark.asyncio
-    async def test_should_exclude_non_canonical_versions(self, db_session):
+    async def test_should_return_the_version_of_the_query_language(self, db_session):
+        """ACT.3: era `test_should_exclude_non_canonical_versions`, y esa exclusion era el
+        defecto —la castellana no volvia nunca—. El invariante que se conserva es que las dos
+        versiones de la MISMA norma no ocupan dos plazas del top-k."""
         from server.app.modules.agents_hub.services.retrieval.metadata_filter import (
             MetadataFilter,
         )
         from server.app.modules.agents_hub.services.retriever import HybridRetriever
 
         cb = uuid.uuid4()
-        canonica = await _documento(db_session, cb, canonica=True, language="ca")
+        val = await _documento(db_session, cb, language="val")
         traduccion = await _documento(
-            db_session, cb, canonica=False, language="es",
-            versio_idiomatica_de=canonica.id,
+            db_session, cb, language="es", versio_idiomatica_de=val.id,
         )
-        await _chunk(db_session, cb, canonica, "Versio valenciana")
+        await _chunk(db_session, cb, val, "Versio valenciana")
         await _chunk(db_session, cb, traduccion, "Version castellana", language="es")
         await db_session.commit()
 
         retriever = HybridRetriever(db_session)
-        por_defecto = await retriever.vector_search(_emb(0), cb, top_k=10)
-        con_todas = await retriever.vector_search(
-            _emb(0), cb, top_k=10,
-            metadata_filter=MetadataFilter(include_non_canonical=True),
+        en_val = await retriever.vector_search(
+            _emb(0), cb, top_k=10, metadata_filter=MetadataFilter(query_language="val")
+        )
+        en_es = await retriever.vector_search(
+            _emb(0), cb, top_k=10, metadata_filter=MetadataFilter(query_language="es")
+        )
+        sin_lengua = await retriever.vector_search(
+            _emb(0), cb, top_k=10, metadata_filter=MetadataFilter()
         )
 
-        assert [r.content for r in por_defecto] == ["Versio valenciana"]
-        assert len(con_todas) == 2
+        assert [r.content for r in en_val] == ["Versio valenciana"]
+        assert [r.content for r in en_es] == ["Version castellana"]
+        # Sin lengua no hay regla que aplicar: es `language_mode: none`.
+        assert len(sin_lengua) == 2
 
     @pytest.mark.asyncio
     async def test_should_exclude_superseded_in_hybrid_search(self, db_session):

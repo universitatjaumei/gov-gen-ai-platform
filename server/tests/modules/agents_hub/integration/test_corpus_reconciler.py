@@ -655,8 +655,9 @@ class TestVersionIdiomatica:
 
         docs = await _documentos(db_session, chatbot_id)
         assert docs["REG-601-es"].versio_idiomatica_de == docs["REG-601"].id
-        assert docs["REG-601-es"].canonica is False
-        assert docs["REG-601"].canonica is True
+        # `canonica` se retiro en ACT.3: lo que la recuperacion necesita es el
+        # emparejamiento, no una jerarquia entre dos versiones oficiales.
+        assert docs["REG-601"].versio_idiomatica_de is None
 
 
 # ───────────────────── ACT.1 — el informe dice la verdad ─────────────────────
@@ -729,7 +730,7 @@ class TestIdempotenciaDeFechas:
         )
         for campo in (
             "content_class", "ambit_principal", "nivell_acces", "us_assistents",
-            "canonica", "estat_vigencia", "revisat_per", "vigencia_validada_el",
+            "estat_vigencia", "revisat_per", "vigencia_validada_el",
             "data_revisio_prevista", "id_publicacio",
         ):
             setattr(doc, campo, getattr(entrada, campo))

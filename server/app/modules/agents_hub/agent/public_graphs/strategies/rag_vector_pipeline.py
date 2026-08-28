@@ -86,11 +86,13 @@ class RagVectorPipeline:
         chatbot_id: str,
         cfg,
         deps,
+        language: str | None = None,
     ) -> RetrievalResult:
         strategy = await self._construir_estrategia(deps, cfg)
         ctx = await strategy.get_context(
             query=query,
             chatbot_id=uuid.UUID(chatbot_id) if isinstance(chatbot_id, str) else chatbot_id,
+            language=language,
         )
         # RAG.5: el contexto se empaqueta contra el presupuesto de la cascada antes de
         # construir el bloque DOCUMENTOS DISPONIBLES. Sin esto, quien recortaba era el

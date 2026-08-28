@@ -250,7 +250,7 @@ class TestNodoEnElGrafo:
         recuperadas: list[str] = []
 
         class _Retrieval:
-            async def retrieve(self, query, chatbot_id, cfg, deps):
+            async def retrieve(self, query, chatbot_id, cfg, deps, language=None):
                 recuperadas.append(query)
                 return RetrievalOutput()
 

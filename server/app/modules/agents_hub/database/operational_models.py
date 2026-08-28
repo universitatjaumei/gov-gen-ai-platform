@@ -274,8 +274,14 @@ class HubDocument(HubOperationalBase):
     us_assistents: Mapped[str] = mapped_column(
         String(20), nullable=False, default="si"
     )
-    # --- Version idiomatica: solo la canonica se indexa (VIS.3) ---
-    canonica: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # --- Version idiomatica: el EMPAREJAMIENTO, no una jerarquia (ACT.3) ---
+    #
+    # `canonica` se retiro el 2026-08-28. Las dos versiones publicadas de una norma son
+    # OFICIALES —la traduccion la publica Secretaria General o el organo que dicto la
+    # resolucion— asi que no hay una que valga mas, y el campo invitaba a leer lo contrario.
+    # Lo que la recuperacion necesita es saber que dos documentos son la MISMA norma, y eso
+    # es `versio_idiomatica_de`. La direccion en que se declara es un detalle de escritura:
+    # `metadata_filter` resuelve la hermana en los dos sentidos.
     versio_idiomatica_de: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("hub_documents.id", ondelete="SET NULL"),

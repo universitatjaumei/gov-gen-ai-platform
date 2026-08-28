@@ -104,7 +104,7 @@ def test_should_have_document_metadata_columns_and_fk(fresh_database: str) -> No
 
     for esperada in (
         "content_class", "ambit_principal", "ambits_secundaris", "submateries",
-        "submateries_internes", "nivell_acces", "us_assistents", "canonica",
+        "submateries_internes", "nivell_acces", "us_assistents",
         "versio_idiomatica_de", "estat_vigencia", "vigencia_validada_el",
         "revisat_per", "revisat_el", "data_revisio_prevista", "id_publicacio",
         "last_seen_at", "doc_metadata",

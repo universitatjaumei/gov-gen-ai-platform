@@ -283,7 +283,6 @@ class TestEnumeracionesCerradas:
         entrada = _entrada()
         assert entrada.nivell_acces == "public"
         assert entrada.us_assistents == "si"
-        assert entrada.canonica is True
         assert entrada.content_class == "generic"
         assert entrada.submateries == ()
 
@@ -413,7 +412,7 @@ class TestManifiesto:
                 documents=[_entrada(), _entrada()],
             )
 
-    def test_should_error_when_two_canonical_versions_share_url(self):
+    def test_should_error_when_two_documents_share_url_without_being_siblings(self):
         """VIS.3: dos canónicas para la misma norma es un error, no una eleccion a ciegas.
 
         Si el paquete declara canónicas la versión valenciana y la castellana de la misma
@@ -428,24 +427,30 @@ class TestManifiesto:
             CorpusManifest(
                 chatbot_id=uuid.uuid4(),
                 documents=[
-                    _entrada(relative_path="reg-020-ca.md", language="ca", canonica=True),
-                    _entrada(relative_path="reg-020-es.md", language="es", canonica=True),
+                    _entrada(relative_path="reg-020-ca.md", language="ca",
+                             id_publicacio="REG-020"),
+                    _entrada(relative_path="reg-020-es.md", language="es",
+                             id_publicacio="REG-021"),
                 ],
             )
 
         mensaje = str(error.value)
         assert "reg-020-ca.md" in mensaje and "reg-020-es.md" in mensaje
 
-    def test_should_accept_one_canonical_and_one_variant_for_the_same_url(self):
+    def test_should_accept_two_language_siblings_sharing_one_url(self):
+        """Compartir URL solo es legitimo entre hermanas idiomaticas: la misma norma publicada
+        en una sola direccion. Son 5 de las 57 parejas del corpus real (una pagina de preguntas
+        frecuentes, un PDF del DOGV con las dos lenguas dentro)."""
         from server.app.modules.agents_hub.ingestion.corpus.manifest import CorpusManifest
 
         manifiesto = CorpusManifest(
             chatbot_id=uuid.uuid4(),
             documents=[
-                _entrada(relative_path="reg-020-ca.md", language="ca", canonica=True),
+                _entrada(relative_path="reg-020-ca.md", language="ca",
+                         id_publicacio="REG-020"),
                 _entrada(
-                    relative_path="reg-020-es.md", language="es", canonica=False,
-                    versio_idiomatica_de="REG-020",
+                    relative_path="reg-020-es.md", language="es",
+                    id_publicacio="REG-020-es", versio_idiomatica_de="REG-020",
                 ),
             ],
         )

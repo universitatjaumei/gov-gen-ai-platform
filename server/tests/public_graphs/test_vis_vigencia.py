@@ -104,7 +104,7 @@ async def _ejecutar_grafo(items: list[EvidenceItem]) -> dict:
     )
 
     class _Retrieval:
-        async def retrieve(self, query, chatbot_id, cfg, deps):
+        async def retrieve(self, query, chatbot_id, cfg, deps, language=None):
             return RetrievalOutput(
                 buckets=[RetrievalResult(items=items, debug={}, context_source_language="ca")]
             )

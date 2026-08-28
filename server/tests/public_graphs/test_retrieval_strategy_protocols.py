@@ -56,7 +56,10 @@ class TestPipelineRetrievalStrategy:
             output = await PipelineRetrievalStrategy().retrieve("consulta", CHATBOT_ID, _CFG, deps)
 
         mock_get_pipeline.assert_called_once_with("RAG")
-        mock_pipeline.run.assert_called_once_with("consulta", CHATBOT_ID, _CFG, deps)
+        # ACT.3: la lengua de la pregunta llega hasta el pipeline, que la pasa al WHERE.
+        mock_pipeline.run.assert_called_once_with(
+            "consulta", CHATBOT_ID, _CFG, deps, language=None
+        )
         assert isinstance(output, RetrievalOutput)
         assert len(output.buckets) == 1
         assert output.buckets[0] is mock_result

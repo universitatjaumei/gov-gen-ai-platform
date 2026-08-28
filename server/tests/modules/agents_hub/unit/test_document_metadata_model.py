@@ -44,7 +44,6 @@ class TestColumnasDeFiltro:
             "submateries_internes",
             "nivell_acces",
             "us_assistents",
-            "canonica",
             "versio_idiomatica_de",
             "estat_vigencia",
             "vigencia_validada_el",
@@ -61,7 +60,7 @@ class TestColumnasDeFiltro:
 
         assert columna in HubDocument.__table__.c, f"falta la columna {columna}"
 
-    def test_should_default_new_document_to_public_and_canonical(self):
+    def test_should_default_new_document_to_public(self):
         doc = _make_document()
         # Los defaults del ORM se materializan al insertar; se comprueban en la columna.
         from server.app.modules.agents_hub.database.operational_models import HubDocument
@@ -69,7 +68,6 @@ class TestColumnasDeFiltro:
         cols = HubDocument.__table__.c
         assert cols["nivell_acces"].default.arg == "public"
         assert cols["us_assistents"].default.arg == "si"
-        assert cols["canonica"].default.arg is True
         assert cols["content_class"].default.arg == "generic"
         assert doc.ambit_principal is None
 

@@ -10,7 +10,7 @@ ambito -> catalogo global— y cada escalon queda anotado en `last_index_level`,
 evidencia arrastra para poder medir cuantas consultas necesitan ensanchar el tema.
 
 El retroceso ensancha el TEMA, nunca el PERMISO: `nivell_acces`, `us_assistents`,
-`canonica` y la exclusion de superseded se aplican en los tres escalones.
+La regla de lengua (ACT.3) y la exclusion de superseded se aplican en los tres escalones.
 """
 
 import uuid
@@ -26,6 +26,9 @@ from server.app.modules.agents_hub.agent.tools.search_knowledge import search_kn
 from server.app.modules.agents_hub.database.operational_models import HubDocument
 from server.app.modules.agents_hub.services.retrieval.metadata_filter import MetadataFilter
 from server.app.modules.agents_hub.services.retrieval.types import RetrievalContext
+from server.app.modules.agents_hub.services.retrieval.metadata_filter import (
+    con_lengua as _con_lengua,
+)
 from server.app.modules.agents_hub.services.retrieval.vigencia import marca_de_vigencia
 
 # Escalones del indice, de mas estrecho a mas ancho.
@@ -84,9 +87,9 @@ class AgenticRetrievalStrategy:
         filtro: MetadataFilter,
     ) -> list[dict]:
         stmt = select(HubDocument).where(HubDocument.chatbot_id == chatbot_id)
-        if language:
-            stmt = stmt.where(HubDocument.language == language)
-        stmt = stmt.where(*filtro.document_conditions())
+        # ACT.3: el indice ensena UNA ficha por norma, la de la lengua de la pregunta. Antes
+        # era un filtro duro por lengua, que dejaba fuera las normas sin traducir.
+        stmt = stmt.where(*_con_lengua(filtro, language).document_conditions())
         stmt = stmt.order_by(HubDocument.title)
         res = await self._session.execute(stmt)
         # La ficha lleva de qué va la norma y con qué rango manda; el cuerpo se pide
@@ -127,8 +130,7 @@ class AgenticRetrievalStrategy:
             # conversación una norma que no cabe (la LCSP son 279.425 tokens).
             "token_count": doc.token_count,
             "estat_vigencia": doc.estat_vigencia,
-            "canonica": doc.canonica,
-            # La canonica declara donde esta su hermana; sin esto, pedir la cita literal en
+            # `versio_idiomatica_de` declara donde esta la hermana; sin esto, pedir la cita
             # la otra lengua exigiria una busqueda por url, que es adivinar.
             "variant_id": await self._variant_id(doc),
             **marca_de_vigencia(doc),

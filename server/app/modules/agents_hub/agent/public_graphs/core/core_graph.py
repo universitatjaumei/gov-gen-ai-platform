@@ -194,6 +194,11 @@ class CoreGraph:
                 state["chatbot_id"],
                 self.cfg,
                 self.deps,
+                # ACT.3: la lengua de la pregunta llega hasta el WHERE. Sin ella la regla de
+                # «una version por norma» no se puede aplicar donde tiene que aplicarse, y
+                # filtrarla despues del top-k haria que la version descartada hubiera consumido
+                # una plaza.
+                language=state.get("language"),
             )
             return {"retrieval_output": output}
 

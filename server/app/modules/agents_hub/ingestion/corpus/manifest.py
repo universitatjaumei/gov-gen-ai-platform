@@ -100,7 +100,9 @@ class CorpusDocumentEntry(BaseModel):
     # --- Versión idiomática. Es la REFERENCIA de la canónica (id_publicacio o ruta), no
     # un UUID: al escribir el .md no se conoce el id que tendrá en la BD. Lo resuelve
     # el cargador (ING.0.5).
-    canonica: bool = True
+    # ACT.3: `canonica` ya NO es un campo del contrato. El `.md` del corpus lo sigue trayendo
+    # y por eso cae a `extra` como cualquier clave no enumerada —un paquete valido no puede
+    # dejar de serlo por un campo que aqui ya no se usa—, pero nada lo lee.
     versio_idiomatica_de: str | None = None
     # --- Vigencia
     estat_vigencia: str | None = None
@@ -170,33 +172,60 @@ class CorpusManifest(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _una_sola_canonica_por_norma(self) -> "CorpusManifest":
-        """VIS.3: dos versiones canónicas de la misma norma es un error, no una elección.
+    def _dos_documentos_no_reclaman_la_misma_url(self) -> "CorpusManifest":
+        """VIS.3: dos documentos con la misma URL oficial y que NO son la misma norma.
 
-        Medido en el informe: 233 fichas en valenciano y 81 en castellano, muchas la misma
-        norma. Si el paquete declara canónicas las dos, elegir por orden de aparición
-        indexaría el mismo contenido dos veces —ocupando dos plazas del top-k— sin que nadie
-        lo hubiera decidido. Falla aquí, antes de tocar la BD, y nombra las dos rutas para
-        que se sepa cuál hay que corregir.
+        **Reescrita en ACT.3, y de paso se hizo mas fuerte.** La version anterior agrupaba por
+        `source_url` y **saltaba las no canonicas**, asi que `canonica` funcionaba como
+        silenciador: bastaba marcar algo `canonica: false` para que la guarda callara.
+
+        Medido sobre el corpus del 27-08-2026: de las **57 parejas bilingues, 47 tienen
+        `url_oficial` distinta** —cada lengua su PDF— y solo **5 comparten URL**. Es decir, en 47
+        de 57 `canonica` no intervenia. Lo que esta guarda detecta de verdad no son versiones
+        linguisticas: son **dos documentos que reclaman la misma URL oficial**, que es el defecto
+        real que cazo el 10-08-2026 —`NOR-006` y `NOR-007`, la Normativa de tesis confidenciales
+        de 2018 y el Reglamento de 2021, compartian `url_publicacio` sin ser la misma norma, asi
+        que una de las dos ofrecia como documento oficial una norma que no era la suya—.
+
+        La regla nueva dice eso mismo sin `canonica`: **compartir URL solo es legitimo entre
+        hermanas idiomaticas**. Es la misma norma publicada en una sola direccion (una pagina de
+        preguntas frecuentes, un PDF del DOGV con las dos lenguas dentro), y son las 5 de arriba.
+        Cualquier otro par que comparta URL es un defecto, y ya no se puede silenciar por
+        accidente.
         """
-        por_url: dict[str, list[str]] = {}
+        por_url: dict[str, list[CorpusDocumentEntry]] = {}
         for documento in self.documents:
-            if not documento.canonica:
-                continue
             clave = (documento.source_url or "").strip().lower()
-            if not clave:
-                continue
-            por_url.setdefault(clave, []).append(documento.relative_path)
+            if clave:
+                por_url.setdefault(clave, []).append(documento)
 
-        conflictos = {url: rutas for url, rutas in por_url.items() if len(rutas) > 1}
+        conflictos: dict[str, list[str]] = {}
+        for url, grupo in por_url.items():
+            if len(grupo) < 2:
+                continue
+            # Hermanas idiomaticas: alguna del grupo declara a otra del grupo, en cualquiera de
+            # los dos sentidos. El corpus lo declara en un solo lado.
+            ids = {d.id_publicacio for d in grupo if d.id_publicacio}
+            rutas = {d.relative_path for d in grupo}
+            emparejadas = any(
+                d.versio_idiomatica_de in ids or d.versio_idiomatica_de in rutas
+                for d in grupo
+                if d.versio_idiomatica_de
+            )
+            lenguas_distintas = len({d.language for d in grupo}) == len(grupo)
+            if emparejadas and lenguas_distintas:
+                continue
+            conflictos[url] = sorted(rutas)
+
         if conflictos:
             detalle = "; ".join(
-                f"{url} → {sorted(rutas)}" for url, rutas in sorted(conflictos.items())
+                f"{url} → {rutas}" for url, rutas in sorted(conflictos.items())
             )
             raise ValueError(
-                "dos o mas versiones declaradas canonicas para la misma norma: "
-                f"{detalle}. Declara canonica solo una y enlaza la otra con "
-                "versio_idiomatica_de"
+                "dos o mas documentos reclaman la misma url oficial sin ser la misma norma en "
+                f"dos lenguas: {detalle}. Si SON la misma norma, enlazalas con "
+                "`versio_idiomatica_de`; si no lo son, una de las dos tiene la url equivocada "
+                "y esta ofreciendo como oficial un documento que no es el suyo"
             )
         return self
 

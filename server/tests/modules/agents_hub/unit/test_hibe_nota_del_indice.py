@@ -35,7 +35,7 @@ class _IndiceFalso:
         self.notas = notas or {}
         self.consulta_vista: str | None = None
 
-    async def build_index(self, chatbot_id: str, deps, query: str = "") -> list[EvidenceItem]:
+    async def build_index(self, chatbot_id: str, deps, query: str = "", language=None) -> list[EvidenceItem]:
         self.consulta_vista = query
         return [
             EvidenceItem(
