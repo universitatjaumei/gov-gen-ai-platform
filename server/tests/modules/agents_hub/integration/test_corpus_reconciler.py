@@ -1130,3 +1130,79 @@ class TestLaValidacionEsDeLaNorma:
         assert informe.metadatos_actualizados == 0, informe.detalle
         docs = await _documentos(db_session, chatbot_id)
         assert docs["REG-906-es"].vigencia_validada_el is not None
+
+    @pytest.mark.asyncio
+    async def test_should_share_the_review_date_too(self, db_session, tmp_path):
+        """ACT.9 — cuándo caduca una norma es tan de la norma como quién la validó.
+
+        Al declarar que `PLA-003` caduca el 31-12-2026, su versión valenciana se quedó con el
+        plazo por defecto de 365 días: nadie la habría vuelto a mirar el día que toca.
+        """
+        _escribir(
+            tmp_path, "REG-910",
+            extra="data_revisio_prevista: '2027-01-01'\n",
+        )
+        _escribir(tmp_path, "REG-910-es", extra="versio_idiomatica_de: REG-910\n")
+        chatbot_id = uuid.uuid4()
+
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        docs = await _documentos(db_session, chatbot_id)
+        assert docs["REG-910-es"].data_revisio_prevista.isoformat() == "2027-01-01"
+        assert docs["REG-910-es"].doc_metadata.get("data_revisio_des_de") == "REG-910"
+
+    @pytest.mark.asyncio
+    async def test_should_keep_the_earliest_when_both_declare_one(
+        self, db_session, tmp_path
+    ):
+        """No es simétrico con la validación: mirar una norma antes cuesta una revisión de
+        más; mirarla tarde es no haberla mirado. Con las dos declaradas, cada una conserva la
+        suya —el corpus manda— y no se marca herencia."""
+        _escribir(tmp_path, "REG-911", extra="data_revisio_prevista: '2027-01-01'\n")
+        _escribir(
+            tmp_path, "REG-911-es",
+            extra=(
+                "versio_idiomatica_de: REG-911\n"
+                "data_revisio_prevista: '2027-06-30'\n"
+            ),
+        )
+        chatbot_id = uuid.uuid4()
+
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        docs = await _documentos(db_session, chatbot_id)
+        assert docs["REG-911"].data_revisio_prevista.isoformat() == "2027-01-01"
+        assert docs["REG-911-es"].data_revisio_prevista.isoformat() == "2027-06-30"
+        assert "data_revisio_des_de" not in (docs["REG-911-es"].doc_metadata or {})
+
+    @pytest.mark.asyncio
+    async def test_should_not_invent_a_review_date(self, db_session, tmp_path):
+        """Sin ninguna declarada sigue mandando el defecto de SYNC.2, no una herencia."""
+        _escribir(tmp_path, "REG-912")
+        _escribir(tmp_path, "REG-912-es", extra="versio_idiomatica_de: REG-912\n")
+        chatbot_id = uuid.uuid4()
+
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        docs = await _documentos(db_session, chatbot_id)
+        for idn in ("REG-912", "REG-912-es"):
+            assert docs[idn].data_revisio_prevista is not None
+            assert "data_revisio_des_de" not in (docs[idn].doc_metadata or {})
+
+    @pytest.mark.asyncio
+    async def test_should_stay_idempotent_after_sharing_the_date(
+        self, db_session, tmp_path
+    ):
+        _escribir(tmp_path, "REG-913", extra="data_revisio_prevista: '2027-01-01'\n")
+        _escribir(tmp_path, "REG-913-es", extra="versio_idiomatica_de: REG-913\n")
+        chatbot_id = uuid.uuid4()
+
+        await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+        informe = await _reconciliar(db_session, tmp_path, chatbot_id)
+        await db_session.commit()
+
+        assert informe.metadatos_actualizados == 0, informe.detalle

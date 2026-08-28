@@ -166,6 +166,7 @@ def _a_utc(valor):
 _METADATOS_QUE_NO_VIENEN_DEL_CORPUS = (
     "vigencia_validada_per",
     "vigencia_validada_des_de",
+    "data_revisio_des_de",
 )
 
 
@@ -245,46 +246,74 @@ def _aplicar(doc: HubDocument, entry: CorpusDocumentEntry, title: str) -> None:
         if campo == "vigencia_validada_el" and not _corpus_declara_validacion(entry):
             continue
         setattr(doc, campo, _a_utc(getattr(entry, campo)))
-    # SYNC.2: sin fecha de revisión no hay caducidad posible y el documento envejecería en
-    # silencio, que es el riesgo nº1 del informe (312 de 314 fichas dicen «vigent?»). Se
-    # rellena solo si no hay ninguna: renovarla en cada pasada equivaldría a no tenerla.
-    if entry.data_revisio_prevista is None:
-        doc.data_revisio_prevista = doc.data_revisio_prevista or (
-            date.today() + timedelta(days=DIAS_REVISION_POR_DEFECTO)
-        )
     for campo in _COLUMNAS_ARRAY:
         setattr(doc, campo, list(getattr(entry, campo) or []))
     doc.doc_metadata = _metadata_objetivo(entry, doc)
     doc.source_kind = entry.extra.get("source_kind", "publicacio")
 
 
-def _compartir_la_validacion(parejas: list[tuple[HubDocument, HubDocument]]) -> None:
-    """La validacion de vigencia es de la NORMA, no de una de sus lenguas (ACT.6).
+def _caducidad_por_defecto(documentos: list[HubDocument]) -> None:
+    """SYNC.2 — sin fecha de revision no hay caducidad posible y el documento envejeceria en
+    silencio, que es el riesgo nº1 del informe (312 de 314 fichas decian «vigent?»).
 
-    Lo que una persona confirma cuando valida es **que la norma rige**, y eso no depende de en
-    que idioma estaba el ejemplar que tenia delante. Tratarlo como un dato del texto producia
-    una incoherencia visible: medido sobre el corpus real, **14 de las 57 parejas** tenian la
-    castellana validada y la valenciana no, y desde ACT.3 —que elige la version por la lengua de
-    la pregunta— eso significaba que la misma norma llevaba el aviso «la vigencia no esta
-    validada» en valenciano y no en castellano.
+    **Va al FINAL, y eso importa (ACT.9).** Estaba dentro de `_aplicar`, asi que se ponia
+    documento a documento ANTES de que las hermanas idiomaticas se emparejaran: cuando la
+    propagacion llegaba, la hermana ya tenia el defecto de 365 dias puesto y la regla «solo se
+    comparte cuando una de las dos lo tiene» la saltaba. `PLA-003` declaraba caducar el
+    31-12-2026 y su version valenciana se quedaba con agosto del año siguiente.
 
-    Solo se comparte cuando UNA de las dos la tiene: con las dos validadas no hay nada que
-    compartir y se respeta la fecha de cada una; con ninguna, compartir seria fabricar una
-    validacion que nadie ha hecho.
-
-    Queda escrito de DONDE viene (`vigencia_validada_des_de`), para que una auditoria no la
-    confunda con una validacion hecha sobre ese ejemplar.
+    Aqui se aplica cuando ya se ha dicho todo lo que el corpus y el emparejamiento tenian que
+    decir, y solo a lo que sigue sin fecha. Renovarla en cada pasada equivaldria a no tenerla,
+    asi que nunca se pisa una que ya exista.
     """
+    caduca = date.today() + timedelta(days=DIAS_REVISION_POR_DEFECTO)
+    for doc in documentos:
+        if doc.data_revisio_prevista is None:
+            doc.data_revisio_prevista = caduca
+
+
+def _compartir_lo_que_es_de_la_norma(
+    parejas: list[tuple[HubDocument, HubDocument]],
+) -> None:
+    """Lo que es de la NORMA y no del texto de una lengua, compartido entre las dos versiones.
+
+    Son dos hechos, y los dos se descubrieron por el mismo camino:
+
+    - **Quien la valido y cuando** (ACT.6). Lo que una persona confirma es que la norma rige, y
+      eso no depende de en que idioma estaba el ejemplar que tenia delante.
+    - **Cuando caduca** (ACT.9). Al declarar que `PLA-003` caduca el 31-12-2026, su version
+      valenciana se quedo con el plazo por defecto de 365 dias: nadie la habria vuelto a mirar
+      el dia que toca.
+
+    En los dos casos se comparte SOLO cuando una de las dos lo tiene: con las dos declaradas se
+    respeta cada una —manda el corpus— y con ninguna, compartir seria fabricar un dato.
+
+    Queda escrito de DONDE viene, para que una auditoria no lo confunda con un dato puesto sobre
+    ese ejemplar.
+    """
+    _compartir(parejas, "vigencia_validada_el", "vigencia_validada_des_de",
+               tambien="vigencia_validada_per")
+    _compartir(parejas, "data_revisio_prevista", "data_revisio_des_de")
+
+
+def _compartir(
+    parejas: list[tuple[HubDocument, HubDocument]],
+    campo: str,
+    marca: str,
+    tambien: str | None = None,
+) -> None:
+    """Copia `campo` de la hermana que lo tiene a la que no, y anota de donde vino."""
     for uno, otro in parejas:
         for origen, destino in ((uno, otro), (otro, uno)):
-            if origen.vigencia_validada_el is None or destino.vigencia_validada_el is not None:
+            if getattr(origen, campo) is None or getattr(destino, campo) is not None:
                 continue
-            destino.vigencia_validada_el = origen.vigencia_validada_el
+            setattr(destino, campo, getattr(origen, campo))
             metadatos = dict(destino.doc_metadata or {})
-            quien = (origen.doc_metadata or {}).get("vigencia_validada_per")
-            if quien:
-                metadatos["vigencia_validada_per"] = quien
-            metadatos["vigencia_validada_des_de"] = origen.id_publicacio
+            if tambien:
+                valor = (origen.doc_metadata or {}).get(tambien)
+                if valor:
+                    metadatos[tambien] = valor
+            metadatos[marca] = origen.id_publicacio
             destino.doc_metadata = metadatos
 
 
@@ -445,6 +474,7 @@ class CorpusReconciler:
         if not dry_run:
             await self._session.flush()
             await self._enlazar_versiones(chatbot_id, pendientes_de_enlazar)
+            await self._cerrar_caducidades(emparejados)
 
         if prune:
             await self._podar(
@@ -626,7 +656,17 @@ class CorpusReconciler:
                 doc.versio_idiomatica_de = hermana.id
                 emparejadas.append((doc, hermana))
         await self._session.flush()
-        _compartir_la_validacion(emparejadas)
+        _compartir_lo_que_es_de_la_norma(emparejadas)
+        await self._session.flush()
+
+    async def _cerrar_caducidades(self, ids: set[uuid.UUID]) -> None:
+        """El defecto de SYNC.2, ya con el emparejamiento resuelto."""
+        if not ids:
+            return
+        filas = await self._session.execute(
+            select(HubDocument).where(HubDocument.id.in_(ids))
+        )
+        _caducidad_por_defecto(list(filas.scalars().all()))
         await self._session.flush()
 
     async def _podar(

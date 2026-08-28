@@ -24168,6 +24168,139 @@ modo busca por fragmentos?», que es lo que de verdad decide si hay que trocear.
 
 ---
 
+### Prompt ACT.9 (CÓDIGO) — La caducidad también es de la norma, no de una de sus lenguas
+
+**Modelo sugerido**: **Sonnet** — es el mismo argumento que ya se aceptó para la validación, y el
+sitio donde va es el mismo.
+
+**Objetivo**: ACT.6 hizo que la validación de vigencia se compartiera entre las dos versiones de
+una norma, porque lo que una persona valida es **que la norma rige**. La `data_revisio_prevista`
+—cuándo hay que volver a mirarla— es el mismo tipo de hecho y **no se comparte**: al declarar que
+`PLA-003` caduca el 31-12-2026, su versión valenciana se quedó con el plazo por defecto de 365
+días. Nadie la habría vuelto a mirar el día que toca.
+
+```
+# PROMPT ACT.9 (CODIGO) — Propagar la caducidad entre hermanas idiomaticas
+# Deploy: edge
+
+## Cambio
+- `_compartir_la_validacion` pasa a compartir tambien `data_revisio_prevista`, y se renombra a
+  lo que hace: `_compartir_lo_que_es_de_la_norma`. Las dos cosas son hechos sobre la NORMA
+  —cuando se valido y cuando caduca—, no sobre el texto de una lengua.
+- Misma regla que la validacion: solo cuando UNA la tiene. Con las dos declaradas se respeta
+  cada una; con ninguna, no hay nada que compartir.
+- **Gana la mas TEMPRANA cuando las dos existen y difieren.** No es simetrico con la validacion:
+  volver a mirar una norma antes de tiempo cuesta una revision de mas, y hacerlo tarde es no
+  haberla mirado. Ante la duda, antes.
+- Se anota `data_revisio_des_de` en `doc_metadata`, como `vigencia_validada_des_de`, y entra en
+  `_METADATOS_QUE_NO_VIENEN_DEL_CORPUS` para que la pasada siguiente no lo quite y lo vuelva a
+  poner.
+
+## Lo que NO cambia
+- El defecto de 365 dias de SYNC.2 sigue: solo se aplica cuando NINGUNA de las dos lo declara.
+
+## Tests (RED primero)
+- Pareja con la fecha declarada en una: la otra la hereda y queda `data_revisio_des_de`.
+- Pareja con las dos declaradas y distintas: las dos conservan la suya (no se pisa ninguna) y
+  ninguna queda con `data_revisio_des_de`.
+- Ninguna declarada: las dos con el defecto, sin marca de herencia.
+- Idempotencia: segunda pasada con `metadatos=0`.
+
+## Criterio de done
+- `PLA-003` y `PLA-003-val` con `2027-01-01` sin declararlo dos veces en el corpus, y una
+  segunda pasada a cero.
+```
+
+---
+
+### Prompt ACT.10 (CORPUS) — Ficha para los cinco documentos que no la tienen
+
+**Modelo sugerido**: **Opus** — hay que decidir qué se rellena, qué se deja vacío y qué NO se
+inventa, y equivocarse aquí mete en el catálogo metadatos que nadie ha decidido.
+
+**Objetivo**: aplicar la propuesta de §12.6 del informe. Cinco documentos de la UJI entran al
+asistente **sin ficha en el catálogo**, y sus metadatos viven en `router_sense_fitxa.json`, un
+canal paralelo que ya ha demostrado tres veces que no lleva todo: les falta el **puente
+bilingüe** —son los únicos cinco del corpus sin `termes_bilingues`, así que quien pregunte en
+castellano no encuentra su texto valenciano y al revés—, la firma de la revisión de conversión, y
+hasta hoy no les llegaba la validación de vigencia.
+
+**Una corrección de premisa, medida**: los cinco **sí tienen URL** —están en el web de la UJI, en
+páginas de servicio— así que no son «no publicados»: lo que les falta es estar en el **catálogo
+de transparencia**. La decisión de publicarlos ahí es posterior e independiente.
+
+```
+# PROMPT ACT.10 (CORPUS) — Los cinco al camino principal
+# Deploy: — (repositorio de curacion)
+
+## Que entra al cataleg
+Tres normas en cinco ficheros: FAQ-001 / FAQ-001-val (preguntes frequents de la UGITJ),
+GES-001 / GES-001-val (procediment de gestio economica de cursos) i MAN-001 (manual del
+pressupost de contractes de l'article 60 LOSU).
+
+## Que se rellena, y de donde sale
+- Lo que YA declaran su front matter o `router_sense_fitxa.json` se transcribe: `titol`,
+  `idioma`, `tipus`, `url_publicacio`, `resum_router`, `preguntes_tipus`, `ambit`,
+  `submateries`, `rang`. No se re-decide nada que ya este decidido.
+- `estat_vigencia: vigent` y la validacion del 28-08, que ya tienen.
+- **Las dos parejas se declaran como parejas** (`versio_idiomatica_de`), que es lo que hoy no
+  esta: sin eso la regla de lengua de ACT.3 no las separa y las dos versiones pueden citarse
+  juntas. MAN-001 no tiene pareja.
+- `publicar_al_portal: false`. Tener ficha no es estar publicado, y confundirlo seria decidir
+  por Secretaria General.
+
+## Que NO se inventa
+- `data_aprovacio` si el documento no la dice. Un campo vacio es honesto; una fecha inventada
+  contamina el eje temporal y nadie la vuelve a mirar.
+- `organ_emissor` si no consta.
+- `content_class`: FAQ-001 se queda en `faq` y los otros en `generic`. Promoverlos a
+  `regulation` exigiria la firma de la revision de conversion, que nadie ha hecho.
+
+## Que se gana, y hay que comprobarlo
+- `termes_bilingues` en los cinco: el pipeline los genera desde el cataleg, asi que entran solos.
+  **Es el motivo principal del prompt** y es lo que hay que medir al cerrar.
+- El emparejamiento de las dos parejas.
+- El canal unico: `router_sense_fitxa.json` se queda solo con las 22 externas, y su docstring lo
+  dice.
+
+## Criterio de done
+- `alta_norma.py` los da de alta (es su primer uso real; si el programa no sirve para esto, el
+  problema es del programa).
+- Los cinco con `termes_bilingues` y **cero documentos del corpus sin puente bilingue**.
+- Las dos parejas emparejadas, y la guarda de VIS.3 en verde.
+- Pipeline entero y la puerta del validador: 295 y 130.
+```
+
+---
+
+### Prompt ACT.11 (INFORME) — Los 35 documentos sin vigencia confirmada, con nombre
+
+**Modelo sugerido**: **Sonnet** — es un listado sacado de la base de datos; lo que hay que
+pensar es cómo se ordena para que se pueda revisar de un tirón.
+
+**Objetivo**: el informe dice «35 documentos sin confirmar» y no dice cuáles. Quien tiene que
+revisarlos no puede hacerlo desde una cifra. Se listan con título, estado y si tienen URL, para
+que el responsable del corpus los revise él mismo y sólo lleve a Secretaría General aquellos en
+los que tenga dudas.
+
+```
+# PROMPT ACT.11 (INFORME) — El listado, para poder revisarlo
+# Deploy: — (documentacion)
+
+## Que se escribe
+- Apartado nuevo en §12 con los 35, ordenados por serie, con: identificador, lengua, titulo,
+  estado declarado y si tienen URL oficial.
+- Agrupados por lo que hace falta para decidirlos, no por orden alfabetico: las 31 que no tienen
+  URL —internas, casi todas circulares e instrucciones de Gerencia y del Vicerectorat
+  d'Investigacio— separadas de las 4 que si la tienen.
+- Una linea diciendo que validar una version de una pareja basta.
+
+## Que NO se escribe
+- No se propone un veredicto para ninguna. El informe lista; quien valida es una persona.
+```
+
+---
+
 ## Candidatos con prompt propio, para después
 
 - **Botón «Actualizar corpus» en la pestaña Documentos.** La pantalla útil no es «ingerir» sino
