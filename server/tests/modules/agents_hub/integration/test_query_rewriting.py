@@ -61,8 +61,17 @@ class _LLMLento:
 class TestCascadaDeConfiguracion:
 
     @pytest.mark.asyncio
-    async def test_should_default_to_disabled_on_the_platform(self, db_session):
-        """Apagado por defecto: cuesta una llamada al LLM por turno y no se ha medido."""
+    async def test_should_default_to_enabled_on_the_platform(self, db_session):
+        """Encendido por defecto desde HIB.Q, y el motivo es HIB.C.
+
+        RAG.10 lo dejo apagado —una llamada al LLM por turno cuya ganancia no estaba medida— y
+        este test fijaba ese False. Cuando el widget empezo a enviar los cinco ultimos
+        intercambios, un chatbot nuevo recibia el historial y no lo reescribia: llegaba la
+        fontaneria y no la funcion, sin ningun error que lo delatara. El defecto vive en la
+        plataforma y no en la columna porque esta SI es nullable, y en la cascada nulo significa
+        heredar; un chatbot que lo quiera apagado pone False y gana —lo comprueba el test de
+        abajo—.
+        """
         from server.app.modules.agents_hub.agent.public_graphs.core.config_resolver import (
             get_effective_public_graph_config,
         )
@@ -75,7 +84,7 @@ class TestCascadaDeConfiguracion:
 
         cfg = await get_effective_public_graph_config(chatbot.id, db_session)
 
-        assert cfg.query_rewriting_enabled is False
+        assert cfg.query_rewriting_enabled is True
         assert cfg.rewrite_llm_config_id is None
 
     @pytest.mark.asyncio

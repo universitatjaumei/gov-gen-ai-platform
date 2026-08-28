@@ -21,9 +21,13 @@ la columna**. `query_rewriting_enabled` sí es nullable, y ahí NULL significa h
 sitio es la configuración de plataforma.
 
 Lo que **no** cambia: `min_retrieval_results` se queda en 2 (el 1 de Normativa fue un apaño de
-desarrollo con un corpus de un solo documento, no una decisión), `quality_threshold` ya estaba
-en 0,6 —que es el punto que HIB.J eligió, por casualidad y no por diseño— y `reranker_enabled`
-ya estaba en False, coherente con lo que midió HIB.A.
+desarrollo con un corpus de un solo documento, no una decisión) y `reranker_enabled` ya estaba
+en False, coherente con lo que midió HIB.A.
+
+`quality_threshold` sí cambió, después de este prompt: HIB.Q lo dejó en el 0,6 que HIB.J había
+elegido «por casualidad y no por diseño», y **HIB.R lo subió a 0,65** sobre la curva de las dos
+columnas del lote de 48 —el único punto que declina dos negativos más sin perder ninguna
+respuesta buena—. Este test se quedó afirmando el 0,6 y por eso llevaba días en rojo en CI.
 
 Y los chatbots que ya existen **no se tocan**: un defecto de columna sólo actúa al insertar.
 Decisión del usuario, 2026-08-27.
@@ -60,7 +64,8 @@ class TestUnChatbotNuevoNaceConLoMedido:
         from server.app.modules.agents_hub.agent.public_graphs.core import config_resolver
 
         por_defecto = config_resolver._PLATFORM_DEFAULTS
-        assert por_defecto.quality_threshold == 0.6
+        # 0,65 desde HIB.R; ver el docstring del módulo.
+        assert por_defecto.quality_threshold == 0.65
         assert por_defecto.reranker_enabled is False
         assert por_defecto.min_retrieval_results == 2
 

@@ -187,10 +187,18 @@ class TestResolucionPorConfiguracion:
 
     @pytest.mark.asyncio
     async def test_should_resolve_the_vertex_reranker_from_the_configuration(
-        self, db_session
+        self, db_session, monkeypatch
     ):
         """El proveedor y el modelo son configuración, no constantes: es lo que permite
-        cambiar de reranker sin tocar código."""
+        cambiar de reranker sin tocar código.
+
+        `GOOGLE_CLOUD_PROJECT` se pone aquí y no se hereda del entorno: el constructor lo exige
+        (`test_should_fail_loudly_without_project`), así que sin esta línea el test pasa en la
+        máquina de quien tiene `gcloud` configurado y falla en CI, que no lo tiene. Un test que
+        depende del entorno del desarrollador mide el entorno, no el código.
+        """
+        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "proyecto-de-prueba")
+
         from server.app.modules.agents_hub.database.config_models import (
             HubLLMConfig,
             HubProvider,

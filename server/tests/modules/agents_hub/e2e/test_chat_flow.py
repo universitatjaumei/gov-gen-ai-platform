@@ -24,6 +24,10 @@ from httpx import ASGITransport, AsyncClient
 from langchain_core.messages import AIMessage
 from sqlalchemy import select
 
+from server.app.modules.agents_hub.agent.public_graphs.core.config_resolver import (
+    PublicGraphConfig,
+)
+
 # SEC.2: el chat y la ingesta exigen que el principal gestione la organizacion del
 # chatbot. Estos tests prueban otra cosa, asi que doble y token comparten organizacion;
 # la tenencia tiene su propio gate en `tests/api/test_tenant_isolation.py`.
@@ -62,6 +66,23 @@ def _parse_sse_lines(lines: list[str]) -> list[tuple[str, dict]]:
     return events
 
 
+# HIB.I hizo que el endpoint leyera `core_graph.cfg` para escribir la traza en
+# `interaction_metadata`, que es una columna JSON. Con un `MagicMock` pelado, `cfg.retrieval_mode`
+# es otro mock y el INSERT de la interaccion muere serializandolo: o sea, el doble del grafo tiene
+# que declarar la configuracion igual que declara `compile()`. Va la configuracion REAL y no un
+# mock con `spec` porque lo que la traza necesita son valores serializables, no una firma.
+_CFG_DEL_DOBLE = PublicGraphConfig(
+    profile="PUBLIC_KB_RICH",
+    retrieval_mode="RAG",
+    language_mode="prefer",
+    quality_threshold=0.65,
+    min_retrieval_results=2,
+    min_retrieval_score=0.0,
+    reranker_enabled=False,
+    answer_template="generic",
+)
+
+
 def _make_mock_graph_astream_events(events_to_yield: list[dict]):
     """Crea un grafo mock cuyo compiled.astream_events devuelve los eventos dados."""
     async def _mock_astream_events(state, config=None, version="v2"):
@@ -72,6 +93,7 @@ def _make_mock_graph_astream_events(events_to_yield: list[dict]):
     mock_compiled.astream_events = _mock_astream_events
     mock_graph = MagicMock()
     mock_graph.compile = MagicMock(return_value=mock_compiled)
+    mock_graph.cfg = _CFG_DEL_DOBLE
     return mock_graph
 
 

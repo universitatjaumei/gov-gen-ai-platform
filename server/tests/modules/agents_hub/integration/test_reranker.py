@@ -223,12 +223,16 @@ class TestIntegracionConLaEstrategia:
             db_session, _Emb(), top_k=2, reranker=RerankerDeterminista()
         ).get_context(query="import dieta", chatbot_id=cb)
 
-        # 0,7 = vector_weight normalizado: los 5 chunks comparten embedding (empatan a
-        # coseno 1.0) y "L'import" con apostrofe no cruza como lexema con "import" en el
-        # tsvector, asi que el ganador llega solo por la rama vectorial (rank 0 ahi, ausente
-        # en la lexica). Lo importante no es el 0,7 exacto sino que ya esta en [0,1] y no en
-        # la escala RRF (~0,016) de antes de normalizar.
-        assert max(s.score for s in sin_rerank.sources) == pytest.approx(0.7)
+        # 1,0 = la similitud coseno del mejor fragmento: los 5 chunks comparten embedding y
+        # empatan a coseno 1.0 contra la consulta.
+        #
+        # Aqui habia un 0,7, y ese numero era el sintoma que HIB.J vino a quitar: sin reranker
+        # la nota era la fusion RRF normalizada por su techo teorico, y eso resultaba ser una
+        # CONSTANTE igual a `vector_weight` —medido, 0,7 en las 25 consultas del lote—, porque
+        # el techo exige que el mismo fragmento salga por las dos ramas y con troceado fino no
+        # ocurre. Desde HIB.J la nota es la relevancia coseno, que es lo que `Source.score` dice
+        # ser. Lo que este test vigila no cambia: la escala es [0,1] y no la RRF (~0,016).
+        assert max(s.score for s in sin_rerank.sources) == pytest.approx(1.0)
         assert max(s.score for s in con_rerank.sources) > 0.4
         assert "dieta" in con_rerank.sources[0].excerpt
 
