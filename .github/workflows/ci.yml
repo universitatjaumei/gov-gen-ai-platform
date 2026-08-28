@@ -79,8 +79,27 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
-        run: uv sync --all-extras
+      # `--locked` afirma que `uv.lock` cuadra con `pyproject.toml`, y falla si no.
+      #
+      # Sin él, uv **vuelve a resolver en silencio**: «The project is re-locked before syncing
+      # unless `--locked` or `--frozen` is provided», dicen sus propias páginas. O sea que un lock
+      # caducado no daba ningún síntoma aquí — CI instalaba un conjunto de dependencias que el
+      # lock no describía y el check seguía verde. Fue exactamente lo que pasó con el lock de la
+      # raíz: EXT.3 retiró Docling del manifiesto el 2026-08-11, nadie regeneró el lock, y el
+      # desajuste vivió **17 días** sin que nada lo dijera; sólo se veía como un fichero
+      # modificado que reaparecía en el árbol del desarrollador y que, por prudencia, no se
+      # commiteaba nunca.
+      #
+      # Va aquí y no en un paso propio de `uv lock --check`, a propósito: como `uv sync` relockea
+      # antes de sincronizar, un paso de comprobación colocado DESPUÉS de la instalación no puede
+      # fallar nunca —el fichero ya estaría reescrito—. Tendría que ir antes, y entonces afirma lo
+      # mismo que este flag en dos sitios. Un mecanismo, no dos.
+      #
+      # **El precio, dicho**: el día que alguien edite un `pyproject.toml` sin relockear, esto se
+      # pone rojo. Es lo que se quiere; por eso el paso lleva la razón en el nombre, para que no se
+      # lea como una avería de infraestructura.
+      - name: Install dependencies (--locked, el lock tiene que cuadrar con pyproject)
+        run: uv sync --locked --all-extras
 
       - name: Lint (ruff)
         run: uv run ruff check app/
@@ -221,9 +240,13 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install backend dependencies
+      # `--locked` y no `--frozen`, por lo mismo que en el job de arriba: `--frozen` usa el lock
+      # tal cual **sin comprobar que corresponda al manifiesto**, así que este job podía validar el
+      # contrato OpenAPI contra un conjunto de dependencias que `pyproject.toml` ya no declara. No
+      # reescribía nada —eso es lo que `--frozen` sí garantiza—, pero tampoco avisaba.
+      - name: Install backend dependencies (--locked, el lock cuadra con pyproject)
         working-directory: server
-        run: uv sync --frozen
+        run: uv sync --locked
 
       - name: Export OpenAPI schema
         working-directory: server
