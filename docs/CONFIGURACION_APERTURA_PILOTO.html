@@ -1245,6 +1245,85 @@ Gerencia.</pre>
     contenido y la propuesta sería la correcta. Es exactamente el tipo de cosa que el texto no dice
     y Secretaría General sí sabe.</p>
 
+    <h3>12.8 · Parejas lingüísticas: 24 normas a las que les falta la versión valenciana</h3>
+    <p>La <b>política lingüística de la UJI</b> es que la versión <b>valenciana existe siempre</b> y
+    la castellana sólo de algunas. Eso convierte el problema en otro del que parecía: una norma que
+    esté sólo en valenciano es lo normal, y una que esté <b>sólo en castellano es una anomalía</b>.
+    O no se cumplió la directriz al aprobarla, o —el caso que se espera mayoritario— la versión
+    valenciana está publicada y <b>la araña que descarga el corpus no la vio</b>.</p>
+
+    <p>Por eso la auditoría de emparejamientos no pregunta «qué parejas hay entre las 214 valencianas
+    y las 81 castellanas», sino, para cada castellana huérfana, <b>¿tiene pareja en el corpus?</b>
+    Son 24 y se revisan de una sentada.</p>
+
+    <div class="tabla-marco"><table>
+        <thead><tr><th>Resultado</th><th>Cuántas</th><th>Qué significa</th></tr></thead>
+        <tbody>
+        <tr><td>Sin ningún candidato</td><td><b>2</b></td>
+            <td>No hay en el corpus ninguna norma valenciana que se le parezca.</td></tr>
+        <tr><td>Sólo candidatos con la fecha en contra</td><td><b>19</b></td>
+            <td>Las dos versiones de un mismo acto se aprueban <b>el mismo día</b>. Si las fechas
+            no coinciden, no son la misma norma por mucho que se parezcan.</td></tr>
+        <tr><td>Con un candidato plausible</td><td><b>3</b></td>
+            <td>Revisados uno a uno: <b>ninguno es pareja</b> — «Reglamento de Convivencia» frente
+            a «Reglament de la Facultat de Ciències de la Salut», y dos más del mismo estilo.</td></tr>
+        </tbody>
+    </table></div>
+
+    <p><b>La conclusión es limpia: en el corpus no hay parejas escondidas.</b> A las 24 les falta la
+    versión valenciana, y por eso la lista no es un problema de emparejamiento sino <b>una petición
+    a Secretaría General</b>: si existe la versión valenciana de estas normas, entregarla completa
+    el corpus y hace que el asistente pueda contestar en valenciano con el texto oficial en vez de
+    con el castellano.</p>
+
+    <p class="nota"><b>Qué se hizo para poder afirmarlo.</b> El generador anterior proponía parejas
+    por un solo indicio —el juego de anclas compartido— y tenía dos agujeros que le hacían perder
+    parejas <i>sin decirlo</i>: saltaba los documentos sin anclas y descartaba de entrada los que no
+    coincidían en fecha. Ahora se generan candidatos por <b>cuatro señales en unión</b> —misma
+    publicación oficial, convención del identificador, anclas y título comparado a través del puente
+    bilingüe— más <b>una prueba en contra</b>: la fecha distinta. Y una regla que gobierna todo:
+    <b>una pareja falsa hace más daño que una que falta</b>, porque emparejar dos normas que no lo
+    son hace que el sistema <b>oculte</b> una de las dos — una pregunta en castellano no recuperaría
+    jamás la valenciana. Se empareja sólo con certeza.</p>
+
+    <p class="nota"><b>El caso que lo demuestra.</b> <code>PRG-003</code> y <code>PRG-004</code>
+    tienen el título idéntico una vez traducido y <b>no son pareja</b>: son dos versiones sucesivas
+    del mismo programa, y la segunda derogó a la primera. Lo único que las separa es la fecha.</p>
+
+    <h4>Las 24, para revisar</h4>
+    <p>La última columna dice qué encontró la auditoría: <i>cap</i>, ningún candidato;
+    <i>data en contra</i>, sólo candidatos cuya fecha de aprobación no coincide;
+    <i>descartat</i>, un candidato plausible que al mirarlo no era pareja.</p>
+    <div class="tabla-marco"><table>
+        <thead><tr><th>Id</th><th>Norma (castellano)</th><th>Fecha</th><th>Órgano</th><th>Auditoría</th></tr></thead>
+        <tbody>
+        <tr><td><code>ACD-002</code></td><td>ACUERDO de 23 de junio de 2026, del Consejo de Gobierno, por el que se delega en el rector la competencia para resolver los recursos potestativos de reposición interpuestos contra los acuerdos del Consejo de Gobierno.</td><td>2026-06-23</td><td>Consell de Govern</td><td>data en contra</td></tr>
+        <tr><td><code>ALT-059</code></td><td>Resolución de 3 de febrero de 2026, de la Secretaría General, por la cual se delega la competencia de la Presidencia de la Junta Electoral en el vicepresidente de esta Junta</td><td>2026-02-03</td><td>Secretaria General</td><td>data en contra</td></tr>
+        <tr><td><code>EST-004</code></td><td>Estatuts de la Fundació Universitat Jaume I-Empresa de la Comunitat Valenciana</td><td>—</td><td>Fundació Universitat Jaume I-Empresa</td><td>descartat</td></tr>
+        <tr><td><code>INS-019</code></td><td>Instrucción de 27 de mayo de 2025, de la vicerrectora de Estudios y Formación Permanente, por la que se desarrollan las microcredenciales universitarias dentro del Plan para el desarrollo de Microcredenciales Universitarias, Inversión 6 del Componente 21, de la Adenda del Plan de Recuperación, Transformación y Resiliencia para los ejercicios 2023, 2024, 2025 y 2026, financiado por los Fondos Next Generation EU, asignados a la Universitat Jaume I</td><td>2025-05-27</td><td>Vicerectorat d&#x27;Estudis i Formació Permanent</td><td>data en contra</td></tr>
+        <tr><td><code>INS-034</code></td><td>Instrucción 1/2023 GERENCIA Términos y condiciones aplicables a los contratos menores de la Universitat Jaume I</td><td>2023-04-25</td><td>Gerència</td><td>data en contra</td></tr>
+        <tr><td><code>MAN-001</code></td><td>Manual de elaboración del presupuesto. Contratos art. 60 LOSU</td><td>2023-10-23</td><td>Oficina de Cooperació en Investigació i Desenvolupament Tecnològic (OCIT)</td><td>cap</td></tr>
+        <tr><td><code>PLA-005</code></td><td>Plan de acción en el marco de la Estrategia Nacional de Ciencia Abierta (2023-2027) de la Universitat Jaume I</td><td>2024-05-01</td><td>Vicerectorat d&#x27;Investigació</td><td>data en contra</td></tr>
+        <tr><td><code>PRG-003</code></td><td>Programa de apoyo a las actividades de investigación y de innovación y transferencia del PDI de la Universitat Jaume I</td><td>2021-01-28</td><td>Consell de Govern</td><td>data en contra</td></tr>
+        <tr><td><code>REG-002</code></td><td>Reglamento sobre reconocimiento y transferencia de creditos en los estudios universitarios oficiales de grado y máster en la Universitat Jaume I</td><td>2026-04-27</td><td>Consell de Govern</td><td>data en contra</td></tr>
+        <tr><td><code>REG-003</code></td><td>Reglamento sobre traslados de expedientes</td><td>2026-04-27</td><td>Consell de Govern</td><td>data en contra</td></tr>
+        <tr><td><code>REG-085</code></td><td>Reglamento de estancias breves de investigación de personal investigador invitado a la Universitat Jaume I</td><td>2024-03-27</td><td>Consell de Govern</td><td>descartat</td></tr>
+        <tr><td><code>REG-090</code></td><td>Reglamento de régimen interno del Comité de Ética de Experimentación Animal de la Universitat Jaume I</td><td>2026-04-27</td><td>Consell de Govern</td><td>data en contra</td></tr>
+        <tr><td><code>REG-091</code></td><td>Reglamento de régimen interno del Comité de Ética de la Investigación con Seres Humanos de la Universitat Jaume I</td><td>2022-09-28</td><td>Consell de Govern</td><td>data en contra</td></tr>
+        <tr><td><code>REG-092</code></td><td>Reglamento de revistas científicas de la Universitat Jaume I de Castelló</td><td>2024-02-27</td><td>Consell de Govern</td><td>data en contra</td></tr>
+        <tr><td><code>REG-094</code></td><td>Reglamento para la contratación de personal investigador y personal técnico o gestor de apoyo en tareas de investigación e innovacion de la Universitat Jaume I de Castelló</td><td>2023-03-30</td><td>Consell de Govern</td><td>data en contra</td></tr>
+        <tr><td><code>REG-115</code></td><td>Reglamento de funcionamiento del Centro de Ensenanzas Propias y de Formacion Permanente</td><td>2025-09-23</td><td>Consell de Govern</td><td>data en contra</td></tr>
+        <tr><td><code>REG-116</code></td><td>Reglamento de la Escuela de Formación Deportiva de la Universitat Jaume I</td><td>2022-01-27</td><td>Consell de Govern</td><td>data en contra</td></tr>
+        <tr><td><code>REG-118</code></td><td>Reglamento de las enseñanzas propias y de formación permanente de la Universitat Jaume I</td><td>2025-10-24</td><td>Consell de Govern</td><td>data en contra</td></tr>
+        <tr><td><code>REG-119</code></td><td>Reglamento de los estudios de grado de la Universitat Jaume I</td><td>2026-04-27</td><td>Consell de Govern</td><td>data en contra</td></tr>
+        <tr><td><code>REG-120</code></td><td>Reglamento de los estudios de máster de la Universitat Jaume I</td><td>2026-04-27</td><td>Consell de Govern</td><td>data en contra</td></tr>
+        <tr><td><code>REG-123</code></td><td>Reglamento de Convivencia de la Universitat Jaume I</td><td>2023-02-28</td><td>Consell de Govern</td><td>descartat</td></tr>
+        <tr><td><code>REG-135</code></td><td>Reglamento de evaluación de la actividad docente del profesorado de la Universitat Jaume I</td><td>2022-11-28</td><td>Consell de Govern</td><td>data en contra</td></tr>
+        <tr><td><code>REG-137</code></td><td>Reglamento de selección del personal docente e investigador de la Universitat Jaume I</td><td>2024-07-17</td><td>Consell de Govern</td><td>data en contra</td></tr>
+        <tr><td><code>RES-005</code></td><td>RESOLUCIÓN de 25 de junio de 2026, del Rectorado, por la que se delegan determinadas competencias en los vicerrectores y vicerrectoras, los delegados del rector, la secretaria general y la gerenta</td><td>2026-06-25</td><td>Rectorat</td><td>cap</td></tr>
+        </tbody>
+    </table></div>
+
 </section>
 
 <footer class="pie">
