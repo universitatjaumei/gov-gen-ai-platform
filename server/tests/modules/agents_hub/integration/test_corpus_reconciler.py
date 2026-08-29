@@ -12,6 +12,8 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
+from types import SimpleNamespace
+
 import pytest
 from sqlalchemy import func, select
 
@@ -1240,3 +1242,96 @@ class TestLaGuardaDeLaCopiaNoEsInerte:
 
         with pytest.raises(R.CopiaIncoherente):
             await _reconciliar(db_session, tmp_path, destino)
+
+
+class TestUnDocumentAMitgesEsRepesca:
+    """Una interrupcion entre el troceo y los metadatos dejaba un documento irreparable.
+
+    EL MECANISMO. `_ingerir_nuevo` crea el documento llamando al watcher —la tuberia compartida
+    con el crawler—, y el watcher hace `commit` antes de volver. Solo DESPUES el reconciliador le
+    aplica los metadatos del corpus con `_aplicar`, que es quien pone `id_publicacio`,
+    `relative_path` y `source_kind='publicacio'`. Entre las dos cosas hay una ventana, y si el
+    proceso se corta ahi el documento queda escrito con su texto y sus fragmentos pero SIN los
+    campos por los que el reconciliador lo buscaria.
+
+    Lo que pasaba entonces: ninguna pasada posterior lo encontraba, intentaba insertar el suyo, y
+    chocaba contra `uq_document_chatbot_hash`. El asistente se quedaba con un documento sin
+    metadatos —invisible para el filtro de vigencia, de ambito y de lengua— y la reingesta de ese
+    chatbot no volvia a completarse nunca. Paso de verdad el 29-08-2026.
+
+    LA REPESCA. El huerfano SI conserva `canonical_url` y `language`, que los pone el watcher. Con
+    eso basta para reconocerlo, y `_aplicar` termina el trabajo que quedo a medias.
+    """
+
+    @pytest.mark.asyncio
+    async def test_should_adopt_a_document_left_without_metadata(self, db_session, tmp_path):
+        from sqlalchemy import select
+
+        from server.app.modules.agents_hub.database.operational_models import HubDocument
+
+        _escribir(tmp_path, "REG-930", body="Un text qualsevol.")
+        chatbot = await _chatbot(db_session)
+        await _reconciliar(db_session, tmp_path, chatbot)
+        await db_session.commit()
+
+        # Se simula la interrupcion: el documento se queda como lo dejo el watcher.
+        doc = (await db_session.execute(
+            select(HubDocument).where(HubDocument.chatbot_id == chatbot)
+        )).scalars().one()
+        doc.id_publicacio = None
+        doc.source_kind = "upload"
+        doc.estat_vigencia = None
+        await db_session.commit()
+
+        informe = await _reconciliar(db_session, tmp_path, chatbot)
+        await db_session.commit()
+
+        # Ni falla ni duplica: lo adopta y le pone los metadatos.
+        docs = (await db_session.execute(
+            select(HubDocument).where(HubDocument.chatbot_id == chatbot)
+        )).scalars().all()
+        assert len(docs) == 1, "no se puede duplicar: el hash unico lo impediria"
+        assert docs[0].id_publicacio == "REG-930"
+        assert docs[0].source_kind == "publicacio"
+        assert informe.ingeridos == 0, informe
+
+    @pytest.mark.asyncio
+    async def test_should_not_adopt_a_document_that_already_has_an_owner(
+        self, db_session, tmp_path
+    ):
+        """La repesca nomes alcanca als HUERFANOS: `id_publicacio IS NULL`.
+
+        Sense eixa condicio, una entrada podria adoptar el document d'una altra que compartira
+        url i idioma, i el corpus perdria un dels dos sense dir-ho. Es prova la guarda directament
+        i no a traves d'una passada sencera, perque el que hi ha darrere —que el watcher
+        desduplica pel seu compte per `canonical_url`— es una altra conducta i no la que aci es
+        garantix.
+        """
+        from sqlalchemy import select
+
+        from server.app.modules.agents_hub.database.operational_models import HubDocument
+        from server.app.modules.agents_hub.ingestion.corpus.reconciler import CorpusReconciler
+        from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
+
+        _escribir(tmp_path, "REG-931", body="Un text.")
+        chatbot = await _chatbot(db_session)
+        await _reconciliar(db_session, tmp_path, chatbot)
+        await db_session.commit()
+
+        doc = (await db_session.execute(
+            select(HubDocument).where(HubDocument.chatbot_id == chatbot)
+        )).scalars().one()
+        url, idioma = doc.canonical_url, doc.language
+
+        watcher = IngestionWatcher(db_session, _FakeEmbedding(),
+                                   chatbot_provider=_FakeChatbotProvider("RAG"))
+        reconciler = CorpusReconciler(db_session, watcher)
+        entrada = SimpleNamespace(id_publicacio="UNA-ALTRA", language=idioma)
+
+        # Amb amo, no es repesca.
+        assert await reconciler._repescar(chatbot, entrada, url) is None
+
+        # I sense amo, si.
+        doc.id_publicacio = None
+        await db_session.flush()
+        assert await reconciler._repescar(chatbot, entrada, url) is not None

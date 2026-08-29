@@ -341,18 +341,52 @@ class CorpusReconciler:
     async def _buscar(
         self, chatbot_id: uuid.UUID, entry: CorpusDocumentEntry, url: str
     ) -> HubDocument | None:
-        """Empareja por `id_publicacio`; si no viene, por url oficial + idioma."""
+        """Empareja por `id_publicacio`; si no viene, por url oficial + idioma.
+
+        Y si viene y no encuentra nada, **repesca un documento a medio construir**: ver abajo.
+        """
         if entry.id_publicacio:
             stmt = select(HubDocument).where(
                 HubDocument.chatbot_id == chatbot_id,
                 HubDocument.id_publicacio == entry.id_publicacio,
             )
-        else:
-            stmt = select(HubDocument).where(
-                HubDocument.chatbot_id == chatbot_id,
-                HubDocument.canonical_url == url,
-                HubDocument.language == entry.language,
-            )
+            doc = (await self._session.execute(stmt.limit(1))).scalar_one_or_none()
+            return doc if doc is not None else await self._repescar(chatbot_id, entry, url)
+        stmt = select(HubDocument).where(
+            HubDocument.chatbot_id == chatbot_id,
+            HubDocument.canonical_url == url,
+            HubDocument.language == entry.language,
+        )
+        return (await self._session.execute(stmt.limit(1))).scalar_one_or_none()
+
+    async def _repescar(
+        self, chatbot_id: uuid.UUID, entry: CorpusDocumentEntry, url: str
+    ) -> HubDocument | None:
+        """Un documento que una interrupción dejó a medias, para terminarlo en vez de duplicarlo.
+
+        POR QUÉ HACE FALTA. `_ingerir_nuevo` crea el documento llamando al watcher —la tubería
+        compartida con el crawler—, y **el watcher hace `commit` antes de volver**. Sólo después
+        se le aplican los metadatos del corpus con `_aplicar`, que es quien pone `id_publicacio`,
+        `relative_path` y `source_kind`. Entre las dos cosas hay una ventana, y un proceso que se
+        corta ahí deja el documento escrito, con sus fragmentos, y **sin los campos por los que
+        aquí se le buscaría**.
+
+        Lo que pasaba entonces era peor que perder el trabajo: ninguna pasada posterior lo
+        encontraba, intentaba insertar el suyo y chocaba contra `uq_document_chatbot_hash`. El
+        asistente se quedaba con un documento sin metadatos —invisible para los filtros de
+        vigencia, ámbito y lengua— y su reingesta no volvía a completarse nunca. Pasó el
+        29-08-2026, y la única salida fue borrar el huérfano a mano.
+
+        SÓLO ALCANZA A LOS HUÉRFANOS. La condición `id_publicacio IS NULL` no es una precaución
+        de más: sin ella, una entrada podría adoptar el documento de otra que comparta url e
+        idioma, y el corpus perdería uno de los dos sin decir nada.
+        """
+        stmt = select(HubDocument).where(
+            HubDocument.chatbot_id == chatbot_id,
+            HubDocument.canonical_url == url,
+            HubDocument.language == entry.language,
+            HubDocument.id_publicacio.is_(None),
+        )
         return (await self._session.execute(stmt.limit(1))).scalar_one_or_none()
 
     async def reconcile(
