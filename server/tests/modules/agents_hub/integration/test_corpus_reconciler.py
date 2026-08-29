@@ -1206,3 +1206,37 @@ class TestLaValidacionEsDeLaNorma:
         await db_session.commit()
 
         assert informe.metadatos_actualizados == 0, informe.detalle
+
+
+class TestLaGuardaDeLaCopiaNoEsInerte:
+    """ACT.5 prometió comprobar la coherencia del destino «siempre», y el import quedó SIN USAR.
+
+    Lo destapó `ruff` en CI —`F401 incoherentes imported but unused`— y es el mismo modo de fallo
+    que este proyecto ya vio en HIB.E: un arreglo escrito, importado y muerto. La lección de
+    HIB.U que ACT.5 decía aplicar era justamente que **un invariante que sólo se comprueba donde
+    se sospecha no es un invariante**.
+
+    Lo que protege: copiar sin remapear el metadato `document_id` deja fragmentos que apuntan al
+    documento del otro chatbot; la agrupación los junta con los del otro corpus y la cita sale con
+    el título equivocado, **sin ningún error**. Fueron 14.198 fragmentos en el banco agéntico.
+    """
+
+    @pytest.mark.asyncio
+    async def test_should_refuse_a_copy_that_leaves_incoherent_chunks(
+        self, db_session, tmp_path, monkeypatch
+    ):
+        from server.app.modules.agents_hub.ingestion.corpus import reconciler as R
+
+        _escribir(tmp_path, "REG-920", body="Text que es copia.")
+        origen, destino = await _dos_chatbots_de_la_misma_organizacion(db_session)
+        await _reconciliar(db_session, tmp_path, origen)
+        await db_session.commit()
+
+        # Un `remapea` que se deja el metadato: exactamente el defecto de HIB.U.
+        def _a_medias(fragmento, *, chatbot_id, document_id):
+            return {**fragmento, "chatbot_id": chatbot_id, "document_id": document_id}
+
+        monkeypatch.setattr(R, "remapea", _a_medias)
+
+        with pytest.raises(R.CopiaIncoherente):
+            await _reconciliar(db_session, tmp_path, destino)

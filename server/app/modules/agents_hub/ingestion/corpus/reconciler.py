@@ -103,6 +103,14 @@ def _fragmento_a_dict(fragmento) -> dict:
     return {campo: getattr(fragmento, campo) for campo in _COLUMNAS_DEL_FRAGMENTO}
 
 
+class CopiaIncoherente(Exception):
+    """La copia dejo fragmentos que apuntan al documento de otro chatbot.
+
+    No se continua: una cita con el titulo equivocado no da ningun error y se lee como buena.
+    Fueron 14.198 fragmentos del banco agentico antes de que HIB.U lo destapara.
+    """
+
+
 class PruneThresholdExceeded(Exception):
     """La poda afectaría a más documentos de los que el umbral permite sin confirmar."""
 
@@ -605,10 +613,23 @@ class CorpusReconciler:
         self._session.add(doc)
         await self._session.flush()
 
-        for fragmento in fragmentos:
-            self._session.add(HubDocumentChunk(**remapea(
-                fragmento, chatbot_id=chatbot_id, document_id=doc.id
-            )))
+        copiados = [
+            remapea(fragmento, chatbot_id=chatbot_id, document_id=doc.id)
+            for fragmento in fragmentos
+        ]
+        # HIB.U — «un invariante que solo se comprueba donde se sospecha no es un invariante»:
+        # se comprueba SIEMPRE, y aqui es donde de verdad puede romperse. Va ANTES del `add`,
+        # asi que un fallo no llega ni a escribirse.
+        malos = incoherentes(copiados)
+        if malos:
+            raise CopiaIncoherente(
+                f"{len(malos)} de {len(copiados)} fragmentos copiados de "
+                f"{origen.id_publicacio} a {chatbot_id} apuntan al documento del origen. "
+                "La agrupacion por documento leeria las filas del otro corpus y la cita saldria "
+                "con el titulo equivocado, sin ningun error."
+            )
+        for fragmento in copiados:
+            self._session.add(HubDocumentChunk(**fragmento))
         await self._session.flush()
         return doc, None
 
@@ -654,7 +675,6 @@ class CorpusReconciler:
         )
         por_id_completo = list(filas.scalars().all())
         por_id_completo_por_publicacio = {d.id_publicacio: d for d in por_id_completo}
-        por_uuid = {d.id: d for d in por_id_completo}
         emparejadas: list[tuple[HubDocument, HubDocument]] = []
         for doc, ref in pendientes:
             hermana = por_id_completo_por_publicacio.get(ref)
