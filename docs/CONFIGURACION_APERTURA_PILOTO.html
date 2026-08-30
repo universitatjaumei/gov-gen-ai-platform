@@ -1263,12 +1263,43 @@ Gerencia.</pre>
             <td>No hay en el corpus ninguna norma valenciana que se le parezca.</td></tr>
         <tr><td>Sólo candidatos con la fecha en contra</td><td><b>19</b></td>
             <td>Las dos versiones de un mismo acto se aprueban <b>el mismo día</b>. Si las fechas
-            no coinciden, no son la misma norma por mucho que se parezcan.</td></tr>
+            no coinciden, no son la misma norma por mucho que se parezcan. <b>Cuidado con leer
+            esta fila al revés</b>: no dice que haya una gemela valenciana con la fecha mal
+            puesta — dice que los únicos candidatos que aparecieron eran otras normas. Comprobado
+            abajo.</td></tr>
         <tr><td>Con un candidato plausible</td><td><b>3</b></td>
             <td>Revisados uno a uno: <b>ninguno es pareja</b> — «Reglamento de Convivencia» frente
             a «Reglament de la Facultat de Ciències de la Salut», y dos más del mismo estilo.</td></tr>
         </tbody>
     </table></div>
+
+    <p class="nota"><b>La comprobación que lo cierra (30-08-2026).</b> La fila de «fecha en contra»
+    invita a una lectura que sería una buena noticia: que la gemela valenciana <i>ya está</i> y que
+    lo que falla es la fecha de la ficha. Si fuera eso, la lista se reduciría sola. Se midió, con
+    dos comprobaciones independientes (<code>comprova_els_24.py</code>), y <b>no es eso</b>:</p>
+
+    <ul>
+      <li><b>Ninguna de las 24 tiene gemela en el corpus.</b> Se comparan con una huella que <b>no
+      depende del idioma</b> —el recuento de cifras y referencias del texto, «88/2010», «25»,
+      «2017», que una traducción conserva—, buscando sólo entre los valencianos <b>que todavía no
+      tienen pareja</b>: una gemela no puede serlo de dos. La medida sola no valdría nada; lo que
+      la hace servir es calibrarla con las <b>50 parejas que el sitio ya publica</b>: mediana 1,00
+      y 48 de 50 por encima de 0,80. El mejor candidato de cada una de las 24 se queda en
+      <b>0,43</b>, y la mayoría por debajo de 0,30. Vistos uno a uno, son otras normas: al
+      «Reglamento de las enseñanzas propias» le sale el «Reglament del Claustre».</li>
+      <li><b>Las fechas no están mal.</b> La mayoría de las normas llevan su fecha de aprobación
+      escrita dentro —«(Aprovat en la sessió núm. 4-2017 del Consell de Govern del dia 25 d'abril
+      de 2017)»— o en una tabla de versiones. <b>18 de las 24 quedan confirmadas por su propio
+      documento y ninguna se desmiente</b>; de las seis restantes, cuatro no tienen texto en el
+      corpus y dos no dicen ninguna fecha.</li>
+    </ul>
+
+    <p class="nota">El umbral solo no probaría nada, y conviene decirlo: una pareja cierta
+    —<code>REG-084</code> y <code>REG-006</code>, el mismo reglamento de doctorado en las dos
+    lenguas— se queda en <b>0,24</b> porque las dos versiones no llevan las mismas tablas. La
+    huella tiene un falso negativo conocido. Por eso la comprobación no se queda en la cifra:
+    saca los tres mejores candidatos de cada una <b>con su título</b>, para que se vea que ninguno
+    lo es.</p>
 
     <p><b>La conclusión es limpia: en el corpus no hay parejas escondidas.</b> A las 24 les falta la
     versión valenciana, y por eso la lista no es un problema de emparejamiento sino <b>una petición
