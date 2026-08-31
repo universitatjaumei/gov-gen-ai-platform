@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vectores embebidos y registro de actividad IA — valoración</title>
+<title>Vectores, registro de IA y secciones dinámicas — valoración</title>
 <style>
   :root {
     --paper: #F7F8F6;
@@ -126,8 +126,10 @@
   }
   .pill.no { color: var(--no); background: var(--no-soft); }
   .pill.si { color: var(--si); background: var(--si-soft); }
+  .pill.mixto { color: var(--accent); background: var(--accent-soft); }
   .card.no { border-top: 3px solid var(--no); }
   .card.si { border-top: 3px solid var(--si); }
+  .card.mixto { border-top: 3px solid var(--accent); }
 
   .panel {
     background: var(--accent-soft);
@@ -217,15 +219,18 @@
 <div class="wrap">
   <header>
     <p class="eyebrow">Gov Gen AI Platform · Valoración de arquitectura</p>
-    <h1>Vectores embebidos y registro de actividad IA</h1>
-    <p class="meta">Reunión con desarrollo · 31&nbsp;ago&nbsp;2026 · preparado sobre el código real del repositorio</p>
+    <h1>Vectores embebidos, registro de IA y secciones dinámicas</h1>
+    <p class="meta">Reuniones con desarrollo · actualizado el 31&nbsp;ago&nbsp;2026 · preparado sobre el código real del repositorio</p>
     <p class="standfirst">
-      Desarrollo planteó dos cuestiones: usar bases vectoriales embebidas en chatbots de corpus
-      estable, y abrir la plataforma para que agentes externos registren su actividad y usen la
-      anonimización. La primera optimiza un coste que no existe y rompe invariantes ya medidos.
-      La segunda es estratégica — y <strong>la mitad ya está construida</strong>: hay servidor MCP,
-      tokens de máquina con scopes y un módulo de anonimización operativo. Lo que falta es girarlos
-      hacia fuera, y <strong>los prompts para hacerlo ya están redactados</strong> (Bloque REG,
+      Desarrollo planteó tres cuestiones: usar bases vectoriales embebidas en chatbots de corpus
+      estable, abrir la plataforma para que agentes externos registren su actividad y usen la
+      anonimización, y que las secciones web de actualización permanente (jornadas, eventos)
+      alimenten su chatbot <strong>sin curación manual</strong>. La primera optimiza un coste que
+      no existe. La segunda es estratégica y la mitad ya está construida. Y la tercera parte de
+      una premisa falsa en dos tercios: <strong>la ingesta automática ya existe y corre en el
+      scheduler</strong> — lo que falta es cerrar su ciclo de vida y, sobre todo, que los
+      apartados sean <strong>parámetros que configura quien cura</strong>, no algo fijado en el
+      código. Los prompts de las dos aceptadas ya están redactados (bloques REG y DIN,
       <code>planificacion/Plan_TDD_Fase1.md</code>).
     </p>
 
@@ -243,6 +248,14 @@
         <p>El diagnóstico «no escalará» está sobrevalorado — el monolito ya está partido por dentro.
         Pero la propuesta encaja con la arquitectura y con el AI&nbsp;Act. Se integra como el bloque
         REG, seis prompts, después del despliegue.</p>
+      </div>
+      <div class="card mixto">
+        <span class="pill mixto">Existe en 2/3; falta el resto</span>
+        <h3>3 · Secciones dinámicas sin curación manual</h3>
+        <p>La auto-ingesta de páginas nuevas y la reingesta de las cambiadas ya existen, con tests
+        y en el scheduler. Falta que el apartado sea un parámetro de curación —hoy es un sitio
+        entero— y cerrar el ciclo: retirada, puerta de calidad y diario. Bloque DIN, siete
+        prompts.</p>
       </div>
     </div>
   </header>
@@ -398,6 +411,158 @@
   </section>
 
   <section>
+    <p class="eyebrow">Observación 3</p>
+    <h2>Secciones dinámicas: la ingesta automática ya existe; lo que falta es el resto del ciclo</h2>
+    <p>
+      La premisa de la reunión — «esto no está previsto ahora» — resultó falsa en dos tercios al
+      revisar el código. Ya existe, con tests y corriendo en el scheduler que arranca con la
+      aplicación:
+    </p>
+    <div class="panel">
+      <ul>
+        <li><strong>Rastreo periódico por apartado.</strong> RAS.5 fijó «un sitio por apartado»:
+          un <code>HubWebSite</code> con <code>url_regex_filter</code> acota
+          <code>/jornadas</code> o <code>/eventos</code> y tiene su propia cadencia
+          (<code>crawl_interval_hours</code>). El diff por <code>content_hash</code> distingue
+          nuevas, cambiadas y desaparecidas.</li>
+        <li><strong>Auto-ingesta de páginas nuevas.</strong> La regla de selección
+          (<code>HubCorpusSelection</code>) tiene una columna <code>auto_ingest_new</code> —
+          con default <code>True</code> desde 9Q.7 — y el job programado la consume: una página
+          nueva que casa la regla entra sola al chatbot (<code>quality_job.py</code>, paso 4).</li>
+        <li><strong>Reingesta automática de lo que cambió.</strong> Desde RAS.5, una página ya
+          ingerida cuyo contenido cambia en el portal se reingiere sola, con el aviso
+          <code>content_updated</code> para poder revisar qué cambió.</li>
+      </ul>
+    </div>
+    <p>
+      El principio que sostiene esto — y que conviene conservar — es <strong>«curación una vez,
+      automatización después»</strong>: el apartado y su modo los define un curador tras la primera
+      pasada manual (que es donde se calibran las trampas del portal real: conmutador de idioma,
+      prefijos duplicados, páginas que necesitan JavaScript), y dentro de ese ámbito la
+      automatización mantiene. No se auto-ingiere nada que ningún humano haya aprobado nunca; se
+      mantiene lo que un humano aprobó una vez.
+    </p>
+
+    <h2 style="margin-top:40px">El apartado tiene que ser un parámetro, no una decisión de código</h2>
+    <p>
+      Hoy un apartado se expresa <strong>creando un sitio entero</strong> con su filtro de URL. Es
+      la decisión de RAS.5 y tenía buena razón — cada apartado tiene un responsable distinto —,
+      pero paga un precio que se nota justo cuando los apartados se multiplican: duplica la URL
+      raíz, el sitemap, la configuración de cortesía y los criterios de juicio; exige un alta
+      técnica por apartado; y convierte «añadir el apartado de becas» en trabajo de quien
+      administra sitios, en vez de trabajo de quien cura.
+    </p>
+    <p>
+      Es el mismo razonamiento que el proyecto ya aplicó al vocabulario del corpus: <strong>lo que
+      va a cambiar mientras alguien lo usa es dato, no estructura</strong>. Por eso el bloque
+      introduce la <strong>sección</strong> como entidad configurable dentro del proceso de
+      curación — con su patrón, su cadencia, su modo (manual o automático), su responsable y sus
+      criterios propios —, y con dos reglas que la hacen barata de mantener: <em>nulo hereda</em>
+      (un parámetro vacío en la sección toma el del sitio, la misma semántica que ya usa la
+      cascada de configuración) y la pertenencia de una página se <em>deriva del patrón</em> en
+      vez de almacenarse, porque los patrones se editan. Un sitio sin secciones sigue
+      comportándose exactamente como hoy.
+    </p>
+
+    <h2 style="margin-top:40px">Y una trampa que el rediseño destapó</h2>
+    <p>
+      Al acotar el rastreo por secciones aparece un riesgo que hoy no existe. El rastreo declara
+      «bajas» las páginas que ya no aparecen, comparando lo que acaba de ver contra las páginas
+      registradas <strong>del sitio entero</strong>. Hoy es correcto porque el sitio <em>es</em> el
+      apartado. Con varias secciones en un mismo sitio, una pasada completa de
+      <code>/eventos</code> vería solo las URL de eventos y <strong>declararía baja el resto del
+      portal</strong> — y con la retirada automática encima, eso vacía corpus en silencio.
+    </p>
+    <p>
+      Es exactamente la lección que el corpus normativo ya tiene escrita («una carga parcial que se
+      interpretara como censo retiraría cientos de normas»), así que la primera regla dura del
+      bloque es que <strong>el censo se acota al ámbito realmente rastreado</strong>, con test
+      dedicado y con una comprobación de recuento antes/después en la verificación final.
+    </p>
+
+    <p>Además del encuadre, faltan tres piezas del ciclo de vida — y para un apartado de eventos
+      la primera es la que más duele:</p>
+    <ul class="args">
+      <li><strong>La retirada automática no existe.</strong> El rastreo marca las páginas
+        desaparecidas, pero retirarlas del corpus solo existe como acción manual del curador: un
+        evento borrado del portal sigue en el corpus respondiendo como si existiera. Contenido
+        caducado servido como vigente es el fallo dominante de una sección de eventos.</li>
+      <li><strong>La auto-ingesta no tiene puerta de calidad.</strong> Ingiere cualquier página
+        nueva que case la regla sin consultar los hallazgos que el mismo job acaba de calcular:
+        una página vacía o que necesita JavaScript para pintarse entraría al corpus. La
+        automatización no puede tener menos criterio que el curador al que sustituye.</li>
+      <li><strong>El curador no puede auditar lo que la automatización hizo.</strong> Los
+        contadores de cada pasada se calculan y se pierden. Una automatización que no se puede
+        auditar barata se apaga al primer susto — con razón.</li>
+    </ul>
+
+    <h2 style="margin-top:40px">Bloque DIN: siete prompts</h2>
+    <div class="table-scroll">
+      <table>
+        <tr><th>Prompt</th><th>Entregable</th><th>Notas de diseño</th></tr>
+        <tr>
+          <td class="id">DIN.1</td>
+          <td>La sección como dato, y qué parámetro gana cuando hay dos</td>
+          <td>Patrón, cadencia, modo, responsable y criterios por sección, con herencia del sitio
+            donde el valor esté vacío. El modo de una sección nueva nace en <strong>manual</strong>
+            a propósito: no automatiza hasta que alguien lo dice.</td>
+        </tr>
+        <tr>
+          <td class="id">DIN.2</td>
+          <td>Rastrear por sección sin que el censo se lleve el resto del sitio</td>
+          <td>Cada sección con su reloj, y la declaración de bajas acotada al ámbito rastreado —
+            la trampa descrita arriba, con el test que la fija.</td>
+        </tr>
+        <tr>
+          <td class="id">DIN.3</td>
+          <td>Parametrizar secciones dentro del proceso de curación</td>
+          <td>Crear y editar secciones desde la interfaz, con <strong>prueba del patrón antes de
+            guardar</strong> (cuántas páginas ya rastreadas casarían, y una muestra): es lo que
+            evita el patrón que no casa nada, que hoy solo se descubriría cuando la pasada
+            siguiente no ingiere.</td>
+        </tr>
+        <tr>
+          <td class="id">DIN.4</td>
+          <td>Retirada automática de las páginas desaparecidas</td>
+          <td>Solo en secciones automáticas; las manuales reciben aviso. Con <strong>salvaguarda de
+            proporción</strong> (si desaparece más del 30% del ámbito en una pasada, no se retira
+            nada y avisa): un rastreo roto no puede vaciar un corpus.</td>
+        </tr>
+        <tr>
+          <td class="id">DIN.5</td>
+          <td>Puerta de calidad en auto-ingesta y reingesta</td>
+          <td>Una página con hallazgos bloqueantes (vacía, ilegible, necesita JavaScript) no entra:
+            queda como candidata con el motivo visible. Resuelto el hallazgo, la siguiente pasada
+            la ingiere sola. En reingesta, la versión buena del corpus se conserva.</td>
+        </tr>
+        <tr>
+          <td class="id">DIN.6</td>
+          <td>Diario de la automatización en la pantalla de curación</td>
+          <td>Cada pasada persiste su ámbito y qué ingirió, reingirió, retiró y bloqueó, y por qué;
+            el curador lo ve por sitio y por sección, lo más reciente arriba.</td>
+        </tr>
+        <tr>
+          <td class="id">DIN.7</td>
+          <td>Un apartado real, parametrizado por quien cura, de punta a punta +
+            <code>docs/SECCIONES_DINAMICAS.md</code></td>
+          <td>Todo por la interfaz (si hace falta SQL a mano, la interfaz está incompleta), y el
+            ciclo verificado de verdad: nueva que entra, cambiada que se reingiere, borrada que se
+            retira, y el resto del sitio intacto. La receta queda escrita para el apartado
+            siguiente.</td>
+        </tr>
+      </table>
+    </div>
+    <p>
+      <strong>Secuencia:</strong> independiente del despliegue (todo es edge y ya corre en local) y
+      <strong>sin depender de decidir ningún apartado</strong>: qué secciones existan es
+      configuración, y las crea quien cura el día que las necesite. Queda fuera a propósito el
+      corpus normativo (sus fuentes tienen su propia puerta de validación) y la <em>caducidad
+      editorial</em> — el evento pasado que sigue publicado — que es una decisión del propietario
+      del contenido, no del código (DIN.7 la documenta con opciones).
+    </p>
+  </section>
+
+  <section>
     <p class="eyebrow">Para la reunión</p>
     <h2>Decisiones a cerrar</h2>
     <ol class="decisiones">
@@ -430,14 +595,40 @@
           del protocolo del retriever, activable si aparece un despliegue que lo necesite — sin
           coste hoy.</div>
       </div></li>
+      <li><div>
+        <div class="q">¿Quién puede parametrizar una sección y ponerla en modo automático?</div>
+        <div class="r">Ya no es una decisión de qué apartados existen — eso es configuración que
+          crea quien cura, cuando la necesita. Lo que sí hay que cerrar es el <b>permiso</b>:
+          ¿basta el rol de curador para pasar una sección a automático, o eso lo aprueba un
+          administrador? <b>Recomendación:</b> crear y probar secciones, el curador; activar el
+          modo automático, también el curador, porque exige haber hecho antes la primera pasada
+          manual — y eso ya es la aprobación.</div>
+      </div></li>
+      <li><div>
+        <div class="q">Confirmar las dos salvaguardas del bloque DIN.</div>
+        <div class="r">Los hallazgos que bloquean la auto-ingesta (vacía, ilegible, necesita
+          JavaScript) y el umbral de la retirada masiva detenida (<b>30% por defecto</b>): si
+          desaparece más de eso en una pasada, no se retira nada y se avisa. Las dos son
+          criterios heredables, así que un apartado puede ser más exigente que su portal sin
+          tocar código.</div>
+      </div></li>
+      <li><div>
+        <div class="q">Caducidad editorial: ¿qué pasa con el evento que ya ocurrió pero sigue publicado?</div>
+        <div class="r">No es una decisión de código sino del propietario del contenido: retirarlo
+          del corpus por fecha, dejar que el chatbot responda en pasado, o moverlo a un apartado
+          de archivo. DIN.4 la documenta con las opciones; conviene llevarla también al
+          responsable del portal.</div>
+      </div></li>
     </ol>
   </section>
 
   <footer>
-    Fuentes en el repositorio: <code>planificacion/Plan_TDD_Fase1.md</code> §Bloque REG (prompts
-    REG.1–REG.6, redactados el 31-08) · <code>docs/mcp.md</code> (valoraciones 1 y 2, Bloque MCP
-    cerrado) · <code>server/app/core/auth/pat/scopes.py</code> ·
+    Fuentes en el repositorio: <code>planificacion/Plan_TDD_Fase1.md</code> §Bloque REG y
+    §Bloque DIN (prompts redactados el 31-08) · <code>docs/mcp.md</code> (valoraciones 1 y 2,
+    Bloque MCP cerrado) · <code>server/app/core/auth/pat/scopes.py</code> ·
     <code>server/app/modules/redaccion/services/anonymization/</code> ·
+    <code>server/app/modules/curation/</code> (<code>quality_job.py</code>,
+    <code>site_crawler.py</code>, <code>selection_service.py</code>, la base de la valoración 3) ·
     <code>AGENTS.md</code> (fronteras edge/cloud y reglas del corpus) ·
     umbrales y mediciones del bloque HIB en <code>planificacion/PROJECT_STATE.md</code>.
   </footer>
