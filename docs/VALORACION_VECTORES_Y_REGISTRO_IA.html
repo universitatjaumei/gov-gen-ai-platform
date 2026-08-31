@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vectores embebidos y registro de actividad IA — valoración</title>
+<style>
+  :root {
+    --paper: #F7F8F6;
+    --surface: #FFFFFF;
+    --ink: #232A2D;
+    --muted: #5C6A6E;
+    --line: #D9DFDD;
+    --accent: #27607A;
+    --accent-soft: #E3EDF2;
+    --no: #A6432F;
+    --no-soft: #F6E9E4;
+    --si: #3E7C4F;
+    --si-soft: #E7F0E8;
+    --code-bg: #EDF0EE;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #171B1D;
+      --surface: #1F2528;
+      --ink: #DDE4E2;
+      --muted: #93A2A4;
+      --line: #333D40;
+      --accent: #6FA9C4;
+      --accent-soft: #22333D;
+      --no: #D4826F;
+      --no-soft: #372520;
+      --si: #7FB58C;
+      --si-soft: #21301F;
+      --code-bg: #262E31;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.65;
+    margin: 0;
+  }
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+  h1, h2, h3, .eyebrow, .pill, th, .q {
+    font-family: "Segoe UI", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  }
+  h1 {
+    font-size: clamp(28px, 5vw, 38px);
+    font-weight: 700;
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 10px 0 14px;
+  }
+  h2 {
+    font-size: 21px;
+    font-weight: 700;
+    letter-spacing: -0.005em;
+    text-wrap: balance;
+    margin: 0 0 14px;
+  }
+  p { margin: 0 0 16px; }
+  section { margin-top: 56px; }
+
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    margin: 0 0 4px;
+  }
+  .meta {
+    font-family: Consolas, "Cascadia Mono", Menlo, monospace;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 40px;
+  }
+  .standfirst {
+    font-size: 19px;
+    line-height: 1.55;
+    max-width: 62ch;
+  }
+  .standfirst strong { font-weight: 700; }
+
+  code {
+    font-family: Consolas, "Cascadia Mono", Menlo, monospace;
+    font-size: 0.82em;
+    background: var(--code-bg);
+    border-radius: 3px;
+    padding: 1px 5px;
+  }
+
+  .verdicts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    gap: 16px;
+    margin: 36px 0 0;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 22px 24px 18px;
+  }
+  .card h3 { margin: 10px 0 8px; font-size: 17px; line-height: 1.3; font-weight: 600; }
+  .card p { font-size: 15.5px; color: var(--muted); margin: 0; }
+  .pill {
+    display: inline-block;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    border-radius: 999px;
+    padding: 4px 12px;
+  }
+  .pill.no { color: var(--no); background: var(--no-soft); }
+  .pill.si { color: var(--si); background: var(--si-soft); }
+  .card.no { border-top: 3px solid var(--no); }
+  .card.si { border-top: 3px solid var(--si); }
+
+  .panel {
+    background: var(--accent-soft);
+    border-radius: 6px;
+    padding: 22px 26px;
+    margin: 22px 0;
+  }
+  .panel ul { margin: 0; padding-left: 20px; }
+  .panel li { margin-bottom: 10px; font-size: 15.5px; }
+  .panel li:last-child { margin-bottom: 0; }
+
+  ul.args { padding-left: 20px; margin: 0 0 16px; }
+  ul.args li { margin-bottom: 12px; }
+  ul.args li::marker { color: var(--accent); }
+
+  .rescate {
+    border-left: 3px solid var(--si);
+    padding: 4px 0 4px 20px;
+    margin: 24px 0;
+  }
+  .rescate p { margin-bottom: 10px; }
+  .rescate p:last-child { margin-bottom: 0; }
+
+  .table-scroll { overflow-x: auto; margin: 20px 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 620px;
+    font-size: 15px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+  }
+  th {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-align: left;
+    color: var(--muted);
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.id {
+    font-family: Consolas, "Cascadia Mono", Menlo, monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  ol.decisiones { padding-left: 0; margin: 20px 0 0; counter-reset: dec; list-style: none; }
+  ol.decisiones li {
+    counter-increment: dec;
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 14px;
+    padding: 18px 0;
+    border-top: 1px solid var(--line);
+  }
+  ol.decisiones li::before {
+    content: counter(dec, decimal-leading-zero);
+    font-family: Consolas, "Cascadia Mono", Menlo, monospace;
+    font-size: 14px;
+    color: var(--accent);
+    padding-top: 3px;
+  }
+  ol.decisiones .q { font-weight: 600; font-size: 15.5px; }
+  ol.decisiones .r { color: var(--muted); font-size: 15.5px; margin-top: 4px; }
+  ol.decisiones .r b { color: var(--ink); font-weight: 600; }
+
+  footer {
+    margin-top: 64px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Gov Gen AI Platform · Valoración de arquitectura</p>
+    <h1>Vectores embebidos y registro de actividad IA</h1>
+    <p class="meta">Reunión con desarrollo · 31&nbsp;ago&nbsp;2026 · preparado sobre el código real del repositorio</p>
+    <p class="standfirst">
+      Desarrollo planteó dos cuestiones: usar bases vectoriales embebidas en chatbots de corpus
+      estable, y abrir la plataforma para que agentes externos registren su actividad y usen la
+      anonimización. La primera optimiza un coste que no existe y rompe invariantes ya medidos.
+      La segunda es estratégica — y <strong>la mitad ya está construida</strong>: hay servidor MCP,
+      tokens de máquina con scopes y un módulo de anonimización operativo. Lo que falta es girarlos
+      hacia fuera, y <strong>los prompts para hacerlo ya están redactados</strong> (Bloque REG,
+      <code>planificacion/Plan_TDD_Fase1.md</code>).
+    </p>
+
+    <div class="verdicts">
+      <div class="card no">
+        <span class="pill no">Desaconsejado</span>
+        <h3>1 · Bases vectoriales embebidas</h3>
+        <p>Postgres no está ahí por los vectores; la recuperación híbrida y sus umbrales calibrados
+        no se trasladan; y «corpus estable» es empíricamente falso hoy. La puerta queda abierta sin
+        pagar nada ahora: el retriever ya se inyecta detrás de un protocolo.</p>
+      </div>
+      <div class="card si">
+        <span class="pill si">Recomendado, con matiz</span>
+        <h3>2 · Registro de actividad y servicios hacia fuera</h3>
+        <p>El diagnóstico «no escalará» está sobrevalorado — el monolito ya está partido por dentro.
+        Pero la propuesta encaja con la arquitectura y con el AI&nbsp;Act. Se integra como el bloque
+        REG, seis prompts, después del despliegue.</p>
+      </div>
+    </div>
+  </header>
+
+  <section>
+    <p class="eyebrow">Punto de partida</p>
+    <h2>Lo que ya existe cambia la conversación</h2>
+    <p>
+      Antes de valorar las propuestas conviene fijar qué hay ya en el repositorio, porque la
+      segunda no parte de cero:
+    </p>
+    <div class="panel">
+      <ul>
+        <li><strong>Servidor MCP completo</strong> (<code>mcp_server/</code>): 16 tools y 5 resources
+          para autoría de plantillas, configuración de chatbots y chat de prueba, con 54 tests.
+          Transporte stdio local; la valoración de <code>docs/mcp.md</code> dejó anotado el MCP
+          remoto como paso siguiente cuando hubiera caso de uso.</li>
+        <li><strong>PAT con scopes por rol</strong> (<code>core/auth/pat/</code>, bloque AUTH): tokens
+          de máquina revocables, con catálogo de scopes y techo por rol. Es exactamente la pieza de
+          auth que un cliente externo necesita.</li>
+        <li><strong>Módulo de anonimización operativo</strong>
+          (<code>modules/redaccion/services/anonymization/</code>): detección de PII en texto libre
+          (<code>detect_spans</code>) y tabular, políticas, generación con Faker, y modos por
+          workspace con herencia. Hoy solo lo consume el módulo de redacción.</li>
+        <li><strong>Registro interno de interacciones</strong> (<code>HubInteraction</code>): captura
+          lo que ocurre <em>dentro</em> de la plataforma. Nada registra hoy el uso de IA que ocurre
+          fuera de ella.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Observación 1</p>
+    <h2>Vectores embebidos: el coste que ahorra no existe</h2>
+    <ul class="args">
+      <li><strong>Quitar los vectores no quita el servidor.</strong> Postgres guarda además los
+        documentos, las interacciones, los jobs de ingesta, el vocabulario versionado y la tenencia
+        por organización. Un chatbot con LanceDB o Chroma embebido seguiría necesitando la misma
+        base de datos para todo lo demás: se añade un almacén, no se quita uno.</li>
+      <li><strong>La recuperación no es «vecinos más próximos».</strong> Es híbrida — vector más
+        <code>tsvector</code> como puente bilingüe catalán/castellano —, filtra por una taxonomía
+        que vive en tablas versionadas, y tiene umbrales calibrados por medición (0,60 en Normativa,
+        0,35 en Gerencia; bloque HIB). Una base embebida obliga a reimplementar y
+        <em>recalibrar</em> todo eso en un segundo camino de código, con su segunda suite de tests.</li>
+      <li><strong>Rompe el invariante «reclasificar = un UPDATE».</strong> El vocabulario está
+        pendiente de validación por Secretaría General y va a cambiar. Con N almacenes embebidos
+        repartidos por chatbot, cada cambio de etiqueta toca N ficheros en vez de una tabla.</li>
+      <li><strong>«Corpus estable» es empíricamente falso hoy.</strong> El bloque ACT reingirió el
+        corpus completo en los cuatro asistentes hace dos días, hay 35 documentos pendientes de
+        confirmación y la curación sigue activa. Y a la escala real — 313 fichas, 308 páginas —
+        pgvector en la VM va sobrado: no hay ninguna métrica de rendimiento que empuje en esta
+        dirección.</li>
+    </ul>
+    <div class="rescate">
+      <p><strong>Qué sí rescatar.</strong> Si el dolor real es «levantar Postgres para desarrollar
+        o hacer una demo», eso se resuelve con un <code>docker compose</code> con datos sembrados,
+        no cambiando el motor.</p>
+      <p>Y la puerta no queda cerrada: el retriever ya se inyecta por <code>Depends</code> detrás
+        de un protocolo. Si algún día un despliegue lo justifica — un edge node mínimo sin
+        Postgres —, añadir un backend embebido es aditivo y no exige migrar nada. Como no hay
+        migración futura que abaratar, tampoco hay motivo para pagarla ahora.</p>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Observación 2</p>
+    <h2>Registro de IA: separar el diagnóstico de la propuesta</h2>
+    <p>
+      <strong>El diagnóstico «no escalará porque está todo integrado» está sobrevalorado.</strong>
+      El monolito ya está partido por dentro precisamente para poder separarse: dos
+      <code>DeclarativeBase</code> (configuración/operacional), <code>DEPLOY_MODE</code> con
+      clasificación de routers cloud/edge, <code>ConfigProvider</code>, y la prohibición de imports
+      edge→cloud con guardarraíles en tests. Esa frontera existe y se vigila.
+    </p>
+    <p>
+      <strong>La propuesta, en cambio, es estratégica y encaja.</strong> El uso de IA en la
+      institución va a ocurrir cada vez más <em>fuera</em> de la plataforma — Claude Cowork,
+      Copilot, agentes de terceros — y hoy nada lo registra. Un registro central de actividad IA es
+      exactamente lo que el AI&nbsp;Act pide a los responsables del despliegue (conservación de
+      logs, arts.&nbsp;12 y&nbsp;26) y lo que un registro de actividades de tratamiento del RGPD
+      (art.&nbsp;30) agradece. Y la anonimización como servicio evita que cada herramienta externa
+      resuelva la PII por su cuenta, peor.
+    </p>
+    <p>
+      Un deslinde importante: esto es <strong>registro de gobernanza, no trazado técnico</strong>.
+      El trazado token a token ya lo cubre Langfuse dentro de la plataforma; lo que falta es el
+      evento de nivel legal — quién usó qué agente, con qué finalidad, sobre qué categorías de
+      datos. No hay que reconstruir Langfuse.
+    </p>
+  </section>
+
+  <section>
+    <p class="eyebrow">Propuesta</p>
+    <h2>Bloque REG: exponer lo que ya hay, con dos superficies</h2>
+    <p>
+      No es una re-arquitectura. Es un bloque de seis prompts — <strong>ya redactados al final de
+      <code>planificacion/Plan_TDD_Fase1.md</code></strong> — que expone piezas existentes con REST
+      para cualquier cliente y MCP como fachada para agentes:
+    </p>
+    <div class="table-scroll">
+      <table>
+        <tr><th>Prompt</th><th>Entregable</th><th>Notas de diseño</th></tr>
+        <tr>
+          <td class="id">REG.1</td>
+          <td>Contrato <code>ActividadIAEvent</code> y tabla <code>hub_actividad_ia</code>
+            (operacional, edge)</td>
+          <td>Evento de gobernanza: actor, organización, herramienta externa, finalidad, modelo,
+            categorías de datos declaradas, timestamps. <strong>Metadatos sí, payloads no</strong>,
+            garantizado por contrato (<code>extra="forbid"</code>): el registro no puede convertirse
+            en un segundo sitio donde viven los datos personales. Tabla nueva — no sobrecargar
+            <code>HubInteraction</code>.</td>
+        </tr>
+        <tr>
+          <td class="id">REG.2</td>
+          <td>Endpoint <code>POST /api/v1/actividad</code> y los dos scopes nuevos</td>
+          <td>Scopes <code>actividad:write</code> y <code>anonimizacion:use</code> en el catálogo
+            PAT. La organización del evento se deriva del dueño del token, nunca del payload.</td>
+        </tr>
+        <tr>
+          <td class="id">REG.3</td>
+          <td>Anonimización como servicio: <code>/anonimizacion/spans</code> y
+            <code>/anonimizacion/replace</code></td>
+          <td>Expone <code>PiiDetector.detect_spans</code> y el anonimizador sobre texto libre.
+            Edge por definición; el texto no toca logs ni BD, con test que lo vigila.</td>
+        </tr>
+        <tr>
+          <td class="id">REG.4</td>
+          <td>MCP remoto (HTTP streamable) como fachada fina</td>
+          <td>Tools <code>registrar_actividad</code>, <code>detectar_pii</code>,
+            <code>anonimizar_texto</code> en el mismo paquete <code>mcp_server/</code>, con el token
+            de cada cliente propagado por petición. Es la «opción B» que <code>docs/mcp.md</code>
+            dejó anotada; este es el caso de uso que la justifica.</td>
+        </tr>
+        <tr>
+          <td class="id">REG.5</td>
+          <td>Lectura y exportación del registro</td>
+          <td><code>GET /api/v1/actividad</code> paginado con filtros + export CSV, para sesión
+            admin, acotado a la organización del principal.</td>
+        </tr>
+        <tr>
+          <td class="id">REG.6</td>
+          <td>Vista en el panel admin y <code>docs/REGISTRO_ACTIVIDAD_IA.md</code></td>
+          <td>Tabla con filtros e i18n; documentación del contrato campo a campo con el mapeo a
+            OTel GenAI y la guía de alta de un agente externo.</td>
+        </tr>
+      </table>
+    </div>
+    <p>
+      <strong>Secuencia:</strong> no bloquea el cursor actual (Deploy/D.0). De hecho conviene
+      ejecutarlo <em>después</em> del despliegue: un MCP remoto solo existe de verdad con el
+      servidor accesible desde fuera.
+    </p>
+  </section>
+
+  <section>
+    <p class="eyebrow">Para la reunión</p>
+    <h2>Decisiones a cerrar</h2>
+    <ol class="decisiones">
+      <li><div>
+        <div class="q">¿Auth para agentes externos: PAT personal ampliado o token de servicio por organización?</div>
+        <div class="r"><b>Recomendación (y como está redactado REG.2):</b> reutilizar el PAT con
+          los dos scopes nuevos; la organización se deriva del dueño del token. Si la reunión exige
+          un token de servicio no personal, es un prompt más, no un rediseño.</div>
+      </div></li>
+      <li><div>
+        <div class="q">¿Esquema de evento propio o adoptar un estándar (OpenTelemetry GenAI)?</div>
+        <div class="r"><b>Recomendación:</b> esquema propio mínimo con nombres de campo mapeables a
+          las convenciones OTel GenAI (el mapeo se documenta en REG.6). El evento aquí es legal, no
+          de observabilidad; adoptar el estándar entero arrastra campos que no aplican.</div>
+      </div></li>
+      <li><div>
+        <div class="q">Confirmar la regla «metadatos sí, payloads no» del registro.</div>
+        <div class="r">Sin el contenido de las conversaciones ni los documentos. Si algún caso
+          exige evidencia del contenido, un hash del payload en el evento — nunca el payload.</div>
+      </div></li>
+      <li><div>
+        <div class="q">Posición del bloque REG en la planificación.</div>
+        <div class="r"><b>Recomendación:</b> después del bloque Deploy (D), como bloque propio de
+          6 prompts. No tocar el cursor actual.</div>
+      </div></li>
+      <li><div>
+        <div class="q">Sobre los vectores: ¿cuál era el dolor real?</div>
+        <div class="r">Si es fricción de desarrollo o demos, se resuelve con un
+          <code>docker compose</code> sembrado. El backend embebido queda como opción futura detrás
+          del protocolo del retriever, activable si aparece un despliegue que lo necesite — sin
+          coste hoy.</div>
+      </div></li>
+    </ol>
+  </section>
+
+  <footer>
+    Fuentes en el repositorio: <code>planificacion/Plan_TDD_Fase1.md</code> §Bloque REG (prompts
+    REG.1–REG.6, redactados el 31-08) · <code>docs/mcp.md</code> (valoraciones 1 y 2, Bloque MCP
+    cerrado) · <code>server/app/core/auth/pat/scopes.py</code> ·
+    <code>server/app/modules/redaccion/services/anonymization/</code> ·
+    <code>AGENTS.md</code> (fronteras edge/cloud y reglas del corpus) ·
+    umbrales y mediciones del bloque HIB en <code>planificacion/PROJECT_STATE.md</code>.
+  </footer>
+</div>
+</body>
+</html>
