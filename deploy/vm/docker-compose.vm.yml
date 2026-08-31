@@ -78,6 +78,31 @@ services:
       - sandbox-net
     restart: unless-stopped
 
+  # ---------------------------------------------------------------------------
+  # Migraciones. Bajo perfil, así que `up -d` NO las ejecuta: el despliegue las lanza en un
+  # paso propio y visible ANTES de cambiar la imagen (D.5-VM), con la salida en el log del
+  # workflow. Una migración que corre dentro del arranque deja el sistema a medias y el
+  # motivo enterrado en los logs del contenedor.
+  # ---------------------------------------------------------------------------
+  migrate:
+    <<: *imagen
+    container_name: govgenai_migrate
+    profiles: ["migrate"]
+    env_file:
+      - /opt/govgenai/.env.runtime
+    # Sin `uv run`: la imagen de runtime no lleva `uv`, tiene el venv en el PATH
+    # (`/app/server/.venv/bin`) y `alembic.ini` en `/app/server`. El primer intento lo escribió
+    # con `uv run` copiándolo del prompt, y habría fallado en el despliegue con «executable
+    # file not found».
+    working_dir: /app/server
+    command: ["alembic", "upgrade", "head"]
+    volumes:
+      - cloudsql:/cloudsql:ro
+    depends_on:
+      cloud-sql-proxy:
+        condition: service_healthy
+    restart: "no"
+
   frontend:
     image: ${GOVGENAI_FRONTEND_IMAGE:?falta GOVGENAI_FRONTEND_IMAGE}
     container_name: govgenai_frontend

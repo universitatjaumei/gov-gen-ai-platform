@@ -1,0 +1,215 @@
+name: Deploy — VM de GCP
+
+# Despliega la punta de `main` a la VM. Tres decisiones que gobiernan todo lo de abajo:
+#
+# 1. **Sin claves de larga vida.** La autenticación es Workload Identity Federation: GitHub
+#    presenta un token de vida corta y Google lo canjea. Una clave JSON en los secretos del
+#    repositorio sería una credencial permanente que nadie rota. No hay ningún secreto de GCP
+#    en este repositorio; lo que hay son identificadores públicos en `vars`.
+#
+# 2. **La etiqueta es el SHA del commit, nunca `latest`.** Con `latest` no se puede saber qué
+#    está corriendo ni volver atrás, que son justo las dos preguntas de un incidente.
+#
+# 3. **Las migraciones van ANTES de cambiar la imagen, en un paso propio y visible.** Una
+#    migración que corre dentro del arranque deja el sistema a medias y el motivo enterrado en
+#    los logs de un contenedor que se reinicia.
+#
+# Lo que este workflow NO hace, a propósito:
+#   - Desplegar con `git pull` en la VM: lo que corre dependería del estado del disco de la
+#     máquina y no de un artefacto identificable.
+#   - Ejecutar la suite. Corre en `ci.yml` sobre el mismo commit; repetirla aquí alarga el
+#     despliegue sin añadir información.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      etiqueta:
+        description: "SHA a desplegar (vacío = el commit actual). Sirve para volver atrás."
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-vm
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # lo exige la federación de identidad
+
+env:
+  VM_NOMBRE: govgenai-vm
+  VM_ZONA: europe-southwest1-b
+  DESTINO: /opt/govgenai
+
+jobs:
+  desplegar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Etiqueta a desplegar
+        id: etiqueta
+        run: |
+          ETIQUETA="${{ inputs.etiqueta }}"
+          if [ -z "$ETIQUETA" ]; then ETIQUETA="${GITHUB_SHA}"; fi
+          echo "valor=$ETIQUETA" >> "$GITHUB_OUTPUT"
+          echo "Desplegando $ETIQUETA"
+
+      - name: Autenticarse en GCP (sin claves)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configurar Docker para Artifact Registry
+        run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Construir y publicar las tres imágenes
+        id: imagenes
+        run: |
+          set -euo pipefail
+          BASE="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_AR_REPO }}"
+          SHA="${{ steps.etiqueta.outputs.valor }}"
+
+          # Si la etiqueta ya existe —un redespliegue o una vuelta atrás— no se reconstruye.
+          construir_si_falta() {
+            local nombre="$1" contexto="$2" dockerfile="$3"
+            if gcloud artifacts docker images describe "$BASE/$nombre:$SHA" >/dev/null 2>&1; then
+              echo "  $nombre:$SHA ya está publicada"
+              return
+            fi
+            docker build -t "$BASE/$nombre:$SHA" -f "$dockerfile" "$contexto"
+            docker push "$BASE/$nombre:$SHA"
+          }
+
+          construir_si_falta app . Dockerfile
+          construir_si_falta frontend ./frontend ./frontend/Dockerfile
+          construir_si_falta sandbox ./services/script_sandbox ./services/script_sandbox/Dockerfile
+
+          echo "app=$BASE/app:$SHA"       >> "$GITHUB_OUTPUT"
+          echo "frontend=$BASE/frontend:$SHA" >> "$GITHUB_OUTPUT"
+          echo "sandbox=$BASE/sandbox:$SHA"   >> "$GITHUB_OUTPUT"
+
+      - name: Copiar los ficheros de despliegue a la máquina
+        run: |
+          set -euo pipefail
+          # Se copian los artefactos, no el repositorio: en la VM no hay working copy que
+          # pueda divergir de lo que se cree que está desplegado.
+          tar czf despliegue.tgz \
+            deploy/vm/docker-compose.vm.yml \
+            deploy/vm/Caddyfile \
+            deploy/vm/govgenai.service \
+            scripts/vm_fetch_secrets.sh \
+            scripts/lib/secretos.tsv
+
+          gcloud compute scp despliegue.tgz \
+            "${VM_NOMBRE}:/tmp/despliegue.tgz" \
+            --zone "$VM_ZONA" --tunnel-through-iap --quiet
+
+          gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap --quiet \
+            --command "sudo mkdir -p ${DESTINO}/scripts/lib && sudo tar xzf /tmp/despliegue.tgz -C /tmp && \
+              sudo cp /tmp/deploy/vm/docker-compose.vm.yml ${DESTINO}/ && \
+              sudo cp /tmp/deploy/vm/Caddyfile ${DESTINO}/ && \
+              sudo cp /tmp/scripts/vm_fetch_secrets.sh ${DESTINO}/scripts/ && \
+              sudo cp /tmp/scripts/lib/secretos.tsv ${DESTINO}/scripts/lib/ && \
+              sudo chmod +x ${DESTINO}/scripts/vm_fetch_secrets.sh && \
+              sudo cp /tmp/deploy/vm/govgenai.service /etc/systemd/system/ && \
+              sudo systemctl daemon-reload && sudo systemctl enable govgenai && \
+              rm -rf /tmp/deploy /tmp/scripts /tmp/despliegue.tgz"
+
+      - name: Guardar la etiqueta anterior (el camino de vuelta)
+        id: anterior
+        run: |
+          set -euo pipefail
+          ANTERIOR="$(gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap \
+            --quiet --command "grep -m1 '^GOVGENAI_IMAGE=' ${DESTINO}/.env.despliegue 2>/dev/null | cut -d: -f2- || true" | tr -d '\r\n')"
+          echo "valor=$ANTERIOR" >> "$GITHUB_OUTPUT"
+          echo "Etiqueta anterior: ${ANTERIOR:-(ninguna, primer despliegue)}"
+
+      - name: Escribir la configuración del despliegue
+        run: |
+          set -euo pipefail
+          # Estas NO son credenciales: son identificadores y rutas. Los secretos los baja la
+          # propia máquina de Secret Manager (D.2) y nunca pasan por aquí.
+          gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap --quiet \
+            --command "sudo tee ${DESTINO}/.env.despliegue > /dev/null <<'EOF'
+          GOVGENAI_IMAGE=${{ steps.imagenes.outputs.app }}
+          GOVGENAI_FRONTEND_IMAGE=${{ steps.imagenes.outputs.frontend }}
+          GOVGENAI_SANDBOX_IMAGE=${{ steps.imagenes.outputs.sandbox }}
+          GOVGENAI_HOST=${{ vars.GOVGENAI_HOST }}
+          CLOUDSQL_CONNECTION_NAME=${{ vars.CLOUDSQL_CONNECTION_NAME }}
+          STORAGE_BUCKET=${{ vars.STORAGE_BUCKET }}
+          GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}
+          GOOGLE_CLOUD_LOCATION=${{ vars.GCP_REGION }}
+          CORPUS_SITE_BASE_URL=${{ vars.CORPUS_SITE_BASE_URL }}
+          CORS_ALLOWED_ORIGINS=${{ vars.CORS_ALLOWED_ORIGINS }}
+          DEPLOY_MODE=all
+          EOF
+          sudo chmod 644 ${DESTINO}/.env.despliegue"
+
+      - name: Bajar los secretos y levantar el proxy de Cloud SQL
+        run: |
+          gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap --quiet \
+            --command "cd ${DESTINO} && sudo ./scripts/vm_fetch_secrets.sh \
+              --project ${{ vars.GCP_PROJECT_ID }} --out ${DESTINO}/.env.runtime && \
+              sudo docker compose --env-file ${DESTINO}/.env.despliegue \
+                -f ${DESTINO}/docker-compose.vm.yml up -d cloud-sql-proxy"
+
+      - name: Migraciones (antes de cambiar la imagen)
+        run: |
+          set -euo pipefail
+          # Paso propio y con la salida en el log: si Alembic falla, el despliegue se detiene
+          # aquí y la imagen vieja sigue sirviendo.
+          gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap --quiet \
+            --command "cd ${DESTINO} && sudo docker compose --env-file ${DESTINO}/.env.despliegue \
+              -f ${DESTINO}/docker-compose.vm.yml --profile migrate run --rm migrate"
+
+          echo '--- revisión aplicada ---'
+          gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap --quiet \
+            --command "cd ${DESTINO} && sudo docker compose --env-file ${DESTINO}/.env.despliegue \
+              -f ${DESTINO}/docker-compose.vm.yml --profile migrate run --rm --entrypoint alembic migrate current"
+
+      - name: Desplegar
+        run: |
+          gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap --quiet \
+            --command "sudo systemctl restart govgenai && sleep 20 && \
+              sudo docker compose --env-file ${DESTINO}/.env.despliegue \
+                -f ${DESTINO}/docker-compose.vm.yml ps"
+
+      - name: Comprobar que sirve, y volver atrás si no
+        run: |
+          set -uo pipefail
+          HOST="${{ vars.GOVGENAI_HOST }}"
+          ok=0
+          for intento in 1 2 3 4 5 6; do
+            codigo="$(curl -s -o /dev/null -w '%{http_code}' "https://$HOST/health" || true)"
+            if [ "$codigo" = "200" ]; then ok=1; break; fi
+            echo "intento $intento: /health devolvió ${codigo:-sin respuesta}"
+            sleep 15
+          done
+
+          if [ "$ok" = "1" ]; then
+            echo "/health responde 200 por TLS"
+            # `/docs` tiene que estar cerrado en producción (SEC.7).
+            docs="$(curl -s -o /dev/null -w '%{http_code}' "https://$HOST/docs" || true)"
+            echo "/docs devuelve $docs (se espera 404)"
+            [ "$docs" != "200" ] || { echo "ERROR: /docs abierto en produccion"; ok=0; }
+          fi
+
+          if [ "$ok" != "1" ]; then
+            ANTERIOR="${{ steps.anterior.outputs.valor }}"
+            if [ -z "$ANTERIOR" ]; then
+              echo "::error::El despliegue no responde y no hay etiqueta anterior a la que volver."
+              exit 1
+            fi
+            echo "::warning::Volviendo a la etiqueta anterior: $ANTERIOR"
+            gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap --quiet \
+              --command "cd ${DESTINO} && sudo sed -i \"s#^GOVGENAI_IMAGE=.*#GOVGENAI_IMAGE=\${ANTERIOR}#\" .env.despliegue && sudo systemctl restart govgenai"
+            echo "::error::Despliegue revertido. Mira el paso de migraciones antes de reintentar."
+            exit 1
+          fi

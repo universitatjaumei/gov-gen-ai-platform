@@ -158,6 +158,42 @@ cita el asistente y la que la gente guarda.
 
 ---
 
+## 3.quater El despliegue continuo, y el origen del bucket (D.5-VM)
+
+Aprovisionado el 2026-08-31 con `scripts/gcp_provision_cicd.sh`:
+
+| Qué | Cómo quedó |
+|---|---|
+| Imágenes | Artifact Registry `govgenai` en `europe-southwest1`. Tres imágenes (`app`, `frontend`, `sandbox`) **etiquetadas con el SHA del commit**, nunca `latest` |
+| Identidad | **Workload Identity Federation**, sin ninguna clave en el repositorio. Proveedor acotado con `assertion.repository=='ModestoFabra/gov-gen-ai-platform'` |
+| Cuenta de despliegue | `govgenai-deploy@…` con cuatro roles mínimos: publicar imagen, túnel de IAP, OS Login con sudo y leer instancias |
+| Variables del repositorio | Diez, puestas con `gh variable set`. **Ninguna es un secreto**: son identificadores, y lo que autoriza es la federación |
+
+**Por qué la condición de atributo importa tanto**: sin ella el proveedor acepta tokens de
+**cualquier** repositorio de GitHub, y cualquiera podría crear uno y suplantar a la cuenta de
+despliegue. Es el error clásico de esta configuración, y el guion se niega a funcionar sin
+`--repo` justamente para no dejarlo al descuido.
+
+### El origen del bucket, que no es un detalle
+
+Las páginas se pueden servir de dos formas, y **no dan el mismo origen**:
+
+| URL | Origen para el navegador |
+|---|---|
+| `https://storage.googleapis.com/govgenai-normativa-uji/…` | `https://storage.googleapis.com` — **el de todos los buckets del mundo** |
+| `https://govgenai-normativa-uji.storage.googleapis.com/…` | `https://govgenai-normativa-uji.storage.googleapis.com` — sólo este bucket |
+
+Se usa la **segunda**. Con la primera, `CORS_ALLOWED_ORIGINS` tendría que abrirse a
+`https://storage.googleapis.com` y entonces cualquier página alojada en cualquier bucket de
+Google podría llamar a la API. Sigue habiendo dos frenos —la credencial de sitio sólo abre
+chatbots `public_anon` y las cuotas por IP—, pero abrir el origen a medio internet cuando
+existe una forma acotada es regalar superficie.
+
+De ahí que `CORPUS_SITE_BASE_URL` y `CORS_ALLOWED_ORIGINS` valgan los dos
+`https://govgenai-normativa-uji.storage.googleapis.com`.
+
+---
+
 ## 4. Lo que este prototipo deja fuera a propósito
 
 - **Dominio propio.** Decisión del usuario: es un prototipo. El bucket sirve por HTTPS con el
