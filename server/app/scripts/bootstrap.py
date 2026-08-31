@@ -17,9 +17,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import sys
 import uuid
+from pathlib import Path
 
 from sqlalchemy import select
 
@@ -92,7 +94,91 @@ class _Informe:
             print("\nNada que hacer: la instalación ya estaba sembrada.")
 
 
-async def _sembrar(email: str, password: str, nombre: str, url: str | None) -> _Informe:
+#: Dónde viven las plantillas demo exportadas por `exportar_plantillas_demo.py`.
+_RUTA_DEMO = Path(__file__).resolve().parents[1] / "data" / "plantillas_demo"
+
+#: Quién firma las versiones que siembra la instalación.
+#:
+#: `created_by` es NOT NULL —cada versión dice quién la escribió— y las plantillas demo no las
+#: escribió ninguna persona: las trae el producto. El superadministrador no sirve como firma:
+#: su clave es un entero (`admin_id`) y esta columna es un UUID, así que no es que no encaje
+#: conceptualmente, es que no encaja de tipo.
+#:
+#: Se usa un UUID5 derivado de un nombre en vez de un `uuid.UUID(int=0)`: un UUID de ceros se
+#: lee como «falta un dato» y es exactamente el defecto que el hallazgo I5 tuvo que quitar de
+#: dos perfiles de grafo. Éste dice quién es, y de dónde sale está aquí escrito.
+AUTOR_DEL_SEMBRADO = uuid.uuid5(uuid.NAMESPACE_URL, "https://govgenai/sembrado-de-plataforma")
+
+
+def _leer_plantillas_demo() -> list[tuple[Path, dict]]:
+    """Los ficheros del catálogo, en orden estable.
+
+    Orden por nombre de fichero y no por lo que devuelva el sistema de ficheros: dos
+    instalaciones tienen que sembrar lo mismo en el mismo orden, o un informe de sembrado no
+    se puede comparar con otro.
+    """
+    if not _RUTA_DEMO.is_dir():
+        return []
+    documentos = []
+    for fichero in sorted(_RUTA_DEMO.glob("*.json")):
+        documentos.append((fichero, json.loads(fichero.read_text(encoding="utf-8"))))
+    return documentos
+
+
+async def _sembrar_plantilla_demo(session, documento: dict, autor_id: uuid.UUID) -> bool:
+    """Siembra una plantilla del catálogo con **todas** sus versiones. Devuelve si la creó.
+
+    Idempotente por nombre: si ya está, no se toca. No se «actualiza» la existente a propósito
+    — el versionado del módulo es append-only y sembrar por encima de una plantilla que alguien
+    ya usó le cambiaría el contenido bajo los pies.
+    """
+    from server.app.modules.redaccion.database.models import (
+        HubReportTemplate,
+        HubReportTemplateVersion,
+    )
+
+    nombre = documento["nombre"]
+    existente = (
+        await session.execute(
+            select(HubReportTemplate).where(HubReportTemplate.name == nombre)
+        )
+    ).scalar_one_or_none()
+    if existente is not None:
+        return False
+
+    plantilla = HubReportTemplate(
+        id=uuid.uuid4(),
+        name=nombre,
+        description=documento.get("descripcion"),
+        report_profile=documento["report_profile"],
+        owner_kind="platform",
+    )
+    session.add(plantilla)
+    await session.flush()
+
+    vigente = None
+    for entrada in documento["versiones"]:
+        version = HubReportTemplateVersion(
+            id=uuid.uuid4(),
+            template_id=plantilla.id,
+            version=entrada["version"],
+            spec_json=entrada["spec_json"],
+            # `created_by` es NOT NULL: cada versión dice quién la firmó. En una instalación
+            # nueva la firma el superadministrador que crea este mismo sembrado — no se pone
+            # un UUID inventado, porque entonces la columna diría algo falso.
+            created_by=autor_id,
+        )
+        session.add(version)
+        await session.flush()
+        if entrada["version"] == documento.get("version_vigente"):
+            vigente = version.id
+    plantilla.current_version_id = vigente
+    return True
+
+
+async def _sembrar(
+    email: str, password: str, nombre: str, url: str | None, con_demo: bool = False
+) -> _Informe:
     informe = _Informe()
     engine = create_async_engine(url)
     session_factory = create_session_factory(engine)
@@ -225,6 +311,23 @@ async def _sembrar(email: str, password: str, nombre: str, url: str | None) -> _
                 else:
                     informe.registrar(f"Prompt de bienvenida [{idioma}]", False)
 
+            # --- Catálogo de plantillas demo (D.7) ---------------------------
+            #
+            # Se lee de `app/data/plantillas_demo/*.json`, ficheros versionados, y **no** de la
+            # base de datos de nadie: así la demo se revisa en un diff y es la misma en todos
+            # los despliegues. Sólo con `--con-demo`: un piloto que no las quiera no debe tener
+            # que borrarlas después.
+            if con_demo:
+                for fichero, documento in _leer_plantillas_demo():
+                    creada = await _sembrar_plantilla_demo(
+                        session, documento, AUTOR_DEL_SEMBRADO
+                    )
+                    informe.registrar(f"Plantilla demo '{documento['nombre']}'", creada)
+                if not _RUTA_DEMO.is_dir():
+                    informe.registrar(
+                        f"Plantillas demo (no existe {_RUTA_DEMO.name}/)", False
+                    )
+
             await session.commit()
     finally:
         await engine.dispose()
@@ -248,6 +351,15 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--database-url",
         default=None,
         help="Por defecto, DATABASE_URL del entorno.",
+    )
+    parser.add_argument(
+        "--con-demo",
+        action="store_true",
+        help=(
+            "Siembra además el catálogo de plantillas demo desde "
+            "app/data/plantillas_demo/. Sin esto no se siembra ninguna: un piloto que no "
+            "las quiera no debe tener que borrarlas."
+        ),
     )
     return parser.parse_args(argv)
 
@@ -274,6 +386,7 @@ def main(argv: list[str] | None = None) -> int:
             password=args.superadmin_password,
             nombre=args.superadmin_name,
             url=args.database_url,
+            con_demo=args.con_demo,
         )
     )
     informe.imprimir()

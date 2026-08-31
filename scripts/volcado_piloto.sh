@@ -52,21 +52,35 @@ done
 # añade una tabla, y entonces los datos de más viajan sin que nadie lo decida. Con una lista de
 # inclusión, una tabla nueva se queda fuera por omisión, que es el lado seguro del error.
 # ---------------------------------------------------------------------------
+# Formato: tabla|filtro SQL (con :ORG)|razón
+#
+# **Cada tabla lleva su filtro escrito.** La primera versión de este guion usaba
+# `pg_dump --table=…`, y `pg_dump` **no filtra filas**: volcaba la tabla entera. Lo peor es que
+# imprimía antes un recuento por organización, así que *parecía* filtrado — 3,2 GB con datos de
+# tres organizaciones ajenas, y sólo la comprobación sobre el fichero lo destapó. De ahí que
+# aquí no haya un `pg_dump` sino un `\copy` por tabla con su `WHERE`.
+#
+# Los caminos no son uniformes y por eso se escriben uno a uno: unas tablas cuelgan de la
+# organización, otras del chatbot, otras del sitio de curación. Una tabla nueva sin filtro no
+# se puede volcar, que es el lado seguro del error.
+_CHATBOTS_DE_LA_ORG="SELECT id FROM hub_chatbots WHERE organizacion_id = ':ORG'"
+_SITIOS_DE_LA_ORG="SELECT id FROM hub_web_sites WHERE organizacion_id = ':ORG'"
+
 TABLAS=(
-  "hub_organizaciones|la organización del piloto, y sólo ella"
-  "hub_chatbots|los asistentes con su configuración medida (umbrales, top_k, modo)"
-  "hub_documents|el corpus curado, con su vigencia y su validación"
-  "hub_document_chunks|los fragmentos y sus vectores: reembeberlos cuesta GPU y horas"
-  "hub_vocabulary_terms|ámbitos y submaterias; sin esto la ingesta aborta"
-  "hub_lexicon_pairs|el puente léxico catalán/castellano de la búsqueda de texto"
-  "hub_web_sites|el sitio de curación"
-  "hub_crawled_pages|sus páginas rastreadas, con las señales de frescura"
-  "hub_content_findings|los hallazgos ya revisados por una persona: es trabajo humano"
-  "hub_corpus_selections|qué páginas alimentan a qué asistente"
-  "hub_prompt_templates|los prompts del sistema, afinados por medición"
-  "hub_themes|la identidad visual de la organización"
-  "hub_widget_keys|las credenciales de sitio ya emitidas"
-  "hub_module_grants|qué módulos tiene concedidos la organización"
+  "hub_organizaciones|id = ':ORG'|la organización del piloto, y sólo ella"
+  "hub_chatbots|organizacion_id = ':ORG'|los asistentes con su configuración medida (umbrales, top_k, modo)"
+  "hub_documents|chatbot_id IN ($_CHATBOTS_DE_LA_ORG)|el corpus curado, con su vigencia y su validación"
+  "hub_document_chunks|chatbot_id IN ($_CHATBOTS_DE_LA_ORG)|los fragmentos y sus vectores: reembeberlos cuesta GPU y horas"
+  "hub_vocabulary_terms|organizacion_id = ':ORG' OR organizacion_id IS NULL|ámbitos y submaterias; sin esto la ingesta aborta. Los nulos son de plataforma y se heredan"
+  "hub_lexicon_pairs|organizacion_id = ':ORG'|el puente léxico catalán/castellano de la búsqueda de texto"
+  "hub_web_sites|organizacion_id = ':ORG'|el sitio de curación"
+  "hub_crawled_pages|site_id IN ($_SITIOS_DE_LA_ORG)|sus páginas rastreadas, con las señales de frescura"
+  "hub_content_findings|site_id IN ($_SITIOS_DE_LA_ORG)|los hallazgos ya revisados por una persona: es trabajo humano"
+  "hub_corpus_selections|chatbot_id IN ($_CHATBOTS_DE_LA_ORG)|qué páginas alimentan a qué asistente"
+  "hub_prompt_templates|chatbot_id IN ($_CHATBOTS_DE_LA_ORG)|los prompts del sistema, afinados por medición"
+  "hub_themes|organizacion_id = ':ORG' OR chatbot_id IN ($_CHATBOTS_DE_LA_ORG)|la identidad visual de la organización"
+  "hub_widget_keys|chatbot_id IN ($_CHATBOTS_DE_LA_ORG)|las credenciales de sitio ya emitidas"
+  "hub_module_grants|organizacion_id = ':ORG'|qué módulos tiene concedidos la organización"
 )
 
 # ---------------------------------------------------------------------------
@@ -95,9 +109,11 @@ echo "== Volcado para el piloto =="
 printf '  %-14s %s\n' "organización" "$ORGANIZACION"
 printf '  %-14s %s\n' "salida" "$SALIDA"
 echo
+campo() { printf '%s' "$1" | cut -d'|' -f"$2"; }
+
 echo "  Viajan ${#TABLAS[@]} tablas:"
 for entrada in "${TABLAS[@]}"; do
-  printf '    %-28s %s\n' "${entrada%%|*}" "${entrada#*|}"
+  printf '    %-28s %s\n' "$(campo "$entrada" 1)" "$(campo "$entrada" 3)"
 done
 echo
 echo "  NO viajan ${#PROHIBIDAS[@]} tablas:"
@@ -113,7 +129,7 @@ fi
 
 [ -n "$DSN" ] || { echo "ERROR: falta DATABASE_URL_SYNC o --dsn." >&2; exit 2; }
 command -v psql >/dev/null 2>&1 || { echo "ERROR: psql no está en el PATH." >&2; exit 3; }
-command -v pg_dump >/dev/null 2>&1 || { echo "ERROR: pg_dump no está en el PATH." >&2; exit 3; }
+
 
 # `psql` y `pg_dump` quieren un DSN de libpq; SQLAlchemy añade el driver.
 DSN_LIBPQ="$(printf '%s' "$DSN" | sed 's#^postgresql+psycopg2://#postgresql://#; s#^postgresql+asyncpg://#postgresql://#')"
@@ -123,27 +139,57 @@ DSN_LIBPQ="$(printf '%s' "$DSN" | sed 's#^postgresql+psycopg2://#postgresql://#;
 # después de haber generado un fichero que alguien podría restaurar.
 # ---------------------------------------------------------------------------
 echo "== Recuento en origen =="
+declare -A RECUENTO
+TOTAL=0
 for entrada in "${TABLAS[@]}"; do
-  tabla="${entrada%%|*}"
-  if [ "$tabla" = "hub_organizaciones" ]; then
-    donde="id = '$ORGANIZACION'"
-  else
-    donde="organizacion_id = '$ORGANIZACION'"
-  fi
-  n="$(psql "$DSN_LIBPQ" -tAc "SELECT count(*) FROM $tabla WHERE $donde" 2>/dev/null || echo "n/d")"
+  tabla="$(campo "$entrada" 1)"
+  filtro="$(campo "$entrada" 2 | sed "s/:ORG/$ORGANIZACION/g")"
+  n="$(psql "$DSN_LIBPQ" -tAc "SELECT count(*) FROM $tabla WHERE $filtro" 2>&1 | tr -d '[:space:]')"
+  case "$n" in
+    ''|*[!0-9]*)
+      echo "  [ERROR] $tabla: el filtro no se pudo evaluar" >&2
+      echo "          $filtro" >&2
+      exit 4
+      ;;
+  esac
+  RECUENTO["$tabla"]="$n"
+  TOTAL=$((TOTAL + n))
   printf '  %-28s %s\n' "$tabla" "$n"
 done
 echo
-echo "  «n/d» = la tabla no tiene columna de organización directa; su filtro va por su padre."
+echo "  total de filas que viajan: $TOTAL"
 echo "  Revisa estas cifras ANTES de continuar: son las que tienen que aparecer al restaurar."
 echo
 
+# ---------------------------------------------------------------------------
+# Generación: un `\copy` por tabla con su filtro.
+#
+# Y **no** `pg_dump --table=…`: `pg_dump` no filtra filas, así que volcaría cada tabla entera.
+# La primera versión de este guion hacía justo eso y produjo 3,2 GB con datos de tres
+# organizaciones ajenas — sólo la comprobación sobre el fichero lo destapó.
+# ---------------------------------------------------------------------------
 echo "== Generando $SALIDA =="
-ARGS=()
+: > "$SALIDA"
+{
+  echo "-- Volcado del piloto para la organización $ORGANIZACION"
+  echo "-- Generado por scripts/volcado_piloto.sh. Restaurar con psql -f sobre una base ya migrada."
+  echo "-- Orden de las tablas = orden de dependencias: no reordenar."
+  echo "SET session_replication_role = replica;  -- las FK circulares de hub_chatbots/hub_documents"
+} >> "$SALIDA"
+
 for entrada in "${TABLAS[@]}"; do
-  ARGS+=("--table=${entrada%%|*}")
+  tabla="$(campo "$entrada" 1)"
+  filtro="$(campo "$entrada" 2 | sed "s/:ORG/$ORGANIZACION/g")"
+  [ "${RECUENTO[$tabla]}" != "0" ] || { printf '  [vacía] %s\n' "$tabla"; continue; }
+  {
+    echo ""
+    echo "COPY $tabla FROM stdin;"
+  } >> "$SALIDA"
+  psql "$DSN_LIBPQ" -tAc "\\copy (SELECT * FROM $tabla WHERE $filtro) TO STDOUT" >> "$SALIDA"
+  echo "\\." >> "$SALIDA"
+  printf '  [ok]    %-28s %s filas\n' "$tabla" "${RECUENTO[$tabla]}"
 done
-pg_dump "$DSN_LIBPQ" --data-only --no-owner --no-privileges "${ARGS[@]}" > "$SALIDA"
+echo "SET session_replication_role = DEFAULT;" >> "$SALIDA"
 echo "  escrito: $(wc -c < "$SALIDA") bytes"
 echo
 

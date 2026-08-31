@@ -30,8 +30,13 @@ VOLCADO = RAIZ / "scripts" / "volcado_piloto.sh"
 
 _BASH = shutil.which("bash") or "bash"
 
-#: Entradas "tabla|razón" de cada lista del guion.
-_ENTRADA = re.compile(r'^\s*"(hub_[a-z_]+)\|([^"]*)"\s*$', re.MULTILINE)
+#: Entradas "tabla|razón" de la lista de prohibidas.
+_ENTRADA = re.compile(r'^\s*"(hub_[a-z_]+)\|([^"|]*)"\s*$', re.MULTILINE)
+
+#: Entradas "tabla|filtro|razón" de la lista de las que viajan.
+_ENTRADA_CON_FILTRO = re.compile(
+    r'^\s*"(hub_[a-z_]+)\|([^"]*?)\|([^"|]*)"\s*$', re.MULTILINE
+)
 
 
 def _texto() -> str:
@@ -46,8 +51,26 @@ def _bloque(nombre: str) -> str:
     return texto[inicio : texto.index("\n)", inicio)]
 
 
+def _expandir(filtro: str) -> str:
+    """Sustituye las variables que el propio guion define para los subconsultas repetidas.
+
+    El test lee las definiciones del guion en vez de duplicarlas: si mañana el filtro de las
+    páginas deja de pasar por los sitios de la organización, esto lo verá.
+    """
+    texto = _texto()
+    for variable in ("_CHATBOTS_DE_LA_ORG", "_SITIOS_DE_LA_ORG"):
+        m = re.search(rf'^{variable}="([^"]+)"', texto, re.MULTILINE)
+        if m:
+            filtro = filtro.replace(f"${variable}", m.group(1))
+    return filtro
+
+
 def _tablas(nombre: str) -> dict[str, str]:
-    return {t: r for t, r in _ENTRADA.findall(_bloque(nombre))}
+    """{tabla: razón}. Las que viajan llevan tres campos (con el filtro); las prohibidas, dos."""
+    bloque = _bloque(nombre)
+    if nombre == "TABLAS":
+        return {t: r for t, _f, r in _ENTRADA_CON_FILTRO.findall(bloque)}
+    return {t: r for t, r in _ENTRADA.findall(bloque)}
 
 
 def _run(*args: str, env: dict[str, str] | None = None):
@@ -127,6 +150,56 @@ def test_los_fragmentos_viajan_porque_reembeber_cuesta() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_cada_tabla_lleva_su_filtro_y_ninguna_se_volca_entera() -> None:
+    """`pg_dump --table=…` **no filtra filas**.
+
+    La primera versión del guion lo usaba y volcaba cada tabla entera: 3,2 GB con datos de tres
+    organizaciones ajenas. Y como imprimía antes un recuento por organización, *parecía*
+    filtrado. Sólo la comprobación sobre el fichero lo destapó.
+    """
+    texto = _texto()
+    activas = [
+        l for l in texto.splitlines()
+        if "pg_dump" in l and not l.strip().startswith("#")
+    ]
+    assert not activas, f"`pg_dump` no puede filtrar filas; usa `\\copy` con WHERE: {activas}"
+    assert "\\\\copy (SELECT * FROM $tabla WHERE $filtro)" in texto, (
+        "Cada tabla se exporta con su propio filtro."
+    )
+
+    # Y cada entrada declara su filtro: tres campos, no dos.
+    for entrada in _ENTRADA_CON_FILTRO.findall(_bloque("TABLAS")):
+        tabla, filtro, razon = entrada
+        assert filtro.strip(), f"{tabla} no declara filtro: se volcaría entera"
+        assert ":ORG" in _expandir(filtro), (
+            f"{tabla} tiene un filtro que no acaba llegando a la organización"
+        )
+        assert razon.strip(), f"{tabla} no dice por qué viaja"
+
+
+def test_las_dos_caras_del_sitio_sin_organizacion() -> None:
+    """`Escola de Doctorat (RAS.5)` se dio de alta con `organizacion_id` a NULO, así que el
+    filtro lo dejaba fuera y con él sus 351 páginas y sus 292 hallazgos.
+
+    Las dos caras: las páginas y los hallazgos cuelgan del **sitio**, no de la organización, así
+    que un sitio sin organización se lleva su contenido al silencio. Que asignarlo sea un paso
+    consciente es la mitad del arreglo; la otra es que el recuento lo delate.
+    """
+    filtros = {
+        t: _expandir(f) for t, f, _ in _ENTRADA_CON_FILTRO.findall(_bloque("TABLAS"))
+    }
+    for tabla in ("hub_crawled_pages", "hub_content_findings"):
+        assert "hub_web_sites" in filtros[tabla], (
+            f"{tabla} tiene que filtrarse por su sitio, no por la organización directamente"
+        )
+    assert "organizacion_id = ':ORG'" in filtros["hub_web_sites"]
+
+    # El guion imprime el recuento por tabla antes de escribir, así que un 0 en `hub_web_sites`
+    # es visible en vez de silencioso.
+    texto = _texto()
+    assert "Recuento en origen" in texto
+
+
 def test_la_verificacion_se_hace_sobre_el_fichero_generado() -> None:
     texto = _texto()
     assert re.search(r'grep -qE "COPY \(public\\?\.\)\?\$tabla ', texto), (
@@ -149,9 +222,8 @@ def test_un_volcado_con_datos_de_mas_se_borra() -> None:
 def test_se_cuenta_antes_de_escribir() -> None:
     texto = _texto()
     assert "Recuento en origen" in texto
-    # La INVOCACIÓN, no cualquier mención: la primera aparición de `pg_dump` en el guion es el
-    # `command -v` que comprueba que está instalado, y comparar contra eso medía otra cosa.
-    invocacion = texto.index('pg_dump "$DSN_LIBPQ"')
+    # La generación de verdad, que ahora es el `\copy` por tabla.
+    invocacion = texto.index("\\\\copy (SELECT * FROM $tabla")
     assert texto.index("Recuento en origen") < invocacion, (
         "El recuento va ANTES de generar el fichero: si las cifras no son las esperadas, se "
         "para sin haber escrito nada."
