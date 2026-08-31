@@ -11483,6 +11483,13 @@ los prueben sobre la norma que están leyendo.
 - Incrustar el widget en `cercador.html` y en la plantilla de `html/<slug>.html`, con
   `data-chatbot-id` y `data-widget-key` — la credencial de SITIO de SEC.8.5, que sólo abre
   chatbots `public_anon`.
+- **La dirección de la API se lee de UN sitio, no se incrusta 316 veces.** Las páginas
+  referencian un único fichero del bucket (el guion de arranque del widget, o un
+  `widget-config.json` que él lea) y de ahí sale `data-api-url`. Es lo que hace que cambiar
+  `sslip.io` por el subdominio institucional cueste editar un fichero en vez de republicar
+  las 313 normas: el nombre de la API es infraestructura, y la infraestructura no se copia
+  en cada página. La URL de cada norma sí es identidad pública y esa no cambia nunca
+  (es la que cita el asistente).
 - Poder incrustar **más de un chatbot** para comparar: es el escenario de prueba que pidió el
   usuario, gente distinta probando sobre la misma norma.
 - El widget NO puede romper la página si el servidor no responde: la lectura de la norma es
