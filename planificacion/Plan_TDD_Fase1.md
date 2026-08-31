@@ -11377,10 +11377,29 @@ incrustación del widget que D.1 dejó pendiente.
   no abre nada que no sea un chatbot `public_anon`.
 - Documentar la revocación y la rotación.
 
+## Runbook de reingesta del corpus (añadido 2026-08-31: curación en local, ingesta en el cloud)
+- docs/RUNBOOK_REINGESTA.md con los comandos EXACTOS en la VM, no una descripción:
+  - Cómo llegan los .md validados a la VM mientras no exista el servicio de publicación
+    (scp/rsync de la carpeta curada) y el comando de `load.py` dentro del contenedor;
+    y la variante `sync.py` contra PUBLICATION_MCP_URL para cuando D.6.1 lo despliegue.
+  - Siempre en dos pasos: `--dry-run` primero (leer el plan `+N ~M =K` ANTES de aplicar,
+    que es la puerta que destapó los 292 falsos cambios del 27-08), aplicar después.
+  - Verificación de cierre de cada pasada: segunda pasada a cero (`metadatos=0` en los
+    cuatro asistentes, el invariante que dejó el bloque ACT) y cero documentos sin
+    fragmentos (la fuga que destapó ACT.8).
+- La regla de fuente única, escrita donde se opera: desde el despliegue, la BD del cloud
+  es la única fuente de verdad del corpus del piloto; la local es solo desarrollo. La
+  única ingesta que cuenta se ejecuta contra el cloud. (El bloque DER existe porque la
+  deriva entre copias ya es un riesgo identificado; este runbook es su prevención barata.)
+- Cuándo se sincroniza sigue siendo decisión operativa manual, sin scheduler — la misma
+  decisión de SYNC.1 y RAG.14; el runbook documenta el CÓMO, no automatiza el CUÁNDO.
+
 ## Cierre
 - [ ] Restauración de la base probada de verdad, con el tiempo que costó anotado
 - [ ] El aviso de caída llega a alguien (probarlo apagando el servicio)
 - [ ] La guía de incrustación permite a alguien de fuera publicar el widget sin preguntar
+- [ ] Una reingesta real ejecutada en la VM siguiendo el runbook tal cual está escrito,
+      con el plan del dry-run y el `metadatos=0` final pegados en el propio documento
 ```
 
 ---
