@@ -3,6 +3,23 @@
 # Guion de arranque de la VM (D.4-VM). Lo ejecuta GCE en el primer arranque y en cada
 # reinicio, así que **tiene que ser idempotente**: comprueba antes de instalar.
 #
+# ⚠️ **Editar este fichero NO cambia la máquina.** GCE lo lee de los metadatos de la instancia,
+# fijados al crearla, así que un cambio aquí no llega sola ni reiniciando: hay que refrescar los
+# metadatos y volver a ejecutarlo.
+#
+#     gcloud compute instances add-metadata govgenai-vm --zone europe-southwest1-b \
+#         --metadata-from-file startup-script=deploy/vm/startup.sh
+#     gcloud compute ssh govgenai-vm --zone europe-southwest1-b --tunnel-through-iap \
+#         --command "sudo google_metadata_script_runner startup"
+#
+# Se descubrió al cerrar D.6-VM: la máquina llevaba horas ejecutando la versión original de este
+# guion, así que el agente de operaciones y la rotación de logs **nunca se instalaron** —y sin el
+# agente, las alertas de memoria y disco no pueden dispararse—. El despliegue de D.5-VM refresca
+# los metadatos por eso: lo que corre tiene que venir del repositorio, no del estado del disco.
+#
+# Ojo al aplicarlo en caliente: el bloque de rotación reinicia Docker, así que los contenedores
+# se reinician. Vuelven solos por `restart: unless-stopped`, pero no es una operación invisible.
+#
 # Instala lo que la máquina necesita y nada más:
 #   - Docker + plugin de Compose        (la pila)
 #   - gVisor (`runsc`)                  (capa 8 del sandbox; ver docs/SANDBOX_SECURITY.md)

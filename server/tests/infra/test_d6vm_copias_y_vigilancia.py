@@ -117,6 +117,26 @@ def test_el_arranque_instala_el_agente_de_operaciones() -> None:
     )
 
 
+def test_el_despliegue_refresca_el_guion_de_arranque_en_los_metadatos() -> None:
+    """Editar `startup.sh` NO cambia la máquina: GCE lo lee de los metadatos de la instancia.
+
+    Se descubrió al cerrar D.6-VM — la VM llevaba horas ejecutando la versión original, así que
+    el agente de operaciones y la rotación de logs nunca se instalaron, y **las alertas de
+    memoria y disco eran inertes sin que nada lo dijera**. El despliegue lo refresca para que
+    lo que corre venga del repositorio y no del estado del disco de la máquina.
+    """
+    workflow = (RAIZ / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
+    assert "startup-script=deploy/vm/startup.sh" in workflow, (
+        "El despliegue tiene que refrescar el guion de arranque en los metadatos."
+    )
+    assert "add-metadata" in workflow
+
+    texto = _texto(STARTUP)
+    assert "NO cambia la máquina" in texto, (
+        "El propio guion tiene que advertirlo: es el defecto que costó descubrirlo."
+    )
+
+
 def test_los_logs_de_contenedor_rotan_en_local() -> None:
     texto = _texto(STARTUP)
     assert "max-size" in texto and "max-file" in texto, (
