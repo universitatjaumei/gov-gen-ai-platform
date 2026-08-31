@@ -88,7 +88,8 @@ def ip_de(request: Request) -> str:
     se obtiene un cubo distinto y el límite de fuerza bruta del login deja de aplicarse.
 
     Se cuenta por tanto desde la derecha, tantos saltos como proxies de confianza haya
-    declarados en `TRUSTED_PROXY_HOPS` (1 detrás de Cloud Run o de un balanceador). Con 0
+    declarados en `TRUSTED_PROXY_HOPS` (1 detrás del proxy inverso que termina TLS, o de un
+    balanceador). Con 0
     —expuesto directamente— la cabecera se ignora entera, porque ahí no la pone nadie de
     fiar.
     """

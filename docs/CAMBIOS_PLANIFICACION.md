@@ -33,7 +33,7 @@ Esta fase se divide en tres sub-entregables claros. El objetivo es que al final 
 
 * **Contenido:**  
   * **Sistema de Temas (Fase 10):** Variables CSS, presets (Oscuro, Universidad) y editor visual para que la **Organización** personalice su widget.  
-  * **Despliegue Staging (Prompts D.2 a D.4):** Configuración de Google Cloud (Secret Manager, Cloud SQL, Cloud Run).  
+  * **Despliegue Staging (Prompts D.2 a D.4):** Configuración de Google Cloud (Secret Manager, Cloud SQL, y una **VM con Docker Compose** — el destino dejó de ser un servicio gestionado el 2026-08-10, ver `DECISION_EXTRACCION_Y_DESPLIEGUE.md` §2).  
 * **Entregable:** Un widget con la marca de la institución accesible desde una URL pública de pruebas.
 
 ### **Subfase 1.C: Privacidad y Generación de Informes**

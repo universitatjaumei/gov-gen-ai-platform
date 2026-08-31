@@ -107,7 +107,10 @@ que ya prohíbe `session.get(HubChatbot,...)` directo en `hub_chatbots_router` a
 
 - **ME-1 · `core/rate_limit.py:89-92`** — `X-Forwarded-For` se toma por la izquierda (valor
   controlable por el cliente), lo que **anula el límite de fuerza bruta de login** falsificando
-  la cabecera. En Cloud Run la IP real la añade la infraestructura al final.
+  la cabecera. ✅ **Arreglado**: se cuenta desde la derecha, tantos saltos como declare
+  `TRUSTED_PROXY_HOPS`, y con 0 —expuesto directamente— la cabecera se ignora entera. En la VM
+  el salto de confianza es el proxy inverso que termina TLS, así que ese número es
+  **configuración del despliegue** (D.4-VM) y no algo que ponga la plataforma por ti.
 - **ME-2 · SAML** (`core/auth/saml/settings.py:85,51-57`) — `validate_cert=False` en el fetch de
   metadata (MITM) y `wantAssertionsSigned: False`. La firma sí se valida vía `OneLogin_Saml2_Auth`.
 - **ME-3 · `api/v1/ingestion.py` `user_upload`** — sin `assert_chatbot_access`: inyecta documentos
@@ -151,11 +154,13 @@ conocidos (pyjwt 2.10.1, python-multipart 0.0.21, cryptography 46.0.3; no se usa
 ### BLOQUEANTE PARA DEPLOY
 
 - **B1 · Temas en disco local relativo** — `hub_themes_router.py:127` (`THEMES_DIR =
-  Path("data/themes")`, con `# en producción usar BD` escrito por el propio código). En Cloud Run
-  los temas desaparecen al reciclar la instancia y no se comparten entre instancias. **Tumba el
-  arreglo del hallazgo #3 de MAN.2** (el widget con tema): `apply_theme_to_chatbot` guarda en BD
-  solo el puntero `{theme_id}` y resuelve leyendo el JSON local. Mover los temas a tabla
-  (`HubConfigBase`, sincronizable) o al menos a `StorageService`.
+  Path("data/themes")`, con `# en producción usar BD` escrito por el propio código). Los temas
+  vivían en el sistema de ficheros del contenedor: se perdían al recrearlo —o sea en cada
+  redespliegue— y no se compartían. **Tumbaba el arreglo del hallazgo #3 de MAN.2** (el widget
+  con tema): `apply_theme_to_chatbot` guardaba en BD solo el puntero `{theme_id}` y resolvía
+  leyendo el JSON local. ✅ **Arreglado por PLAT.7**: el tema en JSON se retiró y `THEMES_DIR`
+  ya no existe en `server/app`; lo vigila
+  `server/tests/infra/test_plat7_retirada_del_tema_en_json.py`.
 - **B2 · La curación no puede rastrear en el despliegue estándar** — `main.py:94-99` construye el
   job con `_NullCrawler()` y `detectors=[]`, y no existe mecanismo real de inyección
   (`SpiderFactory`/`SiteCrawler` sin ningún llamante de producción). `POST /hub/sites/{id}/crawl`

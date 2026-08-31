@@ -198,7 +198,7 @@ Las variables para colores del chatbox, burbujas de mensajes, fuentes y botones 
 El módulo es **edge** (corre en la nube del cliente). Depende de:
 
 - PostgreSQL 16 + pgvector (vectores dim 1024 para BGE-M3).
-- BGE-M3 in-process (LocalEmbeddingService) durante el desarrollo; se externaliza cuando el cold start supere 15 s en Cloud Run.
+- BGE-M3 in-process (`LocalEmbeddingService`) en el modo edge, donde el dato no puede salir; en el modo cloud los embeddings van **por API** (MOD.2) y la pila local es un extra de instalación (D.4.0). El criterio de «externalizar por cold start» ya no aplica: el destino es una VM con proceso vivo, no un servicio que escale a cero.
 - Variables de entorno: `DATABASE_URL`, `DATABASE_URL_SYNC`, `STORAGE_BACKEND`, `STORAGE_BUCKET`.
 
 ---

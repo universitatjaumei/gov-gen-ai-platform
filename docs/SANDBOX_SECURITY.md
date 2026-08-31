@@ -111,9 +111,30 @@ tmpfs:
 
 Evita que un script malicioso agote la CPU, la memoria o el disco del host.
 
-### Capa 8 — gVisor en GCP (despliegue Cloud Run)
+### Capa 8 — gVisor en la VM (la pone el aprovisionamiento)
 
-Cloud Run ejecuta los contenedores sobre **gVisor** (runtime `runsc`), que intercepta las llamadas al sistema y las emula en espacio de usuario. Esto mitiga exploits de kernel del host que pudieran escapar de las capas anteriores.
+**Esta capa la daba la plataforma y ahora la ponemos nosotros.** Hasta el 2026-08-10 el destino era un servicio gestionado que ejecuta los contenedores sobre gVisor sin que nadie lo pida; el destino pasó a ser una **VM con Docker Compose** (`DECISION_EXTRACCION_Y_DESPLIEGUE.md` §2), y ahí **no está salvo que se configure**. Se configura: es la única capa que mitiga una fuga del kernel del host, y las suposiciones del modelo dicen que la auditoría AST es *bypassable*.
+
+**gVisor** (runtime `runsc`) intercepta las llamadas al sistema del contenedor y las emula en espacio de usuario, así que un exploit de kernel se estrella contra un kernel que no es el del host.
+
+Cómo se pone, en el aprovisionamiento de la VM (D.4-VM):
+
+1. Instalar `runsc` y registrarlo como runtime de Docker en `/etc/docker/daemon.json`.
+2. Ejecutar bajo ese runtime **sólo el sandbox**, que es el único que corre código ajeno:
+
+```yaml
+script-sandbox:
+  runtime: runsc
+```
+
+Con plataforma `systrap`, no `kvm`: `kvm` necesita `/dev/kvm` y por tanto virtualización anidada, que en GCE no está en todos los tipos de máquina. `systrap` funciona en cualquier VM y su coste de rendimiento es irrelevante para scripts que duran segundos.
+
+Cómo se comprueba — **una capa que no se comprueba no se cuenta**, y ésta ya se contó una vez sin estar:
+
+```bash
+docker compose exec script-sandbox dmesg | grep -i gvisor
+# Starting gVisor...     <- si no sale nada, la capa 8 NO está y quedan 7
+```
 
 ---
 
@@ -121,7 +142,7 @@ Cloud Run ejecuta los contenedores sobre **gVisor** (runtime `runsc`), que inter
 
 | Amenaza | Estado |
 |---------|--------|
-| Exploits del kernel del host | Mitigado parcialmente por gVisor (capa 8) en GCP |
+| Exploits del kernel del host | Mitigado parcialmente por gVisor (capa 8), **si el aprovisionamiento lo configuró**: lo dice la comprobación de esa capa, no la suposición |
 | Side-channel attacks entre tenants | Fuera de alcance MVP |
 | Inyección de prompts maliciosos al LLM que generan bypass | Mitigado por capas 1, 2 y 5 |
 | Ataques de timing para inferir datos de otros tenants | Fuera de alcance MVP |
