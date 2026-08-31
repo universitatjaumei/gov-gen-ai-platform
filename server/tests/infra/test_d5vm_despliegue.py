@@ -328,6 +328,30 @@ def test_la_cuenta_de_despliegue_puede_actuar_como_la_de_la_maquina() -> None:
     )
 
 
+def test_refrescar_los_metadatos_usa_un_rol_propio_y_no_el_de_administrador() -> None:
+    """`compute.viewer` es de sólo lectura, así que el paso que refresca el guion de arranque
+    murió con «Required 'compute.instances.setMetadata' permission». La salida cómoda era
+    `roles/compute.instanceAdmin.v1`, que trae de regalo apagar y **borrar** la máquina: una
+    cuenta que despliega no necesita poder destruir el destino.
+    """
+    texto = _texto(PROVISION)
+    assert "compute.instances.setMetadata" in texto, (
+        "Falta el permiso para refrescar el guion de arranque."
+    )
+    # Sólo líneas activas: el comentario que justifica la decisión también nombra el rol
+    # que se descarta.
+    admin = [
+        l for l in texto.splitlines()
+        if "roles/compute.instanceAdmin" in l and not l.strip().startswith("#")
+    ]
+    assert not admin, (
+        f"No se concede administración de instancias: basta un rol propio. {admin}"
+    )
+    assert "--permissions=" in texto and "--stage=GA" in texto, (
+        "El rol propio se crea desde el guion, para que el aprovisionamiento sea repetible."
+    )
+
+
 def test_la_cuenta_de_despliegue_no_es_de_editor_ni_de_propietario() -> None:
     texto = _texto(PROVISION)
     assert "roles/editor" not in texto and "roles/owner" not in texto

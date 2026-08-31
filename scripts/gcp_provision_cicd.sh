@@ -68,6 +68,15 @@ ROLES=(
   "roles/compute.viewer"               # resolver la instancia y su zona
 )
 
+#: Rol propio para refrescar el guion de arranque en los metadatos de la instancia.
+#:
+#: Hace falta porque `compute.viewer` es de **sólo lectura** y el despliegue murió con
+#: «Required 'compute.instances.setMetadata' permission». Y se hace con un rol propio de dos
+#: permisos en vez de `roles/compute.instanceAdmin.v1`, que traería de regalo apagar y **borrar**
+#: la máquina: una cuenta que despliega no necesita poder destruir el destino.
+ROL_ARRANQUE="govgenaiActualizaArranque"
+PERMISOS_ARRANQUE="compute.instances.setMetadata,compute.instances.get"
+
 echo "== CI/CD — proyecto: $PROYECTO =="
 printf '  %-22s %s\n' "repositorio GitHub" "$REPO"
 printf '  %-22s %s\n' "región" "$REGION"
@@ -121,6 +130,21 @@ for rol in "${ROLES[@]}"; do
     --member="serviceAccount:$SA_EMAIL" --role="$rol" >/dev/null
   printf '  [ok]        %s\n' "$rol"
 done
+
+# Rol propio para los metadatos del guion de arranque.
+if g iam roles describe "$ROL_ARRANQUE" >/dev/null 2>&1; then
+  echo "  [ya estaba] rol $ROL_ARRANQUE"
+else
+  g iam roles create "$ROL_ARRANQUE" \
+    --title="Gov Gen AI - refrescar guion de arranque" \
+    --description="Solo actualizar metadatos de instancia, para que el guion de arranque venga del repositorio" \
+    --permissions="$PERMISOS_ARRANQUE" --stage=GA >/dev/null
+  echo "  [creado]    rol $ROL_ARRANQUE"
+fi
+g projects add-iam-policy-binding "$PROYECTO" \
+  --member="serviceAccount:$SA_EMAIL" \
+  --role="projects/$PROYECTO/roles/$ROL_ARRANQUE" >/dev/null
+echo "  [ok]        projects/$PROYECTO/roles/$ROL_ARRANQUE"
 echo
 
 # ---------------------------------------------------------------------------
