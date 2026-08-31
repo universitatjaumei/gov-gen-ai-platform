@@ -26,9 +26,16 @@ EnvironmentFile=/opt/govgenai/.env.despliegue
 # Sockets huérfanos del Cloud SQL Auth Proxy. Si el contenedor muere sin apagarse bien —un
 # `kill`, un reinicio duro, un OOM—, el fichero del socket se queda y el proxy siguiente no
 # arranca: falla con «bind: address already in use», un mensaje que no dice que haya que borrar
-# nada. Es seguro hacerlo aquí: en un `restart` systemd ya ha ejecutado ExecStop (compose down)
-# y en un arranque de máquina no hay nada corriendo.
-ExecStartPre=/usr/bin/find /opt/govgenai/cloudsql -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+# nada.
+#
+# **Sólo si no hay proxy corriendo**, y esa condición no es paranoia: la primera versión
+# limpiaba sin comprobar, razonando que en un `restart` systemd ya ha ejecutado ExecStop. Pero
+# ExecStop es el MISMO `docker compose`, así que cuando el fichero de entorno quedó a medias
+# también falló, los contenedores siguieron vivos, y esta línea **borró el socket con el proxy
+# funcionando**. El proxy siguió declarándose sano —ya estaba enlazado— y la aplicación no
+# encontraba nada: `FileNotFoundError` al conectar. Una guarda que no comprueba puede causar el
+# fallo que venía a evitar.
+ExecStartPre=/bin/sh -c 'docker ps --filter name=govgenai_sql_proxy --filter status=running -q | grep -q . || find /opt/govgenai/cloudsql -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
 
 ExecStartPre=/opt/govgenai/scripts/vm_fetch_secrets.sh --project ${GOOGLE_CLOUD_PROJECT} --out /opt/govgenai/.env.runtime
 ExecStart=/usr/bin/docker compose -f /opt/govgenai/docker-compose.vm.yml up -d --remove-orphans

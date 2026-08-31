@@ -174,14 +174,19 @@ jobs:
         # principio, y eso es lo correcto: si la limpieza no se puede completar, el siguiente
         # despliegue extraería sobre ficheros ajenos.
 
-      - name: Guardar la etiqueta anterior (el camino de vuelta)
+      - name: Guardar la configuración anterior (el camino de vuelta)
         id: anterior
         run: |
           set -euo pipefail
-          ANTERIOR="$(gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap \
-            --quiet --command "grep -m1 '^GOVGENAI_IMAGE=' ${DESTINO}/.env.despliegue 2>/dev/null | cut -d: -f2- || true" | tr -d '\r\n')"
-          echo "valor=$ANTERIOR" >> "$GITHUB_OUTPUT"
-          echo "Etiqueta anterior: ${ANTERIOR:-(ninguna, primer despliegue)}"
+          # Se guarda el fichero ENTERO, no sólo la etiqueta de `app`. La primera versión
+          # rehacía con `sed` la línea de la imagen de la aplicación y dejaba las del frontend
+          # y del sandbox apuntando a la versión nueva: una vuelta atrás a medias es un estado
+          # que nadie ha probado. Copiar el fichero revierte las tres de golpe.
+          HAY="$(gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap \
+            --quiet --command "if [ -f ${DESTINO}/.env.despliegue ]; then sudo cp ${DESTINO}/.env.despliegue ${DESTINO}/.env.despliegue.anterior && echo si; else echo no; fi" \
+            | tr -d '\r\n')"
+          echo "hay=$HAY" >> "$GITHUB_OUTPUT"
+          echo "Configuración anterior guardada: $HAY"
 
       - name: Escribir la configuración del despliegue
         run: |
@@ -254,14 +259,18 @@ jobs:
           fi
 
           if [ "$ok" != "1" ]; then
-            ANTERIOR="${{ steps.anterior.outputs.valor }}"
-            if [ -z "$ANTERIOR" ]; then
-              echo "::error::El despliegue no responde y no hay etiqueta anterior a la que volver."
+            if [ "${{ steps.anterior.outputs.hay }}" != "si" ]; then
+              echo "::error::El despliegue no responde y no hay configuración anterior a la que volver."
               exit 1
             fi
-            echo "::warning::Volviendo a la etiqueta anterior: $ANTERIOR"
+            echo "::warning::Volviendo a la configuración anterior"
+            # Se restaura el fichero entero y se reinicia. Nada de `sed` con variables: la
+            # primera versión mandaba `${ANTERIOR}` escapado, así que la expandía el intérprete
+            # de la MÁQUINA —donde no existe— y el `sed` dejaba `GOVGENAI_IMAGE=` vacío. A
+            # partir de ahí compose no podía interpolar ni para levantar ni para bajar, y como
+            # `ExecStop` es el mismo compose, la pila se quedó a medias.
             gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap --quiet \
-              --command "cd ${DESTINO} && sudo sed -i \"s#^GOVGENAI_IMAGE=.*#GOVGENAI_IMAGE=\${ANTERIOR}#\" .env.despliegue && sudo systemctl restart govgenai"
-            echo "::error::Despliegue revertido. Mira el paso de migraciones antes de reintentar."
+              --command "sudo cp ${DESTINO}/.env.despliegue.anterior ${DESTINO}/.env.despliegue && sudo systemctl restart govgenai"
+            echo "::error::Despliegue revertido. Mira los logs de la aplicación antes de reintentar."
             exit 1
           fi

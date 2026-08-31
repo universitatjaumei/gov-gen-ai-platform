@@ -165,13 +165,38 @@ def test_el_cliente_de_la_api_se_genera_antes_de_construir_las_imagenes() -> Non
     assert "generate:api" in texto
 
 
-def test_la_etiqueta_anterior_se_guarda_antes_de_desplegar() -> None:
+def test_la_configuracion_anterior_se_guarda_antes_de_desplegar() -> None:
     nombres = _nombres_de_paso()
     indice_anterior = next((i for i, n in enumerate(nombres) if "anterior" in n), None)
     indice_despliegue = next((i for i, n in enumerate(nombres) if n.strip() == "Desplegar"), None)
-    assert indice_anterior is not None, "No se guarda la etiqueta anterior."
+    assert indice_anterior is not None, "No se guarda la configuración anterior."
     assert indice_anterior < indice_despliegue, (
         "Se guarda antes de desplegar, o no hay a dónde volver."
+    )
+
+
+def test_la_vuelta_atras_restaura_el_fichero_entero_y_sin_variables_remotas() -> None:
+    """Dos fallos reales del sexto despliegue, los dos en la vuelta atrás.
+
+    (1) Rehacía con `sed` sólo la línea de la imagen de la aplicación, dejando frontend y
+    sandbox en la versión nueva: una vuelta atrás a medias es un estado que nadie ha probado.
+    (2) Mandaba `${ANTERIOR}` **escapado**, así que lo expandía el intérprete de la máquina
+    —donde no existe— y el `sed` escribía `GOVGENAI_IMAGE=` vacío. Desde ahí compose no podía
+    interpolar ni para levantar ni para bajar, y como `ExecStop` es el mismo compose, la pila
+    se quedó a medias.
+    """
+    texto = _texto(WORKFLOW)
+    assert ".env.despliegue.anterior" in texto, (
+        "La vuelta atrás restaura el fichero de configuración entero."
+    )
+    activas = [
+        l for l in texto.splitlines()
+        if "sed -i" in l and "GOVGENAI_IMAGE" in l and not l.strip().startswith("#")
+    ]
+    assert not activas, f"La vuelta atrás no debe reescribir la imagen con sed: {activas}"
+    assert "\\${" not in texto, (
+        "Una variable escapada la expande el intérprete remoto, donde no existe. Si el valor "
+        "tiene que viajar, se expande en el runner."
     )
 
 
@@ -180,7 +205,7 @@ def test_hay_comprobacion_posterior_y_reversion() -> None:
     assert "/health" in texto, "Falta la comprobación de que sirve."
     assert "/docs" in texto, "Falta comprobar que /docs está cerrado en producción (SEC.7)."
     assert "systemctl restart govgenai" in texto
-    assert "Volviendo a la etiqueta anterior" in texto, (
+    assert "Volviendo a la configuración anterior" in texto, (
         "Tiene que existir el camino de vuelta, y decirse en el log."
     )
 

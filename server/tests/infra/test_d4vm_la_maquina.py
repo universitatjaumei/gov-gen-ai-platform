@@ -178,13 +178,26 @@ def test_el_socket_del_proxy_vive_en_un_directorio_del_anfitrion_con_su_dueno() 
     )
 
 
-def test_la_unidad_limpia_los_sockets_huerfanos_antes_de_levantar() -> None:
-    """Un proxy que muere sin apagarse bien deja el socket, y el siguiente falla con «bind:
-    address already in use» — un mensaje que no dice que haya que borrar un fichero."""
+def test_la_limpieza_de_sockets_comprueba_que_no_haya_proxy_corriendo() -> None:
+    """La guarda que no comprueba causó el fallo que venía a evitar.
+
+    La primera versión limpiaba sin condición, razonando que en un `restart` systemd ya ha
+    ejecutado `ExecStop`. Pero `ExecStop` es el **mismo** `docker compose`: cuando el fichero
+    de entorno quedó a medias también falló, los contenedores siguieron vivos y la limpieza
+    **borró el socket con el proxy funcionando**. El proxy siguió sano —ya estaba enlazado— y
+    la aplicación murió con `FileNotFoundError` al conectar.
+    """
     texto = _texto(UNIDAD)
     assert "/opt/govgenai/cloudsql" in texto and "rm -rf" in texto, (
         "Falta la limpieza de sockets huérfanos en ExecStartPre."
     )
+    limpieza = [l for l in texto.splitlines() if "rm -rf" in l and "cloudsql" in l]
+    assert limpieza, "No se encuentra la línea de limpieza."
+    for linea in limpieza:
+        assert "govgenai_sql_proxy" in linea and "status=running" in linea, (
+            "La limpieza tiene que comprobar antes que no haya proxy corriendo: "
+            f"{linea.strip()}"
+        )
 
 
 def test_el_sandbox_conserva_las_capas_que_ya_tenia() -> None:
