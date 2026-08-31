@@ -166,7 +166,13 @@ jobs:
               sudo chmod +x ${DESTINO}/scripts/vm_fetch_secrets.sh && \
               sudo cp /tmp/deploy/vm/govgenai.service /etc/systemd/system/ && \
               sudo systemctl daemon-reload && sudo systemctl enable govgenai && \
-              rm -rf /tmp/deploy /tmp/scripts /tmp/despliegue.tgz"
+              sudo rm -rf /tmp/deploy /tmp/scripts /tmp/despliegue.tgz"
+        # `sudo rm` y no `rm`: la extracción es `sudo tar`, así que los ficheros quedan de
+        # root y el usuario del SSH no puede borrarlos. El tercer despliegue real murió aquí,
+        # con todo lo importante ya hecho —ficheros copiados y unidad habilitada— y sólo la
+        # limpieza fallando. Un `Permission denied` al final es igual de rojo que uno al
+        # principio, y eso es lo correcto: si la limpieza no se puede completar, el siguiente
+        # despliegue extraería sobre ficheros ajenos.
 
       - name: Guardar la etiqueta anterior (el camino de vuelta)
         id: anterior
