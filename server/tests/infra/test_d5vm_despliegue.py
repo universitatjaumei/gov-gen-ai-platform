@@ -136,6 +136,35 @@ def test_las_migraciones_van_antes_de_cambiar_la_imagen() -> None:
     )
 
 
+def test_el_cliente_de_la_api_se_genera_antes_de_construir_las_imagenes() -> None:
+    """`frontend/src/shared/api/generated/` está en .gitignore: es código generado por Orval
+    desde `openapi.json` y no viaja en el repositorio. Sin generarlo, `docker build ./frontend`
+    falla con veinte «Cannot find module '@/shared/api/generated/…'» — que es exactamente
+    dónde murió el primer despliegue.
+    """
+    nombres = _nombres_de_paso()
+    indice_cliente = next(
+        (i for i, n in enumerate(nombres) if "cliente de la API" in n), None
+    )
+    indice_imagenes = next(
+        (i for i, n in enumerate(nombres) if "imágenes" in n or "imagenes" in n), None
+    )
+    assert indice_cliente is not None, (
+        f"Falta el paso que genera el cliente de la API: {nombres}"
+    )
+    assert indice_imagenes is not None, f"Falta el paso que construye las imágenes: {nombres}"
+    assert indice_cliente < indice_imagenes, (
+        "El cliente se genera ANTES de construir la imagen del frontend."
+    )
+
+    texto = _texto(WORKFLOW)
+    assert "export_openapi.py" in texto, (
+        "El cliente sale de `openapi.json`, que exporta el backend: sin ese paso, Orval "
+        "generaría contra un contrato viejo o ninguno."
+    )
+    assert "generate:api" in texto
+
+
 def test_la_etiqueta_anterior_se_guarda_antes_de_desplegar() -> None:
     nombres = _nombres_de_paso()
     indice_anterior = next((i for i, n in enumerate(nombres) if "anterior" in n), None)

@@ -79,6 +79,64 @@ else
   log "gcloud ya está"
 fi
 
+# ---------------------------------------------------------------------------
+# Rotación local de los logs de contenedor
+#
+# El disco lleno por logs es la avería más aburrida y más común de una VM, y la que no avisa:
+# el sistema simplemente deja de escribir. `json-file` con techo y rotación pone el límite
+# donde se genera. Cloud Logging se lleva una copia (abajo), pero un envío remoto no protege
+# el disco local — si la red falla, el fichero sigue creciendo.
+# ---------------------------------------------------------------------------
+if ! grep -q '"log-driver"' /etc/docker/daemon.json 2>/dev/null; then
+  log "fijando rotación de logs de contenedor"
+  python3 - <<'PY'
+import json, pathlib
+ruta = pathlib.Path("/etc/docker/daemon.json")
+datos = json.loads(ruta.read_text()) if ruta.exists() else {}
+datos["log-driver"] = "json-file"
+datos["log-opts"] = {"max-size": "10m", "max-file": "3"}
+ruta.write_text(json.dumps(datos, indent=2))
+PY
+  systemctl restart docker
+else
+  log "rotación de logs ya configurada"
+fi
+
+# ---------------------------------------------------------------------------
+# Agente de operaciones
+#
+# Sin él NO hay métricas de memoria ni de disco del huésped, así que las alertas que D.6-VM
+# pide no se pueden ni escribir: Cloud Monitoring sólo ve la máquina desde fuera (CPU, red).
+# Es la diferencia entre «el disco se llenó» y «alguien avisó antes».
+# ---------------------------------------------------------------------------
+if ! systemctl is-enabled google-cloud-ops-agent >/dev/null 2>&1; then
+  log "instalando el agente de operaciones"
+  curl -fsSL https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh \
+    -o /tmp/add-ops-agent.sh
+  bash /tmp/add-ops-agent.sh --also-install
+  rm -f /tmp/add-ops-agent.sh
+else
+  log "el agente de operaciones ya está"
+fi
+
+# Que el agente recoja además los logs de los contenedores, no sólo los del sistema.
+if [ ! -f /etc/google-cloud-ops-agent/config.yaml ]; then
+  mkdir -p /etc/google-cloud-ops-agent
+  cat > /etc/google-cloud-ops-agent/config.yaml <<'YAML'
+logging:
+  receivers:
+    contenedores:
+      type: files
+      include_paths:
+        - /var/lib/docker/containers/*/*-json.log
+  service:
+    pipelines:
+      contenedores:
+        receivers: [contenedores]
+YAML
+  systemctl restart google-cloud-ops-agent || true
+fi
+
 mkdir -p /opt/govgenai/scripts
 chmod 755 /opt/govgenai
 
