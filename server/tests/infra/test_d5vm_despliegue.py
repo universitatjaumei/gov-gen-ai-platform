@@ -258,6 +258,29 @@ def test_el_aprovisionamiento_exige_el_repositorio() -> None:
     )
 
 
+def test_la_cuenta_de_despliegue_puede_actuar_como_la_de_la_maquina() -> None:
+    """Sin `actAs` sobre la cuenta de la VM, `gcloud compute scp` y `ssh` fallan con
+    «User does not have iam.serviceAccounts.actAs permission on the instance's service
+    account» — y el mensaje no dice sobre qué cuenta falta el permiso. El segundo despliegue
+    real murió aquí.
+
+    Y se concede **sobre esa cuenta**, no a nivel de proyecto: `serviceAccountUser` en el
+    proyecto permitiría suplantar a cualquier cuenta de servicio.
+    """
+    texto = _texto(PROVISION)
+    assert "roles/iam.serviceAccountUser" in texto, (
+        "Falta el permiso que permite entrar en la máquina."
+    )
+    assert "VM_SA" in texto, "El permiso tiene que concederse sobre la cuenta de la VM."
+    proyecto_entero = [
+        l for l in texto.splitlines()
+        if "projects add-iam-policy-binding" in l and "serviceAccountUser" in l
+    ]
+    assert not proyecto_entero, (
+        f"`serviceAccountUser` no se concede a nivel de proyecto: {proyecto_entero}"
+    )
+
+
 def test_la_cuenta_de_despliegue_no_es_de_editor_ni_de_propietario() -> None:
     texto = _texto(PROVISION)
     assert "roles/editor" not in texto and "roles/owner" not in texto

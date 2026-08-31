@@ -55,6 +55,9 @@ if [ -z "$REPO" ]; then
 fi
 
 SA_EMAIL="$SA_NOMBRE@$PROYECTO.iam.gserviceaccount.com"
+#: La cuenta con la que corre la VM (la crea `gcp_provision_vm.sh`). Hace falta nombrarla para
+#: conceder `actAs` sobre ella, que es lo que permite entrar por SSH y copiar ficheros.
+VM_SA="govgenai-vm@$PROYECTO.iam.gserviceaccount.com"
 
 # Roles de la cuenta que despliega. Lo mínimo para: publicar la imagen, entrar por IAP y
 # ejecutar `docker compose` en la máquina.
@@ -153,6 +156,26 @@ PRINCIPAL="principalSet://iam.googleapis.com/projects/$NUMERO/locations/global/w
 g iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
   --member="$PRINCIPAL" --role="roles/iam.workloadIdentityUser" >/dev/null
 echo "  [ok]        $REPO puede suplantar a la cuenta de despliegue"
+echo
+
+# ---------------------------------------------------------------------------
+# 4. `actAs` sobre la cuenta de la MÁQUINA
+#
+# Esto no es un extra: sin él, `gcloud compute scp` y `ssh` contra una instancia que corre
+# como cuenta de servicio fallan con
+#     PERMISSION_DENIED: User does not have iam.serviceAccounts.actAs permission on the
+#     instance's service account
+# y el mensaje no dice sobre QUÉ cuenta falta el permiso — falta sobre la de la VM, no sobre
+# la de despliegue. El segundo despliegue real murió exactamente aquí.
+#
+# Se concede **sobre esa cuenta** y no a nivel de proyecto: `serviceAccountUser` en el proyecto
+# permitiría suplantar a cualquier cuenta de servicio, incluida la de la propia máquina para
+# otros fines.
+# ---------------------------------------------------------------------------
+echo "== 4. Permiso para entrar en la máquina =="
+g iam service-accounts add-iam-policy-binding "$VM_SA" \
+  --member="serviceAccount:$SA_EMAIL" --role="roles/iam.serviceAccountUser" >/dev/null
+echo "  [ok]        $SA_NOMBRE puede actuar como $VM_SA"
 echo
 
 echo "== Lo que hay que poner en GitHub (variables del repositorio, no secretos) =="
