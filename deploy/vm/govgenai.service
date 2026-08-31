@@ -1,0 +1,37 @@
+# Unidad systemd de la VM (D.4-VM). Se copia a /etc/systemd/system/govgenai.service
+# y se habilita con `systemctl enable govgenai`.
+#
+# Esto es la avería que una VM tiene y un servicio gestionado no: si la máquina se reinicia
+# —mantenimiento de GCP, un `reboot` por un parche de kernel— nadie levanta los contenedores.
+# Sin esta unidad, el sistema se queda apagado hasta que alguien entra a mano, y la primera
+# noticia la da un usuario.
+#
+# Antes de levantar nada baja los secretos: el fichero de entorno se reconstruye en cada
+# arranque desde Secret Manager, así que rotar una credencial es cambiar el secreto y
+# reiniciar. Si `vm_fetch_secrets.sh` falla, la unidad NO arranca la pila — arrancar con
+# media configuración es peor que no arrancar.
+
+[Unit]
+Description=Gov Gen AI Platform (docker compose)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/govgenai
+EnvironmentFile=/opt/govgenai/.env.despliegue
+
+ExecStartPre=/opt/govgenai/scripts/vm_fetch_secrets.sh --project ${GOOGLE_CLOUD_PROJECT} --out /opt/govgenai/.env.runtime
+ExecStart=/usr/bin/docker compose -f /opt/govgenai/docker-compose.vm.yml up -d --remove-orphans
+ExecStop=/usr/bin/docker compose -f /opt/govgenai/docker-compose.vm.yml down
+
+# `Restart=always` con `Type=oneshot` no reintenta el arranque; lo que mantiene los
+# contenedores en pie es `restart: unless-stopped` en el compose, que es el mecanismo
+# correcto para esto. Esta unidad existe para el ARRANQUE de la máquina y para poder
+# `systemctl restart govgenai` con la recarga de secretos incluida.
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

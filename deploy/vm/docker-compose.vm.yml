@@ -1,0 +1,162 @@
+# docker-compose.vm.yml — la pila que corre en la VM de GCP (D.4-VM).
+#
+# **Por qué no se reutiliza `docker-compose.prod.yml`.** Ese fichero es la opción
+# *autoinstalable*: su propia cabecera lo dice, y trae **su** Postgres, **su** MinIO y un perfil
+# de Ollama, con el `DATABASE_URL` del servicio `app` apuntando al contenedor `postgres`. En GCP
+# el estado va fuera —Cloud SQL y GCS—, así que levantar ese fichero aquí significaría correr una
+# base de datos que nadie usa y otra que sí, con el mismo nombre de variable. El bloque Deploy
+# decía que en una VM esto era «prácticamente `docker compose up -d`»; no lo era.
+#
+# Lo que SÍ se comparte es el `Dockerfile` y la imagen: la construye CI y se publica en Artifact
+# Registry etiquetada con el SHA del commit (D.5-VM). Aquí sólo se despliega.
+#
+# La configuración entra por `/opt/govgenai/.env.runtime`, que escribe
+# `scripts/vm_fetch_secrets.sh` desde Secret Manager (D.2). No hay ningún `.env` en la máquina
+# mantenido a mano.
+
+name: govgenai-vm
+
+x-imagen: &imagen
+  image: ${GOVGENAI_IMAGE:?falta GOVGENAI_IMAGE (repositorio:etiqueta de Artifact Registry)}
+
+services:
+  # ---------------------------------------------------------------------------
+  # Cloud SQL Auth Proxy: la base NO tiene IP pública abierta y nadie guarda una
+  # contraseña de red. El proxy autentica con la cuenta de servicio de la VM y expone
+  # un socket Unix, que es la forma que espera `DATABASE_URL` (`?host=/cloudsql/...`).
+  # ---------------------------------------------------------------------------
+  cloud-sql-proxy:
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.1
+    container_name: govgenai_sql_proxy
+    command:
+      - "--unix-socket=/cloudsql"
+      - "--health-check"
+      - "--http-address=0.0.0.0"
+      - "--http-port=9801"
+      - "${CLOUDSQL_CONNECTION_NAME:?falta CLOUDSQL_CONNECTION_NAME}"
+    volumes:
+      - cloudsql:/cloudsql
+    healthcheck:
+      test: ["CMD", "/cloud-sql-proxy", "wait", "--max=10s", "--http-port=9801"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
+  app:
+    <<: *imagen
+    container_name: govgenai_app
+    env_file:
+      - /opt/govgenai/.env.runtime
+    environment:
+      ENVIRONMENT: production
+      DEPLOY_MODE: ${DEPLOY_MODE:-all}
+      # El estado va fuera de la máquina, a propósito: el disco de la VM no guarda nada
+      # que duela perder.
+      STORAGE_BACKEND: gcs
+      STORAGE_BUCKET: ${STORAGE_BUCKET:?falta STORAGE_BUCKET}
+      # SEC.8.4 — hay un proxy inverso delante, así que la IP del cliente se cuenta un salto
+      # desde la derecha. Con 0 se ignoraría la cabecera y todo el tráfico compartiría cubo.
+      TRUSTED_PROXY_HOPS: "1"
+      # SEC.8.3 — el arranque falla a propósito si esto fuera `local`.
+      SANDBOX_MODE: http
+      SANDBOX_BASE_URL: http://script-sandbox:5000
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:?falta GOOGLE_CLOUD_PROJECT}
+      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-europe-southwest1}
+      CORPUS_SITE_BASE_URL: ${CORPUS_SITE_BASE_URL:?falta CORPUS_SITE_BASE_URL}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?falta CORS_ALLOWED_ORIGINS}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - cloudsql:/cloudsql:ro
+    depends_on:
+      cloud-sql-proxy:
+        condition: service_healthy
+      script-sandbox:
+        condition: service_healthy
+    networks:
+      - default
+      - sandbox-net
+    restart: unless-stopped
+
+  frontend:
+    image: ${GOVGENAI_FRONTEND_IMAGE:?falta GOVGENAI_FRONTEND_IMAGE}
+    container_name: govgenai_frontend
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # El sandbox de scripts, y la capa 8 del modelo de seguridad.
+  #
+  # `runtime: runsc` (gVisor) va SÓLO aquí: es el único servicio que ejecuta código que no
+  # hemos escrito nosotros. Hasta el 2026-08-10 esta capa la regalaba la plataforma; en una
+  # VM la pone el aprovisionamiento, y `docs/SANDBOX_SECURITY.md` lleva el comando que
+  # comprueba que está de verdad. Si `runsc` no estuviera instalado, este servicio no
+  # arranca — y es preferible a arrancar creyendo que hay ocho capas cuando hay siete.
+  # ---------------------------------------------------------------------------
+  script-sandbox:
+    image: ${GOVGENAI_SANDBOX_IMAGE:?falta GOVGENAI_SANDBOX_IMAGE}
+    container_name: govgenai_script_sandbox
+    # La única diferencia con el servicio de `docker-compose.prod.yml` es esta línea y que la
+    # imagen viene de Artifact Registry en vez de construirse. Todo lo demás está copiado a
+    # propósito: las capas 3, 4, 6 y 7 del modelo de seguridad están ahí, y aquí no se
+    # reinventan ni se «mejoran».
+    runtime: runsc
+    environment:
+      SANDBOX_TMP_DIR: /tmp/sandbox
+    networks:
+      - sandbox-net
+    read_only: true
+    tmpfs:
+      - /tmp/sandbox:size=128M,mode=0700,uid=65534,gid=65534
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    user: "65534:65534"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    # SEC.8.3: los límites de CPU y memoria no acotan el número de procesos, así que una
+    # fork-bomb agota los PID del host sin salirse de su presupuesto de memoria.
+    pids_limit: 128
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+          pids: 128
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Caddy: TLS con renovación automática y sin ceremonia. El nombre del host llega por
+  # entorno porque en el prototipo es un `sslip.io` y mañana el subdominio institucional:
+  # cambiarlo tiene que ser una variable, no una edición.
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: govgenai_caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      GOVGENAI_HOST: ${GOVGENAI_HOST:?falta GOVGENAI_HOST}
+    volumes:
+      - /opt/govgenai/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+      - frontend
+    restart: unless-stopped
+
+networks:
+  default:
+  sandbox-net:
+    # Sin salida a internet ni resolución hacia otros servicios: la capa 3 del modelo de
+    # seguridad del sandbox.
+    internal: true
+
+volumes:
+  cloudsql:
+  caddy_data:
+  caddy_config:

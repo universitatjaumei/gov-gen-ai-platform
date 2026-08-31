@@ -1,0 +1,49 @@
+# Caddyfile de la VM (D.4-VM). Se copia a /opt/govgenai/Caddyfile.
+#
+# Caddy y no nginx por una razón concreta: obtiene y renueva el certificado solo, sin cron ni
+# ceremonia. En el prototipo `GOVGENAI_HOST` es un nombre de `sslip.io` —que resuelve a la IP
+# de la VM y para el que Let's Encrypt emite con normalidad— y mañana será el subdominio
+# institucional. Cambiarlo es una variable de entorno, no editar este fichero.
+#
+# Un nombre hace falta aunque las páginas del corpus vivan en un bucket: se sirven por HTTPS, y
+# desde una página HTTPS el navegador **bloquea** una llamada a `http://IP`; con `https://IP` no
+# hay certificado posible, porque Let's Encrypt no emite para direcciones IP desnudas.
+
+{$GOVGENAI_HOST} {
+	encode zstd gzip
+
+	# La API. El prefijo se conserva: el widget incrustado en el bucket llama a
+	# https://<host>/api/v1/... y el servidor espera esa ruta.
+	handle /api/* {
+		reverse_proxy app:8000
+	}
+
+	# Comprobación de salud, sin pasar por el frontend.
+	handle /health {
+		reverse_proxy app:8000
+	}
+
+	# Todo lo demás, el panel.
+	handle {
+		reverse_proxy frontend:80
+	}
+
+	# `/docs` no se abre aquí a propósito: SEC.7 lo apaga en producción desde la propia
+	# aplicación, y duplicar la regla en el proxy daría la impresión de que la protección es
+	# del proxy. Si algún día el proxy dejara de estar, la aplicación sigue cerrada.
+
+	# **Las cabeceras de seguridad NO se ponen aquí.** Las pone la aplicación
+	# (`server/app/core/security_headers.py`): `X-Content-Type-Options`, `X-Frame-Options: DENY`,
+	# `Referrer-Policy`, CSP y —sólo en producción— HSTS. Repetirlas en el proxy crearía dos
+	# fuentes de verdad para la misma cabecera, y la primera versión de este fichero ya lo
+	# demostró: escribí `SAMEORIGIN` donde la aplicación dice `DENY`, o sea que la copia del
+	# proxy era la débil. Si algún día el proxy desaparece, la protección sigue puesta.
+	header {
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
