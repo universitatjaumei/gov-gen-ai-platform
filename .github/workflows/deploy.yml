@@ -252,10 +252,27 @@ jobs:
 
           if [ "$ok" = "1" ]; then
             echo "/health responde 200 por TLS"
-            # `/docs` tiene que estar cerrado en producción (SEC.7).
-            docs="$(curl -s -o /dev/null -w '%{http_code}' "https://$HOST/docs" || true)"
-            echo "/docs devuelve $docs (se espera 404)"
-            [ "$docs" != "200" ] || { echo "ERROR: /docs abierto en produccion"; ok=0; }
+
+            # La documentación de la API tiene que estar cerrada en producción (SEC.7).
+            #
+            # **NO se comprueba `https://$HOST/docs`.** Esa ruta la sirve el FRONTEND: es una
+            # SPA con catch-all, así que devuelve `index.html` con 200 para cualquier camino.
+            # La primera versión de este paso miraba ahí, leyó ese 200 como «documentación
+            # abierta» y **revirtió un despliegue que funcionaba**. La comprobación medía el
+            # frontend creyendo medir la API.
+            #
+            # Se comprueba donde de verdad vive: bajo el prefijo de la API desde fuera, y
+            # —lo que es autoritativo— dentro del contenedor, que es donde SEC.7 actúa.
+            for ruta in /api/v1/docs /api/v1/openapi.json; do
+              codigo="$(curl -s -o /dev/null -w '%{http_code}' "https://$HOST$ruta" || true)"
+              echo "$ruta devuelve $codigo (se espera 404)"
+              [ "$codigo" != "200" ] || { echo "::error::$ruta abierta en produccion"; ok=0; }
+            done
+
+            interno="$(gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap \
+              --quiet --command "sudo docker exec govgenai_app curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/docs" | tr -d '\r\n')"
+            echo "la aplicacion sirve /docs con codigo $interno (se espera 404)"
+            [ "$interno" = "404" ] || { echo "::error::la aplicacion expone /docs"; ok=0; }
           fi
 
           if [ "$ok" != "1" ]; then

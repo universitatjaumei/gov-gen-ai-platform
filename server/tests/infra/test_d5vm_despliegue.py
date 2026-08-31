@@ -200,6 +200,28 @@ def test_la_vuelta_atras_restaura_el_fichero_entero_y_sin_variables_remotas() ->
     )
 
 
+def test_la_comprobacion_de_docs_mide_la_api_y_no_el_frontend() -> None:
+    """El frontend es una SPA con catch-all: `https://host/docs` devuelve `index.html` con 200
+    para cualquier ruta. La primera versión miraba ahí, leyó ese 200 como «documentación
+    abierta» y **revirtió un despliegue que funcionaba**. Medía el frontend creyendo medir la
+    API.
+    """
+    texto = _texto(WORKFLOW)
+    lineas = [
+        l for l in texto.splitlines()
+        if 'HOST/docs' in l and not l.strip().startswith("#")
+    ]
+    assert not lineas, (
+        f"No se puede comprobar el /docs de la raíz: lo sirve el frontend. {lineas}"
+    )
+    assert "/api/v1/openapi.json" in texto, (
+        "La comprobación externa va bajo el prefijo de la API."
+    )
+    assert "docker exec govgenai_app" in texto and "localhost:8000/docs" in texto, (
+        "La comprobación autoritativa es dentro del contenedor, que es donde actúa SEC.7."
+    )
+
+
 def test_hay_comprobacion_posterior_y_reversion() -> None:
     texto = _texto(WORKFLOW)
     assert "/health" in texto, "Falta la comprobación de que sirve."
