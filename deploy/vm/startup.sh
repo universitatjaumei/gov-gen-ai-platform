@@ -163,5 +163,13 @@ fi
 mkdir -p /opt/govgenai/scripts
 chmod 755 /opt/govgenai
 
+# El directorio donde el Cloud SQL Auth Proxy monta su socket. **Con dueño 65532**, que es el
+# uid con el que corre su imagen: un volumen de Docker nuevo nace de root con 0755 y el proxy
+# no puede crear dentro, así que muere con «Unable to mount socket: mkdir …: permission
+# denied» y reintenta en bucle. Por eso es un directorio del anfitrión y no un volumen.
+mkdir -p /opt/govgenai/cloudsql
+chown 65532:65532 /opt/govgenai/cloudsql
+chmod 755 /opt/govgenai/cloudsql
+
 log "listo. Falta desplegar: copiar docker-compose.vm.yml, Caddyfile, .env.despliegue,"
 log "scripts/vm_fetch_secrets.sh + scripts/lib/secretos.tsv, y habilitar govgenai.service (D.5-VM)."

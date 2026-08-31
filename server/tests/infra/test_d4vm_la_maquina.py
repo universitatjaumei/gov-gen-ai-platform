@@ -158,6 +158,35 @@ def test_el_arranque_autentica_docker_contra_artifact_registry() -> None:
     )
 
 
+def test_el_socket_del_proxy_vive_en_un_directorio_del_anfitrion_con_su_dueno() -> None:
+    """La imagen del proxy corre con uid 65532 y un volumen nuevo nace de root con 0755, así
+    que el proxy no puede crear dentro el socket: muere con «Unable to mount socket: mkdir …
+    permission denied» y reintenta en bucle, lo que lo declara *unhealthy* y tumba a quien
+    depende de él. El quinto despliegue real murió ahí.
+    """
+    compose = _texto(COMPOSE)
+    assert "/opt/govgenai/cloudsql:/cloudsql" in compose, (
+        "El socket va en un directorio del anfitrión, no en un volumen con nombre."
+    )
+    assert "cloudsql:" not in compose.split("volumes:")[-1], (
+        "No debe quedar declarado el volumen con nombre `cloudsql`."
+    )
+
+    startup = _texto(STARTUP)
+    assert "chown 65532:65532 /opt/govgenai/cloudsql" in startup, (
+        "El directorio tiene que crearse con el uid con el que corre la imagen del proxy."
+    )
+
+
+def test_la_unidad_limpia_los_sockets_huerfanos_antes_de_levantar() -> None:
+    """Un proxy que muere sin apagarse bien deja el socket, y el siguiente falla con «bind:
+    address already in use» — un mensaje que no dice que haya que borrar un fichero."""
+    texto = _texto(UNIDAD)
+    assert "/opt/govgenai/cloudsql" in texto and "rm -rf" in texto, (
+        "Falta la limpieza de sockets huérfanos en ExecStartPre."
+    )
+
+
 def test_el_sandbox_conserva_las_capas_que_ya_tenia() -> None:
     """No se «mejoran» ni se pierden al copiar el servicio a otro fichero."""
     texto = _texto(COMPOSE)

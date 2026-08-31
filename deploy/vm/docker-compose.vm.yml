@@ -34,8 +34,14 @@ services:
       - "--http-address=0.0.0.0"
       - "--http-port=9801"
       - "${CLOUDSQL_CONNECTION_NAME:?falta CLOUDSQL_CONNECTION_NAME}"
+    # Directorio del anfitrión y NO un volumen con nombre: la imagen del proxy corre con
+    # uid 65532 y un volumen nuevo nace de root con 0755, así que el proxy no puede crear
+    # dentro el socket y muere con «Unable to mount socket: mkdir /cloudsql/…: permission
+    # denied» — reintentando en bucle, que es como se declara «unhealthy» y tumba a quien
+    # depende de él. El quinto despliegue real murió exactamente ahí. El directorio lo crea
+    # el arranque con ese dueño.
     volumes:
-      - cloudsql:/cloudsql
+      - /opt/govgenai/cloudsql:/cloudsql
     healthcheck:
       test: ["CMD", "/cloud-sql-proxy", "wait", "--max=10s", "--http-port=9801"]
       interval: 10s
@@ -67,7 +73,7 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?falta CORS_ALLOWED_ORIGINS}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
-      - cloudsql:/cloudsql:ro
+      - /opt/govgenai/cloudsql:/cloudsql:ro
     depends_on:
       cloud-sql-proxy:
         condition: service_healthy
@@ -97,7 +103,7 @@ services:
     working_dir: /app/server
     command: ["alembic", "upgrade", "head"]
     volumes:
-      - cloudsql:/cloudsql:ro
+      - /opt/govgenai/cloudsql:/cloudsql:ro
     depends_on:
       cloud-sql-proxy:
         condition: service_healthy
@@ -182,6 +188,5 @@ networks:
     internal: true
 
 volumes:
-  cloudsql:
   caddy_data:
   caddy_config:
