@@ -80,6 +80,29 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Autenticar Docker contra Artifact Registry
+#
+# Tener el rol `artifactregistry.reader` en la cuenta de la VM **no basta**: el demonio de
+# Docker no sabe usarlo hasta que se instala el ayudante de credenciales. Sin esto, el `pull`
+# falla con «Unauthenticated request. Unauthenticated requests do not have permission
+# artifactregistry.repositories.downloadArtifacts», que suena a permiso ausente y es un
+# ayudante ausente. El cuarto despliegue real murió exactamente ahí.
+#
+# Se escribe en la configuración de root porque la pila se levanta con `sudo`.
+# ---------------------------------------------------------------------------
+AR_REGION="$(curl -fsS -H 'Metadata-Flavor: Google' \
+  http://metadata.google.internal/computeMetadata/v1/instance/attributes/ar-region \
+  2>/dev/null || true)"
+[ -n "$AR_REGION" ] || AR_REGION="europe-southwest1"
+
+if ! grep -q "$AR_REGION-docker.pkg.dev" /root/.docker/config.json 2>/dev/null; then
+  log "autenticando Docker contra $AR_REGION-docker.pkg.dev"
+  gcloud auth configure-docker "$AR_REGION-docker.pkg.dev" --quiet
+else
+  log "Docker ya autenticado contra Artifact Registry"
+fi
+
+# ---------------------------------------------------------------------------
 # Rotación local de los logs de contenedor
 #
 # El disco lleno por logs es la avería más aburrida y más común de una VM, y la que no avisa:

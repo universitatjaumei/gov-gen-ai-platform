@@ -187,7 +187,7 @@ else
     --address="$IP" \
     --service-account="$SA_EMAIL" \
     --scopes=https://www.googleapis.com/auth/cloud-platform \
-    --metadata=enable-oslogin=TRUE \
+    --metadata=enable-oslogin=TRUE,ar-region="$REGION" \
     --metadata-from-file=startup-script="$STARTUP" \
     --shielded-secure-boot --shielded-vtpm --shielded-integrity-monitoring >/dev/null
   echo "  [creada]    $NOMBRE"

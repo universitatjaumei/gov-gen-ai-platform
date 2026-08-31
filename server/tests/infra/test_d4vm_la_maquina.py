@@ -136,6 +136,28 @@ def test_el_arranque_instala_gvisor_con_la_plataforma_que_funciona_en_una_vm() -
     )
 
 
+def test_el_arranque_autentica_docker_contra_artifact_registry() -> None:
+    """Tener el rol de lectura NO basta: el demonio necesita el ayudante de credenciales.
+
+    Sin él, el `pull` falla con «Unauthenticated request … no permission
+    artifactregistry.repositories.downloadArtifacts», que suena a permiso ausente y es un
+    ayudante ausente. El cuarto despliegue real murió ahí, con la imagen ya publicada.
+    """
+    texto = _texto(STARTUP)
+    assert "configure-docker" in texto, (
+        "El arranque tiene que instalar el ayudante de credenciales de Docker."
+    )
+    assert "docker.pkg.dev" in texto
+    assert "/root/.docker/config.json" in texto, (
+        "La pila se levanta con `sudo`, así que la credencial va en la configuración de root."
+    )
+    # La región llega por metadatos, no cableada: el aprovisionamiento ya la conoce.
+    assert "ar-region" in texto
+    assert "ar-region" in _texto(PROVISION), (
+        "El aprovisionamiento tiene que pasar la región en los metadatos de la instancia."
+    )
+
+
 def test_el_sandbox_conserva_las_capas_que_ya_tenia() -> None:
     """No se «mejoran» ni se pierden al copiar el servicio a otro fichero."""
     texto = _texto(COMPOSE)
