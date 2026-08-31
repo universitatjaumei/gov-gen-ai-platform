@@ -199,7 +199,7 @@ De ahí que `CORPUS_SITE_BASE_URL` y `CORS_ALLOWED_ORIGINS` valgan los dos
 | Qué | Cómo quedó |
 |---|---|
 | Copias de la base | Automáticas diarias + **PITR**, activados al crear la instancia (D.3) |
-| Restauración | **Probada de verdad**, no supuesta: ver la nota de abajo |
+| Restauración | **Probada de verdad el 2026-08-31**: **7 min 43 s** (medidos) hasta ser utilizable |
 | Buckets | Versionado activado en `govgenai-prod-docs` y `govgenai-normativa-uji` |
 | Salud | Comprobación cada 5 min sobre `https://<host>/health`, **con validación de certificado** |
 | Alertas | Caída de la comprobación, memoria > 85 % y disco > 85 %, al correo del responsable |
@@ -217,6 +217,33 @@ común de una VM.
 **Por qué la comprobación valida el certificado**: con un TLS mal renovado el servicio responde
 igual, y una comprobación sin `validateSsl` pasaría mientras los navegadores rechazan la página.
 Es el fallo que nadie ve venir.
+
+### La restauración, medida
+
+Una copia que nadie ha restaurado nunca es una hipótesis, así que se restauró:
+
+| Paso | Dato |
+|---|---|
+| Método | Clonado por **punto en el tiempo** (PITR) a una instancia nueva, `govgenai-restore-test` |
+| Tiempo | **463 s — 7 min 43 s**, cronometrados alrededor del comando |
+| Qué se comprobó | Estado `RUNNABLE` **y** que el clon trae la base `govgenai` y el usuario `govgenai`. Una instancia vacía también estaría `RUNNABLE`: eso es lo que hace falta distinguir |
+| Después | El clon se **borró**: una instancia de prueba olvidada factura igual que una de verdad |
+
+Se clonó por punto en el tiempo y no se restauró una copia sobre la instancia de producción a
+propósito: probar la copia no puede poner en riesgo lo que la copia protege. Y el clonado ejercita
+la cadena entera —copia base más WAL—, que es la garantía que de verdad se quiere.
+
+Tres cosas que conviene saber antes de necesitarlo con prisa:
+
+- La operación de clonado **sigue abierta** un rato después de que la instancia ya sirva: arranca
+  su propia copia inicial.
+- **Mientras haya una operación en curso no se puede borrar** la instancia; el borrado devuelve
+  `409` hasta que termina.
+- **`gcloud sql instances clone` salió con código 1 habiendo funcionado.** Creó la instancia
+  —lo dice su propia salida— y después reventó con un `404: The Cloud SQL instance does not
+  exist` al volver a leerla, que es una carrera del propio cliente. Si se automatiza esto
+  algún día, el criterio no puede ser el código de salida: hay que comprobar el estado de la
+  instancia y que trae su base.
 
 > **Una alerta que nadie ha visto disparar es una hipótesis.** Queda pendiente de una persona
 > apagar el servicio y comprobar que el correo llega — está en el cierre de D.6-VM y no lo puede
