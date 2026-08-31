@@ -13,8 +13,6 @@
     --line: #D9DFDD;
     --accent: #27607A;
     --accent-soft: #E3EDF2;
-    --no: #A6432F;
-    --no-soft: #F6E9E4;
     --si: #3E7C4F;
     --si-soft: #E7F0E8;
     --code-bg: #EDF0EE;
@@ -29,8 +27,6 @@
       --line: #333D40;
       --accent: #6FA9C4;
       --accent-soft: #22333D;
-      --no: #D4826F;
-      --no-soft: #372520;
       --si: #7FB58C;
       --si-soft: #21301F;
       --code-bg: #262E31;
@@ -124,10 +120,8 @@
     border-radius: 999px;
     padding: 4px 12px;
   }
-  .pill.no { color: var(--no); background: var(--no-soft); }
   .pill.si { color: var(--si); background: var(--si-soft); }
   .pill.mixto { color: var(--accent); background: var(--accent-soft); }
-  .card.no { border-top: 3px solid var(--no); }
   .card.si { border-top: 3px solid var(--si); }
   .card.mixto { border-top: 3px solid var(--accent); }
 
@@ -222,35 +216,38 @@
     <h1>Vectores embebidos, registro de IA y secciones dinámicas</h1>
     <p class="meta">Reuniones con desarrollo · actualizado el 31&nbsp;ago&nbsp;2026 · preparado sobre el código real del repositorio</p>
     <p class="standfirst">
-      Desarrollo planteó tres cuestiones: usar bases vectoriales embebidas en chatbots de corpus
+      Desarrollo trajo tres propuestas: usar bases vectoriales embebidas en chatbots de corpus
       estable, abrir la plataforma para que agentes externos registren su actividad y usen la
       anonimización, y que las secciones web de actualización permanente (jornadas, eventos)
-      alimenten su chatbot <strong>sin curación manual</strong>. La primera optimiza un coste que
-      no existe. La segunda es estratégica y la mitad ya está construida. Y la tercera parte de
-      una premisa falsa en dos tercios: <strong>la ingesta automática ya existe y corre en el
-      scheduler</strong> — lo que falta es cerrar su ciclo de vida y, sobre todo, que los
-      apartados sean <strong>parámetros que configura quien cura</strong>, no algo fijado en el
-      código. Los prompts de las dos aceptadas ya están redactados (bloques REG y DIN,
+      alimenten su chatbot <strong>sin curación manual</strong>. Las tres apuntan a preocupaciones
+      reales, y dos de ellas se convierten directamente en bloques de trabajo. La primera se
+      aplaza —no por la idea, sino porque Postgres está en el sistema por muchas más cosas que los
+      vectores— y queda como opción abierta sin coste. La segunda es estratégica y encaja: la
+      mitad de las piezas ya están construidas. Y en la tercera hay una buena noticia:
+      <strong>la ingesta automática ya existe y corre en el scheduler</strong>, aunque no se vea
+      desde la interfaz; lo que falta es cerrar su ciclo de vida y que los apartados sean
+      <strong>parámetros que configura quien cura</strong>, no algo fijado en el código. Los
+      prompts de los dos bloques nuevos ya están redactados (REG y DIN,
       <code>planificacion/Plan_TDD_Fase1.md</code>).
     </p>
 
     <div class="verdicts">
-      <div class="card no">
-        <span class="pill no">Desaconsejado</span>
+      <div class="card mixto">
+        <span class="pill mixto">Aplazado, con la puerta abierta</span>
         <h3>1 · Bases vectoriales embebidas</h3>
-        <p>Postgres no está ahí por los vectores; la recuperación híbrida y sus umbrales calibrados
-        no se trasladan; y «corpus estable» es empíricamente falso hoy. La puerta queda abierta sin
-        pagar nada ahora: el retriever ya se inyecta detrás de un protocolo.</p>
+        <p>Postgres seguiría siendo necesario para todo lo demás, y la recuperación híbrida lleva
+        umbrales calibrados que habría que rehacer. Además el corpus todavía se mueve. La opción
+        queda disponible sin pagar nada hoy: el retriever ya se inyecta detrás de un protocolo.</p>
       </div>
       <div class="card si">
-        <span class="pill si">Recomendado, con matiz</span>
+        <span class="pill si">Recomendado</span>
         <h3>2 · Registro de actividad y servicios hacia fuera</h3>
-        <p>El diagnóstico «no escalará» está sobrevalorado — el monolito ya está partido por dentro.
-        Pero la propuesta encaja con la arquitectura y con el AI&nbsp;Act. Se integra como el bloque
-        REG, seis prompts, después del despliegue.</p>
+        <p>La preocupación por la escalabilidad tiene buena parte de respuesta ya en el código: el
+        monolito está partido por dentro. Y la propuesta encaja con la arquitectura y con el
+        AI&nbsp;Act. Se integra como el bloque REG, seis prompts, después del despliegue.</p>
       </div>
       <div class="card mixto">
-        <span class="pill mixto">Existe en 2/3; falta el resto</span>
+        <span class="pill mixto">Ya en marcha; falta cerrar el ciclo</span>
         <h3>3 · Secciones dinámicas sin curación manual</h3>
         <p>La auto-ingesta de páginas nuevas y la reingesta de las cambiadas ya existen, con tests
         y en el scheduler. Falta que el apartado sea un parámetro de curación —hoy es un sitio
@@ -261,11 +258,30 @@
   </header>
 
   <section>
-    <p class="eyebrow">Punto de partida</p>
-    <h2>Lo que ya existe cambia la conversación</h2>
+    <p class="eyebrow">Antes de entrar en detalle</p>
+    <h2>Las tres propuestas señalan problemas que existen</h2>
     <p>
-      Antes de valorar las propuestas conviene fijar qué hay ya en el repositorio, porque la
-      segunda no parte de cero:
+      Conviene decirlo antes que nada, porque el resto del documento entra en el detalle técnico y
+      ahí es fácil perder de vista lo importante: <strong>las tres aportaciones dieron en
+      preocupaciones legítimas</strong>, y dos de ellas se traducen ya en trabajo planificado.
+      La primera pone el foco en la dependencia de infraestructura, que es la pregunta correcta
+      cuando se piensa en desplegar muchos chatbots. La segunda anticipa algo que efectivamente va
+      a pasar —uso de IA fuera de la plataforma, sin nadie registrándolo— y llegó antes de que
+      fuera un problema. Y la tercera puso nombre a un hueco real del ciclo de vida del contenido,
+      que estaba a medio cerrar sin que nadie lo hubiera notado.
+    </p>
+    <p>
+      Buena parte de las respuestas de aquí abajo son «esto ya está», y eso no es un reproche a
+      quien preguntó: <strong>casi nada de esa maquinaria se ve desde la interfaz</strong> —vive en
+      el scheduler, en jobs y en tablas—, así que la única forma de saberlo era abrir el código.
+      Que las propuestas coincidan con decisiones ya tomadas es, sobre todo, una señal de que
+      vamos en la misma dirección.
+    </p>
+
+    <p class="eyebrow" style="margin-top:40px">Punto de partida</p>
+    <h2>Qué hay ya construido</h2>
+    <p>
+      Fijar el inventario ayuda a valorar las propuestas, porque la segunda no parte de cero:
     </p>
     <div class="panel">
       <ul>
@@ -288,50 +304,60 @@
   </section>
 
   <section>
-    <p class="eyebrow">Observación 1</p>
-    <h2>Vectores embebidos: el coste que ahorra no existe</h2>
+    <p class="eyebrow">Cuestión 1</p>
+    <h2>Vectores embebidos: la intuición es buena, pero el ahorro se queda corto</h2>
+    <p>
+      La idea de fondo —bajar la dependencia de infraestructura de un chatbot cuyo corpus apenas
+      cambia— es sensata, y en otro sistema sería la decisión correcta. Lo que la complica aquí son
+      cuatro detalles concretos de cómo ha acabado montado este:
+    </p>
     <ul class="args">
       <li><strong>Quitar los vectores no quita el servidor.</strong> Postgres guarda además los
         documentos, las interacciones, los jobs de ingesta, el vocabulario versionado y la tenencia
         por organización. Un chatbot con LanceDB o Chroma embebido seguiría necesitando la misma
-        base de datos para todo lo demás: se añade un almacén, no se quita uno.</li>
-      <li><strong>La recuperación no es «vecinos más próximos».</strong> Es híbrida — vector más
-        <code>tsvector</code> como puente bilingüe catalán/castellano —, filtra por una taxonomía
-        que vive en tablas versionadas, y tiene umbrales calibrados por medición (0,60 en Normativa,
-        0,35 en Gerencia; bloque HIB). Una base embebida obliga a reimplementar y
-        <em>recalibrar</em> todo eso en un segundo camino de código, con su segunda suite de tests.</li>
-      <li><strong>Rompe el invariante «reclasificar = un UPDATE».</strong> El vocabulario está
+        base de datos para todo lo demás, así que el resultado sería añadir un almacén más que
+        retirar uno.</li>
+      <li><strong>La recuperación ha acabado siendo bastante más que «vecinos más próximos».</strong>
+        Es híbrida — vector más <code>tsvector</code> como puente bilingüe catalán/castellano —,
+        filtra por una taxonomía que vive en tablas versionadas, y tiene umbrales calibrados por
+        medición (0,60 en Normativa, 0,35 en Gerencia; bloque HIB). Una base embebida obligaría a
+        reimplementar y <em>recalibrar</em> todo eso en un segundo camino de código, con su segunda
+        suite de tests.</li>
+      <li><strong>Tensiona el invariante «reclasificar = un UPDATE».</strong> El vocabulario está
         pendiente de validación por Secretaría General y va a cambiar. Con N almacenes embebidos
-        repartidos por chatbot, cada cambio de etiqueta toca N ficheros en vez de una tabla.</li>
-      <li><strong>«Corpus estable» es empíricamente falso hoy.</strong> El bloque ACT reingirió el
+        repartidos por chatbot, cada cambio de etiqueta tocaría N ficheros en vez de una tabla.</li>
+      <li><strong>El «corpus estable» todavía no lo es del todo.</strong> El bloque ACT reingirió el
         corpus completo en los cuatro asistentes hace dos días, hay 35 documentos pendientes de
-        confirmación y la curación sigue activa. Y a la escala real — 313 fichas, 308 páginas —
-        pgvector en la VM va sobrado: no hay ninguna métrica de rendimiento que empuje en esta
-        dirección.</li>
+        confirmación y la curación sigue activa. Y a la escala actual — 313 fichas, 308 páginas —
+        pgvector en la VM va sobrado, así que por ahora no hay ninguna métrica de rendimiento que
+        empuje en esta dirección. Puede cambiar: si aparece, la conversación se reabre con datos.</li>
     </ul>
     <div class="rescate">
-      <p><strong>Qué sí rescatar.</strong> Si el dolor real es «levantar Postgres para desarrollar
-        o hacer una demo», eso se resuelve con un <code>docker compose</code> con datos sembrados,
-        no cambiando el motor.</p>
-      <p>Y la puerta no queda cerrada: el retriever ya se inyecta por <code>Depends</code> detrás
-        de un protocolo. Si algún día un despliegue lo justifica — un edge node mínimo sin
-        Postgres —, añadir un backend embebido es aditivo y no exige migrar nada. Como no hay
-        migración futura que abaratar, tampoco hay motivo para pagarla ahora.</p>
+      <p><strong>Qué sí conviene recoger.</strong> Si la fricción concreta es «levantar Postgres
+        para desarrollar o hacer una demo» —que es una molestia real—, se resuelve mejor con un
+        <code>docker compose</code> con datos sembrados que cambiando el motor. Merece la pena
+        confirmar en la reunión si ese era el punto de partida.</p>
+      <p>Y la puerta queda abierta a propósito: el retriever ya se inyecta por <code>Depends</code>
+        detrás de un protocolo. Si algún día un despliegue lo justifica — un edge node mínimo sin
+        Postgres —, añadir un backend embebido es aditivo y no exige migrar nada. Es decir: no hace
+        falta decidirlo hoy para poder hacerlo mañana, y por eso proponemos esperar en lugar de
+        cerrar la opción.</p>
     </div>
   </section>
 
   <section>
-    <p class="eyebrow">Observación 2</p>
-    <h2>Registro de IA: separar el diagnóstico de la propuesta</h2>
+    <p class="eyebrow">Cuestión 2</p>
+    <h2>Registro de IA: la propuesta encaja, y el diagnóstico ya tiene respuesta</h2>
     <p>
-      <strong>El diagnóstico «no escalará porque está todo integrado» está sobrevalorado.</strong>
-      El monolito ya está partido por dentro precisamente para poder separarse: dos
+      <strong>Sobre el «no escalará porque está todo integrado»: la preocupación es la correcta, y
+      buena parte del trabajo ya está hecho</strong> —aunque desde fuera no se aprecie, porque es
+      estructura interna. El monolito está partido por dentro precisamente para poder separarse: dos
       <code>DeclarativeBase</code> (configuración/operacional), <code>DEPLOY_MODE</code> con
       clasificación de routers cloud/edge, <code>ConfigProvider</code>, y la prohibición de imports
-      edge→cloud con guardarraíles en tests. Esa frontera existe y se vigila.
+      edge→cloud con guardarraíles en tests. Esa frontera existe y se vigila en cada commit.
     </p>
     <p>
-      <strong>La propuesta, en cambio, es estratégica y encaja.</strong> El uso de IA en la
+      <strong>Y la propuesta en sí es estratégica y encaja bien.</strong> El uso de IA en la
       institución va a ocurrir cada vez más <em>fuera</em> de la plataforma — Claude Cowork,
       Copilot, agentes de terceros — y hoy nada lo registra. Un registro central de actividad IA es
       exactamente lo que el AI&nbsp;Act pide a los responsables del despliegue (conservación de
@@ -411,12 +437,14 @@
   </section>
 
   <section>
-    <p class="eyebrow">Observación 3</p>
+    <p class="eyebrow">Cuestión 3</p>
     <h2>Secciones dinámicas: la ingesta automática ya existe; lo que falta es el resto del ciclo</h2>
     <p>
-      La premisa de la reunión — «esto no está previsto ahora» — resultó falsa en dos tercios al
-      revisar el código. Ya existe, con tests y corriendo en el scheduler que arranca con la
-      aplicación:
+      Aquí la revisión del código trajo una buena noticia: dos de las tres piezas que se pedían ya
+      estaban hechas, con tests y corriendo en el scheduler que arranca con la aplicación. Que no lo
+      pareciera es comprensible —<strong>no hay nada en la interfaz que lo cuente</strong>, y desde
+      fuera un chatbot que se actualiza solo es indistinguible de uno que no—, así que la propuesta
+      llegó a la puerta correcta:
     </p>
     <div class="panel">
       <ul>
@@ -480,8 +508,9 @@
       dedicado y con una comprobación de recuento antes/después en la verificación final.
     </p>
 
-    <p>Además del encuadre, faltan tres piezas del ciclo de vida — y para un apartado de eventos
-      la primera es la que más duele:</p>
+    <p>Además del encuadre, faltan tres piezas del ciclo de vida, y aquí la propuesta acertó de
+      pleno: son huecos nuestros que nadie había mirado desde el punto de vista de un apartado de
+      eventos. Para ese caso, la primera es la que más pesa:</p>
     <ul class="args">
       <li><strong>La retirada automática no existe.</strong> El rastreo marca las páginas
         desaparecidas, pero retirarlas del corpus solo existe como acción manual del curador: un
@@ -589,11 +618,11 @@
           6 prompts. No tocar el cursor actual.</div>
       </div></li>
       <li><div>
-        <div class="q">Sobre los vectores: ¿cuál era el dolor real?</div>
-        <div class="r">Si es fricción de desarrollo o demos, se resuelve con un
-          <code>docker compose</code> sembrado. El backend embebido queda como opción futura detrás
-          del protocolo del retriever, activable si aparece un despliegue que lo necesite — sin
-          coste hoy.</div>
+        <div class="q">Sobre los vectores: ¿qué fricción concreta motivó la propuesta?</div>
+        <div class="r">Merece la pena precisarlo, porque cambia la respuesta. Si es fricción de
+          desarrollo o de demos, se resuelve con un <code>docker compose</code> sembrado; si es una
+          previsión de escala o un despliegue sin Postgres, el backend embebido queda como opción
+          detrás del protocolo del retriever, activable el día que haga falta y sin coste hoy.</div>
       </div></li>
       <li><div>
         <div class="q">¿Quién puede parametrizar una sección y ponerla en modo automático?</div>

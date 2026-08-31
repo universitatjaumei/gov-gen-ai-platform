@@ -101,10 +101,67 @@ va antes, o la carga aborta.
 
 ---
 
+---
+
+## 3.bis Aprovisionado el 2026-08-31 (D.0, D.2 y D.3)
+
+Lo que ya está hecho en `uji-teclab`, para no repetirlo ni adivinarlo:
+
+| Qué | Cómo quedó |
+|---|---|
+| Servicios de GCP | **14 habilitados y comprobados** con `scripts/gcp_enable_services.sh` (D.0). Idempotente: se relanza sin miedo |
+| Cloud SQL | Instancia **`govgenai-prod`**: POSTGRES_16, `db-g1-small`, edición **ENTERPRISE**, `europe-southwest1`, disco con crecimiento automático, copias a las 03:00 y **PITR activado**. Nombre de conexión `uji-teclab:europe-southwest1:govgenai-prod` |
+| Base y usuario | BD **`govgenai`** y usuario **`govgenai`**, con la contraseña en Secret Manager (nunca en un fichero) |
+| `pgvector` | **No hace falta paso manual**: la primera migración ejecuta `CREATE EXTENSION IF NOT EXISTS vector` (`a1b2c3d4e5f6_hub_schema.py:22`) y el usuario creado por la API de Cloud SQL tiene permiso |
+| Secretos | Seis, inventariados en `scripts/lib/secretos.tsv` y creados con `scripts/gcp_create_secrets.sh`. Cinco con valor; **falta `govgenai-google-api-key`**, que lo aporta una persona |
+
+**La edición importa**: el proyecto crea por defecto en `ENTERPRISE_PLUS`, que **rechaza** los
+tiers de núcleo compartido (`db-g1-small`). Hay que pasar `--edition=ENTERPRISE` o el comando
+falla con «Invalid Tier ... for (ENTERPRISE_PLUS) Edition».
+
+**Cómo llegan los secretos al contenedor.** En el despliegue gestionado los inyectaba la
+plataforma; en una VM lo hace `scripts/vm_fetch_secrets.sh`, que escribe
+`/opt/govgenai/.env.runtime` con permisos 600 leyendo Secret Manager, y se niega a escribir un
+fichero a medias si algún secreto falta. Rotar una credencial es cambiar el secreto y
+reiniciar: no se entra en la máquina a editar nada.
+
+> **Cuidado con el retorno de carro, que costó dos diagnósticos.** Ejecutando estos guiones
+> **desde Windows**, `openssl` y algunas salidas de `gcloud` terminan en CRLF y `$(...)` sólo se
+> come el `\n`: el `\r` se queda dentro del valor. Un `\r` en una contraseña hace que
+> `gcloud sql users create` falle con «batch file arguments are invalid», y en un fichero de
+> entorno se lleva la línea entera. Los dos guiones lo limpian ahora en un solo sitio. Y para
+> comprobar un secreto, **`od -c` sobre un fichero**, no una comparación en el intérprete: la
+> propia captura puede añadir el CR que estás buscando.
+
+---
+
+## 3.ter El nombre de la API, que sin dominio sigue haciendo falta
+
+El sitio no necesita dominio —el bucket sirve por HTTPS con el de Google—, pero **la API sí
+necesita un nombre**, y esto no es una preferencia:
+
+- Las páginas del bucket se sirven por **HTTPS**, y ahí `ASSISTENT_API` tiene que ser `https://`.
+  Una llamada a `http://IP` la bloquea el navegador por contenido mixto, sin error visible.
+- Y `https://IP` **no puede tener certificado válido**: Let's Encrypt no emite para direcciones
+  IP desnudas.
+
+**Decisión del usuario (2026-08-31): `sslip.io` para el prototipo**, pidiendo en paralelo el
+subdominio institucional. `<ip-con-guiones>.sslip.io` resuelve solo a esa IP y Let's Encrypt
+emite con normalidad, sin trámite. El nombre sólo aparece en `ASSISTENT_API` y en el
+certificado; nadie lo lee.
+
+Cambiar después al subdominio cuesta: registro A, certificado nuevo, y **regenerar y volver a
+subir el sitio** con el `ASSISTENT_API` nuevo (una orden, porque la URL se inyecta al generar y
+no está escrita a mano en las 313 páginas). Los dos nombres pueden convivir mientras se cambia,
+así que no hay ventana de caída. Lo que **no** cambia es la URL de cada norma, que es la que
+cita el asistente y la que la gente guarda.
+
+---
+
 ## 4. Lo que este prototipo deja fuera a propósito
 
-- **Dominio propio y HTTPS con certificado propio.** Decisión del usuario: es un prototipo.
-  El bucket sirve por HTTPS con el dominio de Google, que basta para probar.
+- **Dominio propio.** Decisión del usuario: es un prototipo. El bucket sirve por HTTPS con el
+  dominio de Google, y la API va por `sslip.io` con certificado de Let's Encrypt (ver 3.ter).
 - **El asistente de Gerencia.** Es interno (`restricted` + grupo SAML) y no tiene sentido en
   un prototipo público. Se prueba desde el panel.
 - **Copias de seguridad y vigilancia**, que son D.6.
