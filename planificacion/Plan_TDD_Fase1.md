@@ -10740,6 +10740,42 @@ Lo que este bloque garantiza es que el modelo lógico aguante, que es el requisi
 > **Prerrequisito**: el bloque **EXT** va antes. D.4 necesita la huella medida en EXT.3 para
 > dimensionar la máquina, y ese número se mide — no se estima.
 
+> ## Decisiones del usuario (2026-08-31), al arrancar el bloque
+>
+> | Qué | Decidido |
+> |---|---|
+> | Proyecto GCP | `uji-teclab` (los 14 servicios ya habilitados por D.0) |
+> | Región y zona | **`europe-southwest1`** (Madrid) — latencia y el dato en España |
+> | Tipo de VM | **`e2-small`** (2 GB), que la medición de D.4.0 dejó holgado (345 MB de RSS) |
+> | Cloud SQL | **`db-g1-small`** (1,7 GB), elegido por el agente: los ~14.500 fragmentos a 1.024 dimensiones son unos 60 MB de vectores y el índice HNSW cabe de sobra, mientras `db-f1-micro` (0,6 GB) iría al límite. Subir de nivel es un reinicio, así que empezar pequeño no cierra ninguna puerta |
+> | Dominio | **Ninguno de momento** |
+> | Dónde viven el buscador y las 313 normas | **Un bucket** (o cualquier alojamiento estático fuera de GCP): son HTML ya generados y no necesitan cómputo |
+>
+> **Consecuencia técnica que la decisión de «sin dominio» NO puede saltarse, y que cambia D.4-VM
+> y D.6.1**: las páginas en un bucket se sirven por **HTTPS**, y el widget que se incrusta en
+> ellas llama a la API con `data-api-url` absoluto (`frontend/src/widget/main.tsx:23`, cuyo
+> defecto `/api/v1` sólo vale si la página y la API comparten origen). Una página HTTPS que
+> llame a `http://IP` la bloquea el navegador por contenido mixto, y un `https://IP` **no puede
+> tener certificado válido**: Let's Encrypt no emite para direcciones IP desnudas. Es decir: las
+> páginas no necesitan dominio, **la API sí necesita un nombre**.
+>
+> Salidas, en el orden en que conviene tomarlas:
+>
+> 1. **Subdominio institucional** (p. ej. `assistent-normativa.uji.es`) con registro A a la IP
+>    estática de la VM. Es la buena a medio plazo: estable, y la URL sobrevive al piloto.
+> 2. **`sslip.io` mientras llegue ese subdominio**: `34-175-x-y.sslip.io` resuelve solo a esa IP
+>    y Let's Encrypt emite con normalidad, sin trámite ninguno. El nombre sólo aparece dentro de
+>    `data-api-url`; nadie lo lee. Cambiar de la 2 a la 1 es una variable de entorno y un
+>    certificado.
+> 3. Servir también las páginas desde la VM en HTTP plano. Funciona porque el origen coincide,
+>    pero tira por la borda el bucket sin cómputo y deja el piloto sin cifrar. Descartada salvo
+>    que las otras dos fallen.
+>
+> **Y en los dos primeros casos hace falta CORS**: el origen del bucket entra en `CORS_ORIGINS`
+> (`server/app/core/cors.py`), porque página y API dejan de compartir origen. La credencial del
+> widget viaja en el HTML **a propósito** — es de sitio y sólo abre chatbots `public_anon`
+> (SEC.8.5).
+
 Esta fase no añade funcionalidad nueva: convierte la pila de desarrollo (Docker Compose local) en un sistema desplegado en Google Cloud Platform. El codebase ya está diseñado para ello (ver sección "Infraestructura objetivo" en CLAUDE.md); estos prompts completan la configuración y documentan el proceso operativo.
 
 **Requisito previo**: acceso a un proyecto GCP con **facturación activa**. Los servicios ya no se dan por habilitados a mano: los habilita **D.0**, que es un paso del despliegue y no una nota en prosa (enmienda del 2026-08-01, a petición del usuario de habilitarlo todo de una vez en el deploy).
