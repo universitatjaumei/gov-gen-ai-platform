@@ -163,8 +163,9 @@ def test_cada_tabla_lleva_su_filtro_y_ninguna_se_volca_entera() -> None:
         if "pg_dump" in l and not l.strip().startswith("#")
     ]
     assert not activas, f"`pg_dump` no puede filtrar filas; usa `\\copy` con WHERE: {activas}"
-    assert "\\\\copy (SELECT * FROM $tabla WHERE $filtro)" in texto, (
-        "Cada tabla se exporta con su propio filtro."
+    assert "\\\\copy (SELECT $seleccion FROM $tabla WHERE $filtro)" in texto, (
+        "Cada tabla se exporta con su propio filtro y con lista de columnas explícita: sin la "
+        "lista, un `COPY` entre dos bases con distinto orden físico desplaza los campos."
     )
 
     # Y cada entrada declara su filtro: tres campos, no dos.
@@ -200,6 +201,59 @@ def test_las_dos_caras_del_sitio_sin_organizacion() -> None:
     assert "Recuento en origen" in texto
 
 
+def test_el_copy_lleva_lista_de_columnas_y_excluye_las_generadas() -> None:
+    """Dos cosas que costaron dos intentos de restauración, y las dos con mensajes engañosos.
+
+    **Sin lista de columnas**, `COPY` usa el orden físico de la tabla destino — y dos bases en
+    la **misma revisión de Alembic** pueden tenerlo distinto: la de desarrollo evolucionó con
+    migraciones y `create_all`, la de producción nació de cero, y `document_id` es la tercera
+    columna en una y la duodécima en la otra. El síntoma fue un hash aterrizando en la columna
+    del vector.
+
+    **Y las columnas generadas** no admiten valores en `COPY FROM`: `hub_document_chunks.tsv`
+    hacía fallar la carga con «extra data after last expected column», que suena a fichero
+    corrupto y era una columna de más.
+    """
+    texto = _texto()
+    assert "COPY $tabla ($columnas)" in texto, (
+        "El `COPY` tiene que llevar la lista de columnas: sin ella depende del orden físico."
+    )
+    assert "is_generated <> 'ALWAYS'" in texto, (
+        "Las columnas generadas se excluyen; `COPY FROM` no acepta valores para ellas."
+    )
+
+
+def test_las_autorreferencias_se_cargan_en_dos_pasos() -> None:
+    """138 documentos apuntan a otro documento (`versio_idiomatica_de`). En un `COPY` la
+    comprobación es por fila, así que si el documento al que se apunta viene después, falla.
+    Se cargan a nulo y se rellenan con `UPDATE` al final, cuando ya existen todas las filas.
+    """
+    texto = _texto()
+    assert "AUTORREFERENCIAS" in texto
+    assert "NULL AS $auto" in texto, (
+        "La columna que se autorreferencia sale como NULL en el COPY."
+    )
+    assert "UPDATE $tabla SET $auto" in texto, (
+        "Y su valor real viaja como UPDATE al final del fichero."
+    )
+
+
+def test_no_desactiva_las_comprobaciones_de_la_base() -> None:
+    """`session_replication_role = replica` estaba tapando tres errores de la propia lista: una
+    tabla que faltaba, un orden mal puesto y las autorreferencias. Cloud SQL lo prohíbe —exige
+    superusuario— y eso fue una suerte: desactivar una comprobación es una forma de no
+    enterarse.
+    """
+    texto = _texto()
+    activas = [
+        l for l in texto.splitlines()
+        if "session_replication_role" in l
+        and not l.strip().startswith("#")
+        and "echo" not in l
+    ]
+    assert not activas, f"No se desactivan los disparadores: {activas}"
+
+
 def test_la_verificacion_se_hace_sobre_el_fichero_generado() -> None:
     texto = _texto()
     assert re.search(r'grep -qE "COPY \(public\\?\.\)\?\$tabla ', texto), (
@@ -223,7 +277,7 @@ def test_se_cuenta_antes_de_escribir() -> None:
     texto = _texto()
     assert "Recuento en origen" in texto
     # La generación de verdad, que ahora es el `\copy` por tabla.
-    invocacion = texto.index("\\\\copy (SELECT * FROM $tabla")
+    invocacion = texto.index("\\\\copy (SELECT $seleccion FROM $tabla")
     assert texto.index("Recuento en origen") < invocacion, (
         "El recuento va ANTES de generar el fichero: si las cifras no son las esperadas, se "
         "para sin haber escrito nada."

@@ -23,6 +23,9 @@ ORGANIZACION=""
 SALIDA=""
 DSN="${DATABASE_URL_SYNC:-}"
 DRY_RUN=0
+#: Tablas que se saltan a peticion, para volcados en dos fases (los fragmentos pesan 1 GB y
+#: no hace falta regenerarlos si ya estan subidos).
+EXCLUIDAS=""
 
 uso() {
   echo "Uso: $0 --organizacion <UUID> --salida <FICHERO.sql> [--dsn <DSN>] [--dry-run]" >&2
@@ -36,6 +39,8 @@ while [ $# -gt 0 ]; do
     --salida=*)       SALIDA="${1#*=}"; shift ;;
     --dsn)            DSN="${2:-}"; shift 2 ;;
     --dsn=*)          DSN="${1#*=}"; shift ;;
+    --excluir)        EXCLUIDAS="$EXCLUIDAS ${2:-}"; shift 2 ;;
+    --excluir=*)      EXCLUIDAS="$EXCLUIDAS ${1#*=}"; shift ;;
     --dry-run)        DRY_RUN=1; shift ;;
     -h|--help)        uso; exit 0 ;;
     *) echo "ERROR: opción desconocida: $1" >&2; uso; exit 2 ;;
@@ -66,21 +71,38 @@ done
 _CHATBOTS_DE_LA_ORG="SELECT id FROM hub_chatbots WHERE organizacion_id = ':ORG'"
 _SITIOS_DE_LA_ORG="SELECT id FROM hub_web_sites WHERE organizacion_id = ':ORG'"
 
+# **El orden es el de las claves ajenas, y se comprobó contra el esquema, no de memoria.** La
+# primera versión ponía `hub_documents` antes de `hub_crawled_pages` y a los chatbots sin su
+# `hub_llm_configs`, y no fallaba porque la cabecera desactivaba los disparadores con
+# `session_replication_role = replica`. **Cloud SQL no permite eso** —exige superusuario, que un
+# servicio gestionado no concede—, y al quitarlo aparecieron los tres problemas que tapaba:
+# falta la tabla de configuración de LLM, las páginas van antes que los documentos, y 138
+# documentos se referencian entre sí. Desactivar una comprobación es una forma de no enterarse.
 TABLAS=(
   "hub_organizaciones|id = ':ORG'|la organización del piloto, y sólo ella"
+  "hub_llm_configs|id IN (SELECT DISTINCT llm_config_id FROM hub_chatbots WHERE organizacion_id = ':ORG' AND llm_config_id IS NOT NULL)|la configuración de modelo que los chatbots referencian; sin ella su inserción falla"
   "hub_chatbots|organizacion_id = ':ORG'|los asistentes con su configuración medida (umbrales, top_k, modo)"
+  "hub_web_sites|organizacion_id = ':ORG'|el sitio de curación. **Antes** de los documentos: 3 de ellos citan una página"
+  "hub_crawled_pages|site_id IN ($_SITIOS_DE_LA_ORG)|sus páginas rastreadas, con las señales de frescura"
   "hub_documents|chatbot_id IN ($_CHATBOTS_DE_LA_ORG)|el corpus curado, con su vigencia y su validación"
   "hub_document_chunks|chatbot_id IN ($_CHATBOTS_DE_LA_ORG)|los fragmentos y sus vectores: reembeberlos cuesta GPU y horas"
   "hub_vocabulary_terms|organizacion_id = ':ORG' OR organizacion_id IS NULL|ámbitos y submaterias; sin esto la ingesta aborta. Los nulos son de plataforma y se heredan"
   "hub_lexicon_pairs|organizacion_id = ':ORG'|el puente léxico catalán/castellano de la búsqueda de texto"
-  "hub_web_sites|organizacion_id = ':ORG'|el sitio de curación"
-  "hub_crawled_pages|site_id IN ($_SITIOS_DE_LA_ORG)|sus páginas rastreadas, con las señales de frescura"
   "hub_content_findings|site_id IN ($_SITIOS_DE_LA_ORG)|los hallazgos ya revisados por una persona: es trabajo humano"
   "hub_corpus_selections|chatbot_id IN ($_CHATBOTS_DE_LA_ORG)|qué páginas alimentan a qué asistente"
   "hub_prompt_templates|chatbot_id IN ($_CHATBOTS_DE_LA_ORG)|los prompts del sistema, afinados por medición"
   "hub_themes|organizacion_id = ':ORG' OR chatbot_id IN ($_CHATBOTS_DE_LA_ORG)|la identidad visual de la organización"
   "hub_widget_keys|chatbot_id IN ($_CHATBOTS_DE_LA_ORG)|las credenciales de sitio ya emitidas"
   "hub_module_grants|organizacion_id = ':ORG'|qué módulos tiene concedidos la organización"
+)
+
+#: Columnas que apuntan a la PROPIA tabla. Se cargan en dos pasos —primero a nulo, después un
+#: `UPDATE`— porque en un `COPY` la comprobación es por fila: si el documento al que se apunta
+#: viene después, falla. Ordenar las filas «bien» sería frágil (una cadena de dos saltos y vuelve
+#: a romperse); dos pasos siempre funciona.
+declare -A AUTORREFERENCIAS=(
+  ["hub_documents"]="versio_idiomatica_de"
+  ["hub_chatbots"]="parent_chatbot_id"
 )
 
 # ---------------------------------------------------------------------------
@@ -110,6 +132,17 @@ printf '  %-14s %s\n' "organización" "$ORGANIZACION"
 printf '  %-14s %s\n' "salida" "$SALIDA"
 echo
 campo() { printf '%s' "$1" | cut -d'|' -f"$2"; }
+
+# Una tabla excluida se salta, y se DICE que se salta: un volcado con una tabla menos y sin
+# avisar es el que alguien restaura creyendo que está completo.
+esta_excluida() {
+  case " $EXCLUIDAS " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
+if [ -n "${EXCLUIDAS// /}" ]; then
+  echo "  EXCLUIDAS a petición:$EXCLUIDAS"
+  echo "  (este volcado NO está completo; restaura también lo que falte)"
+  echo
+fi
 
 echo "  Viajan ${#TABLAS[@]} tablas:"
 for entrada in "${TABLAS[@]}"; do
@@ -143,6 +176,8 @@ declare -A RECUENTO
 TOTAL=0
 for entrada in "${TABLAS[@]}"; do
   tabla="$(campo "$entrada" 1)"
+  esta_excluida "$tabla" && { printf "  [excluida] %s
+" "$tabla"; continue; }
   filtro="$(campo "$entrada" 2 | sed "s/:ORG/$ORGANIZACION/g")"
   n="$(psql "$DSN_LIBPQ" -tAc "SELECT count(*) FROM $tabla WHERE $filtro" 2>&1 | tr -d '[:space:]')"
   case "$n" in
@@ -173,23 +208,67 @@ echo "== Generando $SALIDA =="
 {
   echo "-- Volcado del piloto para la organización $ORGANIZACION"
   echo "-- Generado por scripts/volcado_piloto.sh. Restaurar con psql -f sobre una base ya migrada."
-  echo "-- Orden de las tablas = orden de dependencias: no reordenar."
-  echo "SET session_replication_role = replica;  -- las FK circulares de hub_chatbots/hub_documents"
+  echo "-- Orden de las tablas = orden de dependencias: NO reordenar."
+  echo "--"
+  echo "-- NO lleva 'session_replication_role': Cloud SQL lo prohíbe (exige superusuario), y"
+  echo "-- desactivar las comprobaciones sólo servía para no enterarse de que el orden estaba mal."
+  echo "-- Las columnas que apuntan a su propia tabla se cargan a nulo y se rellenan al final."
 } >> "$SALIDA"
+
+# Los UPDATE de las autorreferencias, que van al FINAL del fichero: para entonces todas las
+# filas existen y ya no importa en qué orden se insertaron.
+COLA="$(mktemp)"
+trap 'rm -f "$COLA"' EXIT
 
 for entrada in "${TABLAS[@]}"; do
   tabla="$(campo "$entrada" 1)"
+  esta_excluida "$tabla" && { printf "  [excluida] %s
+" "$tabla"; continue; }
   filtro="$(campo "$entrada" 2 | sed "s/:ORG/$ORGANIZACION/g")"
   [ "${RECUENTO[$tabla]}" != "0" ] || { printf '  [vacía] %s\n' "$tabla"; continue; }
+
+  # Las columnas GENERADAS se excluyen: `COPY FROM` **no acepta** valores para ellas y falla con
+  # «extra data after last expected column», un mensaje que suena a fichero corrupto y es una
+  # columna de más. `hub_document_chunks.tsv` es la única hoy, y se recalcula sola de `content` y
+  # `bilingual_terms`, así que llevarla no sólo estorba: sobra.
+  auto="${AUTORREFERENCIAS[$tabla]:-}"
+  columnas="$(psql "$DSN_LIBPQ" -tAc \
+    "SELECT string_agg(column_name, ', ' ORDER BY ordinal_position) FROM information_schema.columns WHERE table_name = '$tabla' AND is_generated <> 'ALWAYS'" \
+    | tr -d '\r')"
+
+  if [ -n "$auto" ]; then
+    # La columna que se autorreferencia sale como NULL en el COPY…
+    seleccion="$(printf '%s' "$columnas" | sed "s/\b$auto\b/NULL AS $auto/")"
+    # …y su valor real viaja como UPDATE al final.
+    n_auto="$(psql "$DSN_LIBPQ" -tAc \
+      "SELECT count(*) FROM $tabla WHERE ($filtro) AND $auto IS NOT NULL" | tr -d '[:space:]')"
+    if [ "$n_auto" != "0" ]; then
+      {
+        echo ""
+        echo "-- $tabla.$auto: $n_auto fila(s) que apuntan a su propia tabla."
+      } >> "$COLA"
+      psql "$DSN_LIBPQ" -tAc \
+        "SELECT format('UPDATE $tabla SET $auto = %L WHERE id = %L;', $auto, id) FROM $tabla WHERE ($filtro) AND $auto IS NOT NULL" \
+        >> "$COLA"
+      printf '  [ok]    %-28s %s filas (+%s autorreferencias al final)\n' \
+        "$tabla" "${RECUENTO[$tabla]}" "$n_auto"
+    else
+      printf '  [ok]    %-28s %s filas\n' "$tabla" "${RECUENTO[$tabla]}"
+    fi
+  else
+    seleccion="$columnas"
+    printf '  [ok]    %-28s %s filas\n' "$tabla" "${RECUENTO[$tabla]}"
+  fi
+
   {
     echo ""
-    echo "COPY $tabla FROM stdin;"
+    echo "COPY $tabla ($columnas) FROM stdin;"
   } >> "$SALIDA"
-  psql "$DSN_LIBPQ" -tAc "\\copy (SELECT * FROM $tabla WHERE $filtro) TO STDOUT" >> "$SALIDA"
+  psql "$DSN_LIBPQ" -tAc "\\copy (SELECT $seleccion FROM $tabla WHERE $filtro) TO STDOUT" >> "$SALIDA"
   echo "\\." >> "$SALIDA"
-  printf '  [ok]    %-28s %s filas\n' "$tabla" "${RECUENTO[$tabla]}"
 done
-echo "SET session_replication_role = DEFAULT;" >> "$SALIDA"
+
+cat "$COLA" >> "$SALIDA"
 echo "  escrito: $(wc -c < "$SALIDA") bytes"
 echo
 

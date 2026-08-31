@@ -70,6 +70,62 @@ sus 292 hallazgos. Es un descuido del alta y no una decisión, así que se asign
 del volcado. Si vuelve a aparecer un sitio con la organización a nulo, el volcado lo dejará fuera
 en silencio: revisa el recuento de `hub_web_sites` antes de dar el fichero por bueno.
 
+## Cuatro trampas más, todas descubiertas restaurando de verdad
+
+La restauración necesitó cinco intentos y **ninguno falló por el mismo motivo**. Los cuatro
+primeros los tapaba una sola línea que yo había puesto en la cabecera del volcado.
+
+### 1. `session_replication_role` no está en Cloud SQL — y fue una suerte
+
+El volcado empezaba desactivando los disparadores para saltarse las claves ajenas. Cloud SQL lo
+prohíbe (exige superusuario de verdad), y al quitarlo aparecieron **tres errores de la propia
+lista de tablas** que llevaba tapando:
+
+- Faltaba `hub_llm_configs`, y los cuatro chatbots la referencian.
+- `hub_crawled_pages` iba **después** de `hub_documents`, y 3 documentos citan una página.
+- 138 documentos se referencian entre sí (`versio_idiomatica_de`).
+
+**Desactivar una comprobación es una forma de no enterarse.** El orden de las tablas sale ahora
+del esquema y no de la memoria de quien lo escribió.
+
+### 2. Las columnas generadas no admiten valores en `COPY FROM`
+
+`hub_document_chunks.tsv` es `GENERATED ALWAYS` y se recalcula de `content` y `bilingual_terms`.
+Llevarla hacía fallar la carga con **«extra data after last expected column»**, que suena a
+fichero corrupto y era una columna de más. Se excluyen.
+
+### 3. Dos bases en la misma revisión pueden tener distinto orden físico de columnas
+
+Esto es lo que más caro sale si no se sabe:
+
+```
+desarrollo:  id, chatbot_id, document_id, content, source_url, ...
+producción:  id, chatbot_id, content, source_url, content_hash, ..., document_id
+```
+
+Misma revisión de Alembic, mismas 19 columnas, **orden distinto**: la tabla de desarrollo
+evolucionó con migraciones y `create_all`, la de producción nació de cero. Un `COPY` sin lista de
+columnas usa el orden físico del destino, así que los campos entran desplazados y el síntoma es
+un hash aterrizando en la columna del vector.
+
+**Corolario: en un volcado entre bases, la lista de columnas no es opcional.**
+
+### 4. La dimensión del vector estaba mal en toda instalación nueva
+
+Y esto no era del volcado, sino **un defecto de producción**. La primera migración deja
+`hub_document_chunks.embedding` en `vector(1536)` y ninguna posterior lo corrige, mientras el
+modelo declara `Vector(1024)`. Una base creada con `alembic upgrade head` tenía una columna en la
+que la aplicación **no puede escribir**: la primera ingesta falla.
+
+Llevaba meses invisible porque la base de desarrollo está en 1024 —no nació de la cadena de
+migraciones— y porque `test_migrations_fresh_install.py` comprueba que las columnas **existan**
+pero no su tipo. Apareció aquí porque producción es la primera base de este proyecto creada de
+verdad sólo con migraciones.
+
+Corregido con la migración **`e2b3c4d5f6a7`**, condicional para no borrar vectores buenos, y
+verificado en una instalación limpia (`alembic upgrade head` acaba en `vector(1024)`). El
+guardarraíl que faltaba está en `tests/infra/test_dimension_de_los_vectores.py`.
+
 ## Desviaciones respecto a lo que D.7 esperaba
 
 El prompt se escribió el 2026-08-23 y las cifras han cambiado por trabajo posterior:
