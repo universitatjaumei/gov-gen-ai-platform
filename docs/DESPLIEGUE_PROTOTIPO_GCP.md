@@ -194,6 +194,36 @@ De ahí que `CORPUS_SITE_BASE_URL` y `CORS_ALLOWED_ORIGINS` valgan los dos
 
 ---
 
+## 3.quinquies Copias y vigilancia (D.6-VM)
+
+| Qué | Cómo quedó |
+|---|---|
+| Copias de la base | Automáticas diarias + **PITR**, activados al crear la instancia (D.3) |
+| Restauración | **Probada de verdad**, no supuesta: ver la nota de abajo |
+| Buckets | Versionado activado en `govgenai-prod-docs` y `govgenai-normativa-uji` |
+| Salud | Comprobación cada 5 min sobre `https://<host>/health`, **con validación de certificado** |
+| Alertas | Caída de la comprobación, memoria > 85 % y disco > 85 %, al correo del responsable |
+| Logs | Rotación local (`max-size 10m`, `max-file 3`) **y** copia en Cloud Logging vía el agente |
+| La VM | **No se respalda a propósito**: no guarda nada que no reconstruya el aprovisionamiento |
+
+Todo eso lo pone `scripts/gcp_provision_vigilancia.sh`, idempotente y con `--dry-run`.
+
+**Por qué el agente de operaciones no es opcional**: sin él, Cloud Monitoring sólo ve la máquina
+desde fuera —CPU y red—, así que las alertas de memoria y disco **no se pueden ni escribir**. Lo
+instala el guion de arranque. Y la rotación local no la sustituye el envío remoto: si la red
+falla, el fichero sigue creciendo hasta llenar el disco, que es la avería más aburrida y más
+común de una VM.
+
+**Por qué la comprobación valida el certificado**: con un TLS mal renovado el servicio responde
+igual, y una comprobación sin `validateSsl` pasaría mientras los navegadores rechazan la página.
+Es el fallo que nadie ve venir.
+
+> **Una alerta que nadie ha visto disparar es una hipótesis.** Queda pendiente de una persona
+> apagar el servicio y comprobar que el correo llega — está en el cierre de D.6-VM y no lo puede
+> firmar un agente.
+
+---
+
 ## 4. Lo que este prototipo deja fuera a propósito
 
 - **Dominio propio.** Decisión del usuario: es un prototipo. El bucket sirve por HTTPS con el
