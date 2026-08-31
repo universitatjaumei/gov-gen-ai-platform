@@ -197,21 +197,31 @@ crear_alerta() { # nombre fichero
   crear "$API_ALERT" "$fichero" "$nombre"
 }
 
+# **Se agrupa entre series y se exige más de una región.** Sin `crossSeriesReducer`, cada
+# región de comprobación es su propia serie y abre su propio incidente: la primera versión
+# mandó **seis correos por una sola caída** —Bélgica, Singapur, Brasil y tres de EE. UU.—, y
+# seis avisos de lo mismo enseñan a ignorar los avisos. Agrupando por host sale uno.
+#
+# Y el umbral es «más de una región fallando», no «alguna»: un parpadeo de red entre un
+# comprobador y la máquina no es una caída del servicio, y despertar a alguien por eso gasta
+# la credibilidad de la alerta que sí importa.
 cat > "$TMP/alerta_salud.json" <<JSON
 {
   "displayName": "Gov Gen AI - la salud no responde",
   "combiner": "OR",
   "conditions": [{
-    "displayName": "uptime check fallando",
+    "displayName": "la comprobacion falla en mas de una region",
     "conditionThreshold": {
       "filter": "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.type=\"uptime_url\"",
       "aggregations": [{
-        "alignmentPeriod": "300s",
-        "perSeriesAligner": "ALIGN_FRACTION_TRUE"
+        "alignmentPeriod": "600s",
+        "perSeriesAligner": "ALIGN_NEXT_OLDER",
+        "crossSeriesReducer": "REDUCE_COUNT_FALSE",
+        "groupByFields": ["resource.label.host"]
       }],
-      "comparison": "COMPARISON_LT",
+      "comparison": "COMPARISON_GT",
       "thresholdValue": 1,
-      "duration": "300s",
+      "duration": "60s",
       "trigger": { "count": 1 }
     }
   }],

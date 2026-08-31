@@ -114,6 +114,22 @@ def test_la_comprobacion_de_salud_valida_el_certificado() -> None:
     assert '"useSsl": true' in texto
 
 
+def test_la_alerta_de_caida_agrupa_las_regiones_y_exige_mas_de_una() -> None:
+    """Sin agrupar entre series, cada región de comprobación abre su propio incidente: la
+    primera versión mandó **seis correos por una sola caída**, y seis avisos de lo mismo
+    enseñan a ignorar los avisos. Y el umbral es «más de una región», porque un parpadeo de
+    red entre un comprobador y la máquina no es una caída del servicio.
+    """
+    texto = _texto(VIGILANCIA)
+    assert '"crossSeriesReducer": "REDUCE_COUNT_FALSE"' in texto, (
+        "La alerta de caída tiene que agrupar entre series, o manda un correo por región."
+    )
+    assert '"groupByFields": ["resource.label.host"]' in texto
+    assert '"comparison": "COMPARISON_GT"' in texto and '"thresholdValue": 1' in texto, (
+        "El umbral tiene que ser «más de una región fallando», no «alguna»."
+    )
+
+
 def test_declara_las_tres_alertas() -> None:
     texto = _texto(VIGILANCIA)
     for alerta in ("la salud no responde", "memoria por encima", "disco por encima"):
