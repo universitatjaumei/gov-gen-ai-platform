@@ -70,6 +70,40 @@ def test_exige_proyecto_y_host() -> None:
         assert resultado.returncode == 2, f"Debería negarse con {argumentos}"
 
 
+def test_el_guion_mira_la_respuesta_de_lo_que_crea() -> None:
+    """El fallo más caro de este prompt: el POST iba a `/dev/null` y se imprimía «[creada]»
+    a continuación, pasara lo que pasara.
+
+    La comprobación de salud falló con «selected_regions must include at least three
+    locations», el error se perdió, el guion dijo que la había creado, y **la alerta de caída
+    quedó inerte** —no puede dispararse sin la comprobación que la alimenta— sin que nada lo
+    delatara. Descubierto sólo al ir a probar la alerta de verdad.
+    """
+    texto = _texto(VIGILANCIA)
+    assert "crear()" in texto, "Falta la función que comprueba la respuesta al crear."
+    assert '"error"' in texto, "La función tiene que detectar un error en la respuesta."
+
+    # Ningún POST puede ir a /dev/null: ahí es donde se pierde el motivo del fallo.
+    perdidos = [
+        l for l in texto.splitlines()
+        if "llamar POST" in l and "/dev/null" in l and not l.strip().startswith("#")
+    ]
+    assert not perdidos, f"Un POST cuya respuesta se descarta puede fallar en silencio: {perdidos}"
+
+
+def test_la_comprobacion_de_salud_no_fija_una_sola_region() -> None:
+    """La API exige al menos tres, y con una sola devuelve 400. Omitirlo comprueba desde
+    todas, que para un extremo público es la respuesta honesta."""
+    texto = _texto(VIGILANCIA)
+    activas = [
+        l for l in texto.splitlines()
+        if "selectedRegions" in l and not l.strip().startswith("#")
+    ]
+    assert not activas, (
+        f"`selectedRegions` con una sola región hace que la creación falle con 400: {activas}"
+    )
+
+
 def test_la_comprobacion_de_salud_valida_el_certificado() -> None:
     texto = _texto(VIGILANCIA)
     assert '"validateSsl": true' in texto, (

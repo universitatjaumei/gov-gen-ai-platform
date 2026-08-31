@@ -90,6 +90,23 @@ llamar() { # método ruta [fichero_json]
   fi
 }
 
+# Como `llamar`, pero **mira la respuesta**. La primera versión de este guion canalizaba los
+# POST a /dev/null e imprimía «[creada]» a continuación, pasara lo que pasara: la comprobación
+# de salud falló con «selected_regions must include at least three locations», el error se
+# perdió, el guion dijo que la había creado y la alerta de caída quedó **inerte** —no puede
+# dispararse sin la comprobación que la alimenta— sin que nada lo delatara. Es el mismo defecto
+# que un `tail` comiéndose un código de salida: no basta con actuar, hay que leer el resultado.
+crear() { # ruta fichero_json etiqueta
+  local ruta="$1" cuerpo="$2" etiqueta="$3" respuesta
+  respuesta="$(llamar POST "$ruta" "$cuerpo")"
+  if printf '%s' "$respuesta" | grep -q '"error"'; then
+    echo "  [ERROR]     $etiqueta:" >&2
+    printf '%s' "$respuesta" | tr ',' '\n' | grep -E '"message"|"status"' | head -2 >&2
+    return 1
+  fi
+  printf '  [creada]    %s\n' "$etiqueta"
+}
+
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -119,8 +136,7 @@ else
   "labels": { "email_address": "$CORREO" }
 }
 JSON
-  llamar POST "$API/notificationChannels" "$TMP/canal.json" >/dev/null
-  echo "  [creado]    canal de correo a $CORREO"
+  crear "$API/notificationChannels" "$TMP/canal.json" "canal de correo a $CORREO"
   CANAL_ID="$(canal_existente || true)"
 fi
 
@@ -152,12 +168,13 @@ else
     "requestMethod": "GET"
   },
   "period": "300s",
-  "timeout": "10s",
-  "selectedRegions": ["EUROPE"]
+  "timeout": "10s"
 }
 JSON
-  llamar POST "$API_UPTIME" "$TMP/uptime.json" >/dev/null
-  echo "  [creada]    comprobación cada 5 min sobre https://$HOST/health"
+  # Sin `selectedRegions`: la API exige **al menos tres** («selected_regions must include at
+  # least three locations») y omitirlo significa comprobar desde todas, que para un extremo
+  # público es la respuesta honesta — si sólo responde en Europa, eso es información.
+  crear "$API_UPTIME" "$TMP/uptime.json" "comprobación cada 5 min sobre https://$HOST/health"
 fi
 echo
 
@@ -177,8 +194,7 @@ crear_alerta() { # nombre fichero
     echo "  [ya estaba] $nombre"
     return
   fi
-  llamar POST "$API_ALERT" "$fichero" >/dev/null
-  echo "  [creada]    $nombre"
+  crear "$API_ALERT" "$fichero" "$nombre"
 }
 
 cat > "$TMP/alerta_salud.json" <<JSON
@@ -246,14 +262,33 @@ crear_alerta "Gov Gen AI - disco por encima del 85%" "$TMP/alerta_disco.json"
 echo
 
 echo "== Comprobación =="
+FALTA=0
+
+# La comprobación de salud se verifica **aparte y primero**. La versión anterior sólo revisaba
+# las alertas, y por eso una comprobación que nunca se creó pasó desapercibida: la alerta de
+# caída existía y parecía correcta, pero sin la comprobación que la alimenta **no puede
+# dispararse**. Una alerta huérfana es peor que ninguna, porque da la impresión de cobertura.
+if printf '%s' "$(llamar GET "$API_UPTIME" || true)" | grep -q "\"host\": \"$HOST\""; then
+  printf '  [ok]    comprobación de salud sobre %s\n' "$HOST"
+else
+  printf '  [FALTA] comprobación de salud sobre %s — la alerta de caída no podría dispararse\n' "$HOST"
+  FALTA=$((FALTA + 1))
+fi
+
 FINAL="$(llamar GET "$API_ALERT" || true)"
 for nombre in "la salud no responde" "memoria por encima" "disco por encima"; do
   if printf '%s' "$FINAL" | grep -q "$nombre"; then
     printf '  [ok]    %s\n' "$nombre"
   else
     printf '  [FALTA] %s\n' "$nombre"
+    FALTA=$((FALTA + 1))
   fi
 done
 echo
+
+if [ "$FALTA" -gt 0 ]; then
+  echo "ERROR: faltan $FALTA piezas de la vigilancia. No se puede dar por vigilado." >&2
+  exit 1
+fi
 echo "AVISO: una alerta que nadie ha visto disparar es una hipótesis. Pruébala apagando el"
 echo "       servicio (D.6-VM lo pide en su cierre) y comprueba que el correo llega."
