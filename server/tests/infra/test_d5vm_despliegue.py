@@ -430,3 +430,41 @@ def test_el_dominio_institucional_llega_por_configuracion_y_no_a_mano() -> None:
     assert any("vars." in linea for linea in activas), (
         f"Y de `vars`, no de `secrets`: es un nombre de host, no una credencial. {activas}"
     )
+
+
+def test_un_commit_solo_de_documentacion_no_redespliega_produccion() -> None:
+    """Cambiar un `.md` no puede reiniciar el servicio, y hoy lo hacía.
+
+    Medido el 2026-09-01: el commit `16b5f61` tocaba **sólo** `planificacion/PROJECT_STATE.md`
+    y disparó un despliegue completo que paró y levantó la pila. Consecuencias, las dos malas:
+
+    - **Producción se reinicia sin motivo.** Cada reinicio deja el servicio 60-90 s sin
+      responder, y ese día hubo cuatro.
+    - **La vigilancia se vuelve ruido.** La alerta de salud dispara en cada reinicio, así que
+      llegaban avisos «sin que se haya hecho ningún despliegue» —los había, sólo que de
+      documentación—. Con avisos falsos de por medio se perdió uno real: el del disco al 85%,
+      que había avisado cuatro horas antes de la caída.
+
+    El filtro es por lo que NO se despliega, no por lo que sí: si mañana aparece un directorio
+    de código nuevo, lo peor que pasa es que se despliegue, que es el lado seguro del error.
+    """
+    d = _workflow()
+    # `on` es palabra reservada en YAML 1.1: PyYAML la lee como True.
+    disparador = d.get("on") or d.get(True)
+    assert disparador, "El workflow tiene que declarar su disparador."
+    push = disparador.get("push") or {}
+    ignoradas = push.get("paths-ignore") or []
+    assert ignoradas, (
+        "Falta `paths-ignore` en el disparador del despliegue: un commit de documentación "
+        "reinicia producción y dispara la alerta de salud."
+    )
+    for esperada in ("docs/**", "planificacion/**", "**.md"):
+        assert esperada in ignoradas, (
+            f"{esperada} debería estar en paths-ignore. Actual: {ignoradas}"
+        )
+    # Y lo que NO puede estar: el código, el compose, los guiones y el propio workflow.
+    for prohibida in ("server/**", "frontend/**", "deploy/**", "scripts/**",
+                      ".github/workflows/**"):
+        assert prohibida not in ignoradas, (
+            f"{prohibida} NO puede ignorarse: es lo que se despliega. Actual: {ignoradas}"
+        )

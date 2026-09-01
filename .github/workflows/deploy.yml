@@ -23,6 +23,28 @@ name: Deploy — VM de GCP
 on:
   push:
     branches: [main]
+    # Un commit que sólo toca documentación NO redespliega producción.
+    #
+    # Medido el 2026-09-01: el commit `16b5f61` tocaba únicamente
+    # `planificacion/PROJECT_STATE.md` y disparó un despliegue completo que paró y levantó la
+    # pila. Dos consecuencias, las dos malas: producción se reinicia sin motivo —60-90 s sin
+    # responder cada vez, y ese día fueron cuatro— y **la vigilancia se vuelve ruido**, porque la
+    # alerta de salud dispara en cada reinicio. Llegaban avisos «sin que se haya hecho ningún
+    # despliegue»: los había, sólo que de documentación. Y entre los falsos se perdió uno real,
+    # el del disco al 85%, que había avisado cuatro horas antes de la caída.
+    #
+    # La lista es de lo que NO se despliega, no de lo que sí: si mañana aparece un directorio de
+    # código nuevo, lo peor que pasa es que se despliegue. Ése es el lado seguro del error.
+    #
+    # Un commit que toque documentación **y** código sí despliega: `paths-ignore` sólo salta
+    # cuando *todos* los ficheros del push encajan en la lista.
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "planificacion/**"
+      - "pruebas_manuales/**"
+      - "LICENSE"
+      - "DCO"
   workflow_dispatch:
     inputs:
       etiqueta:

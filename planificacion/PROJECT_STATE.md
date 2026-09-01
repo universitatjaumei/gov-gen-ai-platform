@@ -126,15 +126,24 @@ despliegue es **~~SEC.9~~ ✅ → ~~AIS~~ ✅ → ~~RAG.15~~ ✅ → ~~VIS.4~~ �
 > las **05:11:56Z** (07:11 hora local) de «Gov Gen AI - disco por encima del 85%», y la métrica
 > confirma **376 minutos por encima del 85%** con un pico del 95,9%. El aviso llegó; nadie actuó.
 >
-> **Por qué se perdió, y esto sí es accionable**: la alerta de salud dispara en **cada
+> **Por qué se perdió, y esto sí era accionable**: la alerta de salud dispara en **cada
 > despliegue**, porque el reinicio deja el servicio 60-90 s sin responder y la comprobación lo
-> coge desde varias regiones. El 2026-09-01 disparó cuatro veces, tres de ellas falsas. Un aviso
-> real se pierde entre los falsos. **El usuario decidió (2026-09-01) no invertir tiempo en esto
-> por ahora**; la solución correcta cuando se retome es que el despliegue silencie su propia
-> ventana con un *snooze* de diez minutos —distingue parada planificada de caída por conocimiento
-> y no por estadística, y no pierde detección—, lo que exige un rol propio con
-> `monitoring.snoozes.create` para la cuenta de despliegue. Subir el umbral es la alternativa sin
-> permisos y se descartó: depende de cuántas regiones tenga la comprobación y envejece mal.
+> coge desde varias regiones. El 2026-09-01 disparó cuatro veces, todas por reinicios.
+>
+> ✅ **Y la causa raíz era otra, más barata y peor de lo que parecía: el despliegue se disparaba
+> con CUALQUIER push, incluidos los de sólo documentación.** El usuario avisó de que seguía
+> recibiendo alertas «sin que se haya hecho ningún despliegue»; los había — el commit `16b5f61`
+> tocaba únicamente `PROJECT_STATE.md` y reinició la pila. Medido en el momento: 101 de 1.293
+> comprobaciones fallidas en tres horas, y el log de Caddy con 10 de 43 peticiones a `/health`
+> en 502, todas en las ventanas de reinicio. **Arreglado con `paths-ignore`** (`**.md`, `docs/**`,
+> `planificacion/**`, `pruebas_manuales/**`, `LICENSE`, `DCO`) y un test que lo fija, incluida la
+> lista de lo que NO puede ignorarse. CI se deja disparando con todo a propósito: no reinicia
+> producción y sí ejecuta tests que comprueban la documentación.
+>
+> **Lo que queda como opción, no como pendiente**: si tras esto siguiera molestando el aviso de
+> los despliegues reales, la solución limpia es que el despliegue silencie su propia ventana con
+> un *snooze* de diez minutos, lo que exige un rol propio con `monitoring.snoozes.create`. Subir
+> el umbral se descartó: depende de cuántas regiones tenga la comprobación y envejece mal.
 
 > 📅 **FECHA QUE HAY QUE RECORDAR: el certificado de `normativa.uji.es` caduca el 19 de marzo de
 > 2027 y NO se renueva solo.**
