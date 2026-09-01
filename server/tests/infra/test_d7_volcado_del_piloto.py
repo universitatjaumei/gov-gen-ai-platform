@@ -30,6 +30,16 @@ VOLCADO = RAIZ / "scripts" / "volcado_piloto.sh"
 
 _BASH = shutil.which("bash") or "bash"
 
+#: Tablas que son catálogo de PLATAFORMA y no cuelgan de ninguna organización, así que su
+#: filtro no puede mencionarla. Se enumeran para que la excepción sea una decisión escrita y no
+#: un hueco: una tabla con datos de cliente colada aquí viajaría entera.
+_DE_PLATAFORMA = {
+    "hub_providers": (
+        "el catálogo de proveedores de modelo. No tiene columna de organización y la "
+        "configuración de embeddings apunta a uno: sin él, el resolutor no sabe si es Vertex."
+    ),
+}
+
 #: Entradas "tabla|razón" de la lista de prohibidas.
 _ENTRADA = re.compile(r'^\s*"(hub_[a-z_]+)\|([^"|]*)"\s*$', re.MULTILINE)
 
@@ -100,6 +110,20 @@ def test_ninguna_tabla_esta_en_las_dos_listas() -> None:
     assert not solapan, f"Tablas en las dos listas a la vez: {sorted(solapan)}"
 
 
+def test_las_listas_no_llevan_acentos_graves() -> None:
+    """Dentro de comillas dobles, bash trata el acento grave como sustitución de comandos.
+
+    Una razón escrita con acentos graves alrededor de `purpose='embedding' AND is_default` hizo
+    que el guion muriera con «AND: command not found»: un error de sintaxis provocado por un
+    **comentario**. Lo cazó el test que ejecuta el plan en seco, no leer el fichero.
+    """
+    for nombre in ("TABLAS", "PROHIBIDAS"):
+        con_acento = [l for l in _bloque(nombre).splitlines() if "`" in l]
+        assert not con_acento, (
+            f"Acento grave en {nombre}: bash lo ejecutaría como orden. {con_acento}"
+        )
+
+
 def test_no_viaja_ningun_informe_ni_ninguna_persona() -> None:
     """Los dos grupos que el prompt saca por decisión, no por descuido."""
     viajan = set(_tablas("TABLAS"))
@@ -137,6 +161,29 @@ def test_viaja_lo_que_costaria_rehacer() -> None:
         assert tabla in viajan, f"Falta {tabla}: es lo que costaría rehacer"
 
 
+def test_viaja_la_configuracion_que_hace_usable_el_corpus() -> None:
+    """El corpus sin su modelo de embeddings es un montón de vectores que nadie puede consultar.
+
+    Pasó de verdad: el volcado llevaba sólo las `hub_llm_configs` que los chatbots referencian,
+    y **la de embeddings no la referencia ningún chatbot** — se resuelve por
+    `purpose='embedding' AND is_default`, a nivel de plataforma. Sin ella, producción caía al
+    modelo local por defecto y el guardarraíl de espacio vectorial rechazaba toda consulta:
+    «vectores de gemini-embedding-001 … y el modelo activo es BAAI/bge-m3».
+    """
+    filtros = {
+        t: _expandir(f) for t, f, _ in _ENTRADA_CON_FILTRO.findall(_bloque("TABLAS"))
+    }
+    assert "hub_llm_configs" in filtros, "Falta la configuración de modelos"
+    assert "organizacion_id IS NULL" in filtros["hub_llm_configs"], (
+        "Las configuraciones de PLATAFORMA (organización nula) tienen que viajar: el modelo "
+        "de embeddings es una de ellas y no la referencia nadie."
+    )
+    assert "hub_providers" in filtros, (
+        "Los proveedores también: la configuración de embeddings apunta a uno, y el resolutor "
+        "mira su `provider_type`."
+    )
+
+
 def test_los_fragmentos_viajan_porque_reembeber_cuesta() -> None:
     razon = _tablas("TABLAS").get("hub_document_chunks", "")
     assert "reembeber" in razon.lower() or "gpu" in razon.lower(), (
@@ -172,9 +219,11 @@ def test_cada_tabla_lleva_su_filtro_y_ninguna_se_volca_entera() -> None:
     for entrada in _ENTRADA_CON_FILTRO.findall(_bloque("TABLAS")):
         tabla, filtro, razon = entrada
         assert filtro.strip(), f"{tabla} no declara filtro: se volcaría entera"
-        assert ":ORG" in _expandir(filtro), (
-            f"{tabla} tiene un filtro que no acaba llegando a la organización"
-        )
+        if tabla not in _DE_PLATAFORMA:
+            assert ":ORG" in _expandir(filtro), (
+                f"{tabla} tiene un filtro que no acaba llegando a la organización. Si es "
+                "catálogo de plataforma, decláralo en _DE_PLATAFORMA con su razón."
+            )
         assert razon.strip(), f"{tabla} no dice por qué viaja"
 
 

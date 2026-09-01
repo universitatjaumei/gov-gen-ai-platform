@@ -80,7 +80,8 @@ _SITIOS_DE_LA_ORG="SELECT id FROM hub_web_sites WHERE organizacion_id = ':ORG'"
 # documentos se referencian entre sí. Desactivar una comprobación es una forma de no enterarse.
 TABLAS=(
   "hub_organizaciones|id = ':ORG'|la organización del piloto, y sólo ella"
-  "hub_llm_configs|id IN (SELECT DISTINCT llm_config_id FROM hub_chatbots WHERE organizacion_id = ':ORG' AND llm_config_id IS NOT NULL)|la configuración de modelo que los chatbots referencian; sin ella su inserción falla"
+  "hub_providers|true|los proveedores de modelo; la configuración de embeddings apunta a uno y sin él no resuelve"
+  "hub_llm_configs|id IN (SELECT DISTINCT llm_config_id FROM hub_chatbots WHERE organizacion_id = ':ORG' AND llm_config_id IS NOT NULL) OR organizacion_id IS NULL OR organizacion_id = ':ORG'|la configuración de modelo. TAMBIEN las de plataforma (organización nula): el modelo de embeddings se resuelve por purpose=embedding e is_default, y esa fila NO la referencia ningún chatbot; llevar sólo las referenciadas dejaba el corpus inservible"
   "hub_chatbots|organizacion_id = ':ORG'|los asistentes con su configuración medida (umbrales, top_k, modo)"
   "hub_web_sites|organizacion_id = ':ORG'|el sitio de curación. **Antes** de los documentos: 3 de ellos citan una página"
   "hub_crawled_pages|site_id IN ($_SITIOS_DE_LA_ORG)|sus páginas rastreadas, con las señales de frescura"

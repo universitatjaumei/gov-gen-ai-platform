@@ -292,6 +292,12 @@ def test_la_maquina_usa_cuenta_propia_y_no_la_de_por_defecto_de_compute() -> Non
     )
     for rol in ("roles/cloudsql.client", "roles/artifactregistry.reader"):
         assert rol in texto, f"Falta el rol mínimo {rol}"
+    # Sin este, el asistente no responde: embeber la pregunta es una llamada a Vertex y el
+    # fallo (403 aiplatform.endpoints.predict) no aparece hasta la primera consulta real, con
+    # la máquina, el TLS y la base ya funcionando.
+    assert "roles/aiplatform.user" in texto, (
+        "Falta el rol de Vertex: sin él la recuperación falla con 403 en la primera consulta."
+    )
     assert "roles/editor" not in texto and "roles/owner" not in texto
 
 

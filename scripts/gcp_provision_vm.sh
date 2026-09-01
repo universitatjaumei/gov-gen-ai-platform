@@ -70,6 +70,11 @@ ROLES=(
   "roles/logging.logWriter"          # logs de los contenedores (D.6-VM)
   "roles/monitoring.metricWriter"    # métricas y alertas (D.6-VM)
   "roles/artifactregistry.reader"    # bajar la imagen que publica CI (D.5-VM)
+  # Sin esto **el asistente no puede responder**: embeber la pregunta del usuario es una
+  # llamada a Vertex, y sin el rol devuelve «403 PERMISSION_DENIED: aiplatform.endpoints.predict
+  # denied». Se me escapó al aprovisionar y el fallo no aparece hasta la primera consulta real,
+  # con la máquina, el TLS y la base ya funcionando — o sea, en el peor momento para buscarlo.
+  "roles/aiplatform.user"            # embeddings y modelo de chat en Vertex
 )
 
 echo "== Aprovisionamiento de la VM =="
