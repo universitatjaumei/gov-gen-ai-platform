@@ -24392,7 +24392,7 @@ lectura de la DT primera de PRG-004 (colectivo, alcance y fin), que el usuario y
 > accesible desde fuera, y partir el bloque no compra nada.
 
 **Origen**: reunión con desarrollo del 2026-08-31 y su valoración en
-`docs/VALORACION_VECTORES_Y_REGISTRO_IA.html`. Desarrollo planteó que la plataforma no podrá
+`docs/EVOLUCIO_I_ASPECTES_PENDENTS.html`. Desarrollo planteó que la plataforma no podrá
 actuar como registro de las actividades de IA que ocurren **fuera** de ella (Claude Cowork,
 Copilot, agentes de terceros) y propuso exponer un servicio MCP o endpoints para que esos agentes
 registren sus usos y consuman la anonimización. La valoración lo acepta con un matiz: no es una
@@ -24720,7 +24720,7 @@ limpias); `docs/REGISTRO_ACTIVIDAD_IA.md` existe y el enlace desde `docs/mcp.md`
 permanente, como jornadas o eventos, deberían alimentar el chatbot en cada actualización sin
 curación manual»), y la corrección posterior del usuario: **los apartados se han de poder
 parametrizar como bloques o secciones dentro de un proceso de curación, no quedar fijados**.
-Valoración completa en `docs/VALORACION_VECTORES_Y_REGISTRO_IA.html` (valoración 3).
+Valoración completa en `docs/EVOLUCIO_I_ASPECTES_PENDENTS.html` (valoración 3).
 
 **Lo que la revisión del código encontró ya hecho** —con tests y corriendo en el APScheduler que
 arranca con la aplicación— es dos tercios de lo que la reunión pedía: el rastreo periódico con

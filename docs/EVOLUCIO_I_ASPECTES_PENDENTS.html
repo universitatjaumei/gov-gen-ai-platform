@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evolució i aspectes pendents</title>
+<style>
+  :root {
+    --paper: #F7F8F6;
+    --surface: #FFFFFF;
+    --ink: #232A2D;
+    --muted: #5C6A6E;
+    --line: #D9DFDD;
+    --accent: #27607A;
+    --accent-soft: #E3EDF2;
+    --si: #3E7C4F;
+    --si-soft: #E7F0E8;
+    --espera: #8A6A1F;
+    --espera-soft: #F3EBDA;
+    --code-bg: #EDF0EE;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #171B1D;
+      --surface: #1F2528;
+      --ink: #DDE4E2;
+      --muted: #93A2A4;
+      --line: #333D40;
+      --accent: #6FA9C4;
+      --accent-soft: #22333D;
+      --si: #7FB58C;
+      --si-soft: #21301F;
+      --espera: #D9B767;
+      --espera-soft: #2E2818;
+      --code-bg: #262E31;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.65;
+    margin: 0;
+  }
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+  h1, h2, h3, .eyebrow, .pill, th, .q {
+    font-family: "Segoe UI", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  }
+  h1 {
+    font-size: clamp(28px, 5vw, 38px);
+    font-weight: 700;
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 10px 0 14px;
+  }
+  h2 {
+    font-size: 21px;
+    font-weight: 700;
+    letter-spacing: -0.005em;
+    text-wrap: balance;
+    margin: 0 0 14px;
+  }
+  p { margin: 0 0 16px; }
+  section { margin-top: 56px; }
+
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    margin: 0 0 4px;
+  }
+  .meta {
+    font-family: Consolas, "Cascadia Mono", Menlo, monospace;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 40px;
+  }
+  .standfirst {
+    font-size: 19px;
+    line-height: 1.55;
+    max-width: 62ch;
+  }
+  .standfirst strong { font-weight: 700; }
+
+  code {
+    font-family: Consolas, "Cascadia Mono", Menlo, monospace;
+    font-size: 0.82em;
+    background: var(--code-bg);
+    border-radius: 3px;
+    padding: 1px 5px;
+  }
+
+  .verdicts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    gap: 16px;
+    margin: 36px 0 0;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 22px 24px 18px;
+  }
+  .card h3 { margin: 10px 0 8px; font-size: 17px; line-height: 1.3; font-weight: 600; }
+  .card p { font-size: 15.5px; color: var(--muted); margin: 0; }
+  .pill {
+    display: inline-block;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    border-radius: 999px;
+    padding: 4px 12px;
+  }
+  .pill.si { color: var(--si); background: var(--si-soft); }
+  .pill.mixto { color: var(--accent); background: var(--accent-soft); }
+  .pill.espera { color: var(--espera); background: var(--espera-soft); }
+  .card.si { border-top: 3px solid var(--si); }
+  .card.mixto { border-top: 3px solid var(--accent); }
+  .card.espera { border-top: 3px solid var(--espera); }
+
+  .panel {
+    background: var(--accent-soft);
+    border-radius: 6px;
+    padding: 22px 26px;
+    margin: 22px 0;
+  }
+  .panel ul { margin: 0; padding-left: 20px; }
+  .panel li { margin-bottom: 10px; font-size: 15.5px; }
+  .panel li:last-child { margin-bottom: 0; }
+
+  ul.args { padding-left: 20px; margin: 0 0 16px; }
+  ul.args li { margin-bottom: 12px; }
+  ul.args li::marker { color: var(--accent); }
+
+  .rescate {
+    border-left: 3px solid var(--si);
+    padding: 4px 0 4px 20px;
+    margin: 24px 0;
+  }
+  .rescate p { margin-bottom: 10px; }
+  .rescate p:last-child { margin-bottom: 0; }
+
+  .alerta {
+    border-left: 3px solid var(--espera);
+    padding: 4px 0 4px 20px;
+    margin: 24px 0;
+  }
+  .alerta p { margin-bottom: 10px; }
+  .alerta p:last-child { margin-bottom: 0; }
+
+  .table-scroll { overflow-x: auto; margin: 20px 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 620px;
+    font-size: 15px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+  }
+  th {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-align: left;
+    color: var(--muted);
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.id {
+    font-family: Consolas, "Cascadia Mono", Menlo, monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  ol.decisiones { padding-left: 0; margin: 20px 0 0; counter-reset: dec; list-style: none; }
+  ol.decisiones li {
+    counter-increment: dec;
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 14px;
+    padding: 18px 0;
+    border-top: 1px solid var(--line);
+  }
+  ol.decisiones li::before {
+    content: counter(dec, decimal-leading-zero);
+    font-family: Consolas, "Cascadia Mono", Menlo, monospace;
+    font-size: 14px;
+    color: var(--accent);
+    padding-top: 3px;
+  }
+  ol.decisiones .q { font-weight: 600; font-size: 15.5px; }
+  ol.decisiones .r { color: var(--muted); font-size: 15.5px; margin-top: 4px; }
+  ol.decisiones .r b { color: var(--ink); font-weight: 600; }
+
+  .carta {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 26px 30px;
+    margin: 24px 0;
+    font-size: 15.5px;
+  }
+  .carta p { margin-bottom: 14px; }
+  .carta p:last-child { margin-bottom: 0; }
+  .carta .firma { color: var(--muted); }
+
+  footer {
+    margin-top: 64px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Gov Gen AI Platform · Evolució i aspectes pendents</p>
+    <h1>Evolució i aspectes pendents</h1>
+    <p class="meta">Reunions amb desenvolupament · actualitzat l'1&nbsp;set&nbsp;2026 · preparat sobre el codi real del repositori</p>
+    <p class="standfirst">
+      Desenvolupament va portar tres propostes: fer servir bases vectorials incrustades en xatbots
+      de corpus estable, obrir la plataforma perquè agents externs registren la seua activitat i
+      utilitzen l'anonimització, i que les seccions web d'actualització permanent (jornades,
+      esdeveniments) alimenten el seu xatbot <strong>sense curació manual</strong>. Les tres
+      apunten a preocupacions reals, i dues es convertixen directament en blocs de treball. La
+      primera s'ajorna —no per la idea, sinó perquè Postgres està al sistema per moltes més coses
+      que els vectors— i queda com a opció oberta sense cost. La segona és estratègica i encaixa:
+      la meitat de les peces ja estan construïdes. I en la tercera hi ha una bona notícia:
+      <strong>la ingesta automàtica ja existix i corre al scheduler</strong>, encara que no es veja
+      des de la interfície; el que falta és tancar-ne el cicle de vida i que els apartats siguen
+      <strong>paràmetres que configura qui cura</strong>, no res fixat al codi. Els prompts dels dos
+      blocs nous ja estan redactats (REG i DIN,
+      <code>planificacion/Plan_TDD_Fase1.md</code>). Després de l'informe va arribar per correu una
+      <strong>quarta qüestió</strong>, sobre l'arquitectura dels xatbots: si crear-ne un genera codi
+      dins del runtime del producte. No ho fa —és una fila de configuració que interpreta un motor
+      únic—, i de l'alternativa que proposava el correu (una extensió de LangGraph a nivell d'API)
+      ix una proposta que mereix reunió pròpia: que <strong>tercers implementen agents dins i fora
+      del sistema via API</strong>. I s'hi afig ara una <strong>cinquena qüestió</strong>, que no ve
+      de desenvolupament sinó del pilot que ja està en marxa: <strong>el SSO institucional, i què
+      passa amb els comptes de persona mentre no hi siga</strong>.
+    </p>
+
+    <div class="verdicts">
+      <div class="card mixto">
+        <span class="pill mixto">Ajornat, amb la porta oberta</span>
+        <h3>1 · Bases vectorials incrustades</h3>
+        <p>Postgres continuaria sent necessari per a tot la resta, i la recuperació híbrida porta
+        llindars calibrats que caldria refer. A més el corpus encara es mou. L'opció queda
+        disponible sense pagar res hui: el retriever ja s'injecta darrere d'un protocol.</p>
+      </div>
+      <div class="card si">
+        <span class="pill si">Recomanat</span>
+        <h3>2 · Registre d'activitat i serveis cap a fora</h3>
+        <p>La preocupació per l'escalabilitat té bona part de resposta ja al codi: el monolit està
+        partit per dins. I la proposta encaixa amb l'arquitectura i amb l'AI&nbsp;Act. S'integra com
+        el bloc REG, sis prompts, després del desplegament.</p>
+      </div>
+      <div class="card mixto">
+        <span class="pill mixto">Ja en marxa; falta tancar el cicle</span>
+        <h3>3 · Seccions dinàmiques sense curació manual</h3>
+        <p>L'auto-ingesta de pàgines noves i la reingesta de les canviades ja existixen, amb tests i
+        al scheduler. Falta que l'apartat siga un paràmetre de curació —hui és un lloc sencer— i
+        tancar el cicle: retirada, porta de qualitat i diari. Bloc DIN, set prompts.</p>
+      </div>
+      <div class="card si">
+        <span class="pill si">Aclarit, amb proposta derivada</span>
+        <h3>4 · ¿Generador de codi o framework?</h3>
+        <p>La premissa no es complix: crear un xatbot és un <code>INSERT</code> de configuració i un
+        motor únic la interpreta en temps de petició. L'«extensió de LangGraph» que proposa el
+        correu és com està construït l'interior; obrir-la a tercers —dins i fora del sistema, via
+        API— es recull com a proposta per a la reunió.</p>
+      </div>
+      <div class="card espera">
+        <span class="pill espera">Depén d'un requisit extern</span>
+        <h3>5 · SSO institucional i comptes de persona</h3>
+        <p>El SAML està implementat i apagat per configuració. El que el bloqueja no és codi: són
+        les metadades de l'IdP i <strong>un nom DNS institucional</strong>. Mentrestant no hi ha
+        comptes de persona amb contrasenya —això és el bloc USR, set prompts— i el pilot funciona
+        amb sis comptes elevats que caldrà baixar.</p>
+      </div>
+    </div>
+  </header>
+
+  <section>
+    <p class="eyebrow">Abans d'entrar en detall</p>
+    <h2>Les tres propostes assenyalen problemes que existixen</h2>
+    <p>
+      Convé dir-ho abans que res, perquè la resta del document entra en el detall tècnic i allí és
+      fàcil perdre de vista el que importa: <strong>les tres aportacions van donar en
+      preocupacions legítimes</strong>, i dues es traduïxen ja en treball planificat. La primera
+      posa el focus en la dependència d'infraestructura, que és la pregunta correcta quan es pensa
+      a desplegar molts xatbots. La segona anticipa una cosa que efectivament passarà —ús d'IA fora
+      de la plataforma, sense ningú registrant-ho— i va arribar abans que fóra un problema. I la
+      tercera va posar nom a un buit real del cicle de vida del contingut, que estava a mig tancar
+      sense que ningú ho haguera notat.
+    </p>
+    <p>
+      Bona part de les respostes d'ací baix són «això ja està», i això no és cap retret a qui va
+      preguntar: <strong>quasi res d'eixa maquinària es veu des de la interfície</strong> —viu al
+      scheduler, en jobs i en taules—, així que l'única manera de saber-ho era obrir el codi. Que
+      les propostes coincidisquen amb decisions ja preses és, sobretot, un senyal que anem en la
+      mateixa direcció.
+    </p>
+
+    <p class="eyebrow" style="margin-top:40px">Punt de partida</p>
+    <h2>Què hi ha ja construït</h2>
+    <p>
+      Fixar l'inventari ajuda a valorar les propostes, perquè la segona no parteix de zero:
+    </p>
+    <div class="panel">
+      <ul>
+        <li><strong>Servidor MCP complet</strong> (<code>mcp_server/</code>): 16 tools i 5 resources
+          per a autoria de plantilles, configuració de xatbots i xat de prova, amb 54 tests.
+          Transport stdio local; la valoració de <code>docs/mcp.md</code> va deixar anotat l'MCP
+          remot com a pas següent quan hi haguera cas d'ús.</li>
+        <li><strong>PAT amb permisos per rol</strong> (<code>core/auth/pat/</code>, bloc AUTH):
+          tokens de màquina revocables, amb catàleg de permisos i sostre per rol. És exactament la
+          peça d'autenticació que un client extern necessita.</li>
+        <li><strong>Mòdul d'anonimització operatiu</strong>
+          (<code>modules/redaccion/services/anonymization/</code>): detecció de dades personals en
+          text lliure (<code>detect_spans</code>) i tabular, polítiques, generació amb Faker, i
+          modes per workspace amb herència. Hui només el consumix el mòdul de redacció.</li>
+        <li><strong>Registre intern d'interaccions</strong> (<code>HubInteraction</code>): captura
+          el que ocorre <em>dins</em> de la plataforma. Res no registra hui l'ús d'IA que passa
+          fora.</li>
+        <li><strong>SSO per SAML implementat i apagat</strong> (<code>core/auth/saml/</code>): les
+          quatre rutes, l'alta automàtica de persones en validar l'asserció i el mapatge de grups a
+          rols. Espera dades d'Informàtica, no codi (qüestió 5).</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Qüestió 1</p>
+    <h2>Vectors incrustats: la intuïció és bona, però l'estalvi es queda curt</h2>
+    <p>
+      La idea de fons —baixar la dependència d'infraestructura d'un xatbot amb un corpus que quasi
+      no canvia— és sensata, i en un altre sistema seria la decisió correcta. El que la complica ací
+      són quatre detalls concrets de com ha acabat muntat este:
+    </p>
+    <ul class="args">
+      <li><strong>Llevar els vectors no lleva el servidor.</strong> Postgres guarda també els
+        documents, les interaccions, els jobs d'ingesta, el vocabulari versionat i la tinença per
+        organització. Un xatbot amb LanceDB o Chroma incrustat continuaria necessitant la mateixa
+        base de dades per a tot la resta, així que el resultat seria afegir un magatzem més i no
+        retirar-ne cap.</li>
+      <li><strong>La recuperació ha acabat sent bastant més que «veïns més pròxims».</strong>
+        És híbrida — vector més <code>tsvector</code> com a pont bilingüe valencià/castellà —,
+        filtra per una taxonomia que viu en taules versionades, i té llindars calibrats per mesura
+        (0,60 a Normativa, 0,35 a Gerència; bloc HIB). Una base incrustada obligaria a
+        reimplementar i <em>recalibrar</em> tot això en un segon camí de codi, amb la seua segona
+        bateria de tests.</li>
+      <li><strong>Tensiona l'invariant «reclassificar = un UPDATE».</strong> El vocabulari està
+        pendent de validació per Secretaria General i canviarà. Amb N magatzems incrustats
+        repartits per xatbot, cada canvi d'etiqueta tocaria N fitxers en compte d'una taula.</li>
+      <li><strong>El «corpus estable» encara no ho és del tot.</strong> El bloc ACT va reingerir el
+        corpus complet als quatre assistents fa uns dies, hi ha 35 documents pendents de
+        confirmació i la curació continua activa. I a l'escala actual — 313 fitxes, 308 pàgines —
+        pgvector a la màquina va sobrat, així que ara mateix no hi ha cap mesura de rendiment que
+        empenya en esta direcció. Pot canviar: si apareix, la conversa es reobri amb dades.</li>
+    </ul>
+    <div class="rescate">
+      <p><strong>Què sí que convé recollir.</strong> Si la fricció concreta és «alçar Postgres per a
+        desenvolupar o fer una demostració» —que és una molèstia real—, es resol millor amb un
+        <code>docker compose</code> amb dades sembrades que canviant el motor. Val la pena
+        confirmar a la reunió si eixe era el punt de partida.</p>
+      <p>I la porta queda oberta a propòsit: el retriever ja s'injecta per <code>Depends</code>
+        darrere d'un protocol. Si algun dia un desplegament ho justifica — un edge node mínim sense
+        Postgres —, afegir un backend incrustat és additiu i no exigix migrar res. És a dir: no cal
+        decidir-ho hui per a poder fer-ho demà, i per això proposem esperar en compte de tancar
+        l'opció.</p>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Qüestió 2</p>
+    <h2>Registre d'IA: la proposta encaixa, i el diagnòstic ja té resposta</h2>
+    <p>
+      <strong>Sobre el «no escalarà perquè està tot integrat»: la preocupació és la correcta, i bona
+      part del treball ja està feta</strong> —encara que des de fora no es note, perquè és
+      estructura interna. El monolit està partit per dins precisament per a poder separar-se: dos
+      <code>DeclarativeBase</code> (configuració/operacional), <code>DEPLOY_MODE</code> amb
+      classificació de routers cloud/edge, <code>ConfigProvider</code>, i la prohibició d'imports
+      edge→cloud amb guardarrails en tests. Eixa frontera existix i es vigila en cada commit.
+    </p>
+    <p>
+      <strong>I la proposta en si és estratègica i encaixa bé.</strong> L'ús d'IA a la institució
+      passarà cada vegada més <em>fora</em> de la plataforma — Claude Cowork, Copilot, agents de
+      tercers — i hui res no ho registra. Un registre central d'activitat d'IA és exactament el que
+      l'AI&nbsp;Act demana als responsables del desplegament (conservació de logs, arts.&nbsp;12
+      i&nbsp;26) i el que un registre d'activitats de tractament del RGPD (art.&nbsp;30) agraïx. I
+      l'anonimització com a servei evita que cada eina externa resolga les dades personals pel seu
+      compte, pitjor.
+    </p>
+    <p>
+      Una delimitació important: això és <strong>registre de governança, no traçat tècnic</strong>.
+      El traçat token a token ja el cobrix Langfuse dins de la plataforma; el que falta és
+      l'esdeveniment de nivell legal — qui va usar quin agent, amb quina finalitat, sobre quines
+      categories de dades. No cal reconstruir Langfuse.
+    </p>
+  </section>
+
+  <section>
+    <p class="eyebrow">Proposta</p>
+    <h2>Bloc REG: exposar el que ja hi ha, amb dues superfícies</h2>
+    <p>
+      No és una re-arquitectura. És un bloc de sis prompts — <strong>ja redactats al final de
+      <code>planificacion/Plan_TDD_Fase1.md</code></strong> — que exposa peces existents amb REST
+      per a qualsevol client i MCP com a façana per a agents:
+    </p>
+    <div class="table-scroll">
+      <table>
+        <tr><th>Prompt</th><th>Entregable</th><th>Notes de disseny</th></tr>
+        <tr>
+          <td class="id">REG.1</td>
+          <td>Contracte <code>ActividadIAEvent</code> i taula <code>hub_actividad_ia</code>
+            (operacional, edge)</td>
+          <td>Esdeveniment de governança: actor, organització, eina externa, finalitat, model,
+            categories de dades declarades, marques de temps. <strong>Metadades sí, contingut
+            no</strong>, garantit per contracte (<code>extra="forbid"</code>): el registre no pot
+            convertir-se en un segon lloc on viuen les dades personals. Taula nova — no sobrecarregar
+            <code>HubInteraction</code>.</td>
+        </tr>
+        <tr>
+          <td class="id">REG.2</td>
+          <td>Endpoint <code>POST /api/v1/actividad</code> i els dos permisos nous</td>
+          <td>Permisos <code>actividad:write</code> i <code>anonimizacion:use</code> al catàleg PAT.
+            L'organització de l'esdeveniment es deriva del propietari del token, mai del contingut
+            de la petició.</td>
+        </tr>
+        <tr>
+          <td class="id">REG.3</td>
+          <td>Anonimització com a servei: <code>/anonimizacion/spans</code> i
+            <code>/anonimizacion/replace</code></td>
+          <td>Exposa <code>PiiDetector.detect_spans</code> i l'anonimitzador sobre text lliure.
+            Edge per definició; el text no toca logs ni base de dades, amb test que ho vigila.</td>
+        </tr>
+        <tr>
+          <td class="id">REG.4</td>
+          <td>MCP remot (HTTP streamable) com a façana fina</td>
+          <td>Tools <code>registrar_actividad</code>, <code>detectar_pii</code>,
+            <code>anonimizar_texto</code> al mateix paquet <code>mcp_server/</code>, amb el token de
+            cada client propagat per petició. És l'«opció B» que <code>docs/mcp.md</code> va deixar
+            anotada; este és el cas d'ús que la justifica.</td>
+        </tr>
+        <tr>
+          <td class="id">REG.5</td>
+          <td>Lectura i exportació del registre</td>
+          <td><code>GET /api/v1/actividad</code> paginat amb filtres i exportació CSV, per a sessió
+            d'administració, acotat a l'organització del principal.</td>
+        </tr>
+        <tr>
+          <td class="id">REG.6</td>
+          <td>Vista al panell d'administració i <code>docs/REGISTRO_ACTIVIDAD_IA.md</code></td>
+          <td>Taula amb filtres i i18n; documentació del contracte camp a camp amb el mapatge a
+            OTel GenAI i la guia d'alta d'un agent extern.</td>
+        </tr>
+      </table>
+    </div>
+    <p>
+      <strong>Seqüència:</strong> no bloqueja el cursor actual. De fet convé executar-lo
+      <em>després</em> del desplegament: un MCP remot només existix de veritat amb el servidor
+      accessible des de fora.
+    </p>
+  </section>
+
+  <section>
+    <p class="eyebrow">Qüestió 3</p>
+    <h2>Seccions dinàmiques: la ingesta automàtica ja existix; el que falta és la resta del cicle</h2>
+    <p>
+      Ací la revisió del codi va portar una bona notícia: dues de les tres peces que es demanaven ja
+      estaven fetes, amb tests i corrent al scheduler que arranca amb l'aplicació. Que no ho
+      pareguera és comprensible —<strong>no hi ha res a la interfície que ho conte</strong>, i des de
+      fora un xatbot que s'actualitza sol és indistinguible d'un que no—, així que la proposta va
+      arribar a la porta correcta:
+    </p>
+    <div class="panel">
+      <ul>
+        <li><strong>Rastreig periòdic per apartat.</strong> RAS.5 va fixar «un lloc per apartat»: un
+          <code>HubWebSite</code> amb <code>url_regex_filter</code> acota <code>/jornades</code> o
+          <code>/esdeveniments</code> i té la seua pròpia cadència
+          (<code>crawl_interval_hours</code>). El diff per <code>content_hash</code> distingix
+          noves, canviades i desaparegudes.</li>
+        <li><strong>Auto-ingesta de pàgines noves.</strong> La regla de selecció
+          (<code>HubCorpusSelection</code>) té una columna <code>auto_ingest_new</code> — amb
+          defecte <code>True</code> des de 9Q.7 — i el job programat la consumix: una pàgina nova
+          que casa la regla entra sola al xatbot (<code>quality_job.py</code>, pas 4).</li>
+        <li><strong>Reingesta automàtica del que ha canviat.</strong> Des de RAS.5, una pàgina ja
+          ingerida el contingut de la qual canvia al portal es reingerix sola, amb l'avís
+          <code>content_updated</code> per a poder revisar què ha canviat.</li>
+      </ul>
+    </div>
+    <p>
+      El principi que sosté això — i que convé conservar — és <strong>«curació una vegada,
+      automatització després»</strong>: l'apartat i el seu mode els definix un curador després de la
+      primera passada manual (que és on es calibren les trampes del portal real: commutador
+      d'idioma, prefixos duplicats, pàgines que necessiten JavaScript), i dins d'eixe àmbit
+      l'automatització manté. No s'auto-ingerix res que cap persona haja aprovat mai; es manté el
+      que una persona va aprovar una vegada.
+    </p>
+
+    <h2 style="margin-top:40px">L'apartat ha de ser un paràmetre, no una decisió de codi</h2>
+    <p>
+      Hui un apartat s'expressa <strong>creant un lloc sencer</strong> amb el seu filtre d'URL. És la
+      decisió de RAS.5 i tenia bona raó — cada apartat té un responsable distint —, però paga un
+      preu que es nota justament quan els apartats es multipliquen: duplica l'URL arrel, el sitemap,
+      la configuració de cortesia i els criteris de judici; exigix una alta tècnica per apartat; i
+      convertix «afegir l'apartat de beques» en treball de qui administra llocs, en compte de treball
+      de qui cura.
+    </p>
+    <p>
+      És el mateix raonament que el projecte ja va aplicar al vocabulari del corpus: <strong>el que
+      canviarà mentre algú ho fa servir és dada, no estructura</strong>. Per això el bloc introduïx la
+      <strong>secció</strong> com a entitat configurable dins del procés de curació — amb el seu
+      patró, la seua cadència, el seu mode (manual o automàtic), el seu responsable i els seus
+      criteris propis —, i amb dues regles que la fan barata de mantindre: <em>nul hereta</em> (un
+      paràmetre buit a la secció pren el del lloc, la mateixa semàntica que ja fa servir la cascada
+      de configuració) i la pertinença d'una pàgina es <em>deriva del patró</em> en compte
+      d'emmagatzemar-se, perquè els patrons s'editen. Un lloc sense seccions continua comportant-se
+      exactament com hui.
+    </p>
+
+    <h2 style="margin-top:40px">I una trampa que el redisseny va destapar</h2>
+    <p>
+      En acotar el rastreig per seccions apareix un risc que hui no existix. El rastreig declara
+      «baixes» les pàgines que ja no apareixen, comparant el que acaba de veure contra les pàgines
+      registrades <strong>del lloc sencer</strong>. Hui és correcte perquè el lloc <em>és</em>
+      l'apartat. Amb diverses seccions en un mateix lloc, una passada completa de
+      <code>/esdeveniments</code> veuria només les URL d'esdeveniments i <strong>declararia baixa la
+      resta del portal</strong> — i amb la retirada automàtica al damunt, això buida corpus en
+      silenci.
+    </p>
+    <p>
+      És exactament la lliçó que el corpus normatiu ja té escrita («una càrrega parcial que
+      s'interpretara com a cens retiraria centenars de normes»), així que la primera regla dura del
+      bloc és que <strong>el cens s'acota a l'àmbit realment rastrejat</strong>, amb test dedicat i
+      amb una comprovació de recompte abans/després a la verificació final.
+    </p>
+
+    <p>A més de l'enquadrament, falten tres peces del cicle de vida, i ací la proposta va encertar de
+      ple: són buits nostres que ningú no havia mirat des del punt de vista d'un apartat
+      d'esdeveniments. Per a eixe cas, la primera és la que més pesa:</p>
+    <ul class="args">
+      <li><strong>La retirada automàtica no existix.</strong> El rastreig marca les pàgines
+        desaparegudes, però retirar-les del corpus només existix com a acció manual del curador: un
+        esdeveniment esborrat del portal continua al corpus responent com si existira. Contingut
+        caducat servit com a vigent és el mode de fallada dominant d'una secció d'esdeveniments.</li>
+      <li><strong>L'auto-ingesta no té porta de qualitat.</strong> Ingerix qualsevol pàgina nova que
+        case la regla sense consultar les troballes que el mateix job acaba de calcular: una pàgina
+        buida o que necessita JavaScript per a pintar-se entraria al corpus. L'automatització no pot
+        tindre menys criteri que el curador a qui substituïx.</li>
+      <li><strong>El curador no pot auditar el que l'automatització ha fet.</strong> Els comptadors
+        de cada passada es calculen i es perden. Una automatització que no es pot auditar barata
+        s'apaga al primer ensurt — amb raó.</li>
+    </ul>
+
+    <h2 style="margin-top:40px">Bloc DIN: set prompts</h2>
+    <div class="table-scroll">
+      <table>
+        <tr><th>Prompt</th><th>Entregable</th><th>Notes de disseny</th></tr>
+        <tr>
+          <td class="id">DIN.1</td>
+          <td>La secció com a dada, i quin paràmetre guanya quan n'hi ha dos</td>
+          <td>Patró, cadència, mode, responsable i criteris per secció, amb herència del lloc allà
+            on el valor estiga buit. El mode d'una secció nova naix en <strong>manual</strong> a
+            propòsit: no automatitza fins que algú ho diu.</td>
+        </tr>
+        <tr>
+          <td class="id">DIN.2</td>
+          <td>Rastrejar per secció sense que el cens s'emporte la resta del lloc</td>
+          <td>Cada secció amb el seu rellotge, i la declaració de baixes acotada a l'àmbit rastrejat
+            — la trampa descrita adés, amb el test que la fixa.</td>
+        </tr>
+        <tr>
+          <td class="id">DIN.3</td>
+          <td>Parametritzar seccions dins del procés de curació</td>
+          <td>Crear i editar seccions des de la interfície, amb <strong>prova del patró abans de
+            guardar</strong> (quantes pàgines ja rastrejades casarien, i una mostra): és el que evita
+            el patró que no casa res, que hui només es descobriria quan la passada següent no
+            ingerix.</td>
+        </tr>
+        <tr>
+          <td class="id">DIN.4</td>
+          <td>Retirada automàtica de les pàgines desaparegudes</td>
+          <td>Només en seccions automàtiques; les manuals reben avís. Amb <strong>salvaguarda de
+            proporció</strong> (si desapareix més del 30% de l'àmbit en una passada, no es retira res
+            i avisa): un rastreig trencat no pot buidar un corpus.</td>
+        </tr>
+        <tr>
+          <td class="id">DIN.5</td>
+          <td>Porta de qualitat en auto-ingesta i reingesta</td>
+          <td>Una pàgina amb troballes bloquejants (buida, illegible, necessita JavaScript) no entra:
+            queda com a candidata amb el motiu visible. Resolta la troballa, la passada següent la
+            ingerix sola. En reingesta, la versió bona del corpus es conserva.</td>
+        </tr>
+        <tr>
+          <td class="id">DIN.6</td>
+          <td>Diari de l'automatització a la pantalla de curació</td>
+          <td>Cada passada persistix el seu àmbit i què va ingerir, reingerir, retirar i bloquejar, i
+            per què; el curador ho veu per lloc i per secció, el més recent damunt.</td>
+        </tr>
+        <tr>
+          <td class="id">DIN.7</td>
+          <td>Un apartat real, parametritzat per qui cura, de punta a punta +
+            <code>docs/SECCIONES_DINAMICAS.md</code></td>
+          <td>Tot per la interfície (si cal SQL a mà, la interfície està incompleta), i el cicle
+            verificat de veritat: nova que entra, canviada que es reingerix, esborrada que es retira,
+            i la resta del lloc intacta. La recepta queda escrita per a l'apartat següent.</td>
+        </tr>
+      </table>
+    </div>
+    <p>
+      <strong>Seqüència:</strong> independent del desplegament (tot és edge i ja corre en local) i
+      <strong>sense dependre de decidir cap apartat</strong>: quines seccions existisquen és
+      configuració, i les crea qui cura el dia que les necessite. Queda fora a propòsit el corpus
+      normatiu (les seues fonts tenen la seua pròpia porta de validació) i la <em>caducitat
+      editorial</em> — l'esdeveniment passat que continua publicat — que és una decisió del
+      propietari del contingut, no del codi (DIN.7 la documenta amb opcions).
+    </p>
+  </section>
+
+  <section>
+    <p class="eyebrow">Qüestió 4 · arribada per correu l'1 de setembre</p>
+    <h2>«Generador de codi» contra framework: la premissa no es complix</h2>
+    <p>
+      L'observació descriu un sistema que, en crear un xatbot, genera codi dins dels camins de
+      runtime del producte — i raona, amb encert, que això seria un generador i no un framework,
+      difícil de mantindre («pensa si detectes un bug i cal actualitzar tot el codi»). L'instint
+      arquitectònic és correcte en abstracte; el que no es complix és la premissa, i convé
+      demostrar-ho amb el codi a la mà:
+    </p>
+    <ul class="args">
+      <li><strong>Crear un xatbot és una fila de configuració.</strong> L'endpoint de creació
+        (<code>hub_chatbots_router.py</code>) fa un <code>INSERT</code> a
+        <code>hub_chatbots</code>: prompt de sistema, mode de recuperació, llindars de qualitat,
+        quotes, política de llengua, perfil de graf. Tot declaratiu, en base de dades. No s'escriu
+        cap fitxer ni es genera cap artefacte executable.</li>
+      <li><strong>Un motor únic interpreta eixa configuració en temps de petició.</strong>
+        <code>GraphFactory</code> resol la configuració efectiva per la cascada
+        Plataforma→Organització→Xatbot i compon un <code>CoreGraph</code> a partir de perfils
+        registrats en un <code>GraphProfileRegistry</code> (patró factory + strategy, sobre
+        LangGraph). La conseqüència és la contrària de l'escenari temut: <strong>un bug es corregix
+        una vegada al motor i tots els xatbots l'hereten a l'instant</strong>, perquè no existix codi
+        per xatbot que actualitzar.</li>
+      <li><strong>L'origen probable del malentés és el fragment del widget.</strong> L'única cosa
+        semblant a «codi generat» que mostra l'aplicació són les sis línies d'instal·lació del widget
+        al panell d'administració: un <code>&lt;div data-chatbot-id="…"&gt;</code> i un
+        <code>&lt;script src=".../widget.iife.js"&gt;</code>. És el <em>mateix</em> bundle compilat
+        per a tots els xatbots, parametritzat per atributs — el patró estàndard de qualsevol widget
+        incrustable — i s'executa a la web de qui l'incrusta, no al runtime del producte.</li>
+      <li><strong>Els «xicotets canvis particulars» es fan en configuració, no en codi.</strong> Per
+        xatbot s'ajusten prompt, plantilla de resposta, mode de recuperació (vectorial / context
+        llarg / agèntic), llindars, missatges i quotes. Deliberadament: l'usuari objectiu és un
+        administrador no programador, que pot fer-ho sense obrir una PR ni desplegar.</li>
+    </ul>
+
+    <h2 style="margin-top:40px">L'alternativa que proposa el correu ja és l'arquitectura interna
+      — i obrir-la és la proposta que mereix la reunió</h2>
+    <p>
+      L'«extensió de LangGraph a nivell d'API» que suggerix el correu descriu amb bastant exactitud
+      com està construït l'interior: <code>agent/public_graphs/</code> és un mini-framework sobre
+      LangGraph amb un graf genèric (<code>CoreGraph</code>), estratègies intercanviables
+      (recuperació, fusió, plantilla, política de llengua) i un registre de perfils amb
+      <code>register_profile()</code>. Afegir un tipus d'agent és registrar una factoria, no tocar el
+      motor.
+    </p>
+    <p>
+      El que no està fet — i és decisió de producte, no d'arquitectura — és exposar eixe punt
+      d'extensió cap a fora. De la suggerència ix una proposta concreta: <strong>que tercers
+      implementen agents dins i fora del sistema via API</strong>, en dues superfícies amb costos
+      molt distints:
+    </p>
+    <div class="panel">
+      <ul>
+        <li><strong>Fora del sistema — ja planificat (bloc REG).</strong> Agents externs que
+          consumixen els serveis de valor de la plataforma via REST i MCP remot: registre d'activitat
+          d'IA, detecció i anonimització de dades personals, amb PAT i permisos. Els sis prompts
+          estan redactats; esta meitat de la proposta no cal ni decidir-la, només confirmar el
+          bloc.</li>
+        <li><strong>Dins del sistema — proposta nova, a valorar.</strong> Obrir el
+          <code>GraphProfileRegistry</code> com a contracte públic d'extensió, en dues variants no
+          excloents: (a) <em>perfils aportats</em> — un equip extern entrega un perfil de graf
+          (paquet Python contra el contracte d'estratègies) que hereta de sèrie multitinença, quotes,
+          llindars, política de llengua, traçat i avaluació; i (b) <em>agents remots
+          orquestrats</em> — el xatbot declara un endpoint extern i el CoreGraph li delega la
+          generació, mantenint dins la recuperació, les portes de qualitat i el registre. La (b) no
+          executa codi alié a l'edge node, i per això és la primera candidata.</li>
+      </ul>
+    </div>
+    <p>
+      Els costos que cal posar damunt la taula abans de decidir: codi de tercers executant-se vora
+      dades d'expedients (superfície de seguretat i de compliment, decisiva en la variant a),
+      versionat i estabilitat d'un contracte públic d'extensió — hui el registre canvia quan el
+      projecte ho necessita, amb contracte hi ha deprecacions —, i suport. Res d'això no exigix refer
+      res: el registre és exactament la costura on s'obriria. La recomanació és tractar-ho com a
+      <strong>bloc propi posterior a REG</strong>, perquè REG ja construïx la meitat dels seus
+      prerequisits (autenticació de màquina, registre d'activitat, MCP remot).
+    </p>
+
+    <h2 style="margin-top:40px">Resposta enviada</h2>
+    <p>El correu de resposta, tal com es va enviar:</p>
+    <div class="carta">
+      <p>Hola,</p>
+      <p>Gràcies per l'observació — és justament el tipus de qüestió que convé aclarir abans de la
+        reunió, perquè toca el moll de l'arquitectura. La resposta curta és tranquil·litzadora:
+        <strong>no es genera codi</strong>. T'ho detalle, perquè crec que sé d'on pot vindre la
+        impressió, i al final arreplegue la teua proposta, que m'interessa molt i m'agradaria
+        desenvolupar amb vosaltres.</p>
+      <p><strong>1. Crear un xatbot és una fila de configuració, no codi.</strong> Quan es crea un
+        xatbot, l'única cosa que passa és una inserció a la taula <code>hub_chatbots</code>: nom,
+        prompt de sistema, mode de recuperació, llindars de qualitat, quotes, política de llengua,
+        perfil de graf. Tot declaratiu, en base de dades. No s'escriu cap fitxer ni es genera cap
+        artefacte executable dins dels paths de runtime del producte.</p>
+      <p>En temps de petició, un <strong>motor únic i compartit</strong> interpreta eixa
+        configuració: una factoria resol la configuració efectiva — amb herència
+        Plataforma → Organització → Xatbot — i compon un graf de LangGraph a partir de perfils
+        registrats en un registre (patró factory + strategy). La conseqüència pràctica és justament
+        la contrària de l'escenari que descrius: <strong>un bug es corregeix una vegada al motor i
+        tots els xatbots l'hereten a l'instant</strong>, sense haver d'actualitzar cap codi generat,
+        perquè no existeix codi per xatbot. En la teua terminologia: és un framework, no un
+        generador — i el teu raonament és correcte: si fóra un generador, seria un problema de
+        mantenibilitat seriós. Per això no ho és.</p>
+      <p><strong>2. D'on crec que ve la impressió.</strong> L'única cosa semblant a «codi generat»
+        que mostra l'aplicació és el fragment d'instal·lació del widget al panell d'administració:
+        sis línies d'HTML amb un <code>&lt;div&gt;</code> que porta l'identificador del xatbot i un
+        <code>&lt;script&gt;</code> que apunta a <code>widget.iife.js</code>. És el <em>mateix</em>
+        bundle compilat per a tots els xatbots, parametritzat per atributs — el patró estàndard de
+        qualsevol widget incrustable — i s'executa a la web de qui l'incrusta, no dins del producte:
+        parla amb l'API com qualsevol altre client.</p>
+      <p><strong>3. Sobre «el codi no és tocable per l'usuari».</strong> Els xicotets canvis
+        particulars d'un xatbot concret existeixen i es fan on toca: a la configuració. Per xatbot
+        s'ajusten el prompt de sistema, la plantilla de resposta, el mode de recuperació (vectorial,
+        context llarg o agèntic), els llindars de qualitat, els missatges de no-resposta, les quotes
+        i la política de llengua. I és deliberat que siga configuració i no codi: l'usuari objectiu
+        és un administrador no programador, que pot fer eixos ajustos sense obrir cap PR ni desplegar
+        res.</p>
+      <p><strong>4. La teua alternativa: per dins ja és així — i obrir-la cap a fora és una proposta
+        que vull portar a la reunió.</strong> L'«extensió de LangGraph a nivell d'API» que proposes
+        descriu amb prou exactitud com està construït l'interior: un graf genèric amb estratègies
+        intercanviables (recuperació, fusió, plantilla, política de llengua) i un registre de
+        perfils; afegir un tipus d'agent nou és registrar una factoria, no tocar el motor.</p>
+      <p>El que no està fet — i és una decisió de producte, no d'arquitectura — és exposar eixe punt
+        d'extensió perquè <strong>tercers implementen agents, dins i fora del sistema, via
+        API</strong>. M'agradaria portar-ho a la reunió com a proposta en dos nivells:</p>
+      <p>— <strong>Fora del sistema</strong>: agents externs que consumeixen els serveis de valor de
+        la plataforma via REST i MCP remot — registre d'activitat d'IA, detecció i anonimització de
+        dades personals — amb tokens de màquina i permisos per àmbit. Açò ja està planificat (bloc
+        REG, sis prompts redactats) i connecta amb la vostra proposta anterior del registre.</p>
+      <p>— <strong>Dins del sistema</strong>: obrir el registre de perfils com a contracte públic
+        d'extensió, siga aportant perfils de graf propis que hereten de sèrie la multitenència, les
+        quotes, els llindars, el traçat i l'avaluació, siga — i esta variant em sembla la primera
+        candidata — declarant <em>agents remots</em> que el sistema orquestra: el graf delega la
+        generació en un endpoint extern i manté dins la recuperació, les portes de qualitat i el
+        registre, sense executar codi alié vora dades d'expedients.</p>
+      <p>Ací hi ha decisions serioses — seguretat i compliment si s'executa codi de tercers,
+        versionat d'un contracte públic, suport — i per això no vull tancar-ho per correu: ho porte
+        com a opció amb els costos sobre la taula. La bona notícia és que no exigeix refer res: el
+        punt on s'obriria ja existeix.</p>
+      <p>En parlem a la pròxima reunió. Gràcies de nou per mirar-vos-ho amb esta profunditat.</p>
+      <p class="firma">Modesto</p>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Qüestió 5 · del pilot, no de desenvolupament</p>
+    <h2>SSO institucional: el que falta no és codi</h2>
+    <p>
+      El SSO per SAML <strong>està implementat</strong>: les quatre rutes
+      (<code>/auth/saml/login</code>, <code>/acs</code>, <code>/metadata</code>,
+      <code>/logout</code>), l'alta automàtica de la persona quan es valida l'asserció, i la
+      derivació del rol a partir dels grups que declara l'IdP. Està apagat per configuració
+      (<code>SAML_ENABLED=false</code>) perquè li falten dades que no depenen de nosaltres.
+    </p>
+    <p>
+      La petició completa a Informàtica està redactada a banda. Ací interessa el que afecta la
+      planificació, que són dues coses: <strong>un requisit extern que va davant de tot</strong>, i
+      <strong>què passa amb els comptes mentre no hi haja SSO</strong>.
+    </p>
+
+    <div class="alerta">
+      <p><strong>El requisit que va davant: un nom DNS institucional.</strong> L'identificador del
+        proveïdor de servei (<em>EntityID</em>) i l'URL del punt de retorn (ACS) es construïxen sobre
+        el nom de l'amfitrió, i són precisament les dues dades que l'IdP registra. Canviar-los
+        després no és una redirecció: obliga a registrar el servei de nou.</p>
+      <p>El prototip respon hui en una adreça derivada de la seua IP
+        (<code>34-175-38-129.sslip.io</code>), i és molt probable que un IdP institucional
+        <strong>no accepte registrar un proveïdor de servei en <code>sslip.io</code></strong>, que és
+        un servei de tercers que resol qualsevol IP. Si el subdomini ha d'existir, millor que
+        existisca <em>abans</em> del registre.</p>
+    </div>
+
+    <p>Del que ens han de donar, tres coses són les que solen quedar a mitges:</p>
+    <ul class="args">
+      <li><strong>Els noms literals dels atributs.</strong> Cada IdP els diu d'una manera. Els
+        nostres valors per omissió són <code>mail</code>, <code>displayName</code> i
+        <code>groups</code>, però molts IdP institucionals els envien com a OID
+        (<code>urn:oid:…</code>). Si difereixen, s'ajusten per variable d'entorn i no cal tocar codi.
+        <strong>El correu és obligatori</strong>: sense ell l'ACS rebutja l'asserció, perquè és la
+        clau amb què s'identifica la persona.</li>
+      <li><strong>Els grups que donen cada rol, amb el seu valor exacte.</strong> Es configuren en un
+        mapatge de grup a rol; qui no casa cap grup entra amb el rol per defecte. Un grup mal escrit
+        <em>no dóna error</em>: dóna una persona amb el rol mínim que no entén per què no veu res.</li>
+      <li><strong>Si exigixen que firmem o que xifren.</strong> Hui no firmem les peticions
+        d'autenticació ni rebem assercions xifrades; si ho requerixen, cal generar un parell de claus
+        per al proveïdor de servei i entregar-los el certificat públic.</li>
+    </ul>
+
+    <p>I dues restriccions nostres, posades a propòsit, que convé advertir-los abans de la primera
+      prova, perquè descobrir-les allí costa una setmana d'anada i tornada:</p>
+    <ul class="args">
+      <li><strong>Verifiquem la firma tant del missatge com de l'asserció.</strong> Amb transport
+        HTTP-POST l'asserció viatja dins de la resposta: firmar només el missatge deixa sense
+        verificar la peça que porta la identitat, i al contrari deixa el sobre sense verificar.
+        Diversos IdP firmen només l'asserció per omissió. Si el seu no pot firmar les dues, relaxar-ho
+        és una <strong>decisió de seguretat</strong> i s'ha de parlar.</li>
+      <li><strong>No acceptem inici de sessió iniciat des de l'IdP.</strong> El flux ha d'arrancar al
+        nostre <code>/auth/saml/login</code>. És la protecció que impedix reutilitzar una asserció
+        capturada. Si volen un enllaç des de la intranet, que apunte ahí; si necessiten de veritat un
+        inici des de l'IdP, és un canvi al nostre costat i cal valorar-lo.</li>
+    </ul>
+
+    <h2 style="margin-top:40px">Mentre no hi haja SSO no hi ha comptes de persona</h2>
+    <p>
+      Això no es va decidir: es va descobrir en obrir el pilot. La taula de persones
+      (<code>hub_users</code>) <strong>no té columna de contrasenya</strong>. Els seus camps són
+      l'identificador extern, l'entitat de l'IdP i l'origen: eixes identitats només poden vindre de
+      l'IdP. Login local només en tenen els dos rols de gestió, superadministrador i administrador.
+    </p>
+    <p>
+      I <strong>donar rol d'administrador als provadors no ho resol</strong>, que va ser la primera
+      idea. L'identificador del partner és la clau primària del compte d'administrador, i les
+      organitzacions s'enllacen per eixe mateix identificador: només la fila que el té exactament
+      igual veu els assistents de la Universitat. Quatre provadors serien quatre files de les quals
+      tres obririen el panell amb la llista buida. Es degrada a <strong>una credencial
+      compartida</strong>: sense atribució per persona —que és justament el que necessita la pantalla
+      de revisió que demana Gerència—, amb poders de panell complets i sense poder retirar l'accés a
+      un de sol.
+    </p>
+
+    <div class="alerta">
+      <p><strong>Deute obert del pilot, amb data de caducitat.</strong> Sis comptes de producció
+        estan <strong>elevats a superadministrador a propòsit</strong>, perquè era l'única manera que
+        els provadors entraren el mateix dia. Dos es van demanar així; els altres quatre es van
+        demanar com a administradors i no ho podien ser pel motiu de dalt.</p>
+      <p>Mentre dure, sis persones poden canviar proveïdors de model, esborrar assistents i fixar
+        contrasenyes d'administradors. A més <strong>comparteixen contrasenya</strong> —així que
+        l'atribució de les valoracions val el que valga eixe secret— i <strong>no existix canvi de
+        contrasenya per l'usuari mateix</strong> en cap dels dos rols de gestió, així que ni la poden
+        canviar ells ni hi ha pantalla per a fer-ho.</p>
+      <p>Es desfà creant eixes persones com a comptes de persona amb el seu rol real i la seua
+        organització, i retirant els superadministradors. Això és el bloc USR.</p>
+    </div>
+
+    <h2 style="margin-top:40px">Bloc USR: set prompts</h2>
+    <p>
+      El bloc és petit perquè <strong>l'alta manual de persones ja existix</strong> (bloc IDE): els
+      endpoints i la pantalla de persones estan fets, i l'autorització d'accés a un xatbot ja obri
+      els d'accés autenticat a qualsevol actor de la seua organització. Afig una columna, dos
+      endpoints i una acció de panell.
+    </p>
+    <div class="table-scroll">
+      <table>
+        <tr><th>Prompt</th><th>Entregable</th><th>Notes de disseny</th></tr>
+        <tr>
+          <td class="id">USR.1</td>
+          <td>Columna de contrasenya a <code>hub_users</code> i via per a fixar-la</td>
+          <td>Nul significa <strong>login local deshabilitat</strong>, mai «passa sense comprovar».
+            Un administrador pot fixar-la per a una persona <em>de la seua organització</em>: obligar
+            que passe pel superadministrador convertix cada alta en un coll d'ampolla.</td>
+        </tr>
+        <tr>
+          <td class="id">USR.2</td>
+          <td>El login de la persona</td>
+          <td>Amb les tres defenses dels dos logins que ja hi ha, copiades a consciència: límit
+            d'intents primer, comparació sempre contra un hash esquer perquè el temps de resposta no
+            delate quins correus existixen, i <strong>el mateix error en els tres casos</strong>
+            (compte inexistent, sense contrasenya, contrasenya incorrecta).</td>
+        </tr>
+        <tr>
+          <td class="id">USR.3</td>
+          <td>El panell: entrar i donar contrasenya</td>
+          <td>Tercer intent a la pantalla d'inici de sessió i acció nova a la pantalla de persones.
+            Qui pot fer-ho el decidix el servidor, no el client.</td>
+        </tr>
+        <tr>
+          <td class="id">USR.4</td>
+          <td>Verificació al navegador del recorregut i <strong>dels límits</strong></td>
+          <td>Que un provador entre i conversa, i sobretot que <em>no</em> veja la secció de
+            plataforma, no òbriga un xatbot d'una altra organització, no fixe contrasenyes i deixe
+            d'entrar en desactivar-lo.</td>
+        </tr>
+        <tr>
+          <td class="id">USR.5</td>
+          <td>Unicitat del correu del compte d'administrador</td>
+          <td>Defecte latent trobat investigant això: el correu no té restricció d'unicitat mentre el
+            login pren «el primer» resultat, així que dues files donarien un rebuig intermitent
+            impossible de diagnosticar des de fora. La taula està buida en producció, i per això
+            arreglar-ho és barat hui.</td>
+        </tr>
+        <tr>
+          <td class="id">USR.6</td>
+          <td>Alta d'administradors, i <strong>diverses persones per organització</strong></td>
+          <td>Hui no hi ha <em>cap</em> endpoint que cree un compte d'administrador. I la decisió de
+            fons: es recomana que la persona amb rol d'administrador siga la identitat
+            d'administració real i que el compte de partner es quede amb el que és seu —el partner i
+            la facturació—, en compte d'una taula pont que consolidaria quatre taules d'identitat.</td>
+        </tr>
+        <tr>
+          <td class="id">USR.7</td>
+          <td>Canviar la contrasenya pròpia</td>
+          <td>No existix en cap rol. És la causa directa que les sis comptes del pilot compartisquen
+            una que els seus propietaris no poden canviar.</td>
+        </tr>
+      </table>
+    </div>
+    <p>
+      <strong>Seqüència:</strong> independent del desplegament i dels blocs REG i DIN. Porta un
+      interruptor per a apagar el login local quan arribe el SSO: sense ell, «fins que hi haja SSO»
+      es convertix en «per sempre», que és com envellixen els apanys. Contrasenya i SSO són
+      ortogonals: una persona pot tindre les dues vies.
+    </p>
+  </section>
+
+  <section>
+    <p class="eyebrow">Per a la reunió</p>
+    <h2>Decisions a tancar</h2>
+    <ol class="decisiones">
+      <li><div>
+        <div class="q">Autenticació per a agents externs: PAT personal ampliat o token de servei per organització?</div>
+        <div class="r"><b>Recomanació (i com està redactat REG.2):</b> reutilitzar el PAT amb els dos
+          permisos nous; l'organització es deriva del propietari del token. Si la reunió exigix un
+          token de servei no personal, és un prompt més, no un redisseny.</div>
+      </div></li>
+      <li><div>
+        <div class="q">Esquema d'esdeveniment propi o adoptar un estàndard (OpenTelemetry GenAI)?</div>
+        <div class="r"><b>Recomanació:</b> esquema propi mínim amb noms de camp mapejables a les
+          convencions OTel GenAI (el mapatge es documenta en REG.6). L'esdeveniment ací és legal, no
+          d'observabilitat; adoptar l'estàndard sencer arrossega camps que no apliquen.</div>
+      </div></li>
+      <li><div>
+        <div class="q">Confirmar la regla «metadades sí, contingut no» del registre.</div>
+        <div class="r">Sense el contingut de les converses ni els documents. Si algun cas exigix
+          evidència del contingut, un hash del contingut a l'esdeveniment — mai el contingut.</div>
+      </div></li>
+      <li><div>
+        <div class="q">Posició del bloc REG a la planificació.</div>
+        <div class="r"><b>Recomanació:</b> després del bloc de desplegament, com a bloc propi de sis
+          prompts. Sense tocar el cursor actual.</div>
+      </div></li>
+      <li><div>
+        <div class="q">Sobre els vectors: quina fricció concreta va motivar la proposta?</div>
+        <div class="r">Val la pena precisar-ho, perquè canvia la resposta. Si és fricció de
+          desenvolupament o de demostracions, es resol amb un <code>docker compose</code> sembrat; si
+          és una previsió d'escala o un desplegament sense Postgres, el backend incrustat queda com a
+          opció darrere del protocol del retriever, activable el dia que faça falta i sense cost
+          hui.</div>
+      </div></li>
+      <li><div>
+        <div class="q">Qui pot parametritzar una secció i posar-la en mode automàtic?</div>
+        <div class="r">Ja no és una decisió de quins apartats existixen — això és configuració que
+          crea qui cura, quan la necessita. El que sí que cal tancar és el <b>permís</b>: n'hi ha prou
+          amb el rol de curador per a passar una secció a automàtic, o això l'aprova un administrador?
+          <b>Recomanació:</b> crear i provar seccions, el curador; activar el mode automàtic, també el
+          curador, perquè exigix haver fet abans la primera passada manual — i això ja és
+          l'aprovació.</div>
+      </div></li>
+      <li><div>
+        <div class="q">Confirmar les dues salvaguardes del bloc DIN.</div>
+        <div class="r">Les troballes que bloquegen l'auto-ingesta (buida, illegible, necessita
+          JavaScript) i el llindar de la retirada massiva detinguda (<b>30% per defecte</b>): si
+          desapareix més d'això en una passada, no es retira res i s'avisa. Les dues són criteris
+          heretables, així que un apartat pot ser més exigent que el seu portal sense tocar codi.</div>
+      </div></li>
+      <li><div>
+        <div class="q">Agents de tercers dins del sistema: s'obri el punt d'extensió, i en quina variant?</div>
+        <div class="r">La meitat «fora del sistema» ja la cobrix el bloc REG; el que cal decidir és la
+          de dins. <b>Recomanació:</b> explorar primer la variant d'<b>agents remots orquestrats</b>
+          (el graf delega la generació en un endpoint extern i conserva dins recuperació, portes de
+          qualitat i registre), perquè no executa codi alié vora dades d'expedients; els <b>perfils
+          aportats</b> com a paquet exigixen abans una anàlisi de seguretat i un contracte versionat.
+          Com a bloc propi, posterior a REG, que ja construïx els seus prerequisits.</div>
+      </div></li>
+      <li><div>
+        <div class="q">Caducitat editorial: què passa amb l'esdeveniment que ja ha ocorregut però continua publicat?</div>
+        <div class="r">No és una decisió de codi sinó del propietari del contingut: retirar-lo del
+          corpus per data, deixar que el xatbot responga en passat, o moure'l a un apartat d'arxiu.
+          DIN.4 la documenta amb les opcions; convé portar-la també al responsable del portal.</div>
+      </div></li>
+      <li><div>
+        <div class="q">Quin nom DNS institucional tindrà el servei, i quan?</div>
+        <div class="r">És el <b>prerequisit del SSO</b>, no un detall d'estètica: l'identificador del
+          proveïdor de servei i l'URL de retorn es construïxen sobre ell, i canviar-los obliga a
+          registrar el servei de nou davant l'IdP. <b>Recomanació:</b> demanar-lo en el mateix correu
+          que les dades de SAML i no registrar res fins que existisca.</div>
+      </div></li>
+      <li><div>
+        <div class="q">Es relaxa l'exigència de firma si l'IdP de la Universitat només firma l'asserció?</div>
+        <div class="r">Hui exigim firma del missatge <em>i</em> de l'asserció. <b>Recomanació:</b> no
+          relaxar-ho sense una alternativa —comprovar primer si l'IdP pot firmar les dues, que molts
+          poden amb un canvi de configuració—, i si no es pot, documentar la decisió i el risc
+          acceptat abans d'encendre el SSO.</div>
+      </div></li>
+      <li><div>
+        <div class="q">Els sis comptes elevats del pilot: quan es baixen, i a quin rol cada u?</div>
+        <div class="r">Es desfà amb el bloc USR, creant eixes persones amb el seu rol real i la seua
+          organització. El que cal decidir és <b>qui ha de ser revisor i qui administrador</b>, i si
+          el bloc USR s'avança als blocs REG i DIN. <b>Recomanació:</b> avançar-lo, perquè el pilot ja
+          està en marxa i cada dia que passa és un dia amb sis superadministradors i una contrasenya
+          compartida.</div>
+      </div></li>
+    </ol>
+  </section>
+
+  <footer>
+    Fonts al repositori: <code>planificacion/Plan_TDD_Fase1.md</code> §Bloc REG, §Bloc DIN i §Bloc USR ·
+    <code>docs/mcp.md</code> (valoracions 1 i 2, bloc MCP tancat) ·
+    <code>server/app/core/auth/pat/scopes.py</code> ·
+    <code>server/app/modules/redaccion/services/anonymization/</code> ·
+    <code>server/app/modules/curation/</code> (<code>quality_job.py</code>,
+    <code>site_crawler.py</code>, <code>selection_service.py</code>, la base de la valoració 3) ·
+    <code>AGENTS.md</code> (fronteres edge/cloud i regles del corpus) ·
+    llindars i mesures del bloc HIB a <code>planificacion/PROJECT_STATE.md</code> ·
+    per a la qüestió 4: <code>server/app/routers/hub_chatbots_router.py</code> (creació),
+    <code>server/app/modules/agents_hub/agent/public_graphs/</code>
+    (<code>core/graph_factory.py</code>, <code>registry.py</code>, perfils i estratègies) i
+    <code>frontend/src/admin/pages/ChatbotsPage.tsx</code> (fragment del widget) ·
+    per a la qüestió 5: <code>server/app/core/auth/saml/</code> (<code>settings.py</code>,
+    <code>identity_service.py</code>, <code>role_mapping.py</code>),
+    <code>server/app/routers/saml_auth_router.py</code>,
+    <code>server/app/core/config.py</code> (variables <code>SAML_*</code>) i
+    <code>server/app/modules/agents_hub/database/config_models.py</code> (<code>HubUser</code>).
+  </footer>
+</div>
+</body>
+</html>
