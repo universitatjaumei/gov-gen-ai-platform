@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vectores, registro de IA y secciones dinámicas — valoración</title>
+<title>Vectores, registro de IA, secciones dinámicas y arquitectura de chatbots — valoración</title>
 <style>
   :root {
     --paper: #F7F8F6;
@@ -200,6 +200,19 @@
   ol.decisiones .r { color: var(--muted); font-size: 15.5px; margin-top: 4px; }
   ol.decisiones .r b { color: var(--ink); font-weight: 600; }
 
+  .carta {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 26px 30px;
+    margin: 24px 0;
+    font-size: 15.5px;
+  }
+  .carta p { margin-bottom: 14px; }
+  .carta p:last-child { margin-bottom: 0; }
+  .carta .firma { color: var(--muted); }
+
   footer {
     margin-top: 64px;
     padding-top: 20px;
@@ -213,8 +226,8 @@
 <div class="wrap">
   <header>
     <p class="eyebrow">Gov Gen AI Platform · Valoración de arquitectura</p>
-    <h1>Vectores embebidos, registro de IA y secciones dinámicas</h1>
-    <p class="meta">Reuniones con desarrollo · actualizado el 31&nbsp;ago&nbsp;2026 · preparado sobre el código real del repositorio</p>
+    <h1>Vectores embebidos, registro de IA, secciones dinámicas y arquitectura de chatbots</h1>
+    <p class="meta">Reuniones con desarrollo · actualizado el 1&nbsp;sep&nbsp;2026 · preparado sobre el código real del repositorio</p>
     <p class="standfirst">
       Desarrollo trajo tres propuestas: usar bases vectoriales embebidas en chatbots de corpus
       estable, abrir la plataforma para que agentes externos registren su actividad y usen la
@@ -228,7 +241,12 @@
       desde la interfaz; lo que falta es cerrar su ciclo de vida y que los apartados sean
       <strong>parámetros que configura quien cura</strong>, no algo fijado en el código. Los
       prompts de los dos bloques nuevos ya están redactados (REG y DIN,
-      <code>planificacion/Plan_TDD_Fase1.md</code>).
+      <code>planificacion/Plan_TDD_Fase1.md</code>). Después del informe llegó por correo una
+      <strong>cuarta cuestión</strong>, sobre la arquitectura de los chatbots: si crear uno genera
+      código dentro del runtime del producto. No lo hace —es una fila de configuración que
+      interpreta un motor único—, y de la alternativa que proponía el correo (una extensión de
+      LangGraph a nivel de API) sale una propuesta que merece reunión propia: que
+      <strong>terceros implementen agentes dentro y fuera del sistema vía API</strong>.
     </p>
 
     <div class="verdicts">
@@ -253,6 +271,14 @@
         y en el scheduler. Falta que el apartado sea un parámetro de curación —hoy es un sitio
         entero— y cerrar el ciclo: retirada, puerta de calidad y diario. Bloque DIN, siete
         prompts.</p>
+      </div>
+      <div class="card si">
+        <span class="pill si">Aclarado, con propuesta derivada</span>
+        <h3>4 · ¿Generador de código o framework?</h3>
+        <p>La premisa no se cumple: crear un chatbot es un <code>INSERT</code> de configuración y
+        un motor único la interpreta en tiempo de petición. La «extensión de LangGraph» que
+        propone el correo es como está construido el interior; abrirla a terceros —dentro y fuera
+        del sistema, vía API— se recoge como propuesta para la reunión.</p>
       </div>
     </div>
   </header>
@@ -592,6 +618,153 @@
   </section>
 
   <section>
+    <p class="eyebrow">Cuestión 4 · llegada por correo el 1 de septiembre</p>
+    <h2>«Generador de código» contra framework: la premisa no se cumple</h2>
+    <p>
+      La observación describe un sistema que, al crear un chatbot, genera código dentro de los
+      paths de runtime del producto — y razona, con acierto, que eso sería un generador y no un
+      framework, difícil de mantener («piensa si detectas un bug y hay que actualizar todo el
+      código»). El instinto arquitectónico es correcto en abstracto; lo que no se cumple es la
+      premisa, y conviene demostrarlo con el código en la mano:
+    </p>
+    <ul class="args">
+      <li><strong>Crear un chatbot es una fila de configuración.</strong> El endpoint de creación
+        (<code>hub_chatbots_router.py</code>) hace un <code>INSERT</code> en
+        <code>hub_chatbots</code>: prompt de sistema, modo de recuperación, umbrales de calidad,
+        cuotas, política de lengua, perfil de grafo. Todo declarativo, en base de datos. No se
+        escribe ningún fichero ni se genera ningún artefacto ejecutable.</li>
+      <li><strong>Un motor único interpreta esa configuración en tiempo de petición.</strong>
+        <code>GraphFactory</code> resuelve la configuración efectiva por la cascada
+        Plataforma→Organización→Chatbot y compone un <code>CoreGraph</code> a partir de perfiles
+        registrados en un <code>GraphProfileRegistry</code> (patrón factory + strategy, sobre
+        LangGraph). La consecuencia es la contraria del escenario temido: <strong>un bug se
+        arregla una vez en el motor y todos los chatbots lo heredan al instante</strong>, porque
+        no existe código por chatbot que actualizar.</li>
+      <li><strong>El origen probable del malentendido es el snippet del widget.</strong> Lo único
+        parecido a «código generado» que muestra la aplicación son las 6 líneas de instalación
+        del widget en el panel admin: un <code>&lt;div data-chatbot-id="…"&gt;</code> y un
+        <code>&lt;script src=".../widget.iife.js"&gt;</code>. Es el <em>mismo</em> bundle
+        compilado para todos los chatbots, parametrizado por atributos — el patrón estándar de
+        cualquier widget embebible — y se ejecuta en la web de quien lo embebe, no en el runtime
+        del producto.</li>
+      <li><strong>Los «pequeños cambios particulares» se hacen en configuración, no en
+        código.</strong> Por chatbot se ajustan prompt, plantilla de respuesta, modo de
+        recuperación (vectorial / contexto largo / agéntico), umbrales, mensajes y cuotas.
+        Deliberadamente: el usuario objetivo es un administrador no programador, que puede
+        hacerlo sin abrir una PR ni desplegar.</li>
+    </ul>
+
+    <h2 style="margin-top:40px">La alternativa que propone el correo ya es la arquitectura interna
+      — y abrirla es la propuesta que merece la reunión</h2>
+    <p>
+      La «extensión de LangGraph a nivel de API» que sugiere el correo describe con bastante
+      exactitud cómo está construido el interior: <code>agent/public_graphs/</code> es un
+      mini-framework sobre LangGraph con un grafo genérico (<code>CoreGraph</code>), estrategias
+      intercambiables (recuperación, fusión, plantilla, política de lengua) y un registro de
+      perfiles con <code>register_profile()</code>. Añadir un tipo de agente es registrar una
+      factoría, no tocar el motor.
+    </p>
+    <p>
+      Lo que no está hecho — y es decisión de producto, no de arquitectura — es exponer ese punto
+      de extensión hacia fuera. De la sugerencia sale una propuesta concreta:
+      <strong>que terceros implementen agentes dentro y fuera del sistema vía API</strong>, en dos
+      superficies con costes muy distintos:
+    </p>
+    <div class="panel">
+      <ul>
+        <li><strong>Fuera del sistema — ya planificado (bloque REG).</strong> Agentes externos que
+          consumen los servicios de valor de la plataforma vía REST y MCP remoto: registro de
+          actividad IA, detección y anonimización de PII, con PAT y scopes. Los seis prompts están
+          redactados; esta mitad de la propuesta no hay ni que decidirla, solo confirmar el bloque.</li>
+        <li><strong>Dentro del sistema — propuesta nueva, a valorar.</strong> Abrir el
+          <code>GraphProfileRegistry</code> como contrato público de extensión, en dos variantes no
+          excluyentes: (a) <em>perfiles aportados</em> — un equipo externo entrega un perfil de
+          grafo (paquete Python contra el contrato de estrategias) que hereda de serie
+          multitenencia, cuotas, umbrales, política de lengua, trazado y evaluación; y
+          (b) <em>agentes remotos orquestados</em> — el chatbot declara un endpoint externo y el
+          CoreGraph delega en él la generación, manteniendo dentro la recuperación, las puertas de
+          calidad y el registro. La (b) no ejecuta código ajeno en el edge node, y por eso es el
+          primer candidato.</li>
+      </ul>
+    </div>
+    <p>
+      Los costes que hay que poner sobre la mesa antes de decidir: código de terceros ejecutándose
+      junto a datos de expedientes (superficie de seguridad y de cumplimiento, decisiva en la
+      variante a), versionado y estabilidad de un contrato público de extensión — hoy el registry
+      cambia cuando lo necesita el proyecto, con contrato hay deprecaciones —, y soporte. Nada de
+      esto exige rehacer nada: el registry es exactamente la costura donde se abriría. La
+      recomendación es tratarlo como <strong>bloque propio posterior a REG</strong>, porque REG ya
+      construye la mitad de sus prerrequisitos (auth de máquina, registro de actividad, MCP
+      remoto).
+    </p>
+
+    <h2 style="margin-top:40px">Respuesta enviada</h2>
+    <p>El correo de respuesta, en valenciano, tal como se envió:</p>
+    <div class="carta">
+      <p>Hola,</p>
+      <p>Gràcies per l'observació — és justament el tipus de qüestió que convé aclarir abans de la
+        reunió, perquè toca el moll de l'arquitectura. La resposta curta és tranquil·litzadora:
+        <strong>no es genera codi</strong>. T'ho detalle, perquè crec que sé d'on pot vindre la
+        impressió, i al final arreplegue la teua proposta, que m'interessa molt i m'agradaria
+        desenvolupar amb vosaltres.</p>
+      <p><strong>1. Crear un xatbot és una fila de configuració, no codi.</strong> Quan es crea un
+        xatbot, l'única cosa que passa és una inserció a la taula <code>hub_chatbots</code>: nom,
+        prompt de sistema, mode de recuperació, llindars de qualitat, quotes, política de llengua,
+        perfil de graf. Tot declaratiu, en base de dades. No s'escriu cap fitxer ni es genera cap
+        artefacte executable dins dels paths de runtime del producte.</p>
+      <p>En temps de petició, un <strong>motor únic i compartit</strong> interpreta eixa
+        configuració: una factoria resol la configuració efectiva — amb herència
+        Plataforma → Organització → Xatbot — i compon un graf de LangGraph a partir de perfils
+        registrats en un registre (patró factory + strategy). La conseqüència pràctica és
+        justament la contrària de l'escenari que descrius: <strong>un bug es corregeix una vegada
+        al motor i tots els xatbots l'hereten a l'instant</strong>, sense haver d'actualitzar cap
+        codi generat, perquè no existeix codi per xatbot. En la teua terminologia: és un framework,
+        no un generador — i el teu raonament és correcte: si fóra un generador, seria un problema
+        de mantenibilitat seriós. Per això no ho és.</p>
+      <p><strong>2. D'on crec que ve la impressió.</strong> L'única cosa semblant a «codi generat»
+        que mostra l'aplicació és el fragment d'instal·lació del widget al panell
+        d'administració: sis línies d'HTML amb un <code>&lt;div&gt;</code> que porta
+        l'identificador del xatbot i un <code>&lt;script&gt;</code> que apunta a
+        <code>widget.iife.js</code>. És el <em>mateix</em> bundle compilat per a tots els xatbots,
+        parametritzat per atributs — el patró estàndard de qualsevol widget incrustable — i
+        s'executa a la web de qui l'incrusta, no dins del producte: parla amb l'API com qualsevol
+        altre client.</p>
+      <p><strong>3. Sobre «el codi no és tocable per l'usuari».</strong> Els xicotets canvis
+        particulars d'un xatbot concret existeixen i es fan on toca: a la configuració. Per xatbot
+        s'ajusten el prompt de sistema, la plantilla de resposta, el mode de recuperació
+        (vectorial, context llarg o agèntic), els llindars de qualitat, els missatges de
+        no-resposta, les quotes i la política de llengua. I és deliberat que siga configuració i
+        no codi: l'usuari objectiu és un administrador no programador, que pot fer eixos ajustos
+        sense obrir cap PR ni desplegar res.</p>
+      <p><strong>4. La teua alternativa: per dins ja és així — i obrir-la cap a fora és una
+        proposta que vull portar a la reunió.</strong> L'«extensió de LangGraph a nivell d'API»
+        que proposes descriu amb prou exactitud com està construït l'interior: un graf genèric amb
+        estratègies intercanviables (recuperació, fusió, plantilla, política de llengua) i un
+        registre de perfils; afegir un tipus d'agent nou és registrar una factoria, no tocar el
+        motor.</p>
+      <p>El que no està fet — i és una decisió de producte, no d'arquitectura — és exposar eixe
+        punt d'extensió perquè <strong>tercers implementen agents, dins i fora del sistema, via
+        API</strong>. M'agradaria portar-ho a la reunió com a proposta en dos nivells:</p>
+      <p>— <strong>Fora del sistema</strong>: agents externs que consumeixen els serveis de valor
+        de la plataforma via REST i MCP remot — registre d'activitat d'IA, detecció i anonimització
+        de dades personals — amb tokens de màquina i permisos per àmbit. Açò ja està planificat
+        (bloc REG, sis prompts redactats) i connecta amb la vostra proposta anterior del registre.</p>
+      <p>— <strong>Dins del sistema</strong>: obrir el registre de perfils com a contracte públic
+        d'extensió, siga aportant perfils de graf propis que hereten de sèrie la multitenència,
+        les quotes, els llindars, el traçat i l'avaluació, siga — i esta variant em sembla la
+        primera candidata — declarant <em>agents remots</em> que el sistema orquestra: el graf
+        delega la generació en un endpoint extern i manté dins la recuperació, les portes de
+        qualitat i el registre, sense executar codi alié vora dades d'expedients.</p>
+      <p>Ací hi ha decisions serioses — seguretat i compliment si s'executa codi de tercers,
+        versionat d'un contracte públic, suport — i per això no vull tancar-ho per correu: ho
+        porte com a opció amb els costos sobre la taula. La bona notícia és que no exigeix refer
+        res: el punt on s'obriria ja existeix.</p>
+      <p>En parlem a la pròxima reunió. Gràcies de nou per mirar-vos-ho amb esta profunditat.</p>
+      <p class="firma">Modesto</p>
+    </div>
+  </section>
+
+  <section>
     <p class="eyebrow">Para la reunión</p>
     <h2>Decisiones a cerrar</h2>
     <ol class="decisiones">
@@ -642,6 +815,16 @@
           tocar código.</div>
       </div></li>
       <li><div>
+        <div class="q">Agentes de terceros dentro del sistema: ¿se abre el punto de extensión, y en qué variante?</div>
+        <div class="r">La mitad «fuera del sistema» ya la cubre el bloque REG; lo que hay que
+          decidir es la de dentro. <b>Recomendación:</b> explorar primero la variante de
+          <b>agentes remotos orquestados</b> (el grafo delega la generación en un endpoint
+          externo y conserva dentro recuperación, puertas de calidad y registro), porque no
+          ejecuta código ajeno junto a datos de expedientes; los <b>perfiles aportados</b> como
+          paquete exigen antes un análisis de seguridad y un contrato versionado. Como bloque
+          propio, posterior a REG, que ya construye sus prerrequisitos.</div>
+      </div></li>
+      <li><div>
         <div class="q">Caducidad editorial: ¿qué pasa con el evento que ya ocurrió pero sigue publicado?</div>
         <div class="r">No es una decisión de código sino del propietario del contenido: retirarlo
           del corpus por fecha, dejar que el chatbot responda en pasado, o moverlo a un apartado
@@ -659,7 +842,11 @@
     <code>server/app/modules/curation/</code> (<code>quality_job.py</code>,
     <code>site_crawler.py</code>, <code>selection_service.py</code>, la base de la valoración 3) ·
     <code>AGENTS.md</code> (fronteras edge/cloud y reglas del corpus) ·
-    umbrales y mediciones del bloque HIB en <code>planificacion/PROJECT_STATE.md</code>.
+    umbrales y mediciones del bloque HIB en <code>planificacion/PROJECT_STATE.md</code> ·
+    para la cuestión 4: <code>server/app/routers/hub_chatbots_router.py</code> (creación),
+    <code>server/app/modules/agents_hub/agent/public_graphs/</code>
+    (<code>core/graph_factory.py</code>, <code>registry.py</code>, perfiles y estrategias) y
+    <code>frontend/src/admin/pages/ChatbotsPage.tsx</code> (snippet del widget).
   </footer>
 </div>
 </body>
