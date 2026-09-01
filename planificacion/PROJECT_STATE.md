@@ -108,6 +108,31 @@ despliegue es **~~SEC.9~~ ✅ → ~~AIS~~ ✅ → ~~RAG.15~~ ✅ → ~~VIS.4~~ �
 > lo declara, y verificación de que un `POST /api/v1/auth/superadmin/login` aparece en Cloud Logging
 > **después** de un redespliegue. Cuidado con lo que se manda: el log de acceso lleva IP y correo.
 
+> ⚠️ **DEUDA CON FECHA DE CADUCIDAD (2026-09-01): seis cuentas de producción están elevadas a
+> superadministrador a propósito, y hay que bajarlas.**
+>
+> Los probadores del piloto son `borillo@uji.es`, `gumbau@uji.es` (que el usuario quería
+> superadmin) y `planchad@uji.es`, `anandez@uji.es`, `garridoa@uji.es`, `begomez@uji.es` (que
+> **quería administradores**). Los cuatro últimos se crearon como superadministradores porque
+> era la única forma de que entraran el mismo día, con la decisión tomada sabiendo el coste.
+>
+> **Por qué no podían ser administradores**: `AdminAccount.partner_id` es la clave primaria y las
+> organizaciones se enlazan por `HubOrganizacion.partner_id`, que en la UJI vale `uji`. Solo la
+> fila con ese `partner_id` ve los asistentes de la UJI, así que cuatro cuentas de administrador
+> serían cuatro `partner_id` distintos y las cuatro abrirían el panel con la lista vacía.
+>
+> **Lo que hay que hacer cuando el Bloque USR esté en producción**: crear a los cuatro (y
+> probablemente también a los dos primeros) como `HubUser` con su rol real —`admin` o `informer`
+> según lo que tengan que hacer— y `organizacion_id` de la UJI, y **retirar sus
+> `SuperAdminAccount`**. Mientras no se haga, seis personas pueden cambiar proveedores de LLM,
+> borrar asistentes y fijar contraseñas de administradores.
+>
+> **Y dos cosas que agravan lo anterior mientras dure**: las seis comparten la misma contraseña,
+> así que cualquiera puede entrar como otro y la atribución de las valoraciones vale lo que valga
+> ese secreto; y **no existe cambio de contraseña por el propio usuario** en ninguno de los dos
+> roles de gestión (está dicho en el docstring de `set_admin_password`), así que ni pueden
+> cambiarla ellos ni hay pantalla para hacerlo. Candidato a prompt propio en USR.
+
 > ✅ **RES.5 ejecutado y cerrado SIN implementar (2026-08-25), que es un resultado legítimo del
 > prompt y no un abandono.** 96 ejecuciones (3 tandas × 32 consultas), 85 pasaron la puerta y
 > **`citation` no aparece ni una vez**; los 11 rechazos son todos de la puerta. La regla acordada
