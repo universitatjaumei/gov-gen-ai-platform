@@ -25421,6 +25421,108 @@ producción, así que es el momento barato de arreglarlo: mañana hace falta una
 
 ---
 
+
+---
+
+### Prompt USR.6 (DISEÑO + RED/GREEN) — Alta manual de administradores, y varias personas por organización
+
+**Modelo sugerido**: **Opus** — no es un endpoint más: hay una decisión de modelo de datos que
+condiciona el resto, y la toma este prompt.
+
+**Objetivo**: que se puedan crear cuentas de administración desde el panel y que **varias personas
+administren la misma organización**, que hoy no se puede expresar.
+
+**Contexto — el problema, medido el 2026-09-01**:
+- **No hay ningún endpoint que cree un `AdminAccount`.** Solo lo hacen `seeds.py` y
+  `bootstrap.py`, y `bootstrap` crea un superadministrador único que no pisa. Dar de alta a
+  alguien exige un script contra la base de datos, que es como se dieron de alta las seis cuentas
+  del piloto.
+- **`AdminAccount.partner_id` es la clave primaria** y el enlace con las organizaciones es
+  `HubOrganizacion.partner_id`, un `String(255)` indexado sin unicidad. La relación es
+  *un partner → muchas organizaciones*, así que **una organización tiene exactamente un
+  administrador posible**: el de su `partner_id`. Cuatro personas administrando la UJI no es
+  representable, y crear cuatro filas produce cuatro cuentas que entran y abren el panel con la
+  lista de asistentes vacía.
+- Tampoco hay endpoint para crear ni para cambiar la contraseña de un **superadministrador**:
+  `PATCH /auth/admins/{partner_id}/password` solo cubre administradores.
+
+**La decisión que este prompt tiene que tomar** (y escribir en el PR, no solo en el código). Dos
+caminos, y **no son equivalentes**:
+
+- **(a) Tabla puente `admin_organizaciones`.** Conserva `AdminAccount` y añade la
+  muchos-a-muchos. Barato y local, pero **consolida cuatro tablas de identidad** y deja la
+  contraseña, el rol y la organización de una persona repartidos según por qué puerta entró.
+- **(b) `HubUser` con `role='admin'` pasa a ser la identidad de administración real**, y
+  `AdminAccount` se queda con lo que de verdad es suyo —el partner, los créditos, la facturación—
+  dejando de ser una identidad de login. Es más trabajo, pero es la dirección que el propio
+  docstring de `HubUser` ya señala: «sigue habiendo cuatro tablas de identidad […] unificarlas es
+  una migración de datos con riesgo y merece bloque propio».
+
+**Recomendación**: **(b)**, y no por elegancia. Con (a) el piloto acaba con dos clases de
+administrador según la tabla en que se creó, y la pantalla de personas tendría que enseñar las
+dos; y la deuda de las seis cuentas elevadas (ver `PROJECT_STATE.md`) se cierra sola con (b),
+porque esas personas pasan a ser `HubUser` con su rol. Con (a) habría que hacer las dos cosas.
+Si (b) no cabe en un bloque, se parte — pero se parte hacia (b), no se hace (a) «de momento».
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT USR.6 — Alta de administradores y varias personas por organización
+
+## Primero: decidir y escribirlo
+- Leer HubUser, AdminAccount, ClientAccount, SuperAdminAccount, tenancy.py y
+  _orgs_del_admin, y escribir en docs/ la decisión (a) o (b) con su motivo y su
+  camino de migración. Sin esto, el resto del prompt es código sin criterio.
+- Contar qué hay en producción antes de decidir: si `adminaccount` sigue vacía, (b) no
+  necesita migrar ninguna fila, y eso cambia el coste.
+
+## Después, según la decisión
+- El alta de cuentas de administración se hace por API + panel, NO por script.
+- Reutilizar el contrato de contraseña que ya existe; no escribir un tercero.
+- Si se toca el login: las tres defensas de SEC.1/SEC.4 se conservan, con test.
+- La acotación por organización la resuelve tenancy.py, no un `if` en el endpoint.
+
+## Y lo que NO se hace en este prompt
+- No unificar ClientAccount ni la propiedad de los workspaces de redacción
+  (`user_to_uuid`, SEC.8.1). Es la parte con riesgo real y merece su propio bloque.
+```
+
+**Verificación**: los directorios tocados + higiene; migración aplicada con `alembic current`;
+recorrido en navegador de dos personas administrando la misma organización.
+
+---
+
+### Prompt USR.7 (RED/GREEN) — Cambiar la propia contraseña
+
+**Modelo sugerido**: **Sonnet** — alcance cerrado; lo único a cuidar es no abrir un oráculo.
+
+**Objetivo**: que una persona pueda cambiar su propia contraseña conociendo la anterior.
+
+**Contexto**: hoy **no existe en ninguno de los roles**. Lo dice el docstring de
+`set_admin_password`: «cambiar la contraseña propia exige conocer la anterior, y ese flujo no es
+este prompt». La consecuencia se vio el 2026-09-01: las seis cuentas del piloto se crearon con la
+misma contraseña y **ninguno de sus dueños puede cambiarla**, así que cualquiera de los seis puede
+entrar como otro y la atribución de las valoraciones vale lo que valga ese secreto compartido.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT USR.7 (RED/GREEN) — POST /auth/me/password
+
+- Cuerpo: {password_actual, password_nueva}. Exige la actual SIEMPRE, también para un
+  superadministrador: es lo que impide que una sesión robada se quede la cuenta.
+- Sirve a las tres clases de identidad que tengan login local, resolviendo la tabla por
+  el rol del JWT. Una sola ruta; tres endpoints serían tres sitios donde olvidarse algo.
+- limitar_login (o su equivalente) también aquí: si no, es un oráculo para adivinar la
+  contraseña actual a ritmo de red.
+- 401 si la actual no casa; 204 si va bien. No devolver nada del hash.
+- Test de que la contraseña vieja deja de servir y la nueva sirve, para las tres clases.
+- Panel: formulario en el menú de la propia cuenta, i18n completo.
+```
+
+**Verificación**: los directorios tocados + higiene; contrato regenerado; cambio de contraseña
+probado en navegador de punta a punta.
+
+---
+
 **Al cerrar el bloque**: suite completa (`uv run pytest tests` desde Git Bash) y frontend
 (`--no-file-parallelism`); contrato regenerado; migraciones aplicadas con su `alembic current`;
 `pruebas_manuales/pruebas_manuales_bloqueUSR.bat` **solo** con lo que el agente no puede
