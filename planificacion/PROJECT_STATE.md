@@ -107,12 +107,34 @@ despliegue es **~~SEC.9~~ ✅ → ~~AIS~~ ✅ → ~~RAG.15~~ ✅ → ~~VIS.4~~ �
 > falla el paso de desplegar**, así que no hubo reversión — el servicio se quedó caído en vez de
 > volver a la imagen anterior. Merece mirarse si ese paso debería correr con `if: always()`.
 >
-> **Arreglado**: 22,25 GB liberados (disco al 27%), servicio restaurado y verificado de punta a
-> punta, y **paso de `docker image prune -af` añadido al despliegue** —después de desplegar y
-> antes de la comprobación, para que una vuelta atrás tenga sitio— con dos tests que lo fijan.
+> **Arreglado**: 22,25 GB liberados, servicio restaurado y verificado de punta a punta, y **paso
+> de `docker image prune -af` añadido al despliegue**, con dos tests que lo fijan. Va **antes de
+> que la máquina baje las imágenes nuevas**, y la posición es el diseño: en ese punto los
+> contenedores siguen apuntando a la generación actual y `prune -a` conserva exactamente lo que
+> algún contenedor referencia, así que se conserva la actual, se libera todo lo anterior y la
+> descarga que viene tiene sitio garantizado; tras el reinicio la anterior se queda en local sin
+> contenedor, así que una vuelta atrás no tiene que volver a bajar 2,26 GB. Estado estacionario:
+> dos generaciones, unos 10 GB de 30. Verificado en el despliegue `0f4b178`.
 >
-> **Pendiente relacionado**: no hay alerta de espacio en disco. La de caída habría avisado sólo
-> cuando ya estaba caído.
+> **Limpiar sólo tras un despliegue exitoso no habría servido**, que fue la primera idea: el disco
+> ya estaba lleno al empezar, así que una limpieza condicionada al éxito no se ejecuta nunca
+> cuando hace falta.
+>
+> ⚠️ **Y LA LECCIÓN NO ES TÉCNICA. La alerta de disco existe, funcionó y avisó cuatro horas
+> antes.** Una versión anterior de esta nota decía que no había alerta de espacio en disco: era
+> falso, y no la había mirado antes de escribirlo. El registro de violaciones tiene el evento a
+> las **05:11:56Z** (07:11 hora local) de «Gov Gen AI - disco por encima del 85%», y la métrica
+> confirma **376 minutos por encima del 85%** con un pico del 95,9%. El aviso llegó; nadie actuó.
+>
+> **Por qué se perdió, y esto sí es accionable**: la alerta de salud dispara en **cada
+> despliegue**, porque el reinicio deja el servicio 60-90 s sin responder y la comprobación lo
+> coge desde varias regiones. El 2026-09-01 disparó cuatro veces, tres de ellas falsas. Un aviso
+> real se pierde entre los falsos. **El usuario decidió (2026-09-01) no invertir tiempo en esto
+> por ahora**; la solución correcta cuando se retome es que el despliegue silencie su propia
+> ventana con un *snooze* de diez minutos —distingue parada planificada de caída por conocimiento
+> y no por estadística, y no pierde detección—, lo que exige un rol propio con
+> `monitoring.snoozes.create` para la cuenta de despliegue. Subir el umbral es la alternativa sin
+> permisos y se descartó: depende de cuántas regiones tenga la comprobación y envejece mal.
 
 > 📅 **FECHA QUE HAY QUE RECORDAR: el certificado de `normativa.uji.es` caduca el 19 de marzo de
 > 2027 y NO se renueva solo.**
