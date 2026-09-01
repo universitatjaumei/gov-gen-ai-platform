@@ -25528,3 +25528,218 @@ probado en navegador de punta a punta.
 `pruebas_manuales/pruebas_manuales_bloqueUSR.bat` **solo** con lo que el agente no puede
 verificar él mismo — que aquí es poco, porque el recorrido entero es navegable: previsiblemente
 nada más que dar de alta a los probadores reales de Gerencia con sus correos y decidir sus roles.
+
+---
+
+## Bloque DOM — El dominio institucional sirve lo público (PENDIENTE, planificado el 2026-09-01)
+
+> **Prerrequisito externo y bloqueante**: un registro **A de `normativa.uji.es` a `34.175.38.129`**.
+> El 2026-09-01 el dominio **no existía** (el propio servidor de la UJI responde «Non-existent
+> domain»). El certificado ya está entregado y cargado en Secret Manager; lo que falta es el DNS.
+> **El bloque se ejecuta del tirón el día que el registro exista** (decisión del usuario).
+
+**Origen**: pregunta del usuario el 2026-09-01 — «¿el bucket con el buscador está en la misma IP?
+¿Se puede utilizar también este subdominio?». No: el bucket lo sirve la infraestructura de Google
+(siete IPs rotando, `Server: UploadServer`), y la VM es `34.175.38.129`. De las tres formas de
+darle el dominio al buscador —proxy en Caddy, segundo subdominio con segundo certificado, o
+balanceador HTTPS delante del bucket a 18-25 €/mes— el usuario eligió la primera.
+
+**El reparto, que es la decisión de diseño del bloque**: `normativa.uji.es` sirve **sólo lo
+público** —el buscador en `/` y la API en `/api/*`— y **el panel se queda en el nombre
+provisional**. Así no hay que tocar el frontend, que era la parte con riesgo: no hay `base` en
+`frontend/vite.config.ts` ni `basename` en el `BrowserRouter` de `App.tsx`, así que moverlo a una
+ruta habría sido trabajo delicado y con enlaces rotos difíciles de ver. El panel es interno y no
+necesita el nombre institucional; si algún día lo quiere, será un `admin.…` con su certificado.
+
+**Por qué ahora y no más tarde, que es el argumento que decidió**: cada respuesta del asistente
+enlaza `…/html/<norma>.html#art-63`, y eso es lo que la gente guarda y comparte —el propio
+`scripts/publica_sitio_corpus.sh` lo tiene escrito como regla dura: «la URL de una norma no puede
+cambiar entre publicaciones». Con el piloto recién abierto, cambiar la base no rompe casi nada;
+con esos enlaces en correos y actas, los rompe todos.
+
+**Dos cosas que se comprobaron ANTES de planificar, porque la primera versión de este plan las
+daba por buenas al revés:**
+
+- **La credencial de sitio sigue siendo necesaria.** Compartir origen no la elimina: medido el
+  2026-09-01, el chat sin cabecera `X-Widget-Key` responde **401** aunque el chatbot sea
+  `public_anon`. La credencial identifica el *sitio*, no el origen.
+- **CORS no se cierra.** Mientras la URL del bucket siga siendo pública, las páginas servidas
+  desde ahí son de otro origen y necesitan su entrada en `CORS_ALLOWED_ORIGINS`. Lo que sí
+  desaparece es la dependencia de CORS **para quien entre por el dominio**, que será la mayoría.
+
+**Reglas duras del bloque:**
+
+- **Nada deja de funcionar en ningún paso.** Los dos nombres y las dos URL del sitio conviven
+  durante todo el bloque: la del bucket sigue sirviendo las páginas y el nombre provisional sigue
+  sirviendo la API. Un bloque que necesite una ventana de caída está mal planificado.
+- **`data-api-url` se mantiene, apuntando al dominio nuevo.** Quitarlo sólo funcionaría si las
+  páginas fueran alcanzables *únicamente* por el dominio; mientras la URL del bucket exista, una
+  página sin `data-api-url` servida desde ahí llamaría a `storage.googleapis.com/api/v1` y daría
+  404. Lo explícito funciona desde los dos sitios.
+- **El bucket se queda público.** Cerrarlo obligaría a que Caddy se autenticara contra GCS —el
+  `reverse_proxy` a secas no lo hace— y eso es un bloque distinto. Queda anotado como opción, no
+  como parte de éste.
+- **Una sola fuente de verdad para la base del sitio.** `CORPUS_SITE_BASE_URL` sigue siendo la
+  variable que manda; no se hardcodea el dominio en ningún sitio del servidor.
+
+**Lo que queda FUERA a propósito**, con su motivo:
+
+- **Hacer el dominio y el sitio de corpus configurables por organización.** Hoy es *un
+  despliegue, un dominio, un sitio*: `CORPUS_SITE_BASE_URL` es una variable de entorno global
+  leída en `citations.py` con `os.getenv`, y `HubOrganizacion` tiene veinte campos de
+  configuración por defecto pero **ninguno para su dominio ni para su sitio**. Una segunda
+  organización con su propio buscador publicado necesitaría eso. **No es urgente y se dijo así al
+  usuario**: sería una columna anulable con la cascada que ya existe y `citations.py` leyéndola
+  con el entorno como reserva, así que hacerlo hoy o en seis meses cuesta lo mismo. Lo que sí
+  generaliza ya, y gratis, es el mecanismo de `sites.d` de D.8: añadir el dominio de otra
+  organización es un fichero y dos secretos.
+- **Retirar el nombre provisional.** Se decide en DOM.4 con las páginas ya republicadas, no antes.
+
+---
+
+### Prompt DOM.1 (RED/GREEN) — Caddy: el dominio sirve el buscador y la API
+
+**Modelo sugerido**: **Sonnet** — alcance cerrado; el mecanismo de sitios por dominio lo construyó
+D.8 y aquí se le añaden dos rutas.
+
+**Objetivo**: que `https://normativa.uji.es/` sirva el buscador del corpus y
+`https://normativa.uji.es/api/*` la API, sin tocar el nombre provisional ni el panel.
+
+**Contexto**: la plantilla `deploy/vm/sites.d/dominio.caddy.tpl` hoy importa el fragmento
+`(govgenai_rutas)`, que manda todo lo que no es API ni salud al **panel**. Para el dominio público
+el reparto es otro, así que necesita su propio fragmento: API y salud a la aplicación, y el resto
+al bucket. El fragmento del panel no se toca, porque el nombre provisional sigue sirviéndolo.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT DOM.1 (RED/GREEN) — el dominio público en Caddy
+
+## Caddyfile
+- Fragmento nuevo `(govgenai_rutas_publicas)`: `/api/*` y `/health` a `app:8000`; todo lo
+  demás, `reverse_proxy` al bucket.
+- El proxy al bucket va con la forma **virtual-hosted** y reescribiendo la cabecera Host:
+  `reverse_proxy https://<BUCKET>.storage.googleapis.com { header_up Host {upstream_hostport} }`.
+  Sin reescribir Host, GCS no resuelve el bucket y responde 404 a todo.
+- La plantilla del dominio pasa a importar el fragmento PÚBLICO. El bloque de
+  `{$GOVGENAI_HOST}` sigue importando el del panel, sin cambios.
+- El nombre del bucket llega por entorno (`CORPUS_BUCKET` o equivalente), no escrito a mano:
+  el mismo mecanismo tiene que servir a otra organización con otro bucket.
+
+## Tests (RED primero), en tests/infra/
+- El fragmento público existe y NO manda `/` al frontend.
+- La plantilla del dominio importa el fragmento público y NO el del panel.
+- El bloque del host provisional sigue importando el del panel: si esto se rompe, el panel
+  deja de estar accesible y no lo nota nadie hasta que alguien intente entrar.
+- El proxy al bucket reescribe Host (test que lo fija, porque sin eso todo da 404).
+- `caddy validate` sobre la configuración compuesta, con la plantilla sustituida y un
+  certificado de prueba: es la comprobación que impide desplegar un Caddy que no arranca.
+
+## Verificación
+- `docker run caddy:2.8-alpine caddy validate` en local, y `caddy adapt` comprobando que los
+  dos nombres siguen en la configuración resultante.
+```
+
+**Verificación de cierre**: `tests/infra` completo. Tras desplegar, en la VM:
+`curl -sI https://normativa.uji.es/` (el buscador), `/health` (200) y
+`https://<provisional>/` (el panel, intacto).
+
+---
+
+### Prompt DOM.2 (RED/GREEN) — Las citas apuntan al dominio
+
+**Modelo sugerido**: **Sonnet**.
+
+**Objetivo**: `CORPUS_SITE_BASE_URL=https://normativa.uji.es`, y las citas del asistente
+verificadas resolviendo de verdad.
+
+**Contexto**: `citations.py:89` construye `{CORPUS_SITE_BASE_URL}/html/{slug}.html` más el ancla.
+Cambiar la variable es una línea del fichero de entorno del despliegue; lo que hay que comprobar
+es que las URL resultantes existen, porque un cambio de base con las páginas en otro sitio produce
+404 en cada cita sin que ningún test lo vea.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT DOM.2 (RED/GREEN) — la base de las citas
+
+- `CORPUS_SITE_BASE_URL` a `https://normativa.uji.es` en /opt/govgenai/.env.despliegue, con
+  copia previa del fichero.
+- Reiniciar la unidad y comprobar `alembic current`-style: que el contenedor ve el valor nuevo.
+- Hacer TRES consultas reales que se sepa que citan (contractes menors, bases d'execució, una
+  de Gerència) y comprobar con `curl` que **cada URL citada devuelve 200 y su ancla existe
+  dentro del HTML**. No vale comprobar que la base cambió: hay que abrir lo que cita.
+- Test de contrato: que `citations.py` sigue leyendo la base del entorno y no de un literal.
+```
+
+**Verificación de cierre**: las tres consultas con sus URL y códigos pegados en el informe.
+
+---
+
+### Prompt DOM.3 (RED/GREEN) — Republicar el sitio apuntando al dominio
+
+**Modelo sugerido**: **Sonnet**.
+
+**Objetivo**: regenerar las 313 páginas y los cuatro buscadores con `ASSISTENT_API` en el dominio
+nuevo, y añadir el origen del dominio a `CORS_ALLOWED_ORIGINS`.
+
+**Contexto**: las páginas publicadas llevan `data-api-url=https://<provisional>/api/v1`. Se cambia
+al dominio, **sin quitar el atributo** (regla dura del bloque) y **conservando la credencial de
+sitio**, que sigue siendo necesaria: medido, sin `X-Widget-Key` el chat da 401 aunque el chatbot
+sea `public_anon`. Las credenciales vigentes son las dos del bucket emitidas en D.6.1; se
+reutilizan leyéndolas del HTML actual, porque en claro no se pueden recuperar de la base.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT DOM.3 — republicar con la API en el dominio
+
+- Añadir el origen `https://normativa.uji.es` a CORS_ALLOWED_ORIGINS (aditivo: el del bucket
+  se conserva mientras su URL siga siendo pública).
+- Regenerar con ASSISTENT_API=https://normativa.uji.es/api/v1, cada buscador con SU chatbot,
+  SU credencial (leída del HTML publicado) y SU data-title. Las fichas siguen sin widget.
+- Comprobar antes de publicar que ninguna página suelta lleva un chatbot que no le toca, y
+  que las 313 fichas siguen con cero widgets.
+- Publicar con `scripts/publica_sitio_corpus.sh --con-widget`.
+- Comprobar el preflight desde el origen del dominio Y desde el del bucket, con un origen
+  inventado como control: sin control, un 200 no dice nada.
+```
+
+**Verificación de cierre**: en navegador, el asistente responde desde
+`https://normativa.uji.es/cercador.html` y desde la URL del bucket, con la consola limpia en los
+dos casos.
+
+---
+
+### Prompt DOM.4 (verificación + decisión) — Cerrar, y qué se hace con el nombre provisional
+
+**Modelo sugerido**: **Sonnet**.
+
+**Objetivo**: recorrido completo verificado en navegador, y decidir con datos si el nombre
+provisional se retira o se conserva.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT DOM.4 — verificación y cierre
+
+## El recorrido, en el dominio nuevo
+1. El buscador carga, filtra y sus resultados abren en pestaña nueva.
+2. El asistente de normativa responde, con la cabecera diciendo su nombre.
+3. Una cita abre la ficha en el ancla correcta, servida por el dominio.
+4. El buscador de gerencia, con SU asistente.
+5. El panel sigue funcionando en el nombre provisional.
+6. `read_console_messages` y `read_network_requests` en cada paso.
+
+## La decisión sobre el provisional
+- NO se retira en este prompt. Se deja escrito qué sigue apuntando a él —el panel, la
+  comprobación de salud de la vigilancia, y cualquier página o correo ya enviado— y se
+  recomienda un plazo. Retirarlo el mismo día que se estrena el dominio no gana nada y puede
+  romper algo que nadie recordaba.
+- Actualizar la comprobación de uptime y la alerta si se decide mover el objetivo.
+```
+
+**Verificación de cierre**: informe con las evidencias, y `docs/DESPLIEGUE_PROTOTIPO_GCP.md`
+actualizado con el reparto final de nombres y rutas.
+
+---
+
+**Al cerrar el bloque**: suite completa (`uv run pytest tests` desde Git Bash), y las URL nuevas
+recogidas donde alguien las busque: `PROJECT_STATE.md`, `docs/WIDGET_INCRUSTACION.md` (el
+fragmento de ejemplo) y `docs/RUNBOOK_REINGESTA.md` si menciona la base del sitio.
