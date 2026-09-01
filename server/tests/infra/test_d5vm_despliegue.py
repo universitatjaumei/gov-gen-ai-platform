@@ -357,3 +357,66 @@ def test_la_cuenta_de_despliegue_no_es_de_editor_ni_de_propietario() -> None:
     assert "roles/editor" not in texto and "roles/owner" not in texto
     for rol in ("roles/artifactregistry.writer", "roles/iap.tunnelResourceAccessor"):
         assert rol in texto, f"Falta el rol mínimo {rol}"
+
+
+# ---------------------------------------------------------------------------
+# El disco de la máquina (incidente del 2026-09-01)
+# ---------------------------------------------------------------------------
+
+
+def test_el_despliegue_retira_las_imagenes_que_ya_no_usa_ningun_contenedor() -> None:
+    """Sin esto el disco de la VM se llena y el servicio se cae, y no en el despliegue que lo
+    llena: en el siguiente.
+
+    Pasó el 2026-09-01. Diez despliegues habían dejado **30 imágenes y 25,2 GB** en un disco de
+    30 GB —la de `app` pesa 2,26 GB y cada despliegue publica tres—, y el `docker compose up`
+    murió con `no space left on device` al no poder crear el socket del proxy de Cloud SQL. El
+    síntoma no señalaba al disco por ningún lado: la unidad decía «dependency failed to start:
+    container govgenai_sql_proxy is unhealthy».
+
+    Y lo que lo hace peor: el paso de comprobación con vuelta atrás **se salta** cuando el paso
+    de desplegar falla, así que no hubo reversión — el servicio se quedó caído.
+    """
+    texto = _texto(WORKFLOW)
+    activas = [
+        linea for linea in texto.splitlines()
+        if "image prune" in linea and not linea.strip().startswith("#")
+    ]
+    assert activas, (
+        "Falta un `docker image prune` en el despliegue. Diez despliegues sin limpiar llenaron "
+        "un disco de 30 GB y tumbaron el servicio."
+    )
+    # `-a` (o `--all`) es lo que retira las imágenes de despliegues anteriores: sin él sólo se
+    # van las huérfanas sin etiqueta, que no son las que ocupan.
+    assert any("-a" in linea or "--all" in linea for linea in activas), (
+        f"El prune tiene que ser `-a`: sin eso las imágenes etiquetadas de despliegues "
+        f"anteriores se quedan, y son justo las que llenan el disco. {activas}"
+    )
+    # Después de desplegar, no antes: las imágenes nuevas ya están descargadas y en uso, así
+    # que un prune posterior no puede quitar la que acaba de arrancar.
+    assert texto.index("image prune") > texto.index("- name: Desplegar"), (
+        "El prune va DESPUÉS de desplegar: antes podría retirar una imagen que el compose "
+        "necesita, y encima no liberaría la del despliegue que se acaba de sustituir."
+    )
+
+
+def test_el_dominio_institucional_llega_por_configuracion_y_no_a_mano() -> None:
+    """El fichero de entorno se REGENERA en cada despliegue, así que editarlo a mano no sirve.
+
+    El 2026-09-01 se añadió `GOVGENAI_HOST_INSTITUCIONAL` a mano en la VM y el primer despliegue
+    la borró: el paso «Escribir la configuración del despliegue» sobrescribe el fichero entero
+    desde `vars`. No causó daño —el guion del certificado trata la variable vacía como «no hay
+    dominio» y retira el sitio— pero el dominio no se servía y nada lo decía.
+    """
+    texto = _texto(WORKFLOW)
+    assert "GOVGENAI_HOST_INSTITUCIONAL" in texto, (
+        "El dominio institucional tiene que salir de `vars` como el resto de identificadores: "
+        "el fichero de entorno de la VM se sobrescribe en cada despliegue."
+    )
+    activas = [
+        linea for linea in texto.splitlines()
+        if "GOVGENAI_HOST_INSTITUCIONAL" in linea and not linea.strip().startswith("#")
+    ]
+    assert any("vars." in linea for linea in activas), (
+        f"Y de `vars`, no de `secrets`: es un nombre de host, no una credencial. {activas}"
+    )

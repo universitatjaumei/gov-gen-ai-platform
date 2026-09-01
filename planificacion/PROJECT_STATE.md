@@ -91,6 +91,29 @@ despliegue es **~~SEC.9~~ ✅ → ~~AIS~~ ✅ → ~~RAG.15~~ ✅ → ~~VIS.4~~ �
 ~~RES.1~~ ✅ → ~~RES.2~~ ✅ → ~~RES.3~~ ✅ → ~~RES.4~~ ✅ → ~~RES.5~~ ✅ → **Deploy/D.0**.
 **El bloque RES está completo y ya no queda nada delante del despliegue.**
 
+> 🔥 **INCIDENTE DEL 2026-09-01: el disco de la VM se llenó y el servicio se cayó. Arreglado, y
+> con la causa cerrada.**
+>
+> **Lo que pasó**: diez despliegues habían dejado **30 imágenes de Docker y 25,2 GB** en un disco
+> de 30 GB —la de `app` pesa 2,26 GB y cada despliegue publica tres—, y **el despliegue nunca
+> limpiaba**. El `docker compose up` murió con `no space left on device` al crear el socket del
+> proxy de Cloud SQL.
+>
+> **Por qué costó verlo**: el síntoma no señalaba al disco por ningún lado. La unidad decía
+> «dependency failed to start: container govgenai_sql_proxy is unhealthy», que apunta al proxy y
+> a la base de datos. El disco sólo aparece leyendo el log del propio proxy.
+>
+> **Y lo que lo agravó**: el paso «Comprobar que sirve, y volver atrás si no» **se salta cuando
+> falla el paso de desplegar**, así que no hubo reversión — el servicio se quedó caído en vez de
+> volver a la imagen anterior. Merece mirarse si ese paso debería correr con `if: always()`.
+>
+> **Arreglado**: 22,25 GB liberados (disco al 27%), servicio restaurado y verificado de punta a
+> punta, y **paso de `docker image prune -af` añadido al despliegue** —después de desplegar y
+> antes de la comprobación, para que una vuelta atrás tenga sitio— con dos tests que lo fijan.
+>
+> **Pendiente relacionado**: no hay alerta de espacio en disco. La de caída habría avisado sólo
+> cuando ya estaba caído.
+
 > 📅 **FECHA QUE HAY QUE RECORDAR: el certificado de `normativa.uji.es` caduca el 19 de marzo de
 > 2027 y NO se renueva solo.**
 >

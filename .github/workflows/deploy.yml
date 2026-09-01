@@ -223,6 +223,7 @@ jobs:
           GOOGLE_CLOUD_LOCATION=${{ vars.GCP_REGION }}
           CORPUS_SITE_BASE_URL=${{ vars.CORPUS_SITE_BASE_URL }}
           CORS_ALLOWED_ORIGINS=${{ vars.CORS_ALLOWED_ORIGINS }}
+          GOVGENAI_HOST_INSTITUCIONAL=${{ vars.GOVGENAI_HOST_INSTITUCIONAL }}
           DEPLOY_MODE=all
           EOF
           sudo chmod 644 ${DESTINO}/.env.despliegue"
@@ -255,6 +256,20 @@ jobs:
             --command "sudo systemctl restart govgenai && sleep 20 && \
               sudo docker compose --env-file ${DESTINO}/.env.despliegue \
                 -f ${DESTINO}/docker-compose.vm.yml ps"
+
+      # Antes de comprobar, no después: si la comprobación falla y hay que volver atrás, el
+      # disco tiene que tener sitio para la imagen anterior. Y `|| true` porque quedarse sin
+      # limpiar no es motivo para dar por fallido un despliegue que ya sirve.
+      #
+      # Esto faltaba, y el 2026-09-01 tumbó el servicio: diez despliegues habían dejado 30
+      # imágenes y 25,2 GB en un disco de 30 GB, y el `docker compose up` murió con `no space
+      # left on device` al crear el socket del proxy de Cloud SQL. El síntoma no señalaba al
+      # disco —«container govgenai_sql_proxy is unhealthy»— y, como el fallo fue en el paso de
+      # desplegar, el paso de reversión se saltó y no hubo vuelta atrás.
+      - name: Retirar las imágenes que ya no usa ningún contenedor
+        run: |
+          gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap --quiet \
+            --command "sudo docker image prune -af || true; df -h / | tail -1" || true
 
       - name: Comprobar que sirve, y volver atrás si no
         run: |
