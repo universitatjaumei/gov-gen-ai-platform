@@ -237,10 +237,34 @@ def test_dry_run_no_llama_a_gcloud() -> None:
 
 
 def test_el_plan_en_seco_nombra_todas_las_variables() -> None:
-    resultado = _run(BAJAR, "--project", "proyecto-de-prueba", "--dry-run")
-    assert resultado.returncode == 0
-    for _, variable, _, _ in _entradas():
-        assert variable in resultado.stdout, f"{variable} no aparece en el plan"
+    """Cada entrada del inventario la nombra el guion que la consume, y ninguna queda huérfana.
+
+    Desde D.8 el inventario tiene dos clases de secreto: los que son **variable de entorno**,
+    que baja `vm_fetch_secrets.sh`, y los que son **fichero** (`FICHERO:…`, el certificado del
+    dominio y su clave), que baja `vm_fetch_tls.sh` porque un PEM multilínea no cabe en un
+    fichero de entorno. La comprobación sigue siendo la misma en el fondo —que el inventario y
+    los guiones no divergen— pero ahora pregunta al guion correcto.
+    """
+    plan_entorno = _run(BAJAR, "--project", "proyecto-de-prueba", "--dry-run")
+    assert plan_entorno.returncode == 0
+
+    tls = RAIZ / "scripts" / "vm_fetch_tls.sh"
+    assert tls.is_file(), "Falta scripts/vm_fetch_tls.sh, que es quien baja los ficheros."
+    plan_tls = _run(tls, "--project", "proyecto-de-prueba", "--host", "ejemplo.uji.es",
+                    "--dry-run")
+    assert plan_tls.returncode == 0, plan_tls.stderr
+
+    for nombre, variable, _, _ in _entradas():
+        if variable.startswith("FICHERO:"):
+            assert nombre in plan_tls.stdout, (
+                f"{nombre} es un fichero y no aparece en el plan de vm_fetch_tls.sh"
+            )
+            assert variable not in plan_entorno.stdout, (
+                f"{variable} es un PEM multilínea y NO puede acabar en el fichero de entorno: "
+                f"rompería todas las variables que vinieran detrás."
+            )
+        else:
+            assert variable in plan_entorno.stdout, f"{variable} no aparece en el plan"
 
 
 # ---------------------------------------------------------------------------

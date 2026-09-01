@@ -90,6 +90,30 @@ despliegue es **~~SEC.9~~ ✅ → ~~AIS~~ ✅ → ~~RAG.15~~ ✅ → ~~VIS.4~~ �
 ~~RES.1~~ ✅ → ~~RES.2~~ ✅ → ~~RES.3~~ ✅ → ~~RES.4~~ ✅ → ~~RES.5~~ ✅ → **Deploy/D.0**.
 **El bloque RES está completo y ya no queda nada delante del despliegue.**
 
+> 📅 **FECHA QUE HAY QUE RECORDAR: el certificado de `normativa.uji.es` caduca el 19 de marzo de
+> 2027 y NO se renueva solo.**
+>
+> Desarrollo entregó el 2026-09-01 el certificado del dominio institucional (HARICA vía GÉANT,
+> RSA 4096, un solo SAN) con su clave. Está en Secret Manager como `govgenai-tls-cert` y
+> `govgenai-tls-key`, con acceso concedido a la cuenta de la VM y comprobado desde ella.
+>
+> **Lo que lo separa del anterior**: el del nombre provisional de `sslip.io` lo obtiene y renueva
+> Caddy por ACME sin que nadie intervenga. Este hay que pedirlo, subir la versión nueva de los dos
+> secretos y `systemctl restart govgenai`. Una renovación olvidada deja el dominio con un
+> certificado caducado, que en un navegador es indistinguible de un servicio caído.
+>
+> **Y sigue faltando lo que de verdad bloquea: el registro DNS.** El 2026-09-01
+> `normativa.uji.es` **no existía** — el propio servidor de la UJI (`ntp.uji.es`) responde
+> «Non-existent domain». Hace falta un registro A a `34.175.38.129`. Emitir el certificado y crear
+> el registro son dos peticiones distintas y la segunda está pendiente.
+>
+> **Cuando el DNS exista**, el orden importa y es corto: (1) comprobar que resuelve a la IP,
+> (2) `systemctl restart govgenai` en la VM —el sitio se instala solo, porque el certificado ya
+> está—, (3) comprobar `https://normativa.uji.es/health`, (4) regenerar las páginas del corpus con
+> `ASSISTENT_API=https://normativa.uji.es/api/v1` y republicarlas, (5) **sólo entonces** valorar
+> retirar el nombre provisional. El paso 4 es el que no se puede saltar: las 313 páginas
+> publicadas llevan el nombre viejo dentro.
+
 > ⏳ **PENDIENTE (anotado el 2026-09-01, a petición del usuario): añadir el receptor de Docker a la
 > configuración del ops-agent de la VM.** Hueco de D.6-VM, que se dio por cerrado sin cubrirlo.
 >

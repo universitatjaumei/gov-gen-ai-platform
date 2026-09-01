@@ -150,7 +150,9 @@ jobs:
             deploy/vm/docker-compose.vm.yml \
             deploy/vm/Caddyfile \
             deploy/vm/govgenai.service \
+            deploy/vm/sites.d/dominio.caddy.tpl \
             scripts/vm_fetch_secrets.sh \
+            scripts/vm_fetch_tls.sh \
             scripts/lib/secretos.tsv
 
           gcloud compute scp despliegue.tgz \
@@ -158,12 +160,13 @@ jobs:
             --zone "$VM_ZONA" --tunnel-through-iap --quiet
 
           gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap --quiet \
-            --command "sudo mkdir -p ${DESTINO}/scripts/lib && sudo tar xzf /tmp/despliegue.tgz -C /tmp && \
+            --command "sudo mkdir -p ${DESTINO}/scripts/lib ${DESTINO}/deploy/vm/sites.d ${DESTINO}/sites.d ${DESTINO}/tls && sudo tar xzf /tmp/despliegue.tgz -C /tmp && \
               sudo cp /tmp/deploy/vm/docker-compose.vm.yml ${DESTINO}/ && \
               sudo cp /tmp/deploy/vm/Caddyfile ${DESTINO}/ && \
-              sudo cp /tmp/scripts/vm_fetch_secrets.sh ${DESTINO}/scripts/ && \
+              sudo cp /tmp/deploy/vm/sites.d/dominio.caddy.tpl ${DESTINO}/deploy/vm/sites.d/ && \
+              sudo cp /tmp/scripts/vm_fetch_secrets.sh /tmp/scripts/vm_fetch_tls.sh ${DESTINO}/scripts/ && \
               sudo cp /tmp/scripts/lib/secretos.tsv ${DESTINO}/scripts/lib/ && \
-              sudo chmod +x ${DESTINO}/scripts/vm_fetch_secrets.sh && \
+              sudo chmod +x ${DESTINO}/scripts/vm_fetch_secrets.sh ${DESTINO}/scripts/vm_fetch_tls.sh && \
               sudo cp /tmp/deploy/vm/govgenai.service /etc/systemd/system/ && \
               sudo systemctl daemon-reload && sudo systemctl enable govgenai && \
               sudo rm -rf /tmp/deploy /tmp/scripts /tmp/despliegue.tgz"

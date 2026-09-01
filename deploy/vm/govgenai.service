@@ -38,6 +38,15 @@ EnvironmentFile=/opt/govgenai/.env.despliegue
 ExecStartPre=/bin/sh -c 'docker ps --filter name=govgenai_sql_proxy --filter status=running -q | grep -q . || find /opt/govgenai/cloudsql -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
 
 ExecStartPre=/opt/govgenai/scripts/vm_fetch_secrets.sh --project ${GOOGLE_CLOUD_PROJECT} --out /opt/govgenai/.env.runtime
+
+# El certificado del dominio institucional y el sitio de Caddy que lo usa (D.8). Va DESPUÉS de
+# los secretos y ANTES de levantar la pila, porque si Caddy arranca sin el fichero del sitio el
+# dominio no se sirve hasta el reinicio siguiente.
+#
+# **Sale 0 aunque el certificado no esté**, a propósito: mientras el dominio no exista en el DNS
+# no hay certificado que bajar, y fallar aquí impediría levantar todo lo demás. Lo que hace en
+# ese caso es retirar el fichero del sitio, que es lo que evita que un `tls` roto impida arrancar.
+ExecStartPre=/opt/govgenai/scripts/vm_fetch_tls.sh --project ${GOOGLE_CLOUD_PROJECT} --host ${GOVGENAI_HOST_INSTITUCIONAL}
 ExecStart=/usr/bin/docker compose -f /opt/govgenai/docker-compose.vm.yml up -d --remove-orphans
 ExecStop=/usr/bin/docker compose -f /opt/govgenai/docker-compose.vm.yml down
 

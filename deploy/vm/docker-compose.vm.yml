@@ -173,6 +173,12 @@ services:
       GOVGENAI_HOST: ${GOVGENAI_HOST:?falta GOVGENAI_HOST}
     volumes:
       - /opt/govgenai/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Sitios con certificado propio (D.8). El directorio puede estar VACÍO: el `import` del
+      # Caddyfile es un glob, y quien escribe aquí es `vm_fetch_tls.sh` sólo si el certificado
+      # se ha podido bajar.
+      - /opt/govgenai/sites.d:/etc/caddy/sites.d:ro
+      # El certificado y su clave, en solo lectura. Caddy no tiene por qué poder escribirlos.
+      - /opt/govgenai/tls:/etc/caddy/tls:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

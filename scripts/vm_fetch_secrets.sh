@@ -54,7 +54,10 @@ fi
 [ -f "$INVENTARIO" ] || { echo "ERROR: no existe $INVENTARIO" >&2; exit 3; }
 
 inventario() {
-  grep -vE '^\s*#|^\s*$' "$INVENTARIO"
+  # Se saltan los secretos marcados `FICHERO:`: son ficheros (el certificado del dominio y su
+  # clave), los baja `vm_fetch_tls.sh`, y un PEM multilínea metido en un fichero de entorno
+  # rompería todas las variables que vinieran detrás.
+  grep -vE '^\s*#|^\s*$' "$INVENTARIO" | grep -vE '^[^|]*\|FICHERO:'
 }
 
 echo "== Secretos a montar en $SALIDA (proyecto $PROYECTO) =="

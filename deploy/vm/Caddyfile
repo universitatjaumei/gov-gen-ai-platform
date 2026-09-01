@@ -8,8 +8,23 @@
 # Un nombre hace falta aunque las páginas del corpus vivan en un bucket: se sirven por HTTPS, y
 # desde una página HTTPS el navegador **bloquea** una llamada a `http://IP`; con `https://IP` no
 # hay certificado posible, porque Let's Encrypt no emite para direcciones IP desnudas.
+#
+# ── Dos nombres a la vez, y por qué (D.8, 2026-09-01) ────────────────────────────────────────
+#
+# Desde que existe el dominio institucional hay **dos** sitios: el nombre provisional de
+# `sslip.io` que llega por `GOVGENAI_HOST` (certificado de Let's Encrypt, automático) y
+# `normativa.uji.es` con su certificado propio de HARICA, que se instala en `sites.d/`.
+#
+# No se sustituye uno por otro de golpe porque **las 313 páginas del corpus ya publicadas en el
+# bucket llevan el nombre provisional dentro** (`data-api-url` del widget): cambiar el host sin
+# regenerarlas y volver a subirlas deja el asistente muerto en todas. Sirviendo los dos, la
+# transición no tiene ventana de caída, y el provisional se retira cuando las páginas apunten al
+# definitivo.
+#
+# Las rutas van en un fragmento y no copiadas en cada bloque: dos copias divergen: la primera
+# versión de este fichero ya demostró lo que pasa cuando la misma cosa se dice en dos sitios.
 
-{$GOVGENAI_HOST} {
+(govgenai_rutas) {
 	encode zstd gzip
 
 	# La API. El prefijo se conserva: el widget incrustado en el bucket llama a
@@ -47,3 +62,18 @@
 		format json
 	}
 }
+
+# El nombre provisional, que es el que llevan dentro las páginas ya publicadas.
+{$GOVGENAI_HOST} {
+	import govgenai_rutas
+}
+
+# Los sitios con certificado propio. **Glob a propósito**: `import` de un fichero concreto falla
+# si no está y Caddy no arranca —y un Caddy que no arranca se lleva por delante también el host
+# provisional—, mientras un glob que no casa nada es válido. Así esta configuración se puede
+# desplegar antes de que el dominio institucional exista en el DNS, que es exactamente la
+# situación del 2026-09-01.
+#
+# Quien escribe ahí dentro es `scripts/vm_fetch_tls.sh`, y sólo si el certificado y la clave se
+# han bajado de Secret Manager.
+import /etc/caddy/sites.d/*.caddy
