@@ -24392,7 +24392,7 @@ lectura de la DT primera de PRG-004 (colectivo, alcance y fin), que el usuario y
 > accesible desde fuera, y partir el bloque no compra nada.
 
 **Origen**: reunión con desarrollo del 2026-08-31 y su valoración en
-`docs/EVOLUCIO_I_ASPECTES_PENDENTS.html`. Desarrollo planteó que la plataforma no podrá
+`docs/EVOLUCIO_I_ASPECTES_PENDENTS.md`. Desarrollo planteó que la plataforma no podrá
 actuar como registro de las actividades de IA que ocurren **fuera** de ella (Claude Cowork,
 Copilot, agentes de terceros) y propuso exponer un servicio MCP o endpoints para que esos agentes
 registren sus usos y consuman la anonimización. La valoración lo acepta con un matiz: no es una
@@ -24720,7 +24720,7 @@ limpias); `docs/REGISTRO_ACTIVIDAD_IA.md` existe y el enlace desde `docs/mcp.md`
 permanente, como jornadas o eventos, deberían alimentar el chatbot en cada actualización sin
 curación manual»), y la corrección posterior del usuario: **los apartados se han de poder
 parametrizar como bloques o secciones dentro de un proceso de curación, no quedar fijados**.
-Valoración completa en `docs/EVOLUCIO_I_ASPECTES_PENDENTS.html` (valoración 3).
+Valoración completa en `docs/EVOLUCIO_I_ASPECTES_PENDENTS.md` (valoración 3).
 
 **Lo que la revisión del código encontró ya hecho** —con tests y corriendo en el APScheduler que
 arranca con la aplicación— es dos tercios de lo que la reunión pedía: el rastreo periódico con
@@ -25743,3 +25743,400 @@ actualizado con el reparto final de nombres y rutas.
 **Al cerrar el bloque**: suite completa (`uv run pytest tests` desde Git Bash), y las URL nuevas
 recogidas donde alguien las busque: `PROJECT_STATE.md`, `docs/WIDGET_INCRUSTACION.md` (el
 fragmento de ejemplo) y `docs/RUNBOOK_REINGESTA.md` si menciona la base del sitio.
+
+---
+
+## Bloque LANG — Política de lengua configurable: monolingüe y respuesta fija (PENDIENTE, planificado el 2026-09-01)
+
+> **Posición**: independiente de Deploy; dos prompts. Conviene ejecutarlo **antes del primer
+> despliegue para una organización monolingüe** (el escenario ayuntamientos): el mando ya existe
+> en la cascada, pero está desconectado.
+
+**Origen**: pregunta del usuario del 2026-09-01 («¿se puede construir un grafo sin selector de
+idiomas, para ayuntamientos que no sean multilingües?»). La respuesta medida contra el código: el
+grafo no se construye «con o sin» nodo de lengua — la política de lengua es una **estrategia**
+del CoreGraph y sobre corpus monolingüe degrada sola a passthrough (la ordenación por lengua no
+reordena, la segunda búsqueda no se lanza, el aviso de traducción no salta) —, pero al
+verificarlo aparecieron **dos huecos**:
+
+1. **`language_mode` viaja por toda la cascada y nadie lo consume.** Plataforma (`prefer`) →
+   `HubOrganizacion.default_language_mode` → `HubChatbot.language_mode` →
+   `PublicGraphConfig.language_mode`… y la factoría del perfil monta siempre
+   `DefaultLanguagePolicy` (`graph_factory.py`, `_make_public_kb_rich`). El valor `"none"` está
+   documentado en `metadata_filter.py` («sin regla de lengua») y no hay ningún `if` que lo lea.
+2. **El modo que pediría una organización monolingüe no existe**: «responde siempre en X,
+   pregunten como pregunten». Hoy el grafo detecta la lengua de la pregunta e instruye «Responde
+   en {esa}»: a quien pregunte en catalán a un ayuntamiento castellanohablante se le contesta en
+   catalán, sin que el organismo tenga dónde decidir lo contrario.
+
+**Reglas del bloque**:
+
+- **Tres modos y solo tres**: `prefer` (el actual, sigue siendo el defecto), `none` (sin
+  política: sin detección, sin orden por lengua, sin instrucción de lengua en el prompt) y
+  `fixed:<código>` (instruye siempre esa lengua y prefiere esa versión del corpus, sin detectar).
+- **Las políticas nuevas implementan el protocolo `LanguagePolicy` existente**; el CoreGraph no
+  se toca. Lo único que cambia es qué política compone la factoría según `cfg.language_mode`.
+- **El modo es dato en cascada, nunca un perfil distinto**: un despliegue monolingüe es
+  configuración del mismo grafo, no otro grafo. Es el argumento dado a desarrollo («framework,
+  no generador») y este bloque es lo que lo hace verdad también aquí.
+
+---
+
+### Prompt LANG.1 (RED/GREEN) — Cablear `language_mode`: `none` y `fixed:<lang>`
+
+**Modelo sugerido**: **Sonnet** — alcance cerrado: dos clases pequeñas sobre un protocolo
+existente y un branch en la factoría.
+
+**Objetivo**: que `cfg.language_mode` decida la política de lengua que compone `GraphFactory`,
+con los tres modos, y que el valor se valide al escribirse.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT LANG.1 (RED/GREEN) — language_mode deja de estar desconectado
+
+## Políticas (junto a PreferLanguagePolicy, en strategies/protocols.py)
+- NoneLanguagePolicy: detect() -> None. Con None todo lo demás ya degrada solo:
+  needs_secondary_search devuelve False, filter_items es passthrough y el prompt no
+  lleva "Responde en".
+- FixedLanguagePolicy(lang): detect() -> lang SIEMPRE, sin mirar la consulta (sin
+  langdetect). El efecto aguas abajo es el correcto sin tocar CoreGraph: "Responde en
+  {lang}" en el prompt y query_language={lang} en la recuperación (prefiere esa versión
+  de una norma bilingüe).
+
+## Factoría (core/graph_factory.py, _make_public_kb_rich)
+- language_mode == "none"            -> NoneLanguagePolicy
+- language_mode.startswith("fixed:") -> FixedLanguagePolicy(código)
+- resto                              -> DefaultLanguagePolicy (comportamiento actual intacto)
+
+## Validación del valor (en los contratos de chatbot y organización del router)
+- "prefer" | "none" | "fixed:<código de 2-3 letras minúsculas>"; cualquier otro valor
+  -> 422 con mensaje que enumere los modos. Hoy es String(20) libre: un typo caería a
+  prefer sin avisar a nadie.
+
+## Tests (mínimo 6) — tests/public_graphs/test_lang1_language_mode.py
+- none: el prompt final NO contiene "Responde en" y no se lanza segunda búsqueda.
+- fixed:es con pregunta en catalán: el prompt instruye responder en es.
+- fixed:es: la recuperación recibe query_language="es".
+- prefer: comportamiento idéntico al actual (test de regresión).
+- El branch de la factoría con los tres valores.
+- 422 del endpoint con language_mode="castellano".
+```
+
+**Verificación**: suite de `tests/public_graphs/` + `tests/infra/test_suite_hygiene.py` verdes; y
+una conversación real contra un chatbot puesto en `fixed:es` preguntando en catalán, respondida
+en castellano (evidencia en el informe de cierre).
+
+---
+
+### Prompt LANG.2 — El modo de lengua en el panel
+
+**Modelo sugerido**: **Sonnet** — UI sobre contrato cerrado en LANG.1.
+
+**Objetivo**: exponer el modo en la interfaz de administración (por chatbot y el defecto por
+organización), con i18n y verificación en navegador.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT LANG.2 — desplegable de modo de lengua en ChatbotsPage y en la organización
+
+- Desplegable con los tres modos; al elegir fixed, selector del código de lengua. El
+  catálogo de modos NO se hardcodea en React: viene del contrato OpenAPI (enum) o de un
+  endpoint — regla maestra de contract-first.
+- i18n es/ca/en para etiquetas y descripciones cortas de cada modo (qué implica elegirlo).
+- Orval regenerado si el contrato cambió en LANG.1.
+- Tests de frontend: el desplegable se construye desde el contrato; guardar envía el valor;
+  el valor actual se muestra.
+- Verificación en navegador: cambiar un chatbot a fixed:es, conversar en catalán desde el
+  widget, respuesta en castellano; read_console_messages y read_network_requests limpios.
+```
+
+**Al cerrar el bloque**: suite completa desde Git Bash; actualizar `docs/` si existe guía de
+configuración de chatbots que enumere los campos.
+
+---
+
+## Bloque FUN — Catálogo de funciones deterministas: de scripts copiados a funciones versionadas y compartidas (PENDIENTE, planificado el 2026-09-01)
+
+> **Posición**: FUN.1–FUN.4 no dependen del despliegue. FUN.5 (consumo externo) va **después del
+> Bloque REG**, cuyo registro de actividad y patrón de scopes consume.
+>
+> **Restricción de diseño transversal**: el catálogo se diseña como pieza **compartida** — hoy lo
+> consumen los informes; en Fase 3 lo consumen las fases de expediente. La restricción simétrica
+> quedó escrita en `Plan_TDD_Fase3.md` (las acciones de fase referencian `plantilla@versión` y
+> `función@versión`, nunca código incrustado). Nada en FUN puede asumir «informe» en sus
+> contratos ni nombres.
+
+**Origen**: conversación del 2026-09-01 sobre la observación de desarrollo («generador contra
+framework», ver `docs/EVOLUCIO_I_ASPECTES_PENDENTS.md` §Cuestión 4). Releída sobre los
+scripts deterministas, la crítica **acierta en un punto**: los nodos del grafo se comparten por
+construcción, pero **el código de un script aprobado se incrusta copiado en el bloque de cada
+plantilla** (`scripts_router.py:555-560`: `options={"code": ..., "approved": True}`; documentado
+en `contracts/blocks.py:41-44`). Dos plantillas que necesitan la misma extracción son dos
+propuestas, dos aprobaciones y dos copias; un bug en un script usado por N plantillas se arregla
+N veces. `HubScriptProposal` es una cola de aprobación con `target_template_id`, no un catálogo.
+
+**Qué construye el bloque**: una entidad `HubFuncion` versionada con contrato de entrada/salida
+declarado; los bloques referencian `funcion_id@versión` en vez de incrustar código; una función
+puede **promocionarse a plataforma** con aprobación del superadmin y entonces cualquier
+organización la referencia (caso motor: la explotación de un ERP común que varias organizaciones
+comparten); y consumo externo por API. La cadena de seguridad existente **no cambia**: auditoría
+AST (`ScriptSecurityAuditor`) + sandbox (`SandboxClient`) + aprobación humana. Lo que cambia es
+dónde vive el código aprobado y cómo se le llega.
+
+**Reglas duras del bloque FUN**:
+
+- **El anclaje de versión es la clave de bóveda.** Una plantilla referencia una versión concreta;
+  publicar una versión nueva NO cambia ninguna plantilla existente. Sin esto, «arreglar una vez»
+  sería «cambiar en silencio informes ya aprobados» y el RunManifest dejaría de ser reproducible.
+- **Una versión aprobada es inmutable**: corregir es publicar otra versión. El código de una
+  versión aprobada no se edita jamás (misma razón que el log de auditoría).
+- **Se comparte código y contrato, nunca datos**: ni ficheros, ni resultados, ni datos de prueba
+  cruzan organizaciones.
+- **La cadena de aprobación no se relaja**: toda alta y toda versión nueva pasan auditoría AST +
+  prueba en sandbox + aprobación humana; la promoción a plataforma exige además superadmin. La
+  verificación automática filtra antes de la aprobación humana, nunca la sustituye.
+- **La entrada se valida contra el contrato ANTES de llegar al sandbox**: el fallo de un ERP que
+  cambia de formato tiene que ser «la entrada no cumple el contrato», no un traceback de pandas.
+
+---
+
+### Prompt FUN.1 (RED/GREEN) — La entidad `HubFuncion` y sus versiones
+
+**Modelo sugerido**: **Sonnet** — modelo + migración con las decisiones ya tomadas aquí.
+
+**Objetivo**: tablas `hub_funciones` y `hub_funcion_versiones`, con ámbito declarado, migración
+aplicada e inventario de multitenencia actualizado.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT FUN.1 (RED/GREEN) — hub_funciones + hub_funcion_versiones
+
+## Modelos (junto a los modelos de redaccion, que es la casa física hasta que Fase 3
+## aporte el segundo consumidor — misma regla que la anonimización en REG)
+- HubFuncion: id UUID pk, nombre str(120), descripcion Text, organizacion_id UUID FK
+  NULLABLE (nulo = plataforma, semántica heredable establecida), publicada_en timestamptz
+  nullable, publicada_por nullable, creada_por, created_at/updated_at.
+  __ambito__ = "heredable".
+- HubFuncionVersion: id UUID pk, funcion_id FK ondelete CASCADE, version int, code Text,
+  contrato_entrada JSONB, contrato_salida JSONB, audit_result_json JSONB,
+  code_sha256 str(64), estado (draft|approved|retired), aprobada_por nullable,
+  aprobada_en nullable. UNIQUE(funcion_id, version). __ambito__ = "derivada".
+- Sin relationship() cross-base, como siempre.
+
+## Guarda de inmutabilidad (capa de servicio)
+- Una versión en estado approved no admite cambio de code ni de contratos: el servicio
+  lo rechaza. Corregir = crear versión nueva.
+
+## Migración
+- Alembic autogenerate + revisión; aplicar con uv run alembic upgrade <rev>.
+
+## Tests (mínimo 6) — tests/modules/redaccion/test_fun1_catalogo.py
+- __ambito__ declarado en ambas (el guardarraíl de MT.1 lo exige).
+- UNIQUE(funcion_id, version).
+- La guarda: editar code de una versión approved falla; crear v2 funciona.
+- Round-trip de contratos JSONB.
+- Acotación de listado: una organización ve las suyas + las publicadas (organizacion_id
+  nulo o publicada_en no nulo); nunca las no publicadas de otra.
+- code_sha256 se calcula al escribir y coincide con el código.
+```
+
+**Verificación**: suite del directorio + higiene verdes; `alembic current` con la revisión;
+`docs/MULTITENENCIA.md` actualizado con las dos tablas (su test lo exige).
+
+---
+
+### Prompt FUN.2 (RED/GREEN) — El contrato de entrada/salida, declarado y validado
+
+**Modelo sugerido**: **Opus** — es LA decisión de diseño del bloque: qué declara una función y
+dónde se valida.
+
+**Objetivo**: formalizar el contrato hoy implícito («asigna `result: dict`») como dato declarado
+de cada versión, validado en dos puntos: al registrar y antes de ejecutar.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT FUN.2 (RED/GREEN) — contrato E/S de una función
+
+## Contrato de entrada
+- Slots de fichero (kind: excel|pdf|markdown|text, obligatorio u opcional) + parámetros
+  tipados. Los parámetros reutilizan la FORMA de UIFieldDescriptor (contracts/ui.py): el
+  SDUI pinta el formulario desde el contrato, gratis y sin campos hardcodeados en React
+  (regla maestra 1).
+
+## Contrato de salida
+- ExtractionResult existente (tables/metrics/free_text). NO inventar un segundo esquema
+  de salida: el que hay es el que consumen los nodos, y dos esquemas divergen.
+
+## Validación en dos puntos
+1. Al registrar una versión: el contrato es coherente (slots con kind válido, parámetros
+   con tipo conocido) o la versión no se crea.
+2. Antes de ejecutar: la entrada cumple el contrato ANTES de invocar el sandbox. El error
+   es tipado y legible («falta el slot datos», «el parámetro umbral no es numérico») —
+   nunca un traceback de pandas por un ERP que cambió de formato.
+
+## Tests (mínimo 5) — tests/modules/redaccion/test_fun2_contrato.py
+- Contrato incoherente rechazado al registrar, con el motivo.
+- Entrada que no cumple -> error tipado SIN invocar el sandbox (espía sobre el cliente).
+- Entrada válida -> llega al sandbox con las variables del protocolo actual
+  (file_path/raw_text/options), que no cambia.
+- Los descriptores del formulario SDUI se derivan del contrato (test de que salen del
+  JSON, no de literales).
+- Salida que no valida como ExtractionResult -> warning de error, no excepción opaca.
+```
+
+**Verificación**: suite del directorio + higiene verdes.
+
+---
+
+### Prompt FUN.3 (RED/GREEN) — Referencia en vez de copia, con migración de las plantillas
+
+**Modelo sugerido**: **Opus** — migración de datos vivos + retirada del camino viejo; es el
+prompt que convierte la crítica de desarrollo en falsa también aquí.
+
+**Objetivo**: `DeterministicDataBlock` referencia `funcion_id@versión`; la aprobación escribe en
+el catálogo y referencia; las plantillas existentes se migran; el código incrustado deja de
+existir como camino activo.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT FUN.3 (RED/GREEN) — funcion_ref en DeterministicDataBlock
+
+## Contrato del bloque (contracts/blocks.py)
+- DeterministicDataBlock gana funcion_ref: {funcion_id: UUID, version: int} | None.
+- options deja de llevar "code"/"approved" para admin_script: el contrato lo rechaza
+  (la lección de extra="forbid" de REG.1 aplicada aquí).
+
+## La cola de aprobación (scripts_router.py, hoy líneas ~555-560)
+- Al aprobar una propuesta: crea HubFuncion (o versión nueva de una existente si el
+  admin lo indica) con el code auditado, y escribe funcion_ref en el bloque. El código
+  ya no se incrusta.
+
+## El nodo (deterministic_extraction.py)
+- Resuelve funcion_ref -> versión del catálogo (estado approved) -> pasa code al
+  pipeline, que no cambia. Función retirada o versión inexistente: el bloque falla EN
+  ALTO con mensaje que nombra la función — nunca vacío en silencio (la lección de los
+  perfiles sin configurar).
+
+## Migración de datos (Alembic, data migration)
+- Cada bloque existente con options.code se convierte en HubFuncion v1 approved de la
+  organización de su plantilla + funcion_ref. Idempotente y con recuento antes/después.
+
+## Retirada
+- grep -r de options["code"] / "approved": True como camino activo a cero; el pipeline
+  recibe el código resuelto, no lo busca en options.
+
+## Tests (mínimo 7) — tests/modules/redaccion/test_fun3_referencia.py
+- DOS plantillas referencian la MISMA función y ambas ejecutan (el caso del bloque).
+- Aprobar una propuesta crea la función y escribe la referencia.
+- Publicar v2 NO cambia una plantilla anclada a v1 (el test más importante del bloque).
+- Adoptar v2 en una plantilla es un cambio explícito del bloque y ejecuta v2.
+- Bloque legacy migrado ejecuta igual que antes (regresión con una plantilla real).
+- Función retirada -> fallo en alto con mensaje.
+- El contrato rechaza options.code.
+```
+
+**Verificación**: suite de `tests/modules/redaccion/` + higiene verdes; migración aplicada con
+recuento; un informe real generado desde una plantilla migrada, comparado con su versión previa.
+
+---
+
+### Prompt FUN.4 (RED/GREEN) — Promoción a plataforma y el catálogo en el panel
+
+**Modelo sugerido**: **Sonnet** — flujo y pantalla sobre contratos cerrados.
+
+**Objetivo**: publicar una función para todas las organizaciones con aprobación del superadmin, y
+la pantalla de catálogo.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT FUN.4 (RED/GREEN) — promoción + catálogo en el panel
+
+## Backend
+- POST /funciones/{id}/promover (solo superadmin): sella publicada_en/publicada_por.
+  No muta código ni versiones; la autoría (organizacion_id) se conserva como atribución.
+- Tenancy: la organización B puede REFERENCIAR una función publicada de A (y las de
+  plataforma), nunca las no publicadas de otra; solo la autora (o plataforma) versiona.
+- Las acciones disponibles (versionar, promover, retirar) las calcula el servidor y van
+  en el DTO — el frontend itera, no decide (regla maestra 2).
+
+## Frontend (panel admin)
+- Página de catálogo: lista con origen (mía / de plataforma / publicada por otra),
+  detalle con el contrato legible (slots y parámetros) y las versiones con su estado.
+- Botones desde acciones_permitidas del DTO. i18n es/ca/en. Orval regenerado.
+
+## Tests (mínimo 5)
+- Solo superadmin promociona (403 al admin).
+- B referencia la publicada de A; 404/403 sobre la no publicada.
+- Solo la autora versiona una función publicada.
+- La promoción no cambia code_sha256 de ninguna versión.
+- Frontend: los botones se generan desde acciones_permitidas.
+```
+
+**Verificación**: navegador — crear función en una organización, promoverla como superadmin,
+referenciarla desde otra organización; consola y red limpias.
+
+---
+
+### Prompt FUN.5 (RED/GREEN) — Consumo externo: `POST /api/v1/funciones/{id}/run` (tras REG)
+
+**Modelo sugerido**: **Sonnet** — endpoint sobre patrones ya establecidos (scopes de REG.2,
+sandbox de SBX).
+
+**Objetivo**: que una aplicación externa ejecute una función del catálogo por API, con PAT,
+cuota y rastro en el registro de actividad.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT FUN.5 (RED/GREEN) — ejecución de funciones por API. Deploy: edge
+
+- Scope nuevo funciones:execute en el catálogo PAT (emisible por superadmin y admin).
+- POST /api/v1/funciones/{funcion_id}/run con version explícita en el cuerpo (el
+  anclaje también rige fuera: sin version no se ejecuta), entrada validada contra el
+  contrato (FUN.2), ejecución en sandbox con timeout y límite de tamaño de entrada,
+  salida = ExtractionResult.
+- La organización se deriva del dueño del PAT; solo funciones propias o publicadas.
+- Evento en el registro de actividad de REG: herramienta = cliente del PAT, finalidad =
+  ejecución de función, referencia funcion_id@version + code_sha256. Sin payloads, como
+  siempre.
+
+## Tests (mínimo 5)
+- Sin scope -> 403; con scope -> ejecuta.
+- Entrada inválida -> 422 tipado sin tocar el sandbox.
+- Función de otra organización no publicada -> 404.
+- El evento REG se escribe sin contenido de la entrada.
+- Timeout del sandbox -> error controlado, no 500 opaco.
+```
+
+**Verificación**: `curl` real contra el endpoint con un PAT de prueba; el evento visible en la
+lectura del registro (REG.5).
+
+---
+
+### Prompt FUN.6 — Verificación de punta a punta y documentación
+
+**Modelo sugerido**: **Sonnet**.
+
+**Objetivo**: el ciclo completo recorrido de verdad, y el contrato escrito para el siguiente
+consumidor (Fase 3).
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT FUN.6 — cierre del bloque
+
+## Recorrido en navegador (evidencias en el informe de cierre)
+1. Proponer un script, aprobarlo: aparece como función v1 en el catálogo.
+2. Usarla en DOS plantillas distintas; generar los dos informes.
+3. Publicar v2 con un arreglo: las dos plantillas siguen en v1 (comprobado); adoptar v2
+   en una; regenerar y ver el arreglo solo ahí.
+4. Promoverla como superadmin; referenciarla desde otra organización.
+5. read_console_messages y read_network_requests limpios en cada paso.
+
+## docs/CATALOGO_FUNCIONES.md
+- El contrato campo a campo, el ciclo de versiones (draft/approved/retired, inmutabilidad,
+  anclaje), quién puede qué (autora/superadmin/consumidora), y el puente a Fase 3: las
+  acciones de fase de expediente referencian plantilla@versión y función@versión — con el
+  enlace a la restricción escrita en Plan_TDD_Fase3.md.
+```
+
+**Al cerrar el bloque**: suite completa desde Git Bash; `.bat` humano solo si queda algo
+irreducible (previsiblemente nada: todo el ciclo es verificable en navegador).

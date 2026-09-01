@@ -106,6 +106,21 @@ La Subfase 3.C (AdaptadorUJI, AdaptadorGestion400, capa ENI/ENS) es la de **mayo
 
 > **Arquitectura MCP**: La integración con el Gestor de Expedientes legacy se realizará exponiendo dicho sistema como un Servidor MCP (Model Context Protocol) que GovGenAI consumirá como cliente agnóstico. Esto aísla la plataforma de las especificidades del sistema antiguo.
 
+> **Restricción de arquitectura (añadida el 2026-09-01, convergencia con el módulo de Informes):
+> las fases con IA no construyen un segundo motor de ejecución.** Una acción de tipo `llm` o
+> `script` **no lleva código ni prompt incrustado** en su `configuracion`: referencia una
+> **plantilla versionada del motor de redacción** (`plantilla_id@versión` — bloques, workspaces,
+> RunManifest, puertas HITL de `modules/redaccion/`) y su ejecución **es un workspace** de ese
+> motor. Los scripts deterministas que una fase necesite se referencian del **catálogo de
+> funciones del Bloque FUN** (`Plan_TDD_Fase1.md` §Bloque FUN) como `funcion_id@versión`.
+> Baremación, resolución provisional y resolución definitiva son plantillas; el expediente es la
+> entidad que engloba y ordena sus fases; el gestor de expedientes institucional (sin IA) sigue
+> siendo la fuente de verdad del procedimiento y puede invocar por API la ejecución de una fase
+> con IA. **Motivo**: tal como estaba redactado, `ejecuciones_accion.codigo_ejecutado` duplicaba
+> el sandbox, la auditoría AST y el flujo de aprobación que ya existen — exactamente el patrón
+> «generador» que la reunión con desarrollo del 2026-08-31/09-01 reprochó
+> (`docs/EVOLUCIO_I_ASPECTES_PENDENTS.md` §Cuestión 4). Un solo motor, dos productos.
+
 **Objetivo de la Fase**: Implementar el módulo de gestión de tramitaciones administrativas multi-fase,
 auditables y conformes con el Reglamento de IA de la UE (RIA).
 
@@ -141,8 +156,15 @@ TABLAS NUEVAS (migration Alembic):
 - tipos_expediente: catalogo de tramitaciones (id, nombre, descripcion, version, configuracion JSON)
 - expedientes: instancias (id, tipo_id, estado, tenant_id, creado_por, fecha_inicio, metadata JSON)
 - fases_expediente: (id, expediente_id, nombre, estado, orden, funcion, responsable_rol)
-- acciones_fase: (id, fase_id, tipo [llm|script|human|rpa|api_externa], funcion, responsable_rol, configuracion JSON)
-- ejecuciones_accion: (id, accion_id, expediente_id, timestamp, actor_id, resultado, codigo_ejecutado, explicacion, estado)
+- acciones_fase: (id, fase_id, tipo [llm|script|human|rpa|api_externa], responsable_rol,
+  plantilla_id + plantilla_version nullable (acciones llm/script: referencia al motor de
+  plantillas de redaccion), funcion_id + funcion_version nullable (catalogo del Bloque FUN),
+  configuracion JSON SOLO para parametros declarados por el contrato de la plantilla o funcion
+  — NUNCA codigo ni prompts incrustados, lo rechaza el contrato)
+- ejecuciones_accion: (id, accion_id, expediente_id, workspace_id nullable (la ejecucion de una
+  accion llm/script ES un workspace del motor de plantillas), timestamp, actor_id, resultado,
+  explicacion, estado) — sin columna de codigo: el codigo exacto se recupera del catalogo
+  versionado por la referencia, cuyas versiones aprobadas son inmutables
 - documentos_expediente: (id, expediente_id, nombre, tipo, doc_chunk_id nullable, ruta, metadata)
 - audit_expediente: log inmutable (id, expediente_id, fase_id, accion_id, timestamp, actor,
   accion_descripcion, estado_anterior, estado_nuevo, hash_integridad)
@@ -194,8 +216,10 @@ class ExpedienteState(TypedDict):
     explicacion_ia: str
 
 NODOS ESTANDAR A IMPLEMENTAR:
-- NodoLLM: genera propuesta usando LLM Gateway existente
-- NodoScript: ejecuta script Python determinista (reutiliza sandbox de Automation)
+- NodoLLM: ejecuta la plantilla referenciada por la accion como workspace del motor de
+  redaccion (bloques IA + review gates); no lleva prompt incrustado en la accion
+- NodoScript: ejecuta la funcion referenciada por la accion (catalogo del Bloque FUN,
+  funcion_id@version) via el mismo sandbox; el codigo nunca viaja en la configuracion
 - NodoHuman: breakpoint LangGraph — el expediente queda suspendido esperando aprobacion
 - NodoRPA: despacha job al agente de ejecucion local (Prompt 9.17)
 - NodoAPIExterna: llama al MCP Client (cuando este disponible)
@@ -239,7 +263,8 @@ REQUISITOS:
 
 CAMPOS OBLIGATORIOS EN CADA ENTRADA:
 - explicacion_ia: el "por que" de la decision (Art. 13 RIA — transparencia)
-- codigo_ejecutado: el script exacto que se ejecuto (si aplica)
+- funcion_ejecutada: referencia funcion_id@version del catalogo + code_sha256 (si aplica);
+  el codigo exacto es recuperable del catalogo, cuyas versiones aprobadas son inmutables
 - actor: usuario o sistema que realizo la accion
 - hash_integridad: SHA-256 encadenado
 
@@ -472,8 +497,8 @@ sobre dónde pueden procesarse documentos de categoría media/alta.
 - El cloud (orquestación LangGraph) recibe el resultado ya procesado: datos extraídos
   o documentos transformados, nunca el documento original.
 - Esta regla aplica a: extracción PDF (basada en Docling-edge), validación de formatos
-  ENI, generación de índices de documentos, cualquier script del Script Registry
-  invocado como acción de una fase del expediente.
+  ENI, generación de índices de documentos, cualquier función del catálogo del Bloque FUN
+  (`Plan_TDD_Fase1.md` §Bloque FUN) invocada como acción de una fase del expediente.
 - El checklist de cierre de cada Prompt Ei debe incluir una verificación explícita de
   que ningún documento original viaja al cloud.
 

@@ -189,6 +189,6 @@ ordenadas de menor a mayor coste:
 > futurible: tiene caso de uso — que agentes externos (Claude Cowork, Copilot…) registren su
 > actividad y usen la anonimización — y prompts redactados en el **Bloque REG** de
 > `planificacion/Plan_TDD_Fase1.md` (REG.4). Valoración completa en
-> `docs/EVOLUCIO_I_ASPECTES_PENDENTS.html`.
+> `docs/EVOLUCIO_I_ASPECTES_PENDENTS.md`.
 
 <!-- Sección reservada para la ampliación del usuario -->
