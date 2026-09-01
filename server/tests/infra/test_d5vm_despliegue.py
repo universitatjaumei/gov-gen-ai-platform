@@ -392,11 +392,21 @@ def test_el_despliegue_retira_las_imagenes_que_ya_no_usa_ningun_contenedor() -> 
         f"El prune tiene que ser `-a`: sin eso las imágenes etiquetadas de despliegues "
         f"anteriores se quedan, y son justo las que llenan el disco. {activas}"
     )
-    # Después de desplegar, no antes: las imágenes nuevas ya están descargadas y en uso, así
-    # que un prune posterior no puede quitar la que acaba de arrancar.
-    assert texto.index("image prune") > texto.index("- name: Desplegar"), (
-        "El prune va DESPUÉS de desplegar: antes podría retirar una imagen que el compose "
-        "necesita, y encima no liberaría la del despliegue que se acaba de sustituir."
+    # ANTES de que la máquina descargue las imágenes nuevas, y la posición es el diseño.
+    #
+    # En ese punto los contenedores siguen apuntando a la generación actual, y `prune -a`
+    # conserva exactamente lo que algún contenedor referencia: se conserva la actual, se libera
+    # todo lo anterior, y la descarga que viene tiene sitio garantizado. Tras el reinicio la
+    # generación anterior se queda en local sin contenedor, así que una vuelta atrás no tiene
+    # que volver a bajar 2,26 GB. Estado estacionario: dos generaciones.
+    #
+    # La primera versión lo puso después de desplegar. Funcionaba, pero dejaba la reversión
+    # dependiendo de una descarga y no garantizaba sitio para la descarga de ida — que es
+    # justamente lo que falló.
+    assert texto.index("image prune") < texto.index("- name: Migraciones"), (
+        "El prune va ANTES de que la máquina baje las imágenes nuevas (las migraciones son el "
+        "primer paso que tira de la imagen de `app`). Después de desplegar también libera, pero "
+        "no garantiza sitio para la descarga de ida y deja la vuelta atrás dependiendo de otra."
     )
 
 

@@ -228,6 +228,28 @@ jobs:
           EOF
           sudo chmod 644 ${DESTINO}/.env.despliegue"
 
+      # ANTES de que la máquina descargue las imágenes nuevas, y ésa es toda la gracia de la
+      # posición. En este punto los contenedores siguen apuntando a la generación actual, y
+      # `prune -a` conserva exactamente lo que algún contenedor referencia y borra el resto: se
+      # conserva la actual, se libera todo lo anterior, y la descarga que viene tiene sitio
+      # garantizado. Después del reinicio la generación anterior se queda en local sin
+      # contenedor, así que **una vuelta atrás es instantánea** en vez de volver a bajar 2,26 GB.
+      # Estado estacionario: dos generaciones en disco, unos 6 GB.
+      #
+      # Limpiar sólo tras un despliegue exitoso NO habría evitado el incidente: el 2026-09-01 el
+      # disco ya estaba lleno al empezar, así que la limpieza condicionada al éxito no se habría
+      # ejecutado nunca cuando hacía falta. Diez despliegues habían dejado 30 imágenes y 25,2 GB
+      # en un disco de 30 GB, y el `docker compose up` murió con `no space left on device` al
+      # crear el socket del proxy de Cloud SQL. El síntoma no señalaba al disco —«container
+      # govgenai_sql_proxy is unhealthy»— y, al fallar el paso de desplegar, el de reversión se
+      # saltó y el servicio se quedó caído.
+      #
+      # `|| true` porque quedarse sin limpiar no es motivo para abortar un despliegue.
+      - name: Hacer sitio en el disco antes de bajar las imágenes
+        run: |
+          gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap --quiet \
+            --command "sudo docker image prune -af || true; df -h / | tail -1" || true
+
       - name: Bajar los secretos y levantar el proxy de Cloud SQL
         run: |
           gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap --quiet \
@@ -256,20 +278,6 @@ jobs:
             --command "sudo systemctl restart govgenai && sleep 20 && \
               sudo docker compose --env-file ${DESTINO}/.env.despliegue \
                 -f ${DESTINO}/docker-compose.vm.yml ps"
-
-      # Antes de comprobar, no después: si la comprobación falla y hay que volver atrás, el
-      # disco tiene que tener sitio para la imagen anterior. Y `|| true` porque quedarse sin
-      # limpiar no es motivo para dar por fallido un despliegue que ya sirve.
-      #
-      # Esto faltaba, y el 2026-09-01 tumbó el servicio: diez despliegues habían dejado 30
-      # imágenes y 25,2 GB en un disco de 30 GB, y el `docker compose up` murió con `no space
-      # left on device` al crear el socket del proxy de Cloud SQL. El síntoma no señalaba al
-      # disco —«container govgenai_sql_proxy is unhealthy»— y, como el fallo fue en el paso de
-      # desplegar, el paso de reversión se saltó y no hubo vuelta atrás.
-      - name: Retirar las imágenes que ya no usa ningún contenedor
-        run: |
-          gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap --quiet \
-            --command "sudo docker image prune -af || true; df -h / | tail -1" || true
 
       - name: Comprobar que sirve, y volver atrás si no
         run: |
