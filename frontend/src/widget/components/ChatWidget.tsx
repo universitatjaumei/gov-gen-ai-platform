@@ -24,6 +24,9 @@ interface Props {
   /** Modelo que responde, para decirlo en el aviso. Lo declara la página que incrusta el
    *  widget (`data-model`): es información de quien despliega, no del visitante. */
   model?: string
+  /** Nombre del asistente en la cabecera (`data-title`). Sin él se usa la traducción
+   *  genérica, que basta cuando la página publica un solo asistente. */
+  title?: string
 }
 
 interface StarRatingProps {
@@ -129,7 +132,7 @@ function IconoChatbot({ tamano = 22, color = '#ffffff' }: { tamano?: number; col
   )
 }
 
-export function ChatWidget({ chatbotId, apiUrl, lang, widgetKey, model }: Props) {
+export function ChatWidget({ chatbotId, apiUrl, lang, widgetKey, model, title }: Props) {
   // UX.1: arranca CERRADO. Un widget embebido enseña su botón y el visitante decide; que
   // se despliegue solo se come la página que lo aloja.
   const [open, setOpen] = useState(false)
@@ -263,7 +266,14 @@ export function ChatWidget({ chatbotId, apiUrl, lang, widgetKey, model }: Props)
         <IconoChatbot />
         {/* Título propio y no `widget_open`: esa es la etiqueta del botón que abre —«Obri
             el xat»—, y como encabezado del panel ya abierto no dice nada. */}
-        <span style={{ fontWeight: 600, fontSize: '0.9rem', flex: 1 }}>{t('widget_title')}</span>
+        {/* El nombre declarado manda sobre la traducción genérica: con dos asistentes sobre
+            el mismo corpus, «Asistente» a secas no dice cuál está contestando. */}
+        <span
+          data-testid="widget-header-title"
+          style={{ fontWeight: 600, fontSize: '0.9rem', flex: 1 }}
+        >
+          {title || t('widget_title')}
+        </span>
         {/* HIB.C — empezar de cero. Necesario desde que el historial viaja al servidor: sin
             esto, una pregunta de otro tema se reescribe contra el tema anterior. Sólo se
             ofrece si hay algo que reiniciar, para no poner un mando inerte en la cabecera. */}

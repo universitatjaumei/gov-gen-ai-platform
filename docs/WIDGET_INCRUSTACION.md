@@ -13,6 +13,7 @@
   data-widget-key="<credencial de SITIO>"
   data-api-url="https://34-175-38-129.sslip.io/api/v1"
   data-lang="es"
+  data-title="Assistent normativa"
 ></div>
 <script src="/widget.iife.js" defer></script>
 ```
@@ -24,6 +25,20 @@
 | `data-api-url` | Sí si la página no está en el mismo origen que la API | Por omisión `/api/v1`, que sólo vale si comparten origen |
 | `data-lang` | No | `es` por omisión |
 | `data-model` | No | Sólo para el aviso del pie: lo declara la página, no el servidor |
+| `data-title` | **Sí si publicas más de un asistente** | Nombre en la cabecera del chat. Sin él, la traducción genérica («Asistente») |
+
+## Por qué `data-title` no es cosmético
+
+Con dos asistentes publicados sobre el mismo corpus —el normativo y el
+económico-administrativo del piloto de la UJI— una cabecera que dice sólo «Asistente» no
+permite a quien prueba saber cuál está contestando, y sus valoraciones quedan atribuidas a
+ciegas. Se descubrió enseñando el piloto: las dos páginas eran idénticas salvo el
+`data-chatbot-id`, que no se ve.
+
+**Lo declara la página y no el servidor**, igual que `data-model`, y por dos razones: el texto
+que se quiere mostrar no suele ser el nombre interno del chatbot en el panel («Gerència —
+assistent economicoadministratiu» frente a «Assistent econòmic-administratiu»), y el nombre
+interno puede decir cosas que no van en una página pública.
 
 ## Lo que hay que entender de la credencial
 

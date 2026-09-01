@@ -92,4 +92,26 @@ describe('Widget main', () => {
     const config = readConfig(container)
     expect(config).toBeNull()
   })
+
+  // Con dos asistentes publicados sobre el mismo corpus, una cabecera que dice sólo
+  // «Asistente» no permite saber cuál se está probando, y las valoraciones del piloto se
+  // atribuyen a ciegas. El nombre lo declara la página, como `data-model`: es información
+  // de quien despliega, y el texto que se quiere mostrar no es el nombre interno del
+  // chatbot en el panel.
+  test('should_read_title_from_data_attribute', () => {
+    const container = document.createElement('div')
+    container.setAttribute('data-chatbot-id', 'abc-123')
+    container.setAttribute('data-title', 'Assistent econòmic-administratiu')
+
+    const config = readConfig(container)
+    expect(config?.title).toBe('Assistent econòmic-administratiu')
+  })
+
+  test('should_leave_title_undefined_when_attribute_absent', () => {
+    const container = document.createElement('div')
+    container.setAttribute('data-chatbot-id', 'abc-123')
+
+    const config = readConfig(container)
+    expect(config?.title).toBeUndefined()
+  })
 })

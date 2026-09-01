@@ -12,6 +12,11 @@ export interface WidgetConfig {
   widgetKey?: string
   /** Modelo que responde, para el aviso del pie. Lo declara la pagina anfitriona. */
   model?: string
+  /** Nombre del asistente en la cabecera. Lo declara la pagina anfitriona, igual que
+   *  `model`: con dos asistentes publicados sobre el mismo corpus, una cabecera que dice
+   *  solo «Asistente» no permite saber cual se esta usando. No es el nombre interno del
+   *  chatbot en el panel: el texto que se quiere mostrar es decision de quien publica. */
+  title?: string
 }
 
 export function readConfig(container: Element): WidgetConfig | null {
@@ -23,6 +28,7 @@ export function readConfig(container: Element): WidgetConfig | null {
     apiUrl: container.getAttribute('data-api-url') ?? '/api/v1',
     widgetKey: container.getAttribute('data-widget-key') ?? undefined,
     model: container.getAttribute('data-model') ?? undefined,
+    title: container.getAttribute('data-title') ?? undefined,
   }
 }
 
@@ -64,6 +70,7 @@ export function mountWidget(container: Element, config: WidgetConfig): () => voi
         lang={config.lang}
         widgetKey={config.widgetKey}
         model={config.model}
+        title={config.title}
       />
     </StrictMode>,
   )

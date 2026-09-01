@@ -109,6 +109,26 @@ describe('ChatWidget — comportamiento de widget (UX.1)', () => {
     expect(screen.queryByTestId('widget-launcher')).not.toBeInTheDocument()
   })
 
+  test('should_show_the_declared_title_in_the_header', () => {
+    render(<ChatWidget {...DEFAULT_PROPS} title="Assistent econòmic-administratiu" />)
+
+    fireEvent.click(screen.getByTestId('widget-launcher'))
+
+    expect(screen.getByTestId('widget-header-title')).toHaveTextContent(
+      'Assistent econòmic-administratiu',
+    )
+  })
+
+  test('should_fall_back_to_the_translated_title_without_one', () => {
+    render(<ChatWidget {...DEFAULT_PROPS} />)
+
+    fireEvent.click(screen.getByTestId('widget-launcher'))
+
+    const encabezado = screen.getByTestId('widget-header-title')
+    expect(encabezado).toBeInTheDocument()
+    expect(encabezado.textContent?.trim()).not.toBe('')
+  })
+
   test('should_bring_its_own_box_instead_of_inheriting_the_host_page', () => {
     // El defecto que lo motiva: el panel se renderizaba con `height: 100%` dentro del
     // contenedor y heredaba lo que le diera la página, así que en un `<div>` pelado se
