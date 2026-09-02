@@ -67,8 +67,9 @@ Lo que dice el bloque Deploy (D.4-VM), más lo que ha aparecido en el piloto:
 |---|---|---|
 | `GOOGLE_CLOUD_PROJECT` | `uji-teclab` | Vertex. Ya verificado |
 | `GOOGLE_CLOUD_LOCATION` | `europe-southwest1` | Madrid: el texto no sale de España |
-| `CORPUS_SITE_BASE_URL` | la URL pública del bucket | Sin esto las citas van al PDF |
-| `CORS_ALLOWED_ORIGINS` | el origen del bucket | **Sin esto el widget no puede hablar con la API**: en producción la política es cerrada y un origen que falta se traduce en un preflight rechazado, no en un error visible |
+| `CORPUS_SITE_BASE_URL` | `https://normativa.uji.es` | Sin esto las citas van al PDF. **Desde DOM.3 es el dominio y no la URL del bucket**: el bucket lo sigue sirviendo, pero por detrás del proxy |
+| `CORS_ALLOWED_ORIGINS` | el origen del bucket **y** el del dominio, separados por coma | **Sin esto el widget no puede hablar con la API**: en producción la política es cerrada y un origen que falta se traduce en un preflight rechazado, no en un error visible. Los dos, y es aditivo a propósito: mientras la URL del bucket siga siendo pública, las páginas servidas desde ahí son de otro origen |
+| `CORPUS_BUCKET` | `govgenai-normativa-uji` | El bucket al que el proxy manda todo lo que no es API ni panel (DOM.1). Lo lee **Caddy**, no la aplicación. Vacío compone `https://.storage.googleapis.com` y rompe portada, cercadores y fichas a la vez, así que el compose lo exige con `:?` |
 | `ENVIRONMENT` | `production` | Cierra el sembrado de desarrollo (SEC.8.0) y la documentación de la API (SEC.7) |
 
 Credenciales de Vertex en la VM: cuenta de servicio con el rol de usuario de Vertex AI, no
@@ -95,7 +96,10 @@ va antes, o la carga aborta.
 4. Corpus cargado y comprobado con una consulta real.
 5. Credencial de sitio emitida.
 6. Sitio generado con esa credencial y subido al bucket.
-7. `CORPUS_SITE_BASE_URL` y `CORS_ALLOWED_ORIGINS` apuntando al bucket, y reinicio.
+7. `CORPUS_SITE_BASE_URL` al dominio, `CORS_ALLOWED_ORIGINS` con los dos orígenes y
+   `CORPUS_BUCKET` con el nombre del bucket, y reinicio. **No son ficheros del repositorio**:
+   son variables del repositorio de GitHub (`gh variable set`), de donde `deploy.yml` escribe
+   `/opt/govgenai/.env.despliegue` en cada despliegue.
 8. Comprobación de extremo a extremo: una pregunta cuya respuesta cite un artículo, y que el
    enlace de la cita abra la página en ese artículo.
 
