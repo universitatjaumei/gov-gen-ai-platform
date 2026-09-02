@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { useForm } from 'react-hook-form'
+import { z } from 'zod'
+import { zodResolver } from '@hookform/resolvers/zod'
 import {
   useListUsersApiV1HubUsersGet,
   useCreateUserApiV1HubUsersPost,
   useUpdateUserApiV1HubUsersUserIdPatch,
   useDeleteUserApiV1HubUsersUserIdDelete,
+  useSetUsuarioPassword,
   getListUsersApiV1HubUsersGetQueryKey,
 } from '@/shared/api/generated/hub-users/hub-users'
 import type { UsuarioRead } from '@/shared/api/generated/model'
@@ -17,6 +21,18 @@ const ORIGEN_DE_ARRANQUE = 'superadmin'
 
 /** Los roles que ofrece el alta. Salen del contrato del servidor, que los valida. */
 const ROLES = ['user', 'informer', 'admin', 'superadmin'] as const
+
+/** El mínimo del contrato (`SetPasswordRequest.min_length`), dicho antes de gastar una petición.
+ *
+ *  No es una regla nueva del cliente: es la misma del servidor, alineada a mano porque el
+ *  esquema generado no trae el `minLength` de Pydantic. Si un día divergen, la que manda es la
+ *  del servidor —el 422— y esto sólo deja de avisar antes. */
+const MINIMO_CONTRASENA = 12
+
+const esquemaContrasena = z.object({
+  password: z.string().min(MINIMO_CONTRASENA),
+})
+type ValoresContrasena = z.infer<typeof esquemaContrasena>
 
 /**
  * Quién existe en esta plataforma (IDE.4).
@@ -49,6 +65,16 @@ export function UsuariosPage() {
   const [nombre, setNombre] = useState('')
   /** La fila que espera confirmación de borrado. Estado de la pantalla, no del servidor. */
   const [porConfirmar, setPorConfirmar] = useState<string | null>(null)
+  /** La fila cuyo formulario de contraseña está abierto, y la que acaba de guardarla (USR.3). */
+  const [conFormularioAbierto, setConFormularioAbierto] = useState<string | null>(null)
+  const [contrasenaFijadaEn, setContrasenaFijadaEn] = useState<string | null>(null)
+  const { mutate: fijarContrasena, isPending: fijando } = useSetUsuarioPassword()
+  const {
+    register: registrarContrasena,
+    handleSubmit: enviarContrasena,
+    reset: limpiarContrasena,
+    formState: { errors: erroresContrasena },
+  } = useForm<ValoresContrasena>({ resolver: zodResolver(esquemaContrasena) })
   /** El alta arranca en la organizacion sobre la que ya se esta trabajando (REV.10). */
   const { organizaciones, elegida } = useOrganizacionElegida()
   const [organizacionDelAlta, setOrganizacionDelAlta] = useState('')
@@ -100,6 +126,36 @@ export function UsuariosPage() {
       { userId: persona.id, data: { is_active: !persona.is_active } },
       { onSuccess: invalidar }
     )
+  }
+
+  function abrirContrasena(persona: UsuarioRead) {
+    setContrasenaFijadaEn(null)
+    limpiarContrasena({ password: '' })
+    setConFormularioAbierto(persona.id)
+  }
+
+  function cerrarContrasena() {
+    limpiarContrasena({ password: '' })
+    setConFormularioAbierto(null)
+  }
+
+  /** Guarda la contraseña de esa fila. **El valor no se vuelve a mostrar**: se limpia el campo
+   *  y lo que queda es la confirmación de que se guardó. Enseñarlo «para copiarlo» lo dejaría
+   *  en el DOM y en el portapapeles de quien administra. */
+  function guardarContrasena(persona: UsuarioRead) {
+    return enviarContrasena((valores) => {
+      fijarContrasena(
+        { userId: persona.id, data: { password: valores.password } },
+        {
+          onSuccess: () => {
+            setContrasenaFijadaEn(persona.id)
+            cerrarContrasena()
+            invalidar()
+          },
+        }
+      )
+      limpiarContrasena({ password: '' })
+    })
   }
 
   return (
@@ -283,6 +339,62 @@ export function UsuariosPage() {
                           {t('plataforma.usuarios.eliminar')}
                         </button>
                       )}
+                      {/* USR.3 — **lo decide el servidor**: `puede_fijar_contrasena` viene en
+                          el contrato, calculado con la misma función que autoriza el endpoint.
+                          Un `if (rol === 'superadmin')` aquí sería la autorización escrita por
+                          segunda vez. */}
+                      {persona.puede_fijar_contrasena && (
+                        <button
+                          type="button"
+                          onClick={() => abrirContrasena(persona)}
+                          className="text-xs underline"
+                        >
+                          {t('plataforma.usuarios.fijar_contrasena')}
+                        </button>
+                      )}
+                    </span>
+                  )}
+                  {conFormularioAbierto === persona.id && (
+                    <form
+                      onSubmit={guardarContrasena(persona)}
+                      className="mt-1 flex flex-wrap items-end justify-end gap-2"
+                    >
+                      <span className="flex flex-col gap-1 text-left">
+                        <label
+                          htmlFor={`contrasena-${persona.id}`}
+                          className="text-xs font-medium"
+                        >
+                          {t('plataforma.usuarios.contrasena_nueva')}
+                        </label>
+                        <input
+                          id={`contrasena-${persona.id}`}
+                          type="password"
+                          autoComplete="new-password"
+                          {...registrarContrasena('password')}
+                          className="rounded-md border px-2 py-1 text-sm"
+                        />
+                      </span>
+                      <button
+                        type="submit"
+                        disabled={fijando}
+                        className="text-xs font-medium underline disabled:opacity-50"
+                      >
+                        {t('plataforma.usuarios.guardar_contrasena')}
+                      </button>
+                      <button type="button" onClick={cerrarContrasena} className="text-xs underline">
+                        {t('plataforma.usuarios.cancelar')}
+                      </button>
+                      {erroresContrasena.password && (
+                        <span role="alert" className="block w-full text-xs text-destructive">
+                          {t('plataforma.usuarios.contrasena_corta', { minimo: MINIMO_CONTRASENA })}
+                        </span>
+                      )}
+                    </form>
+                  )}
+                  {/* La confirmación, y no el valor: lo que se guardó no se vuelve a enseñar. */}
+                  {contrasenaFijadaEn === persona.id && (
+                    <span role="status" className="block text-xs text-muted-foreground">
+                      {t('plataforma.usuarios.contrasena_fijada')}
                     </span>
                   )}
                   {/* El motivo, y no sólo la ausencia del botón: una fila sin acciones y sin

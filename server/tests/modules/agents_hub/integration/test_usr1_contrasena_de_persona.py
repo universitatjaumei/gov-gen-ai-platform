@@ -205,6 +205,74 @@ class TestQueSeGuarda:
         assert persona.hashed_password is None
 
 
+class TestElServidorDiceQuienPuedeFijarla:
+    """USR.3 — `puede_fijar_contrasena` en el DTO, no un `if` en React.
+
+    Vive en este fichero y no en uno propio porque es el mismo router y las mismas fixtures;
+    partirlo habría duplicado el andamiaje para tres asertos.
+
+    Es la regla maestra 2 aplicada otra vez: el frontend **no** calcula qué acciones están
+    permitidas. Un `if (rol === 'superadmin')` en la pantalla sería la autorización escrita por
+    segunda vez, y el día que un admin gestione su organización las dos copias dirían cosas
+    distintas.
+    """
+
+    async def test_should_tell_a_superadmin_they_can(self, db_session):
+        org = await _organizacion(db_session, "UJI")
+        await _persona(db_session, org.id)
+
+        async with _cliente(db_session, _principal()) as c:
+            listado = await c.get("/api/v1/hub/users")
+
+        personas = [f for f in listado.json() if f["origen"] == "manual"]
+        assert personas, "no hay ninguna persona en el listado"
+        assert all(f["puede_fijar_contrasena"] for f in personas)
+
+    async def test_should_say_no_for_the_bootstrap_superadmin_row(self, db_session):
+        """Vive en otra tabla y su contraseña no se toca desde esta pantalla."""
+        from server.app.core.security import hash_password
+        from server.app.database.models import SuperAdminAccount
+
+        db_session.add(
+            SuperAdminAccount(
+                email=f"root-{uuid.uuid4().hex[:6]}@uji.es",
+                name="Arranque",
+                hashed_password=hash_password(CONTRASENA),
+                is_active=True,
+            )
+        )
+        await db_session.flush()
+
+        async with _cliente(db_session, _principal()) as c:
+            listado = await c.get("/api/v1/hub/users")
+
+        de_arranque = [f for f in listado.json() if f["origen"] == "superadmin"]
+        assert de_arranque, "la cuenta de arranque no aparece en el listado"
+        assert not any(f["puede_fijar_contrasena"] for f in de_arranque)
+
+    async def test_should_use_the_same_function_that_authorizes_the_endpoint(self, db_session):
+        """Si el DTO dice que sí, el endpoint no puede contestar 403, y al revés.
+
+        Se comprueba con una persona de otra organización y un admin acotado: el DTO dice que
+        no puede, y el endpoint responde 403. Dos respuestas de la misma regla.
+        """
+        propia = await _organizacion(db_session, "Otra")
+        ajena = await _organizacion(db_session, "UJI")
+        persona = await _persona(db_session, ajena.id)
+
+        from server.app.core.auth.tenancy import puede_acceder
+
+        admin = _principal("admin", orgs=(str(propia.id),))
+        assert puede_acceder(admin, persona.organizacion_id) is False
+
+        async with _cliente(db_session, admin) as c:
+            r = await c.patch(
+                f"/api/v1/hub/users/{persona.id}/password",
+                json={"password": CONTRASENA},
+            )
+        assert r.status_code == 403
+
+
 class TestElHashNoCruzaLaFronteraEdge:
     """`hub_users` es `HubConfigBase`, o sea que se sincroniza cloud→edge.
 

@@ -5,6 +5,7 @@ import { useAuth } from '@/shared/auth'
 import {
   getLoginAdminApiV1AuthAdminLoginPostUrl,
   getLoginSuperadminApiV1AuthSuperadminLoginPostUrl,
+  getLoginUsuarioUrl,
 } from '@/shared/api/generated/auth/auth'
 import { apiBaseUrl as API_BASE } from '@/shared/api/client'
 
@@ -12,9 +13,20 @@ import { apiBaseUrl as API_BASE } from '@/shared/api/client'
 // Escritas a mano llevaban desde el 2026-04-24 apuntando a `/api/v1/auth/token/admin`, que
 // no existe: el 404 caía en el catch y se pintaba «credenciales incorrectas», así que el
 // síntoma acusaba a la contraseña del usuario y el fallo estaba aquí.
+//
+// **Tres puertas y un solo formulario** (USR.3): dos tablas de cuentas de administración y
+// `hub_users`, que es donde están las personas. Se prueban en orden, y el orden importa: el
+// mensaje de error **sólo** aparece si fallan las tres, y no dice cuál de ellas conocía el
+// correo. Decirlo convertiría el formulario en un oráculo para saber en qué tabla está alguien;
+// y enseñarlo antes de tiempo es lo que pasó el 2026-09-01, cuando ninguno de los 401 de la
+// cadena distinguía «contraseña mala» de «esta cuenta no tiene login local».
+//
+// La tercera puede responder **404** en vez de 401: es `LOCAL_USER_LOGIN_ENABLED=false`, o sea
+// que en este despliegue esa puerta no existe. Se trata igual que un rechazo.
 const RUTAS_LOGIN = [
   getLoginSuperadminApiV1AuthSuperadminLoginPostUrl(),
   getLoginAdminApiV1AuthAdminLoginPostUrl(),
+  getLoginUsuarioUrl(),
 ]
 
 // Iconos en línea: el proyecto no tiene librería de iconos en esta pantalla y traerla por dos
@@ -73,7 +85,11 @@ export function LoginPage() {
         if (res.ok) {
           const { access_token } = await res.json() as { access_token: string }
           login(access_token)
-          navigate(params.get('from') ?? '/hub', { replace: true })
+          // **A la raíz, no a `/hub`.** El aterrizaje lo decide `Aterrizaje` desde INF.7, que
+          // cae en el primer módulo concedido. Con el destino escrito aquí, una persona `user`
+          // sin el módulo de chatbots aterrizaba en `/hub` y rebotaba a «sin acceso»: la misma
+          // decisión en dos sitios, y una de las dos equivocada.
+          navigate(params.get('from') ?? '/', { replace: true })
           return
         }
       }

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest'
-import { render, screen, within, fireEvent } from '@testing-library/react'
+import { render, screen, within, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import i18n from '@/shared/i18n'
@@ -9,6 +9,7 @@ import {
   useCreateUserApiV1HubUsersPost,
   useUpdateUserApiV1HubUsersUserIdPatch,
   useDeleteUserApiV1HubUsersUserIdDelete as useBorrar,
+  useSetUsuarioPassword,
 } from '@/shared/api/generated/hub-users/hub-users'
 import type { UsuarioRead } from '@/shared/api/generated/model'
 import { useAutoridadDelRol } from '@/shared/auth/useAutoridadDelRol'
@@ -33,6 +34,7 @@ vi.mock('@/shared/api/generated/hub-users/hub-users', () => ({
   useCreateUserApiV1HubUsersPost: vi.fn(),
   useUpdateUserApiV1HubUsersUserIdPatch: vi.fn(),
   useDeleteUserApiV1HubUsersUserIdDelete: vi.fn(),
+  useSetUsuarioPassword: vi.fn(),
   getListUsersApiV1HubUsersGetQueryKey: () => ['usuarios'],
 }))
 
@@ -66,6 +68,7 @@ const PERSONAS: UsuarioRead[] = [
     last_login_at: null,
     puede_borrarse: true,
     motivo_no_borrable: null,
+    puede_fijar_contrasena: true,
   },
   {
     id: '22222222-2222-2222-2222-222222222222',
@@ -80,11 +83,13 @@ const PERSONAS: UsuarioRead[] = [
     last_login_at: '2026-08-20T10:00:00Z',
     puede_borrarse: false,
     motivo_no_borrable: 'Esta persona ya ha entrado.',
+    puede_fijar_contrasena: true,
   },
 ]
 
 const mutar = vi.fn()
 const borrar = vi.fn()
+const fijarContrasena = vi.fn()
 
 function conPersonas(personas: UsuarioRead[] = PERSONAS, autoridad = 'app') {
   vi.mocked(useListUsersApiV1HubUsersGet).mockReturnValue({
@@ -101,6 +106,10 @@ function conPersonas(personas: UsuarioRead[] = PERSONAS, autoridad = 'app') {
     isPending: false,
   } as never)
   vi.mocked(useBorrar).mockReturnValue({ mutate: borrar, isPending: false } as never)
+  vi.mocked(useSetUsuarioPassword).mockReturnValue({
+    mutate: fijarContrasena,
+    isPending: false,
+  } as never)
   return autoridad
 }
 
@@ -112,6 +121,7 @@ beforeEach(() => {
   localStorage.clear()
   mutar.mockClear()
   borrar.mockClear()
+  fijarContrasena.mockClear()
   conPersonas()
 })
 
@@ -392,5 +402,105 @@ describe('REV.10 — la organización de cada persona', () => {
     renderPage()
 
     expect((screen.getByLabelText(/^organización/i) as HTMLSelectElement).value).toBe('org-dipu')
+  })
+})
+
+/**
+ * USR.3 — fijar la contraseña de una persona desde el panel.
+ *
+ * Es la contrapartida de que `hashed_password` nazca en NULL: sin esta acción, una persona dada
+ * de alta a mano no tiene forma de entrar mientras el IdP no esté configurado, y el arreglo de
+ * USR.1 sería una puerta cerrada con la llave dentro.
+ *
+ * **Quién puede lo dice el servidor.** `puede_fijar_contrasena` viene en el contrato, y el botón
+ * se pinta iterando la respuesta. Un `if (rol === 'superadmin')` aquí sería la autorización
+ * escrita por segunda vez (regla maestra 2), y el día que un admin gestione su organización las
+ * dos copias dirían cosas distintas.
+ */
+describe('USR.3 — fijar la contraseña de una persona', () => {
+  function abrirFormulario(email = 'manual@uji.es') {
+    const fila = screen.getByTestId(`persona-${email}`)
+    fireEvent.click(within(fila).getByRole('button', { name: /contraseña/i }))
+    return fila
+  }
+
+  it('should_offer_the_action_only_when_the_server_allows_it', () => {
+    conPersonas([
+      { ...PERSONAS[0], puede_fijar_contrasena: true },
+      { ...PERSONAS[1], puede_fijar_contrasena: false },
+    ])
+    renderPage()
+
+    const permitida = screen.getByTestId('persona-manual@uji.es')
+    const negada = screen.getByTestId('persona-porsso@uji.es')
+    expect(within(permitida).getByRole('button', { name: /contraseña/i })).toBeDefined()
+    expect(within(negada).queryByRole('button', { name: /contraseña/i })).toBeNull()
+  })
+
+  it('should_send_the_password_for_that_person', async () => {
+    renderPage()
+    const fila = abrirFormulario()
+
+    fireEvent.change(within(fila).getByLabelText(/contraseña nueva/i), {
+      target: { value: 'una-contrasena-larga' },
+    })
+    fireEvent.click(within(fila).getByRole('button', { name: /guardar/i }))
+
+    await waitFor(() => expect(fijarContrasena).toHaveBeenCalled())
+    expect(fijarContrasena).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: PERSONAS[0].id,
+        data: { password: 'una-contrasena-larga' },
+      }),
+      expect.anything()
+    )
+  })
+
+  it('should_refuse_a_password_shorter_than_the_contract', async () => {
+    // La validación del cliente se alinea con el contrato del servidor (min_length=12); no es
+    // una regla nueva, es la misma dicha antes de gastar una petición.
+    renderPage()
+    const fila = abrirFormulario()
+
+    fireEvent.change(within(fila).getByLabelText(/contraseña nueva/i), {
+      target: { value: 'corta' },
+    })
+    fireEvent.click(within(fila).getByRole('button', { name: /guardar/i }))
+
+    await waitFor(() => expect(within(fila).getByRole('alert')).toBeDefined())
+    expect(fijarContrasena).not.toHaveBeenCalled()
+  })
+
+  it('should_never_show_the_value_again_after_saving', async () => {
+    renderPage()
+    const fila = abrirFormulario()
+
+    fireEvent.change(within(fila).getByLabelText(/contraseña nueva/i), {
+      target: { value: 'una-contrasena-larga' },
+    })
+    fireEvent.click(within(fila).getByRole('button', { name: /guardar/i }))
+
+    await waitFor(() => expect(fijarContrasena).toHaveBeenCalled())
+    // El doble no dispara `onSuccess`, así que se comprueba lo que sí depende de la pantalla:
+    // el campo no conserva el valor escrito.
+    const campo = within(fila).queryByLabelText(/contraseña nueva/i) as HTMLInputElement | null
+    expect(campo?.value ?? '').not.toBe('una-contrasena-larga')
+  })
+
+  it('should_hide_the_typed_password', () => {
+    renderPage()
+    const fila = abrirFormulario()
+
+    expect(within(fila).getByLabelText(/contraseña nueva/i).getAttribute('type')).toBe('password')
+  })
+
+  it('should_let_the_form_be_closed_without_saving', () => {
+    renderPage()
+    const fila = abrirFormulario()
+
+    fireEvent.click(within(fila).getByRole('button', { name: /cancelar/i }))
+
+    expect(within(fila).queryByLabelText(/contraseña nueva/i)).toBeNull()
+    expect(fijarContrasena).not.toHaveBeenCalled()
   })
 })

@@ -81,7 +81,8 @@ describe('LoginPage — envío del formulario', () => {
     rellenarYEnviar()
 
     await waitFor(() => expect(loginSpy).toHaveBeenCalledWith('jwt-bueno'))
-    expect(navigateSpy).toHaveBeenCalledWith('/hub', { replace: true })
+    // El destino era `/hub` fijo. Lo decide `Aterrizaje` desde INF.7 (ver el test de USR.3).
+    expect(navigateSpy).toHaveBeenCalledWith('/', { replace: true })
   })
 
   it('should_fall_back_to_the_admin_route_when_superadmin_rejects', async () => {
@@ -100,13 +101,80 @@ describe('LoginPage — envío del formulario', () => {
     expect(llamadas[1]).toContain('/api/v1/auth/admin/login')
   })
 
-  it('should_show_the_error_only_when_both_routes_reject', async () => {
+  it('should_show_the_error_only_when_every_route_rejects', async () => {
     mockFetch(() => ({ ok: false, status: 401 }))
     renderLogin()
     rellenarYEnviar('mal')
 
     await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Credenciales incorrectas'))
     expect(loginSpy).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * USR.3 — la tercera puerta: una persona de `hub_users` con contraseña local.
+ *
+ * El orden importa y el mensaje también. Encadenar tres 401 y pintar «credencial incorrecta»
+ * es exactamente lo que pasó el 2026-09-01: el usuario no podía entrar y ninguno de los 401 de
+ * la cadena distinguía «contraseña mala» de «esta cuenta no tiene login local». La regla es que
+ * el mensaje **sólo** cambia si fallan las tres, y que no dice cuál de las tres existía: decirlo
+ * convertiría el formulario en un oráculo para saber en qué tabla está un correo.
+ */
+describe('LoginPage — la tercera puerta (USR.3)', () => {
+  it('should_try_the_person_route_after_superadmin_and_admin_reject', async () => {
+    const fetchSpy = mockFetch((url) =>
+      url.includes('/auth/user/login')
+        ? { ok: true, status: 200, body: { access_token: 'jwt-persona' } }
+        : { ok: false, status: 401 },
+    )
+    renderLogin()
+    rellenarYEnviar()
+
+    await waitFor(() => expect(loginSpy).toHaveBeenCalledWith('jwt-persona'))
+    const llamadas = fetchSpy.mock.calls.map((c) => String(c[0]))
+    expect(llamadas[0]).toContain('/api/v1/auth/superadmin/login')
+    expect(llamadas[1]).toContain('/api/v1/auth/admin/login')
+    expect(llamadas[2]).toContain('/api/v1/auth/user/login')
+  })
+
+  it('should_not_show_an_error_while_a_later_door_can_still_answer', async () => {
+    mockFetch((url) =>
+      url.includes('/auth/user/login')
+        ? { ok: true, status: 200, body: { access_token: 'jwt-persona' } }
+        : { ok: false, status: 401 },
+    )
+    renderLogin()
+    rellenarYEnviar()
+
+    await waitFor(() => expect(loginSpy).toHaveBeenCalled())
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('should_tolerate_a_404_from_the_person_route_when_local_login_is_off', async () => {
+    // Con `LOCAL_USER_LOGIN_ENABLED=false` la ruta responde 404, y eso no es un error del
+    // formulario: es que esa puerta no existe en este despliegue.
+    mockFetch((url) =>
+      url.includes('/auth/user/login') ? { ok: false, status: 404 } : { ok: false, status: 401 },
+    )
+    renderLogin()
+    rellenarYEnviar('mal')
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toBe('Credenciales incorrectas'),
+    )
+    expect(loginSpy).not.toHaveBeenCalled()
+  })
+
+  it('should_land_where_the_role_decides_and_not_on_a_fixed_module', async () => {
+    // INF.7 centralizó el aterrizaje en `Aterrizaje`, que cae en el primer módulo concedido.
+    // Con el destino escrito aquí, una persona `user` sin el módulo de chatbots aterrizaba en
+    // `/hub` y rebotaba a «sin acceso»: la misma decisión en dos sitios, y una de las dos mal.
+    mockFetch(() => ({ ok: true, status: 200, body: { access_token: 'jwt' } }))
+    renderLogin()
+    rellenarYEnviar()
+
+    await waitFor(() => expect(navigateSpy).toHaveBeenCalled())
+    expect(navigateSpy).toHaveBeenCalledWith('/', { replace: true })
   })
 })
 

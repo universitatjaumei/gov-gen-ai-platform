@@ -31,7 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import require_role
 from server.app.core.auth.models import UserInfo, UserRole
-from server.app.core.auth.tenancy import assert_org_access
+from server.app.core.auth.tenancy import assert_org_access, puede_acceder
 from server.app.core.security import hash_password
 from server.app.modules.agents_hub.database.config_models import HubModuleGrant, HubUser
 from server.app.modules.agents_hub.database.connection import get_async_session
@@ -79,6 +79,15 @@ class UsuarioRead(BaseModel):
     # calcula qué acciones están permitidas.
     puede_borrarse: bool = False
     motivo_no_borrable: str | None = None
+    #: Si **quien pregunta** puede fijarle la contraseña de login local (USR.3). Misma regla
+    #: maestra que `puede_borrarse`: la decide el servidor y el panel pinta el botón iterando
+    #: la respuesta. Un `if (rol === 'superadmin')` en React sería la autorización escrita por
+    #: segunda vez, y el día que un admin pueda gestionar su organización dirían cosas
+    #: distintas.
+    #:
+    #: Falso en las cuentas de arranque de `superadminaccount`: viven en otra tabla y su
+    #: contraseña no se toca desde esta pantalla.
+    puede_fijar_contrasena: bool = False
 
 
 class UsuarioCreate(BaseModel):
@@ -146,12 +155,21 @@ MOTIVO_ULTIMO_SUPERADMIN = (
 )
 
 
-def _a_lectura(fila: HubUser, *, motivo_no_borrable: str | None = None) -> UsuarioRead:
-    """El DTO de una persona, **con si se puede borrar y por qué no**.
+def _a_lectura(
+    fila: HubUser,
+    *,
+    motivo_no_borrable: str | None = None,
+    quien: UserInfo | None = None,
+) -> UsuarioRead:
+    """El DTO de una persona, **con qué puede hacer con ella quien pregunta**.
 
     Lo decide el servidor y no la pantalla: es la regla de `AGENTS.md` —el frontend no calcula
     qué acciones están permitidas—. Si el React hiciera «si `last_login_at` es nulo, enseña el
     botón», esa regla viviría en dos sitios y un día dirían cosas distintas.
+
+    `quien` es opcional para no obligar a los llamadores que sólo describen la fila; sin él,
+    `puede_fijar_contrasena` es **falso**, que es el fallo seguro: una acción que no se ofrece
+    se puede añadir, una que se ofrece y no autoriza es un 403 delante del usuario.
     """
     motivo = motivo_no_borrable or (MOTIVO_YA_ENTRO if fila.last_login_at else None)
     return UsuarioRead(
@@ -167,6 +185,10 @@ def _a_lectura(fila: HubUser, *, motivo_no_borrable: str | None = None) -> Usuar
         last_login_at=fila.last_login_at,
         puede_borrarse=motivo is None,
         motivo_no_borrable=motivo,
+        # La misma función que autoriza el endpoint, no una copia de su regla.
+        puede_fijar_contrasena=(
+            puede_acceder(quien, fila.organizacion_id) if quien is not None else False
+        ),
     )
 
 
@@ -244,7 +266,7 @@ async def _otro_superadmin_activo(session: AsyncSession, excluido: uuid.UUID) ->
 
 @router.get("", response_model=list[UsuarioRead])
 async def list_users(
-    _: UserInfo = Depends(_require_superadmin),
+    user: UserInfo = Depends(_require_superadmin),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[UsuarioRead]:
     """Quién existe en esta plataforma.
@@ -259,7 +281,7 @@ async def list_users(
     filas = (
         await session.execute(select(HubUser).order_by(HubUser.email))
     ).scalars().all()
-    personas = [_a_lectura(f) for f in filas]
+    personas = [_a_lectura(f, quien=user) for f in filas]
     return await _superadmins_de_arranque(session) + personas
 
 
@@ -298,14 +320,14 @@ async def create_user(
     session.add(fila)
     await session.commit()
     await session.refresh(fila)
-    return _a_lectura(fila)
+    return _a_lectura(fila, quien=user)
 
 
 @router.patch("/{user_id}", response_model=UsuarioRead)
 async def update_user(
     user_id: uuid.UUID,
     body: UsuarioUpdate,
-    _: UserInfo = Depends(_require_superadmin),
+    user: UserInfo = Depends(_require_superadmin),
     session: AsyncSession = Depends(get_async_session),
 ) -> UsuarioRead:
     """Cambia rol, nombre, organización o actividad. **Desactivar es la baja** para quien ya usó
@@ -339,7 +361,7 @@ async def update_user(
 
     await session.commit()
     await session.refresh(fila)
-    return _a_lectura(fila)
+    return _a_lectura(fila, quien=user)
 
 
 @router.patch(
