@@ -58,9 +58,13 @@ done
 # ingesta (`generat/`, `md*/`, `paquet_*`) que no debe salir a internet, y una lista de
 # exclusiones se queda corta el día que aparece una carpeta nueva.
 # ---------------------------------------------------------------------------
+# `favicon.ico` va en la lista y no como caso aparte: el navegador lo pide **en la raíz del
+# origen** aunque la página esté en `/html/`, así que un solo fichero arriba sirve a las 313
+# fichas y a los cuatro cercadores sin que ninguna página tenga que declararlo. Es el icono en
+# color del portal (`static.uji.es/templates/uji2016_plantillas/static/images/favicon.ico`).
 FICHEROS_SUELTOS=()
 for f in index.html cercador.html cercador_corpus.html cercador_gerencia.html \
-         index_gerencia.html widget.iife.js; do
+         index_gerencia.html widget.iife.js favicon.ico; do
   [ -f "$DIR/$f" ] && FICHEROS_SUELTOS+=("$f")
 done
 
