@@ -93,7 +93,11 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider themeUrl={getThemeUrl()}>
-      <BrowserRouter>
+      {/* DOM.2 — el panel se sirve bajo `/panel/` en la imagen y en la raíz en desarrollo, y
+          el prefijo viene de `base` de Vite por `import.meta.env.BASE_URL`. Escrito a mano,
+          los tests —que montan en la raíz— dejarían de encontrar sus rutas, y el día que el
+          prefijo cambiara habría que acordarse de dos sitios. */}
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
         <AuthProvider>
           <Suspense fallback={<CargandoRuta />}>
             <Routes>

@@ -127,6 +127,8 @@ SAML_ATTR_GROUPS=groups
 # Mapeo grupo del IdP -> rol del sistema (JSON). Precedencia: superadmin>admin>informer>user.
 # SAML_GROUP_ROLE_MAP={"pas-informatica":"admin","govgenai-admins":"superadmin"}
 SAML_DEFAULT_ROLE=user
+# De DESARROLLO, donde el panel se sirve en la raiz. En un despliegue el panel vive bajo
+# `/panel/` (DOM.2) y la vuelta del ACS lleva el prefijo: https://<dominio>/panel/auth/callback.
 SAML_FRONTEND_RETURN_URL=http://localhost:5173/auth/callback
 
 # === MODELOS DE LENGUAJE (elige uno o varios; se configuran por chatbot en /hub/llm-configs) ===

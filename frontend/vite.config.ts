@@ -17,7 +17,27 @@ import path from 'path'
  */
 const DESTINO_API_POR_DEFECTO = 'http://localhost:8000'
 
+/** Prefijo bajo el que se sirve el panel (DOM.2).
+ *
+ * Desde que `normativa.uji.es/` sirve la portada pública del corpus, el panel vive en
+ * `/panel/`. Es un `base` y no una regla del proxy porque **Vite escribe las URL de los
+ * recursos en el HTML en tiempo de compilación**: sin esto, la imagen pide `/assets/…`, y esas
+ * URL servidas bajo el prefijo caen en el catch-all del proxy —o sea en el bucket— y devuelven
+ * 404 con la página en blanco.
+ *
+ * El defecto es la raíz a propósito: `arranque.bat`, `.env.example`, la documentación de
+ * metodología y una docena de guiones de pruebas manuales de bloques ya cerrados dan por hecho
+ * que en desarrollo el panel está en `http://localhost:5173/`. Quien quiera desarrollar con el
+ * mismo prefijo que producción, pone `VITE_BASE_PATH=/panel/` en `frontend/.env.local`.
+ *
+ * El valor lo consume además el `basename` del `BrowserRouter`, que lo lee de
+ * `import.meta.env.BASE_URL`: así el prefijo se dice una sola vez y no hay ningún literal en el
+ * código de la aplicación.
+ */
+const BASE_POR_DEFECTO = '/'
+
 export default defineConfig(({ mode }) => ({
+  base: loadEnv(mode, process.cwd(), '').VITE_BASE_PATH || BASE_POR_DEFECTO,
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
