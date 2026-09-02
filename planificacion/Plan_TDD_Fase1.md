@@ -25857,7 +25857,7 @@ configuración de chatbots que enumere los campos.
 
 ## Bloque FUN — Catálogo de funciones deterministas: de scripts copiados a funciones versionadas y compartidas (PENDIENTE, planificado el 2026-09-01)
 
-> **Posición**: FUN.1–FUN.4 no dependen del despliegue. FUN.5 (consumo externo) va **después del
+> **Posición**: FUN.1–FUN.5 no dependen del despliegue. FUN.6 (consumo externo) va **después del
 > Bloque REG**, cuyo registro de actividad y patrón de scopes consume.
 >
 > **Restricción de diseño transversal**: el catálogo se diseña como pieza **compartida** — hoy lo
@@ -25865,6 +25865,15 @@ configuración de chatbots que enumere los campos.
 > quedó escrita en `Plan_TDD_Fase3.md` (las acciones de fase referencian `plantilla@versión` y
 > `función@versión`, nunca código incrustado). Nada en FUN puede asumir «informe» en sus
 > contratos ni nombres.
+>
+> **Revisado el 2026-09-02 — doble origen.** La segunda observación de desarrollo («gestionar
+> ese código dentro de la herramienta es reinventar la rueda: tiene que estar en manos de quien lo
+> define, versionado, testeado y mantenido contra una API declarada») acierta **para el autor
+> desarrollador** y no ve **al autor informador**, que no tiene repositorio ni despliegue. La
+> respuesta no es elegir: el catálogo es un **registro de referencias `función@versión` con dos
+> orígenes** (autoservicio y empaquetado, detalle abajo). Lo que centraliza la plataforma no es
+> el código, es la **revisión, el manifiesto de ejecución, la trazabilidad y el contrato**: git
+> versiona código; la plataforma versiona decisiones y ejecuciones.
 
 **Origen**: conversación del 2026-09-01 sobre la observación de desarrollo («generador contra
 framework», ver `docs/EVOLUCIO_I_ASPECTES_PENDENTS.md` §Cuestión 4). Releída sobre los
@@ -25883,6 +25892,25 @@ comparten); y consumo externo por API. La cadena de seguridad existente **no cam
 AST (`ScriptSecurityAuditor`) + sandbox (`SandboxClient`) + aprobación humana. Lo que cambia es
 dónde vive el código aprobado y cómo se le llega.
 
+**Los dos orígenes de una función** (decidido el 2026-09-02):
+
+| | Origen **autoservicio** | Origen **empaquetado** |
+|---|---|---|
+| Autor | Informador o administrador sin entorno de desarrollo; el código lo propone la IA | Un equipo de desarrollo, en su propio repositorio, con su CI y su versionado |
+| Dónde vive el código | En el catálogo (`HubFuncionVersion.code`) | En un paquete Python instalado en el despliegue, descubierto por *entry point* `govgenai.funciones` |
+| Cómo entra | Propuesta → auditoría AST → prueba en sandbox → aprobación humana | `pip install` por quien opera; la plataforma lo registra al arrancar y valida su contrato |
+| Dónde corre | Sandbox | En el proceso del servidor: la confianza está en quien lo instala, igual que en un plugin |
+| Versionado | Ordinal del catálogo; versión aprobada inmutable | Semver del paquete; el catálogo registra cada versión instalada con `code_sha256` de su fuente |
+| Anclaje de una plantilla | Por versión exacta, **por construcción**: publicar v2 no toca nada anclado a v1 | Por **mayor** de semver, **por contrato**: una versión instalada del mismo mayor se acepta; un mayor distinto falla en alto |
+| Ámbito | Nace en su organización; promoción a plataforma por superadmin | Plataforma desde el principio: lo instala quien opera el despliegue, no una organización |
+
+Lo que **no cambia entre orígenes**, y es exactamente lo que justifica que el catálogo exista
+aunque el código viva fuera: el contrato de entrada/salida (mismo esquema, mismo validador, mismo
+formulario SDUI derivado), la referencia `función@versión` desde plantillas, fases de expediente
+y API, la entrada validada antes de ejecutar, el `RunManifest` con la versión exacta y el hash
+de lo que corrió, el rastro en el registro de actividad, el inventario de quién usa qué, y la
+frontera de organización. Una función empaquetada hereda todo eso el día que se instala.
+
 **Reglas duras del bloque FUN**:
 
 - **El anclaje de versión es la clave de bóveda.** Una plantilla referencia una versión concreta;
@@ -25897,6 +25925,23 @@ dónde vive el código aprobado y cómo se le llega.
   verificación automática filtra antes de la aprobación humana, nunca la sustituye.
 - **La entrada se valida contra el contrato ANTES de llegar al sandbox**: el fallo de un ERP que
   cambia de formato tiene que ser «la entrada no cumple el contrato», no un traceback de pandas.
+- **Un solo contrato, un solo validador, para los dos orígenes.** Una función empaquetada declara
+  su contrato con el mismo esquema que una de autoservicio y pasa por el mismo validador; si el
+  contrato es incoherente, el arranque falla en alto nombrando el paquete, no se registra a
+  medias. Dos esquemas de contrato divergen; uno solo es lo que hace que el formulario, la API
+  y el expediente traten igual a las dos.
+- **El origen empaquetado no pasa por el sandbox y eso se dice, no se disimula**: su código corre
+  en el proceso del servidor y la confianza se desplaza a quien lo instala, exactamente como en
+  un plugin de despliegue. Por eso nace con ámbito de plataforma y por eso su alta no es un
+  formulario sino un `pip install`. Lo que la plataforma sí verifica de él es el contrato, el
+  mayor de semver al resolver, y el hash de su fuente en cada ejecución.
+- **La garantía de anclaje cambia de naturaleza con el origen, y el manifiesto no.** En
+  autoservicio el anclaje es por construcción (versión exacta e inmutable). En empaquetado es
+  por contrato (semver: mismo mayor, compatible), porque un despliegue no puede tener dos
+  versiones del mismo paquete instaladas. En ambos, el `RunManifest` registra la versión
+  **exacta** y el `code_sha256` de lo que corrió: la reproducibilidad como registro se conserva
+  siempre; como garantía de re-ejecución idéntica, solo en autoservicio, y el manifiesto lo deja
+  ver.
 
 ---
 
@@ -25915,12 +25960,20 @@ aplicada e inventario de multitenencia actualizado.
 ## aporte el segundo consumidor — misma regla que la anonimización en REG)
 - HubFuncion: id UUID pk, nombre str(120), descripcion Text, organizacion_id UUID FK
   NULLABLE (nulo = plataforma, semántica heredable establecida), publicada_en timestamptz
-  nullable, publicada_por nullable, creada_por, created_at/updated_at.
-  __ambito__ = "heredable".
-- HubFuncionVersion: id UUID pk, funcion_id FK ondelete CASCADE, version int, code Text,
-  contrato_entrada JSONB, contrato_salida JSONB, audit_result_json JSONB,
-  code_sha256 str(64), estado (draft|approved|retired), aprobada_por nullable,
-  aprobada_en nullable. UNIQUE(funcion_id, version). __ambito__ = "derivada".
+  nullable, publicada_por nullable, creada_por nullable (nulo en origen paquete),
+  origen (StrEnum: autoservicio|paquete — es estructura, no vocabulario), entry_point
+  str(200) nullable (solo paquete: «distribucion:nombre», UNIQUE cuando no es nulo),
+  created_at/updated_at. __ambito__ = "heredable".
+- HubFuncionVersion: id UUID pk, funcion_id FK ondelete CASCADE, version int (ordinal del
+  catálogo, en ambos orígenes), code Text NULLABLE (nulo en paquete: el código no vive
+  aquí), version_paquete str(32) nullable (semver, solo paquete), contrato_entrada JSONB,
+  contrato_salida JSONB, audit_result_json JSONB nullable (nulo en paquete: no hay
+  auditoría AST), code_sha256 str(64) (en paquete, hash de la fuente de la función
+  instalada), estado (draft|approved|retired|no_instalada — el último solo en paquete),
+  aprobada_por nullable, aprobada_en nullable. UNIQUE(funcion_id, version).
+  __ambito__ = "derivada".
+- Invariante de coherencia por origen, en la capa de servicio: autoservicio exige code y
+  prohíbe version_paquete; paquete exige version_paquete y entry_point y prohíbe code.
 - Sin relationship() cross-base, como siempre.
 
 ## Guarda de inmutabilidad (capa de servicio)
@@ -25938,6 +25991,8 @@ aplicada e inventario de multitenencia actualizado.
 - Acotación de listado: una organización ve las suyas + las publicadas (organizacion_id
   nulo o publicada_en no nulo); nunca las no publicadas de otra.
 - code_sha256 se calcula al escribir y coincide con el código.
+- La invariante por origen: autoservicio sin code falla; paquete con code falla; paquete
+  sin version_paquete falla.
 ```
 
 **Verificación**: suite del directorio + higiene verdes; `alembic current` con la revisión;
@@ -25966,6 +26021,12 @@ de cada versión, validado en dos puntos: al registrar y antes de ejecutar.
 ## Contrato de salida
 - ExtractionResult existente (tables/metrics/free_text). NO inventar un segundo esquema
   de salida: el que hay es el que consumen los nodos, y dos esquemas divergen.
+
+## El contrato es el mismo objeto para los dos orígenes
+- Un modelo Pydantic ContratoFuncion (entrada + salida) que se serializa a los JSONB de
+  FUN.1 y que es TAMBIÉN lo que declara una función empaquetada (FUN.5) en su descriptor.
+  Un solo validador; ninguna rama «si es paquete». El test de FUN.5 que registra un
+  paquete con contrato incoherente reutiliza este validador sin tocarlo.
 
 ## Validación en dos puntos
 1. Al registrar una versión: el contrato es coherente (slots con kind válido, parámetros
@@ -26016,6 +26077,12 @@ existir como camino activo.
   pipeline, que no cambia. Función retirada o versión inexistente: el bloque falla EN
   ALTO con mensaje que nombra la función — nunca vacío en silencio (la lección de los
   perfiles sin configurar).
+- La resolución se encapsula en un ResolvedorDeFuncion con un único método que devuelve
+  «lo ejecutable» (código para el sandbox hoy; en FUN.5 también un callable in-process),
+  para que el nodo no sepa de orígenes. En este prompt solo existe el origen
+  autoservicio; FUN.5 añade el otro sin tocar el nodo.
+- El RunManifest registra funcion_id, version y code_sha256 de lo que corrió (hoy no
+  registra nada de esto: el código iba incrustado y no tenía identidad).
 
 ## Migración de datos (Alembic, data migration)
 - Cada bloque existente con options.code se convierte en HubFuncion v1 approved de la
@@ -26077,17 +26144,98 @@ referenciarla desde otra organización; consola y red limpias.
 
 ---
 
-### Prompt FUN.5 (RED/GREEN) — Consumo externo: `POST /api/v1/funciones/{id}/run` (tras REG)
+### Prompt FUN.5 (RED/GREEN) — El origen empaquetado: funciones que llegan por *entry point*
+
+**Modelo sugerido**: **Opus** — es la costura entre el repositorio de un tercero y el catálogo;
+las decisiones de confianza y de anclaje están tomadas arriba, pero encajarlas sin duplicar el
+validador ni el nodo exige criterio.
+
+**Objetivo**: que un equipo de desarrollo mantenga funciones en su propio repositorio, con su CI
+y su semver, y que la plataforma las registre, valide, referencie, ejecute y trace **igual** que
+las de autoservicio. Es la respuesta a «¿qué valor añade hacerlo en la herramienta en vez de en
+Claude Code?»: el código se queda donde lo escribe quien lo mantiene; la plataforma se queda con
+la revisión, el manifiesto, la trazabilidad y el contrato.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT FUN.5 (RED/GREEN) — origen paquete via entry points. Deploy: edge
+
+## El descriptor que exporta un paquete (contrato público mínimo, en app/core o en un
+## paquete govgenai-sdk ligero si ya existe uno para REG; si no, aquí y se mueve después)
+- FuncionEmpaquetada(nombre: str, version: str semver, contrato: ContratoFuncion (el de
+  FUN.2, sin variantes), run: Callable[[EntradaValidada], ExtractionResult]).
+- Grupo de entry points: govgenai.funciones. Cada entry point apunta a una instancia del
+  descriptor. La distribución (nombre del paquete pip) se lee de los metadatos del entry
+  point y forma, con el nombre, el entry_point «distribucion:nombre» de FUN.1.
+
+## Sincronización al arrancar (lifespan, como el resto de arranques)
+- Descubrir los entry points del grupo. Para cada uno: validar el contrato con el
+  validador de FUN.2 -> si es incoherente, el arranque FALLA EN ALTO nombrando el paquete
+  y la función (nunca registrar a medias ni saltársela con un warning).
+- Upsert de HubFuncion(origen=paquete, organizacion_id nulo, publicada_en = ahora si es
+  nueva). Si la version_paquete instalada no existe aún como HubFuncionVersion: crear
+  versión nueva (ordinal siguiente) con version_paquete, code nulo y code_sha256 = sha256
+  de inspect.getsource(run). Las versiones anteriores de esa función que ya no están
+  instaladas pasan a estado no_instalada (no se borran: hay manifiestos que las citan).
+- Un entry point que desaparece (paquete desinstalado): TODAS sus versiones pasan a
+  no_instalada; la función se conserva.
+- Idempotente: arrancar dos veces no crea nada nuevo.
+
+## Resolución (el ResolvedorDeFuncion de FUN.3 gana el segundo origen; el nodo no cambia)
+- funcion_ref anclada a version N de una función paquete: buscar la versión instalada
+  (estado approved) de esa función. Si su version_paquete tiene el MISMO mayor que la
+  anclada -> ejecutar esa (compatibilidad por contrato semver), y el RunManifest registra
+  la version_paquete EXACTA y su code_sha256, no la anclada. Mayor distinto, o ninguna
+  instalada -> fallo EN ALTO con mensaje que nombra función, mayor anclado y mayor
+  instalado.
+- La entrada se valida contra el contrato ANTES de llamar a run (mismo punto que FUN.2).
+- run se ejecuta in-process, en el executor de hilos si es síncrono (regla de asincronía
+  total); la salida se valida como ExtractionResult igual que la del sandbox.
+
+## Catálogo (FUN.4) y acciones
+- El DTO expone origen y, en paquete, distribución y version_paquete. acciones_permitidas
+  para una función paquete NO incluye versionar ni promover (se versiona con pip y ya es
+  de plataforma); sí incluye retirar (el superadmin puede vetar una instalada).
+
+## Fixture de pruebas
+- Un paquete mínimo bajo tests/fixtures/paquete_funcion_demo/ con pyproject y un entry
+  point real, instalado en editable en el entorno de tests (o registrado con
+  importlib.metadata simulado si instalar en la suite resulta frágil: decidirlo midiendo,
+  no suponiendo; y documentar la elección).
+
+## Tests (mínimo 8) — tests/modules/redaccion/test_fun5_paquete.py
+- Arrancar con el paquete demo crea la función (origen=paquete, ámbito plataforma) y su
+  versión con version_paquete y code_sha256 de la fuente.
+- Contrato incoherente en el paquete -> el arranque falla nombrándolo (no hay fila).
+- Idempotencia del arranque.
+- Una plantilla referencia la función paquete y ejecuta; el RunManifest lleva la
+  version_paquete exacta y el hash.
+- Mismo mayor instalado distinto del anclado (1.2.0 anclado, 1.3.0 instalado) -> ejecuta
+  1.3.0 y el manifiesto lo dice.
+- Mayor distinto (1.x anclado, 2.0.0 instalado) -> fallo en alto con el mensaje.
+- Paquete desinstalado -> versiones no_instalada, función conservada, bloque falla en
+  alto.
+- Entrada inválida -> error tipado SIN llamar a run (espía).
+- acciones_permitidas de una función paquete no contiene versionar ni promover.
+```
+
+**Verificación**: suite del directorio + higiene verdes; en navegador, la función del paquete demo
+aparece en el catálogo con su origen y su distribución, y una plantilla la referencia y genera.
+
+---
+
+### Prompt FUN.6 (RED/GREEN) — Consumo externo: `POST /api/v1/funciones/{id}/run` (tras REG)
 
 **Modelo sugerido**: **Sonnet** — endpoint sobre patrones ya establecidos (scopes de REG.2,
 sandbox de SBX).
 
 **Objetivo**: que una aplicación externa ejecute una función del catálogo por API, con PAT,
-cuota y rastro en el registro de actividad.
+cuota y rastro en el registro de actividad. Vale para los dos orígenes: la API no sabe de dónde
+viene el código, solo del contrato.
 
 **Instrucciones al agente**:
 ```markdown
-# PROMPT FUN.5 (RED/GREEN) — ejecución de funciones por API. Deploy: edge
+# PROMPT FUN.6 (RED/GREEN) — ejecución de funciones por API. Deploy: edge
 
 - Scope nuevo funciones:execute en el catálogo PAT (emisible por superadmin y admin).
 - POST /api/v1/funciones/{funcion_id}/run con version explícita en el cuerpo (el
@@ -26112,16 +26260,16 @@ lectura del registro (REG.5).
 
 ---
 
-### Prompt FUN.6 — Verificación de punta a punta y documentación
+### Prompt FUN.7 — Verificación de punta a punta y documentación
 
 **Modelo sugerido**: **Sonnet**.
 
 **Objetivo**: el ciclo completo recorrido de verdad, y el contrato escrito para el siguiente
-consumidor (Fase 3).
+consumidor (Fase 3) y para el primer equipo que empaquete una función.
 
 **Instrucciones al agente**:
 ```markdown
-# PROMPT FUN.6 — cierre del bloque
+# PROMPT FUN.7 — cierre del bloque
 
 ## Recorrido en navegador (evidencias en el informe de cierre)
 1. Proponer un script, aprobarlo: aparece como función v1 en el catálogo.
@@ -26129,13 +26277,20 @@ consumidor (Fase 3).
 3. Publicar v2 con un arreglo: las dos plantillas siguen en v1 (comprobado); adoptar v2
    en una; regenerar y ver el arreglo solo ahí.
 4. Promoverla como superadmin; referenciarla desde otra organización.
-5. read_console_messages y read_network_requests limpios en cada paso.
+5. La función del paquete demo (FUN.5) aparece con su origen y distribución; una
+   plantilla la referencia y genera; el RunManifest del informe muestra version_paquete y
+   hash.
+6. read_console_messages y read_network_requests limpios en cada paso.
 
 ## docs/CATALOGO_FUNCIONES.md
-- El contrato campo a campo, el ciclo de versiones (draft/approved/retired, inmutabilidad,
-  anclaje), quién puede qué (autora/superadmin/consumidora), y el puente a Fase 3: las
-  acciones de fase de expediente referencian plantilla@versión y función@versión — con el
-  enlace a la restricción escrita en Plan_TDD_Fase3.md.
+- El contrato campo a campo, el ciclo de versiones (draft/approved/retired/no_instalada,
+  inmutabilidad, anclaje), quién puede qué (autora/superadmin/consumidora), y el puente a
+  Fase 3: las acciones de fase de expediente referencian plantilla@versión y
+  función@versión — con el enlace a la restricción escrita en Plan_TDD_Fase3.md.
+- Sección «Empaquetar una función»: el descriptor, el grupo de entry points, qué valida
+  la plataforma al arrancar, la regla del mayor de semver, qué registra el manifiesto, y
+  la frontera de confianza dicha sin rodeos (corre in-process; quien instala responde).
+  Es el documento que se le da al primer equipo externo, así que se escribe para él.
 ```
 
 **Al cerrar el bloque**: suite completa desde Git Bash; `.bat` humano solo si queda algo
