@@ -13,6 +13,7 @@ S’ha plantejat també una una quarta qüestió, sobre l'arquitectura dels xatb
 - **4 · ¿Generador de codi o framework?** — *Actualment* crear un xatbot és un `INSERT` de configuració i un motor únic la interpreta en temps de petició. L'«extensió de LangGraph» que proposa el correu és com està construït l'interior; obrir-la a tercers —dins i fora del sistema, via API— es recull com a proposta per a la reunió.  
 - **4·bis · Scripts copiats** — Actualment en el mòdul informes es poden generar scripts. El codi d'un script aprovat s'incrusta copiat al bloc de cada plantilla: un bug s'arregla N vegades. Com a consequència del suggeriment es planifica un catàleg de funcions versionades i compartibles — hui per als informes, en el futur per actes activitats o  fases d'expedient. A més, per a futures evolucions es valora la possiblitat d’evolucionar els perfils i les estratègies de l’actual fórmula a través del repositori a un model de plugins. .  
 - **5 · SSO institucional i comptes de persona** — *Depén d'un requisit extern.* El SAML està implementat i apagat per configuració. El que el bloqueja no és codi: són les metadades de l'IdP i un nom DNS institucional. Mentrestant no hi ha comptes de persona amb contrasenya —el paquet de treball per a tindre'n ja està planificat— i el pilot funciona amb sis comptes elevats que caldrà baixar.
+- **6 · Procediments al costat de la normativa** — *Recomanat: un sol assistent, sense enrutador.* Els assistents del pilot no contesten qüestions de procediment (servei que tramita, terminis, silenci) perquè això no és a la normativa: és al catàleg de procediments, ara en revisió pels serveis. La gent pregunta les dues coses barrejades i sovint no les distingix, així que les fitxes validades entren al mateix corpus com a documents amb el seu propi tipus, i el circuit d'actualització reutilitza la sincronització que ja manté el corpus normatiu. El paquet de treball ja està planificat; el prerequisit és la validació de les fitxes.
 
 ---
 
@@ -231,6 +232,50 @@ El paquet és petit perquè **l'alta manual de persones ja existix**: els endpoi
 
 ---
 
+### Qüestió 6 · del pilot — el catàleg de procediments
+
+## Normativa i procediment: un sol assistent, no un enrutador
+
+Els assistents del pilot funcionen bé sobre la normativa, però no contesten el que la normativa no diu: quin servei tramita, per on es presenta la sol·licitud, quin termini màxim hi ha, què significa el silenci. Eixa informació és al **catàleg de procediments** (363 fitxes estructurades: servei, col·lectiu, documentació, terminis, silenci, normativa aplicable, enllaç de tramitació), que ara mateix està en revisió: s'ha generat una proposta de posada al dia fitxa a fitxa i els serveis han de completar-la i validar-la.
+
+La qüestió de disseny era si convenia **un segon assistent de procediments amb un enrutador davant**, o **integrar les fitxes al mateix assistent de normativa**. La recomanació és clarament la segona, per tres raons:
+
+- **La gent pregunta les dues coses barrejades, i sovint no les distingix.** Un enrutador obliga a classificar la pregunta *abans* de recuperar — exactament en el punt on el mateix usuari és ambigu. «Puc demanar accés a un expedient, i com ho tramite?» és mitat i mitat: l'enrutador tria un costat i la resposta perd l'altre, en silenci. I la millor resposta a una pregunta mixta necessita **les dues coses al mateix context**: la fitxa (termini d'un mes, silenci negatiu, es presenta al registre electrònic) al costat dels articles de la llei que ho regula. Això només passa si una única recuperació pot tornar-les juntes.
+- **L'arquitectura ja tracta l'heterogeneïtat com a metadades, no com a assistents separats.** La recuperació filtra per àmbit i matèries que viuen en taules (dades, no codi); les fitxes entren amb la seua matèria mapejada a eixe vocabulari i amb un **tipus de document** propi (norma / procediment). L'enrutador, en canvi, exigiria construir una peça que hui no existix i duplicar tot el que està calibrat una vegada: llindars, quotes, tema, credencial del giny.
+- **La fitxa ja enllaça la seua normativa** (camps de normativa aplicable, que la revisió del catàleg està precisament posant al dia: s'han detectat 28 fitxes citant normes derogades i 154 sense enllaç). En un corpus únic, eixos enllaços es convertixen en cites navegables.
+
+El que la integració **sí que exigix**:
+
+1. **Distingir l'autoritat en la resposta, no en l'enrutament.** Una norma té vigència; una fitxa té *data d'actualització i servei responsable*. La resposta ha de citar distint: «segons la Normativa X (art. N)» front a «segons la fitxa del catàleg (Servei Y, actualitzada el …)». És el mateix mecanisme que ja s'usa per a la vigència no validada: una marca per document que el model ha de verbalitzar.
+2. **Recalibrar amb l'instrumental que ja existix.** Afegir 363 documents curts canvia la distribució de la recuperació: es mesura abans i després amb el lot de consultes reals que va servir per a calibrar els llindars del pilot, i s'hi afigen preguntes mixtes noves.
+3. **La porta d'entrada és la validació del servei.** Hui 206 de les 362 fitxes analitzades tenen alguna bandera. Un assistent que responga procediment des de fitxes sense validar és pitjor que un que decline: repetiria amb seguretat una norma derogada. **El catàleg actual no s'ingerix tal qual**: entren les fitxes a mesura que els serveis les validen.
+
+## El circuit d'actualització: el formulari edita, el catàleg publica, el corpus sincronitza
+
+La segona pregunta era com muntar l'actualització quan un servei modifica una fitxa. La bona notícia és que este problema **ja està resolt una vegada** per a la normativa, i el catàleg és un cas més fàcil: la font no és un PDF que cal curar, és un registre estructurat que ompli un formulari.
+
+- **La fitxa validada es convertix en document del corpus amb una plantilla determinista.** Els camps del formulari es rendixen mecànicament al format que el corpus exigix (títol i seccions: què és, qui pot, documentació, terminis, silenci, on es tramita, normativa aplicable), amb metadades de servei, matèria, col·lectiu, data d'actualització i qui va validar. Sense IA i sense curació per actualització: la part cara —revisar el contingut— la fa el servei al formulari.
+- **L'estat de la fitxa és la porta.** Només publica la fitxa **validada**; un esborrany o una edició pendent de valorar no toca el corpus. L'aprovació humana és la validació del servei; a partir d'ahí, l'automatització manté.
+- **La sincronització existent fa la resta.** El mecanisme que manté el corpus normatiu ja compara per empremta (només reingerix el que ha canviat: editar una fitxa costa segons), fa passada en sec, poda el que es retira i porta una **salvaguarda de proporció** perquè una exportació trencada no puga buidar el corpus.
+- **Cadència: programada i diària, no per avís immediat — al principi.** Els procediments no canvien per minuts; una passada diària amb un «sincronitzar ara» manual per a la correcció urgent cobrix el cas. L'avís immediat des del formulari acobla les dues aplicacions i no compra quasi res; queda com a evolució si apareix necessitat real. Les primeres passades es fan supervisades i després es programen.
+- **Cicle complet**: fitxa retirada del catàleg → poda amb salvaguarda; la versió en castellà es genera després de la validació i s'emparella per identificador de fitxa; i opcionalment **caducitat**: una fitxa sense revalidar en N mesos rep una marca que l'assistent verbalitza — decisió dels serveis, no de codi.
+
+## Com es llig el catàleg: estat complet, no «actualitzats en les últimes hores»
+
+La informació viu a la base de dades del catàleg i es publica a la web. Per a no haver de llegir la web, cal una **consulta de descàrrega del dataset**. Caldria  una **consulta HTTPS autenticada** (token de servei) que torne **l'estat actual complet de les fitxes validades** del catàleg de procediments, en JSON, amb este contracte:
+>
+> 1. **Només fitxes validades.** Esborranys i edicions pendents de valorar no apareixen: la consulta exposa l'estat *publicat*, no la base de dades.
+> 2. **Completitud declarada.** La resposta porta `generated_at` (quan es va generar) i `total` (quantes files conté), i el consumidor comprova que ha rebut `total` files. Una resposta truncada no es pot confondre amb un cens.
+> 3. **Per fitxa**: identificador **estable** (el mateix per a sempre, encara que canvie el títol), llengua, tots els camps de la fitxa (títol, servei, contingut, descripció, col·lectiu, documentació, terminis, silenci, normativa aplicable amb enllaços, òrgan de resolució, enllaç de tramitació, matèria) i **data d'última actualització**. Opcional però benvingut: una empremta (hash) del contingut.
+> 4. **Les baixes, explícites si pot ser**: una fitxa retirada apareix amb estat `retirada` i la seua data (millor que desaparéixer sense més, perquè distingix «este procediment ja no s'oferix» d'un error de l'exportació). Si no pot ser, l'absència del cens funciona com a baixa i la plataforma porta una salvaguarda que impedix podades massives per error.
+> 5. **No cal cap filtre per dates ni per canvis**: la plataforma descarrega l'estat complet i detecta els canvis per empremta. Consum previst: una consulta diària, més alguna puntual manual.
+
+Amb això, el circuit queda: consulta del catàleg → conversió mecànica a documents del corpus → sincronització existent (altes, canvis i baixes per empremta, amb salvaguarda i informe de cada passada). L'única peça nova de veritat és la consulta del costat del catàleg; tota la resta ja està construïda i provada amb el corpus normatiu.
+
+**Seqüència:** el paquet de treball ja està planificat i es pot executar **per tandes**, a mesura que els serveis validen (que a més permet mesurar l'efecte en la recuperació amb volum creixent). Els prerequisits externs són dos: eixa validació i la consulta del dataset; res del paquet no depén del desplegament ni de la resta de propostes.
+
+---
+
 ### Per a la reunió
 
 ## Decisions a tancar
@@ -261,6 +306,12 @@ El paquet és petit perquè **l'alta manual de persones ja existix**: els endpoi
       
 13. **Els sis comptes elevats del pilot: quan es baixen, i a quin rol cada u?** Es desfà amb el paquet de comptes de persona, creant eixes persones amb el seu rol real i la seua organització. El que cal decidir és **qui ha de ser revisor i qui administrador**, i si eixe paquet s'avança a la resta. **Recomanació:** avançar-lo, perquè el pilot ja està en marxa i cada dia que passa és un dia amb sis superadministradors i una contrasenya compartida.
 
+14. **Què significa «fitxa validada» del catàleg de procediments, i qui ho decidix.** És la porta de tot el circuit: cap fitxa entra a l'assistent sense passar-la. Cal fixar qui la marca (el servei responsable? amb vistiplau de qui?) i quina revisió mínima comporta — com a mínim, la normativa aplicable posada al dia, que és on la revisió ha trobat més banderes.
+
+15. **Les fitxes entren per tandes per servei, o totes quan acabe la revisió?** **Recomanació:** per tandes, a mesura que cada servei valida. Permet mesurar l'efecte en la recuperació amb volum creixent i dóna valor al pilot des de la primera tanda, en lloc d'esperar el servei més lent.
+
+16. **Caducitat de les fitxes: què passa amb una fitxa que ningú no revalida?** Opcions: marcar-la com a pendent de revisió (l'assistent ho diu en citar-la), retirar-la del corpus, o no fer res. **Recomanació:** marcar-la, amb un termini (per exemple, dotze mesos) i avís al servei responsable — retirar informació correcta per vella és pitjor que servir-la amb l'avís.
+
 ---
 
-Fonts: el codi real del repositori — per a la qüestió 4: `server/app/routers/hub_chatbots_router.py` (creació de xatbots), `server/app/modules/agents_hub/agent/public_graphs/` (factoria, registre de perfils, estratègies) i `frontend/src/admin/pages/ChatbotsPage.tsx` (fragment del widget); per a la seua continuació: `server/app/routers/redaccion/scripts_router.py` i `server/app/modules/redaccion/contracts/blocks.py` (el codi incrustat) i `server/app/modules/redaccion/pipelines/` (contractes i factoria d'extracció); per al registre: `server/app/core/auth/pat/scopes.py` i `server/app/modules/redaccion/services/anonymization/`; per a la curació: `server/app/modules/curation/` (`quality_job.py`, `site_crawler.py`, `selection_service.py`); per al SSO: `server/app/core/auth/saml/` i `server/app/routers/saml_auth_router.py` — i la planificació interna del projecte, on cada proposta d'este informe té el seu paquet de treball detallat pas a pas.  
+Fonts: el codi real del repositori — per a la qüestió 4: `server/app/routers/hub_chatbots_router.py` (creació de xatbots), `server/app/modules/agents_hub/agent/public_graphs/` (factoria, registre de perfils, estratègies) i `frontend/src/admin/pages/ChatbotsPage.tsx` (fragment del widget); per a la seua continuació: `server/app/routers/redaccion/scripts_router.py` i `server/app/modules/redaccion/contracts/blocks.py` (el codi incrustat) i `server/app/modules/redaccion/pipelines/` (contractes i factoria d'extracció); per al registre: `server/app/core/auth/pat/scopes.py` i `server/app/modules/redaccion/services/anonymization/`; per a la curació: `server/app/modules/curation/` (`quality_job.py`, `site_crawler.py`, `selection_service.py`); per al SSO: `server/app/core/auth/saml/` i `server/app/routers/saml_auth_router.py`; per als procediments: el projecte de revisió del catàleg (363 fitxes estructurades, informe de desfasament normatiu inclòs) i la sincronització del corpus (`server/app/modules/agents_hub/ingestion/corpus/`) — i la planificació interna del projecte, on cada proposta d'este informe té el seu paquet de treball detallat pas a pas.  
