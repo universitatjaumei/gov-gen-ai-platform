@@ -3,17 +3,20 @@
 # Un DCO que nadie comprueba se incumple sin que nadie lo note, y la gracia del DCO es
 # poder acreditar la procedencia del código dentro de unos años. Ver `CONTRIBUTING.md`.
 #
-# Se revisan los commits de cada pull request y los de cada push a `main`: la política
-# vale también para el principal, porque un mantenedor que se exceptúa de su propia
-# política la deja sin fuerza. El historial anterior al 2026-08-21 queda fuera —es previo
-# a la adopción—, y por eso nunca se recorre el historial completo, sólo el tramo nuevo.
+# Se revisan los commits de cada pull request y los de cada push a `main` y a `desarrollo`:
+# la política vale también para el principal, porque un mantenedor que se exceptúa de su
+# propia política la deja sin fuerza. `desarrollo` entró el 2026-09-02, cuando el trabajo
+# pasó a empujarse ahí para que un push no despliegue: comprobar la firma al llegar a `main`
+# sería avisar cuando ya hay veinte commits que rehacer. El historial anterior al 2026-08-21
+# queda fuera —es previo a la adopción—, y por eso nunca se recorre el historial completo,
+# sólo el tramo nuevo.
 name: DCO
 
 on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    branches: [main, desarrollo]
 
 jobs:
   signed-off-by:

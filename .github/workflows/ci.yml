@@ -2,7 +2,12 @@ name: CI — Gov Gen AI Platform
 
 on:
   push:
-    branches: [main]
+    # `desarrollo` está aquí y NO en `deploy.yml`, y ésa es toda la gracia: desde el
+    # 2026-09-02 el trabajo se empuja a esa rama para que un push no despliegue producción,
+    # y `main` se reserva para desplegar (por bloque o conjunto de bloques). Sin esta línea,
+    # empujar a la rama no ejecutaría **nada**: se perdería la comprobación que hoy corre en
+    # cada push, que no es lo que se quería evitar.
+    branches: [main, desarrollo]
   pull_request:
     branches: [main]
 

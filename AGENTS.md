@@ -30,6 +30,23 @@ verificación en navegador si toca UI) → actualizar `planificacion/PROJECT_STA
 El commit por prompt es lo que hace reversible un bloque largo: si el prompt 5 rompe
 el 3, hay un punto exacto al que volver.
 
+### Se trabaja en `desarrollo`; `main` es para desplegar
+
+**Nunca commitees ni empujes a `main`.** El trabajo va en la rama **`desarrollo`**, y el paso a
+`main` es una decisión del usuario que se toma **por bloque o conjunto de bloques**, porque es lo
+que despliega: `.github/workflows/deploy.yml` dispara con `push: branches: [main]` y **sólo con
+eso**. Decisión del usuario del 2026-09-02, después de que un commit que sólo tocaba
+`scripts/publica_sitio_corpus.sh` desplegara producción entera —`scripts/` no está en
+`paths-ignore` porque de ahí salen ficheros que sí viajan a la máquina—, con sus 60-90 s de
+reinicio y su aviso de la vigilancia.
+
+- **CI y DCO sí corren en `desarrollo`**, añadida a los dos `on: push`. Empujar a la rama no
+  despliega pero sigue comprobando; perder eso no era lo que se quería evitar.
+- **`deploy.yml` no lleva la rama, y ése es el punto entero.** Si alguna vez aparece ahí,
+  desaparece la separación.
+- La regla de arriba, «sin push», sigue valiendo **dentro** del bloque: se empuja al cerrarlo, y a
+  `desarrollo`.
+
 ### Todos los commits van firmados (DCO)
 
 `git commit -s`, que añade al final del mensaje:
