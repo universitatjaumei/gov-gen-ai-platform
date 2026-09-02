@@ -155,6 +155,21 @@ def test_nginx_sirve_el_panel_desde_su_subdirectorio() -> None:
     )
 
 
+def test_las_redirecciones_de_nginx_no_inventan_el_esquema() -> None:
+    """`https://…/panel` no puede contestar `Location: http://…/panel/`.
+
+    nginx compone la URL absoluta con su propio esquema, y el suyo es `http` porque el TLS lo
+    termina Caddy. Medido en producción el 2026-09-02 al verificar DOM.5: el 301 de la
+    dirección corta salía en claro. Funciona —Caddy devuelve a https y el HSTS de la
+    aplicación hace que el navegador ni salga—, pero es un salto que no hace falta, y la
+    forma de no tenerlo es que la `Location` sea relativa.
+    """
+    assert "absolute_redirect off" in _texto(NGINX), (
+        "Falta `absolute_redirect off;`. Es una línea y evita que cada `return 301` de este "
+        "fichero degrade el esquema."
+    )
+
+
 def test_el_proxy_no_le_quita_el_prefijo_a_la_imagen() -> None:
     """Es la comprobación que mantiene el contenedor honesto abierto directo."""
     activas = [

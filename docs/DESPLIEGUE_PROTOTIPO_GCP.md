@@ -1,8 +1,13 @@
 # Despliegue del prototipo en GCP — sitio de normativa + asistente público
 
 > **Escrito el 2026-08-16.** Alcance: un **prototipo** para que un grupo de personas lo
-> pruebe, **sin dominio propio**. No sustituye al bloque Deploy de `planificacion/Plan_TDD_Fase1.md`
+> pruebe. No sustituye al bloque Deploy de `planificacion/Plan_TDD_Fase1.md`
 > (D.0–D.6), que es el despliegue en condiciones; esto es lo mínimo para que se pueda usar.
+>
+> **Ya tiene dominio propio (2026-09-02).** Decía «sin dominio propio» y desde el bloque DOM
+> `normativa.uji.es` sirve la portada, el cercador, las fichas, la API y el panel. El reparto
+> completo de nombres y rutas está en **3.sexies**, que es la sección a leer antes de tocar el
+> proxy.
 >
 > **De qué repositorio se despliega (2026-08-21).** De este, el principal. La gobernanza del
 > proyecto prevé que cada organización despliegue desde su propio fork (ver `CONTRIBUTING.md`),
@@ -255,12 +260,69 @@ Tres cosas que conviene saber antes de necesitarlo con prisa:
 
 ---
 
+## 3.sexies El dominio institucional, y el reparto de rutas (DOM, 2026-09-02)
+
+El registro A de `normativa.uji.es` a `34.175.38.129` apareció el 2026-09-02, y con él el
+subdominio institucional pasó de estar pedido a estar en marcha. El certificado ya estaba
+cargado en Secret Manager desde D.8, así que **funcionó por SNI sin tocar nada**: cadena de
+HARICA/GÉANT, `CN=normativa.uji.es`, válida del 1 de septiembre de 2026 al **19 de marzo de
+2027**.
+
+Lo primero que sirvió el dominio fue **el login del panel**, porque el fragmento de rutas de
+Caddy mandaba al frontend todo lo que no fuera API ni salud. El reparto de ahora:
+
+| Dirección | Qué sirve | Quién |
+|---|---|---|
+| `normativa.uji.es/` | la portada pública: presentación e índice | el bucket, `index.html` |
+| `normativa.uji.es/cercador` | el cercador de normativa | redirección 301 a `/cercador.html` |
+| `normativa.uji.es/gerencia` | el cercador económico-administrativo | redirección 301 a `/cercador_gerencia.html` |
+| `normativa.uji.es/html/<norma>.html#art-63` | la ficha de una norma, en su artículo | el bucket, **sin cambiar de forma** |
+| `normativa.uji.es/pdf/…`, `/img/…`, `/widget.iife.js` | PDF, imágenes y el widget | el bucket |
+| `normativa.uji.es/api/*` | la API | `app:8000` |
+| `normativa.uji.es/health` | la salud | `app:8000` |
+| `normativa.uji.es/panel/` | **el panel de gestión, y el login** | `frontend:80` |
+
+**El nombre provisional sirve exactamente lo mismo**, panel incluido, y con el mismo prefijo. No
+es economía de configuración: `base` es de tiempo de compilación, así que la imagen del frontend
+referencia `/panel/assets/…` sea quien sea el que la sirva. Servir el panel en la raíz de un
+nombre y bajo prefijo en el otro pediría dos imágenes del frontend.
+
+Tres cosas que conviene saber antes de tocar esto:
+
+- **La raíz del bucket no es su `index.html`.** Devuelve 200 con `ListBucketResult`, el
+  inventario de todos sus objetos: el mapeo de `/` a `index.html` es la configuración de *sitio
+  web* de GCS, y eso exige el balanceador HTTPS que este despliegue evitó a propósito (18-25
+  €/mes). De ahí el `rewrite / /index.html` del Caddyfile. Quitarlo publica el inventario.
+- **El proxy al bucket reescribe la cabecera `Host`.** Con la forma virtual-hosted y el `Host`
+  del cliente, GCS no sabe a qué bucket se refiere y responde 404 a todo el sitio, fichas
+  incluidas.
+- **El prefijo del panel se dice una vez por capa**: `ARG VITE_BASE_PATH` en
+  `frontend/Dockerfile`, `location /panel/` en `frontend/nginx.conf` y el matcher del
+  `deploy/vm/Caddyfile`. Son tres ficheros y una sola verdad; cuando divergen no hay error en
+  ningún log, hay una pantalla en blanco con 404 en la consola. Lo fija
+  `server/tests/infra/test_dom2_el_panel_bajo_su_prefijo.py`.
+
+**Qué sigue apuntando al nombre provisional**, y por eso no se retira todavía: el paso de
+comprobación de `deploy.yml` (`https://$GOVGENAI_HOST/health` y las dos rutas de `/docs`), la
+comprobación de tiempo de actividad de D.6 con su alerta, y cualquier enlace ya enviado por
+correo. Retirarlo el mismo día que se estrena el dominio no gana nada.
+
+**Lo que no se ha cerrado**: el bucket sigue siendo público, así que su URL sirve las mismas
+páginas y `CORS_ALLOWED_ORIGINS` conserva ese origen. Cerrarlo obligaría a que Caddy se
+autenticara contra GCS —el `reverse_proxy` a secas no lo hace— y es un cambio propio.
+
+---
+
 ## 4. Lo que este prototipo deja fuera a propósito
 
-- **Dominio propio.** Decisión del usuario: es un prototipo. El bucket sirve por HTTPS con el
-  dominio de Google, y la API va por `sslip.io` con certificado de Let's Encrypt (ver 3.ter).
-- **El asistente de Gerencia.** Es interno (`restricted` + grupo SAML) y no tiene sentido en
-  un prototipo público. Se prueba desde el panel.
+- ~~**Dominio propio.**~~ **Ya no**: `normativa.uji.es` sirve el sitio y la API desde el
+  2026-09-02 (ver 3.sexies). Lo que sigue fuera es **un dominio y un sitio de corpus por
+  organización**: `CORPUS_SITE_BASE_URL` es una variable global y `HubOrganizacion` no tiene
+  columna para su dominio ni para su sitio. Sería una columna anulable con la cascada que ya
+  existe, así que hacerlo hoy o en seis meses cuesta lo mismo.
+- ~~**El asistente de Gerencia.**~~ **Es público**, y el usuario confirmó el 2026-09-02 que
+  puede seguir siéndolo: no hay nada comprometido en su corpus. Tiene su propio cercador
+  publicado (`/gerencia`) y su tarjeta en la portada.
 - **Copias de seguridad y vigilancia**, que son D.6.
 
 ## 5. Riesgos que conviene mirar antes de abrirlo a gente
