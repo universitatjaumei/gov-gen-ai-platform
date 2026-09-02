@@ -681,6 +681,16 @@ class HubUser(HubConfigBase):
         index=True,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    #: Contraseña de login local (USR.1), mientras el IdP institucional no esté configurado.
+    #:
+    #: **NULL es «login local deshabilitado»** —entra por SSO, o no entra—, y **jamás «pasa sin
+    #: comprobar»**: la lectura contraria es el hallazgo A1 de SEC.1 reabierto por la puerta de
+    #: atrás, y por eso `POST /auth/user/login` compara contra un hash señuelo cuando esto es
+    #: nulo. Mismo criterio, y mismo motivo, que `AdminAccount.hashed_password`.
+    #:
+    #: **Ortogonal a `origen`**, que dice quién creó la fila y no cómo entra: una persona puede
+    #: tener las dos vías, el ACS no toca esta columna y fijar contraseña no cambia `origen`.
+    hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     #: Quién creó la fila: `sso` (el ACS, Just-In-Time) o `manual` (una persona, IDE.3). El
     #: defecto es `sso` porque el ACS no va a escribirlo en cada entrada, y NULL no vale: la
     #: pantalla de personas distingue las dos procedencias.

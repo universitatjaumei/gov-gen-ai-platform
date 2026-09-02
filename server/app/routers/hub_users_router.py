@@ -31,12 +31,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import require_role
 from server.app.core.auth.models import UserInfo, UserRole
+from server.app.core.auth.tenancy import assert_org_access
+from server.app.core.security import hash_password
 from server.app.modules.agents_hub.database.config_models import HubModuleGrant, HubUser
 from server.app.modules.agents_hub.database.connection import get_async_session
 
 router = APIRouter(prefix="/hub/users", tags=["hub-users"])
 
 _require_superadmin = require_role(UserRole.SUPERADMIN.value)
+#: Fijar la contraseña de una persona lo puede hacer también quien administra su organización
+#: (USR.1). Ver `set_usuario_password` para por qué esta puerta es más ancha que las otras.
+_require_admin = require_role(UserRole.SUPERADMIN.value, UserRole.ADMIN.value)
 
 _ROLES = tuple(r.value for r in UserRole)
 
@@ -45,6 +50,13 @@ _ROLES = tuple(r.value for r in UserRole)
 # o sea `core/` dependiendo de un router. Se re-exporta porque es el nombre que usa el resto de
 # este fichero; quien la necesite fuera, la trae de `core`.
 from server.app.core.identidad import normalizar_correo  # noqa: E402
+
+# USR.1 — **el mismo contrato de contraseña, no un segundo con el mismo mínimo escrito otra
+# vez**: dos validaciones que hoy dicen `min_length=12` acabarían diciendo cosas distintas, y la
+# que se relajara sería la débil. Si USR.7 necesita un tercero, entonces es el momento de
+# sacarlo a `core/`; con dos, un import entre routers del mismo `Deploy: cloud` es más honesto
+# que una capa nueva para un modelo de un campo.
+from server.app.routers.auth_router import SetPasswordRequest  # noqa: E402
 
 
 # ============================================
@@ -328,6 +340,48 @@ async def update_user(
     await session.commit()
     await session.refresh(fila)
     return _a_lectura(fila)
+
+
+@router.patch(
+    "/{user_id}/password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    operation_id="setUsuarioPassword",
+)
+async def set_usuario_password(
+    user_id: uuid.UUID,
+    body: SetPasswordRequest,
+    user: UserInfo = Depends(_require_admin),
+    session: AsyncSession = Depends(get_async_session),
+) -> None:
+    """Fija o restablece la contraseña de login local de una persona (USR.1).
+
+    **Su gemelo `setAdminPassword` es sólo superadmin y éste no, a propósito**: quien da de alta
+    a sus probadores es quien administra su organización, y obligar a que cada contraseña pase
+    por el superadministrador convierte cada alta en un cuello de botella. La puerta se ensancha
+    sólo hasta ahí: un admin puede fijarla a una persona **de una organización que gestione**, y
+    quien no gestione ninguna no llega a nadie.
+
+    **La acotación la resuelve `tenancy.py` y no un `if` de aquí.** Es la regla del módulo: el
+    hallazgo A2 no fue que a un endpoint se le olvidara filtrar, fue que no había dónde. Una
+    persona sin organización (nivel plataforma) sólo la alcanza un superadministrador, que es lo
+    que `puede_acceder` responde cuando la organización es nula.
+
+    **No devuelve nada** —204— y el hash no sale por ninguna otra respuesta: `UsuarioRead` se
+    construye campo a campo y colarlo sería fácil, así que hay un test que lo vigila.
+
+    Lo que este endpoint **no** hace es cambiar la contraseña propia conociendo la anterior: eso
+    es USR.7, y es otro flujo porque exige comprobar la vieja para que una sesión robada no se
+    quede la cuenta.
+    """
+    fila = await session.get(HubUser, user_id)
+    if fila is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Persona no encontrada")
+
+    assert_org_access(user, fila.organizacion_id)
+
+    fila.hashed_password = hash_password(body.password)
+    session.add(fila)
+    await session.commit()
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
