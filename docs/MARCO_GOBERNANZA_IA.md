@@ -474,6 +474,9 @@ fuera de la plataforma. Se enumeran aquí para que la frontera quede explícita:
 - `AGENTS.md` — reglas de arquitectura vinculantes que implementan este marco.
 - `docs/EU_GOVERNANCE_CONCEPT_NOTE.md` y `docs/EU_GOVERNANCE_TOPICS.md` — proyección del marco hacia
   consorcios y financiación europea.
+- `docs/GOVERNANCA_PER_API.md` — inventario, mecanismo a mecanismo, de qué comprueba y registra la
+  plataforma y qué de ello es accesible por API para aplicaciones desarrolladas fuera (en
+  valenciano, preparado para la Unidad de Análisis y Desarrollo TI).
 - `docs/SANDBOX_SECURITY.md` — detalle del principio P11.
 - `docs/REDACCION_CONTRACT_FIRST.md` — aplicación de P4 y P5 al módulo de informes.
 - `Arquitectura.md` — arquitectura funcional y técnica.

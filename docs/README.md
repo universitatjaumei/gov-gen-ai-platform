@@ -33,6 +33,7 @@ todas envejecen igual:
 | Documento | Clase |
 |---|---|
 | [`MARCO_GOBERNANZA_IA.md`](MARCO_GOBERNANZA_IA.md) | Referencia viva — gobernanza, trazabilidad y protección de datos; los dos planos y qué obligación vive en cada uno |
+| [`GOVERNANCA_PER_API.md`](GOVERNANCA_PER_API.md) | Inventario de lo que la plataforma comprueba y registra (compliance as code) y qué de ello es accesible por API para aplicaciones desarrolladas fuera; seis candidatos no planificados (en valenciano) |
 | [`LICENCIA_ES.md`](LICENCIA_ES.md) | Referencia viva — la AGPL explicada en español: qué permite, qué obliga, qué **no** obliga, y qué significa para un pliego |
 | [`REQUISITOS_PUBLICACION_PLATAFORMA.md`](REQUISITOS_PUBLICACION_PLATAFORMA.md) | Referencia viva — qué hace falta para publicar la plataforma |
 | [`EU_GOVERNANCE_CONCEPT_NOTE.md`](EU_GOVERNANCE_CONCEPT_NOTE.md) · [`EU_GOVERNANCE_TOPICS.md`](EU_GOVERNANCE_TOPICS.md) | Referencia viva — encaje europeo del proyecto |
