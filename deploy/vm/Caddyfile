@@ -23,6 +23,22 @@
 #
 # Las rutas van en un fragmento y no copiadas en cada bloque: dos copias divergen: la primera
 # versión de este fichero ya demostró lo que pasa cuando la misma cosa se dice en dos sitios.
+#
+# ── El reparto, y por qué cambió (DOM.1, 2026-09-02) ─────────────────────────────────────────
+#
+# Hasta hoy este fragmento mandaba al panel todo lo que no fuera API ni salud. El día que
+# apareció el registro A de `normativa.uji.es`, eso significó que lo primero que servía el
+# dominio institucional era **el login**. El reparto de ahora:
+#
+#   /                          la portada pública del corpus (el bucket)
+#   /cercador, /gerencia       las dos direcciones cortas de los cercadores
+#   /html/…, /pdf/…, /img/…    el sitio del corpus, con la forma de sus URL intacta
+#   /api/*, /health            la aplicación
+#   /panel, /panel/*           el panel de gestión, y su login
+#
+# **Un solo fragmento para los dos nombres, y no es sólo economía**: `base` es de tiempo de
+# compilación, así que la imagen del frontend referencia `/panel/assets/…` sea quien la sirva.
+# Servir el panel en la raíz de un nombre y bajo prefijo en el otro pediría dos imágenes.
 
 (govgenai_rutas) {
 	encode zstd gzip
@@ -38,9 +54,46 @@
 		reverse_proxy app:8000
 	}
 
-	# Todo lo demás, el panel.
-	handle {
+	# El panel de gestión, y con él el login. **Sin despojar el prefijo**: lo sirve el nginx
+	# de la propia imagen en `/panel/`, así que el contenedor se comporta igual abierto
+	# directo que detrás de este proxy. Un `handle_path` que lo quitara por delante dejaría
+	# la imagen sirviendo en la raíz mientras su HTML pide `/panel/assets/…`, y eso sólo
+	# funciona con el proxy puesto.
+	#
+	# Las dos rutas van en un matcher con nombre porque `handle` acepta **un solo**
+	# argumento: `handle /panel /panel/*` no es un reparto más estricto, es un error de
+	# sintaxis que impide arrancar. `/panel` a secas es para quien escriba la dirección
+	# corta —nginx la redirige a `/panel/`— y el comodín, para las rutas de la aplicación y
+	# sus recursos.
+	@panel path /panel /panel/*
+	handle @panel {
 		reverse_proxy frontend:80
+	}
+
+	# Todo lo demás, el sitio del corpus publicado en el bucket.
+	handle {
+		# La raíz del bucket **no** es su `index.html`: devuelve 200 con `ListBucketResult`,
+		# el inventario de todos sus objetos. GCS sólo mapea `/` a `index.html` con la
+		# configuración de *sitio web*, y eso exige el balanceador HTTPS que este bloque
+		# evitó a propósito (18-25 €/mes). Así que se reescribe aquí.
+		rewrite / /index.html
+
+		# Las dos direcciones que la gente escribe y comparte. Redirección y no copia: la
+		# página canónica sigue siendo una sola, y los enlaces relativos de dentro del sitio
+		# (cercador→ficha, ficha→PDF) siguen resolviendo desde su ruta de siempre.
+		redir /cercador /cercador.html permanent
+		redir /gerencia /cercador_gerencia.html permanent
+
+		# Forma **virtual-hosted** y `Host` reescrito. Las dos cosas importan: la otra forma
+		# (`storage.googleapis.com/<bucket>/…`) comparte origen con todos los buckets del
+		# mundo, y sin reescribir `Host` GCS recibe `normativa.uji.es` y no sabe a qué bucket
+		# se refiere — 404 en todo el sitio, incluidas las 313 fichas que cita el asistente.
+		#
+		# El nombre llega por entorno: el mismo mecanismo tiene que servir a otra
+		# organización con otro bucket.
+		reverse_proxy https://{$CORPUS_BUCKET}.storage.googleapis.com {
+			header_up Host {upstream_hostport}
+		}
 	}
 
 	# `/docs` no se abre aquí a propósito: SEC.7 lo apaga en producción desde la propia

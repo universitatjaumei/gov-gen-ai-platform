@@ -171,6 +171,11 @@ services:
       - "443:443"
     environment:
       GOVGENAI_HOST: ${GOVGENAI_HOST:?falta GOVGENAI_HOST}
+      # El bucket del sitio del corpus, al que el proxy manda todo lo que no es API ni panel
+      # (DOM.1). **Exigido y no con defecto**: un `{$CORPUS_BUCKET}` vacío compone
+      # `https://.storage.googleapis.com`, y entonces la portada, los cercadores y las 313
+      # fichas fallan a la vez sin que ningún log diga por qué. Mejor no arrancar.
+      CORPUS_BUCKET: ${CORPUS_BUCKET:?falta CORPUS_BUCKET}
     volumes:
       - /opt/govgenai/Caddyfile:/etc/caddy/Caddyfile:ro
       # Sitios con certificado propio (D.8). El directorio puede estar VACÍO: el `import` del
