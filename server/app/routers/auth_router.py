@@ -3,6 +3,7 @@ Deploy: cloud
 """
 
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -13,6 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from server.app.api.deps import get_session, get_current_user
 from server.app.core.auth import UserInfo, create_token
 from server.app.core.auth.models import UserRole
+from server.app.core.config import get_settings
 from server.app.core.rate_limit import limitar_login
 from server.app.core.security import hash_password, verify_password
 from server.app.database.models import SuperAdminAccount, AdminAccount
@@ -144,6 +146,79 @@ async def login_admin(
     return TokenResponse(access_token=create_token(user_info))
 
 
+@router.post("/user/login", response_model=TokenResponse, operation_id="loginUsuario")
+async def login_usuario(
+    body: LoginRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> TokenResponse:
+    """Emite un JWT para una persona de `hub_users` con correo + contraseña (USR.2).
+
+    **Existe porque el IdP institucional no está configurado y eso no tiene fecha**: los
+    probadores del piloto tienen que poder entrar como ellos mismos en vez de compartir una
+    credencial de administración. Es provisional por definición, y `LOCAL_USER_LOGIN_ENABLED`
+    es lo que lo hace provisional de verdad: con `false` esta ruta responde **404**, como si no
+    existiera, en vez de 403 —que confirmaría que está ahí, apagada—.
+
+    **Las tres defensas son las de los otros dos logins, y están aquí por escrito porque
+    escribirlas de memoria es cómo se repite la curva** que costó SEC.1 y SEC.4:
+
+    1. `limitar_login` **lo primero**, antes de mirar la cuenta: comprobar la contraseña de una
+       cuenta que ya gastó su cupo es hacerle el trabajo a quien prueba diccionarios.
+    2. `verify_password` **siempre**, contra el hash guardado o contra `_HASH_SENUELO`. Sin eso
+       el caso «no existe» responde sin pagar bcrypt y el cronómetro delata qué correos están
+       dados de alta.
+    3. **El mismo 401** —mismo `detail`, mismas cabeceras— en los cuatro casos: no existe, sin
+       hash, inactiva y contraseña incorrecta. Un 403 para la inactiva diría que el correo
+       existe, así que también es 401.
+
+    **`hashed_password` NULL es «login local deshabilitado»**, jamás «pasa sin comprobar»: es el
+    hallazgo A1 y se cierra aquí igual que en `login_admin`.
+
+    **Y una persona no es un administrador.** El token lleva su rol real (`user`/`informer`) y
+    su organización, con los grupos de SAML vacíos como el resto de logins locales: los grupos
+    se leen de cada aserción, así que en una entrada local no hay ninguno que declarar. Con eso,
+    no pasa los guardas de superadmin ni de admin, y sin organización no abre ningún chatbot de
+    organización — que es lo que responde `tenancy.puede_acceder` de un no-superadmin.
+    """
+    if not get_settings().local_user_login_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+
+    limitar_login(request)
+
+    from server.app.modules.agents_hub.database.config_models import HubUser
+
+    result = await session.exec(
+        select(HubUser).where(HubUser.email == body.email.lower())
+    )
+    persona = result.first()
+
+    hash_almacenado = getattr(persona, "hashed_password", None) if persona else None
+    contrasena_valida = verify_password(body.password, hash_almacenado or _HASH_SENUELO)
+
+    if not persona or not persona.is_active or not hash_almacenado or not contrasena_valida:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # La columna existe desde AUTH.2 y hasta ahora sólo la escribía el ACS. La pantalla de
+    # personas la usa para decidir si una fila se puede borrar (REV.8), así que una entrada por
+    # esta vía tiene que contar igual que una por SSO.
+    persona.last_login_at = datetime.now(timezone.utc)
+    session.add(persona)
+    await session.commit()
+
+    user_info = UserInfo(
+        user_id=str(persona.id),
+        email=persona.email,
+        role=persona.role,
+        organizacion_ids=(str(persona.organizacion_id),) if persona.organizacion_id else (),
+    )
+    return TokenResponse(access_token=create_token(user_info))
+
+
 @router.patch(
     "/admins/{partner_id}/password",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -198,7 +273,6 @@ async def get_me(
     operativa, y adivinarla en el cliente sería inventarla.
     """
     from server.app.core.auth.modulos_service import modulos_del_usuario
-    from server.app.core.config import get_settings
 
     return {
         **current_user.to_dict(),

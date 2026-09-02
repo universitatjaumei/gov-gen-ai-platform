@@ -62,6 +62,16 @@ class Settings:
     # la configuración del despliegue: nunca vino de la aserción, así que no hay autoridad que
     # disputar. Por eso el ajuste se llama `..._ROLE_...` y no `IDENTITY_AUTHORITY` a secas.
     identity_role_authority: str = "app"
+    # USR.2 — el login local de una persona (`POST /auth/user/login`), que existe **porque el
+    # IdP institucional no está configurado y eso no tiene fecha**: los probadores del piloto
+    # tienen que poder entrar como ellos mismos.
+    #
+    # **El interruptor no es adorno: es lo que hace que esto sea provisional de verdad.** Sin
+    # él, «hasta que llegue el SSO» se convierte en «para siempre», que es como envejecen los
+    # apaños. Con `false` la ruta responde 404 —como si no existiera— y la acción desaparece del
+    # panel. El defecto es `true` **ahora**; cuando el SSO esté en marcha, el defecto es lo
+    # primero que hay que darle la vuelta.
+    local_user_login_enabled: bool = True
     # Subidas (SEC.6) — límite de tamaño y cuota de documentos por chatbot
     max_upload_mb: int = 10
     max_documents_per_chatbot: int = 0  # 0 = sin límite
@@ -110,6 +120,8 @@ def get_settings() -> Settings:
         saml_frontend_return_url=os.getenv("SAML_FRONTEND_RETURN_URL", ""),
         saml_organizacion_id=os.getenv("SAML_ORGANIZACION_ID", ""),
         identity_role_authority=os.getenv("IDENTITY_ROLE_AUTHORITY", "app").strip().lower(),
+        local_user_login_enabled=os.getenv("LOCAL_USER_LOGIN_ENABLED", "true").lower()
+        == "true",
         max_upload_mb=int(os.getenv("MAX_UPLOAD_MB", "10")),
         max_documents_per_chatbot=int(os.getenv("MAX_DOCUMENTS_PER_CHATBOT", "0")),
     )
