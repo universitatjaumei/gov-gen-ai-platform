@@ -25855,6 +25855,233 @@ configuración de chatbots que enumere los campos.
 
 ---
 
+## Bloque PLG — Perfiles y pipelines de recuperación descubiertos por *entry points* (PENDIENTE, planificado el 2026-09-02)
+
+> **Posición**: independiente de Deploy, REG, DIN y FUN. Conviene ejecutarlo **después de LANG**,
+> que toca la misma factoría de perfil (`_make_public_kb_rich`) para montar la política de
+> lengua: dos bloques editando la misma función en paralelo es un conflicto seguro. 2 prompts.
+>
+> **Lo que este bloque NO hace, a propósito**: congelar los protocolos de estrategia ni la firma
+> de factoría como contrato público con deprecaciones. Han cambiado dos veces en un mes por
+> medición (la puerta de calidad en HIB, la política de lengua en LANG) y congelarlos hoy sería
+> congelar errores conocidos. Se declaran **inestables (0.x)** por escrito, y el contrato se fija
+> el día que exista el primer tercero real con un perfil que mantener.
+
+**Origen**: el correo de desarrollo del 2026-09-02 («que la carga de las distintas estrategias sea
+dinámica, un sistema de plugins, es algo que puede afectar al diseño y conviene que esté previsto
+de inicio aunque no esté abierto a otros desarrolladores; ahora mismo las estrategias más core
+pueden ser ya plugins»). La respuesta (informe, decisión 9 revisada) fue **sí al descubrimiento,
+no a la congelación**. El argumento a favor que el correo no hizo y que decide el bloque: si el
+propio núcleo entra por el mismo mecanismo, el motor queda **obligado** a no depender de nada que
+no pase por el registro, que es justo hacia donde ya empuja el test de contrato de perfiles.
+
+**Estado de partida, medido**:
+
+- `GraphProfileRegistry.register_profile()` existe y es la costura; la llama `graph_factory.py`
+  al importarse, con tres perfiles (uno operativo, dos en `PERFILES_SIN_CONFIGURAR` que fallan
+  en alto). `register_profile` **sobrescribe en silencio** si el nombre se repite.
+- `PublicGraphProfile` es un `Enum` cerrado (`types.py`): un perfil de terceros **no cabe** por
+  construcción. Contradice la regla «el vocabulario es dato»: un nombre de perfil que llega por
+  instalación no puede ser miembro de un enum del núcleo.
+- `retrieval_pipeline_factory.get_pipeline()` es una cadena de `if` sobre `_VALID_MODES`
+  cerrada; `hub_chatbots_router.py` y `hub_organizaciones_router.py` tipan `retrieval_mode` como
+  `Literal[...]` cerrado y **no validan** `public_graph_profile` contra nada (es `str` libre).
+- El frontend lleva los nombres de perfil y de modo **hardcodeados** en
+  `frontend/src/admin/chatbots/schemas/chatbotSchemas.ts`, `ChatbotsPage.tsx` y
+  `ValoresPorDefectoPage.tsx`: viola la regla maestra de contrato (la UI no conoce las opciones
+  a priori) y sería lo primero que un perfil instalado no podría atravesar.
+- **El servidor no está instalado como paquete en el venv** (sólo `automatia_shared` lo está,
+  en editable; `server/pyproject.toml` no declara `[build-system]`). Consecuencia: unos *entry
+  points* declarados en el `pyproject.toml` del servidor **no serían visibles** para
+  `importlib.metadata` hasta que el proyecto sea instalable. Es la decisión técnica del bloque
+  (ver PLG.1).
+
+**Qué construye el bloque**: dos grupos de *entry points*, `govgenai.graph_profiles` (nombre del
+perfil → factoría `(cfg, deps, llm) -> CoreGraph`) y `govgenai.retrieval_pipelines` (nombre del
+modo → clase que implementa `RetrievalPipeline`); un cargador que los descubre al arrancar y los
+registra **por la misma API** que el núcleo, fallando en alto ante nombres duplicados o
+factorías que no cumplen el contrato; la validación de perfil y modo en los routers contra los
+registros y no contra literales; y el panel tomando las opciones del servidor.
+
+> **Desviación documentada respecto al informe**: el informe (Qüestió 4, decisión 9) nombra los
+> grupos `govgenai.graph_profiles` y `govgenai.strategies`. Una estrategia suelta no es
+> seleccionable por configuración —la compone un perfil—, así que un *entry point* de estrategia
+> no tendría consumidor. Lo que sí selecciona la configuración, además del perfil, es el
+> **pipeline de recuperación** (`retrieval_mode`); ese es el segundo grupo. Una estrategia nueva
+> entra dentro de un perfil, como hasta ahora.
+
+**Reglas duras del bloque PLG**:
+
+- **Un solo camino de registro.** El cargador de *entry points* y el núcleo usan la misma
+  función de registro; no hay un registro «de plugins» aparte. Si al cerrar el bloque el núcleo
+  puede declararse como *entry point* (PLG.1 decide), lo hace y `graph_factory.py` deja de
+  registrar por código; si no puede, registra por código **a través del mismo cargador**, y la
+  razón queda escrita.
+- **Fallar en alto, nunca sobrescribir.** Dos *entry points* con el mismo nombre, o un nombre que
+  colisiona con uno del núcleo, abortan el arranque nombrando ambas distribuciones. Una factoría
+  que no produce un `CoreGraph` con las cuatro estrategias no nulas se rechaza al arrancar, no
+  en la primera petición. `register_profile` deja de sobrescribir en silencio (hoy lo hace).
+- **El enum se retira.** `PublicGraphProfile` desaparece como tipo cerrado; el nombre de perfil es
+  una cadena validada contra el registro. `PERFILES_SIN_CONFIGURAR` se conserva como conjunto de
+  cadenas y sigue significando lo mismo. Sin shims ni re-exports (regla del proyecto).
+- **Sin sandbox, y se dice.** Un perfil o pipeline instalado corre en el proceso del servidor con
+  los datos del cliente. La confianza está en quien instala, como en cualquier plugin de pytest o
+  Airflow, y así lo dice `docs/GRAPH_PROFILES.md`. No se finge otra cosa.
+- **El test de contrato cubre lo instalado.** La parametrización de
+  `test_profile_contract.py` sale de `list_profiles()` **después** del descubrimiento, así que un
+  perfil instalado en el entorno de tests que no compile pone la suite en rojo. Lo que no está
+  instalado en CI no lo cubre nadie, y eso también se escribe.
+- **La UI no conoce las opciones.** Perfiles y modos llegan del servidor; ningún literal en
+  React ni en el esquema zod (regla maestra 1).
+
+---
+
+### Prompt PLG.1 (RED/GREEN) — El registro descubre por *entry points* y el núcleo entra por ahí
+
+**Modelo sugerido**: **Opus** — retira un enum del núcleo, cambia la validación de dos routers y
+decide sobre el empaquetado del servidor; tres cosas con efectos cruzados.
+
+**Objetivo**: que un paquete Python instalado pueda aportar un perfil de grafo o un pipeline de
+recuperación sin tocar el repositorio, y que el núcleo entre por el mismo camino.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT PLG.1 (RED/GREEN) — entry points govgenai.graph_profiles y govgenai.retrieval_pipelines
+
+## 0. La decisión de empaquetado, medida antes de escribir código
+- Comprobar qué cuesta que `server/` sea instalable: añadir `[build-system]` (hatchling o el
+  backend que ya use automatia_shared, por coherencia) a server/pyproject.toml, `uv lock`,
+  `uv sync --locked`, y que la suite y el arranque sigan igual. Si cuesta eso y nada más ->
+  el núcleo declara sus entry points en server/pyproject.toml y graph_factory.py deja de
+  registrar por código. Si rompe algo que no se arregla en el prompt (CI, Docker, el
+  --extra local-models) -> el núcleo registra por código a través del cargador (regla
+  «un solo camino»), y la razón va en docs/GRAPH_PROFILES.md y en HISTORIAL como
+  desviación documentada. No interrumpir por esto: es exactamente el caso de «desviación
+  entre el plan y el código real».
+- En cualquiera de los dos casos, `uv lock` va en el mismo commit (regla del proyecto).
+
+## 1. El cargador (agent/public_graphs/plugins.py o nombre equivalente, Deploy: edge)
+- descubrir_perfiles(): itera importlib.metadata.entry_points(group="govgenai.graph_profiles");
+  para cada uno: cargar, comprobar que es callable, registrar con register_profile(nombre,
+  factoría). Nombre = entry point name. Duplicado (con otro entry point o con el núcleo) ->
+  RuntimeError que nombra las dos distribuciones. Error de import -> RuntimeError que nombra
+  la distribución; nunca warning-y-seguir.
+- descubrir_pipelines(): igual sobre "govgenai.retrieval_pipelines"; el objeto cargado debe
+  cumplir RetrievalPipeline (runtime_checkable) o se rechaza.
+- Se invoca UNA vez en el lifespan de la app y en el conftest de tests (misma función).
+
+## 2. Los registros
+- GraphProfileRegistry.register_profile(nombre: str, factoría): nombre es str, no enum;
+  registrar dos veces el mismo nombre -> ValueError (hoy sobrescribe).
+- retrieval_pipeline_factory: de cadena de `if` a registro (dict nombre -> clase) con
+  register_pipeline()/get_pipeline()/list_modes(); los tres modos del núcleo se registran por
+  el mismo camino. get_pipeline con modo desconocido -> el mismo ValueError de hoy, con la
+  lista de disponibles.
+- Retirar PublicGraphProfile (types.py) y todos sus usos: grep -r a cero. Los nombres son
+  cadenas; PERFILES_SIN_CONFIGURAR pasa a frozenset[str].
+
+## 3. Validación en los routers (hub_chatbots_router, hub_organizaciones_router)
+- public_graph_profile y retrieval_mode (y sus default_* en organización) se validan contra
+  list_profiles()/list_modes() en el servicio, con 422 tipado que lista las opciones. Los
+  Literal[...] cerrados de los DTO se retiran: el contrato OpenAPI expone `str` y la lista
+  viva llega por el endpoint de PLG.2.
+- Un perfil en PERFILES_SIN_CONFIGURAR sigue rechazándose al crear/editar como hasta ahora.
+
+## 4. Verificación de arranque
+- Tras descubrir, por cada perfil registrado y no en PERFILES_SIN_CONFIGURAR: construir el
+  grafo con una PublicGraphConfig mínima y deps nulas y comprobar que devuelve CoreGraph con
+  las cuatro estrategias no nulas. Falla -> el arranque falla nombrando perfil y
+  distribución. Es lo que hoy hace test_profile_contract, llevado al arranque para lo
+  instalado.
+
+## 5. Fixture de pruebas
+- tests/fixtures/paquete_perfil_demo/: pyproject con un entry point en cada grupo (un perfil
+  que envuelve las estrategias de PUBLIC_KB_RICH con otro nombre; un pipeline trivial que
+  devuelve un RetrievalResult fijo). Instalado en editable en el entorno de tests, o
+  simulado vía importlib.metadata si instalar resulta frágil: decidirlo midiendo y
+  documentarlo (mismo criterio que FUN.5; si FUN.5 ya decidió, reutilizar su decisión).
+
+## 6. Documentación
+- docs/GRAPH_PROFILES.md: sección «Aportar un perfil o un pipeline desde un paquete»
+  (descriptor, grupos, qué valida el arranque, colisiones), sección «Estabilidad: los
+  protocolos de estrategia, RetrievalPipeline y la firma de factoría son 0.x» (pueden
+  cambiar entre versiones menores; se anuncia en HISTORIAL; sin política de deprecación
+  hasta el primer tercero), y la frontera de confianza dicha sin rodeos (in-process; quien
+  instala responde). Actualizar los pasos «Cómo añadir un perfil/pipeline nuevo» (ya no se
+  toca el enum).
+
+## Tests (mínimo 10) — server/tests/public_graphs/test_plg1_entry_points.py
+- El paquete demo aporta un perfil: aparece en list_profiles() y construye un CoreGraph.
+- El paquete demo aporta un pipeline: aparece en list_modes() y get_pipeline lo devuelve.
+- Entry point con nombre duplicado -> RuntimeError que nombra ambas distribuciones.
+- Entry point cuyo import falla -> RuntimeError que nombra la distribución (no warning).
+- Pipeline que no cumple el protocolo -> rechazado al descubrir.
+- register_profile dos veces el mismo nombre -> ValueError.
+- Crear un chatbot con perfil inexistente -> 422 que lista los disponibles; con el del
+  paquete demo -> 201.
+- retrieval_mode inexistente -> 422; el del paquete demo -> 201.
+- Perfil de PERFILES_SIN_CONFIGURAR -> rechazado igual que antes (regresión).
+- grep del árbol: PublicGraphProfile a cero (test de higiene, mismo patrón que los de
+  test_suite_hygiene).
+- test_profile_contract.py parametriza desde list_profiles() tras el descubrimiento e
+  incluye el perfil del paquete demo (comprobar que el id aparece en la colección).
+```
+
+**Verificación**: `server/tests/public_graphs/` + `tests/modules/agents_hub/unit/` + higiene
+verdes; arranque real del servidor con el paquete demo instalado y el log de descubrimiento
+visible; `uv lock --check` limpio; `grep -r PublicGraphProfile` a cero.
+
+---
+
+### Prompt PLG.2 (RED/GREEN) — El panel toma perfiles y modos del servidor
+
+**Modelo sugerido**: **Sonnet** — endpoint de lectura y sustitución de literales por datos del
+contrato; alcance cerrado.
+
+**Objetivo**: que un perfil o modo aportado por un paquete sea seleccionable desde el panel sin
+tocar el frontend, y que desaparezcan los literales hardcodeados.
+
+**Instrucciones al agente**:
+```markdown
+# PROMPT PLG.2 (RED/GREEN) — opciones de grafo desde el servidor. Deploy: cloud
+
+## Backend
+- GET /api/v1/hub/chatbots/opciones-de-grafo (nombre a criterio, coherente con el router):
+  {perfiles: [{nombre, configurable: bool, descripcion?}], modos: [{nombre, descripcion?}]}.
+  `configurable` = no está en PERFILES_SIN_CONFIGURAR. La descripción sale de la docstring
+  de la factoría/pipeline si existe (primera línea), y es opcional: no se inventa i18n para
+  nombres de terceros.
+- Acotado a admin/superadmin como el resto del router de chatbots.
+
+## Frontend
+- ChatbotsPage, ValoresPorDefectoPage y chatbotSchemas.ts dejan de conocer PUBLIC_KB_RICH,
+  RAG, MD_LONG_CONTEXT, MD_AGENT_SELECTOR: los selects se rellenan del endpoint; el esquema
+  zod valida `string` no vacío y la validación de pertenencia es del servidor (422 mostrado
+  tal cual). Los perfiles con configurable=false se muestran deshabilitados con su motivo.
+- Orval regenerado. i18n es/ca/en para las etiquetas de la pantalla (no para los nombres).
+- grep -r de los cuatro literales en frontend/src (fuera de generated y de tests que los
+  usen como datos de fixture) a cero.
+
+## Tests (mínimo 5)
+- El endpoint lista los perfiles y modos registrados, incluido el del paquete demo si está
+  instalado en el entorno de tests.
+- configurable=false para PERFILES_SIN_CONFIGURAR.
+- Frontend: los selects se generan desde la respuesta (test con MSW/mocks del hook), no desde
+  literales; un perfil no configurable aparece deshabilitado.
+- Frontend: el 422 del servidor se muestra como error del campo.
+- Higiene frontend: ningún literal de perfil/modo en src/ fuera de generated.
+```
+
+**Verificación**: navegador — crear un chatbot eligiendo el perfil del paquete demo, comprobar
+que se guarda y responde; `read_console_messages` y `read_network_requests` limpios. Suite
+frontend con `--no-file-parallelism` verde.
+
+**Al cerrar el bloque**: suite completa desde Git Bash; informe con la decisión de empaquetado
+tomada en PLG.1 y su razón; `.bat` humano previsiblemente innecesario (todo verificable en
+navegador).
+
+---
+
 ## Bloque FUN — Catálogo de funciones deterministas: de scripts copiados a funciones versionadas y compartidas (PENDIENTE, planificado el 2026-09-01)
 
 > **Posición**: FUN.1–FUN.5 no dependen del despliegue. FUN.6 (consumo externo) va **después del
