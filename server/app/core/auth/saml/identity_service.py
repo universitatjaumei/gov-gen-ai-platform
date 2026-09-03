@@ -149,11 +149,14 @@ class SamlIdentityService:
                 saml_groups=grupos,
             )
 
+        # `one_or_none()` por lo mismo que en `login_admin` (USR.5): `adminaccount.email` es
+        # único, así que aquí no puede haber dos filas — y si alguna vez las hubiera, es mejor
+        # levantar que reencontrar a quien entra con una cuenta indeterminada de las dos.
         admin = (
             await self.session.execute(
                 select(AdminAccount).where(AdminAccount.email == email)
             )
-        ).scalars().first()
+        ).scalars().one_or_none()
         if admin and admin.is_active:
             # Las mismas organizaciones que el login local le daría: entrar por el IdP no
             # puede significar entrar con menos permisos de los que la cuenta ya tiene.

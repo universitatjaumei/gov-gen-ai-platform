@@ -162,7 +162,13 @@ class AdminAccount(SQLModel, table=True):
 
     partner_id: str = Field(primary_key=True)
     name: str
-    email: str = Field(nullable=False)
+    #: **Único** (USR.5), como el de `SuperAdminAccount` y por el mismo motivo: dos sitios lo
+    #: consultan esperando una fila —`login_admin` y el ACS de SAML—, y con dos filas del mismo
+    #: correo cuál gana depende del orden que devuelva Postgres, que sin `ORDER BY` no está
+    #: definido. El síntoma sería un **401 intermitente**, imposible de diagnosticar desde
+    #: fuera. Se cerró cuando la tabla estaba vacía en producción y el índice no costaba
+    #: migración de datos.
+    email: str = Field(nullable=False, sa_column_kwargs={"unique": True}, index=True)
     # SEC.1 (hallazgo A1): hasta aquí esta tabla no tenía hash, así que el login de Admin no
     # comprobaba nada — no era un descuido de una rama, es que no había contra qué comparar.
     #

@@ -123,7 +123,11 @@ async def login_admin(
     result = await session.exec(
         select(AdminAccount).where(AdminAccount.email == body.email.lower())
     )
-    admin = result.first()
+    # `one_or_none()` y no `first()` (USR.5): con el índice único de `adminaccount.email` son
+    # equivalentes, y esto deja de compilar la suposición de que puede haber varias. Si algún
+    # día vuelven a poder —porque alguien quite el índice—, esto levanta en vez de entrar con
+    # una fila indeterminada, que es el 401 intermitente que el índice viene a cerrar.
+    admin = result.one_or_none()
 
     hash_almacenado = getattr(admin, "hashed_password", None) if admin else None
     # Hash de descarte: sin esto, una cuenta inexistente responde sin hacer bcrypt y el

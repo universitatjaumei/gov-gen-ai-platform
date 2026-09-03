@@ -46,8 +46,14 @@ def _sesion(*, admin=None, superadmin=None):
     session = MagicMock()
 
     resultado = MagicMock()
-    # Los dos logins leen con `.first()`; cada test siembra solo una de las dos cuentas.
-    resultado.first = MagicMock(return_value=admin if admin is not None else superadmin)
+    # El login de superadmin lee con `.first()`; el de Admin, con `.one_or_none()` desde USR.5
+    # —`adminaccount.email` es único, así que dos filas son un error y no algo que desempatar—.
+    # **Los dos tienen que estar puestos**: un doble que sólo ofrece uno devuelve un `MagicMock`
+    # por el otro, y entonces `verify_password` compara contra un mock y el test falla con un
+    # 401 que parece de la lógica y es del andamio.
+    cuenta = admin if admin is not None else superadmin
+    resultado.first = MagicMock(return_value=cuenta)
+    resultado.one_or_none = MagicMock(return_value=cuenta)
     resultado.scalar_one_or_none = MagicMock(return_value=superadmin)
     resultado.scalars.return_value.all.return_value = []
 
