@@ -84,6 +84,7 @@ se llega a ellas. La columna dice **por dónde** las acota un router.
 | `hub_run_manifests` | `workspace_id` → informe |
 | `hub_script_proposals` | por su informe |
 | `hub_usage_counters` | `subject_type='organizacion'` desde SEC.4 |
+| `hub_actividad_ia` | `organizacion_id`, la del dueño del token que registra (REG.1) |
 
 ## Las dos capas que hacen cumplir la frontera
 

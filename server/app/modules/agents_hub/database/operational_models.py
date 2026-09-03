@@ -18,6 +18,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
@@ -849,3 +850,69 @@ class HubLexiconPair(HubOperationalBase):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class HubActividadIA(HubOperationalBase):
+    """Un uso de IA ocurrido **fuera** de la plataforma, declarado por la herramienta que lo hizo.
+
+    **Es registro de gobernanza**: sirve a la conservación de registros del AI Act y al registro
+    de actividades de tratamiento del RGPD. Contesta «qué IA se usó aquí, quién, para qué y sobre
+    qué categorías de datos» cuando el uso ocurrió en un asistente de escritorio, un agente de
+    código o una integración propia, y no en esta plataforma.
+
+    **No se confunde con `hub_interactions`, y por eso es una tabla nueva.** Aquélla registra las
+    conversaciones **internas** y tiene otra forma —mensajes, valoraciones, veredictos— porque
+    sirve a otra cosa: medir y mejorar los asistentes propios. Sobrecargarla con eventos externos
+    obligaría a que la mitad de sus columnas fueran nulas en la mitad de sus filas, y a que
+    cualquier consulta tuviera que acordarse de distinguir las dos poblaciones.
+
+    **Metadatos sí, payloads no.** No hay ninguna columna de contenido. Si un caso exige poder
+    cotejar lo que se procesó, va `payload_hash`. Un registro que existe para dar cuenta del
+    tratamiento de datos personales no puede ser, además, un segundo sitio donde vivan.
+
+    Sin FK a `hub_organizaciones` y sin `__ambito__`, como el resto de los modelos operacionales:
+    las dos bases declarativas tienen que poder vivir separadas cuando el despliegue parte cloud y
+    edge. El acotado por organización lo hacen el código y su test.
+    """
+
+    __tablename__ = "hub_actividad_ia"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    #: Sin FK, como el resto de los modelos operacionales.
+    organizacion_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+
+    #: Cuándo ocurrió el uso, **según quien lo declara**. Indexado porque la lectura del registro
+    #: filtra por rango de fechas.
+    ocurrido_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    #: Cuándo lo recibimos nosotros. Lo pone la **base de datos**, no el proceso que inserta: es
+    #: la única marca de tiempo del registro que no la elige quien registra, y es la que vale
+    #: cuando hay que demostrar cuándo se supo algo.
+    registrado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    #: Identificador opaco de la persona en la herramienta externa: para dar cuenta de un
+    #: tratamiento basta poder correlacionar, no identificar desde el registro.
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: Indexada porque es el filtro principal de la lectura: «qué se hizo con esta herramienta».
+    herramienta: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    agente: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: El único texto libre, y el que da sentido al registro: sin finalidad, saber que alguien usó
+    #: una IA no informa de nada.
+    finalidad: Mapped[str] = mapped_column(String(500), nullable=False)
+    modelo_usado: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    #: JSONB y **sin `CheckConstraint`**: las categorías son vocabulario revisable, no estructura.
+    #: Misma regla que el vocabulario del corpus, y por lo mismo — una categoría nueva no puede
+    #: costar una migración.
+    categorias_datos: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    #: SHA-256 del contenido procesado, si el caso lo exige. Nunca el contenido.
+    payload_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
