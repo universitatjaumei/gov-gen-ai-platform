@@ -1,7 +1,8 @@
 # Quién es una cuenta de administración (decisión de USR.6)
 
-> **Escrito el 2026-09-03**, al ejecutar el prompt USR.6 del Bloque USR. Es la decisión que el
-> prompt exigía tomar **antes** de escribir código, porque condiciona todo lo que venga detrás.
+> **Fecha**: 2026-09-03. **Estado**: aceptada y aplicada — USR.9 cerró el hueco que este
+> documento dejaba anotado. **Origen**: el prompt USR.6 del Bloque USR exigía tomarla **antes**
+> de escribir código, porque condiciona todo lo que venga detrás.
 
 ## El problema, medido y no supuesto
 

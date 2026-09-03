@@ -74,6 +74,10 @@ todas envejecen igual:
 
 ## Decisiones
 
+El registro con número y estado está en [`DECISIONES.md`](DECISIONES.md), que también dice
+**cuándo hace falta un ADR** y cuándo basta con una fila en el historial. Las decisiones
+sueltas, en orden de aparición:
+
 Se leen por su fecha. Ninguna se actualiza: si una decisión cambia, la sustituye otra que la cite.
 
 | Documento | Decidió |

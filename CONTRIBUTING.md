@@ -193,3 +193,79 @@ Regulado en runtime por `DEPLOY_MODE=cloud|edge|all`. Ver el detalle completo en
 - Nada nuevo entra en `_legacy_archive/`. Sin shims de retrocompatibilidad ni alias `_old_*`.
 
 Ver el procedimiento completo en `AGENTS.md` → "Regla crítica: migración = código nuevo + retirada del legacy".
+
+---
+
+## 🧭 8. La metodología, en una página
+
+El desarrollo de este proyecto sigue un método propio, pensado para que lo ejecute un agente de
+programación y para que un humano pueda auditar lo que hizo. No hay que adoptarlo entero para
+contribuir —al final de esta sección se dice qué parte no se te pide— pero sí conviene entenderlo,
+porque explica la forma de los ficheros que vas a encontrar.
+
+### Las cuatro piezas
+
+| Pieza | Qué es | Se lee cuando |
+|---|---|---|
+| **Planificación por prompts** (`planificacion/Plan_TDD_*.md`) | El trabajo pendiente escrito como instrucciones ejecutables, agrupadas en **bloques**. Cada prompt lleva su objetivo, sus tests mínimos y su verificación | Vas a implementar algo que ya está planificado |
+| **El cursor** (`planificacion/PROJECT_STATE.md`) | La fuente de verdad del progreso: qué bloque está en curso, qué prompt viene, qué quedó cerrado | Empiezas a trabajar |
+| **El historial** (`planificacion/HISTORIAL.md`) | Una fila por prompt cerrado, con **qué se midió, qué se desvió del plan y qué defecto apareció al verificar** | Quieres saber por qué algo está así antes de cambiarlo |
+| **Las especificaciones** ([`docs/ESPECIFICACIONES.md`](docs/ESPECIFICACIONES.md)) | Qué **garantiza** el sistema, capacidad por capacidad, con sus invariantes y dónde se hacen cumplir | Vas a tocar código y no quieres romper una garantía |
+
+La distinción que más se confunde: **un plan dice «haz X»; una especificación dice «el sistema
+garantiza Y»**. Para saber qué puedes cambiar sin romper nada, la especificación; para saber qué
+falta y en qué orden, el plan.
+
+### El bucle, y por qué es así
+
+Un bloque se ejecuta prompt a prompt, y cada prompt cierra igual:
+
+```
+RED → GREEN → REFACTOR → verificaciones de cierre → actualizar el cursor → un commit firmado
+```
+
+Tres cosas de ese bucle no son ceremonia:
+
+- **Un commit por prompt, firmado.** Es lo que hace reversible un bloque largo: si el prompt 5
+  rompe lo que hizo el 3, hay un punto exacto al que volver. Sin eso, un bloque de siete pasos es
+  un solo commit gigante que no se puede revertir a medias.
+- **Los tests escalonados.** Durante el prompt, sólo el fichero que estás escribiendo; al cerrarlo,
+  los directorios que toca; al cerrar el bloque, la suite entera. Correr la suite completa después
+  de cada cambio cuesta más de una hora y no aporta información nueva.
+- **El historial se escribe al cerrar, no al planificar.** Lo que vale de él es lo que sólo se sabe
+  después: la cifra que salió, el doble de test que mentía, la alternativa que no funcionó.
+
+### Las dos reglas que más protegen a quien llega
+
+**Escribe el test antes del código, y comprueba que sabe ponerse rojo.** Un test que pasa desde el
+primer momento no está probando lo que crees. En este proyecto ha pasado varias veces que un rojo
+alarmante era un defecto del instrumento y no del sistema —y una vez peor: un guardarraíl recorría
+un directorio inexistente y **pasaba en verde sin mirar nada**—. Ante una cifra extrema o un verde
+sospechoso, primero se comprueba el medidor.
+
+**Deja escrito el por qué, no el qué.** El *qué* está en el diff. Lo que se pierde es por qué se
+descartó la otra opción, y eso se paga cuando alguien la reimplementa de buena fe dos meses
+después. En este proyecto va en tres sitios según su alcance: en el **docstring** si es local, en
+`HISTORIAL.md` si es del prompt, y en una **decisión de arquitectura** si condiciona al resto —ver
+[`docs/DECISIONES.md`](docs/DECISIONES.md), que dice cuándo hace falta una y cuándo basta una fila
+del historial—.
+
+### Qué NO se te pide como contribuidor externo
+
+- **No tienes que planificar por prompts.** Eso es la herramienta del mantenedor para dirigir a un
+  agente. Tu contribución puede ser un PR normal.
+- **No tienes que actualizar el cursor** (`PROJECT_STATE.md`) salvo que estés cerrando un prompt
+  planificado. Si tu cambio no corresponde a un paso del plan, no lo toques.
+- **No tienes que escribir en `HISTORIAL.md`.** Lo relevante de tu cambio va en el PR; el
+  mantenedor lo integra donde toque.
+
+Lo que **sí** se te pide, sin excepción: TDD, Conventional Commits, `Signed-off-by`, respetar los
+invariantes de la especificación y las fronteras de `AGENTS.md`. Y si tu propuesta deja fuera una
+alternativa razonable, acompañarla de una decisión escrita.
+
+### Antes de escribir código: propón
+
+Si lo que traes no es un defecto, **abre una propuesta antes** de escribirlo:
+[`.github/ISSUE_TEMPLATE/propuesta.md`](.github/ISSUE_TEMPLATE/propuesta.md). Su pregunta central
+—«¿por qué lo necesita **cualquier** organización?»— es la que decide si el cambio es material del
+principal o de tu fork, y contestarla antes ahorra escribir código que no puede entrar.

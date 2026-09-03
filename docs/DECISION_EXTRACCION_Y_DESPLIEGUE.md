@@ -1,6 +1,9 @@
 # Decisión — frontera de la extracción y forma del despliegue
 
-> **Fecha**: 2026-08-10. **Origen**: conversación de arquitectura tras `docs/AUDITORIA_PRE_DEPLOY.md`
+> **Fecha**: 2026-08-10. **Estado**: aceptada y aplicada — Docling se retiró en EXT.3 y el
+> despliegue es VM, no Cloud Run. **Sustituye** a la sección de servicios de computación pesada
+> de `AGENTS.md`, que pedía extraer Docling y BGE-M3 a servicios separados de Cloud Run.
+> **Origen**: conversación de arquitectura tras `docs/AUDITORIA_PRE_DEPLOY.md`
 > y el cierre del bloque SEC.8. **Afecta a**: bloque EXT (nuevo) y bloque Deploy (reescrito).
 
 Dos decisiones que se tomaron juntas porque la segunda depende de la primera: qué extrae
