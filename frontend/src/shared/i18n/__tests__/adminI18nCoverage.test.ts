@@ -75,6 +75,10 @@ describe('CAL.4 — i18n del panel admin', () => {
     const PREFIJOS_DINAMICOS = [
       'nav.',
       'hub.availability_',
+      // LANG.2 — los modos de política de lengua los enumera el servidor y la pantalla
+      // itera: `t(`hub.language_mode_${m.valor}`)`. Escribir las claves literales aquí
+      // sería congelar el catálogo en React, que es justo lo que el bloque quita.
+      'hub.language_mode_',
       'hub.test_scenarios.verdict_',
       // IDE.4 — el rol y el origen de cada persona se pintan iterando lo que devuelve el
       // servidor: `t(`plataforma.usuarios.roles.${persona.role}`)`. La clave literal no

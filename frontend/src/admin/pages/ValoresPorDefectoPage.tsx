@@ -7,6 +7,8 @@ import {
   useUpdateValoresPorDefectoApiV1HubOrganizacionesOrganizacionIdValoresPorDefectoPatch as useGuardarValores,
   getGetValoresPorDefectoApiV1HubOrganizacionesOrganizacionIdValoresPorDefectoGetQueryKey as claveDeValores,
 } from '@/shared/api/generated/hub-organizaciones/hub-organizaciones'
+import { useOpcionesDeLengua } from '@/shared/api/generated/hub-opciones/hub-opciones'
+import type { OpcionesDeLengua } from '@/shared/api/generated/model'
 
 /** Los campos que pueden volver a «heredar el defecto de plataforma» valiendo `null`. */
 const HEREDABLES = [
@@ -53,6 +55,13 @@ export const CONTROLES: Record<string, 'numero' | 'booleano' | 'texto' | 'texto-
  * nadie lo pidiera—. Es el mismo criterio, y por el mismo motivo, que la lista de tipografías
  * de Identidad visual. Cuando el servidor los declare como enumeración cerrada, esto puede
  * pasar a `<select>` generado del contrato y dejar de vivir aquí.
+ *
+ * **`default_language_mode` ya se fue de aquí (LANG.2)**, y no por gusto: la lista decía
+ * `['prefer', 'strict', 'neutral']` y dos de los tres eran falsos —`strict` es una política que
+ * la factoría del grafo nunca compuso, y `neutral` es el nombre de la clase, no el valor, que se
+ * llama `none`—. Desde LANG.1 los dos dan 422 al guardar. Ahora sale del catálogo del servidor,
+ * que además da el código del corpus (`val`, no `ca`). Sigue siendo `<datalist>` por el motivo
+ * de arriba: `fixed:<código>` es paramétrico, así que el campo tiene que ser cadena libre.
  */
 const SUGERENCIAS: Record<string, readonly string[]> = {
   default_public_graph_profile: [
@@ -61,9 +70,25 @@ const SUGERENCIAS: Record<string, readonly string[]> = {
     'PUBLIC_PORTAL_AGGREGATOR',
   ],
   default_retrieval_mode: ['RAG', 'MD_LONG_CONTEXT', 'MD_AGENT_SELECTOR'],
-  default_language_mode: ['prefer', 'strict', 'neutral'],
   default_chunking_strategy: ['structural', 'parent_child'],
 }
+
+/**
+ * Los valores que se ofrecen para `default_language_mode`, compuestos del catálogo (LANG.2).
+ *
+ * Los modos simples tal cual, y el paramétrico una vez por idioma —`fixed:val`, `fixed:es`…—,
+ * porque lo que se guarda en el campo es el valor completo. `requiere_lengua` lo dice el
+ * servidor: el día que haya un segundo modo paramétrico, esto no hay que tocarlo.
+ */
+function modosDeIdiomaOfrecidos(
+  catalogo: OpcionesDeLengua | undefined
+): readonly string[] | undefined {
+  if (!catalogo) return undefined
+  return catalogo.modos.flatMap((m) =>
+    m.requiere_lengua ? catalogo.lenguas.map((l) => `${m.valor}:${l.codigo}`) : [m.valor]
+  )
+}
+
 
 /**
  * Los valores por defecto de RAG de una organización (PLAT.3, editables en REV.2).
@@ -85,6 +110,9 @@ const SUGERENCIAS: Record<string, readonly string[]> = {
  */
 export function ValoresPorDefectoPage() {
   const { t } = useTranslation('admin')
+  // LANG.2 — los modos de idioma los enumera el servidor. Mientras no ha llegado no se
+  // ofrece nada: una lista propia sería volver a escribir el catálogo en React.
+  const { data: opcionesDeLengua } = useOpcionesDeLengua()
   const { t: tc } = useTranslation('common')
   const qc = useQueryClient()
 
@@ -184,7 +212,10 @@ export function ValoresPorDefectoPage() {
             const heredado = valor === null
             const tipo = CONTROLES[campo]
             const editable = tipo !== undefined && (!heredado || desplegados.has(campo))
-            const sugerencias = SUGERENCIAS[campo]
+            const sugerencias =
+              campo === 'default_language_mode'
+                ? modosDeIdiomaOfrecidos(opcionesDeLengua)
+                : SUGERENCIAS[campo]
             const idLista = sugerencias ? `vpd_${campo}_opciones` : undefined
 
             return (

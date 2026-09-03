@@ -21,6 +21,7 @@ import { useListLlmConfigsApiV1HubLlmConfigsGet } from '@/shared/api/generated/h
 import { useListOrganizacionesApiV1HubOrganizacionesGet } from '@/shared/api/generated/hub-organizaciones/hub-organizaciones'
 import { chatbotCreateSchema, type FormValues } from '../chatbots/schemas/chatbotSchemas'
 import { mapApiErrorsToFormErrors } from '@/shared/utils/formErrors'
+import { SelectorDeModoDeLengua } from '../components/SelectorDeModoDeLengua'
 
 // Claves de traducción, no texto: una constante de módulo se evalúa una sola vez, así que
 // guardar aquí la etiqueta ya traducida la congelaría en el idioma activo al cargar (CAL.4).
@@ -148,7 +149,7 @@ export function ChatbotsPage() {
     },
   })
 
-  const { register, handleSubmit, reset, watch, setError, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, reset, watch, setValue, setError, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(chatbotCreateSchema),
     defaultValues: {
       name: '',
@@ -729,18 +730,17 @@ export function ChatbotsPage() {
                             <option value="PUBLIC_KB_RICH">{t('hub.chatbot_graph_profile_rich')}</option>
                           </select>
                         </div>
-                        <div>
-                          <label htmlFor="chatbot-language-mode" className="text-sm font-medium">{t('hub.chatbot_language_mode')}</label>
-                          <select
-                            id="chatbot-language-mode"
-                            {...register('language_mode')}
-                            className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
-                          >
-                            <option value="prefer">{t('hub.chatbot_language_prefer')}</option>
-                            <option value="strict">{t('hub.chatbot_language_strict')}</option>
-                            <option value="none">{t('hub.chatbot_language_none')}</option>
-                          </select>
-                        </div>
+                        {/* LANG.2 — la lista venía escrita aquí y ofrecía `strict`, que la
+                            factoría del grafo nunca compuso: una opción que no hacía nada, y
+                            que desde LANG.1 además da 422. Ahora los modos y los idiomas los
+                            trae el contrato, con el código del corpus (`val`, no `ca`). */}
+                        <SelectorDeModoDeLengua
+                          idPrefijo="chatbot-language"
+                          valor={watch('language_mode') ?? 'prefer'}
+                          onChange={(v) =>
+                            setValue('language_mode', v, { shouldDirty: true })
+                          }
+                        />
                         <div>
                           <label htmlFor="chatbot-quality-threshold" className="text-sm font-medium">{t('hub.chatbot_quality_threshold')}</label>
                           <input
