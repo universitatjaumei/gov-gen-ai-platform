@@ -142,7 +142,9 @@ describe('PLAT.2 — las tres pantallas dejan de depender del módulo Chatbots',
     renderApp('/plataforma/modelos')
 
     expect(screen.queryByText('pantalla de modelos')).toBeNull()
-    expect(screen.getByTestId('sin-acceso')).toBeDefined()
+    // USR.10 — lo que este test fija es que la sección **se corta**. A dónde va cambió:
+    // teniendo `chatbots`, decirle «no tienes ningún módulo concedido» era falso.
+    expect(screen.getByTestId('sin-este-modulo')).toBeDefined()
   })
 })
 

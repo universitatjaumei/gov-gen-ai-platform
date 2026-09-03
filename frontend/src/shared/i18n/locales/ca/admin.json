@@ -361,6 +361,11 @@
     "volver": "Anar a l’inici",
     "titulo": "Aquesta adreça no existeix"
   },
+  "sin_este_modulo": {
+    "texto": "El teu compte té accés a altres parts de la plataforma, però no a aquesta. Si la necessites, demana-la a qui administra i indica-li l'adreça que estaves obrint.",
+    "titulo": "Aquesta part no és del teu compte",
+    "volver": "Vés al que sí que pots obrir"
+  },
   "sin_acceso": {
     "texto": "El teu compte existeix però no té cap mòdul concedit. Demana accés a qui administra la plataforma indicant què necessites: informes, chatbots o curació.",
     "titulo": "Encara no tens accés a cap mòdul"

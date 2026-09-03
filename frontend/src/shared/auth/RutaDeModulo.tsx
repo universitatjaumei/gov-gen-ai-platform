@@ -19,8 +19,39 @@ export function RutaDeModulo({ modulo, children }: { modulo: string; children: R
   const { modulos, cargando } = useModulos()
 
   if (cargando) return <div className="p-4">{t('loading')}</div>
-  if (!modulos.includes(modulo)) return <Navigate to="/sin-acceso" replace />
+  if (!modulos.includes(modulo)) {
+    // USR.10 — «no tienes ningún módulo» y «no tienes éste» son dos cosas distintas, y hasta
+    // aquí las dos acababan en la misma pantalla. A quien tiene informes y ha pinchado un
+    // enlace a Chatbots, `/sin-acceso` le decía que su cuenta no tiene ningún módulo
+    // concedido —falso—, le proponía pedir lo que ya tiene y le escondía que su propia
+    // pantalla sigue ahí.
+    //
+    // Sin ningún módulo se sigue redirigiendo, porque ahí sí hay que decir que no hay a dónde
+    // ir. Con módulos y sin éste **no se cambia de dirección**: la URL es lo único que dice
+    // qué parte se estaba pidiendo, y perderla convierte «pide acceso a esto» en «pide acceso
+    // a algo».
+    if (modulos.length === 0) return <Navigate to="/sin-acceso" replace />
+    return <SinEsteModulo modulos={modulos} />
+  }
   return <>{children}</>
+}
+
+/** Esta parte de la plataforma no está concedida —pero otras sí— (USR.10). */
+function SinEsteModulo({ modulos }: { modulos: string[] }) {
+  const { t } = useTranslation('admin')
+  return (
+    <div className="p-8 max-w-lg" data-testid="sin-este-modulo">
+      <h1 className="text-lg font-medium mb-2">{t('sin_este_modulo.titulo')}</h1>
+      <p className="text-sm text-muted-foreground">{t('sin_este_modulo.texto')}</p>
+      {/* La salida, por si se llegó desde un enlace profundo y no desde el menú. */}
+      <Link
+        to={primeraRutaConcedida(modulos)}
+        className="mt-3 inline-block text-sm text-primary underline"
+      >
+        {t('sin_este_modulo.volver')}
+      </Link>
+    </div>
+  )
 }
 
 /**
@@ -66,7 +97,10 @@ export function NoEncontrado() {
   )
 }
 
-/** Sin ningún módulo concedido no hay a dónde ir, y hay que decirlo en vez de rebotar. */
+/** Sin ningún módulo concedido no hay a dónde ir, y hay que decirlo en vez de rebotar.
+ *
+ * USR.10 — **sólo** para quien no tiene ninguno. Quien tiene módulos y le falta éste ve
+ * `SinEsteModulo`, que no le miente sobre lo que tiene ni le hace perder la dirección. */
 export function SinAcceso() {
   const { t } = useTranslation('admin')
   return (

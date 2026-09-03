@@ -361,6 +361,11 @@
     "volver": "Go to the start",
     "titulo": "This address does not exist"
   },
+  "sin_este_modulo": {
+    "texto": "Your account has access to other parts of the platform, but not this one. If you need it, ask your administrator and tell them the address you were opening.",
+    "titulo": "This section is not part of your account",
+    "volver": "Go to what you can open"
+  },
   "sin_acceso": {
     "texto": "Your account exists but no module has been granted. Ask the platform administrator for access, saying what you need: reports, chatbots or curation.",
     "titulo": "You do not have access to any module yet"

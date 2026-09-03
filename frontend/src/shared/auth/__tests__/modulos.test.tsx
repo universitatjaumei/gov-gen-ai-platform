@@ -75,7 +75,9 @@ describe('INF.7 — una zona sin su módulo no se abre', () => {
   it('should_refuse_the_area_without_the_module', async () => {
     conModulos(['informes'])
     pintar('/hub')
-    expect(await screen.findByTestId('sin-acceso')).toBeDefined()
+    // USR.10 — lo que este test fija es que la zona **no se abre**. A dónde va cambió: quien
+    // tiene módulos y no éste ya no aterriza en «no tienes ninguno», que era falso.
+    expect(await screen.findByTestId('sin-este-modulo')).toBeDefined()
     expect(screen.queryByTestId('dentro-de-hub')).toBeNull()
   })
 
@@ -132,6 +134,70 @@ describe('REV.5 — una ruta que no existe', () => {
   })
 })
 
+
+/**
+ * USR.10 — «no tienes ningún módulo» y «no tienes éste» son dos cosas distintas.
+ *
+ * `RutaDeModulo` mandaba a `/sin-acceso` en los dos casos, y esa pantalla dice literalmente «tu
+ * cuenta existe pero **no tiene ningún módulo concedido**. Pide acceso [...] indicando que
+ * necesitas: informes, chatbots o curación». A quien tiene informes y ha pinchado un enlace a
+ * Chatbots eso le dice algo que no es verdad, le propone pedir lo que ya tiene y le esconde que
+ * su propia pantalla sigue ahí.
+ *
+ * Se separan las dos: sin ningún módulo, la pantalla de siempre —hay que decir que no hay a
+ * dónde ir—; con módulos y sin éste, **la dirección no cambia** y se dice que esta parte no
+ * está concedida, con la salida a lo que sí.
+ */
+describe('USR.10 — una zona sin su módulo, teniendo otros', () => {
+  function pintar(ruta: string) {
+    return render(
+      <MemoryRouter initialEntries={[ruta]}>
+        <Routes>
+          <Route
+            path="/hub"
+            element={<RutaDeModulo modulo="chatbots"><div data-testid="dentro-de-hub" /></RutaDeModulo>}
+          />
+          <Route path="/sin-acceso" element={<div data-testid="sin-acceso" />} />
+          <Route path="/redaccion" element={<div data-testid="dentro-de-informes" />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('should_not_claim_they_have_no_modules_when_they_do', async () => {
+    conModulos(['informes'])
+    pintar('/hub')
+
+    expect(await screen.findByTestId('sin-este-modulo')).toBeDefined()
+    expect(screen.queryByTestId('sin-acceso')).toBeNull()
+  })
+
+  it('should_keep_the_address_of_the_section_they_asked_for', async () => {
+    /* La dirección es lo único que dice qué parte pedían; perderla convierte «pide acceso a
+       esto» en «pide acceso a algo». */
+    conModulos(['informes'])
+    pintar('/hub')
+
+    await screen.findByTestId('sin-este-modulo')
+    expect(window.location.pathname).not.toBe('/sin-acceso')
+  })
+
+  it('should_offer_a_way_to_what_they_can_open', async () => {
+    conModulos(['informes'])
+    pintar('/hub')
+
+    const salida = await screen.findByRole('link')
+    expect(salida.getAttribute('href')).toBe('/redaccion')
+  })
+
+  it('should_still_send_someone_with_nothing_to_sin_acceso', async () => {
+    conModulos([])
+    pintar('/hub')
+
+    expect(await screen.findByTestId('sin-acceso')).toBeDefined()
+    expect(screen.queryByTestId('sin-este-modulo')).toBeNull()
+  })
+})
 
 /**
  * USR.9 — quien sólo administra personas tiene a dónde ir.

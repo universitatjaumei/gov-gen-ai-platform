@@ -361,6 +361,11 @@
     "volver": "Ir al inicio",
     "titulo": "Esta direccion no existe"
   },
+  "sin_este_modulo": {
+    "texto": "Tu cuenta tiene acceso a otras partes de la plataforma, pero no a ésta. Si la necesitas, pídesela a quien administra indicándole la dirección que estabas abriendo.",
+    "titulo": "Esta parte no está en tu cuenta",
+    "volver": "Ir a lo que sí puedes abrir"
+  },
   "sin_acceso": {
     "texto": "Tu cuenta existe pero no tiene ningun modulo concedido. Pide acceso a quien administra la plataforma indicando que necesitas: informes, chatbots o curacion.",
     "titulo": "Todavia no tienes acceso a ningun modulo"
