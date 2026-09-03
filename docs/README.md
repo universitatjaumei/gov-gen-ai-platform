@@ -23,6 +23,7 @@ todas envejecen igual:
 
 | Documento | Qué es |
 |---|---|
+| [`ESPECIFICACIONES.md`](ESPECIFICACIONES.md) | **Qué garantiza el sistema**, capacidad por capacidad, con sus invariantes y dónde se hacen cumplir. El documento para quien va a escribir código |
 | [`PRESENTACION_PROYECTO.md`](PRESENTACION_PROYECTO.md) | Qué hace la plataforma, qué está construido y verificado, y qué está previsto. El documento para quien llega de fuera |
 | [`Arquitectura.md`](Arquitectura.md) | Qué es la plataforma y qué principios la rigen: módulos, roles, privacidad, frontera cloud/edge, stack |
 | [`../AGENTS.md`](../AGENTS.md) | Las reglas duras para agentes de programación, y de paso el contrato de estilo del proyecto |

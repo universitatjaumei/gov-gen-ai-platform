@@ -119,6 +119,9 @@ _legacy_nicegui/        cuarentena de la migración; sólo lectura
 
 ## Documentación
 
+- `docs/ESPECIFICACIONES.md` — **qué garantiza el sistema, capacidad por capacidad**, dónde se
+  hace cumplir cada garantía y qué la demuestra. Es el documento para leer primero si vas a
+  escribir código. Lo vigila un test: si algo de ahí deja de ser verdad, la suite se pone roja.
 - `docs/PRESENTACION_PROYECTO.md` — qué hace la plataforma, qué está construido y verificado, y
   qué está previsto. Es el documento para leer primero si vienes de fuera.
 - `docs/Arquitectura.md` — qué es la plataforma y qué principios la rigen.

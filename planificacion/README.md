@@ -4,6 +4,11 @@ Estos documentos no describen el producto: **lo dirigen**. Son los instrumentos 
 ejecuta el desarrollo, y cambian a diario. La documentación estable —arquitectura, decisiones,
 manuales— vive en `docs/`.
 
+> **Si lo que buscas es qué garantiza el sistema, esto no es.** Un plan dice «haz X»; lo que
+> puedes dar por cierto al construir encima está en
+> [`../docs/ESPECIFICACIONES.md`](../docs/ESPECIFICACIONES.md), organizado por capacidad y no por
+> orden de ejecución. Aquí está **qué falta y en qué orden**; allí, **qué se puede romper**.
+
 | Fichero | Para qué |
 |---|---|
 | `PROJECT_STATE.md` | **La fuente de verdad del progreso.** Cursor actual, planes activos, modelo sugerido para el próximo prompt y los bloques cerrados recientes. Se lee al arrancar cada sesión. |
