@@ -1,8 +1,8 @@
 # Marco de desarrollo asistido por agentes
 
-> **Qué es esto.** El método con el que se desarrolla Gov Gen AI Platform, escrito para poder
-> aplicarse a otros proyectos. No es una propuesta teórica: es lo que ha quedado después de varios
-> meses de ensayo y error en un proyecto real, contrastado con lo que hay publicado.
+> **Qué es este documento.** El método con el que se desarrolla Gov Gen AI Platform, escrito para
+> que otros proyectos del Teclab puedan adoptarlo. No es una propuesta teórica: es lo que ha quedado
+> tras varios meses de ensayo y error en un proyecto real, contrastado con lo que hay publicado.
 >
 > **Fecha**: 2026-09-03. **Ámbito**: desarrollo de software con agentes de programación bajo
 > supervisión humana.
@@ -11,143 +11,178 @@
 
 ## 0. Cómo leer este documento
 
-Está escrito para tres lectores distintos, y conviene saber cuál eres:
+Está escrito para tres lectores distintos. Conviene saber cuál eres:
 
 | Si eres… | Lee |
 |---|---|
-| Quien decide si adoptar esto | §1 (la evidencia), §2 (los principios), §10 (la comparación) |
-| Quien va a trabajar así | §3 a §7, y sobre todo **§9, lo que nos ha fallado** |
+| Quien decide si adoptar el método | §1 (por qué merece la pena), §2 (los principios), §10 (la comparación) |
+| Quien va a trabajar así | §3 a §7, y sobre todo **§9, los errores que ya pagamos** |
 | **Un agente que tiene que montar los documentos de un proyecto nuevo** | §11, que lleva el orden, el prompt de arranque y las plantillas |
 
-**Las tres capas de credibilidad.** Este documento mezcla tres cosas que no valen lo mismo, y las
-marca siempre:
+**Tres marcas de credibilidad.** No todo lo que dice este documento vale lo mismo, y cada
+afirmación relevante lleva una etiqueta que dice cuánto crédito darle:
 
-- **[Evidencia]** — hay estudio publicado detrás. Se cita.
-- **[Convención]** — es práctica establecida o estándar emergente, sin evidencia cuantitativa.
-- **[n=1]** — es nuestra experiencia en **un** proyecto. Puede ser un acierto o una casualidad, y
-  lo honesto es no presentarlo como más de lo que es.
+- **[Evidencia]** — hay un estudio publicado detrás, y se cita.
+- **[Convención]** — es práctica establecida o estándar emergente en la industria, sin evidencia
+  cuantitativa.
+- **[n=1]** — es la experiencia de este proyecto, y de ninguno más. *n=1* es la forma breve de
+  decir «una sola muestra»: puede ser un acierto o una casualidad, y presentarlo como método
+  validado sería un mal servicio a quien lo lea.
 
-La sección más útil para otro equipo es probablemente §9, que es toda `[n=1]` y toda negativa: los
-errores que ya pagamos.
+La mayoría del marco es **[n=1]**. Se dice desde el principio porque es lo que permite a otro
+equipo decidir qué adoptar tal cual y qué tratar como hipótesis.
+
+**Cuatro términos que se usan en todo el documento:**
+
+| Término | Qué significa aquí |
+|---|---|
+| **Prompt** | Una instrucción de trabajo para el agente, escrita con sus tests y su criterio de cierre. Es la unidad mínima del plan |
+| **Bloque** | Un conjunto de prompts que entrega algo utilizable. Es la unidad de interacción con el humano |
+| **Cursor** | El documento que dice en qué bloque y en qué prompt está el desarrollo ahora mismo |
+| **Guardarraíl** | Un test de la suite que falla cuando un documento del proyecto deja de ser verdad |
 
 ---
 
-## 1. Qué problema resuelve, y qué dice la evidencia
+## 1. Por qué merece la pena generalizarlo, y qué dice la evidencia
 
-### 1.1 El dato incómodo del que hay que partir
+### 1.1 La tesis
 
-En julio de 2025, METR publicó un **ensayo controlado aleatorizado**: 16 desarrolladores
-experimentados, 246 tareas reales en sus propios repositorios (proyectos de más de 22.000 estrellas
-y más de un millón de líneas). Resultado: con acceso a herramientas de IA fueron **un 19 % más
-lentos** — y creían haber sido un 20 % más rápidos. Habían pronosticado un 24 % de mejora
-**[Evidencia]**.
+Con agentes de programación, **el método importa más que la herramienta**. Un equipo que ya trabaja
+con tests, revisión y trazabilidad va a ir mejor con agentes; un equipo que no, va a producir más
+deuda y más rápido. El método que describe este documento es la parte que se puede transferir de un
+proyecto a otro: los principios, el modelo de permisos, el ciclo de trabajo y los mecanismos que
+mantienen la documentación honesta.
 
-Ese estudio se cita mucho y casi siempre mal, en las dos direcciones. Dos matices que lo hacen
+Cuatro razones para generalizarlo en lugar de dejar que cada proyecto improvise el suyo:
+
+1. **Las piezas no dependen del dominio.** El modelo de permisos, el ciclo TDD, el registro de
+   decisiones y los guardarraíles son iguales para un asistente normativo que para un gestor de
+   expedientes. Lo que cambia entre proyectos son las decisiones de arquitectura, y el documento
+   dice explícitamente cuáles no copiar (§11.3).
+2. **El coste de adopción es bajo y está medido.** Los documentos de gobierno de un proyecto nuevo
+   se montan con un prompt que este documento incluye (§11.2), en un orden que evita escribir lo
+   que luego hay que tirar.
+3. **Los errores catalogados son generales, no nuestros.** La sección §9 recoge los fallos que ya
+   pagamos, y ninguno es específico del proyecto: son la forma en que fallan los agentes, los
+   tests y la documentación en cualquier equipo. Empezar sabiéndolos es la ventaja más barata que
+   se puede tener.
+4. **La evidencia publicada apunta en la misma dirección.** Lo que sigue.
+
+### 1.2 El dato del que hay que partir
+
+En julio de 2025, METR publicó un **ensayo controlado aleatorizado** con 16 desarrolladores
+experimentados y 246 tareas reales en sus propios repositorios (proyectos de más de 22.000
+estrellas y más de un millón de líneas). Con acceso a herramientas de IA fueron **un 19 % más
+lentos**, y creían haber sido un 20 % más rápidos. Antes de empezar habían pronosticado un 24 % de
+mejora. **[Evidencia]**
+
+El estudio se cita mucho y casi siempre mal, en las dos direcciones. Dos matices lo hacen
 utilizable:
 
 1. **La misma organización estima que un año después esos desarrolladores serían un 18 % más
-   rápidos.** El dato de 2025 no es una ley: es una foto de unas herramientas concretas en un
-   momento concreto **[Evidencia]**.
+   rápidos.** El dato de 2025 no es una ley. Es una foto de unas herramientas concretas en un
+   momento concreto. **[Evidencia]**
 2. **La brecha entre percepción y realidad fue de casi 40 puntos.** Eso sí es estructural y no
-   depende del modelo: quien usa un agente **no sabe por introspección** si le está yendo bien.
+   depende del modelo: quien usa un agente no sabe, por introspección, si le está yendo bien.
 
-De ahí sale el primer requisito de cualquier método serio en esto: **medir, no sentir**.
+De ahí sale el primer requisito de cualquier método serio en este terreno: **medir, no sentir**.
 
-### 1.2 Por qué el método importa más que la herramienta
+### 1.3 La IA como amplificador
 
-El informe DORA de 2025 sobre desarrollo asistido por IA —cerca de 5.000 profesionales y más de
-100 horas de datos cualitativos, con una adopción del 90 %— concluye que la IA actúa como
-**amplificador**: multiplica las fortalezas de una organización y también sus debilidades. Su frase
-resumen es la mejor justificación de este documento: *«velocidad sin estabilidad es caos
-acelerado»* **[Evidencia]**.
+El informe DORA de 2025 sobre desarrollo asistido por IA, con cerca de 5.000 profesionales, más de
+100 horas de datos cualitativos y una adopción del 90 %, concluye que la IA actúa como
+**amplificador**: multiplica las
+fortalezas de una organización y también sus debilidades. Su frase resumen es la mejor
+justificación de este documento: *«velocidad sin estabilidad es caos acelerado»*. **[Evidencia]**
 
-Traducido: un equipo con tests, revisión y trazabilidad va a ir mejor con agentes. Un equipo sin
-eso va a producir más deuda, más rápido. **El agente no arregla el método; lo revela.**
+**El agente no arregla el método; lo revela.** Esa es la razón de fondo para tener un método antes
+de tener agentes.
 
-### 1.3 Y por qué la supervisión no es opcional
+### 1.4 Dónde decide el humano
 
-El informe de tendencias de codificación agéntica de Anthropic de 2026 encuentra un reparto
-revelador: los humanos toman alrededor del **70 % de las decisiones de planificación** y sólo cerca
-del **20 % de las decisiones de ejecución** **[Evidencia]**.
+El informe de tendencias de codificación agéntica de Anthropic de 2026 encuentra que los humanos
+toman alrededor del **70 % de las decisiones de planificación** y solo cerca del **20 % de las
+decisiones de ejecución**. **[Evidencia]**
 
-Eso describe exactamente el equilibrio que buscamos, y explica por qué el método se concentra en la
-planificación y en las puertas de cierre, no en vigilar cada comando.
+Ese reparto describe el equilibrio que busca este marco, y explica por qué el método se concentra
+en la planificación y en las puertas de cierre en lugar de vigilar cada comando.
 
-En la industria hay al menos dos taxonomías de autonomía —cinco niveles al estilo de la conducción
-autónoma, y una de seis niveles con controles alineados al riesgo— y coinciden en algo: **el nivel
-máximo no es apropiado para producción hoy**, porque los mecanismos de control que lo harían seguro
-no existen todavía **[Convención]**.
+En la industria circulan al menos dos taxonomías de autonomía para agentes: una de cinco niveles al
+estilo de la conducción autónoma, y otra de seis con controles alineados al riesgo. Coinciden en un
+punto: **el nivel máximo no es apropiado para producción hoy**, porque los mecanismos de control
+que lo harían seguro no existen todavía. **[Convención]**
 
 ---
 
 ## 2. Principios
 
-Seis. Están ordenados: cuando dos chocan, gana el de arriba.
+Seis, y ordenados: cuando dos chocan, gana el de arriba.
 
 ### P1 — Agentes supervisados, no autónomos
 
 El agente ejecuta, mide y demuestra. **Las decisiones que cambian el producto son humanas.** No es
-desconfianza en el modelo: es que una decisión de diseño mal tomada se paga durante años, y quien
-paga es quien mantiene.
+desconfianza en el modelo: una decisión de diseño mal tomada se paga durante años, y quien la paga
+es quien mantiene el sistema.
 
-En la práctica esto se concreta en **cuatro y sólo cuatro causas para interrumpir** al humano a
-mitad de trabajo (§5.3). Menos causas y el agente se atasca; más, y la supervisión se vuelve ruido
-que se ignora — que es la forma habitual en que muere una barrera.
+En la práctica, esto se concreta en **cuatro causas, y solo cuatro, para interrumpir al humano** a
+mitad de trabajo (§5.3). Con menos, el agente se atasca. Con más, la supervisión se vuelve ruido
+que se ignora, que es la forma habitual en que muere una barrera.
 
 ### P2 — Nada se reporta sin medirlo
 
-Si una cifra no se ha medido, no se dice como medida. Si un test no se ha ejecutado, no se dice que
-pasa. Si algo se verificó en navegador, se dice **con qué evidencia**: qué URL, qué texto
-encontrado, qué decía la consola.
+Si una cifra no se ha medido, no se presenta como medida. Si un test no se ha ejecutado, no se dice
+que pasa. Si algo se verificó en un navegador, se dice **con qué evidencia**: qué dirección, qué
+texto se encontró, qué decía la consola.
 
-Es el principio que la brecha de percepción de METR obliga a tener **[Evidencia]**.
+Es el principio que la brecha de percepción de METR obliga a tener. **[Evidencia]**
 
 ### P3 — Lo determinista antes que el modelo
 
-Si algo se puede calcular, se calcula. El modelo se reserva para lo que sólo él puede hacer:
-redactar, valorar, interpretar lenguaje. Una tabla de datos la produce código; una valoración de
+Si algo se puede calcular, se calcula. El modelo se reserva para lo que solo él puede hacer:
+redactar, valorar, interpretar lenguaje. Una tabla de datos la produce el código; la valoración de
 esa tabla, el modelo, y sujeta a aprobación humana.
 
 ### P4 — Una sola fuente de verdad por cosa
 
-Cada hecho vive en un sitio. Los demás **apuntan**, no copian. Dos documentos que dicen lo mismo
-divergen, y el día que divergen los dos mienten: no se sabe cuál.
+Cada hecho vive en un sitio. Los demás documentos **apuntan** a él, no lo copian. Dos documentos que
+dicen lo mismo acaban divergiendo, y el día que divergen los dos mienten, porque ya no se sabe cuál
+tiene razón.
 
-### P5 — El *por qué* se escribe, no sólo el *qué*
+### P5 — El *por qué* se escribe, no solo el *qué*
 
-El *qué* está en el diff. Lo que se pierde es por qué se descartó la otra opción, y eso se paga
-cuando alguien la reimplementa de buena fe seis meses después. Tres destinos según el alcance: el
-**docstring** si es local, el **historial** si es del paso, un **registro de decisión** si
-condiciona al resto (§4).
+El *qué* está en el código. Lo que se pierde es por qué se descartó la otra opción, y eso se paga
+cuando alguien la reimplementa de buena fe seis meses después. Según el alcance, el *por qué* va a
+uno de tres sitios: el **comentario del código** si es local, el **historial** si es de un paso del
+plan, y el **registro de decisiones** si condiciona al resto (§4).
 
-### P6 — Lo que hay que mantener al día, se pone rojo cuando miente
+### P6 — Lo que hay que mantener al día se pone rojo cuando miente
 
 Un documento que envejece es peor que no tenerlo, porque **miente con autoridad**. Todo documento
-que se pueda comprobar mecánicamente, se comprueba con un test de la suite (§6).
+que se pueda comprobar mecánicamente se comprueba con un test de la suite (§6).
 
 ---
 
 ## 3. El modelo de permisos: qué se autoacepta y qué no
 
-Esta es la sección más transferible del documento, porque es la que se puede copiar casi literal.
+Es la sección más transferible del documento, porque se puede copiar casi literalmente.
 
 ### 3.1 La forma: tres cubos y una guarda
 
-Los agentes de programación modernos permiten declarar permisos en tres cubos: **permitir**
-(ejecuta sin preguntar), **preguntar** (eleva al humano) y **denegar** (no se ejecuta nunca). Sobre
-eso añadimos un **hook** que inspecciona el comando antes de ejecutarlo y decide, porque los
-patrones de texto no bastan: `rm -rf` puede ser legítimo dentro del directorio de trabajo y
-catastrófico fuera.
+Los agentes de programación actuales permiten declarar permisos en tres cubos: **permitir** (se
+ejecuta sin preguntar), **preguntar** (se eleva al humano) y **denegar** (no se ejecuta nunca).
+Sobre eso se añade un **hook**: un programa que inspecciona cada comando antes de ejecutarlo y
+decide en qué cubo cae. Hace falta porque los patrones de texto no bastan: `rm -rf` puede ser
+legítimo dentro del directorio de trabajo y catastrófico fuera de él.
 
 Esto coincide con lo que la literatura sobre **supervisión humana graduada** en generación de
 código recomienda: la intensidad de la supervisión escala con el riesgo, y los mecanismos concretos
-son puertas de revisión, **matrices de permisos**, registros de auditoría y despliegue por etapas
-**[Evidencia]**.
+son puertas de revisión, **matrices de permisos**, registros de auditoría y despliegue por etapas.
+**[Evidencia]**
 
 ### 3.2 El criterio: tres familias suben siempre al humano
 
-Nuestra guarda clasifica cada comando y eleva si cae en una de estas tres. Todo lo demás es trabajo
-normal de desarrollo y se aprueba solo **[n=1, y es el corazón del modelo]**:
+La guarda clasifica cada comando y lo eleva si cae en una de estas tres familias. Todo lo demás es
+trabajo normal de desarrollo y se aprueba solo. Este criterio es el corazón del modelo. **[n=1]**
 
 | Familia | Qué incluye |
 |---|---|
@@ -155,13 +190,13 @@ normal de desarrollo y se aprueba solo **[n=1, y es el corazón del modelo]**:
 | **B. Borrado fuera de las raíces permitidas** | Cualquier borrado fuera del directorio de trabajo y del temporal |
 | **C. Pérdida irreversible de datos o de historial** | `git push --force`, poda de volúmenes, `DROP DATABASE`, `git clean -xdf` |
 
-La lógica es que las tres tienen la misma propiedad: **no se pueden deshacer con `git revert`**. Lo
-que se puede deshacer con git no necesita permiso; lo que no, siempre.
+Las tres comparten una propiedad: **no se pueden deshacer con `git revert`**. Lo que se puede
+deshacer con git no necesita permiso; lo que no, siempre.
 
 ### 3.3 Lo que sí se autoacepta
 
-Esto es deliberadamente amplio, y es lo que hace el método viable: si cada comando pide permiso, el
-humano deja de leer y aprueba en bloque, que es peor que no preguntar.
+La lista es deliberadamente amplia, y es lo que hace viable el método. Si cada comando pide permiso,
+el humano deja de leer y aprueba en bloque, que es peor que no preguntar.
 
 ```jsonc
 // Se ejecuta sin preguntar
@@ -173,10 +208,10 @@ humano deja de leer y aprueba en bloque, que es peor que no preguntar.
 "Bash(docker compose *)", "Bash(curl *)", "Bash(gh *)"
 ```
 
-**Escribir ficheros del proyecto se autoacepta.** Es la decisión que más sorprende y la que más
-defiendo: el trabajo del agente **es** escribir ficheros, todo está en git, y pedir permiso por
-edición convierte la supervisión en un clic reflejo. Lo que se supervisa no es la edición: es el
-**cierre** (§5.2).
+**Escribir ficheros del proyecto se autoacepta.** Es la decisión que más sorprende y la más
+defendible: el trabajo del agente **es** escribir ficheros, todo está en git, y pedir permiso por
+cada edición convierte la supervisión en un clic reflejo. Lo que se supervisa no es la edición,
+sino el **cierre** (§5.2).
 
 ### 3.4 Lo que exige autorización, y lo que no se ejecuta nunca
 
@@ -194,85 +229,88 @@ edición convierte la supervisión en un clic reflejo. Lo que se supervisa no es
 "PowerShell(Format-Volume*)", "PowerShell(Clear-Disk*)", "Bash(bcdedit *)"
 ```
 
-**La diferencia entre «preguntar» y «denegar»** es si existe un caso legítimo. `git push --force`
-lo tiene —reescribir un historial con datos filtrados, que nos pasó— así que pregunta. `mkfs` sobre
-el disco del portátil no lo tiene nunca: se deniega, y así no hay un momento de despiste en que se
-apruebe.
+**La diferencia entre «preguntar» y «denegar» es si existe un caso legítimo.** `git push --force`
+lo tiene (reescribir un historial que contenía datos filtrados, algo que ocurrió en este proyecto),
+así que pregunta. Formatear el disco del portátil no lo tiene nunca: se deniega, y así no hay un
+momento de despiste en que se apruebe.
 
-### 3.5 La regla que hace que esto funcione
+### 3.5 Las dos reglas que hacen que funcione
 
 **La guarda tiene sus propios tests.** Un mecanismo de seguridad sin tests es una intención: nadie
-sabe si sigue funcionando después del siguiente refactor. Y **el agente no busca rodeos**: si la
-guarda eleva algo, se para y pregunta; intentar otro camino para el mismo efecto es violar el
-método, no ser eficiente.
+sabe si sigue funcionando después de la siguiente refactorización.
+
+**El agente no busca rodeos.** Si la guarda eleva algo, el agente se para y pregunta. Intentar otro
+camino para conseguir el mismo efecto no es eficiencia: es violar el método.
 
 ---
 
 ## 4. Los documentos que rigen el desarrollo
 
-Siete, cada uno contesta **una** pregunta. La disciplina está en no dejar que uno contesté la de
-otro (P4).
+Siete documentos, y cada uno contesta **una** pregunta. La disciplina está en no dejar que uno
+conteste la de otro (P4).
 
 | Documento | Contesta | Cambia |
 |---|---|---|
-| **Reglas** (`AGENTS.md`) | ¿Cómo se trabaja aquí? Qué está prohibido | Rara vez |
+| **Reglas** (`AGENTS.md`) | ¿Cómo se trabaja aquí? ¿Qué está prohibido? | Rara vez |
 | **Especificaciones** | ¿Qué **garantiza** el sistema? ¿Qué no puedo romper? | Cuando cambia una garantía |
 | **Plan** (prompts TDD) | ¿Qué falta, y en qué orden? | Al planificar |
-| **Cursor** | ¿Dónde estamos ahora mismo? | Cada paso |
-| **Historial** | ¿Por qué esto está así? ¿Qué se midió? | Cada paso, añadiendo |
+| **Cursor** | ¿Dónde estamos ahora mismo? | En cada paso |
+| **Historial** | ¿Por qué esto está así? ¿Qué se midió? | En cada paso, añadiendo |
 | **Registro de decisiones** | ¿Por qué no se hizo de la otra manera? | Cuando se descarta una alternativa |
 | **Contribución** | ¿Cómo aporto desde fuera? | Rara vez |
 
 ### 4.1 Las reglas: `AGENTS.md`
 
-**Usa el nombre estándar.** `AGENTS.md` se formalizó en agosto de 2025 con participación de OpenAI,
-Google, Cursor, Factory y Sourcegraph; pasó de unos 20.000 repositorios a más de 60.000 en
-diciembre de 2025, cuando la especificación se donó a la *Agentic AI Foundation* de la Linux
-Foundation. Más de veinte herramientas lo leen **[Convención, con adopción medida]**.
+**Conviene usar el nombre estándar.** `AGENTS.md` se formalizó en agosto de 2025 con participación
+de OpenAI, Google, Cursor, Factory y Sourcegraph. Pasó de unos 20.000 repositorios a más de 60.000
+en diciembre de 2025, cuando la especificación se donó a la *Agentic AI Foundation* de la Linux
+Foundation. Más de veinte herramientas lo leen. **[Convención, con adopción medida]**
 
-Es Markdown plano sin esquema obligatorio. Si tu herramienta busca otro nombre —Claude Code busca
-`CLAUDE.md`—, ese fichero debe ser de tres líneas que **importan** el canónico, para que no haya
-dos versiones que puedan divergir (P4).
+Es Markdown plano sin esquema obligatorio. Si la herramienta busca otro nombre (Claude Code busca
+`CLAUDE.md`), ese fichero debe tener tres líneas que **importen** el canónico, para que no haya dos
+versiones que puedan divergir (P4).
 
-> **Un hallazgo contra nosotros, y lo que hicimos con él.** El estudio empírico sobre ficheros de
-> contexto para agentes encuentra que **la longitud moderada funciona mejor** que la exhaustiva, que
-> las instrucciones **explícitas** pesan más que los ejemplos implícitos, y que los agentes
-> **se saltan** el contenido verboso y redundante **[Evidencia]**.
+> **Un hallazgo que juega contra este proyecto, y lo que se hizo con él.** El estudio empírico
+> sobre ficheros de contexto para agentes encuentra que **la longitud moderada funciona mejor** que
+> la exhaustiva, que las instrucciones **explícitas** pesan más que los ejemplos implícitos, y que
+> los agentes **se saltan** el contenido verboso y redundante. **[Evidencia]**
 >
-> Nuestro `AGENTS.md` tenía **40 KB**. Al medirlo apareció algo peor que la longitud:
-> **el 28 % duplicaba `docs/METODOLOGIA_AGENTICA.md`** —las cuatro causas de parada, el bucle, el
-> informe de cierre y el protocolo de verificación estaban escritos dos veces, con redacción
-> distinta—. Es una violación de P4 **dentro del fichero que enuncia P4**, y ya había costado una
-> edición doble.
+> El `AGENTS.md` de este proyecto tenía **40 KB**. Al medirlo apareció algo peor que la longitud:
+> **el 28 % duplicaba otro documento**, el que describe la metodología. Las cuatro causas de
+> parada, el bucle de trabajo, el informe de cierre y el protocolo de verificación estaban escritos
+> dos veces, con redacción distinta. Es una violación de P4 dentro del fichero que enuncia P4, y ya
+> había costado una edición doble.
 >
-> Se partió el 2026-09-03 por **registro y no por tema**: el imperativo se queda —es lo que se lee
-> antes de escribir código— y el relato se va al documento que lo explica, dejando **una cláusula**
-> de por qué junto a cada regla. Resultado: **de 40 a 33 KB**, con un guardarraíl que comprueba que
-> los punteros resuelven, que los dieciocho imperativos siguen ahí y que el fichero no vuelve a
-> crecer.
+> Se partió el 2026-09-03 **por registro y no por tema**: el imperativo se queda, porque es lo que
+> se lee antes de escribir código, y el relato se va al documento que lo explica, dejando **una
+> cláusula** de por qué junto a cada regla. Resultado: **de 40 a 33 KB**, y un guardarraíl que
+> comprueba que los punteros resuelven, que los dieciocho imperativos siguen ahí y que el fichero
+> no vuelve a crecer.
 >
-> **Y sigue siendo mucho.** 33 KB no es «longitud moderada» por ninguna medida; la ganancia real
-> fue quitar la doble fuente de verdad, no el tamaño. La recomendación para quien empiece es la
-> misma y más fuerte: **no llegues ahí**. Reglas duras y accionables en el fichero principal, y el
-> razonamiento largo en documentos aparte que el fichero enlace, desde el primer día.
+> **Y sigue siendo mucho.** 33 KB no es «longitud moderada» por ninguna medida. La ganancia real
+> fue eliminar la doble fuente de verdad, no el tamaño. La recomendación para quien empiece es la
+> misma, y con más fuerza: **no llegues ahí**. Reglas duras y accionables en el fichero principal;
+> el razonamiento largo, en documentos aparte que el fichero enlace, desde el primer día.
 
 ### 4.2 Las especificaciones: qué garantiza el sistema
 
-Es el documento que más tardamos en escribir y el que más falta hacía. Un plan dice «haz X»; una
-especificación dice **«el sistema garantiza Y»**, y sólo lo segundo permite saber qué se puede
-cambiar sin romper nada.
+Es el documento que más se tardó en escribir y el que más falta hacía. Un plan dice «haz X»; una
+especificación dice **«el sistema garantiza Y»**. Solo lo segundo permite saber qué se puede cambiar
+sin romper nada.
 
-Se organiza **por capacidad, no por orden de ejecución**, y cada una lleva el mismo esqueleto:
+Se organiza **por capacidad, no por orden de ejecución**, y cada capacidad sigue el mismo esqueleto.
+El ejemplo es real y describe cómo el asistente decide en qué idioma responder:
 
 ```markdown
 ### 5.2 Política de lengua
 
 **Qué hace.** Decide en qué lengua responde un asistente.
 
-**Garantiza.** Tres modos y sólo tres, configurables en cascada y validados al escribirse.
-Un valor que no sea uno de los tres da 422 con los modos enumerados.
+**Garantiza.** Tres modos y solo tres, configurables en cascada y validados al escribirse.
+Un valor que no sea uno de los tres se rechaza con un error que enumera los modos válidos.
 
-**Superficie.** `core/language_mode.py` · `hub_opciones_router` · dos columnas en cascada.
+**Superficie.** El módulo que valida el modo, el endpoint que ofrece el catálogo al panel,
+y dos columnas de configuración en cascada.
 
 **Invariantes.** I3, I10.
 
@@ -281,77 +319,82 @@ Un valor que no sea uno de los tres da 422 con los modos enumerados.
 **Abierto.** Ningún despliegue monolingüe real lo ha usado todavía.
 ```
 
-Y su pieza central es una **tabla de invariantes**, cada uno con **dónde se hace cumplir**:
+Su pieza central es una **tabla de invariantes**, cada uno con **dónde se hace cumplir**:
 
 | # | Invariante | Se hace cumplir en |
 |---|---|---|
-| I1 | Una respuesta sin cita válida no se entrega | `citation_validator.py` |
-| I5 | Una lista de organizaciones vacía significa «ninguna», no «todas» | `core/auth/tenancy.py` |
-| I9 | Un docstring no autoriza nada: declarar un módulo obliga a exigirlo | `test_router_inventory_is_walked.py` |
+| I1 | Una respuesta sin cita válida no se entrega | El validador de citas |
+| I5 | Una lista de organizaciones vacía significa «ninguna», no «todas» | El módulo de tenencia |
+| I9 | Un comentario no autoriza nada: declarar que un endpoint pertenece a un módulo obliga a exigirlo con código | Un test que recorre todos los endpoints |
 
-**La columna derecha es lo que distingue un invariante de una intención.** Un invariante que sólo
+**La columna derecha es lo que distingue un invariante de una intención.** Un invariante que solo
 vive en un documento no obliga a nada.
 
-**Cuatro palabras de madurez y no un porcentaje**: `producción`, `construido`, `parcial`,
-`previsto`. Un porcentaje hay que revisarlo; cuatro palabras no. Y **la madurez la mueve el
-despliegue**, no el cierre del trabajo **[n=1, aprendido equivocándonos]**.
+**La madurez se expresa en cuatro palabras, no en un porcentaje**: `producción`, `construido`,
+`parcial`, `previsto`. Un porcentaje hay que revisarlo; cuatro palabras, no. Y **la madurez la
+mueve el despliegue**, no el cierre del trabajo. Esta última regla se aprendió por haberla
+confundido. **[n=1]**
 
 ### 4.3 El plan: especificaciones en forma de prompts TDD
 
-El trabajo pendiente se escribe como **instrucciones ejecutables**, agrupadas en **bloques**. Cada
-prompt lleva su objetivo, sus tests mínimos enumerados y su verificación de cierre:
+El trabajo pendiente se escribe como **instrucciones ejecutables**, agrupadas en bloques. Cada
+prompt lleva su objetivo, sus tests mínimos enumerados y su verificación de cierre. El ejemplo es el
+primer prompt del bloque que construyó la política de lengua del apartado anterior:
 
 ```markdown
-### Prompt LANG.1 (RED/GREEN) — Cablear `language_mode`
+### Prompt 1 (RED/GREEN) — Cablear el modo de lengua
 
 **Modelo sugerido**: Sonnet — alcance cerrado: dos clases sobre un protocolo existente.
 
-**Objetivo**: que `cfg.language_mode` decida la política que compone la factoría.
+**Objetivo**: que el modo configurado decida la política de lengua que compone la factoría.
 
 ## Tests (mínimo 6)
-- `none`: el prompt final NO contiene «Responde en» y no se lanza segunda búsqueda.
-- `fixed:es` con pregunta en catalán: el prompt instruye responder en es.
-- `prefer`: comportamiento idéntico al actual (test de regresión).
-- 422 del endpoint con `language_mode="castellano"`.
+- Modo «sin política»: el prompt final NO contiene «Responde en» y no se lanza segunda búsqueda.
+- Modo «fijo en castellano» con pregunta en catalán: el prompt instruye responder en castellano.
+- Modo «preferir la lengua de la pregunta»: comportamiento idéntico al actual (test de regresión).
+- Un valor inventado se rechaza con error 422.
 
-**Verificación**: suite del directorio verde, y una conversación real contra un chatbot en
-`fixed:es` preguntando en catalán, respondida en castellano (evidencia en el informe de cierre).
+**Verificación**: suite del directorio verde, y una conversación real contra un asistente fijado
+en castellano, preguntando en catalán y respondida en castellano (evidencia en el informe de cierre).
 ```
 
-Tres detalles que hacen la diferencia **[n=1]**:
+Tres detalles marcan la diferencia. **[n=1]**
 
 - **Los tests van enumerados en el prompt.** Escribir «añade tests» produce tests que confirman lo
-  que el código hace. Enumerarlos antes fija qué tiene que ser cierto.
+  que el código ya hace. Enumerarlos antes fija qué tiene que ser cierto.
 - **Un test de regresión explícito** en todo prompt que cambie algo existente.
 - **La verificación dice qué evidencia hace falta**, no «comprobar que funciona».
 
-**Y una lección de tamaño**: nuestro plan de fase 1 llegó a **27.449 líneas en un solo fichero**.
-No se puede revisar en un *pull request* ni comentar por línea. Hay que partirlo **un fichero por
-bloque desde el principio**.
+**Una lección sobre el tamaño**: el plan de la primera fase de este proyecto llegó a **27.449 líneas
+en un solo fichero**. No se puede revisar en una *pull request* ni comentar por línea. Hay que
+partirlo en **un fichero por bloque desde el principio**.
 
 ### 4.4 El cursor y el historial
 
 **El cursor** dice dónde estamos: qué bloque, qué paso, qué quedó cerrado. Se actualiza siempre.
 
-**El historial** es una fila por paso cerrado, añadida **arriba**, con lo que sólo se sabe después:
-la cifra que salió, el doble de test que mentía, la alternativa que no funcionó. Es el documento
-que ninguna herramienta del mercado te da y el que más agradece quien llega después **[n=1]**.
+**El historial** es una fila por paso cerrado, añadida arriba, con lo que solo se sabe después de
+hacer el trabajo: la cifra que salió, el test que mentía, la alternativa que no funcionó. Es el
+documento que ninguna herramienta del mercado ofrece y el que más agradece quien llega después.
+**[n=1]**
 
-Ejemplo de fila real, y fíjate en que lo valioso es la parte negativa:
+Un ejemplo de fila real, traducido a lenguaje llano. Lo valioso es la parte negativa:
 
-> **USR.8** — El asistente agéntico tenía **0 interacciones registradas** mientras los de RAG
-> tenían 33, 9 y 1. Todas sus conversaciones se perdían. Causa: `"".join(collected_tokens)` con
-> `TypeError` porque el proveedor devuelve el contenido como lista de bloques. **Son dos defectos**:
-> el contenido en bloques y que el tramo posterior estaba fuera de todo `try`, así que el cliente
-> no recibía ni un evento de error. Tercera vez que muerde el mismo problema.
+> Uno de los asistentes tenía **cero conversaciones registradas**, mientras que los otros tres
+> tenían 33, 9 y 1. No es que se usara poco: todas sus conversaciones se perdían, y el usuario se
+> quedaba esperando una respuesta que nunca terminaba. La causa era que el proveedor del modelo
+> devolvía el texto en un formato que el código no esperaba. **Eran dos defectos, no uno**: el
+> formato inesperado, y que el tramo de código que guardaba la conversación no tenía ninguna
+> protección, así que fallaba en silencio. Era la tercera vez que el mismo problema mordía en un
+> sitio distinto.
 
-**Separa el historial del cursor en cuanto crezca.** El nuestro llegó a ser 535 de los 626 KB del
-fichero del cursor, que se lee entero al arrancar cada sesión.
+**Hay que separar el historial del cursor en cuanto crezca.** En este proyecto llegó a ocupar 535
+de los 626 KB del fichero del cursor, que se lee entero al arrancar cada sesión.
 
 ### 4.5 El registro de decisiones (ADR)
 
-Formato clásico de *Architecture Decision Record*: qué se decidió, cuándo, por qué, y **qué queda
-descartado** **[Convención, establecida desde 2011]**.
+Es el formato clásico de *Architecture Decision Record*: qué se decidió, cuándo, por qué, y **qué
+quedó descartado**. **[Convención, establecida desde 2011]**
 
 ```markdown
 # Decisión: <qué se decide, en una frase>
@@ -360,14 +403,14 @@ descartado** **[Convención, establecida desde 2011]**.
 > **Origen**: <de dónde salió la pregunta>. **Afecta a**: <módulos>.
 ```
 
-**El criterio de cuándo hace falta uno** es lo que evita los dos extremos —nadie escribe ninguno, o
-se escribe uno por cada corrección—:
+**El criterio de cuándo hace falta uno** evita los dos extremos, que nadie escriba ninguno o que se
+escriba uno por cada corrección:
 
-> Si dentro de un año alguien pudiera implementar **lo contrario** de buena fe, hace falta ADR. Si
-> sólo repetiría un error ya pagado, basta una fila del historial.
+> Si dentro de un año alguien pudiera implementar **lo contrario** de buena fe, hace falta una
+> decisión escrita. Si solo repetiría un error ya pagado, basta una fila del historial.
 
-Y: **una decisión no se edita para cambiarla.** Se escribe otra que la sustituya, y la vieja pasa a
-`sustituida por…`. Borrar el razonamiento viejo pierde la prueba de que la alternativa se
+Y **una decisión no se edita para cambiarla**. Se escribe otra que la sustituya, y la vieja pasa a
+`sustituida por…`. Borrar el razonamiento antiguo destruye la prueba de que la alternativa se
 consideró.
 
 ### 4.6 Comparación con los marcos publicados
@@ -380,13 +423,13 @@ consideró.
 | Tareas ordenadas | `tasks.md` | Cursor |
 | **Qué garantiza el sistema** | — | **Especificaciones** |
 | **Por qué se hizo así** | — | **Historial + ADR** |
-| **TDD obligatorio** | — | **Sí, y es lo que más protege** |
+| **TDD obligatorio** | — | **Sí** |
 | **Documentación con test** | — | **Guardarraíles (§6)** |
 
-La forma coincide **[Convención]**: hay convergencia real de la industria en «principios → qué →
-plan → tareas». Lo que añadimos son las cuatro filas de abajo, y de esas la que yo defendería
-primero ante otro equipo es **TDD obligatorio**, porque es la que hace que el resto sea comprobable
-y no una declaración de intenciones.
+La forma coincide: hay convergencia real en la industria hacia «principios → qué → plan → tareas».
+**[Convención]** Lo que este marco añade son las cuatro filas inferiores. De ellas, la que más
+conviene defender ante otro equipo es **TDD obligatorio**, porque es la que hace que el resto sea
+comprobable y no una declaración de intenciones.
 
 ---
 
@@ -394,12 +437,12 @@ y no una declaración de intenciones.
 
 ### 5.1 El bloque es la unidad de interacción
 
-Un **bloque** es un conjunto de prompts que entregan algo utilizable. Una vez arrancado, el agente
-**no informa hasta cerrarlo**: no pide confirmación entre pasos.
+Un bloque es un conjunto de prompts que entrega algo utilizable. Una vez arrancado, el agente **no
+informa hasta cerrarlo** y no pide confirmación entre pasos.
 
-Esto es lo que hace el método rentable, y encaja con el reparto que mide Anthropic —el humano en la
-planificación, el agente en la ejecución **[Evidencia]**. Confirmar cada paso convierte al humano
-en un cuello de botella que además deja de leer.
+Esto es lo que hace rentable el método, y encaja con el reparto que mide Anthropic: el humano en la
+planificación, el agente en la ejecución. **[Evidencia]** Confirmar cada paso convierte al humano en
+un cuello de botella que, además, deja de leer.
 
 ### 5.2 El bucle por paso
 
@@ -409,67 +452,68 @@ RED → GREEN → REFACTOR → verificaciones de cierre → actualizar el cursor
 
 **Un commit por paso, firmado.** Es lo que hace reversible un bloque largo: si el paso 5 rompe lo
 que hizo el 3, hay un punto exacto al que volver. Sin eso, un bloque de siete pasos es un solo
-commit gigante que no se puede revertir a medias **[n=1, y de las cosas que más han servido]**.
+commit gigante que no se puede revertir a medias. De todo lo que se describe aquí, es una de las
+prácticas que más ha servido. **[n=1]**
 
 Las **verificaciones de cierre** son la supervisión real, y por eso los permisos pueden ser amplios
 (§3.3): suite verde en los directorios tocados, migración aplicada, contrato regenerado si cambió
-la API, retirada del código viejo comprobada con búsqueda a cero, y verificación en navegador si
-toca interfaz.
+la API, código antiguo retirado y comprobado con una búsqueda que devuelve cero, y verificación en
+navegador si el cambio toca la interfaz.
 
 ### 5.3 Cuándo interrumpir al humano, y cuándo no
 
-**Sólo por estas cuatro causas:**
+**Solo por estas cuatro causas:**
 
-1. **Operación de riesgo** — la detecta la guarda (§3). No se fuerza ni se busca rodeo.
-2. **Decisión de criterio** — ambigüedad que llevaría a productos distintos, arquitectura que el
-   plan no cierra, alcance que excede el bloque.
-3. **Fallo persistente** — un rojo que no llega a verde. Se para y se reporta **con la salida
-   real**.
-4. **Prerrequisito externo ausente** — base de datos apagada, credencial que falta.
+1. **Operación de riesgo.** La detecta la guarda (§3). No se fuerza ni se busca un rodeo.
+2. **Decisión de criterio.** Una ambigüedad que llevaría a productos distintos, una arquitectura
+   que el plan no cierra, un alcance que excede el bloque.
+3. **Fallo persistente.** Un test en rojo que no llega a verde. Se para y se reporta **con la
+   salida real**.
+4. **Prerrequisito externo ausente.** Base de datos apagada, credencial que falta.
 
-**Y explícitamente NO se interrumpe por**: desviaciones entre el plan y el código real —se aplica
-la interpretación más fiel, se registra como *desviación documentada* y se sigue—, fallos
-preexistentes ya inventariados, o dudas de estilo que las reglas ya resuelven.
+**Y explícitamente no se interrumpe por** desviaciones entre el plan y el código real (se aplica la
+interpretación más fiel, se registra como *desviación documentada* y se sigue), por fallos
+preexistentes ya inventariados, ni por dudas de estilo que las reglas ya resuelven.
 
-Enumerar las causas de **no** interrumpir es tan importante como las de sí. Sin esa lista el agente
-pregunta por todo, y la supervisión se degrada a aprobación automática **[n=1]**.
+Enumerar las causas de **no** interrumpir es tan importante como enumerar las de sí. Sin esa lista,
+el agente pregunta por todo y la supervisión se degrada a aprobación automática. **[n=1]**
 
 ### 5.4 Tests escalonados
 
 | Cuándo | Qué | Coste |
 |---|---|---|
-| Durante el paso | Sólo el fichero de tests que se está escribiendo | segundos |
-| Al cerrar el paso | Los directorios que toca + el test de higiene de la suite | segundos a 1 min |
-| Al cerrar el bloque | La suite entera | minutos a una hora |
+| Durante el paso | Solo el fichero de tests que se está escribiendo | segundos |
+| Al cerrar el paso | Los directorios que toca, más el test de higiene de la suite | de segundos a un minuto |
+| Al cerrar el bloque | La suite entera | de minutos a una hora |
 
-La suite completa después de cada cambio no aporta información nueva y sí una hora de espera. El
-test de higiene entra en el nivel intermedio porque tarda medio segundo y caza justo lo que se
-escapa de un subconjunto: mocks mal puestos, creación de esquema sobre la base del desarrollador,
-imports a módulos que ya no existen.
+Ejecutar la suite completa después de cada cambio no aporta información nueva y sí una hora de
+espera. El test de higiene entra en el nivel intermedio porque tarda medio segundo y caza justo lo
+que se escapa de un subconjunto: dobles de test mal puestos, creación de esquema sobre la base de
+datos del desarrollador, imports a módulos que ya no existen.
 
 ### 5.5 Verificación en navegador por el propio agente
 
-Si el trabajo toca interfaz, **el agente lo comprueba él mismo en un navegador real** dentro del
-bloque: navega, busca el texto, interactúa, y lee la consola y las peticiones de red buscando
+Si el trabajo toca la interfaz, **el agente lo comprueba él mismo en un navegador real** dentro del
+bloque: navega, busca el texto, interactúa, y lee la consola y las peticiones de red en busca de
 errores que los tests unitarios no ven.
 
-Las **pruebas manuales humanas se reservan** a lo irreducible: credenciales reales, sistemas
-externos no simulables, juicio de identidad visual, lector de pantalla real, datos personales. Y se
-entregan como un guion ejecutable, no como una lista de deseos.
+Las **pruebas manuales humanas se reservan** para lo irreducible: credenciales reales, sistemas
+externos que no se pueden simular, juicio sobre la identidad visual, lector de pantalla real, datos
+personales. Y se entregan como un guion ejecutable, no como una lista de deseos.
 
-Esto no es cosmético. En nuestro proyecto, la verificación en navegador ha encontrado defectos que
-la suite no veía **y que la suite no podía ver**: un 500 en un login, un flujo que no terminaba
-nunca, y una etiqueta que decía «Editar» y lo que hacía era activar un asistente **[n=1]**.
+No es cosmético. En este proyecto, la verificación en navegador ha encontrado defectos que la suite
+no veía **y que no podía ver**: un error 500 en un inicio de sesión, un flujo que no terminaba
+nunca, y un botón que decía «Editar» y lo que hacía era activar un asistente. **[n=1]**
 
 ### 5.6 El informe de cierre
 
-Un solo mensaje con: pasos cerrados y sus commits, **cifras reales** por suite, migraciones
-aplicadas, qué se verificó en navegador y con qué evidencia, desviaciones documentadas, lo que
-queda pendiente, las pruebas manuales, y **una línea diciendo qué cambió en las especificaciones o
-por qué no cambió nada**.
+Un solo mensaje con: los pasos cerrados y sus commits, las **cifras reales** de cada suite, las
+migraciones aplicadas, qué se verificó en navegador y con qué evidencia, las desviaciones
+documentadas, lo que queda pendiente, las pruebas manuales, y **una línea que dice qué cambió en las
+especificaciones o por qué no cambió nada**.
 
-Esa última parte es la que sostiene el mantenimiento de la documentación: **obligar a afirmar la
-omisión** convierte «me lo salté» en una frase revisable.
+Esa última línea es la que sostiene el mantenimiento de la documentación. **Obligar a afirmar la
+omisión** convierte «me lo salté» en una frase que se puede revisar.
 
 ---
 
@@ -478,32 +522,33 @@ omisión** convierte «me lo salté» en una frase revisable.
 ### 6.1 La idea
 
 Todo documento que se pueda comprobar mecánicamente tiene un test en la suite que falla cuando el
-documento miente. No es documentación *sobre* el código: es documentación **comprobada por** el
-código.
+documento deja de ser verdad. No es documentación *sobre* el código: es documentación **comprobada
+por** el código.
 
-Es la respuesta operativa a P6, y no la he visto en ninguno de los marcos publicados **[n=1]**.
+Es la respuesta operativa a P6, y no aparece en ninguno de los marcos publicados. **[n=1]**
 
-### 6.2 Los cinco tipos que usamos
+### 6.2 Los cinco tipos que se usan
 
 | Tipo | Qué comprueba | Ejemplo real |
 |---|---|---|
 | **Inventario completo** | Que el documento nombra **todo** lo que el código declara | Toda tabla de configuración está en el inventario de multitenencia con su ámbito |
 | **Vocabulario sincronizado** | Que las listas del documento son las del código | Los modos de lengua del documento son los que el validador acepta |
-| **Referencias vivas** | Que las rutas y ficheros que nombra existen | Las 35 rutas de la especificación |
+| **Referencias vivas** | Que las rutas y ficheros que nombra existen | Las 35 rutas que cita la especificación |
 | **Regla presente** | Que una regla no ha desaparecido del fichero de reglas | Que la regla de mantener la especificación sigue ahí **y conserva su condición** |
-| **Clase de defecto** | Que un patrón que ya falló no vuelve | Que nadie lee el contenido del modelo sin normalizarlo |
+| **Clase de defecto** | Que un patrón que ya falló no vuelve | Que nadie lee la respuesta del modelo sin normalizarla antes |
 
 ### 6.3 La trampa: el guardarraíl que pasa en el vacío
 
-**Esto es lo más importante de la sección.** Un guardarraíl que recorre un directorio inexistente
-no encuentra nada, y por tanto **pasa en verde sin mirar nada**. Nos ocurrió: un test que prohibía
-un patrón usaba una ruta mal calculada y llevaba días en verde sin haber comprobado una sola línea.
-Se descubrió por casualidad, al copiarlo **[n=1, y es el error más peligroso del método]**.
+**Es lo más importante de esta sección.** Un guardarraíl que recorre un directorio inexistente no
+encuentra nada y, por tanto, **pasa en verde sin haber mirado nada**. Ocurrió en este proyecto: un
+test que prohibía cierto patrón usaba una ruta mal calculada, y llevaba días en verde sin haber
+comprobado una sola línea. Se descubrió por casualidad, al copiarlo para otro uso. Es el error más
+peligroso del método. **[n=1]**
 
-Es peor que un falso negativo normal porque **no hay cifra extrema que dé el aviso**: un verde no
-llama la atención de nadie.
+Es peor que un falso negativo normal porque **no hay ninguna cifra extraña que dé el aviso**. Un
+verde no llama la atención de nadie.
 
-Dos reglas que lo evitan:
+Dos reglas lo evitan:
 
 ```python
 # 1. La raíz se comprueba, no se supone.
@@ -514,8 +559,8 @@ assert (RAIZ / "docs").is_dir(), f"la raíz no es la que se cree: {RAIZ}"
 #    se escribe primero contra el estado que SÍ tiene ocurrencias, y se ve rojo.
 ```
 
-Y la práctica que lo cierra: **sabotear el documento a propósito y ver el rojo** antes de dar el
-guardarraíl por bueno. Un guardarraíl que sólo se ha visto en verde no se ha visto.
+Y una práctica cierra el círculo: **sabotear el documento a propósito y ver el rojo** antes de dar
+el guardarraíl por bueno. Un guardarraíl que solo se ha visto en verde no se ha visto.
 
 ### 6.4 Un guardarraíl completo, como plantilla
 
@@ -543,8 +588,8 @@ def test_should_be_listed_in_the_register(decision, registro):
     )
 ```
 
-Fíjate en tres cosas: el `assert` de la raíz, el `assert` de que la búsqueda encontró algo, y que
-**el mensaje de error explica la consecuencia**, no sólo el hecho. Quien se encuentre ese rojo
+Tres cosas a observar: el `assert` sobre la raíz, el `assert` de que la búsqueda encontró algo, y
+que **el mensaje de error explica la consecuencia**, no solo el hecho. Quien se encuentre ese rojo
 dentro de un año tiene que entender por qué importa.
 
 ---
@@ -553,35 +598,36 @@ dentro de un año tiene que entender por qué importa.
 
 ### 7.1 Las puertas
 
-CI no es «que pasen los tests». Son puertas con propósito, y cada una existe por algo que pasó:
+La integración continua no es «que pasen los tests». Son puertas con propósito, y cada una existe
+por algo que pasó:
 
 | Puerta | Por qué |
 |---|---|
 | Lint | Corre **antes** de los tests: un import sin usar deja el trabajo en rojo sin que nada se ejecute |
 | Dependencias con *lock* verificado | Instalar sin verificar vuelve a resolver en silencio, y un *lock* que no corresponde a su manifiesto no da ningún síntoma |
-| Contrato regenerado y tipado | El cliente del frontend se genera del contrato del backend; si no compila, el contrato se rompió |
+| Contrato regenerado y tipado | El cliente del frontend se genera a partir del contrato del backend; si no compila, el contrato se rompió |
 | Suite completa | En **una sola invocación** |
 | Puerta de control de acceso | Un subconjunto de tests de aislamiento que **bloquea el despliegue** |
 | Puerta de regresión de calidad | Falla si una métrica baja más de un umbral respecto a una línea base versionada |
-| Accesibilidad | Base mínima que no puede empeorar |
+| Accesibilidad | Una base mínima que no puede empeorar |
 | Certificado de origen (DCO) | Cada commit va firmado |
 
-### 7.2 En CI el paralelismo se apaga, a propósito
+### 7.2 En la integración continua el paralelismo se apaga, a propósito
 
-En local los tests corren en paralelo por velocidad. **En CI, no.** El paralelismo reparte los
-tests entre procesos y eso **esconde el estado filtrado entre tests** —un mock asignado a una
-clase, un singleton contaminado—, que es justo lo que se quiere cazar. En local manda la velocidad;
-en CI, la detección **[n=1]**.
+En local, los tests corren en paralelo por velocidad. **En la integración continua, no.** El
+paralelismo reparte los tests entre procesos y eso **esconde el estado que se filtra entre tests**
+(un doble asignado a una clase, un objeto global contaminado), que es justo lo que se quiere cazar.
+En local manda la velocidad; en integración continua, la detección. **[n=1]**
 
 ### 7.3 Ramas: trabajar y desplegar no son lo mismo
 
-El trabajo va a una rama de desarrollo; la rama principal **es la que despliega**. CI y la firma
-corren en las dos; el despliegue, sólo en la principal.
+El trabajo va a una rama de desarrollo; la rama principal **es la que despliega**. Integración
+continua y firma corren en las dos; el despliegue, solo en la principal.
 
-Esto lo aprendimos de la peor manera: un commit que sólo tocaba un guion de publicación desplegó
-producción entera, con su reinicio y su aviso de vigilancia **[n=1]**. La regla que lo cierra es
-que **el fichero de despliegue no lleva la rama de desarrollo en su disparador**, y si algún día
-aparece ahí, la separación desaparece.
+Se aprendió de la peor manera: un commit que solo tocaba un guion de publicación desplegó producción
+entera, con su reinicio y su aviso de vigilancia. **[n=1]** La regla que lo cierra es que **el
+fichero de despliegue no lleva la rama de desarrollo en su disparador**. Si algún día aparece ahí,
+la separación desaparece.
 
 ---
 
@@ -589,34 +635,35 @@ aparece ahí, la separación desaparece.
 
 ### 8.1 Licencia
 
-Nuestro proyecto usa **AGPL-3.0-or-later**. El razonamiento, que es el que hay que replicar y no la
+Este proyecto usa **AGPL-3.0-or-later**. Lo que hay que replicar es el razonamiento, no la
 elección:
 
 - Es software para **administraciones públicas**, financiado con dinero público. Que las mejoras
   vuelvan a la comunidad es coherente con su origen.
 - La AGPL cubre el **§13**: quien ofrezca el software como servicio en red tiene que ofrecer la
-  fuente a sus usuarios. Con GPL a secas, un despliegue SaaS de un tercero no obliga a nada.
+  fuente a sus usuarios. Con GPL a secas, un despliegue como servicio por parte de un tercero no
+  obliga a nada.
 - Titularidad institucional, autoría personal. Se distinguen.
 
-**Para otro proyecto la elección puede ser otra**, y lo que este marco pide es que esté **razonada
-por escrito**, no que sea AGPL.
+**Para otro proyecto la elección puede ser otra.** Lo que el marco pide es que esté **razonada por
+escrito**, no que sea AGPL.
 
 ### 8.2 Certificado de origen (DCO)
 
 Cada commit lleva `Signed-off-by`, con `git commit -s`. Certifica que quien commitea tiene derecho
 a aportar ese código bajo la licencia del proyecto. Lo comprueba un *workflow*.
 
-**Se exige también al mantenedor**, y eso no es simetría decorativa: un mantenedor que se exceptúa
-de su propia política la deja sin fuerza.
+**Se exige también al mantenedor**, y no es simetría decorativa: un mantenedor que se exceptúa de
+su propia política la deja sin fuerza.
 
 ### 8.3 Issues y la vía para proponer
 
 Dos plantillas, y la segunda es la que importa en un proyecto multiorganización:
 
-**Fallo** — qué pasó, qué se esperaba, cómo reproducirlo, y **en qué modo de despliegue y con qué
+**Fallo.** Qué pasó, qué se esperaba, cómo reproducirlo, y **en qué modo de despliegue y con qué
 configuración**: el mismo código se comporta distinto según cómo esté configurado.
 
-**Propuesta** — con una pregunta central que decide todo:
+**Propuesta.** Con una pregunta central que decide todo:
 
 ```markdown
 ## Qué falta
@@ -637,49 +684,54 @@ configuración**: el mismo código se comporta distinto según cómo esté confi
 **Se propone antes de escribir código.** Contestar esa pregunta primero ahorra escribir lo que no
 puede entrar.
 
-Y la plantilla de *pull request* empieza por la misma pregunta: **¿por qué esto es generalizable?**
+La plantilla de *pull request* empieza por la misma pregunta: **¿por qué esto es generalizable?**
 
 ### 8.4 Un principal y tantos *forks* como organizaciones
 
-El repositorio principal decide la dirección. Cada organización que despliegue trabaja sobre **su
+El repositorio principal decide la dirección. Cada organización que despliega trabaja sobre **su
 fork**, y lo generalizable sube por *pull request*. **La regla vale también para la institución
 donde nació el proyecto**: su desarrollo entra como aportación, no como dirección.
 
-Sin esa regla, en poco tiempo el principal *sería* el sistema de una institución concreta y el
+Sin esa regla, en poco tiempo el principal *sería* el sistema de una institución concreta, y el
 resto heredaría decisiones tomadas para un contexto que no es el suyo.
 
-### 8.5 Lo que la especificación no resuelve
+### 8.5 Lo que la documentación no resuelve
 
-Advertencia práctica **[n=1]**: para abrir un repositorio, la documentación resuelve «qué no puedo
-romper». No resuelve **«qué tarea cojo»**. Eso son *issues*, y sin ellos quien llega no tiene por
-dónde entrar. Nosotros llegamos a tener toda la documentación y **cero issues**, que es la mitad del
-trabajo sin hacer.
+Una advertencia práctica. **[n=1]** Para abrir un repositorio, la documentación resuelve «qué no
+puedo romper». No resuelve **«qué tarea cojo»**. Eso son *issues*, y sin ellos quien llega no tiene
+por dónde entrar. Este proyecto llegó a tener toda la documentación escrita y **cero issues**, que
+es la mitad del trabajo sin hacer.
 
 ---
 
-## 9. Lo que nos ha fallado
+## 9. Los errores que ya pagamos
 
-Toda esta sección es `[n=1]` y toda es negativa. Es la que yo leería primero.
+Toda esta sección es **[n=1]** y toda es negativa. Es también la de más valor para otro equipo:
+ninguno de estos errores es específico del proyecto. Son la forma en que fallan los agentes, los
+tests y la documentación en cualquier equipo, y empezar sabiéndolo es la ventaja más barata que se
+puede tener.
 
 ### 9.1 El medidor miente antes que el sistema
 
-**Es el error más frecuente, con diferencia.** Ante una cifra extrema —un 0, un 100 %, un valor
-exacto repetido, una comparación que se invierte— el fallo está en el instrumento más veces que en
-el sistema. Y es **más barato de creer**, porque confirma que había algo que arreglar.
+**Es el error más frecuente, con diferencia.** Ante una cifra extraña (un cero, un cien por cien,
+un valor exacto que se repite, una comparación que se invierte), el fallo está en el instrumento
+más veces que en el sistema. Y es **más fácil de creer**, porque confirma que había algo que
+arreglar.
 
-Nos ha pasado más de quince veces. Ejemplos: «0 de 12 fuentes» era leer un campo que no existía;
-«1.000 exacto» era medir una cosa distinta de la que decide; «cuatro fichas sin texto» lo tenían,
-guardado por otra clave; y una diferencia de 22 KB al partir un fichero era mi propio verificador
-buscando mal.
+Ha ocurrido más de quince veces en este proyecto. Algunos ejemplos: «0 de 12 fuentes» era leer un
+campo que no existía; «1.000 exacto» era medir una cosa distinta de la que decide; «cuatro fichas
+sin texto» lo tenían, guardado bajo otra clave; y una diferencia de 22 KB al partir un fichero era
+el propio verificador buscando mal.
 
-**La variante peligrosa: un rojo en un test recién escrito es tan sospechoso como una cifra
-extrema**, porque ahí se interpreta como «falta implementarlo» y la prisa por arreglar tapa la
+**La variante peligrosa: un test recién escrito que sale en rojo es tan sospechoso como una cifra
+extraña.** Ahí el rojo se interpreta como «falta implementarlo», y la prisa por arreglar tapa la
 revisión del instrumento.
 
 ### 9.2 El doble de test se queda corto respecto al código
 
-Un mock que enumera a mano lo que un módulo exporta se queda viejo en el siguiente cambio, y el
-rojo aparece **lejos de su causa**: 19 tests fallando que parecían del menú y eran del doble.
+Un doble que enumera a mano lo que un módulo exporta se queda viejo en el siguiente cambio, y el
+rojo aparece **lejos de su causa**: 19 tests fallando que parecían del menú de la aplicación, y eran
+del doble.
 
 Regla: **un solo doble por módulo, en un solo sitio.** Si un fichero de tests nuevo necesita el
 mismo doble, los tests van al fichero que ya lo tiene.
@@ -687,36 +739,36 @@ mismo doble, los tests van al fichero que ya lo tiene.
 ### 9.3 Una guarda defensiva esconde un bug
 
 Donde un `except` evita que un fallo tumbe el servicio, hace falta **un test del camino bueno**.
-Tuvimos un arreglo inerte durante días porque un `except` se tragaba el error que probaba que no
-funcionaba.
+Este proyecto tuvo un arreglo inerte durante días porque un `except` se tragaba el error que
+demostraba que no funcionaba.
 
-### 9.4 Los mocks sin `spec=` esconden cambios de API externa
+### 9.4 Los dobles sin especificación esconden cambios de API externa
 
-Un doble sin especificación acepta cualquier método, incluido uno que el SDK real renombró. Se
-descubre en producción.
+Un doble sin `spec=` acepta cualquier método, incluido uno que el SDK real renombró. Se descubre en
+producción.
 
 ### 9.5 La duplicación se cuela en el documento que la prohíbe
 
-`AGENTS.md` enuncia «una sola fuente de verdad por cosa» y tenía el 28 % de su contenido
-duplicado en otro documento. No fue descuido: cada vez que una regla necesitaba una frase más de
-contexto, se escribía ahí en vez de en el documento largo, y en meses eso son 11 KB.
+`AGENTS.md` enuncia «una sola fuente de verdad por cosa» y tenía el 28 % de su contenido duplicado
+en otro documento. No fue descuido: cada vez que una regla necesitaba una frase más de contexto, se
+escribía ahí en vez de en el documento largo, y en meses eso son 11 KB.
 
-**El síntoma que lo delató no fue el tamaño**: fue tener que editar la misma lista en dos sitios
-al añadir una regla, y darse cuenta de que la segunda copia casi se queda sin actualizar. Y al
-quitar la duplicación se puso rojo un guardarraíl **que estaba casando con la copia**, lo que
-enseña algo incómodo: un guardarraíl puede estar vigilando la redundancia en vez del original.
+**El síntoma que lo delató no fue el tamaño.** Fue tener que editar la misma lista en dos sitios al
+añadir una regla, y darse cuenta de que la segunda copia casi se queda sin actualizar. Y al quitar
+la duplicación se puso rojo un guardarraíl **que estaba casando con la copia**, lo que enseña algo
+incómodo: un guardarraíl puede estar vigilando la redundancia en vez del original.
 
 ### 9.6 Un documento con estado incrustado envejece
 
-Nuestro documento de «leer primero» llevaba una sección de estado fechada, y tres bloques después
-mentía. **El estado va en un solo sitio** (el cursor) y los demás apuntan. Es P4 aplicado a lo que
-más tienta romperlo.
+El documento de «leer primero» de este proyecto llevaba una sección de estado fechada, y tres
+bloques después mentía. **El estado va en un solo sitio**, el cursor, y los demás documentos
+apuntan a él. Es P4 aplicado a lo que más tienta romperlo.
 
-### 9.7 Y el meta-error: el mismo problema muerde tres veces
+### 9.7 El mismo problema muerde tres veces
 
-Un defecto de frontera con un proveedor externo nos mordió **tres veces en sitios distintos** antes
-de que lo arregláramos como **clase** en vez de como caso. La segunda vez ya había un módulo
-escrito para evitarlo, y no se usó en los ocho sitios que lo necesitaban.
+Un defecto de frontera con un proveedor externo mordió **tres veces en sitios distintos** antes de
+que se arreglara como **clase** en vez de como caso. La segunda vez ya existía un módulo escrito
+para evitarlo, y no se usó en los ocho sitios que lo necesitaban.
 
 Regla: **a la segunda vez, guardarraíl.** No a la tercera.
 
@@ -727,7 +779,7 @@ Regla: **a la segunda vez, guardarraíl.** No a la tercera.
 | Dimensión | Marcos *spec-driven* (Spec Kit, Kiro) | Marcos de personas ágiles (BMAD) | Este marco |
 |---|---|---|---|
 | Origen | Herramienta con opinión, 2025 | Comunidad, 2025 | Ensayo y error en un proyecto real |
-| Madurez | Meses. Ninguno se ha impuesto | Meses | `[n=1]` |
+| Madurez | Meses. Ninguno se ha impuesto | Meses | **[n=1]** |
 | Especificación | Fichero por *feature* | Documentos por rol | Prompts TDD + especificación por capacidad |
 | TDD | No lo impone | No lo impone | **Obligatorio** |
 | Trazabilidad del *por qué* | — | — | **Historial + ADR** |
@@ -736,15 +788,15 @@ Regla: **a la segunda vez, guardarraíl.** No a la tercera.
 | Autonomía | Alta, con confirmación por fase | Alta | **Media: bloque autónomo, decisiones humanas** |
 
 **Qué tomar de ellos**: la granularidad de un fichero por unidad de trabajo, y el vocabulario
-—*constitution*, *spec*, *plan*, *tasks*— que ya empieza a ser común y facilita que alguien de
-fuera entienda tu repositorio.
+(*constitution*, *spec*, *plan*, *tasks*), que empieza a ser común y facilita que alguien de fuera
+entienda el repositorio.
 
 **Qué no tomar**: la promesa de autonomía por fases sin puerta de tests. Es donde DORA avisa: sin
-estabilidad, la velocidad es caos acelerado **[Evidencia]**.
+estabilidad, la velocidad es caos acelerado. **[Evidencia]**
 
-**Y qué no hacer**: adoptar una herramienta de orquestación para obtener lo que ya tienes. Si ya
-tienes plan, cursor e historial funcionando, migrarlos al formato de un marco te cuesta la
-reescritura entera y te devuelve lo mismo.
+**Y qué no hacer**: adoptar una herramienta de orquestación para obtener lo que ya se tiene. Si un
+equipo ya tiene plan, cursor e historial funcionando, migrarlos al formato de un marco cuesta la
+reescritura entera y devuelve lo mismo.
 
 ---
 
@@ -752,27 +804,27 @@ reescritura entera y te devuelve lo mismo.
 
 ### 11.1 El orden importa
 
-No se montan los siete documentos el primer día. Este orden es el que evita escribir documentos que
-luego hay que tirar:
+Los siete documentos no se montan el primer día. Este orden evita escribir documentos que luego hay
+que tirar:
 
 | # | Paso | Por qué aquí |
 |---|---|---|
 | 1 | **Permisos y guarda, con sus tests** | Antes de que el agente ejecute nada |
 | 2 | **`AGENTS.md` mínimo**: reglas duras, comandos del proyecto, prohibiciones | Es lo que el agente lee antes de escribir |
-| 3 | **CI con lint + tests + lock verificado** | Sin esto, TDD es una intención |
+| 3 | **Integración continua con lint, tests y *lock* verificado** | Sin esto, TDD es una intención |
 | 4 | **El primer bloque de prompts TDD** | Un bloque pequeño, para calibrar el método |
 | 5 | **Cursor e historial** | En cuanto haya dos bloques |
 | 6 | **Registro de decisiones** | A la primera alternativa descartada |
 | 7 | **Especificaciones** | Cuando haya capacidades que garanticen algo |
-| 8 | **Guardarraíles** | A la primera vez que un documento se queda viejo |
+| 8 | **Guardarraíles** | La primera vez que un documento se queda viejo |
 | 9 | **Licencia, DCO, plantillas de issue** | Antes de abrir el repositorio, no después |
 
-**Las especificaciones van en el 7 y no en el 1** por una razón medida: escribir garantías antes de
-tener nada que garantizar produce un documento que se reescribe entero al segundo bloque.
+**Las especificaciones van en el paso 7 y no en el 1** por una razón medida: escribir garantías
+antes de tener nada que garantizar produce un documento que se reescribe entero al segundo bloque.
 
 ### 11.2 El prompt de arranque
 
-Esto es literal: se le da a un agente con este documento accesible, y produce el andamio.
+Es literal: se le da a un agente que tenga este documento accesible, y produce el andamio.
 
 ```markdown
 Lee `MARCO_DESARROLLO_AGENTICO.md` y monta los documentos de gobierno de este proyecto.
@@ -795,11 +847,13 @@ QUÉ QUIERO QUE HAGAS, EN ESTE ORDEN, PARANDO DONDE SE INDICA:
    seguir**: es la única parte que no puedo revisar después.
 
 2. `AGENTS.md` según §4.1. Reglas duras, accionables, con los comandos exactos de mi stack.
-   **Máximo 300 líneas** — la evidencia dice que la longitud moderada funciona mejor, y nuestro
-   propio fichero se pasó. Si algo necesita más razonamiento, va a un documento aparte enlazado.
-   Si mi herramienta busca otro nombre, crea ese fichero con tres líneas que importen este.
+   **Máximo 300 líneas** — la evidencia dice que la longitud moderada funciona mejor, y el
+   fichero del proyecto de origen se pasó. Si algo necesita más razonamiento, va a un documento
+   aparte enlazado. Si mi herramienta busca otro nombre, crea ese fichero con tres líneas que
+   importen este.
 
-3. CI según §7.1, con las puertas que apliquen a mi stack. Lint antes de tests. Lock verificado.
+3. Integración continua según §7.1, con las puertas que apliquen a mi stack. Lint antes de
+   tests. Lock verificado.
 
 4. El primer bloque de prompts TDD según §4.3, para «lo primero que hay que construir»:
    entre 3 y 7 prompts, cada uno con sus tests ENUMERADOS y su verificación de cierre con
@@ -817,33 +871,34 @@ QUÉ NO HAGAS:
 - No escribas especificaciones todavía (§11.1, paso 7): no hay nada que garantizar.
 - No escribas guardarraíles todavía: llegan cuando un documento se queda viejo.
 - No inventes cifras, umbrales ni métricas. Si algo hay que medir, deja escrito cómo se mide.
-- No copies nuestras decisiones de arquitectura: son de nuestro dominio. Copia la FORMA.
+- No copies las decisiones de arquitectura del proyecto de origen: son de su dominio. Copia la
+  FORMA.
 ```
 
-### 11.3 Qué NO copiar de nosotros
+### 11.3 Qué no copiar de este proyecto
 
-Tres cosas de este marco son de nuestro contexto y copiarlas sería un error:
+Tres cosas de este marco pertenecen a su contexto de origen, y copiarlas sería un error:
 
-1. **Nuestras decisiones de arquitectura.** La frontera edge/cloud, la multitenencia por
+1. **Las decisiones de arquitectura.** La separación entre nube y nodo local, la multitenencia por
    organización o la retirada de un conversor de documentos responden a un dominio concreto.
-2. **El tamaño de nuestro `AGENTS.md`.** Es deuda, no modelo (§4.1).
-3. **La AGPL.** La elección tiene que estar razonada para **tu** proyecto (§8.1).
+2. **El tamaño del `AGENTS.md`.** Es deuda, no modelo (§4.1).
+3. **La AGPL.** La elección de licencia tiene que estar razonada para **cada** proyecto (§8.1).
 
 ### 11.4 Cómo saber si está funcionando
 
-Sin métricas, esto es fe. Cuatro señales, y las dos primeras son las que de verdad importan
-**[n=1]**:
+Sin métricas, esto es fe. Cuatro señales, y las dos primeras son las que de verdad importan.
+**[n=1]**
 
 | Señal | Qué indica |
 |---|---|
 | **Cuántas veces al mes un guardarraíl se pone rojo por un documento viejo** | Que la documentación se mantiene sola. Cero durante meses es sospechoso: probablemente pasa en vacío (§6.3) |
-| **Cuántas veces el rojo era del instrumento y no del sistema** | Si baja, el método está calando. Nosotros lo anotamos cada vez |
-| Tiempo desde «entra alguien nuevo» hasta su primer PR aceptado | Si la documentación sirve |
+| **Cuántas veces el rojo era del instrumento y no del sistema** | Si baja, el método está calando. En este proyecto se anota cada vez |
+| Tiempo desde que entra alguien nuevo hasta su primera *pull request* aceptada | Si la documentación sirve |
 | Reversiones por bloque | Si el commit por paso está bien puesto |
 
-**No midas velocidad sin medir estabilidad.** Es la conclusión de DORA y la moraleja de METR a la
-vez: quien mide sólo velocidad va a concluir que va más rápido, y se va a equivocar en 40 puntos
-**[Evidencia]**.
+**No se mide velocidad sin medir estabilidad.** Es la conclusión de DORA y la moraleja de METR a
+la vez: quien mide solo velocidad concluirá que va más rápido, y se equivocará en 40 puntos.
+**[Evidencia]**
 
 ---
 
@@ -852,7 +907,7 @@ vez: quien mide sólo velocidad va a concluir que va más rápido, y se va a equ
 **Evidencia empírica**
 
 - METR, *Measuring the Impact of Early-2025 AI on Experienced Open-Source Developer Productivity*
-  (julio 2025) — el ECA de los 16 desarrolladores y las 246 tareas.
+  (julio 2025) — el ensayo controlado de los 16 desarrolladores y las 246 tareas.
   <https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/>
 - DORA / Google Cloud, *State of AI-assisted Software Development 2025* — la IA como amplificador.
   <https://dora.dev/dora-report-2025/>
@@ -909,7 +964,7 @@ CICLO               bloque = unidad de interacción
                     tests escalonados · verificación en navegador · informe de cierre
 
 CONTROL             guardarraíles (documentación con test)
-                    CI con puertas · sin paralelismo en CI
+                    integración continua con puertas · sin paralelismo en CI
                     rama de trabajo ≠ rama que despliega
 
 APERTURA            licencia razonada · DCO también al mantenedor
