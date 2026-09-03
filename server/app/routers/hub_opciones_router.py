@@ -26,7 +26,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from server.app.api.deps import require_role
+from server.app.api.deps import require_module, require_role
 from server.app.core.auth.models import UserInfo, UserRole
 from server.app.core.language_mode import (
     MODO_PREFERIR,
@@ -34,7 +34,15 @@ from server.app.core.language_mode import (
     PREFIJO_FIJO,
 )
 
-router = APIRouter(prefix="/hub/opciones", tags=["hub-opciones"])
+#: `require_module` y no sólo el rol: el docstring declara el módulo y **un docstring no
+#: autoriza nada** —es lo que dejó `library_router` abierto pasando el check de PLAT.5 en
+#: verde—. `chatbots` es donde viven las dos pantallas que consumen esto: la de chatbots y
+#: la de valores por defecto de la organización.
+router = APIRouter(
+    prefix="/hub/opciones",
+    tags=["hub-opciones"],
+    dependencies=[Depends(require_module("chatbots"))],
+)
 
 #: Lo lee quien configura un chatbot o los valores por defecto de una organización, o sea
 #: administrador o superadministrador. Un usuario no tiene nada que hacer con esto.

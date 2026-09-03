@@ -46,9 +46,19 @@ _SIN_ACOTAR = {
     "saml_auth_router.py": "ACS y metadata del IdP: la credencial es la aserción firmada",
     "charts_router.py": "sin estado — dibuja con los datos que le manda el propio llamante",
     "pat_router.py": "acota por propiedad del token (owner_id); su ámbito lo resuelve PatService",
+    # USR.9 — esta razón decía «los cuatro endpoints son de superadministrador. Cuando MT.9
+    # los abra a un administrador harán falta scope_query_to_orgs y assert_org_access», y eso
+    # ya pasó: el listado lo lee quien administra una organización, acotado con
+    # `scope_query_to_orgs`, y fijar la contraseña usa `assert_org_access`. Sigue en la lista
+    # porque crear, editar y borrar son de superadministrador y no acotan nada.
     "hub_users_router.py": (
-        "los cuatro endpoints son de superadministrador. Cuando MT.9 los abra a un "
-        "administrador harán falta scope_query_to_orgs y assert_org_access"
+        "listar y fijar contraseña YA acotan (scope_query_to_orgs, assert_org_access); crear, "
+        "editar y borrar son de superadministrador y por eso no acotan"
+    ),
+    "hub_opciones_router.py": (
+        "no sirve datos de ningún inquilino: sirve el contrato —qué modos de idioma existen y "
+        "qué idiomas se ofrecen—, idéntico para todos. No hay nada que acotar, y el día que "
+        "necesite una sesión de base de datos será porque dejó de ser contrato"
     ),
     "hub_modulos_router.py": (
         "de superadministrador. La dimensión de organización de las concesiones (MT.5) está "
