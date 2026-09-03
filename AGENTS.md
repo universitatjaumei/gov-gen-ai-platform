@@ -125,7 +125,9 @@ Solo por estas cuatro causas:
   que el de la sesión, dilo **una sola vez antes de empezar**.
 - **Al cerrar**: un solo informe con prompts cerrados + commits, cifras reales de tests,
   migraciones aplicadas, qué verificaste en navegador con qué evidencia, desviaciones
-  documentadas, pendientes, y las instrucciones de pruebas manuales del bloque.
+  documentadas, pendientes, las instrucciones de pruebas manuales del bloque, y **una línea
+  diciendo qué cambió en `docs/ESPECIFICACIONES.md` o por qué no cambió nada** (ver la regla en
+  «Seguimiento del estado del proyecto»).
   Después **espera**: el siguiente bloque no arranca solo.
 
 ---
@@ -650,6 +652,38 @@ No omitirla aunque el cambio sea un fix puntual que avanza el cursor.
 - Prompts de configuración de herramientas (permisos, settings, hooks).
 - Prompts de consulta o explicación sin cambios de código.
 - Refactors internos sin relación con un paso numerado de un plan.
+
+### Regla: actualizar `docs/ESPECIFICACIONES.md` al cerrar un bloque, si cambió una garantía
+
+`PROJECT_STATE.md` se actualiza **siempre**, por prompt. La especificación **sólo** cuando el
+bloque cambia lo que el sistema garantiza, y entonces **en el mismo commit que lo cambia**.
+
+**Por qué hace falta la regla si ya hay un test.** `test_especificaciones_no_miente.py` caza la
+deriva estructural —un ámbito renombrado, una ruta muerta, el índice incompleto— y **no puede
+comprobar la prosa**. Lo que se escapa es exactamente lo que hace daño: una capacidad nueva que no
+aparece en §5, una garantía que cambia de significado, un «Abierto» que ya se cerró.
+
+**Los cinco disparadores.** Se actualiza si el bloque:
+
+1. hace aparecer o desaparecer una capacidad (una §5.x nueva) — LANG añadió §5.2;
+2. añade o retira un invariante, o cambia dónde se hace cumplir — USR.8 añadió I10;
+3. cierra un punto de «Abierto» — USR.9 cerró el hueco que la decisión de USR.6 dejaba anotado;
+4. mete o saca algo de §10, «qué NO hace la plataforma»;
+5. cambia una madurez.
+
+**La madurez la mueve el despliegue, no el cierre del bloque.** Un bloque cerrado y sin empujar a
+`main` queda en `construido`; pasa a `producción` cuando se despliega. USR era `construido` al
+cerrar y `producción` tras el push; LANG sigue `construido`. Confundirlo deja el documento diciendo
+que está en uso algo que nadie ha usado.
+
+**Y en el informe de cierre se dice siempre, en una línea: qué cambió en la especificación o por
+qué no cambió nada.** Un bloque puede no tocarla legítimamente —DOM no cambió ninguna garantía,
+cambió dónde se sirven las cosas— pero decirlo es lo que impide saltárselo en silencio. Es el mismo
+criterio que se aplica a las cifras de tests: si no se ha medido, no se reporta como medida.
+
+**Lo que NO va en la especificación**: el estado del desarrollo, qué prompt viene, qué se midió en
+un barrido. Eso es `PROJECT_STATE.md` y `HISTORIAL.md`. Un documento que repita el estado divergirá
+en semanas y mentirá con autoridad, que es peor que no tenerlo.
 
 ---
 

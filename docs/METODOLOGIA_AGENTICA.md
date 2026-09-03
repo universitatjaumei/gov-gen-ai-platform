@@ -219,5 +219,10 @@ Al cerrar el bloque, el agente entrega **un solo mensaje** con:
 7. **Pruebas manuales** — el bloque de instrucciones del `.bat`, con el formato de
    `AGENTS.md` (Antes de empezar / Ejecuta el archivo / Pasos en la interfaz / Qué debes
    ver / Casos límite / Para terminar).
+8. **La especificación** — una línea: qué cambió en `../docs/ESPECIFICACIONES.md`, o **por qué no
+   cambió nada**. Un bloque puede no tocarla legítimamente —DOM no cambió ninguna garantía, cambió
+   dónde se sirven las cosas— pero decirlo es lo que impide saltárselo en silencio. La regla y sus
+   cinco disparadores están en `AGENTS.md` → «Seguimiento del estado del proyecto»; el aviso
+   importante es que **la madurez la mueve el despliegue, no el cierre del bloque**.
 
 Después del informe, el agente **espera**: el siguiente bloque no arranca solo.

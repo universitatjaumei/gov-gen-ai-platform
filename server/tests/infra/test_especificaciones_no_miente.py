@@ -250,6 +250,63 @@ class TestSeLlegaDesdeDondeAlguienMiraria:
         )
 
 
+class TestLaReglaDeActualizarloExiste:
+    """Un documento vigilado por un test estructural pero sin regla de mantenimiento envejece.
+
+    El test de este fichero caza la deriva **estructural** —un ámbito renombrado, una ruta
+    muerta— y no puede comprobar la prosa. Lo que se escapa es lo que hace daño: una capacidad
+    nueva que no aparece en §5, una garantía que cambia de significado, un «Abierto» ya cerrado.
+    Eso lo cubre una regla en `AGENTS.md`, que es lo que un agente lee antes de escribir código.
+
+    Se comprueba que la regla sigue ahí porque una regla borrada es una regla que nadie sigue, y
+    su ausencia no produce ningún rojo por sí misma. Es el mismo criterio que
+    `test_mt7_el_inventario_esta_escrito.py`, que exige que su inventario esté enlazado desde las
+    reglas que leen los agentes.
+    """
+
+    def test_should_be_required_when_a_guarantee_changes(self):
+        reglas = (RAIZ / "AGENTS.md").read_text(encoding="utf-8")
+
+        assert "ESPECIFICACIONES.md" in reglas, (
+            "`AGENTS.md` no menciona la especificación. Sin regla de mantenimiento, el documento "
+            "envejece en todo lo que este test no puede comprobar, que es la prosa."
+        )
+        assert "si cambió una garantía" in reglas, (
+            "falta la regla de actualizar la especificación al cerrar un bloque. Es condicional a "
+            "propósito —incondicional produce commits de churn vacío— y por eso el enunciado "
+            "lleva la condición dentro."
+        )
+
+    def test_should_hook_maturity_to_the_deploy_and_not_to_the_block(self):
+        """El error que la formulación literal invitaba a cometer.
+
+        USR era `construido` al cerrar el bloque y `producción` tras el push a `main`; LANG cerró
+        y sigue `construido`. Si el disparador fuera «cerrar el bloque», la madurez quedaría mal
+        en todos los bloques que no se despliegan el mismo día — o sea casi todos.
+        """
+        reglas = (RAIZ / "AGENTS.md").read_text(encoding="utf-8")
+
+        assert "La madurez la mueve el despliegue" in reglas, (
+            "la regla no dice que la madurez la mueve el despliegue y no el cierre del bloque, "
+            "que es justo lo que se confunde."
+        )
+
+    def test_should_require_saying_it_in_the_closing_report(self):
+        """Obligar a decir «no cambió nada, y por esto» convierte la omisión en afirmación.
+
+        Es lo que de verdad sostiene la regla: sin esa línea, saltársela no deja rastro. Mismo
+        criterio que se aplica a las cifras de tests — si no se ha medido, no se reporta como
+        medida.
+        """
+        reglas = (RAIZ / "AGENTS.md").read_text(encoding="utf-8")
+
+        assert "o por qué no cambió nada" in reglas, (
+            "el informe de cierre no está obligado a decir qué cambió en la especificación. Un "
+            "bloque puede no tocarla legítimamente, pero decirlo es lo que impide saltárselo en "
+            "silencio."
+        )
+
+
 class TestLaEstructuraDelDocumento:
     """Las secciones a las que el propio documento y este test se refieren por número."""
 
