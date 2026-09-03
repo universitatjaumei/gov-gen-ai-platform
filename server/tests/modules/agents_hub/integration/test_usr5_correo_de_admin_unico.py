@@ -106,7 +106,7 @@ class TestLasOtrasTablasDeIdentidad:
         """
         from pathlib import Path
 
-        raiz = Path(__file__).resolve().parents[5] / "app"
+        raiz = Path(__file__).resolve().parents[4] / "app"
         consultas = [
             f"{fichero.relative_to(raiz).as_posix()}:{numero}"
             for fichero in raiz.rglob("*.py")

@@ -14,7 +14,15 @@ from typing import Any
 
 
 def texto_de(contenido: Any) -> str:
-    """Texto plano de un `content` de LangChain, venga como cadena o como bloques."""
+    """Texto plano de una respuesta de LangChain, venga como mensaje, cadena o bloques.
+
+    Acepta el mensaje entero además del `content` porque el desenvoltorio se escribía a mano en
+    ocho sitios, siempre igual: leer `.content` con un `hasattr` de guarda y un `str()` de
+    reserva. Esa forma protege del caso raro —que no llegue un mensaje— y deja pasar el
+    frecuente, que el `content` sea una lista de bloques. Con el desenvoltorio aquí, el sitio de
+    llamada no tiene ocasión de equivocarse, y un guardarraíl de USR.8 impide que vuelva.
+    """
+    contenido = getattr(contenido, "content", contenido)
     if isinstance(contenido, str):
         return contenido
     if isinstance(contenido, list):

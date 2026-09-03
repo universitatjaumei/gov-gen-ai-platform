@@ -34,6 +34,7 @@ from server.app.modules.redaccion.services.charts.chart_configuration import (
     catalogo_de_configuracion,
 )
 from server.app.modules.redaccion.services.script_auditor import AuditResult, ScriptSecurityAuditor
+from server.app.core.llm_text import texto_de
 
 MAX_REFINEMENT_ITERATIONS = 3
 
@@ -220,7 +221,7 @@ class ChartFactory:
 
     async def _invoke(self, messages: list[dict[str, str]]) -> str:
         response = await self._llm.ainvoke(messages)
-        return response.content if hasattr(response, "content") else str(response)
+        return texto_de(response)
 
     @staticmethod
     def _strip_fences(raw: str) -> str:

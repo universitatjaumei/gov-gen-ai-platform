@@ -181,4 +181,4 @@ class RedactorDeBloques:
                 ),
             },
         ])
-        return texto_de(getattr(respuesta, "content", respuesta))
+        return texto_de(respuesta)

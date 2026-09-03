@@ -16,6 +16,7 @@ Deploy: edge
 """
 
 import json
+import logging
 import uuid
 from time import perf_counter
 from typing import AsyncIterator, Literal
@@ -38,6 +39,7 @@ from server.app.core.auth.widget_key import (
     resolver_widget_key,
 )
 from server.app.core.auth.delegated_actor import resolve_effective_actor
+from server.app.core.llm_text import texto_de
 from server.app.core.auth.models import UserRole
 from server.app.core.auth.pat.scopes import CHAT_DEBUG
 from server.app.modules.agents_hub.agent.public_graphs.core.graph_factory import GraphFactory
@@ -85,6 +87,11 @@ NODE_STATUS_MESSAGES: dict[str, str] = {
     "retrieve":         "Buscando en la base de conocimiento...",
     "generate_answer":  "Generando respuesta...",
 }
+
+#: USR.8 — un fallo después del grafo se le dice al cliente **y** se deja en el log. Sin la
+#: traza, «el chat se queda pensando» no se puede diagnosticar: el evento `error` lleva el
+#: mensaje, pero no dónde pasó.
+logger = logging.getLogger(__name__)
 
 # Nodo del CoreGraph cuyo on_chain_end trae el estado final del que salen las fuentes.
 _FINAL_NODES = ("generate_answer", "fallback")
@@ -532,7 +539,18 @@ async def chat_stream(
                         continue
                     chunk = event.get("data", {}).get("chunk")
                     if chunk is not None:
-                        delta = chunk.content if hasattr(chunk, "content") else str(chunk)
+                        # USR.8 — `texto_de` y no `chunk.content` a pelo. Gemini devuelve el
+                        # contenido como **lista de bloques** en cuanto la respuesta tiene más
+                        # de una parte, y entonces esto guardaba una lista en
+                        # `collected_tokens`: el `"".join(...)` de ochenta líneas más abajo
+                        # levantaba `TypeError`, y con él se caían el `done`, la interacción y
+                        # la contabilidad de la cuota. Medido el 2026-09-03: el asistente
+                        # agéntico tenía **0 interacciones** guardadas y 33 el de RAG.
+                        #
+                        # Es la tercera vez que muerde el mismo problema, y el docstring de
+                        # `core/llm_text.py` ya lo decía: quien asume `str` no falla al
+                        # recibirlo, falla más tarde y en otro sitio.
+                        delta = texto_de(chunk)
                         if delta:
                             if primer_token_ms is None:
                                 primer_token_ms = int((perf_counter() - inicio) * 1000)
@@ -589,100 +607,116 @@ async def chat_stream(
             yield _sse("error", {"message": str(exc)})
             return
 
-        # El fallback y el mensaje del validador de citas no pasan por el stream de tokens
-        # del LLM, así que hay que emitirlos aquí para que el usuario vea una respuesta.
+        # USR.8 — **todo esto va dentro de su propio `try`**, y no es simetría: guardar la
+        # interacción, la traza, la cuota, el commit y el propio `done` estaban fuera de
+        # cualquier protección. Un fallo aquí no producía ni un evento de error, así que el
+        # cliente se quedaba esperando sin poder distinguirlo de una respuesta lenta — que
+        # es exactamente lo que pasó con el `TypeError` del contenido en bloques.
         #
-        # HIB.B — se emite SIEMPRE que haya rendición, no sólo cuando no llegó nada. La
-        # condición `and not collected_tokens` era el segundo defecto: el contrato de citas
-        # corre *dentro* de `generate_answer`, después de generar, así que cuando rechaza los
-        # tokens ya han salido — y entonces el mensaje de rendición no se mostraba nunca y el
-        # usuario se quedaba con la respuesta que el contrato acababa de descartar.
-        #
-        # Por SSE no se retira lo ya enviado, así que se le dice al cliente que lo descarte.
-        # La alternativa —retener los tokens hasta validar— costaría el streaming en todas
-        # las respuestas: medido en HIB.I, el primer token pasaría de 780 ms a 2.140 ms, y el
-        # contrato rechaza en torno al 4 % de las consultas. Decisión del usuario, 2026-08-26.
-        if fallback_answer:
-            if collected_tokens:
-                yield _sse("discard", {"reason": fallback_reason or "fallback"})
-                collected_tokens.clear()
-            collected_tokens.append(fallback_answer)
-            yield _sse("token", {"delta": fallback_answer})
+        # Se emite `error` y **no** un `done` con datos inventados: si la interacción no se
+        # guardó, decir que sí dejaría al cliente con un `interaction_id` que no existe y
+        # una valoración que no se puede anclar a nada.
+        try:
+            # El fallback y el mensaje del validador de citas no pasan por el stream de tokens
+            # del LLM, así que hay que emitirlos aquí para que el usuario vea una respuesta.
+            #
+            # HIB.B — se emite SIEMPRE que haya rendición, no sólo cuando no llegó nada. La
+            # condición `and not collected_tokens` era el segundo defecto: el contrato de citas
+            # corre *dentro* de `generate_answer`, después de generar, así que cuando rechaza los
+            # tokens ya han salido — y entonces el mensaje de rendición no se mostraba nunca y el
+            # usuario se quedaba con la respuesta que el contrato acababa de descartar.
+            #
+            # Por SSE no se retira lo ya enviado, así que se le dice al cliente que lo descarte.
+            # La alternativa —retener los tokens hasta validar— costaría el streaming en todas
+            # las respuestas: medido en HIB.I, el primer token pasaría de 780 ms a 2.140 ms, y el
+            # contrato rechaza en torno al 4 % de las consultas. Decisión del usuario, 2026-08-26.
+            if fallback_answer:
+                if collected_tokens:
+                    yield _sse("discard", {"reason": fallback_reason or "fallback"})
+                    collected_tokens.clear()
+                collected_tokens.append(fallback_answer)
+                yield _sse("token", {"delta": fallback_answer})
 
-        # HIB.B — lo que se guarda es lo que el usuario vio. Antes guardaba la reformulación,
-        # así que quien revisaba juzgaba una respuesta que nadie recibió.
-        assistant_message = "".join(collected_tokens)
+            # HIB.B — lo que se guarda es lo que el usuario vio. Antes guardaba la reformulación,
+            # así que quien revisaba juzgaba una respuesta que nadie recibió.
+            assistant_message = "".join(collected_tokens)
 
-        # SEC.4: si el proveedor no declaró uso, se estima por longitud y **se marca**. Una
-        # cuota apoyada en una estimación silenciosa no se puede defender ante quien la
-        # sufre; con la marca, al menos se sabe qué número se está discutiendo.
-        if uso["source"] == "estimated":
-            uso["prompt"] = _tokens_estimados(request.message)
-            uso["completion"] = _tokens_estimados(assistant_message)
+            # SEC.4: si el proveedor no declaró uso, se estima por longitud y **se marca**. Una
+            # cuota apoyada en una estimación silenciosa no se puede defender ante quien la
+            # sufre; con la marca, al menos se sabe qué número se está discutiendo.
+            if uso["source"] == "estimated":
+                uso["prompt"] = _tokens_estimados(request.message)
+                uso["completion"] = _tokens_estimados(assistant_message)
 
-        total_tokens = uso["prompt"] + uso["completion"]
-        interaction = HubInteraction(
-            id=interaction_id,
-            chatbot_id=selected_chatbot_id,
-            user_id=actor.subject_id,
-            user_message=request.message,
-            assistant_message=assistant_message,
-            run_id=interaction_id,
-            fallback_reason=fallback_reason,
-            prompt_tokens=uso["prompt"] or None,
-            completion_tokens=uso["completion"] or None,
-            # HIB.I — la traza de diagnóstico. Con el piloto en marcha ya es tarde para los
-            # datos que no se guardaron: sin los identificadores y las puntuaciones de lo
-            # recuperado no se puede saber, meses después, si una respuesta mala fue de
-            # recuperación o de redacción, ni re-ejecutar una ablación sobre las mismas
-            # consultas sin volver a pedir trabajo a los informadores.
-            interaction_metadata=construye_traza(
-                cfg=core_graph.cfg,
-                fuentes=final_sources,
-                usage_source=uso["source"],
-                best_score=best_score,
-                gate_passed=gate_passed,
-                language=detected_language,
-                source_language=lengua_de_la_fuente,
-                translation_warning=language_fallback,
-                # El turno que se está respondiendo, contando desde 1. Es lo que permite
-                # separar «falla la primera pregunta» de «falla el seguimiento», que es
-                # justo la distinción que HIB.C viene a arreglar.
-                turn_index=len(request.history) + 1,
-                rewritten_query=consulta_reescrita,
-                reformulada=reformulada,
-                latency_ms=int((perf_counter() - inicio) * 1000),
-                first_token_ms=primer_token_ms,
-            ),
-        )
-        session.add(interaction)
-        # El consumo va en el MISMO commit que la interacción, no en un segundo write: si
-        # se separaran, un fallo entre los dos dejaría respuestas servidas sin contabilizar
-        # —o al revés— y la cuota dejaría de cuadrar con lo que el usuario ha recibido.
-        await contabilizar_interaccion(
-            session,
-            actor,
-            chatbot,
-            total_tokens,
-            ip=ip_del_visitante if es_widget else None,
-        )
-        await session.commit()
+            total_tokens = uso["prompt"] + uso["completion"]
+            interaction = HubInteraction(
+                id=interaction_id,
+                chatbot_id=selected_chatbot_id,
+                user_id=actor.subject_id,
+                user_message=request.message,
+                assistant_message=assistant_message,
+                run_id=interaction_id,
+                fallback_reason=fallback_reason,
+                prompt_tokens=uso["prompt"] or None,
+                completion_tokens=uso["completion"] or None,
+                # HIB.I — la traza de diagnóstico. Con el piloto en marcha ya es tarde para los
+                # datos que no se guardaron: sin los identificadores y las puntuaciones de lo
+                # recuperado no se puede saber, meses después, si una respuesta mala fue de
+                # recuperación o de redacción, ni re-ejecutar una ablación sobre las mismas
+                # consultas sin volver a pedir trabajo a los informadores.
+                interaction_metadata=construye_traza(
+                    cfg=core_graph.cfg,
+                    fuentes=final_sources,
+                    usage_source=uso["source"],
+                    best_score=best_score,
+                    gate_passed=gate_passed,
+                    language=detected_language,
+                    source_language=lengua_de_la_fuente,
+                    translation_warning=language_fallback,
+                    # El turno que se está respondiendo, contando desde 1. Es lo que permite
+                    # separar «falla la primera pregunta» de «falla el seguimiento», que es
+                    # justo la distinción que HIB.C viene a arreglar.
+                    turn_index=len(request.history) + 1,
+                    rewritten_query=consulta_reescrita,
+                    reformulada=reformulada,
+                    latency_ms=int((perf_counter() - inicio) * 1000),
+                    first_token_ms=primer_token_ms,
+                ),
+            )
+            session.add(interaction)
+            # El consumo va en el MISMO commit que la interacción, no en un segundo write: si
+            # se separaran, un fallo entre los dos dejaría respuestas servidas sin contabilizar
+            # —o al revés— y la cuota dejaría de cuadrar con lo que el usuario ha recibido.
+            await contabilizar_interaccion(
+                session,
+                actor,
+                chatbot,
+                total_tokens,
+                ip=ip_del_visitante if es_widget else None,
+            )
+            await session.commit()
 
-        translation_warning = (
-            _build_translation_warning(lengua_de_la_fuente, detected_language)
-            if language_fallback
-            else None
-        )
-        yield _sse(
-            "done",
-            {
-                "interaction_id": str(interaction_id),
-                "sources": final_sources,
-                "language_fallback": language_fallback,
-                "translation_warning": translation_warning,
-                "reformulada": reformulada,
-            },
-        )
+            translation_warning = (
+                _build_translation_warning(lengua_de_la_fuente, detected_language)
+                if language_fallback
+                else None
+            )
+            yield _sse(
+                "done",
+                {
+                    "interaction_id": str(interaction_id),
+                    "sources": final_sources,
+                    "language_fallback": language_fallback,
+                    "translation_warning": translation_warning,
+                    "reformulada": reformulada,
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "El turno de chat falló después del grafo; el cliente recibe `error`."
+            )
+            yield _sse("error", {"message": str(exc)})
+            return
 
     return StreamingResponse(
         event_generator(),

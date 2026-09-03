@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from bs4 import BeautifulSoup
+from server.app.core.llm_text import texto_de
 
 _HTML_TRUNCATE_CHARS = 10_000
 _SAMPLE_MAX_CHARS = 200
@@ -87,4 +88,4 @@ class LangChainLLMAdapter:
 
     async def generate(self, prompt: str) -> str:
         response = await self._model.ainvoke(prompt)
-        return response.content if hasattr(response, "content") else str(response)
+        return texto_de(response)

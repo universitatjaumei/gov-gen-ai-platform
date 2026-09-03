@@ -12,6 +12,8 @@ from typing import Any, Literal, get_args
 
 from pydantic import TypeAdapter
 
+from server.app.core.llm_text import texto_de
+
 from server.app.modules.redaccion.contracts.blocks import BlockContract
 from server.app.modules.redaccion.contracts.drafts import ReportTemplateDraft
 from server.app.modules.redaccion.contracts.inputs import InputContract, InputSlotKind
@@ -213,7 +215,6 @@ def _esquema_del_contrato() -> str:
 # sitio equivocado. Se conserva el nombre local porque es el que usa el resto del fichero.
 from server.app.core.llm_json import extraer_json as _extract_json  # noqa: E402
 
-
 #: Un solo reintento: si la segunda tampoco valida, el problema no es de forma.
 INTENTOS_DE_PROPUESTA = 2
 
@@ -239,7 +240,7 @@ class LLMSpecService:
         construcción del borrador y nada más.
         """
         respuesta = await self._llm.ainvoke(messages)
-        raw = respuesta.content if hasattr(respuesta, "content") else str(respuesta)
+        raw = texto_de(respuesta)
         try:
             data = json.loads(_extract_json(raw))
         except json.JSONDecodeError as fallo:

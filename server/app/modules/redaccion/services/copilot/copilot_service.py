@@ -16,6 +16,7 @@ from .models import (
     CopilotTargetKind,
     CopilotTranslateResponse,
 )
+from server.app.core.llm_text import texto_de
 
 
 _ANSWER_SYSTEM_PROMPT = """Eres un asistente experto en la plataforma Gov Gen AI. \
@@ -78,7 +79,7 @@ class CopilotService:
             },
         ]
         response = await self._llm.ainvoke(messages)
-        raw = response.content if hasattr(response, "content") else str(response)
+        raw = texto_de(response)
         return CopilotAnswer(
             answer=raw,
             source_refs=[c.to_source_ref() for c in chunks],

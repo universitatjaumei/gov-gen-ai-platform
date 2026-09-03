@@ -28,6 +28,7 @@ from server.app.modules.redaccion.services.script_auditor import (
     ScriptSecurityAuditor,
     WHITELIST_MODULES,
 )
+from server.app.core.llm_text import texto_de
 
 
 PROMPT_VERSION = "script_proposal_v1"
@@ -235,7 +236,7 @@ class ScriptProposalService:
         messages.append({"role": "user", "content": prompt_nl})
 
         response = await self._llm.ainvoke(messages)
-        raw = response.content if hasattr(response, "content") else str(response)
+        raw = texto_de(response)
         code = _extract_code(raw)
 
         # Primero el AST, que no se puede convencer; después el modelo, que explica.
@@ -273,5 +274,5 @@ class ScriptProposalService:
             {"role": "system", "content": instrucciones},
             {"role": "user", "content": peticion},
         ])
-        texto = respuesta.content if hasattr(respuesta, "content") else str(respuesta)
+        texto = texto_de(respuesta)
         return _leer_veredicto(texto, self._auditor_model_name)

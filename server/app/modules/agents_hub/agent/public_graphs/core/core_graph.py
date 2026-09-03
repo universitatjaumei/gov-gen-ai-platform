@@ -45,6 +45,7 @@ from server.app.modules.agents_hub.agent.public_graphs.core.query_rewriter impor
 from server.app.modules.agents_hub.services.retrieval.vigencia import (
     aviso_para as aviso_de_vigencia,
 )
+from server.app.core.llm_text import texto_de
 
 if TYPE_CHECKING:
     from server.app.modules.agents_hub.agent.public_graphs.strategies.agentic_loop import (
@@ -324,7 +325,7 @@ class CoreGraph:
                     {"role": "system", "content": context},
                     {"role": "user", "content": state["query"]},
                 ])
-                answer = response.content if hasattr(response, "content") else str(response)
+                answer = texto_de(response)
                 citables = items
 
             # UX.4: el mensaje de «no lo sé» es del chatbot. Esta rama lo ignoraba y

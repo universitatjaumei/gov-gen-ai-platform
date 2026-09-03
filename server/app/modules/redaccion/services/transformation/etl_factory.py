@@ -36,6 +36,7 @@ from server.app.modules.redaccion.services.transformation.operations import (
     catalogo_de_operaciones,
     parse_operations,
 )
+from server.app.core.llm_text import texto_de
 
 MAX_REFINEMENT_ITERATIONS = 3
 
@@ -193,7 +194,7 @@ class ETLFactory:
 
     async def _invoke(self, messages: list[dict[str, str]]) -> str:
         response = await self._llm.ainvoke(messages)
-        return response.content if hasattr(response, "content") else str(response)
+        return texto_de(response)
 
     @staticmethod
     def _parse_operations_payload(raw: str) -> list[Operation]:
