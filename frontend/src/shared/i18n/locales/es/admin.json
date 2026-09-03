@@ -376,6 +376,8 @@
     "prompts_actividad": "Prompts",
     "tokens": "Tokens de acceso",
     "usuarios": {
+      "alcance_organizacion": "Quién tiene cuenta en las organizaciones que administras, con qué rol y si ha entrado alguna vez. Dar de alta y cambiar roles lo hace quien administra la plataforma.",
+      "titulo_organizacion": "Personas de tu organización",
       "titulo": "Personas de la plataforma",
       "alcance": "Quién tiene cuenta, con qué rol y si ha entrado alguna vez. No son todas las cuentas: las de superadministrador, partner y cliente viven en tablas propias que todavía no están unificadas.",
       "aviso_autoridad_idp": "En este despliegue el rol lo decide el proveedor de identidad (IDENTITY_ROLE_AUTHORITY=idp): lo que cambies aquí lo pisará el siguiente inicio de sesión.",

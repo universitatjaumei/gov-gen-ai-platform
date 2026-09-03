@@ -376,6 +376,8 @@
     "prompts_actividad": "Prompts",
     "tokens": "Access tokens",
     "usuarios": {
+      "alcance_organizacion": "Who has an account in the organisations you administer, with which role and whether they have ever signed in. Creating people and changing roles is done by the platform administrator.",
+      "titulo_organizacion": "People in your organisation",
       "titulo": "People on this platform",
       "alcance": "Who has an account, with which role, and whether they have ever signed in. This is not every account: superadmin, partner and client accounts live in their own tables, not yet unified.",
       "aviso_autoridad_idp": "On this deployment the identity provider decides the role (IDENTITY_ROLE_AUTHORITY=idp): whatever you change here will be overwritten at the next sign-in.",

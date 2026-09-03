@@ -376,6 +376,8 @@
     "prompts_actividad": "Prompts",
     "tokens": "Tokens d'accés",
     "usuarios": {
+      "alcance_organizacion": "Qui té compte en les organitzacions que administres, amb quin rol i si ha entrat cap vegada. Donar d'alta i canviar rols ho fa qui administra la plataforma.",
+      "titulo_organizacion": "Persones de la teua organització",
       "titulo": "Persones de la plataforma",
       "alcance": "Qui té compte, amb quin rol i si ha entrat alguna vegada. No són tots els comptes: els de superadministrador, partner i client viuen en taules pròpies que encara no estan unificades.",
       "aviso_autoridad_idp": "En aquest desplegament el rol el decideix el proveïdor d’identitat (IDENTITY_ROLE_AUTHORITY=idp): el que canvies ací ho trepitjarà el següent inici de sessió.",

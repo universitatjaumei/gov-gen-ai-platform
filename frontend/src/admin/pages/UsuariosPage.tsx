@@ -177,9 +177,21 @@ export function UsuariosPage() {
 
   return (
     <div className="space-y-6">
+      {/* USR.9 — la misma pantalla la ven dos clases de administrador y no ven lo mismo. A
+          quien administra una organización, «Personas de la plataforma» le nombra algo que no
+          es lo que tiene delante: su listado está acotado a sus organizaciones. El criterio
+          sale de la capacidad que el servidor concede, no de un `rol ===`. */}
       <header>
-        <h2 className="text-lg font-semibold">{t('plataforma.usuarios.titulo')}</h2>
-        <p className="text-sm text-muted-foreground">{t('plataforma.usuarios.alcance')}</p>
+        <h2 className="text-lg font-semibold">
+          {puede('crear')
+            ? t('plataforma.usuarios.titulo')
+            : t('plataforma.usuarios.titulo_organizacion')}
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          {puede('crear')
+            ? t('plataforma.usuarios.alcance')
+            : t('plataforma.usuarios.alcance_organizacion')}
+        </p>
       </header>
 
       {autoridadDelRol === 'idp' && (

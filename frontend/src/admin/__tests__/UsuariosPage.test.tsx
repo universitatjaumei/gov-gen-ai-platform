@@ -564,6 +564,16 @@ describe('USR.9 — lo que cada administrador puede hacer lo dice el servidor', 
     expect(within(fila).getByRole('button', { name: /contraseña/i })).toBeTruthy()
   })
 
+  it('should_not_call_the_list_platform_wide_for_an_organization_admin', () => {
+    /** «Personas de la plataforma» le nombra algo que no es lo que ve: su listado está
+     *  acotado a sus organizaciones. */
+    conCapacidades(DE_ORGANIZACION)
+    renderPage()
+
+    expect(screen.getByRole('heading', { name: /personas de tu organización/i })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: /personas de la plataforma/i })).toBeNull()
+  })
+
   it('should_still_show_everything_to_a_superadmin', () => {
     renderPage()
 
