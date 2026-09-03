@@ -245,9 +245,45 @@ class _ReaderDesdeEstrategia:
         return await self._estrategia.read(document_id)
 
 
-def _make_public_kb_rich(cfg: Any, deps: Any, llm: Any = None) -> CoreGraph:
+def _politica_de_lengua(cfg: Any):
+    """La política que pide `cfg.language_mode` (LANG.1).
+
+    Hasta aquí la factoría montaba **siempre** `DefaultLanguagePolicy`, mientras
+    `language_mode` viajaba por toda la cascada —plataforma → organización → chatbot →
+    configuración efectiva— sin que nadie lo consumiera. El mando existía y no estaba conectado
+    a nada.
+
+    Se resuelve **componiendo otra política**, no metiendo condicionales en el CoreGraph: los
+    tres modos son el mismo grafo con una estrategia distinta, que es el argumento de
+    «framework, no generador». Un despliegue monolingüe es configuración, no otro grafo.
+
+    Un valor desconocido cae a la política de siempre en vez de reventar: el rechazo es trabajo
+    del router (422 con los modos enumerados), y un chatbot que ya tuviera un valor raro en la
+    columna `String(20)` libre debe seguir contestando como contestaba.
+    """
+    from server.app.core.language_mode import MODO_SIN_POLITICA, lengua_fijada
     from server.app.modules.agents_hub.agent.public_graphs.profiles.public_kb_rich import (
         DefaultLanguagePolicy,
+    )
+    from server.app.modules.agents_hub.agent.public_graphs.strategies.protocols import (
+        FixedLanguagePolicy,
+        NeutralLanguagePolicy,
+    )
+
+    modo = getattr(cfg, "language_mode", None)
+    if modo == MODO_SIN_POLITICA:
+        # `NeutralLanguagePolicy` ya existía con este comportamiento exacto —`detect` a `None`,
+        # sin segunda búsqueda, passthrough, sin aviso— y no la usaba nadie. El plan pedía una
+        # clase nueva; duplicarla serían dos cuerpos iguales que pueden divergir.
+        return NeutralLanguagePolicy()
+    lengua = lengua_fijada(modo)
+    if lengua is not None:
+        return FixedLanguagePolicy(lengua)
+    return DefaultLanguagePolicy()
+
+
+def _make_public_kb_rich(cfg: Any, deps: Any, llm: Any = None) -> CoreGraph:
+    from server.app.modules.agents_hub.agent.public_graphs.profiles.public_kb_rich import (
         GenericAnswerTemplateStrategy,
         PassthroughMergeStrategy,
         SingleSourceRetrievalStrategy,
@@ -261,7 +297,7 @@ def _make_public_kb_rich(cfg: Any, deps: Any, llm: Any = None) -> CoreGraph:
             retrieval_mode=cfg.retrieval_mode,
             router_index=getattr(cfg, "router_index", None),
         ),
-        language_policy=DefaultLanguagePolicy(),
+        language_policy=_politica_de_lengua(cfg),
         cfg=cfg,
         deps=deps,
         llm=llm,

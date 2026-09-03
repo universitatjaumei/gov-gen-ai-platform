@@ -175,6 +175,32 @@ class PreferLanguagePolicy:
         )
 
 
+class FixedLanguagePolicy(PreferLanguagePolicy):
+    """`fixed:<lang>`: responde siempre en esa lengua, pregunten como pregunten (LANG.1).
+
+    El modo que no existía. Hoy el grafo detecta la lengua de la pregunta e instruye «Responde en
+    {esa}», así que a quien escriba en catalán a un ayuntamiento castellanohablante se le contesta
+    en catalán, y el organismo no tenía dónde decidir lo contrario.
+
+    **Hereda de `PreferLanguagePolicy` y solo cambia `detect`**, y eso no es economía: es el
+    comportamiento que se quiere. Todo lo que hay aguas abajo cuelga de `detect()` —el
+    «Responde en {lang}» del prompt, el `language=` de la recuperación, la segunda búsqueda y el
+    aviso de traducción—, así que devolver siempre la misma lengua **fija la respuesta y prefiere
+    esa versión del corpus** sin tocar el CoreGraph. Y la preferencia sigue operando **dentro** de
+    la vigencia, que es la regla de VIS.4: citar lo derogado en la lengua correcta sería peor que
+    citar lo vigente en la otra.
+
+    Sin `langdetect`: no se mira la consulta, que es el punto entero del modo. De paso se ahorra
+    la detección en cada consulta.
+    """
+
+    def __init__(self, lang: str) -> None:
+        self._lang = lang
+
+    def detect(self, query: str) -> str | None:
+        return self._lang
+
+
 class StrictLanguagePolicy:
     """strict: filtra items al idioma del usuario; puede disparar fallback si quedan pocos."""
 

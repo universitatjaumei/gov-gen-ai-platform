@@ -19,7 +19,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select, delete as sql_delete
 
 from server.app.api.deps import require_module, require_role
@@ -150,6 +150,16 @@ class ValoresPorDefectoUpdate(BaseModel):
     rewrite_llm_config_id: uuid.UUID | None = None
 
     model_config = {"extra": "forbid"}
+
+    # LANG.1 — `default_language_mode` era texto libre, así que «castellano» se guardaba tal
+    # cual y la factoría lo trataba como `prefer` **sin avisar a nadie**. La regla vive en
+    # `core/language_mode.py` y no aquí: la comparten los dos routers y la factoría del grafo.
+    @field_validator("default_language_mode")
+    @classmethod
+    def _modo_de_lengua_conocido(cls, valor):
+        from server.app.core.language_mode import valida_language_mode
+
+        return valida_language_mode(valor)
 
 
 _count_sq = (

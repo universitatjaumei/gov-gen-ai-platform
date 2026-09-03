@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete as sql_delete
 from sqlalchemy import func
 from sqlalchemy import select
@@ -167,6 +167,16 @@ class ChatbotCreate(BaseModel):
     chunking_strategy: Literal["structural", "parent_child"] | None = None
     query_rewriting_enabled: bool | None = None
 
+    # LANG.1 — `language_mode` era `String(20)` libre, así que «castellano» se guardaba tal cual
+    # y la factoría lo trataba como `prefer` **sin avisar a nadie**. La regla vive en
+    # `core/language_mode.py` y no aquí: la comparten los dos routers y la factoría del grafo.
+    @field_validator("language_mode")
+    @classmethod
+    def _modo_de_lengua_conocido(cls, valor):
+        from server.app.core.language_mode import valida_language_mode
+
+        return valida_language_mode(valor)
+
 
 class ChatbotUpdate(BaseModel):
     # FIX.3: un campo que el servidor no conoce es un **error**, no algo que se ignora.
@@ -215,6 +225,16 @@ class ChatbotUpdate(BaseModel):
     chunk_overlap: int | None = None
     chunking_strategy: Literal["structural", "parent_child"] | None = None
     query_rewriting_enabled: bool | None = None
+
+    # LANG.1 — `language_mode` era `String(20)` libre, así que «castellano» se guardaba tal cual
+    # y la factoría lo trataba como `prefer` **sin avisar a nadie**. La regla vive en
+    # `core/language_mode.py` y no aquí: la comparten los dos routers y la factoría del grafo.
+    @field_validator("language_mode")
+    @classmethod
+    def _modo_de_lengua_conocido(cls, valor):
+        from server.app.core.language_mode import valida_language_mode
+
+        return valida_language_mode(valor)
 
 
 class AssignChildIn(BaseModel):
