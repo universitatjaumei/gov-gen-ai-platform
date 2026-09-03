@@ -185,10 +185,18 @@ ordenadas de menor a mayor coste:
 
 ## Aspectos pendientes de ampliar
 
-> **Actualización 2026-08-31**: la **opción B** (MCP remoto por HTTP streamable) dejó de ser
-> futurible: tiene caso de uso — que agentes externos (Claude Cowork, Copilot…) registren su
-> actividad y usen la anonimización — y prompts redactados en el **Bloque REG** de
-> `planificacion/Plan_TDD_Fase1.md` (REG.4). Valoración completa en
-> `docs/EVOLUCIO_I_ASPECTES_PENDENTS.md`.
+> **Actualización 2026-09-03**: la **opción B** (MCP remoto por HTTP streamable) **está
+> implementada** (REG.4). Su caso de uso era el que faltaba en 2026-06-06: que agentes externos
+> —Claude Cowork, Copilot— registren su actividad y usen la anonimización de la plataforma.
+>
+> Lo que la valoración de entonces no había resuelto era la autenticación, y la respuesta es que
+> **el token no vive en el servidor**: cada cliente presenta el suyo en la petición, y el
+> `Authorization: Bearer` entrante se propaga al cliente HTTP de esa llamada y de nadie más. Un
+> PAT en el entorno del servicio habría sido más simple y habría dejado a todos los clientes
+> actuando con la misma identidad, con lo que el registro de actividad —el motivo de existir de
+> la superficie— no distinguiría a nadie.
+>
+> El transporte convive con el stdio en el mismo paquete, que sigue sin importar `server.app`.
+> Detalles en `docs/MCP_SERVER.md`; despliegue en `docs/DESPLIEGUE_PROTOTIPO_GCP.md` §3.septies.
 
 <!-- Sección reservada para la ampliación del usuario -->

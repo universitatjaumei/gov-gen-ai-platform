@@ -70,6 +70,19 @@
 		reverse_proxy frontend:80
 	}
 
+	# El MCP remoto (REG.4). **Sin despojar el prefijo**: el SDK sirve el transporte en
+	# `/mcp`, así que el contenedor se comporta igual abierto directo que detrás de este
+	# proxy — el mismo criterio que el panel, y por el mismo motivo.
+	#
+	# Dos rutas con matcher con nombre porque `handle` acepta un solo argumento. Y sin
+	# `flush_interval`: el transporte se configura con respuestas JSON en vez de SSE
+	# precisamente para no depender de que alguien se acuerde de desactivar el buffering
+	# del proxy.
+	@mcp path /mcp /mcp/*
+	handle @mcp {
+		reverse_proxy mcp:8080
+	}
+
 	# Todo lo demás, el sitio del corpus publicado en el bucket.
 	handle {
 		# La raíz del bucket **no** es su `index.html`: devuelve 200 con `ListBucketResult`,

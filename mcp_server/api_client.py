@@ -4,6 +4,11 @@ Envuelve ``httpx.AsyncClient`` añadiendo el header ``Authorization: Bearer <PAT
 a cada petición y traduciendo los códigos de error del backend a excepciones
 legibles (ver ``errors.py``). NO importa nada de ``server/app``: es un cliente más
 de la API HTTP, igual que el frontend.
+
+La cabecera se pone **en cada petición** y no al construir el cliente ``httpx``
+(REG.4). Así el MCP remoto puede compartir un solo pool de conexiones entre
+clientes que presentan tokens distintos, y deja de existir la trampa de que
+pasar ``client=`` descartara el PAT en silencio.
 """
 from __future__ import annotations
 
@@ -31,7 +36,6 @@ class ApiClient:
         self._pat = pat
         self._client = client or httpx.AsyncClient(
             base_url=self._base_url,
-            headers={"Authorization": f"Bearer {pat}"},
             timeout=timeout,
         )
 
@@ -61,7 +65,13 @@ class ApiClient:
     # -- internos ----------------------------------------------------------
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
-        response = await self._client.request(method, path, **kwargs)
+        cabeceras = {
+            "Authorization": f"Bearer {self._pat}",
+            **(kwargs.pop("headers", None) or {}),
+        }
+        response = await self._client.request(
+            method, path, headers=cabeceras, **kwargs
+        )
         self._raise_for_status(response)
         return self._parse(response)
 

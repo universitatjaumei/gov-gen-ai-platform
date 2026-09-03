@@ -313,6 +313,53 @@ autenticara contra GCS —el `reverse_proxy` a secas no lo hace— y es un cambi
 
 ---
 
+## 3.septies El MCP remoto, y el token que no está en la máquina (REG.4, 2026-09-03)
+
+Desde REG.4 la pila lleva un servicio más, `mcp`, y el proxy le manda `/mcp`. Es un servidor
+**MCP** con transporte *streamable HTTP*: un cliente compatible —Claude Code, entre otros— se
+conecta a `https://normativa.uji.es/mcp` y obtiene tres herramientas que hablan con la API de la
+plataforma: registrar un uso de IA en el registro de actividad, detectar datos personales en un
+texto y anonimizarlo.
+
+**Lo que hay que entender antes de tocarlo: este servicio no tiene credencial propia.** El
+servidor MCP que ya existía es de línea de comandos, mono-usuario, y lee su token de una variable
+de entorno; ahí es lo correcto, porque un proceso equivale a una persona. El remoto atiende a
+varios clientes a la vez, así que **el token es el que presenta cada petición** en su cabecera
+`Authorization: Bearer`. Poner un PAT en el entorno del contenedor lo dejaría funcionando —de ahí
+que la tentación exista— pero todos los clientes actuarían con la misma identidad, y el registro
+de actividad, que existe justamente para saber quién usó qué, diría que todo lo hizo un solo
+token. Lo impide `server/tests/infra/test_reg4_el_mcp_remoto_esta_declarado.py`.
+
+Los hosts admitidos se derivan de `GOVGENAI_HOST` y `GOVGENAI_HOST_INSTITUCIONAL`, las mismas
+variables que usa Caddy, y no de una variable propia. La protección contra *DNS rebinding* del
+SDK valida la cabecera `Host` y Caddy reenvía la original: un nombre que faltara en esa lista
+recibiría **421 en todo `/mcp`**, y ese error no se parece en nada a su causa.
+
+### Cómo se conecta alguien
+
+Hace falta un PAT con los scopes de lo que vaya a usar: `actividad:write` para registrar y
+`anonimizacion:use` para las dos de PII. Se emiten desde el panel, y los puede emitir tanto un
+superadministrador como un administrador de organización.
+
+```bash
+claude mcp add --transport http govgenai https://normativa.uji.es/mcp     --header "Authorization: Bearer pat_..."
+```
+
+Si el token no viaja, las herramientas fallan con un mensaje que lo dice —«Falta el PAT»— y **sin
+llamar a la API**: un 401 del servidor haría buscar el problema en el token en vez de en su
+ausencia.
+
+### Comprobación después de desplegar
+
+```bash
+curl -si https://normativa.uji.es/mcp -X POST     -H 'Accept: application/json, text/event-stream'     -H 'Content-Type: application/json'     -H 'Authorization: Bearer pat_...'     -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | head -1
+```
+
+Un `200` con las tres herramientas en el cuerpo es la señal buena. Un **421** es la cabecera
+`Host` fuera de la lista de admitidos; un **502**, el contenedor sin arrancar.
+
+---
+
 ## 4. Lo que este prototipo deja fuera a propósito
 
 - ~~**Dominio propio.**~~ **Ya no**: `normativa.uji.es` sirve el sitio y la API desde el

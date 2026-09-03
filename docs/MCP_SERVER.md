@@ -1,12 +1,31 @@
 # Servidor MCP de Gov Gen AI Platform
 
-Servidor **MCP (Model Context Protocol) stdio** que permite a un cliente como
-**Claude Code** autorar plantillas de informe, configurar chatbots y probarlos,
-hablando con la API de la plataforma. Cierra el bucle **configurar → probar →
-ajustar** desde una conversación, sin construir UI a medida.
+Servidor **MCP (Model Context Protocol)** que permite a un cliente como **Claude Code** autorar
+plantillas de informe, configurar chatbots y probarlos, hablando con la API de la plataforma.
+Cierra el bucle **configurar → probar → ajustar** desde una conversación, sin construir UI a
+medida.
 
 > Bloque MCP (MCP.1–MCP.4) del `planificacion/Plan_TDD_Fase1.md`. Diseño = **opción A** de
 > [`docs/mcp.md`](mcp.md): un cliente HTTP local, no una superficie nueva en el server.
+
+## Dos transportes, y no son intercambiables
+
+| | **stdio** (MCP.1) | **streamable HTTP** (REG.4) |
+|---|---|---|
+| Quién lo usa | una persona en su máquina | varios clientes a la vez, por la red |
+| De dónde sale el token | `GOVGENAI_PAT` del entorno | la cabecera `Authorization` de cada petición |
+| Qué expone | plantillas, chatbots, chat de prueba | registro de actividad y anonimización |
+| Cómo se arranca | `mcp run server.py` | `uvicorn http_server:app --factory` |
+
+**El modelo de autenticación es la diferencia que importa.** En stdio, un proceso equivale a una
+persona, así que un token en el entorno dice exactamente quién actúa. En un servicio remoto
+multi-cliente, ese mismo token uniformaría a todos: mismos permisos, misma organización y mismo
+rastro en el registro de actividad. Por eso el transporte HTTP **no admite** `GOVGENAI_PAT` y lo
+exige por petición; hay un guardarraíl que impide reintroducirlo en el despliegue.
+
+El transporte HTTP se despliega como servicio propio detrás del proxy inverso, en `/mcp`. Cómo se
+conecta un cliente y cómo se comprueba tras desplegar está en
+[`DESPLIEGUE_PROTOTIPO_GCP.md`](DESPLIEGUE_PROTOTIPO_GCP.md) §3.septies.
 
 ---
 
@@ -41,8 +60,10 @@ tienen URLs distintas, hoy se registran dos instancias del servidor MCP con
 | Variable | Obligatoria | Descripción |
 |---|---|---|
 | `GOVGENAI_API_BASE_URL` | sí | URL base de la API, p. ej. `http://localhost:8000` |
-| `GOVGENAI_PAT` | sí | Personal Access Token (`pat_<prefix>_<secret>`) |
+| `GOVGENAI_PAT` | sí (**solo stdio**) | Personal Access Token (`pat_<prefix>_<secret>`) |
 | `GOVGENAI_GRAPH_PROFILES_PATH` | no | Ruta a `GRAPH_PROFILES.md` (default `<repo>/docs/GRAPH_PROFILES.md`) |
+| `GOVGENAI_MCP_ALLOWED_HOSTS` | sí (**solo HTTP**) | Valores admitidos de la cabecera `Host`, separados por comas. Sin ellos el transporte responde **421 a todo**: el SDK valida el `Host` contra esta lista para prevenir *DNS rebinding*, y detrás del proxy inverso ese `Host` es el del dominio, no `localhost` |
+| `GOVGENAI_MCP_ALLOWED_ORIGINS` | no (**solo HTTP**) | Igual, para la cabecera `Origin` |
 
 ### Cómo emitir el PAT
 
@@ -78,6 +99,22 @@ necesita un cliente de confianza que atienda a varias personas —el Pipe de Ope
 integración de una sola persona no debe llevarlo.
 
 ---
+
+### Las tools del transporte HTTP (REG.4)
+
+| Scope | Tools |
+|---|---|
+| `actividad:write` | `registrar_actividad` |
+| `anonimizacion:use` | `detectar_pii`, `anonimizar_texto` |
+
+Los dos scopes los puede emitir tanto un superadministrador como un administrador de
+organización. `chatbots:write` es la excepción, y por un motivo concreto: muta un chatbot en
+producción in-place. Registrar actividad añade metadatos y no muta nada.
+
+**`registrar_actividad` no pide confirmación**, a diferencia de `update_chatbot`. Es una tool que
+un agente llama de forma rutinaria; con una puerta delante, se dejaría de llamar y el registro
+quedaría vacío — que es peor que una entrada de más. Y el contrato del evento **rechaza cualquier
+campo de contenido**: mandar el prompt no lo registra, falla.
 
 ## 4. Registro en Claude Code
 

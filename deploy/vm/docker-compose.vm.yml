@@ -159,6 +159,37 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
+  # El MCP remoto (REG.4). Proceso pequeño y aparte, y por dos razones:
+  #
+  # No es la aplicación. `mcp_server/` no importa `server.app` —hay un test que lo comprueba—,
+  # así que no necesita el venv del servidor ni el socket de la base. Meterlo dentro de `app`
+  # le daría acceso a las dos cosas para nada.
+  #
+  # **No lleva PAT.** Es la decisión del prompt: cada cliente presenta el suyo en la petición.
+  # Un token en el entorno de este servicio haría que todos los que se conectaran actuaran con
+  # el mismo —mismos permisos, misma organización y mismo rastro en el registro de actividad—,
+  # y la trazabilidad que el bloque REG existe para dar se perdería justo aquí.
+  #
+  # Los hosts admitidos **se derivan de los dos nombres que sirve el proxy** y no son una
+  # variable propia. La protección contra DNS rebinding del SDK valida la cabecera `Host`, y
+  # Caddy reenvía la original: si a esta lista le faltara un nombre, ese nombre recibiría 421
+  # en todo `/mcp` sin que nada dijera por qué. Derivarla es lo que impide que se quede atrás
+  # el día que cambie un nombre — que es exactamente lo que pasó con las 313 páginas del
+  # corpus cuando el host vivía escrito en dos sitios. La coma sobrante cuando el
+  # institucional está vacío no molesta: `load_http_config` descarta los tramos en blanco.
+  # ---------------------------------------------------------------------------
+  mcp:
+    image: ${GOVGENAI_MCP_IMAGE:?falta GOVGENAI_MCP_IMAGE}
+    container_name: govgenai_mcp
+    environment:
+      # Por la red interna del Compose: la llamada no sale de la máquina ni vuelve por el proxy.
+      GOVGENAI_API_BASE_URL: http://app:8000
+      GOVGENAI_MCP_ALLOWED_HOSTS: ${GOVGENAI_HOST:?falta GOVGENAI_HOST},${GOVGENAI_HOST_INSTITUCIONAL:-}
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
   # Caddy: TLS con renovación automática y sin ceremonia. El nombre del host llega por
   # entorno porque en el prototipo es un `sslip.io` y mañana el subdominio institucional:
   # cambiarlo tiene que ser una variable, no una edición.
@@ -189,6 +220,7 @@ services:
     depends_on:
       - app
       - frontend
+      - mcp
     restart: unless-stopped
 
 networks:

@@ -137,7 +137,7 @@ jobs:
         working-directory: frontend
         run: npm run generate:api
 
-      - name: Construir y publicar las tres imágenes
+      - name: Construir y publicar las cuatro imágenes
         id: imagenes
         run: |
           set -euo pipefail
@@ -158,10 +158,12 @@ jobs:
           construir_si_falta app . Dockerfile
           construir_si_falta frontend ./frontend ./frontend/Dockerfile
           construir_si_falta sandbox ./services/script_sandbox ./services/script_sandbox/Dockerfile
+          construir_si_falta mcp ./mcp_server ./mcp_server/Dockerfile
 
           echo "app=$BASE/app:$SHA"       >> "$GITHUB_OUTPUT"
           echo "frontend=$BASE/frontend:$SHA" >> "$GITHUB_OUTPUT"
           echo "sandbox=$BASE/sandbox:$SHA"   >> "$GITHUB_OUTPUT"
+          echo "mcp=$BASE/mcp:$SHA"           >> "$GITHUB_OUTPUT"
 
       - name: Copiar los ficheros de despliegue a la máquina
         run: |
@@ -238,6 +240,7 @@ jobs:
           GOVGENAI_IMAGE=${{ steps.imagenes.outputs.app }}
           GOVGENAI_FRONTEND_IMAGE=${{ steps.imagenes.outputs.frontend }}
           GOVGENAI_SANDBOX_IMAGE=${{ steps.imagenes.outputs.sandbox }}
+          GOVGENAI_MCP_IMAGE=${{ steps.imagenes.outputs.mcp }}
           GOVGENAI_HOST=${{ vars.GOVGENAI_HOST }}
           CLOUDSQL_CONNECTION_NAME=${{ vars.CLOUDSQL_CONNECTION_NAME }}
           STORAGE_BUCKET=${{ vars.STORAGE_BUCKET }}
