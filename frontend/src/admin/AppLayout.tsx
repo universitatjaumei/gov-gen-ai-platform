@@ -31,6 +31,9 @@ const NAV_SECTIONS = [
   { key: 'chatbots', path: '/hub', modulo: 'chatbots' },
   { key: 'reports', path: '/redaccion', modulo: 'informes' },
   { key: 'curation', path: '/curation', modulo: 'curacion' },
+  // USR.9 — sale del módulo `plataforma`: quien administra una organización necesita
+  // llegar a sus personas sin recibir los modelos de LLM ni los tokens de paso.
+  { key: 'personas', path: '/personas', modulo: 'personas' },
   { key: 'plataforma', path: '/plataforma', modulo: 'plataforma' },
 ] as const
 

@@ -10,7 +10,10 @@ const PLATAFORMA_SUBNAV = [
   { key: 'plataforma.modelos', path: '/plataforma/modelos' },
   { key: 'plataforma.prompts_actividad', path: '/plataforma/prompts-actividad' },
   { key: 'plataforma.tokens', path: '/plataforma/tokens' },
-  { key: 'plataforma.usuarios_nav', path: '/plataforma/usuarios' },
+  // USR.9 — «Personas» se fue a su propio módulo. Administrar a la gente de tu
+  // organización no es administrar la plataforma, y tenerla aquí obligaba a dar los
+  // modelos de LLM, las organizaciones, los tokens y los módulos para poder dar lo
+  // primero: el caso de «Modelos LLM» de PLAT.2 al revés.
   { key: 'plataforma.modulos_nav', path: '/plataforma/modulos' },
   { key: 'plataforma.identidad_visual_nav', path: '/plataforma/identidad-visual' },
 ] as const

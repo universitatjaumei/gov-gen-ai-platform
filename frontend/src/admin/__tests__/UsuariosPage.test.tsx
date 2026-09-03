@@ -10,6 +10,7 @@ import {
   useUpdateUserApiV1HubUsersUserIdPatch,
   useDeleteUserApiV1HubUsersUserIdDelete as useBorrar,
   useSetUsuarioPassword,
+  useCapacidadesDePersonas,
 } from '@/shared/api/generated/hub-users/hub-users'
 import type { UsuarioRead } from '@/shared/api/generated/model'
 import { useAutoridadDelRol } from '@/shared/auth/useAutoridadDelRol'
@@ -35,6 +36,7 @@ vi.mock('@/shared/api/generated/hub-users/hub-users', () => ({
   useUpdateUserApiV1HubUsersUserIdPatch: vi.fn(),
   useDeleteUserApiV1HubUsersUserIdDelete: vi.fn(),
   useSetUsuarioPassword: vi.fn(),
+  useCapacidadesDePersonas: vi.fn(),
   getListUsersApiV1HubUsersGetQueryKey: () => ['usuarios'],
 }))
 
@@ -110,7 +112,16 @@ function conPersonas(personas: UsuarioRead[] = PERSONAS, autoridad = 'app') {
     mutate: fijarContrasena,
     isPending: false,
   } as never)
+  conCapacidades(['listar', 'crear', 'editar', 'borrar', 'fijar_contrasena'])
   return autoridad
+}
+
+/** Las acciones que el servidor concede a quien mira (USR.9). La pantalla no las calcula. */
+function conCapacidades(acciones: string[]) {
+  vi.mocked(useCapacidadesDePersonas).mockReturnValue({
+    data: { acciones_permitidas: acciones },
+    isLoading: false,
+  } as never)
 }
 
 beforeAll(async () => {
@@ -502,5 +513,63 @@ describe('USR.3 — fijar la contraseña de una persona', () => {
 
     expect(within(fila).queryByLabelText(/contraseña nueva/i)).toBeNull()
     expect(fijarContrasena).not.toHaveBeenCalled()
+  })
+})
+
+
+/**
+ * USR.9 — la pantalla la comparten dos clases de administrador, y el servidor dice qué puede
+ * hacer cada una.
+ *
+ * Hasta aquí era sólo de superadministrador, así que la capacidad que USR.1 dio a quien
+ * administra una organización —fijar la contraseña de alguien de su organización— existía por
+ * API y no por pantalla: para usarla había que saberse el UUID de la persona.
+ *
+ * **Se parte, no se abre**, y el reparto **no se calcula aquí**: un `rol === 'superadmin'` en
+ * React sería la autorización escrita por segunda vez, que es la regla maestra 2 y ya se rompió
+ * una vez con `puede_fijar_contrasena` antes de USR.3.
+ */
+describe('USR.9 — lo que cada administrador puede hacer lo dice el servidor', () => {
+  const DE_ORGANIZACION = ['listar', 'fijar_contrasena']
+
+  it('should_hide_the_creation_form_when_creating_is_not_allowed', () => {
+    conCapacidades(DE_ORGANIZACION)
+    renderPage()
+
+    expect(screen.queryByRole('button', { name: /dar de alta/i })).toBeNull()
+  })
+
+  it('should_hide_the_delete_action_when_deleting_is_not_allowed', () => {
+    conCapacidades(DE_ORGANIZACION)
+    renderPage()
+
+    const fila = screen.getByTestId('persona-manual@uji.es')
+    expect(within(fila).queryByRole('button', { name: /eliminar/i })).toBeNull()
+  })
+
+  it('should_hide_the_activation_toggle_when_editing_is_not_allowed', () => {
+    conCapacidades(DE_ORGANIZACION)
+    renderPage()
+
+    const fila = screen.getByTestId('persona-manual@uji.es')
+    expect(within(fila).queryByRole('button', { name: /desactivar|reactivar/i })).toBeNull()
+  })
+
+  it('should_keep_the_password_action_for_an_organization_admin', () => {
+    /** Es la razón de ser del prompt: sin esto la pantalla no le sirve de nada. */
+    conCapacidades(DE_ORGANIZACION)
+    renderPage()
+
+    const fila = screen.getByTestId('persona-manual@uji.es')
+    expect(within(fila).getByRole('button', { name: /contraseña/i })).toBeTruthy()
+  })
+
+  it('should_still_show_everything_to_a_superadmin', () => {
+    renderPage()
+
+    expect(screen.getByRole('button', { name: /dar de alta/i })).toBeTruthy()
+    const fila = screen.getByTestId('persona-manual@uji.es')
+    expect(within(fila).getByRole('button', { name: /eliminar/i })).toBeTruthy()
+    expect(within(fila).getByRole('button', { name: /desactivar/i })).toBeTruthy()
   })
 })

@@ -16,8 +16,13 @@ silencio haría creer que se guardó algo que no existe.
 minúsculas— al guardar y al buscar, y **no se puede editar**. Cambiarlo desde el panel
 desengancharía a la persona de su identidad sin que se note hasta que intente entrar.
 
-**Reservado a superadministrador.** Un admin que pudiera crear personas con rol podría crearse
-un admin. Es la misma razón por la que `create_theme` reserva el tema de plataforma.
+**Partido, no reservado (USR.9).** Crear personas, cambiar roles y borrar siguen siendo sólo de
+superadministrador, y la razón es la de siempre: un admin que pudiera crear personas con rol
+podría crearse un admin —la misma por la que `create_theme` reserva el tema de plataforma—.
+**Listar y fijar la contraseña, en cambio, los puede hacer quien administra la organización de
+esa persona**, acotado por tenencia. USR.1 ya había abierto la contraseña con ese argumento; el
+listado se quedó cerrado, y sin él la capacidad existía por API y no por pantalla: para usarla
+había que saberse el UUID de la persona.
 """
 from __future__ import annotations
 
@@ -31,7 +36,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import require_role
 from server.app.core.auth.models import UserInfo, UserRole
-from server.app.core.auth.tenancy import assert_org_access, puede_acceder
+from server.app.core.auth.tenancy import (
+    assert_org_access,
+    puede_acceder,
+    scope_query_to_orgs,
+)
 from server.app.core.security import hash_password
 from server.app.modules.agents_hub.database.config_models import HubModuleGrant, HubUser
 from server.app.modules.agents_hub.database.connection import get_async_session
@@ -88,6 +97,18 @@ class UsuarioRead(BaseModel):
     #: Falso en las cuentas de arranque de `superadminaccount`: viven en otra tabla y su
     #: contraseña no se toca desde esta pantalla.
     puede_fijar_contrasena: bool = False
+
+
+class CapacidadesDePersonas(BaseModel):
+    """Qué puede hacer **quien pregunta** en esta pantalla (USR.9).
+
+    Regla maestra 2: la pantalla itera sobre `acciones_permitidas` y no las calcula. Las de fila
+    —borrar, fijar contraseña— ya viajan en `UsuarioRead`; éstas son las de pantalla, que no
+    tienen fila donde colgarse: si «crear» se decidiera en React con un `rol === 'superadmin'`,
+    sería la autorización escrita por segunda vez y el día que cambie dirían cosas distintas.
+    """
+
+    acciones_permitidas: list[str]
 
 
 class UsuarioCreate(BaseModel):
@@ -264,24 +285,57 @@ async def _otro_superadmin_activo(session: AsyncSession, excluido: uuid.UUID) ->
 # ============================================
 
 
+@router.get(
+    "/capacidades",
+    response_model=CapacidadesDePersonas,
+    operation_id="capacidadesDePersonas",
+)
+async def capacidades_de_personas(
+    user: UserInfo = Depends(_require_admin),
+) -> CapacidadesDePersonas:
+    """Qué puede hacer quien pregunta en la pantalla de personas (USR.9).
+
+    Va **antes** de `list_users` en el fichero por costumbre de orden, no por precedencia: no hay
+    `GET /hub/users/{id}` con el que pudiera chocar la ruta.
+
+    Un `user` a secas recibe 403 y no una lista vacía: quien no administra nada no tiene por qué
+    saber que esta pantalla existe, y una lista vacía es una respuesta afirmativa a la pregunta
+    «¿hay algo aquí?».
+    """
+    acciones = ["listar", "fijar_contrasena"]
+    if user.role == UserRole.SUPERADMIN.value:
+        # El mismo reparto que las puertas de los endpoints, leído del mismo sitio: crear,
+        # editar y borrar son `_require_superadmin`.
+        acciones += ["crear", "editar", "borrar"]
+    return CapacidadesDePersonas(acciones_permitidas=acciones)
+
+
 @router.get("", response_model=list[UsuarioRead])
 async def list_users(
-    user: UserInfo = Depends(_require_superadmin),
+    user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[UsuarioRead]:
-    """Quién existe en esta plataforma.
+    """Quién existe en esta plataforma —o en tu organización, si es lo que administras.
 
     **REV.8 — incluye las cuentas de `superadminaccount`**, en solo lectura. Antes el listado
     leía sólo `hub_users` y el superadministrador principal no aparecía en ninguna parte, que es
     la única cuenta real de una instalación recién creada.
 
+    **USR.9 — abierto a quien administra una organización, acotado por tenencia.** La acotación
+    la hace `scope_query_to_orgs` y no un `if` aquí, para que la regla siga viviendo en un solo
+    sitio; un principal con la lista de organizaciones vacía recibe `IN ()`, o sea nada, que es
+    la diferencia entre «no ve nada» y «no se filtra». Las cuentas de arranque **no** se le
+    enseñan: no son de ninguna organización, así que colarlas en un listado acotado sería
+    filtrarle las cuentas de la plataforma por la puerta de atrás.
+
     Siguen sin listarse `AdminAccount` y `ClientAccount`, que tampoco están unificadas. La
     pantalla lo dice, para que nadie lea el listado como «todas las cuentas».
     """
-    filas = (
-        await session.execute(select(HubUser).order_by(HubUser.email))
-    ).scalars().all()
+    consulta = scope_query_to_orgs(select(HubUser), user, HubUser).order_by(HubUser.email)
+    filas = (await session.execute(consulta)).scalars().all()
     personas = [_a_lectura(f, quien=user) for f in filas]
+    if user.role != UserRole.SUPERADMIN.value:
+        return personas
     return await _superadmins_de_arranque(session) + personas
 
 

@@ -302,8 +302,16 @@ class TestEdicionYListado:
         assert origenes[por_sso] == "sso"
 
     @pytest.mark.asyncio
-    async def test_should_reserve_the_listing_to_a_superadmin(self, db_session):
-        async with _cliente(db_session, _principal(role="admin")) as cliente:
+    async def test_should_reserve_the_listing_to_whoever_administers(self, db_session):
+        """USR.9 — el listado se abrió a quien administra una organización, **acotado**.
+
+        Lo que IDE.3 fijaba aquí era que no lo viera cualquiera, y eso sigue: un `user` recibe
+        403. Lo que cambió es que un `admin` también administra —USR.1 ya le había dado fijar la
+        contraseña de alguien de su organización, y sin el listado esa capacidad existía por API
+        y no por pantalla—. El reparto y la acotación se miden en
+        `test_usr9_personas_de_mi_organizacion.py`.
+        """
+        async with _cliente(db_session, _principal(role="user")) as cliente:
             respuesta = await cliente.get("/api/v1/hub/users")
 
         assert respuesta.status_code == 403

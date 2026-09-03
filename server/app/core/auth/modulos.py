@@ -31,6 +31,10 @@ MODULOS_INICIALES: tuple[tuple[str, str], ...] = (
     ("chatbots", "Chatbots y asistentes"),
     ("curacion", "Curación de contenido"),
     ("informes", "Informes"),
+    # USR.9 — separado de `plataforma` a propósito: administrar a las personas de tu
+    # organización no es administrar la plataforma (modelos de LLM, organizaciones, tokens,
+    # módulos), y meterlo ahí obligaba a dar todo eso para poder dar lo primero.
+    ("personas", "Personas de la organización"),
     ("plataforma", "Administración de la plataforma"),
 )
 

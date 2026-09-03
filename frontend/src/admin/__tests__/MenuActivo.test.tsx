@@ -123,16 +123,18 @@ describe('REV.3 — la opción activa se marca con negrita y barra, no con un re
 
   it('should_underline_the_active_tab_of_the_platform_subnav', () => {
     render(
-      <MemoryRouter initialEntries={['/plataforma/usuarios']}>
+      /* USR.9 — el ejemplo era «Personas», que se fue a su propio módulo. Se cambia de
+         pestaña y no de criterio: lo que se comprueba es el estilo de la activa. */
+      <MemoryRouter initialEntries={['/plataforma/tokens']}>
         <Routes>
           <Route path="/plataforma" element={<PlataformaLayout />}>
-            <Route path="usuarios" element={<div />} />
+            <Route path="tokens" element={<div />} />
           </Route>
         </Routes>
       </MemoryRouter>
     )
 
-    const clases = activo(/personas|usuarios/i).className
+    const clases = activo(/tokens/i).className
     expect(clases).not.toMatch(/bg-accent(?!\/)/)
     expect(clases).toMatch(/font-semibold/)
     expect(clases).toMatch(/border-b-2/)

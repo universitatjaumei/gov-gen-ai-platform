@@ -116,19 +116,27 @@ Queda por tanto **partido hacia (b)**, y lo que falta es exactamente esto:
 - [ ] `seeds.py`: la cuenta de desarrollo pasa a ser un `HubUser` con `role='admin'`.
 - [ ] `AdminAccount` se queda sin `email` ni `hashed_password`: es partner y facturación.
 
-### Un hueco que apareció al verificar, y que tampoco se cierra aquí
+### Un hueco que apareció al verificar, y que se cerró en USR.9
 
-**La pantalla de Personas es sólo de superadministrador, así que un admin no puede llegar a la
+**La pantalla de Personas era sólo de superadministrador, así que un admin no podía llegar a la
 capacidad que USR.1 le dio.** `PATCH /hub/users/{id}/password` **sí** le deja fijar la contraseña
 de alguien de su organización —y ése era su argumento: quien da de alta a sus probadores es quien
-administra su organización—, pero `GET /hub/users` exige superadministrador, así que desde el
-panel no ve la lista sobre la que actuar. Hoy la capacidad existe **por API y no por pantalla**.
+administra su organización—, pero `GET /hub/users` exigía superadministrador, así que desde el
+panel no veía la lista sobre la que actuar: la capacidad existía **por API y no por pantalla**.
 
-No se ensancha aquí porque el propio router tiene escrita la razón contraria y es buena: «un admin
-que pudiera crear personas con rol podría crearse un admin». La forma correcta no es abrir la
-pantalla entera, sino partirla: **listar y fijar contraseña** acotado por tenencia sí, y **crear o
-cambiar roles** no. Eso es una decisión de permisos con peso propio, nadie la ha pedido todavía, y
-mientras el superadministrador dé de alta a los probadores del piloto no bloquea nada.
+**Se cerró en USR.9 (2026-09-03) partiéndola, que era la forma que este documento ya señalaba**,
+y no abriéndola: el propio router tiene escrita la razón contraria y es buena —«un admin que
+pudiera crear personas con rol podría crearse un admin»—. Lo que quedó:
+
+- `GET /hub/users` acepta `admin` y **se acota por tenencia** con `scope_query_to_orgs`. Las
+  cuentas de arranque de `superadminaccount` no se le enseñan: no son de ninguna organización, y
+  colarlas en un listado acotado sería filtrarle las cuentas de la plataforma.
+- `POST`, `PATCH /{id}` y `DELETE` siguen siendo de superadministrador.
+- `GET /hub/users/capacidades` devuelve `acciones_permitidas`, y la pantalla pinta iterándola en
+  vez de calcular el reparto en React (regla maestra 2).
+- La pantalla **sale del módulo `plataforma`** a un módulo propio, `personas`. Tenerla ahí
+  obligaba a dar los modelos de LLM, las organizaciones, los tokens y los módulos para poder dar
+  lo primero — el caso de «Modelos LLM» de PLAT.2 al revés.
 
 Mientras eso no se haga, **las dos vías conviven**: un `AdminAccount` sigue entrando por su puerta
 y un `HubUser` con rol admin por la suya. No es una contradicción, es una transición con la

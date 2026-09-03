@@ -264,7 +264,11 @@ class TestElOrigenDeCadaModuloSeVe:
 
         origen = await modulos_con_origen(db_session, root)
 
-        assert set(origen) == {"chatbots", "curacion", "informes", "plataforma"}
+        # El catálogo es dato y crece (USR.9 añadió `personas`): se compara contra la
+        # semilla, no contra una copia de sus cuatro códigos escrita aquí.
+        from server.app.core.auth.modulos import MODULOS_INICIALES
+
+        assert set(origen) == {codigo for codigo, _etiqueta in MODULOS_INICIALES}
         # MT.5 — mismo campo que las demás filas, vacío: el superadministrador vale en todas.
         assert all(
             o == [{"tipo": "rol", "sujeto": "superadmin", "organizacion": ""}]

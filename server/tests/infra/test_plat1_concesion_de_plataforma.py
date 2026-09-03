@@ -129,7 +129,10 @@ class TestLaMigracionRellenaSinPisar:
         resultado = _alembic(base_en_inf7, "upgrade", "head")
         assert resultado.returncode == 0, resultado.stderr
 
-        assert _modulos_de(base_en_inf7, SOLO_CHATBOTS) == ["chatbots", "plataforma"]
+        # `upgrade head` pasa por todas las migraciones posteriores, y USR.9 concede
+        # `personas` a quien tenga `plataforma`: la cadena es correcta y la lista crece. Lo que
+        # este test fija es que **`plataforma` llega**, no que sea el único añadido.
+        assert "plataforma" in _modulos_de(base_en_inf7, SOLO_CHATBOTS)
 
     def test_should_not_duplicate_an_existing_grant(self, base_en_inf7: str):
         """La restricción única ya lo impediría con un error; aquí se exige que **no falle**."""

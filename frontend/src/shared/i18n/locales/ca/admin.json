@@ -350,6 +350,7 @@
     "chatbots": "Chatbots",
     "reports": "Informes",
     "curation": "Curació",
+    "personas": "Persones",
     "main": "Navegació principal",
     "language": "Idioma",
     "organizacion": "Organització",
@@ -369,7 +370,6 @@
     "modelos": "Models LLM",
     "prompts_actividad": "Prompts",
     "tokens": "Tokens d'accés",
-    "usuarios_nav": "Persones",
     "usuarios": {
       "titulo": "Persones de la plataforma",
       "alcance": "Qui té compte, amb quin rol i si ha entrat alguna vegada. No són tots els comptes: els de superadministrador, partner i client viuen en taules pròpies que encara no estan unificades.",

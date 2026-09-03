@@ -65,3 +65,39 @@ describe('PLAT.2 — las rutas de plataforma', () => {
     }
   })
 })
+
+/**
+ * USR.9 — «Personas» sale del módulo `plataforma`.
+ *
+ * Es el caso de «Modelos LLM» de PLAT.2 al revés: allí una pantalla de plataforma colgaba del
+ * módulo Chatbots; aquí una pantalla que necesita quien administra **una organización** colgaba
+ * del módulo que administra **la plataforma**, o sea detrás de los modelos de LLM, las
+ * organizaciones, los tokens y los módulos. La consecuencia era que la capacidad que USR.1 le
+ * dio —fijar la contraseña de alguien de su organización— existía por API y no por pantalla.
+ *
+ * Sin redirección desde la ruta vieja, por lo mismo que las tres de PLAT.2.
+ */
+describe('USR.9 — la ruta de personas', () => {
+  it('should_not_keep_personas_under_plataforma', () => {
+    const app = sinComentarios('App.tsx')
+    const plataforma = sinComentarios('admin/PlataformaLayout.tsx')
+
+    expect(plataforma, '/plataforma/usuarios sigue en la subnavegación').not.toContain(
+      '/plataforma/usuarios'
+    )
+    expect(app, '"usuarios" sigue montado dentro de /plataforma').not.toContain('"usuarios"')
+  })
+
+  it('should_gate_personas_with_its_own_module', () => {
+    const app = sinComentarios('App.tsx')
+
+    expect(app).toContain('/personas')
+    expect(app).toMatch(/RutaDeModulo\s+modulo="personas"/)
+  })
+
+  it('should_not_add_a_redirect_from_the_old_route', () => {
+    const app = sinComentarios('App.tsx')
+
+    expect(app).not.toMatch(/Navigate\s+to="\/personas"/)
+  })
+})

@@ -44,6 +44,10 @@ export const RUTA_DEL_MODULO: ReadonlyArray<readonly [string, string]> = [
   ['informes', '/redaccion'],
   ['chatbots', '/hub'],
   ['curacion', '/curation'],
+  // USR.9 — antes de `plataforma` y después del trabajo: administrar a las personas de tu
+  // organización es administración, pero es la única que tiene quien no administra la
+  // plataforma, y sin esta fila aterrizaría en `/sin-acceso` teniendo acceso.
+  ['personas', '/personas'],
   ['plataforma', '/plataforma'],
 ]
 

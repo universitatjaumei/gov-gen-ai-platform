@@ -10,6 +10,7 @@ import {
   useUpdateUserApiV1HubUsersUserIdPatch,
   useDeleteUserApiV1HubUsersUserIdDelete,
   useSetUsuarioPassword,
+  useCapacidadesDePersonas,
   getListUsersApiV1HubUsersGetQueryKey,
 } from '@/shared/api/generated/hub-users/hub-users'
 import type { UsuarioRead } from '@/shared/api/generated/model'
@@ -53,6 +54,22 @@ export function UsuariosPage() {
   const autoridadDelRol = useAutoridadDelRol()
   const queryClient = useQueryClient()
   const { data: personas, isLoading } = useListUsersApiV1HubUsersGet()
+  /**
+   * Qué puede hacer **quien mira** (USR.9). Lo dice el servidor y la pantalla itera.
+   *
+   * Desde USR.9 esta pantalla la comparten dos clases de administrador: quien administra la
+   * plataforma y quien administra una organización. El segundo puede listar y fijar
+   * contraseñas, y no crear personas, cambiar roles ni borrar —quien puede crear personas con
+   * rol puede crearse un admin—. Ese reparto **no se calcula aquí**: un `rol === 'superadmin'`
+   * sería la autorización escrita por segunda vez, y es la misma razón por la que
+   * `puede_borrarse` y `puede_fijar_contrasena` viajan en cada fila.
+   *
+   * Mientras la respuesta no ha llegado no se concede nada: enseñar el formulario de alta y
+   * quitarlo después es peor que enseñarlo un instante más tarde.
+   */
+  const { data: capacidades } = useCapacidadesDePersonas()
+  const puede = (accion: string) =>
+    (capacidades?.acciones_permitidas ?? []).includes(accion)
   const invalidar = () =>
     void queryClient.invalidateQueries({ queryKey: getListUsersApiV1HubUsersGetQueryKey() })
 
@@ -171,6 +188,7 @@ export function UsuariosPage() {
         </p>
       )}
 
+      {puede('crear') && (
       <form onSubmit={darDeAlta} className="flex flex-wrap items-end gap-3 rounded-md border p-4">
         <div className="flex flex-col gap-1">
           <label htmlFor="usuario_email" className="text-sm font-medium">
@@ -243,6 +261,7 @@ export function UsuariosPage() {
           {t('plataforma.usuarios.sin_contrasena')}
         </p>
       </form>
+      )}
 
       {isLoading ? (
         <p>{t('plataforma.usuarios.cargando')}</p>
@@ -316,7 +335,7 @@ export function UsuariosPage() {
                     <span className="flex flex-wrap items-center justify-end gap-3">
                       {/* La cuenta de arranque vive en otra tabla: desactivarla desde aquí
                           daría un 404 y parecería un fallo de la pantalla. */}
-                      {persona.origen !== ORIGEN_DE_ARRANQUE && (
+                      {puede('editar') && persona.origen !== ORIGEN_DE_ARRANQUE && (
                         <button
                           type="button"
                           onClick={() => cambiarActividad(persona)}
@@ -330,7 +349,7 @@ export function UsuariosPage() {
                       {/* **Lo decide el servidor**, no esta pantalla: `puede_borrarse` viene en
                           el contrato. Calcularlo aquí por `last_login_at` pondría la misma
                           regla en dos sitios, y un día dirían cosas distintas. */}
-                      {persona.puede_borrarse && (
+                      {puede('borrar') && persona.puede_borrarse && (
                         <button
                           type="button"
                           onClick={() => setPorConfirmar(persona.id)}

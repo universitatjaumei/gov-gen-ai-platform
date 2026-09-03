@@ -73,7 +73,11 @@ class TestElCatalogoEsDato:
             respuesta = await cliente.get("/api/v1/hub/modulos/catalogo")
 
         codigos = [m["code"] for m in respuesta.json()]
-        assert codigos == ["chatbots", "curacion", "informes", "plataforma"]
+        # Igual que arriba: la lista sale de la semilla. Sigue exigiendo el orden, que es
+        # el que el endpoint promete.
+        from server.app.core.auth.modulos import MODULOS_INICIALES
+
+        assert codigos == [codigo for codigo, _etiqueta in MODULOS_INICIALES]
 
     @pytest.mark.asyncio
     async def test_should_mark_a_retired_module_as_such(self, db_session):

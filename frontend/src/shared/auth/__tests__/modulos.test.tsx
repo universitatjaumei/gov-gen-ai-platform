@@ -131,3 +131,20 @@ describe('REV.5 — una ruta que no existe', () => {
     await waitFor(() => expect(screen.getByTestId('dentro-de-informes')).toBeDefined())
   })
 })
+
+
+/**
+ * USR.9 — quien sólo administra personas tiene a dónde ir.
+ *
+ * Es la nota que PLAT.2 dejó escrita en `RUTA_DEL_MODULO`: sin su fila, quien sólo administra
+ * la plataforma aterrizaba en `/sin-acceso` teniendo acceso. El módulo nuevo repetiría el fallo.
+ */
+describe('USR.9 — el aterrizaje de quien sólo administra personas', () => {
+  it('should_land_a_personas_only_admin_in_personas', () => {
+    expect(primeraRutaConcedida(['personas'])).toBe('/personas')
+  })
+
+  it('should_know_which_module_protects_personas', () => {
+    expect(moduloDeLaRuta('/personas')).toBe('personas')
+  })
+})

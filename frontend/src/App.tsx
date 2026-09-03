@@ -127,6 +127,13 @@ function App() {
                       «Modelos LLM» vivía bajo `/hub` mientras su router ya exigía
                       `require_module("plataforma")`: el menú prometía lo que la API negaba.
                       Sin redirecciones desde las rutas viejas, que AGENTS.md prohíbe los shims. */}
+                  {/* USR.9 — «Personas» tenía su ruta bajo `/plataforma`, o sea detrás del
+                      módulo de administración de la plataforma. Un administrador de
+                      organización no lo tiene ni debe tenerlo (ahí están los modelos de LLM,
+                      las organizaciones, los tokens y los módulos), así que la capacidad que
+                      USR.1 le dio existía por API y no por pantalla. Sin redirección desde la
+                      ruta vieja, que AGENTS.md prohíbe los shims. */}
+                  <Route path="/personas" element={<RutaDeModulo modulo="personas"><UsuariosPage /></RutaDeModulo>} />
                   <Route path="/plataforma" element={<RutaDeModulo modulo="plataforma"><PlataformaLayout /></RutaDeModulo>}>
                     <Route index element={<Navigate to="/plataforma/modelos" replace />} />
                     {/* REV.11 — sale de /hub: su router ya exigia el modulo plataforma para
@@ -136,7 +143,6 @@ function App() {
                     <Route path="modelos" element={<LLMConfigsPage />} />
                     <Route path="prompts-actividad" element={<ActivityPromptsPage />} />
                     <Route path="tokens" element={<AccessTokensPage />} />
-                    <Route path="usuarios" element={<UsuariosPage />} />
                     <Route path="modulos" element={<ModulosPage />} />
                     <Route path="identidad-visual" element={<IdentidadVisualPage />} />
                   </Route>

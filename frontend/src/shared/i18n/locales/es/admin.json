@@ -350,6 +350,7 @@
     "chatbots": "Chatbots",
     "reports": "Informes",
     "curation": "Curación",
+    "personas": "Personas",
     "main": "Navegación principal",
     "language": "Idioma",
     "organizacion": "Organización",
@@ -369,7 +370,6 @@
     "modelos": "Modelos LLM",
     "prompts_actividad": "Prompts",
     "tokens": "Tokens de acceso",
-    "usuarios_nav": "Personas",
     "usuarios": {
       "titulo": "Personas de la plataforma",
       "alcance": "Quién tiene cuenta, con qué rol y si ha entrado alguna vez. No son todas las cuentas: las de superadministrador, partner y cliente viven en tablas propias que todavía no están unificadas.",
