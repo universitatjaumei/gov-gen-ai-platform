@@ -23,6 +23,7 @@ todas envejecen igual:
 
 | Documento | Qué es |
 |---|---|
+| [`MARCO_DESARROLLO_AGENTICO.md`](MARCO_DESARROLLO_AGENTICO.md) | **El método** con el que se desarrolla esto, escrito para poder aplicarse a otros proyectos: principios, permisos de autoaceptación, TDD, guardarraíles, y cómo montarlo en un proyecto nuevo. Con bibliografía y comparación con los marcos publicados |
 | [`ESPECIFICACIONES.md`](ESPECIFICACIONES.md) | **Qué garantiza el sistema**, capacidad por capacidad, con sus invariantes y dónde se hacen cumplir. El documento para quien va a escribir código |
 | [`PRESENTACION_PROYECTO.md`](PRESENTACION_PROYECTO.md) | Qué hace la plataforma, qué está construido y verificado, y qué está previsto. El documento para quien llega de fuera |
 | [`Arquitectura.md`](Arquitectura.md) | Qué es la plataforma y qué principios la rigen: módulos, roles, privacidad, frontera cloud/edge, stack |
