@@ -32,8 +32,26 @@ class LoginRequest(BaseModel):
     password: str
 
 
+#: Longitud mínima de una contraseña de esta plataforma, **dicha una vez**. La consumen los tres
+#: contratos que la piden: fijar la de un Admin, fijar la de una persona (USR.1, que importa
+#: `SetPasswordRequest` desde aquí) y cambiar la propia (USR.7). Tres literales iguales acabarían
+#: siendo tres distintos, y el que se relajara sería el débil.
+MINIMO_CONTRASENA = 12
+
+
 class SetPasswordRequest(BaseModel):
-    password: str = PydanticField(min_length=12)
+    password: str = PydanticField(min_length=MINIMO_CONTRASENA)
+
+
+class CambioDeContrasenaRequest(BaseModel):
+    """La actual **y** la nueva (USR.7).
+
+    La actual no lleva `min_length`: es la que ya existe, y validar su forma aquí sólo serviría
+    para rechazar antes de comprobar —o, peor, para decir algo sobre lo que hay guardado—.
+    """
+
+    password_actual: str
+    password_nueva: str = PydanticField(min_length=MINIMO_CONTRASENA)
 
 
 class TokenResponse(BaseModel):
@@ -263,6 +281,96 @@ async def set_admin_password(
 
     admin.hashed_password = hash_password(body.password)
     session.add(admin)
+    await session.commit()
+
+
+async def _cuenta_con_login_local(session: AsyncSession, quien: UserInfo):
+    """La fila que guarda la contraseña de quien pregunta, sea de la clase que sea (USR.7).
+
+    Tres tablas tienen login local y el token no dice en cuál está: dice el rol y el
+    `user_id`, y la forma de ese identificador es lo que las distingue.
+
+    **Se mira primero si es un UUID, y eso no es un truco**: desde USR.6 la identidad de
+    administración es `HubUser`, así que un superadministrador o un administrador **nuevos**
+    son filas de `hub_users` con `user_id` UUID, mientras los de las tablas viejas traen un
+    entero (`SuperAdminAccount.admin_id`) o el `partner_id` de texto. Preguntar por el rol
+    primero daría la tabla vieja a una persona nueva.
+
+    Devuelve `None` cuando no hay fila: quien llame responde el mismo 401 que si la contraseña
+    fuera incorrecta, porque distinguirlo diría en qué tabla está una cuenta.
+    """
+    from server.app.modules.agents_hub.database.config_models import HubUser
+
+    try:
+        como_uuid = uuid.UUID(quien.user_id)
+    except (ValueError, AttributeError, TypeError):
+        como_uuid = None
+
+    if como_uuid is not None:
+        return await session.get(HubUser, como_uuid)
+
+    if quien.role == UserRole.SUPERADMIN.value:
+        try:
+            return await session.get(SuperAdminAccount, int(quien.user_id))
+        except (ValueError, TypeError):
+            return None
+
+    if quien.role == UserRole.ADMIN.value:
+        return await session.get(AdminAccount, quien.user_id)
+
+    return None
+
+
+@router.post(
+    "/me/password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    operation_id="cambiarMiPassword",
+)
+async def cambiar_mi_password(
+    body: CambioDeContrasenaRequest,
+    request: Request,
+    current_user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Cambia la contraseña de quien llama, **conociendo la anterior** (USR.7).
+
+    No existía en ningún rol, y la consecuencia se vio el 2026-09-01: las seis cuentas del
+    piloto se crearon con la misma contraseña y ninguno de sus dueños podía cambiarla, así que
+    cualquiera de los seis podía entrar como otro y la atribución de las valoraciones valía lo
+    que valiera ese secreto compartido.
+
+    **La actual se exige siempre, también a un superadministrador**, y no es ceremonia: con el
+    token basta para actuar, pero no tiene que bastar para quedarse la cuenta. Una sesión
+    robada sin la contraseña no puede cerrarle la puerta a su dueño.
+
+    **Una sola ruta para las tres clases** con login local —`hub_users`,
+    `superadminaccount` y `adminaccount`—, resolviendo la tabla por la forma del `user_id`
+    (ver `_cuenta_con_login_local`). Tres endpoints serían tres sitios donde olvidarse del
+    límite de intentos, del 401 uniforme o de no devolver nada.
+
+    **`limitar_login` también aquí.** Sin él esto es un oráculo para adivinar la contraseña
+    actual a ritmo de red, y encima con el token ya en la mano.
+
+    **El mismo 401** cuando la actual no casa y cuando la cuenta no tiene hash: distinguirlos
+    diría si esa cuenta usa login local, que no es asunto de quien está probando.
+    """
+    limitar_login(request)
+
+    cuenta = await _cuenta_con_login_local(session, current_user)
+    hash_actual = getattr(cuenta, "hashed_password", None) if cuenta else None
+    # El hash señuelo, por lo mismo que en los logins: sin él, una cuenta sin contraseña
+    # responde sin pagar bcrypt y el tiempo delata que no tiene login local.
+    correcta = verify_password(body.password_actual, hash_actual or _HASH_SENUELO)
+
+    if cuenta is None or not hash_actual or not correcta:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    cuenta.hashed_password = hash_password(body.password_nueva)
+    session.add(cuenta)
     await session.commit()
 
 

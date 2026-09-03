@@ -23,8 +23,12 @@ import { useGetResolvedThemeApiV1HubThemesResolvedGet } from '@/shared/api/gener
  * - «Prompts de actividad», que por definición no cuelgan de ningún chatbot (PRO.2.1).
  * - «Tokens de acceso», que son credenciales de máquina de la plataforma.
  */
+// USR.7 — el menú de la cuenta lleva el formulario de la propia contraseña, así que el
+// layout consulta también esa mutación. Sin ella en el doble, el componente llama a
+// `undefined` y no monta nada: los rojos parecen de esta pantalla y son del doble.
 vi.mock('@/shared/api/generated/auth/auth', () => ({
   useGetMeApiV1AuthMeGet: vi.fn(),
+  useCambiarMiPassword: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }))
 
 vi.mock('@/shared/api/generated/hub-themes/hub-themes', () => ({

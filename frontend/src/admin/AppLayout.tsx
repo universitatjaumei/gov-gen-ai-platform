@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/shared/auth'
+import { CambiarMiContrasena } from '@/shared/auth/CambiarMiContrasena'
 import { useModulos } from '@/shared/auth/useModulos'
 import { SUPPORTED_LANGUAGES } from '@/shared/i18n'
 import { useMarca } from '@/shared/marca/useMarca'
@@ -139,6 +140,10 @@ export function AppLayout() {
             ))}
           </select>
           <p className="truncate mb-2">{user?.email}</p>
+          {/* USR.7 — el sitio de cambiar la propia contraseña es el menú de la propia cuenta,
+              junto al correo y a cerrar sesión: es lo que se hace con la cuenta, no una
+              pantalla de administración. */}
+          <CambiarMiContrasena className="mb-2" />
           <button
             type="button"
             onClick={logout}

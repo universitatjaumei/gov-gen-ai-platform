@@ -11,8 +11,13 @@ import { useGetResolvedThemeApiV1HubThemesResolvedGet } from '@/shared/api/gener
  * INF.7 — el menú se genera con los módulos que concede el servidor, así que el test tiene que
  * darlos: antes las tres entradas estaban escritas en el componente y salían para cualquiera.
  */
+// USR.7 — el menú de la cuenta lleva el formulario de la propia contraseña, así que este
+// layout consulta también esa mutación. Un doble del módulo tiene que traer **todo** lo que el
+// árbol usa: con `useCambiarMiPassword` fuera, el componente llama a `undefined` y el layout
+// entero no monta — ocho rojos que parecen del menú y son del doble.
 vi.mock('@/shared/api/generated/auth/auth', () => ({
   useGetMeApiV1AuthMeGet: vi.fn(),
+  useCambiarMiPassword: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }))
 
 // La marca del panel viene de la cascada del servidor; sin el doble, el `useQuery` de este

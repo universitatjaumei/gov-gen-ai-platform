@@ -22,8 +22,12 @@ import { useListOrganizacionesApiV1HubOrganizacionesGet } from '@/shared/api/gen
  * reserva también en los inactivos con `border-transparent`, porque si sólo la tuviera el
  * activo el menú entero se desplazaría al cambiar de sección.
  */
+// USR.7 — el menú de la cuenta lleva el formulario de la propia contraseña, así que el
+// layout consulta también esa mutación. Sin ella en el doble, el componente llama a
+// `undefined` y no monta nada: los rojos parecen de esta pantalla y son del doble.
 vi.mock('@/shared/api/generated/auth/auth', () => ({
   useGetMeApiV1AuthMeGet: vi.fn(),
+  useCambiarMiPassword: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }))
 
 vi.mock('@/shared/api/generated/hub-themes/hub-themes', () => ({
