@@ -21,6 +21,15 @@ echo   - Dos administradores sobre la MISMA organizacion, los dos viendo los
 echo     mismos cuatro asistentes de la UJI y ninguno el de otra.
 echo   - Cambiar la propia contrasena de punta a punta: la vieja deja de
 echo     servir y la nueva sirve.
+echo   - USR.9: la pantalla de Personas desde un administrador de
+echo     organizacion: ve solo a la gente de la UJI y ninguna de las cuentas
+echo     de superadministracion, sin formulario de alta y sin desactivar, y
+echo     con "Fijar contrasena" en cada fila.
+echo   - USR.10: quien tiene un modulo y pide otro se queda en la direccion
+echo     que pidio, con el aviso correcto; quien no tiene ninguno sigue
+echo     yendo a la pantalla de "sin acceso".
+echo   - USR.8: el asistente agentico de Gerencia responde y AHORA registra
+echo     la interaccion (de 0 pasa a 1) y cierra el flujo con su evento.
 echo.
 echo  Aqui queda SOLO lo que una persona tiene que decidir o hacer con datos
 echo  reales.
@@ -39,7 +48,8 @@ echo.
 echo  En https://normativa.uji.es/panel/ (o en local, http://localhost:5173):
 echo.
 echo   1. Entra como superadministrador.
-echo   2. Plataforma ^> Personas.
+echo   2. Personas (en el menu de la izquierda; desde USR.9 ya no cuelga de
+echo      Plataforma, tiene su propio modulo).
 echo   3. Para cada probador de Gerencia:
 echo        - Correo institucional real.
 echo        - Rol: Informador si va a anotar respuestas; Usuario si solo
@@ -51,6 +61,12 @@ echo   4. Comunicale a cada uno su contrasena por un canal seguro. La pantalla
 echo      no la vuelve a mostrar, a proposito.
 echo   5. Diles que entren y usen "Cambiar mi contrasena" (menu de su cuenta,
 echo      abajo a la izquierda). Desde ese momento el secreto es solo suyo.
+echo.
+echo   6. A quien lleve rol Administrador, concedele ademas el modulo
+echo      "Personas de la organizacion" en Plataforma ^> Modulos. Sin el no ve
+echo      la pantalla, y con el vera SOLO a la gente de sus organizaciones y
+echo      podra fijarles la contrasena, pero no dar de alta ni cambiar roles.
+echo      A quien ya tenia el modulo Plataforma se lo dio la migracion.
 echo.
 echo  DECISION TUYA: que rol lleva cada uno. El agente no puede inventarlo.
 echo.
