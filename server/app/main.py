@@ -53,6 +53,7 @@ from server.app.routers.hub_themes_router import router as hub_themes_router
 from server.app.routers.hub_users_router import router as hub_users_router
 from server.app.routers.hub_modulos_router import router as hub_modulos_router
 from server.app.routers.hub_opciones_router import router as hub_opciones_router
+from server.app.routers.actividad_router import router as actividad_router
 from server.app.routers.hub_agents_router import router as hub_agents_router
 from server.app.routers.hub_sites_router import router as hub_sites_router
 from server.app.routers.hub_content_quality_router import router as hub_content_quality_router
@@ -404,6 +405,7 @@ def _register_cloud(app: FastAPI) -> None:
 def _register_edge(app: FastAPI) -> None:
     app.include_router(hub_chat_router, prefix="/api/v1")
     app.include_router(hub_feedback_router, prefix="/api/v1")
+    app.include_router(actividad_router, prefix="/api/v1")  # Deploy: edge (REG.2)
     app.include_router(hub_usage_router, prefix="/api/v1")  # Deploy: edge (SEC.4)
     app.include_router(hub_tasks_router, prefix="/api/v1")
     app.include_router(ingestion_router, prefix="/api/v1")

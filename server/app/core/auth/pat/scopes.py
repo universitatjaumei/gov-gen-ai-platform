@@ -16,6 +16,13 @@ CHAT_DEBUG = "chat:debug"
 # persona. Es lo más que concede un PAT, así que va aparte de `chat:test`: sin este scope la
 # cabecera se ignora, y un token robado que no lo lleve no puede suplantar a nadie.
 CHAT_ONBEHALF = "chat:onbehalf"
+# REG.2: registrar un uso de IA ocurrido fuera de la plataforma. Es append-only de metadatos
+# —no muta nada— y por eso no se reserva a superadmin como `chatbots:write`.
+ACTIVIDAD_WRITE = "actividad:write"
+# REG.3: usar la anonimización como servicio. Separado de `actividad:write` porque son dos
+# capacidades distintas: una herramienta puede querer limpiar PII sin registrar nada, y otra
+# registrar sin pedirnos que le limpiemos texto.
+ANONIMIZACION_USE = "anonimizacion:use"
 
 ALL_SCOPES: frozenset[str] = frozenset(
     {
@@ -26,6 +33,8 @@ ALL_SCOPES: frozenset[str] = frozenset(
         CHAT_TEST,
         CHAT_DEBUG,
         CHAT_ONBEHALF,
+        ACTIVIDAD_WRITE,
+        ANONIMIZACION_USE,
     }
 )
 

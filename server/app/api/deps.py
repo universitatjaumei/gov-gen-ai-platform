@@ -155,6 +155,47 @@ def require_scopes(*needed: str):
     return _check
 
 
+def require_pat_scopes(*needed: str):
+    """Como `require_scopes`, pero **exige además que el principal sea un PAT** (REG.2).
+
+    `require_scopes` deja pasar una sesión JWT a propósito: un principal humano no se filtra por
+    scope porque su autorización viene del rol. Para las superficies que existen **para clientes
+    máquina** eso no vale: el registro de actividad y la anonimización como servicio los consumen
+    agentes externos, y una sesión de navegador que pudiera escribir en el registro permitiría
+    fabricar entradas desde el panel — que es exactamente lo que un registro de gobernanza no
+    puede admitir.
+
+    El 403 dice qué falta en cada caso, porque son dos problemas distintos de cara a quien
+    integra: «esto necesita un token de máquina» y «a tu token le falta este scope».
+    """
+
+    async def _check(
+        request: Request, user: UserInfo = Depends(get_current_user)
+    ) -> UserInfo:
+        scopes = getattr(request.state, "pat_scopes", None)
+        if scopes is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "PAT_REQUIRED",
+                    "message": (
+                        "Esta operación es para clientes máquina: hace falta un Personal "
+                        "Access Token, no una sesión."
+                    ),
+                    "scopes_requeridos": list(needed),
+                },
+            )
+        missing = [s for s in needed if s not in scopes]
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "PAT_SCOPE_MISSING", "missing": missing},
+            )
+        return user
+
+    return _check
+
+
 async def modulos_concedidos(
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
