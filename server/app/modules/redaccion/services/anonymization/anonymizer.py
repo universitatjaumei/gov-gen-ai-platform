@@ -58,6 +58,22 @@ def _get_nlp(model: str) -> Any:
     return _NLP_CACHE[model]
 
 
+#: Tipos que la politica por defecto sustituye en texto libre.
+#:
+#: Estaba escrita dentro de `AnonymizationContext.anonymize()`. REG.3 la saca a constante porque
+#: el endpoint publico necesita la misma lista para informar de que aplico: con una copia, las dos
+#: politicas por defecto divergirian en cuanto alguien anada un tipo, y en silencio —el endpoint
+#: devolveria un texto sustituido y un informe que no lo describe.
+TIPOS_ANONIMIZADOS_POR_DEFECTO: tuple[str, ...] = (
+    "PERSON_NAME",
+    "EMAIL",
+    "DNI",
+    "NIE",
+    "PHONE",
+    "PASSPORT",
+)
+
+
 @dataclass
 class Entity:
     """Entidad detectada en un texto."""
@@ -393,7 +409,7 @@ class AnonymizationContext:
         Por defecto preserva nombres, emails, DNI, NIE, teléfonos y pasaportes.
         """
         if allowed_types is None:
-            allowed_types = ["PERSON_NAME", "EMAIL", "DNI", "NIE", "PHONE", "PASSPORT"]
+            allowed_types = list(TIPOS_ANONIMIZADOS_POR_DEFECTO)
 
         if isinstance(data, dict):
             return {k: self.anonymize(v, allowed_types) for k, v in data.items()}
