@@ -203,6 +203,20 @@ async def login_usuario(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # **Los datos del token se leen ANTES del commit, y no es estilo: es lo que hace que esto
+    # funcione.** `commit()` expira los atributos de la instancia, así que leer `persona.id`
+    # después dispara una recarga perezosa —IO síncrona— fuera del greenlet de SQLAlchemy, y eso
+    # es un `MissingGreenlet` que llega al navegador como **500**. Pasó de verdad: lo destapó la
+    # verificación de USR.4, y los tests de USR.2 no lo veían porque doblan la sesión.
+    #
+    # `login_admin` no tiene el problema porque no commitea; éste sí, porque anota la entrada.
+    user_info = UserInfo(
+        user_id=str(persona.id),
+        email=persona.email,
+        role=persona.role,
+        organizacion_ids=(str(persona.organizacion_id),) if persona.organizacion_id else (),
+    )
+
     # La columna existe desde AUTH.2 y hasta ahora sólo la escribía el ACS. La pantalla de
     # personas la usa para decidir si una fila se puede borrar (REV.8), así que una entrada por
     # esta vía tiene que contar igual que una por SSO.
@@ -210,12 +224,6 @@ async def login_usuario(
     session.add(persona)
     await session.commit()
 
-    user_info = UserInfo(
-        user_id=str(persona.id),
-        email=persona.email,
-        role=persona.role,
-        organizacion_ids=(str(persona.organizacion_id),) if persona.organizacion_id else (),
-    )
     return TokenResponse(access_token=create_token(user_info))
 
 
