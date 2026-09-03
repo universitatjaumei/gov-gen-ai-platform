@@ -7,6 +7,7 @@
     "chatbot_name": "Nombre",
     "chatbot_prompt": "Prompt del sistema",
     "chatbot_active": "Activo",
+    "chatbot_inactive": "Inactivo",
     "chatbot_model": "Modelo de lenguaje",
     "no_chatbots": "No hay chatbots creados",
     "delete_confirm": "¿Eliminar este chatbot?",

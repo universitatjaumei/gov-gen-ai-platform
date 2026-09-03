@@ -456,8 +456,25 @@ export function ChatbotsPage() {
                   </span>
                 </td>
                 <td className="py-3 pr-4">
+                  {/* El interruptor de actividad. La etiqueta nombra el ESTADO, que es lo
+                      que esta columna dice que muestra —su encabezado es «Activo»— y lo que ya
+                      hacía la mitad verde.
+
+                      Decía `tc('edit')` cuando el chatbot estaba inactivo, o sea «Editar», y lo
+                      que hacía era activarlo. Se encontró verificando LANG.2 en el navegador y de
+                      la peor manera: buscando el botón de editar de la fila se pincha esto y se
+                      activa un asistente. Y no es un caso raro, porque el editar de verdad está
+                      en el clic sobre la fila y no en un botón, así que cualquiera que busque
+                      «Editar» acaba aquí.
+
+                      `aria-pressed` porque es un interruptor: sin él un lector de pantalla lee
+                      «Inactivo» como una etiqueta y no dice que se pueda pulsar para cambiarlo.
+                      No se usa `aria-label` con el verbo («Activar») a propósito: el nombre
+                      accesible tiene que contener el texto visible (WCAG 2.5.3), y decir una cosa
+                      a la vista y otra al lector es el mismo defecto que se está arreglando. */}
                   <button
                     type="button"
+                    aria-pressed={c.is_active}
                     onClick={(e) => {
                       e.stopPropagation()
                       toggleMutation.mutate({ chatbotId: c.id, data: { is_active: !c.is_active } })
@@ -468,7 +485,7 @@ export function ChatbotsPage() {
                         : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'
                     }`}
                   >
-                    {c.is_active ? t('hub.chatbot_active') : tc('edit')}
+                    {c.is_active ? t('hub.chatbot_active') : t('hub.chatbot_inactive')}
                   </button>
                 </td>
                 <td className="py-3 pr-4">

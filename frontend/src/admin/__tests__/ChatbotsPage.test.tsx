@@ -388,3 +388,88 @@ describe('ChatbotsPage', () => {
     expect(screen.getByText('Caducado')).toBeInTheDocument()
   })
 })
+
+/**
+ * El interruptor de actividad nombraba otra acción: decía «Editar» y activaba.
+ *
+ * **Encontrado verificando LANG.2 en el navegador**, y de la peor manera: buscando el botón de
+ * editar de la fila pinché el chip de la columna «Activo», que en un chatbot inactivo se pintaba
+ * con `tc('edit')`. No abrió ningún diálogo — **activó el asistente**, y hubo que devolverlo a
+ * `is_active: false` por API.
+ *
+ * No es un caso raro: es lo que le pasa a cualquiera que busque «Editar» en la fila, porque el
+ * editar de verdad está en el clic sobre la fila y no en un botón.
+ *
+ * **La etiqueta pasa a nombrar el estado**, que es lo que la columna dice que muestra —su
+ * encabezado es «Activo»— y lo que ya hacía la mitad verde. Así el color y el texto dicen lo
+ * mismo, y el texto no promete una acción que no ocurre. Con `aria-pressed`, porque es un
+ * interruptor: sin él un lector de pantalla lee «Inactivo» como etiqueta y no dice que se pueda
+ * pulsar para cambiarlo.
+ */
+describe('El interruptor de actividad nombra el estado, no otra acción', () => {
+  const INACTIVO: ChatbotRead = { ...DEMO_CHATBOT, id: 'bot-inactivo', name: 'Bot Parado', is_active: false }
+
+  it('should_not_label_an_inactive_chatbot_as_edit', async () => {
+    renderPage([INACTIVO])
+    await waitFor(() => screen.getByText('Bot Parado'))
+
+    expect(screen.queryByRole('button', { name: /^editar$/i })).toBeNull()
+  })
+
+  it('should_label_an_inactive_chatbot_as_inactive', async () => {
+    renderPage([INACTIVO])
+    await waitFor(() => screen.getByText('Bot Parado'))
+
+    expect(screen.getByRole('button', { name: /inactivo/i })).toBeTruthy()
+  })
+
+  it('should_keep_labelling_an_active_chatbot_as_active', async () => {
+    renderPage([DEMO_CHATBOT])
+    await waitFor(() => screen.getByText('Bot Demo'))
+
+    expect(screen.getByRole('button', { name: /^activo$/i })).toBeTruthy()
+  })
+
+  it('should_announce_it_as_a_toggle', async () => {
+    renderPage([INACTIVO])
+    await waitFor(() => screen.getByText('Bot Parado'))
+
+    expect(screen.getByRole('button', { name: /inactivo/i }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('should_announce_an_active_one_as_pressed', async () => {
+    renderPage([DEMO_CHATBOT])
+    await waitFor(() => screen.getByText('Bot Demo'))
+
+    expect(screen.getByRole('button', { name: /^activo$/i }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('should_still_activate_an_inactive_chatbot_when_clicked', async () => {
+    renderPage([INACTIVO])
+    await waitFor(() => screen.getByText('Bot Parado'))
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /inactivo/i }))
+    })
+
+    // Un solo argumento: el interruptor no pasa opciones a `mutate`, a diferencia del
+    // guardado del formulario. Escribí `expect.anything()` de segundo y el rojo era mío.
+    expect(mockUpdateMutate).toHaveBeenCalledWith({
+      chatbotId: 'bot-inactivo',
+      data: { is_active: true },
+    })
+  })
+
+  it('should_not_open_the_edit_dialog_when_toggling', async () => {
+    /** El clic lleva `stopPropagation` porque la fila entera abre el diálogo. Si se perdiera,
+     *  cambiar el estado abriría además el formulario. */
+    renderPage([INACTIVO])
+    await waitFor(() => screen.getByText('Bot Parado'))
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /inactivo/i }))
+    })
+
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+})
