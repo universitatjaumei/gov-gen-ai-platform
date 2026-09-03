@@ -91,9 +91,9 @@ De ahí sale el primer requisito de cualquier método serio en este terreno: **m
 
 El informe DORA de 2025 sobre desarrollo asistido por IA, con cerca de 5.000 profesionales, más de
 100 horas de datos cualitativos y una adopción del 90 %, concluye que la IA actúa como
-**amplificador**: multiplica las
-fortalezas de una organización y también sus debilidades. Su frase resumen es la mejor
-justificación de este documento: *«velocidad sin estabilidad es caos acelerado»*. **[Evidencia]**
+**amplificador**: multiplica las fortalezas de una organización y también sus debilidades. Su frase
+resumen es la mejor justificación de este documento: *«velocidad sin estabilidad es caos
+acelerado»*. **[Evidencia]**
 
 **El agente no arregla el método; lo revela.** Esa es la razón de fondo para tener un método antes
 de tener agentes.
@@ -270,33 +270,29 @@ Es Markdown plano sin esquema obligatorio. Si la herramienta busca otro nombre (
 `CLAUDE.md`), ese fichero debe tener tres líneas que **importen** el canónico, para que no haya dos
 versiones que puedan divergir (P4).
 
-> **Un hallazgo que juega contra este proyecto, y lo que se hizo con él.** El estudio empírico
-> sobre ficheros de contexto para agentes encuentra que **la longitud moderada funciona mejor** que
-> la exhaustiva, que las instrucciones **explícitas** pesan más que los ejemplos implícitos, y que
-> los agentes **se saltan** el contenido verboso y redundante. **[Evidencia]**
+> **Corto, imperativo y sin duplicar.** El estudio empírico sobre ficheros de contexto para
+> agentes encuentra que **la longitud moderada funciona mejor** que la exhaustiva, que las
+> instrucciones **explícitas** pesan más que los ejemplos implícitos, y que los agentes **se
+> saltan** el contenido verboso y redundante. **[Evidencia]**
 >
-> El `AGENTS.md` de este proyecto tenía **40 KB**. Al medirlo apareció algo peor que la longitud:
-> **el 28 % duplicaba otro documento**, el que describe la metodología. Las cuatro causas de
-> parada, el bucle de trabajo, el informe de cierre y el protocolo de verificación estaban escritos
-> dos veces, con redacción distinta. Es una violación de P4 dentro del fichero que enuncia P4, y ya
-> había costado una edición doble.
+> De ahí salen tres reglas para el fichero. **Lo que se queda es el imperativo**, porque es lo que
+> el agente lee antes de escribir código; el razonamiento largo va a documentos aparte que el
+> fichero enlaza. **Cada regla lleva una cláusula de por qué**, y no más: una regla sin motivo se
+> racionaliza y se salta, y una regla con un párrafo de motivo se lee por encima. Y **el fichero no
+> repite lo que ya está en otro sitio**: la tentación constante es añadir «una frase más de
+> contexto» junto a cada regla, y en meses eso convierte el fichero de reglas en una copia parcial
+> del documento de metodología, con la divergencia asegurada.
 >
-> Se partió el 2026-09-03 **por registro y no por tema**: el imperativo se queda, porque es lo que
-> se lee antes de escribir código, y el relato se va al documento que lo explica, dejando **una
-> cláusula** de por qué junto a cada regla. Resultado: **de 40 a 33 KB**, y un guardarraíl que
-> comprueba que los punteros resuelven, que los dieciocho imperativos siguen ahí y que el fichero
-> no vuelve a crecer.
->
-> **Y sigue siendo mucho.** 33 KB no es «longitud moderada» por ninguna medida. La ganancia real
-> fue eliminar la doble fuente de verdad, no el tamaño. La recomendación para quien empiece es la
-> misma, y con más fuerza: **no llegues ahí**. Reglas duras y accionables en el fichero principal;
-> el razonamiento largo, en documentos aparte que el fichero enlace, desde el primer día.
+> Un guardarraíl lo mantiene: comprueba que los punteros a otros documentos resuelven, que las
+> reglas operativas siguen en el fichero y que su tamaño no crece por encima del listón fijado.
+> El de este proyecto sigue siendo más largo de lo que la evidencia recomienda, así que la
+> recomendación para quien empiece es no llegar ahí.
 
 ### 4.2 Las especificaciones: qué garantiza el sistema
 
-Es el documento que más se tardó en escribir y el que más falta hacía. Un plan dice «haz X»; una
+Es el documento que contesta la pregunta que los planes no contestan. Un plan dice «haz X»; una
 especificación dice **«el sistema garantiza Y»**. Solo lo segundo permite saber qué se puede cambiar
-sin romper nada.
+sin romper nada, y es lo primero que necesita quien llega de fuera a continuar un desarrollo.
 
 Se organiza **por capacidad, no por orden de ejecución**, y cada capacidad sigue el mismo esqueleto.
 El ejemplo es real y describe cómo el asistente decide en qué idioma responder:
@@ -365,9 +361,9 @@ Tres detalles marcan la diferencia. **[n=1]**
 - **Un test de regresión explícito** en todo prompt que cambie algo existente.
 - **La verificación dice qué evidencia hace falta**, no «comprobar que funciona».
 
-**Una lección sobre el tamaño**: el plan de la primera fase de este proyecto llegó a **27.449 líneas
-en un solo fichero**. No se puede revisar en una *pull request* ni comentar por línea. Hay que
-partirlo en **un fichero por bloque desde el principio**.
+**Un fichero por bloque, desde el principio.** Un plan de fase entero en un solo fichero no se
+puede revisar en una *pull request* ni comentar por línea, y crece hasta que nadie lo lee de
+principio a fin. La unidad de fichero es la misma que la de ejecución: el bloque.
 
 ### 4.4 El cursor y el historial
 
@@ -388,8 +384,9 @@ Un ejemplo de fila real, traducido a lenguaje llano. Lo valioso es la parte nega
 > protección, así que fallaba en silencio. Era la tercera vez que el mismo problema mordía en un
 > sitio distinto.
 
-**Hay que separar el historial del cursor en cuanto crezca.** En este proyecto llegó a ocupar 535
-de los 626 KB del fichero del cursor, que se lee entero al arrancar cada sesión.
+**El historial y el cursor son ficheros distintos.** El cursor se lee entero al arrancar cada
+sesión y tiene que caber en dos pantallas; el historial crece una fila por paso y no tiene techo.
+Juntarlos hace que la lectura del cursor pague el peso del historial.
 
 ### 4.5 El registro de decisiones (ADR)
 
@@ -719,9 +716,8 @@ más veces que en el sistema. Y es **más fácil de creer**, porque confirma que
 arreglar.
 
 Ha ocurrido más de quince veces en este proyecto. Algunos ejemplos: «0 de 12 fuentes» era leer un
-campo que no existía; «1.000 exacto» era medir una cosa distinta de la que decide; «cuatro fichas
-sin texto» lo tenían, guardado bajo otra clave; y una diferencia de 22 KB al partir un fichero era
-el propio verificador buscando mal.
+campo que no existía; «1.000 exacto» era medir una cosa distinta de la que decide; y «cuatro fichas
+sin texto» lo tenían, guardado bajo otra clave.
 
 **La variante peligrosa: un test recién escrito que sale en rojo es tan sospechoso como una cifra
 extraña.** Ahí el rojo se interpreta como «falta implementarlo», y la prisa por arreglar tapa la
@@ -749,14 +745,15 @@ producción.
 
 ### 9.5 La duplicación se cuela en el documento que la prohíbe
 
-`AGENTS.md` enuncia «una sola fuente de verdad por cosa» y tenía el 28 % de su contenido duplicado
-en otro documento. No fue descuido: cada vez que una regla necesitaba una frase más de contexto, se
-escribía ahí en vez de en el documento largo, y en meses eso son 11 KB.
+El fichero de reglas enuncia «una sola fuente de verdad por cosa» y acabó duplicando buena parte
+del documento de metodología. No fue descuido: cada vez que una regla necesitaba una frase más de
+contexto, se escribía ahí en vez de en el documento largo, y la duplicación se acumula una frase a
+la vez.
 
-**El síntoma que lo delató no fue el tamaño.** Fue tener que editar la misma lista en dos sitios al
-añadir una regla, y darse cuenta de que la segunda copia casi se queda sin actualizar. Y al quitar
-la duplicación se puso rojo un guardarraíl **que estaba casando con la copia**, lo que enseña algo
-incómodo: un guardarraíl puede estar vigilando la redundancia en vez del original.
+**El síntoma que lo delata no es el tamaño.** Es tener que editar la misma lista en dos sitios al
+añadir una regla, y ver que la segunda copia casi se queda sin actualizar. Y hay una consecuencia
+incómoda: al eliminar la duplicación puede ponerse rojo un guardarraíl **que estaba casando con la
+copia** y no con el original. Un guardarraíl también puede estar vigilando la redundancia.
 
 ### 9.6 Un documento con estado incrustado envejece
 
@@ -819,8 +816,9 @@ que tirar:
 | 8 | **Guardarraíles** | La primera vez que un documento se queda viejo |
 | 9 | **Licencia, DCO, plantillas de issue** | Antes de abrir el repositorio, no después |
 
-**Las especificaciones van en el paso 7 y no en el 1** por una razón medida: escribir garantías
-antes de tener nada que garantizar produce un documento que se reescribe entero al segundo bloque.
+**Las especificaciones van en el paso 7 y no en el 1.** Escribir garantías antes de tener nada
+que garantizar produce un documento que hay que reescribir entero al segundo bloque. Primero se
+construye; cuando algo garantiza algo, se escribe.
 
 ### 11.2 El prompt de arranque
 
@@ -847,10 +845,9 @@ QUÉ QUIERO QUE HAGAS, EN ESTE ORDEN, PARANDO DONDE SE INDICA:
    seguir**: es la única parte que no puedo revisar después.
 
 2. `AGENTS.md` según §4.1. Reglas duras, accionables, con los comandos exactos de mi stack.
-   **Máximo 300 líneas** — la evidencia dice que la longitud moderada funciona mejor, y el
-   fichero del proyecto de origen se pasó. Si algo necesita más razonamiento, va a un documento
-   aparte enlazado. Si mi herramienta busca otro nombre, crea ese fichero con tres líneas que
-   importen este.
+   **Máximo 300 líneas** — la evidencia dice que la longitud moderada funciona mejor. Si algo
+   necesita más razonamiento, va a un documento aparte enlazado. Si mi herramienta busca otro
+   nombre, crea ese fichero con tres líneas que importen este.
 
 3. Integración continua según §7.1, con las puertas que apliquen a mi stack. Lint antes de
    tests. Lock verificado.
@@ -881,7 +878,8 @@ Tres cosas de este marco pertenecen a su contexto de origen, y copiarlas sería 
 
 1. **Las decisiones de arquitectura.** La separación entre nube y nodo local, la multitenencia por
    organización o la retirada de un conversor de documentos responden a un dominio concreto.
-2. **El tamaño del `AGENTS.md`.** Es deuda, no modelo (§4.1).
+2. **La longitud del `AGENTS.md`.** El del proyecto de origen es más largo de lo que la
+   evidencia recomienda. Empieza corto y deja que el guardarraíl lo mantenga así (§4.1).
 3. **La AGPL.** La elección de licencia tiene que estar razonada para **cada** proyecto (§8.1).
 
 ### 11.4 Cómo saber si está funcionando
