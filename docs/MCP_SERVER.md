@@ -114,7 +114,8 @@ producción in-place. Registrar actividad añade metadatos y no muta nada.
 **`registrar_actividad` no pide confirmación**, a diferencia de `update_chatbot`. Es una tool que
 un agente llama de forma rutinaria; con una puerta delante, se dejaría de llamar y el registro
 quedaría vacío — que es peor que una entrada de más. Y el contrato del evento **rechaza cualquier
-campo de contenido**: mandar el prompt no lo registra, falla.
+campo de contenido**: mandar el prompt no lo registra, falla. El contrato campo a campo está en
+[`REGISTRO_ACTIVIDAD_IA.md`](REGISTRO_ACTIVIDAD_IA.md).
 
 ## 4. Registro en Claude Code
 

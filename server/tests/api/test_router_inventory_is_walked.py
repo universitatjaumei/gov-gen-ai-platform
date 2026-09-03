@@ -70,6 +70,13 @@ _SIN_ACOTAR = {
         "dos stubs 501. **Cuando se implemente nace abierto si nadie mira**: GET /edge/config "
         "está diseñado para servir un snapshot de configuración cloud"
     ),
+    # REG.3 — mismo caso que `charts_router`: no lee nada, así que no hay nada que acotar.
+    "anonimizacion_router.py": (
+        "sin estado — detecta y sustituye PII en el texto que le manda el propio llamante, y no "
+        "guarda ni consulta nada (hay un test que cuenta todas las tablas operacionales antes y "
+        "después). No recibe sesión de base de datos: el día que la necesite, esta exención deja "
+        "de valer y hay que releerla"
+    ),
 }
 
 # Routers que declaran su módulo en el docstring y **todavía no lo exigen** con `require_module`.

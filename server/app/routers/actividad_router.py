@@ -39,7 +39,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.api.deps import require_admin, require_pat_scopes
+from server.app.api.deps import require_admin, require_module, require_pat_scopes
 from server.app.core.auth.models import UserInfo
 from server.app.core.auth.pat.scopes import ACTIVIDAD_WRITE
 from server.app.core.auth.tenancy import organizacion_unica_de, scope_query_to_orgs
@@ -65,6 +65,10 @@ COLUMNAS_CSV = (
     "categorias_datos",
     "payload_hash",
 )
+
+#: El módulo que abre la lectura del registro. **Solo la lectura**: el POST lo autentica un PAT
+#: de máquina, y un token de máquina no tiene módulos concedidos —los módulos son de personas—.
+MODULO_REGISTRO = "registro"
 
 router = APIRouter(prefix="/actividad", tags=["actividad"])
 
@@ -204,6 +208,7 @@ def _ordenada(stmt):
     "",
     response_model=PaginaDeActividad,
     operation_id="listarActividad",
+    dependencies=[Depends(require_module(MODULO_REGISTRO))],
 )
 async def listar_actividad(
     herramienta: str | None = Query(default=None),
@@ -242,6 +247,7 @@ async def listar_actividad(
 @router.get(
     "/export",
     operation_id="exportarActividad",
+    dependencies=[Depends(require_module(MODULO_REGISTRO))],
     response_class=Response,
     responses={200: {"content": {"text/csv": {}}}},
 )

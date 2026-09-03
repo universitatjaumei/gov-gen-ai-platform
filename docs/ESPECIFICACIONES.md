@@ -291,7 +291,8 @@ gobernado.
   pueden administrar la misma organización. `AdminAccount` se queda con el partner y la
   facturación. Decisión escrita en [`DECISION_IDENTIDAD_DE_ADMINISTRACION.md`](DECISION_IDENTIDAD_DE_ADMINISTRACION.md).
 - **Acceso por módulos concedidos, no por roles nuevos**: `chatbots`, `curacion`, `informes`,
-  `personas`, `plataforma`. El catálogo es tabla (I4). El superadmin no necesita concesión.
+  `personas`, `registro`, `plataforma`. El catálogo es tabla (I4). El superadmin no necesita
+  concesión.
 - Toda consulta que sirva datos de inquilino se acota con `scope_query_to_orgs`, y **la lista vacía
   significa «ninguna»** (I5, I8).
 - Contraseña local para personas, con interruptor `LOCAL_USER_LOGIN_ENABLED` para apagarla cuando
@@ -370,6 +371,57 @@ mes por medición, y congelarlos hoy sería congelar errores conocidos.
 - La pila local de `torch` se paga entera en memoria y arranque aunque se usen embeddings por API;
   hacerla extra opcional está anotado como candidato, no hecho. **El modo edge sigue
   necesitándola**, así que puede volverse opcional pero no desaparecer.
+
+---
+
+### 5.9 Registro de actividad IA y servicios hacia fuera
+
+**Qué hace.** Da a una organización un sitio donde las herramientas de IA que usa **fuera** de la
+plataforma —asistentes de escritorio, agentes de código, integraciones propias— declaren qué
+usaron, para qué y sobre qué categorías de datos; y les ofrece la anonimización de la plataforma
+para que no tengan que resolver la PII por su cuenta.
+
+Es **registro de gobernanza**, al servicio de la conservación de registros del AI Act (arts. 12 y
+26) y del registro de actividades de tratamiento del RGPD (art. 30). No es trazado técnico: el
+detalle de lo que pasa dentro de la plataforma ya lo cubre la observabilidad interna.
+
+**Garantiza.**
+- **Metadatos sí, payloads no.** El contrato del evento no declara ningún campo de contenido y
+  rechaza los que no declara. Mandar el prompt no lo registra: **falla con 422**. Si hace falta
+  evidencia, va el **SHA-256** validado en forma, nunca el texto.
+- **El servicio de anonimización no registra el texto** que recibe: ni en la base ni en el log,
+  tampoco a nivel DEBUG.
+- **La organización del evento se deriva del token**, no viaja en el cuerpo: mandarla es 422 y no
+  se ignora en silencio.
+- **Escribir exige un PAT y leer exige una sesión**, y en los dos casos al revés no se puede. Una
+  sesión de navegador que escribiera permitiría fabricar entradas del registro; un PAT que leyera
+  daría a cada integración una ventana a la actividad de toda la organización.
+- **El MCP remoto no tiene credencial propia**: el token es el que presenta cada petición
+  entrante. Un PAT en el entorno del servicio uniformaría a todos sus clientes bajo una identidad
+  y el registro no distinguiría a nadie.
+- **Paginar no repite ni pierde filas**: `ocurrido_en` lo declara quien registra y los empates son
+  normales, así que el orden lleva desempate por `id`.
+
+**Superficie.** `contracts/actividad.py`, tabla `hub_actividad_ia` (operacional) ·
+`actividad_router` y `anonimizacion_router` (`Deploy: edge`) · `mcp_server/http_server.py` y
+`mcp_server/tools/actividad.py` · pantalla `/registro` (módulo `registro`) ·
+[`REGISTRO_ACTIVIDAD_IA.md`](REGISTRO_ACTIVIDAD_IA.md).
+
+**Invariantes.** I5, I8, I12.
+
+**Madurez**: `implementado` — la pila está completa y probada, y el servicio `mcp` está declarado
+en la pila de la VM **sin desplegar**: pasa a producción cuando el bloque llegue a `main`.
+
+**Abierto.**
+- **Nadie ha registrado nada real todavía.** Lo que falta no es código: es que una herramienta
+  externa se conecte con un PAT y confirme que el contrato le sirve tal como está.
+- **Sin política de retención.** Un registro de conservación acabará necesitando decir cuánto se
+  guarda y qué pasa después; hoy crece sin límite y sin purga.
+- **La anonimización no ofrece elegir política**, a propósito: se añade cuando un consumidor real
+  diga qué necesita.
+- **Sin token de servicio no personal.** El PAT pertenece a una persona, así que la actividad de
+  una integración cuelga de quien emitió su token; si la reunión lo pide, es un prompt, no un
+  rediseño.
 
 ---
 
@@ -465,6 +517,10 @@ a quien llega de fuera:
 - `tests/infra/test_suite_hygiene.py` — mocks sobre clases, `create_all` sobre la base del
   desarrollador, imports a módulos que ya no existen.
 - El guardarraíl de I10 en `test_usr8_el_flujo_del_chat_siempre_termina.py`.
+- `test_reg3_anonimizacion_servicio.py` — el centinela que comprueba, con `caplog` a **DEBUG**,
+  que el texto que se manda a anonimizar no llega a ningún registro.
+- `test_reg4_el_mcp_remoto_esta_declarado.py` — que el despliegue del MCP remoto no reciba un
+  PAT por entorno. Es el cambio más razonable del mundo para quien no sepa por qué no está.
 - `test_profile_contract.py` — todo perfil que no esté declarado sin configurar tiene que compilar
   y ejecutar.
 - Gate de regresión de recuperación: falla si `recall@5`, `recall@10` o `MRR` bajan más de 0,02

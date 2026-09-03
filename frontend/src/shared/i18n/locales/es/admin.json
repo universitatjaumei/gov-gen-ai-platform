@@ -356,6 +356,7 @@
     "reports": "Informes",
     "curation": "Curación",
     "personas": "Personas",
+    "registro": "Registro IA",
     "main": "Navegación principal",
     "language": "Idioma",
     "organizacion": "Organización",
@@ -374,6 +375,26 @@
   "sin_acceso": {
     "texto": "Tu cuenta existe pero no tiene ningun modulo concedido. Pide acceso a quien administra la plataforma indicando que necesitas: informes, chatbots o curacion.",
     "titulo": "Todavia no tienes acceso a ningun modulo"
+  },
+  "registro": {
+    "titulo": "Registro de actividad IA",
+    "descripcion": "Usos de IA declarados por herramientas de fuera de la plataforma. Se registran metadatos —quién, con qué, para qué y con qué modelo—, nunca el contenido.",
+    "herramienta": "Herramienta",
+    "agente": "Agente",
+    "actor": "Actor",
+    "finalidad": "Finalidad",
+    "modelo": "Modelo",
+    "categorias": "Categorías de datos",
+    "ocurrido_en": "Cuándo ocurrió",
+    "desde": "Desde",
+    "hasta": "Hasta",
+    "exportar": "Exportar a CSV",
+    "cargando": "Cargando el registro…",
+    "vacio": "Todavía no hay actividad registrada. Aparecerá aquí cuando una herramienta externa empiece a declararla con un token que lleve el permiso «actividad:write».",
+    "sin_resultados": "Ningún evento coincide con el filtro. Prueba a ampliar el rango de fechas o a borrar el nombre de la herramienta.",
+    "total": "{{count}} eventos",
+    "anterior": "Anterior",
+    "siguiente": "Siguiente"
   },
   "plataforma": {
     "subnav_aria": "Navegación de la administración de la plataforma",

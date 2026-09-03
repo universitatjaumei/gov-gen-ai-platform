@@ -35,6 +35,12 @@ MODULOS_INICIALES: tuple[tuple[str, str], ...] = (
     # organización no es administrar la plataforma (modelos de LLM, organizaciones, tokens,
     # módulos), y meterlo ahí obligaba a dar todo eso para poder dar lo primero.
     ("personas", "Personas de la organización"),
+    # REG.6 — el registro de usos de IA que declaran las herramientas de fuera. Módulo propio y
+    # no dentro de `plataforma` por el mismo criterio que `personas`: es dato **operacional** de
+    # la organización (`Deploy: edge`) y aquélla es configuración de la plataforma
+    # (`Deploy: cloud`). Meterlo ahí obligaría a dar los modelos de LLM, las organizaciones y los
+    # tokens para poder dar el registro.
+    ("registro", "Registro de actividad IA"),
     ("plataforma", "Administración de la plataforma"),
 )
 

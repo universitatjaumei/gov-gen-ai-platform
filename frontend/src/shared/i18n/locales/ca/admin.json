@@ -356,6 +356,7 @@
     "reports": "Informes",
     "curation": "Curació",
     "personas": "Persones",
+    "registro": "Registre IA",
     "main": "Navegació principal",
     "language": "Idioma",
     "organizacion": "Organització",
@@ -374,6 +375,26 @@
   "sin_acceso": {
     "texto": "El teu compte existeix però no té cap mòdul concedit. Demana accés a qui administra la plataforma indicant què necessites: informes, chatbots o curació.",
     "titulo": "Encara no tens accés a cap mòdul"
+  },
+  "registro": {
+    "titulo": "Registre d'activitat IA",
+    "descripcion": "Usos d'IA declarats per eines de fora de la plataforma. Es registren metadades —qui, amb què, per a què i amb quin model—, mai el contingut.",
+    "herramienta": "Eina",
+    "agente": "Agent",
+    "actor": "Actor",
+    "finalidad": "Finalitat",
+    "modelo": "Model",
+    "categorias": "Categories de dades",
+    "ocurrido_en": "Quan va passar",
+    "desde": "Des de",
+    "hasta": "Fins a",
+    "exportar": "Exporta a CSV",
+    "cargando": "S'està carregant el registre…",
+    "vacio": "Encara no hi ha activitat registrada. Apareixerà aquí quan una eina externa comence a declarar-la amb un testimoni que porte el permís «actividad:write».",
+    "sin_resultados": "Cap esdeveniment coincideix amb el filtre. Prova d'ampliar el rang de dates o de buidar el nom de l'eina.",
+    "total": "{{count}} esdeveniments",
+    "anterior": "Anterior",
+    "siguiente": "Següent"
   },
   "plataforma": {
     "subnav_aria": "Navegació de l'administració de la plataforma",

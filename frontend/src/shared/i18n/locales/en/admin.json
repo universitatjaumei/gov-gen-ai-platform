@@ -356,6 +356,7 @@
     "reports": "Reports",
     "curation": "Curation",
     "personas": "People",
+    "registro": "AI register",
     "main": "Main navigation",
     "language": "Language",
     "organizacion": "Organisation",
@@ -374,6 +375,26 @@
   "sin_acceso": {
     "texto": "Your account exists but no module has been granted. Ask the platform administrator for access, saying what you need: reports, chatbots or curation.",
     "titulo": "You do not have access to any module yet"
+  },
+  "registro": {
+    "titulo": "AI activity register",
+    "descripcion": "AI usage declared by tools outside the platform. Only metadata is recorded —who, with what, what for and with which model—, never the content.",
+    "herramienta": "Tool",
+    "agente": "Agent",
+    "actor": "Actor",
+    "finalidad": "Purpose",
+    "modelo": "Model",
+    "categorias": "Data categories",
+    "ocurrido_en": "When it happened",
+    "desde": "From",
+    "hasta": "To",
+    "exportar": "Export to CSV",
+    "cargando": "Loading the register…",
+    "vacio": "No activity recorded yet. It will appear here once an external tool starts declaring it with a token carrying the «actividad:write» scope.",
+    "sin_resultados": "No event matches the filter. Try widening the date range or clearing the tool name.",
+    "total": "{{count}} events",
+    "anterior": "Previous",
+    "siguiente": "Next"
   },
   "plataforma": {
     "subnav_aria": "Platform administration navigation",

@@ -197,6 +197,10 @@ ordenadas de menor a mayor coste:
 > la superficie— no distinguiría a nadie.
 >
 > El transporte convive con el stdio en el mismo paquete, que sigue sin importar `server.app`.
-> Detalles en `docs/MCP_SERVER.md`; despliegue en `docs/DESPLIEGUE_PROTOTIPO_GCP.md` §3.septies.
+> Detalles en [`MCP_SERVER.md`](MCP_SERVER.md); despliegue en
+> [`DESPLIEGUE_PROTOTIPO_GCP.md`](DESPLIEGUE_PROTOTIPO_GCP.md) §3.septies. **El contrato de lo
+> que se registra y su mapeo a las convenciones OTel GenAI está en
+> [`REGISTRO_ACTIVIDAD_IA.md`](REGISTRO_ACTIVIDAD_IA.md)**, que es el documento que hay que
+> leer antes de pedir un campo nuevo.
 
 <!-- Sección reservada para la ampliación del usuario -->

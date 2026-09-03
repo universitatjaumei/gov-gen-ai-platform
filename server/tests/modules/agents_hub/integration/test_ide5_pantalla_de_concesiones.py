@@ -73,11 +73,17 @@ class TestElCatalogoEsDato:
             respuesta = await cliente.get("/api/v1/hub/modulos/catalogo")
 
         codigos = [m["code"] for m in respuesta.json()]
-        # Igual que arriba: la lista sale de la semilla. Sigue exigiendo el orden, que es
-        # el que el endpoint promete.
+        # La lista sale de la semilla y el orden es el que el endpoint promete: `ORDER BY code`.
+        #
+        # Esta comparación se hacía contra el orden de `MODULOS_INICIALES`, y **pasaba por
+        # casualidad**: la semilla estaba escrita en orden alfabético. REG.6 metió `registro`
+        # entre `personas` y `plataforma` —donde tiene sentido leerlo, junto al módulo del que
+        # copia el criterio— y el test se puso rojo sin que nada del endpoint hubiera cambiado.
+        # Se compara con `sorted` porque es lo que el endpoint garantiza; el orden en que se
+        # escriba la semilla es cosa de quien la lee.
         from server.app.core.auth.modulos import MODULOS_INICIALES
 
-        assert codigos == [codigo for codigo, _etiqueta in MODULOS_INICIALES]
+        assert codigos == sorted(codigo for codigo, _etiqueta in MODULOS_INICIALES)
 
     @pytest.mark.asyncio
     async def test_should_mark_a_retired_module_as_such(self, db_session):

@@ -97,6 +97,12 @@ def test_operational_base_contains_only_operational_models() -> None:
         # sale del edge. Un contador colgado de `HubChatbot` se habría sincronizado con la
         # configuración, que es justo lo que la frontera existe para impedir.
         "hub_usage_counters",
+        # REG.1 — el registro de usos de IA que declaran las herramientas de fuera. Operacional
+        # por el mismo criterio que decidió `hub_lexicon_pairs`: dice quién de esta organización
+        # usó qué agente y para qué, y eso es dato del cliente final. Que el cloud tuviera el
+        # registro de actividad de sus clientes sería justo lo que la frontera existe para
+        # impedir — y en una instalación edge por requisito regulatorio, inaceptable.
+        "hub_actividad_ia",
     }
 
 def test_no_cross_base_relationships() -> None:

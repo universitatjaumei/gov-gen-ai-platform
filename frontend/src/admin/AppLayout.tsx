@@ -34,6 +34,9 @@ const NAV_SECTIONS = [
   // USR.9 — sale del módulo `plataforma`: quien administra una organización necesita
   // llegar a sus personas sin recibir los modelos de LLM ni los tokens de paso.
   { key: 'personas', path: '/personas', modulo: 'personas' },
+  // REG.6 — el registro de usos de IA de la organizacion. Modulo propio por lo mismo que
+  // `personas`: es operacion de la organizacion y no administracion de la plataforma.
+  { key: 'registro', path: '/registro', modulo: 'registro' },
   { key: 'plataforma', path: '/plataforma', modulo: 'plataforma' },
 ] as const
 

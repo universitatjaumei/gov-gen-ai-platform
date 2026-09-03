@@ -32,6 +32,7 @@ const AuthCallbackPage = lazy(() => import('@/admin/pages/AuthCallbackPage').the
 const ModulosPage = lazy(() => import('@/admin/pages/ModulosPage').then(m => ({ default: m.ModulosPage })))
 const IdentidadVisualPage = lazy(() => import('@/admin/pages/IdentidadVisualPage').then(m => ({ default: m.IdentidadVisualPage })))
 const UsuariosPage = lazy(() => import('@/admin/pages/UsuariosPage').then(m => ({ default: m.UsuariosPage })))
+const RegistroActividadPage = lazy(() => import('@/admin/pages/RegistroActividadPage').then(m => ({ default: m.RegistroActividadPage })))
 const AccessTokensPage = lazy(() => import('@/admin/pages/AccessTokensPage').then(m => ({ default: m.AccessTokensPage })))
 const ChatbotsPage = lazy(() => import('@/admin/pages/ChatbotsPage').then(m => ({ default: m.ChatbotsPage })))
 const ValoresPorDefectoPage = lazy(() => import('@/admin/pages/ValoresPorDefectoPage').then(m => ({ default: m.ValoresPorDefectoPage })))
@@ -134,6 +135,11 @@ function App() {
                       USR.1 le dio existía por API y no por pantalla. Sin redirección desde la
                       ruta vieja, que AGENTS.md prohíbe los shims. */}
                   <Route path="/personas" element={<RutaDeModulo modulo="personas"><UsuariosPage /></RutaDeModulo>} />
+                  {/* REG.6 — modulo propio y no dentro de `plataforma`: el registro es dato
+                      operacional de la organizacion (`Deploy: edge`) y aquella pantalla es
+                      configuracion de la plataforma (`Deploy: cloud`). Meterlo alli obligaria
+                      a dar los modelos de LLM y los tokens para poder dar el registro. */}
+                  <Route path="/registro" element={<RutaDeModulo modulo="registro"><RegistroActividadPage /></RutaDeModulo>} />
                   <Route path="/plataforma" element={<RutaDeModulo modulo="plataforma"><PlataformaLayout /></RutaDeModulo>}>
                     <Route index element={<Navigate to="/plataforma/modelos" replace />} />
                     {/* REV.11 — sale de /hub: su router ya exigia el modulo plataforma para
