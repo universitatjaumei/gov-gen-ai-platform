@@ -3,6 +3,8 @@
 import re
 import unicodedata
 
+from server.app.core.llm_text import texto_de
+
 _MD_LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 # Un corchete que NO va seguido de parentesis: la forma en la que el modelo cita cuando se
 # deja la URL. Se excluye el salto de linea para no tragarse dos citas de parrafos distintos.
@@ -156,7 +158,20 @@ def enforce_citation_contract(
 
     En modo agentic, se relaja: el agente puede decidir no leer ningun documento
     (saludo, charla); validamos solo si sources no esta vacio.
+
+    **USR.11 — la respuesta se normaliza al entrar.** Gemini devuelve el `content` como lista de
+    bloques en cuanto tiene mas de una parte, y con una lista esta funcion se portaba de dos
+    maneras distintas, que es lo peor de los dos mundos: con `sources` reales moria en la primera
+    expresion regular (`TypeError: expected string or bytes-like object`), y con `sources` vacias
+    salia por la linea de abajo **devolviendo la lista**, incumpliendo su propia firma y dejandola
+    viajar aguas abajo con etiqueta de texto. Esa segunda mitad es la que no avisa, y es
+    precisamente la forma del modo agentic cuando el modelo contesta sin leer nada.
+
+    Se normaliza, **no se envuelve en un `except`**: un `except` cambiaria un fallo por silencio,
+    que es lo que se acaba de arreglar en dos sitios. `texto_de` es donde vive el saber de como se
+    lee un `content`, y esto es un llamador mas.
     """
+    response_text = texto_de(response_text)
     if not sources:
         return response_text
     anclas = {u for u in (_url_de(s) for s in sources) if u}
