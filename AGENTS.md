@@ -12,123 +12,96 @@ El cliente NiceGUI (`client_app/`) está siendo migrado progresivamente al servi
 
 ## Ejecución agéntica por bloques
 
-El desarrollo se ejecuta **de forma autónoma y secuencial, por bloques de prompts**.
-Un bloque es una fila de la tabla de planes activos de `planificacion/PROJECT_STATE.md`
-(Fase 11 = 11.1→11.3; Bloque SEC = SEC.1→SEC.7; Bloque RAG = RAG.1→RAG.14...).
+El desarrollo se ejecuta **de forma autónoma y secuencial, por bloques de prompts**. Un bloque es
+una fila de la tabla de planes activos de `planificacion/PROJECT_STATE.md`; sus prompts viven en
+`planificacion/fase1/`.
 
-**El bloque es la unidad de interacción: una vez arrancado, no informes hasta cerrarlo.**
-No pidas confirmación entre prompts. Detalle completo en `docs/METODOLOGIA_AGENTICA.md`.
+**El bloque es la unidad de interacción: una vez arrancado, no informes hasta cerrarlo.** No pidas
+confirmación entre prompts. El protocolo completo —qué es un bloque, cómo se arranca, el informe de
+cierre— está en `docs/METODOLOGIA_AGENTICA.md`.
 
-### Bucle por prompt (sin interacción)
+### El bucle por prompt
 
-RED → GREEN → REFACTOR → verificaciones de cierre (suite verde, migración aplicada,
-contrato regenerado si cambió la API, retirada del legacy con `grep -r` a cero,
-verificación en navegador si toca UI) → actualizar `planificacion/PROJECT_STATE.md` →
-**un commit Conventional por prompt** con el identificador del prompt en el asunto,
-**firmado** (`git commit -s`), sin `Co-Authored-By` y **sin push** → siguiente prompt.
+```
+RED → GREEN → REFACTOR → verificaciones de cierre → actualizar el cursor → un commit firmado
+```
 
-El commit por prompt es lo que hace reversible un bloque largo: si el prompt 5 rompe
-el 3, hay un punto exacto al que volver.
+Las **verificaciones de cierre** son: suite verde en los directorios tocados, migración aplicada,
+contrato regenerado si cambió la API, retirada del legacy comprobada con `grep -r` a cero, y
+verificación en navegador si toca UI.
+
+**Un commit Conventional por prompt**, con el identificador del prompt en el asunto, **firmado**
+(`git commit -s`), sin `Co-Authored-By` y **sin push**. Es lo que hace reversible un bloque largo:
+si el prompt 5 rompe lo que hizo el 3, hay un punto exacto al que volver.
 
 ### Se trabaja en `desarrollo`; `main` es para desplegar
 
-**Nunca commitees ni empujes a `main`.** El trabajo va en la rama **`desarrollo`**, y el paso a
-`main` es una decisión del usuario que se toma **por bloque o conjunto de bloques**, porque es lo
-que despliega: `.github/workflows/deploy.yml` dispara con `push: branches: [main]` y **sólo con
-eso**. Decisión del usuario del 2026-09-02, después de que un commit que sólo tocaba
-`scripts/publica_sitio_corpus.sh` desplegara producción entera —`scripts/` no está en
-`paths-ignore` porque de ahí salen ficheros que sí viajan a la máquina—, con sus 60-90 s de
-reinicio y su aviso de la vigilancia.
+**Nunca commitees ni empujes a `main`.** `deploy.yml` dispara con `push: branches: [main]` y sólo
+con eso, así que empujar a `desarrollo` comprueba pero no despliega. El paso a `main` es decisión
+del usuario, por bloque o conjunto de bloques.
 
-- **CI y DCO sí corren en `desarrollo`**, añadida a los dos `on: push`. Empujar a la rama no
-  despliega pero sigue comprobando; perder eso no era lo que se quería evitar.
-- **`deploy.yml` no lleva la rama, y ése es el punto entero.** Si alguna vez aparece ahí,
-  desaparece la separación.
-- La regla de arriba, «sin push», sigue valiendo **dentro** del bloque: se empuja al cerrarlo, y a
-  `desarrollo`.
+CI y DCO **sí** corren en `desarrollo`. Y **`deploy.yml` no lleva esa rama**: si alguna vez aparece
+ahí, desaparece la separación. La regla nació el 2026-09-02, después de que un commit que sólo
+tocaba un guion de publicación desplegara producción entera.
 
 ### Todos los commits van firmados (DCO)
 
-`git commit -s`, que añade al final del mensaje:
+`git commit -s`, que añade `Signed-off-by: <autor>`. Certifica que quien commitea tiene derecho a
+aportar ese código bajo la licencia del proyecto (AGPL-3.0-or-later).
 
-```
-Signed-off-by: Modesto Fabra <fabra@uji.es>
-```
-
-Certifica que quien commitea tiene derecho a aportar ese código bajo la licencia del proyecto
-(AGPL-3.0-or-later). El texto completo está en `DCO` y la explicación en `CONTRIBUTING.md`.
-
-**La firma es la del autor humano del commit, no del agente.** Un agente que commitea en esta
-máquina lo hace como el autor configurado en git, y por eso sigue sin añadirse `Co-Authored-By`:
-la línea que importa es la que certifica procedencia, y sólo la puede certificar una persona.
-
-Se exige aquí y no sólo en las contribuciones externas porque un mantenedor que se exceptúa de su
-propia política la deja sin fuerza. Lo comprueba `.github/workflows/dco.yml`, en los *pull requests*
-y en los *push* a `main`; el historial anterior al 2026-08-21 queda fuera, que es cuando se adoptó.
+**La firma es del autor humano, no del agente**, y por eso no se añade `Co-Authored-By`: la línea
+que importa certifica procedencia, y sólo la puede certificar una persona. Se exige también al
+mantenedor —quien se exceptúa de su propia política la deja sin fuerza— y lo comprueba
+`.github/workflows/dco.yml`. Detalle en `DCO` y `CONTRIBUTING.md`.
 
 ### Qué tests ejecutar y cuándo (escalonado)
 
-Ejecutar la suite entera después de cada prompt cuesta minutos y no aporta información nueva
-la mayoría de las veces. Tres niveles:
-
 | Cuándo | Qué | Coste |
 |---|---|---|
-| **Durante el prompt** (bucle RED→GREEN) | Solo el fichero de tests que estás escribiendo | segundos |
+| **Durante el prompt** | Solo el fichero de tests que estás escribiendo | segundos |
 | **Al cerrar el prompt** | Los directorios que el prompt toca + `tests/infra/test_suite_hygiene.py` | segundos a 1 min |
-| **Al cerrar el bloque** | `uv run pytest tests` completo, **desde Git Bash** | 1-3 min |
+| **Al cerrar el bloque** | `uv run pytest tests` completo, **desde Git Bash** | minutos a una hora |
 
-`test_suite_hygiene.py` entra en el nivel intermedio porque tarda medio segundo y caza justo
-lo que se escapa de un subconjunto: mocks sobre clases, `create_all` sobre la BD del
-desarrollador, imports a módulos que ya no existen.
-
-**Desde Git Bash, no desde PowerShell.** `tests/infra/test_setup_script.py` invoca `bash`, que
-en PowerShell resuelve al lanzador de WSL y da 10 rojos de entorno. Ver la nota del historial
-del 2026-07-31 en `planificacion/PROJECT_STATE.md`.
-
-La suite corre en paralelo (`-n auto` en `addopts`) y sin cobertura; para depurar un fallo con
-la salida en orden, `-n0`, y para medir cobertura en local, `--cov=app`. **Si una cifra de
-tests no se ha medido, no se reporta como medida**: dilo como lo que es.
-
-**CI corre con `-n0`, a propósito.** El paralelismo reparte los tests entre 16 procesos, y eso
-esconde el estado filtrado entre tests —un mock asignado a una clase, un singleton
-contaminado—, que es justo lo que TST.1 unificó CI para cazar. En local manda la velocidad;
-en CI manda la detección. No añadas `-n auto` a los pasos de CI.
+- `test_suite_hygiene.py` va en el nivel intermedio porque tarda medio segundo y caza lo que se
+  escapa de un subconjunto: mocks sobre clases, `create_all` sobre la BD del desarrollador,
+  imports a módulos que ya no existen.
+- **Desde Git Bash, no desde PowerShell**: `test_setup_script.py` invoca `bash`, que en PowerShell
+  resuelve al lanzador de WSL y da diez rojos de entorno.
+- **CI corre con `-n0` a propósito.** El paralelismo esconde el estado filtrado entre tests, que es
+  justo lo que se quiere cazar. En local manda la velocidad; en CI, la detección. No añadas
+  `-n auto` a CI.
+- **Si una cifra de tests no se ha medido, no se reporta como medida.**
 
 ### Cuándo SÍ interrumpir a mitad de bloque
 
-Solo por estas cuatro causas:
+Solo por estas cuatro causas. Detalle en `docs/METODOLOGIA_AGENTICA.md` §3.
 
-1. **Operación de riesgo** — la detecta la guarda (`.claude/hooks/guard_operaciones_riesgo.ps1`)
-   y genera un prompt de permiso. No la fuerces ni busques rodeos.
-2. **Decisión de criterio** — ambigüedad del plan que llevaría a productos distintos,
-   arquitectura que el plan no cierra, o alcance que excede el bloque. Usa
-   `AskUserQuestion` con opciones y recomendación.
-3. **Fallo persistente** — un RED que no llega a GREEN, o suite en rojo por causa no
-   atribuible al prompt. Para y reporta **con el output real**; no marques el prompt
-   como cerrado.
-4. **Prerrequisito externo ausente** — BD apagada, Docker cerrado, corpus no entregado,
-   credencial que falta.
+1. **Operación de riesgo** — la detecta la guarda. No la fuerces ni busques rodeos.
+2. **Decisión de criterio** — ambigüedad que llevaría a productos distintos, arquitectura que el
+   plan no cierra, o alcance que excede el bloque. Usa `AskUserQuestion` con recomendación.
+3. **Fallo persistente** — un RED que no llega a GREEN, o suite en rojo por causa no atribuible al
+   prompt. Para y reporta **con el output real**; no marques el prompt como cerrado.
+4. **Prerrequisito externo ausente** — BD apagada, Docker cerrado, credencial que falta.
 
 ### Cuándo NO interrumpir
 
-- **Desviaciones entre el plan y el código real.** Aplica la interpretación más fiel al
-  espíritu del prompt, sin inventar infraestructura inexistente ni añadir features no
-  pedidas; regístralo como *"Desviación documentada"* en el historial de
-  `planificacion/PROJECT_STATE.md` y sigue. Se resume en el informe de cierre.
+- **Desviaciones entre el plan y el código real.** Aplica la interpretación más fiel al espíritu
+  del prompt, sin inventar infraestructura ni añadir features no pedidas; regístralo como
+  *«desviación documentada»* en `planificacion/HISTORIAL.md` y sigue.
 - Fallos de test preexistentes ya inventariados.
 - Dudas de estilo o estructura resolubles con las reglas de este documento.
 
+Enumerar cuándo **no** interrumpir es tan importante como lo contrario: sin esta lista se pregunta
+por todo, y la supervisión se degrada a aprobación automática.
+
 ### Al arrancar y al cerrar
 
-- **Al arrancar**: lee el cursor de `planificacion/PROJECT_STATE.md`, lee los prompts verbatim del plan,
-  comprueba los prerrequisitos, y si algún prompt del bloque sugiere un modelo más capaz
-  que el de la sesión, dilo **una sola vez antes de empezar**.
-- **Al cerrar**: un solo informe con prompts cerrados + commits, cifras reales de tests,
-  migraciones aplicadas, qué verificaste en navegador con qué evidencia, desviaciones
-  documentadas, pendientes, las instrucciones de pruebas manuales del bloque, y **una línea
-  diciendo qué cambió en `docs/ESPECIFICACIONES.md` o por qué no cambió nada** (ver la regla en
-  «Seguimiento del estado del proyecto»).
-  Después **espera**: el siguiente bloque no arranca solo.
+- **Al arrancar**: lee el cursor de `planificacion/PROJECT_STATE.md`, lee los prompts verbatim, y
+  si algún prompt del bloque sugiere un modelo más capaz que el de la sesión, dilo **una sola vez
+  antes de empezar**.
+- **Al cerrar**: un solo informe con los ocho puntos de `docs/METODOLOGIA_AGENTICA.md` §7 —el
+  octavo es la línea sobre `docs/ESPECIFICACIONES.md`—. Después **espera**: el siguiente bloque no
+  arranca solo.
 
 ---
 
@@ -232,71 +205,16 @@ Solo lo que el agente **no puede** verificar con el navegador:
 - **Todo lo que el agente ya verificó en navegador**: no se repite en el `.bat`; se menciona como verificado en el informe de cierre.
 - Infraestructura, configuración o scripts sin impacto visual.
 
-### Archivo .bat
 
-- **Uno por bloque, no por prompt.** Se genera al cerrar el bloque.
-- **Nombre**: `pruebas_manuales_bloque<NOMBRE>.bat` (p. ej. `pruebas_manuales_bloqueSEC.bat`). Para prompts sueltos fuera de un bloque: `pruebas_manuales_promptXX.bat`.
-- **Ubicación**: `pruebas_manuales/`. Los comandos siguen ejecutándose desde la raíz del
-  proyecto: el `.bat` lleva `cd /d "%~dp0.."` justo tras el `chcp`, así que las rutas relativas
-  (`frontend\.env.local`, `cd server`) funcionan aunque el guion viva en un subdirectorio.
-- **Contenido mínimo obligatorio**:
-  - Línea `@echo off` al inicio y `chcp 65001 > nul` para codificación UTF-8.
-  - Bloques `echo` que muestren por pantalla cada sección: requisitos previos, comandos a ejecutar, qué comprobar, cómo terminar.
-  - Solo los comandos que no pueden automatizarse: `curl` de smoke check, `alembic upgrade head` si hay migración, instrucciones de pasos en la UI.
-  - Mensaje final con `echo PRUEBAS COMPLETADAS` y `pause`.
-- El `.bat` **no levanta** Docker ni el servidor automáticamente (son pasos previos manuales); sí puede comprobar con `curl` o comandos similares que los servicios estén respondiendo antes de continuar.
+### El `.bat` de pruebas manuales
 
-> **IMPORTANTE — codificación del archivo `.bat`**
-> El tool `Write` guarda en UTF-8, pero CMD de Windows requiere ANSI sin BOM.
-> Un archivo `.bat` con BOM hace que CMD interprete los primeros bytes de cada comando
-> como el nombre del programa (`echo` → `ho`, `curl` → `rl`, `pause` → `ause`).
-> **Siempre** usa PowerShell para escribir los `.bat`:
->
-> ```powershell
-> [System.IO.File]::WriteAllText(
->     'ruta\absoluta\archivo.bat',
->     $content,
->     [System.Text.Encoding]::GetEncoding(1252)
-> )
-> ```
->
-> Verifica que los primeros bytes son `0x40 0x65 0x63 0x68` (`@ech`) y no un BOM
-> (`0xEF 0xBB 0xBF` para UTF-8, `0xFF 0xFE` para UTF-16 LE).
-
-### Instrucciones para el usuario
-
-Tras generar el `.bat`, muestra en la respuesta un bloque con instrucciones sencillas, sin jerga técnica, con este formato:
-
-```
-## Pruebas manuales — Bloque <NOMBRE>
-
-### Ya verificado por el agente en navegador
-- <flujo comprobado + evidencia: URL, texto encontrado, consola limpia>
-
-### Antes de empezar
-1. Abre Docker Desktop y asegúrate de que está en marcha (icono verde en la barra de tareas).
-2. <paso concreto adicional, p. ej. "Abre una terminal y ejecuta: docker compose up -d">
-3. <si el bloque incluye migración: "Ejecuta en una terminal: cd server; uv run alembic upgrade head">
-
-### Ejecuta el archivo
-- Haz doble clic en `pruebas_manuales_bloque<NOMBRE>.bat` (está en la carpeta <ruta relativa>).
-- El script irá mostrando los pasos; pulsa cualquier tecla para avanzar entre ellos.
-
-### Pasos en la interfaz
-1. <acción concreta en el frontend: URL exacta, qué hacer, qué debe pasar>
-2. <siguiente acción>
-
-### Qué debes ver
-- <resultado visual o de comportamiento esperado, con URL, texto o dato concreto>
-
-### Casos límite
-- [ ] <escenario edge case + resultado esperado>
-
-### Para terminar
-- <cómo detener los servicios si es necesario>
-```
-
-Las instrucciones deben ser **accionables y específicas**: rutas reales, valores de ejemplo, resultados esperados. No sirve "comprobar que funciona".
+- **Uno por bloque, no por prompt**, en `pruebas_manuales/`, y **ninguno si el bloque es
+  exclusivamente backend**.
+- **Se escribe en ANSI cp1252 sin BOM.** `Write` guarda en UTF-8 y CMD interpreta el BOM como
+  parte del primer comando (`echo` → `ho`, `pause` → `ause`), así que hay que usar PowerShell y
+  comprobar que los primeros bytes son `40 65 63 68`.
+- Formato, contenido mínimo y la plantilla de instrucciones al usuario: en
+  `docs/METODOLOGIA_AGENTICA.md` §4.3 y §7.1.
 
 ---
 
@@ -565,67 +483,43 @@ postgresql+asyncpg:///govgenai?host=/cloudsql/PROJECT:REGION:INSTANCE
 
 ---
 
+
 ## Servicios de computación pesada
 
-> **Actualizado el 2026-08-11 (bloque EXT + decisión de despliegue).** Esta sección decía que
-> Docling y BGE-M3 debían extraerse a servicios separados de Cloud Run. **Docling ya no
-> existe** en el servidor y **el despliegue ya no es Cloud Run**, así que la mitad del
-> problema desapareció en vez de resolverse. Ver `docs/DECISION_EXTRACCION_Y_DESPLIEGUE.md`.
+**Docling no se reintroduce.** Al corpus solo entra `.md` conforme a `docs/CONTRATO_MD_CORPUS.md`;
+el contexto temporal se extrae con **pdfplumber**. Si algo hay que convertir, se convierte antes de
+llegar.
 
-**Docling: retirado (EXT.3).** Al corpus solo entra `.md` conforme a
-`docs/CONTRATO_MD_CORPUS.md`, producido por el pipeline de curación que vive **fuera** de la
-aplicación; el contexto temporal —el PDF que alguien aporta para preguntarle cosas, o la
-fuente de un informe— se extrae con **pdfplumber**. No reintroduzcas un conversor de
-documentos en el servidor: si algo hay que convertir, se convierte antes de llegar.
+**`EmbeddingService` es un protocolo** con implementación local (BGE-M3) y por API. **No se
+mezclan**: si un servicio llama al embedding por HTTP, no puede además importar el local como
+reserva silenciosa — el fallback se configura en el `Depends`, no en la lógica de negocio. Y **el
+modo edge sigue necesitando los modelos locales**, así que pueden hacerse opcionales pero no
+desaparecer.
 
-**Lo que pesa hoy es `torch`**, no la extracción. Medido en EXT.3: la aplicación en reposo
-son 627 MB y el arranque lo dominan `transformers` (142 s), `sentence-transformers` (75 s /
-216 MB) y `torch` (52 s / 172 MB) — todo ello por `LocalEmbeddingService` (BGE-M3) y
-`LocalReranker`. `pdfplumber` cuesta 0,09 s y 5 MB.
-
-### Regla vigente
-
-- **`EmbeddingService`** sigue siendo un protocolo con `LocalEmbeddingService` y
-  `GoogleEmbeddingService`. Con embeddings por API (el plan de despliegue) la pila local no
-  se usa en ejecución pero se paga entera en memoria y arranque: **hacerla un extra de
-  instalación opcional está anotado como candidato en D.4**, no hecho.
-- **No mezcles**: si un servicio llama al embedding service via HTTP, no puede también
-  importar `LocalEmbeddingService` como fallback silencioso. El fallback se configura
-  en el `Depends`, no en la lógica de negocio.
-- **El modo edge sigue necesitando los modelos locales**: lo que se decida sobre el
-  empaquetado no puede quitar esa capacidad, solo hacerla opcional.
-
-Hasta entonces, la abstracción existente es suficiente. **No anticipes la extracción**
-antes de que el problema aparezca en métricas reales.
+**No anticipes la extracción a microservicios** antes de que el problema aparezca en métricas
+reales. Lo que pesa hoy es `torch`, no la extracción, y el razonamiento con las mediciones está en
+`docs/DECISION_EXTRACCION_Y_DESPLIEGUE.md` (decisión 4 del registro).
 
 ---
 
 ## Modelo por prompt
 
-Cada prompt activo en `planificacion/Plan_TDD_Fase1.md` (y subsiguientes) lleva una etiqueta `**Modelo sugerido**: Opus | Sonnet — <razón corta>` justo bajo el título. La etiqueta es **una recomendación informada**, no un requisito: el usuario decide al abrir sesión qué modelo usar con `/model opus` o `/model sonnet`.
+Cada prompt de `planificacion/fase1/` lleva bajo el título `**Modelo sugerido**: Opus | Sonnet —
+<razón corta>`. Es **una recomendación, no un requisito**: el modelo lo elige el usuario, por
+coste y disponibilidad. Hay una referencia rápida en la columna «Modelo sugerido siguiente» de
+`planificacion/PROJECT_STATE.md`.
 
-Heurística usada para etiquetar:
+Tres reglas al abrir sesión:
 
-- **Opus** se sugiere cuando el prompt concentra **decisiones de diseño embebidas** (qué preservar de un legacy masivo, cómo discriminar uniones, cómo afinar prompts del sistema LLM), **migra >800 LOC ajeno**, o requiere **debugging cruzado multi-módulo** donde Sonnet suele pegarse.
-- **Sonnet** se sugiere cuando el alcance está **explícitamente cerrado en el prompt** (endpoints concretos, tests enumerados, fixtures dadas) y las **decisiones abiertas son pocas**.
+1. **Si el modelo de la sesión no coincide con el sugerido, dilo en una línea y espera** — «el
+   cursor sugiere Opus y estoy en Sonnet, ¿continúo?».
+2. **No intentes cambiar de modelo por tu cuenta.** La elección es del usuario.
+3. **En ejecución por bloques la comprobación se hace una sola vez**, al arrancar, sobre el
+   conjunto de prompts del bloque. Dentro del bloque no se vuelve a interrumpir por esto.
 
-Una segunda referencia rápida vive en `planificacion/PROJECT_STATE.md`:
-- Columna **Modelo sugerido siguiente** en la tabla de bloques activos.
-- Línea **"Modelo sugerido para el próximo prompt: ..."** junto al "Cursor actual".
-
-Cómo actúa un agente al abrir una sesión:
-
-1. Lee `planificacion/PROJECT_STATE.md` y localiza el cursor + el modelo sugerido para el próximo prompt.
-2. Si el modelo de la sesión actual coincide con el sugerido → procede.
-3. Si NO coincide → menciona la discrepancia en una sola línea al inicio de la respuesta ("El cursor sugiere Opus para este prompt; estoy en Sonnet. ¿Continúo o prefieres cambiar con `/model opus`?") y espera decisión del usuario antes de ejecutar.
-4. No intentes auto-cambiar de modelo. La elección es del usuario por motivos de coste/disponibilidad.
-
-En **ejecución por bloques**, esta comprobación se hace **una sola vez, al arrancar el bloque**, sobre el conjunto de sus prompts: si alguno sugiere un modelo más capaz que el de la sesión, dilo antes de empezar y espera decisión. Dentro del bloque no se vuelve a interrumpir por este motivo.
-
-Cuándo delegar a un sub-agente con modelo distinto:
-
-- Tareas **autocontenidas** dentro de un prompt mayor (auditoría de un diff, búsqueda compleja, revisión de seguridad sobre código generado): se pueden delegar via tool `Agent` con `model: "opus"` aunque la sesión esté en Sonnet.
-- **No** delegar un prompt entero de implementación a un sub-agente: pierde el historial conversacional y no puede pedirte clarificaciones.
+**Delegar a un sub-agente con otro modelo** vale para tareas autocontenidas —auditar un diff, una
+búsqueda compleja, una revisión de seguridad— y **no** para un prompt entero de implementación:
+pierde el hilo conversacional y no puede pedir clarificaciones.
 
 ---
 

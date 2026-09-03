@@ -265,7 +265,7 @@ class TestLaReglaDeActualizarloExiste:
     """
 
     def test_should_be_required_when_a_guarantee_changes(self):
-        reglas = (RAIZ / "AGENTS.md").read_text(encoding="utf-8")
+        reglas = " ".join((RAIZ / "AGENTS.md").read_text(encoding="utf-8").split())
 
         assert "ESPECIFICACIONES.md" in reglas, (
             "`AGENTS.md` no menciona la especificación. Sin regla de mantenimiento, el documento "
@@ -284,7 +284,7 @@ class TestLaReglaDeActualizarloExiste:
         y sigue `construido`. Si el disparador fuera «cerrar el bloque», la madurez quedaría mal
         en todos los bloques que no se despliegan el mismo día — o sea casi todos.
         """
-        reglas = (RAIZ / "AGENTS.md").read_text(encoding="utf-8")
+        reglas = " ".join((RAIZ / "AGENTS.md").read_text(encoding="utf-8").split())
 
         assert "La madurez la mueve el despliegue" in reglas, (
             "la regla no dice que la madurez la mueve el despliegue y no el cierre del bloque, "
@@ -298,7 +298,11 @@ class TestLaReglaDeActualizarloExiste:
         criterio que se aplica a las cifras de tests — si no se ha medido, no se reporta como
         medida.
         """
-        reglas = (RAIZ / "AGENTS.md").read_text(encoding="utf-8")
+        # El texto se normaliza porque un marcador sensible al salto de línea es frágil: este
+        # test casaba con la COPIA duplicada de la regla, y al quitar la duplicación se puso
+        # rojo aunque la regla seguía escrita —partida por un reajuste de párrafo—. Lo que hay
+        # que exigir es que la regla esté, no que quepa en una línea.
+        reglas = " ".join((RAIZ / "AGENTS.md").read_text(encoding="utf-8").split())
 
         assert "o por qué no cambió nada" in reglas, (
             "el informe de cierre no está obligado a decir qué cambió en la especificación. Un "

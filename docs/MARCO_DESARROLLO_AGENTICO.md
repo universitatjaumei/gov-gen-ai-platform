@@ -234,15 +234,27 @@ Es Markdown plano sin esquema obligatorio. Si tu herramienta busca otro nombre �
 `CLAUDE.md`—, ese fichero debe ser de tres líneas que **importan** el canónico, para que no haya
 dos versiones que puedan divergir (P4).
 
-> **Un hallazgo contra nosotros, y hay que decirlo.** El estudio empírico sobre ficheros de
+> **Un hallazgo contra nosotros, y lo que hicimos con él.** El estudio empírico sobre ficheros de
 > contexto para agentes encuentra que **la longitud moderada funciona mejor** que la exhaustiva, que
 > las instrucciones **explícitas** pesan más que los ejemplos implícitos, y que los agentes
 > **se saltan** el contenido verboso y redundante **[Evidencia]**.
 >
-> Nuestro `AGENTS.md` tiene **40 KB** —y creció mientras escribía este documento, lo que dice bastante—. Según ese estudio, es demasiado. No lo hemos partido todavía
-> y no voy a defender que esté bien: lo honesto es señalarlo como deuda del método y recomendar a
-> quien empiece que **no llegue ahí** — reglas duras y accionables en el fichero principal, y el
-> razonamiento largo en documentos aparte que el fichero enlace.
+> Nuestro `AGENTS.md` tenía **40 KB**. Al medirlo apareció algo peor que la longitud:
+> **el 28 % duplicaba `docs/METODOLOGIA_AGENTICA.md`** —las cuatro causas de parada, el bucle, el
+> informe de cierre y el protocolo de verificación estaban escritos dos veces, con redacción
+> distinta—. Es una violación de P4 **dentro del fichero que enuncia P4**, y ya había costado una
+> edición doble.
+>
+> Se partió el 2026-09-03 por **registro y no por tema**: el imperativo se queda —es lo que se lee
+> antes de escribir código— y el relato se va al documento que lo explica, dejando **una cláusula**
+> de por qué junto a cada regla. Resultado: **de 40 a 33 KB**, con un guardarraíl que comprueba que
+> los punteros resuelven, que los dieciocho imperativos siguen ahí y que el fichero no vuelve a
+> crecer.
+>
+> **Y sigue siendo mucho.** 33 KB no es «longitud moderada» por ninguna medida; la ganancia real
+> fue quitar la doble fuente de verdad, no el tamaño. La recomendación para quien empiece es la
+> misma y más fuerte: **no llegues ahí**. Reglas duras y accionables en el fichero principal, y el
+> razonamiento largo en documentos aparte que el fichero enlace, desde el primer día.
 
 ### 4.2 Las especificaciones: qué garantiza el sistema
 
@@ -683,13 +695,24 @@ funcionaba.
 Un doble sin especificación acepta cualquier método, incluido uno que el SDK real renombró. Se
 descubre en producción.
 
-### 9.5 Un documento con estado incrustado envejece
+### 9.5 La duplicación se cuela en el documento que la prohíbe
+
+`AGENTS.md` enuncia «una sola fuente de verdad por cosa» y tenía el 28 % de su contenido
+duplicado en otro documento. No fue descuido: cada vez que una regla necesitaba una frase más de
+contexto, se escribía ahí en vez de en el documento largo, y en meses eso son 11 KB.
+
+**El síntoma que lo delató no fue el tamaño**: fue tener que editar la misma lista en dos sitios
+al añadir una regla, y darse cuenta de que la segunda copia casi se queda sin actualizar. Y al
+quitar la duplicación se puso rojo un guardarraíl **que estaba casando con la copia**, lo que
+enseña algo incómodo: un guardarraíl puede estar vigilando la redundancia en vez del original.
+
+### 9.6 Un documento con estado incrustado envejece
 
 Nuestro documento de «leer primero» llevaba una sección de estado fechada, y tres bloques después
 mentía. **El estado va en un solo sitio** (el cursor) y los demás apuntan. Es P4 aplicado a lo que
 más tienta romperlo.
 
-### 9.6 Y el meta-error: el mismo problema muerde tres veces
+### 9.7 Y el meta-error: el mismo problema muerde tres veces
 
 Un defecto de frontera con un proveedor externo nos mordió **tres veces en sitios distintos** antes
 de que lo arregláramos como **clase** en vez de como caso. La segunda vez ya había un módulo

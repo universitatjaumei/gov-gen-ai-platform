@@ -150,6 +150,12 @@ Se deja para el final del bloque, y **solo** lo imprescindible:
 - La regla de codificación sigue vigente: ANSI cp1252 sin BOM, escrito con
   `[System.IO.File]::WriteAllText(..., [System.Text.Encoding]::GetEncoding(1252))`,
   primeros bytes `40 65 63 68`.
+- **Estructura mínima**: `@echo off` y `chcp 65001 > nul` al inicio, `cd /d "%~dp0.."` justo
+  después —así las rutas relativas funcionan aunque el guion viva en un subdirectorio—, bloques
+  `echo` por sección, `pause` entre pasos, y al final `echo PRUEBAS COMPLETADAS` con su `pause`.
+- **Solo lo que no puede automatizarse**: el `curl` de comprobación, el `alembic upgrade head` si
+  hay migración, y los pasos en la interfaz. **No levanta Docker ni el servidor** —son pasos
+  previos manuales— aunque sí puede comprobar que responden.
 
 ---
 
@@ -226,3 +232,41 @@ Al cerrar el bloque, el agente entrega **un solo mensaje** con:
    importante es que **la madurez la mueve el despliegue, no el cierre del bloque**.
 
 Después del informe, el agente **espera**: el siguiente bloque no arranca solo.
+
+### 7.1 Instrucciones para el usuario
+
+Tras generar el `.bat`, el informe lleva un bloque con instrucciones sencillas, **sin jerga
+técnica**, con este formato. Vivía en `AGENTS.md`, que a su vez apuntaba aquí para el
+protocolo: la plantilla se usa al cerrar el bloque, así que su sitio es esta sección.
+
+```
+## Pruebas manuales — Bloque <NOMBRE>
+
+### Ya verificado por el agente en navegador
+- <flujo comprobado + evidencia: URL, texto encontrado, consola limpia>
+
+### Antes de empezar
+1. Abre Docker Desktop y asegúrate de que está en marcha (icono verde en la barra de tareas).
+2. <paso concreto adicional, p. ej. "Abre una terminal y ejecuta: docker compose up -d">
+3. <si el bloque incluye migración: "Ejecuta en una terminal: cd server; uv run alembic upgrade head">
+
+### Ejecuta el archivo
+- Haz doble clic en `pruebas_manuales_bloque<NOMBRE>.bat` (está en la carpeta <ruta relativa>).
+- El script irá mostrando los pasos; pulsa cualquier tecla para avanzar entre ellos.
+
+### Pasos en la interfaz
+1. <acción concreta en el frontend: URL exacta, qué hacer, qué debe pasar>
+2. <siguiente acción>
+
+### Qué debes ver
+- <resultado visual o de comportamiento esperado, con URL, texto o dato concreto>
+
+### Casos límite
+- [ ] <escenario edge case + resultado esperado>
+
+### Para terminar
+- <cómo detener los servicios si es necesario>
+```
+
+Las instrucciones deben ser **accionables y específicas**: rutas reales, valores de ejemplo, resultados esperados. No sirve "comprobar que funciona".
+
