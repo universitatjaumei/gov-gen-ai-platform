@@ -48,6 +48,11 @@ MENCIONES_LEGITIMAS: dict[str, str] = {
     "README.md": (
         "El índice describe qué decidió cada documento, y uno decidió «VM y no Cloud Run»."
     ),
+    "DECISIONES.md": (
+        "El registro de decisiones usa «elegir VM en vez de Cloud Run» como ejemplo de lo que "
+        "merece un ADR, y el ejemplo vale precisamente porque es real. No razona sobre el "
+        "destino actual: lo cita como historia."
+    ),
 }
 
 #: Capas declaradas en la prosa del modelo de seguridad, p. ej. «con 8 capas independientes».
