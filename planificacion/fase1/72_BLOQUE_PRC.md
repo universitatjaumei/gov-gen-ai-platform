@@ -22,6 +22,33 @@ y sus errores serían pérdida de calidad silenciosa; la mejor respuesta a una p
 necesita la ficha y los artículos en el mismo contexto; y los perfiles router/aggregator siguen
 sin implementar (hallazgo I5) mientras que la vía de metadatos ya existe.
 
+**La regla que gobierna el reparto (decisión del usuario, 2026-09-04)**: **de la plataforma,
+sólo lo que afecta a la ingesta y a la recuperación; lo institucional, en el pipeline del
+catálogo.** El catálogo de procedimientos es de la UJI, pero la plataforma es general y otras
+universidades y ayuntamientos tienen el suyo, con otros campos, otros nombres y otra lengua. Así
+que el lado plataforma no puede conocer ni un campo, ni un literal, ni una frase de este catálogo
+en concreto.
+
+No es una preferencia: es el criterio de éxito que `docs/DECISION_CURACION_SEPARADA.md` ya escribió
+—«que cargar un corpus nuevo **no exija tocar código de la plataforma**, sólo cumplir el
+contrato»— y la frontera que fija es `docs/CONTRATO_MD_CORPUS.md`, no una interfaz de código.
+
+**Tres correcciones de la primera versión de este bloque, que incumplían esa regla:**
+
+1. **`id_ficha` se retira.** PRC.1 lo introducía en el *frontmatter* «para el emparejamiento
+   bilingüe», y el contrato **ya tiene `versio_idiomatica_de`** —la referencia a la versión
+   canónica por `id_publicacio`—, que es el mecanismo con el que ACT emparejó las lenguas de la
+   normativa. Una segunda clave con nombre de catálogo es la doble fuente de verdad que el
+   proyecto persigue.
+2. **`tipus_document` no es un `StrEnum` de valores.** Lo que el código distingue de verdad no son
+   tipos de documento sino **dos clases de autoridad**: lo que tiene vigencia normativa y lo que
+   tiene un responsable y una fecha de actualización. Eso sí es estructura, porque el código se
+   bifurca. Los valores (`norma`, `procediment`, y el `ordenança` o el `conveni` de quien venga
+   después) son **términos de vocabulario**, dato en tabla, como manda el invariante I4.
+3. **Ni un literal institucional en el código.** La marca «segons la fitxa del catàleg (Servei
+   X…)» y el nombre del campo `servei` salen del código a la plantilla de respuesta y al
+   vocabulario, que ya existen por chatbot.
+
 **Reglas duras del bloque PRC**:
 
 - **Solo entran fichas validadas.** El estado de la ficha en el catálogo es la puerta; un
@@ -61,6 +88,22 @@ El endpoint que se pide al equipo del catálogo:
 6. **Sin filtro por fechas ni por cambios**: el incremento lo da la huella en destino.
 
 ---
+
+> **PRC.0 y PRC.1 no se ejecutan en este repositorio, y su registro sí.** Los dos viven en el
+> proyecto del corpus (`Descarregar_pdf/normativa_propia/cataleg_procediments/`), que es un
+> **repositorio git distinto**: su código, sus tests y sus *commits* van allí. Lo que queda aquí es
+> **una línea en `HISTORIAL.md` por prompt**, diciendo que se ejecutó allí y con qué *commit*. No es
+> duplicar nada: `PROJECT_STATE.md` es el cursor del plan **completo**, y dos prompts de un bloque
+> sin rastro hacen imposible distinguir «hecho» de «bloqueado». Es además la convención que ya se
+> usó en PUB (2026-08-16), que registró aquí tres cambios hechos allí nombrando el otro
+> repositorio.
+>
+> **Prerrequisito que hay que resolver antes, y es del usuario**: `Descarregar_pdf` tiene git
+> iniciado **y cero commits** —`master` está vacío—, así que hoy ejecutar PRC.0 y PRC.1 allí
+> produciría código que nada versiona: ni revisable, ni reversible, ni atribuible. Y en ese primer
+> *commit* entran también los tres cambios que PUB dejó sin commitear a propósito. Mientras ese
+> repositorio no tenga historia, la regla del proyecto —«el historial de git es la fuente de verdad
+> del pasado»— no se cumple en ese lado.
 
 ### Prompt PRC.0 (RED/GREEN) — El cliente del dataset y la validación del contrato
 
@@ -110,9 +153,14 @@ conforme al contrato del corpus, listo para los cargadores existentes.
 - Estructura del .md: título = nombre del procedimiento; secciones con encabezados (què és,
   qui pot demanar-ho, documentació, terminis i silenci, on es tramita, normativa aplicable).
   El embedding_text resultante solo lleva contexto estructural, como siempre.
-- Frontmatter: tipus_document=procediment, servei (ORIGEN), materia mapeada al vocabulario
-  vigente, col.lectiu, data_actualitzacio, validada_per, url_tramitacio, url_fitxa (fuente
-  canónica para la cita), id_ficha para el emparejamiento bilingüe.
+- Frontmatter: SOLO claves del contrato del corpus. `tipus_document` con el término del
+  vocabulario, `id_publicacio` estable, `versio_idiomatica_de` apuntando a la version canonica
+  —ESE es el emparejamiento bilingue, no una clave nueva—, la materia mapeada al vocabulario
+  vigente, y la URL canonica de la cita en la clave que el contrato ya declara para eso.
+- Todo lo demas del catalogo (ORIGEN, PLAZOMAXIMO, SILENCIOADMINISTRATIVO, COLECTIVO, la URL de
+  tramitacion...) va a `doc_metadata` TAL CUAL, que es lo que el contrato dice: «las claves que el
+  contrato no declara van a doc_metadata, asi el esquema puede crecer sin tocar el codigo». El hub
+  no conoce ni un campo de este catalogo.
 - Determinista e idempotente: mismo export -> mismos bytes (el hash del reconciliador decide
   qué reingiere). Ficha sin los campos mínimos (título, servicio, contenido) -> se excluye
   CON AVISO en el resumen, nunca en silencio.
@@ -130,24 +178,38 @@ conforme al contrato del corpus, listo para los cargadores existentes.
 
 **Modelo sugerido**: **Opus** — toca los invariantes del corpus (ejes, filtro, índice agéntico).
 
-**Objetivo**: que el corpus distinga `norma` de `procediment` como **eje** (estructura, StrEnum:
-pocos y estables), consumido por el filtro de metadatos y por el índice del modo agéntico.
+**Objetivo**: que el corpus distinga **clases de autoridad** —lo que tiene vigencia normativa de
+lo que tiene responsable y fecha— con el eje `tipus_document`, cuyos **términos son dato** y
+consumido por el filtro de metadatos y por el índice del modo agéntico.
 
 **Instrucciones al agente**:
 ```markdown
 # PROMPT PRC.2 (RED/GREEN) — eje tipus_document. Deploy: edge
 
-- StrEnum TipusDocument {norma, procediment} donde viven los ejes del corpus; las normas
-  existentes son norma por defecto (migración de datos con recuento antes/después).
-- El frontmatter del contrato admite tipus_document; el cargador lo persiste en metadatos.
+- `tipus_document` se anade a VocabularyAxis (el eje es estructura: I4). Sus TERMINOS van a
+  `hub_vocabulary_terms` como los ambitos y las submaterias: `norma` y `procediment` se siembran,
+  y quien venga despues anade `ordenanca` o `conveni` SIN TOCAR CODIGO. Prohibido StrEnum de
+  valores y prohibido CheckConstraint sobre ellos.
+- **Lo estructural es la clase de autoridad, no el termino.** StrEnum `ClaseDeAutoridad`
+  {normativa, administrativa} con dos miembros porque el codigo se bifurca de verdad: la
+  normativa pasa por la logica de vigencia, la administrativa se presenta con responsable y
+  fecha. Cada termino del vocabulario declara a que clase pertenece (columna en el termino, o
+  `parent_codi`, que ya existe). Anadir un termino no toca codigo; anadir una CLASE si, y eso es
+  correcto porque exige codigo que la consuma.
+- El frontmatter del contrato admite tipus_document, validado CONTRA EL VOCABULARIO como
+  `ambit_principal` (y el error enumera todos los codigos no reconocidos, no el primero).
+- El cargador lo persiste en metadatos; las normas existentes quedan en `norma` por defecto
+  (migracion de datos con recuento antes/despues).
 - MetadataFilter gana el eje (vacío = sin restringir, como ambits/submateries).
 - El índice del modo agéntico (nivel 0 y listado) presenta las fichas de procedimiento como
   documentos propios, distinguibles de las normas.
-- Las fichas NO entran en la lógica de vigencia normativa: su frescura es
-  data_actualitzacio, no estat_vigencia (test que fija que la vigencia no se les aplica).
-- Tests: filtro por eje en las dos direcciones; migración deja todo lo existente en norma;
-  taxonomía sigue sin entrar en embedding_text (el test existente lo cubre, verificar que
-  cubre también las fichas).
+- La logica de vigencia se aplica por CLASE DE AUTORIDAD, no por termino: lo administrativo no
+  pasa por `estat_vigencia`, su frescura es la fecha de actualizacion.
+- Tests: filtro por eje en las dos direcciones; un termino NUEVO del vocabulario clasifica sin
+  tocar codigo (es el test que fija I4 aqui); un termino no sembrado se rechaza en la validacion
+  del frontmatter; la migracion deja todo lo existente en `norma`; la vigencia no se aplica a la
+  clase administrativa; la taxonomia sigue sin entrar en embedding_text (verificar que el test
+  existente cubre tambien las fichas).
 ```
 
 **Verificación**: suite de ingesta + retrieval + higiene verdes; migración aplicada.
@@ -158,26 +220,36 @@ pocos y estables), consumido por el filtro de metadatos y por el índice del mod
 
 **Modelo sugerido**: **Sonnet** — mismo mecanismo que el marcador de vigencia, ya existente.
 
-**Objetivo**: que el asistente cite una ficha como lo que es — «segons la fitxa del catàleg
-(Servei X, actualitzada el …)» con su `url_fitxa` — y nunca como norma.
+**Objetivo**: que el asistente cite un documento de autoridad administrativa como lo que es
+—con su responsable y su fecha de actualización— y nunca como norma. **La frase la pone la
+plantilla, no el código**: «segons la fitxa del catàleg (Servei X…)» es valenciano de universidad,
+y un ayuntamiento dirá «àrea» o «regidoria».
 
 **Instrucciones al agente**:
 ```markdown
 # PROMPT PRC.3 (RED/GREEN) — marcador de autoridad por documento
 
-- En el bloque de fuentes del prompt, un documento tipus_document=procediment lleva su marca
-  con servicio y fecha (el patrón de VIGENCIA NO VALIDADA: marcado por documento, no aviso
-  general), y la instrucción de verbalizarla al citarlo.
-- La cita de una ficha usa url_fitxa como URL canónica (el validador de citas la acepta).
+- En el bloque de fuentes del prompt, un documento de clase administrativa lleva su marca con
+  responsable y fecha (el patron de VIGENCIA NO VALIDADA: marcado por documento, no aviso
+  general), y la instruccion de verbalizarla al citarlo.
+- **El texto de la marca es una plantilla**, no una cadena en el codigo: sale de la plantilla de
+  respuesta del chatbot (`answer_template` / plantillas de prompt, que ya son por chatbot) con
+  huecos para responsable y fecha. Test: cambiar la plantilla cambia la frase SIN tocar codigo.
+- El nombre del responsable sale del metadato generico, no de una clave llamada `servei`: el hub
+  lee «quien responde de esto» y el pipeline del catalogo decide que campo suyo lo rellena.
+- La cita usa la URL canonica que el contrato ya declara (el validador de citas la acepta); no se
+  anade una clave `url_fitxa` al lado de la que ya existe.
 - Preparado para la caducidad: si la ficha supera el umbral de revalidación (parámetro, sin
   activar por defecto), la marca añade «pendent de revisió» — la decisión de activarlo es de
   los servicios (decisión 16 del informe).
-- Tests: el prompt final contiene la marca para una ficha y no para una norma; la respuesta
-  que cita una ficha pasa el contrato de citas con url_fitxa; el umbral apagado no marca.
+- Tests: el prompt final contiene la marca para un documento de clase administrativa y no para
+  uno de clase normativa; la respuesta que lo cita pasa el contrato de citas con la URL canonica
+  del contrato; el umbral apagado no marca; **cambiar la plantilla cambia la frase sin tocar
+  codigo**.
 ```
 
 **Verificación**: conversación real con una pregunta de procedimiento; la respuesta cita la
-ficha con servicio y fecha.
+ficha con su responsable y su fecha, con la frase que ponga la plantilla.
 
 ---
 
@@ -197,7 +269,9 @@ ficha con servicio y fecha.
   poda y salvaguarda de proporción — no se duplica nada.
 - Alta/cambio: solo lo que cambió de hash se reingiere. Baja: ficha retirada del catálogo ->
   poda, protegida por la salvaguarda de proporción.
-- Bilingüe: val + es emparejadas por id_ficha (metadato del frontmatter de PRC.1).
+- Bilingüe: val + es emparejadas por `versio_idiomatica_de`, el mecanismo del contrato que ACT
+  ya usa para la normativa. **No hay clave propia del catálogo**: si el emparejamiento necesitara
+  una, sería el contrato el que tendría que crecer, y para todos.
 - Cadencia: las primeras pasadas MANUALES y supervisadas (la decisión de SYNC.1: no se
   programa a ciegas); tras dos pasadas limpias documentadas, entrada en el scheduler con
   cadencia diaria + comando manual para la corrección urgente. El informe de cada pasada
