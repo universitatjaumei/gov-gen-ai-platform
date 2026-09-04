@@ -23,7 +23,6 @@ from server.app.core.security_headers import (
     SecurityHeadersMiddleware,
     urls_de_documentacion,
 )
-from server.app.database.db import init_server_db
 from server.app.api.v1.hub_chat import router as hub_chat_router
 from server.app.api.v1.hub_feedback import router as hub_feedback_router
 from server.app.api.v1.hub_usage import router as hub_usage_router
@@ -98,20 +97,6 @@ def configurar_logging() -> None:
     else:
         for manejador in raiz.handlers:
             manejador.setFormatter(formato)
-
-
-async def _init_hub_db() -> None:
-    """Crea las tablas de agents_hub (config y operacionales) si no existen."""
-    from server.app.modules.agents_hub.database.connection import create_async_engine as hub_engine
-    from server.app.modules.agents_hub.database.base import HubConfigBase, HubOperationalBase
-    import server.app.modules.agents_hub.database.config_models  # noqa: F401 — registra tablas
-    import server.app.modules.agents_hub.database.operational_models  # noqa: F401 — registra tablas
-
-    engine = hub_engine()
-    async with engine.begin() as conn:
-        await conn.run_sync(HubConfigBase.metadata.create_all)
-        await conn.run_sync(HubOperationalBase.metadata.create_all)
-    await engine.dispose()
 
 
 def _start_quality_scheduler():
@@ -314,8 +299,12 @@ async def _arranque(app: FastAPI):
     # mensajes del propio arranque —que son los que más falta hacen cuando algo va mal— se
     # perderían o saldrían con el formato de otro.
     configurar_logging()
-    await init_server_db()
-    await _init_hub_db()
+    # El esquema NO se crea aquí. Hasta BD.2 (2026-09-04) el arranque hacía `create_all` sobre
+    # los tres metadatos, además de lo que Alembic aplica en el despliegue: dos fuentes, y la que
+    # nunca borra ganaba — así quedaron 36 tablas de modelos retirados en la base de desarrollo.
+    # Alembic es la única fuente: `alembic upgrade head` antes de arrancar, y `alembic check` en
+    # CI para que un modelo sin migración se vea en el push. Si la base no está migrada, la
+    # primera consulta falla con claridad, que es mejor que una tabla aparecida en silencio.
     await _fail_zombie_jobs()
     from server.app.database.seeds import seed_all
 

@@ -271,9 +271,14 @@ class HubOrganizacion(HubConfigBase):
     # Modelo con el que se reescribe: pequeno y rapido, distinto del que responde. Vive en
     # la organizacion porque repetirlo en cada chatbot solo multiplicaria sitios donde
     # olvidarlo. NULL = usar el del chatbot con el tope de salida bajado.
+    # `use_alter=True` (BD.2): esta FK y `HubLLMConfig.organizacion_id` forman un ciclo
+    # —cada tabla apunta a la otra—, y SQLAlchemy avisaba de que no podía ordenar su creación
+    # («may raise an error in a future release»). Con `use_alter`, la FK se añade con un
+    # `ALTER TABLE` después de crear las dos tablas. Es la anulable de las dos, así que es la que
+    # puede esperar. No cambia el esquema resultante: `alembic check` no lo ve como diferencia.
     rewrite_llm_config_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("hub_llm_configs.id", ondelete="SET NULL"),
+        ForeignKey("hub_llm_configs.id", ondelete="SET NULL", use_alter=True),
         nullable=True,
     )
     # --- Cuotas de consumo (SEC.4). Todo en TOKENS ---

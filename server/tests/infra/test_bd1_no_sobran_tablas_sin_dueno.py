@@ -106,23 +106,28 @@ async def test_should_have_no_table_without_a_model():
     )
 
 
-def test_should_keep_the_two_creation_mechanisms_visible():
-    """Y la causa, dicha donde se lee: el esquema lo gobiernan **dos** mecanismos a la vez.
+def test_should_have_closed_the_cause_not_only_the_symptom():
+    """El mecanismo que producía huérfanas ya no existe, y `db.py` dice cuál era.
 
-    Alembic en el despliegue y `create_all` en cada arranque. Mientras eso siga así, el test de
-    arriba puede volver a ponerse rojo — no por descuido de nadie, sino porque el mecanismo lo
-    permite. Este test no lo prohíbe (cambiarlo es una decisión de arquitectura con su propio
-    coste); exige que **esté escrito**, para que la próxima huérfana se lea como consecuencia y no
-    como misterio.
+    **Este test decía lo contrario.** Al cerrar BD.1 exigía que `create_all` **siguiera** en
+    `db.py` junto con una nota diciendo que Alembic también gobernaba el esquema: el mecanismo se
+    dejaba en pie a propósito porque cambiarlo era una decisión de arquitectura del usuario, y lo
+    único exigible era que estuviera escrito. BD.2 tomó la decisión y quitó el mecanismo, así que la
+    afirmación se invierte — igual que NIC.3 invirtió los guardarraíles de la cuarentena cuando la
+    cuarentena se fue.
+
+    Lo que sobrevive del test original es la razón: la causa, dicha donde se lee.
     """
     from pathlib import Path
 
     raiz = Path(__file__).resolve().parents[3]
     db = (raiz / "server" / "app" / "database" / "db.py").read_text(encoding="utf-8")
 
-    assert "create_all" in db, "cambió el mecanismo: revisa este guardarraíl y su explicación"
-    assert "alembic" in db.lower() or "Alembic" in db, (
-        "`db.py` hace `create_all` sin decir en ninguna parte que el esquema lo gobierna "
-        "también Alembic. Es la causa de las 36 tablas huérfanas que censó BD.1, y sin la nota "
-        "el siguiente que lo lea creerá que Alembic es la única fuente"
+    assert "create_all" not in db.replace("`create_all`", ""), (
+        "`db.py` vuelve a crear esquema. Desde BD.2 el arranque no crea tablas: Alembic es la "
+        "única fuente, y `alembic check` en CI lo vigila"
+    )
+    assert "Alembic" in db, (
+        "`db.py` tiene que decir que el esquema lo define Alembic y por qué se quitó el "
+        "`create_all`: sin la nota, el siguiente que lo lea lo añadirá «para que arranque»"
     )

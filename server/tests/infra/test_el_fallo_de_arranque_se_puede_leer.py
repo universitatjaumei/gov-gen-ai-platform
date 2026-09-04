@@ -75,7 +75,10 @@ async def test_un_arranque_que_falla_deja_la_causa_en_el_log_y_sigue_fallando(
     async def _init_que_revienta():
         raise RuntimeError("no hay base de datos en el 5432")
 
-    monkeypatch.setattr(main_mod, "init_server_db", _init_que_revienta)
+    # Se parchea el PRIMER paso del arranque que toca la base. Hasta BD.2 era `init_server_db`
+    # (el `create_all` del esquema); BD.2 lo retiró —Alembic es la única fuente— y el primero
+    # pasó a ser `_fail_zombie_jobs`. El test prueba lo mismo: que un fallo temprano se lee.
+    monkeypatch.setattr(main_mod, "_fail_zombie_jobs", _init_que_revienta)
 
     with caplog.at_level(logging.CRITICAL, logger=main_mod.__name__):
         with pytest.raises(RuntimeError, match="no hay base de datos"):

@@ -11,10 +11,13 @@ def test_database_models_import():
 
 
 def test_database_db_import():
-    """Verifica que el motor de base de datos se importa correctamente."""
-    from server.app.database.db import server_engine, init_server_db
+    """Verifica que el motor de base de datos se importa correctamente.
+
+    Hasta BD.2 comprobaba también `init_server_db`, el `create_all` del arranque. Se retiró: el
+    esquema lo define Alembic y la aplicación no crea tablas.
+    """
+    from server.app.database.db import server_engine
     assert server_engine is not None
-    assert init_server_db is not None
 
 
 def test_services_pricing_import():

@@ -123,6 +123,7 @@ vive en un documento no es un invariante: es una intención.
 | I11 | **Los ficheros de negocio se guardan por `StorageService`**, nunca con `open()`: el contenedor es efímero y el proveedor, cambiable | `core/storage.py`; regla de portabilidad |
 | I12 | **Todo lo que va al LLM desde el edge va anonimizado**, y el `model_factory` no anonimiza: recibe datos ya limpios | frontera edge/cloud de `AGENTS.md` |
 | I13 | **Código no aprobado no se ejecuta.** Auditoría AST + sandbox + aprobación humana antes de que un script corra | `redaccion/services/script_auditor.py`, `SANDBOX_SECURITY.md` |
+| I14 | **El esquema lo define Alembic, y sólo Alembic.** La aplicación no crea tablas al arrancar; un modelo cambiado sin su migración es un fallo de CI, no una tabla aparecida | `alembic check` en CI tras `upgrade head`; `test_bd2_alembic_es_la_unica_fuente.py` |
 
 **Cómo se usa esta tabla.** Al escribir código nuevo, si tocas algo que aparece en la columna
 derecha, el test correspondiente es el que te dirá si te has pasado. Si crees que un invariante

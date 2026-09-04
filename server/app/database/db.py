@@ -1,13 +1,26 @@
-"""
-Server database configuration and initialization (PostgreSQL + asyncpg).
+"""Motor y sesiones de la base de datos del servidor (PostgreSQL + asyncpg).
+
+**El esquema lo define Alembic, y sólo Alembic.** Este módulo abre el motor; no crea tablas.
+Hasta BD.2 (2026-09-04) tenía un `init_server_db()` que hacía `create_all` en cada arranque, junto
+con otro igual para los metadatos del Hub en `main.py`, además de las migraciones que aplica el
+despliegue. Dos fuentes para lo mismo, y la que nunca borra ganaba: `create_all` crea lo declarado
+y deja intacto lo que dejó de estarlo, así que cada modelo retirado dejaba su tabla — 36 en la base
+de desarrollo cuando se midió, ninguna en producción, que siempre se creó sólo con Alembic.
+
+Medido antes de quitarlo: la cadena de Alembic aplicada a una base vacía produce exactamente las
+tablas que los modelos declaran. El `create_all` no aportaba ninguna.
+
+Lo que garantiza que las dos cosas —modelos y migraciones— sigan diciendo lo mismo es
+`alembic check` en CI, que compara y falla si divergen. Para arrancar en local:
+`uv run alembic upgrade head` desde `server/`, como dice el README.
 """
 
 import os
-from sqlmodel import SQLModel
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-# Import models to register them with SQLModel metadata
+# Los modelos se importan para que queden registrados en `SQLModel.metadata`, que es lo que lee
+# `migrations/env.py` para el autogenerate y para `alembic check`.
 from server.app.database import models  # noqa: F401
 
 #: DSN de desarrollo. Es local y su credencial está publicada en el repositorio, igual que la
@@ -48,12 +61,6 @@ server_engine = create_async_engine(DATABASE_URL, echo=False, future=True)
 AsyncSessionLocal = async_sessionmaker(
     server_engine, class_=AsyncSession, expire_on_commit=False
 )
-
-
-async def init_server_db():
-    """Create all tables (development only — use Alembic in production)."""
-    async with server_engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
 
 
 async def get_session() -> AsyncSession:

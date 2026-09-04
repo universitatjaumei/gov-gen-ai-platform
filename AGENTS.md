@@ -254,6 +254,28 @@ antes de continuar:
 Una vez la BD responda, aplica la migración y muestra el resultado de `alembic current`
 para confirmar que la revisión ha quedado registrada.
 
+### El esquema lo define Alembic, y sólo Alembic (BD.2, 2026-09-04)
+
+**La aplicación no crea tablas.** Hasta BD.2 el arranque hacía `create_all` sobre los tres
+metadatos además de lo que Alembic aplica en el despliegue, y esa segunda fuente **nunca borra lo
+que dejó de estar declarado**: así quedaron 36 tablas de modelos retirados en la base de desarrollo
+sin que nada lo dijera, y tres columnas `nullable=True` en su migración y `NOT NULL` en su modelo
+durante semanas, también en producción.
+
+Tres consecuencias prácticas:
+
+- **Un modelo nuevo o cambiado va con su migración en el mismo commit.** `alembic check` corre en
+  CI después de `alembic upgrade head` y se pone rojo si los modelos y la cadena difieren.
+  Ejecútalo en local antes del push: `uv run alembic check` desde `server/`, con la BD migrada.
+- **`nullable=` se escribe explícito** en las columnas que importan. `Mapped[datetime]` sin él es
+  `NOT NULL` por deducción de la anotación, y así nacieron las tres columnas divergentes: el
+  modelo lo deducía y la migración a mano decía otra cosa.
+- **Si la base no está migrada, la primera consulta falla con claridad.** Es mejor que una tabla
+  aparecida en silencio. Para arrancar en local: `uv run alembic upgrade head`.
+
+Los tests siguen creando sus bases desechables con `create_all`: eso no es la aplicación, y
+`test_bd2_alembic_es_la_unica_fuente.py` vigila la diferencia.
+
 ---
 
 ## Dependencias: relockear va en el mismo commit

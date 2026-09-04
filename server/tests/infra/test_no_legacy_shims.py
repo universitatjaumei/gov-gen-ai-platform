@@ -2,9 +2,11 @@
 
 CLAUDE.md los prohíbe explícitamente: «Sin backwards-compatibility shims. No renombres
 variables a `_old_foo`, no re-exportes símbolos eliminados». Un alias como
-`init_db = init_server_db` cuesta cero mantenerlo y por eso sobrevive años, pero deja dos
-nombres para una cosa: quien lee `init_db` en un script no sabe si es lo mismo o algo
-parecido, y el `grep` de cualquier auditoría posterior devuelve el doble de ruido.
+`init_db = init_server_db` —el que existió aquí— cuesta cero mantenerlo y por eso sobrevive años,
+pero deja dos nombres para una cosa: quien lee `init_db` en un script no sabe si es lo mismo o algo
+parecido, y el `grep` de cualquier auditoría posterior devuelve el doble de ruido. (La función a la
+que apuntaba, `init_server_db`, se retiró en BD.2: el arranque ya no crea esquema. El alias sigue
+prohibido igual, que es lo que este fichero vigila.)
 
 Se comprueba sobre el árbol, no importando módulos: varios de los llamantes históricos
 cuelgan de rutas anteriores al monorepo y no se pueden importar.
@@ -39,8 +41,8 @@ def _ficheros_python() -> list[Path]:
 
 
 class TestSinShimsDeCompatibilidad:
-    def test_should_import_init_server_db_directly(self):
-        """`init_db` no existe: el nombre real es `init_server_db`.
+    def test_should_have_no_init_db_alias(self):
+        """`init_db` no existe, y desde BD.2 tampoco lo que aliasaba.
 
         Se busca el identificador entero para no confundirlo con `init_client_db` ni con
         `scripts/init_db.py`, que es otra cosa.
@@ -57,7 +59,8 @@ class TestSinShimsDeCompatibilidad:
                     culpables.append(f"{fichero.relative_to(_RAIZ)}:{numero}: {linea.strip()}")
 
         assert not culpables, (
-            "Quedan referencias al alias `init_db`; el nombre real es `init_server_db`:\n  "
+            "Quedan referencias al alias `init_db`. No apunta a nada: el arranque no crea "
+            "esquema desde BD.2, y un alias a una función retirada es un shim doblemente muerto:\n  "
             + "\n  ".join(culpables)
         )
 

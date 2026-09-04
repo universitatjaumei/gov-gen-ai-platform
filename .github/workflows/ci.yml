@@ -123,6 +123,24 @@ jobs:
       - name: Export OpenAPI schema (lo exige tests/test_openapi_export.py)
         run: uv run python export_openapi.py
 
+      # BD.2 — el esquema lo define Alembic y SOLO Alembic, y esto es lo que lo demuestra.
+      #
+      # Hasta el 2026-09-04 la aplicación hacía además `create_all` al arrancar. Esa segunda
+      # fuente nunca borra lo que dejó de estar declarado, y así quedaron 36 tablas de modelos
+      # retirados en la base de desarrollo sin que nada lo dijera (BD.1). Y una deriva más fina
+      # que un censo de tablas no ve: tres columnas `nullable=True` en su migración y `NOT NULL`
+      # en su modelo, durante semanas, en producción también.
+      #
+      # `alembic check` compara los modelos con la base y falla si difieren. Tiene que ir DESPUÉS
+      # de `upgrade head`: contra una base vacía propondría crearlo todo y estaría siempre rojo, y
+      # un guardarraíl siempre rojo se desactiva. Cuesta segundos. Cuando esté rojo, la lectura es
+      # una de dos: un modelo cambiado sin su migración, o una migración que dijo otra cosa que
+      # el modelo. Las dos son un motivo para no fusionar.
+      - name: Schema is defined by Alembic alone (upgrade head, then alembic check)
+        run: |
+          uv run alembic upgrade head
+          uv run alembic check
+
       # Unit + integration + e2e en UNA sola invocación de pytest, a propósito (TST.1):
       # separados en dos procesos, el estado filtrado entre tests —un mock asignado a
       # una clase, un singleton contaminado— es invisible para CI. Así fue como
