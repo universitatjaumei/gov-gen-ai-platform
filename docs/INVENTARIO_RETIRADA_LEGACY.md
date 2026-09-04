@@ -119,7 +119,7 @@ equivalente concreto; en «parcial», qué falta.
 | `client_app/app/services/email_body_utils.py` | **no cubierto** | **Decide NIC.3**: limpieza del cuerpo de los correos que recoge el agente. |
 | `client_app/app/services/email_scan_service.py` | **no cubierto** | **Decide NIC.3**: recolección pasiva de correos para flujos. |
 | `client_app/app/services/enterprise_audit_service.py` | **parcial** | `graph/nodes/audit_log.py` + `hub_actividad_ia` (REG.1) cubren el registro; el informe de auditoría empresarial del legacy, no. |
-| `client_app/app/services/event_bus_service.py` | **no aplica** | Bus de eventos en proceso de NiceGUI; el servidor usa HTTP y WebSocket. |
+| `client_app/app/services/event_bus_service.py` | **no cubierto** | **Corregido en NIC.2**: estaba «no aplica», y lo importan `app/modules/watchers/email_watcher.py` y `folder_watcher.py`, que son **el agente que se queda**. «No aplica» significa borrar, así que la etiqueta habría roto lo único que `client_app/` debe conservar. **Decide NIC.3** si el bus es parte del agente. |
 | `client_app/app/services/execution_session_service.py` | **parcial** | `hub_workspaces` y `services/workspace_run_service.py` cubren la sesión de un informe; la de un flujo, no. |
 | `client_app/app/services/external_script_audit_service.py` | **cubierto** | `services/script_auditor.py`, y expuesto como servicio en `POST /api/v1/verificaciones/codigo` (VAS.3). |
 | `client_app/app/services/extraction_service.py` | **parcial** | **3.494 líneas**, el fichero más grande del legacy. `extraction_strategies.py` y los cuatro *pipelines* cubren la extracción determinista; lo demás hay que leerlo antes de decidir. |
@@ -135,7 +135,7 @@ equivalente concreto; en «parcial», qué falta.
 | `client_app/app/services/import_validation_service.py` | **no cubierto** | Validación de paquetes importados; FUN. |
 | `client_app/app/services/knowledge_orchestrator_service.py` | **no cubierto** | Orquestador de conocimiento del lado cliente; sin equivalente. |
 | `client_app/app/services/launcher.py` | **no aplica** | Lanzador del proceso NiceGUI (65 líneas). |
-| `client_app/app/services/layout_manager.py` | **no aplica** | Disposición de la interfaz NiceGUI vista desde los servicios; no es el mismo fichero que el de `app/ui`. |
+| `client_app/app/services/layout_manager.py` | **no cubierto** | **Corregido en NIC.2**: estaba «no aplica», y lo importa `app/core/state.py` —el estado global que ata la interfaz al `RPAExecutor`— más quince páginas que se quedan. **Decide NIC.3** si `state.py` es agente o era interfaz. |
 | `client_app/app/services/library_bridge.py` | **no aplica** | Puente de 27 líneas entre dos servicios del legacy. |
 | `client_app/app/services/local_knowledge_service.py` | **no cubierto** | Base de conocimiento local del cliente; sin equivalente (el corpus vive en el servidor). |
 | `client_app/app/services/mail_watcher_service.py` | **no cubierto** | **Decide NIC.3**: ídem para el de correo (796 líneas). |
@@ -280,3 +280,73 @@ equivalente concreto; en «parcial», qué falta.
 | `client_app/app/ui/ui_translations.json` | **parcial** | **60 KB**, el mayor del legacy: mezcla cadenas de todo. Las de informes, scripts y anonimización están en i18next; las del editor de flujos y los vigilantes, no. |
 | `client_app/app/ui/ui_utils.py` | **no aplica** | 16 líneas de utilidades de NiceGUI. |
 | `client_app/app/ui/web_watcher_page.py` | **no cubierto** | Configuración del vigilante web; sin interfaz en el frontend. |
+
+---
+
+## 4. Lo que NIC.2 midió, y por qué la retirada no se puede hacer por cobertura
+
+**NIC.2 no movió nada.** Iba a mover los 67 ficheros etiquetados «cubierto» y «no aplica», y la
+medición previa dijo que no se podía: **48 de los 67 tenían quien los importara**, y los
+importadores no eran código muerto.
+
+| Quién importa lo que iba a moverse | Ficheros |
+|---|---|
+| Nadie, o sólo tests del propio legacy | 32 |
+| El agente de ejecución | 5 |
+| Código de `client_app/` que se queda | 30 |
+
+El legacy es **una aplicación entrelazada**: las páginas «no cubierto» que se quedan usan
+servicios «cubierto», y cinco de ellos los usa el propio agente.
+
+### Tres hallazgos, y el tercero es el que decidió el bloque
+
+**1. Dos etiquetas eran peligrosas.** «No aplica» significa *borrar*, y dos ficheros lo tenían con
+código vivo detrás: `event_bus_service.py` lo importan los vigilantes —**el agente**— y
+`layout_manager.py` lo importa `app/core/state.py`. Borrarlos habría roto lo único que
+`client_app/` debía conservar. La etiqueta salió de leer el propósito del fichero, y **quién lo
+importa no se deduce del propósito**.
+
+**2. El bloqueo es transitivo.** La primera pasada calculó «quién importa X» excluyendo a los
+propios candidatos, que vale si los 67 se mueven juntos; con 23 bloqueados, un candidato bloqueado
+que importa a otro lo retiene igual. Hubo que calcular el cierre **a punto fijo**: de 41 movibles
+a 32.
+
+**3. `client_app/` ya no arranca, y no por NIC.2.** Hay **28 imports activos hacia diez ficheros
+que bloques anteriores llevaron a la cuarentena** sin reapuntar a quien los importaba. Y no son
+periféricos: **`workflow_engine.py`, el motor por el que ejecutan los dos vigilantes, importa en
+sus líneas 1478 y 1604 dos módulos que no existen** en `client_app/`
+(`modules/factory/graphics_factory.py` y `modules/privacy/anonymizer.py`).
+
+---
+
+## 5. La decisión: retirada completa, con la referencia fuera del repositorio
+
+El hallazgo 3 cambia la pregunta. No se trataba de conservar un agente que funciona mientras se
+migra lo demás: **el agente no arranca hoy**, y no hay nada en producción que dependa de
+`client_app/` —no aparece en `docker-compose`, ni en el `Dockerfile`, ni en CI—.
+
+**Decisión del usuario (2026-09-04): se retiran `client_app/` y `_legacy_nicegui/` completos.** El
+razonamiento es que el repositorio se va a abrir, y 500 ficheros de una aplicación que no compila
+no se pueden distinguir de código vivo por quien llegue de fuera.
+
+La referencia se conserva en **tres** sitios, y ninguno dentro del repositorio abierto:
+
+1. **El historial de git de este repositorio.** Borrar del árbol de trabajo no borra del
+   historial: los ficheros siguen ahí con su contexto y sus mensajes de commit. Es la mejor de las
+   tres, porque viaja con el repositorio y no se puede perder.
+2. `C:\Users\fabra\Documents\AutomatIA` — la aplicación NiceGUI completa y verificada.
+3. El *bundle* de GenGov.
+
+**Y este inventario es el mapa.** Su tabla de la §3 dice, fichero a fichero, qué tiene equivalente
+y dónde, y qué no lo tiene: es lo que hay que leer el día que se desarrolle el agente local, antes
+de ir a buscar el código a ninguna de las tres referencias.
+
+### La quinta etiqueta que se consideró y se descartó
+
+La medición sugería añadir una etiqueta —«cubierto en el servidor, pero el agente necesita el
+suyo»— para los servicios que el agente duplica legítimamente: el agente corre en la máquina del
+cliente y que el servidor tenga un sandbox no le sirve.
+
+**Se descartó**, y la razón es el hallazgo 3: la etiqueta habría servido para justificar conservar
+código que no compila. Con la retirada completa, lo que queda escrito es que **el agente local es
+trabajo pendiente sin código en el repositorio**, que es la verdad.

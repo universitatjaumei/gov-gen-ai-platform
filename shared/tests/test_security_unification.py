@@ -18,19 +18,21 @@ def process(file):
     result = audit_code(code)
     assert result['status'] == 'SAFE', f"Errors found: {result['reasons']}"
 
-def test_pymupdf_is_not_in_any_whitelist():
-    """Verificar que el nombre 'PyMuPDF' ya no existe en ninguna de las listas blancas."""
-    # 1. Check shared/automatia_shared/core/security.py
-    shared_security_path = os.path.abspath("shared/automatia_shared/core/security.py")
-    with open(shared_security_path, "r", encoding="utf-8") as f:
-        content = f.read()
-        assert "PyMuPDF" not in content, "PyMuPDF found in shared/automatia_shared/core/security.py"
+def test_pymupdf_no_esta_en_la_lista_blanca():
+    """`PyMuPDF` es el nombre del paquete; el módulo que se importa es `fitz`.
 
-    # 2. Check client_app/app/services/sandbox_service.py
-    sandbox_service_path = os.path.abspath("client_app/app/services/sandbox_service.py")
-    with open(sandbox_service_path, "r", encoding="utf-8") as f:
-        content = f.read()
-        assert "PyMuPDF" not in content, "PyMuPDF found in client_app/app/services/sandbox_service.py"
+    Admitir «PyMuPDF» en una lista blanca de *imports* no protege ni permite nada: nadie escribe
+    `import PyMuPDF`. Tenerlo ahí sólo hace creer que la lista dice algo que no dice.
+
+    NIC.2 — la segunda mitad de este test **leía el texto de
+    `client_app/app/services/sandbox_service.py`**, que se ha ido a la cuarentena. Y leer el
+    fichero era la comprobación equivocada: lo que importa es qué admite la lista que consulta el
+    auditor, no qué palabras aparecen en un fuente.
+    """
+    from automatia_shared.core.security import SAFE_IMPORTS
+
+    assert "PyMuPDF" not in SAFE_IMPORTS
+    assert "fitz" in SAFE_IMPORTS, "el módulo que sí se importa tiene que estar"
 
 def test_openpyxl_is_allowed_for_pandas():
     """Confirmar que pandas y openpyxl están permitidos."""
@@ -39,22 +41,19 @@ def test_openpyxl_is_allowed_for_pandas():
     result = audit_code(code)
     assert result['status'] == 'SAFE'
 
-def test_sandbox_allowed_imports_contains_fitz_and_pdfplumber():
-    """Verificar que sandbox_service tiene los nuevos imports permitidos."""
-    from client_app.app.services.sandbox_service import neutralize_dangerous_functions
-    import builtins
-    
-    # We can't easily call neutralize_dangerous_functions safely here without side effects,
-    # but we can inspect the file content (already done) or use internal inspection if available.
-    # Since we are in the same environment, let's just check the file again.
-    # Actually, we could import the service and check ALLOWED_IMPORTS if it was global,
-    # but it's defined inside a function.
-    
-    # Let's rely on the file content check in test_pymupdf_is_not_in_any_whitelist
-    # and add a specific check for fitz/pdfplumber in the file.
-    sandbox_service_path = os.path.abspath("client_app/app/services/sandbox_service.py")
-    with open(sandbox_service_path, "r", encoding="utf-8") as f:
-        content = f.read()
-        assert "fitz" in content
-        assert "pdfplumber" in content
-        assert "openpyxl" in content
+def test_la_lista_blanca_admite_los_lectores_de_pdf_y_excel():
+    """Los tres módulos de lectura que el sandbox tiene que admitir.
+
+    NIC.2 — **este test miraba el texto de un fichero del legacy**: importaba
+    `neutralize_dangerous_functions` de `client_app/app/services/sandbox_service.py` sin llamarla
+    nunca y luego afirmaba que el contenido del fichero contenía las cadenas «fitz»,
+    «pdfplumber» y «openpyxl». Eso no comprobaba la lista blanca: comprobaba que un fichero
+    mencionara tres palabras, y habría pasado igual con las tres en un comentario.
+
+    Era además **el único import real hacia `client_app/` en todo el repositorio**, así que
+    atañía a la retirada del legacy. Ahora se afirma sobre `SAFE_IMPORTS`, que es la lista que
+    el auditor consulta de verdad.
+    """
+    from automatia_shared.core.security import SAFE_IMPORTS
+
+    assert {"fitz", "pdfplumber", "openpyxl"} <= SAFE_IMPORTS
