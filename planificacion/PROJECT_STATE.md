@@ -117,7 +117,7 @@ sólo entonces retirar los seis `SuperAdminAccount`. Desde USR.9, a quien admini
 organización hay que concederle además el módulo **`personas`**; a quien ya tenía `plataforma` se
 lo dio la migración.
 
-**Cursor: Bloque VAS ✅ completo. Siguiente: Bloque NIC.** Después VAS → NIC → REPO → PLG → DIN → FUN, con PRC en
+**Cursor: Bloque NIC, prompt NIC.2.** Después VAS → NIC → REPO → PLG → DIN → FUN, con PRC en
 paralelo y a tandas. **LANG ✅ quedó completo el 2026-09-03** y está en `desarrollo`, **sin
 desplegar**: el paso a `main` es decisión del usuario, y no cambia comportamiento porque el modo
 `prefer` es el que producción necesita. Lo anterior:
