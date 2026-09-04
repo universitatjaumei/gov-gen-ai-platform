@@ -212,6 +212,13 @@ _PUEDEN_LEER_EL_DSN = {
     # Inspecciona el esquema real ya migrado —sólo lectura, y se salta si no hay BD—: es lo
     # que comprueba que el renombrado de tablas se aplicó de verdad.
     "tests/api/test_migration_rename.py",
+    # Igual que la anterior, y por eso entra: censa el esquema real para comprobar que ninguna
+    # tabla sobra. Sólo lectura —`information_schema` y `count(*)`— y se salta si no hay BD. No
+    # puede usar la fixture desechable: una base recién creada tiene exactamente las tablas
+    # declaradas, así que el censo pasaría siempre y no vigilaría nada. Lo que busca es
+    # justamente la diferencia entre lo declarado y lo que se acumuló en una base de verdad
+    # (BD.1: eran 36 tablas, residuo del «Brain» de AutomatIA).
+    "tests/infra/test_bd1_no_sobran_tablas_sin_dueno.py",
     # Lo lee para AFIRMAR QUE NO ES ESA: es el test que vigila esta misma regla sobre la
     # suite e2e (TST.2). Prohibírselo dejaría sin guardián al guardián.
     "tests/modules/agents_hub/e2e/test_db_isolation.py",
