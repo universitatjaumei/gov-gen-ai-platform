@@ -39,10 +39,19 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.app.api.deps import require_admin, require_module, require_pat_scopes
+from server.app.api.deps import (
+    get_current_user,
+    require_admin,
+    require_module,
+    require_pat_scopes,
+)
 from server.app.core.auth.models import UserInfo
 from server.app.core.auth.pat.scopes import ACTIVIDAD_WRITE
-from server.app.core.auth.tenancy import organizacion_unica_de, scope_query_to_orgs
+from server.app.core.auth.tenancy import (
+    assert_org_access,
+    organizacion_unica_de,
+    scope_query_to_orgs,
+)
 from server.app.modules.agents_hub.contracts.actividad import ActividadIAEvent
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.operational_models import HubActividadIA
@@ -294,3 +303,97 @@ async def exportar_actividad(
             "Content-Disposition": 'attachment; filename="actividad_ia.csv"'
         },
     )
+
+
+# ─────────────────────────── El catálogo de categorías (REG.8) ─────────────
+
+
+class CategoriaDeDatos(BaseModel):
+    """Una categoría del catálogo de la organización.
+
+    Lleva `nombre` para que el panel no tenga que inventar la etiqueta, y `sustituida_por` para
+    que quien tenga que reetiquetar lo ya registrado sepa a dónde fue una categoría renombrada.
+    """
+
+    codigo: str
+    nombre: str
+    nombre_secundario: str | None
+    vigente: bool
+    sustituida_por: str | None
+
+
+@router.get(
+    "/categorias",
+    response_model=list[CategoriaDeDatos],
+    operation_id="categoriasDeDatos",
+)
+async def categorias_de_datos(
+    incluir_retiradas: bool = Query(
+        default=False,
+        description=(
+            "Incluye las categorías retiradas, con su sustituta. Para reetiquetar lo ya "
+            "registrado; para elegir al registrar, no hacen falta."
+        ),
+    ),
+    organizacion_id: uuid.UUID | None = Query(
+        default=None,
+        description=(
+            "Obligatorio sólo si el principal no pertenece a una sola organización "
+            "(superadministrador o token de varias)."
+        ),
+    ),
+    user: UserInfo = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> list[CategoriaDeDatos]:
+    """Los códigos de `categorias_datos` que usa esta organización.
+
+    **Se anuncia, no se impone**: el `POST` sigue aceptando cualquier código. Rechazar uno que no
+    esté aquí convertiría «esta categoría todavía no está dada de alta» en «este uso de IA no
+    queda registrado», y perder el registro es peor que tenerlo con una etiqueta imperfecta. Lo
+    que este catálogo compra es que las herramientas **converjan**: sin él, cada una inventa sus
+    códigos y el registro deja de poder agregarse, que es para lo que existe.
+
+    **Sin exigir rol ni módulo**, a diferencia de la lectura del registro. Saber cómo se llaman
+    las categorías de tu propia organización no es privilegiado, y exigir el módulo `registro`
+    dejaría fuera al consumidor principal: el token de máquina que sólo tiene `actividad:write`.
+    """
+    org = organizacion_id or organizacion_unica_de(user)
+    if org is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "ORGANIZACION_NO_INDICADA",
+                "message": (
+                    "Indica `organizacion_id`: el catálogo es de cada organización y este "
+                    "principal no pertenece a una sola."
+                ),
+            },
+        )
+    # Con `organizacion_id` explícito hay que comprobarlo: si no, cualquiera con sesión leería
+    # el catálogo de cualquier organización pasando su id.
+    assert_org_access(user, org)
+
+    # Vía `ConfigProvider` y no importando el modelo: `hub_vocabulary_terms` es configuración
+    # cloud y este router es edge. Es la única puerta (ING.0.1).
+    from server.app.modules.agents_hub.services.config_provider import (
+        LocalConfigProvider,
+    )
+    from server.app.modules.agents_hub.services.vocabulary_service import VocabularyAxis
+
+    terminos = await LocalConfigProvider(session).list_vocabulary(
+        VocabularyAxis.CATEGORIA_DADES, org
+    )
+
+    # El orden lo decide quien mantiene el catálogo (`ordre`), con el código como desempate para
+    # que dos términos del mismo orden no salgan hoy en un sitio y mañana en otro.
+    return [
+        CategoriaDeDatos(
+            codigo=t.codi,
+            nombre=t.nom_primari,
+            nombre_secundario=t.nom_secundari,
+            vigente=t.vigent,
+            sustituida_por=t.substituit_per_codi,
+        )
+        for t in sorted(terminos, key=lambda t: (t.ordre, t.codi))
+        if incluir_retiradas or t.vigent
+    ]

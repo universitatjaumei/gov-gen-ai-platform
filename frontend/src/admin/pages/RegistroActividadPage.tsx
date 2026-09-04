@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useListarActividad } from '@/shared/api/generated/actividad/actividad'
+import {
+  useCategoriasDeDatos,
+  useListarActividad,
+} from '@/shared/api/generated/actividad/actividad'
 import { descargarConAutorizacion } from '@/shared/api/download'
 
 /**
@@ -66,6 +69,17 @@ export function RegistroActividadPage() {
   }, [herramienta, desde, hasta, pagina])
 
   const { data, isLoading } = useListarActividad(parametros)
+
+  /* El catálogo de categorías (REG.8), sólo para poner la etiqueta legible.
+   *
+   * Un código que no esté en el catálogo se enseña **crudo, tal como llegó**: el servidor acepta
+   * cualquiera a propósito, así que llegarán, y esconderlos ocultaría la única señal de que al
+   * catálogo le falta una entrada. Verlos ahí es lo que hace que alguien lo cure. */
+  const { data: categorias } = useCategoriasDeDatos({})
+  const etiquetaDeCategoria = useMemo(() => {
+    const porCodigo = new Map((categorias ?? []).map((c) => [c.codigo, c.nombre]))
+    return (codigo: string) => porCodigo.get(codigo) ?? codigo
+  }, [categorias])
 
   const eventos = data?.items ?? []
   const total = data?.total ?? 0
@@ -193,7 +207,7 @@ export function RegistroActividadPage() {
                   <td className="text-muted-foreground">{evento.modelo_usado ?? '—'}</td>
                   <td className="text-xs text-muted-foreground">
                     {evento.categorias_datos.length > 0
-                      ? evento.categorias_datos.join(', ')
+                      ? evento.categorias_datos.map(etiquetaDeCategoria).join(', ')
                       : '—'}
                   </td>
                 </tr>

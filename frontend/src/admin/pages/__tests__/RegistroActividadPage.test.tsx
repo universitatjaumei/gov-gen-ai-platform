@@ -29,6 +29,10 @@ import { RegistroActividadPage } from '../RegistroActividadPage'
 const hooks = vi.hoisted(() => ({
   parametros: [] as unknown[],
   descargar: vi.fn(),
+  categorias: [
+    { codigo: 'datos_identificativos', nombre: 'Datos identificativos', nombre_secundario: null, vigente: true, sustituida_por: null },
+    { codigo: 'datos_de_contacto', nombre: 'Datos de contacto', nombre_secundario: null, vigente: true, sustituida_por: null },
+  ] as object[],
   pagina: {
     items: [
       {
@@ -67,6 +71,7 @@ vi.mock('@/shared/api/generated/actividad/actividad', () => ({
     hooks.parametros.push(params)
     return { data: hooks.pagina, isLoading: false, isError: false }
   }),
+  useCategoriasDeDatos: vi.fn(() => ({ data: hooks.categorias, isLoading: false })),
 }))
 
 vi.mock('@/shared/api/download', () => ({
@@ -121,13 +126,29 @@ describe('RegistroActividadPage', () => {
     expect(screen.getByText('revisor-de-contratos')).toBeInTheDocument()
   })
 
-  it('should_show_the_data_categories_of_each_event', () => {
+  it('should_label_the_data_categories_from_the_catalogue', () => {
+    /* REG.8 — la etiqueta la da el catálogo del servidor, no un diccionario del frontend.
+     * Con los códigos escritos aquí, dar de alta una categoría exigiría desplegar el panel. */
     renderPage()
 
-    // Los códigos del vocabulario los declara quien registra: el frontend no los conoce y por
-    // eso los enseña tal cual en vez de traducirlos.
-    expect(screen.getByText(/datos_identificativos/)).toBeInTheDocument()
-    expect(screen.getByText(/datos_de_contacto/)).toBeInTheDocument()
+    expect(screen.getByText(/Datos identificativos/)).toBeInTheDocument()
+    expect(screen.getByText(/Datos de contacto/)).toBeInTheDocument()
+  })
+
+  it('should_show_an_uncatalogued_code_as_it_arrived', () => {
+    /* La otra mitad de «se anuncia, no se impone».
+     *
+     * El servidor acepta cualquier código, así que llegarán algunos que no están en el
+     * catálogo. Esconderlos o pintarlos como «—» ocultaría precisamente la señal de que al
+     * catálogo le falta una entrada, y entonces nadie lo curaría nunca. Se enseña el código
+     * crudo, que es donde alguien lo va a ver. */
+    hooks.pagina = {
+      ...hooks.pagina,
+      items: [{ ...(hooks.pagina.items[0] as object), categorias_datos: ['codigo_sin_catalogar'] }],
+    }
+    renderPage()
+
+    expect(screen.getByText(/codigo_sin_catalogar/)).toBeInTheDocument()
   })
 
   it('should_send_the_tool_filter_to_the_server', async () => {

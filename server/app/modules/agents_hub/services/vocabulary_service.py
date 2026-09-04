@@ -31,6 +31,12 @@ class VocabularyAxis(StrEnum):
     # ACT.4: la CAUSA de la no vigencia. Eje nuevo porque anadirlo exige codigo que
     # lo consuma; sus terminos son dato y viven en `vocabulari/motius_no_vigencia.csv`.
     MOTIU_NO_VIGENCIA = "motiu_no_vigencia"
+    # REG.8: categorias de datos personales del registro de actividad IA. Eje y no tabla propia
+    # porque lo que un catalogo de proteccion de datos necesita es exactamente lo que esta tabla
+    # ya da: `vigent` para retirar sin borrar el historico, `substituit_per_codi` para renombrar
+    # dejando la traza, y el par de nombres para las dos lenguas. Su semilla esta en
+    # `core/actividad_categorias.py`; los terminos son dato.
+    CATEGORIA_DADES = "categoria_dades"
 
 
 @dataclass(frozen=True)
