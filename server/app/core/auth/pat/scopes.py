@@ -23,6 +23,11 @@ ACTIVIDAD_WRITE = "actividad:write"
 # capacidades distintas: una herramienta puede querer limpiar PII sin registrar nada, y otra
 # registrar sin pedirnos que le limpiemos texto.
 ANONIMIZACION_USE = "anonimizacion:use"
+# VAS.1: usar las verificaciones como servicio —contrato de citas, vigencia de un documento y
+# auditoria estatica—. **Uno para los tres** y no uno por servicio: son la misma capacidad
+# —comprobar con la vara de la plataforma algo que se produjo fuera— y partirlo obligaria a
+# pedir tres permisos para un caso de uso. Los tres son de lectura o de computo sin efecto.
+VERIFICACIONES_USE = "verificaciones:use"
 
 ALL_SCOPES: frozenset[str] = frozenset(
     {
@@ -35,6 +40,7 @@ ALL_SCOPES: frozenset[str] = frozenset(
         CHAT_ONBEHALF,
         ACTIVIDAD_WRITE,
         ANONIMIZACION_USE,
+        VERIFICACIONES_USE,
     }
 )
 

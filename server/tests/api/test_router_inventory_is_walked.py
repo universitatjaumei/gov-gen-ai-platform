@@ -70,6 +70,16 @@ _SIN_ACOTAR = {
         "dos stubs 501. **Cuando se implemente nace abierto si nadie mira**: GET /edge/config "
         "está diseñado para servir un snapshot de configuración cloud"
     ),
+    # VAS.1 — cómputo puro: aplica el contrato de citas al texto que le manda el llamante y no
+    # recibe sesión de base de datos, así que no hay nada que acotar.
+    #
+    # **Esta exención caduca en VAS.2**, que añade la consulta de vigencia y con ella la
+    # acotación por tenencia sobre `hub_chatbots`. Cuando eso entre, la línea se va: dejarla
+    # puesta convertiría una exención cierta en una que tapa lo que viniera después.
+    "verificaciones_router.py": (
+        "cómputo puro sobre el texto del llamante (contrato de citas); sin sesión de base de "
+        "datos. Caduca en VAS.2, que trae la vigencia y su acotación por tenencia"
+    ),
     # REG.3 — mismo caso que `charts_router`: no lee nada, así que no hay nada que acotar.
     "anonimizacion_router.py": (
         "sin estado — detecta y sustituye PII en el texto que le manda el propio llamante, y no "

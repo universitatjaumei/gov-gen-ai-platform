@@ -140,6 +140,146 @@ def despojar_remisiones(response_text: str, allowed: set[str]) -> str:
     return _MD_LINK.sub(_reemplazo, response_text)
 
 
+def citas_de(texto: str) -> list[tuple[str, str]]:
+    """Los `(titulo, url)` de los enlaces markdown del texto.
+
+    Existe para que nadie tenga que volver a escribir la expresión regular de una cita. VAS.1
+    necesita contar y clasificar lo que el contrato hizo, y un `re.compile` en el router sería
+    una segunda implementación de qué cuenta como cita entrando por la puerta de atrás.
+    """
+    return [(titulo, url.strip()) for titulo, url in _MD_LINK.findall(texto)]
+
+
+class ResultadoDelContrato:
+    """El texto que el contrato deja, y el desglose de lo que hizo para dejarlo.
+
+    Existe porque VAS.1 expone el contrato como servicio y quien lo llama necesita saber **qué
+    pasó**, no sólo el veredicto: qué citas valieron, cuáles apuntaban fuera, cuántas anclas
+    bajaron al documento y cuántas remisiones perdieron el enlace.
+
+    El desglose sale de la **misma pasada** que produce el texto. Calcularlo aparte sería
+    describir un texto distinto del que se devuelve: los pasos no son idempotentes entre sí, y
+    el orden de degradar y despojar *es* el contrato.
+    """
+
+    __slots__ = (
+        "texto",
+        "cumple",
+        "citas_validas",
+        "citas_invalidas",
+        "anclas_degradadas",
+        "remisiones_despojadas",
+    )
+
+    def __init__(
+        self,
+        *,
+        texto: str,
+        cumple: bool,
+        citas_validas: list[str],
+        citas_invalidas: list[str],
+        anclas_degradadas: int,
+        remisiones_despojadas: int,
+    ) -> None:
+        self.texto = texto
+        self.cumple = cumple
+        self.citas_validas = citas_validas
+        self.citas_invalidas = citas_invalidas
+        self.anclas_degradadas = anclas_degradadas
+        self.remisiones_despojadas = remisiones_despojadas
+
+
+def aplicar_contrato(
+    response_text: str,
+    sources: list,
+    mode: str,
+    no_answer_message: str | None = None,
+) -> ResultadoDelContrato:
+    """El contrato de citas, con el desglose de lo que hizo. **La única implementación.**
+
+    `enforce_citation_contract` delega aquí y devuelve sólo el texto, que es lo que el grafo
+    necesita. Así el servicio de VAS.1 y el motor no pueden divergir: no hay dos caminos, hay
+    uno con dos vistas.
+    """
+    response_text = texto_de(response_text)
+    if not sources:
+        # Sin fuentes no hay contrato que aplicar: es el modo agéntico, donde el agente puede
+        # decidir no leer nada. Se declara conforme porque no hay nada que fundamentar.
+        return ResultadoDelContrato(
+            texto=response_text,
+            cumple=True,
+            citas_validas=[],
+            citas_invalidas=[],
+            anclas_degradadas=0,
+            remisiones_despojadas=0,
+        )
+
+    anclas = {u for u in (_url_de(s) for s in sources) if u}
+    # La URL de la norma es citable por derecho propio: es el «o la norma» del criterio
+    # «el articulo si se puede, la norma si no». Sin esto, degradar produciria una URL que
+    # el propio contrato rechazaria.
+    allowed = anclas | {_sin_fragmento(u) for u in anclas}
+
+    # HIB.0: el orden de estos dos pasos es el contrato.
+    #
+    # 1. DEGRADAR primero: una cita al documento correcto con un ancla que no es la
+    #    recuperada baja al documento y **sobrevive**. Si se despojara antes, esa cita —que
+    #    es fundamento legitimo— se convertiria en texto plano y la respuesta se quedaria
+    #    sin apoyo por un ancla mal compuesta.
+    # 2. DESPOJAR despues: lo que sigue apuntando fuera del conjunto recuperado pierde el
+    #    enlace, no la mencion.
+    #
+    # Y la comprobacion va LA ULTIMA, sobre el texto ya despojado: al reves, una remision
+    # enlazada contaria como cita valida y el contrato dejaria de proteger justo de lo que
+    # existe para proteger.
+    degradado = degradar_anclas(response_text, anclas)
+    enlazado = enlazar_citas_en_prosa(degradado, sources)
+    texto = despojar_remisiones(enlazado, allowed)
+
+    # El desglose, leyendo las citas en los puntos donde el contrato las cambia. Se cuentan
+    # posiciones y no URL únicas: dos citas a la misma ancla equivocada son dos degradaciones,
+    # y quien integra quiere saber cuántas veces pasó.
+    antes = citas_de(response_text)
+    tras_degradar = citas_de(degradado)
+    finales = citas_de(texto)
+
+    anclas_degradadas = sum(
+        1
+        for (_t1, u1), (_t2, u2) in zip(antes, tras_degradar)
+        if u1 != u2
+    )
+    urls_finales = {u for _t, u in finales}
+    remisiones_despojadas = sum(
+        1 for _t, u in tras_degradar if u not in allowed and u not in urls_finales
+    )
+
+    validas = list(dict.fromkeys(u for _t, u in finales if u in allowed))
+    invalidas = list(
+        dict.fromkeys(u for _t, u in tras_degradar if u not in allowed)
+    )
+
+    if has_valid_citations(texto, allowed):
+        return ResultadoDelContrato(
+            texto=texto,
+            cumple=True,
+            citas_validas=validas,
+            citas_invalidas=invalidas,
+            anclas_degradadas=anclas_degradadas,
+            remisiones_despojadas=remisiones_despojadas,
+        )
+
+    # UX.4: el mensaje es del chatbot. Esta rama lo ignoraba y devolvia el texto fijo, en
+    # castellano, a preguntas hechas en valenciano.
+    return ResultadoDelContrato(
+        texto=no_answer_message or NO_CITATION_FALLBACK,
+        cumple=False,
+        citas_validas=[],
+        citas_invalidas=invalidas,
+        anclas_degradadas=anclas_degradadas,
+        remisiones_despojadas=remisiones_despojadas,
+    )
+
+
 def enforce_citation_contract(
     response_text: str,
     sources: list,
@@ -170,34 +310,10 @@ def enforce_citation_contract(
     Se normaliza, **no se envuelve en un `except`**: un `except` cambiaria un fallo por silencio,
     que es lo que se acaba de arreglar en dos sitios. `texto_de` es donde vive el saber de como se
     lee un `content`, y esto es un llamador mas.
+
+    **VAS.1 — el cuerpo se fue a `aplicar_contrato`**, que devuelve lo mismo mas el desglose de
+    lo que hizo. Esta funcion se queda porque es la firma que el grafo usa y porque el desglose
+    no le sirve de nada; lo que no puede haber es dos implementaciones del contrato, y ahora no
+    las hay.
     """
-    response_text = texto_de(response_text)
-    if not sources:
-        return response_text
-    anclas = {u for u in (_url_de(s) for s in sources) if u}
-    # La URL de la norma es citable por derecho propio: es el «o la norma» del criterio
-    # «el articulo si se puede, la norma si no». Sin esto, degradar produciria una URL que
-    # el propio contrato rechazaria.
-    allowed = anclas | {_sin_fragmento(u) for u in anclas}
-
-    # HIB.0: el orden de estos dos pasos es el contrato.
-    #
-    # 1. DEGRADAR primero: una cita al documento correcto con un ancla que no es la
-    #    recuperada baja al documento y **sobrevive**. Si se despojara antes, esa cita —que
-    #    es fundamento legitimo— se convertiria en texto plano y la respuesta se quedaria
-    #    sin apoyo por un ancla mal compuesta.
-    # 2. DESPOJAR despues: lo que sigue apuntando fuera del conjunto recuperado pierde el
-    #    enlace, no la mencion.
-    #
-    # Y la comprobacion va LA ULTIMA, sobre el texto ya despojado: al reves, una remision
-    # enlazada contaria como cita valida y el contrato dejaria de proteger justo de lo que
-    # existe para proteger.
-    texto = degradar_anclas(response_text, anclas)
-    texto = enlazar_citas_en_prosa(texto, sources)
-    texto = despojar_remisiones(texto, allowed)
-    if has_valid_citations(texto, allowed):
-        return texto
-
-    # UX.4: el mensaje es del chatbot. Esta rama lo ignoraba y devolvia el texto fijo, en
-    # castellano, a preguntas hechas en valenciano.
-    return no_answer_message or NO_CITATION_FALLBACK
+    return aplicar_contrato(response_text, sources, mode, no_answer_message).texto
