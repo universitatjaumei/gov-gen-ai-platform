@@ -5,8 +5,9 @@
 Gov Gen AI Platform es el resultado de integrar **AI Agents Hub** (chatbots RAG, LangGraph) y **AutomatIA**
 (automatización, scripts, RPA) en un monorepo. El plan de desarrollo completo está en `planificacion/PLAN_DESARROLLO.md`.
 
-El cliente NiceGUI (`client_app/`) está siendo migrado progresivamente al servidor FastAPI y al frontend React.
-**El código NiceGUI es legacy y debe eliminarse** a medida que cada módulo quede cubierto en el nuevo sistema.
+**El cliente NiceGUI se retiró completo el 2026-09-04** (bloque NIC): `client_app/` y `_legacy_nicegui/` ya no existen, y con ellos se fueron 574 ficheros. No se estaba conservando un agente que funcionaba —el motor por el que ejecutaban sus vigilantes importaba dos módulos que ya no existían— y nada en producción dependía de él.
+
+**El agente de ejecución local es trabajo pendiente sin código en el repositorio.** Cuando haya que desarrollarlo, el mapa es `docs/INVENTARIO_RETIRADA_LEGACY.md`, que dice fichero a fichero qué tenía equivalente y dónde; el código está en el **historial de git** de este repositorio, en la carpeta `AutomatIA` y en el *bundle* de GenGov.
 
 ---
 
@@ -110,25 +111,23 @@ por todo, y la supervisión se degrada a aprobación automática.
 Una tarea de migración **no está completa** hasta que el código original quede retirado.
 No dejes código muerto, imports sin usar, archivos vacíos ni comentarios `# TODO: migrate`.
 
-La retirada sigue un proceso de **dos pasos** según el tipo de código:
+**Se retira borrando.** El historial de git es la fuente de verdad del pasado: los ficheros
+siguen ahí con su contexto y sus mensajes de commit, y esa referencia viaja con el repositorio y no
+se puede perder.
 
-### Caso A — Código NiceGUI con migración activa en curso
+**Hubo una cuarentena, `_legacy_nicegui/`, y se retiró el 2026-09-04 junto con `client_app/`.**
+Servía para tener el NiceGUI a mano mientras el código nuevo se estabilizaba contra escenarios
+reales, y durante meses valió la pena. Lo que la volvió inútil fue medirla: cuando llegó el momento
+de mover el resto, **48 de los 67 ficheros candidatos tenían quien los importara** y el bloqueo era
+transitivo, así que la cuarentena no se vaciaba fichero a fichero; y el propio `client_app/` ya no
+compilaba —28 imports activos hacia diez ficheros que bloques anteriores habían movido allí sin
+reapuntar a sus importadores—. Una cuarentena que nadie puede vaciar y que contiene código que no
+arranca no es referencia, es ruido con aspecto de código vivo. Está en
+`docs/INVENTARIO_RETIRADA_LEGACY.md` §4 y §5, con la medición.
 
-El código NiceGUI se mueve a `_legacy_nicegui/` cuando se completa su migración, manteniendo la ruta relativa. Sirve como referencia durante el resto de la Fase 1, mientras el código nuevo se va estabilizando contra escenarios reales.
-
-1. **Al cerrar el prompt de implementación** (GREEN): mover el fichero a `_legacy_nicegui/` manteniendo la ruta relativa.
-2. **No borres `_legacy_nicegui/` automáticamente al cerrar una subfase**. El borrado definitivo lo hace **el usuario manualmente** al cierre de la **Fase 1 completa**, una vez verificado que todo lo migrado funciona en producción.
-
-`_legacy_nicegui/` acumula ficheros a lo largo de Fase 1. No la consideres "zona temporal corta": es cuarentena de larga duración hasta el cierre de Fase 1.
-
-Lo que sí debes hacer al mover algo a `_legacy_nicegui/`:
-- Asegurarte de que ningún import activo apunta ya al fichero migrado (`grep -r` antes de cerrar el prompt).
-- No volver a importar desde `_legacy_nicegui/` en código nuevo. Ese directorio es **solo lectura** para los agentes; queda como referencia documental.
-- No reintroducir código desde ahí. Si el código migrado tiene un bug, se arregla en la nueva ubicación; el fichero en `_legacy_nicegui/` no se toca.
-
-### Caso B — Código huérfano sin migración activa
-
-Código que ya no se usa y no tiene una migración en curso asociada: **borrar directamente**, sin pasar por `_legacy_nicegui/`. El historial de git es la fuente de verdad del pasado.
+**No la reconstruyas.** Si necesitas ver cómo lo hacía el NiceGUI: `git log --diff-filter=D --
+client_app/`, la carpeta `AutomatIA` o el *bundle* de GenGov. Lo que **no** se hace es volver a
+crear un directorio de código muerto dentro del árbol.
 
 ### Definición de "migración completa" (checklist obligatorio)
 
@@ -136,7 +135,7 @@ Antes de cerrar cualquier tarea de migración, verifica y ejecuta cada punto:
 
 - [ ] La nueva implementación tiene tests que pasan (`pytest` o equivalente)
 - [ ] El endpoint o servicio nuevo está integrado y verificado end-to-end
-- [ ] El archivo o módulo legacy está en `_legacy_nicegui/` (Caso A) o **eliminado** (Caso B)
+- [ ] El archivo o módulo legacy está **eliminado** del árbol de trabajo
 - [ ] Los imports del legacy han sido eliminados de todos los ficheros que los referenciaban
 - [ ] No quedan referencias al código eliminado en ningún fichero del proyecto (`grep -r` antes de cerrar)
 - [ ] El `docker compose up` + suite de tests completa sigue pasando tras la retirada
@@ -167,19 +166,36 @@ Si no se usa ahora, no existe.
 ## Estructura de módulos y dónde vive cada cosa
 
 ```
-server/app/modules/automation/   ← lógica de flows, ETL, PDF, scripts (migrado desde client_app)
-server/app/modules/agents_hub/   ← RAG, LangGraph, chatbots, ingesta del corpus
-server/app/core/                 ← servicios compartidos: LLM gateway, auth, tenancy, MCP
-frontend/src/automation/         ← UI de flujos y scripts (reemplaza vistas NiceGUI)
-frontend/src/widget/             ← chatbot público embebible
-frontend/src/agent/              ← modo agente expandido
-frontend/src/admin/              ← panel admin hub + plataforma
-client_app/                      ← SOLO agente de ejecución local (RPA, folder watcher)
-                                    Todo lo demás aquí es legacy pendiente de migrar
+server/app/modules/agents_hub/   ← RAG, LangGraph, chatbots, ingesta del corpus (105)
+server/app/modules/redaccion/    ← informes, plantillas, scripts, ETL, anonimización (96)
+server/app/modules/curation/     ← curación de portales (29)
+server/app/modules/automation/   ← cortex, estrategias de extracción, llm_gateway (5)
+server/app/core/                 ← servicios compartidos: LLM gateway, auth, tenancy, storage
+server/app/routers/              ← la superficie HTTP, etiquetada `Deploy: cloud|edge|shared`
+frontend/src/admin/              ← panel admin hub + plataforma (64)
+frontend/src/shared/             ← i18n, cliente generado por Orval, componentes comunes (61)
+frontend/src/redaccion/          ← UI de informes, scripts y anonimización (53)
+frontend/src/curation/           ← UI de curación de portales (22)
+frontend/src/widget/             ← chatbot público embebible (6)
+mcp_server/                      ← servidor MCP, stdio y remoto. NO importa `server/app`
 ```
 
-Si estás escribiendo código nuevo en `client_app/` fuera del agente de ejecución local,
-para y consulta si pertenece al servidor o al frontend.
+Las cifras son ficheros versionados y están para dar escala, no para cuadrar: lo que importa es que
+`redaccion/` es casi tan grande como `agents_hub/` y `automation/` no es un módulo, son cinco
+ficheros.
+
+**Tres advertencias, y las tres son rutas que se escriben de memoria y no existen.**
+`server/app/modules/automation/` tiene **cinco** ficheros: lo que la planificación llamaba
+«automatización» aterrizó en `redaccion/`. **No hay** un `automation/` ni un `agent/` bajo
+`frontend/src/`. Y **el bloque REG no dejó un paquete Python**: su «módulo registro» es una fila de
+`hub_modules` —una unidad de licencia, lo que comprueba `require_module` con la clave `registro`—,
+y su código son `routers/actividad_router.py` y `core/actividad_categorias.py`. Los tres son rutas
+que se escriben de memoria; un guardarraíl comprueba que las que cita este fichero existan, y
+saltó con las tres.
+
+**No hay nodo de ejecución local.** El agente RPA, los vigilantes de carpeta, correo y web, y el
+programador de flujos locales **no tienen código en este repositorio** desde el 2026-09-04. Si un
+plan los da por hechos, el plan está desactualizado; ver `docs/INVENTARIO_RETIRADA_LEGACY.md`.
 
 ---
 

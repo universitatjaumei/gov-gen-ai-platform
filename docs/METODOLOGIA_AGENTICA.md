@@ -63,7 +63,7 @@ Para cada prompt del bloque, en este orden:
    - Suite completa del ámbito tocado en verde (`pytest`, `vitest`, `tsc -b`).
    - Migración Alembic **aplicada** (`uv run alembic upgrade <rev>` + `alembic current`).
    - Contrato regenerado si cambió la API (`export_openapi` + `npm run generate:api`).
-   - Retirada del legacy según el checklist de `AGENTS.md` (`_legacy_nicegui/` o borrado)
+- Retirada del legacy según el checklist de `AGENTS.md`: se borra del árbol, y el historial de git es la referencia.
      y `grep -r` de referencias a cero.
    - Verificación en navegador si el prompt toca UI (§4).
 6. **Actualizar `planificacion/PROJECT_STATE.md`**: marcar el paso ✅, mover el cursor, añadir fila al

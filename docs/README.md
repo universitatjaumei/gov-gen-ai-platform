@@ -12,10 +12,10 @@ todas envejecen igual:
 
 > **El índice anterior era el de AutomatIA**, la aplicación NiceGUI de la que nace este proyecto,
 > y con él diecisiete documentos que describían aquel producto: el *Client Node*, el *Brain*, su
-> `brain_server.db`. El 2026-08-22 pasaron a `_legacy_nicegui/docs/`, que es la cuarentena de la
-> migración —sólo lectura, y los borra una persona al cerrar la Fase 1—. No se borraron todavía
-> porque el Bloque NIC tiene que inventariar qué de `client_app/` está cubierto, y esos documentos
-> son la descripción de lo que había.
+> `brain_server.db`. El 2026-08-22 pasaron a la cuarentena `_legacy_nicegui/docs/` a esperar
+> justo lo que hizo el Bloque NIC: inventariar qué de `client_app/` estaba cubierto. Hecho el
+> inventario —`INVENTARIO_RETIRADA_LEGACY.md`, que es el que sobrevive y es el mapa—, **el
+> 2026-09-04 se retiraron con la cuarentena entera**. Se leen en el historial de git.
 
 ---
 

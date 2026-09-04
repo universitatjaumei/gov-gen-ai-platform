@@ -36,9 +36,11 @@
   destino y mandaba una cadena vacía (422 siempre). Detalle completo en el
   historial de `planificacion/PROJECT_STATE.md` (2026-08-14).
 - **Camino 4 cerrado, no pendiente**: el paso (d) no se puede recorrer porque el
-  canal `client_app` ↔ cloud por WebSocket no existe todavía — no es un bug, es
-  el **Prompt 9.16** (Bloque 9D / Subfase 2.A, Fase 2), diseñado pero aparcado a
-  propósito (decisión del usuario 2026-08-14: no adelantarlo). No afecta al
+  canal agente local ↔ cloud por WebSocket no existe — no es un bug, es el
+  **Prompt 9.16** (Bloque 9D / Subfase 2.A, Fase 2), diseñado pero aparcado a
+  propósito (decisión del usuario 2026-08-14: no adelantarlo). Desde el
+  2026-09-04 está **doblemente cerrado**: NIC.3 retiró `client_app/`, así que
+  tampoco queda el extremo que hablaría por ese canal. No afecta al
   ciclo propuesta→sandbox→aprobación, que es autocontenido en el servidor.
   Detalle completo en `planificacion/HISTORIAL.md` (2026-08-14).
 - **Aviso de entorno**: si `curl`/el navegador dan respuestas inconsistentes contra

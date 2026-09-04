@@ -1,4 +1,4 @@
-| **Bloque NIC** — Retirada del legacy NiceGUI, con inventario antes de borrar | — | NIC.1 (**después de Deploy**) |# Estado del Proyecto — Gov Gen AI Platform
+| **Bloque NIC** — Retirada del legacy NiceGUI, con inventario antes de borrar | ▶ NIC.1 ✅ NIC.2 ✅ NIC.3 ✅ (los dos directorios retirados) | NIC.4 |# Estado del Proyecto — Gov Gen AI Platform
 
 > Actualizado automáticamente al final de cada prompt de desarrollo.
 > Fuente de verdad para saber en qué paso está cada plan activo.
@@ -117,7 +117,7 @@ sólo entonces retirar los seis `SuperAdminAccount`. Desde USR.9, a quien admini
 organización hay que concederle además el módulo **`personas`**; a quien ya tenía `plataforma` se
 lo dio la migración.
 
-**Cursor: Bloque NIC, prompt NIC.2.** Después VAS → NIC → REPO → PLG → DIN → FUN, con PRC en
+**Cursor: Bloque NIC, prompt NIC.4.** Después VAS → NIC → REPO → PLG → DIN → FUN, con PRC en
 paralelo y a tandas. **LANG ✅ quedó completo el 2026-09-03** y está en `desarrollo`, **sin
 desplegar**: el paso a `main` es decisión del usuario, y no cambia comportamiento porque el modo
 `prefer` es el que producción necesita. Lo anterior:
@@ -610,14 +610,29 @@ que nadie lo haya decidido.
 
 **Coste asumido**: 12 prompts entre el cursor y D.0, y el piloto se retrasa lo que tarden. Es decisión del usuario.
 
-**Deploy va ANTES de NIC**, y no por preferencia: `CLAUDE.md` §128 dice que `_legacy_nicegui/` se
-borra «una vez verificado que todo lo migrado funciona en producción», y NIC.5 **es** ese borrado. Se
-añaden tres razones: NIC.1 decide qué cuenta como «cubierto» y producción es el único sitio donde esa
-respuesta se comprueba; NIC **no le ahorra nada al despliegue** (comprobado: el `Dockerfile` sólo
-copia `shared/`, `server/app/`, `server/migrations/` y el `.venv` — `client_app/` nunca entra en la
-imagen); y NIC.4 toca el `pyproject.toml` de la raíz, que es lo último que conviene mover justo antes
-de desplegar por primera vez. Ese argumento sigue intacto: lo que cambió el 2026-08-22 es lo que va **antes** de
-Deploy, no lo que va después. Secuencia vigente:
+**Deploy iba ANTES de NIC**, y la razón principal caducó el 2026-09-04. Era que `AGENTS.md` manda
+borrar la cuarentena «una vez verificado que todo lo migrado funciona en producción», y NIC.5 **era**
+ese borrado; a eso se añadía que NIC.1 decide qué cuenta como «cubierto» y producción es el único
+sitio donde esa respuesta se comprueba.
+
+**NIC.3 hizo el borrado antes de esa verificación, por decisión explícita del usuario**, y conviene
+que quede escrito qué se aceptó al hacerlo. La regla protegía algo real: la cuarentena era la
+referencia mientras el código nuevo se estabilizaba contra escenarios reales, y el despliegue no ha
+recorrido en producción todo lo migrado. Lo que la volvió inaplicable es lo que midió NIC.2: la
+cuarentena contenía código que **no compila** —`client_app/` tenía 28 imports activos hacia diez
+ficheros movidos allí sin reapuntar a sus importadores— y no se podía vaciar fichero a fichero,
+porque 48 de los 67 candidatos tenían quien los importara y el bloqueo era transitivo. Una
+referencia que no arranca no protege de nada.
+
+**Y la referencia no se perdió, cambió de sitio**: el historial de git de este repositorio, la
+carpeta `AutomatIA` y el *bundle* de GenGov, con `INVENTARIO_RETIRADA_LEGACY.md` como mapa. El
+historial es mejor que la cuarentena en lo que importaba —viaja con el repositorio y no se puede
+perder— y peor en una cosa: hay que saber que está ahí. Por eso el inventario sobrevive y lo dice.
+
+De las razones originales sobreviven dos, y siguen siendo ciertas: NIC **no le ahorra nada al
+despliegue** (comprobado: el `Dockerfile` sólo copia `shared/`, `server/app/`, `server/migrations/`
+y el `.venv` — `client_app/` nunca entró en la imagen), y **NIC.4 toca el `pyproject.toml` de la
+raíz**, que es lo último que conviene mover justo antes de desplegar por primera vez. Secuencia vigente:
 **PLAT.1 → PLAT.2 → IDE.1…IDE.5 → PLAT.3…PLAT.7 → Deploy (D.0–D.6) → pruebas humanas y RAG.6b → REV → NIC → REPO.**
 
 **Ya alineado antes de D.0**: el `Dockerfile` construía en Python 3.11 y la suite corre en 3.13.
@@ -628,13 +643,15 @@ a re-resolver cinco locks y no debe viajar con el despliegue.
 
 ### El orden, y por qué
 
-**PLAT.1 → PLAT.2 → IDE → PLAT.3…PLAT.7 → Deploy → pruebas humanas y RAG.6b → REV → NIC → NIC.5 (el usuario borra `_legacy_nicegui/`) → REPO.**
+**PLAT.1 → PLAT.2 → IDE → PLAT.3…PLAT.7 → Deploy → pruebas humanas y RAG.6b → REV → NIC → REPO.** (NIC.5 era «el usuario borra `_legacy_nicegui/`»; NIC.3 lo hizo el 2026-09-04.)
 
 Dos decisiones distintas lo fijan. La primera es del usuario (2026-08-21): **REPO no se ejecuta hasta
 que la migración esté hecha**, porque no tiene sentido montar el repositorio definitivo y acto seguido
-meterle la retirada de 500 ficheros de legacy. La segunda sale de `CLAUDE.md` §128: `_legacy_nicegui/`
-se borra «una vez verificado que todo lo migrado funciona en producción», así que **NIC.5 no puede
-preceder al despliegue** — y NIC.5 es lo que cierra la Fase 1.
+meterle la retirada de 500 ficheros de legacy. La segunda salía de `AGENTS.md`: `_legacy_nicegui/`
+se borraba «una vez verificado que todo lo migrado funciona en producción», así que NIC.5 no podía
+preceder al despliegue. **Esa segunda decisión ya no aplica**: NIC.3 retiró la cuarentena el
+2026-09-04 por decisión del usuario, con el razonamiento y lo que se aceptó al hacerlo escritos más
+arriba. La primera —REPO después de la migración— sigue en pie y es la que fija el orden.
 
 **REPO no depende técnicamente de NIC.** Si abrir el repositorio pasara a tener fecha, se desengancha:
 la dependencia dura es sólo la de los objetos huérfanos, que va de borrar el repositorio viejo y no

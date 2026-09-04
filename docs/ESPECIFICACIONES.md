@@ -636,6 +636,29 @@ faltan:
 - **No hay shims de compatibilidad.** Si una ruta o un símbolo se retira, se retira: el historial
   de git es la fuente de verdad del pasado.
 
+### 10.1 Y una cosa que no está aquí por decisión, sino porque no está hecha
+
+**No ejecuta nada en la máquina de quien la usa.** No hay agente de ejecución local: ni RPA, ni
+vigilancia de carpetas, de correo o de web, ni programador de flujos locales.
+
+Va en su propio apartado a propósito, porque **no es un límite deliberado como los seis de
+arriba**: aquellos están escritos para que nadie los implemente creyendo que faltan, y este sí
+falta. La diferencia importa para quien planifique — proponer un agente local no es contradecir la
+especificación; proponer un conversor de documentos en el servidor, sí.
+
+Existió como aplicación NiceGUI y **se retiró completa el 2026-09-04** (bloque NIC), 574 ficheros,
+porque llevaba tiempo sin compilar —el motor por el que ejecutaban sus dos vigilantes importaba
+módulos que ya no estaban— y nada en producción dependía de ella. Lo que había, fichero a fichero y
+con qué tiene equivalente hoy, está en
+[`INVENTARIO_RETIRADA_LEGACY.md`](INVENTARIO_RETIRADA_LEGACY.md); el código, en el historial de git
+de este repositorio, en la carpeta `AutomatIA` y en el *bundle* de GenGov.
+
+**Consecuencia para la frontera edge-cloud**, que conviene no malinterpretar: el «modo edge» de
+`AGENTS.md` es el servidor desplegado **en la nube del cliente**, no un proceso en su puesto de
+trabajo. Los dos modos de despliegue que existen hoy corren el mismo servidor FastAPI, y la
+garantía de que los datos no salen de la institución la da dónde está la máquina, no que haya un
+programa en el escritorio.
+
 ---
 
 ## 11. Cómo mantener este documento honesto

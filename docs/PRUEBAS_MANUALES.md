@@ -182,12 +182,15 @@ arreglado con TDD; detalle en `planificacion/PROJECT_STATE.md`, entradas PRO.1�
 | Conexión real desde un cliente MCP (Claude Desktop, Cursor…) por stdio | No tiene superficie HTTP ni de navegador; es un proceso stdio que un cliente MCP lanza | Alguien con un cliente MCP instalado y `docs/MCP_SERVER.md` a mano |
 | Autoría de una plantilla de redacción de principio a fin usando las tools MCP desde un cliente real | Igual que el punto anterior — el agente puede (y ha) probado las 54 tests automáticas, no la experiencia de uso real | Igual que el punto anterior |
 
-### `client_app` (agente de ejecución local)
+### El agente de ejecución local ya no se prueba: no existe
 
-| Qué se prueba | Por qué NO lo hace el agente en navegador | Quién |
-|---|---|---|
-| El agente local ejecutándose de verdad en la máquina de un usuario final, con su propio watcher de carpeta | Es un proceso de escritorio separado, fuera del navegador; requiere arrancarlo e interactuar con el sistema de ficheros real | Alguien con `client_app` instalado en su máquina |
-| Comunicación WebSocket edge↔cloud con el grafo orquestando y el edge ejecutando (invariante de arquitectura) | Requiere dos procesos reales (cloud + edge) hablando entre sí; no es una pantalla | Alguien con ambos entornos desplegados |
+Aquí había dos filas —el agente local con su vigilante de carpeta en la máquina de un usuario
+final, y el canal WebSocket edge↔cloud con el grafo orquestando y el edge ejecutando—. **Las dos
+se retiraron el 2026-09-04 con `client_app/`**, y no porque se den por buenas: **no hay código que
+probar**. Pedirle a una persona que instale un agente inexistente es la peor clase de prueba
+pendiente, porque parece trabajo y no se puede ni empezar.
+
+Cuando el agente local se desarrolle, estas dos filas vuelven. Ver `docs/ESPECIFICACIONES.md` §10.
 
 ### Despliegue `DEPLOY_MODE=cloud|edge`
 

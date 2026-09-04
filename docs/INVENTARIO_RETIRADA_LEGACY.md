@@ -350,3 +350,89 @@ cliente y que el servidor tenga un sandbox no le sirve.
 **Se descartó**, y la razón es el hallazgo 3: la etiqueta habría servido para justificar conservar
 código que no compila. Con la retirada completa, lo que queda escrito es que **el agente local es
 trabajo pendiente sin código en el repositorio**, que es la verdad.
+
+---
+
+## 6. Lo que la retirada arrastró, y lo que dejó para NIC.4
+
+`git rm -r client_app _legacy_nicegui` llevó el repositorio de **2105 a 1531 ficheros
+versionados**: 574 menos. Pero un directorio no se va solo — se va con lo que apuntaba a él, y eso
+hubo que medirlo.
+
+### 6.1 Ocho ficheros más, porque el paso de colección de CI se puso rojo
+
+CI tiene un paso, `Collect root tests`, que hace `pytest tests --collect-only` sobre el árbol de la
+raíz **sin ejecutarlo**. Existe porque ese árbol acumuló durante meses doce rojos y dos errores de
+colección sin que ningún check se enterara, y colectar es barato y caza exactamente lo que la
+retirada provoca: un import a un módulo que ya no existe. Se puso rojo al primer intento:
+
+```
+ERROR tests/unit/test_report_analyzer_service.py
+E   ModuleNotFoundError: No module named 'client_app'
+```
+
+Retirados (Caso B — su sujeto ya no existe):
+
+| Fichero | Qué era |
+|---|---|
+| `tests/unit/test_local_models.py` | los modelos SQLModel de la BD local del cliente |
+| `tests/unit/test_multiasiento_licenses.py` | licencias multiasiento contra la huella de máquina |
+| `tests/unit/test_report_analyzer_service.py` | el analizador de informes del NiceGUI |
+| `tests/manual/debug_etl_service.py` | guion de depuración del ETL a mano |
+| `scripts/refactor_imports.py` | reescritura puntual de imports de `client_app` |
+| `scripts/validate_dev_env.py` | validaba el entorno del NiceGUI, incluido su `translations.json` |
+| `scripts/verify_integration.py` | comprobaba que `client_app`, `server` y `shared` se importaban |
+
+Y en `tests/conftest.py` se fueron las fixtures `test_client_db` y `db_session`, que construían la
+BD SQLite del cliente a partir de `client_app.app.database.db.client_engine`.
+
+### 6.2 Cuatro guardarraíles que afirmaban la cuarentena
+
+Este es el hallazgo con enseñanza. Cuatro ficheros de `server/tests/infra/` la daban por presente,
+y **no fallan igual**:
+
+| Guardarraíl | Qué le pasó |
+|---|---|
+| `test_nic1_el_inventario_esta_completo.py` | **retirado entero** |
+| `test_la_documentacion_de_automatia_esta_en_cuarentena.py` | 1 test invertido de 17 parámetros, 3 sobreviven; renombrado a `..._se_retiro.py` |
+| `test_el_lanzador_de_nicegui_esta_en_cuarentena.py` | 1 test invertido, 4 sobreviven; renombrado a `..._se_retiro.py` |
+| `test_nicegui_retirado.py` | 1 test invertido, 1 retirado por vacío, 4 sobreviven |
+
+**Los que se ponen rojos son los inofensivos.** «`_legacy_nicegui/main.py` existe» y «los
+diecisiete documentos siguen en la cuarentena» pasaron a falsos y lo dijeron, así que se
+invirtieron: ahora vigilan que la cuarentena **no vuelva**.
+
+**El peligroso es el que se pone verde.** El de NIC.1 cruzaba `git ls-files client_app/app/ui` y
+`app/services` contra la tabla de la §3: con el directorio retirado, `git ls-files` devuelve la
+lista vacía y sus cuatro tests de cruce —«toda ruta tiene fila», «toda fila tiene etiqueta»,
+«ninguna justificación vacía»— iteran sobre nada y **pasan sin comprobar nada**. Igual
+`test_should_have_no_legacy_ui_files_in_client_app`, cuya primera línea era un `return` sobre un
+directorio inexistente. Un guardarraíl verde se lee como «comprobado», así que se retiran los dos,
+y un test de NIC.3 impide que el de NIC.1 vuelva.
+
+De lo que hacía NIC.1 sobrevive lo que no depende de que los ficheros existan: que el inventario
+conserve su tabla, que los diecisiete documentos no **vuelvan** a `docs/`, y que ningún fichero
+activo los enlace. Ese era el daño real: quien abría uno de aquellos documentos técnicos se
+llevaba la arquitectura de otro producto, con la de este al lado.
+
+(Y una anécdota que vale como comprobación, porque pasó **dos veces seguidas**: la primera versión
+de este párrafo nombraba uno de los diecisiete y el guardarraíl superviviente se puso rojo; la
+segunda, al explicar por qué, nombró otro. Busca los nombres de fichero a secas y no rutas
+completas —un enlace relativo desde `docs/` se escribe sin prefijo de directorio—, así que **no
+distingue el enlace de la mención**. Se reformuló el párrafo las dos veces en vez de afinar el
+test: relajar un guardarraíl para que pase tu propia prosa es la forma más barata de quedarse sin
+guardarraíl.)
+
+### 6.3 Lo que NIC.3 no toca, y NIC.4 tiene que decidir
+
+**Cinco ficheros de `tests/unit/` pedían `db_session`** —licencias, partners, escalado de scripts,
+semillas— y esa fixture ya no existe. No se les inventó un sustituto: **ya estaban en rojo antes de
+esta retirada**, porque importan `server.app.services.ai_brain`, que tampoco existe. Son la punta
+del mundo SQLModel *Brain/partner/licencia* que vino de AutomatIA y que convive con los modelos
+vivos sin que nada los use.
+
+Es exactamente lo que NIC.4 mide: el entorno legacy de la raíz —`nicegui==3.4.1` en el
+`pyproject.toml`, las 35 filas de `tests/`, `translations.json` con su `i18n.py`, `arranque.bat`—.
+Aquí se retira lo que la retirada rompe **en colección**, que es lo que CI comprueba, y no más: un
+prompt que se lleva por delante el alcance del siguiente deja de ser reversible, que es lo único
+que hace tolerable un bloque largo.

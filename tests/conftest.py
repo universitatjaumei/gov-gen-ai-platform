@@ -61,31 +61,13 @@ async def test_server_db():
     await test_engine.dispose()
 
 
-@pytest.fixture(scope="function")
-async def test_client_db():
-    """BBDD local en memoria para tests"""
-    # Import under fixture to avoid early loading of models
-    from sqlmodel import SQLModel
-    from client_app.app.database.db import client_engine
-
-    async with client_engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.drop_all)
-        await conn.run_sync(SQLModel.metadata.create_all)
-    yield client_engine
-    async with client_engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.drop_all)
-
-
-@pytest.fixture(scope="function")
-async def db_session(test_client_db):
-    from sqlmodel.ext.asyncio.session import AsyncSession
-    from sqlalchemy.orm import sessionmaker
-
-    async_session = sessionmaker(
-        test_client_db, class_=AsyncSession, expire_on_commit=False
-    )
-    async with async_session() as session:
-        yield session
+# `test_client_db` y `db_session` construían la BD SQLite del cliente NiceGUI a partir de
+# `client_app.app.database.db.client_engine`. NIC.3 retiró `client_app/` completo, así que las dos
+# fixtures se fueron con él. Los cinco ficheros de `tests/unit/` que pedían `db_session`
+# —licencias, partners, escalado de scripts, semillas— ya estaban en rojo antes de esta retirada:
+# importan `server.app.services.ai_brain`, que tampoco existe. **Su destino lo decide NIC.4**, que
+# es el prompt que mide el entorno legacy de la raíz entero; aquí no se inventa un sustituto,
+# porque una fixture que finge una BD que no existe esconde que esos tests no prueban nada.
 
 
 @pytest.fixture(scope="function")

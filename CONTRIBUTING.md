@@ -133,13 +133,15 @@ política. Una política que nadie comprueba se incumple sin que nadie lo note.
 ```
 server/        FastAPI (AGPLv3) — modules/{automation,agents_hub,redaccion,expedientes}, core/, services/, api/, routers/, migrations/
 frontend/      React + Vite + TS (MIT) — src/{admin,widget,agent,redaccion,shared}
-client_app/    Agente de ejecución local (Thin Client, sin UI). El resto es legacy NiceGUI pendiente de retirada.
-mcp_server/    Servidor MCP stdio (paquete uv autocontenido, sin imports de server/app)
+mcp_server/    Servidor MCP, stdio y remoto (paquete uv autocontenido, sin imports de server/app)
 shared/        Tipos y contratos compartidos
-_legacy_nicegui/   Cuarentena de larga duración durante la migración (solo lectura; borrado final manual al cierre de Fase 1)
 ```
 
-Si escribes código nuevo en `client_app/` fuera del agente de ejecución local, para y consulta si pertenece al servidor o al frontend.
+**No hay cliente de escritorio ni agente de ejecución local.** La aplicación NiceGUI original
+(`client_app/`) y su cuarentena (`_legacy_nicegui/`) **se retiraron completas el 2026-09-04**, 574
+ficheros: llevaba tiempo sin compilar y nada en producción dependía de ella. El agente local es
+trabajo pendiente **sin código aquí**; el mapa de lo que hubo está en
+`docs/INVENTARIO_RETIRADA_LEGACY.md`.
 
 ---
 
@@ -170,7 +172,6 @@ Regulado en runtime por `DEPLOY_MODE=cloud|edge|all`. Ver el detalle completo en
 
 - **Dos `DeclarativeBase`**: `HubConfigBase` (config, se sincroniza cloud→edge) y `HubOperationalBase` (solo edge). **Sin `relationship()` cross-base**; navega por `*_id` con query explícito.
 - **Un módulo edge no importa de un módulo cloud.** La configuración se lee vía `ConfigProvider`, no importando modelos de config directamente.
-- **`client_app/` no puede importar de `server/`.** El Thin Client se comunica con el servidor por API/WebSocket.
 - **Etiqueta cada router nuevo** con `Deploy: cloud|edge|shared` en su docstring y regístralo en `_register_cloud`/`_register_edge`.
 
 ---
@@ -188,9 +189,10 @@ Regulado en runtime por `DEPLOY_MODE=cloud|edge|all`. Ver el detalle completo en
 ## 🧹 7. Retirada de legacy (borra, no comentes)
 
 - Una migración **no está completa** hasta retirar el código original. Sin código muerto, imports sin usar ni comentarios `# TODO: migrate`.
-- **Caso A** (NiceGUI con migración activa): al cerrar el prompt GREEN, mover el fichero a `_legacy_nicegui/` manteniendo la ruta relativa. `_legacy_nicegui/` es **solo lectura** y cuarentena de larga duración; el borrado definitivo lo hace el usuario al cierre de la Fase 1.
-- **Caso B** (código huérfano sin migración): borrar directamente. El historial de git es la fuente de verdad del pasado.
-- Nada nuevo entra en `_legacy_archive/`. Sin shims de retrocompatibilidad ni alias `_old_*`.
+- **Se retira borrando**, y el historial de git es la fuente de verdad del pasado. Hubo una
+  cuarentena, `_legacy_nicegui/`, retirada el 2026-09-04 con el resto del NiceGUI; no se
+  reconstruye. Tampoco entra nada nuevo en `_legacy_archive/`.
+- Sin shims de retrocompatibilidad ni alias `_old_*`.
 
 Ver el procedimiento completo en `AGENTS.md` → "Regla crítica: migración = código nuevo + retirada del legacy".
 

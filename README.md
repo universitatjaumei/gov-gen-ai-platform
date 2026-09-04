@@ -110,11 +110,10 @@ cd frontend; npm run generate:api
 server/app/modules/     agents_hub · automation · curation · redaccion
 server/app/core/        servicios compartidos: LLM gateway, auth, tenancy, storage
 frontend/src/           admin · curation · redaccion · widget
-client_app/             agente de ejecución local (RPA); el resto es legacy
+mcp_server/             servidor MCP, stdio y remoto
 docs/                   arquitectura, decisiones, manuales, casos guía
 planificacion/          plan de desarrollo, cursor del trabajo e historial
 pruebas_manuales/       guiones .bat de lo que sólo puede juzgar una persona
-_legacy_nicegui/        cuarentena de la migración; sólo lectura
 ```
 
 ## Documentación
@@ -137,8 +136,15 @@ _legacy_nicegui/        cuarentena de la migración; sólo lectura
 
 ## Estado
 
-En desarrollo activo. La migración desde la aplicación NiceGUI original sigue en curso: lo que
-vive en `_legacy_nicegui/` es referencia en cuarentena, no código en uso.
+En desarrollo activo, y **la migración desde la aplicación NiceGUI original terminó el
+2026-09-04**: `client_app/` y `_legacy_nicegui/` se retiraron completos, 574 ficheros, porque
+llevaban tiempo sin compilar y nada en producción dependía de ellos. Todo lo que queda en el árbol
+es código vivo.
+
+La contrapartida honesta es que **la plataforma no ejecuta nada en la máquina de quien la usa**: no
+hay agente RPA, ni vigilancia de carpetas, correo o web, ni programador de flujos locales. Es
+trabajo pendiente sin código aquí; el mapa de lo que hubo, fichero a fichero, está en
+[`docs/INVENTARIO_RETIRADA_LEGACY.md`](docs/INVENTARIO_RETIRADA_LEGACY.md).
 
 ## Gobernanza: un principal y tantos forks como organizaciones
 

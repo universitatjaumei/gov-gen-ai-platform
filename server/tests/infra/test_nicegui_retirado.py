@@ -4,10 +4,10 @@
 que **nadie importaba y nada servía**: `main.py` no los monta, así que eran inalcanzables por
 HTTP. Lo único que los mantenía vivos eran tres tests que los importaban para probarlos.
 
-Se movieron enteros a `_legacy_nicegui/` en vez de repartirlos entre borrado y cuarentena: 9
-de los 21 se importan entre sí (comparten `admin_layout`, `partner_layout` y el JSON de
-traducciones), así que separarlos habría dejado referencias rotas dentro de la propia
-cuarentena. Quien migre el portal de partner en Fase 2 los quiere completos o no los quiere.
+CAL.1 los movió enteros a la cuarentena `_legacy_nicegui/` en vez de repartirlos entre borrado y
+cuarentena, porque 9 de los 21 se importaban entre sí. **NIC.3 retiró la cuarentena completa el
+2026-09-04**: quien migre el portal de partner los saca del historial de git, completos, que es
+justo la propiedad por la que se movieron juntos.
 
 Este fichero es el guardarraíl de la retirada: sin él, el siguiente `from nicegui import ui`
 entra sin que nadie se entere y la Fase 1 vuelve a tener dos interfaces.
@@ -61,22 +61,20 @@ def test_should_have_no_references_to_server_app_ui() -> None:
 
 def test_should_not_have_the_ui_package_in_the_active_tree() -> None:
     assert not (SERVIDOR / "app" / "ui").exists(), (
-        "server/app/ui volvió al árbol activo; su sitio es _legacy_nicegui/ hasta que el "
-        "usuario borre la cuarentena al cerrar la Fase 1"
+        "server/app/ui volvió al árbol activo. La interfaz del servidor es el panel React"
     )
 
 
-def test_should_keep_the_quarantine_complete() -> None:
-    """La cuarentena sirve de referencia: incompleta no sirve de nada.
+def test_should_have_no_quarantine_in_the_tree() -> None:
+    """Aquí se comprobaba que la cuarentena estuviera **completa**: los dos `layout` y el JSON.
 
-    Se comprueba que están los dos `layout` y el JSON de traducciones, que son justo las
-    piezas compartidas que hacían inseparable el resto.
+    Tenía sentido mientras fuese la referencia —incompleta no servía de nada—. NIC.3 la retiró, y
+    la comprobación se invierte: lo que hay que vigilar es que no vuelva.
     """
-    cuarentena = RAIZ / "_legacy_nicegui" / "server" / "app" / "ui"
-    assert cuarentena.is_dir(), "no se movió el UI a la cuarentena"
-
-    for pieza in ("admin_layout.py", "partner_layout.py", "admin_translations.json"):
-        assert (cuarentena / pieza).is_file(), f"falta {pieza} en la cuarentena"
+    assert not (RAIZ / "_legacy_nicegui").exists(), (
+        "_legacy_nicegui/ volvió al árbol. El NiceGUI se lee en el historial de git; "
+        "un directorio de código que no compila no se distingue de código vivo"
+    )
 
 
 def test_should_have_no_generated_extractors_tracked() -> None:
@@ -97,13 +95,7 @@ def test_should_have_no_generated_extractors_tracked() -> None:
     )
 
 
-def test_should_have_no_legacy_ui_files_in_client_app() -> None:
-    ui = RAIZ / "client_app" / "app" / "ui"
-    if not ui.is_dir():
-        return
-    legacy = sorted(f.name for f in ui.glob("*_legacy*.py"))
-    legacy += sorted(f.name for f in ui.glob("_legacy_*.py"))
-    assert not legacy, (
-        f"client_app conserva UI legacy: {legacy}. Son versiones sustituidas y sin "
-        "importadores; el pasado lo guarda git."
-    )
+
+# `test_should_have_no_legacy_ui_files_in_client_app` vivía aquí: buscaba `*_legacy*.py` dentro de
+# `client_app/app/ui`. Con `client_app/` retirado (NIC.3) su primera línea era un `return` sobre un
+# directorio inexistente, es decir **verde sin comprobar nada**, que es peor que no tenerlo.
