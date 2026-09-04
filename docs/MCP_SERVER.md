@@ -106,9 +106,11 @@ integración de una sola persona no debe llevarlo.
 |---|---|
 | `actividad:write` | `registrar_actividad` |
 | `anonimizacion:use` | `detectar_pii`, `anonimizar_texto` |
+| `verificaciones:use` | `verificar_citas`, `consultar_vigencia`, `auditar_codigo`, `reglas_de_auditoria` |
 
-Los dos scopes los puede emitir tanto un superadministrador como un administrador de
-organización. `chatbots:write` es la excepción, y por un motivo concreto: muta un chatbot en
+Los tres scopes los puede emitir tanto un superadministrador como un administrador de
+organización. `verificaciones:use` es **uno para los tres servicios** y no uno por servicio: son la misma capacidad —comprobar con la vara de la plataforma algo que se produjo fuera— y
+partirlo obligaría a pedir tres permisos para un caso de uso. `chatbots:write` es la excepción, y por un motivo concreto: muta un chatbot en
 producción in-place. Registrar actividad añade metadatos y no muta nada.
 
 **`registrar_actividad` no pide confirmación**, a diferencia de `update_chatbot`. Es una tool que
@@ -123,6 +125,57 @@ qué formato lleva la marca de tiempo, que el hash es un SHA-256 y de dónde sac
 "object", "additionalProperties": true}` —ni un nombre de campo, y encima prometiendo que cualquier
 extra valía cuando el servidor los rechaza—. Un guardarraíl del lado del servidor comprueba que la
 firma y el contrato no divergen; no puede vivir aquí porque este paquete no importa `server.app`.
+
+### Las tools de verificaciones (VAS.4)
+
+Prestan tres comprobaciones que la plataforma ya se aplica a sí misma, para que quien desarrolle
+fuera herede la misma vara. Las tres son **deterministas**: la misma entrada da la misma salida.
+
+| Tool | Qué contesta |
+|---|---|
+| `verificar_citas` | Si un texto cumple «ninguna afirmación sin fuente resoluble», con el texto ya corregido y el desglose de qué se degradó y qué perdió el enlace |
+| `consultar_vigencia` | Si la plataforma pondría un aviso de vigencia sobre un documento del corpus, y **el texto del aviso** |
+| `auditar_codigo` | El nivel de riesgo de un script, cada hallazgo con su línea, y si puede pasar a revisión humana |
+| `reglas_de_auditoria` | La caja de herramientas: con qué se puede escribir código que pase |
+
+Tres cosas que conviene saber antes de usarlas:
+
+**No hay segunda implementación.** Cada una envuelve la función que usa el motor, con un test que
+compara los dos veredictos. Así que lo que responden aquí es lo que el asistente haría con lo
+mismo — que es el sentido de prestarlas.
+
+**El texto no se guarda.** Ni la respuesta que se verifica ni el código que se audita tocan
+registros ni base de datos. De la auditoría se conserva sólo el SHA-256.
+
+**Sólo `auditar_codigo` deja evento** en el registro de actividad, con el hash y el nivel de
+riesgo: auditar es un acto de gobernanza y tiene que constar. Verificar citas y consultar vigencia
+son comprobaciones sin estado, y un evento por comprobación duplicaría el registro sin decir nada
+nuevo.
+
+### Ejemplo de sesión: auditar un script antes de compartirlo
+
+Es el caso de la Instrucció 02/2026: un script de nivel 2 que **no** va a correr en la plataforma
+—una automatización local de un servicio— pasa igualmente por la misma vara.
+
+```
+> Antes de subir este script al repositorio del servicio, pásalo por la auditoría de la
+  plataforma y dime si algo no pasaría.
+
+[reglas_de_auditoria]  → 16 módulos permitidos, 6 reglas, version_auditor 3f9c…
+[auditar_codigo]       → CRITICAL
+                         · forbidden-call, línea 12: llamada peligrosa 'eval()'
+                         · module-not-whitelisted, línea 1: 'csv' no está en la lista blanca
+                         code_sha256 9130c489…
+
+El script no pasaría: el `eval()` de la línea 12 es crítico y no se acepta con una revisión
+humana. El `import csv` de la línea 1 sí: es un hueco en la lista blanca y quien revise puede
+aceptarlo mirándolo.
+
+Queda constancia en el registro de actividad de tu organización, con el hash y el nivel.
+```
+
+Lo que **no** hace: ejecutar el script. La auditoría es estática; ejecutar es el sandbox, y eso
+vive dentro de la plataforma.
 
 ## 4. Registro en Claude Code
 

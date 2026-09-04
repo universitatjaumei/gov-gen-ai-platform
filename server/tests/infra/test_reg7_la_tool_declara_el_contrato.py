@@ -126,3 +126,62 @@ class TestLaToolDeclaraLosCamposDelContrato:
             f"{sin_descripcion}. La descripción viaja en el esquema y es donde caben las reglas "
             "que el tipo no expresa."
         )
+
+
+# ─────────────────────────── VAS.4: las mismas cuentas para las verificaciones ──
+
+
+VERIFICACIONES = RAIZ / "mcp_server" / "tools" / "verificaciones.py"
+
+
+def _args_de(fichero: Path, nombre: str) -> ast.arguments:
+    arbol = ast.parse(fichero.read_text(encoding="utf-8"))
+    funciones = [
+        nodo
+        for nodo in ast.walk(arbol)
+        if isinstance(nodo, (ast.AsyncFunctionDef, ast.FunctionDef)) and nodo.name == nombre
+    ]
+    assert funciones, f"no se encuentra la tool `{nombre}`"
+    return funciones[-1].args
+
+
+class TestLasToolsDeVerificacionesDeclaranSusCampos:
+    """VAS.4 aplica de entrada la lección de REG.7, y esto lo mantiene.
+
+    El contrato del lado servidor son modelos Pydantic (`PeticionDeCitas`,
+    `PeticionDeAuditoria`), así que la comparación es la misma que la del evento: nombres y
+    obligatoriedad, no tipos.
+    """
+
+    def test_should_match_the_citation_request_contract(self):
+        from server.app.routers.verificaciones_router import PeticionDeCitas
+
+        de_la_tool = set(_nombres(_args_de(VERIFICACIONES, "verificar_citas")))
+        del_contrato = set(PeticionDeCitas.model_fields)
+
+        # `modo` no se expone en la tool a propósito: hoy el contrato de citas se comporta igual
+        # en los tres modos, y un parámetro que no cambia nada sólo invita a rellenarlo mal.
+        assert de_la_tool <= del_contrato, (
+            f"la tool manda campos que el contrato no declara: {sorted(de_la_tool - del_contrato)}"
+        )
+        assert {"texto", "fuentes_permitidas"} <= de_la_tool
+
+    def test_should_match_the_audit_request_contract(self):
+        from server.app.routers.verificaciones_router import PeticionDeAuditoria
+
+        de_la_tool = set(_nombres(_args_de(VERIFICACIONES, "auditar_codigo")))
+
+        assert de_la_tool == set(PeticionDeAuditoria.model_fields)
+
+    def test_should_not_take_an_opaque_object(self):
+        """La regresión de REG.7, vigilada también aquí."""
+        for tool in ("verificar_citas", "consultar_vigencia", "auditar_codigo"):
+            nombres = _nombres(_args_de(VERIFICACIONES, tool))
+            assert "cuerpo" not in nombres and "peticion" not in nombres, tool
+
+    def test_should_describe_each_field(self):
+        fuente = VERIFICACIONES.read_text(encoding="utf-8")
+        for tool in ("verificar_citas", "consultar_vigencia", "auditar_codigo"):
+            for nombre in _nombres(_args_de(VERIFICACIONES, tool)):
+                assert f"{nombre}: Annotated" in fuente, f"{tool}.{nombre}"
+

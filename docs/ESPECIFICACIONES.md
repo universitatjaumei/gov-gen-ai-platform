@@ -439,6 +439,62 @@ en la pila de la VM **sin desplegar**: pasa a producción cuando el bloque llegu
 
 ---
 
+### 5.10 Verificaciones como servicio
+
+**Qué hace.** Presta a quien desarrolla fuera tres comprobaciones que la plataforma ya se aplica a
+sí misma: el contrato de citas, el estado de vigencia de un documento del corpus y la auditoría
+estática de código. Es lo que hace literal la frase «definidos los parámetros de gobernanza, la
+UADTI desarrolla fuera con registro por API dentro».
+
+Las tres son **deterministas** —la misma entrada da la misma salida—, así que exponerlas no crea
+una segunda fuente de verdad.
+
+**Garantiza.**
+- **No hay segunda implementación.** Cada servicio envuelve la función que usa el motor
+  (`aplicar_contrato`, `marca_de_vigencia`/`aviso_para`, `ScriptSecurityAuditor.audit`), y un test
+  de paridad por servicio compara el veredicto de la API con el de la función. Si el servicio
+  necesita algo que la función no da, se cambia la función y el motor lo hereda.
+- **El texto no se guarda.** Ni la respuesta que se verifica ni el código que se audita tocan
+  registros ni base de datos; de la auditoría se conserva sólo el SHA-256. Los dos endpoints que
+  reciben material ajeno **no piden sesión de base de datos**, que es más fuerte que recordar no
+  escribir.
+- **Sólo la auditoría registra evento.** Auditar es un acto de gobernanza y tiene que constar
+  —quién auditó qué hash, con qué nivel y cuándo—; verificar citas o consultar vigencia son
+  comprobaciones sin estado, y un evento por comprobación duplicaría el registro sin decir nada
+  nuevo. Está en un test para que no se «arregle» en ninguno de los dos sentidos.
+- **La vigencia respeta la tenencia y el filtro cerrado**, y lo que no cumple da **404 y no «no
+  validado»**: el propio título de la respuesta confirmaría que el documento existe.
+- **Las reglas del auditor se publican desde el código**, leyendo sus `frozenset`. Es lo que
+  permite pedirle a la UADTI que las contraste con las Guías Operativas Técnicas sin que el
+  documento y el sistema puedan divergir.
+- **Un scope para los tres**, `verificaciones:use`: son la misma capacidad, y partirlo obligaría a
+  pedir tres permisos para un caso de uso.
+
+**Superficie.** `verificaciones_router` (`Deploy: edge`) · `agent/citation_validator.py`
+(`aplicar_contrato`), `services/retrieval/vigencia.py`, `redaccion/services/script_auditor.py`
+(`REGLAS`, `caja_de_herramientas`) · `core/urls.py` · `mcp_server/tools/verificaciones.py` ·
+[`GOVERNANCA_PER_API.md`](GOVERNANCA_PER_API.md) §4.4-4.6.
+
+**Invariantes.** I1, I2, I5, I8, I13.
+
+**Madurez**: `implementado` — probado y verificado en vivo con un PAT real y una sesión MCP real;
+**sin desplegar**.
+
+**Abierto.**
+- **Nadie ha desarrollado nada fuera todavía.** Lo que falta no es código: es que la UADTI diga si
+  quiere la auditoría como servicio, que es la pregunta que `GOVERNANCA_PER_API.md` §5 le hace.
+- **Quedan tres candidatos** sin planificar (§4.1, §4.2 y §4.3 de ese documento): los parámetros
+  de gobernanza de un caso de uso, el depósito de manifiestos y los asistentes externos
+  registrados con escenarios. Esperan a la primera aplicación externa real.
+- **La cuota no se consume.** El plan decía «cuenta como interacción del PAT en la cuota de
+  organización/mes», y el contador de SEC.4 está en **tokens**: una verificación no consume
+  ninguno, y sumarle tokens falsos haría que el presupuesto que un administrador fijó en tokens se
+  lo comieran operaciones que no llaman a ningún modelo. Se respeta el límite y no se inventa
+  consumo. **Consecuencia asumida y anotada**: acotar el volumen bruto necesitaría un límite de
+  frecuencia, que la plataforma no tiene.
+
+---
+
 ## 6. Fase 2 — Automatización documental
 
 **Propósito.** Llevar la automatización de AutomatIA al servidor: extracción de documentos,
@@ -535,9 +591,16 @@ a quien llega de fuera:
   que el texto que se manda a anonimizar no llega a ningún registro.
 - `test_reg4_el_mcp_remoto_esta_declarado.py` — que el despliegue del MCP remoto no reciba un
   PAT por entorno. Es el cambio más razonable del mundo para quien no sepa por qué no está.
-- `test_reg7_la_tool_declara_el_contrato.py` — que la firma de la tool MCP y `ActividadIAEvent`
-  no divergan. Vive del lado del servidor porque `mcp_server/` no puede importar `server.app`, y
-  comprobarlo exige tener los dos delante.
+- `test_reg7_la_tool_declara_el_contrato.py` — que las firmas de las tools MCP y los contratos
+  del servidor no divergan (el evento de REG y las peticiones de VAS). Vive del lado del servidor
+  porque `mcp_server/` no puede importar `server.app`, y comprobarlo exige tener los dos delante.
+- Los tres tests de paridad de VAS: `test_vas1_citas.py`, `test_vas2_vigencia.py` y
+  `test_vas3_codigo.py` comparan el veredicto de cada servicio con el de la función que usa el
+  motor. Son lo que impide que la comprobación de fuera deje de ser la de dentro.
+- `test_vas2_el_pat_lleva_su_organizacion.py` — recorre `PatService.verify` **sin sobreescribir
+  el principal**, que es el camino que ningún test de PAT recorría y por donde se colaron dos
+  defectos: un PAT sin organización y, con él, `POST /actividad` respondiendo 403 a todo
+  integrador real.
 - `test_profile_contract.py` — todo perfil que no esté declarado sin configurar tiene que compilar
   y ejecutar.
 - Gate de regresión de recuperación: falla si `recall@5`, `recall@10` o `MRR` bajan más de 0,02

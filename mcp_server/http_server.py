@@ -54,6 +54,7 @@ from starlette.applications import Starlette
 from api_client import ApiClient
 from config import HttpConfig, load_http_config
 from tools.actividad import register_actividad_tools
+from tools.verificaciones import register_verificaciones_tools
 
 _TIMEOUT = 30.0
 
@@ -88,26 +89,32 @@ def pat_de_las_cabeceras(cabeceras: Mapping[str, str]) -> str:
     return valor.strip()
 
 
-def build_http_server(config: HttpConfig | None = None) -> FastMCP:
-    """Construye el servidor MCP remoto con las tools de actividad y anonimización."""
+def _construye(
+    config: HttpConfig | None = None,
+) -> tuple[FastMCP, httpx.AsyncClient]:
+    """El servidor y su pool de conexiones, para que quien lo monte decida cuándo cerrarlo.
+
+    **El pool NO se cierra en el ciclo de vida de FastMCP**, y esto costó encontrarlo (VAS.4).
+    Con `stateless_http` ese ciclo corre **por petición**, así que un `aclose()` en su `finally`
+    cerraba el pool compartido en cuanto acababa la primera llamada: el servidor remoto servía
+    **una sola llamada por proceso** y la segunda moría con «Cannot send a request, as the client
+    has been closed».
+
+    Lo destapó una sesión MCP real, no la suite: el test de dos clientes concurrentes pasaba
+    —sus peticiones empiezan antes de que el ciclo de la primera termine, así que las dos
+    encuentran el pool abierto— y lo que fallaba era lo secuencial, que es lo normal. Ahora hay
+    un test que hace dos llamadas seguidas.
+    """
     cfg = config or load_http_config()
 
+    # El pool se comparte entre clientes con tokens distintos porque la cabecera se pone por
+    # petición (ver `ApiClient._request`); lo que se comparte son conexiones, no identidades.
     pool = httpx.AsyncClient(base_url=cfg.api_base_url.rstrip("/"), timeout=_TIMEOUT)
-
-    @asynccontextmanager
-    async def _ciclo(_servidor: FastMCP):
-        # El pool se comparte entre clientes con tokens distintos porque la cabecera se pone por
-        # petición (ver `ApiClient._request`); lo que se comparte son conexiones, no identidades.
-        try:
-            yield {}
-        finally:
-            await pool.aclose()
 
     mcp = FastMCP(
         "govgenai-remoto",
         stateless_http=True,
         json_response=True,
-        lifespan=_ciclo,
         transport_security=TransportSecuritySettings(
             allowed_hosts=list(cfg.allowed_hosts),
             allowed_origins=list(cfg.allowed_origins),
@@ -129,12 +136,42 @@ def build_http_server(config: HttpConfig | None = None) -> FastMCP:
         return ApiClient(cfg.api_base_url, pat_de_las_cabeceras(peticion.headers), client=pool)
 
     register_actividad_tools(mcp, client_provider=client_provider)
+    register_verificaciones_tools(mcp, client_provider=client_provider)
+    return mcp, pool
+
+
+def build_http_server(config: HttpConfig | None = None) -> FastMCP:
+    """El servidor MCP remoto con sus tools. Para inspeccionarlo y para los tests.
+
+    Quien lo use así se queda sin cerrar el pool, que en un proceso corto lo reclama el sistema
+    al salir. La aplicación de verdad la construye `build_http_app`, que sí lo cierra.
+    """
+    mcp, _pool = _construye(config)
     return mcp
 
 
 def build_http_app(config: HttpConfig | None = None) -> Starlette:
     """La aplicación ASGI, para servirla con uvicorn detrás del proxy inverso."""
-    return build_http_server(config).streamable_http_app()
+    mcp, pool = _construye(config)
+    app = mcp.streamable_http_app()
+
+    # El cierre va en el ciclo de vida de la APLICACIÓN y no en el de FastMCP, que con
+    # `stateless_http` corre por petición. Se envuelve el que trae el SDK en vez de sustituirlo:
+    # ahí dentro vive el gestor de sesiones, y quitarlo dejaría el transporte sin arrancar.
+    #
+    # No se usa `add_event_handler("shutdown", …)`, que esta versión de Starlette ya no tiene.
+    original = app.router.lifespan_context
+
+    @asynccontextmanager
+    async def _con_cierre_del_pool(aplicacion):
+        async with original(aplicacion):
+            try:
+                yield
+            finally:
+                await pool.aclose()
+
+    app.router.lifespan_context = _con_cierre_del_pool
+    return app
 
 
 def app() -> Starlette:  # pragma: no cover - punto de entrada de uvicorn --factory

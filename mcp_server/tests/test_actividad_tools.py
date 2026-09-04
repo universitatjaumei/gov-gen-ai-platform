@@ -150,6 +150,32 @@ class TestElTokenViajaConLaPeticion:
         assert ruta.calls.last.request.headers["authorization"] == f"Bearer {PAT_UNO}"
 
     @respx.mock
+    async def test_should_serve_more_than_one_call_per_process(self):
+        """VAS.4 — el defecto que la sesión MCP real destapó, y que ningún test veía.
+
+        El pool de `httpx` se cerraba en el ciclo de vida de **FastMCP**, y con `stateless_http`
+        ese ciclo corre **por petición**: el `aclose()` del `finally` cerraba el pool compartido
+        en cuanto acababa la primera llamada, así que la segunda moría con «Cannot send a
+        request, as the client has been closed». El servidor remoto servía **una sola llamada por
+        proceso**.
+
+        Y lo que hace este test necesario es que el de dos clientes concurrentes **pasaba**: sus
+        dos peticiones empiezan antes de que el ciclo de la primera termine, así que las dos
+        encuentran el pool abierto. Lo que fallaba era lo secuencial, que es lo normal.
+        """
+        ruta = respx.post(f"{API}/api/v1/anonimizacion/spans").mock(
+            return_value=httpx.Response(200, json={"spans": []})
+        )
+
+        async with servidor_mcp() as app:
+            primera = await _llama(app, "detectar_pii", {"text": "uno"}, pat=PAT_UNO)
+            segunda = await _llama(app, "detectar_pii", {"text": "dos"}, pat=PAT_UNO)
+
+        assert not primera.get("isError"), _texto(primera)
+        assert not segunda.get("isError"), _texto(segunda)
+        assert len(ruta.calls) == 2
+
+    @respx.mock
     async def test_should_carry_each_client_token_to_the_api(self):
         """Dos clientes en vuelo a la vez contra el mismo servidor, cada uno con el suyo.
 
