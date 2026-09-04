@@ -32,8 +32,9 @@ evento por cada comprobación duplicaría el registro sin decir nada nuevo.
 """
 from __future__ import annotations
 
+import hashlib
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -43,12 +44,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from server.app.api.deps import require_pat_scopes
 from server.app.core.auth.models import UserInfo
 from server.app.core.auth.pat.scopes import VERIFICACIONES_USE
-from server.app.core.auth.tenancy import scope_query_to_orgs
+from server.app.core.auth.tenancy import organizacion_unica_de, scope_query_to_orgs
 from server.app.core.urls import normalizar_url
 from server.app.modules.agents_hub.agent.citation_validator import aplicar_contrato
+from server.app.modules.agents_hub.contracts.actividad import ActividadIAEvent
 from server.app.modules.agents_hub.database.config_models import HubChatbot
 from server.app.modules.agents_hub.database.connection import get_async_session
-from server.app.modules.agents_hub.database.operational_models import HubDocument
+from server.app.modules.agents_hub.database.operational_models import (
+    HubActividadIA,
+    HubDocument,
+)
 from server.app.modules.agents_hub.services.retrieval.metadata_filter import (
     MetadataFilter,
 )
@@ -56,6 +61,17 @@ from server.app.modules.agents_hub.services.retrieval.vigencia import (
     aviso_para,
     marca_de_vigencia,
 )
+from server.app.modules.redaccion.services.script_auditor import (
+    AuditFinding,
+    CajaDeHerramientas,
+    ScriptSecurityAuditor,
+    caja_de_herramientas,
+)
+
+#: Con qué nombre consta la auditoría en el registro de actividad. Fijo y no el cliente del PAT:
+#: lo que el registro tiene que poder contar es «esta plataforma auditó este hash», y el nombre
+#: del cliente que lo pidió ya va en `actor`.
+_HERRAMIENTA_DE_AUDITORIA = "govgenai-auditoria-estatica"
 
 #: Tope del texto que se acepta, en bytes. No hay límite de entrada del sandbox del que heredarlo
 #: —FUN.6 aún no existe—, así que se fija aquí y ese bloque lo heredará de este sitio en vez de
@@ -377,3 +393,165 @@ async def _lo_desplaza(session: AsyncSession, documento) -> DocumentoDesplazado 
     if otro is None:
         return None
     return DocumentoDesplazado(document_id=otro.id, url=otro.canonical_url)
+
+
+# ─────────────────────────── La auditoría de código (VAS.3) ────────────────
+
+
+class PeticionDeAuditoria(BaseModel):
+    """El código a auditar y, si se quiere, para qué.
+
+    `finalidad` va al registro, no al veredicto: la auditoría es determinista y no depende de
+    para qué se pida.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    codigo: str
+    finalidad: str | None = Field(default=None, max_length=500)
+
+
+class VeredictoDeCodigo(BaseModel):
+    """El `AuditResult` del auditor, tal cual, más el hash de lo que se auditó.
+
+    Sin añadir ni quitar nada: la revisión de fuera tiene que ser **la misma** que la de dentro,
+    porque si no, pasar por aquí no prueba nada sobre si ese código pasaría el catálogo de
+    funciones.
+    """
+
+    approved: bool
+    risk_level: str
+    puede_revisarse: bool
+    findings: list[AuditFinding]
+    confidence: float
+    code_sha256: str
+
+
+@router.post(
+    "/codigo",
+    response_model=VeredictoDeCodigo,
+    operation_id="auditarCodigo",
+)
+async def auditar_codigo(
+    peticion: PeticionDeAuditoria,
+    user: UserInfo = Depends(_exige_scope),
+    session: AsyncSession = Depends(get_async_session),
+) -> VeredictoDeCodigo:
+    """Audita código que va a correr fuera, con la vara del catálogo de funciones.
+
+    Es la **revisión posterior del nivel 2 de la Instrucció 02/2026** para código que no corre en
+    la plataforma: análisis del AST contra una lista blanca de módulos y las capacidades que
+    ninguna revisión humana acepta.
+
+    **Esto sí deja evento en el registro de actividad**, a diferencia de las otras dos
+    verificaciones. Auditar es un acto de gobernanza y tiene que constar —quién auditó qué hash,
+    con qué nivel de riesgo y cuándo—; verificar citas o consultar vigencia son comprobaciones
+    sin estado, y un evento por cada una duplicaría el registro sin decir nada nuevo.
+
+    **El código no se guarda: sólo su SHA-256.** Aquí llega, por definición, código que alguien
+    está a punto de ejecutar en otro sitio, y guardarlo convertiría el servicio en un repositorio
+    de código ajeno que nadie ha decidido tener. El hash permite cotejar después que un fichero
+    concreto es el que se auditó, sin tenerlo.
+    """
+    _dentro_del_limite(peticion.codigo)
+
+    organizacion_id = organizacion_unica_de(user)
+    if organizacion_id is None:
+        # Sin organización no hay dónde registrar, y auditar sin registrar no es esta operación:
+        # el evento es parte del servicio, no un efecto secundario.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "ORGANIZACION_INDETERMINADA",
+                "message": (
+                    "El token tiene que pertenecer a una sola organización: la auditoría deja "
+                    "constancia en su registro de actividad, y no se elige en la petición."
+                ),
+            },
+        )
+
+    resultado = ScriptSecurityAuditor().audit(peticion.codigo)
+    huella = hashlib.sha256(peticion.codigo.encode("utf-8")).hexdigest()
+
+    await _registra_la_auditoria(
+        session, user, organizacion_id, peticion.finalidad, resultado, huella
+    )
+
+    return VeredictoDeCodigo(
+        approved=resultado.approved,
+        risk_level=resultado.risk_level.value,
+        puede_revisarse=resultado.puede_revisarse,
+        findings=resultado.findings,
+        confidence=resultado.confidence,
+        code_sha256=huella,
+    )
+
+
+async def _registra_la_auditoria(
+    session: AsyncSession,
+    user: UserInfo,
+    organizacion_id: uuid.UUID,
+    finalidad: str | None,
+    resultado,
+    huella: str,
+) -> None:
+    """Escribe el evento REG de la auditoría, con el hash y el nivel de riesgo.
+
+    **El nivel va en `finalidad`, y conviene decir por qué.** El contrato de REG.1 no tiene un
+    campo de nivel de riesgo, y el prompt preveía añadirlo. No se añade: sería un campo que sólo
+    esta operación rellena, y el contrato es el mismo para toda herramienta que registre — un
+    campo específico de un caso de uso lo convierte en un formulario con huecos. Lo que hace
+    falta es que el nivel **conste y se pueda buscar**, y la finalidad declarada es exactamente
+    el sitio donde un registro de gobernanza cuenta qué pasó.
+
+    Si algún día hay tres consumidores que necesiten el mismo metadato estructurado, entonces sí
+    es un campo del contrato y se añade con su migración.
+    """
+    evento = ActividadIAEvent(
+        ocurrido_en=datetime.now(timezone.utc),
+        actor=user.user_id,
+        herramienta=_HERRAMIENTA_DE_AUDITORIA,
+        agente=None,
+        finalidad=(
+            f"[{resultado.risk_level.value}] "
+            f"{finalidad or 'auditoría estática de código'}"
+        ),
+        modelo_usado=None,
+        categorias_datos=[],
+        payload_hash=huella,
+    )
+    session.add(
+        HubActividadIA(
+            organizacion_id=organizacion_id,
+            ocurrido_en=evento.ocurrido_en,
+            actor=evento.actor,
+            herramienta=evento.herramienta,
+            agente=evento.agente,
+            finalidad=evento.finalidad,
+            modelo_usado=evento.modelo_usado,
+            categorias_datos=evento.categorias_datos,
+            payload_hash=evento.payload_hash,
+        )
+    )
+    await session.commit()
+
+
+@router.get(
+    "/codigo/reglas",
+    response_model=CajaDeHerramientas,
+    operation_id="reglasDeAuditoria",
+)
+async def reglas_de_auditoria(
+    _=Depends(_exige_scope),
+) -> CajaDeHerramientas:
+    """Con qué se puede escribir código que pase la auditoría, y con qué no.
+
+    Se compone **leyendo los `frozenset` del auditor**, no una copia: es lo que permite pedirle a
+    la UADTI que contraste la caja de herramientas con las Guías Operativas Técnicas sin que el
+    documento y el sistema puedan divergir. Con una lista paralela, se contrastaría un documento
+    contra otro documento.
+
+    `version_auditor` cambia si cambia el contenido, para que un cliente sepa si tiene que volver
+    a leerla.
+    """
+    return caja_de_herramientas()

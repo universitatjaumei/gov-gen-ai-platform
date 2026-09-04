@@ -28,6 +28,7 @@ pasaba la auditoría.
 from __future__ import annotations
 
 import ast
+import hashlib
 import re
 from enum import StrEnum
 from typing import Literal
@@ -266,4 +267,135 @@ def _resultado(findings: list[AuditFinding]) -> AuditResult:
         puede_revisarse=not hay_critico,
         findings=findings,
         confidence=1.0 if not findings else (0.0 if hay_critico else 0.5),
+    )
+
+
+# ─────────────────────────── La caja de herramientas publicada (VAS.3) ─────
+
+
+class Regla(BaseModel):
+    """Una regla del auditor, tal como se le explica a quien va a escribir código.
+
+    Vive **aquí y no en el router ni en un `.md`** porque el objetivo es que la UADTI pueda
+    contrastar la caja de herramientas con las Guías Operativas Técnicas sin que el documento y
+    el sistema puedan divergir. Con una lista paralela, contrastarían el documento contra otro
+    documento.
+    """
+
+    id: str
+    nivel: RiskLevel
+    descripcion: str
+
+
+#: Las reglas que `audit()` puede emitir, con su nivel y el porqué.
+#:
+#: El nivel de `module-not-whitelisted` es WARNING y el del resto CRITICAL, y esa diferencia es
+#: la que hace segura la graduación: un hueco en una lista blanca lo puede aceptar una persona
+#: mirándolo; una capacidad —sistema operativo, red, intérprete— no.
+#:
+#: Un test comprueba que **cada `rule=` que el auditor escribe está aquí**: si alguien añade una
+#: regla y no la cataloga, el endpoint publicaría una caja incompleta sin que nada fallara, y
+#: quien la consultara creería tener la lista entera.
+REGLAS: tuple[Regla, ...] = (
+    Regla(
+        id="syntax-error",
+        nivel=RiskLevel.CRITICAL,
+        descripcion=(
+            "El fichero no compila. No es una regla de seguridad: es que no se puede afirmar "
+            "nada de un código que no se puede analizar."
+        ),
+    ),
+    Regla(
+        id="forbidden-call",
+        nivel=RiskLevel.CRITICAL,
+        descripcion=(
+            "Llamada que abre el intérprete o el sistema de ficheros: `eval`, `exec`, "
+            "`__import__`, `compile`, `open`, o métodos como `.system()` y `.rmtree()`."
+        ),
+    ),
+    Regla(
+        id="interpreter-access",
+        nivel=RiskLevel.CRITICAL,
+        descripcion=(
+            "Introspección que alcanza al intérprete —`__builtins__`, `__class__`, "
+            "`__subclasses__`, `getattr`—. Se bloquea por su forma y no por su nombre, así que "
+            "`__builtins__['eval']` y `getattr(o, 'ev' + 'al')` también entran."
+        ),
+    ),
+    Regla(
+        id="absolute-path",
+        nivel=RiskLevel.CRITICAL,
+        descripcion=(
+            "Ruta absoluta de Windows o de sistema. Un script sólo puede leer el fichero que se "
+            "le pasa; se mira también dentro de los comentarios, porque una ruta escrita ahí "
+            "dice igualmente qué se intentaba."
+        ),
+    ),
+    Regla(
+        id="forbidden-module",
+        nivel=RiskLevel.CRITICAL,
+        descripcion=(
+            "Módulo denegado explícitamente: da acceso al sistema, a la red o a la "
+            "deserialización. No se acepta con una revisión humana."
+        ),
+    ),
+    Regla(
+        id="module-not-whitelisted",
+        nivel=RiskLevel.WARNING,
+        descripcion=(
+            "Módulo que no está en la lista blanca y tampoco en la de denegados. Es un hueco en "
+            "una lista, no una capacidad, así que una persona puede aceptarlo mirándolo."
+        ),
+    ),
+)
+
+
+class CajaDeHerramientas(BaseModel):
+    """Con qué se puede escribir código que pase la auditoría, y con qué no.
+
+    `version_auditor` es un hash **estable entre procesos** del contenido de la caja: sirve para
+    que un cliente sepa si cambió desde la última vez que la consultó. No sale de `hash()`, que
+    va con sal por proceso y le daría un cambio falso en cada reinicio del servidor.
+    """
+
+    modulos_permitidos: list[str]
+    capacidades_denegadas: list[str]
+    reglas: list[Regla]
+    version_auditor: str
+
+
+def caja_de_herramientas() -> CajaDeHerramientas:
+    """Compone la caja **leyendo los `frozenset` del módulo**, no una copia.
+
+    Se leen por el módulo (`sys.modules`) y no por la referencia importada al definir la
+    función, para que un `monkeypatch` sobre el auditor se vea reflejado — que es cómo el test
+    comprueba que no hay lista paralela. Si se cerrara sobre el valor de importación, el test
+    pasaría con una copia y la garantía se perdería.
+    """
+    import sys
+
+    modulo = sys.modules[__name__]
+    permitidos = sorted(getattr(modulo, "WHITELIST_MODULES"))
+    denegados = sorted(
+        set(getattr(modulo, "MODULOS_PROHIBIDOS"))
+        | set(getattr(modulo, "NOMBRES_PROHIBIDOS"))
+        | set(getattr(modulo, "_DANGEROUS_CALLS"))
+        | set(getattr(modulo, "_DANGEROUS_ATTRS"))
+    )
+    reglas = list(getattr(modulo, "REGLAS"))
+
+    canonico = "\n".join(
+        [
+            "modulos:" + ",".join(permitidos),
+            "denegados:" + ",".join(denegados),
+            "reglas:" + ",".join(f"{r.id}={r.nivel.value}" for r in reglas),
+        ]
+    )
+    version = hashlib.sha256(canonico.encode("utf-8")).hexdigest()[:16]
+
+    return CajaDeHerramientas(
+        modulos_permitidos=permitidos,
+        capacidades_denegadas=denegados,
+        reglas=reglas,
+        version_auditor=version,
     )
