@@ -107,14 +107,24 @@ class TestReportTemplateContractValidation:
         assert any(e["loc"] == ("owner_kind",) for e in errors)
 
     def test_only_admin_can_create_global_template_contract(self):
-        # is_global=True with owner_kind != "platform" must be rejected
+        """`is_global=True` con `owner_kind` distinto de «platform» se rechaza.
+
+        **Este test pasaba por la razón equivocada.** ROL.1 castellanizó el literal a
+        `organizacion`, y con `organization` la validación fallaba por el literal inválido, no
+        por la regla de `is_global` — habría pasado igual si la regla no existiera. Es el mismo
+        modo de fallo que un guardarraíl que recorre un directorio inexistente: verde sin
+        comprobar lo que dice comprobar.
+        """
         with pytest.raises(ValidationError) as exc_info:
-            _minimal_contract(owner_kind="organization", is_global=True)
+            _minimal_contract(owner_kind="organizacion", is_global=True)
         assert exc_info.value.error_count() >= 1
+        assert any(e["loc"] == ("is_global",) or "global" in str(e) for e in exc_info.value.errors()), (
+            f"rechazado, pero no por `is_global`: {exc_info.value.errors()}"
+        )
 
     def test_non_global_template_can_belong_to_organization(self):
-        contract = _minimal_contract(owner_kind="organization", is_global=False, owner_id=uuid4())
-        assert contract.owner_kind == "organization"
+        contract = _minimal_contract(owner_kind="organizacion", is_global=False, owner_id=uuid4())
+        assert contract.owner_kind == "organizacion"
         assert not contract.is_global
 
     def test_optional_description_defaults_to_none(self):

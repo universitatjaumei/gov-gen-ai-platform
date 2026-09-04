@@ -160,17 +160,25 @@ jobs:
             --cov-report=term-missing \
             -v
 
-      # SEC.8.7 — el árbol `tests/` de la RAÍZ del repo, que este job no ejecuta.
+      # SEC.8.7 cerró aquí un agujero: CI corre con `working-directory: server`, así que sólo
+      # veía `server/tests`, y el árbol `tests/` de la RAÍZ acumuló durante meses doce rojos y
+      # dos errores de colección sin que ningún check se pusiera rojo. Se colectaba, que es
+      # barato y caza un import a un módulo que ya no existe.
       #
-      # CI corre con `working-directory: server`, así que solo ve `server/tests`. El árbol
-      # de la raíz mezcla tests vivos (`tests/redaccion`, `tests/public_graphs`) con
-      # huérfanos, y durante meses acumuló 12 rojos y 2 errores de colección —imports a
-      # rutas que CUR.1 movió y a servicios ya borrados— sin que ningún check se pusiera
-      # rojo. Colectar es barato y caza exactamente eso: un import a un módulo que ya no
-      # existe. Ejecutarlos aquí no: dependen de otra configuración y de otra BD.
-      - name: Collect root tests (catches imports to modules that no longer exist)
+      # **NIC.4 retiró ese árbol** (2026-09-04): sus tests vivos se migraron a `server/tests`,
+      # que este job ejecuta entero, y los huérfanos se fueron con el NiceGUI. El paso se
+      # quedó sin sujeto — y borrarlo sin más habría dejado el agujero abierto en otro sitio,
+      # porque **`shared/tests` y `mcp_server/tests` seguían igual de fuera**.
+      #
+      # Se **ejecutan** en vez de colectarse, y la razón la dio la medición: los dos rojos que
+      # `shared/tests` tenía escondidos —`FieldDefinition`, retirado de `automatia_shared.dtos`
+      # sin que nadie repuntara sus tests— importaban **dentro** de la función, así que un
+      # `--collect-only` los habría dejado pasar. Cuestan 14 segundos entre los dos.
+      - name: Run the trees the server job does not see (shared, mcp_server)
         working-directory: ${{ github.workspace }}
-        run: uv run --project server pytest tests --collect-only -q --no-cov
+        run: |
+          uv run --project server pytest shared/tests -q --no-cov -p no:cacheprovider
+          uv run --project mcp_server pytest mcp_server/tests -q -p no:cacheprovider
 
       # Gate de aislamiento entre organizaciones (SEC.2, hallazgo A2). Paso PROPIO y no
       # una carpeta más del paso anterior, a propósito: si esto se pone en rojo hay acceso

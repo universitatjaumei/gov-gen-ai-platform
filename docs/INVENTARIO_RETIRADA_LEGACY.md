@@ -361,8 +361,8 @@ hubo que medirlo.
 
 ### 6.1 Ocho ficheros más, porque el paso de colección de CI se puso rojo
 
-CI tiene un paso, `Collect root tests`, que hace `pytest tests --collect-only` sobre el árbol de la
-raíz **sin ejecutarlo**. Existe porque ese árbol acumuló durante meses doce rojos y dos errores de
+CI tenía un paso, `Collect root tests`, que hacía `pytest tests --collect-only` sobre el árbol de
+la raíz **sin ejecutarlo** (NIC.4 lo reapuntó; ver §7.3). Existe porque ese árbol acumuló durante meses doce rojos y dos errores de
 colección sin que ningún check se enterara, y colectar es barato y caza exactamente lo que la
 retirada provoca: un import a un módulo que ya no existe. Se puso rojo al primer intento:
 
@@ -436,3 +436,94 @@ Es exactamente lo que NIC.4 mide: el entorno legacy de la raíz —`nicegui==3.4
 Aquí se retira lo que la retirada rompe **en colección**, que es lo que CI comprueba, y no más: un
 prompt que se lleva por delante el alcance del siguiente deja de ser reversible, que es lo único
 que hace tolerable un bloque largo.
+
+---
+
+## 7. NIC.4 — el entorno que sólo existía para sostener el NiceGUI
+
+El prompt nombraba cuatro piezas y pedía **medir antes de tocar**. Dos no eran lo que suponía, y
+por eso la regla vale más que la lista.
+
+| Pieza | Qué dijo la medición |
+|---|---|
+| `pyproject.toml` de la raíz + `uv.lock` (1,6 MB) | **Huérfano.** Retirado |
+| `tests/` de la raíz (32 ficheros) | **No era un bloque.** 16 migrados, 16 retirados |
+| `translations.json` (158 KB) + `core/i18n.py` | **Huérfano.** Retirado |
+| `arranque.bat` | **Ya estaba limpio.** No se toca |
+
+### 7.1 El `pyproject.toml` de la raíz no lo usaba ningún workflow
+
+Se llamaba `automatia` y se describía como «aplicación NiceGUI legada». Declaraba **sesenta
+dependencias** empezando por `nicegui==3.4.1`. Y no lo instalaba nada de lo que decide si el
+proyecto funciona: CI y `deploy.yml` corren `uv sync` con `working-directory: server`, el
+`Dockerfile` copia `server/pyproject.toml`, y hasta el paso que colectaba la suite de la raíz
+invocaba `uv run --project server`. Lo único que aportaba era su `[tool.pytest.ini_options]` — con
+un `--cov=app` que apuntaba a un directorio `app/` que en la raíz no existe— y hacer que `uv sync`
+sin `--project` resolviera algo.
+
+Los proyectos uv son ahora cuatro: `server/`, `shared/`, `mcp_server/` y `services/script_sandbox/`.
+El `.venv` de la raíz sobrevive en el disco sin estar versionado; se puede borrar.
+
+### 7.2 El árbol de tests de la raíz: la pregunta que decidió el reparto
+
+Medido por directorio, antes de mover nada:
+
+| Directorio | Pasan | Rojos |
+|---|---|---|
+| `tests/redaccion` (12 ficheros) | 117 | 12 |
+| `tests/public_graphs` (3) | 9 | 13 |
+| `tests/modules` (1) | 5 | 0 |
+| `tests/unit` (6) | 0 | 31 errores |
+| `tests/security`, `tests/integration` | — | vacíos, sólo `__init__.py` |
+
+Retirarlos juntos habría perdido 131 aserciones que pasan; migrarlos juntos habría traído seis
+ficheros que no compilan. **La pregunta que lo decidió fue si duplicaban lo que CI ya ejecuta**, y
+se contestó con AST sobre los nombres de test: **cero de los 128 de `tests/redaccion` y cero de los
+22 de `tests/public_graphs` coinciden con ninguno de los 3.630 de `server/tests/`**. No eran
+duplicados. Era cobertura que CI nunca ejecutó, sólo colectó.
+
+Los 16 vivos se **funden** con las carpetas que ya existían —`server/tests/modules/redaccion/`,
+`server/tests/public_graphs/`, `server/tests/modules/agents_hub/unit/`— y no en una segunda
+`redaccion/` al lado: dos directorios con el mismo nombre garantizan que la mitad de las búsquedas
+mire en el que no toca. Se comprobó antes que no hubiera colisión de nombre de fichero.
+
+`tests/unit/` se retira: es el mundo SQLModel *Brain/partner/licencia* que vino de AutomatIA, y sus
+31 errores son `server.app.services.ai_brain`, que no existe.
+
+### 7.3 Los 25 rojos, y la regla que evitó decidir caso a caso
+
+Veinticinco tests de código vivo llevaban en rojo **sin que ningún check lo dijera**. Repararlos de
+uno en uno invita a escribir lo que haga falta para que pasen, así que se aplicó una regla:
+
+* **Rojo por un símbolo renombrado o una guarda añadida → se repara.** Conserva la intención del
+  test. Fueron `HubClient`→`HubOrganizacion`, `client_id`→`organizacion_id` y el `owner_kind`
+  «organization»→«organizacion» de ROL.1.
+* **Rojo por afirmar un valor que un bloque posterior cambió a propósito → se escribe el de hoy,
+  con quién lo eligió y por qué.** Nunca el número a secas: un default de columna que cambia sin
+  que nadie lo decida es una regresión silenciosa, y esto es lo único que la vigila.
+  `quality_threshold` 0,65 (HIB.R), `min_retrieval_score` 0,0 (RAG.5), `reranker_enabled` `False`
+  (RAG.6, confirmado midiendo en HIB.A).
+* **Sujeto desaparecido sin sucesor → se retira la aserción.** `FieldDefinition` era el
+  especificador de campos de la extracción asistida del NiceGUI; el `OutputField` de hoy tiene otra
+  forma porque describe otra cosa.
+
+**Cuatro de los rojos eran el doble del propio test, no el producto**, y son el aviso que conviene
+recordar: dos endpoints devolvían 409 porque `MagicMock().archived_at` no es `None` y el router
+había ganado la comprobación de plantilla retirada; uno devolvía **500** —justo lo que ese test
+existe para prohibir— porque parcheaba `model_validate` para devolver `None` y SEG.5 añadió después
+`bloques_sin_seccion(spec.sections, ...)`; y el `AsyncMock` pelado del ConfigResolver hacía que
+`scalars()` devolviera una corrutina. Es el modo de fallo de los mocks sin `spec=`.
+
+**Y uno pasaba en verde por la razón equivocada.**
+`test_only_admin_can_create_global_template_contract` esperaba un `ValidationError` y lo obtenía
+por el literal `organization` inválido, no por la regla de `is_global`: habría pasado igual si la
+regla no existiera. Ahora comprueba que el rechazo sea el suyo.
+
+### 7.4 El paso de CI que se quedó sin sujeto, y el agujero que habría movido
+
+Borrar `Collect root tests` sin más era la opción cómoda y la equivocada: el paso existía porque CI
+corre con `working-directory: server` y no ve nada más, y **`shared/tests` y `mcp_server/tests`
+seguían igual de fuera**. Ahora ese paso los **ejecuta** —14 segundos entre los dos—, y la razón de
+ejecutar en vez de colectar la dio la propia medición: los dos rojos que `shared/tests` escondía
+importaban `FieldDefinition` **dentro** de la función, así que un `--collect-only` los habría
+dejado pasar. Quedan en 142 y 89 tests verdes.

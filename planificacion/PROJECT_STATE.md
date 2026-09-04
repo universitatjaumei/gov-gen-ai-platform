@@ -1,4 +1,4 @@
-| **Bloque NIC** — Retirada del legacy NiceGUI, con inventario antes de borrar | ▶ NIC.1 ✅ NIC.2 ✅ NIC.3 ✅ (los dos directorios retirados) | NIC.4 |# Estado del Proyecto — Gov Gen AI Platform
+| **Bloque NIC** — Retirada del legacy NiceGUI, con inventario antes de borrar | ✅ Completo (NIC.1–NIC.4; NIC.5 absorbido en NIC.3) | — |# Estado del Proyecto — Gov Gen AI Platform
 
 > Actualizado automáticamente al final de cada prompt de desarrollo.
 > Fuente de verdad para saber en qué paso está cada plan activo.
@@ -117,7 +117,7 @@ sólo entonces retirar los seis `SuperAdminAccount`. Desde USR.9, a quien admini
 organización hay que concederle además el módulo **`personas`**; a quien ya tenía `plataforma` se
 lo dio la migración.
 
-**Cursor: Bloque NIC, prompt NIC.4.** Después VAS → NIC → REPO → PLG → DIN → FUN, con PRC en
+**Cursor: Bloque NIC ✅ completo.** El siguiente bloque es **REPO**. Después VAS → NIC → REPO → PLG → DIN → FUN, con PRC en
 paralelo y a tandas. **LANG ✅ quedó completo el 2026-09-03** y está en `desarrollo`, **sin
 desplegar**: el paso a `main` es decisión del usuario, y no cambia comportamiento porque el modo
 `prefer` es el que producción necesita. Lo anterior:

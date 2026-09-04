@@ -107,14 +107,23 @@ cd frontend; npm run generate:api
 ## Dónde está cada cosa
 
 ```
+server/                 el backend FastAPI y **la suite**: `server/tests/`
 server/app/modules/     agents_hub · automation · curation · redaccion
 server/app/core/        servicios compartidos: LLM gateway, auth, tenancy, storage
 frontend/src/           admin · curation · redaccion · widget
 mcp_server/             servidor MCP, stdio y remoto
+shared/                 tipos y contratos compartidos (`automatia_shared`)
+services/               microservicios aislados: `script_sandbox`
 docs/                   arquitectura, decisiones, manuales, casos guía
 planificacion/          plan de desarrollo, cursor del trabajo e historial
 pruebas_manuales/       guiones .bat de lo que sólo puede juzgar una persona
 ```
+
+**No hay proyecto Python en la raíz.** Había uno —se llamaba `automatia`, declaraba sesenta
+dependencias empezando por `nicegui==3.4.1` y arrastraba un `uv.lock` de 1,6 MB— y **NIC.4 lo
+retiró el 2026-09-04**: no lo usaba ni CI, ni el despliegue, ni el `Dockerfile`, que trabajan con
+`server/pyproject.toml`. Los proyectos uv son cuatro: `server/`, `shared/`, `mcp_server/` y
+`services/script_sandbox/`. Cada comando se lanza con `--project` o desde su directorio.
 
 ## Documentación
 

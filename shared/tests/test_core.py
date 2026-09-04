@@ -116,31 +116,10 @@ class TestExecutionManager:
             assert f.read() == script_content
 
 
-class TestI18nModule:
-    """Tests for i18n.py"""
-
-    def test_i18n_manager_default_locale(self):
-        """Verify default locale is Spanish."""
-        from automatia_shared.core.i18n import I18nManager
-
-        manager = I18nManager()
-        assert manager.locale == 'es'
-
-    def test_i18n_fallback_to_key(self):
-        """Verify missing keys return the key itself."""
-        from automatia_shared.core.i18n import t
-
-        result = t('nonexistent_key')
-        assert result == 'nonexistent_key'
-
-    def test_i18n_set_locale(self):
-        """Verify locale can be changed."""
-        from automatia_shared.core.i18n import i18n
-
-        original = i18n.locale
-        i18n.set_locale('en')
-        assert i18n.locale == 'en'
-        i18n.set_locale(original)  # Reset
+# `TestI18nModule` estaba aquí: tres tests del `I18nManager` de `automatia_shared.core.i18n`,
+# que leía el `translations.json` de la interfaz NiceGUI. **NIC.4 retiró los dos** el 2026-09-04,
+# después de que NIC.3 retirase la interfaz que los usaba. El i18n de la plataforma es i18next y
+# vive en el frontend, así que no hay nada equivalente que probar desde aquí.
 
 
 class TestDataConsolidator:
@@ -231,11 +210,6 @@ class TestCoreImports:
             ExecutionPathManager,
         )
         assert all([ExecutionLock, RunManifest, ExecutionPathManager])
-
-    def test_import_i18n(self):
-        """Verify i18n imports."""
-        from automatia_shared.core import i18n, t, I18nManager
-        assert all([i18n, t, I18nManager])
 
     def test_import_consolidator(self):
         """Verify consolidator imports."""

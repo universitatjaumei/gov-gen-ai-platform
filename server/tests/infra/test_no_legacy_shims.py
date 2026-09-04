@@ -15,7 +15,10 @@ from pathlib import Path
 
 _RAIZ = Path(__file__).resolve().parents[3]  # server/tests/infra/ → AI_agents_hub/
 
-_EXCLUIDOS = ("node_modules", ".venv", "_legacy_nicegui", "_legacy_archive", ".git")
+#: `_legacy_nicegui` y `_legacy_archive` estuvieron aquí hasta NIC.3/NIC.4: eran directorios
+#: de código muerto que este barrido tenía que saltarse. Ya no existen, y un test de NIC.3
+#: impide que vuelvan, así que la exclusión sobra.
+_EXCLUIDOS = ("node_modules", ".venv", ".git")
 
 
 _ESTE_FICHERO = Path(__file__).resolve()

@@ -73,6 +73,10 @@ MODULOS_PROHIBIDOS: frozenset[str] = frozenset({
     "ast", "dis", "inspect", "gc", "traceback",
     "builtins", "types", "nicegui", "fastapi", "uvicorn",
 })
+# `nicegui` se queda en la lista **aunque el paquete ya no esté instalado** (NIC.4 lo retiró
+# como dependencia). Es una lista de prohibidos: quitar una entrada nunca la mejora, y si
+# alguien reinstalara el paquete, un script generado podría abrir una ventana desde el
+# servidor. Lo mismo en `automatia_shared.core.security:FORBIDDEN_IMPORTS`.
 
 # Módulos permitidos (lista blanca)
 WHITELIST_MODULES: frozenset[str] = frozenset({

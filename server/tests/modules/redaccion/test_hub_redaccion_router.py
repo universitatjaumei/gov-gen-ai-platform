@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -25,6 +26,26 @@ from server.app.routers.redaccion import hub_redaccion_router as router_module
 # user_id no-UUID: SuperAdminAccount.admin_id es int, AdminAccount.partner_id es texto libre
 _SUPERADMIN_NON_UUID = UserInfo(user_id="42", email="root@test.com", role="superadmin")
 _ADMIN_NON_UUID = UserInfo(user_id="org-uji", email="admin@test.com", role="admin")
+
+
+def _plantilla_viva():
+    """Una plantilla mock que **no** está retirada, y por qué hace falta decirlo.
+
+    Los dos tests que crean un informe y publican una versión hacían
+    `session.get = AsyncMock(return_value=MagicMock())`, que era suficiente cuando se
+    escribieron. Después el router ganó la comprobación de plantilla archivada —archivar una
+    plantilla la saca de la lista y **bloquea crear informes nuevos con ella**, o archivar sólo la
+    escondería y cualquier enlace guardado seguiría funcionando—, y sobre un `MagicMock` pelado
+    `plantilla.archived_at` no es `None`: es otro `MagicMock`, que es un valor verdadero. Así que
+    los dos tests recibían **409 TEMPLATE_ARCHIVED**.
+
+    No era un bug del router ni un cambio de regla: era el mock diciendo «sí, está archivada» sin
+    que nadie se lo hubiera pedido. Es el modo de fallo de los mocks sin `spec=`, y aquí se
+    corrige nombrando el estado que el test da por supuesto.
+    """
+    plantilla = MagicMock()
+    plantilla.archived_at = None
+    return plantilla
 
 
 def _mock_session():
@@ -101,7 +122,7 @@ class TestCreateTemplateNonUuidUserId:
 class TestCreateWorkspaceNonUuidUserId:
     def test_superadmin_with_non_uuid_user_id_gets_201_not_500(self, client):
         session = _mock_session()
-        session.get = AsyncMock(return_value=MagicMock())  # version existente
+        session.get = AsyncMock(return_value=_plantilla_viva())  # versión y plantilla existentes
         app.dependency_overrides[get_current_user] = lambda: _SUPERADMIN_NON_UUID
         app.dependency_overrides[get_session] = _session_dep(session)
 
@@ -145,13 +166,21 @@ class TestMigrateWorkspaceNonUuidUserId:
 class TestPublishTemplateVersionNonUuidUserId:
     def test_superadmin_with_non_uuid_user_id_gets_201_not_500(self, client, monkeypatch):
         session = _mock_session()
-        fake_template = MagicMock()
+        fake_template = _plantilla_viva()
         session.get = AsyncMock(return_value=fake_template)
         session.execute = AsyncMock(return_value=_empty_scalars_result())
+        # El parche devolvía `None`, y eso bastaba cuando publicar sólo validaba el spec.
+        # SEG.5 añadió después `bloques_sin_seccion(spec.sections, spec.blocks)` —un bloque que
+        # ninguna sección enumera no se pinta, y avisar aquí es lo único que sirve de algo—, y
+        # sobre `None` eso es `AttributeError: 'NoneType' object has no attribute 'sections'`,
+        # es decir **el 500 que este test existe para prohibir**, provocado por su propio doble.
+        #
+        # En producción `model_validate` devuelve un spec o levanta `ValidationError`: nunca
+        # `None`. Así que el doble devuelve un spec vacío, que es el mínimo honesto.
         monkeypatch.setattr(
             router_module.ReportTemplateSpec,
             "model_validate",
-            staticmethod(lambda spec_json: None),
+            staticmethod(lambda spec_json: SimpleNamespace(sections=[], blocks=[])),
         )
 
         app.dependency_overrides[get_current_user] = lambda: _SUPERADMIN_NON_UUID

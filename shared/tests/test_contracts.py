@@ -100,22 +100,17 @@ class TestDTOsContract:
         assert len(data["steps"]) == 2
         assert data["steps"][0]["name"] == "Extract"
 
-    def test_field_definition_contract(self):
-        """Verify FieldDefinition structure."""
-        from automatia_shared.dtos import FieldDefinition
-
-        field = FieldDefinition(
-            name="invoice_number",
-            description="The invoice number",
-            example_value="INV-2024-001",
-            expected_format="text",
-            is_optional=False,
-            is_table=False
-        )
-
-        data = field.model_dump()
-        assert data["name"] == "invoice_number"
-        assert data["is_optional"] is False
+    # `test_field_definition_contract` vivía aquí. `FieldDefinition` era el especificador de
+    # campos de la extracción asistida del NiceGUI —`expected_format`, `is_table`,
+    # `example_value`— y **ya no existe en `automatia_shared.dtos`**, ni con otro nombre: el
+    # `OutputField` de `contracts/ui_contract.py` tiene otra forma (`label`, `type`, `nullable`,
+    # `constraints`) porque describe la salida de un átomo, no un campo a extraer de un PDF.
+    #
+    # Retirado en NIC.4 junto con el test de importación que lo pedía. Los dos llevaban en rojo
+    # **sin que ningún check lo dijera**, porque CI corre con `working-directory: server` y nunca
+    # ejecutó `shared/tests`. El paso que colectaba el árbol de la raíz —retirado en NIC.4 con ese
+    # árbol— pasa a ejecutar este y el de `mcp_server`, que es lo que habría cazado esto: el
+    # import está **dentro** de la función, así que un `--collect-only` lo habría dejado pasar.
 
     def test_license_info_computed_properties(self):
         """Verify LicenseInfo computed properties work."""
@@ -288,7 +283,6 @@ class TestImportability:
             TaskSpec,
             FlowSpec,
             ExtractionResult,
-            FieldDefinition,
             ScriptAuditResult,
             LicenseInfo,
             BillingRecord,
@@ -296,7 +290,7 @@ class TestImportability:
 
         assert all([
             TaskSpec, FlowSpec, ExtractionResult,
-            FieldDefinition, ScriptAuditResult, LicenseInfo, BillingRecord
+            ScriptAuditResult, LicenseInfo, BillingRecord
         ])
 
     def test_import_validators_module(self):

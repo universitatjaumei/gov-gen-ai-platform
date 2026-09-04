@@ -5,8 +5,11 @@ This module contains pure utilities shared between server and client_app:
 - PDF reading (reader.py, pdf_reader.py)
 - Security auditing (security.py)
 - Execution management (execution_manager.py)
-- Internationalization (i18n.py)
 - Data consolidation (consolidator.py)
+
+`i18n.py` vivía aquí y **se retiró el 2026-09-04 (NIC.4)**: leía el `translations.json` de 158 KB
+de la interfaz NiceGUI, que NIC.3 retiró. El i18n de la plataforma es i18next, en
+`frontend/src/shared/i18n/`, y no tiene lado servidor.
 """
 
 # Reader utilities
@@ -36,13 +39,6 @@ from automatia_shared.core.execution_manager import (
     ExecutionPathManager,
 )
 
-# Internationalization
-from automatia_shared.core.i18n import (
-    I18nManager,
-    i18n,
-    t,
-)
-
 # Data consolidation
 from automatia_shared.core.consolidator import DataConsolidator
 
@@ -64,10 +60,6 @@ __all__ = [
     "ExecutionLock",
     "RunManifest",
     "ExecutionPathManager",
-    # I18n
-    "I18nManager",
-    "i18n",
-    "t",
     # Consolidation
     "DataConsolidator",
 ]

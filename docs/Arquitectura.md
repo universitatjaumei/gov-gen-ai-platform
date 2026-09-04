@@ -417,7 +417,7 @@ AutomatIA es el módulo de automatización de procesos internos de la plataforma
 
 ### 8.2 Migración servidor-first
 
-La lógica de negocio se consolida en el servidor FastAPI. El antiguo cliente NiceGUI queda deprecado y será reemplazado por el frontend React unificado.
+La lógica de negocio se consolida en el servidor FastAPI. El antiguo cliente NiceGUI **se retiró completo el 2026-09-04** (bloque NIC): `client_app/`, su cuarentena `_legacy_nicegui/` y el entorno Python de la raíz que sólo existía para sostenerlo. El frontend es React, y el mapa de lo que hubo está en [`INVENTARIO_RETIRADA_LEGACY.md`](INVENTARIO_RETIRADA_LEGACY.md).
 
 La migración se realizará módulo a módulo, con cobertura TDD. La lógica más crítica ya situada en servidor —LLM Gateway, estrategias LLM, prompts y configuración— se mantiene y se amplía.
 
@@ -873,8 +873,8 @@ Repos separados pueden reconsiderarse si el widget público, el runner local o u
 
 * AI Agents Hub y Gestor de Expedientes se integran como módulos de Gov Gen AI Platform.
 * La arquitectura es servidor-first.
-* React sustituye al cliente NiceGUI como frontend principal.
-* Se introduce un Local Runner sin UI para ejecución local controlada.
+* React sustituye al cliente NiceGUI como frontend principal. **Hecho**: el NiceGUI se retiró completo el 2026-09-04.
+* Se introduce un Local Runner sin UI para ejecución local controlada. **Previsto, sin código**: lo que había se retiró con el NiceGUI porque llevaba tiempo sin compilar. Ver `ESPECIFICACIONES.md` §10.1.
 * PostgreSQL es la base común; pgvector se añade para RAG.
 * LangGraph se utiliza tanto para agentes como para expedientes.
 * El Job Queue existente se reutiliza antes de introducir Celery/Redis.
