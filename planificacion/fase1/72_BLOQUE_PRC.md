@@ -60,10 +60,12 @@ contrato»— y la frontera que fija es `docs/CONTRATO_MD_CORPUS.md`, no una int
   los de normativa (`generat/ingesta/`).
 - **Las reglas del corpus no se relajan**: la taxonomía (materia, tipo, servicio) va en
   metadatos y NUNCA en `embedding_text`; reclasificar sigue costando un UPDATE. La lengua de
-  trabajo es valenciano y el castellano se genera tras la validación, **emparejado por ID de
-  ficha** (aquí no hace falta la huella de cifras).
-- **La autoridad se distingue en la respuesta, no en el enrutado**: una ficha se cita con
-  servicio responsable y fecha de actualización, nunca como si fuera una norma con vigencia.
+  trabajo es valenciano y el castellano se genera tras la validación, emparejado con
+  **`versio_idiomatica_de`**, que es el mecanismo del contrato (aquí no hace falta la huella de
+  cifras, porque el origen ya trae el par).
+- **La autoridad se distingue en la respuesta, no en el enrutado**: un documento de clase
+  administrativa se cita con su responsable y su fecha de actualización, nunca como si fuera una
+  norma con vigencia.
 - **Ninguna cifra de calidad se reporta sin medirla**: el cierre exige el lote dorado
   antes/después.
 
@@ -89,21 +91,29 @@ El endpoint que se pide al equipo del catálogo:
 
 ---
 
-> **PRC.0 y PRC.1 no se ejecutan en este repositorio, y su registro sí.** Los dos viven en el
-> proyecto del corpus (`Descarregar_pdf/normativa_propia/cataleg_procediments/`), que es un
-> **repositorio git distinto**: su código, sus tests y sus *commits* van allí. Lo que queda aquí es
-> **una línea en `HISTORIAL.md` por prompt**, diciendo que se ejecutó allí y con qué *commit*. No es
-> duplicar nada: `PROJECT_STATE.md` es el cursor del plan **completo**, y dos prompts de un bloque
-> sin rastro hacen imposible distinguir «hecho» de «bloqueado». Es además la convención que ya se
-> usó en PUB (2026-08-16), que registró aquí tres cambios hechos allí nombrando el otro
-> repositorio.
+> **PRC.0 y PRC.1 no se ejecutan en este repositorio, y su registro sí.**
 >
-> **Prerrequisito que hay que resolver antes, y es del usuario**: `Descarregar_pdf` tiene git
-> iniciado **y cero commits** —`master` está vacío—, así que hoy ejecutar PRC.0 y PRC.1 allí
-> produciría código que nada versiona: ni revisable, ni reversible, ni atribuible. Y en ese primer
-> *commit* entran también los tres cambios que PUB dejó sin commitear a propósito. Mientras ese
-> repositorio no tenga historia, la regla del proyecto —«el historial de git es la fuente de verdad
-> del pasado»— no se cumple en ese lado.
+> **Dónde van: el repositorio `normativa-uji`** (`ModestoFabra/normativa-uji`), que en el disco es
+> `Descarregar_pdf/normativa_propia/` —un repositorio **anidado** dentro de `Descarregar_pdf`, que
+> es otra cosa y no es el sitio—. Ahí vive ya `cataleg_procediments/` con el proyecto de revisión
+> de las fichas, así que PRC.0 y PRC.1 aterrizan donde está su materia. Su código, sus tests y sus
+> *commits* van allí.
+>
+> Medido el 2026-09-04: **79 commits**, rama `rubriques-bilingues`, **al día con su remoto**. Tiene
+> historia y tiene dónde empujar, así que no hace falta preparar nada — al contrario de lo que dijo
+> la primera versión de esta nota, que midió `Descarregar_pdf` (cero commits) en vez de
+> `normativa_propia`.
+>
+> **Lo que queda aquí es una línea en `HISTORIAL.md` por prompt**, diciendo que se ejecutó allí y
+> con qué *commit*. No es duplicar nada: `PROJECT_STATE.md` es el cursor del plan **completo**, y
+> dos prompts de un bloque sin rastro hacen imposible distinguir «hecho» de «bloqueado». Es además
+> la convención que ya se usó en PUB (2026-08-16), que registró aquí tres cambios hechos allí
+> nombrando el otro repositorio.
+>
+> **Lo único que conviene mirar antes de empezar**: `cataleg_procediments/` tiene hoy **76 ficheros
+> modificados sin commitear** —el trabajo vivo de la revisión de las 363 fichas—. Conviene que eso
+> quede en su propio *commit* antes de que PRC.0 escriba encima, para que el diff de PRC.0 se lea
+> como lo que es y no mezclado con la revisión.
 
 ### Prompt PRC.0 (RED/GREEN) — El cliente del dataset y la validación del contrato
 
