@@ -5,6 +5,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import i18n from '@/shared/i18n'
 import { AuthProvider } from '@/shared/auth'
 import { expectNoA11yViolations } from '@/test/a11y'
+import type {
+  CategoriaDeDatos,
+  PaginaDeActividad,
+} from '@/shared/api/generated/model'
 import { RegistroActividadPage } from '../RegistroActividadPage'
 
 /**
@@ -34,7 +38,7 @@ const hooks = vi.hoisted(() => ({
   categorias: [
     { codigo: 'datos_identificativos', nombre: 'Datos identificativos', nombre_secundario: null, vigente: true, sustituida_por: null },
     { codigo: 'datos_de_contacto', nombre: 'Datos de contacto', nombre_secundario: null, vigente: true, sustituida_por: null },
-  ] as object[],
+  ] as CategoriaDeDatos[],
   pagina: {
     items: [
       {
@@ -65,7 +69,7 @@ const hooks = vi.hoisted(() => ({
     total: 2,
     page: 1,
     size: 25,
-  },
+  } as PaginaDeActividad,
 }))
 
 vi.mock('@/shared/api/generated/actividad/actividad', () => ({
@@ -186,7 +190,7 @@ describe('RegistroActividadPage', () => {
      * crudo, que es donde alguien lo va a ver. */
     hooks.pagina = {
       ...hooks.pagina,
-      items: [{ ...(hooks.pagina.items[0] as object), categorias_datos: ['codigo_sin_catalogar'] }],
+      items: [{ ...hooks.pagina.items[0], categorias_datos: ['codigo_sin_catalogar'] }],
     }
     renderPage()
 
