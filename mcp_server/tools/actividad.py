@@ -21,9 +21,10 @@ deja arreglar nada.
 """
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Annotated, Any, Callable
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import Field
 
 from api_client import ApiClient
 
@@ -41,6 +42,10 @@ async def run_registrar_actividad_core(
 
     No se rellena ni se completa nada aquí. Un valor por defecto puesto en el cliente MCP sería
     un dato del registro que no declaró quien lo usó, y el registro dejaría de decir la verdad.
+
+    **Y la validación tampoco se duplica.** Los tipos de la firma son los que viajan en JSON; que
+    la marca de tiempo lleve zona o que el hash tenga 64 dígitos lo comprueba el servidor, que es
+    donde vive la regla. Validar aquí sólo movería el sitio donde falla, y con peor mensaje.
     """
     return await client.post(ACTIVIDAD_PATH, json=evento)
 
@@ -55,16 +60,109 @@ async def run_anonimizar_texto_core(client: ApiClient, text: str) -> dict:
 
 def register_actividad_tools(mcp: FastMCP, *, client_provider: ClientProvider) -> None:
     @mcp.tool()
-    async def registrar_actividad(evento: dict) -> dict:
+    async def registrar_actividad(
+        ocurrido_en: Annotated[
+            str,
+            Field(
+                description=(
+                    "Cuándo ocurrió el uso, en ISO 8601 y **con zona horaria** "
+                    "(«2026-09-03T10:30:00Z» o «...+02:00»). Una marca sin zona se rechaza: un "
+                    "instante sin zona no es un instante, y en un registro que se cruza entre "
+                    "organizaciones eso son horas de diferencia sin avisar."
+                )
+            ),
+        ],
+        actor: Annotated[
+            str,
+            Field(
+                description=(
+                    "Quién lo usó, en la forma que tengas. Un identificador interno estable es "
+                    "preferible a un correo: identifica igual y no propaga un dato personal."
+                )
+            ),
+        ],
+        herramienta: Annotated[
+            str,
+            Field(
+                description=(
+                    "El producto que se usó: «claude-cowork», «copilot», «gemini-cli». Usa "
+                    "siempre el mismo valor para el mismo producto; es el eje por el que se "
+                    "filtra y se agrega el registro."
+                )
+            ),
+        ],
+        finalidad: Annotated[
+            str,
+            Field(
+                description=(
+                    "Para qué se usó, en una frase. Es el campo que hace útil el registro en una "
+                    "auditoría: sin él sólo consta que hubo uso."
+                )
+            ),
+        ],
+        agente: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "El agente concreto dentro de esa herramienta, si lo hay: "
+                    "«revisor-de-contratos»."
+                )
+            ),
+        ] = None,
+        modelo_usado: Annotated[
+            str | None,
+            Field(description="El modelo, si se conoce: «claude-opus-5»."),
+        ] = None,
+        categorias_datos: Annotated[
+            list[str] | None,
+            Field(
+                description=(
+                    "Categorías de datos personales que se tocaron. **Pide el catálogo de tu "
+                    "organización a `GET /api/v1/actividad/categorias` y usa esos códigos**: el "
+                    "campo acepta cualquiera, pero si cada herramienta inventa los suyos el "
+                    "registro deja de poder agregarse, que es para lo que existe."
+                )
+            ),
+        ] = None,
+        payload_hash: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "SHA-256 en minúscula del texto procesado, sólo si hace falta dejar prueba "
+                    "de cuál fue. Permite demostrar después que un texto concreto es el que se "
+                    "procesó **sin guardar el texto**."
+                )
+            ),
+        ] = None,
+    ) -> dict:
         """Declara un uso de IA ocurrido fuera de la plataforma. [scope actividad:write]
 
-        El evento lleva **metadatos de gobernanza, nunca el contenido**: cuándo ocurrió, quién,
-        con qué herramienta y agente, para qué, con qué modelo y qué categorías de datos tocó. Si
-        hace falta dejar prueba de un texto concreto, va su SHA-256 en `payload_hash`. El contrato
-        rechaza cualquier campo de contenido, así que mandar el prompt no lo registra: falla.
+        El evento lleva **metadatos de gobernanza, nunca el contenido**. El contrato no tiene
+        ningún campo de texto y rechaza los que no declara, así que mandar el prompt no lo
+        registra: falla. Si hace falta prueba del contenido, va su SHA-256 en `payload_hash`.
 
         La organización sale del token, no se elige. Devuelve `id` y `registrado_en`.
+
+        Contrato campo a campo, mapeo a las convenciones OTel GenAI y cómo darse de alta: en
+        `docs/REGISTRO_ACTIVIDAD_IA.md` de la plataforma.
         """
+        # Lo que nadie declaró no viaja, y menos como `null`: `categorias_datos` no admite nulo
+        # en el contrato —su defecto es la lista vacía—, así que rellenar el hueco sería provocar
+        # un 422 desde el cliente.
+        evento = {
+            nombre: valor
+            for nombre, valor in (
+                ("ocurrido_en", ocurrido_en),
+                ("actor", actor),
+                ("herramienta", herramienta),
+                ("finalidad", finalidad),
+                ("agente", agente),
+                ("modelo_usado", modelo_usado),
+                ("categorias_datos", categorias_datos),
+                ("payload_hash", payload_hash),
+            )
+            if valor is not None
+        }
         return await run_registrar_actividad_core(client_provider(), evento)
 
     @mcp.tool()

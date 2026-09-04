@@ -46,6 +46,16 @@ PAT_DOS = "pat_dos_123456"
 
 CENTINELA = "SENTINELA_PII_123"
 
+#: El evento minimo que la firma tipada exige. Los tests que miran cabeceras o codigos de error
+#: lo mandan entero porque desde REG.7 la validacion de presencia la hace el propio cliente MCP:
+#: con menos campos, la tool falla antes de llegar a la API y no se probaria lo que se cree.
+EVENTO_MINIMO = {
+    "ocurrido_en": "2026-09-03T10:30:00Z",
+    "actor": "u-1",
+    "herramienta": "claude-cowork",
+    "finalidad": "Revision de un pliego",
+}
+
 
 # ─────────────────────────── Arnés del transporte ──────────────────────────
 
@@ -134,9 +144,7 @@ class TestElTokenViajaConLaPeticion:
         )
 
         async with servidor_mcp() as app:
-            await _llama(
-                app, "registrar_actividad", {"evento": {"actor": "u-1"}}, pat=PAT_UNO
-            )
+            await _llama(app, "registrar_actividad", EVENTO_MINIMO, pat=PAT_UNO)
 
         assert ruta.called
         assert ruta.calls.last.request.headers["authorization"] == f"Bearer {PAT_UNO}"
@@ -215,10 +223,7 @@ class TestLasTresTools:
 
         async with servidor_mcp() as app:
             resultado = await _llama(
-                app,
-                "registrar_actividad",
-                {"evento": {"actor": "u-1", "herramienta": "claude-cowork"}},
-                pat=PAT_UNO,
+                app, "registrar_actividad", EVENTO_MINIMO, pat=PAT_UNO
             )
 
         assert _payload(resultado)["id"] == "0d3b"
@@ -274,12 +279,92 @@ class TestLasTresTools:
         ruta = respx.post(f"{API}/api/v1/actividad").mock(
             return_value=httpx.Response(201, json={"id": "x", "registrado_en": "z"})
         )
-        evento = {"actor": "u-1", "finalidad": "Revisión de un pliego"}
+        evento = {
+            "ocurrido_en": "2026-09-03T10:30:00Z",
+            "actor": "u-1",
+            "herramienta": "claude-cowork",
+            "finalidad": "Revisión de un pliego",
+        }
 
         async with servidor_mcp() as app:
-            await _llama(app, "registrar_actividad", {"evento": evento}, pat=PAT_UNO)
+            await _llama(app, "registrar_actividad", evento, pat=PAT_UNO)
 
         assert json.loads(ruta.calls.last.request.content) == evento
+
+    @respx.mock
+    async def test_should_leave_out_the_optional_fields_nobody_filled(self):
+        """Lo que no se declara no viaja, y menos como `null`.
+
+        `categorias_datos` no admite nulo en el contrato —su defecto es la lista vacía—, así que
+        mandar `null` por rellenar el hueco sería un 422 provocado por el cliente. Y `agente:
+        null` sería ruido: el registro no gana nada guardando «no dijo nada» de forma explícita.
+        """
+        ruta = respx.post(f"{API}/api/v1/actividad").mock(
+            return_value=httpx.Response(201, json={"id": "x", "registrado_en": "z"})
+        )
+
+        async with servidor_mcp() as app:
+            await _llama(
+                app,
+                "registrar_actividad",
+                {
+                    "ocurrido_en": "2026-09-03T10:30:00Z",
+                    "actor": "u-1",
+                    "herramienta": "copilot",
+                    "finalidad": "Una consulta",
+                },
+                pat=PAT_UNO,
+            )
+
+        enviado = json.loads(ruta.calls.last.request.content)
+        assert set(enviado) == {"ocurrido_en", "actor", "herramienta", "finalidad"}
+
+    async def test_should_publish_the_event_contract_in_the_tool_schema(self):
+        """Lo que un cliente MCP recibe de `tools/list` tiene que ser el contrato.
+
+        Con `evento: dict` el esquema era `{"type": "object", "additionalProperties": true}`: sin
+        un solo nombre de campo y, encima, prometiendo que cualquier extra vale cuando el
+        servidor los rechaza con 422. Un agente lo descubría a base de 422 en bucle.
+        """
+        from http_server import build_http_server
+
+        servidor = build_http_server(_config())
+        registrar = next(
+            t for t in await servidor.list_tools() if t.name == "registrar_actividad"
+        )
+        esquema = registrar.inputSchema
+
+        assert set(esquema["properties"]) == {
+            "ocurrido_en",
+            "actor",
+            "herramienta",
+            "agente",
+            "finalidad",
+            "modelo_usado",
+            "categorias_datos",
+            "payload_hash",
+        }, esquema["properties"].keys()
+        assert set(esquema["required"]) == {
+            "ocurrido_en",
+            "actor",
+            "herramienta",
+            "finalidad",
+        }, esquema.get("required")
+
+    async def test_should_describe_the_rules_that_the_type_cannot_express(self):
+        """«Con zona horaria» y «SHA-256» no se deducen de `str`: van en la descripción."""
+        from http_server import build_http_server
+
+        servidor = build_http_server(_config())
+        registrar = next(
+            t for t in await servidor.list_tools() if t.name == "registrar_actividad"
+        )
+        propiedades = registrar.inputSchema["properties"]
+
+        assert "zona horaria" in propiedades["ocurrido_en"]["description"]
+        assert "SHA-256" in propiedades["payload_hash"]["description"]
+        # Y el puntero al catálogo, que es lo que evita que cada herramienta invente códigos.
+        assert "categorias" in propiedades["categorias_datos"]["description"]
 
     async def test_should_expose_the_three_new_tools(self):
         from http_server import build_http_server
@@ -329,7 +414,7 @@ class TestLosErroresLleganLegibles:
 
         async with servidor_mcp() as app:
             resultado = await _llama(
-                app, "registrar_actividad", {"evento": {"actor": "u-1"}}, pat=PAT_UNO
+                app, "registrar_actividad", EVENTO_MINIMO, pat=PAT_UNO
             )
 
         assert resultado.get("isError")
@@ -348,7 +433,7 @@ class TestLosErroresLleganLegibles:
 
         async with servidor_mcp() as app:
             resultado = await _llama(
-                app, "registrar_actividad", {"evento": {"actor": "u-1"}}, pat=PAT_UNO
+                app, "registrar_actividad", EVENTO_MINIMO, pat=PAT_UNO
             )
 
         assert resultado.get("isError")
