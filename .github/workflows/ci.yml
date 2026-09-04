@@ -192,11 +192,18 @@ jobs:
       # `shared/tests` tenía escondidos —`FieldDefinition`, retirado de `automatia_shared.dtos`
       # sin que nadie repuntara sus tests— importaban **dentro** de la función, así que un
       # `--collect-only` los habría dejado pasar. Cuestan 14 segundos entre los dos.
+      # `--directory mcp_server` y `--extra dev`, y las dos cosas son la misma lección.
+      # El primer intento fue `uv run --project mcp_server pytest mcp_server/tests` y CI dio
+      # `error: Failed to spawn: pytest`. En local pasaba, porque el venv de `mcp_server/` ya
+      # tenía pytest de sesiones anteriores; en CI se crea limpio, y `pytest` está declarado en
+      # `[project.optional-dependencies] dev` —un EXTRA, no un grupo—, que `uv run` no instala
+      # salvo que se le pida. `--directory` además pone el cwd dentro del proyecto, que es donde
+      # su `[tool.pytest.ini_options]` (`testpaths`, `pythonpath = ["."]`) significa lo que dice.
       - name: Run the trees the server job does not see (shared, mcp_server)
         working-directory: ${{ github.workspace }}
         run: |
           uv run --project server pytest shared/tests -q --no-cov -p no:cacheprovider
-          uv run --project mcp_server pytest mcp_server/tests -q -p no:cacheprovider
+          uv run --directory mcp_server --extra dev pytest tests -p no:cacheprovider
 
       # Gate de aislamiento entre organizaciones (SEC.2, hallazgo A2). Paso PROPIO y no
       # una carpeta más del paso anterior, a propósito: si esto se pone en rojo hay acceso
