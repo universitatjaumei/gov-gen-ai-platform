@@ -28,6 +28,8 @@ import { RegistroActividadPage } from '../RegistroActividadPage'
 
 const hooks = vi.hoisted(() => ({
   parametros: [] as unknown[],
+  paramsCatalogo: [] as { params: unknown; opciones: unknown }[],
+  organizacionElegida: '735a5f55-7020-4c88-a374-c2b641c5b00b',
   descargar: vi.fn(),
   categorias: [
     { codigo: 'datos_identificativos', nombre: 'Datos identificativos', nombre_secundario: null, vigente: true, sustituida_por: null },
@@ -71,7 +73,19 @@ vi.mock('@/shared/api/generated/actividad/actividad', () => ({
     hooks.parametros.push(params)
     return { data: hooks.pagina, isLoading: false, isError: false }
   }),
-  useCategoriasDeDatos: vi.fn(() => ({ data: hooks.categorias, isLoading: false })),
+  useCategoriasDeDatos: vi.fn((params: unknown, opciones: unknown) => {
+    hooks.paramsCatalogo.push({ params, opciones })
+    return { data: hooks.categorias, isLoading: false }
+  }),
+}))
+
+vi.mock('@/shared/organizacion/useOrganizacionElegida', () => ({
+  useOrganizacionElegida: vi.fn(() => ({
+    organizaciones: [],
+    elegida: hooks.organizacionElegida,
+    elegir: vi.fn(),
+    hayVarias: false,
+  })),
 }))
 
 vi.mock('@/shared/api/download', () => ({
@@ -92,6 +106,10 @@ beforeAll(async () => {
 
 afterEach(() => {
   hooks.parametros = []
+  hooks.paramsCatalogo = []
+  // Se restaura porque un test la vacía a propósito, y dejarla vacía haría que los siguientes
+  // probaran otra cosa sin decirlo.
+  hooks.organizacionElegida = '735a5f55-7020-4c88-a374-c2b641c5b00b'
   hooks.descargar.mockClear()
   localStorage.clear()
   vi.restoreAllMocks()
@@ -133,6 +151,30 @@ describe('RegistroActividadPage', () => {
 
     expect(screen.getByText(/Datos identificativos/)).toBeInTheDocument()
     expect(screen.getByText(/Datos de contacto/)).toBeInTheDocument()
+  })
+
+  it('should_ask_the_catalogue_for_the_chosen_organisation', () => {
+    /* El defecto que salió verificando en el navegador, y que este fichero no veía.
+     *
+     * La pantalla pedía el catálogo sin decir la organización. Para un superadministrador eso
+     * es un 400 —el catálogo es de cada organización y él no tiene «la suya»—, así que el mapa
+     * de etiquetas quedaba vacío y la tabla caía a los códigos crudos. Aquí no se notaba porque
+     * el hook está mockeado: devolvía el catálogo igual. De ahí que ahora se compruebe **con qué
+     * parámetros se pide**, que es la parte que el mock no puede fingir. */
+    renderPage()
+
+    const ultima = hooks.paramsCatalogo.at(-1)
+    expect(ultima?.params).toEqual({ organizacion_id: hooks.organizacionElegida })
+  })
+
+  it('should_not_ask_for_a_catalogue_when_there_is_no_organisation', () => {
+    /* Sin organización elegida no hay catálogo que pedir, y pedirlo sólo dejaría un 400 en la
+       consola de quien mire. La tabla sigue funcionando: enseña los códigos tal cual. */
+    hooks.organizacionElegida = ''
+    renderPage()
+
+    const ultima = hooks.paramsCatalogo.at(-1)
+    expect((ultima?.opciones as { query?: { enabled?: boolean } })?.query?.enabled).toBe(false)
   })
 
   it('should_show_an_uncatalogued_code_as_it_arrived', () => {

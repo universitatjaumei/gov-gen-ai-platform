@@ -5,6 +5,7 @@ import {
   useListarActividad,
 } from '@/shared/api/generated/actividad/actividad'
 import { descargarConAutorizacion } from '@/shared/api/download'
+import { useOrganizacionElegida } from '@/shared/organizacion/useOrganizacionElegida'
 
 /**
  * El registro de usos de IA de la organización (REG.6).
@@ -74,8 +75,21 @@ export function RegistroActividadPage() {
    *
    * Un código que no esté en el catálogo se enseña **crudo, tal como llegó**: el servidor acepta
    * cualquiera a propósito, así que llegarán, y esconderlos ocultaría la única señal de que al
-   * catálogo le falta una entrada. Verlos ahí es lo que hace que alguien lo cure. */
-  const { data: categorias } = useCategoriasDeDatos({})
+   * catálogo le falta una entrada. Verlos ahí es lo que hace que alguien lo cure.
+   *
+   * **La organización se manda siempre que se sepa.** El catálogo es de cada organización, y un
+   * superadministrador no tiene «la suya»: el servidor le responde 400 pidiéndole que la indique.
+   * Sin esto, la pantalla pedía el catálogo sin decirla, recibía ese 400 y caía a los códigos
+   * crudos — que es exactamente lo que se veía en el navegador, y lo que el test de esta pantalla
+   * no podía ver porque mockea el hook. La elección es la del selector del panel, que ya se
+   * recuerda entre pantallas. */
+  const { elegida: organizacionElegida } = useOrganizacionElegida()
+  const { data: categorias } = useCategoriasDeDatos(
+    organizacionElegida ? { organizacion_id: organizacionElegida } : {},
+    // Sin organización no hay catálogo que pedir, y pedirlo sólo dejaría un 400 en la consola de
+    // quien mire. La tabla funciona igual: enseña los códigos tal cual.
+    { query: { enabled: Boolean(organizacionElegida) } },
+  )
   const etiquetaDeCategoria = useMemo(() => {
     const porCodigo = new Map((categorias ?? []).map((c) => [c.codigo, c.nombre]))
     return (codigo: string) => porCodigo.get(codigo) ?? codigo

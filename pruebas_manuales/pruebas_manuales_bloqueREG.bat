@@ -88,7 +88,61 @@ curl -s -o nul -w "con campo prompt -> %%{http_code} (se espera 422)\n" -X POST 
   -H "Content-Type: application/json" ^
   -d "{\"ocurrido_en\":\"2026-09-03T12:00:00Z\",\"actor\":\"prueba-manual\",\"herramienta\":\"prueba-bat\",\"finalidad\":\"x\",\"prompt\":\"texto que no debe entrar\"}"
 echo.
-echo Si aqui sale 201, el contrato se ha roto: para y avisa.
+echo Se espera 422, y el mensaje tiene que EXPLICAR la regla: que el registro
+echo guarda metadatos y no contenido, y que para dejar prueba va el SHA-256 en
+echo payload_hash. Si solo dice "Extra inputs are not permitted", el arreglo de
+echo REG.9 no esta puesto.
+echo.
+echo Si sale 201, el contrato se ha roto: para y avisa.
+echo.
+pause
+
+echo.
+echo ------------------------------------------------------------
+echo  PASO 4.bis - Y que organizacion_id tampoco se elige
+echo ------------------------------------------------------------
+echo.
+curl -s -w "\n-> %%{http_code}\n" -X POST http://localhost:8000/api/v1/actividad ^
+  -H "Authorization: Bearer %PAT%" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"ocurrido_en\":\"2026-09-03T12:00:00Z\",\"actor\":\"prueba-manual\",\"herramienta\":\"prueba-bat\",\"finalidad\":\"x\",\"organizacion_id\":\"00000000-0000-0000-0000-000000000010\"}"
+echo.
+echo Se espera 422 con un mensaje distinto del anterior: este no habla de
+echo metadatos, habla de que la organizacion sale del dueno del token. Son dos
+echo malentendidos distintos y cada uno tiene su explicacion.
+echo.
+pause
+
+echo.
+echo ------------------------------------------------------------
+echo  PASO 4.ter - El catalogo de categorias de datos (REG.8)
+echo ------------------------------------------------------------
+echo.
+curl -s -w "\n-> %%{http_code}\n" http://localhost:8000/api/v1/actividad/categorias ^
+  -H "Authorization: Bearer %PAT%"
+echo.
+echo Se espera 200 con las ocho categorias sembradas, empezando por
+echo datos_identificativos. Es lo que una herramienta externa tiene que pedir
+echo para no inventarse los codigos.
+echo.
+echo Comprueba que el token de maquina lo puede leer: NO exige rol ni modulo,
+echo a diferencia de la lectura del registro.
+echo.
+pause
+
+echo.
+echo ------------------------------------------------------------
+echo  PASO 4.quater - Y que un codigo sin catalogar NO se rechaza
+echo ------------------------------------------------------------
+echo.
+curl -s -o nul -w "categoria inventada -> %%{http_code} (se espera 201)\n" -X POST http://localhost:8000/api/v1/actividad ^
+  -H "Authorization: Bearer %PAT%" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"ocurrido_en\":\"2026-09-03T12:05:00Z\",\"actor\":\"prueba-manual\",\"herramienta\":\"prueba-bat\",\"finalidad\":\"Codigo fuera del catalogo\",\"categorias_datos\":[\"una_categoria_inventada\"]}"
+echo.
+echo Se espera 201. El catalogo se anuncia, no se impone: rechazarlo
+echo convertiria "esta categoria no esta dada de alta" en "este uso de IA no
+echo queda registrado", y perder el registro es peor.
 echo.
 pause
 
@@ -136,7 +190,12 @@ echo        herramienta  prueba-bat
 echo        finalidad    Comprobacion manual del bloque REG
 echo   3. Escribe "prueba-bat" en el filtro Herramienta: debe quedar
 echo      ese solo.
-echo   4. Pulsa "Exportar a CSV" y abre el fichero descargado:
+echo   4. En la columna "Categorias de datos" tienen que salir las ETIQUETAS
+echo      del catalogo ("Datos identificativos"), no los codigos. Pero el
+echo      evento del PASO 4.quater tiene que ensenar "una_categoria_inventada"
+echo      tal cual: es la unica senal de que al catalogo le falta una entrada,
+echo      y si se escondiera nadie lo curaria nunca.
+echo   5. Pulsa "Exportar a CSV" y abre el fichero descargado:
 echo      la primera linea son los nombres del contrato
 echo      (ocurrido_en, registrado_en, actor, herramienta, agente,
 echo       finalidad, modelo_usado, categorias_datos, payload_hash).
