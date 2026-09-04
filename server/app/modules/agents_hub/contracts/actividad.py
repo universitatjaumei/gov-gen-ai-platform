@@ -27,11 +27,35 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 #: SHA-256 en hexadecimal minúscula. Se valida la forma porque un hash mal formado no sirve para
 #: cotejar nada, y el error tiene que salir al registrar y no el día de la auditoría.
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+#: Dónde está explicado todo el contrato, para que quien se estrelle no tenga que preguntar.
+_DOCUMENTO = "docs/REGISTRO_ACTIVIDAD_IA.md"
+
+#: Nombres con los que un integrador intenta mandar el contenido. No es una lista de prohibidos
+#: —`extra="forbid"` ya rechaza cualquier campo no declarado—: es la lista de los que reciben la
+#: explicación de la regla en vez del mensaje genérico, porque son los que se mandan de buena fe.
+_NOMBRES_DE_CONTENIDO = frozenset(
+    {
+        "payload",
+        "content",
+        "contenido",
+        "prompt",
+        "mensaje",
+        "message",
+        "texto",
+        "text",
+        "respuesta",
+        "response",
+        "completion",
+        "input",
+        "output",
+    }
+)
 
 
 class ActividadIAEvent(BaseModel):
@@ -72,6 +96,59 @@ class ActividadIAEvent(BaseModel):
 
     #: SHA-256 del contenido procesado, si el caso exige poder cotejarlo. **Nunca el contenido.**
     payload_hash: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _explica_lo_que_sobra(cls, datos):
+        """Convierte «Extra inputs are not permitted» en algo que se pueda actuar (REG.9).
+
+        `extra="forbid"` ya hace cumplir la regla; lo que no hace es decir **por qué**. Y la
+        diferencia tiene consecuencias: quien integra lee «este campo no está permitido» y saca
+        la conclusión razonable de que al esquema le falta algo, así que pide que se añada. La
+        conversación de explicar que el registro no puede convertirse en un segundo sitio donde
+        viven los datos personales acaba teniéndose igual, sólo que a posteriori y por un canal
+        lento — cuando cabía aquí, gratis, en el momento en que alguien está mirando.
+
+        Se distinguen dos casos porque son dos malentendidos distintos: mandar el contenido es
+        chocar con la regla del bloque, y mandar `organizacion_id` es creer que se elige algo que
+        sale del token. Para cualquier otro extra, el mensaje genérico con el puntero: no vale la
+        pena adivinar la intención de un campo que nadie ha visto todavía.
+
+        Va en `mode="before"` para llegar antes que el rechazo de Pydantic, y sólo actúa si el
+        campo no está declarado — así añadir un campo al contrato no lo convierte en un error por
+        parecerse a uno de estos nombres.
+        """
+        if not isinstance(datos, dict):
+            return datos
+
+        declarados = set(cls.model_fields)
+        sobran = [nombre for nombre in datos if nombre not in declarados]
+        if not sobran:
+            return datos
+
+        de_contenido = [n for n in sobran if n.lower() in _NOMBRES_DE_CONTENIDO]
+        if de_contenido:
+            raise ValueError(
+                f"El registro guarda **metadatos** de gobernanza, nunca el contenido, así que "
+                f"{', '.join(f'`{n}`' for n in de_contenido)} no cabe en el evento: si lo "
+                f"aceptara, el registro sería un segundo sitio donde viven los datos personales "
+                f"que existe para inventariar. Si necesitas dejar prueba de qué texto se "
+                f"procesó, manda su SHA-256 en `payload_hash`. Contrato completo en "
+                f"{_DOCUMENTO}."
+            )
+
+        if "organizacion_id" in sobran:
+            raise ValueError(
+                "`organizacion_id` no se manda: sale del dueño del token que autentica la "
+                "petición. Si viajara en el evento, un token de una organización podría "
+                f"escribir en el registro de otra. Contrato completo en {_DOCUMENTO}."
+            )
+
+        raise ValueError(
+            f"El evento no admite {', '.join(f'`{n}`' for n in sobran)}: sólo los campos que "
+            f"declara el contrato, para que quien audite el registro sepa qué hay en él. "
+            f"Contrato completo en {_DOCUMENTO}."
+        )
 
     @field_validator("ocurrido_en")
     @classmethod

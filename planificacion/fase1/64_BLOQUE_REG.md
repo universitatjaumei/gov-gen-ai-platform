@@ -322,3 +322,29 @@ extensión de Chrome (tabla renderizada con datos sembrados, filtros funcionando
 limpias); `docs/REGISTRO_ACTIVIDAD_IA.md` existe y el enlace desde `docs/mcp.md` también.
 
 ---
+
+---
+
+### Prompts REG.7-REG.9 (añadidos el 2026-09-04, tras revisar el bloque con el usuario)
+
+**De dónde salen.** Al cerrar el bloque, la pregunta fue si hace falta documentar lo que se puede
+registrar y cómo, o si la conexión MCP ya intercambia esa información. Comprobándolo aparecieron
+tres huecos, y los tres se cerraron aquí.
+
+**REG.7 — La tool MCP declara el contrato.** `registrar_actividad` recibía `evento: dict`, así que
+el esquema de `tools/list` era `{"type": "object", "additionalProperties": true}`: sin un nombre de
+campo, y prometiendo que cualquier extra valía cuando el servidor los rechaza con 422. Se tipa la
+firma con descripción por campo, y un guardarraíl **del lado del servidor** —`mcp_server/` no
+puede importar `server.app`— comprueba que no divergen.
+
+**REG.8 — El catálogo de categorías de datos.** `categorias_datos` es vocabulario abierto y no
+había catálogo: si cada herramienta inventa sus códigos, el registro deja de poder agregarse, que
+es para lo que existe. `GET /api/v1/actividad/categorias` sobre `hub_vocabulary_terms` con el eje
+nuevo `categoria_dades`. **Se anuncia, no se impone**: el `POST` sigue aceptando cualquier código,
+porque rechazarlo convertiría «esta categoría no está dada de alta» en «este uso de IA no queda
+registrado», y los sin catalogar se ven en el panel tal como llegaron.
+
+**REG.9 — El rechazo se explica.** «Extra inputs are not permitted» dice qué y no dice por qué, y
+quien lo lee concluye razonablemente que al esquema le falta un campo. Un `model_validator` en
+`mode="before"` distingue dos malentendidos —mandar contenido y mandar `organizacion_id`— y en los
+dos casos señala la salida y el documento.

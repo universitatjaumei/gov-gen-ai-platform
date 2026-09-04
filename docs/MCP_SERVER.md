@@ -117,6 +117,13 @@ quedaría vacío — que es peor que una entrada de más. Y el contrato del even
 campo de contenido**: mandar el prompt no lo registra, falla. El contrato campo a campo está en
 [`REGISTRO_ACTIVIDAD_IA.md`](REGISTRO_ACTIVIDAD_IA.md).
 
+**Los campos del evento viajan en el esquema de la tool** (REG.7), con la descripción de cada uno:
+qué formato lleva la marca de tiempo, que el hash es un SHA-256 y de dónde sacar los códigos de
+`categorias_datos`. Se declaraba como un `dict` opaco, así que el cliente recibía `{"type":
+"object", "additionalProperties": true}` —ni un nombre de campo, y encima prometiendo que cualquier
+extra valía cuando el servidor los rechaza—. Un guardarraíl del lado del servidor comprueba que la
+firma y el contrato no divergen; no puede vivir aquí porque este paquete no importa `server.app`.
+
 ## 4. Registro en Claude Code
 
 ```bash

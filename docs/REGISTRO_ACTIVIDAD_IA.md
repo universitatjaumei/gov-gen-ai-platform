@@ -29,8 +29,13 @@ No es una omisión que se pueda corregir por petición. Un registro de cumplimie
 contenido sería un segundo sitio donde viven los datos personales de la organización: uno más que
 inventariar, uno más que proteger, uno más que borrar cuando alguien ejerza su derecho de
 supresión — y creado precisamente por la herramienta que existe para llevar la cuenta de los
-riesgos. Dos tests fijan la regla, y uno de ellos comprueba los cinco nombres con los que un
-integrador intentaría colar el contenido (`payload`, `content`, `prompt`, `mensaje`, `texto`).
+riesgos.
+
+`extra="forbid"` rechaza **cualquier** campo no declarado, así que la regla no depende de acertar
+una lista de nombres. Lo que sí hay es una lista de los que se mandan de buena fe —`payload`,
+`content`, `prompt`, `mensaje`, `texto`, `respuesta`, `input`, `output`…—: ésos reciben un 422 que
+explica la regla y señala `payload_hash` en vez del «Extra inputs are not permitted» de rigor,
+porque quien lee eso concluye razonablemente que al esquema le falta un campo y pide que se añada.
 
 **Si un caso exige evidencia del contenido**, va su **SHA-256** en `payload_hash`. Un hash permite
 demostrar después que un texto concreto es el que se procesó, sin guardar el texto. Se valida en
@@ -51,7 +56,7 @@ nada y es mejor saberlo al registrar que en la auditoría.
 | `agente` | `str` (≤255) | no | El agente concreto dentro de esa herramienta, si lo hay: `revisor-de-contratos` |
 | `finalidad` | `str` (≤500) | sí | Para qué. Es el campo que hace útil el registro en una auditoría: sin él, sólo consta que hubo uso |
 | `modelo_usado` | `str` (≤100) | no | El modelo, si se conoce |
-| `categorias_datos` | `list[str]` | no (vacía) | Categorías de datos personales tocadas. **Vocabulario abierto**, no un `Enum`: quien registra sabe qué trató, y una lista cerrada en nuestro código haría que un caso legítimo se registrara mal o no se registrara |
+| `categorias_datos` | `list[str]` | no (vacía) | Categorías de datos personales tocadas. **Vocabulario abierto**, no un `Enum`: quien registra sabe qué trató, y una lista cerrada en nuestro código haría que un caso legítimo se registrara mal o no se registrara. Pide los códigos a `GET /api/v1/actividad/categorias` — ver §2.bis |
 | `payload_hash` | `str` | no | SHA-256 en minúscula, si hace falta evidencia |
 
 La respuesta es `201` con `{id, registrado_en}`. Se devuelve `registrado_en` y no sólo el `id`
@@ -62,6 +67,66 @@ marca que vale en una auditoría es la que pone la plataforma.
 token de una organización podría escribir en el registro de otra y el registro dejaría de dar
 cuenta de nada. Mandarla llega como **422** y no se ignora en silencio: ignorarla haría creer a
 quien integra que la está eligiendo.
+
+---
+
+## 2.bis El catálogo de categorías: se anuncia, no se impone
+
+`categorias_datos` acepta cualquier código, y eso resuelve un problema y crea otro.
+
+**El que resuelve**: quien registra sabe qué datos trató, y una lista cerrada en nuestro código
+haría que un caso legítimo se registrara mal o no se registrara.
+
+**El que crea**: si cada herramienta inventa sus códigos —`datos_identificativos`,
+`identificativos`, `PII`—, el registro **deja de poder agregarse**, que es exactamente para lo que
+existe en una auditoría. Y ningún canal automático lo arregla: ni el esquema MCP ni OpenAPI pueden
+transmitir un vocabulario que no existe.
+
+De ahí el catálogo:
+
+```bash
+curl -sS https://normativa.uji.es/api/v1/actividad/categorias \
+    -H "Authorization: Bearer pat_..."
+```
+
+```json
+[{"codigo": "datos_identificativos", "nombre": "Datos identificativos",
+  "nombre_secundario": null, "vigente": true, "sustituida_por": null}]
+```
+
+**El `POST` sigue aceptando cualquier código.** Rechazar uno que no esté en el catálogo
+convertiría «esta categoría todavía no está dada de alta» en «este uso de IA no queda
+registrado», y perder el registro es peor que tenerlo con una etiqueta imperfecta. Lo que sí se
+hace es dejar los códigos sin catalogar **a la vista** en el panel, tal como llegaron: es la única
+señal de que al catálogo le falta una entrada, y es así como se cura en vez de podrirse.
+
+**Este endpoint no exige rol ni módulo**, a diferencia de la lectura del registro: saber cómo se
+llaman las categorías de tu propia organización no es privilegiado, y exigir el módulo `registro`
+dejaría fuera al consumidor principal —el token de máquina que sólo tiene `actividad:write`—. Un
+superadministrador tiene que indicar `?organizacion_id=...`, porque en él la lista vacía significa
+«todas» y no hay «la suya».
+
+### De dónde salen los códigos, y quién los cambia
+
+Viven en `hub_vocabulary_terms` con el eje `categoria_dades`: la misma tabla que el vocabulario
+del corpus, y por la misma razón. Un catálogo de protección de datos necesita exactamente lo que
+esa tabla da —`vigent` para retirar una categoría sin borrar el histórico,
+`substituit_per_codi` para renombrar dejando la traza, y el par de nombres para las dos lenguas—.
+
+**Las categorías sembradas están pendientes de validación** por quien lleve el registro de
+actividades de tratamiento de la organización. Son un punto de partida convencional, con las
+categorías del art. 30 del RGPD y `datos_de_categoria_especial` para lo del art. 9 cuando no haga
+falta más detalle:
+
+`datos_identificativos` · `datos_de_contacto` · `caracteristicas_personales` ·
+`datos_academicos_y_profesionales` · `datos_economicos_y_financieros` ·
+`datos_de_trafico_y_conexion` · `datos_de_categoria_especial` · `sin_datos_personales`
+
+El último hace falta poder decirlo: sin él, una lista vacía es ambigua entre «no hubo datos
+personales» y «no lo declaré», y en una auditoría son dos cosas distintas.
+
+Cambiarlas es un `UPDATE`, no un despliegue. Con `?incluir_retiradas=true` el catálogo devuelve
+también las retiradas con su sustituta, que es lo que hace falta para reetiquetar lo ya registrado.
 
 ---
 
@@ -159,6 +224,22 @@ porque aquí llega por definición el material más sensible que pasa por la pla
 `logger.debug(text)` de una depuración convertiría el log en el archivo de datos personales que el
 servicio existe para evitar.
 
+### 4.5 Qué te dice el sistema solo, y qué tienes que leer aquí
+
+Conviene saber qué parte del contrato viaja por el canal y qué parte no, para no buscarla donde
+no está.
+
+| | Por MCP | Por HTTP |
+|---|---|---|
+| Nombres de campo, obligatorios y descripciones | sí, en el esquema de `tools/list` | `openapi.json`, **apagado en producción** por SEC.7 |
+| La regla «metadatos sí, payloads no» | sí, en la descripción de la tool | en el mensaje del 422, cuando choques |
+| Los códigos de `categorias_datos` | no: pídelos a `/actividad/categorias` | igual |
+| Por qué el contrato es así, y el mapeo a OTel | no | no |
+
+Las dos últimas filas son la razón de que este documento exista. Y de que el rechazo del contrato
+no diga «Extra inputs are not permitted» sino qué regla se ha tocado y qué hacer en su lugar: sin
+eso, la conclusión razonable de quien integra es que al esquema le falta un campo.
+
 ---
 
 ## 5. Consultar el registro
@@ -185,6 +266,7 @@ del panel, que sí sabe en qué idioma está su lector.
 | Pieza | Fichero |
 |---|---|
 | Contrato del evento | `server/app/modules/agents_hub/contracts/actividad.py` |
+| Semilla del catálogo de categorías | `server/app/core/actividad_categorias.py` (los términos, en `hub_vocabulary_terms`) |
 | Tabla | `hub_actividad_ia` (`operational_models.py`) — **operacional**, vive en el edge |
 | Endpoints | `server/app/routers/actividad_router.py` (`Deploy: edge`) |
 | Anonimización como servicio | `server/app/routers/anonimizacion_router.py` (`Deploy: edge`) |

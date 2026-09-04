@@ -113,7 +113,7 @@ vive en un documento no es un invariante: es una intención.
 | I1 | **Una respuesta sin cita válida no se entrega.** Si no hay fundamento en el corpus recuperado, el asistente se rinde con el mensaje del chatbot | `agent/citation_validator.py` (`enforce_citation_contract`) |
 | I2 | **Sólo se cita lo que se recuperó.** Un ancla que no se recuperó se degrada al documento; lo que apunta fuera del conjunto pierde el enlace, no la mención | `degradar_anclas` + `despojar_remisiones`, en ese orden |
 | I3 | **La taxonomía nunca entra en el texto que se embebe.** En `embedding_text` sólo va contexto estructural. Reclasificar tiene que costar un `UPDATE`, no un reindexado | contrato del corpus + guardarraíles de ingesta |
-| I4 | **El vocabulario es dato, no código.** Ámbitos, submaterias y módulos viven en tabla versionada; prohibido `Enum` de Python o `CheckConstraint` para ellos | `core/auth/modulos.py`, vocabulario del corpus |
+| I4 | **El vocabulario es dato, no código.** Ámbitos, submaterias, módulos y categorías de datos viven en tabla versionada; prohibido `Enum` de Python o `CheckConstraint` para ellos. Los **ejes** sí son estructura y van en `StrEnum`: añadir uno exige código que lo consuma | `core/auth/modulos.py`, `vocabulary_service.py`, vocabulario del corpus |
 | I5 | **Quien no gestiona una organización no ve sus datos.** Y una lista de organizaciones vacía significa «ninguna», no «todas» | `core/auth/tenancy.py`; `test_tenant_isolation.py` |
 | I6 | **El frontend no calcula permisos.** El servidor manda `acciones_permitidas` o banderas por fila; React itera | reglas maestras de `AGENTS.md`; DTOs de cada router |
 | I7 | **El frontend no define tipos de datos a mano.** Todo sale del contrato OpenAPI vía Orval | job `API Contract` de CI |
@@ -401,11 +401,20 @@ detalle de lo que pasa dentro de la plataforma ya lo cubre la observabilidad int
   y el registro no distinguiría a nadie.
 - **Paginar no repite ni pierde filas**: `ocurrido_en` lo declara quien registra y los empates son
   normales, así que el orden lleva desempate por `id`.
+- **Quien integra recibe el contrato por el canal que use**: el esquema de la tool MCP declara
+  campo a campo lo que el evento admite, y un guardarraíl impide que se separe del contrato del
+  servidor. Los códigos de `categorias_datos` los sirve
+  `GET /api/v1/actividad/categorias`, y el rechazo de un campo de contenido **explica la regla y
+  señala `payload_hash`** en vez de decir «campo no permitido».
+- **El catálogo de categorías se anuncia y no se impone**: el `POST` acepta códigos que no estén
+  en él, y los sin catalogar se ven en el panel tal como llegaron. Rechazarlos convertiría «esta
+  categoría no está dada de alta» en «este uso de IA no queda registrado».
 
 **Superficie.** `contracts/actividad.py`, tabla `hub_actividad_ia` (operacional) ·
 `actividad_router` y `anonimizacion_router` (`Deploy: edge`) · `mcp_server/http_server.py` y
-`mcp_server/tools/actividad.py` · pantalla `/registro` (módulo `registro`) ·
-[`REGISTRO_ACTIVIDAD_IA.md`](REGISTRO_ACTIVIDAD_IA.md).
+`mcp_server/tools/actividad.py` · catálogo de categorías en `hub_vocabulary_terms`, eje
+`categoria_dades`, con su semilla en `core/actividad_categorias.py` · pantalla `/registro`
+(módulo `registro`) · [`REGISTRO_ACTIVIDAD_IA.md`](REGISTRO_ACTIVIDAD_IA.md).
 
 **Invariantes.** I5, I8, I12.
 
@@ -417,6 +426,11 @@ en la pila de la VM **sin desplegar**: pasa a producción cuando el bloque llegu
   externa se conecte con un PAT y confirme que el contrato le sirve tal como está.
 - **Sin política de retención.** Un registro de conservación acabará necesitando decir cuánto se
   guarda y qué pasa después; hoy crece sin límite y sin purga.
+- **Las categorías sembradas están pendientes de validación** por quien lleve el registro de actividades
+  de tratamiento. Son un punto de partida convencional; cambiarlas es un `UPDATE`, y por eso el
+  catálogo vive en tabla y no en código.
+- **Una organización creada después de la migración nace sin catálogo** y recibe una lista vacía.
+  Asumido: sembrarlo en el alta fijaría en código un vocabulario que va a cambiar.
 - **La anonimización no ofrece elegir política**, a propósito: se añade cuando un consumidor real
   diga qué necesita.
 - **Sin token de servicio no personal.** El PAT pertenece a una persona, así que la actividad de
@@ -521,6 +535,9 @@ a quien llega de fuera:
   que el texto que se manda a anonimizar no llega a ningún registro.
 - `test_reg4_el_mcp_remoto_esta_declarado.py` — que el despliegue del MCP remoto no reciba un
   PAT por entorno. Es el cambio más razonable del mundo para quien no sepa por qué no está.
+- `test_reg7_la_tool_declara_el_contrato.py` — que la firma de la tool MCP y `ActividadIAEvent`
+  no divergan. Vive del lado del servidor porque `mcp_server/` no puede importar `server.app`, y
+  comprobarlo exige tener los dos delante.
 - `test_profile_contract.py` — todo perfil que no esté declarado sin configurar tiene que compilar
   y ejecutar.
 - Gate de regresión de recuperación: falla si `recall@5`, `recall@10` o `MRR` bajan más de 0,02
