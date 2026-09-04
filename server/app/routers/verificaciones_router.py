@@ -17,8 +17,12 @@ aquí con el de la función directamente.
 
 **El texto no se guarda.** Ni la respuesta que se verifica ni el código que se audita tocan logs ni
 base de datos — la misma regla que REG.3 para la anonimización, y por el mismo motivo: aquí llega,
-por definición, material que no es nuestro. Este módulo **no recibe sesión de base de datos**, que
-es una garantía más fuerte que un cuidado: no hay dónde escribir.
+por definición, material que no es nuestro.
+
+La forma de garantizarlo cambia por endpoint, y conviene saber cuál protege a cuál. `POST /citas`
+y `POST /codigo` **no piden sesión de base de datos**: no hay dónde escribir, que es más fuerte que
+recordar no hacerlo. `GET /vigencia` sí la recibe —tiene que leer el corpus—, y ahí la garantía es
+que sólo hace `SELECT`; lo que se manda es un identificador, no texto ajeno.
 
 **Y la asimetría del registro, escrita para que nadie la «arregle»**: la auditoría de código sí
 deja un evento REG (VAS.3) porque auditar es un acto de gobernanza —la revisión posterior del
@@ -28,12 +32,30 @@ evento por cada comprobación duplicaría el registro sin decir nada nuevo.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import uuid
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import require_pat_scopes
+from server.app.core.auth.models import UserInfo
 from server.app.core.auth.pat.scopes import VERIFICACIONES_USE
+from server.app.core.auth.tenancy import scope_query_to_orgs
+from server.app.core.urls import normalizar_url
 from server.app.modules.agents_hub.agent.citation_validator import aplicar_contrato
+from server.app.modules.agents_hub.database.config_models import HubChatbot
+from server.app.modules.agents_hub.database.connection import get_async_session
+from server.app.modules.agents_hub.database.operational_models import HubDocument
+from server.app.modules.agents_hub.services.retrieval.metadata_filter import (
+    MetadataFilter,
+)
+from server.app.modules.agents_hub.services.retrieval.vigencia import (
+    aviso_para,
+    marca_de_vigencia,
+)
 
 #: Tope del texto que se acepta, en bytes. No hay límite de entrada del sandbox del que heredarlo
 #: —FUN.6 aún no existe—, así que se fija aquí y ese bloque lo heredará de este sitio en vez de
@@ -146,3 +168,212 @@ async def verificar_citas(
         remisiones_despojadas=resultado.remisiones_despojadas,
         anclas_degradadas=resultado.anclas_degradadas,
     )
+
+
+# ─────────────────────────── La vigencia (VAS.2) ───────────────────────────
+
+
+class VersionEnOtraLengua(BaseModel):
+    document_id: uuid.UUID
+    url: str
+    lengua: str
+
+
+class DocumentoDesplazado(BaseModel):
+    document_id: uuid.UUID
+    url: str
+
+
+class EstadoDeVigencia(BaseModel):
+    """Lo que la plataforma sabe de la vigencia de un documento, y qué diría de él.
+
+    `aviso` no es un booleano: es **el texto**. Si cada cliente redactara el suyo a partir de
+    `necesita_aviso`, dos superficies de la misma institución acabarían diciendo cosas distintas
+    de la misma norma.
+    """
+
+    document_id: uuid.UUID
+    titulo: str
+    url: str
+    estat_vigencia: str | None
+    vigencia_validada: bool
+    vigencia_validada_el: datetime | None
+    vigencia_validada_por: str | None
+    necesita_aviso: bool
+    aviso: str | None
+    superseded_por: DocumentoDesplazado | None
+    lengua: str
+    version_pareja: VersionEnOtraLengua | None
+
+
+class _ItemParaElAviso:
+    """Lo mínimo que `aviso_para` necesita: un título y los metadatos de vigencia.
+
+    Se le pasa un objeto sintético en vez de reimplementar el texto del aviso. Es lo que hace
+    que el aviso sea **byte a byte** el del grafo: no hay dos redacciones, hay una función.
+    """
+
+    __slots__ = ("title", "metadata")
+
+    def __init__(self, titulo: str, metadatos: dict) -> None:
+        self.title = titulo
+        self.metadata = metadatos
+
+
+@router.get(
+    "/vigencia",
+    response_model=EstadoDeVigencia,
+    operation_id="consultarVigencia",
+)
+async def consultar_vigencia(
+    document_id: uuid.UUID | None = Query(default=None),
+    url: str | None = Query(default=None, max_length=2048),
+    user: UserInfo = Depends(_exige_scope),
+    session: AsyncSession = Depends(get_async_session),
+) -> EstadoDeVigencia:
+    """Si la plataforma pondría un aviso sobre este documento, y cuál.
+
+    **Acotado por tenencia y por el filtro cerrado.** Sólo documentos de chatbots visibles para
+    la organización del token y que pasen `MetadataFilter()` por defecto: público, no desplazado,
+    apto para asistentes, y de los que rigen hoy.
+
+    **Lo que no cumple eso devuelve 404, no «no validado».** Un 403 o un «existe pero no puedo
+    decirte» confirmarían que el documento existe, y el propio título de la respuesta sería la
+    fuga. Es la misma razón por la que la lectura del registro acota en vez de responder «no
+    autorizado» con datos dentro.
+    """
+    if (document_id is None) == (url is None):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "IDENTIFICA_UN_DOCUMENTO",
+                "message": (
+                    "Indica `document_id` o `url`, exactamente uno de los dos: con los dos no "
+                    "se sabe cuál manda si no coinciden, y sin ninguno no hay nada que mirar."
+                ),
+            },
+        )
+
+    documento = await _documento_verificable(session, user, document_id, url)
+    if documento is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "DOCUMENTO_NO_VERIFICABLE",
+                "message": (
+                    "No hay ningún documento verificable con esa referencia. Puede que no "
+                    "exista, que no sea de tu organización o que el corpus no lo ofrezca a los "
+                    "asistentes."
+                ),
+            },
+        )
+
+    # El aviso, del motor y no de una copia: `marca_de_vigencia` decide si hace falta y
+    # `aviso_para` lo redacta, que son las dos funciones que el grafo usa para hidratar la
+    # respuesta.
+    metadatos = marca_de_vigencia(documento)
+    aviso = aviso_para([_ItemParaElAviso(documento.title, metadatos)])
+
+    return EstadoDeVigencia(
+        document_id=documento.id,
+        titulo=documento.title,
+        url=documento.canonical_url,
+        estat_vigencia=documento.estat_vigencia,
+        vigencia_validada=documento.vigencia_validada_el is not None,
+        vigencia_validada_el=documento.vigencia_validada_el,
+        vigencia_validada_por=documento.vigencia_validada_per,
+        necesita_aviso=aviso is not None,
+        aviso=aviso,
+        superseded_por=await _lo_desplaza(session, documento),
+        lengua=documento.language,
+        version_pareja=await _pareja_de(session, documento),
+    )
+
+
+async def _documento_verificable(
+    session: AsyncSession,
+    user: UserInfo,
+    document_id: uuid.UUID | None,
+    url: str | None,
+):
+    """El documento, si el principal puede recuperarlo. `None` si no, sin distinguir por qué.
+
+    No se distingue a propósito: «no existe», «no es tuyo» y «el corpus no lo ofrece» tienen que
+    dar la misma respuesta, porque distinguirlas es decir cuál de las tres es.
+    """
+    consulta = scope_query_to_orgs(
+        select(HubDocument).join(
+            HubChatbot, HubChatbot.id == HubDocument.chatbot_id
+        ),
+        user,
+        HubChatbot,
+    ).where(*MetadataFilter().document_conditions())
+
+    if document_id is not None:
+        consulta = consulta.where(HubDocument.id == document_id)
+        return (await session.execute(consulta)).scalars().first()
+
+    # Por URL hace falta normalizar los dos lados: el corpus guarda la canónica tal como la
+    # publicó el portal, y quien pregunta trae la que copió de una cita. La barra final, el
+    # esquema y el ancla no cambian de qué norma se habla.
+    buscada = normalizar_url(url)
+    for documento in (await session.execute(consulta)).scalars().all():
+        if normalizar_url(documento.canonical_url) == buscada:
+            return documento
+    return None
+
+
+async def _pareja_de(session: AsyncSession, documento) -> VersionEnOtraLengua | None:
+    """La versión en la otra lengua, mirando **los dos sentidos** de `versio_idiomatica_de`.
+
+    El corpus la declara en un solo lado y cuál es depende de qué se ingirió primero, que no es
+    una afirmación sobre nada. Resolverlo en un sentido dejaría la mitad de las parejas sin
+    hermana según el orden de la ingesta.
+    """
+    hermana = (
+        (
+            await session.execute(
+                select(HubDocument).where(
+                    or_(
+                        HubDocument.id == documento.versio_idiomatica_de,
+                        HubDocument.versio_idiomatica_de == documento.id,
+                    ),
+                    HubDocument.id != documento.id,
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if hermana is None:
+        return None
+    return VersionEnOtraLengua(
+        document_id=hermana.id, url=hermana.canonical_url, lengua=hermana.language
+    )
+
+
+async def _lo_desplaza(session: AsyncSession, documento) -> DocumentoDesplazado | None:
+    """Qué norma lo desplaza, si el corpus lo declara.
+
+    Se lee de `doc_metadata['superseded_per']` porque es donde el corpus lo escribe; un
+    documento **desplazado entero** no llega aquí —el filtro cerrado lo excluye y la respuesta
+    es 404—, así que esto informa del caso en que lo desplazado es una parte.
+    """
+    referencia = (documento.doc_metadata or {}).get("superseded_per")
+    if not isinstance(referencia, dict):
+        return None
+    otro_id = referencia.get("document_id")
+    if not otro_id:
+        return None
+    try:
+        otro_uuid = uuid.UUID(str(otro_id))
+    except (ValueError, TypeError):
+        return None
+    otro = (
+        (await session.execute(select(HubDocument).where(HubDocument.id == otro_uuid)))
+        .scalars()
+        .first()
+    )
+    if otro is None:
+        return None
+    return DocumentoDesplazado(document_id=otro.id, url=otro.canonical_url)

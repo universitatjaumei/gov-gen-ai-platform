@@ -13,28 +13,19 @@ mirado.
 """
 from __future__ import annotations
 
+from server.app.core.urls import normalizar_url
 from server.app.modules.agents_hub.evaluation.escenario_contrato import (
     Escenario,
     ExpectedSource,
 )
 
 
-def _normaliza_url(url: str | None) -> str:
-    """Compara documentos sin que decida la barra final ni el esquema.
-
-    El portal real sirve la misma sección con y sin barra y por http y https —lo documentó el
-    bloque de curación—, así que comparar la cadena tal cual produce falsos negativos que se
-    leen como fallos de recuperación.
-    """
-    if not url:
-        return ""
-    limpia = url.strip().lower()
-    for prefijo in ("https://", "http://"):
-        if limpia.startswith(prefijo):
-            limpia = limpia[len(prefijo) :]
-            break
-    limpia, _, _ = limpia.partition("#")
-    return limpia.rstrip("/")
+#: VAS.2 — la misma comparación la necesita la verificación de vigencia, así que la función subió
+#: a `core/urls.py` y aquí se importa. **No es un alias de compatibilidad**: es que hay una sola
+#: implementación y este módulo es uno de sus dos llamadores. Dos normalizadores de URL divergen
+#: en el primer caso raro, y entonces el emparejador del dorado y la verificación dejan de hablar
+#: del mismo documento sin que nada avise.
+_normaliza_url = normalizar_url
 
 
 def _normaliza_ancla(ancla: str | None) -> str:

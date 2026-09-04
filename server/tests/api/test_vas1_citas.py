@@ -361,18 +361,28 @@ class TestElTextoNoSeGuarda:
         )
         assert CENTINELA not in registrado
 
-    def test_should_not_touch_the_database_at_all(self):
+    def test_should_not_take_a_database_session(self):
         """No pide sesión: es cómputo puro, como `charts_router`.
 
         Un espía sobre la sesión sería más débil que esto — con sesión, alguien puede añadir
         una escritura mañana. Sin sesión inyectada, no hay dónde escribir.
+
+        Se mira **la firma de este endpoint** y no el módulo entero: VAS.2 añadió `GET /vigencia`,
+        que sí necesita leer el corpus, así que «el módulo no importa la sesión» dejó de ser
+        cierto y era la afirmación equivocada desde el principio. La que aguanta es que el
+        endpoint que recibe texto ajeno no tiene dónde escribirlo.
         """
         import inspect
 
-        from server.app.routers import verificaciones_router
+        from server.app.routers.verificaciones_router import verificar_citas
 
-        fuente = inspect.getsource(verificaciones_router)
-        assert "get_async_session" not in fuente
+        parametros = inspect.signature(verificar_citas).parameters
+        anotaciones = {str(p.annotation) for p in parametros.values()}
+
+        assert not any("AsyncSession" in a for a in anotaciones), (
+            f"`verificar_citas` recibe una sesión: {parametros.keys()}. El texto que llega aquí "
+            "es ajeno, y la garantía de que no se guarda es que no haya dónde."
+        )
 
 
 # ─────────────────────────── El scope y el router ──────────────────────────

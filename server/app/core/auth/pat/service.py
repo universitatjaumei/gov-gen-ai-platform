@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import secrets
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -149,13 +150,52 @@ class PatService:
         return principal
 
     async def _orgs_del_dueno(self, owner_role: str, owner_id: str) -> tuple[str, ...]:
-        """Organizaciones del dueño del PAT. Vacío en superadmin: ahí es el comodín."""
+        """Organizaciones del dueño del PAT. Vacío en superadmin: ahí es el comodín.
+
+        **Dos formas de dueño, y sólo se miraba una** (defecto encontrado en VAS.2 con un `curl`
+        real). Esto resolvía únicamente por `HubOrganizacion.partner_id == owner_id`, que es el
+        modelo de *partner*: una cuenta de partner **posee** organizaciones y `partner_id` es su
+        código. Pero desde ROL/IDE la identidad de administración es un **`HubUser` con
+        `role='admin'`**, y un `HubUser` no posee organizaciones: **pertenece** a una, por su
+        columna `organizacion_id`. Así que la consulta comparaba un uuid de usuario con un código
+        de partner —`60082aa4-…` contra `uji`— y no encajaba nunca.
+
+        Y para un rol que no es superadmin, la tupla vacía significa «ninguna organización» (I5),
+        con lo que el PAT no veía nada de la suya y `organizacion_unica_de` daba `None`: **`POST
+        /api/v1/actividad` respondía 403 a todo integrador real** desde REG.2. Ninguno de sus
+        tests lo veía porque todos sobreescriben `get_current_user` con un principal ya poblado.
+
+        Se prueba primero la identidad de usuario, que es la de hoy, y se cae al partner, que
+        sigue siendo un dueño legítimo. Un `HubUser` sin organización cae también al partner y
+        acaba devolviendo la tupla vacía, que en un rol no privilegiado es «ninguna» — la
+        respuesta correcta para un usuario que no pertenece a ninguna.
+        """
         from sqlalchemy import select as sa_select
 
-        from server.app.modules.agents_hub.database.config_models import HubOrganizacion
+        from server.app.modules.agents_hub.database.config_models import (
+            HubOrganizacion,
+            HubUser,
+        )
 
         if owner_role == "superadmin":
             return ()
+
+        # `owner_id` puede no ser un uuid —un partner lo tiene como código—, así que la consulta
+        # por usuario se intenta sólo cuando la forma encaja: pasarle `'uji'` a una columna UUID
+        # revienta la sentencia en vez de no encontrar nada.
+        try:
+            como_uuid = uuid.UUID(str(owner_id))
+        except (ValueError, AttributeError, TypeError):
+            como_uuid = None
+
+        if como_uuid is not None:
+            del_usuario = await self.session.execute(
+                sa_select(HubUser.organizacion_id).where(HubUser.id == como_uuid)
+            )
+            propia = del_usuario.scalars().first()
+            if propia:
+                return (str(propia),)
+
         filas = await self.session.execute(
             sa_select(HubOrganizacion.id).where(HubOrganizacion.partner_id == owner_id)
         )
