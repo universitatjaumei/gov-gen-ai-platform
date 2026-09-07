@@ -94,6 +94,17 @@ Se leen por su fecha. Ninguna se actualiza: si una decisión cambia, la sustituy
 | [`DECISION_OPENWEBUI_CARCASA_CHAT.md`](DECISION_OPENWEBUI_CARCASA_CHAT.md) | **Descartar** OpenWebUI como carcasa de chat |
 | [`RAG_SUSTITUCION_DEPENDENCIAS.md`](RAG_SUSTITUCION_DEPENDENCIAS.md) | Qué dependencias de recuperación se sustituyeron y por qué |
 
+## Mediciones
+
+**[`mediciones/`](mediciones/README.md) — ocho mediciones fechadas**, con su propio índice. Qué
+se midió, con qué lote y qué salió: la anchura de la recuperación, por qué el asistente no
+contesta, cuánto contexto conviene inyectar y qué medición decidió cada valor de apertura del
+piloto.
+
+Van aparte del resto de `docs/` porque **envejecen distinto**: la documentación de arriba se
+mantiene, y una medición no se toca nunca más — se añade otra con su fecha. El proyecto es
+experimental y habrá más, así que la carpeta es la que crece.
+
 ## Instantáneas
 
 Ciertas en su fecha. Se leen como historia del proyecto, no como estado.

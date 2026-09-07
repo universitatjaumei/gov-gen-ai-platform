@@ -134,6 +134,14 @@ que monte un RAG en administracion publica, y **la evidencia de la tesis del pro
 `GERENCIA_CIERRE_BLOQUE_HIB` se llaman «Gerencia» y son **metodologicos**; el primero incluso
 lleva la seccion «Por que el agentico contesta a todo», que es la advertencia de que la
 comparacion RAG/agentico es asimetrica por construccion. Abrir el fichero antes de decidir.
+
+**Los ocho viven desde el 2026-09-07 en `docs/mediciones/`**, con la fecha delante
+(`AAAA-MM-DD_NOMBRE.html`) y su propio indice. La carpeta existe porque `docs/` mezclaba dos cosas
+que **envejecen distinto** —referencia que se mantiene e instantaneas que no se tocan nunca mas—,
+y porque **ninguno de los doce `.html` estaba en el indice**: no eran «documentacion menos
+estable», eran ficheros que solo encontraba quien supiera el nombre. Un guardarrail comprueba que
+no queden `.html` sueltos en la raiz de `docs/`, con estos cuatro como excepcion fechada que **este
+paso 5.bis vacia**.
 * **`LITERATURA_ASISTENTES_NORMATIVA.html`**, las 43 referencias del articulo para AI&Law. Ni
   publico ni operacion: material de investigacion sin publicar, y su sede es donde vivan los
   papers.
@@ -248,6 +256,12 @@ Actions.**
      --path docs/chatbots-publicos/demo-uji.html \
      --path docs/chatbots-publicos/uji-theme.css \
      --path docs/chatbots-publicos/marcauji.png
+
+   **OJO al verificar esta lista: tres de las siete rutas NO existen en `git ls-files`**, y es
+   correcto. El trio de marca salio del arbol el 2026-09-07 a `_local/`, pero **sigue en el
+   historial**, que es sobre lo que actua `filter-repo`. Quien coteje la lista contra el arbol y
+   «arregle» lo que no resuelve, borra tres entradas buenas y publica el logotipo. Se comprueba
+   contra el historial: `git log --all --oneline -- docs/chatbots-publicos/marcauji.png`.
 
    Comprobar en el filtrado ANTES de empujar, y las tres cosas:
    - los 18 caminos han desaparecido de todo el historial:

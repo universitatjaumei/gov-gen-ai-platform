@@ -51,6 +51,22 @@ _INSTITUCIONES_EN_RUTAS = re.compile(
 #: señal de que el árbol está limpio. Si algún día entra algo aquí, va con su justificación.
 _EXCEPCIONES: tuple[str, ...] = ()
 
+#: Los cuatro `.html` que siguen en la raíz de `docs/` porque **salen del repositorio en REPO.1**,
+#: no porque sean documentación: los tres `VALIDACION_GERENCIA*` son hojas de anotación con salida
+#: del modelo sin validar, y la revisión de literatura es material de investigación sin publicar.
+#:
+#: Es una excepción **con fecha de caducidad**: el paso 5.bis de REPO.1 los filtra del historial y
+#: entonces esta tupla se vacía. Que siga aquí cuando REPO.1 esté hecho es la señal de que el
+#: filtro se quedó a medias.
+_HTML_QUE_SALEN_EN_REPO1: frozenset[str] = frozenset(
+    {
+        "docs/VALIDACION_GERENCIA.html",
+        "docs/VALIDACION_GERENCIA_AUTONOMA.html",
+        "docs/VALIDACION_GERENCIA_RAG_VS_AGENTICO.html",
+        "docs/LITERATURA_ASISTENTES_NORMATIVA.html",
+    }
+)
+
 
 @lru_cache(maxsize=1)
 def _versionados() -> tuple[str, ...]:
@@ -93,6 +109,34 @@ class TestNingunaImagenNuevaEntraEnDocs:
 
     #: Extensiones de imagen. `svg` incluido: un logotipo en vectorial es igual de institucional.
     _IMAGENES = re.compile(r"\.(png|jpe?g|gif|webp|avif|ico|svg)$", re.IGNORECASE)
+
+    def test_should_keep_measurements_in_their_own_folder(self):
+        """Las mediciones viven en `docs/mediciones/`, no sueltas en la raíz de `docs/`.
+
+        **Por qué una carpeta.** `docs/` mezclaba dos cosas que envejecen distinto: documentación
+        de referencia, que se mantiene, e **instantáneas fechadas**, que no se tocan nunca más.
+        Doce `.html` sueltos en la raíz, y **ninguno estaba en el índice**: no eran «documentación
+        menos estable», eran ficheros que sólo encontraba quien supiera el nombre. El proyecto es
+        experimental y va a producir más, así que la carpeta es la que crece.
+
+        **Y este test es lo que hace que la convención se sostenga sola**: la próxima medición cae
+        en `mediciones/` porque si no, esto se pone rojo. Sin él, dependería de que alguien se
+        acordara — que es exactamente como llegaron a ser doce.
+
+        El nombre lleva la fecha (`AAAA-MM-DD_NOMBRE.html`) para que la carpeta se ordene sola y
+        una ronda nueva no compita por el nombre con la anterior.
+        """
+        sueltos = [
+            ruta
+            for ruta in _versionados()
+            if re.fullmatch(r"docs/[^/]+\.html", ruta) and ruta not in _HTML_QUE_SALEN_EN_REPO1
+        ]
+
+        assert sueltos == [], (
+            "páginas HTML sueltas en la raíz de `docs/`:\n  "
+            + "\n  ".join(sueltos)
+            + "\n\nSi es una medición, va a `docs/mediciones/` con su fecha delante."
+        )
 
     def test_should_not_version_images_under_docs(self):
         imagenes = [
