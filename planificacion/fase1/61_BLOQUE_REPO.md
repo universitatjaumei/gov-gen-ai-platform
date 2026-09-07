@@ -83,6 +83,21 @@ Actions.**
    **permisos base para miembros** de la organizacion (decide quien ve el repositorio mientras
    siga privado), y **plan** de la organizacion (si no es Enterprise, los rulesets sobre repos
    privados pueden no estar disponibles).
+0.bis. **`.git/info/exclude` NO VIAJA, y hoy protege tres ficheros que no deben publicarse.**
+   Descubierto el 2026-09-07, al ponerse roja en CI una comprobacion que en local pasaba. Esa
+   lista es **por clon**: no esta versionada, no va en el bundle y **el clon nuevo no la tendra**.
+   Hoy contiene:
+     docs/convocatoria_tecnologo_A2_TecLab.md
+     docs/EU_GOVERNANCE_CONCEPT_NOTE.md
+     docs/EU_GOVERNANCE_TOPICS.md
+   Como el repositorio **se va a abrir**, el riesgo es concreto: en el clon nuevo un `git add -A`
+   los mete, y acaban en un repositorio publico una convocatoria de plaza y dos notas de
+   proyecto europeo. Antes de empujar hay que decidir por cada uno: **`.gitignore`** si nunca
+   deben entrar (lo expresa para todos los clones y sí viaja), o sacarlos de `docs/` a `_local/`,
+   que ya esta ignorada. **Dejarlo en `.git/info/exclude` no es una opcion en el clon nuevo**,
+   porque nadie se acordara de recrearlo.
+   Nota aparte: `git ls-files` es lo unico que dice la verdad sobre que hay en el arbol; el disco
+   del mantenedor tiene mas cosas. El guardarrail de REPO.3 se arreglo para preguntar a git.
 1. Copia de seguridad fuera del portatil: `git bundle create ../respaldo.bundle --all`, y
    `git bundle verify` ejecutado desde dentro del repositorio.
    HECHO el 2026-09-07: `Documents/respaldo-gov-gen-ai-platform-2026-09-07.bundle`, 11,1 MB,

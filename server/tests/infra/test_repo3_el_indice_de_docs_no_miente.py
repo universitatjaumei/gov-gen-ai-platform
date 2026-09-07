@@ -9,20 +9,61 @@ Estos dos tests son el guardarraíl del triaje, y valen igual para el siguiente:
 lista de lo retirado en REPO.3 escrita a mano —eso caducaría—, sino que comprueban la propiedad
 que debe seguir siendo cierta siempre.
 
-**Por qué el segundo test mira `planificacion/` además de `docs/`.** Lo retirado se resume en
-`HISTORIAL.md`, así que el historial **sí** puede nombrarlo: es su registro. Lo que no puede
-pasar es que un documento **activo** mande a leer un fichero que ya no está. Por eso el historial
-y los planes de fase quedan fuera del barrido y `docs/` entra entero.
+**Qué entra en el barrido y qué no.** Se recorre `docs/` entero, menos los ficheros que son
+**registro del pasado**: `INVENTARIO_RETIRADA_LEGACY.md` puede nombrar lo retirado porque su
+función es justamente eso. `planificacion/` no se recorre —su `HISTORIAL.md` y sus planes de fase
+cerrados son registro por definición—. Lo que no puede pasar es que un documento **activo** mande
+a leer un fichero que no está.
+
+**Y «no está» significa «no lo tiene quien clona», no «no está en mi disco»**: se pregunta a
+`git ls-files`. El porqué, que es un fallo real de la primera versión, en `_versionados()`.
 """
 from __future__ import annotations
 
 import re
+import subprocess
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
 
 _DOCS = Path("../docs")
 _RAIZ = Path("..")
+
+
+@lru_cache(maxsize=1)
+def _versionados() -> frozenset[str]:
+    """Los ficheros que git tiene, en POSIX y relativos a la raíz del repositorio.
+
+    **Se pregunta a git y no al disco, y eso es el arreglo de un fallo real.** La primera
+    versión de estos tests usaba `Path.is_file()`, pasaba en local y **se puso roja en CI**:
+    `docs/README.md` enlazaba `EU_GOVERNANCE_CONCEPT_NOTE.md` y `EU_GOVERNANCE_TOPICS.md`, que
+    existen en el disco del mantenedor pero **no en el repositorio** —están excluidos en
+    `.git/info/exclude`, que es por clon y no viaja—.
+
+    O sea que el test pasaba por el entorno y no por el árbol, que es justo lo que este
+    proyecto llama «el medidor miente antes que el sistema». La propiedad que hay que
+    comprobar no es «el fichero está en mi disco» sino **«lo tiene quien clona»**, y eso sólo
+    lo sabe git.
+    """
+    salida = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=_RAIZ,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return frozenset(p for p in salida.split("\0") if p)
+
+
+def _esta_en_el_repositorio(destino: Path) -> bool:
+    """`destino` es una ruta del sistema; se traduce a la forma que usa `git ls-files`."""
+    try:
+        relativa = destino.resolve().relative_to(_RAIZ.resolve())
+    except ValueError:
+        return False
+    return relativa.as_posix() in _versionados()
+
 
 #: Enlaces markdown a un `.md`, capturando sólo la ruta y descartando ancla y título.
 _ENLACE_MD = re.compile(r"\]\(\s*<?([^)>\s#]+\.md)(?:#[^)>\s]*)?>?\s*(?:\"[^\"]*\")?\s*\)")
@@ -54,7 +95,7 @@ class TestElIndiceNoEnlazaAlVacio:
         for destino in _ENLACE_MD.findall(readme.read_text(encoding="utf-8")):
             if destino.startswith(("http://", "https://")):
                 continue
-            if not (readme.parent / destino).resolve().is_file():
+            if not _esta_en_el_repositorio(readme.parent / destino):
                 rotos.append(destino)
 
         assert rotos == [], (
@@ -78,7 +119,7 @@ class TestNingunDocumentoActivoCitaUnoRetirado:
             for destino in _ENLACE_MD.findall(doc.read_text(encoding="utf-8")):
                 if destino.startswith(("http://", "https://")):
                     continue
-                if not (doc.parent / destino).resolve().is_file():
+                if not _esta_en_el_repositorio(doc.parent / destino):
                     rotos.append(f"{doc.as_posix()} → {destino}")
 
         assert rotos == [], (

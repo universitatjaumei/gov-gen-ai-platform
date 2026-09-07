@@ -38,7 +38,11 @@ todas envejecen igual:
 | [`GOVERNANCA_PER_API.md`](GOVERNANCA_PER_API.md) | Inventario de lo que la plataforma comprueba y registra (compliance as code) y qué de ello es accesible por API para aplicaciones desarrolladas fuera; seis candidatos no planificados (en valenciano) |
 | [`LICENCIA_ES.md`](LICENCIA_ES.md) | Referencia viva — la AGPL explicada en español: qué permite, qué obliga, qué **no** obliga, y qué significa para un pliego |
 | [`REQUISITOS_PUBLICACION_PLATAFORMA.md`](REQUISITOS_PUBLICACION_PLATAFORMA.md) | Referencia viva — qué hace falta para publicar la plataforma |
-| [`EU_GOVERNANCE_CONCEPT_NOTE.md`](EU_GOVERNANCE_CONCEPT_NOTE.md) · [`EU_GOVERNANCE_TOPICS.md`](EU_GOVERNANCE_TOPICS.md) | Referencia viva — encaje europeo del proyecto |
+> El encaje europeo del proyecto —`EU_GOVERNANCE_CONCEPT_NOTE.md` y
+> `EU_GOVERNANCE_TOPICS.md`— **no está versionado**: se mantiene fuera del repositorio a
+> propósito. Este índice los enlazaba, así que cualquier clon que no fuera el del mantenedor veía
+> dos enlaces muertos en la portada de `docs/`. Lo cazó `test_repo3_el_indice_de_docs_no_miente.py`
+> al pasar por CI, que es donde se ve la diferencia entre el árbol y un disco concreto.
 
 ## Chatbots y corpus normativo
 
