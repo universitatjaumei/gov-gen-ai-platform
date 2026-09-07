@@ -191,7 +191,7 @@ prefiere.
 **Superficie.** `core/language_mode.py` · `hub_opciones_router` · `HubOrganizacion.default_language_mode`
 · `HubChatbot.language_mode`.
 
-**Madurez**: `construido` (bloque LANG, 2026-09-03; sin desplegar al escribir esto).
+**Madurez**: `producción` — desplegado el 2026-09-07 (bloque LANG, 2026-09-03).
 
 **Abierto.** Ningún despliegue monolingüe real lo ha usado todavía; el juicio sobre si el
 castellano de una respuesta fijada suena institucional o a traducción automática está pendiente de
@@ -419,8 +419,8 @@ detalle de lo que pasa dentro de la plataforma ya lo cubre la observabilidad int
 
 **Invariantes.** I5, I8, I12.
 
-**Madurez**: `implementado` — la pila está completa y probada, y el servicio `mcp` está declarado
-en la pila de la VM **sin desplegar**: pasa a producción cuando el bloque llegue a `main`.
+**Madurez**: `producción` — desplegado el 2026-09-07, junto con VAS. El registro de actividad IA
+sirve en la VM y sus rutas responden autenticadas.
 
 **Abierto.**
 - **Nadie ha registrado nada real todavía.** Lo que falta no es código: es que una herramienta
@@ -478,8 +478,8 @@ una segunda fuente de verdad.
 
 **Invariantes.** I1, I2, I5, I8, I13.
 
-**Madurez**: `implementado` — probado y verificado en vivo con un PAT real y una sesión MCP real;
-**sin desplegar**.
+**Madurez**: `producción` — desplegado el 2026-09-07, junto con REG, del que es prerrequisito.
+Probado y verificado en vivo con un PAT real y una sesión MCP real.
 
 **Abierto.**
 - **Nadie ha desarrollado nada fuera todavía.** Lo que falta no es código: es que la UADTI diga si
