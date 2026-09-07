@@ -155,8 +155,8 @@ desplegar**: el paso a `main` es decisión del usuario, y no cambia comportamien
 
 ### El orden de los bloques que quedan, acordado el 2026-09-02
 
-Lo decidió el usuario sobre una propuesta razonada. **51 prompts en diez bloques** —eran 49; REPO
-pasó de 2 a 4 el 2026-09-07, al elegir la variante B y aparecer REPO.4.
+Lo decidió el usuario sobre una propuesta razonada. **52 prompts en diez bloques** —eran 49; REPO
+pasó de 2 a 5 el 2026-09-07, al elegir la variante B y aparecer REPO.4 y REPO.5.
 
 | # | Bloque | Prompts | Por qué aquí |
 |---|---|---|---|
@@ -165,7 +165,7 @@ pasó de 2 a 4 el 2026-09-07, al elegir la variante B y aparecer REPO.4.
 | 3 | **REG** | 6 | Lo pidió la reunión de desarrollo del 31-08 y **esperaba el despliegue** (REG.4, el MCP remoto, sólo existe con el servidor accesible desde fuera — ya lo está). Desbloquea VAS y FUN.6 |
 | 4 | **VAS** | 4 | El mejor ratio del plan: los tres candidatos ya existen como función interna y sólo necesitan superficie |
 | 5 | **NIC** | 5 | Cierra la Fase 1. Se puede esperar sin coste porque nada de lo planificado toca `client_app/`. **NIC.5 lo ejecuta el usuario** |
-| 6 ▶ | **REPO** | 4 (1 ✅) | **En curso.** REPO.3 ✅ el 2026-09-07 (triaje de `docs/`). Quedan REPO.1, REPO.4 y REPO.2, en ese orden. **La ventana sigue abierta y medida**: el commit huérfano `dc4904e0c763` todavía sirve `logs/` con 46 ficheros, 17 días después de la reescritura. Se hace **antes** de que exista el primer *fork* y antes de abrir. REPO.1 y REPO.2 los ejecuta el usuario |
+| 6 ▶ | **REPO** | 5 (1 ✅) | **En curso.** REPO.3 ✅ el 2026-09-07 (triaje de `docs/`). Quedan **REPO.1 → REPO.4 → REPO.5 → REPO.2**. REPO.1 lleva ahora el **reparto de `docs/`** —repositorio privado de operación para los 15 ficheros de historia operativa— y el **filtro del historial**, porque la visibilidad alcanza a los commits y borrar antes de abrir no saca nada del pasado. **La ventana sigue abierta y medida**: el commit huérfano `dc4904e0c763` todavía sirve `logs/` con 46 ficheros, 17 días después de la reescritura. Se hace **antes** de que exista el primer *fork* y antes de abrir. REPO.1 y REPO.2 los ejecuta el usuario |
 | 7 | **PLG** | 3 | Responde al correo de desarrollo pidiendo plugins. Después de LANG, que tocan la misma factoría |
 | 8 | **DIN** | 7 | Bueno y no urgente: su premisa resultó falsa en dos tercios —el rastreo con cadencia y la auto-ingesta ya existen— |
 | 9 | **FUN** | 7 | El más grande y el de más diseño; FUN.6 necesita REG, que a estas alturas ya está |

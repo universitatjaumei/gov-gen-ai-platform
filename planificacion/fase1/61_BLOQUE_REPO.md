@@ -1,9 +1,11 @@
 ## Bloque REPO — Sustituir el repositorio de GitHub por uno sin objetos huérfanos
 
-> **Estado (2026-09-07): 4 prompts, uno hecho.** REPO.3 ✅ (el triaje de `docs/`). Pendientes:
-> **REPO.1** (crear el limpio en `universitatjaumei` — variante B elegida), **REPO.2** (los otros
-> dos repositorios) y **REPO.4** (retirar los anclajes al dueño anterior, nuevo con la variante B).
-> El orden es **REPO.1 → REPO.4 → REPO.2**, y REPO.1 y REPO.2 los ejecuta el usuario.
+> **Estado (2026-09-07): 5 prompts, uno hecho.** REPO.3 ✅ (el triaje de `docs/`). Pendientes:
+> **REPO.1** (crear el limpio en `universitatjaumei`, con el reparto de `docs/` y el filtro del
+> historial), **REPO.4** (retirar los anclajes al dueño anterior), **REPO.5** (los valores reales
+> fuera de los documentos publicables) y **REPO.2** (los otros dos repositorios). Los dos últimos
+> prompts nuevos salen de la variante B: con la A no hacían falta.
+> El orden es **REPO.1 → REPO.4 → REPO.5 → REPO.2**, y REPO.1 y REPO.2 los ejecuta el usuario.
 
 > **Planificado el 2026-08-21.** No es un bloque de código: es una operación sobre GitHub que ejecuta
 > el usuario. Está aquí, versionado, porque el guion detallado vivía en `_local/`, que es una carpeta
@@ -38,7 +40,7 @@ El orden acordado es **limpiar, mover y abrir despues**. Habia dos formas:
   A) Crear el limpio en `ModestoFabra` y TRANSFERIRLO despues.
   B) Crear el limpio DIRECTAMENTE en `universitatjaumei`. **ELEGIDA.**
 
-**Y conviene decirlo con precision porque el nombre enga_a: con B NO HAY TRANSFERENCIA.** No se
+**Y conviene decirlo con precision porque el nombre confunde: con B NO HAY TRANSFERENCIA.** No se
 usa la operacion «Transfer» de GitHub en ningun momento. Se crea un repositorio nuevo en la
 organizacion y se le empuja el historial limpio; el viejo se borra al final. Eso es exactamente lo
 que hace que nazca limpio: **una transferencia se lleva el almacen de objetos completo**, asi que
@@ -59,6 +61,56 @@ Con A el nombre acaba siendo el mismo y WIF sobrevive solo; con B hay que tocarl
 anadir el segundo principalSet, subir, verificar un despliegue real, y solo entonces retirar el
 viejo. No hay que tocar codigo: `deploy.yml` lee el proveedor de una variable y el nombre del
 recurso no cambia.
+
+## El reparto de `docs/` (decidido el 2026-09-07, se ejecuta en los pasos 3.bis y 5.bis)
+
+GitHub **no permite mezclar visibilidad dentro de un repositorio**: no hay carpetas privadas, las
+ramas heredan la visibilidad, un *Project* es un tablero y no almacena ficheros, y un submodulo
+privado sigue siendo otro repositorio y rompe el clon de quien no tiene acceso. Asi que la
+eleccion es en QUE repositorio vive cada documento. **Decision: repositorio privado de
+operacion**, no `_local/` + Drive: un Drive pierde el historial —y estos tableros valen por poder
+compararse con la medicion de hace un mes— y una copia manual deriva.
+
+**El criterio es el que ya rige el codigo: principal contra despliegue.** El publico lleva lo que
+otra administracion necesita; el privado, la historia operativa de UNA instalacion.
+
+**AL PRIVADO — 15 ficheros.** Los once tableros de medicion y experimento:
+  BLOQUE_HIB_CIERRE.html   CALIDAD_RESPUESTA_TOP_K.html   CONFIGURACION_APERTURA_PILOTO.html
+  DIAGNOSTICO_POR_QUE_NO_CONTESTA.html   EXPERIMENTO_GRANULARIDAD_CONTEXTO.html
+  GERENCIA_CIERRE_BLOQUE_HIB.html   GERENCIA_TOP_K_Y_UMBRAL.html   MEDICION_RETRIEVAL_TOP_K.html
+  VALIDACION_GERENCIA.html   VALIDACION_GERENCIA_AUTONOMA.html
+  VALIDACION_GERENCIA_RAG_VS_AGENTICO.html
+Mas `DATOS_DEL_PILOTO.md`, `RUNBOOK_REINGESTA.md` (nombres reales de la instalacion),
+`CASO_CURACION_ESCOLA_DOCTORAT.md` (un centro concreto) y el trio de marca ya sacado del arbol el
+2026-09-07 a `_local/docs_operacion/`: `demo-uji.html`, `uji-theme.css`, `marcauji.png`.
+
+Comprobado antes de decidir: los once `.html` **no llevan datos personales ni credenciales** —cero
+correos, cero DNI, cero valores de configuracion—. Lo que son es historia de una institucion, no
+documentacion de la plataforma.
+
+**A INVESTIGACION, que no es ninguno de los dos**: `LITERATURA_ASISTENTES_NORMATIVA.html`, las 43
+referencias del articulo para AI&Law. Su sede es donde vivan los papers.
+
+**AL PUBLICO — el resto (~45)**: arquitectura, especificaciones, contratos, las seis decisiones,
+metodologia, multitenencia, accesibilidad, licencia, MCP, registro de actividad, sandbox. Y
+`DESPLIEGUE_PROTOTIPO_GCP.md` **generalizado y NO retirado**: el procedimiento —VM, proxy de
+Cloud SQL, WIF sin claves, migraciones antes de la imagen— es de lo mas valioso que se puede
+publicar, porque es justo lo que una entidad local no sabe hacer. Lo que se va son los valores.
+Eso es **REPO.5**.
+
+**Sobre el historial, que es la parte que no se puede deshacer.** La visibilidad alcanza a los
+commits: borrar un fichero antes de abrir **no lo saca del pasado**. Medido el 2026-09-07, el
+filtro seria quirurgico —de **707** commits, los tableros tocan 33, `chatbots-publicos/` 5,
+`DATOS_DEL_PILOTO.md` 2 y `RUNBOOK_REINGESTA.md` 1—, y la ventana es esta: REPO.1 ya reescribe y
+empuja desde cero. Hacerlo despues de abrir cuesta otra reescritura, otro push forzado y otro
+periodo de objetos huerfanos servidos por SHA, que es de lo que se esta saliendo.
+
+**Lo que el filtro NO arregla**: los valores reales que quedan en versiones antiguas de los cinco
+documentos de despliegue. `filter-repo` retira **ficheros**, no cadenas; para eso haria falta
+`--replace-text` sobre los 707 commits. **Recomendado no hacerlo**: un id de proyecto de GCP y un
+numero de proyecto no son credenciales —lo que protege el acceso es IAM, no que el nombre sea
+secreto—. Se generaliza la version publicada por utilidad y para no invitar a sondear, no por
+secreto.
 
 ## Lo que se pierde (inventariado el 2026-08-21, REVISADO el 2026-09-07)
 Issues, PRs, releases, tags, webhooks: 0 de todo. Secretos de Actions: ninguno, el CI no usa.
@@ -108,6 +160,15 @@ Actions.**
 3. Crear el nuevo en la ORGANIZACION, VACIO (sin README, sin .gitignore, sin licencia: si GitHub
    crea un commit inicial, el push choca):
    gh repo create universitatjaumei/gov-gen-ai-platform --private
+3.bis. CREAR EL REPOSITORIO PRIVADO DE OPERACION y sembrarlo, ANTES de filtrar nada. Si se filtra
+   primero y algo sale mal, esos 15 ficheros solo estarian en el bundle.
+   gh repo create universitatjaumei/gov-gen-ai-platform-operacion --private
+   Sembrarlo con los 15 del reparto (los once tableros, DATOS_DEL_PILOTO, RUNBOOK_REINGESTA,
+   CASO_CURACION_ESCOLA_DOCTORAT y el trio de marca de `_local/docs_operacion/`), con un README
+   que diga **que es y que no**: historia operativa de la instalacion de la UJI, no documentacion
+   de la plataforma; y que la plataforma se documenta en el principal.
+   Comprobar que estan los 15 antes de seguir: gh api repos/.../contents/... o un clon limpio.
+
 4. AMPLIAR LA AUTENTICACION A LOS DOS NOMBRES, antes de empujar. Aditivo, sin ventana de rotura:
    gh variable list -> copiar los 12 pares al nuevo (gh variable set ... --repo universitatjaumei/...)
    gcloud iam workload-identity-pools providers update-oidc modestofabra-gov-gen-ai-platform \
@@ -123,6 +184,46 @@ Actions.**
    git remote set-url origin git@github.com:universitatjaumei/gov-gen-ai-platform.git
    git push -u origin main
    git push -u origin desarrollo
+
+5.bis. FILTRAR DEL HISTORIAL lo que va al privado. **Se hace en un CLON DE TRABAJO, no aqui**:
+   `filter-repo` reescribe todos los SHA, asi que el clon de desarrollo quedaria divergente de lo
+   que ya se ha empujado. Se clona, se filtra, se empuja el resultado, y luego se reclona.
+   Es lo que hace que el repositorio publico NUNCA haya contenido estos ficheros:
+
+   git clone --no-local . ../filtrado && cd ../filtrado
+   git filter-repo --invert-paths \
+     --path docs/BLOQUE_HIB_CIERRE.html \
+     --path docs/CALIDAD_RESPUESTA_TOP_K.html \
+     --path docs/CONFIGURACION_APERTURA_PILOTO.html \
+     --path docs/DIAGNOSTICO_POR_QUE_NO_CONTESTA.html \
+     --path docs/EXPERIMENTO_GRANULARIDAD_CONTEXTO.html \
+     --path docs/GERENCIA_CIERRE_BLOQUE_HIB.html \
+     --path docs/GERENCIA_TOP_K_Y_UMBRAL.html \
+     --path docs/MEDICION_RETRIEVAL_TOP_K.html \
+     --path docs/VALIDACION_GERENCIA.html \
+     --path docs/VALIDACION_GERENCIA_AUTONOMA.html \
+     --path docs/VALIDACION_GERENCIA_RAG_VS_AGENTICO.html \
+     --path docs/LITERATURA_ASISTENTES_NORMATIVA.html \
+     --path docs/DATOS_DEL_PILOTO.md \
+     --path docs/RUNBOOK_REINGESTA.md \
+     --path docs/CASO_CURACION_ESCOLA_DOCTORAT.md \
+     --path docs/chatbots-publicos/demo-uji.html \
+     --path docs/chatbots-publicos/uji-theme.css \
+     --path docs/chatbots-publicos/marcauji.png
+
+   Comprobar en el filtrado ANTES de empujar, y las tres cosas:
+   - los 18 caminos han desaparecido de todo el historial:
+     git log --all --oneline -- docs/DATOS_DEL_PILOTO.md   (vacio)
+   - **la suite sigue verde**: retirar ficheros del historial no deberia tocar el arbol de la
+     punta, pero `test_repo3_el_indice_de_docs_no_miente.py` y
+     `test_ninguna_marca_institucional_esta_versionada.py` lo demuestran en vez de suponerlo;
+   - el recuento de commits no se ha desplomado: eran 707. `filter-repo` borra commits que se
+     quedan vacios, y si desaparecieran decenas seria que un `--path` cazo mas de lo previsto.
+
+   OJO con el orden: los ficheros hay que **retirarlos tambien del arbol de la punta** en un
+   commit normal (`git rm`), porque `--invert-paths` los saca del pasado pero el commit de la
+   punta se reescribe sin ellos y el indice de `docs/` quedaria enlazando al vacio. Los dos
+   guardarrailes de arriba se pondran rojos si se olvida, que es para lo que estan.
    La rama `desarrollo` nacio el 2026-09-02, despues de escribirse este plan, y es DONDE VIVE EL
    TRABAJO: subir solo `main` dejaria fuera todo lo no desplegado. Comprobar que estan las dos:
    gh api repos/.../branches --jq '.[].name'
@@ -243,6 +344,54 @@ negocio. Cuatro son ficheros vivos que un lector nuevo consulta, y dos son docum
 - [ ] CODEOWNERS a un equipo
 - [ ] `CONTRIBUTING.md` sigue diciendo que no hay fork privilegiado
 - [ ] `docs/DESPLIEGUE_PROTOTIPO_GCP.md` documenta LOS DOS anclajes de WIF
+```
+
+---
+
+### Prompt REPO.5 (RED/GREEN) — Los documentos de despliegue dejan de llevar los valores reales
+
+**Modelo sugerido**: **Sonnet** — sustitución acotada con un guardarraíl; el criterio está decidido.
+
+> **Nuevo el 2026-09-07.** Va **después de REPO.1**, para no reescribir dos veces los mismos
+> documentos. No es por secreto: un id de proyecto de GCP no es una credencial. Es por **utilidad**
+> —el procedimiento tiene que servir a otra administración, y con los valores de esta casa dentro
+> no sirve— y por no publicar el inventario de qué sondear.
+
+```
+# PROMPT REPO.5 (RED/GREEN) — El procedimiento se publica; los valores, no
+# Deploy: n/a
+
+## Por que
+Medido el 2026-09-07: cinco documentos llevan los valores reales de la instalacion —`uji-teclab`,
+`govgenai-prod`, `govgenai-vm`, el numero de proyecto `618806480921`, la IP `34-175-38-129` y
+`europe-southwest1`—. `DESPLIEGUE_PROTOTIPO_GCP.md` acumula 22 apariciones; las otras cuatro, unas
+pocas cada una: `DECISION_MODELOS_EMBEDDING_RERANKER.md`, `EVOLUCIO_I_ASPECTES_PENDENTS.md`,
+`WIDGET_INCRUSTACION.md` y `RUNBOOK_REINGESTA.md` —este ultimo se va al privado en REPO.1, asi
+que queda fuera de este prompt—.
+
+Es exactamente lo que el codigo ya resolvio y la documentacion no: identificadores en variables,
+no escritos dentro. `deploy.yml` no lleva ninguno.
+
+## Que hacer
+1. Sustituir por marcadores que se lean como marcadores: `<PROYECTO_GCP>`, `<INSTANCIA_SQL>`,
+   `<REGION>`, `<NUMERO_DE_PROYECTO>`, `<HOST>`. NO por otro valor plausible: un ejemplo que
+   parece real se copia y pega.
+2. Anadir a `DESPLIEGUE_PROTOTIPO_GCP.md` una tabla de «que valor va en cada marcador y de donde
+   sale», que es lo que convierte el documento en reutilizable de verdad.
+3. Documentar **los DOS anclajes de WIF** (condicion del proveedor y `principalSet` de la cuenta
+   de servicio). Hoy §177 menciona uno, y quien siga el documento se quedaria a medias.
+4. NO se toca el historial: `filter-repo --replace-text` sobre 707 commits no se justifica para
+   identificadores que no son credenciales. Se dice aqui para que nadie lo replantee.
+
+## Tests (RED primero)
+- RED: ningun documento de `docs/` contiene los valores de esta instalacion. La lista de patrones
+  vive en el test, y **excluye `HISTORIAL.md` y los planes de fase**, que son registro.
+- RED: `DESPLIEGUE_PROTOTIPO_GCP.md` menciona los dos anclajes de WIF, no uno.
+
+## Criterio de done
+- [ ] Los cuatro documentos con marcadores, y el guardarrail verde
+- [ ] La tabla de marcadores existe y dice de donde sale cada valor
+- [ ] Los dos anclajes de WIF documentados
 ```
 
 ---
