@@ -62,41 +62,71 @@ anadir el segundo principalSet, subir, verificar un despliegue real, y solo ento
 viejo. No hay que tocar codigo: `deploy.yml` lee el proveedor de una variable y el nombre del
 recurso no cambia.
 
-## El reparto de `docs/` (decidido el 2026-09-07, se ejecuta en los pasos 3.bis y 5.bis)
+## El reparto de `docs/` (decidido el 2026-09-07, REVISADO el mismo dia, se ejecuta en 5.bis)
 
 GitHub **no permite mezclar visibilidad dentro de un repositorio**: no hay carpetas privadas, las
 ramas heredan la visibilidad, un *Project* es un tablero y no almacena ficheros, y un submodulo
 privado sigue siendo otro repositorio y rompe el clon de quien no tiene acceso. Asi que la
-eleccion es en QUE repositorio vive cada documento. **Decision: repositorio privado de
-operacion**, no `_local/` + Drive: un Drive pierde el historial —y estos tableros valen por poder
-compararse con la medicion de hace un mes— y una copia manual deriva.
+eleccion es en QUE repositorio vive cada documento — o si vive fuera de los repositorios.
 
-**El criterio es el que ya rige el codigo: principal contra despliegue.** El publico lleva lo que
-otra administracion necesita; el privado, la historia operativa de UNA instalacion.
+### La primera version de este reparto estaba mal, y conviene saber por que
 
-**AL PRIVADO — 15 ficheros.** Los once tableros de medicion y experimento:
-  BLOQUE_HIB_CIERRE.html   CALIDAD_RESPUESTA_TOP_K.html   CONFIGURACION_APERTURA_PILOTO.html
-  DIAGNOSTICO_POR_QUE_NO_CONTESTA.html   EXPERIMENTO_GRANULARIDAD_CONTEXTO.html
-  GERENCIA_CIERRE_BLOQUE_HIB.html   GERENCIA_TOP_K_Y_UMBRAL.html   MEDICION_RETRIEVAL_TOP_K.html
-  VALIDACION_GERENCIA.html   VALIDACION_GERENCIA_AUTONOMA.html
-  VALIDACION_GERENCIA_RAG_VS_AGENTICO.html
-Mas `DATOS_DEL_PILOTO.md`, `RUNBOOK_REINGESTA.md` (nombres reales de la instalacion),
-`CASO_CURACION_ESCOLA_DOCTORAT.md` (un centro concreto) y el trio de marca ya sacado del arbol el
-2026-09-07 a `_local/docs_operacion/`: `demo-uji.html`, `uji-theme.css`, `marcauji.png`.
+**Se propuso un repositorio privado de operacion para 15 ficheros, y el usuario lo cuestiono con
+razon.** Dos motivos, los dos validos:
 
-Comprobado antes de decidir: los once `.html` **no llevan datos personales ni credenciales** —cero
-correos, cero DNI, cero valores de configuracion—. Lo que son es historia de una institucion, no
-documentacion de la plataforma.
+1. **Un repositorio privado de operacion es un patron habitual, pero para otra cosa**: codigo y
+   configuracion que el equipo trabaja —Terraform, Ansible, estado de entornos, registro de
+   incidencias—. Quince documentos estaticos, once de ellos instantaneas congeladas, no son un
+   repositorio de operacion: son **un archivo disfrazado de repositorio de operacion**.
+2. **Y el argumento con el que se defendio no aguanta.** Se dijo que un Drive «pierde el
+   historial» y que los tableros valen por poder compararse con la medicion de hace un mes. Pero
+   son **instantaneas fechadas e inmutables**: cada fichero ES el registro, y una medicion nueva
+   produce un fichero nuevo. Git no aporta casi nada ahi.
 
-**A INVESTIGACION, que no es ninguno de los dos**: `LITERATURA_ASISTENTES_NORMATIVA.html`, las 43
-referencias del articulo para AI&Law. Su sede es donde vivan los papers.
+**Y habia una incoherencia de fondo**: a la pregunta del *fork* institucional se respondio «no lo
+crees hasta que tenga peso, hoy estaria vacio». El mismo criterio se aplica aqui y no se aplico.
 
-**AL PUBLICO — el resto (~45)**: arquitectura, especificaciones, contratos, las seis decisiones,
-metodologia, multitenencia, accesibilidad, licencia, MCP, registro de actividad, sandbox. Y
-`DESPLIEGUE_PROTOTIPO_GCP.md` **generalizado y NO retirado**: el procedimiento —VM, proxy de
-Cloud SQL, WIF sin claves, migraciones antes de la imagen— es de lo mas valioso que se puede
-publicar, porque es justo lo que una entidad local no sabe hacer. Lo que se va son los valores.
-Eso es **REPO.5**.
+**Ademas, tres ficheros estaban clasificados por su NOMBRE y no por su contenido**, y los tres
+resultaron ser documentacion publicable:
+
+| Fichero | Lo que parecia | Lo que es |
+|---|---|---|
+| `DATOS_DEL_PILOTO.md` | datos del piloto | documento de **diseno**: la distincion entre catalogo de producto y datos operativos, y como viaja cada uno |
+| `RUNBOOK_REINGESTA.md` | operacion de esta casa | **procedimiento**: los comandos exactos, en orden, con la puerta de comprobacion delante |
+| `CASO_CURACION_ESCOLA_DOCTORAT.md` | un centro concreto | **caso guia**, con los umbrales que hubo que corregir, «para repetirlo en otro apartado sin volver a descubrirlo todo» |
+
+Los tres llevan valores o nombres reales, y eso lo arregla **REPO.5** generalizandolos, no
+sacarlos del repositorio. Clasificar por el nombre del fichero es como se llego a un reparto
+tres veces mas grande de lo necesario.
+
+### El reparto que queda
+
+**FUERA DEL REPOSITORIO — 15 rutas, a `_local/docs_operacion/` y copia en Drive.** No hay
+repositorio privado: se crea cuando tenga peso de verdad (Terraform, registro de incidencias,
+rondas de medicion futuras), con el mismo test que el *fork*.
+
+* **Los once tableros de medicion y experimento.** Y **no porque no puedan publicarse**:
+  comprobado, **cero datos personales, cero credenciales, cero valores de configuracion**. Para un
+  proyecto que se defiende sobre «garantia → mecanismo → precio», publicar como se mide y que
+  salio es un **activo**. Lo que los deja fuera por ahora es que recogen **juicios de calidad
+  sobre un servicio en uso**, y eso es una decision de la institucion, no de un triaje documental
+  — y **publicar es la direccion irreversible**: abrirlos manana es un commit, cerrarlos cuesta
+  una reescritura de historial.
+* **El trio de marca**, ya sacado del arbol el 2026-09-07 a `_local/docs_operacion/`. Aqui el
+  motivo **si** es distinto: identidad institucional, no secreto.
+* **`LITERATURA_ASISTENTES_NORMATIVA.html`**, las 43 referencias del articulo para AI&Law. Ni
+  publico ni operacion: material de investigacion sin publicar, y su sede es donde vivan los
+  papers.
+
+**AL PUBLICO — el resto (~48)**: arquitectura, especificaciones, contratos, las seis decisiones,
+metodologia, multitenencia, accesibilidad, licencia, MCP, registro de actividad, sandbox, los tres
+reclasificados de arriba, y `DESPLIEGUE_PROTOTIPO_GCP.md` **generalizado y NO retirado**: el
+procedimiento —VM, proxy de Cloud SQL, WIF sin claves, migraciones antes de la imagen— es de lo
+mas valioso que se puede publicar, porque es justo lo que una entidad local no sabe hacer. Lo que
+se va son los valores. Eso es **REPO.5**.
+
+**Si la institucion decide publicar los tableros**, el filtro baja de 15 rutas a 4 y esto se
+simplifica del todo. Es la decision que conviene tomar antes de ejecutar 5.bis.
 
 **Sobre el historial, que es la parte que no se puede deshacer.** La visibilidad alcanza a los
 commits: borrar un fichero antes de abrir **no lo saca del pasado**. Medido el 2026-09-07, el
@@ -160,14 +190,11 @@ Actions.**
 3. Crear el nuevo en la ORGANIZACION, VACIO (sin README, sin .gitignore, sin licencia: si GitHub
    crea un commit inicial, el push choca):
    gh repo create universitatjaumei/gov-gen-ai-platform --private
-3.bis. CREAR EL REPOSITORIO PRIVADO DE OPERACION y sembrarlo, ANTES de filtrar nada. Si se filtra
-   primero y algo sale mal, esos 15 ficheros solo estarian en el bundle.
-   gh repo create universitatjaumei/gov-gen-ai-platform-operacion --private
-   Sembrarlo con los 15 del reparto (los once tableros, DATOS_DEL_PILOTO, RUNBOOK_REINGESTA,
-   CASO_CURACION_ESCOLA_DOCTORAT y el trio de marca de `_local/docs_operacion/`), con un README
-   que diga **que es y que no**: historia operativa de la instalacion de la UJI, no documentacion
-   de la plataforma; y que la plataforma se documenta en el principal.
-   Comprobar que estan los 15 antes de seguir: gh api repos/.../contents/... o un clon limpio.
+3.bis. COPIAR A `_local/docs_operacion/` LO QUE SALE DEL ARBOL, y de ahi al Drive, ANTES de
+   filtrar. Si se filtra primero y algo sale mal, esos ficheros solo estarian en el bundle.
+   El trio de marca ya esta ahi desde el 2026-09-07. Faltan los once tableros y la revision de
+   literatura. **La copia en Drive va antes del paso 5.bis**, no despues: `_local/` esta ignorada
+   y no la respalda nadie.
 
 4. AMPLIAR LA AUTENTICACION A LOS DOS NOMBRES, antes de empujar. Aditivo, sin ventana de rotura:
    gh variable list -> copiar los 12 pares al nuevo (gh variable set ... --repo universitatjaumei/...)
@@ -185,7 +212,8 @@ Actions.**
    git push -u origin main
    git push -u origin desarrollo
 
-5.bis. FILTRAR DEL HISTORIAL lo que va al privado. **Se hace en un CLON DE TRABAJO, no aqui**:
+5.bis. FILTRAR DEL HISTORIAL lo que sale del repositorio (15 rutas). **Se hace en un CLON DE
+   TRABAJO, no aqui**:
    `filter-repo` reescribe todos los SHA, asi que el clon de desarrollo quedaria divergente de lo
    que ya se ha empujado. Se clona, se filtra, se empuja el resultado, y luego se reclona.
    Es lo que hace que el repositorio publico NUNCA haya contenido estos ficheros:
@@ -204,9 +232,6 @@ Actions.**
      --path docs/VALIDACION_GERENCIA_AUTONOMA.html \
      --path docs/VALIDACION_GERENCIA_RAG_VS_AGENTICO.html \
      --path docs/LITERATURA_ASISTENTES_NORMATIVA.html \
-     --path docs/DATOS_DEL_PILOTO.md \
-     --path docs/RUNBOOK_REINGESTA.md \
-     --path docs/CASO_CURACION_ESCOLA_DOCTORAT.md \
      --path docs/chatbots-publicos/demo-uji.html \
      --path docs/chatbots-publicos/uji-theme.css \
      --path docs/chatbots-publicos/marcauji.png
