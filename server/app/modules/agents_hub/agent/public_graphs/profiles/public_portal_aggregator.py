@@ -1,8 +1,17 @@
-"""Perfil PUBLIC_PORTAL_AGGREGATOR (UJI) — dos fuentes (procedimientos + normativa).
+"""Perfil PUBLIC_PORTAL_AGGREGATOR — dos fuentes (procedimientos + normativa).
 
-  - UjiDualSourceRetrievalStrategy : recupera de ambas fuentes y devuelve dos buckets
-  - UjiMergeStrategy               : procedimiento top + normativa enlazada; solo normativa si no hay candidato
-  - UjiAnswerTemplateStrategy      : secciones Procedimiento / Normativa + warning de traducción
+  - DualSourceRetrievalStrategy      : recupera de ambas fuentes y devuelve dos buckets
+  - PrimaryFirstMergeStrategy        : primaria arriba + secundaria enlazada; sólo la
+                                       secundaria si la primaria no tiene candidato
+  - TwoSectionAnswerTemplateStrategy : dos secciones + aviso de traducción
+
+**El perfil no nombra ninguna institución, y es deliberado** (AIS.2 y `CONTRIBUTING.md`): la
+topología es «un portal de trámites junto a su corpus normativo», que sirve a cualquier
+administración con esas dos fuentes. Los dos chatbots de origen **se inyectan** por
+constructor, así que de quién son las fuentes es configuración del despliegue.
+
+Estas tres clases se llamaron `Uji*` desde 9B.11 hasta el 2026-09-07, con el guardarraíl de
+AIS.2 en verde: su patrón no veía el CamelCase. Ver el test de AIS.2.
 
 Deploy: edge
 """
@@ -28,7 +37,7 @@ if TYPE_CHECKING:
     )
 
 
-class UjiDualSourceRetrievalStrategy:
+class DualSourceRetrievalStrategy:
     """Recupera de procedimientos y normativa por separado y devuelve dos buckets."""
 
     def __init__(
@@ -56,8 +65,9 @@ class UjiDualSourceRetrievalStrategy:
         return RetrievalOutput(buckets=[proc_result, norm_result])
 
 
-class UjiMergeStrategy:
-    """Fusión UJI: procedimiento top + normativa; solo normativa si no hay candidato."""
+class PrimaryFirstMergeStrategy:
+    """Fusión: la fuente primaria arriba y la secundaria detrás; sólo la secundaria si la
+    primaria no tiene candidato."""
 
     def merge(self, output: RetrievalOutput) -> list:
         proc_items = list(output.buckets[0].items) if output.buckets else []
@@ -68,8 +78,8 @@ class UjiMergeStrategy:
         return proc_items + norm_items
 
 
-class UjiAnswerTemplateStrategy:
-    """Plantilla UJI: secciones Procedimiento / Normativa + warning de traducción."""
+class TwoSectionAnswerTemplateStrategy:
+    """Plantilla de dos secciones (Procedimiento / Normativa) + aviso de traducción."""
 
     def build_prompt_context(
         self,

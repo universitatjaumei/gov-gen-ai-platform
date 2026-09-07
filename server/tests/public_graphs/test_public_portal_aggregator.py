@@ -1,18 +1,19 @@
-"""Tests del perfil PUBLIC_PORTAL_AGGREGATOR (UJI) — 9B.10 (RED).
+"""Tests del perfil PUBLIC_PORTAL_AGGREGATOR — 9B.10 (RED).
 
-El perfil UJI agrega dos fuentes (procedimientos + normativa) con cualquier retrieval_mode.
+El perfil agrega dos fuentes (un portal de trámites y su corpus normativo) con cualquier
+retrieval_mode, y **no es de ninguna institución**: los dos chatbots de origen se inyectan.
 Estos tests FALLAN con el stub y pasarán tras la implementación del prompt 9B.11.
 
 Contrato esperado:
-  UjiDualSourceRetrievalStrategy.retrieve():
+  DualSourceRetrievalStrategy.retrieve():
     - Llama al pipeline(cfg.retrieval_mode) para cada fuente
     - Devuelve RetrievalOutput con dos buckets: [0]=procedimientos, [1]=normativa
 
-  UjiMergeStrategy.merge():
+  PrimaryFirstMergeStrategy.merge():
     - Si hay procedimiento candidato: procedimiento top + normativa enlazada + respaldo
     - Si no: sólo normativa
 
-  UjiAnswerTemplateStrategy.build_prompt_context():
+  TwoSectionAnswerTemplateStrategy.build_prompt_context():
     - Contiene secciones "Procedimiento" y "Normativa"
     - Añade warning de traducción cuando context_language != query_language
 """
@@ -25,9 +26,9 @@ from server.app.modules.agents_hub.agent.public_graphs.core.config_resolver impo
     PublicGraphConfig,
 )
 from server.app.modules.agents_hub.agent.public_graphs.profiles.public_portal_aggregator import (
-    UjiAnswerTemplateStrategy,
-    UjiDualSourceRetrievalStrategy,
-    UjiMergeStrategy,
+    DualSourceRetrievalStrategy,
+    PrimaryFirstMergeStrategy,
+    TwoSectionAnswerTemplateStrategy,
 )
 from server.app.modules.agents_hub.agent.public_graphs.strategies.protocols import RetrievalOutput
 from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_contract import (
@@ -88,7 +89,7 @@ def _make_cfg(mode: str) -> PublicGraphConfig:
         min_retrieval_results=1,
         min_retrieval_score=0.25,
         reranker_enabled=False,
-        answer_template="uji",
+        answer_template="portal_aggregator",
     )
 
 
@@ -112,11 +113,11 @@ def _make_mock_pipeline(proc_item: EvidenceItem, norm_item: EvidenceItem, mode: 
 
 
 # ---------------------------------------------------------------------------
-# Tests del UjiDualSourceRetrievalStrategy
+# Tests del DualSourceRetrievalStrategy
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-class TestUjiDualSourceRetrievalStrategy:
+class TestDualSourceRetrievalStrategy:
 
     async def _run(self, mode: str) -> RetrievalOutput:
         deps = GraphDeps(session=AsyncMock(), embedder=AsyncMock())
@@ -127,7 +128,7 @@ class TestUjiDualSourceRetrievalStrategy:
             "server.app.modules.agents_hub.agent.public_graphs.profiles.public_portal_aggregator.get_pipeline",
             return_value=mock_pipeline,
         ):
-            strategy = UjiDualSourceRetrievalStrategy(
+            strategy = DualSourceRetrievalStrategy(
                 procedimientos_chatbot_id=PROC_ID,
                 normativa_chatbot_id=NORM_ID,
             )
@@ -138,7 +139,7 @@ class TestUjiDualSourceRetrievalStrategy:
                 deps,
             )
 
-    async def test_uji_aggregator_rag_mode_combines_procedure_and_normativa(self):
+    async def test_aggregator_rag_mode_combines_procedure_and_normativa(self):
         """En modo RAG, retrieve() devuelve buckets con items de procedimiento y normativa."""
         output = await self._run("RAG")
 
@@ -148,7 +149,7 @@ class TestUjiDualSourceRetrievalStrategy:
         assert "procedimiento" in source_types, "Falta bucket de procedimientos"
         assert "normativa" in source_types, "Falta bucket de normativa"
 
-    async def test_uji_aggregator_md_long_context_mode_combines_procedure_and_normativa(self):
+    async def test_aggregator_md_long_context_mode_combines_procedure_and_normativa(self):
         """En modo MD_LONG_CONTEXT, retrieve() devuelve buckets de ambas fuentes."""
         output = await self._run("MD_LONG_CONTEXT")
 
@@ -158,7 +159,7 @@ class TestUjiDualSourceRetrievalStrategy:
         assert "procedimiento" in source_types
         assert "normativa" in source_types
 
-    async def test_uji_aggregator_md_agent_selector_mode_combines_procedure_and_normativa(self):
+    async def test_aggregator_md_agent_selector_mode_combines_procedure_and_normativa(self):
         """En modo MD_AGENT_SELECTOR, retrieve() devuelve buckets de ambas fuentes."""
         output = await self._run("MD_AGENT_SELECTOR")
 
@@ -170,18 +171,18 @@ class TestUjiDualSourceRetrievalStrategy:
 
 
 # ---------------------------------------------------------------------------
-# Tests del UjiMergeStrategy
+# Tests del PrimaryFirstMergeStrategy
 # ---------------------------------------------------------------------------
 
-class TestUjiMergeStrategy:
+class TestPrimaryFirstMergeStrategy:
 
-    def test_uji_normativa_only_when_no_procedure_candidate(self):
+    def test_normativa_only_when_no_procedure_candidate(self):
         """Sin ítems de procedimiento, merge devuelve únicamente normativa."""
         proc_bucket = RetrievalResult(items=[], debug={"source": "procedimientos"})
         norm_bucket = RetrievalResult(items=[_NORM_ITEM], debug={"source": "normativa"})
         output = RetrievalOutput(buckets=[proc_bucket, norm_bucket])
 
-        merged = UjiMergeStrategy().merge(output)
+        merged = PrimaryFirstMergeStrategy().merge(output)
 
         assert len(merged) > 0, "Debe devolver al menos los ítems de normativa"
         for item in merged:
@@ -190,13 +191,13 @@ class TestUjiMergeStrategy:
                 f"'{item.metadata.get('source_type')}'"
             )
 
-    def test_uji_merge_includes_both_when_procedure_candidate_exists(self):
+    def test_merge_includes_both_when_procedure_candidate_exists(self):
         """Con candidato de procedimiento, merge incluye ítems de ambas fuentes."""
         proc_bucket = RetrievalResult(items=[_PROC_ITEM], debug={"source": "procedimientos"})
         norm_bucket = RetrievalResult(items=[_NORM_ITEM], debug={"source": "normativa"})
         output = RetrievalOutput(buckets=[proc_bucket, norm_bucket])
 
-        merged = UjiMergeStrategy().merge(output)
+        merged = PrimaryFirstMergeStrategy().merge(output)
 
         source_types = {item.metadata.get("source_type") for item in merged}
         assert "procedimiento" in source_types, "Debe incluir el procedimiento candidato"
@@ -204,24 +205,24 @@ class TestUjiMergeStrategy:
 
 
 # ---------------------------------------------------------------------------
-# Tests del UjiAnswerTemplateStrategy
+# Tests del TwoSectionAnswerTemplateStrategy
 # ---------------------------------------------------------------------------
 
-class TestUjiAnswerTemplateStrategy:
+class TestTwoSectionAnswerTemplateStrategy:
 
-    def test_uji_answer_template_sections_present(self):
+    def test_answer_template_sections_present(self):
         """El contexto generado debe contener secciones de Procedimiento y Normativa."""
         items = [_PROC_ITEM, _NORM_ITEM]
-        context = UjiAnswerTemplateStrategy().build_prompt_context(items, "es", "consulta")
+        context = TwoSectionAnswerTemplateStrategy().build_prompt_context(items, "es", "consulta")
 
         assert "procedimiento" in context.lower(), "Falta sección de procedimiento"
         assert "normativa" in context.lower(), "Falta sección de normativa"
 
-    def test_uji_translation_warning_only_when_context_language_differs(self):
+    def test_translation_warning_only_when_context_language_differs(self):
         """Warning de traducción sólo cuando context_language != query_language."""
         # Contexto en español, usuario en catalán → warning esperado
         items_es = [_PROC_ITEM, _NORM_ITEM]  # language="es"
-        context_with_warning = UjiAnswerTemplateStrategy().build_prompt_context(
+        context_with_warning = TwoSectionAnswerTemplateStrategy().build_prompt_context(
             items_es, "ca", "Quina és la matrícula?"
         )
         assert any(
@@ -231,7 +232,7 @@ class TestUjiAnswerTemplateStrategy:
 
         # Contexto en catalán, usuario en catalán → sin warning
         items_ca = [_PROC_ITEM_CA, _NORM_ITEM_CA]  # language="ca"
-        context_no_warning = UjiAnswerTemplateStrategy().build_prompt_context(
+        context_no_warning = TwoSectionAnswerTemplateStrategy().build_prompt_context(
             items_ca, "ca", "Quina és la matrícula?"
         )
         assert not any(

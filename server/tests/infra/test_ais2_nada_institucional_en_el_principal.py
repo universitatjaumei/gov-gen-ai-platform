@@ -36,6 +36,23 @@ _APP = Path("app")
 #: cualquiera, no sólo para la de esta casa.
 _INSTITUCIONES = re.compile(r"\b(uji|jaume|castell[oó]n?|innovap|generalitat)\b", re.IGNORECASE)
 
+#: Separa las palabras pegadas en CamelCase **antes** de buscar la institución.
+#:
+#: Este guardarraíl estuvo verde durante semanas con tres clases llamadas
+#: `UjiDualSourceRetrievalStrategy`, `UjiMergeStrategy` y `UjiAnswerTemplateStrategy` en el
+#: perfil agregador. El motivo es que `\b(uji|…)\b` se aplicaba a la línea cruda y **en CamelCase
+#: no hay frontera de palabra**: tras «Uji» viene una letra, así que el `\b` final no casa. Lo
+#: mismo le pasaría a cualquier `HubUjiAlgo` que se escriba mañana.
+#:
+#: Se arregla **la entrada y no el patrón**, a propósito. Quitar el `\b` final haría casar
+#: «castellano» —que sale por todo el código, es el nombre de una lengua— y a partir de ahí el
+#: guardarraíl se desactivaría a base de excepciones. Con la línea ya separada, `\b…\b` sigue
+#: siendo legible y sigue descartando «castellano».
+#:
+#: Las dos alternativas son el par estándar: minúscula→mayúscula (`UjiMerge` → `Uji Merge`) y
+#: fin de acrónimo (`UJIMerge` → `UJI Merge`), que sin la segunda también se escaparía.
+_CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+
 #: Ficheros de código de producción, sin tests ni cuarentena.
 def _codigo() -> list[Path]:
     return [p for p in _APP.rglob("*.py") if "__pycache__" not in p.parts]
@@ -66,7 +83,9 @@ def _lineas_con_institucion(ruta: Path, *, solo_codigo: bool) -> list[str]:
             if limpia.startswith("#"):
                 continue
             limpia = limpia.split("#", 1)[0]
-        if _INSTITUCIONES.search(limpia):
+        # Se busca sobre la línea con el CamelCase separado, pero se REPORTA la original: quien
+        # lea el fallo tiene que ver el identificador tal como está escrito en el fichero.
+        if _INSTITUCIONES.search(_CAMEL.sub(" ", limpia)):
             fuera.append(f"{ruta.as_posix()}:{numero} → {limpia[:110]}")
     return fuera
 

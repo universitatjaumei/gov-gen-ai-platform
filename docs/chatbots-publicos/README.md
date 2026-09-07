@@ -212,7 +212,7 @@ server/tests/public_graphs/
 ├── test_core_graph.py                # CoreGraph: compile, fallback, modos
 ├── test_public_kb_rich.py            # Perfil PUBLIC_KB_RICH × 3 modos
 ├── test_public_portal_router.py      # PortalRouterRetrievalStrategy
-├── test_uji_aggregator.py            # UJI: retrieve dual, merge, template, warning
+├── test_public_portal_aggregator.py  # retrieve dual, merge, template, aviso de traduccion
 ├── test_language_policy.py           # prefer / strict / none + warnings
 ├── test_graph_factory.py             # GraphFactory: cascada de config
 ├── test_profile_contract.py          # Contrato por perfil (compile + smoke run)

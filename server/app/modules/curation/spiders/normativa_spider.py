@@ -47,7 +47,7 @@ class NormativaDoc:
 
 
 class NormativaSpider:
-    """Extrae documentos de normativa de fuentes BOE, DOGV y UJI."""
+    """Extrae documentos de normativa de boletines oficiales y de portales propios."""
 
     def __init__(self, source_type: str, date_from: date | None = None) -> None:
         if source_type not in SELECTORS:
