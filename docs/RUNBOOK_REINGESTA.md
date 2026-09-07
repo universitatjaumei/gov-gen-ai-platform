@@ -20,11 +20,11 @@ entre copias del corpus ya está identificada como riesgo; este runbook es su pr
 
 ```bash
 # 1. Que la base responde y qué revisión tiene
-gcloud sql instances describe govgenai-prod --project=uji-teclab --format='value(state)'
+gcloud sql instances describe <INSTANCIA_SQL> --project=<PROYECTO_GCP> --format='value(state)'
 
 # 2. Una copia a mano ANTES de una reingesta grande. Las automáticas son de las 03:00;
 #    una reingesta no es un cambio de esquema, pero mueve miles de filas.
-gcloud sql backups create --instance=govgenai-prod --project=uji-teclab --async
+gcloud sql backups create --instance=<INSTANCIA_SQL> --project=<PROYECTO_GCP> --async
 ```
 
 ## Cómo llegan los `.md` a la máquina
@@ -35,8 +35,8 @@ Mientras el servicio de publicación no exista (bloque SYNC), la fuente es una c
 # Desde la máquina de quien cura, con el corpus ya validado
 gcloud compute scp --recurse \
     "<corpus>/generat/ingesta/normatiu" \
-    govgenai-vm:/tmp/corpus \
-    --zone europe-southwest1-b --tunnel-through-iap --project uji-teclab
+    <VM>:/tmp/corpus \
+    --zone europe-southwest1-b --tunnel-through-iap --project <PROYECTO_GCP>
 ```
 
 Cuando exista el servicio de publicación, esto se sustituye por `sync.py` contra
@@ -48,8 +48,8 @@ Cuando exista el servicio de publicación, esto se sustituye por `sync.py` contr
 puerta que el 2026-08-27 destapó 292 falsos cambios que tapaban 24 reales.
 
 ```bash
-gcloud compute ssh govgenai-vm --zone europe-southwest1-b --tunnel-through-iap \
-  --project uji-teclab --command "sudo docker compose \
+gcloud compute ssh <VM> --zone europe-southwest1-b --tunnel-through-iap \
+  --project <PROYECTO_GCP> --command "sudo docker compose \
     --env-file /opt/govgenai/.env.despliegue -f /opt/govgenai/docker-compose.vm.yml \
     run --rm --entrypoint python app \
     -m server.app.modules.agents_hub.ingestion.corpus.load \

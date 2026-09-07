@@ -11,7 +11,7 @@
   id="govgenai-widget"
   data-chatbot-id="<UUID del chatbot>"
   data-widget-key="<credencial de SITIO>"
-  data-api-url="https://34-175-38-129.sslip.io/api/v1"
+  data-api-url="https://<HOST>/api/v1"
   data-lang="es"
   data-title="Assistent normativa"
 ></div>

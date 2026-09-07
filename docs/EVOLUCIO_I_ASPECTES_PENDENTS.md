@@ -240,7 +240,7 @@ La petició completa a Informàtica està redactada a banda. Ací interessa el q
 
 **El requisit que va davant: un nom DNS institucional.** L'identificador del proveïdor de servei (*EntityID*) i l'URL del punt de retorn (ACS) es construïxen sobre el nom de l'amfitrió, i són precisament les dues dades que l'IdP registra. Canviar-los després no és una redirecció: obliga a registrar el servei de nou.
 
-El prototip respon hui en una adreça derivada de la seua IP (`34-175-38-129.sslip.io`), i és molt probable que un IdP institucional **no accepte registrar un proveïdor de servei en `sslip.io`**, que és un servei de tercers que resol qualsevol IP. Si el subdomini ha d'existir, millor que existisca *abans* del registre.
+El prototip respon hui en una adreça derivada de la seua IP (`<HOST>`), i és molt probable que un IdP institucional **no accepte registrar un proveïdor de servei en `sslip.io`**, que és un servei de tercers que resol qualsevol IP. Si el subdomini ha d'existir, millor que existisca *abans* del registre.
 
 Del que ens han de donar, tres coses són les que solen quedar a mitges:
 

@@ -17,6 +17,31 @@
 
 ---
 
+## Los marcadores: qué valor va en cada uno y de dónde sale
+
+Este documento usa marcadores en vez de los valores de la instalación que lo originó. **No es por
+secreto** —ninguno es una credencial; lo que autoriza es IAM y la federación de identidad— sino
+porque un procedimiento con los valores de otra casa dentro obliga a adivinar qué sustituir, y
+porque un ejemplo que parece real se acaba copiando tal cual.
+
+| Marcador | Qué es | De dónde sale |
+|---|---|---|
+| `<PROYECTO_GCP>` | Id del proyecto de GCP | Lo eliges al crear el proyecto. `gcloud config get-value project` |
+| `<NUMERO_DE_PROYECTO>` | Número del proyecto, distinto del id | `gcloud projects describe <PROYECTO_GCP> --format='value(projectNumber)'` |
+| `<REGION>` | Región de Cloud SQL, la VM y Artifact Registry | Tu elección. Aquí se usó Madrid (`europe-southwest1`) porque el texto no sale de España |
+| `<INSTANCIA_SQL>` | Nombre de la instancia de Cloud SQL | Lo eliges al crearla (§3.bis) |
+| `<VM>` | Nombre de la máquina | Lo eliges al crearla (D.4-VM) |
+| `<BUCKET_CORPUS>` | *Bucket* del sitio estático del corpus | Lo eliges. Va en la variable `CORPUS_BUCKET` |
+| `<BUCKET_DOCS>` | *Bucket* de documentos de la aplicación | Lo eliges. Va en `STORAGE_BUCKET` |
+| `<HOST>` | Nombre por el que responde el servicio | Tu dominio, o el provisional derivado de la IP mientras no lo haya |
+| `<ORG>/<REPOSITORIO>` | El repositorio de GitHub desde el que se despliega | El tuyo. Aparece en **los dos** anclajes de la identidad federada |
+
+**Ninguno de estos valores va en el código.** Van en variables del repositorio de GitHub
+(`gh variable set`), de donde el *workflow* escribe el fichero de entorno de la máquina en cada
+despliegue. Ésa es la razón por la que el mismo código sirve a cualquier organización.
+
+---
+
 ## Son dos cosas, y conviene no mezclarlas
 
 | | Qué es | Dónde va | Qué necesita |
@@ -70,11 +95,11 @@ Lo que dice el bloque Deploy (D.4-VM), más lo que ha aparecido en el piloto:
 
 | Variable | Valor | Por qué |
 |---|---|---|
-| `GOOGLE_CLOUD_PROJECT` | `uji-teclab` | Vertex. Ya verificado |
+| `GOOGLE_CLOUD_PROJECT` | `<PROYECTO_GCP>` | Vertex. Ya verificado |
 | `GOOGLE_CLOUD_LOCATION` | `europe-southwest1` | Madrid: el texto no sale de España |
 | `CORPUS_SITE_BASE_URL` | `https://normativa.uji.es` | Sin esto las citas van al PDF. **Desde DOM.3 es el dominio y no la URL del bucket**: el bucket lo sigue sirviendo, pero por detrás del proxy |
 | `CORS_ALLOWED_ORIGINS` | el origen del bucket **y** el del dominio, separados por coma | **Sin esto el widget no puede hablar con la API**: en producción la política es cerrada y un origen que falta se traduce en un preflight rechazado, no en un error visible. Los dos, y es aditivo a propósito: mientras la URL del bucket siga siendo pública, las páginas servidas desde ahí son de otro origen |
-| `CORPUS_BUCKET` | `govgenai-normativa-uji` | El bucket al que el proxy manda todo lo que no es API ni panel (DOM.1). Lo lee **Caddy**, no la aplicación. Vacío compone `https://.storage.googleapis.com` y rompe portada, cercadores y fichas a la vez, así que el compose lo exige con `:?` |
+| `CORPUS_BUCKET` | `<BUCKET_CORPUS>` | El bucket al que el proxy manda todo lo que no es API ni panel (DOM.1). Lo lee **Caddy**, no la aplicación. Vacío compone `https://.storage.googleapis.com` y rompe portada, cercadores y fichas a la vez, así que el compose lo exige con `:?` |
 | `ENVIRONMENT` | `production` | Cierra el sembrado de desarrollo (SEC.8.0) y la documentación de la API (SEC.7) |
 
 Credenciales de Vertex en la VM: cuenta de servicio con el rol de usuario de Vertex AI, no
@@ -114,12 +139,12 @@ va antes, o la carga aborta.
 
 ## 3.bis Aprovisionado el 2026-08-31 (D.0, D.2 y D.3)
 
-Lo que ya está hecho en `uji-teclab`, para no repetirlo ni adivinarlo:
+Lo que ya está hecho en `<PROYECTO_GCP>`, para no repetirlo ni adivinarlo:
 
 | Qué | Cómo quedó |
 |---|---|
 | Servicios de GCP | **14 habilitados y comprobados** con `scripts/gcp_enable_services.sh` (D.0). Idempotente: se relanza sin miedo |
-| Cloud SQL | Instancia **`govgenai-prod`**: POSTGRES_16, `db-g1-small`, edición **ENTERPRISE**, `europe-southwest1`, disco con crecimiento automático, copias a las 03:00 y **PITR activado**. Nombre de conexión `uji-teclab:europe-southwest1:govgenai-prod` |
+| Cloud SQL | Instancia **`<INSTANCIA_SQL>`**: POSTGRES_16, `db-g1-small`, edición **ENTERPRISE**, `europe-southwest1`, disco con crecimiento automático, copias a las 03:00 y **PITR activado**. Nombre de conexión `<PROYECTO_GCP>:<REGION>:<INSTANCIA_SQL>` |
 | Base y usuario | BD **`govgenai`** y usuario **`govgenai`**, con la contraseña en Secret Manager (nunca en un fichero) |
 | `pgvector` | **No hace falta paso manual**: la primera migración ejecuta `CREATE EXTENSION IF NOT EXISTS vector` (`a1b2c3d4e5f6_hub_schema.py:22`) y el usuario creado por la API de Cloud SQL tiene permiso |
 | Secretos | Seis, inventariados en `scripts/lib/secretos.tsv` y creados con `scripts/gcp_create_secrets.sh`. Cinco con valor; **falta `govgenai-google-api-key`**, que lo aporta una persona |
@@ -173,10 +198,27 @@ Aprovisionado el 2026-08-31 con `scripts/gcp_provision_cicd.sh`:
 
 | Qué | Cómo quedó |
 |---|---|
-| Imágenes | Artifact Registry `govgenai` en `europe-southwest1`. Tres imágenes (`app`, `frontend`, `sandbox`) **etiquetadas con el SHA del commit**, nunca `latest` |
-| Identidad | **Workload Identity Federation**, sin ninguna clave en el repositorio. Proveedor acotado con `assertion.repository=='ModestoFabra/gov-gen-ai-platform'` |
+| Imágenes | Artifact Registry `govgenai` en `<REGION>`. **Cuatro** imágenes (`app`, `frontend`, `sandbox` y `mcp`, ésta desde REG.4) **etiquetadas con el SHA del commit**, nunca `latest` |
+| Identidad | **Workload Identity Federation**, sin ninguna clave en el repositorio. **El nombre del repositorio está anclado en DOS sitios** — ver abajo |
 | Cuenta de despliegue | `govgenai-deploy@…` con cuatro roles mínimos: publicar imagen, túnel de IAP, OS Login con sudo y leer instancias |
-| Variables del repositorio | Diez, puestas con `gh variable set`. **Ninguna es un secreto**: son identificadores, y lo que autoriza es la federación |
+| Variables del repositorio | **Doce**, puestas con `gh variable set`. **Ninguna es un secreto**: son identificadores, y lo que autoriza es la federación |
+
+#### Los dos anclajes de la identidad federada
+
+Quien siga este documento y ponga sólo el primero se queda a medias, y el síntoma —la
+autenticación falla— no señala a lo que falta. Son **dos**, y los dos llevan el nombre del
+repositorio:
+
+| Dónde | Qué dice |
+|---|---|
+| Condición del proveedor OIDC | `assertion.repository=='<ORG>/<REPOSITORIO>'` |
+| Enlace de la cuenta de servicio | `principalSet://iam.googleapis.com/projects/<NUMERO_DE_PROYECTO>/locations/global/workloadIdentityPools/github/attribute.repository/<ORG>/<REPOSITORIO>` |
+
+Corolario para cuando el repositorio cambie de dueño o de nombre: **hay que tocar los dos**, y se
+hace de forma **aditiva** —ampliar la condición con `||` al nombre nuevo y añadir el segundo
+`principalSet`, verificar un despliegue real, y sólo entonces retirar el viejo—. Así no hay
+ventana en la que no se pueda desplegar. El código no se toca: el *workflow* lee el proveedor de
+una variable y el nombre del recurso no cambia.
 
 **Por qué la condición de atributo importa tanto**: sin ella el proveedor acepta tokens de
 **cualquier** repositorio de GitHub, y cualquiera podría crear uno y suplantar a la cuenta de
@@ -189,8 +231,8 @@ Las páginas se pueden servir de dos formas, y **no dan el mismo origen**:
 
 | URL | Origen para el navegador |
 |---|---|
-| `https://storage.googleapis.com/govgenai-normativa-uji/…` | `https://storage.googleapis.com` — **el de todos los buckets del mundo** |
-| `https://govgenai-normativa-uji.storage.googleapis.com/…` | `https://govgenai-normativa-uji.storage.googleapis.com` — sólo este bucket |
+| `https://storage.googleapis.com/<BUCKET_CORPUS>/…` | `https://storage.googleapis.com` — **el de todos los buckets del mundo** |
+| `https://<BUCKET_CORPUS>.storage.googleapis.com/…` | `https://<BUCKET_CORPUS>.storage.googleapis.com` — sólo este bucket |
 
 Se usa la **segunda**. Con la primera, `CORS_ALLOWED_ORIGINS` tendría que abrirse a
 `https://storage.googleapis.com` y entonces cualquier página alojada en cualquier bucket de
@@ -199,7 +241,7 @@ chatbots `public_anon` y las cuotas por IP—, pero abrir el origen a medio inte
 existe una forma acotada es regalar superficie.
 
 De ahí que `CORPUS_SITE_BASE_URL` y `CORS_ALLOWED_ORIGINS` valgan los dos
-`https://govgenai-normativa-uji.storage.googleapis.com`.
+`https://<BUCKET_CORPUS>.storage.googleapis.com`.
 
 ---
 
@@ -209,7 +251,7 @@ De ahí que `CORPUS_SITE_BASE_URL` y `CORS_ALLOWED_ORIGINS` valgan los dos
 |---|---|
 | Copias de la base | Automáticas diarias + **PITR**, activados al crear la instancia (D.3) |
 | Restauración | **Probada de verdad el 2026-08-31**: **7 min 43 s** (medidos) hasta ser utilizable |
-| Buckets | Versionado activado en `govgenai-prod-docs` y `govgenai-normativa-uji` |
+| Buckets | Versionado activado en `<BUCKET_DOCS>` y `<BUCKET_CORPUS>` |
 | Salud | Comprobación cada 5 min sobre `https://<host>/health`, **con validación de certificado** |
 | Alertas | Caída de la comprobación, memoria > 85 % y disco > 85 %, al correo del responsable |
 | Logs | Rotación local (`max-size 10m`, `max-file 3`) **y** copia en Cloud Logging vía el agente |

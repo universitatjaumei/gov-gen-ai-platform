@@ -1,11 +1,18 @@
 ## Bloque REPO — Sustituir el repositorio de GitHub por uno sin objetos huérfanos
 
-> **Estado (2026-09-07): 5 prompts, uno hecho.** REPO.3 ✅ (el triaje de `docs/`). Pendientes:
-> **REPO.1** (crear el limpio en `universitatjaumei`, con el reparto de `docs/` y el filtro del
-> historial), **REPO.4** (retirar los anclajes al dueño anterior), **REPO.5** (los valores reales
-> fuera de los documentos publicables) y **REPO.2** (los otros dos repositorios). Los dos últimos
-> prompts nuevos salen de la variante B: con la A no hacían falta.
-> El orden es **REPO.1 → REPO.4 → REPO.5 → REPO.2**, y REPO.1 y REPO.2 los ejecuta el usuario.
+> **Estado (2026-09-07): 5 prompts, DOS hechos.** REPO.3 ✅ (triaje de `docs/`) y **REPO.5 ✅**
+> (los valores de esta casa fuera de los documentos publicables). REPO.5 se adelantó porque **dejó
+> de depender de REPO.1** al revisarse el reparto, y adelantarlo evita que la documentación escrita
+> durante la espera vuelva a meter valores reales.
+>
+> Pendientes: **REPO.1** (crear el limpio en `universitatjaumei`, con el reparto de `docs/` y el
+> filtro del historial) y **REPO.4** (retirar los anclajes al dueño anterior), más **REPO.2** (los
+> otros dos repositorios). Los dos prompts nuevos salen de la variante B: con la A no hacían falta.
+>
+> El orden es **REPO.1 → REPO.4 → REPO.2**, y REPO.1 y REPO.2 los ejecuta el usuario.
+> **REPO.4 es el único que espera a la organización**: cambia `CODEOWNERS` a un equipo y las URL
+> al dueño nuevo, así que sin organización no hay a qué apuntar. Mientras tanto, se puede seguir
+> con otros bloques sin que REPO se quede obsoleto.
 
 > **Planificado el 2026-08-21.** No es un bloque de código: es una operación sobre GitHub que ejecuta
 > el usuario. Está aquí, versionado, porque el guion detallado vivía en `_local/`, que es una carpeta
@@ -373,14 +380,25 @@ negocio. Cuatro son ficheros vivos que un lector nuevo consulta, y dos son docum
 
 ---
 
-### Prompt REPO.5 (RED/GREEN) — Los documentos de despliegue dejan de llevar los valores reales
+### Prompt REPO.5 ✅ (RED/GREEN, HECHO el 2026-09-07) — Los documentos de despliegue dejan de llevar los valores reales
 
 **Modelo sugerido**: **Sonnet** — sustitución acotada con un guardarraíl; el criterio está decidido.
 
-> **Nuevo el 2026-09-07.** Va **después de REPO.1**, para no reescribir dos veces los mismos
-> documentos. No es por secreto: un id de proyecto de GCP no es una credencial. Es por **utilidad**
-> —el procedimiento tiene que servir a otra administración, y con los valores de esta casa dentro
-> no sirve— y por no publicar el inventario de qué sondear.
+> **Nuevo el 2026-09-07**, y **ejecutado el mismo día**. Se planificó «después de REPO.1, para no
+> reescribir dos veces los mismos documentos», y **esa dependencia desapareció con la revisión del
+> reparto**: `RUNBOOK_REINGESTA.md` dejó de ir al filtro, así que ninguno de los cinco documentos
+> de este prompt está en la lista de rutas filtradas. Se adelantó a propósito — su guardarraíl
+> impide que la documentación que se escriba durante la espera vuelva a meter valores reales.
+>
+> No es por secreto: un id de proyecto de GCP no es una credencial. Es por **utilidad** —el
+> procedimiento tiene que servir a otra administración, y con los valores de esta casa dentro no
+> sirve— y por no publicar el inventario de qué sondear.
+>
+> **Fueron cinco documentos y no cuatro**: `RUNBOOK_REINGESTA.md` entró al reclasificarse como
+> público. Y aparecieron **tres datos que habían dejado de ser ciertos** en
+> `DESPLIEGUE_PROTOTIPO_GCP.md`: decía «tres imágenes» (son cuatro desde REG.4), «diez variables»
+> (son doce) y **un solo anclaje de WIF** (son dos). Un documento de despliegue que miente en las
+> cifras es peor que no tenerlo: quien lo siga creerá que ha terminado cuando le falta algo.
 
 ```
 # PROMPT REPO.5 (RED/GREEN) — El procedimiento se publica; los valores, no
