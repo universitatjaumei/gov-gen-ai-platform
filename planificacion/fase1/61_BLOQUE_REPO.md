@@ -1,5 +1,10 @@
 ## Bloque REPO — Sustituir el repositorio de GitHub por uno sin objetos huérfanos
 
+> **Estado (2026-09-07): 4 prompts, uno hecho.** REPO.3 ✅ (el triaje de `docs/`). Pendientes:
+> **REPO.1** (crear el limpio en `universitatjaumei` — variante B elegida), **REPO.2** (los otros
+> dos repositorios) y **REPO.4** (retirar los anclajes al dueño anterior, nuevo con la variante B).
+> El orden es **REPO.1 → REPO.4 → REPO.2**, y REPO.1 y REPO.2 los ejecuta el usuario.
+
 > **Planificado el 2026-08-21.** No es un bloque de código: es una operación sobre GitHub que ejecuta
 > el usuario. Está aquí, versionado, porque el guion detallado vivía en `_local/`, que es una carpeta
 > ignorada y de usar y tirar — y esto no puede perderse con ella.
@@ -27,16 +32,23 @@ tambien antes de TRANSFERIR: una transferencia se lleva el almacen de objetos co
 commit huerfano `dc4904e0c763` todavia sirve `logs/` con 46 ficheros por la API. GitHub no ha
 recogido basura y no promete cuando.
 
-## A donde va el nuevo (decision del 2026-09-07)
-El orden acordado con el usuario es **limpiar, transferir y abrir despues**. Eso abre una variante
-mejor que la de los pasos de abajo, si hay permiso para crear repositorios en la organizacion:
+## A donde va el nuevo — ELEGIDA LA VARIANTE B (decision del usuario, 2026-09-07)
+El orden acordado es **limpiar, mover y abrir despues**. Habia dos formas:
 
-  A) Crear el limpio en `ModestoFabra` (los pasos tal como estan) y transferirlo despues.
-  B) Crear el limpio DIRECTAMENTE en `universitatjaumei` y no transferir nada.
+  A) Crear el limpio en `ModestoFabra` y TRANSFERIRLO despues.
+  B) Crear el limpio DIRECTAMENTE en `universitatjaumei`. **ELEGIDA.**
 
-**B es estrictamente mejor y es la recomendada**: el repositorio de la organizacion **nace
-limpio**, asi que los 46 volcados no entran nunca en el almacen de objetos de la universidad, ni
-un minuto; y se ahorra un paso entero con su ventana de riesgo.
+**Y conviene decirlo con precision porque el nombre enga_a: con B NO HAY TRANSFERENCIA.** No se
+usa la operacion «Transfer» de GitHub en ningun momento. Se crea un repositorio nuevo en la
+organizacion y se le empuja el historial limpio; el viejo se borra al final. Eso es exactamente lo
+que hace que nazca limpio: **una transferencia se lleva el almacen de objetos completo**, asi que
+con A los 46 volcados entrarian en la organizacion de la universidad y solo desaparecerian al
+borrar el original. Con B no entran nunca, ni un minuto.
+
+Se ahorra ademas un paso entero con su ventana de riesgo.
+
+**Requisito de B**: permiso para crear repositorios en `universitatjaumei`. Si no lo hay, se cae a
+A, que sigue documentada en el historial de git de este fichero.
 
 Su unico coste es que el nombre pasa a `universitatjaumei/gov-gen-ai-platform`, y **la
 autenticacion del despliegue esta anclada al nombre en DOS sitios**, los dos en GCP:
@@ -65,29 +77,51 @@ pueden leer y copiar sin ceremonia.
 **Solo se pierden de verdad la fecha de creacion (2026-04-22) y el historial de ejecuciones de
 Actions.**
 
-## Los pasos
+## Los pasos (variante B: el nuevo nace en la organizacion)
+0. PRERREQUISITOS que no se averiguan desde fuera, y que van ANTES de tocar nada. Son las tres
+   preguntas a UADTI: rol con el que se incorpora el mantenedor y **quien aprueba la creacion**,
+   **permisos base para miembros** de la organizacion (decide quien ve el repositorio mientras
+   siga privado), y **plan** de la organizacion (si no es Enterprise, los rulesets sobre repos
+   privados pueden no estar disponibles).
 1. Copia de seguridad fuera del portatil: `git bundle create ../respaldo.bundle --all`, y
    `git bundle verify` ejecutado desde dentro del repositorio.
-2. Renombrar el viejo, que es instantaneo y no destructivo:
-   gh repo rename gov-gen-ai-platform-anterior --repo ModestoFabra/gov-gen-ai-platform
-3. Crear el nuevo ya con el nombre bueno y VACIO (sin README, sin .gitignore, sin licencia: si
-   GitHub crea un commit inicial, el push choca):
-   gh repo create ModestoFabra/gov-gen-ai-platform --private
-4. Subir **LAS DOS RAMAS**, fijando la URL para no depender de la redireccion del renombrado:
-   git remote set-url origin git@github.com:ModestoFabra/gov-gen-ai-platform.git
+   HECHO el 2026-09-07: `Documents/respaldo-gov-gen-ai-platform-2026-09-07.bundle`, 11,1 MB,
+   «complete history», con `main`, `desarrollo` y HEAD. **Falta sacarlo del portatil.**
+2. Apuntar las 12 variables del viejo, que en el nuevo no estan:
+   gh variable list --repo ModestoFabra/gov-gen-ai-platform
+   NO se renombra el viejo. En B se queda como esta y sirviendo hasta el paso 7: es la red.
+3. Crear el nuevo en la ORGANIZACION, VACIO (sin README, sin .gitignore, sin licencia: si GitHub
+   crea un commit inicial, el push choca):
+   gh repo create universitatjaumei/gov-gen-ai-platform --private
+4. AMPLIAR LA AUTENTICACION A LOS DOS NOMBRES, antes de empujar. Aditivo, sin ventana de rotura:
+   gh variable list -> copiar los 12 pares al nuevo (gh variable set ... --repo universitatjaumei/...)
+   gcloud iam workload-identity-pools providers update-oidc modestofabra-gov-gen-ai-platform \
+     --project=uji-teclab --location=global --workload-identity-pool=github \
+     --attribute-condition="assertion.repository=='ModestoFabra/gov-gen-ai-platform' || assertion.repository=='universitatjaumei/gov-gen-ai-platform'"
+   gcloud iam service-accounts add-iam-policy-binding govgenai-deploy@uji-teclab.iam.gserviceaccount.com \
+     --project=uji-teclab --role=roles/iam.workloadIdentityUser \
+     --member="principalSet://iam.googleapis.com/projects/618806480921/locations/global/workloadIdentityPools/github/attribute.repository/universitatjaumei/gov-gen-ai-platform"
+   Los dos anclajes estan medidos el 2026-09-07 y son los dos sitios que llevan el nombre. El
+   codigo NO se toca: `deploy.yml` lee el proveedor de una variable y el nombre del recurso no
+   cambia.
+5. Subir **LAS DOS RAMAS** al nuevo:
+   git remote set-url origin git@github.com:universitatjaumei/gov-gen-ai-platform.git
    git push -u origin main
    git push -u origin desarrollo
    La rama `desarrollo` nacio el 2026-09-02, despues de escribirse este plan, y es DONDE VIVE EL
    TRABAJO: subir solo `main` dejaria fuera todo lo no desplegado. Comprobar que estan las dos:
    gh api repos/.../branches --jq '.[].name'
-5. Verificar CON EL ANTERIOR TODAVIA EN PIE. Si algo falla, se para y no se ha perdido nada:
+6. Verificar CON EL ANTERIOR TODAVIA EN PIE. Si algo falla, se para y no se ha perdido nada:
    - las dos puntas coinciden: git rev-parse main / desarrollo contra
      gh api repos/.../commits/{main,desarrollo} --jq .sha
      (si coinciden esta todo: git no puede subir un commit sin sus ancestros);
    - gh api repos/.../commits/dc4904e0c763  da 404  <- EL QUE IMPORTA, ver abajo;
    - gh api repos/.../contents/logs  da 404;
-   - las 12 variables estan: gh variable list | wc -l
+   - las 12 variables estan: gh variable list --repo universitatjaumei/... | wc -l
    - CI en verde: un commit firmado (git commit -s) y los dos workflows pasan.
+   - **UN DESPLIEGUE REAL desde el nuevo**, que es lo unico que demuestra que WIF acepta el
+     nombre nuevo. Sin esto no se puede seguir: llevar `desarrollo` a `main` en el nuevo y ver
+     `deploy.yml` en verde hasta el paso de salud.
 
    Sobre que SHA comprobar: la version anterior de este paso miraba
    `82f475b6c6d382e1586e7cc0319a9a0917fb3475`, y **ese no demuestra nada**. Medido el 2026-09-07
@@ -96,9 +130,14 @@ Actions.**
    exposicion siga viva. El primer ancestro que SI sirve los volcados es **`dc4904e0c763`**
    (2026-08-21 06:20:35), con **46 ficheros**, y por debajo `152c3d2f3f2e` con otros 46. Comprobar
    `82f475b` era medir lo que no era, que es el fallo de instrumento habitual de esta casa.
-6. Borrar el anterior:
+7. Borrar el viejo. **Aqui es donde mueren los 46 volcados**, y no antes: hasta este punto la
+   exposicion sigue viva y el viejo es la red por si algo del paso 6 falla.
    gh auth refresh -h github.com -s delete_repo   (el token no trae ese permiso por defecto)
-   gh repo delete ModestoFabra/gov-gen-ai-platform-anterior --yes
+   gh repo delete ModestoFabra/gov-gen-ai-platform --yes
+8. ESTRECHAR la autenticacion, ya sin vuelta atras que proteger:
+   gcloud ... providers update-oidc ... --attribute-condition="assertion.repository=='universitatjaumei/gov-gen-ai-platform'"
+   gcloud iam service-accounts remove-iam-policy-binding ... --member="principalSet://.../attribute.repository/ModestoFabra/gov-gen-ai-platform"
+   Y un despliegue mas para comprobar que sigue en verde con la condicion estrecha.
 
 ## Despues
 - **Abrir es el ULTIMO paso**, y va despues de transferir: limpiar -> transferir -> abrir.
@@ -134,7 +173,66 @@ Y guardar un bundle en un disco externo si la historia de enero-marzo importa: s
 ```
 
 
-### Prompt REPO.3 (RED/GREEN) — El triaje editorial de `docs/`
+### Prompt REPO.4 (RED/GREEN) — Retirar los anclajes al dueño anterior
+
+**Modelo sugerido**: **Sonnet** — es una retirada mecánica con un guardarraíl; el criterio ya está
+decidido.
+
+> **Nuevo el 2026-09-07**, al elegir la variante B. Con la variante A no hacía falta: el nombre
+> acababa siendo el mismo. Con B cambia el dueño, y el repositorio se nombra a sí mismo en seis
+> sitios. Va **después de REPO.1**, porque hasta que el repositorio no está en la organización el
+> guardarraíl no puede estar verde.
+
+```
+# PROMPT REPO.4 (RED/GREEN) — El repositorio deja de nombrar a su dueño anterior
+# Deploy: n/a
+
+## Por que
+Medido el 2026-09-07: seis sitios del arbol escriben `ModestoFabra`, y ninguno es codigo de
+negocio. Cuatro son ficheros vivos que un lector nuevo consulta, y dos son documentacion:
+
+  .github/CODEOWNERS                      14 entradas a @ModestoFabra
+  server/pyproject.toml                   Repository = "https://github.com/ModestoFabra/..."
+  mcp_server/pyproject.toml               idem
+  CONTRIBUTING.md                         la tabla de §«Donde trabajas» nombra el principal
+  docs/DESPLIEGUE_PROTOTIPO_GCP.md §177   la condicion de WIF, con el nombre viejo
+  planificacion/PLAN_DESARROLLO.md        dos menciones de contexto
+
+`deploy.yml` NO lleva el nombre: lee el proveedor de una variable. Comprobado.
+
+## Que hacer
+1. CODEOWNERS: a un equipo de la organizacion, no a una persona. Es el cambio con mas fondo del
+   prompt —una persona no es un mantenedor sostenible para un repositorio institucional— asi que
+   el equipo tiene que existir antes (paso 0 de REPO.1).
+2. Los dos `Repository =` de los `pyproject.toml`, al nombre nuevo.
+3. `CONTRIBUTING.md`: la tabla de §«Donde trabajas» pasa a nombrar el principal en la
+   organizacion. **OJO con no romper lo que esa seccion dice**: la regla es que NO hay fork
+   privilegiado, «incluida la universidad donde nacio». Que el principal viva en la organizacion
+   de la UJI **no le da privilegio**, y el texto tiene que seguir diciendolo — si no, la
+   gobernanza se lee como que la UJI dirige.
+4. `docs/DESPLIEGUE_PROTOTIPO_GCP.md` §177: la condicion de WIF, con el nombre nuevo. Y el
+   `principalSet`, que ese documento no menciona y deberia: son DOS anclajes, no uno.
+5. `planificacion/PLAN_DESARROLLO.md`: las dos menciones de contexto.
+6. NO se toca `planificacion/HISTORIAL.md` ni los planes de fase cerrados: son registro.
+
+## Tests (RED primero)
+- RED: ningun fichero vivo escribe `ModestoFabra`. El barrido excluye `HISTORIAL.md`,
+  `planificacion/fase1/` y `docs/` marcados como instantanea fechada — la misma distincion
+  registro/activo que ya usa `test_repo3_el_indice_de_docs_no_miente.py`.
+- RED: `CODEOWNERS` no asigna a un usuario individual (`@usuario`), sino a un equipo
+  (`@org/equipo`). Es lo que impide que la retirada se haga cambiando un nombre de persona por
+  otro.
+
+## Criterio de done
+- [ ] Los seis sitios, al nombre nuevo, y el guardarrail verde
+- [ ] CODEOWNERS a un equipo
+- [ ] `CONTRIBUTING.md` sigue diciendo que no hay fork privilegiado
+- [ ] `docs/DESPLIEGUE_PROTOTIPO_GCP.md` documenta LOS DOS anclajes de WIF
+```
+
+---
+
+### Prompt REPO.3 ✅ (RED/GREEN, HECHO el 2026-09-07) — El triaje editorial de `docs/`
 
 **Modelo sugerido**: **Opus** — decide qué se publica y qué no, y algunas instantáneas llevan
 asuntos abiertos dentro.

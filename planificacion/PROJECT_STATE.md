@@ -90,9 +90,39 @@
 | **Bloque FUN** — Catálogo de funciones deterministas versionadas y compartidas, con doble origen: el canal del nivel 2 de la Instrucció 02/2026 | — | FUN.1 | Opus (FUN.2, FUN.3, FUN.4 y FUN.5) · Sonnet (resto) | ⏳ **Pendiente, planificado el 2026-09-01 y revisado dos veces el 2026-09-02 (doble origen; alineación con la Instrucció 02/2026 de desarrollo ciudadano governat). FUN.1–FUN.5 independientes de Deploy; FUN.6 DESPUÉS del Bloque REG** (consume su registro de actividad y su patrón de scopes). **Segunda revisión**: el catálogo no está pensado para desarrolladores profesionales sino para **gobernar el desarrollo ciudadano**; el nivel 1 (uso personal) vive fuera de la plataforma y **la plataforma entra en el nivel 2**: registrar una función ES declararla y compartirla. Por eso registrar = declaración responsable + AST sin CRITICAL + sandbox, **automáticos y con uso inmediato**; **sin aprobación humana previa** (la Instrucció la prohíbe como condición para compartir); **revisión posterior** con muestreo, correcciones, reclasificación y **suspensión** (de quien revisa; retirar es del autor); aprobación previa **solo** para el paso a nivel 3 (promoción con valoración del superadmin); el registro **acepta código escrito fuera** (autoría ia|persona); el auditor AST es **la caja de herramientas** de la Instrucció y sus reglas se contrastan con las Guías Operativas Técnicas de la UADTI. Estados de versión: draft/registrada/suspendida/retirada/no_instalada. FUN.4 pasa a Opus (máquina de estados por rol). Origen: la observación de desarrollo («generador, no framework») releída sobre los scripts deterministas, donde **acierta**: el código aprobado **se incrusta copiado** en el bloque de cada plantilla (`scripts_router.py:555-560`) — dos plantillas con la misma extracción son dos copias y dos aprobaciones, y un bug se arregla N veces; `HubScriptProposal` es cola, no catálogo. La segunda observación («ese código tiene que estar en manos de quien lo define, versionado y testeado en su repositorio») acierta para el autor desarrollador y no para el informador sin repositorio: de ahí el **doble origen** — *autoservicio* (código en el catálogo, IA+AST+sandbox+aprobación, anclaje exacto por construcción) y *empaquetado* (código en el repositorio del equipo, *entry point* `govgenai.funciones`, semver con anclaje por mayor, in-process con la confianza en quien instala). Lo que centraliza la plataforma en ambos es revisión, `RunManifest`, trazabilidad y contrato, no el código. **7 prompts**: `HubFuncion`+versiones con `origen` (`__ambito__="heredable"`, versión aprobada inmutable, `code_sha256`), contrato E/S declarado y validado ANTES del sandbox con un solo validador para ambos orígenes (los parámetros con la forma de `UIFieldDescriptor`: el SDUI pinta el formulario gratis), **referencia `funcion_id@versión` en vez de copia** con migración de las plantillas existentes y anclaje (publicar v2 NO cambia ninguna plantilla anclada — el test más importante del bloque), promoción a plataforma con aprobación del superadmin + catálogo en el panel (acciones desde el DTO), **FUN.5 origen paquete** (sincronización al arrancar que falla en alto con contrato incoherente, `no_instalada` al desinstalar, fixture de paquete demo), `POST /api/v1/funciones/{id}/run` con scope `funciones:execute` y evento REG, y verificación e2e + `docs/CATALOGO_FUNCIONES.md` con la sección «Empaquetar una función» para el primer equipo externo. **Diseñado como pieza compartida**: en Fase 3 las fases de expediente referencian `plantilla@versión` y `función@versión` — restricción escrita el mismo día en `Plan_TDD_Fase3.md` (retirado `ejecuciones_accion.codigo_ejecutado`, que duplicaba sandbox+auditoría+aprobación). Se comparte código y contrato, nunca datos; la cadena AST+sandbox+HITL no se relaja. Prompts en `Plan_TDD_Fase1.md` §Bloque FUN |
 | **Bloque PRC** — El catálogo de procedimientos entra al asistente de normativa (**replanificado el 2026-09-04**: sólo lo que afecta a ingesta y recuperación entra en la plataforma; `id_ficha` retirado, `tipus_document` como vocabulario con la clase de autoridad como estructura, y los literales institucionales fuera del código. **PRC.0 y PRC.1 se ejecutan en el repositorio `normativa-uji`**, donde ya vive `cataleg_procediments/`; aquí sólo su línea de historial) | — | PRC.0 | Opus (PRC.2 y PRC.5) · Sonnet (resto) | ⏳ **Pendiente, planificado el 2026-09-02. BLOQUEADO por dos prerrequisitos externos: las fichas del catálogo validadas por los servicios** (revisión en curso: 363 fichas, 206 con banderas, 28 citando normas derogadas — `Descarregar_pdf/normativa_propia/cataleg_procediments/`) **y la consulta de descarga del dataset que debe habilitar el equipo del catálogo** (contrato decidido el 2026-09-02: **estado completo, no deltas por horas** — un filtro por fecha no expresa bajas, exige contabilidad de la última pasada exitosa y depende de fechas que mienten; HTTPS con token, solo validadas, `generated_at`+`total` con completitud verificada, ID estable, bajas explícitas si puede ser; el incremento lo da el hash en destino; petición textual en la Qüestió 6 del informe). Origen: valoración de diseño del 2026-09-02 (Qüestió 6 de `docs/EVOLUCIO_I_ASPECTES_PENDENTS.md`): el piloto no contesta procedimiento (servicio, plazos, silencio, canal) porque eso no está en la normativa sino en el catálogo. **Decisión tomada: un solo asistente, no dos chatbots con router** — los usuarios preguntan mezclado y no distinguen; el router clasificaría donde el usuario es ambiguo y los perfiles router/aggregator siguen sin implementar (I5); la pregunta mixta necesita ficha y artículos en el mismo contexto. **6 prompts (PRC.0–PRC.5)**: cliente del dataset con validación del contrato (censo incompleto abortado sin tocar el export anterior), rendido determinista ficha→`.md` del contrato (vive con el proyecto del catálogo, solo fichas VALIDADAS, bilingüe emparejado por `id_ficha`), eje `tipus_document` (`norma`|`procediment`) en filtro e índice agéntico (las fichas NO entran en la vigencia normativa: su frescura es `data_actualitzacio`), marcador de autoridad en la respuesta («segons la fitxa del catàleg, Servei X, actualitzada el …» con `url_fitxa` citable), sincronización reutilizando reconciliador+poda+salvaguarda (pasadas supervisadas primero, scheduler diario después), y recalibración medida con el lote dorado antes/después + escenarios mixtos nuevos. **Ejecutable por tandas** conforme los servicios validan. Decisiones 14-16 del informe pendientes: qué significa «validada», tandas o todo al final, y caducidad de fichas |
 
-## 👉 EMPEZAR AQUÍ EL PRÓXIMO DÍA (actualizado 2026-09-02, al acordar el orden de los diez bloques que quedan)
+## 👉 EMPEZAR AQUÍ EL PRÓXIMO DÍA (actualizado 2026-09-07, al elegir la variante B del Bloque REPO)
 
-**Cursor actual: sin bloque en curso.** El **Bloque LANG ✅ quedó completo el 2026-09-03** (2
+**Cursor actual: Bloque REPO, en el prompt REPO.1.** El siguiente paso **no es de agente**: es la
+creación del repositorio limpio en `universitatjaumei`, que ejecuta el usuario. Detalle en
+`planificacion/fase1/61_BLOQUE_REPO.md`.
+
+**Lo que pasó el 2026-09-07, y por qué el bloque cambió de forma.** Al valorar la propuesta de
+UADTI de llevar los repositorios a la organización de la UJI se midió el estado real, y salieron
+tres cosas:
+
+1. **La exposición sigue viva.** Caminando la cadena de huérfanos en GitHub, el commit
+   `dc4904e0c763` (2026-08-21 06:20) todavía sirve `logs/` con **46 ficheros** de datos reales.
+   GitHub no ha recogido basura en 17 días y no promete cuándo. Y **el SHA que REPO.1 mandaba
+   comprobar no demostraba nada**: el árbol de `82f475b` no tiene `logs/`.
+2. **Se elige la variante B**: el repositorio limpio **nace en la organización** y no se
+   transfiere nada. Una transferencia se lleva el almacén de objetos completo, así que con la
+   variante A los 46 volcados entrarían en la organización de la universidad. Con B no entran
+   nunca. Requisito: permiso para crear repositorios allí.
+3. **Aparece REPO.4**, que con la variante A no hacía falta: al cambiar el dueño, el repositorio
+   se nombra a sí mismo en seis sitios (`CODEOWNERS`, dos `pyproject.toml`, `CONTRIBUTING.md`,
+   `DESPLIEGUE_PROTOTIPO_GCP.md` §177 y `PLAN_DESARROLLO.md`). `deploy.yml` **no** lleva el
+   nombre.
+
+**El modelo de gobernanza acordado, que es lo que decide todo lo anterior**: un solo repositorio
+—no un *fork* institucional— gestionado con la disciplina de que otra administración pueda
+descargarlo, con lo específico de la UJI en variables, Secret Manager y filas de la base de datos.
+El *fork* se creará el día que la UJI escriba código que no se pueda generalizar; hoy estaría
+vacío. La propuesta para UADTI, con el estado real del reparto medido, está publicada como página
+aparte. Y **la AGPL ya garantiza el uso**: sus derechos son irrevocables (§2), así que ninguna
+decisión de gestión puede impedir el uso investigador ni por entidades locales; lo que la licencia
+no protege es la **dirección**, y eso lo protege la arquitectura.
+
+**Antes de REPO había: sin bloque en curso.** El **Bloque LANG ✅ quedó completo el 2026-09-03** (2
 prompts), en `desarrollo` y **sin desplegar**: `language_mode` dejó de estar desconectado —los
 tres modos los compone la factoría y el valor se valida con 422—, y el panel los ofrece desde el
 contrato, con el código del corpus. Antes, el **Bloque USR ✅ también quedó completo el
@@ -125,7 +155,8 @@ desplegar**: el paso a `main` es decisión del usuario, y no cambia comportamien
 
 ### El orden de los bloques que quedan, acordado el 2026-09-02
 
-Lo decidió el usuario sobre una propuesta razonada. **49 prompts en diez bloques.**
+Lo decidió el usuario sobre una propuesta razonada. **51 prompts en diez bloques** —eran 49; REPO
+pasó de 2 a 4 el 2026-09-07, al elegir la variante B y aparecer REPO.4.
 
 | # | Bloque | Prompts | Por qué aquí |
 |---|---|---|---|
@@ -134,7 +165,7 @@ Lo decidió el usuario sobre una propuesta razonada. **49 prompts en diez bloque
 | 3 | **REG** | 6 | Lo pidió la reunión de desarrollo del 31-08 y **esperaba el despliegue** (REG.4, el MCP remoto, sólo existe con el servidor accesible desde fuera — ya lo está). Desbloquea VAS y FUN.6 |
 | 4 | **VAS** | 4 | El mejor ratio del plan: los tres candidatos ya existen como función interna y sólo necesitan superficie |
 | 5 | **NIC** | 5 | Cierra la Fase 1. Se puede esperar sin coste porque nada de lo planificado toca `client_app/`. **NIC.5 lo ejecuta el usuario** |
-| 6 | **REPO** | 2 | En este orden por decisión del usuario: no tiene sentido montar el repositorio definitivo y acto seguido meterle la retirada de 500 ficheros. **Tiene ventana**: antes de que exista el primer *fork*, o sea antes de abrir el repositorio. Lo ejecuta el usuario |
+| 6 ▶ | **REPO** | 4 (1 ✅) | **En curso.** REPO.3 ✅ el 2026-09-07 (triaje de `docs/`). Quedan REPO.1, REPO.4 y REPO.2, en ese orden. **La ventana sigue abierta y medida**: el commit huérfano `dc4904e0c763` todavía sirve `logs/` con 46 ficheros, 17 días después de la reescritura. Se hace **antes** de que exista el primer *fork* y antes de abrir. REPO.1 y REPO.2 los ejecuta el usuario |
 | 7 | **PLG** | 3 | Responde al correo de desarrollo pidiendo plugins. Después de LANG, que tocan la misma factoría |
 | 8 | **DIN** | 7 | Bueno y no urgente: su premisa resultó falsa en dos tercios —el rastreo con cadencia y la auto-ingesta ya existen— |
 | 9 | **FUN** | 7 | El más grande y el de más diseño; FUN.6 necesita REG, que a estas alturas ya está |
@@ -663,8 +694,12 @@ tiene nada que ver con el código legacy.
 1. **Las pruebas manuales del Bloque INF**: `pruebas_manuales/pruebas_manuales_bloqueINF.bat`, cinco
    pasos. Lo irreducible: si el texto que la IA escribió sobre las tablas reales dice algo cierto, si
    el DOCX se lee, y los permisos por módulo, que necesitan dos cuentas.
-2. **REPO.1 y REPO.2**, cuando NIC esté cerrado. Los pasos están en `Plan_TDD_Fase1.md` §Bloque REPO,
-   versionados a propósito: el guion detallado vivía en `_local/`, que es ignorada y de usar y tirar.
+2. **REPO.1 y REPO.2** — NIC ya está cerrado, así que están desbloqueados. Los pasos están en
+   `planificacion/fase1/61_BLOQUE_REPO.md`, versionados a propósito: el guion detallado vivía en
+   `_local/`, que es ignorada y de usar y tirar. **REPO.1 arranca con tres preguntas a UADTI**
+   (rol y quién aprueba la creación, permisos base de la organización, y plan) que no se pueden
+   averiguar desde fuera. Y **el respaldo ya está hecho** —11,1 MB, «complete history»— pero
+   **sigue en el portátil**, que es justo donde no debe estar.
 3. **El Camino 3 de redacción, sin verificar del todo** — *trasladado aquí por REPO.3 al retirar
    `docs/PRUEBAS_PENDIENTES.md`, 2026-09-07*. Falta un borrador real con bloques
    `AI_ASSISTED_TEXT` (vía `/redaccion/llm-drafts/approve-as-workspace`), la anonimización con
