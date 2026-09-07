@@ -108,19 +108,32 @@ tres veces mas grande de lo necesario.
 
 ### El reparto que queda
 
-**FUERA DEL REPOSITORIO — 15 rutas, a `_local/docs_operacion/` y copia en Drive.** No hay
+**FUERA DEL REPOSITORIO — 7 rutas, a `_local/docs_operacion/` y copia en Drive.** No hay
 repositorio privado: se crea cuando tenga peso de verdad (Terraform, registro de incidencias,
 rondas de medicion futuras), con el mismo test que el *fork*.
 
-* **Los once tableros de medicion y experimento.** Y **no porque no puedan publicarse**:
-  comprobado, **cero datos personales, cero credenciales, cero valores de configuracion**. Para un
-  proyecto que se defiende sobre «garantia → mecanismo → precio», publicar como se mide y que
-  salio es un **activo**. Lo que los deja fuera por ahora es que recogen **juicios de calidad
-  sobre un servicio en uso**, y eso es una decision de la institucion, no de un triaje documental
-  — y **publicar es la direccion irreversible**: abrirlos manana es un commit, cerrarlos cuesta
-  una reescritura de historial.
+* **Los tres `VALIDACION_GERENCIA*.html`, y NO por sensibilidad: es que no son documentos.**
+  Renderizan `p.pregunta` de un array de datos: son las **hojas de anotacion** que se envian a los
+  informadores, con salida del modelo **sin validar**, pendiente de veredicto humano. Publicar
+  salida sin validar como si fuera un documento induce a error, y un instrumento no tiene lector
+  fuera de su proceso. Si alguna vez se publica el **resultado** de esas validaciones, sera otro
+  documento.
 * **El trio de marca**, ya sacado del arbol el 2026-09-07 a `_local/docs_operacion/`. Aqui el
   motivo **si** es distinto: identidad institucional, no secreto.
+
+**SE PUBLICAN los otros ocho tableros** (decision del usuario el 2026-09-07: «no hay problema en
+publicar los tableros, si tienen interes»). Lo tienen, y bastante: `CALIDAD_RESPUESTA_TOP_K`
+—«redacta mejor con menos documentos»—, `DIAGNOSTICO_POR_QUE_NO_CONTESTA` —«y por que no es la
+anchura»—, `GERENCIA_TOP_K_Y_UMBRAL` —«lo calla el umbral»—, `EXPERIMENTO_GRANULARIDAD_CONTEXTO`
+—«que puede decidir un lote de 25»—, mas `MEDICION_RETRIEVAL_TOP_K`, `BLOQUE_HIB_CIERRE`,
+`GERENCIA_CIERRE_BLOQUE_HIB` y `CONFIGURACION_APERTURA_PILOTO`. Son hallazgos utiles a cualquiera
+que monte un RAG en administracion publica, y **la evidencia de la tesis del proyecto**: garantia
+→ mecanismo → precio. Comprobado ademas: cero datos personales, cero credenciales.
+
+**Y dos de ellos casi se clasifican mal por el nombre, otra vez**: `GERENCIA_TOP_K_Y_UMBRAL` y
+`GERENCIA_CIERRE_BLOQUE_HIB` se llaman «Gerencia» y son **metodologicos**; el primero incluso
+lleva la seccion «Por que el agentico contesta a todo», que es la advertencia de que la
+comparacion RAG/agentico es asimetrica por construccion. Abrir el fichero antes de decidir.
 * **`LITERATURA_ASISTENTES_NORMATIVA.html`**, las 43 referencias del articulo para AI&Law. Ni
   publico ni operacion: material de investigacion sin publicar, y su sede es donde vivan los
   papers.
@@ -132,12 +145,13 @@ procedimiento —VM, proxy de Cloud SQL, WIF sin claves, migraciones antes de la
 mas valioso que se puede publicar, porque es justo lo que una entidad local no sabe hacer. Lo que
 se va son los valores. Eso es **REPO.5**.
 
-**Si la institucion decide publicar los tableros**, el filtro baja de 15 rutas a 4 y esto se
-simplifica del todo. Es la decision que conviene tomar antes de ejecutar 5.bis.
+**Esa decision ya esta tomada** (2026-09-07): se publican ocho de los once, y el filtro quedo en
+**7 rutas**. Lo que la decidio no fue conveniencia sino abrir los ficheros: ocho son mediciones
+con hallazgo propio y tres son instrumentos de anotacion, que es otra cosa.
 
 **Sobre el historial, que es la parte que no se puede deshacer.** La visibilidad alcanza a los
 commits: borrar un fichero antes de abrir **no lo saca del pasado**. Medido el 2026-09-07, el
-filtro seria quirurgico —de **707** commits, los tableros tocan 33, `chatbots-publicos/` 5,
+filtro seria quirurgico —de **707** commits, las 7 rutas tocan pocos: `chatbots-publicos/` 5,
 `DATOS_DEL_PILOTO.md` 2 y `RUNBOOK_REINGESTA.md` 1—, y la ventana es esta: REPO.1 ya reescribe y
 empuja desde cero. Hacerlo despues de abrir cuesta otra reescritura, otro push forzado y otro
 periodo de objetos huerfanos servidos por SHA, que es de lo que se esta saliendo.
@@ -199,8 +213,8 @@ Actions.**
    gh repo create universitatjaumei/gov-gen-ai-platform --private
 3.bis. COPIAR A `_local/docs_operacion/` LO QUE SALE DEL ARBOL, y de ahi al Drive, ANTES de
    filtrar. Si se filtra primero y algo sale mal, esos ficheros solo estarian en el bundle.
-   El trio de marca ya esta ahi desde el 2026-09-07. Faltan los once tableros y la revision de
-   literatura. **La copia en Drive va antes del paso 5.bis**, no despues: `_local/` esta ignorada
+   El trio de marca ya esta ahi desde el 2026-09-07. Faltan los TRES `VALIDACION_GERENCIA*.html`
+   y la revision de literatura — los otros ocho tableros se publican y no salen del arbol. **La copia en Drive va antes del paso 5.bis**, no despues: `_local/` esta ignorada
    y no la respalda nadie.
 
 4. AMPLIAR LA AUTENTICACION A LOS DOS NOMBRES, antes de empujar. Aditivo, sin ventana de rotura:
@@ -219,7 +233,7 @@ Actions.**
    git push -u origin main
    git push -u origin desarrollo
 
-5.bis. FILTRAR DEL HISTORIAL lo que sale del repositorio (15 rutas). **Se hace en un CLON DE
+5.bis. FILTRAR DEL HISTORIAL lo que sale del repositorio (7 rutas). **Se hace en un CLON DE
    TRABAJO, no aqui**:
    `filter-repo` reescribe todos los SHA, asi que el clon de desarrollo quedaria divergente de lo
    que ya se ha empujado. Se clona, se filtra, se empuja el resultado, y luego se reclona.
@@ -227,14 +241,6 @@ Actions.**
 
    git clone --no-local . ../filtrado && cd ../filtrado
    git filter-repo --invert-paths \
-     --path docs/BLOQUE_HIB_CIERRE.html \
-     --path docs/CALIDAD_RESPUESTA_TOP_K.html \
-     --path docs/CONFIGURACION_APERTURA_PILOTO.html \
-     --path docs/DIAGNOSTICO_POR_QUE_NO_CONTESTA.html \
-     --path docs/EXPERIMENTO_GRANULARIDAD_CONTEXTO.html \
-     --path docs/GERENCIA_CIERRE_BLOQUE_HIB.html \
-     --path docs/GERENCIA_TOP_K_Y_UMBRAL.html \
-     --path docs/MEDICION_RETRIEVAL_TOP_K.html \
      --path docs/VALIDACION_GERENCIA.html \
      --path docs/VALIDACION_GERENCIA_AUTONOMA.html \
      --path docs/VALIDACION_GERENCIA_RAG_VS_AGENTICO.html \
