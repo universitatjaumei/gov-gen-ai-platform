@@ -36,6 +36,33 @@
 > esa salida filtrada, así que **la medición fiable es 645**.
 > **El Bloque AIS (§5 y puntos 6–10, 12–14) sigue pendiente**, y con él el único hallazgo que
 > bloquea de facto el modelo open source: la paleta del panel.
+>
+> ---
+>
+> ## ⚠️ Segunda nota de estado (REPO.3, 2026-09-07): §2.3 ya no describe el presente
+>
+> Este informe **se conserva como instantánea fechada** y no se reescribe, por la misma razón que
+> dice la nota de arriba. Pero han pasado dos semanas y su §2.3 —«deuda de calidad que sigue
+> pendiente»— enumera siete cosas de las que **seis están cerradas**, así que leerlo sin este
+> aviso manda a arreglar lo ya arreglado:
+>
+> - `subprocess.run` en `to_pdf` → **cerrado**, es `await asyncio.to_thread(_convertir)`.
+> - `create_all` en el *lifespan* → **cerrado** por **BD.2**: el esquema lo define Alembic y sólo
+>   Alembic, con `alembic check` en CI.
+> - Fallback de `DATABASE_URL` con credenciales → **cerrado**: `_dsn()` falla duro en producción.
+> - Sin *code-splitting* en el frontend → **cerrado**: el panel carga 45 fragmentos en diferido.
+> - `client_app/` como peso muerto → **cerrado** por **NIC.3**, que retiró 574 ficheros.
+> - Persistencia del mapa de anonimización → **cerrado por decisión** en **AIS.5** (2026-08-24):
+>   el piloto no trata datos de ciudadanos, así que no hay bóveda antes del piloto y la
+>   persistencia es F2.A.4. Los dos *no-op* se borraron en vez de dejarlos marcados.
+>
+> **Sobrevive una, y ha empeorado**: la higiene de arranque. Los `print()` de `server/app/` eran
+> 157 y son **186**. Está trasladada a `planificacion/PROJECT_STATE.md`, que es donde vive el
+> trabajo pendiente; aquí sólo queda dicho para que §2.3 no engañe.
+>
+> Y el hallazgo que la nota de arriba llamaba bloqueante —la paleta del panel— **está cerrado**:
+> el bloque AIS se ejecutó, y hoy lo vigilan `paletaDelPanelNoEsDeNadie.test.ts` y
+> `marcaNoViajaEnElRepo.test.ts`.
 
 ---
 

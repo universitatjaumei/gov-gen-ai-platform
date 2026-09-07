@@ -5,8 +5,9 @@ plantillas de informe, configurar chatbots y probarlos, hablando con la API de l
 Cierra el bucle **configurar → probar → ajustar** desde una conversación, sin construir UI a
 medida.
 
-> Bloque MCP (MCP.1–MCP.4) del `planificacion/Plan_TDD_Fase1.md`. Diseño = **opción A** de
-> [`docs/mcp.md`](mcp.md): un cliente HTTP local, no una superficie nueva en el server.
+> Bloque MCP (MCP.1–MCP.4) del `planificacion/Plan_TDD_Fase1.md`. Diseño = **opción A** del
+> análisis previo: un cliente HTTP local, no una superficie nueva en el server. La **opción B**,
+> el MCP remoto por HTTP, llegó después con REG.4 y conviven; ver §8 para la procedencia.
 
 ## Dos transportes, y no son intercambiables
 
@@ -73,7 +74,7 @@ opcionalmente una caducidad, y **copia el token en claro** (se muestra una sola 
 El token es revocable desde la misma pantalla.
 
 > Recuerda: un **partner** no puede emitir el scope `chatbots:write` (la mutación
-> in-place de chatbots en producción se reserva a admin; ver `docs/mcp.md` val. 2).
+> in-place de chatbots en producción se reserva a admin; ver §8, valoración 2 del análisis previo).
 
 ---
 
@@ -274,3 +275,24 @@ validar de extremo a extremo con un PAT real:
 5. `test_chat(chatbot_id, "¿Qué trámites puedo hacer?")` → debe devolver `answer` y
    `sources`. Si el PAT no tiene `chat:test`, la tool falla con `ScopeError` (403).
 6. Revoca el PAT desde la UI y repite: la siguiente llamada debe fallar con `AuthError`.
+
+---
+
+## 8. Procedencia de este documento (REPO.3, 2026-09-07)
+
+Hasta hoy había **dos** páginas sobre MCP y se solapaban: ésta, que documenta lo construido, y
+`docs/mcp.md`, que era el análisis **previo** —opciones de implementación, decisiones de diseño
+por tomar y recomendación de planificación, del 2026-06-06—. El índice de `docs/` ya señalaba la
+duplicidad, y dos páginas sobre lo mismo divergen sin que nada avise.
+
+`mcp.md` se retira porque **sus tres incógnitas están resueltas y contestadas aquí**, y conviene
+dejar escrito dónde, para que nadie las reabra:
+
+| Lo que preguntaba `mcp.md` | Dónde está la respuesta |
+|---|---|
+| Autenticación para clientes máquina: ¿token de larga duración o PAT revocable? | **PAT revocable con techo de scopes por rol**, §5 y §2 |
+| Regla dura nº 4 de `REDACCION_CONTRACT_FIRST.md`: que el LLM no publique sin aprobación | **Toda escritura exige `confirm=true`** y `update_chatbot` es `dry_run` por defecto, §5 |
+| «Opción B»: ¿MCP remoto por HTTP, y con qué caso de uso? | **Implementada en REG.4**: §«Dos transportes» y §3. El caso de uso es que agentes externos registren su actividad; el token viaja **en cada petición**, no en el servidor |
+
+Lo que `mcp.md` tenía y no viaja aquí es su razonamiento de planificación, que ya cumplió su
+función, y una sección vacía reservada para ampliarla. El documento sigue en el historial de git.

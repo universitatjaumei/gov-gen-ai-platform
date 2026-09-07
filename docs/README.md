@@ -64,7 +64,7 @@ todas envejecen igual:
 
 | Documento | Clase |
 |---|---|
-| [`MCP_SERVER.md`](MCP_SERVER.md) · [`mcp.md`](mcp.md) | Referencia viva — el servidor MCP. **Se solapan**: pendiente de unificar |
+| [`MCP_SERVER.md`](MCP_SERVER.md) | Referencia viva — el servidor MCP, sus dos transportes y su toolset |
 | [`A11Y_GUIDELINES.md`](A11Y_GUIDELINES.md) · [`A11Y_CHECKLIST.md`](A11Y_CHECKLIST.md) | Referencia viva — accesibilidad: criterios y lista de comprobación |
 | [`PRUEBAS_MANUALES.md`](PRUEBAS_MANUALES.md) | Referencia viva — qué se prueba a mano y qué no, con la matriz por módulo |
 | [`METODOLOGIA_AGENTICA.md`](METODOLOGIA_AGENTICA.md) | Referencia viva — cómo se ejecuta el desarrollo por bloques |
@@ -96,13 +96,18 @@ Ciertas en su fecha. Se leen como historia del proyecto, no como estado.
 
 | Documento | Fecha del corte |
 |---|---|
-| [`VALORACION_PROYECTO.md`](VALORACION_PROYECTO.md) | Valoración del proyecto, con hallazgos y decisiones pendientes anotadas |
-| [`AUDITORIA_PRE_DEPLOY.md`](AUDITORIA_PRE_DEPLOY.md) | Auditoría previa al despliegue |
-| [`PRUEBAS_PENDIENTES.md`](PRUEBAS_PENDIENTES.md) | Pruebas pendientes en su momento |
-| [`CAMBIOS_ARQUITECTURA.md`](CAMBIOS_ARQUITECTURA.md) · [`CAMBIOS_PLANIFICACION.md`](CAMBIOS_PLANIFICACION.md) | Registro de cambios de arquitectura y de planificación |
-| [`COMPARATIVA_ETL_LEGACY.md`](COMPARATIVA_ETL_LEGACY.md) · [`COMPARATIVA_LEGACY_INFORMES.md`](COMPARATIVA_LEGACY_INFORMES.md) · [`COMPARATIVA_PROMPTS_LEGACY.md`](COMPARATIVA_PROMPTS_LEGACY.md) | Qué hacía el legacy NiceGUI frente a lo nuevo, módulo a módulo |
-| [`COMPARATIVA_RAG_LAMB.md`](COMPARATIVA_RAG_LAMB.md) | Comparativa de la recuperación frente a otra implementación |
-| [`PLAN_CHATBOTS_E_INGESTA_LOCAL.md`](PLAN_CHATBOTS_E_INGESTA_LOCAL.md) | El plan de carga del corpus en local |
+| [`VALORACION_PROYECTO.md`](VALORACION_PROYECTO.md) | 2026-08-24 — Valoración del proyecto. Lleva **dos notas de estado**: su §3 y su §2.3 describen fallos y deudas ya cerrados |
+| [`AUDITORIA_PRE_DEPLOY.md`](AUDITORIA_PRE_DEPLOY.md) | 2026-08-10 — Auditoría previa al despliegue. Sus nueve hallazgos los cerró el bloque SEC.8 |
+| [`COMPARATIVA_ETL_LEGACY.md`](COMPARATIVA_ETL_LEGACY.md) · [`COMPARATIVA_LEGACY_INFORMES.md`](COMPARATIVA_LEGACY_INFORMES.md) · [`COMPARATIVA_PROMPTS_LEGACY.md`](COMPARATIVA_PROMPTS_LEGACY.md) | Qué hacía el legacy NiceGUI frente a lo nuevo, módulo a módulo. **Se conservan porque ese código ya no está en el árbol**: son el único registro dentro del repositorio de las decisiones que el legacy tenía mejor resueltas |
+| [`COMPARATIVA_RAG_LAMB.md`](COMPARATIVA_RAG_LAMB.md) | 2026-07-15 — Comparativa de la recuperación frente a otra implementación real |
+
+> **Cuatro instantáneas se retiraron en REPO.3 (2026-09-07)**, con la razón de cada una en su
+> commit y el resumen en [`../planificacion/HISTORIAL.md`](../planificacion/HISTORIAL.md):
+> `CAMBIOS_ARQUITECTURA.md` y `CAMBIOS_PLANIFICACION.md` —encargos escritos *a* un agente, cuyo
+> resultado es la arquitectura construida—, `PRUEBAS_PENDIENTES.md` —sustituido por el `.bat` por
+> bloque de `pruebas_manuales/`— y `PLAN_CHATBOTS_E_INGESTA_LOCAL.md` —el corpus ya está
+> ingerido—. Lo único que seguía abierto en ellas, la verificación manual del Camino 3, está
+> trasladado a `PROJECT_STATE.md`. Los cuatro siguen en el historial de git.
 
 ## Dónde está el estado del desarrollo
 

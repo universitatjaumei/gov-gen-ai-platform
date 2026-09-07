@@ -1,6 +1,6 @@
 """Servidor MCP remoto: streamable HTTP con el token de cada cliente (REG.4).
 
-Es la «opción B» que `docs/mcp.md` dejó anotada en 2026-06-06 sin caso de uso; el bloque REG lo
+Es la «opción B» que el análisis previo dejó anotada en 2026-06-06 sin caso de uso (procedencia en `docs/MCP_SERVER.md` §8); el bloque REG lo
 trajo. El servidor stdio de `server.py` **no cambia**: sigue siendo mono-usuario y sigue leyendo
 `GOVGENAI_PAT` del entorno, que ahí es lo correcto —un proceso, una persona, un token—.
 

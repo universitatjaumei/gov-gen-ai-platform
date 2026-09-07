@@ -665,6 +665,27 @@ tiene nada que ver con el código legacy.
    el DOCX se lee, y los permisos por módulo, que necesitan dos cuentas.
 2. **REPO.1 y REPO.2**, cuando NIC esté cerrado. Los pasos están en `Plan_TDD_Fase1.md` §Bloque REPO,
    versionados a propósito: el guion detallado vivía en `_local/`, que es ignorada y de usar y tirar.
+3. **El Camino 3 de redacción, sin verificar del todo** — *trasladado aquí por REPO.3 al retirar
+   `docs/PRUEBAS_PENDIENTES.md`, 2026-09-07*. Falta un borrador real con bloques
+   `AI_ASSISTED_TEXT` (vía `/redaccion/llm-drafts/approve-as-workspace`), la anonimización con
+   datos sintéticos, y abrir el export en Word y Adobe reales. Es el único punto del documento
+   retirado que seguía abierto: los otros —el 500 de `templates`, el 403 del propio workspace, el
+   `data-token` del widget— están arreglados y comprobados.
+
+### Deuda de calidad que sigue abierta
+
+*Trasladado por REPO.3 (2026-09-07) desde `docs/VALORACION_PROYECTO.md` §2.3, que se conserva
+como instantánea fechada. De las siete deudas que aquel informe listaba el 2026-08-24, **seis se
+cerraron** —`asyncio.to_thread` en `to_pdf`, el `create_all` del arranque (BD.2), el fallback de
+`DATABASE_URL` (ahora `_dsn()` falla duro en producción), los fragmentos en diferido del frontend,
+`client_app/` (NIC.3) y el mapa de anonimización (AIS.5 lo retiró por decisión, aplazado a
+F2.A.4)—. Sobrevive una, y ha empeorado:*
+
+- **Higiene de arranque y observabilidad.** El informe contó **157** llamadas a `print()` en
+  `server/app/`; medidas el 2026-09-07 son **186**. Ya hay tres `basicConfig`/`dictConfig` en
+  `app/`, así que la parte de «sin configuración de logging» está a medias, pero los `print()`
+  crecen. En producción la observabilidad sigue siendo stdout sin niveles ni marcas de tiempo.
+  Sin bloque asignado.
 
 ### Lo que se hizo el 2026-08-21 y conviene no repetir
 

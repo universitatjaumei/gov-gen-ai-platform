@@ -31,7 +31,7 @@ Bona part de les respostes d'ací baix són «això ja està», i això no és c
 
 Fixar l'inventari ajuda a valorar les propostes, perquè la segona no parteix de zero:
 
-- **Servidor MCP complet** (`mcp_server/`): 16 tools i 5 resources per a autoria de plantilles, configuració de xatbots i xat de prova, amb 54 tests. La valoració de `docs/mcp.md` va deixar anotat l'MCP remot com a pas següent quan hi haguera cas d'ús.  
+- **Servidor MCP complet** (`mcp_server/`): 16 tools i 5 resources per a autoria de plantilles, configuració de xatbots i xat de prova, amb 54 tests. La valoració prèvia (recollida a `docs/MCP_SERVER.md` §8) va deixar anotat l'MCP remot com a pas següent quan hi haguera cas d'ús.  
 - **PAT amb permisos per rol** (`core/auth/pat/`): tokens de màquina revocables, amb catàleg de permisos i sostre per rol. És la peça d'autenticació que un client extern necessita.  
 - **Mòdul d'anonimització operatiu** (`modules/redaccion/services/anonymization/`): detecció de dades personals en text lliure (`detect_spans`) i tabular, polítiques, generació amb Faker, i modes per workspace amb herència. Hui només el consumix el mòdul de redacció.  
 - **Registre intern d'interaccions** (`HubInteraction`): captura el que ocorre *dins* de la plataforma. Res no registra hui l'ús d'IA que passa fora.  
@@ -77,7 +77,7 @@ No és una re-arquitectura. És un paquet de sis passos, **ja planificat**, que 
 | 1 | Contracte `ActividadIAEvent` i taula `hub_actividad_ia` (operacional, edge) | Esdeveniment de governança: actor, organització, eina externa, finalitat, model, categories de dades declarades, marques de temps. **Metadades sí, contingut no**, garantit per contracte (`extra="forbid"`): el registre no pot convertir-se en un segon lloc on viuen les dades personals. Taula nova — no sobrecarregar `HubInteraction`. |
 | 2 | Endpoint `POST /api/v1/actividad` i els dos permisos nous | Permisos `actividad:write` i `anonimizacion:use` al catàleg PAT. L'organització de l'esdeveniment es deriva del propietari del token, mai del contingut de la petició. |
 | 3 | Anonimització com a servei: `/anonimizacion/spans` i `/anonimizacion/replace` | Exposa `PiiDetector.detect_spans` i l'anonimitzador sobre text lliure. Edge per definició; el text no toca logs ni base de dades, amb test que ho vigila. |
-| 4 | MCP remot (HTTP streamable) com a façana fina | Tools `registrar_actividad`, `detectar_pii`, `anonimizar_texto` al mateix paquet `mcp_server/`, amb el token de cada client propagat per petició. És l'«opció B» que `docs/mcp.md` va deixar anotada; este és el cas d'ús que la justifica. |
+| 4 | MCP remot (HTTP streamable) com a façana fina | Tools `registrar_actividad`, `detectar_pii`, `anonimizar_texto` al mateix paquet `mcp_server/`, amb el token de cada client propagat per petició. És l'«opció B» que l'anàlisi previ va deixar anotada (`docs/MCP_SERVER.md` §8); este és el cas d'ús que la justifica. |
 | 5 | Lectura i exportació del registre | `GET /api/v1/actividad` paginat amb filtres i exportació CSV, per a sessió d'administració, acotat a l'organització del principal. |
 | 6 | Vista al panell d'administració i la guia del registre | Taula amb filtres i i18n; documentació del contracte camp a camp amb el mapatge a OTel GenAI i la guia d'alta d'un agent extern. |
 
