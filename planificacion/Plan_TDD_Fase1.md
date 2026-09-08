@@ -892,3 +892,4 @@ siguen funcionando: llevan aquí, y aquí está el enlace.
 | 71 | [`71_BLOQUE_FUN.md`](fase1/71_BLOQUE_FUN.md) | Bloque FUN — Catálogo de funciones deterministas: de scripts copiados a funciones versionadas y compartidas (PENDIENTE, planificado el 2026-09-01) |
 | 72 | [`72_BLOQUE_PRC.md`](fase1/72_BLOQUE_PRC.md) | Bloque PRC — El catálogo de procedimientos entra al asistente de normativa (PENDIENTE, planificado el 2026-09-02) |
 | 73 | [`73_BLOQUE_BD.md`](fase1/73_BLOQUE_BD.md) | Bloque BD — Una sola fuente para el esquema de la base de datos (BD.1 ejecutado el 2026-09-04; BD.2 arranca el mismo día) |
+| 74 | [`74_BLOQUE_DEP.md`](fase1/74_BLOQUE_DEP.md) | Bloque DEP — Las dependencias vulnerables, y la puerta que las vigile (PENDIENTE, planificado el 2026-09-08 a partir de la primera medición del job `supply-chain`) |
