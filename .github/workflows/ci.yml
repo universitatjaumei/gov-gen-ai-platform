@@ -349,3 +349,179 @@ jobs:
       - name: Run a11y baseline tests
         working-directory: frontend
         run: npm run test:a11y
+
+  # ---------------------------------------------------------------------------------------
+  # Cadena de suministro: vulnerabilidades conocidas, inventario de dependencias y secretos.
+  #
+  # **Por qué existe, y no es por una exigencia externa todavía.** La OIATI planteó el
+  # 2026-09-08 que antes de cada puesta en explotación generalizada haya una auditoría de
+  # seguridad independiente, con el modelo del voto electrónico como precedente. Este job no
+  # la sustituye: la prepara. Una auditoría sobre un código sin inventario de dependencias
+  # gasta sus primeras horas construyendo el inventario, y encuentra CVE de librería —que
+  # cualquier herramienta detecta— en vez de lo que sólo encuentra una persona mirando el
+  # diseño.
+  #
+  # El otro motivo es concreto y está medido: el commit huérfano `dc4904e0c763` seguía
+  # sirviendo `logs/` con 46 ficheros de datos reales 17 días después de reescribir el
+  # historial. Un escáner de secretos no habría evitado aquello —no eran credenciales— pero
+  # sí cierra la puerta al caso que sí lo sería.
+  #
+  # **Qué bloquea y qué informa, que es la decisión de diseño de este job.** Sólo bloquea
+  # gitleaks sobre el árbol de trabajo: una credencial en el árbol es inequívoca y se arregla
+  # quitándola. Los escáneres de vulnerabilidades **informan y no bloquean**, y no es
+  # laxitud: sobre 408 dependencias transitivas aparecerá antes o después un CVE sin versión
+  # corregida publicada, y un guardarraíl que se pone rojo por algo que quien lo lee no puede
+  # arreglar es un guardarraíl que se desactiva —el mismo razonamiento que está escrito en el
+  # paso de `alembic check`—. El camino es el del gate de retrieval: primero medir, y con la
+  # medida encima de la mesa, fijar el umbral que sí bloquea.
+  #
+  # **El historial tampoco bloquea**, y por lo mismo: estaría rojo hasta que alguien
+  # reescribiera el pasado, que no es una acción que un check de CI pueda pedir.
+  # ---------------------------------------------------------------------------------------
+  supply-chain:
+    name: Supply chain — vulnerabilities, SBOM and secrets
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    env:
+      # Pinada a propósito y verificada contra la página de releases el 2026-09-08. Subirla es
+      # una decisión, no una deriva: una versión que se resuelve sola en cada ejecución es
+      # justamente la clase de dependencia que este job existe para vigilar.
+      GITLEAKS_VERSION: "8.30.1"
+
+    steps:
+      # `fetch-depth: 0` porque el escaneo del historial necesita el historial. Los demás jobs
+      # se quedan con el clon superficial que basta para compilar y probar.
+      - name: Checkout (full history — el escaneo de secretos lo necesita)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: "latest"
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      # `--locked` por lo mismo que en los otros dos jobs: sin él `uv export` puede volver a
+      # resolver, y auditaríamos un conjunto de dependencias que el lock no describe — que es
+      # exactamente el desajuste que vivió 17 días sin dar síntoma.
+      #
+      # `--no-emit-project` y `--no-emit-package automatia-shared` quitan **nuestro** código
+      # del fichero. No es cosmético: `-e ../shared` es una ruta local que pip-audit no puede
+      # resolver contra PyPI, y además auditar código propio contra una base de CVE de
+      # terceros no dice nada. Sus dependencias sí están, resueltas en el mismo export.
+      #
+      # Medido en local el 2026-09-08: 408 dependencias en `server`, 38 en `mcp_server`, cero
+      # editables en los dos.
+      - name: Export the locked dependency sets
+        run: |
+          mkdir -p sbom
+          uv export --directory server --locked --no-dev --no-hashes \
+            --no-emit-project --no-emit-package automatia-shared \
+            --format requirements-txt -o "$GITHUB_WORKSPACE/sbom/server-requirements.txt"
+          uv export --directory mcp_server --locked --no-dev --no-hashes \
+            --no-emit-project \
+            --format requirements-txt -o "$GITHUB_WORKSPACE/sbom/mcp-requirements.txt"
+
+      # Sin versión pinada, a propósito y al revés que gitleaks: pip-audit consulta la base de
+      # avisos viva de PyPI, así que lo que importa es que la herramienta siga al día. De cada
+      # ejecución lo que queda registrado es el informe, no la versión del escáner.
+      - name: Python dependency audit (pip-audit — informa, no bloquea)
+        id: pip_audit
+        continue-on-error: true
+        run: |
+          uvx pip-audit -r sbom/server-requirements.txt \
+            --format json --output sbom/pip-audit-server.json --progress-spinner off
+          uvx pip-audit -r sbom/mcp-requirements.txt \
+            --format json --output sbom/pip-audit-mcp.json --progress-spinner off
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # `--omit=dev` porque una vulnerabilidad en la cadena de construcción no viaja al
+      # navegador de nadie. Interesa, pero no es el mismo riesgo, y mezclarlas hace que el
+      # número deje de significar algo.
+      - name: JS dependency audit (npm audit — informa, no bloquea)
+        id: npm_audit
+        continue-on-error: true
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high --json > "$GITHUB_WORKSPACE/sbom/npm-audit.json"
+
+      # El SBOM es lo que se le entrega a quien audite, y la razón de que la retención de este
+      # artefacto sea de 90 días y no de 7 como la de cobertura: es evidencia con fecha de qué
+      # se estaba ejecutando, y su valor aparece meses después.
+      - name: Generate SBOM (CycloneDX)
+        continue-on-error: true
+        run: |
+          uvx --from cyclonedx-bom cyclonedx-py requirements \
+            sbom/server-requirements.txt -o sbom/sbom-server.cdx.json
+          uvx --from cyclonedx-bom cyclonedx-py requirements \
+            sbom/mcp-requirements.txt -o sbom/sbom-mcp.cdx.json
+          npx --yes @cyclonedx/cyclonedx-npm --omit dev \
+            --output-file "$GITHUB_WORKSPACE/sbom/sbom-frontend.cdx.json" \
+            --package-lock-only frontend/package-lock.json
+
+      # La suma se comprueba contra el fichero de sumas de la MISMA release, así que protege de
+      # una descarga truncada o alterada en tránsito, no de una release comprometida. Se dice
+      # para que nadie lea de aquí una garantía que no da.
+      - name: Install gitleaks
+        run: |
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          curl -sSfL -o gitleaks.tar.gz "${base}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o gitleaks_checksums.txt "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep " gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz$" gitleaks_checksums.txt \
+            | sed "s/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz/gitleaks.tar.gz/" \
+            | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks version
+
+      # **El único paso que bloquea.** Un secreto en el árbol de trabajo no es un juicio de
+      # valor ni depende de que exista parche aguas arriba: se quita y se rota.
+      - name: Secret scan — working tree (BLOCKS)
+        run: ./gitleaks dir . --redact --no-banner --report-path sbom/gitleaks-tree.json
+
+      # El historial informa y no bloquea: ponerlo a bloquear dejaría el check rojo hasta que
+      # alguien reescribiera el pasado. Lo que sí hace es dejar constancia con fecha de qué hay
+      # ahí atrás, que es la mitad del trabajo cuando toca decidir si una fuga sigue viva.
+      - name: Secret scan — full history (informa, no bloquea)
+        continue-on-error: true
+        run: ./gitleaks git . --redact --no-banner --report-path sbom/gitleaks-history.json
+
+      # Sin esto hay que descargar el artefacto para saber si algo salió mal, y un informe que
+      # cuesta tres clics no se mira.
+      - name: Summarise
+        if: always()
+        run: |
+          {
+            echo "## Cadena de suministro"
+            echo ""
+            echo "| Comprobación | Resultado |"
+            echo "|---|---|"
+            echo "| pip-audit (server + mcp) | ${{ steps.pip_audit.outcome }} |"
+            echo "| npm audit (frontend, prod) | ${{ steps.npm_audit.outcome }} |"
+            echo ""
+            echo "Informes completos y SBOM en el artefacto \`supply-chain\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload SBOM and audit reports
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: supply-chain
+          path: sbom/
+          retention-days: 90

@@ -1,0 +1,163 @@
+"""El job de cadena de suministro mira de verdad, y lo único que bloquea sigue bloqueando.
+
+El job `supply-chain` de `ci.yml` prepara la auditoría de seguridad independiente que la OIATI
+pide antes de la puesta en explotación: inventario de dependencias (SBOM), vulnerabilidades
+conocidas y escaneo de secretos. Casi todo él **informa y no bloquea**, a propósito y con la
+razón escrita en el propio fichero.
+
+Eso es justo lo que lo hace frágil de una manera silenciosa. Un job casi entero en
+`continue-on-error` se degrada sin dar ningún síntoma: sigue en verde, sigue subiendo su
+artefacto, y ya no comprueba nada. Los cuatro casos que este fichero fija son los cuatro que
+he visto o que el proyecto ya ha pagado en otro sitio:
+
+* **`fetch-depth: 0`.** Sin él el clon es superficial y `gitleaks git` recorre un historial de
+  un commit. No falla: pasa en verde sin mirar nada, que es la forma de avería que este
+  proyecto ya se comió con un guardarraíl que recorría un directorio inexistente.
+* **El escaneo del árbol de trabajo no lleva `continue-on-error`.** Es el único paso que
+  bloquea. El día que alguien lo ponga para desatascar un build, el job entero pasa a ser
+  decorativo y nada lo dirá.
+* **`uv export --locked`.** Sin el flag, uv vuelve a resolver en silencio y se audita un
+  conjunto de dependencias que el lock no describe. Es la misma lección que costó 17 días con
+  el lock de la raíz, y auditar el conjunto equivocado es peor que no auditar: da un informe.
+* **La versión de gitleaks está pinada.** `latest` en la herramienta que vigila la cadena de
+  suministro es la contradicción que el job existe para no cometer.
+
+Lo que este fichero **no** comprueba, porque vive fuera del árbol: que el job llegue a
+ejecutarse en GitHub y que las herramientas se descarguen. Eso se ve en la primera ejecución.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
+
+RAIZ = Path(__file__).resolve().parents[3]
+CI = RAIZ / ".github" / "workflows" / "ci.yml"
+
+JOB = "supply-chain"
+
+
+@pytest.fixture(scope="module")
+def job() -> dict[str, Any]:
+    assert CI.is_file(), f"Falta {CI.relative_to(RAIZ).as_posix()}"
+    flujo = yaml.safe_load(CI.read_text(encoding="utf-8"))
+    assert JOB in flujo["jobs"], (
+        f"El job «{JOB}» no está en ci.yml. Si se ha renombrado, este fichero se actualiza "
+        f"con él; si se ha quitado, se quita también la promesa de tener SBOM que le hemos "
+        f"hecho a quien vaya a auditar."
+    )
+    return flujo["jobs"][JOB]
+
+
+def _paso(job: dict[str, Any], *fragmentos: str) -> dict[str, Any]:
+    """El paso cuyo nombre contiene TODOS los fragmentos. Exige que sea exactamente uno.
+
+    Los dos detalles son deliberados y salieron de que la primera versión, que devolvía el
+    primer nombre que casara con un fragmento suelto, afirmaba cosas sobre el paso equivocado:
+    «full history» aparece también en el nombre del checkout, así que el test del escaneo del
+    historial estaba comprobando el `continue-on-error` de un `actions/checkout`. Un buscador
+    de pasos laxo convierte un guardarraíl en un generador de afirmaciones sobre cualquier
+    cosa, y eso no se ve en el verde.
+    """
+    encontrados = [
+        p
+        for p in job["steps"]
+        if all(f.lower() in p.get("name", "").lower() for f in fragmentos)
+    ]
+    if len(encontrados) == 1:
+        return encontrados[0]
+    nombres = "\n  - ".join(p.get("name", "<sin nombre>") for p in job["steps"])
+    raise AssertionError(
+        f"Se esperaba un único paso que contuviera {fragmentos!r} y hay {len(encontrados)}. "
+        f"Los pasos del job:\n  - {nombres}"
+    )
+
+
+def test_el_clon_trae_el_historial_entero(job: dict[str, Any]) -> None:
+    """Con un clon superficial el escaneo del historial pasa en verde sin mirar nada."""
+    checkout = _paso(job, "Checkout")
+    assert checkout.get("with", {}).get("fetch-depth") == 0, (
+        "El checkout de este job necesita `fetch-depth: 0`. Con el clon superficial que traen "
+        "los demás jobs, `gitleaks git` recorre un solo commit y no encuentra nada — y no da "
+        "error, que es lo peor: informa de cero hallazgos sobre un historial que no ha leído."
+    )
+
+
+def test_el_escaneo_del_arbol_bloquea(job: dict[str, Any]) -> None:
+    """Es el único paso que bloquea. Si deja de hacerlo, el job entero es decorativo."""
+    paso = _paso(job, "Secret scan", "working tree")
+    assert not paso.get("continue-on-error", False), (
+        "El escaneo de secretos del árbol de trabajo es el ÚNICO paso que bloquea de este "
+        "job; todo lo demás informa a propósito. Ponerle `continue-on-error` lo deja todo en "
+        "verde permanente. Si está rojo por un falso positivo, la salida es un `.gitleaksignore` "
+        "con el hallazgo concreto y su motivo, no apagar el paso."
+    )
+    assert "gitleaks dir" in paso["run"], (
+        "El paso que bloquea escanea el árbol (`gitleaks dir`), no el historial: lo que hay en "
+        "el árbol se arregla quitándolo y rotándolo, y lo del historial no."
+    )
+
+
+def test_el_escaneo_del_historial_informa(job: dict[str, Any]) -> None:
+    """Y no bloquea: estaría rojo hasta que alguien reescribiera el pasado."""
+    paso = _paso(job, "Secret scan", "full history")
+    assert paso.get("continue-on-error", False), (
+        "El escaneo del historial informa y no bloquea. Ponerlo a bloquear deja el check rojo "
+        "hasta que se reescriba el historial, que no es una acción que un CI pueda pedir — y "
+        "un guardarraíl siempre rojo se acaba desactivando entero."
+    )
+    assert "gitleaks git" in paso["run"]
+
+
+def test_las_dependencias_auditadas_son_las_del_lock(job: dict[str, Any]) -> None:
+    """`uv export` sin `--locked` vuelve a resolver, y se audita otro conjunto."""
+    export = _paso(job, "Export the locked dependency sets")
+    run = export["run"]
+    assert run.count("uv export") == 2, (
+        "Se exportan los dos proyectos con lock propio: `server` y `mcp_server`. Si aparece un "
+        "tercero, entra aquí; si no, su árbol de dependencias no lo audita nadie."
+    )
+    assert run.count("--locked") == 2, (
+        "Cada `uv export` lleva `--locked`. Sin él uv **vuelve a resolver en silencio** y el "
+        "informe describiría un conjunto de dependencias que el lock no declara: un informe "
+        "que parece bueno y mide otra cosa. Es la misma avería que vivió 17 días con el lock "
+        "de la raíz."
+    )
+    assert "--no-emit-project" in run and "automatia-shared" in run, (
+        "Nuestro propio código se excluye del fichero auditado: `-e ../shared` es una ruta "
+        "local que pip-audit no resuelve contra PyPI, y un paquete propio no tiene CVE. Sus "
+        "dependencias sí están, resueltas en el mismo export."
+    )
+
+
+def test_la_version_de_gitleaks_esta_pinada(job: dict[str, Any]) -> None:
+    version = job.get("env", {}).get("GITLEAKS_VERSION", "")
+    assert version and version[0].isdigit(), (
+        "`GITLEAKS_VERSION` tiene que ser una versión concreta. Resolver «latest» en cada "
+        "ejecución, en el job que vigila la cadena de suministro, es exactamente lo que este "
+        "job existe para no hacer."
+    )
+    instalacion = _paso(job, "Install gitleaks")
+    assert "sha256sum -c" in instalacion["run"], (
+        "La descarga se comprueba contra el fichero de sumas de la misma release. No protege "
+        "de una release comprometida —y así está dicho en el comentario— pero sí de una "
+        "descarga truncada o alterada en tránsito."
+    )
+
+
+def test_el_sbom_se_conserva_lo_suficiente(job: dict[str, Any]) -> None:
+    """Es la evidencia que se le entrega a quien audite, y eso pasa meses después."""
+    subida = _paso(job, "Upload SBOM")
+    assert subida.get("if") == "always()", (
+        "El artefacto se sube pase lo que pase: cuando más falta hace es cuando algún paso ha "
+        "fallado."
+    )
+    dias = subida.get("with", {}).get("retention-days", 0)
+    assert int(dias) >= 90, (
+        f"El SBOM se guarda {dias} días. Es evidencia con fecha para la auditoría de "
+        f"seguridad, que llega meses después del commit; los 7 días de la cobertura no valen "
+        f"aquí."
+    )
