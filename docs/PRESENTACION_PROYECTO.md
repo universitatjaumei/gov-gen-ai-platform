@@ -7,6 +7,14 @@
 >
 > **Fecha**: 26 de agosto de 2026. Las cifras de este documento corresponden a esa fecha y son
 > medidas, no estimadas. Cuando una cifra procede de una ejecución concreta, se dice cuál.
+>
+> **Revisión del 8 de septiembre de 2026.** La escala de madurez de este documento era propia
+> —«prototipo», «piloto en producción»— y no se correspondía con la del Reglamento de IA de la
+> Universitat Jaume I, que distingue **experimentación, validación y explotación**. Se ha
+> reescrito §5.1 para usar esa escala, §6 para expresar los hitos en ella, y §7.1 para decir
+> cuál es el mecanismo que conecta los dos planos de gobernanza —el **estudio de integración**
+> del Annex II— y qué control técnico corresponde a cada salto. **Las cifras no se han vuelto a
+> medir**: siguen siendo las del 26 de agosto y cada una lleva su fecha.
 
 ---
 
@@ -31,8 +39,8 @@ puede garantizar por diseño, no la gobernanza institucional de la IA. El invent
 el registro de sistemas y la asignación de responsabilidades se gestionan **fuera** de ella, y §7
 explica por qué esa separación es deliberada.
 
-El primer despliegue piloto es la **Universitat Jaume I**, con tres asistentes en marcha sobre
-corpus normativo real —uno público sobre normativa propia y dos internos de Gerencia, montados
+El primer despliegue es la **Universitat Jaume I**, hoy en **fase de experimentación** (§5.1),
+con tres asistentes en marcha sobre corpus normativo real —uno público sobre normativa propia y dos internos de Gerencia, montados
 para comparar dos métodos de recuperación—. El proyecto adoptó en agosto de 2026 la licencia
 **AGPL-3.0-or-later** con licencia dual comercial; el repositorio sigue privado hasta la apertura
 prevista, de modo que después cualquier institución pueda autoalojarlo.
@@ -168,14 +176,70 @@ Monorepo con backend **FastAPI** (Python asíncrono, contrato OpenAPI como únic
 frontend **React** generado contra ese contrato, y **PostgreSQL con pgvector**. El detalle está en
 `Arquitectura.md`.
 
-El primer despliegue de producción es una **máquina virtual en Google Cloud Platform** con Docker
-Compose, base de datos gestionada y almacenamiento de objetos. Se descartó una arquitectura sin
+El despliegue actual —«producción» en el sentido de infraestructura, no de fase de madurez: lo
+que corre ahí es la experimentación de §5.1— es una **máquina virtual en Google Cloud Platform**
+con Docker Compose, base de datos gestionada y almacenamiento de objetos. Se descartó una arquitectura sin
 servidor porque el sistema tiene procesos de ingesta programados que no encajan con el escalado a
 cero, y porque a igualdad de coste añadía restricciones. La aplicación pesa ~345 MB y cabe en una
 instancia pequeña: los modelos de embeddings locales son una dependencia **opcional**, necesaria
 solo cuando la institución exige que el cálculo no salga de su perímetro.
 
-## 5. Estado de desarrollo (26 de agosto de 2026)
+## 5. Estado de desarrollo y fase de madurez
+
+### 5.1 En qué fase está, y qué exige la siguiente
+
+La escala que usa este documento es la del **Reglamento de IA de la Universitat Jaume I**, y no
+una propia. Tiene tres fases, y lo que las separa no es cuánto software hay construido sino
+**quién usa el sistema y con qué datos**:
+
+| Fase | Qué la define | Qué exige para entrar |
+|---|---|---|
+| **Experimentación** | Entorno controlado, datos sintéticos o públicos, sin audiencia abierta | Alta del uso y registro inicial |
+| **Validación** | Audiencia limitada y real, con medición de calidad, sesgo y deriva del modelo | **Estudio de integración** aprobado |
+| **Explotación** | Uso general y sostenido, incorporado a la operación de la institución | **Auditoría de seguridad independiente** e integración plena en el SGSI/ENS |
+
+**Hoy el proyecto está en experimentación**, y lo que está pedido es el paso a validación. Es
+importante no leer la tabla de más abajo como si dijera otra cosa: que una capacidad esté
+construida y verificada **no la pone en fase de validación**. Un módulo funcionalmente completo
+sigue en experimentación mientras no lo use gente real bajo un estudio de integración aprobado,
+y la distancia entre las dos cosas es precisamente lo que la escala existe para no confundir.
+
+Dos matices que conviene decir, porque en este proyecto no coinciden con lo que se supondría:
+
+- **Hay ya un despliegue accesible desde internet** —`normativa.uji.es`, con dominio y
+  certificado institucionales— y eso **no significa explotación**. Es el entorno donde se
+  experimenta, sobre corpus normativo público y con un grupo reducido de personas.
+- **Las fases se recorren por caso de uso, no por plataforma.** El asistente sobre normativa
+  propia puede estar en validación mientras el módulo de informes sigue en experimentación. La
+  clasificación de riesgo se hace en la misma unidad y por la misma razón
+  (`MARCO_GOBERNANZA_IA.md` §6).
+
+**Lo que el proyecto se compromete a que ocurra antes de cada salto**, y que la versión anterior
+de este documento no decía:
+
+- **Antes de validación**: estudio de integración aprobado, identidad institucional conectada
+  (SSO SAML contra el IdP de la universidad, sin cuentas locales), y revisión técnica del código
+  sobre un repositorio al que la institución tenga acceso.
+- **Antes de explotación**: **auditoría de seguridad independiente**, con el precedente del voto
+  electrónico. La versión anterior de este documento preveía pasar de la validación de pilotos
+  al despliegue sin ese paso intermedio, y era una omisión: en un sistema llamado a ser la base
+  sobre la que se construyan otros aplicativos de la institución, la auditoría no es un trámite,
+  es lo que permite que los siguientes se apoyen en él. También es lo que sostiene la calidad
+  percibida por otra administración que reutilice el código bajo la AGPL.
+
+Como preparación de esa auditoría, la integración continua produce desde septiembre de 2026 el
+**inventario de dependencias (SBOM)** de los tres árboles del proyecto —servidor, servidor MCP y
+frontend—, el informe de vulnerabilidades conocidas de cada uno, y un escaneo de secretos que
+pone el check en rojo cuando encuentra algo en el árbol de trabajo. Los informes de
+vulnerabilidades **no bloquean todavía**: sobre cuatrocientas dependencias transitivas aparece
+antes o después un aviso sin versión corregida publicada, y un guardarraíl que se pone rojo por
+algo que quien lo lee no puede arreglar acaba desactivado. Primero medir, y con la medida, fijar
+el umbral que bloquea.
+
+Nada de esto sustituye a la auditoría: le ahorra el trabajo que una herramienta hace mejor, para
+que mire lo que sólo mira una persona.
+
+### 5.2 Lo construido y lo medido (26 de agosto de 2026)
 
 El proyecto se ha desarrollado **en solitario**, con disciplina de desarrollo guiado por pruebas
 (la prueba antes del código) y asistencia de agentes de programación sujetos a reglas de
@@ -213,8 +277,8 @@ juzgar (identidad visual, calidad editorial, sistemas externos reales).
 | Frontera entre organizaciones | ✅ Ámbito declarado tabla por tabla, con inventario escrito y vigilado por prueba |
 | Administración de plataforma e identidad | ✅ Organizaciones, personas y concesión de módulos, separadas de la administración de cada asistente |
 
-**El piloto, con datos reales.** El corpus normativo de la Universitat Jaume I está cargado y
-clasificado por ámbito y materia:
+**La experimentación, con datos reales.** El corpus normativo de la Universitat Jaume I está
+cargado y clasificado por ámbito y materia:
 
 | Asistente | Acceso | Corpus |
 |---|---|---|
@@ -250,17 +314,27 @@ lo que hay que leer con cuidado:
 El detalle, con la configuración de cada asistente y la tabla consulta a consulta, está en
 `docs/INFORME_CHATBOTS_NORMATIVA_Y_GERENCIA.html`.
 
-**Lo que queda antes del despliegue con usuarios reales:**
+**Lo que queda para entrar en fase de validación.** Los dos puntos de infraestructura que esta
+lista tenía —desplegar en producción y publicar el sitio del corpus— **están hechos** desde el 31
+de agosto y el 2 de septiembre de 2026 respectivamente. Lo que queda no es técnico:
 
-1. **Despliegue de producción** en la infraestructura descrita (§4). Es lo único que queda por
-   delante: los bloques de saneamiento, endurecimiento y calidad de respuesta previstos antes del
-   despliegue están cerrados.
-2. **Validación humana de los asistentes de Gerencia**: la hoja está generada; faltan los
+1. **Estudio de integración aprobado.** Es el requisito de entrada a la fase, y el mecanismo por
+   el que la institución decide alcance, riesgo y responsable (§7.1).
+2. **Identidad institucional conectada.** El SSO SAML está implementado y no está enchufado al
+   IdP de la universidad; mientras tanto se entra con cuentas locales de la propia plataforma,
+   que es aceptable en experimentación y no lo es con audiencia real.
+3. **Repositorio en la organización de la universidad**, que es el prerrequisito de cualquier
+   revisión técnica del código por parte de la institución.
+4. **Validación humana de los asistentes de Gerencia**: la hoja está generada; faltan los
    veredictos, y de lo que marquen saldrán las pruebas de regresión.
-3. **Lote de consultas de referencia para Gerencia**: siete preguntas no son una medida. El
+5. **Lote de consultas de referencia para Gerencia**: siete preguntas no son una medida. El
    mecanismo de carga es el mismo que ya se usa con el asistente público.
-4. **Publicar el sitio del corpus**, para que las citas dejen de apuntar a una dirección local.
-5. **Pruebas manuales finales** con datos e infraestructura reales.
+6. **Instrumentación de la medida que la fase exige**: calidad, sesgo y deriva del modelo sobre
+   uso real. Hoy la calidad se mide a mano con lotes de consultas anotadas; sesgo y deriva no se
+   miden todavía, porque necesitan volumen de uso que la experimentación no da.
+
+El punto 6 es el que conviene no minimizar: es la única obligación de la fase de validación para
+la que **no hay mecanismo construido**, y por eso está aquí y no en la tabla de arriba.
 
 ## 6. Lo que viene
 
@@ -274,8 +348,21 @@ según rol, fase y estado —de modo que el sistema solo ofrece lo que la norma 
 encadenada con valor probatorio, fotografía de la normativa aplicable en la fecha de referencia
 (Ley 39/2015), auditoría de equidad y integración con los gestores corporativos existentes.
 
-**Hitos orientativos**: piloto en producción en el cuarto trimestre de 2026, apertura del
-repositorio público en la misma ventana, cliente local y gestor de expedientes durante 2027-2028.
+Y conviene decirlo aquí y no descubrirlo después: el gestor de expedientes **sí toca actuación
+administrativa**, así que no hereda la clasificación de riesgo de los asistentes informativos.
+Tendrá que recorrer el procedimiento desde el principio, con su propia clasificación y, si esa
+clasificación lo exige, con evaluación de impacto en la protección de datos. Los asistentes de
+hoy no la necesitan porque informan citando norma publicada; ése es el motivo, y deja de valer en
+cuanto el sistema participa en una decisión.
+
+**Hitos orientativos, en la escala de §5.1**: entrada en **validación** de los asistentes
+informativos durante el cuarto trimestre de 2026, sujeta al estudio de integración; apertura del
+repositorio público en la misma ventana; **explotación** no antes de que exista auditoría de
+seguridad independiente; cliente local y gestor de expedientes en experimentación durante
+2027-2028.
+
+Las fechas son orientativas y las dependencias no: ninguna de ellas depende sólo del desarrollo,
+y decirlas como si fueran hitos de ingeniería sería confundir lo que uno controla con lo que no.
 
 ## 7. Dos planos de gobernanza, y dónde acaba esta plataforma
 
@@ -320,6 +407,55 @@ clasificación de riesgo, cómo se referencia el órgano responsable— es una d
 sectorial que conviene tomar de forma compartida, y no algo que deba resolver por su cuenta cada
 herramienta. El marco de gobernanza del proyecto (`MARCO_GOBERNANZA_IA.md`) desarrolla esta
 distinción de planos y detalla qué obligaciones vive en cada uno.
+
+### 7.1 El mecanismo que conecta los dos planos
+
+Decir que hay dos planos y no decir por dónde se tocan deja el documento a medias, y era el hueco
+de la versión anterior. La conexión no la inventa la plataforma: **la pone la institución, y es
+un procedimiento administrativo**. En la Universitat Jaume I, que es el primer despliegue, se
+llama **estudio de integración** (Annex II, sección 5.1 del Reglamento de IA), y funciona como
+puente de doble sentido:
+
+- **Alta y registro inicial.** Cualquier uso de la plataforma, institucional o particular,
+  requiere una petición que recoja objetivo, alcance, beneficio, coste estimado de recursos,
+  parámetros técnicos y la lista de herramientas empleadas. Es lo que hace que un uso exista para
+  la organización antes de existir en un servidor.
+- **Graduación por riesgo y madurez.** El estudio define en qué fase entra el caso de uso y con
+  qué controles. Los de bajo riesgo pueden resolverse con declaración responsable, para que el
+  procedimiento no se coma la experimentación que dice querer fomentar.
+- **Evaluación por el órgano competente** —en la UJI, el comité de estrategia digital e
+  inteligencia artificial, bajo la coordinación del delegado del rector como responsable
+  institucional de IA— en los casos de impacto significativo o de información no pública, con el
+  informe de auditoría que corresponda.
+
+**Qué aporta la plataforma a ese procedimiento, y qué no.** Aporta las dos cosas que un
+expediente de este tipo no puede fabricar por sí mismo: los **parámetros técnicos** verificables
+—modelos, umbrales, modos de disociación, fronteras de datos, dónde hay revisión humana— y la
+**evidencia de ejecución** que después demuestra que se hizo lo que se declaró. No aporta, ni
+debe, la decisión de si un uso se autoriza, en qué fase entra o quién responde de él.
+
+Este patrón no es específico de una universidad. Cualquier administración que despliegue la
+plataforma necesitará su equivalente —un procedimiento propio de alta, clasificación y
+autorización de casos de uso— y la plataforma está construida para alimentarlo, no para
+sustituirlo.
+
+### 7.2 Lengua: qué decide la institución y qué ejecuta la plataforma
+
+Es un caso pequeño que ilustra bien el reparto, y en un contexto con lengua propia no es menor.
+
+La plataforma **no decide** en qué lengua se atiende: lo ejecuta. La política es configuración en
+cascada —plataforma, organización, asistente— con tres modos: responder en la lengua de la
+pregunta, no aplicar política, o **fijar una lengua** con independencia de cómo se pregunte
+(`server/app/core/language_mode.py`). Una institución cuya normativa establezca una lengua por
+defecto la fija ahí, y no hay que tocar código.
+
+Lo que sí es del plano institucional, y conviene no confundirlo con lo anterior, es **qué cuenta
+como publicación oficial**. Una respuesta conversacional a una consulta no es una publicación: se
+genera para quien pregunta, cita su fuente y no queda como texto de la institución. Un documento
+publicado sí lo es, y donde exista un servicio lingüístico con competencia sobre las traducciones
+—en la UJI, el Servei de Llengües i Terminologia— la supervisión previa le corresponde a él. En
+el corpus normativo esa línea ya está trazada: las traducciones automáticas viven aparte y
+**alimentan sólo la búsqueda**; el texto que se publica es el aprobado.
 
 ## 8. Licencia y distribución
 
