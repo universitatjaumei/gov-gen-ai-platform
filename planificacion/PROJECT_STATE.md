@@ -148,15 +148,18 @@ sólo entonces retirar los seis `SuperAdminAccount`. Desde USR.9, a quien admini
 organización hay que concederle además el módulo **`personas`**; a quien ya tenía `plataforma` se
 lo dio la migración.
 
-**Cursor: Bloque BD ✅ completo (2026-09-04).** NIC ✅ completo el mismo día. El siguiente bloque es **REPO**. Después VAS → NIC → REPO → PLG → DIN → FUN, con PRC en
-paralelo y a tandas. **LANG ✅ quedó completo el 2026-09-03** y está en `desarrollo`, **sin
+**Cursor: Bloque BD ✅ completo (2026-09-04).** NIC ✅ completo el mismo día. El bloque en curso
+sigue siendo **REPO**. Después **DEP → PLG → DIN → FUN**, con PRC en paralelo y a tandas.
+**DEP nació el 2026-09-08** de la primera medición del job de cadena de suministro, y su prompt
+DEP.1 se puede adelantar solo: arregla un defecto latente en la subida de ficheros. **LANG ✅ quedó completo el 2026-09-03** y está en `desarrollo`, **sin
 desplegar**: el paso a `main` es decisión del usuario, y no cambia comportamiento porque el modo
 `prefer` es el que producción necesita. Lo anterior:
 
 ### El orden de los bloques que quedan, acordado el 2026-09-02
 
-Lo decidió el usuario sobre una propuesta razonada. **52 prompts en diez bloques** —eran 49; REPO
-pasó de 2 a 5 el 2026-09-07, al elegir la variante B y aparecer REPO.4 y REPO.5.
+Lo decidió el usuario sobre una propuesta razonada. **59 prompts en once bloques** —eran 49; REPO
+pasó de 2 a 5 el 2026-09-07, al elegir la variante B y aparecer REPO.4 y REPO.5, y **DEP nació el
+2026-09-08** con la primera medición del job de cadena de suministro.
 
 | # | Bloque | Prompts | Por qué aquí |
 |---|---|---|---|
@@ -166,9 +169,10 @@ pasó de 2 a 5 el 2026-09-07, al elegir la variante B y aparecer REPO.4 y REPO.5
 | 4 | **VAS** | 4 | El mejor ratio del plan: los tres candidatos ya existen como función interna y sólo necesitan superficie |
 | 5 | **NIC** | 5 | Cierra la Fase 1. Se puede esperar sin coste porque nada de lo planificado toca `client_app/`. **NIC.5 lo ejecuta el usuario** |
 | 6 ▶ | **REPO** | 5 (2 ✅) | **En curso.** REPO.3 ✅ y REPO.5 ✅ el 2026-09-07. Quedan **REPO.1 → REPO.4 → REPO.2**, y sólo REPO.4 espera a la organización: se puede seguir con otros bloques sin que REPO se quede obsoleto. REPO.1 lleva ahora el **reparto de `docs/`** y el **filtro del historial** (**7 rutas**: los tres `VALIDACION_GERENCIA*`, que son hojas de anotación y no informes, el trío de marca y la revisión de literatura; **los otros ocho tableros se publican**), porque la visibilidad alcanza a los commits y borrar antes de abrir no saca nada del pasado. **Sin repositorio privado**: se propuso uno para 15 ficheros y el usuario lo cuestionó con razón —un archivo de instantáneas no es un repositorio de operación, y tres de esos ficheros estaban clasificados por su nombre y son publicables—.  **La ventana sigue abierta y medida**: el commit huérfano `dc4904e0c763` todavía sirve `logs/` con 46 ficheros, 17 días después de la reescritura. Se hace **antes** de que exista el primer *fork* y antes de abrir. REPO.1 y REPO.2 los ejecuta el usuario |
-| 7 | **PLG** | 3 | Responde al correo de desarrollo pidiendo plugins. Después de LANG, que tocan la misma factoría |
-| 8 | **DIN** | 7 | Bueno y no urgente: su premisa resultó falsa en dos tercios —el rastreo con cadencia y la auto-ingesta ya existen— |
-| 9 | **FUN** | 7 | El más grande y el de más diseño; FUN.6 necesita REG, que a estas alturas ya está |
+| 7 | **DEP** | 7 | **Nacido de una medición, no de una sospecha**: la primera ejecución del job `supply-chain` (2026-09-08, run `34214582147`) dio **32 avisos en `server`, 4 en `mcp_server` y 21 en el frontend, 13 de ellos altos**. Va aquí y no antes porque REPO está en curso y no depende de esto; y va antes que PLG porque la auditoría de seguridad independiente es requisito de la explotación y el árbol tiene que llegar limpio. **DEP.1 se puede adelantar solo**: arregla un defecto latente —`python-multipart` no está declarado y la aplicación lo usa en 7 ficheros, así que un cambio en el árbol de `browser-use` dejaría la subida de ficheros dando 500 en producción sin fallar al arrancar— y de paso saca los dos únicos avisos sin corrección publicada, que se van con `browser-use` y `ragas`. **DEP.7 es el que cierra el ciclo**: convierte el job de informar en bloquear, con fichero de aceptaciones y fecha de caducidad |
+| 8 | **PLG** | 3 | Responde al correo de desarrollo pidiendo plugins. Después de LANG, que tocan la misma factoría |
+| 9 | **DIN** | 7 | Bueno y no urgente: su premisa resultó falsa en dos tercios —el rastreo con cadencia y la auto-ingesta ya existen— |
+| 10 | **FUN** | 7 | El más grande y el de más diseño; FUN.6 necesita REG, que a estas alturas ya está |
 | — | **PRC** | 6 | **No se puede programar**: espera las fichas validadas por los servicios y que el equipo del catálogo habilite la consulta de descarga. **En paralelo y a tandas**, conforme lleguen |
 
 ### Dónde se trabaja: la rama `desarrollo` (decisión del usuario, 2026-09-02)
