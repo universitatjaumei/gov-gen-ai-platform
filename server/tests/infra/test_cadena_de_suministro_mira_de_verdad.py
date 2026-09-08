@@ -109,7 +109,29 @@ def test_el_escaneo_del_historial_informa(job: dict[str, Any]) -> None:
         "hasta que se reescriba el historial, que no es una acción que un CI pueda pedir — y "
         "un guardarraíl siempre rojo se acaba desactivando entero."
     )
+    assert paso.get("if") == "always()", (
+        "Necesita `if: always()`, y no basta `continue-on-error`: el primero dice «ejecútalo "
+        "aunque algo anterior fallara» y el segundo sólo «si falla, no tumbes el job». Sin él, "
+        "cuando el escaneo del árbol se pone rojo este paso sale `skipped` — el día en que más "
+        "falta hace saber qué hay en el historial. Pasó en la primera ejecución."
+    )
     assert "gitleaks git" in paso["run"]
+
+
+def test_los_dos_escaneos_usan_la_lista_de_permitidos(job: dict[str, Any]) -> None:
+    """Sin `--config`, los 58 falsos positivos vuelven y el paso que bloquea es inútil."""
+    config = RAIZ / ".gitleaks.toml"
+    assert config.is_file(), (
+        "Falta `.gitleaks.toml`. Es lo que evita que los 58 hallazgos de ficheros de prueba "
+        "dejen el único paso que bloquea permanentemente en rojo."
+    )
+    for fragmento in ("working tree", "full history"):
+        paso = _paso(job, "Secret scan", fragmento)
+        assert "--config .gitleaks.toml" in paso["run"], (
+            f"El escaneo «{fragmento}» tiene que pasar `--config .gitleaks.toml` explícitamente. "
+            f"Sin él gitleaks usa sólo sus reglas por defecto y vuelven los falsos positivos de "
+            f"los árboles de prueba."
+        )
 
 
 def test_las_dependencias_auditadas_son_las_del_lock(job: dict[str, Any]) -> None:
@@ -130,6 +152,26 @@ def test_las_dependencias_auditadas_son_las_del_lock(job: dict[str, Any]) -> Non
         "Nuestro propio código se excluye del fichero auditado: `-e ../shared` es una ruta "
         "local que pip-audit no resuelve contra PyPI, y un paquete propio no tiene CVE. Sus "
         "dependencias sí están, resueltas en el mismo export."
+    )
+
+
+def test_los_dos_proyectos_se_auditan_aunque_el_primero_encuentre_algo(
+    job: dict[str, Any],
+) -> None:
+    """El agujero real de la primera ejecución: `mcp_server` no se auditó y nada lo dijo."""
+    paso = _paso(job, "pip-audit")
+    run = paso["run"]
+    assert run.count("uvx pip-audit") == 2, "Se auditan los dos proyectos."
+    assert run.count("|| rc=1") == 2, (
+        "Cada `pip-audit` tiene que capturar su propio fallo. Encadenados sin más, el shell "
+        "aborta el paso en cuanto el primero encuentra algo —pip-audit sale con 1— y el "
+        "segundo no llega a correr. Con `continue-on-error` encima, el job sigue en verde y el "
+        "único síntoma es un fichero que falta en el artefacto. Pasó en la primera ejecución: "
+        "`mcp_server` no se auditó."
+    )
+    assert "exit $rc" in run, (
+        "Y el paso tiene que acabar propagando el resultado, o su `outcome` diría «success» "
+        "siempre y la tabla del resumen estaría mintiendo."
     )
 
 

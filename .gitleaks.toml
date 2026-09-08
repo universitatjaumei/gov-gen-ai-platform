@@ -1,0 +1,45 @@
+# Configuración de gitleaks para el job `supply-chain` de `.github/workflows/ci.yml`.
+#
+# La primera ejecución del job (2026-09-08, run 34214046813) encontró **58 hallazgos y los 58
+# eran falsos positivos**: 57 en ficheros de prueba —claves y UUID inventados en fixtures, más
+# una clave privada de juguete en el test de criptografía— y uno en el propio `ci.yml`, que es
+# el secreto JWT de prueba con el que corre la suite.
+#
+# **Por qué esto es una lista de permitidos y no un `.gitleaksignore`.** Un `.gitleaksignore`
+# guarda huellas que incluyen el número de línea: cambiar el fichero de sitio o añadirle una
+# línea las invalida, el hallazgo reaparece, y a la tercera vez que pasa alguien apaga el paso.
+# Lo que se quiere fijar no son 58 hallazgos concretos, sino la regla: **fuera de los árboles de
+# prueba no hay secretos**.
+#
+# **Lo que esto cuesta, dicho.** Una credencial de verdad pegada dentro de un fichero de test no
+# se detectaría. Es un riesgo real y se acepta a sabiendas: la alternativa es 58 falsos positivos
+# permanentes, y un check que siempre está rojo no lo lee nadie. Lo que **no** se permite es nada
+# fuera de estas rutas: ni `deploy/`, ni `scripts/`, ni `.env*`, ni el código de la aplicación.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = """
+Árboles de prueba. Sus claves, tokens y UUID son inventados y existen para que los tests tengan
+algo con la forma correcta que pasarle al código.
+"""
+paths = [
+    '''^server/tests/''',
+    '''^shared/tests/''',
+    '''^mcp_server/tests/''',
+    '''^frontend/src/.*__tests__/''',
+    '''^frontend/src/.*\.test\.tsx?$''',
+]
+
+[[allowlists]]
+description = """
+El secreto JWT con el que corre la suite en integración continua. Está escrito en claro en
+`ci.yml` a propósito —lo que hace es firmar tokens de tests que se descartan al acabar el job— y
+su propio valor lo dice. Se permite por su contenido y no por su ruta: en `ci.yml` sí podría
+aparecer algún día un secreto de verdad, y entonces tiene que saltar.
+"""
+regexTarget = "match"
+regexes = [
+    '''ci-test-secret-key-at-least-32-chars-long''',
+]

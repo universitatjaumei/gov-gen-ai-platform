@@ -433,14 +433,25 @@ jobs:
       # Sin versión pinada, a propósito y al revés que gitleaks: pip-audit consulta la base de
       # avisos viva de PyPI, así que lo que importa es que la herramienta siga al día. De cada
       # ejecución lo que queda registrado es el informe, no la versión del escáner.
+      # El `|| rc=1` no es defensivo: arregla un agujero que la primera ejecución destapó. Los
+      # dos comandos estaban encadenados sin más, `pip-audit` sale con código 1 cuando encuentra
+      # algo, y el shell de GitHub aborta el paso al primer fallo. Como el paso lleva
+      # `continue-on-error`, el job siguió en verde y **`mcp_server` no se auditó nunca**: en el
+      # artefacto había `pip-audit-server.json` y no había `pip-audit-mcp.json`, que es la única
+      # forma en que se notaba. Un paso que informa y se corta a la primera informa de la mitad.
+      #
+      # El `exit $rc` conserva lo que importa: el `outcome` del paso sigue diciendo la verdad, y
+      # es lo que lee la tabla del resumen.
       - name: Python dependency audit (pip-audit — informa, no bloquea)
         id: pip_audit
         continue-on-error: true
         run: |
+          rc=0
           uvx pip-audit -r sbom/server-requirements.txt \
-            --format json --output sbom/pip-audit-server.json --progress-spinner off
+            --format json --output sbom/pip-audit-server.json --progress-spinner off || rc=1
           uvx pip-audit -r sbom/mcp-requirements.txt \
-            --format json --output sbom/pip-audit-mcp.json --progress-spinner off
+            --format json --output sbom/pip-audit-mcp.json --progress-spinner off || rc=1
+          exit $rc
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -493,14 +504,20 @@ jobs:
       # **El único paso que bloquea.** Un secreto en el árbol de trabajo no es un juicio de
       # valor ni depende de que exista parche aguas arriba: se quita y se rota.
       - name: Secret scan — working tree (BLOCKS)
-        run: ./gitleaks dir . --redact --no-banner --report-path sbom/gitleaks-tree.json
+        run: ./gitleaks dir . --config .gitleaks.toml --redact --no-banner --report-path sbom/gitleaks-tree.json
 
       # El historial informa y no bloquea: ponerlo a bloquear dejaría el check rojo hasta que
       # alguien reescribiera el pasado. Lo que sí hace es dejar constancia con fecha de qué hay
       # ahí atrás, que es la mitad del trabajo cuando toca decidir si una fuga sigue viva.
+      #
+      # **`if: always()` y no sólo `continue-on-error`**, y la diferencia la enseñó la primera
+      # ejecución: `continue-on-error` dice «si este paso falla, no tumbes el job», no «ejecuta
+      # este paso aunque uno anterior fallara». Con el escaneo del árbol en rojo, éste salió
+      # `skipped` — justo el día en que más falta hacía saber qué había en el historial.
       - name: Secret scan — full history (informa, no bloquea)
+        if: always()
         continue-on-error: true
-        run: ./gitleaks git . --redact --no-banner --report-path sbom/gitleaks-history.json
+        run: ./gitleaks git . --config .gitleaks.toml --redact --no-banner --report-path sbom/gitleaks-history.json
 
       # Sin esto hay que descargar el artefacto para saber si algo salió mal, y un informe que
       # cuesta tres clics no se mira.
