@@ -6,7 +6,14 @@ license = "AGPL-3.0-or-later"
 description = "Servidor MCP stdio para autoría de plantillas y configuración de chatbots de Gov Gen AI Platform."
 requires-python = ">=3.11"
 dependencies = [
-    "mcp[cli]>=1.25.0",
+    # DEP.5 — el techo `<2` es deuda declarada, no una preferencia. `mcp` 2.x **renombra
+    # `FastMCP` a `MCPServer`** y cambia más API: al subir sin techo, los cuatro ficheros de
+    # test fallan ya en la recolección con `No module named 'mcp.server.fastmcp'`. Migrar es
+    # trabajo de código con su propia verificación —el servidor MCP se comprueba contra el
+    # despliegue real, con dos clientes concurrentes (REG.4)—, así que no cabe en un prompt de
+    # subida de dependencias. Sin este techo, el próximo `uv lock --upgrade` rompe el servidor
+    # MCP en silencio hasta que alguien ejecute su suite.
+    "mcp[cli]>=1.25.0,<2",
     "httpx>=0.27.0",
     "pydantic>=2.0.0",
     # REG.4: el transporte HTTP se sirve con uvicorn. Declarado y no heredado del extra
