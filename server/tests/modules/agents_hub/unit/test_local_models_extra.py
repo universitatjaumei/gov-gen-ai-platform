@@ -122,14 +122,49 @@ class TestNadieCargaLaPilaSinQuererlo:
     def test_langchain_core_should_probe_transformers_not_require_it(self):
         """La afirmación en la que se apoya el test de arriba, comprobada en vez de supuesta:
         si `langchain_core` exigiera `transformers`, quitarlo del manifiesto rompería la
-        aplicación entera en vez de ahorrar memoria."""
+        aplicación entera en vez de ahorrar memoria.
+
+        **Se comprueba la PROPIEDAD, no el nombre de una variable privada.** Hasta DEP.1 esto
+        buscaba el literal `_HAS_TRANSFORMERS = False` en el fuente de `langchain_core`, y al
+        subir de 1.5.5 a 1.6.2 se puso rojo sin que nada estuviera mal: la librería había
+        cambiado a un import perezoso dentro de la función, con caché y un mensaje que dice qué
+        instalar — o sea, mejor que antes. Un test clavado a la implementación de un tercero se
+        rompe cuando el tercero mejora, y eso enseña a ignorarlo.
+        """
+        import importlib.util
+        import re
         from pathlib import Path
 
         import langchain_core.language_models.base as base
 
+        assert importlib.util.find_spec("transformers") is None, (
+            "`transformers` está instalado, así que este test no demuestra nada: la premisa es "
+            "que la aplicación funciona SIN la pila local. ¿Se sincronizó con "
+            "`--extra local-models` o con `--all-extras`?"
+        )
+        assert base is not None, (
+            "`langchain_core.language_models.base` no se puede importar sin `transformers`. "
+            "Eso convierte la pila local en obligatoria y tira por tierra el extra "
+            "`local-models`: importar la aplicación pasaría a costar torch entero."
+        )
+
         fuente = Path(base.__file__).read_text(encoding="utf-8")
-        assert "except ImportError" in fuente
-        assert "_HAS_TRANSFORMERS = False" in fuente
+        importa_transformers = [
+            linea
+            for linea in fuente.splitlines()
+            if re.match(r"\s*(from transformers import|import transformers)", linea)
+        ]
+        assert importa_transformers, (
+            "Ya no se importa `transformers` en este módulo. Si la dependencia ha desaparecido "
+            "del todo, este test sobra; compruébalo y quítalo en vez de dejarlo pasando en "
+            "verde sobre algo que ya no existe."
+        )
+        assert all(linea.startswith((" ", "\t")) for linea in importa_transformers), (
+            "`transformers` se importa en el NIVEL SUPERIOR del módulo. Da igual que esté "
+            "dentro de un `try`: lo que importa es que no se pague al importar. Tiene que ir "
+            "dentro de la función que lo usa.\n"
+            f"Líneas: {importa_transformers}"
+        )
 
 
 class TestElErrorExplicaQueInstalar:

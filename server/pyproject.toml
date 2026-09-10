@@ -44,7 +44,23 @@ dependencies = [
     # del arranque en una máquina sin GPU.
     "langdetect>=1.0.9",
     "langgraph>=1.1.0",
-    # DEP.1 — `ragas` y `datasets` se fueron al extra `evaluacion`.
+    # DEP.1 — `ragas` y `datasets` se fueron al extra `evaluacion`, y al irse destaparon
+    # OTRO caso del mismo defecto que este prompt vino a arreglar: `langchain` estaba en uso
+    # y no declarado. Lo necesita `observability.py`, que hace
+    # `from langfuse.langchain import CallbackHandler` en el nivel superior del módulo, y
+    # llegaba de rebote como transitiva de ragas. Sin esta línea, quitar ragas rompe la
+    # importación del router de borradores. La versión es la corregida: 1.2.15 tenía aviso.
+    "langchain>=1.3.9",
+    # DEP.1 — mismo caso, tercera vez. `bs4` se importa en el NIVEL SUPERIOR de
+    # `html_analyzer_service.py` y de `normativa_spider.py`, sin guarda, y llegaba de rebote.
+    "beautifulsoup4>=4.12",
+    # DEP.1 — sostiene el proveedor **Ollama**: `model_factory.py` hace
+    # `from langchain_community.chat_models import ChatOllama` dentro de la rama `ollama`.
+    # El import es perezoso pero NO está guardado, así que sin esta línea configurar Ollama
+    # revienta en tiempo de ejecución con un `ModuleNotFoundError` que no dice qué instalar.
+    # Se declara en vez de mandarlo a un extra porque quitarlo retiraría una capacidad
+    # soportada, y la regla del proyecto es que un extra no retira capacidades.
+    "langchain-community>=0.3",
     "reportlab>=4.0.0",
     "apscheduler>=3.10.4",
     "fsspec>=2024.6.0",
