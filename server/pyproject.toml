@@ -23,8 +23,18 @@ dependencies = [
     "langchain-google-genai>=4.1.3",
     "langchain-openai>=1.1.7",
     "aiohttp>=3.12.15",
-    "browser-use>=0.1.0",
+    # DEP.1 — `browser-use` se fue al extra `agente-navegador`. `playwright` se QUEDA aquí, y
+    # no es un olvido: `agent_service.py` lo importa en el nivel superior del módulo
+    # (`from playwright.async_api import BrowserContext`), mientras que `browser_use` va
+    # dentro de un `try/except`. Moverlo exigiría tocar código, que está fuera de este
+    # prompt, y no compra nada en seguridad: playwright no tiene ningún aviso en la medición.
     "playwright>=1.40.0",
+    # DEP.1 — DECLARADO, y antes llegaba de rebote por `browser-use → mcp`. FastAPI lo exige
+    # para `UploadFile` y `Form(`, que la aplicación usa 22 veces en 7 ficheros. No falla al
+    # importar: falla al ATENDER la petición, así que sin esta línea el día que cambie el
+    # árbol de `browser-use` la subida de un PDF empieza a dar 500 con el arranque en verde.
+    # La versión es la corregida: 0.0.21 acumulaba seis avisos.
+    "python-multipart>=0.0.31",
     "pgvector>=0.3.0",
     "langchain-text-splitters>=0.3.0",
     "langfuse>=2.0.0",
@@ -34,8 +44,7 @@ dependencies = [
     # del arranque en una máquina sin GPU.
     "langdetect>=1.0.9",
     "langgraph>=1.1.0",
-    "ragas>=0.2.0",
-    "datasets>=3.0.0",
+    # DEP.1 — `ragas` y `datasets` se fueron al extra `evaluacion`.
     "reportlab>=4.0.0",
     "apscheduler>=3.10.4",
     "fsspec>=2024.6.0",
@@ -100,6 +109,26 @@ local-models = [
     "torch",
     "torchvision",
     "sentence-transformers>=3.0.0",
+]
+# DEP.1: los dos extras que siguen. El criterio es el mismo que el de `local-models` —lo que
+# el despliegue estándar no ejecuta no se instala— pero aquí hay además un motivo de
+# seguridad: entre los dos arrastraban unos 19 de los 32 avisos de vulnerabilidad del
+# servidor, incluidos **los dos únicos sin versión corregida publicada** (`diskcache`, que
+# entra por ragas, y el propio `ragas`). Ésos no se arreglan subiendo: sólo dejando de
+# traerlos.
+#
+# **No retiran ninguna capacidad, y ésa es la razón de que esto se pueda hacer sin tocar
+# código**: los dos consumidores ya envolvían su import en un `try/except ImportError` y
+# degradan a propósito. `agent_service` deja `Agent = None`; `rag_metrics` cae a una métrica
+# léxica de solapamiento, y su docstring ya decía que la evaluación es «a mano o de noche,
+# jamás bloqueando un PR». `test_dep1_lo_que_se_usa_esta_declarado.py` lo comprueba
+# bloqueando el import de verdad, en vez de suponerlo.
+agente-navegador = [
+    "browser-use>=0.1.0",
+]
+evaluacion = [
+    "ragas>=0.2.0",
+    "datasets>=3.0.0",
 ]
 
 [tool.pytest.ini_options]
