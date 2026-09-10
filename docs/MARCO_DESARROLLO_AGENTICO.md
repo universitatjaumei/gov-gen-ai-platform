@@ -388,6 +388,37 @@ Un ejemplo de fila real, traducido a lenguaje llano. Lo valioso es la parte nega
 sesión y tiene que caber en dos pantallas; el historial crece una fila por paso y no tiene techo.
 Juntarlos hace que la lectura del cursor pague el peso del historial.
 
+#### El plan puede vivir en los *issues*; el historial no
+
+La primera revisión externa (equipo Teclab, 2026-09-10) objetó que ellos gestionan plan e
+historial con los *issues* del repositorio, y que así hay más paralelismo y un control más
+flexible. **Para el plan y el cursor tienen razón**, y este documento no debe insinuar lo
+contrario: un fichero de plan es un cuello de botella de un solo escritor, mientras que los
+*issues* permiten varios actores a la vez —personas y modelo— asignación, y trabajo en paralelo.
+Quien prefiera esa vía no está incumpliendo el marco: el cursor pasa a ser una vista (un tablero,
+un hito) en vez de un fichero.
+
+**El historial y las decisiones son otra cosa, y sí van en el repositorio.** Cuatro razones, en
+orden de peso:
+
+1. **Viajan con el código.** `git clone` trae el historial; no trae los *issues*. Para un
+   proyecto que se publica bajo AGPL y aspira a que otra administración lo recoja, el
+   razonamiento tiene que estar dentro del repositorio. No es hipotético: este proyecto cambió de
+   organización en GitHub el 2026-09-10 y va a borrar y recrear el repositorio para limpiar su
+   historial — **los *issues* no sobreviven a eso y los commits sí**.
+2. **La granularidad no encaja.** Una fila es un paso cerrado; un *issue* es una unidad de
+   trabajo prevista. Lo más valioso del historial **no es una tarea, es un hallazgo**: nadie abre
+   un *issue* para «la cifra que medí era un artefacto de mi propio instrumento». Abrirlo y
+   cerrarlo en el acto es un cuaderno de laboratorio disfrazado de *issue*.
+3. **El conocimiento negativo no tiene ciclo de vida.** Un *issue* nace abierto y muere cerrado;
+   «probamos X y no funcionó» no tiene cierre, y cerrarlo lo entierra.
+4. **El agente lee ficheros gratis.** El cursor entra en el contexto al arrancar; meter *issues*
+   cuesta llamadas y se pierde por el camino.
+
+**El puente entre las dos cosas**: al cerrar un *issue*, el modelo escribe la fila del historial.
+El *issue* dice **qué se pretendía**; la fila dice **qué se aprendió**. Son preguntas distintas,
+y por eso ninguna sustituye a la otra.
+
 ### 4.5 El registro de decisiones (ADR)
 
 Es el formato clásico de *Architecture Decision Record*: qué se decidió, cuándo, por qué, y **qué
@@ -477,6 +508,18 @@ el agente pregunta por todo y la supervisión se degrada a aprobación automáti
 
 ### 5.4 Tests escalonados
 
+**Antes de la tabla, el porqué, que no es el habitual.** Con un agente, el test deja de ser una
+red de seguridad y pasa a ser **el contrato**. En desarrollo normal los tests te protegen de
+romper cosas; con un agente son **la única forma de que «está hecho» sea falsable sin leerse cada
+línea**. Por eso el plan se escribe como prompts TDD (§4.3): los criterios de aceptación son
+ejecutables *antes* de que exista el código. Sin eso, «el agente dice que está terminado» no se
+puede comprobar.
+
+Y de ahí sale lo demás. Un agente ejecutará la suite entera después de cada cambio si le dejas:
+una hora por paso y ninguna información nueva. Los tres niveles responden a **tres preguntas
+distintas** —¿funciona lo que acabo de escribir?, ¿he roto a mis vecinos?, ¿he roto algo?— y por
+eso cuestan lo que cuestan.
+
 | Cuándo | Qué | Coste |
 |---|---|---|
 | Durante el paso | Solo el fichero de tests que se está escribiendo | segundos |
@@ -523,6 +566,13 @@ documento deja de ser verdad. No es documentación *sobre* el código: es docume
 por** el código.
 
 Es la respuesta operativa a P6, y no aparece en ninguno de los marcos publicados. **[n=1]**
+
+**En qué se concreta, porque la primera revisión externa preguntó justo esto (2026-09-10): no hay
+ninguna infraestructura.** Un guardarraíl es **un fichero de test normal, en la suite normal**,
+que en vez de comprobar código comprueba que un documento sigue siendo verdad: lee un `.md` —o un
+YAML de integración continua, o el manifiesto de dependencias— y lo contrasta con el código o con
+el sistema de ficheros. Nada más. Quien espere una herramienta aparte no la va a encontrar, y por
+eso cuesta verlo: el mecanismo es tan pequeño que parece que falta algo.
 
 ### 6.2 Los cinco tipos que se usan
 
@@ -897,6 +947,36 @@ Sin métricas, esto es fe. Cuatro señales, y las dos primeras son las que de ve
 **No se mide velocidad sin medir estabilidad.** Es la conclusión de DORA y la moraleja de METR a
 la vez: quien mide solo velocidad concluirá que va más rápido, y se equivocará en 40 puntos.
 **[Evidencia]**
+
+### 11.5 Cómo vuelve lo aprendido al marco
+
+Esta sección existe porque faltaba, y la señaló la primera revisión externa (equipo Teclab de la
+UADTI, 2026-09-10): un marco que se copia de proyecto en proyecto **diverge**, y sin un camino de
+vuelta las divergencias se quedan encerradas donde nacieron. Es exactamente lo que ya había
+pasado allí entre dos proyectos.
+
+**Las divergencias no son el problema: son los experimentos.** Copiar el marco y adaptarlo es lo
+que debe ocurrir. Lo que falta no es evitarlo, sino un **criterio de promoción** y una
+**cadencia**.
+
+**El criterio sale de las etiquetas de evidencia que este documento ya usa.** Cada afirmación
+lleva su estatus —`[n=1]` cuando viene de una sola experiencia, `[Evidencia]` cuando hay estudio
+detrás, `[Convención]` cuando es práctica establecida—. De ahí la regla:
+
+> Una práctica divergente entra en el marco común cuando **la han pagado dos proyectos
+> distintos**. Con uno se anota como `[n=1]` diciendo dónde ocurrió; con dos deja de llevar la
+> etiqueta y pasa a regla.
+
+Así el marco crece con evidencia y no con opiniones, y se ve de un vistazo qué partes no han sido
+probadas todavía fuera de su proyecto de origen.
+
+**La propagación necesita dos cosas mínimas**, y ninguna es una herramienta:
+
+1. **Una versión del marco declarada** en el `AGENTS.md` de cada proyecto. Sin número no hay
+   contra qué comparar, y por eso hoy nadie compara.
+2. **Una revisión periódica** en la que cada proyecto reporta sus divergencias. El diff lo hace
+   el propio agente: «compara nuestras reglas con el marco vX y dime qué hemos cambiado y por
+   qué». Son cinco minutos, y sin el número de versión son imposibles.
 
 ---
 
