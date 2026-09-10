@@ -18,6 +18,6 @@
     "generate_answer": "Redactant la resposta..."
   },
   "widget_title": "Assistent",
-  "ai_disclaimer": "Assistent creat amb intel·ligència artificial. Les respostes poden contindre errors: contrasta sempre amb la norma citada.",
-  "ai_disclaimer_model": "Assistent creat amb intel·ligència artificial ({{model}}). Les respostes poden contindre errors: contrasta sempre amb la norma citada."
+  "ai_disclaimer": "Assistent creat amb intel·ligència artificial. Les respostes poden contindre errors i no han passat revisió lingüística: contrasta sempre amb la norma citada.",
+  "ai_disclaimer_model": "Assistent creat amb intel·ligència artificial ({{model}}). Les respostes poden contindre errors i no han passat revisió lingüística: contrasta sempre amb la norma citada."
 }

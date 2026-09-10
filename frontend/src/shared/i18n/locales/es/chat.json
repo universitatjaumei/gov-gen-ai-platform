@@ -18,6 +18,6 @@
     "generate_answer": "Redactando la respuesta..."
   },
   "widget_title": "Asistente",
-  "ai_disclaimer": "Asistente creado con inteligencia artificial. Las respuestas pueden contener errores: contrasta siempre con la norma citada.",
-  "ai_disclaimer_model": "Asistente creado con inteligencia artificial ({{model}}). Las respuestas pueden contener errores: contrasta siempre con la norma citada."
+  "ai_disclaimer": "Asistente creado con inteligencia artificial. Las respuestas pueden contener errores y no han pasado revisión lingüística: contrasta siempre con la norma citada.",
+  "ai_disclaimer_model": "Asistente creado con inteligencia artificial ({{model}}). Las respuestas pueden contener errores y no han pasado revisión lingüística: contrasta siempre con la norma citada."
 }

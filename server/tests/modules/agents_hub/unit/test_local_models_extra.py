@@ -131,23 +131,16 @@ class TestNadieCargaLaPilaSinQuererlo:
         instalar — o sea, mejor que antes. Un test clavado a la implementación de un tercero se
         rompe cuando el tercero mejora, y eso enseña a ignorarlo.
         """
-        import importlib.util
         import re
         from pathlib import Path
 
         import langchain_core.language_models.base as base
 
-        assert importlib.util.find_spec("transformers") is None, (
-            "`transformers` está instalado, así que este test no demuestra nada: la premisa es "
-            "que la aplicación funciona SIN la pila local. ¿Se sincronizó con "
-            "`--extra local-models` o con `--all-extras`?"
-        )
-        assert base is not None, (
-            "`langchain_core.language_models.base` no se puede importar sin `transformers`. "
-            "Eso convierte la pila local en obligatoria y tira por tierra el extra "
-            "`local-models`: importar la aplicación pasaría a costar torch entero."
-        )
-
+        # NO se comprueba que `transformers` falte. Sería una premisa que sólo se cumple en el
+        # entorno base: CI sincroniza con `uv sync --locked --all-extras` y allí está instalado,
+        # así que la afirmación pondría el job en rojo sin que nada estuviera mal. Es el mismo
+        # error que se cometió en el guardarraíl de DEP.1 y se corrigió igual: **lo que se fija
+        # se lee del fuente, no del entorno**, y así vale en las dos máquinas.
         fuente = Path(base.__file__).read_text(encoding="utf-8")
         importa_transformers = [
             linea

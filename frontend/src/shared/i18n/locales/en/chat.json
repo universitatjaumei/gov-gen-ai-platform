@@ -18,6 +18,6 @@
     "generate_answer": "Writing the answer..."
   },
   "widget_title": "Assistant",
-  "ai_disclaimer": "Assistant built with artificial intelligence. Answers may contain errors: always check against the regulation cited.",
-  "ai_disclaimer_model": "Assistant built with artificial intelligence ({{model}}). Answers may contain errors: always check against the regulation cited."
+  "ai_disclaimer": "Assistant built with artificial intelligence. Answers may contain errors and have not been checked by a language service: always check against the regulation cited.",
+  "ai_disclaimer_model": "Assistant built with artificial intelligence ({{model}}). Answers may contain errors and have not been checked by a language service: always check against the regulation cited."
 }

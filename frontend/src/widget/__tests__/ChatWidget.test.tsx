@@ -230,6 +230,19 @@ describe('ChatWidget — señal inmediata y aviso de IA (UX.7)', () => {
     expect(aviso.textContent).toMatch(/errores/i)
   })
 
+  // La respuesta la redacta el modelo y NO pasa por el Servei de Llengües: el aviso tiene que
+  // decirlo. Sale de la respuesta del DEDIA a la OIATI (2026-09-09), que da por hecho que «a les
+  // respostes s'aplica el disclaimer general..., inclosa la referència a la validació
+  // lingüística» — y no la llevaba. No es un flujo de validación por respuesta, que no tendría
+  // sentido: es advertir de lo que no se ha hecho.
+  test('should_warn_that_the_answer_has_not_been_checked_by_a_language_service', () => {
+    renderOpen(<ChatWidget {...DEFAULT_PROPS} />)
+
+    expect(screen.getByTestId('widget-aviso-ia').textContent).toMatch(
+      /revisi[oó]n ling[uü][ií]stica/i,
+    )
+  })
+
   test('should_name_the_model_when_the_page_declares_it', () => {
     renderOpen(<ChatWidget {...DEFAULT_PROPS} model="Gemini 2.5 Flash" />)
 
