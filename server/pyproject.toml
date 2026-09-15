@@ -8,6 +8,18 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "automatia-shared",
+    # DEP.1 (arreglado el 2026-09-15, tras tumbar produccion) — `uvicorn` es lo que EJECUTA la
+    # aplicacion: el `CMD` del Dockerfile es `uvicorn server.app.main:app`. Llegaba de rebote por
+    # `browser-use -> mcp -> uvicorn`, y cuando DEP.1 mando `browser-use` al extra
+    # `agente-navegador` se fue con el. La imagen instala `uv sync --frozen --no-dev` SIN extras,
+    # asi que el contenedor arranco sin uvicorn y murio con
+    # `exec: "uvicorn": executable file not found in $PATH`.
+    #
+    # Es el cuarto caso del mismo defecto que DEP.1 destapo, y el unico que ningun guardarrail de
+    # los que habia podia ver: `test_dep1_no_hay_dependencias_de_rebote.py` busca IMPORTS no
+    # declarados, y uvicorn no se importa, se invoca. Lo vigila ahora
+    # `test_dep8_los_ejecutables_del_dockerfile_estan_declarados.py`.
+    "uvicorn>=0.30",
     "fastapi>=0.111.0",
     "PyJWT>=2.8.0",
     "bcrypt>=4.0.0",

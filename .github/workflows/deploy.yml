@@ -305,7 +305,24 @@ jobs:
               sudo docker compose --env-file ${DESTINO}/.env.despliegue \
                 -f ${DESTINO}/docker-compose.vm.yml ps"
 
+      # `if: always()`, y lo enseñaron DOS incidentes.
+      #
+      # Este paso es la red de seguridad del despliegue: comprueba que el servicio responde y, si
+      # no, vuelve a la imagen anterior. Sin `always()` **se salta justo cuando hace falta**,
+      # porque en GitHub Actions un paso fallido salta todo lo que viene detrás: si «Desplegar»
+      # muere, la reversión no corre y el servicio se queda caído en vez de volver atrás.
+      #
+      # Pasó el 2026-09-01 (el disco lleno) y quedó anotado en `PROJECT_STATE.md` como «merece
+      # mirarse». No se miró, y volvió a pasar el 2026-09-15: `uvicorn` salió del conjunto base
+      # al mover `browser-use` a un extra, el contenedor no arrancó, y producción estuvo caída
+      # media hora **con la reversión preparada y sin ejecutar**. Dos veces el mismo coste por la
+      # misma línea que faltaba.
+      #
+      # `continue-on-error` NO sirve aquí: dice «si este paso falla, no tumbes el job», no
+      # «ejecútalo aunque uno anterior fallara». Son cosas distintas y es la tercera vez que esa
+      # confusión cuesta algo en este repositorio.
       - name: Comprobar que sirve, y volver atrás si no
+        if: always()
         run: |
           set -uo pipefail
           HOST="${{ vars.GOVGENAI_HOST }}"

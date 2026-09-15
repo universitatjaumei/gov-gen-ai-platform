@@ -232,6 +232,40 @@ def test_hay_comprobacion_posterior_y_reversion() -> None:
     )
 
 
+def test_la_reversion_corre_aunque_el_despliegue_falle() -> None:
+    """La red de seguridad tiene que estar puesta JUSTO cuando el despliegue se cae.
+
+    Dos incidentes, la misma línea que faltaba. En GitHub Actions un paso fallido salta todo lo
+    que viene detrás salvo lo marcado `if: always()`, así que sin él la reversión **no corre
+    precisamente cuando hace falta**: si «Desplegar» muere, el servicio se queda caído en vez de
+    volver a la imagen anterior.
+
+    * **2026-09-01** — el disco se llenó, `docker compose up` murió, y no hubo reversión. Quedó
+      anotado en `PROJECT_STATE.md` como «merece mirarse si ese paso debería correr con
+      `if: always()`».
+    * **2026-09-15** — no se miró. `uvicorn` salió del conjunto base al mover `browser-use` a un
+      extra (DEP.1), el contenedor no arrancó, y producción estuvo caída media hora **con la
+      reversión preparada en la máquina y sin ejecutar**.
+
+    Y `continue-on-error` no vale: dice «si este paso falla, no tumbes el job», no «ejecútalo
+    aunque uno anterior fallara». Es la tercera vez que esa confusión cuesta algo aquí.
+    """
+    import yaml
+
+    flujo = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    pasos = next(iter(flujo["jobs"].values()))["steps"]
+    comprobacion = [p for p in pasos if "Comprobar que sirve" in p.get("name", "")]
+    assert len(comprobacion) == 1, (
+        f"Se esperaba un único paso de comprobación y reversión, y hay {len(comprobacion)}."
+    )
+    assert comprobacion[0].get("if") == "always()", (
+        "El paso «Comprobar que sirve, y volver atrás si no» necesita `if: always()`. Sin él se "
+        "salta cuando «Desplegar» falla — o sea, cuando es su único momento útil — y el servicio "
+        "se queda caído con la reversión preparada y sin ejecutar. Pasó el 2026-09-01 y otra vez "
+        "el 2026-09-15."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Lo que el despliegue NO hace
 # ---------------------------------------------------------------------------

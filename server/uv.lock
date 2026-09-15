@@ -400,6 +400,7 @@ dependencies = [
     { name = "seaborn" },
     { name = "spacy" },
     { name = "sqlmodel" },
+    { name = "uvicorn" },
 ]
 
 [package.optional-dependencies]
@@ -486,6 +487,7 @@ requires-dist = [
     { name = "sqlmodel", specifier = ">=0.0.14" },
     { name = "torch", marker = "extra == 'local-models'", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torchvision", marker = "extra == 'local-models'", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "uvicorn", specifier = ">=0.30" },
 ]
 provides-extras = ["shared", "local-models", "agente-navegador", "evaluacion"]
 
