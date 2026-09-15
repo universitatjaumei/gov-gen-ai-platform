@@ -478,7 +478,23 @@ jobs:
             --aceptados avisos_aceptados.toml \
             --resumen "$GITHUB_STEP_SUMMARY"
 
+      # A partir de aquí, TODOS los pasos llevan `if: always()`, y la razón la enseñó la primera
+      # ejecución de la puerta de DEP.7. Este job tiene ahora tres pasos que bloquean, y en
+      # GitHub Actions un paso fallido salta **todo** lo que viene detrás salvo lo marcado con
+      # `always()`. Con la puerta en rojo se saltaron `npm audit`, el SBOM y —lo grave— el
+      # escaneo de secretos del árbol, que es el paso del que este mismo fichero dice que si
+      # deja de ejecutarse «el job entero es decorativo».
+      #
+      # O sea: encender una puerta había apagado las otras dos. Es la tercera vez que este job
+      # se come la misma avería —la primera fue `mcp_server` sin auditar, la segunda el escaneo
+      # del historial saliendo `skipped`—, así que ya no se arregla paso a paso sino por regla,
+      # con un guardarraíl que la fija: `test_ningun_paso_se_salta_por_un_rojo_anterior`.
+      #
+      # Las comprobaciones son independientes: que el árbol de Python tenga un aviso no dice
+      # nada sobre si hay un secreto en el árbol de trabajo, y enterarse de las dos cosas en la
+      # misma ejecución es justo lo que hace útil el job.
       - name: Set up Node.js
+        if: always()
         uses: actions/setup-node@v7
         with:
           node-version: "24"
@@ -486,6 +502,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
+        if: always()
         working-directory: frontend
         run: npm ci
 
@@ -503,6 +520,7 @@ jobs:
       # líneas, bloquear habría costado perder el informe justo en el caso interesante.
       - name: JS dependency audit (npm audit — BLOCKS on high)
         id: npm_audit
+        if: always()
         working-directory: frontend
         run: |
           set -o pipefail
@@ -514,6 +532,7 @@ jobs:
       # artefacto sea de 90 días y no de 7 como la de cobertura: es evidencia con fecha de qué
       # se estaba ejecutando, y su valor aparece meses después.
       - name: Generate SBOM (CycloneDX)
+        if: always()
         continue-on-error: true
         run: |
           uvx --from cyclonedx-bom cyclonedx-py requirements \
@@ -528,6 +547,7 @@ jobs:
       # una descarga truncada o alterada en tránsito, no de una release comprometida. Se dice
       # para que nadie lea de aquí una garantía que no da.
       - name: Install gitleaks
+        if: always()
         run: |
           base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
           curl -sSfL -o gitleaks.tar.gz "${base}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
@@ -541,6 +561,7 @@ jobs:
       # **El único paso que bloquea.** Un secreto en el árbol de trabajo no es un juicio de
       # valor ni depende de que exista parche aguas arriba: se quita y se rota.
       - name: Secret scan — working tree (BLOCKS)
+        if: always()
         run: ./gitleaks dir . --config .gitleaks.toml --redact --no-banner --report-path sbom/gitleaks-tree.json
 
       # El historial informa y no bloquea: ponerlo a bloquear dejaría el check rojo hasta que

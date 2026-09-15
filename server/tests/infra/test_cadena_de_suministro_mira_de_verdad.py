@@ -249,6 +249,53 @@ def test_npm_audit_bloquea_y_conserva_su_informe(job: dict[str, Any]) -> None:
     )
 
 
+def test_ningun_paso_se_salta_por_un_rojo_anterior(job: dict[str, Any]) -> None:
+    """La avería que este job se ha comido TRES veces, fijada por fin como regla.
+
+    En GitHub Actions un paso fallido salta todo lo que viene detrás salvo lo marcado con
+    `if: always()`. Con un solo paso bloqueante eso casi no se notaba; con tres —la puerta de
+    Python, `npm audit` y el escaneo del árbol— significa que **el primero que se pone rojo apaga
+    los otros dos**, y el job informa de un problema ocultando los demás.
+
+    Pasó de verdad en la primera ejecución de la puerta de DEP.7 (run 34974628381): la puerta
+    bloqueó por `langchain-openai`, y con ella se saltaron `npm audit`, el SBOM y el escaneo de
+    secretos del árbol de trabajo — el paso del que el docstring de este fichero dice que si deja
+    de ejecutarse, el job entero es decorativo. Antes había pasado con `mcp_server` sin auditar y
+    con el escaneo del historial saliendo `skipped`.
+
+    La regla: desde el primer paso que puede bloquear, todos llevan `if: always()`. Se comprueba
+    por posición y no por nombre, para que un paso nuevo quede cubierto sin tener que acordarse.
+    """
+    pasos = job["steps"]
+    nombres_bloqueantes = [
+        i
+        for i, p in enumerate(pasos)
+        if not p.get("continue-on-error", False)
+        and "run" in p
+        and "BLOCK" in p.get("name", "").upper()
+    ]
+    assert nombres_bloqueantes, (
+        "Este job tiene que tener al menos un paso que bloquee, marcado «BLOCKS» en el nombre. "
+        "Si no queda ninguno, la cadena de suministro se vigila sola y nadie se entera."
+    )
+
+    primero = min(nombres_bloqueantes)
+    sin_guarda = [
+        p.get("name", "<sin nombre>")
+        for p in pasos[primero + 1 :]
+        if p.get("if") != "always()"
+    ]
+    assert not sin_guarda, (
+        "Estos pasos van DESPUÉS del primer paso que bloquea y no llevan `if: always()`, así que "
+        "un rojo anterior los deja en `skipped` y su comprobación no se hace:\n  - "
+        + "\n  - ".join(sin_guarda)
+        + "\n\nLas comprobaciones de este job son independientes entre sí: que el árbol de Python "
+        "tenga un aviso no dice nada sobre si hay un secreto en el árbol de trabajo. Enterarse de "
+        "las dos cosas en la misma ejecución es lo que hace útil el job, y es la avería que ya se "
+        "ha pagado tres veces aquí."
+    )
+
+
 def test_el_fichero_de_aceptados_existe_y_lo_vigila_un_test() -> None:
     """Aceptar tiene que costar algo, o la lista crece hasta cubrir el árbol."""
     aceptados = RAIZ / "avisos_aceptados.toml"

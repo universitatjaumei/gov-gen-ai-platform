@@ -21,7 +21,11 @@ dependencies = [
     "openai",
     "google-genai",
     "langchain-google-genai>=4.1.3",
-    "langchain-openai>=1.1.7",
+    # DEP.7 — el suelo es 1.1.14 por seguridad, no por capricho: PYSEC-2026-76 se corrige ahí,
+    # y con `>=1.1.7` la resolución se quedaba en 1.1.9. Lo encontró la PRIMERA ejecución real
+    # de la puerta, no la medición local: este paquete cayó en el trozo de 49 que no se pudo
+    # auditar en local, y así se dijo. Bajar este suelo vuelve a meter el aviso.
+    "langchain-openai>=1.1.14",
     "aiohttp>=3.12.15",
     # DEP.1 — `browser-use` se fue al extra `agente-navegador`. `playwright` se QUEDA aquí, y
     # no es un olvido: `agent_service.py` lo importa en el nivel superior del módulo

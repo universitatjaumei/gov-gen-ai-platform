@@ -88,8 +88,32 @@ def test_pii_detector_uses_form_anchors_for_field_context(
 # ---------------------------------------------------------------------------
 
 def test_pii_detector_degrades_to_regex_only_without_spacy(monkeypatch) -> None:
-    """Forzamos _nlp=None y verificamos que regex + anclajes siguen funcionando."""
-    ctx = AnonymizationContext()
+    """Forzamos _nlp=None y verificamos que regex + anclajes siguen funcionando.
+
+    El ancla se comprueba por la DETECCIÓN, no por el texto de salida, y eso arregla un rojo que
+    tumbó CI el 2026-09-15 (run 34974628381). La versión anterior afirmaba
+    `assert "Marta" not in anonymized`, o sea que el nombre falso nunca coincidiera con el real.
+
+    **Y no era aleatoriedad, era estado filtrado entre tests**, que es lo que `-n0` en CI existe
+    para cazar. `FakerGenerator.__init__` llama a `Faker.seed(seed)`, que es un **método de
+    clase**: siembra el generador compartido de todo el proceso. Dos tests más abajo en este
+    mismo fichero construyen `FakerGenerator(seed=42)`, así que en una ejecución **en serie** la
+    secuencia global queda fijada y este test —que creaba el contexto **sin semilla**— dejaba de
+    ser aleatorio y caía siempre en «Marta». Con `-n auto` no salía porque el reparto entre
+    procesos cambia quién sembró antes; en serie es determinista. (Sin ese estado previo el
+    choque existe igual, pero es raro: medido sobre 3.000 contextos frescos, 3 devuelven
+    «Marta», un 0,1 %.)
+
+    El rojo escondía además un error de fondo: que el nombre falso coincida con el real **no es
+    un fallo del anonimizador**, que hizo su trabajo —detectar el ancla y sustituir—. La garantía
+    es que `ANCHOR_FIRSTNAME` dispara sin spaCy; el valor concreto que escupe Faker es asunto de
+    Faker. El DNI y el correo sí se comprueban por el texto, porque ahí el sustituto tiene otra
+    forma y no puede coincidir por azar.
+
+    La semilla explícita hace el test independiente de lo que corriera antes, que es la mitad del
+    arreglo; la otra mitad es afirmar sobre la detección.
+    """
+    ctx = AnonymizationContext(faker_seed=42)
     ctx._nlp = None  # type: ignore[attr-defined]
     assert not ctx.spacy_available
 
@@ -97,7 +121,16 @@ def test_pii_detector_degrades_to_regex_only_without_spacy(monkeypatch) -> None:
     anonymized = ctx.anonymize(text)
     assert "12345678Z" not in anonymized
     assert "juan@example.com" not in anonymized
-    assert "Marta" not in anonymized  # detectado por ANCHOR_FIRSTNAME
+
+    anclas = ctx.get_detected_anchors()
+    assert any(a.get("field_type") == "firstname" for a in anclas), (
+        f"Sin spaCy, «Nombre: Marta» lo tiene que cazar ANCHOR_FIRSTNAME. Anclas detectadas: "
+        f"{anclas}"
+    )
+    # Y el valor que el ancla señala es el nombre, no la etiqueta: si los offsets se
+    # desplazaran, la sustitución tocaría el trozo equivocado y el test anterior no lo veía.
+    ancla = next(a for a in anclas if a.get("field_type") == "firstname")
+    assert text[ancla["value_start"] : ancla["value_end"]] == "Marta"
 
 
 # ---------------------------------------------------------------------------
