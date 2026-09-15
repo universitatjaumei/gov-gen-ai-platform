@@ -189,8 +189,21 @@ comprobable desde fuera, y sí lo es — con la misma llamada que encontró el p
 además dice que aquí funciona limpiamente es que **nada ancla los huérfanos**: **0 *forks*, 0
 *pull requests*, 0 refs de *pull***. Con eso, una recogida de basura se los lleva.
 
+**Pasos 1-4 EJECUTADOS el 2026-09-15**: respaldo, filtrado de las 7 rutas y *force-push* al mismo
+repositorio. `main` **50bb0c5**, `desarrollo` **b0d8523**, CI verde entero sobre la historia
+reescrita. Las 7 rutas pasan de 12 commits a 0, el recuento se queda en 736 —sin desplome— y el
+diff de árboles son exactamente los 4 ficheros. Los cuatro se copiaron antes a
+`_local/docs_operacion/` (paso 3.bis, que estaba pendiente).
+
+**Lo que queda, y lo hace el usuario**: abrir el ticket a GitHub Support. Texto listo en
+`_local/TICKET_GITHUB_SUPPORT_purga.md`, con los **cuatro** huérfanos —los dos de `logs/` más los
+dos que creó este *push*— y las dos puntas que no deben tocarse.
+
 **La puerta, y es lo único irreversible del bloque**: no se cambia la visibilidad a pública hasta
-que los dos SHA den **404**. Pasos en `planificacion/fase1/61_BLOQUE_REPO.md`.
+que los cuatro SHA den **404**. Y el orden importa: **el punto de no retorno es la purga, no el
+*push*** — mientras los huérfanos existan, todo lo anterior al filtrado sigue siendo recuperable
+desde el propio GitHub, además del respaldo local y del *bundle*. Sigue pendiente **sacar el
+*bundle* del portátil**.
 
 **Exposición mientras tanto, medida**: privado, **7 colaboradores directos**, 30 miembros en la
 organización. Acotada y conocida.
