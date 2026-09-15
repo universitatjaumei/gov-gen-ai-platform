@@ -165,12 +165,28 @@ intento revertido se hizo antes de que DEP.2 subiera `fastapi`— **no está com
 anotada como tal. Corrobora el diagnóstico que **`mcp_server` ya corría starlette 1.6.0 desde
 DEP.5**, sin que nadie notara nada.
 
-**Bloque REPO ▶: desbloqueado el 2026-09-14.** El usuario ya tiene rol `admin` sobre
-`universitatjaumei`, que era el único prerrequisito que faltaba. Quedan **REPO.1 → REPO.4 →
-REPO.2**; **REPO.1 y REPO.2 los ejecuta el usuario** (creación del repositorio limpio y corte),
-**REPO.4 es de agente** (el repositorio se nombra a sí mismo en seis ficheros). Detalle en
-`planificacion/fase1/61_BLOQUE_REPO.md`. La ventana sigue abierta y medida: el commit huérfano
-`dc4904e0c763` todavía servía `logs/` con 46 ficheros a 17 días de la reescritura.
+**Bloque REPO ▶: desbloqueado (rol `admin` desde el 2026-09-14) y REPLANIFICADO a la variante C
+el 2026-09-15.** La variante B —«el limpio nace en la organización y no se transfiere nada»— **ya
+no es posible: la transferencia se hizo el 2026-09-10**, y con ella entró en la organización justo
+lo que B existía para evitar. Medido contra la API: los **dos** commits huérfanos
+(`dc4904e0c763` y `152c3d2f3f2e`) son alcanzables y sirven **92 ficheros**; el historial
+alcanzable, en cambio, está limpio.
+
+**Y lo que hay dentro ya no es una suposición**: son volcados `llm_anonymized_input_*.txt` cuyo
+nombre **miente**. Sobre una muestra, y sin leer contenido personal: de 28 correos, **13 son de
+dominios institucionales reales** (`uji.es`, `mondragon.edu`, `doctor.upv.es`). La anonimización
+no lo cogió todo. Los DNI y teléfonos **no discriminan** —Faker sustituye un DNI por otro DNI—,
+así que lo que decide son los dominios.
+
+**Por eso `filter-repo` no basta**: los volcados no están en la historia, así que reescribirla no
+los toca. La **variante C** es un repositorio nuevo en la organización, con almacén de objetos
+nuevo, al que se empuja el historial filtrado; el sucio se conserva como red y se borra al
+verificar. Pasos en `planificacion/fase1/61_BLOQUE_REPO.md`.
+
+**Lo que ya está hecho y no hay que repetir**: las 12 variables, los dos anclajes de GCP
+—demostrados por **dos despliegues reales** el 2026-09-15—, y el paso **0.bis** (los tres ficheros
+que sólo protegía `.git/info/exclude`, que no viaja, movidos a `_local/docs_operacion/`;
+comprobado además que ninguno entró nunca al historial).
 
 **El orden de lo que queda: DEP → PLG → DIN → FUN**, con **PRC en paralelo y a tandas** cuando
 lleguen las fichas validadas, y **REPO intercalado** en cuanto el usuario ejecute REPO.1.

@@ -1,18 +1,73 @@
 ## Bloque REPO — Sustituir el repositorio de GitHub por uno sin objetos huérfanos
 
-> **Estado (2026-09-07): 5 prompts, DOS hechos.** REPO.3 ✅ (triaje de `docs/`) y **REPO.5 ✅**
-> (los valores de esta casa fuera de los documentos publicables). REPO.5 se adelantó porque **dejó
-> de depender de REPO.1** al revisarse el reparto, y adelantarlo evita que la documentación escrita
-> durante la espera vuelva a meter valores reales.
+> ## ⚠️ REPLANIFICADO EL 2026-09-15: la variante B ya no es posible, y lo que queda es la C
 >
-> Pendientes: **REPO.1** (crear el limpio en `universitatjaumei`, con el reparto de `docs/` y el
-> filtro del historial) y **REPO.4** (retirar los anclajes al dueño anterior), más **REPO.2** (los
-> otros dos repositorios). Los dos prompts nuevos salen de la variante B: con la A no hacían falta.
+> **La transferencia se hizo el 2026-09-10, y con ella entró en la organización justo lo que la
+> variante B existía para evitar.** La B decía «el repositorio limpio **nace** en
+> `universitatjaumei` y no se transfiere nada, porque una transferencia se lleva el almacén de
+> objetos completo». Se transfirió. Medido el 2026-09-15 contra la API:
+>
+> | Comprobación | Resultado |
+> |---|---|
+> | `repos/universitatjaumei/gov-gen-ai-platform/commits/dc4904e0c763` | **existe** |
+> | …`/contents/logs?ref=dc4904e0c763` | **46 ficheros** |
+> | …`/contents/logs?ref=152c3d2f3f2e` | **46 ficheros** |
+> | Historial **alcanzable** — `git log --all -- logs/` | **0 commits** (limpio) |
+> | Visibilidad / *forks* | **privado / 0** |
+>
+> **Lo que atenúa**: sigue privado y sin *forks*, así que la exposición se limita a quien tenga
+> acceso en la organización. **Lo que agrava, y es nuevo**: el objetivo pasa a ser **abrirlo**.
+>
+> ### Lo que hay dentro, medido y no supuesto (2026-09-15)
+>
+> Son volcados `llm_anonymized_input_*.txt`, ~1,2 MB. El nombre dice «anonymized» y **el nombre
+> miente**. Sobre una muestra de 51 KB, sin leer contenido personal —sólo patrones y dominios—:
+>
+> * **28 correos: 15 de Faker** (`example.com/net/org`) y **13 de dominios institucionales
+>   reales** — `uji.es` (9), `mondragon.edu` (2), `doctor.upv.es`, `edu.uji.es`.
+> * 19 cadenas con forma de DNI y 4 de teléfono. **Éstas no discriminan**: el anonimizador
+>   sustituye con Faker, o sea que cambia un DNI por **otro DNI válido**, así que su presencia no
+>   prueba ni desmiente nada. Los dominios sí discriminan, y dicen que **la anonimización no lo
+>   cogió todo**.
+>
+> Conclusión operativa: **hay datos personales reales en ficheros etiquetados como anonimizados**,
+> y eso decide el resto del bloque. No se investiga más: caracterizar basta para decidir, y leer
+> los volcados para «confirmar» sería hacer con ellos justo lo que se quiere evitar.
+>
+> ### Por qué `filter-repo` NO basta, que es el punto entero
+>
+> El historial alcanzable **ya está limpio** (0 commits con `logs/`). Los volcados viven en
+> **commits huérfanos**, fuera de la historia, y `git filter-repo` reescribe lo alcanzable: no los
+> toca. Sobreviven en el almacén de objetos hasta que GitHub recoja basura, **sin plazo
+> garantizado** — llevan así desde el 2026-08-21.
+>
+> Y al abrir el repositorio eso deja de ser un detalle: **cualquiera con el SHA los descarga**, y
+> en cuanto exista un *fork* los objetos se propagan a la red de *forks* de forma permanente.
+>
+> ### La variante C, que es la única que cierra esto
+>
+> **Un repositorio nuevo en la organización, con un almacén de objetos nuevo**, al que se empuja
+> el historial ya filtrado; el sucio se conserva como red hasta verificar, y luego se borra.
+> Borrar el repositorio borra su almacén, y ahí mueren los 92 volcados. Detalle en REPO.1.
+>
+> **La alternativa —pedir a GitHub Support que purgue— no se elige**, y la razón es de método: deja
+> el resultado en manos de un tercero y sin forma de comprobarlo desde fuera, mientras que borrar
+> un repositorio es verificable en un `curl`. Puede hacerse **además**, no en lugar de.
+
+> **Estado (2026-09-15): 5 prompts, DOS hechos.** REPO.3 ✅ (triaje de `docs/`) y **REPO.5 ✅**
+> (los valores de esta casa fuera de los documentos publicables).
+>
+> Pendientes: **REPO.1** (ahora variante C: repositorio nuevo en la organización), **REPO.4**
+> (retirar los anclajes al dueño anterior) y **REPO.2** (los otros dos repositorios).
 >
 > El orden es **REPO.1 → REPO.4 → REPO.2**, y REPO.1 y REPO.2 los ejecuta el usuario.
-> **REPO.4 es el único que espera a la organización**: cambia `CODEOWNERS` a un equipo y las URL
-> al dueño nuevo, así que sin organización no hay a qué apuntar. Mientras tanto, se puede seguir
-> con otros bloques sin que REPO se quede obsoleto.
+> **El rol `admin` sobre la organización, que era el prerrequisito que faltaba, está desde el
+> 2026-09-14.**
+>
+> **El paso 0.bis está HECHO (2026-09-15)**: los tres ficheros que sólo protegía
+> `.git/info/exclude` —que no viaja— se movieron a `_local/docs_operacion/`, cubierto por
+> `.gitignore:139`, que sí viaja. Comprobado además que **ninguno de los tres entró nunca al
+> historial**, así que no van en la lista de filtrado.
 
 > **Planificado el 2026-08-21.** No es un bloque de código: es una operación sobre GitHub que ejecuta
 > el usuario. Está aquí, versionado, porque el guion detallado vivía en `_local/`, que es una carpeta
@@ -188,7 +243,118 @@ pueden leer y copiar sin ceremonia.
 **Solo se pierden de verdad la fecha de creacion (2026-04-22) y el historial de ejecuciones de
 Actions.**
 
-## Los pasos (variante B: el nuevo nace en la organizacion)
+## LOS PASOS VIGENTES — VARIANTE C (replanificado el 2026-09-15)
+
+**El objetivo es dejarlo listo para ABRIRLO**, y por eso el criterio de cada paso es «que el
+repositorio publico NUNCA haya contenido esto», no «que ya no se vea».
+
+**Lo que YA ESTA HECHO y no hay que repetir** (medido el 2026-09-15):
+
+- El remoto es `universitatjaumei/gov-gen-ai-platform`; las dos ramas estan subidas y al dia.
+- Las **12 variables** estan puestas y verificadas.
+- **Los dos anclajes de GCP** aceptan el nombre nuevo, y no es teoria: el 2026-09-15 se
+  desplegaron DOS veces desde ahi (`8e518e0`), con `deploy.yml` verde hasta el paso de salud.
+  Eso era el paso 6 de la variante B, y ya esta cumplido.
+- **0.bis**: los tres ficheros de `.git/info/exclude` movidos a `_local/docs_operacion/`.
+- El historial **alcanzable** no tiene `logs/` (0 commits).
+
+```
+# PROMPT REPO.1 (variante C) — Lo hace el usuario
+# Deploy: n/a
+
+## Por que
+El repositorio de la organizacion arrastra DOS commits huerfanos con 92 volcados que contienen
+correos institucionales reales. `filter-repo` no los alcanza: no estan en la historia. Abrir el
+repositorio con ellos dentro los hace descargables por SHA para cualquiera, y permanentes en
+cuanto exista un fork.
+
+## Los pasos, y el orden importa
+1. RESPALDO fuera del portatil, otra vez y con fecha de hoy:
+   git bundle create ../respaldo-$(date +%F).bundle --all
+   git bundle verify ../respaldo-$(date +%F).bundle
+   El del 2026-09-07 existe (11,1 MB) pero es anterior a 29 commits.
+
+2. FILTRAR EN UN CLON DE TRABAJO, nunca aqui: `filter-repo` reescribe todos los SHA y dejaria
+   este clon divergente de lo que ya esta empujado.
+   git clone --no-local . ../filtrado && cd ../filtrado
+   git filter-repo --invert-paths \
+     --path docs/VALIDACION_GERENCIA.html \
+     --path docs/VALIDACION_GERENCIA_AUTONOMA.html \
+     --path docs/VALIDACION_GERENCIA_RAG_VS_AGENTICO.html \
+     --path docs/LITERATURA_ASISTENTES_NORMATIVA.html \
+     --path docs/chatbots-publicos/demo-uji.html \
+     --path docs/chatbots-publicos/uji-theme.css \
+     --path docs/chatbots-publicos/marcauji.png
+
+   OJO: tres de las siete rutas NO estan en `git ls-files` y es CORRECTO — el trio de marca salio
+   del arbol el 2026-09-07 pero sigue en el historial, que es sobre lo que actua filter-repo.
+   Quien coteje la lista contra el arbol y «arregle» lo que no resuelve, publica el logotipo.
+   Se comprueba contra el historial:
+     git log --all --oneline -- docs/chatbots-publicos/marcauji.png
+
+   Y NO hay que anadir los tres de 0.bis: se comprobo que nunca entraron al historial.
+
+3. COMPROBAR EN EL FILTRADO, antes de empujar y las cuatro cosas:
+   - las siete rutas han desaparecido:  git log --all --oneline -- <ruta>   (vacio)
+   - `logs/` tampoco esta:              git log --all --oneline -- logs/    (vacio)
+   - el recuento de commits no se desploma (eran ~736 el 15-09): filter-repo borra commits que
+     se quedan vacios, y decenas de menos significaria que un --path cazo de mas;
+   - la suite sigue verde, que lo demuestran `test_repo3_el_indice_de_docs_no_miente.py` y
+     `test_ninguna_marca_institucional_esta_versionada.py` en vez de suponerlo.
+
+4. RENOMBRAR EL SUCIO, que pasa a ser la red:
+   gh repo rename gov-gen-ai-platform-sucio --repo universitatjaumei/gov-gen-ai-platform
+   NO se borra todavia. Hasta el paso 8 es lo unico que garantiza que no se ha perdido nada.
+
+5. CREAR EL LIMPIO, VACIO, con el nombre canonico que acaba de quedar libre:
+   gh repo create universitatjaumei/gov-gen-ai-platform --private
+   Sin README, sin .gitignore y sin licencia: si GitHub crea un commit inicial, el push choca.
+   ALMACEN DE OBJETOS NUEVO — es el punto entero de la variante C.
+
+6. EMPUJAR LAS DOS RAMAS desde el clon filtrado:
+   git remote set-url origin git@github.com:universitatjaumei/gov-gen-ai-platform.git
+   git push -u origin main
+   git push -u origin desarrollo
+   Las dos: `desarrollo` es donde vive el trabajo y subir solo `main` dejaria fuera lo no
+   desplegado.
+
+7. REHACER LO QUE NO VIAJA con el repositorio, y verificarlo:
+   - las 12 variables (gh variable list en el sucio -> gh variable set en el limpio);
+   - los anclajes de GCP NO hay que tocarlos: la condicion es por RUTA
+     (`assertion.repository=='universitatjaumei/gov-gen-ai-platform'`) y el nombre no cambia;
+   - un commit firmado y CI+DCO en verde;
+   - **UN DESPLIEGUE REAL** desde el limpio, hasta el paso de salud. Es lo unico que demuestra
+     que WIF sigue aceptando, y que el almacen nuevo no rompio nada.
+   - **Y LA COMPROBACION QUE DA NOMBRE AL BLOQUE**:
+       gh api repos/universitatjaumei/gov-gen-ai-platform/commits/dc4904e0c763   -> 404
+       gh api repos/universitatjaumei/gov-gen-ai-platform/commits/152c3d2f3f2e   -> 404
+     Si alguno responde, el almacen nuevo NO esta limpio y no se sigue.
+
+8. BORRAR EL SUCIO. Aqui mueren los 92 volcados, y no antes:
+   gh auth refresh -h github.com -s delete_repo   (el token no trae ese permiso por defecto)
+   gh repo delete universitatjaumei/gov-gen-ai-platform-sucio --yes
+
+9. RECLONAR EN LOCAL. Este clon tiene los SHA viejos y quedaria divergente para siempre; seguir
+   trabajando en el es garantia de volver a empujar lo filtrado.
+
+## Criterio de done
+- [ ] Los dos SHA huerfanos dan 404 en el repositorio nuevo
+- [ ] Las dos ramas coinciden con las locales del clon filtrado
+- [ ] Las 12 variables puestas, CI y DCO verdes, y UN DESPLIEGUE REAL en verde
+- [ ] El sucio borrado
+- [ ] Reclonado en local
+
+## Lo que NO hace este prompt
+- **No abre el repositorio.** Abrir es el ULTIMO paso y va despues de REPO.4, que retira los
+  anclajes al dueno anterior. Un repositorio abierto que todavia se nombra a si mismo con el
+  dueno viejo es un repositorio que hay que tocar despues de abrirlo.
+- **No renuncia a pedir la purga a GitHub Support.** Se puede hacer ademas, y no en lugar de:
+  borrar el repositorio es verificable desde fuera y un ticket no.
+```
+
+---
+
+## Los pasos de la variante B (SUPERADOS el 2026-09-15 por la transferencia — se conservan porque explican de dónde salen las decisiones)
 0. PRERREQUISITOS que no se averiguan desde fuera, y que van ANTES de tocar nada. Son las tres
    preguntas a UADTI: rol con el que se incorpora el mantenedor y **quien aprueba la creacion**,
    **permisos base para miembros** de la organizacion (decide quien ve el repositorio mientras
