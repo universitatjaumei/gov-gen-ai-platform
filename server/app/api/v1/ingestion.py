@@ -69,7 +69,7 @@ async def user_upload(
             # usuario preguntaría y el asistente no encontraría nada, sin ningún error
             # a la vista.
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail={"code": "PDF_WITHOUT_TEXT_LAYER", "message": str(escaneado)},
             ) from escaneado
     finally:

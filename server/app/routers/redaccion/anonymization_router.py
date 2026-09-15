@@ -221,7 +221,7 @@ async def patch_anonymization_mode(
 
     if workspace.status in _LOCKED_STATUSES:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="MODE_LOCKED_DURING_EXECUTION",
         )
 

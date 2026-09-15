@@ -47,14 +47,14 @@ async def preview_deterministic(body: DeterministicPreviewRequest) -> Response:
     No persiste nada. Devuelve bytes PNG o SVG.
     """
     if not body.rows:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="rows cannot be empty")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="rows cannot be empty")
 
     df = pd.DataFrame(body.rows)
     svc = DeterministicChartService()
     try:
         image_bytes = svc.render(df, body.config)
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
     media_type = "image/svg+xml" if body.config.output_format == "svg" else "image/png"
     return Response(content=image_bytes, media_type=media_type)
@@ -76,7 +76,7 @@ async def preview_script(
     No persiste nada. El script recibe `df` (pandas DataFrame) ya cargado.
     """
     if not rows:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="rows cannot be empty")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="rows cannot be empty")
 
     df = pd.DataFrame(rows)
     try:
@@ -84,7 +84,7 @@ async def preview_script(
             code, df, output_format=output_format, sandbox_client=sandbox
         )
     except ChartRenderError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
     media_type = "image/svg+xml" if output_format == "svg" else "image/png"
     return Response(content=image_bytes, media_type=media_type)

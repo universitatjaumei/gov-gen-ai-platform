@@ -230,7 +230,7 @@ async def analyze_html(
         result = await service.analyze(html=body.html, url_hint=body.url_hint)
     except EmptyHtmlError:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="El HTML no puede estar vacío.",
         )
     return {
@@ -634,7 +634,7 @@ def _assert_cumple_el_contrato(content: bytes, filename: str | None) -> None:
         texto = content.decode("utf-8")
     except UnicodeDecodeError:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="El fichero no es texto UTF-8.",
         ) from None
 
@@ -649,7 +649,7 @@ def _assert_cumple_el_contrato(content: bytes, filename: str | None) -> None:
             assert_formato_faq(cuerpo)
         except FaqFormatoInvalido as mal_formada:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail={
                     "code": "FAQ_FORMAT_INVALID",
                     "message": str(mal_formada),
@@ -671,7 +671,7 @@ def _assert_cumple_el_contrato(content: bytes, filename: str | None) -> None:
             for e in exc.errors()
         ]
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "CORPUS_CONTRACT_VIOLATION",
                 "message": (
@@ -683,7 +683,7 @@ def _assert_cumple_el_contrato(content: bytes, filename: str | None) -> None:
         ) from exc
     except Exception as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "CORPUS_CONTRACT_VIOLATION",
                 "message": str(exc),

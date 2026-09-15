@@ -139,7 +139,7 @@ class VeredictoDeCitas(BaseModel):
 def _dentro_del_limite(texto: str) -> None:
     if len(texto.encode("utf-8")) > MAXIMO_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail={
                 "code": "TEXTO_DEMASIADO_GRANDE",
                 "message": f"El texto no puede pasar de {MAXIMO_BYTES} bytes.",
@@ -260,7 +260,7 @@ async def consultar_vigencia(
     """
     if (document_id is None) == (url is None):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "IDENTIFICA_UN_DOCUMENTO",
                 "message": (
