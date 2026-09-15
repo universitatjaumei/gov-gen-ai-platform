@@ -442,7 +442,11 @@ jobs:
       #
       # El `exit $rc` conserva lo que importa: el `outcome` del paso sigue diciendo la verdad, y
       # es lo que lee la tabla del resumen.
-      - name: Python dependency audit (pip-audit — informa, no bloquea)
+      # Este paso SIGUE sin bloquear, y a propósito: su trabajo es producir los dos informes,
+      # no juzgarlos. Quien juzga es el paso siguiente, que lee el fichero de aceptados. Si este
+      # paso bloqueara, `pip-audit` tumbaría el job por cualquier aviso —incluidos los que nadie
+      # puede arreglar— y volveríamos justo al guardarraíl que se acaba desactivando.
+      - name: Python dependency audit (pip-audit — produce los informes)
         id: pip_audit
         continue-on-error: true
         run: |
@@ -452,6 +456,27 @@ jobs:
           uvx pip-audit -r sbom/mcp-requirements.txt \
             --format json --output sbom/pip-audit-mcp.json --progress-spinner off || rc=1
           exit $rc
+
+      # **BLOQUEA**, y el criterio está escrito entero en el guion y en `avisos_aceptados.toml`:
+      # un aviso con corrección publicada y sin aceptar pone rojo el build. Lo que no tiene
+      # corrección informa.
+      #
+      # No es un umbral por severidad, que es lo que el plan proponía, porque **`pip-audit` no
+      # informa de severidad**: sus entradas traen `id`, `aliases`, `description` y
+      # `fix_versions`, y nada más. Un umbral por CVSS tendría que inventarse el dato o dejar un
+      # hueco por el que pasan los avisos sin severidad, y eso no se ve en el verde.
+      #
+      # `if: always()` porque el paso anterior sale con 1 cuando encuentra algo —que es
+      # precisamente cuando este paso hace falta— y `continue-on-error` solo dice «no tumbes el
+      # job», no «ejecútalo igualmente». Es la misma lección que costó el escaneo del historial
+      # saliendo `skipped` en la primera ejecución.
+      - name: Vulnerability gate — Python (BLOCKS)
+        if: always()
+        run: |
+          python scripts/puerta_de_avisos.py \
+            sbom/pip-audit-server.json sbom/pip-audit-mcp.json \
+            --aceptados avisos_aceptados.toml \
+            --resumen "$GITHUB_STEP_SUMMARY"
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -467,11 +492,23 @@ jobs:
       # `--omit=dev` porque una vulnerabilidad en la cadena de construcción no viaja al
       # navegador de nadie. Interesa, pero no es el mismo riesgo, y mezclarlas hace que el
       # número deje de significar algo.
-      - name: JS dependency audit (npm audit — informa, no bloquea)
+      # **BLOQUEA desde DEP.7**, y aquí sí por severidad: al revés que `pip-audit`, `npm audit`
+      # la trae, así que `--audit-level=high` es un umbral real y no una aproximación. Medido el
+      # 2026-09-15 antes de encenderlo: el árbol de producción está en **cero** avisos, así que
+      # la puerta nace en verde y lo que vigila es la deriva futura.
+      #
+      # El `tee` conserva el informe pase lo que pase —el artefacto tiene que llevarlo también
+      # cuando el paso se pone rojo, que es cuando más falta hace— y `PIPESTATUS` recupera el
+      # código de `npm audit`, que sin él quedaría enmascarado por el del `tee`. Sin esas dos
+      # líneas, bloquear habría costado perder el informe justo en el caso interesante.
+      - name: JS dependency audit (npm audit — BLOCKS on high)
         id: npm_audit
-        continue-on-error: true
         working-directory: frontend
-        run: npm audit --omit=dev --audit-level=high --json > "$GITHUB_WORKSPACE/sbom/npm-audit.json"
+        run: |
+          set -o pipefail
+          npm audit --omit=dev --audit-level=high --json \
+            | tee "$GITHUB_WORKSPACE/sbom/npm-audit.json"
+          exit "${PIPESTATUS[0]}"
 
       # El SBOM es lo que se le entrega a quien audite, y la razón de que la retención de este
       # artefacto sea de 90 días y no de 7 como la de cobertura: es evidencia con fecha de qué
@@ -529,8 +566,8 @@ jobs:
             echo ""
             echo "| Comprobación | Resultado |"
             echo "|---|---|"
-            echo "| pip-audit (server + mcp) | ${{ steps.pip_audit.outcome }} |"
-            echo "| npm audit (frontend, prod) | ${{ steps.npm_audit.outcome }} |"
+            echo "| pip-audit (server + mcp, informa) | ${{ steps.pip_audit.outcome }} |"
+            echo "| npm audit (frontend, prod — BLOQUEA en high) | ${{ steps.npm_audit.outcome }} |"
             echo ""
             echo "Informes completos y SBOM en el artefacto \`supply-chain\`."
           } >> "$GITHUB_STEP_SUMMARY"

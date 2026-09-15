@@ -1,0 +1,54 @@
+# Avisos de seguridad aceptados a propósito, con fecha de caducidad
+#
+# Esto **no** es una lista de exclusiones. Una exclusión dice «no me lo cuentes»; una aceptación
+# dice «lo he mirado, sé por qué sigue aquí, y esto caduca». La diferencia está en los cuatro
+# campos obligatorios, y sobre todo en el último: **un aviso aceptado sin fecha es un aviso
+# olvidado**, y una lista de olvidos con aspecto de política es peor que no tener política.
+#
+# La puerta de `ci.yml` (job `supply-chain`) consulta este fichero. El criterio, decidido el
+# 2026-09-15 al cerrar DEP.7:
+#
+#   Un aviso BLOQUEA si tiene corrección publicada (`fix_versions` no vacío) y no está aceptado
+#   aquí, o lo está pero su aceptación ha caducado. Si no hay corrección publicada, informa.
+#
+# **Por qué ese criterio y no «bloquear en alto y crítico», que es lo que el prompt proponía**:
+# `pip-audit` no informa de severidad. Sus entradas traen `id`, `aliases`, `description` y
+# `fix_versions`, y ni un CVSS ni una etiqueta «high». Un umbral por severidad sobre el lado
+# Python tendría que inventarse el dato o dejar un hueco silencioso —los avisos sin severidad no
+# bloquearían nunca—, que es la forma de avería que este proyecto ya se ha comido dos veces.
+# «¿Tiene corrección?» sí es un dato que la herramienta da, y además es **exactamente la pregunta
+# que decide si quien lee el rojo puede hacer algo**: si hay versión corregida, se sube; si no la
+# hay, subir no es una opción y el sitio del aviso es este fichero. Ésa era la razón escrita
+# cuando el job nació informando, y este criterio la respeta en vez de contradecirla.
+#
+# El lado JavaScript sí tiene severidad, así que `npm audit` bloquea en `high` con
+# `--audit-level=high`, sobre el árbol de producción (`--omit=dev`).
+#
+# Campos, los cuatro obligatorios:
+#   id         El identificador tal y como lo emite la herramienta (PYSEC-…, CVE-…, GHSA-…).
+#   paquete    A qué paquete afecta. Sirve para revisar la entrada sin buscar el aviso.
+#   motivo     POR QUÉ se acepta. No vale «no aplica»: hay que poder rebatirlo dentro de un año.
+#   acepta     Quién lo aceptó. Una persona, no un equipo: alguien tiene que poder explicarlo.
+#   caduca     ISO 8601. Al llegar la fecha, `test_dep7_las_aceptaciones_caducan.py` se pone rojo.
+#
+# Para renovar una aceptación se vuelve a mirar y se cambia la fecha, con el motivo al día. Es
+# deliberadamente un poco incómodo: si renovar fuera gratis, la lista crecería sola y volveríamos
+# a tener una lista de exclusiones con otro nombre.
+
+[[aviso]]
+id = "PYSEC-2026-3447"
+paquete = "setuptools"
+motivo = """
+La corrección existe (setuptools 83.0.0) pero NO se puede aplicar: `torch` 2.11.0 declara
+`setuptools<82`, así que subirlo exige subir `torch`, que es la dependencia más pesada del árbol
+y entra por el extra `local-models`. Aceptarlo aquí es lo honesto mientras ese techo siga puesto;
+lo que no sería honesto es apagar la puerta por él.
+
+Alcance real: `setuptools` es herramienta de construcción. Llega al árbol como dependencia de
+`spacy`, `thinc` y `torch`, y no se ejecuta al atender una petición.
+
+Al renovar, comprobar primero si `torch` ya ha levantado el techo: `uv tree --invert --package
+setuptools` lo dice en una línea.
+"""
+acepta = "Modesto Fabra"
+caduca = "2026-12-15"

@@ -2,8 +2,14 @@
 
 El job `supply-chain` de `ci.yml` prepara la auditoría de seguridad independiente que la OIATI
 pide antes de la puesta en explotación: inventario de dependencias (SBOM), vulnerabilidades
-conocidas y escaneo de secretos. Casi todo él **informa y no bloquea**, a propósito y con la
-razón escrita en el propio fichero.
+conocidas y escaneo de secretos.
+
+**Desde DEP.7 (2026-09-15) ya no informa sólo: tres pasos bloquean** —el escaneo de secretos del
+árbol, la puerta de avisos de Python y `npm audit` en `high`— y el resto sigue informando a
+propósito, con la razón escrita en el propio fichero. El criterio de la puerta de Python no es un
+umbral por severidad, porque `pip-audit` no la informa: bloquea lo que **tiene corrección
+publicada y no está aceptado** en `avisos_aceptados.toml`. Lo que no se puede arreglar informa,
+que era la condición para que el guardarraíl no acabe desactivado.
 
 Eso es justo lo que lo hace frágil de una manera silenciosa. Un job casi entero en
 `continue-on-error` se degrada sin dar ningún síntoma: sigue en verde, sigue subiendo su
@@ -172,6 +178,88 @@ def test_los_dos_proyectos_se_auditan_aunque_el_primero_encuentre_algo(
     assert "exit $rc" in run, (
         "Y el paso tiene que acabar propagando el resultado, o su `outcome` diría «success» "
         "siempre y la tabla del resumen estaría mintiendo."
+    )
+
+
+def test_el_paso_que_audita_sigue_sin_bloquear_porque_bloquea_el_siguiente(
+    job: dict[str, Any],
+) -> None:
+    """DEP.7 separó producir los informes de juzgarlos, y la separación es el diseño.
+
+    Si `pip-audit` bloqueara directamente, tumbaría el job por CUALQUIER aviso, incluidos los que
+    nadie puede arreglar porque no tienen versión corregida — el guardarraíl siempre rojo que se
+    acaba desactivando, que es la razón por la que el job nació informando. El juicio vive en el
+    paso siguiente, que sí sabe distinguir.
+    """
+    auditar = _paso(job, "pip-audit")
+    assert auditar.get("continue-on-error", False), (
+        "El paso que ejecuta `pip-audit` NO bloquea, y no es un descuido: su trabajo es producir "
+        "los dos informes. Quien decide es `Vulnerability gate — Python`, que lee "
+        "`avisos_aceptados.toml` y distingue lo que tiene corrección de lo que no. Si este paso "
+        "pasa a bloquear, esa distinción desaparece y vuelve el rojo inarreglable."
+    )
+
+
+def test_la_puerta_de_python_bloquea_y_corre_siempre(job: dict[str, Any]) -> None:
+    """La pieza que DEP.7 añade: de informar a bloquear, con criterio escrito."""
+    puerta = _paso(job, "Vulnerability gate", "Python")
+    assert not puerta.get("continue-on-error", False), (
+        "La puerta de avisos de Python BLOQUEA. Es la mitad de DEP.7: sin ella el bloque deja el "
+        "árbol limpio hoy y sucio dentro de tres meses. Si está roja, la salida es subir el "
+        "paquete o aceptar el aviso en `avisos_aceptados.toml` con motivo y caducidad."
+    )
+    assert puerta.get("if") == "always()", (
+        "Necesita `if: always()`. El paso anterior sale con 1 en cuanto encuentra algo, que es "
+        "exactamente cuando esta puerta hace falta; sin `always()` saldría `skipped` y el job "
+        "quedaría verde con avisos sin juzgar. Es la misma avería que dejó el escaneo del "
+        "historial sin ejecutar en la primera ejecución."
+    )
+    run = puerta["run"]
+    assert "puerta_de_avisos.py" in run
+    assert "--aceptados avisos_aceptados.toml" in run, (
+        "La puerta tiene que leer el fichero de aceptados. Sin él bloquearía por avisos ya "
+        "decididos, y la primera reacción de quien se lo encuentre será quitar el paso."
+    )
+    for informe in ("pip-audit-server.json", "pip-audit-mcp.json"):
+        assert informe in run, (
+            f"La puerta juzga los DOS informes. Si {informe} no está, ese árbol se audita y "
+            f"nadie mira el resultado, que es el mismo agujero de la primera ejecución con otra "
+            f"forma."
+        )
+
+
+def test_npm_audit_bloquea_y_conserva_su_informe(job: dict[str, Any]) -> None:
+    """En JavaScript sí hay severidad, así que el umbral es real y no una aproximación."""
+    paso = _paso(job, "npm audit")
+    assert not paso.get("continue-on-error", False), (
+        "`npm audit` bloquea desde DEP.7. Al revés que `pip-audit`, trae severidad, así que "
+        "`--audit-level=high` es un umbral de verdad. Medido antes de encenderlo: el árbol de "
+        "producción estaba en cero avisos."
+    )
+    run = paso["run"]
+    assert "--audit-level=high" in run, "El umbral es `high`, decidido y no heredado."
+    assert "--omit=dev" in run, (
+        "Sobre el árbol de producción: una vulnerabilidad en la cadena de construcción no viaja "
+        "al navegador de nadie. Mezclarlas hace que el número deje de significar algo."
+    )
+    assert "set -o pipefail" in run and "PIPESTATUS" in run, (
+        "El informe se conserva con `tee` y el código de salida se recupera con `PIPESTATUS`. "
+        "Sin las dos cosas, encender la puerta cuesta perder el informe justo cuando el paso se "
+        "pone rojo — que es cuando el artefacto tiene que llevarlo."
+    )
+
+
+def test_el_fichero_de_aceptados_existe_y_lo_vigila_un_test() -> None:
+    """Aceptar tiene que costar algo, o la lista crece hasta cubrir el árbol."""
+    aceptados = RAIZ / "avisos_aceptados.toml"
+    assert aceptados.is_file(), (
+        "Falta `avisos_aceptados.toml`. Es lo que permite que la puerta bloquee sin bloquear por "
+        "cosas ya decididas."
+    )
+    vigilante = RAIZ / "server" / "tests" / "infra" / "test_dep7_las_aceptaciones_caducan.py"
+    assert vigilante.is_file(), (
+        "Falta el test que vigila las caducidades. Sin él, aceptar es gratis y para siempre, y "
+        "el fichero de aceptados degenera en una lista de exclusiones con mejor prosa."
     )
 
 
