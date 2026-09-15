@@ -44,15 +44,42 @@
 > Y al abrir el repositorio eso deja de ser un detalle: **cualquiera con el SHA los descarga**, y
 > en cuanto exista un *fork* los objetos se propagan a la red de *forks* de forma permanente.
 >
-> ### La variante C, que es la única que cierra esto
+> ### ~~La variante C~~ → **LA VARIANTE D** (corregido el mismo 2026-09-15)
 >
-> **Un repositorio nuevo en la organización, con un almacén de objetos nuevo**, al que se empuja
-> el historial ya filtrado; el sucio se conserva como red hasta verificar, y luego se borra.
-> Borrar el repositorio borra su almacén, y ahí mueren los 92 volcados. Detalle en REPO.1.
+> **La C —repositorio nuevo con almacén nuevo— está BLOQUEADA POR PERMISOS**, medido:
 >
-> **La alternativa —pedir a GitHub Support que purgue— no se elige**, y la razón es de método: deja
-> el resultado en manos de un tercero y sin forma de comprobarlo desde fuera, mientras que borrar
-> un repositorio es verificable en un `curl`. Puede hacerse **además**, no en lugar de.
+> | | |
+> |---|---|
+> | Rol en la organización | **`member`** (no *owner*) |
+> | `members_can_create_repositories` | **`false`** |
+> | Permiso sobre el repositorio | **`admin=true`** |
+>
+> O sea: **se puede borrar el repositorio pero no crear uno**, y pedir el permiso otra vez es
+> justo lo que se quiere evitar. La C exigiría una gestión con UADTI por cada intento.
+>
+> **Y la alternativa que descarté al escribir la C estaba MAL DESCARTADA.** El argumento fue que
+> pedir la purga a GitHub Support «deja el resultado en manos de un tercero y **sin forma de
+> comprobarlo desde fuera**». La segunda mitad es falsa: **se comprueba con la misma llamada que
+> encontró el problema**, `gh api …/commits/<sha>` → 404. Que dependa de un tercero es un problema
+> de plazo, no de verificabilidad, y no es lo mismo.
+>
+> **La variante D: pedir a GitHub Support la recogida de basura, y verificar.** Y hay tres
+> mediciones que dicen que aquí funciona limpiamente, porque **nada ancla los huérfanos**:
+>
+> | Lo que podría anclarlos | Medido |
+> |---|---|
+> | *Forks* (heredan el almacén de objetos) | **0** |
+> | *Pull requests* (sus `refs/pull/*` los harían alcanzables) | **0** |
+> | Refs de *pull* en el remoto | **0** |
+> | `logs/` en el historial alcanzable | **0 commits** |
+>
+> Con cero *forks* y cero *pull requests*, los dos commits son **genuinamente inalcanzables**: una
+> recogida de basura se los lleva. Ésa es exactamente la condición en la que la purga de Support
+> hace lo que promete; si hubiera un *fork* o un PR que los citara, no bastaría y habría que
+> volver a la C.
+>
+> **La exposición mientras tanto, medida**: repositorio privado, **7 colaboradores directos** y 30
+> miembros en la organización. Es acotada y conocida, no pública.
 
 > **Estado (2026-09-15): 5 prompts, DOS hechos.** REPO.3 ✅ (triaje de `docs/`) y **REPO.5 ✅**
 > (los valores de esta casa fuera de los documentos publicables).
@@ -243,7 +270,90 @@ pueden leer y copiar sin ceremonia.
 **Solo se pierden de verdad la fecha de creacion (2026-04-22) y el historial de ejecuciones de
 Actions.**
 
-## LOS PASOS VIGENTES — VARIANTE C (replanificado el 2026-09-15)
+## LOS PASOS VIGENTES — VARIANTE D (2026-09-15)
+
+**No hace falta crear ningún repositorio ni pedir permisos nuevos.** Son tres cosas: filtrar lo
+que sí está en la historia, pedir a Support la recogida de basura, y **no abrir hasta que los dos
+SHA den 404**.
+
+```
+# PROMPT REPO.1 (variante D) — Lo hace el usuario
+# Deploy: n/a
+
+## Por que
+Los 92 volcados viven en dos commits huerfanos y contienen correos institucionales reales.
+`filter-repo` no los alcanza porque no estan en la historia. Y no se puede crear un repositorio
+limpio: la organizacion tiene `members_can_create_repositories=false`.
+
+Lo que si se puede: pedir a GitHub que recoja basura. Y funciona porque NADA los ancla — cero
+forks, cero pull requests, cero refs de pull. Medido el 2026-09-15.
+
+## Los pasos
+1. RESPALDO fuera del portatil, con fecha de hoy:
+   git bundle create ../respaldo-$(date +%F).bundle --all
+   git bundle verify ../respaldo-$(date +%F).bundle
+
+2. FILTRAR LO QUE SI ESTA EN LA HISTORIA (las 7 rutas del reparto de docs/), en un CLON DE
+   TRABAJO y nunca aqui: filter-repo reescribe todos los SHA.
+   git clone --no-local . ../filtrado && cd ../filtrado
+   git filter-repo --invert-paths \
+     --path docs/VALIDACION_GERENCIA.html \
+     --path docs/VALIDACION_GERENCIA_AUTONOMA.html \
+     --path docs/VALIDACION_GERENCIA_RAG_VS_AGENTICO.html \
+     --path docs/LITERATURA_ASISTENTES_NORMATIVA.html \
+     --path docs/chatbots-publicos/demo-uji.html \
+     --path docs/chatbots-publicos/uji-theme.css \
+     --path docs/chatbots-publicos/marcauji.png
+
+   OJO: tres de las siete NO estan en `git ls-files` y es CORRECTO — el trio de marca salio del
+   arbol el 2026-09-07 pero sigue en el historial, que es sobre lo que actua filter-repo. Quien
+   coteje contra el arbol y «arregle» lo que no resuelve, publica el logotipo.
+   Los tres de 0.bis NO van: se comprobo que nunca entraron al historial.
+
+3. COMPROBAR EN EL FILTRADO antes de empujar:
+   - las siete rutas desaparecidas:  git log --all --oneline -- <ruta>   (vacio)
+   - el recuento de commits no se desploma (eran ~740 el 15-09)
+   - la suite verde: test_repo3_el_indice_de_docs_no_miente.py y
+     test_ninguna_marca_institucional_esta_versionada.py lo demuestran
+
+4. EMPUJAR FORZADO las dos ramas. ESTO CREA MAS HUERFANOS —los actuales— y no importa: van en
+   la misma peticion a Support del paso 5.
+   git push --force-with-lease origin main
+   git push --force-with-lease origin desarrollo
+
+5. ABRIR TICKET A GITHUB SUPPORT (support.github.com), pidiendo la recogida de basura del
+   repositorio `universitatjaumei/gov-gen-ai-platform` para eliminar objetos inalcanzables.
+   Citar los dos SHA: dc4904e0c763 y 152c3d2f3f2e. Decir que el repositorio es privado, sin
+   forks y sin pull requests, que es lo que hace la operacion limpia.
+
+6. VERIFICAR, y este paso es la PUERTA:
+   gh api repos/universitatjaumei/gov-gen-ai-platform/commits/dc4904e0c763   -> 404
+   gh api repos/universitatjaumei/gov-gen-ai-platform/commits/152c3d2f3f2e   -> 404
+   Y los huerfanos que cree el paso 4, si se apuntaron sus SHA.
+
+7. RECLONAR EN LOCAL: este clon tiene los SHA viejos tras el filtrado.
+
+## Criterio de done
+- [ ] Las 7 rutas fuera del historial alcanzable, y la suite verde
+- [ ] Ticket abierto a Support, con los dos SHA citados
+- [ ] LOS DOS SHA DAN 404 — sin esto el bloque NO esta cerrado y NO SE ABRE el repositorio
+- [ ] Reclonado en local
+
+## La puerta, dicha aparte porque es lo unico irreversible
+**NO SE CAMBIA LA VISIBILIDAD A PUBLICA HASTA QUE EL PASO 6 DE 404.** Abrir con los huerfanos
+dentro los hace descargables por cualquiera con el SHA, y en cuanto exista un fork se propagan de
+forma permanente. Es el unico paso de todo el bloque que no tiene vuelta atras.
+
+## Si Support tarda o se niega
+Entonces —y solo entonces— se vuelve a la variante C, que exige UNA gestion con UADTI: que un
+owner cree el repositorio vacio, o que ponga `members_can_create_repositories=true` una vez.
+Borrar el sucio SI se puede sin pedir nada (`admin=true` sobre el repo y
+`members_can_delete_repositories=true`), asi que lo unico que hay que pedir es la creacion.
+```
+
+---
+
+## Los pasos de la variante C (BLOQUEADA por permisos el 2026-09-15 — se conservan como plan B)
 
 **El objetivo es dejarlo listo para ABRIRLO**, y por eso el criterio de cada paso es «que el
 repositorio publico NUNCA haya contenido esto», no «que ya no se vea».

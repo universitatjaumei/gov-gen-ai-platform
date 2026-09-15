@@ -179,9 +179,21 @@ no lo cogió todo. Los DNI y teléfonos **no discriminan** —Faker sustituye un
 así que lo que decide son los dominios.
 
 **Por eso `filter-repo` no basta**: los volcados no están en la historia, así que reescribirla no
-los toca. La **variante C** es un repositorio nuevo en la organización, con almacén de objetos
-nuevo, al que se empuja el historial filtrado; el sucio se conserva como red y se borra al
-verificar. Pasos en `planificacion/fase1/61_BLOQUE_REPO.md`.
+los toca. Y **la variante C —repositorio nuevo— está bloqueada por permisos**: el usuario es
+`member` de la organización, que tiene `members_can_create_repositories=false`; puede **borrar**
+el repositorio (es `admin` sobre él) pero no crear uno.
+
+**Vigente: la variante D — pedir a GitHub Support la recogida de basura, y verificar.** Y el
+argumento con el que se descartó Support al escribir la C **estaba mal**: se dijo que no era
+comprobable desde fuera, y sí lo es — con la misma llamada que encontró el problema. Lo que
+además dice que aquí funciona limpiamente es que **nada ancla los huérfanos**: **0 *forks*, 0
+*pull requests*, 0 refs de *pull***. Con eso, una recogida de basura se los lleva.
+
+**La puerta, y es lo único irreversible del bloque**: no se cambia la visibilidad a pública hasta
+que los dos SHA den **404**. Pasos en `planificacion/fase1/61_BLOQUE_REPO.md`.
+
+**Exposición mientras tanto, medida**: privado, **7 colaboradores directos**, 30 miembros en la
+organización. Acotada y conocida.
 
 **Lo que ya está hecho y no hay que repetir**: las 12 variables, los dos anclajes de GCP
 —demostrados por **dos despliegues reales** el 2026-09-15—, y el paso **0.bis** (los tres ficheros
