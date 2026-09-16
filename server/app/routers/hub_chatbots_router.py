@@ -317,6 +317,118 @@ async def _leer_con_disponibilidad(session, chatbot) -> ChatbotRead:
     )
 
 
+class EstrategiaOut(BaseModel):
+    nombre: str
+    descripcion: str | None = None
+    #: `nucleo` o `paquete`. Que el panel pueda distinguirlas importa: una estrategia de un
+    #: paquete desaparece si alguien lo desinstala, y quien la elige debería saberlo.
+    origen: str
+    distribucion: str | None = None
+
+
+class PerfilOut(BaseModel):
+    nombre: str
+    #: False para los de `PERFILES_SIN_CONFIGURAR`: se ofrecen, pero no se pueden seleccionar.
+    configurable: bool
+    descripcion: str | None = None
+    composicion: dict[str, str] | None = None
+
+
+class ModoOut(BaseModel):
+    nombre: str
+    descripcion: str | None = None
+
+
+class OpcionesDeGrafoOut(BaseModel):
+    """Lo que el panel puede ofrecer **en esta instalación**.
+
+    Existe porque desde PLG.1 la lista no se puede conocer en tiempo de compilación: depende de
+    qué paquetes haya instalados. El frontend llevaba los cuatro nombres *hardcodeados* en tres
+    ficheros, que además de violar la regla maestra de contrato era lo primero con lo que un
+    perfil instalado se habría dado de bruces.
+    """
+
+    perfiles: list[PerfilOut]
+    modos: list[ModoOut]
+    estrategias: dict[str, list[EstrategiaOut]]
+    #: Los ejes, en orden. El panel pinta un select por cada uno sin conocerlos de antemano.
+    ejes: list[str]
+
+
+def _primera_linea(objeto: object) -> str | None:
+    """La descripción de una opción sale de su *docstring*, y es opcional a propósito.
+
+    No se inventa i18n para nombres de terceros: si un paquete no documenta su estrategia, el
+    panel enseña el nombre y ya. Traducir lo que no controlamos sería prometer una calidad que
+    no podemos sostener.
+    """
+    doc = (getattr(objeto, "__doc__", None) or "").strip()
+    return doc.splitlines()[0].strip() if doc else None
+
+
+@router.get("/opciones-de-grafo", response_model=OpcionesDeGrafoOut)
+async def opciones_de_grafo(user: UserInfo = Depends(_require_admin)):
+    """Perfiles, modos y estrategias disponibles, con su origen.
+
+    Acotado a admin/superadmin como el resto del router. No lleva datos de ninguna organización
+    —es el catálogo de la instalación— pero enumerar qué paquetes hay instalados es información
+    del despliegue, y ésa no es pública.
+    """
+    from server.app.modules.agents_hub.agent.public_graphs.core.graph_factory import (
+        COMPOSICION_PUBLIC_KB_RICH,
+        PERFILES_SIN_CONFIGURAR,
+    )
+    from server.app.modules.agents_hub.agent.public_graphs.registry import (
+        get_profile,
+        list_profiles,
+    )
+    from server.app.modules.agents_hub.agent.public_graphs.strategies.registry import (
+        EjeDeEstrategia,
+        get_strategy,
+        list_strategies,
+    )
+    from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_pipeline_factory import (
+        list_modes,
+    )
+
+    perfiles = [
+        PerfilOut(
+            nombre=nombre,
+            configurable=nombre not in PERFILES_SIN_CONFIGURAR,
+            descripcion=_primera_linea(get_profile(nombre)),
+            composicion=dict(COMPOSICION_PUBLIC_KB_RICH) if nombre == "PUBLIC_KB_RICH" else None,
+        )
+        for nombre in sorted(list_profiles())
+    ]
+
+    estrategias: dict[str, list[EstrategiaOut]] = {}
+    for eje in EjeDeEstrategia:
+        del_eje = []
+        for nombre in list_strategies(eje):
+            factoria = get_strategy(eje, nombre)
+            modulo = getattr(factoria, "__module__", "") or ""
+            # El origen se deduce del módulo: lo del núcleo vive bajo `server.app`. Es una
+            # heurística y se dice; la alternativa —guardar la distribución al registrar— añade
+            # estado al registro para un dato que sólo usa el panel.
+            del_nucleo = modulo.startswith("server.app")
+            del_eje.append(
+                EstrategiaOut(
+                    nombre=nombre,
+                    descripcion=_primera_linea(factoria),
+                    origen="nucleo" if del_nucleo else "paquete",
+                    distribucion=None if del_nucleo else modulo.split(".")[0],
+                )
+            )
+        estrategias[eje.value] = del_eje
+
+    return OpcionesDeGrafoOut(
+        perfiles=perfiles,
+        modos=[ModoOut(nombre=m) for m in list_modes()],
+        estrategias=estrategias,
+        ejes=[e.value for e in EjeDeEstrategia],
+    )
+
+
 @router.get("", response_model=list[ChatbotRead])
 async def list_chatbots(
     user: UserInfo = Depends(_require_admin),

@@ -8,6 +8,7 @@ import { ChatbotsPage } from '@/admin/pages/ChatbotsPage'
 import { expectNoA11yViolations } from '@/test/a11y'
 
 vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
+  useOpcionesDeGrafoApiV1HubChatbotsOpcionesDeGrafoGet: () => ({ data: { perfiles: [{ nombre: 'PUBLIC_KB_RICH', configurable: true }], modos: [{ nombre: 'RAG' }, { nombre: 'MD_LONG_CONTEXT' }, { nombre: 'MD_AGENT_SELECTOR' }], estrategias: { retrieval: [], merge: [], template: [], language: [] }, ejes: ['retrieval', 'merge', 'template', 'language'] } }),
   useCreateChatbotApiV1HubChatbotsPost: vi.fn(() => ({ mutate: vi.fn(), isPending: false, reset: vi.fn() })),
   useUpdateChatbotApiV1HubChatbotsChatbotIdPatch: vi.fn(() => ({ mutate: vi.fn(), isPending: false, reset: vi.fn() })),
   useDeleteChatbotApiV1HubChatbotsChatbotIdDelete: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),

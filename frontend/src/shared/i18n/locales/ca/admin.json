@@ -340,7 +340,15 @@
     },
     "llm_configs_alcance_de_los_niveles": "Els nivells (1, 2, 3) no són només de Chatbots: els consumeixen també Informes —copilot, proposta i auditoria de scripts, esborranys— i Curació —rastreig i reconeixement—. Canviar el model d’un nivell canvia el comportament dels tres mòduls.",
     "organizacion_identidad_visual": "Identitat visual",
-    "revision": "Revisió"
+    "revision": "Revisió",
+    "chatbot_graph_profile_no_configurable": "sense configurar",
+    "chatbot_estrategias": "Estratègies per eix",
+    "chatbot_estrategia_heredar": "Heretar",
+    "chatbot_estrategia_de_paquete": "d'un paquet",
+    "chatbot_eje_retrieval": "Recuperació",
+    "chatbot_eje_merge": "Fusió",
+    "chatbot_eje_template": "Plantilla",
+    "chatbot_eje_language": "Llengua"
   },
   "login": {
     "title": "Inicia la sessió",

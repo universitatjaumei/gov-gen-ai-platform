@@ -16,6 +16,7 @@ import {
   getListChatbotsApiV1HubChatbotsGetQueryKey,
   getListChildrenApiV1HubChatbotsChatbotIdChildrenGetQueryKey,
   getGetCorpusStatsApiV1HubChatbotsChatbotIdCorpusStatsGetQueryKey,
+  useOpcionesDeGrafoApiV1HubChatbotsOpcionesDeGrafoGet,
 } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
 import { useListLlmConfigsApiV1HubLlmConfigsGet } from '@/shared/api/generated/hub-llm-configs/hub-llm-configs'
 import { useListOrganizacionesApiV1HubOrganizacionesGet } from '@/shared/api/generated/hub-organizaciones/hub-organizaciones'
@@ -23,13 +24,31 @@ import { chatbotCreateSchema, type FormValues } from '../chatbots/schemas/chatbo
 import { mapApiErrorsToFormErrors } from '@/shared/utils/formErrors'
 import { SelectorDeModoDeLengua } from '../components/SelectorDeModoDeLengua'
 
-// Claves de traducción, no texto: una constante de módulo se evalúa una sola vez, así que
-// guardar aquí la etiqueta ya traducida la congelaría en el idioma activo al cargar (CAL.4).
-const RETRIEVAL_MODES = [
-  { value: 'RAG',               labelKey: 'hub.chatbot_retrieval_rag',           hintKey: 'hub.chatbot_retrieval_hint_rag' },
-  { value: 'MD_LONG_CONTEXT',   labelKey: 'hub.chatbot_retrieval_long_context',  hintKey: 'hub.chatbot_retrieval_hint_long_context' },
-  { value: 'MD_AGENT_SELECTOR', labelKey: 'hub.chatbot_retrieval_agentic',       hintKey: 'hub.chatbot_retrieval_hint_agentic' },
-] as const
+// PLG.3 — la lista de modos **ya no vive aquí**: llega de `/hub/chatbots/opciones-de-grafo`,
+// porque desde PLG.1 depende de qué paquetes haya instalados en el servidor.
+//
+// Lo que sí se queda son las **etiquetas de los modos del núcleo**, y no es una recaída: son
+// traducciones de tres nombres que este repositorio sí conoce, con su texto de ayuda escrito por
+// alguien que entiende la diferencia entre RAG y contexto largo. Un modo aportado por un paquete
+// no tiene traducción —ni la vamos a inventar, que sería prometer una calidad que no podemos
+// sostener— y se muestra con su nombre y la descripción que venga del servidor.
+//
+// O sea: el catálogo es del servidor; el diccionario de lo conocido, del cliente.
+// Las claves van LITERALES y no interpoladas (`hub.chatbot_eje_${eje}`): el guardarrail de
+// i18n de CAL.4 busca consumidores en el codigo, y una clave construida en tiempo de
+// ejecucion le parece huerfana. Un eje sin etiqueta cae a su propio nombre.
+const ETIQUETA_DE_EJE: Record<string, string> = {
+  retrieval: 'hub.chatbot_eje_retrieval',
+  merge: 'hub.chatbot_eje_merge',
+  template: 'hub.chatbot_eje_template',
+  language: 'hub.chatbot_eje_language',
+}
+
+const ETIQUETAS_DE_MODO: Record<string, { labelKey: string; hintKey: string }> = {
+  RAG:               { labelKey: 'hub.chatbot_retrieval_rag',          hintKey: 'hub.chatbot_retrieval_hint_rag' },
+  MD_LONG_CONTEXT:   { labelKey: 'hub.chatbot_retrieval_long_context', hintKey: 'hub.chatbot_retrieval_hint_long_context' },
+  MD_AGENT_SELECTOR: { labelKey: 'hub.chatbot_retrieval_agentic',      hintKey: 'hub.chatbot_retrieval_hint_agentic' },
+}
 
 // SEC.4.1: solo el color. El estado y su motivo vienen del contrato —los calcula el
 // servidor—, y el texto sale de i18n; aquí no se decide nada sobre disponibilidad.
@@ -64,6 +83,14 @@ type LlmConfigOption = {
 }
 
 type OrganizacionOption = { id: string; name: string }
+
+type EstrategiaOpcion = { nombre: string; descripcion?: string | null; origen: string }
+type OpcionesDeGrafo = {
+  perfiles: { nombre: string; configurable: boolean; descripcion?: string | null }[]
+  modos: { nombre: string; descripcion?: string | null }[]
+  estrategias: Record<string, EstrategiaOpcion[]>
+  ejes: string[]
+}
 
 function etiquetaModelo(config: LlmConfigOption): string {
   // El `model_name` exacto va SIEMPRE, aunque haya etiqueta. Es lo que distingue
@@ -107,6 +134,15 @@ export function ChatbotsPage() {
   const llmConfigs = (configsRaw as unknown as LlmConfigOption[] | undefined) ?? []
   const { data: orgsRaw } = useListOrganizacionesApiV1HubOrganizacionesGet()
   const organizaciones = (orgsRaw as unknown as OrganizacionOption[] | undefined) ?? []
+
+  // PLG.3 — el catalogo de lo que ESTA INSTALACION ofrece. Antes eran cuatro literales
+  // escritos en este fichero; ahora la lista depende de los paquetes instalados y solo el
+  // servidor la conoce.
+  const { data: opcionesRaw } = useOpcionesDeGrafoApiV1HubChatbotsOpcionesDeGrafoGet()
+  const opciones = opcionesRaw as unknown as OpcionesDeGrafo | undefined
+  const modosDisponibles = opciones?.modos ?? []
+  const perfilesDisponibles = opciones?.perfiles ?? []
+  const ejes = opciones?.ejes ?? []
 
   const createMutation = useCreateChatbotApiV1HubChatbotsPost({
     mutation: {
@@ -179,7 +215,7 @@ export function ChatbotsPage() {
     },
   })
   const selectedKind = watch('kind')
-  const claveHint = RETRIEVAL_MODES.find(m => m.value === watch('retrieval_mode'))?.hintKey
+  const claveHint = ETIQUETAS_DE_MODO[watch('retrieval_mode')]?.hintKey
   const retrievalHint = claveHint ? t(claveHint) : undefined
 
   const { data: childrenRaw, isLoading: isLoadingChildren } = useListChildrenApiV1HubChatbotsChatbotIdChildrenGet(
@@ -264,6 +300,7 @@ export function ChatbotsPage() {
       use_prompt_caching: c.use_prompt_caching ?? false,
       cache_ttl: c.cache_ttl ?? 3600,
       public_graph_profile: c.public_graph_profile ?? 'PUBLIC_KB_RICH',
+      estrategias: (c as { estrategias?: Record<string, string> | null }).estrategias ?? {},
       language_mode: c.language_mode ?? 'prefer',
       quality_threshold: c.quality_threshold ?? 0.6,
       min_retrieval_results: c.min_retrieval_results ?? 2,
@@ -343,6 +380,7 @@ export function ChatbotsPage() {
           use_prompt_caching: values.use_prompt_caching,
           cache_ttl: values.cache_ttl,
           public_graph_profile: values.public_graph_profile,
+          estrategias: values.estrategias,
           language_mode: values.language_mode,
           quality_threshold: values.quality_threshold,
           min_retrieval_results: values.min_retrieval_results,
@@ -375,6 +413,7 @@ export function ChatbotsPage() {
           organizacion_id: values.organizacion_id,
           llm_config_id: values.llm_config_id,
           public_graph_profile: values.public_graph_profile,
+          estrategias: values.estrategias,
           language_mode: values.language_mode,
           quality_threshold: values.quality_threshold,
           min_retrieval_results: values.min_retrieval_results,
@@ -450,7 +489,8 @@ export function ChatbotsPage() {
                 <td className="py-3 pr-4">
                   <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground border">
                     {(() => {
-                      const clave = RETRIEVAL_MODES.find(m => m.value === c.retrieval_mode)?.labelKey
+                      const clave = ETIQUETAS_DE_MODO[c.retrieval_mode]?.labelKey
+                      // Sin traducción —un modo de un paquete— se muestra su nombre tal cual.
                       return clave ? t(clave) : c.retrieval_mode
                     })()}
                   </span>
@@ -679,8 +719,10 @@ export function ChatbotsPage() {
                         {...register('retrieval_mode')}
                         className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                       >
-                        {RETRIEVAL_MODES.map(m => (
-                          <option key={m.value} value={m.value}>{t(m.labelKey)}</option>
+                        {modosDisponibles.map(m => (
+                          <option key={m.nombre} value={m.nombre}>
+                            {ETIQUETAS_DE_MODO[m.nombre] ? t(ETIQUETAS_DE_MODO[m.nombre].labelKey) : m.nombre}
+                          </option>
                         ))}
                       </select>
                       {retrievalHint && <p className="text-xs text-muted-foreground mt-1">{retrievalHint}</p>}
@@ -739,12 +781,22 @@ export function ChatbotsPage() {
                       <div className="space-y-3 rounded-md border bg-muted/40 p-3">
                         <div>
                           <label htmlFor="chatbot-graph-profile" className="text-sm font-medium">{t('hub.chatbot_graph_profile')}</label>
+                          {/* PLG.3 — la unica opcion estaba escrita aqui, asi que un perfil
+                              instalado no habria aparecido nunca. Ahora la lista viene del
+                              servidor, y los NO configurables salen deshabilitados con su
+                              motivo en vez de ocultarse: ocultarlos dejaria sin explicar por
+                              que un perfil que existe no se puede elegir. */}
                           <select
                             id="chatbot-graph-profile"
                             {...register('public_graph_profile')}
                             className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
                           >
-                            <option value="PUBLIC_KB_RICH">{t('hub.chatbot_graph_profile_rich')}</option>
+                            {perfilesDisponibles.map(p => (
+                              <option key={p.nombre} value={p.nombre} disabled={!p.configurable}>
+                                {p.nombre === 'PUBLIC_KB_RICH' ? t('hub.chatbot_graph_profile_rich') : p.nombre}
+                                {p.configurable ? '' : ` — ${t('hub.chatbot_graph_profile_no_configurable')}`}
+                              </option>
+                            ))}
                           </select>
                         </div>
                         {/* LANG.2 — la lista venía escrita aquí y ofrecía `strict`, que la
@@ -758,6 +810,47 @@ export function ChatbotsPage() {
                             setValue('language_mode', v, { shouldDirty: true })
                           }
                         />
+                        {/* PLG.2/PLG.3 — un select por EJE, y los ejes salen de la respuesta:
+                            no hay lista de ejes en React. «Heredar» manda la clave AUSENTE, no
+                            una cadena vacia, porque la cascada distingue las dos cosas: ausente
+                            hereda de la organizacion y, en su defecto, de la composicion del
+                            perfil. */}
+                        {ejes.length > 0 && (
+                          <div className="space-y-2 rounded-md border border-dashed p-2">
+                            <p className="text-xs font-medium text-muted-foreground">
+                              {t('hub.chatbot_estrategias')}
+                            </p>
+                            {ejes.map(eje => {
+                              const puestas = watch('estrategias') ?? {}
+                              const disponibles = opciones?.estrategias?.[eje] ?? []
+                              return (
+                                <div key={eje}>
+                                  <label htmlFor={`chatbot-estrategia-${eje}`} className="text-xs font-medium">
+                                    {ETIQUETA_DE_EJE[eje] ? t(ETIQUETA_DE_EJE[eje]) : eje}
+                                  </label>
+                                  <select
+                                    id={`chatbot-estrategia-${eje}`}
+                                    value={puestas[eje] ?? ''}
+                                    onChange={(e) => {
+                                      const siguiente = { ...puestas }
+                                      if (e.target.value) siguiente[eje] = e.target.value
+                                      else delete siguiente[eje]
+                                      setValue('estrategias', siguiente, { shouldDirty: true })
+                                    }}
+                                    className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                                  >
+                                    <option value="">{t('hub.chatbot_estrategia_heredar')}</option>
+                                    {disponibles.map(s => (
+                                      <option key={s.nombre} value={s.nombre}>
+                                        {s.nombre}{s.origen === 'paquete' ? ` (${t('hub.chatbot_estrategia_de_paquete')})` : ''}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
                         <div>
                           <label htmlFor="chatbot-quality-threshold" className="text-sm font-medium">{t('hub.chatbot_quality_threshold')}</label>
                           <input

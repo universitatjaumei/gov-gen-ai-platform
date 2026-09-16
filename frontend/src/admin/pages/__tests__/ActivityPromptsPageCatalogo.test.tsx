@@ -32,6 +32,7 @@ vi.mock('@/shared/api/generated/hub-prompt-templates/hub-prompt-templates', () =
   useUpdatePromptTemplateApiV1HubPromptTemplatesTemplateIdPatch: vi.fn(),
 }))
 vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
+  useOpcionesDeGrafoApiV1HubChatbotsOpcionesDeGrafoGet: () => ({ data: { perfiles: [{ nombre: 'PUBLIC_KB_RICH', configurable: true }], modos: [{ nombre: 'RAG' }, { nombre: 'MD_LONG_CONTEXT' }, { nombre: 'MD_AGENT_SELECTOR' }], estrategias: { retrieval: [], merge: [], template: [], language: [] }, ejes: ['retrieval', 'merge', 'template', 'language'] } }),
   useUpdateChatbotApiV1HubChatbotsChatbotIdPatch: vi.fn(),
 }))
 

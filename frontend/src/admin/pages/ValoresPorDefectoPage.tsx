@@ -8,6 +8,7 @@ import {
   getGetValoresPorDefectoApiV1HubOrganizacionesOrganizacionIdValoresPorDefectoGetQueryKey as claveDeValores,
 } from '@/shared/api/generated/hub-organizaciones/hub-organizaciones'
 import { useOpcionesDeLengua } from '@/shared/api/generated/hub-opciones/hub-opciones'
+import { useOpcionesDeGrafoApiV1HubChatbotsOpcionesDeGrafoGet } from '@/shared/api/generated/hub-chatbots/hub-chatbots'
 import type { OpcionesDeLengua } from '@/shared/api/generated/model'
 
 /** Los campos que pueden volver a «heredar el defecto de plataforma» valiendo `null`. */
@@ -30,7 +31,13 @@ const HEREDABLES = [
  * generada por Orval (`valoresPorDefectoRead.ts`): si el servidor añade un campo y nadie le da
  * control, se pone rojo. Eso es lo que separa un mapa mantenido de una lista que miente.
  */
-export const CONTROLES: Record<string, 'numero' | 'booleano' | 'texto' | 'texto-largo'> = {
+export const CONTROLES: Record<
+  string,
+  'numero' | 'booleano' | 'texto' | 'texto-largo' | 'estrategias'
+> = {
+  // PLG.2 — un select POR EJE, no un campo de texto con JSON: lo que se guarda es
+  // `{eje: nombre}` y escribirlo a mano invita a errores que solo se ven al guardar.
+  default_estrategias: 'estrategias',
   default_public_graph_profile: 'texto',
   default_retrieval_mode: 'texto',
   default_language_mode: 'texto',
@@ -63,13 +70,25 @@ export const CONTROLES: Record<string, 'numero' | 'booleano' | 'texto' | 'texto-
  * que además da el código del corpus (`val`, no `ca`). Sigue siendo `<datalist>` por el motivo
  * de arriba: `fixed:<código>` es paramétrico, así que el campo tiene que ser cadena libre.
  */
+/**
+ * **PLG.3 — los perfiles y los modos ya NO estan aqui**, y es exactamente el mismo error que
+ * LANG.2 arreglo con `default_language_mode`: una lista escrita en React que dice lo que el
+ * servidor acepta. Entonces mentia porque dos de los tres valores daban 422; ahora mentiria de
+ * otra forma —por defecto— al no poder enumerar lo que aporte un paquete instalado.
+ *
+ * Lo que queda es `default_chunking_strategy`, y se queda a proposito: es un CHECK de la base
+ * (`ck_chatbot_chunking_strategy`), o sea ESTRUCTURA con codigo que la aplica en el chunker, no
+ * vocabulario que pueda crecer por instalacion. El criterio es el mismo de CLAUDE.md §5.
+ */
+/** Claves LITERALES por el guardarrail de i18n de CAL.4 (ver ChatbotsPage). */
+const ETIQUETA_DE_EJE: Record<string, string> = {
+  retrieval: 'hub.chatbot_eje_retrieval',
+  merge: 'hub.chatbot_eje_merge',
+  template: 'hub.chatbot_eje_template',
+  language: 'hub.chatbot_eje_language',
+}
+
 const SUGERENCIAS: Record<string, readonly string[]> = {
-  default_public_graph_profile: [
-    'PUBLIC_KB_RICH',
-    'PUBLIC_PORTAL_ROUTER',
-    'PUBLIC_PORTAL_AGGREGATOR',
-  ],
-  default_retrieval_mode: ['RAG', 'MD_LONG_CONTEXT', 'MD_AGENT_SELECTOR'],
   default_chunking_strategy: ['structural', 'parent_child'],
 }
 
@@ -113,6 +132,16 @@ export function ValoresPorDefectoPage() {
   // LANG.2 — los modos de idioma los enumera el servidor. Mientras no ha llegado no se
   // ofrece nada: una lista propia sería volver a escribir el catálogo en React.
   const { data: opcionesDeLengua } = useOpcionesDeLengua()
+  // PLG.3 — perfiles y modos, del catalogo de ESTA instalacion.
+  const { data: opcionesDeGrafoRaw } = useOpcionesDeGrafoApiV1HubChatbotsOpcionesDeGrafoGet()
+  const opcionesDeGrafo = opcionesDeGrafoRaw as unknown as
+    | {
+        perfiles: { nombre: string; configurable: boolean }[]
+        modos: { nombre: string }[]
+        estrategias: Record<string, { nombre: string }[]>
+        ejes: string[]
+      }
+    | undefined
   const { t: tc } = useTranslation('common')
   const qc = useQueryClient()
 
@@ -215,7 +244,11 @@ export function ValoresPorDefectoPage() {
             const sugerencias =
               campo === 'default_language_mode'
                 ? modosDeIdiomaOfrecidos(opcionesDeLengua)
-                : SUGERENCIAS[campo]
+                : campo === 'default_public_graph_profile'
+                  ? opcionesDeGrafo?.perfiles.filter(p => p.configurable).map(p => p.nombre)
+                  : campo === 'default_retrieval_mode'
+                    ? opcionesDeGrafo?.modos.map(m => m.nombre)
+                    : SUGERENCIAS[campo]
             const idLista = sugerencias ? `vpd_${campo}_opciones` : undefined
 
             return (
@@ -235,7 +268,39 @@ export function ValoresPorDefectoPage() {
 
                 <span className="flex-1">
                   {editable ? (
-                    tipo === 'booleano' ? (
+                    tipo === 'estrategias' ? (
+                      <span className="flex flex-wrap gap-2">
+                        {(opcionesDeGrafo?.ejes ?? []).map((eje) => {
+                          const puestas = (valor as Record<string, string> | null) ?? {}
+                          return (
+                            <span key={eje} className="flex items-center gap-1">
+                              <label htmlFor={`vpd_${campo}_${eje}`} className="text-xs">
+                                {ETIQUETA_DE_EJE[eje] ? t(ETIQUETA_DE_EJE[eje]) : eje}
+                              </label>
+                              <select
+                                id={`vpd_${campo}_${eje}`}
+                                value={puestas[eje] ?? ''}
+                                disabled={isPending}
+                                onChange={(e) => {
+                                  const siguiente = { ...puestas }
+                                  // Clave AUSENTE, no cadena vacia: la cascada distingue
+                                  // «heredar» de «elegida», y mandar '' guardaria una eleccion.
+                                  if (e.target.value) siguiente[eje] = e.target.value
+                                  else delete siguiente[eje]
+                                  cambiar(campo, Object.keys(siguiente).length ? siguiente : null)
+                                }}
+                                className="rounded border px-2 py-1 text-xs"
+                              >
+                                <option value="">{t('hub.chatbot_estrategia_heredar')}</option>
+                                {(opcionesDeGrafo?.estrategias?.[eje] ?? []).map((s) => (
+                                  <option key={s.nombre} value={s.nombre}>{s.nombre}</option>
+                                ))}
+                              </select>
+                            </span>
+                          )
+                        })}
+                      </span>
+                    ) : tipo === 'booleano' ? (
                       <input
                         id={`vpd_${campo}`}
                         type="checkbox"
