@@ -195,9 +195,17 @@ reescrita. Las 7 rutas pasan de 12 commits a 0, el recuento se queda en 736 —s
 diff de árboles son exactamente los 4 ficheros. Los cuatro se copiaron antes a
 `_local/docs_operacion/` (paso 3.bis, que estaba pendiente).
 
-**Lo que queda, y lo hace el usuario**: abrir el ticket a GitHub Support. Texto listo en
-`_local/TICKET_GITHUB_SUPPORT_purga.md`, con los **cuatro** huérfanos —los dos de `logs/` más los
-dos que creó este *push*— y las dos puntas que no deben tocarse.
+**Ticket a GitHub Support ENVIADO el 2026-09-16.** Cubre los **cuatro** huérfanos —los dos de
+`logs/` más los dos que creó el *force-push*— y nombra las dos puntas que no deben tocarse. **El
+bloque queda esperando respuesta**; el detalle, el camino del formulario y la verificación, en
+`_local/TICKET_GITHUB_SUPPORT_purga.md`.
+
+> ⚠️ **Al rellenarlo apareció una trampa que conviene no volver a pisar**: la categoría
+> «Eliminaciones» lleva a un formulario que **borra el repositorio entero** y es irreversible,
+> porque ahí «purgar» significa destruir del todo un repositorio **ya eliminado**. El nuestro está
+> vivo y lo que se purgan son objetos **dentro**. El camino bueno es **Repositorios → Funciones
+> del repositorio → Datos**, y el cuerpo del mensaje empieza diciendo explícitamente que **no** se
+> pide borrar el repositorio. (Y «Problemas», en ese menú, es la traducción de *Issues*.)
 
 **La puerta, y es lo único irreversible del bloque**: no se cambia la visibilidad a pública hasta
 que los cuatro SHA den **404**. Y el orden importa: **el punto de no retorno es la purga, no el
