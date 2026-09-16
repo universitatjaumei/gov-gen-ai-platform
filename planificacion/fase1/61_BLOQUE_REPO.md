@@ -676,6 +676,124 @@ negocio. Cuatro son ficheros vivos que un lector nuevo consulta, y dos son docum
 
 ---
 
+### Prompt REPO.6 (RED/GREEN) — La revisión del contenido antes de abrirlo
+
+**Modelo sugerido**: **Opus** — hay una decisión de criterio dentro (qué se hace con una deuda de
+seguridad viva que no se puede publicar pero tampoco perder) y un guardarraíl que hay que diseñar
+para que no se dispare con su propia documentación, cosa que en este bloque ya ha pasado tres veces.
+
+> **Nuevo el 2026-09-16**, a petición del usuario: «no sé si hay algún otro aspecto del contenido
+> del repo actual que convendría revisar antes de hacerlo público». La purga del historial cerró
+> **de dónde viene** el repositorio; esto mira **qué contiene hoy**, que es lo otro que se publica
+> al cambiar la visibilidad y que ningún bloque anterior había barrido entero.
+>
+> **El hallazgo que justifica el prompt por sí solo no es un fichero, es un guardarraíl.** REPO.5
+> puso un test para que `docs/` no publicara los valores de esta instalación, y su patrón escribe
+> la IP como `34-175-38-129`, **con guiones** —la forma del host provisional de entonces—. El
+> documento la escribe `34.175.38.129`, con puntos. El test lleva desde el 07-09 **pasando en
+> verde sin mirar la IP**, que es la avería que este proyecto persigue en todas partes. No se
+> encontró ejecutando el test —está verde— sino barriendo el contenido a mano.
+>
+> **Y una decisión de criterio que el prompt no puede tomar solo.** `PROJECT_STATE.md` nombra a
+> seis personas con su correo institucional y dice que sus seis cuentas son superadministradoras
+> de producción **compartiendo una contraseña que no pueden cambiar**. Medido el 2026-09-16: la
+> deuda **sigue viva** —«sólo entonces retirar los seis `SuperAdminAccount`», pendiente de una
+> persona—, así que no vale reescribirla como resuelta. Publicarla es a la vez dato personal y el
+> mapa de qué atacar. Pero borrarla del cursor sería perder una deuda de seguridad abierta, que
+> es peor.
+
+```
+# PROMPT REPO.6 (RED/GREEN) — Lo que contiene el repositorio el dia que se abre
+# Deploy: n/a
+
+## Por que
+La purga verifico que el historial no arrastra los 92 volcados. Eso cierra de donde VIENE el
+repositorio. Falta lo que CONTIENE: al poner `Public` se publica el arbol de trabajo entero, y eso
+no lo habia barrido ningun bloque. Medido el 2026-09-16 sobre los 1525 ficheros versionados.
+
+## Los cinco hallazgos, medidos
+
+1. **`planificacion/PROJECT_STATE.md` publica seis correos institucionales reales** —los seis
+   probadores del piloto— **y ademas dice que esas seis cuentas son superadministradoras de
+   produccion con una contrasena compartida que no pueden cambiar**. Es dato personal y es el mapa
+   de que atacar. Y la deuda SIGUE VIVA: la retirada de los seis `SuperAdminAccount` esta
+   pendiente de una persona.
+
+   `PROJECT_STATE.md` **no es registro**. La distincion de REPO.3/REPO.4/REPO.5 es entre lo que
+   cuenta lo que paso —`HISTORIAL.md` y `planificacion/fase1/`, que se conservan— y lo que un
+   lector consulta como verdad presente. El cursor es lo segundo.
+
+2. **El guardarrail de REPO.5 no mira la IP.** `_VALORES_DE_ESTA_CASA` busca `34-175-38-129` (con
+   guiones) y `docs/DESPLIEGUE_PROTOTIPO_GCP.md:307` la escribe `34.175.38.129` (con puntos). El
+   test pasa en verde con la IP de produccion dentro desde el 2026-09-07.
+
+3. **`server/my_errores.txt`**: 90 KB, UTF-16, un volcado de pytest del 2026-05-02 con rutas
+   `C:\Users\fabra\...`. Es literalmente lo que `_local/README.md` dice que no va al repositorio.
+
+4. **Siete scripts que no puede ejecutar nadie**: `scripts/audit_translations.py`,
+   `check_duplicates.py`, `debug_audit.py`, `find_fragmentation.py`, `find_root_keys.py`,
+   `find_second_level_keys.py` y `find_specific_keys.py`. Los siete abren
+   `c:\Users\fabra\Documents\AutomatIA\translations.json`, que no esta en este repositorio y
+   pertenece a la app NiceGUI retirada el 2026-09-04.
+
+5. **Falta `CODE_OF_CONDUCT.md`**. Es lo unico del juego estandar que no esta: LICENSE, README,
+   CONTRIBUTING, SECURITY, DCO, CODEOWNERS y las plantillas de issue y PR si estan.
+
+## Que hacer
+
+1. **La deuda de las seis cuentas se queda; las seis identidades, no.** Reescribir el aviso de
+   `PROJECT_STATE.md` para que siga diciendo **que la deuda existe, que sigue abierta, cuantas
+   cuentas son, que poderes tienen y que comparten contrasena** —eso es lo que hace que no se
+   olvide— y que **no diga quienes son**. La lista nominal va a `_local/`, que es exactamente para
+   lo que existe. Mismo tratamiento a cualquier otra aparicion en la superficie viva.
+
+   NO se toca `HISTORIAL.md` ni `planificacion/fase1/`: son registro.
+
+2. **Arreglar el patron de REPO.5** para que cace la IP en las dos formas, y dejar
+   `docs/DESPLIEGUE_PROTOTIPO_GCP.md` con marcador. Ojo al §3.sexies: ahi la IP aparece en una
+   frase de procedencia («el registro A de normativa.uji.es a … aparecio el 2026-09-02»), asi que
+   la sustitucion tiene que dejar la frase con sentido, no cortarla.
+
+3. **Borrar `server/my_errores.txt` y los siete scripts.** Se retira borrando; el historial de git
+   es la fuente de verdad del pasado. Comprobar antes que nada los importe.
+
+4. **Anadir `CODE_OF_CONDUCT.md`**: Contributor Covenant 2.1, con un correo de contacto real y
+   enlazado desde `CONTRIBUTING.md` y `README.md`.
+
+## Lo que NO hace este prompt, y por que se dice
+- **No toca el numero de proyecto ni la IP en `HISTORIAL.md` ni en `planificacion/fase1/`.**
+  REPO.5 decidio que son registro y que generalizar una procedencia de medicion la destruye. Se
+  escribe aqui para que no se replantee cada vez que alguien los encuentre.
+- **No toca los ~190 correos `@uji.es` de los tests** (`root@`, `x@`, `persona-manual@`): son
+  sinteticos y no nombran a nadie.
+- **No cambia la visibilidad del repositorio.** Eso es decision del usuario y va despues.
+
+## Tests (RED primero)
+- RED: **ningun fichero de la superficie viva lleva un correo `@uji.es`** que no sea el contacto
+  publicado del mantenedor o uno de la lista corta de sinteticos, **cada uno con su razon**.
+  Superficie viva = lo versionado menos `HISTORIAL.md`, `planificacion/fase1/` y los directorios de
+  tests. Medido: hoy solo fallan las seis de `PROJECT_STATE.md`.
+- RED: el patron de REPO.5 caza la IP escrita con puntos, y `docs/` queda limpio con el arreglado.
+- RED: `server/my_errores.txt` no esta versionado, y **ningun fichero de `scripts/` lleva una ruta
+  absoluta de una maquina concreta**.
+- RED: existe `CODE_OF_CONDUCT.md`, lleva un contacto y `CONTRIBUTING.md` lo enlaza.
+- **El guardarrail tiene que leer solo lineas de datos, no su propia documentacion.** En este
+  bloque ya se ha disparado tres veces contra si mismo: por una frase partida en dos lineas, por
+  la palabra `@usuario` dentro de un comentario suyo, y por llevar escrito el nombre que buscaba.
+  Si el test se mira a si mismo via `git ls-files`, **se prueba despues de `git add`**: antes da
+  falso verde.
+
+## Criterio de done
+- [ ] La superficie viva sin correos institucionales de personas, y la deuda de las seis cuentas
+      SIGUE dicha en el cursor
+- [ ] El guardarrail de REPO.5 caza la IP con puntos, y `docs/` verde
+- [ ] `my_errores.txt` y los siete scripts fuera
+- [ ] `CODE_OF_CONDUCT.md` existe y esta enlazado
+- [ ] Los cinco guardarrailes en verde DESPUES de `git add`
+```
+
+---
+
 ### Prompt REPO.5 ✅ (RED/GREEN, HECHO el 2026-09-07) — Los documentos de despliegue dejan de llevar los valores reales
 
 **Modelo sugerido**: **Sonnet** — sustitución acotada con un guardarraíl; el criterio está decidido.
