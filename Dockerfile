@@ -8,8 +8,14 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # El paquete compartido debe copiarse antes de instalar server/
 COPY shared/ ./shared/
 
-# Copiar sólo los manifiestos para aprovechar caché Docker en cambios de código
-COPY server/pyproject.toml server/uv.lock ./server/
+# Copiar sólo los manifiestos para aprovechar caché Docker en cambios de código.
+#
+# `README.md` va aquí aunque no sea un manifiesto, y **quitarlo rompe la construcción entera**:
+# desde PLG.1 `server/pyproject.toml` tiene `[build-system]` —sin él no hay entry points que
+# descubrir— así que `uv sync` construye el wheel del proyecto, y hatchling lee `readme =
+# "README.md"` y aborta con `OSError: Readme file does not exist` si no está en el contexto.
+# Antes de PLG no había backend de construcción y el fichero no hacía falta.
+COPY server/pyproject.toml server/uv.lock server/README.md ./server/
 
 WORKDIR /app/server
 # --no-editable convierte automatia-shared en paquete regular (no hace falta shared/ en runtime)
