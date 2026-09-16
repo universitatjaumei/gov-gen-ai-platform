@@ -181,6 +181,30 @@ cambio `docs/DESPLIEGUE_PROTOTIPO_GCP.md` ya estaba resuelto: REPO.5 lo dejó co
 por otra y el problema seguiría igual. Comprobado contra el estado anterior: se pone rojo con las
 14 entradas.
 
+**REPO.6 ✅ el 2026-09-16 — la revisión del contenido antes de abrirlo.** La purga cerró **de
+dónde viene** el repositorio; esto miró **qué contiene**, que es lo otro que se publica al cambiar
+la visibilidad. Cinco hallazgos sobre los 1525 ficheros versionados, y **el que importa no es un
+fichero sino un guardarraíl**: el de REPO.5 buscaba la IP como `34-175-38-129`, con guiones, y el
+documento la escribe con puntos — **nueve días en verde con la IP de producción dentro de
+`DESPLIEGUE_PROTOTIPO_GCP.md`**, y lo encontró un barrido a mano, no el test. Los otros cuatro:
+`PROJECT_STATE.md` nombraba a los seis probadores del piloto con su correo institucional en el
+mismo párrafo que decía que sus cuentas son superadministradoras con contraseña compartida (la
+deuda **sigue viva**, así que se conservó entera **sin las identidades**, que están en `_local/`);
+`server/my_errores.txt` y `frontend/tsc_baseline.txt`, dos salidas guardadas que **no lee nadie**
+—la segunda no la menciona ni un fichero del repositorio—; siete scripts de `scripts/` que abrían
+todos el mismo `translations.json` de la app NiceGUI retirada; y faltaba `CODE_OF_CONDUCT.md`, lo
+único del juego estándar que no estaba.
+
+**Lo vigila `test_repo6_el_contenido_que_se_publica.py`** con cuatro guardarraíles. El de correos
+barre la **superficie viva** —lo versionado menos `HISTORIAL.md`, `planificacion/fase1/` y los
+tests— y su lista de permitidas obliga a escribir **por qué** una cadena no nombra a nadie: quien
+no pueda escribirlo está callando a alguien. **Y uno de los cuatro nació con el defecto que este
+proyecto persigue**: buscaba las palabras `volcado`, `my_errores`… y acusó a
+`scripts/volcado_piloto.sh`, que es la **herramienta que hace** un volcado. Ahora mira la forma
+—extensión de salida fuera de los tests— y no el nombre.
+
+**Queda sólo REPO.2** (los otros dos repositorios), que no bloquea abrir éste.
+
 **Bloque REPO ▶: desbloqueado (rol `admin` desde el 2026-09-14) y REPLANIFICADO a la variante C
 el 2026-09-15.** La variante B —«el limpio nace en la organización y no se transfiere nada»— **ya
 no es posible: la transferencia se hizo el 2026-09-10**, y con ella entró en la organización justo
@@ -472,10 +496,16 @@ despliegue es **~~SEC.9~~ ✅ → ~~AIS~~ ✅ → ~~RAG.15~~ ✅ → ~~VIS.4~~ �
 > ⚠️ **DEUDA CON FECHA DE CADUCIDAD (2026-09-01): seis cuentas de producción están elevadas a
 > superadministrador a propósito, y hay que bajarlas.**
 >
-> Los probadores del piloto son `borillo@uji.es`, `gumbau@uji.es` (que el usuario quería
-> superadmin) y `planchad@uji.es`, `anandez@uji.es`, `garridoa@uji.es`, `begomez@uji.es` (que
-> **quería administradores**). Los cuatro últimos se crearon como superadministradores porque
-> era la única forma de que entraran el mismo día, con la decisión tomada sabiendo el coste.
+> Son **seis probadores del piloto**: dos que el usuario quería superadministradores y **cuatro
+> que quería administradores**. Los cuatro se crearon como superadministradores porque era la
+> única forma de que entraran el mismo día, con la decisión tomada sabiendo el coste.
+>
+> **Quiénes son está en `_local/`, no aquí, y el motivo es REPO.6**: este fichero se publica al
+> abrir el repositorio, y una lista de correos institucionales junto a «estas cuentas pueden
+> cambiar proveedores de LLM y borrar asistentes, y comparten contraseña» no es un dato de
+> contacto, es el mapa de por dónde entrar. La deuda sigue dicha entera —que existe, cuántas son,
+> qué pueden hacer y que la contraseña es común—, que es lo que hace falta para no olvidarla.
+> Quien tenga que ejecutar la retirada tiene los nombres donde se trabaja.
 >
 > **Por qué no podían ser administradores**: `AdminAccount.partner_id` es la clave primaria y las
 > organizaciones se enlazan por `HubOrganizacion.partner_id`, que en la UJI vale `uji`. Solo la

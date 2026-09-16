@@ -304,7 +304,7 @@ Tres cosas que conviene saber antes de necesitarlo con prisa:
 
 ## 3.sexies El dominio institucional, y el reparto de rutas (DOM, 2026-09-02)
 
-El registro A de `normativa.uji.es` a `34.175.38.129` apareció el 2026-09-02, y con él el
+El registro A de `normativa.uji.es` a la IP de `<VM>` apareció el 2026-09-02, y con él el
 subdominio institucional pasó de estar pedido a estar en marcha. El certificado ya estaba
 cargado en Secret Manager desde D.8, así que **funcionó por SNI sin tocar nada**: cadena de
 HARICA/GÉANT, `CN=normativa.uji.es`, válida del 1 de septiembre de 2026 al **19 de marzo de

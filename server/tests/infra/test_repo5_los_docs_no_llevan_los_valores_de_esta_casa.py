@@ -41,8 +41,16 @@ _DOCS = Path("../docs")
 #: servicio, que es público por definición y aparece en las citas del propio corpus— ni la región
 #: `europe-southwest1`, que es un dato de GCP y no una identidad: un documento que diga «Madrid»
 #: es más útil que uno que diga `<REGION>`.
+#:
+#: **La IP va en las DOS formas, y ésa fue la avería.** Hasta el 2026-09-16 este patrón sólo
+#: llevaba `34-175-38-129`, con guiones, que era como se escribía dentro del host provisional de
+#: entonces. La IP de verdad se escribe con puntos, así que el guardarraíl pasó **nueve días en
+#: verde con la IP de producción dentro de `DESPLIEGUE_PROTOTIPO_GCP.md`**. No lo encontró el
+#: test: lo encontró un barrido a mano del contenido, al preparar la apertura del repositorio.
+#: Un guardarraíl que no mira nada pasa en verde igual que uno que mira y no encuentra nada.
 _VALORES_DE_ESTA_CASA = re.compile(
-    r"(uji-teclab|govgenai-prod|govgenai-vm|govgenai-normativa-uji|34-175-38-129|618806480921)"
+    r"(uji-teclab|govgenai-prod|govgenai-vm|govgenai-normativa-uji"
+    r"|34-175-38-129|34\.175\.38\.129|618806480921)"
 )
 
 #: (fichero, línea, razón). Procedencias de medición: el valor está en poder ir a comprobarlo.

@@ -117,6 +117,9 @@ política. Una política que nadie comprueba se incumple sin que nadie lo note.
 
 ## 🎯 0. Pre-flight (obligatorio)
 
+- **Lee [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).** Es corto y se aplica igual a quien mantiene
+  el proyecto que a quien contribuye una vez — la misma regla que el DCO y que la de no tener un
+  *fork* privilegiado. Si algo de lo que pasa aquí lo incumple, ahí dice a dónde se escribe.
 - **Entorno Python con `uv`.** Toda ejecución de backend, tests o scripts se hace vía `uv run …`. En Windows, **nunca** invoques `python` directamente (te redirige a la Microsoft Store); usa el ejecutor `uv`.
 - **`uv sync` siempre desde un proyecto, nunca desde la raíz.** Desde NIC.4 (2026-09-04) la raíz **no tiene `pyproject.toml`**: los proyectos son `server/`, `shared/`, `mcp_server/` y `services/script_sandbox/`. Y si tocas dependencias, **`uv lock` va en el mismo commit** — CI instala con `uv sync --locked`, que falla si el lock no corresponde a su manifiesto. Comprueba con `uv lock --check`, no con `uv sync` a secas, que vuelve a resolver en silencio y por eso siempre pasa.
 - **Shell del proyecto: PowerShell 5.1.** El operador `&&` **no existe** y provoca error de parseo. Encadena con `;` o `; if ($?) { … }`. Usa rutas absolutas al cambiar de directorio (ver `AGENTS.md` → "Reglas de comandos de shell").
