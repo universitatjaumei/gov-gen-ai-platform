@@ -9,7 +9,7 @@ Deploy: edge
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from server.app.modules.agents_hub.agent.public_graphs.core.config_resolver import (
@@ -34,8 +34,20 @@ class GraphDeps:
     llm: Any = None
 
 
+@runtime_checkable
 class RetrievalPipeline(Protocol):
-    """Contrato que deben cumplir todas las implementaciones de pipeline de retrieval."""
+    """Contrato que deben cumplir todas las implementaciones de pipeline de retrieval.
+
+    **`runtime_checkable` desde PLG.1**, para que el cargador de *entry points* pueda rechazar
+    con `issubclass` un pipeline aportado por un paquete que no cumpla el contrato — **al
+    descubrir, no en la primera petición**. Sin esto, un plugin mal escrito arranca el servidor
+    sin quejarse y revienta delante de un usuario.
+
+    El límite, dicho para que nadie lea de aquí una garantía que no da: `runtime_checkable`
+    comprueba **que los métodos existan**, no sus firmas ni sus tipos. Caza el error frecuente
+    —el objeto equivocado, la clase sin `run`— y no un `run` con otra signatura. Para eso está el
+    contrato de pipelines de la suite, que sí lo ejecuta.
+    """
 
     async def run(
         self,

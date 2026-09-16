@@ -340,7 +340,15 @@
     },
     "llm_configs_alcance_de_los_niveles": "Los niveles (1, 2, 3) no son solo de Chatbots: los consumen también Informes —copiloto, propuesta y auditoría de scripts, borradores— y Curación —rastreo y reconocimiento—. Cambiar el modelo de un nivel cambia el comportamiento de los tres módulos.",
     "organizacion_identidad_visual": "Identidad visual",
-    "revision": "Revisión"
+    "revision": "Revisión",
+    "chatbot_graph_profile_no_configurable": "sin configurar",
+    "chatbot_estrategias": "Estrategias por eje",
+    "chatbot_estrategia_heredar": "Heredar",
+    "chatbot_estrategia_de_paquete": "de un paquete",
+    "chatbot_eje_retrieval": "Recuperación",
+    "chatbot_eje_merge": "Fusión",
+    "chatbot_eje_template": "Plantilla",
+    "chatbot_eje_language": "Lengua"
   },
   "login": {
     "title": "Iniciar sesión",

@@ -80,6 +80,7 @@ vi.mock('@/shared/api/generated/hub-content-quality/hub-content-quality', () => 
 
 // El nombre del hook generado, tal cual: `ContentGapsPanel` comparte pantalla con los hallazgos.
 vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
+  useOpcionesDeGrafoApiV1HubChatbotsOpcionesDeGrafoGet: () => ({ data: { perfiles: [{ nombre: 'PUBLIC_KB_RICH', configurable: true }], modos: [{ nombre: 'RAG' }, { nombre: 'MD_LONG_CONTEXT' }, { nombre: 'MD_AGENT_SELECTOR' }], estrategias: { retrieval: [], merge: [], template: [], language: [] }, ejes: ['retrieval', 'merge', 'template', 'language'] } }),
   useListChatbotsApiV1HubChatbotsGet: () => ({ data: [], isLoading: false }),
 }))
 

@@ -102,7 +102,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/ModestoFabra/gov-gen-ai-platform"
+Repository = "https://github.com/universitatjaumei/gov-gen-ai-platform"
 
 [dependency-groups]
 dev = [
@@ -114,6 +114,13 @@ dev = [
     "ruff",
     "aiosqlite>=0.22.1",
     "pytest-xdist>=3.8.0",
+    # PLG.1 — el paquete de ejemplo que aporta un perfil y un pipeline por entry points.
+    # Va en `dev` y NO en un extra: sirve para que la suite ejercite el camino de un
+    # tercero de verdad —descubrir, cargar, registrar, construir— en vez de simularlo con
+    # mocks de `importlib.metadata`. Se midio y instalarlo sale barato; simular habria
+    # dejado sin probar justo lo que puede fallar: que un paquete REAL se encuentre.
+    # La imagen no lo lleva: el Dockerfile instala con `--no-dev`.
+    "govgenai-demo-perfil",
 ]
 
 [[tool.uv.index]]
@@ -123,6 +130,7 @@ explicit = true
 
 [tool.uv.sources]
 automatia-shared = { path = "../shared", editable = true }
+govgenai-demo-perfil = { path = "tests/fixtures/paquete_perfil_demo", editable = true }
 torch = { index = "pytorch-cpu" }
 torchvision = { index = "pytorch-cpu" }
 
@@ -188,3 +196,67 @@ markers = [
     # el resto la tiene parcheada por el fixture autouse de `tests/conftest.py`.
     "sin_guarda_de_modulos: usa la comprobacion real de modulos concedidos",
 ]
+
+# PLG.1 — el servidor pasa a ser INSTALABLE, y sólo para que exista su distribución.
+#
+# Hasta aquí `automatia-server` era un proyecto «virtual»: uv instalaba sus dependencias pero
+# nunca el proyecto, así que **no había distribución** y `importlib.metadata.entry_points()` no
+# podía ver nada declarado aquí. Los perfiles, pipelines y estrategias del núcleo tienen que
+# entrar por el mismo camino que los de un tercero (regla «un solo camino de registro»), y ese
+# camino son los entry points. Sin `[build-system]` no hay entry points que descubrir.
+#
+# **El wheel va VACÍO a propósito, y `bypass-selection` lo dice en voz alta.** El código NO viaja
+# en él, y hay dos razones:
+#
+#  1. **El nombre de import no coincide con este directorio.** El paquete es `server.app`, o sea
+#     que su raíz es la RAÍZ DEL REPOSITORIO, un nivel por encima de este `pyproject.toml`.
+#     Empaquetar `app/` produciría un top-level `app` en site-packages que nadie importa —el
+#     código dice `from server.app...`— y que podría ensombrecer a otro paquete con ese nombre,
+#     que es de los más genéricos que hay.
+#  2. **El `Dockerfile` copia sólo los manifiestos antes de `uv sync`**, para que un cambio de
+#     código no invalide la capa de dependencias. Un wheel con código obligaría a copiar
+#     `server/app/` antes de instalar y se perdería esa caché en cada commit.
+#
+# Cómo llega el código entonces: en desarrollo, la raíz del repositorio está en `sys.path`; en la
+# imagen, el `Dockerfile` hace `COPY server/app/` y fija `PYTHONPATH=/app`. Ninguno de los dos
+# depende del wheel. Medido el 2026-09-16 reproduciendo el orden del `Dockerfile`: instala, deja
+# `automatia_server-0.1.0.dist-info` —que es lo único que se busca— y **cero ficheros**.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+bypass-selection = true
+
+# PLG.1 — los perfiles y pipelines del NÚCLEO, declarados igual que los de un tercero.
+#
+# Esto es la regla «un solo camino de registro» hecha fichero. Antes `graph_factory.py` los
+# registraba por código al importarse; ahora entran por donde entrarían los de un paquete
+# instalado, y el núcleo pasa a ser el primer usuario de su propia API pública. Si algo le falta
+# a esa API, sale a la primera y no cuando llegue el primer tercero.
+#
+# Los nombres de la izquierda son los que ve el usuario en el panel y los que se guardan en
+# `hub_chatbots.public_graph_profile`. Cambiar uno es cambiar un dato ya escrito en la base: no
+# se renombran sin migración.
+[project.entry-points."govgenai.graph_profiles"]
+PUBLIC_KB_RICH = "server.app.modules.agents_hub.agent.public_graphs.core.graph_factory:_make_public_kb_rich"
+PUBLIC_PORTAL_AGGREGATOR = "server.app.modules.agents_hub.agent.public_graphs.core.graph_factory:_make_public_portal_aggregator"
+PUBLIC_PORTAL_ROUTER = "server.app.modules.agents_hub.agent.public_graphs.core.graph_factory:_make_public_portal_router"
+
+[project.entry-points."govgenai.retrieval_pipelines"]
+RAG = "server.app.modules.agents_hub.agent.public_graphs.strategies.rag_vector_pipeline:RagVectorPipeline"
+MD_LONG_CONTEXT = "server.app.modules.agents_hub.agent.public_graphs.strategies.md_long_context_pipeline:MdLongContextPipeline"
+MD_AGENT_SELECTOR = "server.app.modules.agents_hub.agent.public_graphs.strategies.md_agent_selector_pipeline:MdAgentSelectorPipeline"
+
+# PLG.2 — las estrategias del núcleo, por eje. El nombre es `<eje>.<nombre>`; el eje tiene que
+# ser uno de los cuatro de `EjeDeEstrategia` (estructura), y el nombre es libre (vocabulario).
+#
+# `language.default` es la que respeta `language_mode` de LANG. Las otras dos del eje están para
+# poder fijar una política **por chatbot** sin tocar `language_mode`, que es de organización.
+[project.entry-points."govgenai.strategies"]
+"retrieval.single_source" = "server.app.modules.agents_hub.agent.public_graphs.strategies.nucleo:single_source_retrieval"
+"merge.passthrough" = "server.app.modules.agents_hub.agent.public_graphs.strategies.nucleo:passthrough_merge"
+"template.generic" = "server.app.modules.agents_hub.agent.public_graphs.strategies.nucleo:generic_template"
+"language.default" = "server.app.modules.agents_hub.agent.public_graphs.strategies.nucleo:default_language"
+"language.neutral" = "server.app.modules.agents_hub.agent.public_graphs.strategies.nucleo:neutral_language"
+"language.strict" = "server.app.modules.agents_hub.agent.public_graphs.strategies.nucleo:strict_language"

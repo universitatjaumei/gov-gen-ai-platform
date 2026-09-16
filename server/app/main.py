@@ -299,6 +299,20 @@ async def _arranque(app: FastAPI):
     # mensajes del propio arranque —que son los que más falta hacen cuando algo va mal— se
     # perderían o saldrían con el formato de otro.
     configurar_logging()
+    # PLG.1 — descubrir los perfiles, pipelines y estrategias declarados por *entry points*, del
+    # núcleo y de cualquier paquete instalado. Va aquí, pronto y **antes de servir**, porque los
+    # dos fallos que puede dar —un paquete que no carga, dos que declaran el mismo nombre— son
+    # de configuración del entorno: tienen que romper el arranque y no la primera petición.
+    #
+    # `verificar_perfiles_registrados` construye cada perfil configurable y comprueba que sale un
+    # grafo con sus cuatro ejes. Es lo que `tests/public_graphs/test_profile_contract.py` hace
+    # con lo que está en el árbol, llevado al arranque para **lo instalado**: un perfil que llega
+    # en un paquete no lo cubre ningún test de este repositorio.
+    from server.app.modules.agents_hub.agent.public_graphs import plugins
+
+    descubierto = plugins.descubrir_todo()
+    logger.info("Descubrimiento por entry points: %s", descubierto)
+    plugins.verificar_perfiles_registrados()
     # El esquema NO se crea aquí. Hasta BD.2 (2026-09-04) el arranque hacía `create_all` sobre
     # los tres metadatos, además de lo que Alembic aplica en el despliegue: dos fuentes, y la que
     # nunca borra ganaba — así quedaron 36 tablas de modelos retirados en la base de desarrollo.

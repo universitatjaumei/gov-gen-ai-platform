@@ -248,6 +248,10 @@ class HubOrganizacion(HubConfigBase):
     default_chunk_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     default_chunk_overlap: Mapped[int | None] = mapped_column(Integer, nullable=True)
     default_chunking_strategy: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # PLG.2 — estrategias por defecto de la organización, `{eje: nombre}`. Se fusiona CLAVE A
+    # CLAVE con lo que ponga el chatbot: una organización que fija `merge` no pisa el `template`
+    # que el chatbot haya elegido. NULL = hereda entera la composición del perfil.
+    default_estrategias: Mapped[dict[str, str] | None] = mapped_column(JSONB, nullable=True)
     # --- Reescritura de consulta (RAG.10). NULL = heredar del default de plataforma ---
     # Nullable y no `default=False` como sus hermanas booleanas mas antiguas: con un False
     # no nulo, la organizacion pisaria siempre a la plataforma y encenderlo por organizacion
@@ -369,10 +373,22 @@ class HubChatbot(HubConfigBase):
     # MT.1 — un asistente es siempre de una organización.
     __ambito__ = Ambito.ORGANIZACION
     __table_args__ = (
-        CheckConstraint(
-            "retrieval_mode IN ('RAG', 'MD_LONG_CONTEXT', 'MD_AGENT_SELECTOR')",
-            name="ck_chatbot_retrieval_mode",
-        ),
+        # PLG.2 — **el CHECK de `retrieval_mode` se retira**, y no es un descuido del criterio de
+        # los de abajo sino su aplicación. La regla del proyecto dice que el vocabulario va en
+        # dato y la estructura en CHECK, y la prueba de cuál es cuál es ésta: *¿puede llegar un
+        # valor nuevo sin escribir código que lo consuma?*
+        #
+        # Hasta PLG.1 la respuesta era no, y el CHECK era correcto: los tres modos eran una
+        # cadena de `if` en la factoría. Desde PLG.1 un pipeline llega **instalando un paquete**,
+        # así que el CHECK convertía la funcionalidad entera en imposible: el modo se validaba
+        # contra el registro vivo en el router, pasaba, y luego Postgres lo rechazaba al guardar.
+        #
+        # Lo que sigue validando: `validar_modo()` contra `list_modes()`, que es el registro vivo
+        # y sabe lo que el CHECK no puede saber — qué hay instalado.
+        #
+        # Los tres CHECK que quedan abajo SÍ son estructura, y por eso se quedan: `kind`,
+        # `chunking_strategy` y `access_mode` tienen cada uno código que los aplica, y añadir un
+        # valor exige escribirlo.
         CheckConstraint(
             "kind IN ('atomic', 'router')",
             name="ck_chatbot_kind",
@@ -484,6 +500,14 @@ class HubChatbot(HubConfigBase):
     anon_ip_daily_token_quota: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # --- Campos del grafo público (9B.2) ---
     public_graph_profile: Mapped[str] = mapped_column(String(50), nullable=False, default="PUBLIC_KB_RICH")
+    # PLG.2 — sobreescritura de estrategias por eje, `{eje: nombre}`. Heredable **clave a
+    # clave**: una clave ausente hereda de la organización, y una ausente allí hereda de la
+    # composición del perfil. NULL y `{}` significan lo mismo, «hereda todo».
+    #
+    # JSONB y no cuatro columnas porque los ejes son cuatro hoy y el `StrEnum` puede crecer; y
+    # sin CHECK sobre sus valores, que es justo lo que este bloque hace posible: los nombres se
+    # validan contra el registro vivo, que sabe qué hay instalado. Un CHECK no puede saberlo.
+    estrategias: Mapped[dict[str, str] | None] = mapped_column(JSONB, nullable=True)
     language_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="prefer")
     # RES.1 — se compara contra la puntuación del **mejor** fragmento recuperado, no contra la
     # media de todos. O sea: «¿tengo al menos una fuente buena?», no «¿son buenas de media?».

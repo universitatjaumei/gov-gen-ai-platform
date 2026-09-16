@@ -9,7 +9,7 @@ Deploy: edge
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_contract import (
     EvidenceItem,
@@ -40,6 +40,7 @@ class RetrievalOutput:
     buckets: list[RetrievalResult] = field(default_factory=list)
 
 
+@runtime_checkable
 class RetrievalStrategy(Protocol):
     """Protocolo de estrategia de retrieval para grafos públicos."""
 
@@ -53,12 +54,14 @@ class RetrievalStrategy(Protocol):
     ) -> RetrievalOutput: ...
 
 
+@runtime_checkable
 class MergeStrategy(Protocol):
     """Fusiona los buckets de un RetrievalOutput en una lista plana de EvidenceItem."""
 
     def merge(self, output: RetrievalOutput) -> list[EvidenceItem]: ...
 
 
+@runtime_checkable
 class TemplateStrategy(Protocol):
     """Construye el contexto de prompt que se entrega al LLM."""
 
@@ -70,6 +73,7 @@ class TemplateStrategy(Protocol):
     ) -> str: ...
 
 
+@runtime_checkable
 class LanguagePolicy(Protocol):
     """Política de idioma: detección + filtros post-merge + warning de traducción."""
 

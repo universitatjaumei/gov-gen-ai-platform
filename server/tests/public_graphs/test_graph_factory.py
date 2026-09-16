@@ -21,7 +21,7 @@ from server.app.modules.agents_hub.agent.public_graphs.strategies.protocols impo
 from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_pipeline_protocol import (
     GraphDeps,
 )
-from server.app.modules.agents_hub.agent.public_graphs.types import PublicGraphProfile
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -62,7 +62,10 @@ def _test_registry() -> GraphProfileRegistry:
             llm=llm,
         )
 
-    for profile in PublicGraphProfile:
+    # PLG.1: los nombres son cadenas, no miembros de un enum. Se listan aquí a propósito en vez
+    # de leerlos del registro global: este test monta SU registro y no debe depender de qué haya
+    # descubierto el cargador en el entorno, que puede incluir paquetes instalados.
+    for profile in ("PUBLIC_KB_RICH", "PUBLIC_PORTAL_AGGREGATOR", "PUBLIC_PORTAL_ROUTER"):
         registry.register_profile(profile, make_mock_graph)
 
     return registry

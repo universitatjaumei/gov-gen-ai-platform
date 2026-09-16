@@ -18,6 +18,27 @@ import {
  * mostrarlos, es **distinguir un valor propio de uno heredado** y permitir volver a heredar —
  * que hasta PLAT.3 era imposible por API, porque el `PATCH` descartaba el `null` explícito.
  */
+// PLG.3 — el catalogo de perfiles, modos y estrategias de ESTA instalacion. Antes la pagina
+// llevaba las listas escritas dentro; ahora las pide, asi que el test tiene que servirlas.
+vi.mock('@/shared/api/generated/hub-chatbots/hub-chatbots', () => ({
+  useOpcionesDeGrafoApiV1HubChatbotsOpcionesDeGrafoGet: () => ({
+    data: {
+      perfiles: [
+        { nombre: 'PUBLIC_KB_RICH', configurable: true },
+        { nombre: 'PUBLIC_PORTAL_ROUTER', configurable: false },
+      ],
+      modos: [{ nombre: 'RAG' }, { nombre: 'MD_LONG_CONTEXT' }, { nombre: 'MD_AGENT_SELECTOR' }],
+      estrategias: {
+        retrieval: [{ nombre: 'single_source' }],
+        merge: [{ nombre: 'passthrough' }],
+        template: [{ nombre: 'generic' }],
+        language: [{ nombre: 'default' }],
+      },
+      ejes: ['retrieval', 'merge', 'template', 'language'],
+    },
+  }),
+}))
+
 vi.mock('@/shared/api/generated/hub-organizaciones/hub-organizaciones', () => ({
   useListOrganizacionesApiV1HubOrganizacionesGet: vi.fn(),
   useGetValoresPorDefectoApiV1HubOrganizacionesOrganizacionIdValoresPorDefectoGet: vi.fn(),

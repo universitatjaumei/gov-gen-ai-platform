@@ -17,6 +17,11 @@ from sqlalchemy import select
 
 from server.app.api.deps import require_role, require_module
 from server.app.core.auth.models import UserInfo
+from server.app.modules.agents_hub.agent.public_graphs.validacion import (
+    validar_estrategias,
+    validar_modo,
+    validar_perfil,
+)
 from server.app.core.auth.tenancy import assert_org_access, scope_query_to_orgs
 from server.app.modules.agents_hub.database.config_models import HubChatbot, HubLLMConfig
 from server.app.modules.agents_hub.database.connection import get_async_session
@@ -65,7 +70,7 @@ class ChatbotRead(BaseModel):
     system_prompt: str
     sources: list[str]
     is_active: bool
-    retrieval_mode: Literal["RAG", "MD_LONG_CONTEXT", "MD_AGENT_SELECTOR"]
+    retrieval_mode: str
     retrieval_top_k: int
     use_prompt_caching: bool
     cache_ttl: int
@@ -112,6 +117,9 @@ class ChatbotRead(BaseModel):
     chunking_strategy: Literal["structural", "parent_child"] | None
     # RAG.10: None = heredar. Un False no nulo pisaria a la organizacion.
     query_rewriting_enabled: bool | None
+    # PLG.2 — lo que el chatbot tiene PUESTO, `{eje: nombre}`. Puede estar a medias: las
+    # claves ausentes se heredan.
+    estrategias: dict[str, str] | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -125,7 +133,7 @@ class ChatbotCreate(BaseModel):
     system_prompt: str
     sources: list[str] = []
     is_active: bool = True
-    retrieval_mode: Literal["RAG", "MD_LONG_CONTEXT", "MD_AGENT_SELECTOR"] = "RAG"
+    retrieval_mode: str = "RAG"
     retrieval_top_k: int = 8
     use_prompt_caching: bool = False
     cache_ttl: int = 3600
@@ -166,6 +174,9 @@ class ChatbotCreate(BaseModel):
     chunk_overlap: int | None = None
     chunking_strategy: Literal["structural", "parent_child"] | None = None
     query_rewriting_enabled: bool | None = None
+    # PLG.2 — sobreescritura por eje. Clave ausente = hereda de la organizacion y, en su
+    # defecto, de la composicion del perfil.
+    estrategias: dict[str, str] | None = None
 
     # LANG.1 — `language_mode` era `String(20)` libre, así que «castellano» se guardaba tal cual
     # y la factoría lo trataba como `prefer` **sin avisar a nadie**. La regla vive en
@@ -196,7 +207,7 @@ class ChatbotUpdate(BaseModel):
     system_prompt: str | None = None
     sources: list[str] | None = None
     is_active: bool | None = None
-    retrieval_mode: Literal["RAG", "MD_LONG_CONTEXT", "MD_AGENT_SELECTOR"] | None = None
+    retrieval_mode: str | None = None
     retrieval_top_k: int | None = None
     use_prompt_caching: bool | None = None
     cache_ttl: int | None = None
@@ -225,6 +236,9 @@ class ChatbotUpdate(BaseModel):
     chunk_overlap: int | None = None
     chunking_strategy: Literal["structural", "parent_child"] | None = None
     query_rewriting_enabled: bool | None = None
+    # PLG.2 — sobreescritura por eje. Clave ausente = hereda de la organizacion y, en su
+    # defecto, de la composicion del perfil.
+    estrategias: dict[str, str] | None = None
 
     # LANG.1 — `language_mode` era `String(20)` libre, así que «castellano» se guardaba tal cual
     # y la factoría lo trataba como `prefer` **sin avisar a nadie**. La regla vive en
@@ -303,6 +317,118 @@ async def _leer_con_disponibilidad(session, chatbot) -> ChatbotRead:
     )
 
 
+class EstrategiaOut(BaseModel):
+    nombre: str
+    descripcion: str | None = None
+    #: `nucleo` o `paquete`. Que el panel pueda distinguirlas importa: una estrategia de un
+    #: paquete desaparece si alguien lo desinstala, y quien la elige debería saberlo.
+    origen: str
+    distribucion: str | None = None
+
+
+class PerfilOut(BaseModel):
+    nombre: str
+    #: False para los de `PERFILES_SIN_CONFIGURAR`: se ofrecen, pero no se pueden seleccionar.
+    configurable: bool
+    descripcion: str | None = None
+    composicion: dict[str, str] | None = None
+
+
+class ModoOut(BaseModel):
+    nombre: str
+    descripcion: str | None = None
+
+
+class OpcionesDeGrafoOut(BaseModel):
+    """Lo que el panel puede ofrecer **en esta instalación**.
+
+    Existe porque desde PLG.1 la lista no se puede conocer en tiempo de compilación: depende de
+    qué paquetes haya instalados. El frontend llevaba los cuatro nombres *hardcodeados* en tres
+    ficheros, que además de violar la regla maestra de contrato era lo primero con lo que un
+    perfil instalado se habría dado de bruces.
+    """
+
+    perfiles: list[PerfilOut]
+    modos: list[ModoOut]
+    estrategias: dict[str, list[EstrategiaOut]]
+    #: Los ejes, en orden. El panel pinta un select por cada uno sin conocerlos de antemano.
+    ejes: list[str]
+
+
+def _primera_linea(objeto: object) -> str | None:
+    """La descripción de una opción sale de su *docstring*, y es opcional a propósito.
+
+    No se inventa i18n para nombres de terceros: si un paquete no documenta su estrategia, el
+    panel enseña el nombre y ya. Traducir lo que no controlamos sería prometer una calidad que
+    no podemos sostener.
+    """
+    doc = (getattr(objeto, "__doc__", None) or "").strip()
+    return doc.splitlines()[0].strip() if doc else None
+
+
+@router.get("/opciones-de-grafo", response_model=OpcionesDeGrafoOut)
+async def opciones_de_grafo(user: UserInfo = Depends(_require_admin)):
+    """Perfiles, modos y estrategias disponibles, con su origen.
+
+    Acotado a admin/superadmin como el resto del router. No lleva datos de ninguna organización
+    —es el catálogo de la instalación— pero enumerar qué paquetes hay instalados es información
+    del despliegue, y ésa no es pública.
+    """
+    from server.app.modules.agents_hub.agent.public_graphs.core.graph_factory import (
+        COMPOSICION_PUBLIC_KB_RICH,
+        PERFILES_SIN_CONFIGURAR,
+    )
+    from server.app.modules.agents_hub.agent.public_graphs.registry import (
+        get_profile,
+        list_profiles,
+    )
+    from server.app.modules.agents_hub.agent.public_graphs.strategies.registry import (
+        EjeDeEstrategia,
+        get_strategy,
+        list_strategies,
+    )
+    from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_pipeline_factory import (
+        list_modes,
+    )
+
+    perfiles = [
+        PerfilOut(
+            nombre=nombre,
+            configurable=nombre not in PERFILES_SIN_CONFIGURAR,
+            descripcion=_primera_linea(get_profile(nombre)),
+            composicion=dict(COMPOSICION_PUBLIC_KB_RICH) if nombre == "PUBLIC_KB_RICH" else None,
+        )
+        for nombre in sorted(list_profiles())
+    ]
+
+    estrategias: dict[str, list[EstrategiaOut]] = {}
+    for eje in EjeDeEstrategia:
+        del_eje = []
+        for nombre in list_strategies(eje):
+            factoria = get_strategy(eje, nombre)
+            modulo = getattr(factoria, "__module__", "") or ""
+            # El origen se deduce del módulo: lo del núcleo vive bajo `server.app`. Es una
+            # heurística y se dice; la alternativa —guardar la distribución al registrar— añade
+            # estado al registro para un dato que sólo usa el panel.
+            del_nucleo = modulo.startswith("server.app")
+            del_eje.append(
+                EstrategiaOut(
+                    nombre=nombre,
+                    descripcion=_primera_linea(factoria),
+                    origen="nucleo" if del_nucleo else "paquete",
+                    distribucion=None if del_nucleo else modulo.split(".")[0],
+                )
+            )
+        estrategias[eje.value] = del_eje
+
+    return OpcionesDeGrafoOut(
+        perfiles=perfiles,
+        modos=[ModoOut(nombre=m) for m in list_modes()],
+        estrategias=estrategias,
+        ejes=[e.value for e in EjeDeEstrategia],
+    )
+
+
 @router.get("", response_model=list[ChatbotRead])
 async def list_chatbots(
     user: UserInfo = Depends(_require_admin),
@@ -330,6 +456,14 @@ async def create_chatbot(
     # comprobación de embeddings: a quien no gestiona la organización no se le contesta
     # con el estado del servicio de embeddings, que es información de la instalación.
     assert_org_access(user, body.organizacion_id)
+
+    # PLG.1: perfil y modo se validan contra los registros VIVOS, no contra un `Literal` del
+    # DTO. El `Literal` cerraba el vocabulario en el código —un modo de un paquete instalado no
+    # habría pasado nunca— y el perfil no se validaba en absoluto, así que un valor inventado se
+    # guardaba y el fallo salía en el primer mensaje del usuario, lejos del formulario.
+    validar_perfil(body.public_graph_profile)
+    validar_modo(body.retrieval_mode)
+    validar_estrategias(body.estrategias)
 
     # RAG.9: fallar al crear es barato; fallar a mitad de una ingesta de miles de documentos
     # no. Sólo para los modos que CONSULTAN el índice vectorial (ACT.8): a `MD_LONG_CONTEXT`,
@@ -397,6 +531,12 @@ async def update_chatbot(
     session=Depends(get_async_session),
 ):
     chatbot = await _get_chatbot_or_404(session, chatbot_id, user)
+
+    # PLG.1: mismo criterio que al crear. `None` pasa y significa «heredar», que es lo que
+    # distingue este endpoint del de creación.
+    validar_perfil(body.public_graph_profile)
+    validar_modo(body.retrieval_mode)
+    validar_estrategias(body.estrategias)
 
     payload = body.model_dump(exclude_none=True)
 

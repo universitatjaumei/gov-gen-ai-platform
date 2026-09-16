@@ -34,30 +34,22 @@ def _construir(perfil):
 
     cfg = SimpleNamespace(public_graph_profile=perfil, retrieval_mode="MD_FULL")
     deps = SimpleNamespace(session=None, embedder=None, llm=None)
-    return get_profile(perfil.value)(cfg, deps, None)
+    return get_profile(perfil)(cfg, deps, None)
 
 
 class TestLosPerfilesStubNoDevuelvenVacioEnSilencio:
 
     @pytest.mark.parametrize("perfil", sorted(_PERFILES_SIN_CONFIGURAR))
     def test_should_refuse_to_build_an_unconfigured_profile(self, perfil):
-        from server.app.modules.agents_hub.agent.public_graphs.types import (
-            PublicGraphProfile,
-        )
-
         with pytest.raises(NotImplementedError):
-            _construir(PublicGraphProfile(perfil))
+            _construir(perfil)
 
     @pytest.mark.parametrize("perfil", sorted(_PERFILES_SIN_CONFIGURAR))
     def test_should_say_what_to_use_instead(self, perfil):
         """Quien está configurando un chatbot necesita saber qué elegir, no solo que esto
         no vale."""
-        from server.app.modules.agents_hub.agent.public_graphs.types import (
-            PublicGraphProfile,
-        )
-
         with pytest.raises(NotImplementedError) as exc:
-            _construir(PublicGraphProfile(perfil))
+            _construir(perfil)
 
         mensaje = str(exc.value)
         assert "PUBLIC_KB_RICH" in mensaje, mensaje
@@ -66,10 +58,6 @@ class TestLosPerfilesStubNoDevuelvenVacioEnSilencio:
 class TestElPerfilQueSiFuncionaSigueFuncionando:
 
     def test_should_still_build_public_kb_rich(self):
-        from server.app.modules.agents_hub.agent.public_graphs.types import (
-            PublicGraphProfile,
-        )
-
-        grafo = _construir(PublicGraphProfile.PUBLIC_KB_RICH)
+        grafo = _construir("PUBLIC_KB_RICH")
 
         assert grafo is not None

@@ -137,6 +137,8 @@ retiró el 2026-09-04**: no lo usaba ni CI, ni el despliegue, ni el `Dockerfile`
 - `docs/LICENCIA_ES.md` — la AGPL explicada en español: qué permite, qué obliga y qué no, y qué
   significa para un pliego.
 - `CONTRIBUTING.md` — cómo se trabaja aquí.
+- `CODE_OF_CONDUCT.md` — qué se espera de quien participa, y a dónde se escribe cuando algo se
+  incumple. Se aplica igual a quien mantiene el proyecto.
 - `AGENTS.md` — reglas duras para agentes de programación, y de paso el contrato de estilo
   del proyecto. Vale para cualquier agente, no solo para Claude Code: el `CLAUDE.md` de la raíz
   es un fichero de tres líneas que importa este, porque Claude Code busca ese nombre por

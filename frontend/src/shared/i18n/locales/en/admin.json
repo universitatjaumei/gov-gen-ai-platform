@@ -340,7 +340,15 @@
     },
     "llm_configs_alcance_de_los_niveles": "Tiers (1, 2, 3) are not only for Chatbots: Reports —copilot, script proposal and audit, drafts— and Curation —crawling and recognition— consume them too. Changing a tier’s model changes the behaviour of all three modules.",
     "organizacion_identidad_visual": "Visual identity",
-    "revision": "Review"
+    "revision": "Review",
+    "chatbot_graph_profile_no_configurable": "not configured",
+    "chatbot_estrategias": "Strategies by axis",
+    "chatbot_estrategia_heredar": "Inherit",
+    "chatbot_estrategia_de_paquete": "from a package",
+    "chatbot_eje_retrieval": "Retrieval",
+    "chatbot_eje_merge": "Merge",
+    "chatbot_eje_template": "Template",
+    "chatbot_eje_language": "Language"
   },
   "login": {
     "title": "Sign in",

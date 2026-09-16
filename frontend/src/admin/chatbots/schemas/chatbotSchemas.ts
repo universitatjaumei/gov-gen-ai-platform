@@ -6,11 +6,18 @@ export const chatbotCreateSchema = z.object({
   kind: z.enum(['atomic', 'router']),
   system_prompt: z.string().min(1),
   is_active: z.boolean(),
-  retrieval_mode: z.enum(['RAG', 'MD_LONG_CONTEXT', 'MD_AGENT_SELECTOR']),
+  // PLG.3 — `z.enum([...])` cerraba aquí la lista de modos, y desde PLG.1 esa lista **depende de
+  // qué paquetes haya instalados en el servidor**. El cliente no puede conocerla: valida que sea
+  // una cadena no vacía y **la pertenencia la decide el servidor** (422 con las opciones, que se
+  // muestra tal cual). Es la regla maestra 1 — la UI no conoce las opciones a priori.
+  retrieval_mode: z.string().min(1),
   retrieval_top_k: z.number().int().min(1).max(50),
   use_prompt_caching: z.boolean(),
   cache_ttl: z.number().int().min(60).max(86_400),
   public_graph_profile: z.string(),
+  // PLG.2 — sobreescritura por eje, `{eje: nombre}`. Clave ausente = hereda. El cliente no
+  // valida los nombres: los decide el servidor contra su registro vivo.
+  estrategias: z.record(z.string(), z.string()).optional(),
   language_mode: z.string(),
   quality_threshold: z.number().min(0).max(1),
   min_retrieval_results: z.number().int().min(1).max(20),
