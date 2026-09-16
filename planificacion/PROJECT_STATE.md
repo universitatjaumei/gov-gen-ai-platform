@@ -195,10 +195,39 @@ reescrita. Las 7 rutas pasan de 12 commits a 0, el recuento se queda en 736 —s
 diff de árboles son exactamente los 4 ficheros. Los cuatro se copiaron antes a
 `_local/docs_operacion/` (paso 3.bis, que estaba pendiente).
 
-**Ticket a GitHub Support ENVIADO el 2026-09-16.** Cubre los **cuatro** huérfanos —los dos de
-`logs/` más los dos que creó el *force-push*— y nombra las dos puntas que no deben tocarse. **El
-bloque queda esperando respuesta**; el detalle, el camino del formulario y la verificación, en
-`_local/TICKET_GITHUB_SUPPORT_purga.md`.
+## ✅ LA PURGA ESTÁ HECHA Y VERIFICADA (2026-09-16)
+
+**GitHub Support la ejecutó el mismo día**, y está comprobado a los tres niveles:
+
+| Comprobación | Resultado |
+|---|---|
+| Los **4 huérfanos** por API | **422 «No commit found for SHA»** |
+| `contents/logs` de los dos con datos | **404 «No commit found for the ref»** |
+| **`git fetch origin <sha>`** ← la definitiva | **no se pueden descargar** |
+| `main` / `desarrollo` | vivas, y el historial completo (741 commits) se descarga entero |
+
+**Con esto cae la puerta que impedía abrir el repositorio.** Lo que queda antes de hacerlo
+público es **REPO.4** (el repositorio se nombra a sí mismo en seis ficheros con el dueño anterior;
+es de agente) y **REPO.2** (los otros dos repositorios).
+
+> ⚠️ **Y la lección de la verificación, que es de método y ya tiene nombre en esta casa: el
+> medidor miente antes que el sistema.** Las **dos primeras** comprobaciones dieron falso:
+>
+> * `gh api … --jq '.sha'` sobre un error imprime la cadena `"null"`, que **no está vacía**, así
+>   que un `if [ -n "$r" ]` daba «sigue vivo» **siempre**. Dijo «TODAVÍA ALCANZABLE» en los cuatro.
+> * `--jq 'length'` sobre `contents` contaba la longitud del **JSON de error** como si fueran
+>   ficheros.
+>
+> Quedarse en la primera lectura habría sido acusar a Support de no haber hecho su trabajo. Lo que
+> zanjó la duda fue **bajar al nivel correcto**: `git fetch origin <sha>` no pasa por la API ni
+> por cachés — o el objeto está en el almacén, o no está.
+>
+> **Matiz sobre la respuesta de Support**: dice *«I have cleared the cached views»*, que
+> literalmente es menos que «he recogido la basura» y podía significar sólo la interfaz web. **No
+> fue el caso.** Y su aviso de rotar credenciales **no aplica**: lo que había eran volcados con
+> correos institucionales, no secretos. Nada que rotar.
+
+Texto del ticket y comprobaciones, en `_local/TICKET_GITHUB_SUPPORT_purga.md`.
 
 > ⚠️ **Al rellenarlo apareció una trampa que conviene no volver a pisar**: la categoría
 > «Eliminaciones» lleva a un formulario que **borra el repositorio entero** y es irreversible,
@@ -207,14 +236,16 @@ bloque queda esperando respuesta**; el detalle, el camino del formulario y la ve
 > del repositorio → Datos**, y el cuerpo del mensaje empieza diciendo explícitamente que **no** se
 > pide borrar el repositorio. (Y «Problemas», en ese menú, es la traducción de *Issues*.)
 
-**La puerta, y es lo único irreversible del bloque**: no se cambia la visibilidad a pública hasta
-que los cuatro SHA den **404**. Y el orden importa: **el punto de no retorno es la purga, no el
-*push*** — mientras los huérfanos existan, todo lo anterior al filtrado sigue siendo recuperable
-desde el propio GitHub, además del respaldo local y del *bundle*. Sigue pendiente **sacar el
-*bundle* del portátil**.
+**La puerta CAYÓ el 2026-09-16** con la purga verificada (arriba). Ya no hay nada que impida
+abrir el repositorio salvo REPO.4 y REPO.2.
 
-**Exposición mientras tanto, medida**: privado, **7 colaboradores directos**, 30 miembros en la
-organización. Acotada y conocida.
+**Y el punto de no retorno ya se cruzó**: era la purga, no el *push*. Mientras los huérfanos
+existían, todo lo anterior al filtrado se recuperaba desde el propio GitHub; ahora **la única
+copia de la historia previa al filtrado es el *bundle*** `respaldo-gov-gen-ai-platform-2026-09-15.bundle`
+—ya fuera del portátil— y este clon local. No borrar ninguno de los dos a la ligera.
+
+**La exposición que hubo, para el registro**: privado, 7 colaboradores directos, 30 miembros en la
+organización, del 2026-08-21 al 2026-09-16. Acotada y conocida en todo momento; nunca pública.
 
 **Lo que ya está hecho y no hay que repetir**: las 12 variables, los dos anclajes de GCP
 —demostrados por **dos despliegues reales** el 2026-09-15—, y el paso **0.bis** (los tres ficheros
