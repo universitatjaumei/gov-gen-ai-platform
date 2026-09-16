@@ -50,7 +50,22 @@ def _versionados() -> list[str]:
     return [p for p in salida.split("\0") if p]
 
 
+#: Este mismo fichero, en la forma en que lo nombra `git ls-files`.
+#:
+#: El escáner tiene que llevar escrito el nombre que busca, así que se encuentra a sí mismo. No se
+#: arregla con una entrada más en `REGISTRO` —esto no cuenta lo que pasó, es la maquinaria— ni
+#: partiendo el literal en trozos para esconderlo. Se **calcula** la ruta, para que la exención sea
+#: exactamente una y no una lista que alguien pueda ir engordando.
+#:
+#: Que se escapara en local tiene su propia lección: `git ls-files` no ve un fichero hasta que está
+#: commiteado, así que un guardarraíl nuevo que se mire a sí mismo pasa en verde en la máquina que
+#: lo escribe y se pone rojo en CI, cuando ya está empujado.
+YO_MISMO = Path(__file__).resolve().relative_to(_RAIZ.resolve()).as_posix()
+
+
 def _es_registro(ruta: str) -> bool:
+    if ruta == YO_MISMO:
+        return True
     return any(ruta.startswith(r) or ruta == r for r in REGISTRO)
 
 
@@ -94,6 +109,22 @@ def test_ningun_fichero_vivo_nombra_al_dueno_anterior() -> None:
         f"redirección, y esa redirección desaparece el día que alguien registre ese nombre.\n"
         f"Si el fichero es REGISTRO —cuenta lo que pasó— va en la lista `REGISTRO` de este "
         f"mismo test, con su razón."
+    )
+
+
+def test_la_unica_exencion_calculada_apunta_a_un_fichero_que_existe() -> None:
+    """La exención de arriba se calcula, y algo calculado puede dejar de apuntar a nada.
+
+    Si `YO_MISMO` se resolviera mal —otra raíz, otro separador, el fichero renombrado— el escáner
+    volvería a acusarse a sí mismo, pero **no** es eso lo que se comprueba aquí: eso ya lo dice el
+    test de arriba poniéndose rojo. Lo que se comprueba es lo contrario, que es lo que fallaría en
+    silencio: una exención que apunta a un fichero que git no conoce no exime nada y nadie se
+    entera hasta que hace falta.
+    """
+    assert YO_MISMO in _versionados(), (
+        f"La exención del escáner apunta a '{YO_MISMO}', que no es un fichero versionado. "
+        f"Se calcula desde `__file__` y la raíz del repositorio; si una de las dos cambia, deja "
+        f"de eximir a nadie."
     )
 
 
