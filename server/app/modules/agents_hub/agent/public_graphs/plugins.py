@@ -41,6 +41,7 @@ from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_pipe
 
 GRUPO_PERFILES = "govgenai.graph_profiles"
 GRUPO_PIPELINES = "govgenai.retrieval_pipelines"
+GRUPO_ESTRATEGIAS = "govgenai.strategies"
 
 
 def _puntos_de_entrada(grupo: str) -> Iterable[Any]:
@@ -140,15 +141,92 @@ def descubrir_pipelines() -> list[str]:
     return registrados
 
 
-#: **El punto de extensión es una LISTA, no tres llamadas sueltas.** PLG.2 añade aquí
-#: `descubrir_estrategias`. Con llamadas sueltas, la cuarta acaba registrándose en otro sitio y
-#: vuelve a haber dos caminos, que es justo lo que este módulo existe para evitar.
-DESCUBRIDORES: list[Callable[[], list[str]]] = [descubrir_perfiles, descubrir_pipelines]
+def descubrir_estrategias() -> list[str]:
+    """Registra las estrategias declaradas, con nombre `<eje>.<nombre>` (PLG.2).
+
+    El eje va **en el nombre del *entry point*** y no en el objeto cargado, a propósito: así el
+    cargador sabe en qué eje va antes de importar nada, y puede rechazar un eje inventado sin
+    ejecutar código del paquete. Lo contrario —preguntarle al objeto— obligaría a cargar primero
+    y a fiarse de lo que conteste.
+    """
+    from server.app.modules.agents_hub.agent.public_graphs.strategies import registry as sreg
+
+    puntos = list(_puntos_de_entrada(GRUPO_ESTRATEGIAS))
+    _comprobar_sin_duplicados(puntos, GRUPO_ESTRATEGIAS)
+
+    registrados: list[str] = []
+    for punto in puntos:
+        distribucion = _nombre_de_distribucion(punto)
+        eje, _, nombre = punto.name.partition(".")
+        if not nombre:
+            raise RuntimeError(
+                f"El entry point de estrategia '{punto.name}', de '{distribucion}', no tiene la "
+                f"forma '<eje>.<nombre>' (por ejemplo 'merge.dedup_por_documento')."
+            )
+        try:
+            eje_valido = sreg.EjeDeEstrategia(eje)
+        except ValueError:
+            raise RuntimeError(
+                f"La estrategia '{punto.name}' de '{distribucion}' declara el eje '{eje}', que "
+                f"no existe. Los ejes son {[e.value for e in sreg.EjeDeEstrategia]} y son "
+                f"estructura: añadir uno exige escribir el nodo del CoreGraph que lo consuma."
+            ) from None
+
+        factoria = _cargar(punto, GRUPO_ESTRATEGIAS)
+        if not callable(factoria):
+            raise RuntimeError(
+                f"La estrategia '{punto.name}' de '{distribucion}' no apunta a algo invocable. "
+                f"Tiene que ser una factoría `(cfg, deps, llm) -> instancia`."
+            )
+        try:
+            sreg.register_strategy(eje_valido, nombre, factoria)
+        except ValueError as exc:
+            raise RuntimeError(
+                f"La estrategia '{punto.name}' de '{distribucion}' choca con una ya "
+                f"registrada. {exc}"
+            ) from exc
+        registrados.append(punto.name)
+    return registrados
 
 
-def descubrir_todo() -> dict[str, list[str]]:
-    """Ejecuta todos los descubridores. Se invoca UNA vez, en el lifespan y en el conftest."""
-    return {d.__name__: d() for d in DESCUBRIDORES}
+#: **El punto de extensión es una LISTA, no tres llamadas sueltas.** Con llamadas sueltas, la
+#: cuarta acaba registrándose en otro sitio y vuelve a haber dos caminos, que es justo lo que
+#: este módulo existe para evitar.
+DESCUBRIDORES: list[Callable[[], list[str]]] = [
+    descubrir_perfiles,
+    descubrir_pipelines,
+    descubrir_estrategias,
+]
+
+
+#: Lo que se descubrió en este proceso, o `None` si todavía no se ha descubierto.
+_YA_DESCUBIERTO: dict[str, list[str]] | None = None
+
+
+def descubrir_todo(*, forzar: bool = False) -> dict[str, list[str]]:
+    """Ejecuta todos los descubridores. **Idempotente por proceso.**
+
+    Lo idempotente no es cosmética: **el registro falla en alto ante duplicados**, que es lo que
+    se quiere cuando dos paquetes chocan, pero un segundo descubrimiento en el mismo proceso no
+    es un choque — es el mismo paquete otra vez. Sin esta guarda, cualquier cosa que ejecute el
+    *lifespan* dos veces revienta con «PUBLIC_KB_RICH choca con uno ya registrado», que además
+    **oculta el error de verdad**: lo destapó `test_el_fallo_de_arranque_se_puede_leer.py`, donde
+    el fallo que se quería leer en el log quedó tapado por éste.
+
+    Y no es sólo de tests: `uvicorn --reload` reimporta, `importlib.reload(server.app.main)` es lo
+    que hacen los tests de `DEPLOY_MODE`, y un arranque que falla y se reintenta pasaría por aquí
+    dos veces.
+
+    `forzar=True` existe para los tests que necesitan volver a descubrir con *entry points*
+    simulados; nadie más debería usarlo.
+    """
+    global _YA_DESCUBIERTO
+
+    if _YA_DESCUBIERTO is not None and not forzar:
+        return _YA_DESCUBIERTO
+
+    _YA_DESCUBIERTO = {d.__name__: d() for d in DESCUBRIDORES}
+    return _YA_DESCUBIERTO
 
 
 def verificar_perfiles_registrados() -> None:
@@ -209,3 +287,51 @@ def verificar_perfiles_registrados() -> None:
                 f"El perfil '{nombre}' construye un grafo con estrategias sin asignar: {faltan}. "
                 f"Un CoreGraph con un eje nulo falla al ejecutarse, no al construirse."
             )
+
+
+def verificar_estrategias_registradas() -> None:
+    """Instancia cada estrategia y comprueba que cumple el protocolo de SU eje (PLG.2).
+
+    Que esté registrada en el eje `merge` no significa que sea una `MergeStrategy`: el nombre del
+    *entry point* lo pone quien empaqueta, y equivocarse de eje es fácil. Sin esta comprobación,
+    el error saldría como un `AttributeError` a mitad de una conversación, con la estrategia ya
+    montada en el grafo y sin ninguna pista del paquete que la aportó.
+    """
+    import dataclasses
+
+    from server.app.modules.agents_hub.agent.public_graphs.core.config_resolver import (
+        PublicGraphConfig,
+    )
+    from server.app.modules.agents_hub.agent.public_graphs.strategies.registry import (
+        PROTOCOLO_DE_EJE,
+        EjeDeEstrategia,
+        get_strategy,
+        list_strategies,
+    )
+
+    cfg = PublicGraphConfig(
+        profile="",
+        retrieval_mode="RAG",
+        language_mode="prefer",
+        quality_threshold=0.6,
+        min_retrieval_results=1,
+        min_retrieval_score=0.25,
+        reranker_enabled=False,
+        answer_template="generic",
+    )
+
+    for eje in EjeDeEstrategia:
+        protocolo = PROTOCOLO_DE_EJE[eje]
+        for nombre in list_strategies(eje):
+            try:
+                instancia = get_strategy(eje, nombre)(dataclasses.replace(cfg), None, None)
+            except Exception as exc:  # noqa: BLE001 — se reenvía con contexto y se aborta
+                raise RuntimeError(
+                    f"La estrategia '{eje.value}.{nombre}' no se puede instanciar: {exc}."
+                ) from exc
+            if not isinstance(instancia, protocolo):
+                raise RuntimeError(
+                    f"La estrategia '{eje.value}.{nombre}' no cumple el protocolo "
+                    f"'{protocolo.__name__}' de su eje. O está declarada en el eje equivocado, o "
+                    f"le falta algún método del contrato."
+                )

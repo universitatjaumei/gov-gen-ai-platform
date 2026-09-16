@@ -247,3 +247,16 @@ PUBLIC_PORTAL_ROUTER = "server.app.modules.agents_hub.agent.public_graphs.core.g
 RAG = "server.app.modules.agents_hub.agent.public_graphs.strategies.rag_vector_pipeline:RagVectorPipeline"
 MD_LONG_CONTEXT = "server.app.modules.agents_hub.agent.public_graphs.strategies.md_long_context_pipeline:MdLongContextPipeline"
 MD_AGENT_SELECTOR = "server.app.modules.agents_hub.agent.public_graphs.strategies.md_agent_selector_pipeline:MdAgentSelectorPipeline"
+
+# PLG.2 — las estrategias del núcleo, por eje. El nombre es `<eje>.<nombre>`; el eje tiene que
+# ser uno de los cuatro de `EjeDeEstrategia` (estructura), y el nombre es libre (vocabulario).
+#
+# `language.default` es la que respeta `language_mode` de LANG. Las otras dos del eje están para
+# poder fijar una política **por chatbot** sin tocar `language_mode`, que es de organización.
+[project.entry-points."govgenai.strategies"]
+"retrieval.single_source" = "server.app.modules.agents_hub.agent.public_graphs.strategies.nucleo:single_source_retrieval"
+"merge.passthrough" = "server.app.modules.agents_hub.agent.public_graphs.strategies.nucleo:passthrough_merge"
+"template.generic" = "server.app.modules.agents_hub.agent.public_graphs.strategies.nucleo:generic_template"
+"language.default" = "server.app.modules.agents_hub.agent.public_graphs.strategies.nucleo:default_language"
+"language.neutral" = "server.app.modules.agents_hub.agent.public_graphs.strategies.nucleo:neutral_language"
+"language.strict" = "server.app.modules.agents_hub.agent.public_graphs.strategies.nucleo:strict_language"

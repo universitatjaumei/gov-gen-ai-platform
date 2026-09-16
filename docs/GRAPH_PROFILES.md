@@ -201,6 +201,81 @@ Igual: la clase, y su línea en `[project.entry-points."govgenai.retrieval_pipel
 `test_pipeline_contract_suite.py` se parametriza sobre `list_modes()` y lo recoge solo; lo único
 que hay que añadir es su rama de *mocking* en el fichero de contrato.
 
+## Estrategias: los cuatro ejes, cómo registrar una, cómo seleccionarla por configuración
+
+Un `CoreGraph` compone **cuatro** protocolos, y cada uno es un *eje*:
+
+| Eje | Protocolo | Qué decide |
+|---|---|---|
+| `retrieval` | `RetrievalStrategy` | cómo se busca la evidencia |
+| `merge` | `MergeStrategy` | cómo se fusionan los *buckets* en una lista plana |
+| `template` | `TemplateStrategy` | qué contexto de prompt recibe el LLM |
+| `language` | `LanguagePolicy` | detección de lengua, filtros y aviso de traducción |
+
+**Los ejes son estructura; los nombres de estrategia son vocabulario.** Por eso los ejes son un
+`StrEnum` cerrado y los nombres se registran: añadir un eje exige de todos modos escribir el nodo
+del grafo que lo consuma, así que no puede llegar por instalación. Una estrategia sí.
+
+**El bucle agéntico NO es un eje**, y conviene decir por qué: lo monta
+`build_agentic_loop_if_needed` a partir del modo de recuperación y de sus dependencias, y
+convertirlo en enchufe exigiría antes separar sus tres colaboradores —lector, buscador y
+puntuador—, que hoy se construyen juntos. Declararlo eje sin eso sería ofrecer un enchufe que no
+se puede sustituir de verdad. Queda como candidato.
+
+### Registrar una
+
+Igual que un perfil, con el nombre `<eje>.<nombre>`:
+
+```toml
+[project.entry-points."govgenai.strategies"]
+"merge.dedup_por_documento" = "govgenai_demo_perfil:merge_dedup_por_documento"
+```
+
+La factoría tiene la firma `(cfg, deps, llm) -> instancia`. Recibe `cfg` porque una estrategia
+puede necesitar la configuración efectiva del chatbot para construirse — la plantilla genérica del
+núcleo, por ejemplo, lee de ahí el prompt de sistema.
+
+El eje va **en el nombre del *entry point*** y no dentro del objeto: así el cargador sabe en qué
+eje va **antes de importar nada**, y puede rechazar un eje inventado sin ejecutar código del
+paquete. Al arrancar se instancia cada estrategia y se comprueba `isinstance` contra el protocolo
+de su eje: estar registrada en `merge` no la convierte en una `MergeStrategy`, y equivocarse de
+eje es fácil.
+
+### Seleccionarla por configuración
+
+Dos columnas `JSONB` con forma `{eje: nombre}`:
+
+- `hub_organizaciones.default_estrategias`
+- `hub_chatbots.estrategias`
+
+**Se fusionan CLAVE A CLAVE**, no como valor entero:
+
+```
+composición del perfil  ←  default_estrategias (organización)  ←  estrategias (chatbot)
+```
+
+Una organización que fija `merge` **no** pisa el `template` que haya elegido el chatbot. Clave
+ausente, `null` o cadena vacía significan «hereda»; el resultado trae **siempre los cuatro ejes**,
+para que quien lo lea no tenga que tratar el caso «falta la clave».
+
+Así, un chatbot que quiera deduplicar por documento cambia **una clave** —no hace falta un perfil
+nuevo ni código:
+
+```json
+{"estrategias": {"merge": "dedup_por_documento"}}
+```
+
+**Un nombre no registrado revienta en alto**, nombrando eje, nombre y chatbot. Nunca se cae al
+valor por defecto en silencio: es la lección del hallazgo I5 de la auditoría, donde un asistente
+respondía «no encuentro información» con el corpus perfectamente cargado.
+
+### El cruce con `language_mode`
+
+`language_mode` (LANG) elige la política **por defecto** del eje `language`. Una sobreescritura
+explícita del eje manda sobre él, porque es más específica: quien escribe `{"language":
+"neutral"}` está pidiendo exactamente ésa. Sin sobreescritura, `language_mode` sigue mandando como
+siempre.
+
 ## Reglas de extensión
 
 - Un perfil nuevo **no modifica** `CoreGraph` ni los protocolos existentes.

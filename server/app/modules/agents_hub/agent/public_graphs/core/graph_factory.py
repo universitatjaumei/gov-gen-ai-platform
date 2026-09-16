@@ -37,6 +37,11 @@ class GraphFactory:
         cfg = await get_effective_public_graph_config(chatbot_id, deps.session)
         profile_factory = self._registry.get_profile(cfg.profile)
         grafo = profile_factory(cfg, deps, llm)
+        # PLG.2 — las sobreescrituras por eje se aplican AQUÍ, en la misma capa que `rewrite_llm`
+        # y el bucle agéntico, y por el mismo motivo: son decisiones de composición que dependen
+        # de la cascada. Ni las factorías de perfil ni `CoreGraph` saben que existen, que es lo
+        # que permite que un perfil de un paquete se beneficie de ellas sin hacer nada.
+        _aplicar_sobreescrituras(grafo, cfg, deps, llm)
         # RAG.10: el LLM de reescritura se asigna aquí y no se pasa por las tres factorías
         # de perfil. Es una decisión de composición que depende de la cascada —igual que el
         # AgenticLoop— y añadirlo a sus firmas obligaría a los tres perfiles a conocer algo
@@ -45,6 +50,50 @@ class GraphFactory:
         if getattr(cfg, "query_rewriting_enabled", False):
             grafo.rewrite_llm = await _resolver_llm_de_reescritura(cfg, deps)
         return grafo
+
+
+def _aplicar_sobreescrituras(grafo: CoreGraph, cfg: Any, deps: Any, llm: Any) -> None:
+    """Sustituye en el grafo los ejes cuyo nombre resuelto difiera del que montó el perfil.
+
+    Sólo se toca lo que cambia: si la composición resuelta coincide con la del perfil —el caso
+    normal— no se instancia nada y el grafo sale exactamente igual que antes de PLG.2.
+
+    **Un nombre no registrado revienta aquí, en alto.** No se cae al defecto en silencio, y ésa es
+    la lección de los perfiles sin configurar (hallazgo I5): un asistente que responde «no
+    encuentro información» con el corpus cargado cuesta días de encontrar, mientras que un error
+    con el eje, el nombre y el chatbot se arregla en un minuto.
+    """
+    from server.app.modules.agents_hub.agent.public_graphs.strategies.registry import (
+        ATRIBUTO_DE_EJE,
+        EjeDeEstrategia,
+        UnknownStrategyError,
+        get_strategy,
+    )
+
+    resueltas = getattr(cfg, "estrategias", None) or {}
+    for eje_txt, nombre in resueltas.items():
+        try:
+            eje = EjeDeEstrategia(eje_txt)
+        except ValueError:
+            raise RuntimeError(
+                f"El chatbot {getattr(cfg, 'chatbot_id', '?')} tiene configurado el eje de "
+                f"estrategia '{eje_txt}', que no existe."
+            ) from None
+
+        atributo = ATRIBUTO_DE_EJE[eje]
+        montada = getattr(grafo, atributo, None)
+        if nombre == COMPOSICION_PUBLIC_KB_RICH.get(eje_txt) and montada is not None:
+            # El perfil ya montó ésta. Se evita instanciarla dos veces, que además de gastar
+            # cambiaría la identidad del objeto y rompería los tests de regresión por `type()`.
+            continue
+        try:
+            factoria = get_strategy(eje, nombre)
+        except UnknownStrategyError as exc:
+            raise RuntimeError(
+                f"El chatbot {getattr(cfg, 'chatbot_id', '?')} pide la estrategia "
+                f"'{eje_txt}.{nombre}', que no está registrada. {exc}"
+            ) from exc
+        setattr(grafo, atributo, factoria(cfg, deps, llm))
 
 
 # ---------------------------------------------------------------------------
@@ -280,22 +329,35 @@ def _politica_de_lengua(cfg: Any):
     return DefaultLanguagePolicy()
 
 
+#: PLG.2 — la composición por defecto del perfil operativo, **por nombre**.
+#:
+#: Antes la factoría importaba las cuatro clases y las instanciaba. Ahora declara qué estrategia
+#: quiere en cada eje y el registro la construye, que es lo que permite que una estrategia
+#: aportada por un paquete instalado ocupe uno de estos ejes sin tocar este fichero. Las clases no
+#: se han movido ni renombrado: lo que cambia es quién las instancia.
+COMPOSICION_PUBLIC_KB_RICH: dict[str, str] = {
+    "retrieval": "single_source",
+    "merge": "passthrough",
+    "template": "generic",
+    "language": "default",
+}
+
+
 def _make_public_kb_rich(cfg: Any, deps: Any, llm: Any = None) -> CoreGraph:
-    from server.app.modules.agents_hub.agent.public_graphs.profiles.public_kb_rich import (
-        GenericAnswerTemplateStrategy,
-        PassthroughMergeStrategy,
-        SingleSourceRetrievalStrategy,
+    from server.app.modules.agents_hub.agent.public_graphs.strategies.registry import (
+        ATRIBUTO_DE_EJE,
+        EjeDeEstrategia,
+        get_strategy,
     )
 
+    composicion = dict(COMPOSICION_PUBLIC_KB_RICH)
+    montadas = {
+        ATRIBUTO_DE_EJE[EjeDeEstrategia(eje)]: get_strategy(eje, nombre)(cfg, deps, llm)
+        for eje, nombre in composicion.items()
+    }
+
     return CoreGraph(
-        retrieval_strategy=SingleSourceRetrievalStrategy(),
-        merge_strategy=PassthroughMergeStrategy(),
-        template_strategy=GenericAnswerTemplateStrategy(
-            base_system_prompt=getattr(cfg, "system_prompt", None),
-            retrieval_mode=cfg.retrieval_mode,
-            router_index=getattr(cfg, "router_index", None),
-        ),
-        language_policy=_politica_de_lengua(cfg),
+        **montadas,
         cfg=cfg,
         deps=deps,
         llm=llm,

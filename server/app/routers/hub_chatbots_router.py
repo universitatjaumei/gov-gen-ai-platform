@@ -18,6 +18,7 @@ from sqlalchemy import select
 from server.app.api.deps import require_role, require_module
 from server.app.core.auth.models import UserInfo
 from server.app.modules.agents_hub.agent.public_graphs.validacion import (
+    validar_estrategias,
     validar_modo,
     validar_perfil,
 )
@@ -116,6 +117,9 @@ class ChatbotRead(BaseModel):
     chunking_strategy: Literal["structural", "parent_child"] | None
     # RAG.10: None = heredar. Un False no nulo pisaria a la organizacion.
     query_rewriting_enabled: bool | None
+    # PLG.2 — lo que el chatbot tiene PUESTO, `{eje: nombre}`. Puede estar a medias: las
+    # claves ausentes se heredan.
+    estrategias: dict[str, str] | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -170,6 +174,9 @@ class ChatbotCreate(BaseModel):
     chunk_overlap: int | None = None
     chunking_strategy: Literal["structural", "parent_child"] | None = None
     query_rewriting_enabled: bool | None = None
+    # PLG.2 — sobreescritura por eje. Clave ausente = hereda de la organizacion y, en su
+    # defecto, de la composicion del perfil.
+    estrategias: dict[str, str] | None = None
 
     # LANG.1 — `language_mode` era `String(20)` libre, así que «castellano» se guardaba tal cual
     # y la factoría lo trataba como `prefer` **sin avisar a nadie**. La regla vive en
@@ -229,6 +236,9 @@ class ChatbotUpdate(BaseModel):
     chunk_overlap: int | None = None
     chunking_strategy: Literal["structural", "parent_child"] | None = None
     query_rewriting_enabled: bool | None = None
+    # PLG.2 — sobreescritura por eje. Clave ausente = hereda de la organizacion y, en su
+    # defecto, de la composicion del perfil.
+    estrategias: dict[str, str] | None = None
 
     # LANG.1 — `language_mode` era `String(20)` libre, así que «castellano» se guardaba tal cual
     # y la factoría lo trataba como `prefer` **sin avisar a nadie**. La regla vive en
@@ -341,6 +351,7 @@ async def create_chatbot(
     # guardaba y el fallo salía en el primer mensaje del usuario, lejos del formulario.
     validar_perfil(body.public_graph_profile)
     validar_modo(body.retrieval_mode)
+    validar_estrategias(body.estrategias)
 
     # RAG.9: fallar al crear es barato; fallar a mitad de una ingesta de miles de documentos
     # no. Sólo para los modos que CONSULTAN el índice vectorial (ACT.8): a `MD_LONG_CONTEXT`,
@@ -413,6 +424,7 @@ async def update_chatbot(
     # distingue este endpoint del de creación.
     validar_perfil(body.public_graph_profile)
     validar_modo(body.retrieval_mode)
+    validar_estrategias(body.estrategias)
 
     payload = body.model_dump(exclude_none=True)
 

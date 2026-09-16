@@ -30,6 +30,42 @@ def construir_perfil_demo(cfg: Any, deps: Any, llm: Any = None) -> Any:
     return _make_public_kb_rich(cfg, deps, llm)
 
 
+def merge_dedup_por_documento(cfg: Any, deps: Any, llm: Any = None) -> Any:
+    """Estrategia del eje `merge` aportada por un paquete: una evidencia por documento.
+
+    Observable en la salida a propósito —si entran tres fragmentos del mismo documento sale uno—
+    para que el test pueda comprobar que la sobreescritura hizo algo, y no sólo que se instanció
+    la clase esperada.
+    """
+
+    class _DedupPorDocumento:
+        def merge(self, output: Any) -> list:
+            vistos: set[str] = set()
+            planos = []
+            for bucket in getattr(output, "buckets", []) or []:
+                for item in getattr(bucket, "items", []) or []:
+                    if item.source_id in vistos:
+                        continue
+                    vistos.add(item.source_id)
+                    planos.append(item)
+            return planos
+
+    return _DedupPorDocumento()
+
+
+def template_con_cabecera(cfg: Any, deps: Any, llm: Any = None) -> Any:
+    """Estrategia del eje `template`: antepone una cabecera fija al contexto."""
+
+    CABECERA = "[CABECERA DEL PAQUETE DEMO]"
+
+    class _ConCabecera:
+        def build_prompt_context(self, items: list, language: Any, query: str) -> str:
+            cuerpo = "\n".join(getattr(i, "content", "") for i in items)
+            return f"{CABECERA}\n{cuerpo}"
+
+    return _ConCabecera()
+
+
 class PipelineDemo:
     """Pipeline de recuperación mínimo que cumple `RetrievalPipeline`.
 

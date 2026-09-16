@@ -28,6 +28,7 @@ from server.app.core.auth.tenancy import assert_org_access, scope_query_to_orgs
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion
 from server.app.modules.agents_hub.agent.public_graphs.validacion import (
+    validar_estrategias,
     validar_modo,
     validar_perfil,
 )
@@ -108,6 +109,7 @@ class ValoresPorDefectoRead(BaseModel):
 
     default_public_graph_profile: str
     default_retrieval_mode: str
+    default_estrategias: dict[str, str] | None = None
     default_language_mode: str
     default_quality_threshold: float
     default_min_retrieval_results: int
@@ -140,6 +142,9 @@ class ValoresPorDefectoUpdate(BaseModel):
 
     default_public_graph_profile: str | None = None
     default_retrieval_mode: str | None = None
+    # PLG.2 — defectos de estrategia de la organizacion. Se fusionan CLAVE A CLAVE con los
+    # del chatbot: fijar `merge` aqui no pisa el `template` que el chatbot haya elegido.
+    default_estrategias: dict[str, str] | None = None
     default_language_mode: str | None = None
     default_quality_threshold: float | None = None
     default_min_retrieval_results: int | None = None
@@ -307,6 +312,7 @@ async def update_valores_por_defecto(
     # aparece multiplicado y lejos de donde se escribió.
     validar_perfil(body.default_public_graph_profile, "default_public_graph_profile")
     validar_modo(body.default_retrieval_mode, "default_retrieval_mode")
+    validar_estrategias(body.default_estrategias, "default_estrategias")
 
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(organizacion, field, value)

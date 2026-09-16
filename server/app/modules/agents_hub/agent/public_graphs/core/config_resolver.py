@@ -6,7 +6,7 @@ Un campo None en el chatbot o el org indica "heredar del nivel superior".
 Deploy: edge
 """
 import uuid
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 
@@ -26,6 +26,11 @@ class PublicGraphConfig:
     reranker_enabled: bool
     answer_template: str
     chatbot_id: uuid.UUID | None = None
+    # PLG.2 — la composición EFECTIVA de estrategias, `{eje: nombre}`, con **los cuatro ejes
+    # siempre presentes**. Que siempre estén los cuatro es deliberado: quien la lee —la factoría,
+    # la traza, el panel— no tiene que saber de herencia ni tratar el caso «falta la clave». La
+    # herencia se resuelve aquí y una sola vez.
+    estrategias: dict[str, str] = field(default_factory=dict)
     # RAG.2: el system_prompt del chatbot entra por la cascada porque *es* configuración
     # efectiva del chatbot. Así la TemplateStrategy —única fuente del system prompt— lo
     # recibe por el mismo camino que el resto de la config, sin parámetros paralelos.
@@ -235,6 +240,22 @@ async def get_effective_public_graph_config(
         "inject_whole_document": chatbot.inject_whole_document,
     })
 
+    # PLG.2 — las estrategias se resuelven APARTE y clave a clave, no con `_apply_layer`.
+    #
+    # `_apply_layer` sustituye el valor entero cuando no es nulo, y aquí eso sería el error: una
+    # organización que fija `{"merge": "..."}` borraría el `{"template": "..."}` del chatbot. La
+    # herencia de este campo es **por clave**, y por eso no puede pasar por el mismo mecanismo.
+    config = replace(
+        config,
+        estrategias=_resolver_estrategias(
+            perfil=config.profile,
+            de_organizacion=getattr(organizacion, "default_estrategias", None)
+            if organizacion is not None
+            else None,
+            del_chatbot=chatbot.estrategias,
+        ),
+    )
+
     if config.retrieval_mode == "MD_AGENT_SELECTOR":
         config = replace(
             config,
@@ -242,6 +263,32 @@ async def get_effective_public_graph_config(
         )
 
     return config
+
+
+def _resolver_estrategias(
+    perfil: str,
+    de_organizacion: dict[str, str] | None,
+    del_chatbot: dict[str, str] | None,
+) -> dict[str, str]:
+    """Composición del perfil ← defectos de la organización ← estrategias del chatbot.
+
+    **Fusión clave a clave**, y el resultado trae SIEMPRE los cuatro ejes. Nulo o clave ausente
+    significan «hereda»; no hay forma de decir «este eje, ninguno», porque un `CoreGraph` con un
+    eje vacío no se puede ejecutar.
+    """
+    from server.app.modules.agents_hub.agent.public_graphs.core.graph_factory import (
+        COMPOSICION_PUBLIC_KB_RICH,
+    )
+
+    # Hoy sólo el perfil operativo declara composición; los otros dos lanzan
+    # `NotImplementedError` al construirse, así que la suya no llega a usarse. Se parte de la de
+    # `PUBLIC_KB_RICH` para que el campo tenga los cuatro ejes en cualquier caso — un perfil de
+    # un paquete que no declare composición hereda una válida en vez de un diccionario vacío.
+    resuelto = dict(COMPOSICION_PUBLIC_KB_RICH)
+    for capa in (de_organizacion, del_chatbot):
+        if capa:
+            resuelto.update({k: v for k, v in capa.items() if v})
+    return resuelto
 
 
 async def _build_router_index(organizacion_id: uuid.UUID, session: Any) -> str | None:

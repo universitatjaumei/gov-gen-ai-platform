@@ -27,6 +27,12 @@ DEMO_KB_RICH = "govgenai_demo_perfil:construir_perfil_demo"
 [project.entry-points."govgenai.retrieval_pipelines"]
 DEMO_PIPELINE = "govgenai_demo_perfil:PipelineDemo"
 
+# PLG.2 — estrategias por eje. El nombre es `<eje>.<nombre>`: el eje va AHÍ y no dentro del
+# objeto, para que el cargador pueda rechazar un eje inventado sin ejecutar código del paquete.
+[project.entry-points."govgenai.strategies"]
+"merge.dedup_por_documento" = "govgenai_demo_perfil:merge_dedup_por_documento"
+"template.con_cabecera" = "govgenai_demo_perfil:template_con_cabecera"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

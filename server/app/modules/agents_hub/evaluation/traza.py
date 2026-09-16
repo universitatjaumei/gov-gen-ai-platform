@@ -28,6 +28,12 @@ CLAVES_DE_TRAZA = (
     "usage_source",
     # Configuración vigente en ESTA respuesta.
     "retrieval_mode",
+    # PLG.2 — qué estrategia corrió en cada eje. **Clave añadida a conciencia**, que es lo que
+    # este `CLAVES_DE_TRAZA` existe para forzar: el aviso de HIB.I es que un cambio de claves
+    # rompe el instrumental de `_local/` en silencio, así que añadir una obliga a pasar por aquí
+    # y a mirar quién lee la traza. Añadir no rompe a nadie —los lectores ignoran lo que no
+    # conocen—; renombrar sí, y por eso el snapshot compara el conjunto entero.
+    "estrategias",
     "chunking_strategy",
     "retrieval_top_k",
     "candidate_k",
@@ -112,6 +118,11 @@ def construye_traza(
     return {
         "usage_source": usage_source,
         "retrieval_mode": _de_cfg("retrieval_mode"),
+        # PLG.2 — qué estrategia corrió en cada eje, POR VALOR y con el resto de la
+        # configuración. Sin esto, una respuesta rara de un chatbot con `merge` sobreescrito no
+        # se podría explicar mirando su traza: habría que ir a la base a ver qué tenía puesto
+        # **en ese momento**, y la configuración cambia.
+        "estrategias": _de_cfg("estrategias"),
         "chunking_strategy": _de_cfg("chunking_strategy"),
         "retrieval_top_k": _de_cfg("retrieval_top_k"),
         "candidate_k": _de_cfg("candidate_k"),

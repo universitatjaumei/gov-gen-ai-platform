@@ -194,29 +194,33 @@ class TestOpenAPISchemaContract:
 
     # -- Enum de retrieval_mode --
 
-    def test_retrieval_mode_has_enum_values(self):
-        """retrieval_mode en ChatbotCreate debe exponer sus valores válidos como enum.
+    def test_retrieval_mode_is_an_open_string_not_an_enum(self):
+        """PLG.1 **invierte** este test a conciencia, y conviene entender por qué.
 
-        El frontend hardcodea ['RAG', 'MD_LONG_CONTEXT', 'MD_AGENT_SELECTOR'].
-        Si el contrato no expone el enum, el frontend puede quedar desalineado
-        cuando se añadan o eliminen modos.
-        Solución (CF.1.4): usar Literal['RAG', 'MD_LONG_CONTEXT', 'MD_AGENT_SELECTOR']
-        en el modelo Pydantic ChatbotCreate.
+        Se llamaba `test_retrieval_mode_has_enum_values` y exigía lo contrario: que el contrato
+        expusiera `Literal['RAG', 'MD_LONG_CONTEXT', 'MD_AGENT_SELECTOR']`. Su argumento era
+        bueno para su momento (CF.1.4): el frontend llevaba esa lista *hardcodeada*, y un enum en
+        el contrato impedía que se desalinearan.
+
+        Desde PLG.1 la lista **no se puede conocer en tiempo de compilación**: un modo de
+        recuperación llega instalando un paquete, así que la verdad depende de lo que haya
+        instalado en ESA máquina. Un enum en el contrato sería una promesa falsa — y peor: FastAPI
+        rechazaría un modo válido antes de que la validación pudiera verlo.
+
+        Lo que sustituye a la garantía vieja NO es «nada»: el modo se valida contra el registro
+        vivo (`validar_modo`, 422 con las opciones) y la lista llega al panel por el endpoint de
+        opciones de PLG.3. La comprobación se mueve de compilación a ejecución porque el dato
+        también se movió.
         """
         schema = app.openapi()
         schemas = schema.get("components", {}).get("schemas", {})
-        chatbot_create = schemas.get("ChatbotCreate", {})
-        retrieval_mode_prop = chatbot_create.get("properties", {}).get("retrieval_mode", {})
+        prop = schemas.get("ChatbotCreate", {}).get("properties", {}).get("retrieval_mode", {})
 
-        enum_values = retrieval_mode_prop.get("enum") or retrieval_mode_prop.get("allOf", [{}])[0].get("enum")
-        assert enum_values is not None, (
-            "retrieval_mode en ChatbotCreate no tiene enum definido en el contrato.\n"
-            f"Definicion actual: {retrieval_mode_prop}\n"
-            "Solucion (CF.1.4): cambiar el tipo de retrieval_mode en los schemas Pydantic "
-            "a Literal['RAG', 'MD_LONG_CONTEXT', 'MD_AGENT_SELECTOR']"
-        )
-        assert set(enum_values) == {"RAG", "MD_LONG_CONTEXT", "MD_AGENT_SELECTOR"}, (
-            f"Valores de enum incorrectos: {enum_values}"
+        assert prop.get("type") == "string", f"Definicion actual: {prop}"
+        assert "enum" not in prop, (
+            "El contrato vuelve a cerrar `retrieval_mode` con un enum. Mientras lo tenga, un "
+            "pipeline aportado por un paquete instalado no se puede seleccionar: FastAPI lo "
+            "rechaza antes de llegar a `validar_modo`."
         )
 
     # -- Campos de los Read schemas (verificación de contenido, no de nombre) --

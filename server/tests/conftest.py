@@ -31,17 +31,14 @@ def _descubrir_plugins_una_vez() -> None:
     como cualquier paquete. Si la suite no descubriera, `list_profiles()` saldría vacío y media
     docena de ficheros fallarían con «perfil desconocido» sin que nada explicara por qué.
 
-    Se llama al colectar, antes de cualquier test, y es idempotente por el `try`: el registro
-    falla en alto ante duplicados —eso es lo que se quiere en producción—, pero aquí un segundo
-    descubrimiento sólo significa que el módulo se recargó, y no es un error del que informar.
+    Se llama al colectar, antes de cualquier test. `descubrir_todo` es **idempotente por
+    proceso**, así que llamarlo aquí y otra vez en el *lifespan* no choca: la guarda vive en el
+    cargador y no en un `try/except` de este fichero, que es donde tiene que estar — el problema
+    no era de los tests, era que el arranque no se podía ejecutar dos veces.
     """
     from server.app.modules.agents_hub.agent.public_graphs import plugins
 
-    try:
-        plugins.descubrir_todo()
-    except RuntimeError as exc:
-        if "choca con uno ya registrado" not in str(exc):
-            raise
+    plugins.descubrir_todo()
 
 
 _descubrir_plugins_una_vez()

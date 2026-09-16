@@ -87,3 +87,43 @@ def validar_modo(valor: str | None, campo: str = "retrieval_mode") -> None:
     disponibles = list_modes()
     if valor not in disponibles:
         raise _error(campo, valor, disponibles)
+
+
+def validar_estrategias(
+    valor: dict[str, str] | None, campo: str = "estrategias"
+) -> None:
+    """Cada clave un eje válido, cada valor una estrategia registrada EN ESE EJE (PLG.2).
+
+    Se valida aquí y no con un CHECK en la base por la misma razón que el modo: un CHECK no puede
+    saber qué paquetes hay instalados. Y se valida **por eje**, no contra un catálogo plano,
+    porque el mismo nombre puede existir en dos ejes y significar cosas distintas.
+
+    `None` y `{}` pasan: los dos significan «hereda todo», que es el caso normal.
+    """
+    if not valor:
+        return
+
+    from server.app.modules.agents_hub.agent.public_graphs.strategies.registry import (
+        EjeDeEstrategia,
+        list_strategies,
+    )
+
+    ejes = [e.value for e in EjeDeEstrategia]
+    for eje, nombre in valor.items():
+        if eje not in ejes:
+            raise _error(
+                f"{campo}.<eje>",
+                eje,
+                ejes,
+                extra=(
+                    "Los ejes son estructura: añadir uno exige escribir el nodo del CoreGraph "
+                    "que lo consuma, así que no se pueden inventar desde la configuración."
+                ),
+            )
+        if not nombre:
+            # Cadena vacía = «no he elegido». Se deja pasar y la cascada la ignora, en vez de
+            # rechazarla: un formulario que manda "" por un select sin tocar es normal.
+            continue
+        disponibles = list_strategies(eje)
+        if nombre not in disponibles:
+            raise _error(f"{campo}.{eje}", nombre, disponibles)
