@@ -17,6 +17,10 @@ from sqlalchemy import select
 
 from server.app.api.deps import require_role, require_module
 from server.app.core.auth.models import UserInfo
+from server.app.modules.agents_hub.agent.public_graphs.validacion import (
+    validar_modo,
+    validar_perfil,
+)
 from server.app.core.auth.tenancy import assert_org_access, scope_query_to_orgs
 from server.app.modules.agents_hub.database.config_models import HubChatbot, HubLLMConfig
 from server.app.modules.agents_hub.database.connection import get_async_session
@@ -65,7 +69,7 @@ class ChatbotRead(BaseModel):
     system_prompt: str
     sources: list[str]
     is_active: bool
-    retrieval_mode: Literal["RAG", "MD_LONG_CONTEXT", "MD_AGENT_SELECTOR"]
+    retrieval_mode: str
     retrieval_top_k: int
     use_prompt_caching: bool
     cache_ttl: int
@@ -125,7 +129,7 @@ class ChatbotCreate(BaseModel):
     system_prompt: str
     sources: list[str] = []
     is_active: bool = True
-    retrieval_mode: Literal["RAG", "MD_LONG_CONTEXT", "MD_AGENT_SELECTOR"] = "RAG"
+    retrieval_mode: str = "RAG"
     retrieval_top_k: int = 8
     use_prompt_caching: bool = False
     cache_ttl: int = 3600
@@ -196,7 +200,7 @@ class ChatbotUpdate(BaseModel):
     system_prompt: str | None = None
     sources: list[str] | None = None
     is_active: bool | None = None
-    retrieval_mode: Literal["RAG", "MD_LONG_CONTEXT", "MD_AGENT_SELECTOR"] | None = None
+    retrieval_mode: str | None = None
     retrieval_top_k: int | None = None
     use_prompt_caching: bool | None = None
     cache_ttl: int | None = None
@@ -331,6 +335,13 @@ async def create_chatbot(
     # con el estado del servicio de embeddings, que es información de la instalación.
     assert_org_access(user, body.organizacion_id)
 
+    # PLG.1: perfil y modo se validan contra los registros VIVOS, no contra un `Literal` del
+    # DTO. El `Literal` cerraba el vocabulario en el código —un modo de un paquete instalado no
+    # habría pasado nunca— y el perfil no se validaba en absoluto, así que un valor inventado se
+    # guardaba y el fallo salía en el primer mensaje del usuario, lejos del formulario.
+    validar_perfil(body.public_graph_profile)
+    validar_modo(body.retrieval_mode)
+
     # RAG.9: fallar al crear es barato; fallar a mitad de una ingesta de miles de documentos
     # no. Sólo para los modos que CONSULTAN el índice vectorial (ACT.8): a `MD_LONG_CONTEXT`,
     # que inyecta documentos enteros, exigirle un servicio de embeddings operativo sería
@@ -397,6 +408,11 @@ async def update_chatbot(
     session=Depends(get_async_session),
 ):
     chatbot = await _get_chatbot_or_404(session, chatbot_id, user)
+
+    # PLG.1: mismo criterio que al crear. `None` pasa y significa «heredar», que es lo que
+    # distingue este endpoint del de creación.
+    validar_perfil(body.public_graph_profile)
+    validar_modo(body.retrieval_mode)
 
     payload = body.model_dump(exclude_none=True)
 

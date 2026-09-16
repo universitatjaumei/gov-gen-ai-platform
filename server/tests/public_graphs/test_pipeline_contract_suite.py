@@ -5,8 +5,8 @@ Todo pipeline en RetrievalPipelineFactory debe devolver RetrievalResult con:
 - debug: dict con clave "pipeline_mode" igual al modo solicitado
 - context_source_language: str | None
 
-Los tests son parametrizados sobre _VALID_MODES: cuando se añada un modo nuevo
-a la factory solo hay que añadir su rama de mocking en _configure_deps.
+Los tests son parametrizados sobre `list_modes()` —el registro, desde PLG.1—: cuando se añada
+un modo nuevo, por código o por un paquete instalado, solo hay que añadir su rama de mocking.
 """
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -21,8 +21,8 @@ from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_cont
     RetrievalResult,
 )
 from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_pipeline_factory import (
-    _VALID_MODES,
     get_pipeline,
+    list_modes,
 )
 from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_pipeline_protocol import (
     GraphDeps,
@@ -81,7 +81,7 @@ def _make_selector_deps() -> GraphDeps:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("mode", _VALID_MODES)
+@pytest.mark.parametrize("mode", list_modes())
 class TestPipelineContractSuite:
 
     async def test_pipeline_returns_retrieval_result(self, mode: str):

@@ -27,6 +27,10 @@ from server.app.core.auth.models import UserInfo
 from server.app.core.auth.tenancy import assert_org_access, scope_query_to_orgs
 from server.app.modules.agents_hub.database.connection import get_async_session
 from server.app.modules.agents_hub.database.config_models import HubChatbot, HubOrganizacion
+from server.app.modules.agents_hub.agent.public_graphs.validacion import (
+    validar_modo,
+    validar_perfil,
+)
 
 router = APIRouter(prefix="/hub/organizaciones", tags=["hub-organizaciones"])
 
@@ -297,6 +301,12 @@ async def update_valores_por_defecto(
             status_code=status.HTTP_404_NOT_FOUND, detail="Organización not found"
         )
     assert_org_access(user, organizacion.id)
+
+    # PLG.1: los defectos de organización se validan contra los registros vivos, igual que los
+    # del chatbot. Si no, un perfil inventado aquí lo heredan TODOS sus chatbots y el fallo
+    # aparece multiplicado y lejos de donde se escribió.
+    validar_perfil(body.default_public_graph_profile, "default_public_graph_profile")
+    validar_modo(body.default_retrieval_mode, "default_retrieval_mode")
 
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(organizacion, field, value)

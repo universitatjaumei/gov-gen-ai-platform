@@ -24,6 +24,29 @@ import pytest
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 
+def _descubrir_plugins_una_vez() -> None:
+    """PLG.1 — la MISMA llamada que hace el *lifespan*, y por eso está aquí y no en un fixture.
+
+    Desde PLG.1 importar `graph_factory` ya no registra nada: el núcleo entra por *entry points*
+    como cualquier paquete. Si la suite no descubriera, `list_profiles()` saldría vacío y media
+    docena de ficheros fallarían con «perfil desconocido» sin que nada explicara por qué.
+
+    Se llama al colectar, antes de cualquier test, y es idempotente por el `try`: el registro
+    falla en alto ante duplicados —eso es lo que se quiere en producción—, pero aquí un segundo
+    descubrimiento sólo significa que el módulo se recargó, y no es un error del que informar.
+    """
+    from server.app.modules.agents_hub.agent.public_graphs import plugins
+
+    try:
+        plugins.descubrir_todo()
+    except RuntimeError as exc:
+        if "choca con uno ya registrado" not in str(exc):
+            raise
+
+
+_descubrir_plugins_una_vez()
+
+
 def _base_url() -> str:
     return os.getenv(
         "DATABASE_URL",

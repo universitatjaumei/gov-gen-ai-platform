@@ -53,129 +53,153 @@ El `retrieval_mode` es **independiente** del perfil: cualquier perfil puede
 operar con cualquier modo. El `CoreGraph` no conoce el modo; lo conoce la
 `RetrievalStrategy` (o el perfil que la instancia).
 
-## Cómo añadir un perfil nuevo
+## Aportar un perfil o un pipeline desde un paquete
 
-Ejemplo: perfil `OFERTA_ACADEMICA` para estructuras de grados y másteres.
+**Desde PLG.1 no hace falta tocar este repositorio.** Un paquete Python instalado en el mismo
+entorno que el servidor puede aportar perfiles y pipelines declarándolos como *entry points*, y el
+núcleo entra **por ese mismo camino**: sus tres perfiles y sus tres modos están declarados en
+`server/pyproject.toml` igual que los declararía un tercero.
 
-### 1. Registrar el valor en el enum
+Eso último no es simetría decorativa. Con dos caminos de registro, el motor puede acabar
+dependiendo de algo que sólo el registro interno proporciona, y **no se nota hasta que llega el
+primer tercero** — cuando ya está en el diseño. Con uno solo, el núcleo es el primer usuario de la
+API pública y cualquier carencia sale a la primera.
 
-```python
-# types.py
-class PublicGraphProfile(str, Enum):
-    PUBLIC_KB_RICH           = "PUBLIC_KB_RICH"
-    PUBLIC_PORTAL_AGGREGATOR = "PUBLIC_PORTAL_AGGREGATOR"
-    PUBLIC_PORTAL_ROUTER     = "PUBLIC_PORTAL_ROUTER"
-    OFERTA_ACADEMICA         = "OFERTA_ACADEMICA"   # ← nuevo
+### El ejemplo, y está vivo
+
+Lo que sigue es **literalmente** el paquete
+[`server/tests/fixtures/paquete_perfil_demo/`](../server/tests/fixtures/paquete_perfil_demo/), que
+la suite instala y ejecuta en cada ejecución. Un guardarraíl
+(`test_plg1_el_ejemplo_de_la_guia_es_el_del_paquete_demo`) comprueba que este fragmento y ese
+fichero no divergen: un ejemplo de documentación que nadie ejecuta envejece en silencio, y éste no
+puede.
+
+```toml
+# pyproject.toml del paquete que aporta
+[project]
+name = "govgenai-demo-perfil"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[project.entry-points."govgenai.graph_profiles"]
+DEMO_KB_RICH = "govgenai_demo_perfil:construir_perfil_demo"
+
+[project.entry-points."govgenai.retrieval_pipelines"]
+DEMO_PIPELINE = "govgenai_demo_perfil:PipelineDemo"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 ```
 
-### 2. Crear el módulo de perfil
+Y el código, que no importa nada de la plataforma para declararse:
+
+```python
+def construir_perfil_demo(cfg, deps, llm=None):
+    """Factoría de perfil: `(cfg, deps, llm) -> CoreGraph`."""
+    from server.app.modules.agents_hub.agent.public_graphs.core.graph_factory import (
+        _make_public_kb_rich,
+    )
+    return _make_public_kb_rich(cfg, deps, llm)
+
+
+class PipelineDemo:
+    """Cumple `RetrievalPipeline`: un único método `run`."""
+    async def run(self, query, chatbot_id, cfg, deps): ...
+```
+
+Instalarlo basta. No hay que registrarse en ningún sitio ni avisar a nadie.
+
+### Los grupos
+
+| Grupo | Nombre del *entry point* | A qué apunta |
+|---|---|---|
+| `govgenai.graph_profiles` | el que verá quien configure el chatbot | factoría `(cfg, deps, llm) -> CoreGraph` |
+| `govgenai.retrieval_pipelines` | el modo de recuperación | clase que cumple `RetrievalPipeline` |
+| `govgenai.strategies` | `<eje>.<nombre>` | factoría de estrategia de ese eje (PLG.2) |
+
+**El nombre de la izquierda se guarda en la base de datos** (`hub_chatbots.public_graph_profile`).
+Cambiarlo después es cambiar un dato ya escrito: no se renombra sin migración. Usa un prefijo
+propio para no chocar.
+
+### Qué comprueba el arranque, y por qué ahí
+
+El cargador (`public_graphs/plugins.py`) corre en el *lifespan*, **antes de servir**:
+
+1. **Nombres duplicados** → aborta nombrando **las dos distribuciones**. Sin esto ganaría el
+   último que cargara `importlib.metadata`, o sea un orden que nadie controla y sin ningún
+   síntoma: el mismo perfil se comportaría distinto en dos máquinas.
+2. **Un *entry point* que no carga** → aborta nombrando su distribución. La alternativa —avisar y
+   seguir— deja un servidor en pie al que le falta un perfil, y quien lo tuviera seleccionado
+   vería «perfil desconocido» sin ninguna pista del paquete roto.
+3. **Un pipeline que no cumple `RetrievalPipeline`** → se rechaza al descubrir. El protocolo es
+   `runtime_checkable`, con su límite dicho: comprueba **que los métodos existan**, no sus firmas.
+4. **Cada perfil configurable se construye** y se comprueba que salen sus cuatro ejes. Es lo que
+   `test_profile_contract.py` hace con lo que está en el árbol, llevado al arranque para **lo
+   instalado**: un perfil que llega en un paquete no lo cubre ningún test de este repositorio.
+
+Todo falla **en alto**. Un servidor que arranca a medias es peor que uno que no arranca: el fallo
+aparece delante de un usuario y lejos de su causa.
+
+### Estabilidad: los protocolos son 0.x
+
+`RetrievalPipeline`, los protocolos de estrategia y la firma de las factorías **pueden cambiar
+entre versiones menores**, y no hay política de deprecación. Se anuncia en
+`planificacion/HISTORIAL.md` y nada más.
+
+Es deliberado: han cambiado dos veces en un mes por medición —la puerta de calidad en HIB, la
+política de lengua en LANG— y congelarlos hoy sería congelar errores conocidos. El contrato se fija
+el día que exista el primer tercero real con un perfil que mantener, y entonces se dirá.
+
+### La frontera de confianza, sin rodeos
+
+**Un perfil o un pipeline instalado corre dentro del proceso del servidor y con los datos del
+cliente. No hay *sandbox*.** La confianza está en quien instala, igual que en un plugin de pytest
+o de Airflow. Se dice aquí para que nadie lea de este mecanismo una garantía de aislamiento que no
+da; si algún día hace falta aislamiento, será otro diseño y no un ajuste de éste.
+
+## Cómo añadir un perfil nuevo al núcleo
+
+Los mismos tres pasos que para un paquete, con el `pyproject.toml` del servidor en vez del propio.
+Ejemplo: perfil `OFERTA_ACADEMICA`.
+
+### 1. Crear el módulo de perfil
 
 ```python
 # profiles/oferta_academica.py
-"""Perfil OFERTA_ACADEMICA — grados, másteres y programas estructurados.
-
-Deploy: edge
-"""
-from server.app.modules.agents_hub.agent.public_graphs.profiles.public_kb_rich import (
-    DefaultLanguagePolicy,
-    PassthroughMergeStrategy,
-    SingleSourceRetrievalStrategy,
-)
-from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_contract import EvidenceItem
-
-
-class AcademicAnswerTemplateStrategy:
-    """Plantilla estructurada: sección de Grado + sección de Acceso + sección de Plan."""
-
-    def build_prompt_context(self, items: list[EvidenceItem], language: str | None, query: str) -> str:
-        lang_hint = f"Responde en idioma: {language}." if language else ""
-        sections = "\n\n".join(
-            f"## {item.title or item.source_id}\n{item.content}" for item in items
-        )
-        return f"{lang_hint}\n\nUsa sólo la siguiente información académica:\n\n{sections}".strip()
-```
-
-### 3. Registrar la factoría en `graph_factory.py`
-
-```python
-# core/graph_factory.py (al final del archivo)
-
-def _make_oferta_academica(cfg, deps, llm=None):
-    from server.app.modules.agents_hub.agent.public_graphs.profiles.oferta_academica import (
-        AcademicAnswerTemplateStrategy,
-    )
-    from server.app.modules.agents_hub.agent.public_graphs.profiles.public_kb_rich import (
-        DefaultLanguagePolicy,
-        PassthroughMergeStrategy,
-        SingleSourceRetrievalStrategy,
-    )
+def make_oferta_academica(cfg, deps, llm=None) -> CoreGraph:
     return CoreGraph(
-        retrieval_strategy=SingleSourceRetrievalStrategy(),
-        merge_strategy=PassthroughMergeStrategy(),
-        template_strategy=AcademicAnswerTemplateStrategy(),
-        language_policy=DefaultLanguagePolicy(),
-        cfg=cfg,
-        deps=deps,
-        llm=llm,
+        retrieval_strategy=...,
+        merge_strategy=...,
+        template_strategy=...,
+        language_policy=...,
+        cfg=cfg, deps=deps, llm=llm,
     )
-
-register_profile(PublicGraphProfile.OFERTA_ACADEMICA, _make_oferta_academica)
 ```
 
-### 4. Escribir los tests de contrato del perfil nuevo
+### 2. Declararlo como *entry point*
 
-Los tests en `tests/public_graphs/test_profile_contract.py` se ejecutan
-automáticamente para todo perfil en `_default_registry`. Basta con que el
-nuevo perfil esté registrado al importar `graph_factory`.
-
-## Cómo añadir un pipeline nuevo
-
-Si apareciese un modo `HYBRID_RERANK` que combina RAG y reranker externo:
-
-### 1. Crear el módulo de pipeline
-
-```python
-# strategies/hybrid_rerank_pipeline.py
-"""HybridRerankPipeline — RAG + reranker externo.
-
-Deploy: edge
-"""
-from server.app.modules.agents_hub.agent.public_graphs.strategies.retrieval_contract import (
-    EvidenceItem, RetrievalResult,
-)
-
-
-class HybridRerankPipeline:
-    async def run(self, query, chatbot_id, cfg, deps) -> RetrievalResult:
-        # ... implementación ...
-        return RetrievalResult(items=[], debug={"pipeline_mode": "HYBRID_RERANK"})
+```toml
+# server/pyproject.toml
+[project.entry-points."govgenai.graph_profiles"]
+OFERTA_ACADEMICA = "server.app.modules.agents_hub.agent.public_graphs.profiles.oferta_academica:make_oferta_academica"
 ```
 
-### 2. Registrar el modo en `retrieval_pipeline_factory.py`
+**Ya no se registra por código** y **ya no hay enum que tocar**: `PublicGraphProfile` se retiró en
+PLG.1 porque un perfil aportado desde fuera no cabe en un enum del núcleo. Tras editar el
+manifiesto hace falta un `uv sync` para que la distribución se reinstale y el *entry point* sea
+visible.
 
-```python
-_VALID_MODES = ("RAG", "MD_LONG_CONTEXT", "MD_AGENT_SELECTOR", "HYBRID_RERANK")
+### 3. Los tests de contrato se aplican solos
 
-def get_pipeline(mode: str):
-    ...
-    if mode == "HYBRID_RERANK":
-        from ...strategies.hybrid_rerank_pipeline import HybridRerankPipeline
-        return HybridRerankPipeline()
-    raise ValueError(...)
-```
+`test_profile_contract.py` se parametriza sobre `list_profiles()`, así que el perfil nuevo entra
+sin tocar ningún fichero de test. Si no debe exigírsele todavía, va a `PERFILES_SIN_CONFIGURAR`.
 
-### 3. Añadir el mock en `test_pipeline_contract_suite.py`
+## Cómo añadir un pipeline nuevo al núcleo
 
-El test parametrizado sobre `_VALID_MODES` ya cubrirá el nuevo modo,
-pero hay que añadir la rama de mocking en `_patch_for_mode`:
-
-```python
-elif mode == "HYBRID_RERANK":
-    return [patch(
-        "...hybrid_rerank_pipeline.HybridRerankPipeline.run",
-        AsyncMock(return_value=RetrievalResult(items=[], debug={"pipeline_mode": "HYBRID_RERANK"})),
-    )]
-```
+Igual: la clase, y su línea en `[project.entry-points."govgenai.retrieval_pipelines"]`.
+`test_pipeline_contract_suite.py` se parametriza sobre `list_modes()` y lo recoge solo; lo único
+que hay que añadir es su rama de *mocking* en el fichero de contrato.
 
 ## Reglas de extensión
 

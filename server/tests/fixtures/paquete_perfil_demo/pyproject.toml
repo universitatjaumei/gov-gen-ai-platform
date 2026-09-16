@@ -1,0 +1,35 @@
+# Paquete de ejemplo: así aporta un TERCERO un perfil y un pipeline.
+#
+# No es sólo una fixture de tests. **Es el ejemplo copiable de `docs/GRAPH_PROFILES.md`**, y un
+# guardarraíl comprueba que lo que la guía enseña es literalmente lo que este fichero declara
+# (`test_plg1_el_ejemplo_de_la_guia_es_el_del_paquete_demo`). Un ejemplo de documentación que
+# nadie ejecuta envejece en silencio; éste no puede, porque la suite lo instala y lo carga.
+#
+# Lo mínimo que hace falta para aportar algo a la plataforma:
+#
+#   1. un `[build-system]`, para que exista una distribución con metadatos;
+#   2. una entrada por cada grupo `govgenai.*` que se quiera aportar;
+#   3. nada más. No hay que tocar el repositorio de la plataforma ni registrarse en ningún sitio.
+#
+# El nombre de la IZQUIERDA es el que verá quien configure un chatbot, y el que se guarda en la
+# base de datos. Elígelo con prefijo propio: si choca con uno del núcleo o con el de otro
+# paquete, el arranque falla en alto nombrando las dos distribuciones — a propósito, porque el
+# que ganara dependería del orden de carga.
+[project]
+name = "govgenai-demo-perfil"
+version = "0.1.0"
+description = "Paquete de ejemplo que aporta un perfil y un pipeline por entry points"
+requires-python = ">=3.11"
+
+[project.entry-points."govgenai.graph_profiles"]
+DEMO_KB_RICH = "govgenai_demo_perfil:construir_perfil_demo"
+
+[project.entry-points."govgenai.retrieval_pipelines"]
+DEMO_PIPELINE = "govgenai_demo_perfil:PipelineDemo"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["govgenai_demo_perfil"]

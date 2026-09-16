@@ -19,9 +19,7 @@ from server.app.modules.agents_hub.agent.public_graphs.core.core_graph import Co
 from server.app.modules.agents_hub.agent.public_graphs.registry import (
     GraphProfileRegistry,
     _default_registry,
-    register_profile,
 )
-from server.app.modules.agents_hub.agent.public_graphs.types import PublicGraphProfile
 
 
 class GraphFactory:
@@ -314,10 +312,12 @@ def _make_public_kb_rich(cfg: Any, deps: Any, llm: Any = None) -> CoreGraph:
 #: (`tests/public_graphs/test_profile_contract.py`) exige compilar y ejecutar a todo perfil que
 #: NO esté aquí. Implementar uno se cierra sacándolo de este conjunto, y entonces el contrato
 #: pasa a exigírselo.
-PERFILES_SIN_CONFIGURAR = frozenset(
+#: Desde PLG.1 son cadenas: el enum se retiró porque un perfil aportado por un paquete instalado
+#: no cabe en un enum del núcleo.
+PERFILES_SIN_CONFIGURAR: frozenset[str] = frozenset(
     {
-        PublicGraphProfile.PUBLIC_PORTAL_AGGREGATOR.value,
-        PublicGraphProfile.PUBLIC_PORTAL_ROUTER.value,
+        "PUBLIC_PORTAL_AGGREGATOR",
+        "PUBLIC_PORTAL_ROUTER",
     }
 )
 
@@ -369,6 +369,18 @@ def _make_public_portal_router(cfg: Any, deps: Any, llm: Any = None) -> CoreGrap
     )
 
 
-register_profile(PublicGraphProfile.PUBLIC_KB_RICH, _make_public_kb_rich)
-register_profile(PublicGraphProfile.PUBLIC_PORTAL_AGGREGATOR, _make_public_portal_aggregator)
-register_profile(PublicGraphProfile.PUBLIC_PORTAL_ROUTER, _make_public_portal_router)
+# PLG.1 — **aquí ya no se registra nada**, y es el punto entero del bloque.
+#
+# Hasta ahora, importar este módulo registraba los tres perfiles del núcleo por código. Desde
+# PLG.1 el núcleo entra **por el mismo camino que un tercero**: los declara como *entry points*
+# del grupo `govgenai.graph_profiles` en `server/pyproject.toml`, y los registra el cargador
+# (`public_graphs/plugins.py`) al arrancar.
+#
+# El argumento no es de simetría. Con dos caminos, el motor puede acabar dependiendo de algo que
+# sólo el registro por código proporciona —un orden, un objeto, un atajo— y **eso no se nota hasta
+# que llega el primer tercero**, cuando ya está en el diseño. Con uno solo, el núcleo es el primer
+# usuario de la API pública y cualquier carencia sale a la primera.
+#
+# Consecuencia práctica para quien lea un test rojo: si `list_profiles()` sale vacío, lo que falta
+# es la llamada a `plugins.descubrir_todo()` — está en el *lifespan* de la app y en el `conftest`
+# de la suite, y **no** se dispara al importar este módulo.
