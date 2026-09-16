@@ -493,6 +493,28 @@ despliegue es **~~SEC.9~~ ✅ → ~~AIS~~ ✅ → ~~RAG.15~~ ✅ → ~~VIS.4~~ �
 > lo declara, y verificación de que un `POST /api/v1/auth/superadmin/login` aparece en Cloud Logging
 > **después** de un redespliegue. Cuidado con lo que se manda: el log de acceso lleva IP y correo.
 
+> ✅ **RETIRADA EL 2026-09-16. Queda un solo superadministrador en producción, `fabra@uji.es`.**
+>
+> Las seis filas se borraron de `superadminaccount` por decisión del usuario, que eligió
+> **borrar primero y crear después** sabiendo lo que costaba: el guion de USR dice crear las
+> Personas, comprobar que cada una entra con su contraseña y *sólo entonces* retirar, y así
+> nadie se queda fuera en el intervalo. **Al revés, los seis están hoy sin ninguna vía de
+> entrada** hasta que se den de alta como Personas. Eso es ahora lo pendiente, y es lo único
+> que queda de esta deuda.
+>
+> Comprobado antes de borrar: **ninguna clave ajena** apunta a `superadminaccount`, así que no
+> arrastró nada, y **cero concesiones de módulo** quedaron huérfanas. Copia de las filas en
+> `_local/`. El borrado fue por lista explícita de `admin_id` y con la postcondición —queda
+> exactamente una fila, es `fabra@uji.es` y está activa— comprobada **dentro** de la
+> transacción: si no se cumplía, no se confirmaba.
+>
+> **Lo que sigue siendo verdad y por eso no se borra este aviso**: no existe cambio de
+> contraseña por el propio usuario en ninguno de los dos roles de gestión. **Es USR.7.**
+>
+> Lo de abajo cuenta por qué se llegó a esto, y se conserva.
+>
+> ---
+>
 > ⚠️ **DEUDA CON FECHA DE CADUCIDAD (2026-09-01): seis cuentas de producción están elevadas a
 > superadministrador a propósito, y hay que bajarlas.**
 >
