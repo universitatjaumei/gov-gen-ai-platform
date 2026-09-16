@@ -5,7 +5,7 @@
   "author": "Modesto Fabra <fabra@uji.es>",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ModestoFabra/gov-gen-ai-platform"
+    "url": "https://github.com/universitatjaumei/gov-gen-ai-platform"
   },
   "version": "0.0.0",
   "type": "module",

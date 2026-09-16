@@ -165,6 +165,22 @@ intento revertido se hizo antes de que DEP.2 subiera `fastapi`— **no está com
 anotada como tal. Corrobora el diagnóstico que **`mcp_server` ya corría starlette 1.6.0 desde
 DEP.5**, sin que nadie notara nada.
 
+**Bloque REPO: REPO.4 ✅ el 2026-09-16 — `CODEOWNERS` pasa de una persona a un equipo.** Catorce
+entradas apuntaban a **una sola persona**, incluidas `/server/migrations/`, `/server/app/core/` y
+`/.github/workflows/`: un único punto de fallo humano sobre lo que rompe todos los despliegues a
+la vez. Ahora es **`@universitatjaumei/gov-gen-ai-platform-maintainers`**, creado con los cuatro
+que ya tenían admin sobre el repositorio.
+
+**Y el inventario del prompt se quedó corto**: decía seis sitios y eran **siete** —aparecieron
+`frontend/package.json` y `pruebas_manuales_bloqueAIS.bat`, escritos después del 07-09—. En
+cambio `docs/DESPLIEGUE_PROTOTIPO_GCP.md` ya estaba resuelto: REPO.5 lo dejó con marcadores
+`<ORG>/<REPOSITORIO>` y documentando **los dos** anclajes de WIF.
+
+**Lo vigila `test_repo4_no_se_nombra_al_dueno_anterior.py`**, que prohíbe además volver a poner un
+`@usuario` individual — sin eso, «retirar el nombre viejo» se podría hacer cambiando una persona
+por otra y el problema seguiría igual. Comprobado contra el estado anterior: se pone rojo con las
+14 entradas.
+
 **Bloque REPO ▶: desbloqueado (rol `admin` desde el 2026-09-14) y REPLANIFICADO a la variante C
 el 2026-09-15.** La variante B —«el limpio nace en la organización y no se transfiere nada»— **ya
 no es posible: la transferencia se hizo el 2026-09-10**, y con ella entró en la organización justo
@@ -329,7 +345,7 @@ pasó de 2 a 5 el 2026-09-07, al elegir la variante B y aparecer REPO.4 y REPO.5
 | 3 | **REG** | 6 | Lo pidió la reunión de desarrollo del 31-08 y **esperaba el despliegue** (REG.4, el MCP remoto, sólo existe con el servidor accesible desde fuera — ya lo está). Desbloquea VAS y FUN.6 |
 | 4 | **VAS** | 4 | El mejor ratio del plan: los tres candidatos ya existen como función interna y sólo necesitan superficie |
 | 5 | **NIC** | 5 | Cierra la Fase 1. Se puede esperar sin coste porque nada de lo planificado toca `client_app/`. **NIC.5 lo ejecuta el usuario** |
-| 6 ▶ | **REPO** | 5 (2 ✅) | **En curso y DESBLOQUEADO el 2026-09-14**: el usuario ya tiene rol `admin` sobre `universitatjaumei`, que era el único prerrequisito que faltaba. REPO.3 ✅ y REPO.5 ✅ el 2026-09-07. Quedan **REPO.1 → REPO.4 → REPO.2**. REPO.1 lleva ahora el **reparto de `docs/`** y el **filtro del historial** (**7 rutas**: los tres `VALIDACION_GERENCIA*`, que son hojas de anotación y no informes, el trío de marca y la revisión de literatura; **los otros ocho tableros se publican**), porque la visibilidad alcanza a los commits y borrar antes de abrir no saca nada del pasado. **Sin repositorio privado**: se propuso uno para 15 ficheros y el usuario lo cuestionó con razón —un archivo de instantáneas no es un repositorio de operación, y tres de esos ficheros estaban clasificados por su nombre y son publicables—.  **La ventana sigue abierta y medida**: el commit huérfano `dc4904e0c763` todavía sirve `logs/` con 46 ficheros, 17 días después de la reescritura. Se hace **antes** de que exista el primer *fork* y antes de abrir. REPO.1 y REPO.2 los ejecuta el usuario |
+| 6 ▶ | **REPO** | 5 (4 ✅) | **Sólo queda REPO.2.** REPO.3 y REPO.5 ✅ el 2026-09-07; **REPO.1 ✅ el 2026-09-15** (historial filtrado y empujado, variante D) con su **purga de GitHub verificada el 2026-09-16** —los cuatro huérfanos dan 422 y `git fetch` no los descarga—; **REPO.4 ✅ el 2026-09-16**. **La puerta para abrir el repositorio ya cayó**: lo único que queda antes de `Settings → Danger Zone → Change visibility` es REPO.2, que son los OTROS dos repositorios y no bloquea a éste. |
 | ~~7~~ ✅ | ~~**DEP**~~ | 7 | **COMPLETO en código el 2026-09-15**, los siete. Falta sólo el push que demuestre la puerta en una ejecución real, que es decisión del usuario. El árbol del servidor pasa de **408 a 197 dependencias** y el de producción del frontend de **21 avisos (13 altos) a cero**. **DEP.4 se cerró midiendo, no confiando**: `camelot-py` 2.0 saca `pypdf` del árbol entero, y de los **2 PDF de 20** cuya extracción cambia, mirados celda a celda, **en los dos la versión vieja era la equivocada** —una cabecera de dos niveles colapsada y una portada de 28×2 que no era tabla, sino un falso positivo que la 2.0 rechaza bien—. **DEP.3 se cerró midiendo y su premisa resultó FALSA**: `starlette` sube a 1.6.0 sin tocar `fastapi` y sus 5 avisos desaparecen, pero `app.routes` **sigue plano** y los 14 tests que enumeran rutas **pasan**, así que no se reescribió ninguno — el `_IncludedRouter` que el prompt daba por hecho no aparece con `fastapi` 0.136.0. **Queda sólo DEP.7**, ya desbloqueado. **Lo que DEP.1 destapó y no estaba previsto**: al sacar `browser-use` y `ragas` aparecieron **tres paquetes usados y no declarados** —`python-multipart`, `langchain`, `beautifulsoup4`— más `langchain-community`, que sostiene Ollama. Entra un guardarraíl que los caza todos de golpe |
 | ~~8~~ ✅ | ~~**PLG**~~ | 3 | Responde al correo de desarrollo pidiendo plugins. Después de LANG, que tocan la misma factoría |
 | 9 | **DIN** | 7 | Bueno y no urgente: su premisa resultó falsa en dos tercios —el rastreo con cadencia y la auto-ingesta ya existen— |

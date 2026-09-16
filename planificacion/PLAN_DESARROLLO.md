@@ -14,7 +14,7 @@
 
 ## Situación actual (2026-04-24)
 
-Repositorio `gov-gen-ai-platform` en GitHub (ModestoFabra), monorepo con:
+Repositorio `gov-gen-ai-platform` en GitHub (`universitatjaumei`), monorepo con:
 
 - `server/` — FastAPI sobre PostgreSQL + pgvector; módulos `automation/` y `agents_hub/` operativos; JWT real; Docker multi-stage CPU-only; CI/CD en GitHub Actions; observabilidad LangFuse; servicio de feedback.
 - `client_app/` — Cliente NiceGUI legacy, pendiente de migración progresiva al server y al frontend React (ver Subfases **2.A** Thin Client, **2.B** Migración UI y **2.C** Servicios migrados). El agente ligero de ejecución local (thin client) aún no existe; se creará en la Subfase 2.A.
@@ -219,7 +219,7 @@ Fases TDD 0–8 más las piezas pendientes de Subfases 1.A, 1.B y 1.C.
 | ID | Tarea | Detalle |
 |---|---|---|
 | ~~0.1~~ | ~~Inicializar git~~ ✅ | `git init`, `.gitignore`, dos ficheros `LICENSE` (AGPLv3 server, MIT frontend) |
-| ~~0.2~~ | ~~Crear repositorio GitHub~~ ✅ | Nuevo repo `gov-gen-ai-platform` (ModestoFabra), push inicial |
+| ~~0.2~~ | ~~Crear repositorio GitHub~~ ✅ | Nuevo repo `gov-gen-ai-platform`, push inicial. Transferido a `universitatjaumei` el 2026-09-10 |
 | ~~0.3~~ | ~~Docker Compose unificado~~ ✅ | `docker-compose.yml` con PostgreSQL+pgvector y MinIO. Pendiente: `docker compose up` tras instalar Docker Desktop |
 | ~~0.4~~ | ~~Alembic~~ ✅ | `alembic.ini` + `migrations/env.py` listos. Pendiente: `alembic revision --autogenerate` + `upgrade head` tras levantar PG |
 | ~~0.5~~ | ~~Renombrar `brain/` → `automation/`~~ ✅ | Módulo renombrado, todos los imports actualizados, legacy eliminado |

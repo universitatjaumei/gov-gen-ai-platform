@@ -102,7 +102,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/ModestoFabra/gov-gen-ai-platform"
+Repository = "https://github.com/universitatjaumei/gov-gen-ai-platform"
 
 [dependency-groups]
 dev = [
