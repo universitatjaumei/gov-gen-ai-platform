@@ -149,6 +149,12 @@ def _plantilla_hub() -> str:
     import server.app.modules.agents_hub.database.config_models  # noqa: F401
     import server.app.modules.agents_hub.database.operational_models  # noqa: F401
 
+    # FUN.1 — **las tablas de redacción no estaban en la plantilla**. Viven en la misma
+    # `HubOperationalBase`, pero `create_all` sólo crea lo que está *importado*: sin esta línea,
+    # un test que tocara `hub_report_templates` o el catálogo de funciones moría con
+    # «relation does not exist», y la causa no se parece nada al síntoma.
+    import server.app.modules.redaccion.database.models  # noqa: F401
+
     from sqlalchemy import create_engine
 
     admin = _conexion_admin()

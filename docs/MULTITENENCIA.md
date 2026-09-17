@@ -61,8 +61,16 @@ vacío»), sin lo cual no se puede vaciar un valor heredado desde la pantalla.
 
 ## Tablas operacionales (`HubOperationalBase`, viven sólo en el edge)
 
-No declaran `__ambito__`: son datos del cliente final, y su acotación es la del camino por el que
-se llega a ellas. La columna dice **por dónde** las acota un router.
+Casi ninguna declara `__ambito__`: son datos del cliente final, y su acotación es la del camino
+por el que se llega a ellas. La columna dice **por dónde** las acota un router.
+
+**Las dos excepciones son las de FUN.1**, y la excepción está razonada: `hub_funciones` tiene una
+cascada de verdad —nulo = de plataforma, y se hereda, que es lo que hace que una función
+promocionada la referencie cualquier organización—, así que declarar su ámbito documenta esa
+cascada aunque el guardarraíl de MT.1 sólo recorra `HubConfigBase`. Están en el lado operacional,
+y no en configuración, porque `hub_funcion_versiones.code` y su declaración responsable son texto
+escrito por una persona de la organización: el mismo criterio que mandó aquí a `hub_lexicon_pairs`.
+Lo comprueba `test_fun1_catalogo.py`, que es el guardarraíl que a estas dos les faltaba.
 
 | Tabla | Camino a la organización |
 |---|---|
@@ -77,6 +85,8 @@ se llega a ellas. La columna dice **por dónde** las acota un router.
 | `hub_interactions` | `chatbot_id` |
 | `hub_test_scenarios` | `chatbot_id` |
 | `hub_test_runs` | por su escenario |
+| `hub_funciones` | `organizacion_id` — **nulo = de plataforma, y se hereda** (FUN.1) |
+| `hub_funcion_versiones` | `funcion_id` → función |
 | `hub_report_templates` | `organizacion_id` (MT.4) |
 | `hub_report_template_versions` | `template_id` → plantilla |
 | `hub_workspaces` | `organizacion_id` (MT.4) |
