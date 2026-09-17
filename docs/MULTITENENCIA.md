@@ -67,6 +67,7 @@ se llega a ellas. La columna dice **por dónde** las acota un router.
 | Tabla | Camino a la organización |
 |---|---|
 | `hub_web_sites` | `organizacion_id` |
+| `hub_web_sections` | `site_id` → sitio (DIN.1) |
 | `hub_crawled_pages` | `site_id` → sitio |
 | `hub_content_findings` | `site_id` / `chatbot_id` |
 | `hub_corpus_selections` | `site_id` / `chatbot_id` |

@@ -61,6 +61,74 @@ class HubWebSite(HubOperationalBase):
     )
 
 
+class HubWebSection(HubOperationalBase):
+    """Sección o bloque dentro de un sitio: el apartado como **dato** (DIN.1).
+
+    Hasta aquí un apartado se expresaba creando un `HubWebSite` entero con su
+    `url_regex_filter` (RAS.5). Tenía una razón —cada apartado tiene un responsable
+    distinto, que aquí es la columna `owner`— pero duplicaba `root_url`, sitemap,
+    cortesía y criterios de juicio, y hacía que «añadir el apartado de becas» fuera un
+    alta técnica en vez de un formulario de quien cura.
+
+    Los campos están en inglés como los de `HubWebSite`, para leerse como su vecina.
+    Llega a su organización **por el sitio**: no tiene `organizacion_id`, y eso es lo
+    que dice su fila en `docs/MULTITENENCIA.md`.
+
+    **Nulo hereda**: `crawl_interval_hours` y `criteria_json` vacíos valen los del
+    sitio; lo resuelve `curation/secciones.parametros_efectivos`. `mode` lleva
+    `CheckConstraint` —dos valores estables con consumidor en el código— y
+    `criteria_json` no: son vocabulario que crecerá, como los criterios de sitio de
+    CUR.2.1.
+    """
+
+    __tablename__ = "hub_web_sections"
+    __table_args__ = (
+        UniqueConstraint("site_id", "name", name="uq_section_site_name"),
+        CheckConstraint(
+            "pattern_kind IN ('path_prefix', 'regex')", name="ck_section_pattern_kind"
+        ),
+        CheckConstraint("mode IN ('manual', 'automatic')", name="ck_section_mode"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    site_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_web_sites.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    #: El nombre que le da quien cura: «Jornadas», «Eventos».
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: Lo que delimita la sección. Se valida al guardar (`secciones.validar_patron`): un regex
+    #: que no compila rompería todos los rastreos y el fallo saldría lejos del formulario.
+    pattern: Mapped[str] = mapped_column(String(2048), nullable=False)
+    pattern_kind: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="path_prefix"
+    )
+    #: NULL = hereda la cadencia del sitio.
+    crawl_interval_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: El defecto es `manual` **a propósito**, al contrario que `auto_ingest_new` (que nació
+    #: con default `True`): una sección nueva no automatiza hasta que alguien lo dice. Es el
+    #: principio del bloque, «curación una vez, automatización después».
+    mode: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
+    #: Overrides de criterios de juicio sobre los del sitio; NULL = hereda. Se funden **clave a
+    #: clave**: un override de `stale_days` no puede borrar el umbral de retirada del sitio.
+    criteria_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    #: Responsable del apartado: la razón original de RAS.5 para partir por sitios, que aquí es
+    #: un campo y no una tabla nueva.
+    owner: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: La sección tiene su propio reloj: es lo que permite cadencias distintas en un mismo sitio.
+    last_crawled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class HubCrawledPage(HubOperationalBase):
     """Página rastreada de un sitio. Acumula señales de frescura y flags de higiene."""
 

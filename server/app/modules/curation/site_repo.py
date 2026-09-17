@@ -11,7 +11,6 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import urlparse
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,8 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from server.app.modules.agents_hub.database.operational_models import (
     HubCorpusSelection,
     HubCrawledPage,
+    HubWebSection,
     HubWebSite,
 )
+from server.app.modules.curation.secciones import casa_patron, validar_patron
 
 
 class WebSiteRepo:
@@ -83,6 +84,83 @@ class WebSiteRepo:
         if site is None:
             return
         await self.session.delete(site)
+        await self.session.flush()
+
+
+class WebSectionRepo:
+    """CRUD de las secciones de un sitio (DIN.1).
+
+    El patrón se valida **antes de escribir**: la lección de `CrawlConfig` en RAS.5 es que un
+    patrón inválido rompería todos los rastreos de la sección y el fallo saldría lejos del
+    formulario donde se escribió. DIN.3 lo convierte en un 422 por HTTP; aquí es una excepción
+    que nadie puede saltarse llamando al repositorio directamente.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def create(
+        self,
+        *,
+        site_id: uuid.UUID,
+        name: str,
+        pattern: str,
+        pattern_kind: str = "path_prefix",
+        crawl_interval_hours: int | None = None,
+        mode: str = "manual",
+        criteria_json: dict[str, Any] | None = None,
+        owner: str | None = None,
+    ) -> HubWebSection:
+        section = HubWebSection(
+            site_id=site_id,
+            name=name,
+            pattern=validar_patron(pattern_kind, pattern),
+            pattern_kind=pattern_kind,
+            crawl_interval_hours=crawl_interval_hours,
+            mode=mode,
+            criteria_json=criteria_json,
+            owner=owner,
+        )
+        self.session.add(section)
+        await self.session.flush()
+        await self.session.refresh(section)
+        return section
+
+    async def get(self, section_id: uuid.UUID) -> HubWebSection | None:
+        return await self.session.get(HubWebSection, section_id)
+
+    async def list_by_site(
+        self, site_id: uuid.UUID, *, only_active: bool = False
+    ) -> list[HubWebSection]:
+        stmt = select(HubWebSection).where(HubWebSection.site_id == site_id)
+        if only_active:
+            stmt = stmt.where(HubWebSection.is_active.is_(True))
+        # Orden estable con desempate determinista (DET.1): dos secciones creadas en la misma
+        # transacción comparten `created_at` al microsegundo.
+        stmt = stmt.order_by(HubWebSection.created_at.desc(), HubWebSection.id)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def update(self, section_id: uuid.UUID, **fields: Any) -> HubWebSection | None:
+        section = await self.get(section_id)
+        if section is None:
+            return None
+        if "pattern" in fields or "pattern_kind" in fields:
+            fields["pattern"] = validar_patron(
+                fields.get("pattern_kind", section.pattern_kind),
+                fields.get("pattern", section.pattern),
+            )
+        for key, value in fields.items():
+            setattr(section, key, value)
+        await self.session.flush()
+        await self.session.refresh(section)
+        return section
+
+    async def delete(self, section_id: uuid.UUID) -> None:
+        section = await self.get(section_id)
+        if section is None:
+            return
+        await self.session.delete(section)
         await self.session.flush()
 
 
@@ -223,9 +301,13 @@ class CorpusSelectionRepo:
           se materializa por crawl en 9Q.2 y aquí siempre devuelve False.
         - manual: selección explícita; la asociación efectiva se gestiona
           fuera de la regla, por lo que aquí siempre devuelve False.
+
+        DIN.1 — la comparación la hace `curation/secciones.casa_patron`, no una copia local: una
+        regla de selección y una sección con el mismo prefijo tienen que decidir igual, o la
+        pantalla y el rastreo discreparían sobre qué entra al corpus.
         """
         if selection.rule_type == "path_prefix":
             if not selection.rule_value:
                 return False
-            return urlparse(page_url).path.startswith(selection.rule_value)
+            return casa_patron("path_prefix", selection.rule_value, page_url)
         return False
