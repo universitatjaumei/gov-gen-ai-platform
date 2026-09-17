@@ -137,7 +137,11 @@ export function FindingsPage() {
                   y RAS.5. Sin estar aquí no se podían filtrar y su columna «Tipo» habría salido
                   con la clave de traducción en crudo: un hallazgo que la pantalla no sabe nombrar
                   no existe para quien cura. */}
-              {['superseded','duplicate','contradiction','empty','thin','stale','crawl_error','orphan_page','needs_javascript','content_updated','version_series'].map((ft) => (
+              {/* DIN.4 — `page_gone` (desapareció y el apartado no automatiza) y
+                  `retirada_masiva_detenida` (la salvaguarda paró una retirada entera). El
+                  segundo es el más importante de la lista: si no se ve, la única señal de que la
+                  automatización se detuvo se queda en el log del servidor. */}
+              {['superseded','duplicate','contradiction','empty','thin','stale','crawl_error','orphan_page','needs_javascript','content_updated','version_series','page_gone','retirada_masiva_detenida'].map((ft) => (
                 <option key={ft} value={ft}>{t(`type_${ft}` as Parameters<typeof t>[0])}</option>
               ))}
             </select>

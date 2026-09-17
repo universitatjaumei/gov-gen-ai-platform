@@ -21,6 +21,19 @@ from server.app.modules.curation.reconciliacion import (
 
 logger = logging.getLogger(__name__)
 
+#: DIN.4 — la proporción de bajas del ámbito por encima de la cual no se retira nada. Protege de
+#: la clase de rastreo malo que `truncated` **no** capta: el portal que responde 200 con una
+#: plantilla vacía, la redirección masiva. Es un criterio de juicio, así que se puede poner por
+#: sitio y sobrescribir por sección (DIN.1); esto es el valor si nadie lo dice.
+UMBRAL_DE_RETIRADA_MASIVA = 0.30
+CLAVE_UMBRAL_DE_RETIRADA = "retirada_masiva_umbral"
+
+#: Lo que se escribe al retirar el aviso de una página que volvió a aparecer. Un `resolved` a
+#: secas se leería como «alguien lo arregló»; aquí lo único cierto es que la página está otra vez.
+NOTA_DE_PAGINA_QUE_VOLVIO = (
+    "Retirado automáticamente: la página ha vuelto a aparecer en el portal."
+)
+
 
 # ──────────────────────────── Protocolos ────────────────────────────
 
@@ -79,6 +92,10 @@ class SiteQualitySummary:
     #: DIN.2 — qué ámbito cubrió la pasada: la sección, o el sitio entero. El diario de DIN.6 lo
     #: escribe y la auto-retirada de DIN.4 decide con él.
     section_id: uuid.UUID | None = None
+    #: DIN.4 — documentos retirados del corpus porque su página desapareció del portal. Hasta
+    #: aquí `mark_gone` marcaba la página y ahí moría: un evento borrado seguía en el corpus
+    #: respondiendo como si existiera.
+    documents_auto_retired: int = 0
 
     @property
     def ambito(self) -> str:
@@ -120,6 +137,8 @@ class SiteQualityAnalysisJob:
         run_semantic: bool = True,
         finding_repo: Any = None,
         watcher_factory: Any = None,
+        retirer_factory: Any = None,
+        selection_repo_factory: Any = None,
     ) -> None:
         self._session_factory = session_factory
         self._site_crawler = site_crawler
@@ -135,6 +154,19 @@ class SiteQualityAnalysisJob:
         # vectores incomparables. Con fábrica, cada ingesta usa el suyo. Sin ella se usa el
         # watcher fijo, que es lo que hacen los tests que doblan esta pieza.
         self._watcher_factory = watcher_factory
+        # DIN.4 — quien sabe retirar una página del corpus (`CorpusSelectionService`), construido
+        # con la sesión de la pasada. Sin él no hay auto-retirada y el resto del job sigue igual.
+        self._retirer_factory = retirer_factory
+        # DIN.4 — el repositorio de selecciones **con la sesión de la pasada**. Construido al
+        # arrancar tendría la sesión de entonces, y por eso el arranque pasaba uno nulo que
+        # devolvía lista vacía: con él, la auto-ingesta de 9Q.7 no ha corrido nunca en producción.
+        self._selection_repo_factory = selection_repo_factory
+
+    def _selecciones(self, session: Any) -> Any:
+        """El repositorio de selecciones de esta pasada: el de la fábrica, o el fijo."""
+        if self._selection_repo_factory is not None:
+            return self._selection_repo_factory(session)
+        return self._selection_repo
 
     async def _watcher_para(self, session: Any, chatbot_id: uuid.UUID) -> Any:
         """El watcher que ingiere para ese chatbot, con su servicio de embeddings."""
@@ -196,6 +228,260 @@ class SiteQualityAnalysisJob:
 
             if actualizados and self._finding_repo is not None:
                 await self._avisar_de_la_actualizacion(site_id, page, actualizados)
+
+    # ──────────────────── DIN.4 — retirar lo que desapareció ────────────────────
+
+    async def _retirar_lo_que_desaparecio(
+        self,
+        session: Any,
+        site_id: uuid.UUID,
+        section_id: uuid.UUID | None,
+        gone_page_ids: list,
+        summary: SiteQualitySummary,
+    ) -> None:
+        """Retira del corpus las páginas desaparecidas, o avisa, según el modo del ámbito.
+
+        Tres reglas, y las tres son sobre no pasarse:
+
+        * **Sólo en modo automático.** Una sección `manual` —o una pasada del sitio entero, que
+          es lo que hace quien cura a mano— deja el aviso `page_gone` y no toca el corpus.
+        * **Salvaguarda de proporción.** Por encima del umbral del ámbito no se retira nada: es
+          la clase de rastreo malo que `truncated` no capta, y sin esto vacía corpus con el
+          rastreo en verde. Misma idea que el reconciliador del corpus normativo.
+        * **La proporción es del ámbito**, no del sitio: cuatro bajas en un apartado de diez son
+          el 40 % del apartado y el 4 % de un portal de cien.
+        """
+        from server.app.modules.agents_hub.database.operational_models import (
+            HubWebSection,
+            HubWebSite,
+        )
+        from server.app.modules.curation.secciones import parametros_efectivos
+
+        # El aviso de una página que volvió se retira siempre, incluso sin bajas nuevas: es la
+        # única pasada que puede saberlo.
+        await self._retirar_avisos_de_paginas_que_volvieron(session, site_id)
+
+        if not gone_page_ids:
+            return
+
+        sitio = await session.get(HubWebSite, site_id)
+        seccion = (
+            await session.get(HubWebSection, section_id) if section_id is not None else None
+        )
+        efectivos = parametros_efectivos(sitio, seccion)
+
+        if not await self._la_proporcion_es_creible(
+            session, site_id, efectivos, gone_page_ids, summary
+        ):
+            return
+
+        # `mode` de la sección de la pasada. Sin sección no se automatiza nada: la pasada del
+        # sitio entero es la del curador, y ahí una baja es una señal, no un disparador.
+        if seccion is None or getattr(seccion, "mode", "manual") != "automatic":
+            await self._avisar_de_las_bajas(session, site_id, gone_page_ids)
+            return
+
+        await self._retirar_de_los_chatbots_que_la_publicaron(
+            session, site_id, gone_page_ids, summary
+        )
+
+    async def _la_proporcion_es_creible(
+        self,
+        session: Any,
+        site_id: uuid.UUID,
+        efectivos: Any,
+        gone_page_ids: list,
+        summary: SiteQualitySummary,
+    ) -> bool:
+        """Si las bajas de esta pasada caben en lo que un portal hace de verdad.
+
+        El denominador son las páginas **del ámbito** que había antes de la pasada: las que
+        siguen activas más las que esta pasada acaba de dar de baja.
+        """
+        umbral = float(
+            efectivos.criterios.get(CLAVE_UMBRAL_DE_RETIRADA, UMBRAL_DE_RETIRADA_MASIVA)
+        )
+        activas = await self._paginas_activas_del_ambito(session, site_id, efectivos)
+        del_ambito = activas + len(gone_page_ids)
+        if del_ambito == 0:
+            return False
+
+        proporcion = len(gone_page_ids) / del_ambito
+        if proporcion < umbral:
+            return True
+
+        summary.errors.append(
+            f"retirada detenida: {len(gone_page_ids)} bajas de {del_ambito} páginas del ámbito "
+            f"({proporcion:.0%}) superan el umbral del {umbral:.0%}"
+        )
+        await self._registrar_hallazgo(
+            site_id,
+            "retirada_masiva_detenida",
+            severity="critical",
+            signal={
+                "bajas": len(gone_page_ids),
+                "ambito": del_ambito,
+                "proporcion": round(proporcion, 4),
+                "umbral": umbral,
+                "ambito_id": efectivos.ambito,
+            },
+        )
+        return False
+
+    async def _paginas_activas_del_ambito(
+        self, session: Any, site_id: uuid.UUID, efectivos: Any
+    ) -> int:
+        """Cuántas páginas activas del sitio casan el ámbito de esta pasada."""
+        from sqlalchemy import select
+
+        from server.app.modules.agents_hub.database.operational_models import HubCrawledPage
+
+        filas = (
+            await session.execute(
+                select(HubCrawledPage).where(HubCrawledPage.site_id == site_id)
+            )
+        ).scalars().all()
+        return sum(
+            1
+            for p in filas
+            if getattr(p, "status", None) == "active" and efectivos.en_ambito(p.url)
+        )
+
+    async def _avisar_de_las_bajas(
+        self, session: Any, site_id: uuid.UUID, gone_page_ids: list
+    ) -> None:
+        """Un `page_gone` por página, para la cola de quien cura."""
+        from server.app.modules.agents_hub.database.operational_models import HubCrawledPage
+
+        for page_id in gone_page_ids:
+            pagina = await session.get(HubCrawledPage, page_id)
+            if pagina is None:
+                continue
+            await self._registrar_hallazgo(
+                site_id,
+                "page_gone",
+                severity="warning",
+                page_id=pagina.id,
+                source_url=pagina.url,
+                signal={"title": getattr(pagina, "title", None)},
+            )
+
+    async def _retirar_de_los_chatbots_que_la_publicaron(
+        self,
+        session: Any,
+        site_id: uuid.UUID,
+        gone_page_ids: list,
+        summary: SiteQualitySummary,
+    ) -> None:
+        if self._retirer_factory is None:
+            return
+
+        from server.app.modules.agents_hub.database.operational_models import HubCrawledPage
+
+        repo = self._selecciones(session)
+        selecciones = await repo.list_by_site(site_id)
+        if not selecciones:
+            return
+        secciones = await repo.secciones_de(selecciones)
+        retirador = self._retirer_factory(session)
+
+        for page_id in gone_page_ids:
+            pagina = await session.get(HubCrawledPage, page_id)
+            if pagina is None:
+                continue
+            for sel in selecciones:
+                if not repo.matches(sel, pagina.url, secciones=secciones):
+                    continue
+                try:
+                    await retirador.retire_page(sel.chatbot_id, pagina.id)
+                    summary.documents_auto_retired += 1
+                except Exception as exc:  # noqa: BLE001
+                    # Media retirada silenciosa dejaría el corpus en un estado que nadie sabría
+                    # reconstruir: el resto sigue y el fallo consta.
+                    logger.exception(
+                        "Auto-retirada fallida de %s para el chatbot %s",
+                        pagina.url,
+                        sel.chatbot_id,
+                    )
+                    summary.errors.append(f"retirada {pagina.url}: {exc}")
+
+    async def _retirar_avisos_de_paginas_que_volvieron(
+        self, session: Any, site_id: uuid.UUID
+    ) -> None:
+        """Retira los `page_gone` abiertos cuya página ha vuelto a estar activa.
+
+        **No lo puede hacer la reconciliación de CUR.9**: `page_gone` no lo emite ningún detector,
+        así que su tipo nunca entra en `tipos_a_reconciliar`. Y reconciliarlo por sitio desde una
+        pasada de sección retiraría los avisos de las otras secciones, que es la misma trampa del
+        censo de DIN.2. Mirar el estado de la página no tiene ese problema: una página de otra
+        sección sigue en `gone`, así que su aviso no se toca.
+        """
+        from sqlalchemy import select
+
+        from server.app.modules.agents_hub.database.operational_models import (
+            HubContentFinding,
+            HubCrawledPage,
+        )
+
+        abiertos = (
+            await session.execute(
+                select(HubContentFinding).where(
+                    HubContentFinding.site_id == site_id,
+                    HubContentFinding.finding_type == "page_gone",
+                    HubContentFinding.status.in_(("new", "confirmed")),
+                )
+            )
+        ).scalars().all()
+        if not abiertos:
+            return
+
+        retirados = 0
+        for aviso in abiertos:
+            if getattr(aviso, "finding_type", None) != "page_gone":
+                continue
+            if getattr(aviso, "status", None) not in ("new", "confirmed"):
+                continue
+            pagina = await session.get(HubCrawledPage, aviso.page_id)
+            if pagina is None or getattr(pagina, "status", None) != "active":
+                continue
+            aviso.status = "resolved"
+            aviso.reviewed_at = datetime.now(timezone.utc)
+            aviso.resolution_note = NOTA_DE_PAGINA_QUE_VOLVIO
+            retirados += 1
+
+        if retirados:
+            await session.flush()
+
+    async def _registrar_hallazgo(
+        self,
+        site_id: uuid.UUID,
+        tipo: str,
+        *,
+        severity: str,
+        page_id: uuid.UUID | None = None,
+        source_url: str | None = None,
+        signal: dict | None = None,
+    ) -> None:
+        """Escribe un hallazgo del job. Sin repositorio no se escribe, y el job sigue."""
+        if self._finding_repo is None:
+            return
+
+        from server.app.modules.curation.contracts import ContentFinding
+
+        try:
+            await self._finding_repo.upsert(ContentFinding(
+                id=uuid.uuid4(),
+                site_id=site_id,
+                finding_type=tipo,
+                severity=severity,
+                confidence=1.0,
+                detected_at=datetime.now(timezone.utc),
+                page_id=page_id,
+                source_url=source_url,
+                signal=signal or {},
+            ))
+        except Exception:  # noqa: BLE001 — el aviso no puede tumbar el job de calidad
+            logger.exception("No se pudo registrar el hallazgo %s del sitio %s", tipo, site_id)
 
     async def _avisar_de_la_actualizacion(
         self, site_id: uuid.UUID, page: Any, chatbots_actualizados: int
@@ -345,24 +631,35 @@ class SiteQualityAnalysisJob:
             )
 
             # ── 4. AUTO-INGESTA (páginas nuevas del diff) ──────────────────────
+            #
+            # **La condición era `self._watcher is not None`, y en producción el watcher fijo es
+            # `None`**: el arranque pasa una *fábrica* porque cada chatbot ingiere con su propio
+            # servicio de embeddings (RAS.5). Con eso, y con el repositorio de selecciones nulo
+            # que también pasaba el arranque, este paso no ha corrido nunca fuera de los tests.
             new_page_ids: list[uuid.UUID] = getattr(crawl_summary, "new_page_ids", [])
-            if new_page_ids and self._watcher is not None:
-                selections = await self._selection_repo.list_by_site(site_id)
+            repo_de_selecciones = self._selecciones(session)
+            if new_page_ids and (
+                self._watcher is not None or self._watcher_factory is not None
+            ):
+                selections = await repo_de_selecciones.list_by_site(site_id)
                 auto_sels = [s for s in selections if getattr(s, "auto_ingest_new", False)]
 
                 if auto_sels:
                     # DIN.3 — las secciones a las que apuntan, cargadas antes del bucle.
-                    secciones = await self._selection_repo.secciones_de(auto_sels)
+                    secciones = await repo_de_selecciones.secciones_de(auto_sels)
                     for page_id in new_page_ids:
                         page = await session.get(HubCrawledPage, page_id)
                         if page is None:
                             continue
                         for sel in auto_sels:
-                            if self._selection_repo.matches(
+                            if repo_de_selecciones.matches(
                                 sel, page.url, secciones=secciones
                             ):
                                 try:
-                                    await self._watcher.process_source(
+                                    watcher = await self._watcher_para(
+                                        session, sel.chatbot_id
+                                    )
+                                    await watcher.process_source(
                                         source_url=page.url,
                                         chatbot_id=sel.chatbot_id,
                                         prefetched_content=page.markdown_content,
@@ -377,5 +674,22 @@ class SiteQualityAnalysisJob:
                                         sel.chatbot_id,
                                     )
                                     summary.errors.append(f"auto-ingest {page.url}: {exc}")
+
+            # ── 5. AUTO-RETIRADA DE LO QUE DESAPARECIÓ (DIN.4) ─────────────────
+            #
+            # Va **después** de la auto-ingesta a propósito: si una página se movió dentro del
+            # apartado, la nueva ya está ingerida cuando se retira la vieja, y el corpus no se
+            # queda sin ella ni un momento.
+            try:
+                await self._retirar_lo_que_desaparecio(
+                    session,
+                    site_id,
+                    section_id,
+                    getattr(crawl_summary, "gone_page_ids", []),
+                    summary,
+                )
+            except Exception as exc:  # noqa: BLE001 — retirar de menos es mejor que tumbar
+                logger.exception("Auto-retirada fallida en el sitio %s", site_id)
+                summary.errors.append(f"auto-retirada: {exc}")
 
         return summary

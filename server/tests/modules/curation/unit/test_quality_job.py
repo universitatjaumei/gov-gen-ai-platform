@@ -115,6 +115,19 @@ class _FakeSession:
         # Devolvemos una _FakePage si la clave existe, independientemente del modelo
         return self._pages.get(pk)
 
+    async def execute(self, stmt: Any) -> Any:
+        """DIN.4 — el paso de auto-retirada consulta los avisos `page_gone` abiertos. Estos
+        tests no siembran ninguno, así que la respuesta es vacía."""
+
+        class _R:
+            def scalars(self_inner) -> Any:  # noqa: N805
+                return self_inner
+
+            def all(self_inner) -> list:  # noqa: N805
+                return []
+
+        return _R()
+
     async def flush(self) -> None:
         return None
 

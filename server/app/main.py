@@ -164,7 +164,12 @@ def _start_quality_scheduler():
                 run_semantic=settings.content_quality_semantic_enabled,
             ),
             watcher=None,
-            selection_repo=_NullSelectionRepo(),
+            # DIN.4 — el repositorio y el retirador se resuelven **con la sesión de cada
+            # pasada**. Aquí iba un repositorio nulo que devolvía lista vacía a todo, y con él
+            # la auto-ingesta de 9Q.7 no ha corrido nunca en producción.
+            selection_repo=None,
+            selection_repo_factory=_repo_de_selecciones,
+            retirer_factory=_retirador_del_corpus,
             run_semantic=settings.content_quality_semantic_enabled,
             watcher_factory=_watcher_para,
             finding_repo=_RepoDeHallazgosDelJob(hub_session_factory),
@@ -216,17 +221,36 @@ class _RepoDeHallazgosDelJob:
             return resultado
 
 
-class _NullSelectionRepo:
-    """Selection repo stub para el arranque sin configuración completa."""
+def _repo_de_selecciones(session: Any) -> Any:
+    """El repositorio de selecciones de la pasada de calidad (DIN.4).
 
-    async def list_by_site(self, site_id):  # noqa: ANN001
-        return []
+    **Aquí iba `_NullSelectionRepo`, que devolvía lista vacía a todo.** Era un sustituto puesto
+    porque el repositorio real necesita una sesión y el job se construye al arrancar — pero con
+    él, el paso de auto-ingesta de 9Q.7 preguntaba «¿qué selecciones tiene este sitio?» y la
+    respuesta era siempre «ninguna»: la auto-ingesta de páginas nuevas no ha corrido nunca en
+    producción. Con una fábrica, el job resuelve el repositorio con la sesión de cada pasada.
+    """
+    from server.app.modules.curation.site_repo import CorpusSelectionRepo
 
-    async def secciones_de(self, selections) -> dict:  # noqa: ANN001
-        return {}
+    return CorpusSelectionRepo(session)
 
-    def matches(self, selection, page_url: str, *, secciones=None) -> bool:  # noqa: ANN001
-        return False
+
+def _retirador_del_corpus(session: Any) -> Any:
+    """Quien sabe retirar del corpus los documentos de una página (DIN.4).
+
+    Es el mismo `CorpusSelectionService` del endpoint manual de retirada, y por eso no hace
+    falta un segundo camino: `retire_page` borra documentos y *chunks*, y no necesita watcher
+    —retirar no ingiere nada—.
+    """
+    from server.app.modules.curation.selection_service import CorpusSelectionService
+    from server.app.modules.curation.site_repo import (
+        CorpusSelectionRepo,
+        CrawledPageRepo,
+    )
+
+    return CorpusSelectionService(
+        session, CrawledPageRepo(session), CorpusSelectionRepo(session), watcher=None
+    )
 
 
 async def _fail_zombie_jobs() -> None:

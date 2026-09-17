@@ -94,6 +94,25 @@ export function razonDelHallazgo(hallazgo: HallazgoConSenal, t: Traductor): stri
         : t('reason_updated_short')
     }
 
+    // DIN.4 — la página desapareció y este apartado no retira solo: la decisión es de quien cura.
+    case 'page_gone':
+      return t('reason_page_gone')
+
+    // DIN.4 — la salvaguarda paró una retirada entera, y las cifras son lo que permite juzgar si
+    // el portal cambió de verdad o el rastreo salió mal. Sin ellas el aviso no dice nada.
+    case 'retirada_masiva_detenida': {
+      const bajas = numero(s.bajas)
+      const ambito = numero(s.ambito)
+      const proporcion = numero(s.proporcion)
+      return bajas === null || ambito === null
+        ? t('reason_retirada_masiva_detenida_short')
+        : t('reason_retirada_masiva_detenida', {
+            bajas,
+            ambito,
+            proporcion: Math.round((proporcion ?? bajas / ambito) * 100),
+          })
+    }
+
     default:
       return texto(s.explanation) ?? ''
   }

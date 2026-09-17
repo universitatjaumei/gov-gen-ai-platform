@@ -38,6 +38,15 @@ FindingType = Literal[
     # auditar paginas: sale de que pase el tiempo. El sync detecta lo que cambia en origen,
     # y una norma que nadie toca durante tres anos no emite ninguna senal.
     "revisio_vencuda",
+    # DIN.4: la pagina desaparecio del portal y su apartado NO esta en modo automatico, asi que
+    # no se ha tocado el corpus. Es una senal para quien cura, no una acusacion contra la
+    # pagina: se retira sola cuando la pagina vuelve a aparecer.
+    "page_gone",
+    # DIN.4: las bajas de esta pasada superan el umbral del ambito, asi que no se ha retirado
+    # NADA. Protege de la clase de rastreo malo que `truncated` no capta —el portal que responde
+    # 200 con una plantilla vacia, la redireccion masiva— y que sin esto vaciaria un corpus con
+    # el rastreo en verde.
+    "retirada_masiva_detenida",
     # DER.2: la misma norma con contenidos distintos en dos chatbots de la organización.
     # Es la factura de haber descartado compartir el documento (COR): filas separadas
     # conservan que cada asistente elija su modelo de embedding, y a cambio pueden derivar.
