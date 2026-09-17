@@ -146,12 +146,47 @@ también ejecuta uno. Quitar el arranque de la aplicación no se notaba. Ahora l
 `docker run -d` **de una etiqueta que este mismo job acaba de construir**, y el caso está escrito
 como test. Es otra vez la misma lección: un guardarraíl sólo ve la pregunta que le hicieron.
 
-### Lo que falta, y no se puede medir desde aquí
+### La medida, y la decisión que sale de ella (2026-09-17)
 
-- **El tiempo del job, sin medir.** Docker Desktop estaba apagado y una medida en Windows no
-  sustituye a construir en Linux en la máquina de GitHub. **Hasta tenerla, el job corre en cada
-  ejecución del flujo** —sin `if`—, que es la opción conservadora; si resulta caro, se acota con
-  la medida escrita aquí y el guardarraíl se actualiza a la vez.
-- **El caso real del 2026-09-15 en vivo**: quitar `uvicorn` del manifiesto y ver el job rojo. Eso
-  exige una ejecución de CI. Lo que sí está comprobado sin Docker es que `test_dep8` ya se pone
-  rojo con ese mismo cambio.
+**La secuencia entera, ejecutada en local** con Docker Desktop (motor Linux), en frío y contra un
+Postgres desechable en su propia red —la base de desarrollo no se tocó—:
+
+| Paso | Tiempo |
+|---|---|
+| Construir `app` | 166 s |
+| Construir `frontend` | 66 s |
+| Construir `sandbox` | 59 s |
+| Construir `mcp` | 18 s |
+| Migrar con la imagen recién construida | 6 s |
+| Arrancar hasta `/health` 200 | ~20 s |
+| **Total** | **≈ 5,6 min** |
+
+Y sirvió para lo que una medición sirve además de dar un número: **la secuencia funciona de punta
+a punta**. El contenedor arrancó con `ENVIRONMENT=production` y el registro salió con **0 errores
+y 0 avisos**, `Application startup complete`, el sembrado **omitiendo los datos de desarrollo**
+como debe fuera de desarrollo, y los dos refrescos de arranque resolviendo sin credenciales por su
+lista de reserva.
+
+**Contra los tiempos reales de CI** (run `35117521768`, rama `desarrollo`): `Lint & Test` **6,28
+min** —que es quien marca el total—, `contract` 3,38 min, `supply-chain` 1,27 min, `a11y` 0,68
+min.
+
+**Decisión: el job corre en cada ejecución del flujo, sin `if`.** Con `needs: contract` (3,38 min)
+más lo suyo, quedaría alrededor de 9 min y **pasaría a ser el camino crítico**, añadiendo unos 2-3
+min al total. Se acepta, y la razón es que la alternativa no protege: acotarlo a `main` llegaría
+tarde, porque `deploy.yml` dispara **con ese mismo push y en paralelo**, así que un rojo ahí no
+frena nada. El valor entero está en cazarlo en `desarrollo`, antes del merge.
+
+**La palanca, escrita por si algún día molesta**: sólo la imagen del frontend necesita el cliente
+generado. Partir el job —las tres que no lo necesitan sin `needs`— las sacaría del camino crítico.
+No se hace ahora: un job es más fácil de leer que dos, y el coste medido no lo justifica todavía.
+
+**Dos avisos sobre la medida, para que nadie la lea como lo que no es**: es de Windows y de una
+pasada, y su contexto de construcción es **mayor** que el de CI (`_local/` y `htmlcov/` no están
+en el checkout). Sirve para dimensionar, no para presumir de cifra.
+
+### Lo que sigue sin comprobarse fuera de CI
+
+**El caso real del 2026-09-15 en vivo**: quitar `uvicorn` del manifiesto y ver el job rojo. Exige
+una ejecución de CI. Lo comprobado sin ella: `test_dep8` se pone rojo con ese mismo cambio, y la
+imagen construida aquí arranca — que es la otra mitad de la afirmación.
