@@ -12,6 +12,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 _ROOT = Path(__file__).parent.parent.parent.parent
 _SCRIPT = _ROOT / "scripts" / "setup.sh"
 
@@ -58,6 +60,12 @@ def test_should_reject_unknown_flag() -> None:
 def test_should_check_docker_and_required_ports() -> None:
     result = _run("--dry-run")
     salida = result.stdout + result.stderr
+    # El script comprueba Docker ANTES que los puertos y aborta si el demonio no responde, así
+    # que con Docker Desktop parado esto daba rojo afirmando que «no comprueba el puerto 80» —
+    # y sí lo comprueba: nunca llega. Un rojo que dice algo falso sobre el código es peor que
+    # uno que no dice nada, porque se arregla el sitio equivocado.
+    if "el demonio de Docker no responde" in salida:
+        pytest.skip("el demonio de Docker no está en marcha: el script aborta antes de los puertos")
     for puerto in ("80", "443", "5432"):
         assert puerto in salida, f"debe comprobar el puerto {puerto}"
     assert "docker" in salida.lower()

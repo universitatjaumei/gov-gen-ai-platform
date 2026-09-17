@@ -102,3 +102,56 @@ es una rendija; lo que falta es levantar la imagen.
   necesita.
 - **No sustituye al escaneo de la cadena de suministro.** DEP.7 vigila vulnerabilidades; esto
   vigila que lo que se despliega arranque. Son preguntas distintas y por eso son jobs distintos.
+
+---
+
+## Ejecutado el 2026-09-17 — el job `imagen`
+
+**Lo que quedó montado**, en `ci.yml`, con `needs: contract`:
+
+1. **Las cuatro imágenes se construyen** con los `Dockerfile` y los contextos del despliegue.
+2. **Sólo se arranca la de la aplicación**, que es la única con una comprobación de salud que
+   signifique algo sin montar red ni configuración: el frontend sirve estáticos y el *sandbox* y
+   el MCP necesitan una red que este job no levanta. Construir las tres, sí: es barato y caza un
+   `Dockerfile` roto, que es justo lo que pasó el 2026-09-16.
+3. **Migra con la imagen recién construida** (`alembic upgrade head`), como el servicio `migrate`
+   de `docker-compose.prod.yml`. Sin eso el arranque muere en la primera consulta y el job se
+   pondría rojo por una razón distinta de la que existe para vigilar.
+4. **Arranca con `ENVIRONMENT=production`**, que es lo que se despliega y lo que activa los tres
+   gates de `core/config.py`, y espera a `/health` con reintentos: el mismo criterio del paso
+   «Comprobar que sirve, y volver atrás si no» de `deploy.yml`.
+5. **El cliente de la API se descarga del job `contract`** en vez de volver a instalar uv y node
+   aquí. `frontend/src/shared/api/generated/` no viaja en el repositorio, y `docker build
+   ./frontend` a secas falla con veinte «Cannot find module»: es donde murió el primer
+   despliegue.
+
+**El guardarraíl es `server/tests/infra/test_img1_ci_construye_y_arranca_la_imagen.py`**, y lee de
+`deploy.yml` qué imágenes y qué `Dockerfile` usa el despliegue **en vez de copiarlos**: si el
+despliegue añade una imagen o mueve un fichero, este test se entera. Copiar la lista es cómo
+empiezan las dos verdades.
+
+### Las cinco mutaciones, comprobadas una a una
+
+| Mutación | Resultado |
+|---|---|
+| `--all-extras` dentro del job | rojo |
+| `continue-on-error` en el paso que arranca | rojo |
+| construir `Dockerfile.test` en vez del del despliegue | rojo (2 tests) |
+| construir y **no** arrancar | rojo |
+| acotar el job con un `if` | rojo |
+
+**Y la cuarta se quedó VERDE en la primera versión**, que es el hallazgo de método de este
+prompt: la comprobación preguntaba si el script contenía `docker run`, y el paso de migraciones
+también ejecuta uno. Quitar el arranque de la aplicación no se notaba. Ahora la pregunta es
+`docker run -d` **de una etiqueta que este mismo job acaba de construir**, y el caso está escrito
+como test. Es otra vez la misma lección: un guardarraíl sólo ve la pregunta que le hicieron.
+
+### Lo que falta, y no se puede medir desde aquí
+
+- **El tiempo del job, sin medir.** Docker Desktop estaba apagado y una medida en Windows no
+  sustituye a construir en Linux en la máquina de GitHub. **Hasta tenerla, el job corre en cada
+  ejecución del flujo** —sin `if`—, que es la opción conservadora; si resulta caro, se acota con
+  la medida escrita aquí y el guardarraíl se actualiza a la vez.
+- **El caso real del 2026-09-15 en vivo**: quitar `uvicorn` del manifiesto y ver el job rojo. Eso
+  exige una ejecución de CI. Lo que sí está comprobado sin Docker es que `test_dep8` ya se pone
+  rojo con ese mismo cambio.

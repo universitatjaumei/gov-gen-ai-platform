@@ -358,7 +358,14 @@ def test_caddy_valida_la_configuracion_compuesta(tmp_path: Path) -> None:
         return r.returncode, (r.stdout or "") + (r.stderr or "")
 
     codigo, salida = _caddy("caddy", "validate")
-    if codigo != 0 and "Cannot connect to the Docker daemon" in salida:
+    # Las dos formas de decir lo mismo. `shutil.which("docker")` encuentra el ejecutable de
+    # Docker Desktop aunque el motor esté parado, así que el skip de arriba no cubre este caso y
+    # lo que queda es leer el error. En Linux llega como «Cannot connect to the Docker daemon»;
+    # en Windows, como «failed to connect to the docker API at npipe://…», y con el demonio
+    # apagado este test daba ROJO en vez de saltarse — un rojo de entorno en el cierre de
+    # cualquier prompt, que es como se acaba ignorando la suite entera.
+    demonio_parado = ("Cannot connect to the Docker daemon", "failed to connect to the docker API")
+    if codigo != 0 and any(marca in salida for marca in demonio_parado):
         pytest.skip("el demonio de Docker no está en marcha")
     assert codigo == 0, f"`caddy validate` falla:\n{salida}"
 

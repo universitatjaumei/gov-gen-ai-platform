@@ -604,6 +604,10 @@ a quien llega de fuera:
   integrador real.
 - `test_profile_contract.py` — todo perfil que no esté declarado sin configurar tiene que compilar
   y ejecutar.
+- `test_img1_ci_construye_y_arranca_la_imagen.py` — que el job `imagen` siga construyendo **los
+  `Dockerfile` del despliegue**, sin extras y sin dependencias de desarrollo, y arrancando el
+  contenedor hasta `/health`. El conjunto de dependencias que se despliega era el único que no
+  probaba nadie, y eso costó 35 minutos de producción caída el 2026-09-15.
 - Gate de regresión de recuperación: falla si `recall@5`, `recall@10` o `MRR` bajan más de 0,02
   respecto a la línea base versionada.
 
