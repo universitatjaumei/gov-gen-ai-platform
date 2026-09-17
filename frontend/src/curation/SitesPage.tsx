@@ -15,6 +15,7 @@ import {
 } from '@/shared/api/generated/hub-sites/hub-sites'
 import type { ReconnaissanceView, SiteView } from '@/shared/api/generated/model'
 import { descargarConAutorizacion } from '@/shared/api/download'
+import { useOrganizacionElegida } from '@/shared/organizacion/useOrganizacionElegida'
 import { SectionsPanel } from './SectionsPanel'
 
 const siteSchema = z.object({
@@ -73,6 +74,8 @@ export function SitesPage() {
   // DIN.3 — las secciones de un sitio se despliegan bajo su fila: son trabajo de curación sobre
   // un sitio ya dado de alta, no parte del alta.
   const [sitioDesplegado, setSitioDesplegado] = useState<string | null>(null)
+  // REV.10 — la misma elección de organización que el resto del panel, no un selector nuevo.
+  const { elegida: organizacionElegida } = useOrganizacionElegida()
 
   const { data: sites = [], isLoading } = useListSites()
   const createMutation = useCreateSite({
@@ -164,6 +167,16 @@ export function SitesPage() {
 
   const onSubmit = (data: SiteFormValues) => {
     createMutation.mutate({
+      // De quién es el sitio. `POST /hub/sites` lo recibe como parámetro de consulta y sin él
+      // responde **403 «Indica la organización del sitio»** a quien no sea superadministrador
+      // (SEC.8.1: sin organización el sitio queda fuera de toda cascada y de todo listado
+      // acotado). La pantalla no lo enviaba, así que un administrador de organización **no podía
+      // crear un sitio desde la interfaz** — y es la única forma de crearlo. Lo destapó el
+      // montaje de la verificación de DIN.7.
+      //
+      // Sin organización elegida no se inventa ninguna: un superadministrador puede querer un
+      // sitio de plataforma, y ésa es su decisión, no la de esta pantalla.
+      ...(organizacionElegida ? { params: { organizacion_id: organizacionElegida } } : {}),
       data: {
         name: data.name,
         root_url: data.root_url,

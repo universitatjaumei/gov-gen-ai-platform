@@ -110,6 +110,7 @@ class _FakeSession:
 
     def __init__(self, pages: dict[uuid.UUID, _FakePage] | None = None) -> None:
         self._pages = pages or {}
+        self.confirmada = False
 
     async def get(self, model: type, pk: uuid.UUID) -> Any:
         # Devolvemos una _FakePage si la clave existe, independientemente del modelo
@@ -130,6 +131,11 @@ class _FakeSession:
 
     async def flush(self) -> None:
         return None
+
+    async def commit(self) -> None:
+        """DIN.7 — el job **confirma** su sesión al terminar. No lo hacía, y por eso perdía el
+        `quality_score` y las supersesiones que escribe aquí mismo."""
+        self.confirmada = True
 
 
 @asynccontextmanager

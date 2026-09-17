@@ -827,6 +827,23 @@ class SiteQualityAnalysisJob:
                 logger.exception("Auto-retirada fallida en el sitio %s", site_id)
                 summary.errors.append(f"auto-retirada: {exc}")
 
+            # ── CONFIRMAR LO QUE ESTA SESIÓN HA ESCRITO ────────────────────────
+            #
+            # **Aquí no había nada, y el job llevaba desde 9Q.5 escribiendo en el vacío.** La
+            # sesión se abría con `async with self._session_factory() as session:` y sólo se le
+            # hacía `flush`; al cerrarse, lo pendiente se deshace. Se perdían el `quality_score`
+            # y las supersesiones de 9Q.5 — y, desde DIN.4, **la retirada del corpus**: el
+            # resumen decía «retirada 1», el diario lo escribía (tiene transacción propia) y el
+            # documento seguía ahí. Lo destapó el ciclo real de DIN.7.
+            #
+            # Retirar mintiendo es peor que no retirar, así que esto no puede volver a faltar:
+            # hay un test que comprueba que la sesión se confirma.
+            try:
+                await session.commit()
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("No se pudo confirmar la pasada del sitio %s", site_id)
+                summary.errors.append(f"commit: {exc}")
+
         # ── 6. EL DIARIO DE LA PASADA (DIN.6) ──────────────────────────────────
         await self._anotar_en_el_diario(site_id, section_id, comenzado, summary)
 

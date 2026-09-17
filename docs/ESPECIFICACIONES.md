@@ -246,10 +246,8 @@ para que una persona decida qué entra al corpus.
 **Madurez**: `producción` — el portal real de la UJI, con sus trampas inventariadas (conmutador de
 idioma, http+https duplicados, la misma sección bajo dos prefijos, archivo por curso académico).
 
-**Abierto.** Bloque **DIN**: parametrizar apartados como *secciones* dentro del proceso de
-curación, con censo acotado por sección. La trampa que el bloque evita está medida:
-`site_crawler.py` compara contra las páginas de **todo** el sitio, así que una pasada de sección
-completa declararía baja el resto del portal.
+**Y encima de esto**, §5.11 añade el apartado que se mantiene solo: la misma curación, acotada a
+una sección del portal y con el ciclo de vida cerrado.
 
 ---
 
@@ -493,6 +491,42 @@ Probado y verificado en vivo con un PAT real y una sesión MCP real.
   lo comieran operaciones que no llaman a ningún modelo. Se respeta el límite y no se inventa
   consumo. **Consecuencia asumida y anotada**: acotar el volumen bruto necesitaría un límite de
   frecuencia, que la plataforma no tiene.
+
+---
+
+---
+
+### 5.11 Apartados que se mantienen solos
+
+**Qué hace.** Un apartado del portal que se actualiza de forma permanente —jornadas, eventos,
+becas— se parametriza como **sección** dentro del proceso de curación, con su patrón, su cadencia
+y su responsable, y a partir de ahí la plataforma lo mantiene: ingiere lo nuevo, reingiere lo que
+cambió y retira lo que desapareció.
+
+**Garantiza.**
+- **Curación una vez, automatización después.** Una sección nace en modo `manual` y sólo automatiza
+  cuando alguien lo dice. En `manual`, una baja deja un aviso y **no toca el corpus**.
+- **El censo se acota al ámbito rastreado.** Una pasada de sección compara contra las páginas de
+  esa sección; fuera del ámbito no declara nada, ni baja ni cambio.
+- **Nada entra al corpus con hallazgos bloqueantes**: la automatización no tiene menos criterio
+  que el curador al que sustituye. La página bloqueada sigue siendo candidata.
+- **Ninguna retirada masiva silenciosa**: por encima del umbral del ámbito (30 % por defecto) no
+  se retira nada y queda el aviso con las cifras.
+- **Todo lo que hace queda escrito** en un diario por pasada, con el ámbito que cubrió.
+- Los parámetros de una sección **heredan del sitio**: nulo hereda, y lo puesto gana.
+
+**Superficie.** `modules/curation/secciones.py`, `quality_job.py`, `diario.py` ·
+`hub_web_sections`, `hub_crawl_runs` · `hub_sites_router` (`/hub/sites/{id}/sections`, `/runs`) ·
+panel de secciones y diario en `/curation/sites`.
+
+**Madurez**: `construido` — ciclo completo verificado contra un portal controlado (nueva que
+entra, cambiada que se reingiere, desaparecida que se retira, y el resto del sitio intacto). Sin
+desplegar. La receta está en `docs/SECCIONES_DINAMICAS.md`.
+
+**Abierto.** La **caducidad editorial**: un evento que ya ocurrió sigue publicado, así que para la
+plataforma no ha desaparecido y el asistente puede citarlo. No se implementa porque no es una
+decisión técnica — depende de quien publica el contenido. Las cuatro opciones y a quién le toca,
+en `docs/SECCIONES_DINAMICAS.md` §6.
 
 ---
 

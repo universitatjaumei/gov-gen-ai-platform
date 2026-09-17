@@ -18,6 +18,19 @@ vi.mock('@/shared/api/generated/hub-sites/hub-sites', () => ({
   getListSitesQueryKey: vi.fn(() => ['listSites']),
 }))
 
+// DIN.7 — `SitesPage` resuelve de qué organización es el sitio que se crea (sin ella el
+// servidor responde 403). El hook se dobla aquí porque este fichero no prueba esa elección:
+// la prueba `ElAltaDeSitioDiceSuOrganizacion` sí, y sin el doble la pantalla lanzaría la
+// consulta real de organizaciones.
+vi.mock('@/shared/organizacion/useOrganizacionElegida', () => ({
+  useOrganizacionElegida: () => ({
+    organizaciones: [{ id: 'org-1', name: 'Organización' }],
+    elegida: 'org-1',
+    elegir: vi.fn(),
+    hayVarias: false,
+  }),
+}))
+
 const TOKEN =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
   btoa(JSON.stringify({ sub: '1', email: 'admin@test.com', role: 'admin', exp: 9999999999 }))

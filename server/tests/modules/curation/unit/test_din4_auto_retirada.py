@@ -174,6 +174,7 @@ class _Sesion:
         self._paginas = {p.id: p for p in paginas}
         self._secciones = {s.id: s for s in (secciones or [])}
         self.resueltos: list = []
+        self.confirmada = False
 
     async def get(self, modelo: Any, ident: Any) -> Any:
         nombre = getattr(modelo, "__name__", "")
@@ -203,6 +204,9 @@ class _Sesion:
 
     async def flush(self) -> None:
         return None
+
+    async def commit(self) -> None:
+        self.confirmada = True
 
 
 def _da_el_watcher(watcher: Any) -> Any:
@@ -282,6 +286,38 @@ class TestSeccionAutomatica:
         assert retirador.retiradas == [(chatbot, ida.id)]
         assert resumen.documents_auto_retired == 1
         assert "page_gone" not in hallazgos.tipos()
+
+    @pytest.mark.asyncio
+    async def test_should_commit_what_it_retired(self):
+        """**Lo destapó el ciclo real de DIN.7.** El job abría su sesión con
+        `async with self._session_factory() as session:` y **no la confirmaba nunca**: sólo
+        `flush`. Al cerrarse, la sesión deshace lo pendiente — así que la retirada contaba 1, el
+        resumen decía «retirada 1», el diario lo escribía (tiene transacción propia) y **el
+        documento seguía en el corpus**. Peor que no retirar: retirar mintiendo.
+
+        Y no es sólo la retirada: por el mismo camino se perdían el `quality_score` y las
+        supersesiones que 9Q.5 escribe en esta misma sesión.
+        """
+        sitio = _Sitio()
+        seccion = _Seccion(site_id=sitio.id, mode="automatic")
+        ida = _Pagina(url="https://www.uji.es/jornadas/vieja", status="gone")
+        vivas = [_Pagina(url=f"https://www.uji.es/jornadas/{i}") for i in range(9)]
+        sesion = _Sesion(sitio, [ida, *vivas], [seccion])
+        seleccion = _Seleccion(
+            chatbot_id=uuid.uuid4(), site_id=sitio.id, section_id=seccion.id
+        )
+
+        await _job(
+            sesion=sesion,
+            resumen=_ResumenDeRastreo(
+                gone_page_ids=[ida.id], pages_gone=1, section_id=seccion.id
+            ),
+            selecciones=[seleccion],
+            secciones_de_selecciones={seccion.id: seccion},
+            retirador=_Retirador(),
+        ).run_for_site(sitio.id, section_id=seccion.id)
+
+        assert sesion.confirmada is True
 
     @pytest.mark.asyncio
     async def test_should_not_retire_a_page_no_selection_points_to(self):

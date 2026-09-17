@@ -64,6 +64,12 @@ def test_operational_base_contains_only_operational_models() -> None:
         "hub_web_sites",
         "hub_crawled_pages",
         "hub_corpus_selections",
+        # Bloque DIN — el apartado como dato y el diario de sus pasadas. Operacionales sin
+        # discusión: una sección delimita contenido del cliente y sus criterios de juicio, y el
+        # diario dice qué se hizo con el corpus de ese cliente. Ninguna de las dos se sincroniza
+        # cloud→edge.
+        "hub_web_sections",
+        "hub_crawl_runs",
         # Módulo redacción (edge, 9R) — procesan expedientes del cliente
         "hub_report_templates",
         "hub_report_template_versions",
