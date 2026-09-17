@@ -21,6 +21,7 @@ from server.app.modules.curation.cortesia import (
     clasificar_fallo,
     cortesia_desde_config,
 )
+from server.app.modules.curation.secciones import predicado_de_ambito
 
 
 #: Tope de páginas que se guardan en memoria para no volver a pedirlas. Con ~50 KB de HTML por
@@ -298,6 +299,10 @@ class GenericSpider:
         empezado = self._cortesia._reloj()
 
         regex = re.compile(url_regex_filter) if url_regex_filter else None
+        # DIN.2 — el apartado dentro de la valla. El filtro del sitio acota el dominio y este
+        # acota la sección **dentro** de él: se aplican los dos, no uno en lugar del otro. Sin
+        # ámbito declarado esto es siempre cierto, que es el rastreo de siempre.
+        en_ambito = predicado_de_ambito(config)
         base_netloc = urlparse(source.root_url).netloc
 
         # Cola BFS: pares (url, profundidad). Si el sitio guarda una cola de una ejecución
@@ -397,6 +402,8 @@ class GenericSpider:
                 if urlparse(link).netloc != base_netloc:
                     continue
                 if regex and not regex.search(link):
+                    continue
+                if not en_ambito(link):
                     continue
                 if _parece_descarga(link):
                     # Se ve en la URL, así que ni se pide: es tráfico que no aporta nada y, si se

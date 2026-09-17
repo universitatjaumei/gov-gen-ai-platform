@@ -26,7 +26,9 @@ logger = logging.getLogger(__name__)
 
 
 class _SiteCrawler(Protocol):
-    async def crawl_site(self, site_id: uuid.UUID) -> Any: ...
+    async def crawl_site(
+        self, site_id: uuid.UUID, section_id: uuid.UUID | None = None
+    ) -> Any: ...
 
 
 class _Detector(Protocol):
@@ -71,6 +73,13 @@ class SiteQualitySummary:
     #: y «41 nuevos y 300 retirados» se leerían igual, y son dos noticias muy distintas.
     findings_retired: int = 0
     errors: list[str] = field(default_factory=list)
+    #: DIN.2 — qué ámbito cubrió la pasada: la sección, o el sitio entero. El diario de DIN.6 lo
+    #: escribe y la auto-retirada de DIN.4 decide con él.
+    section_id: uuid.UUID | None = None
+
+    @property
+    def ambito(self) -> str:
+        return "sitio" if self.section_id is None else str(self.section_id)
 
 
 # ──────────────────────────── Heurística de calidad ────────────────────────────
@@ -210,16 +219,24 @@ class SiteQualityAnalysisJob:
         except Exception:  # noqa: BLE001 — el aviso no puede tumbar el job de calidad
             logger.exception("No se pudo registrar el aviso de actualización de %s", page.url)
 
-    async def run_for_site(self, site_id: uuid.UUID) -> SiteQualitySummary:
-        """Ejecuta el ciclo completo de calidad para un sitio.
+    async def run_for_site(
+        self, site_id: uuid.UUID, section_id: uuid.UUID | None = None
+    ) -> SiteQualitySummary:
+        """Ejecuta el ciclo completo de calidad para un ámbito del sitio.
+
+        `section_id` acota la pasada a una sección (DIN.2): con él, el censo de bajas se compara
+        sólo contra las páginas de ese apartado. Sin él, el ámbito es el sitio entero, que es el
+        comportamiento de siempre.
 
         Nunca propaga excepción: todos los errores se acumulan en summary.errors.
         """
-        summary = SiteQualitySummary()
+        summary = SiteQualitySummary(section_id=section_id)
 
         # ── 1. CRAWL ──────────────────────────────────────────────────────────
         try:
-            crawl_summary = await self._site_crawler.crawl_site(site_id)
+            crawl_summary = await self._site_crawler.crawl_site(
+                site_id, section_id=section_id
+            )
             summary.pages_new = crawl_summary.pages_new
             summary.pages_changed = crawl_summary.pages_changed
             summary.pages_gone = crawl_summary.pages_gone

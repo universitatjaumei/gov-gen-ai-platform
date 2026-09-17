@@ -82,7 +82,7 @@ class TestDespachadorDeRastreo:
         await despachador.crawl_site(site.id)
 
         assert elegidos == ["dogv"]
-        crawler.crawl_site.assert_awaited_once_with(site.id)
+        crawler.crawl_site.assert_awaited_once_with(site.id, section_id=None)
 
     async def test_should_fall_back_to_the_generic_spider(self, monkeypatch):
         from server.app.modules.curation.site_crawler_dispatcher import (

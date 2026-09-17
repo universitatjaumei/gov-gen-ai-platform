@@ -55,7 +55,9 @@ class _Crawler:
     def __init__(self, resumen: _ResumenDeRastreo) -> None:
         self._resumen = resumen
 
-    async def crawl_site(self, site_id: uuid.UUID) -> Any:
+    async def crawl_site(
+        self, site_id: uuid.UUID, section_id: uuid.UUID | None = None
+    ) -> Any:
         return self._resumen
 
 

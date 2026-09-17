@@ -118,6 +118,28 @@ def casa(section: Any | None, url: str) -> bool:
     )
 
 
+#: Las dos claves con las que el ámbito viaja **dentro** de la configuración del rastreo (DIN.2).
+#: Va aquí y no como argumento nuevo de `GenericSpider.crawl` porque es exactamente el camino que
+#: ya recorre `url_regex_filter`: el ámbito es configuración de la pasada, y así el protocolo del
+#: spider —`crawl(source)`— no cambia.
+CLAVE_PATRON = "ambito_pattern"
+CLAVE_CLASE_DE_PATRON = "ambito_pattern_kind"
+
+
+def predicado_de_ambito(config: dict[str, Any] | None) -> Any:
+    """Si una URL está en el ámbito que declara esta configuración de rastreo.
+
+    Sin ámbito declarado el ámbito es el sitio entero, así que todo entra: es el comportamiento
+    de siempre, y el que hace que un sitio sin secciones se rastree exactamente como antes.
+    """
+    datos = config or {}
+    patron = datos.get(CLAVE_PATRON)
+    if not patron:
+        return lambda _url: True
+    clase = datos.get(CLAVE_CLASE_DE_PATRON) or "path_prefix"
+    return lambda url: casa_patron(clase, patron, url)
+
+
 @dataclass(frozen=True)
 class ParametrosEfectivos:
     """Los parámetros resueltos de una pasada: intervalo, criterios y patrón.
@@ -139,6 +161,20 @@ class ParametrosEfectivos:
     @property
     def ambito(self) -> str:
         return "sitio" if self.section_id is None else str(self.section_id)
+
+    def config_de_rastreo(self) -> dict[str, Any]:
+        """Los criterios efectivos con el ámbito dentro, tal y como los lee el spider (DIN.2)."""
+        config = dict(self.criterios)
+        if self.pattern:
+            config[CLAVE_PATRON] = self.pattern
+            config[CLAVE_CLASE_DE_PATRON] = self.pattern_kind or "path_prefix"
+        return config
+
+    def en_ambito(self, url: str) -> bool:
+        """Si una página pertenece al ámbito de esta pasada. Sin sección, todo el sitio lo es."""
+        if self.pattern is None:
+            return True
+        return casa_patron(self.pattern_kind or "path_prefix", self.pattern, url)
 
 
 def parametros_efectivos(site: Any, section: Any | None = None) -> ParametrosEfectivos:
