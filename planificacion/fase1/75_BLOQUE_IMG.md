@@ -167,26 +167,40 @@ y 0 avisos**, `Application startup complete`, el sembrado **omitiendo los datos 
 como debe fuera de desarrollo, y los dos refrescos de arranque resolviendo sin credenciales por su
 lista de reserva.
 
-**Contra los tiempos reales de CI** (run `35117521768`, rama `desarrollo`): `Lint & Test` **6,28
-min** —que es quien marca el total—, `contract` 3,38 min, `supply-chain` 1,27 min, `a11y` 0,68
-min.
+### La ejecución real, que corrigió la medida local (run `35214706322`, `desarrollo`)
 
-**Decisión: el job corre en cada ejecución del flujo, sin `if`.** Con `needs: contract` (3,38 min)
-más lo suyo, quedaría alrededor de 9 min y **pasaría a ser el camino crítico**, añadiendo unos 2-3
-min al total. Se acepta, y la razón es que la alternativa no protege: acotarlo a `main` llegaría
-tarde, porque `deploy.yml` dispara **con ese mismo push y en paralelo**, así que un rojo ahí no
-frena nada. El valor entero está en cazarlo en `desarrollo`, antes del merge.
+**El job pasó en verde a la primera, y tardó 2 min 45 s.** Por pasos:
 
-**La palanca, escrita por si algún día molesta**: sólo la imagen del frontend necesita el cliente
-generado. Partir el job —las tres que no lo necesitan sin `needs`— las sacaría del camino crítico.
-No se hace ahora: un job es más fácil de leer que dos, y el coste medido no lo justifica todavía.
+| Paso | Tiempo |
+|---|---|
+| Levantar el Postgres de servicio | 32 s |
+| Descargar el cliente de la API de `contract` | 1 s |
+| **Construir las cuatro imágenes** | **111 s** |
+| Migrar con la imagen recién construida | 4 s |
+| Arrancar y esperar a `/health` | 12 s |
 
-**Dos avisos sobre la medida, para que nadie la lea como lo que no es**: es de Windows y de una
-pasada, y su contexto de construcción es **mayor** que el de CI (`_local/` y `htmlcov/` no están
-en el checkout). Sirve para dimensionar, no para presumir de cifra.
+**La medida local sobreestimaba por casi el doble** —5,6 min contra 2,75—, y conviene saber por
+qué antes de fiarse de la siguiente: Docker Desktop sobre Windows es más lento que un runner
+Linux, y el contexto de construcción de aquí lleva `_local/` y `htmlcov/`, que no están en el
+checkout. **Sirvió para dimensionar y para saber que la secuencia funciona; para decidir, no.**
 
-### Lo que sigue sin comprobarse fuera de CI
+**Y la decisión que la medida local justificaba con un argumento equivocado sigue siendo la misma,
+ahora con el argumento bueno.** Se escribió que el job «pasaría a ser el camino crítico y añadiría
+2-3 min»: **no lo es**. `contract` (3,33) + `imagen` (2,75) = **6,1 min**, y `Lint & Test` solo ya
+gasta **7,87** — el total del run fue 7,93 min, que es el de siempre. **El job es gratis en reloj
+de pared.**
 
-**El caso real del 2026-09-15 en vivo**: quitar `uvicorn` del manifiesto y ver el job rojo. Exige
-una ejecución de CI. Lo comprobado sin ella: `test_dep8` se pone rojo con ese mismo cambio, y la
-imagen construida aquí arranca — que es la otra mitad de la afirmación.
+**Decisión: corre en cada ejecución del flujo, sin `if`.** Además de no costar nada, acotarlo a
+`main` no protegería: `deploy.yml` dispara **con ese mismo push y en paralelo**, así que un rojo
+allí llegaría tarde. El valor entero está en cazarlo en `desarrollo`, antes del merge.
+
+**La palanca, escrita por si algún día deja de ser gratis**: sólo la imagen del frontend necesita
+el cliente generado, así que partir el job quitaría el `needs` a las otras tres. Hoy no hace
+falta: un job se lee mejor que dos.
+
+### Lo que sigue sin comprobarse
+
+**El caso real del 2026-09-15 en vivo**: quitar `uvicorn` del manifiesto y ver **este** job rojo.
+Lo comprobado hasta ahora: `test_dep8` se pone rojo con ese cambio, la imagen construida arranca,
+y el job entero pasa en verde cuando debe pasar. Falta la mitad que importa —que falle cuando debe
+fallar—, y eso exige una ejecución con el defecto dentro.
