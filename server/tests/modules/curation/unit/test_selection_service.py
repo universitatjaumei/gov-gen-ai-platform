@@ -62,7 +62,13 @@ class _FakeSelectionRepo:
     async def list_by_chatbot(self, chatbot_id: uuid.UUID) -> list[_FakeSelection]:
         return [s for s in self._selections if s.chatbot_id == chatbot_id]
 
-    def matches(self, selection: _FakeSelection, page_url: str) -> bool:
+    async def secciones_de(self, selections: list) -> dict:
+        """DIN.3 — ninguna de estas selecciones apunta a una sección."""
+        return {}
+
+    def matches(
+        self, selection: _FakeSelection, page_url: str, *, secciones: dict | None = None
+    ) -> bool:
         if selection.rule_type == "path_prefix" and selection.rule_value:
             from urllib.parse import urlparse
             return urlparse(page_url).path.startswith(selection.rule_value)

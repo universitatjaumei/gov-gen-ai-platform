@@ -222,7 +222,10 @@ class _NullSelectionRepo:
     async def list_by_site(self, site_id):  # noqa: ANN001
         return []
 
-    def matches(self, selection, page_url: str) -> bool:
+    async def secciones_de(self, selections) -> dict:  # noqa: ANN001
+        return {}
+
+    def matches(self, selection, page_url: str, *, secciones=None) -> bool:  # noqa: ANN001
         return False
 
 

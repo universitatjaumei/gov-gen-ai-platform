@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
@@ -15,6 +15,7 @@ import {
 } from '@/shared/api/generated/hub-sites/hub-sites'
 import type { ReconnaissanceView, SiteView } from '@/shared/api/generated/model'
 import { descargarConAutorizacion } from '@/shared/api/download'
+import { SectionsPanel } from './SectionsPanel'
 
 const siteSchema = z.object({
   name: z.string().min(1),
@@ -69,6 +70,9 @@ export function SitesPage() {
   const { t: tc } = useTranslation('common')
   const qc = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
+  // DIN.3 — las secciones de un sitio se despliegan bajo su fila: son trabajo de curación sobre
+  // un sitio ya dado de alta, no parte del alta.
+  const [sitioDesplegado, setSitioDesplegado] = useState<string | null>(null)
 
   const { data: sites = [], isLoading } = useListSites()
   const createMutation = useCreateSite({
@@ -218,7 +222,8 @@ export function SitesPage() {
             </thead>
             <tbody>
               {(sites as SiteView[]).map((site) => (
-                <tr key={site.id} className="border-b hover:bg-accent/30">
+                <Fragment key={site.id}>
+                <tr className="border-b hover:bg-accent/30">
                   <td className="py-2 pr-4 font-medium">{site.name}</td>
                   <td className="py-2 pr-4 text-xs text-muted-foreground truncate max-w-xs">{site.root_url}</td>
                   <td className="py-2 pr-4 text-xs">
@@ -255,6 +260,20 @@ export function SitesPage() {
                     >
                       {t('crawl_now')}
                     </button>
+                    {/* DIN.3 — parametrizar los apartados del sitio: es lo que convierte
+                        «añadir el apartado de becas» en un formulario. */}
+                    <button
+                      className="text-xs px-2 py-1 rounded border hover:bg-accent"
+                      data-testid={`btn-secciones-${site.id}`}
+                      aria-expanded={sitioDesplegado === site.id}
+                      onClick={() =>
+                        setSitioDesplegado((abierto) =>
+                          abierto === site.id ? null : site.id,
+                        )
+                      }
+                    >
+                      {t('sections_title')}
+                    </button>
                     <button
                       className="text-xs px-2 py-1 rounded border text-destructive hover:bg-destructive/10"
                       onClick={() => deleteMutation.mutate({ siteId: site.id })}
@@ -264,6 +283,14 @@ export function SitesPage() {
                     </button>
                   </td>
                 </tr>
+                {sitioDesplegado === site.id && (
+                  <tr className="border-b bg-accent/10">
+                    <td colSpan={6} className="py-3 px-2">
+                      <SectionsPanel siteId={site.id} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

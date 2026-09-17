@@ -21,7 +21,7 @@ from server.app.modules.agents_hub.database.operational_models import (
     HubWebSection,
     HubWebSite,
 )
-from server.app.modules.curation.secciones import casa_patron, validar_patron
+from server.app.modules.curation.secciones import casa, casa_patron, validar_patron
 
 
 class WebSiteRepo:
@@ -241,6 +241,15 @@ class CrawledPageRepo:
         return result.scalar_one_or_none()
 
 
+class SeccionNoCargada(RuntimeError):
+    """Se ha preguntado si una selección casa una URL sin haber cargado su sección.
+
+    **Nunca un «no casa» en silencio.** Es el fallo de VER.8 con las reglas inventadas: una
+    selección activa que no puede casar nada se ve en pantalla como activa y vacía, sin nada que
+    lo explique. Quien pregunta carga las secciones con `secciones_de` y las pasa.
+    """
+
+
 class CorpusSelectionRepo:
     """CRUD de selecciones N:M chatbot→sitio + evaluación de reglas."""
 
@@ -255,6 +264,7 @@ class CorpusSelectionRepo:
         rule_type: str,
         rule_value: str | None = None,
         auto_ingest_new: bool = True,
+        section_id: uuid.UUID | None = None,
     ) -> HubCorpusSelection:
         selection = HubCorpusSelection(
             chatbot_id=chatbot_id,
@@ -262,6 +272,7 @@ class CorpusSelectionRepo:
             rule_type=rule_type,
             rule_value=rule_value,
             auto_ingest_new=auto_ingest_new,
+            section_id=section_id,
         )
         self.session.add(selection)
         await self.session.flush()
@@ -293,9 +304,32 @@ class CorpusSelectionRepo:
         await self.session.delete(selection)
         await self.session.flush()
 
-    def matches(self, selection: HubCorpusSelection, page_url: str) -> bool:
+    async def secciones_de(self, selections: list) -> dict[uuid.UUID, HubWebSection]:
+        """Las secciones a las que apuntan estas selecciones, para poder evaluarlas (DIN.3).
+
+        Una sola consulta: `matches` es sincrónica —la evalúan bucles sobre cientos de páginas—,
+        así que la carga se hace antes y de golpe.
+        """
+        ids = {s.section_id for s in selections if getattr(s, "section_id", None)}
+        if not ids:
+            return {}
+        filas = (
+            await self.session.execute(
+                select(HubWebSection).where(HubWebSection.id.in_(ids))
+            )
+        ).scalars().all()
+        return {fila.id: fila for fila in filas}
+
+    def matches(
+        self,
+        selection: HubCorpusSelection,
+        page_url: str,
+        *,
+        secciones: dict[uuid.UUID, HubWebSection] | None = None,
+    ) -> bool:
         """Evalúa una regla de selección contra una URL de página.
 
+        - **section_id puesto**: manda el patrón de la sección, y `rule_value` se ignora (DIN.3).
         - path_prefix: el path de la URL empieza por rule_value.
         - sitemap_section: marcador semántico — la asignación efectiva
           se materializa por crawl en 9Q.2 y aquí siempre devuelve False.
@@ -306,6 +340,16 @@ class CorpusSelectionRepo:
         regla de selección y una sección con el mismo prefijo tienen que decidir igual, o la
         pantalla y el rastreo discreparían sobre qué entra al corpus.
         """
+        section_id = getattr(selection, "section_id", None)
+        if section_id is not None:
+            seccion = (secciones or {}).get(section_id)
+            if seccion is None:
+                raise SeccionNoCargada(
+                    f"la selección {getattr(selection, 'id', '?')} apunta a la sección "
+                    f"{section_id} y no se ha cargado: cárgala con `secciones_de`"
+                )
+            return casa(seccion, page_url)
+
         if selection.rule_type == "path_prefix":
             if not selection.rule_value:
                 return False

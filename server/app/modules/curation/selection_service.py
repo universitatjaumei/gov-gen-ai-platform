@@ -65,13 +65,20 @@ class CorpusSelectionService:
         all_sels = await self._selection_repo.list_by_chatbot(chatbot_id)
         site_sels = [s for s in all_sels if s.site_id == site_id]
 
+        # DIN.3 — las secciones a las que apuntan, cargadas antes del bucle: `matches` es
+        # sincrónica y aquí se evalúa una vez por página.
+        secciones = await self._selection_repo.secciones_de(site_sels)
+
         # 4. Construir candidatas
         candidates = []
         for page in pages:
             matched_rule: str | None = None
             for sel in site_sels:
-                if self._selection_repo.matches(sel, page.url):
-                    matched_rule = sel.rule_value
+                if self._selection_repo.matches(sel, page.url, secciones=secciones):
+                    # Con `section_id` puesto, lo que casó fue el patrón de la sección: decir
+                    # `rule_value` mentiría sobre por qué está seleccionada esta página.
+                    seccion = secciones.get(getattr(sel, "section_id", None))
+                    matched_rule = seccion.pattern if seccion is not None else sel.rule_value
                     break
 
             candidates.append(

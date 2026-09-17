@@ -244,6 +244,19 @@ class HubCorpusSelection(HubOperationalBase):
     )
     rule_type: Mapped[str] = mapped_column(String(20), nullable=False)
     rule_value: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    #: DIN.3 — apunta a una sección del sitio en vez de repetir su patrón. **Cuando está puesto,
+    #: el patrón efectivo es el de la sección y `rule_value` se ignora**: dos sitios de verdad de
+    #: la misma regla —el patrón de la sección y este valor— divergirían en cuanto alguien
+    #: editara uno. Nulo = la regla vale por sí misma, que es el camino de siempre.
+    #: `RESTRICT` y no `CASCADE`: borrar una sección no puede llevarse por delante la selección
+    #: que apunta a ella. Con la auto-retirada de DIN.4 detrás, perder la selección no es perder
+    #: una fila: es dejar de mantener lo que ya está en el corpus.
+    section_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_web_sections.id", ondelete="RESTRICT", name="fk_selection_section"),
+        nullable=True,
+        index=True,
+    )
     auto_ingest_new: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

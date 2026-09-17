@@ -50,7 +50,10 @@ class _Watcher(Protocol):
 
 class _SelectionRepo(Protocol):
     async def list_by_site(self, site_id: uuid.UUID) -> list: ...
-    def matches(self, selection: Any, page_url: str) -> bool: ...
+    async def secciones_de(self, selections: list) -> dict: ...
+    def matches(
+        self, selection: Any, page_url: str, *, secciones: dict | None = None
+    ) -> bool: ...
 
 
 # ──────────────────────────── SiteQualitySummary ────────────────────────────
@@ -348,12 +351,16 @@ class SiteQualityAnalysisJob:
                 auto_sels = [s for s in selections if getattr(s, "auto_ingest_new", False)]
 
                 if auto_sels:
+                    # DIN.3 — las secciones a las que apuntan, cargadas antes del bucle.
+                    secciones = await self._selection_repo.secciones_de(auto_sels)
                     for page_id in new_page_ids:
                         page = await session.get(HubCrawledPage, page_id)
                         if page is None:
                             continue
                         for sel in auto_sels:
-                            if self._selection_repo.matches(sel, page.url):
+                            if self._selection_repo.matches(
+                                sel, page.url, secciones=secciones
+                            ):
                                 try:
                                     await self._watcher.process_source(
                                         source_url=page.url,
