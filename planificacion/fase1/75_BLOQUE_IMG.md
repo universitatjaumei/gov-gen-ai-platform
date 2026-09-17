@@ -198,9 +198,33 @@ allí llegaría tarde. El valor entero está en cazarlo en `desarrollo`, antes d
 el cliente generado, así que partir el job quitaría el `needs` a las otras tres. Hoy no hace
 falta: un job se lee mejor que dos.
 
-### Lo que sigue sin comprobarse
+### El caso real, reproducido: el job también falla cuando debe fallar
 
-**El caso real del 2026-09-15 en vivo**: quitar `uvicorn` del manifiesto y ver **este** job rojo.
-Lo comprobado hasta ahora: `test_dep8` se pone rojo con ese cambio, la imagen construida arranca,
-y el job entero pasa en verde cuando debe pasar. Falta la mitad que importa —que falle cuando debe
-fallar—, y eso exige una ejecución con el defecto dentro.
+**Quitado `uvicorn` del manifiesto y relockeado**, `uv tree --invert` enseña lo que hacía falta
+para que el caso fuera el de verdad: ya sólo llega por `mcp → browser-use`, y `browser-use` vive
+en el extra `agente-navegador`. O sea, **fuera del conjunto base** — la situación exacta que DEP.1
+creó sin querer el 2026-09-15.
+
+Con esa mutación:
+
+| Paso | Resultado |
+|---|---|
+| `docker build` | **verde**, 142 s — un job que sólo construyera no vería nada |
+| `docker run -d` | **rc=127**, y el contenedor ni llega a arrancar |
+| El error | `exec: "uvicorn": executable file not found in $PATH` |
+| `curl /health` | sin respuesta |
+
+Es el mensaje del incidente, palabra por palabra. Y **falla en el `docker run -d`**, antes incluso
+de la espera: con `set -euo pipefail` el paso muere ahí, así que el job se pone rojo en segundos y
+con el error exacto en el registro.
+
+El manifiesto y el lock se restauraron; el árbol quedó limpio.
+
+**La otra clase de fallo —la imagen que no construye, como la del 2026-09-16— la cubre el propio
+`docker build`**, y además la caza antes y más barato
+`test_la_imagen_puede_construir_el_wheel.py`, que dice qué `COPY` falta en vez de dejar un
+`OSError` al final de la construcción.
+
+**Lo único que no se ha hecho** es esa misma mutación **dentro de CI**, y se decidió no hacerla:
+exige empujar un defecto a propósito a una rama compartida o abrir un *pull request* de mentira, y
+el job ya ha demostrado en la máquina de GitHub que hace lo que aquí hace.
