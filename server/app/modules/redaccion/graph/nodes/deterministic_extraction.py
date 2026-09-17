@@ -67,8 +67,23 @@ class DeterministicExtractionNode:
     con el resto (el CoreGraph NO aborta).
     """
 
-    def __init__(self, factory: Any) -> None:
+    def __init__(self, factory: Any, resolvedor: Any = None) -> None:
         self._factory = factory
+        # FUN.3 — quien traduce `funcion@versión` en algo ejecutable. Opcional para que un
+        # bloque sin función —`excel_pipeline` y compañía— siga funcionando sin catálogo, y
+        # porque los tests del nodo que no usan scripts no tienen por qué construirlo.
+        self._resolvedor = resolvedor
+
+    async def _resolver_funcion(self, funcion_ref: Any) -> Any:
+        """La versión anclada, o un fallo que nombra la función y el motivo."""
+        from server.app.modules.redaccion.funciones_resolver import FuncionNoEjecutable
+
+        if self._resolvedor is None:
+            raise FuncionNoEjecutable(
+                "el bloque referencia una función del catálogo y este grafo se construyó sin "
+                "resolutor: el informe no puede ejecutarla"
+            )
+        return await self._resolvedor.resolver(funcion_ref.funcion_id, funcion_ref.version)
 
     async def __call__(self, state: WorkspaceState) -> dict:
         if state.spec is None:
@@ -101,10 +116,38 @@ class DeterministicExtractionNode:
             # PRO.3 — las opciones del bloque viajan al pipeline. Iba `options={}`, así que el
             # código del script aprobado no llegaba nunca y el pipeline respondía
             # `SCRIPT_NOT_APPROVED`: el síntoma acusaba a la aprobación, que estaba bien.
+            opciones = dict(getattr(block_contract, "options", {}) or {})
+
+            # FUN.3 — el código ya no viene en el bloque: viene del catálogo. El nodo no sabe de
+            # orígenes; le pide «lo ejecutable» al resolutor, que en FUN.5 sabrá además resolver
+            # una función empaquetada sin que esto cambie.
+            funcion_ref = getattr(block_contract, "funcion_ref", None)
+            ejecutable = None
+            if funcion_ref is not None:
+                try:
+                    ejecutable = await self._resolver_funcion(funcion_ref)
+                except Exception as exc:
+                    # EN ALTO y con el motivo: una función retirada o suspendida no puede
+                    # dejar el bloque vacío en silencio (la lección de los perfiles sin
+                    # configurar).
+                    new_warnings.append(ExtractionWarning(
+                        block_id=block_id, message=str(exc), kind="funcion_no_ejecutable",
+                    ))
+                    updated_blocks[block_id] = updated_blocks[block_id].model_copy(update={
+                        "status": "failed",
+                        "failure_kind": "extraction_failed",
+                        "last_error_message": str(exc)[:500],
+                        "last_updated_by": "system",
+                        "updated_at": now,
+                    })
+                    new_block_outputs[block_id] = {"partial": {}}
+                    continue
+                opciones.update(ejecutable.como_opciones_del_pipeline())
+
             inp = ExtractionInput(
                 source_kind=source_kind,
                 file_ref=file_ref,
-                options=dict(getattr(block_contract, "options", {}) or {}),
+                options=opciones,
             )
 
             try:

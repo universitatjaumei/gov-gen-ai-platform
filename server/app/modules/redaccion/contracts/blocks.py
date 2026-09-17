@@ -5,6 +5,7 @@ obligatorios para ese tipo de bloque; los campos comunes viven en _BlockBase.
 """
 from __future__ import annotations
 
+import uuid
 from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field, model_validator
@@ -35,14 +36,48 @@ class UserInputBlock(_BlockBase):
     field_type: str = "text"
 
 
+class FuncionRef(BaseModel):
+    """Qué función del catálogo ejecuta un bloque, y **en qué versión exacta** (FUN.3).
+
+    El anclaje por versión es la clave de bóveda del bloque FUN: publicar v2 no toca ninguna
+    plantilla anclada a v1. Sin él, «arreglar una vez» sería «cambiar en silencio informes ya
+    aprobados» y el `RunManifest` dejaría de ser reproducible.
+    """
+
+    funcion_id: uuid.UUID
+    version: int = Field(ge=1)
+
+
 class DeterministicDataBlock(_BlockBase):
     kind: Literal["DETERMINISTIC_DATA"] = "DETERMINISTIC_DATA"
     source_pipeline: str
-    # PRO.3 — lo que el pipeline necesita además del fichero. Para `admin_script` es el
-    # código aprobado (`{"code": ..., "approved": True}`), que la cola de aprobación incrusta
-    # aquí: sin un sitio en el contrato, el bloque que escribía `approve` no validaba y la
-    # plantilla quedaba ilegible para el grafo.
+    #: FUN.3 — la función del catálogo que este bloque ejecuta. **Sustituye al código
+    #: incrustado**: dos plantillas que necesitan la misma extracción la referencian, en vez de
+    #: llevar dos copias que pueden divergir.
+    funcion_ref: FuncionRef | None = None
+    # PRO.3 — lo que el pipeline necesita además del fichero.
+    #
+    # **Ya no lleva el código.** FUN.3 lo retira del contrato, no sólo del sitio que lo
+    # escribía: si `options.code` siguiera validando, una plantilla podría volver a llevar el
+    # código dentro y nadie lo vería hasta que divergiera de su función.
     options: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _un_script_se_referencia_y_no_se_incrusta(self) -> "DeterministicDataBlock":
+        prohibidas = sorted({"code", "approved"} & set(self.options))
+        if prohibidas:
+            raise ValueError(
+                f"{', '.join(prohibidas)} ya no va en las opciones de un bloque: el código de "
+                "una función vive en el catálogo y el bloque lo referencia con `funcion_ref` "
+                "(FUN.3)"
+            )
+        if self.source_pipeline == "admin_script" and self.funcion_ref is None:
+            raise ValueError(
+                "un bloque `admin_script` necesita `funcion_ref`: sin función no hay nada que "
+                "ejecutar, y antes eso se manifestaba como «script no aprobado», que acusaba a "
+                "la aprobación cuando lo que faltaba era el código"
+            )
+        return self
 
 
 class TableBlock(_BlockBase):

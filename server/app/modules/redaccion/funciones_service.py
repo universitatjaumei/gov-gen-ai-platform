@@ -154,6 +154,100 @@ def _exigir_motivo_al_suspender(version: Any, cambios: dict[str, Any]) -> None:
         )
 
 
+async def registrar_version(
+    session: Any,
+    *,
+    nombre: str,
+    organizacion_id: uuid.UUID | None,
+    code: str,
+    contrato: Any,
+    declarada_por: uuid.UUID,
+    audit_result: dict[str, Any] | None = None,
+    autoria: str = "ia",
+    funcion_id: uuid.UUID | None = None,
+    creada_por: uuid.UUID | None = None,
+) -> tuple[Any, Any]:
+    """Registra una versión en el catálogo y la deja **usable de inmediato** (FUN.3).
+
+    Esto es lo que sustituye a la aprobación como puerta. La Instrucció 02/2026 prohíbe la
+    aprobación humana previa como condición para compartir en el nivel 2 (§5), así que el filtro
+    es automático —declaración responsable + auditoría sin hallazgos críticos + prueba en
+    sandbox, que el llamante ya ha comprobado— y la persona entra **después**, en la revisión
+    posterior (FUN.4).
+
+    Con `funcion_id` publica una versión nueva de una función que ya existe; sin él crea la
+    función. En los dos casos el ordinal es el siguiente, y **la versión anterior no se toca**:
+    es lo que hace que publicar v2 no cambie ninguna plantilla anclada a v1.
+    """
+    from datetime import datetime, timezone
+
+    from sqlalchemy import func, select
+
+    from server.app.modules.redaccion.database.models import (
+        HubFuncion,
+        HubFuncionVersion,
+    )
+
+    datos_de_version_coherentes(
+        origen="autoservicio",
+        code=code,
+        finalidad=contrato.finalidad,
+        declarada_por=declarada_por,
+        categorias_datos=list(contrato.categorias_datos),
+    )
+
+    if funcion_id is None:
+        funcion = HubFuncion(
+            # La identidad se asigna al construir y no al hacer `flush`: el defecto de columna
+            # sólo lo aplica la base, así que sin esto el objeto vive un rato con `id=None` y
+            # cualquiera que lo lea antes del flush —la referencia del bloque, el manifiesto—
+            # escribe «None». Es lo que hace el resto de los modelos del módulo.
+            id=uuid.uuid4(),
+            nombre=nombre,
+            descripcion="",
+            organizacion_id=organizacion_id,
+            origen="autoservicio",
+            creada_por=creada_por or declarada_por,
+        )
+        session.add(funcion)
+        await session.flush()
+    else:
+        funcion = await session.get(HubFuncion, funcion_id)
+        if funcion is None:
+            raise FuncionIncoherente(
+                f"no hay ninguna función {funcion_id} a la que añadir una versión"
+            )
+
+    siguiente = (
+        await session.execute(
+            select(func.coalesce(func.max(HubFuncionVersion.version), 0) + 1).where(
+                HubFuncionVersion.funcion_id == funcion.id
+            )
+        )
+    ).scalar_one()
+
+    version = HubFuncionVersion(
+        id=uuid.uuid4(),
+        funcion_id=funcion.id,
+        version=int(siguiente),
+        code=code,
+        contrato_entrada=contrato.model_dump(mode="json"),
+        contrato_salida={"kind": contrato.salida},
+        audit_result_json=audit_result,
+        code_sha256=sha256_del_codigo(code),
+        # Registrada, no aprobada: usable ya, revisable después.
+        estado="registrada",
+        autoria=autoria,
+        finalidad=contrato.finalidad,
+        categorias_datos=list(contrato.categorias_datos),
+        declarada_por=declarada_por,
+        declarada_en=datetime.now(timezone.utc),
+    )
+    session.add(version)
+    await session.flush()
+    return funcion, version
+
+
 async def ejecutar_funcion(
     *,
     contrato: Any,
