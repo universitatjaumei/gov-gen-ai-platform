@@ -68,6 +68,10 @@ vi.mock('@/shared/api/generated/hub-sites/hub-sites', () => ({
   useDeleteSiteSection: () => ({ mutate: borrar, isPending: false }),
   useTestSectionPattern: () => ({ mutateAsync: probar, isPending: false }),
   getListSiteSectionsQueryKey: () => ['sections'],
+  // DIN.6 — el panel de secciones muestra debajo el diario de pasadas, que es donde se ve qué
+  // hizo la automatización con ellas. Aquí no se prueba el diario (tiene su propio fichero):
+  // basta con que el hook exista para que el panel se pueda renderizar.
+  useListSiteRuns: () => ({ data: { total: 0, items: [] }, isLoading: false }),
 }))
 
 function renderizar() {

@@ -115,6 +115,7 @@ def _start_quality_scheduler():
             create_async_engine,
             create_session_factory,
         )
+        from server.app.modules.curation.diario import DiarioDePasadas
         from server.app.modules.curation.quality_job import (
             SiteQualityAnalysisJob,
         )
@@ -173,6 +174,10 @@ def _start_quality_scheduler():
             run_semantic=settings.content_quality_semantic_enabled,
             watcher_factory=_watcher_para,
             finding_repo=_RepoDeHallazgosDelJob(hub_session_factory),
+            # DIN.6 — el diario. Con su propia transacción, como el repositorio de avisos: es
+            # información sobre algo que ya pasó, y perderla por un rollback del job sería
+            # perder justo el rastro del problema.
+            run_log=DiarioDePasadas(hub_session_factory),
         )
 
         scheduler = create_quality_scheduler(

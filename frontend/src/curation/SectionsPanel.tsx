@@ -13,6 +13,7 @@ import {
   getListSiteSectionsQueryKey,
 } from '@/shared/api/generated/hub-sites/hub-sites'
 import type { PatternTestView, SectionView } from '@/shared/api/generated/model'
+import { RunsPanel } from './RunsPanel'
 
 /**
  * DIN.3 — las secciones de un sitio, parametrizables por quien cura.
@@ -347,6 +348,13 @@ export function SectionsPanel({ siteId }: { siteId: string }) {
           </div>
         </form>
       )}
+
+      {/* DIN.6 — el diario va aquí, junto a las secciones, porque es donde se mira lo que la
+          automatización hizo con ellas: la cadencia y el modo de arriba explican qué debería
+          pasar, y esto dice qué pasó. */}
+      <div className="border-t pt-3">
+        <RunsPanel siteId={siteId} />
+      </div>
     </div>
   )
 }

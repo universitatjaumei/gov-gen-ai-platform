@@ -47,6 +47,9 @@ TIPOS_BLOQUEANTES_POR_DEFECTO: frozenset[str] = frozenset({
 })
 CLAVE_TIPOS_BLOQUEANTES = "tipos_bloqueantes"
 
+#: DIN.6 — cómo se llama en el diario la pasada que cubrió el sitio entero.
+ETIQUETA_DEL_SITIO_ENTERO = "sitio"
+
 
 # ──────────────────────────── Protocolos ────────────────────────────
 
@@ -113,6 +116,11 @@ class SiteQualitySummary:
     #: de decir que no se pueden leer. Sin esta cifra, «no entró nada» y «no había nada que
     #: entrar» se leen igual.
     pages_blocked_by_findings: int = 0
+    #: DIN.6 — el rastreo no vio el ámbito entero, y por qué (RAS.1). Llegaba hasta el summary
+    #: del rastreo y se perdía aquí: sin ello, el diario no puede distinguir «cero bajas» de «no
+    #: se han comprobado las bajas», que es la diferencia que RAS.1 existe para marcar.
+    truncated: bool = False
+    stop_reason: str | None = None
 
     @property
     def ambito(self) -> str:
@@ -156,6 +164,7 @@ class SiteQualityAnalysisJob:
         watcher_factory: Any = None,
         retirer_factory: Any = None,
         selection_repo_factory: Any = None,
+        run_log: Any = None,
     ) -> None:
         self._session_factory = session_factory
         self._site_crawler = site_crawler
@@ -178,6 +187,9 @@ class SiteQualityAnalysisJob:
         # arrancar tendría la sesión de entonces, y por eso el arranque pasaba uno nulo que
         # devolvía lista vacía: con él, la auto-ingesta de 9Q.7 no ha corrido nunca en producción.
         self._selection_repo_factory = selection_repo_factory
+        # DIN.6 — el diario de pasadas (`DiarioDePasadas`). Sin él el job funciona igual que
+        # antes: la pasada se ejecuta y no deja rastro consultable, que es como estaba.
+        self._run_log = run_log
 
     def _selecciones(self, session: Any) -> Any:
         """El repositorio de selecciones de esta pasada: el de la fábrica, o el fijo."""
@@ -351,17 +363,21 @@ class SiteQualityAnalysisJob:
         seccion = (
             await session.get(HubWebSection, section_id) if section_id is not None else None
         )
-        efectivos = await self._parametros_del_ambito(session, site_id, section_id)
+        # `mode` de la sección de la pasada, **antes de la salvaguarda**. Sin sección no se
+        # automatiza nada: la pasada del sitio entero es la del curador, y ahí una baja es una
+        # señal, no un disparador.
+        #
+        # El orden importa: mirando primero la proporción, un ámbito en `manual` con muchas bajas
+        # emitiría `retirada_masiva_detenida` —«la salvaguarda paró una retirada»— cuando no
+        # había ninguna retirada que parar. La salvaguarda guarda lo que de verdad retira.
+        if seccion is None or getattr(seccion, "mode", "manual") != "automatic":
+            await self._avisar_de_las_bajas(session, site_id, gone_page_ids)
+            return
 
+        efectivos = await self._parametros_del_ambito(session, site_id, section_id)
         if not await self._la_proporcion_es_creible(
             session, site_id, efectivos, gone_page_ids, summary
         ):
-            return
-
-        # `mode` de la sección de la pasada. Sin sección no se automatiza nada: la pasada del
-        # sitio entero es la del curador, y ahí una baja es una señal, no un disparador.
-        if seccion is None or getattr(seccion, "mode", "manual") != "automatic":
-            await self._avisar_de_las_bajas(session, site_id, gone_page_ids)
             return
 
         await self._retirar_de_los_chatbots_que_la_publicaron(
@@ -603,6 +619,7 @@ class SiteQualityAnalysisJob:
         Nunca propaga excepción: todos los errores se acumulan en summary.errors.
         """
         summary = SiteQualitySummary(section_id=section_id)
+        comenzado = datetime.now(timezone.utc)
 
         # ── 1. CRAWL ──────────────────────────────────────────────────────────
         try:
@@ -614,9 +631,14 @@ class SiteQualityAnalysisJob:
             summary.pages_gone = crawl_summary.pages_gone
             summary.pages_error = crawl_summary.pages_error
             summary.pages_total = crawl_summary.pages_total
+            summary.truncated = bool(getattr(crawl_summary, "truncated", False))
+            summary.stop_reason = getattr(crawl_summary, "stop_reason", None)
         except Exception as exc:
             logger.exception("Crawl failed for site %s", site_id)
             summary.errors.append(f"crawl: {exc}")
+            # DIN.6 — **una pasada que falla también va al diario**, y es cuando más falta hace:
+            # sin esto, «no pasó nada» y «el rastreo revento» se leen igual desde la pantalla.
+            await self._anotar_en_el_diario(site_id, section_id, comenzado, summary)
             return summary  # Sin crawl no hay diff para detectar ni consolidar
 
         # ── 2. DETECCIÓN (cada detector aislado) ──────────────────────────────
@@ -805,4 +827,46 @@ class SiteQualityAnalysisJob:
                 logger.exception("Auto-retirada fallida en el sitio %s", site_id)
                 summary.errors.append(f"auto-retirada: {exc}")
 
+        # ── 6. EL DIARIO DE LA PASADA (DIN.6) ──────────────────────────────────
+        await self._anotar_en_el_diario(site_id, section_id, comenzado, summary)
+
         return summary
+
+    async def _anotar_en_el_diario(
+        self,
+        site_id: uuid.UUID,
+        section_id: uuid.UUID | None,
+        comenzado: datetime,
+        summary: SiteQualitySummary,
+    ) -> None:
+        """Deja constancia de la pasada. Sin diario, el job funciona igual que antes.
+
+        Fuera de la transacción del job, y sin propagar: el diario cuenta lo que pasó, y un
+        fallo al contarlo no puede deshacer lo que ya se hizo ni tumbar la pasada.
+        """
+        if self._run_log is None:
+            return
+        try:
+            await self._run_log.registrar(
+                site_id=site_id,
+                section_id=section_id,
+                scope_label=await self._etiqueta_del_ambito(site_id, section_id),
+                started_at=comenzado,
+                finished_at=datetime.now(timezone.utc),
+                summary=summary,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("No se pudo anotar la pasada del sitio %s en el diario", site_id)
+
+    async def _etiqueta_del_ambito(
+        self, site_id: uuid.UUID, section_id: uuid.UUID | None
+    ) -> str:
+        """El nombre de la sección, o «sitio». Se guarda en texto porque el diario es historia:
+        si alguien borra la sección, la fila tiene que seguir diciendo qué cubrió."""
+        if section_id is None:
+            return ETIQUETA_DEL_SITIO_ENTERO
+        from server.app.modules.agents_hub.database.operational_models import HubWebSection
+
+        async with self._session_factory() as session:
+            seccion = await session.get(HubWebSection, section_id)
+            return getattr(seccion, "name", None) or str(section_id)

@@ -26,8 +26,10 @@ from server.app.modules.agents_hub.database.operational_models import HubCrawled
 from server.app.modules.curation.selection_contracts import (
     CandidatePageView,
     CrawlConfig,
+    CrawlRunView,
     PageContentView,
     PageView,
+    PaginaDePasadas,
     PatternTestRequest,
     PatternTestView,
     ReconnaissanceRequest,
@@ -548,6 +550,54 @@ async def delete_site_section(
 
     await WebSectionRepo(session).delete(section_id)
     await session.commit()
+
+
+@router.get(
+    "/hub/sites/{site_id}/runs",
+    response_model=PaginaDePasadas,
+    operation_id="listSiteRuns",
+)
+async def list_site_runs(
+    site_id: uuid.UUID,
+    section_id: uuid.UUID | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=20, ge=1, le=100),
+    current_user: UserInfo = Depends(_require_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """El diario de las pasadas de un sitio, filtrable por sección (DIN.6).
+
+    Deploy: edge. El `summary` del job se calculaba, se devolvía y se perdía; con DIN.4 y DIN.5
+    encima, esto es el único sitio donde se puede ver que la salvaguarda paró una retirada o que
+    la puerta de calidad dejó fuera cinco páginas.
+
+    **Orden con desempate por `id`** (DET.1): dos pasadas pueden compartir `started_at` al
+    microsegundo, y sin desempate paginar devuelve una fila en dos páginas y otra en ninguna.
+    """
+    from sqlalchemy import func
+
+    from server.app.modules.agents_hub.database.operational_models import HubCrawlRun
+
+    await assert_site_org_access(session, site_id, current_user)
+
+    base = select(HubCrawlRun).where(HubCrawlRun.site_id == site_id)
+    if section_id is not None:
+        base = base.where(HubCrawlRun.section_id == section_id)
+
+    total = (
+        await session.execute(select(func.count()).select_from(base.subquery()))
+    ).scalar_one()
+    filas = (
+        await session.execute(
+            base.order_by(HubCrawlRun.started_at.desc(), HubCrawlRun.id.desc())
+            .offset((page - 1) * size)
+            .limit(size)
+        )
+    ).scalars().all()
+
+    return PaginaDePasadas(
+        total=total, items=[CrawlRunView.model_validate(f) for f in filas]
+    )
 
 
 @router.post(

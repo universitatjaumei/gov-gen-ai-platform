@@ -129,6 +129,76 @@ class HubWebSection(HubOperationalBase):
     )
 
 
+class HubCrawlRun(HubOperationalBase):
+    """El diario de una pasada de curación: qué ámbito cubrió y qué hizo (DIN.6).
+
+    El `summary` del job se calculaba, se devolvía y **se perdía**. La confianza en una
+    automatización se construye pudiendo auditarla barata: si quien cura no ve lo que
+    hizo, la apagará al primer susto — y tendrá razón.
+
+    **Por qué una tabla nueva y no `hub_ingestion_jobs`** (el prompt pedía comprobarlo
+    antes): aquélla es de **un documento** —`chatbot_id` NOT NULL, `source_url`,
+    `chunks_processed`— y una pasada no tiene chatbot (puede tocar varios, o ninguno) ni
+    una URL; lo que tiene es un sitio, una sección y un diff. Encajarla ahí exigiría un
+    `chatbot_id` inventado y un `source_url` que no es una URL, y el listado de trabajos
+    de ingesta pasaría a mezclar dos cosas que nadie querría ver juntas.
+
+    `section_id` es `SET NULL` y va con `scope_label` al lado a propósito: **el diario es
+    historia**, y una historia que se reescribe cuando alguien borra una sección no sirve
+    para auditar nada. Con la etiqueta, la fila sigue diciendo qué cubrió.
+    """
+
+    __tablename__ = "hub_crawl_runs"
+    __table_args__ = (
+        Index("ix_hub_crawl_runs_site_started", "site_id", "started_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    site_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_web_sites.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    section_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_web_sections.id", ondelete="SET NULL", name="fk_run_section"),
+        nullable=True,
+        index=True,
+    )
+    #: Qué cubrió la pasada, en texto: el nombre de la sección, o «sitio». Sobrevive al borrado
+    #: de la sección, que es lo que hace que el diario siga siendo historia.
+    scope_label: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    pages_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pages_new: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pages_changed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pages_gone: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pages_error: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    documents_auto_ingested: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    documents_reingested: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    documents_auto_retired: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pages_blocked_by_findings: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    findings_retired: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    #: El rastreo no vio el ámbito entero, y por qué (RAS.1). Mientras sea cierto no hay bajas.
+    truncated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    stop_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    #: Los errores de la pasada, tal cual. Un contador diría cuántos y no cuáles.
+    errors: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class HubCrawledPage(HubOperationalBase):
     """Página rastreada de un sitio. Acumula señales de frescura y flags de higiene."""
 

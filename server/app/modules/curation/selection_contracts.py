@@ -318,6 +318,43 @@ class PatternTestRequest(BaseModel):
         return self
 
 
+class CrawlRunView(BaseModel):
+    """Una pasada, tal y como la lee quien cura (DIN.6).
+
+    `scope_label` va al lado de `section_id` porque el diario es **historia**: si alguien borra
+    la sección, la fila tiene que seguir diciendo qué cubrió.
+    """
+
+    id: uuid.UUID
+    site_id: uuid.UUID
+    section_id: uuid.UUID | None
+    scope_label: str
+    started_at: datetime
+    finished_at: datetime
+    pages_total: int
+    pages_new: int
+    pages_changed: int
+    pages_gone: int
+    pages_error: int
+    documents_auto_ingested: int
+    documents_reingested: int
+    documents_auto_retired: int
+    pages_blocked_by_findings: int
+    findings_retired: int
+    truncated: bool
+    stop_reason: str | None
+    errors: list[str] = Field(default_factory=list)
+
+    model_config = {"from_attributes": True}
+
+
+class PaginaDePasadas(BaseModel):
+    """Una página del diario. El total va aparte porque la tabla lo necesita para paginar."""
+
+    total: int
+    items: list[CrawlRunView]
+
+
 class PatternTestView(BaseModel):
     """Cuántas páginas **ya rastreadas** casarían, y una muestra.
 

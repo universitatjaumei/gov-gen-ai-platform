@@ -378,6 +378,135 @@ class TestProbarElPatron:
         assert resp.status_code == 422
 
 
+# ──────────────────────────── El diario de pasadas (DIN.6) ────────────────────────────
+
+
+def _pasada(site_id: uuid.UUID, **kw):
+    m = MagicMock()
+    m.id = kw.get("id", uuid.uuid4())
+    m.site_id = site_id
+    m.section_id = kw.get("section_id", None)
+    m.scope_label = kw.get("scope_label", "sitio")
+    m.started_at = kw.get("started_at", datetime.now(timezone.utc))
+    m.finished_at = m.started_at
+    for contador in (
+        "pages_total",
+        "pages_new",
+        "pages_changed",
+        "pages_gone",
+        "pages_error",
+        "documents_auto_ingested",
+        "documents_reingested",
+        "documents_auto_retired",
+        "pages_blocked_by_findings",
+        "findings_retired",
+    ):
+        setattr(m, contador, kw.get(contador, 0))
+    m.truncated = kw.get("truncated", False)
+    m.stop_reason = kw.get("stop_reason", None)
+    m.errors = kw.get("errors", [])
+    return m
+
+
+class TestElDiarioDePasadas:
+
+    def test_should_serve_the_runs_of_a_site_with_their_scope(self):
+        sitio = _sitio()
+        seccion_id = uuid.uuid4()
+        session = AsyncMock()
+        session.get = AsyncMock(return_value=sitio)
+        total = MagicMock()
+        total.scalar_one.return_value = 2
+        session.execute = AsyncMock(
+            side_effect=[
+                total,
+                _resultado([
+                    _pasada(
+                        sitio.id,
+                        section_id=seccion_id,
+                        scope_label="Jornadas",
+                        documents_auto_retired=3,
+                        pages_blocked_by_findings=1,
+                    ),
+                    _pasada(sitio.id, scope_label="sitio"),
+                ]),
+            ]
+        )
+
+        resp = _cliente(session).get(
+            f"/api/v1/hub/sites/{sitio.id}/runs", headers=_cabeceras()
+        )
+
+        assert resp.status_code == 200
+        cuerpo = resp.json()
+        assert cuerpo["total"] == 2
+        assert [p["scope_label"] for p in cuerpo["items"]] == ["Jornadas", "sitio"]
+        assert cuerpo["items"][0]["documents_auto_retired"] == 3
+        assert cuerpo["items"][0]["pages_blocked_by_findings"] == 1
+
+    def test_should_order_with_a_deterministic_tiebreak(self):
+        """DET.1 — dos pasadas pueden compartir `started_at` al microsegundo. Sin desempate, el
+        orden dentro del empate lo decide el planificador y paginar devuelve una fila en dos
+        páginas y otra en ninguna."""
+        sitio = _sitio()
+        session = AsyncMock()
+        session.get = AsyncMock(return_value=sitio)
+        total = MagicMock()
+        total.scalar_one.return_value = 0
+        session.execute = AsyncMock(side_effect=[total, _resultado([])])
+
+        _cliente(session).get(f"/api/v1/hub/sites/{sitio.id}/runs", headers=_cabeceras())
+
+        consulta = str(session.execute.await_args_list[1].args[0])
+        assert "started_at DESC" in consulta
+        assert "id DESC" in consulta
+
+    def test_should_filter_by_section(self):
+        sitio = _sitio()
+        seccion_id = uuid.uuid4()
+        session = AsyncMock()
+        session.get = AsyncMock(return_value=sitio)
+        total = MagicMock()
+        total.scalar_one.return_value = 0
+        session.execute = AsyncMock(side_effect=[total, _resultado([])])
+
+        resp = _cliente(session).get(
+            f"/api/v1/hub/sites/{sitio.id}/runs?section_id={seccion_id}",
+            headers=_cabeceras(),
+        )
+
+        assert resp.status_code == 200
+        assert "section_id" in str(session.execute.await_args_list[1].args[0])
+
+    def test_should_paginate(self):
+        sitio = _sitio()
+        session = AsyncMock()
+        session.get = AsyncMock(return_value=sitio)
+        total = MagicMock()
+        total.scalar_one.return_value = 40
+        session.execute = AsyncMock(side_effect=[total, _resultado([])])
+
+        resp = _cliente(session).get(
+            f"/api/v1/hub/sites/{sitio.id}/runs?page=3&size=5", headers=_cabeceras()
+        )
+
+        assert resp.status_code == 200
+        consulta = session.execute.await_args_list[1].args[0]
+        assert consulta._limit_clause.value == 5
+        assert consulta._offset_clause.value == 10
+
+    def test_should_not_serve_the_runs_of_another_organizacion(self):
+        sitio = _sitio(organizacion_id=OTRA_ORG)
+        session = AsyncMock()
+        session.get = AsyncMock(return_value=sitio)
+
+        resp = _cliente(session).get(
+            f"/api/v1/hub/sites/{sitio.id}/runs", headers=_cabeceras(ORG)
+        )
+
+        assert resp.status_code == 403
+
+
 # ──────────────────────────── La selección apunta a la sección ────────────────────────────
 
 

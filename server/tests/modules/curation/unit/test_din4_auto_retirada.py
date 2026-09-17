@@ -378,6 +378,36 @@ class TestSeccionManual:
         assert avisos[0].source_url == ida.url
 
     @pytest.mark.asyncio
+    async def test_should_warn_and_not_claim_the_safeguard_stopped_anything(self):
+        """**El orden de las dos comprobaciones.** Con muchas bajas en un ámbito `manual`,
+        mirar primero la proporción emitiría «la salvaguarda paró una retirada» cuando no había
+        ninguna retirada que parar. La salvaguarda guarda lo que de verdad retira; en manual, lo
+        que hay son avisos."""
+        sitio = _Sitio()
+        seccion = _Seccion(site_id=sitio.id, mode="manual")
+        idas = [
+            _Pagina(url=f"https://www.uji.es/jornadas/ida{i}", status="gone")
+            for i in range(4)
+        ]
+        vivas = [_Pagina(url=f"https://www.uji.es/jornadas/viva{i}") for i in range(6)]
+        sesion = _Sesion(sitio, [*idas, *vivas], [seccion])
+        hallazgos = _RepoDeHallazgos()
+
+        await _job(
+            sesion=sesion,
+            resumen=_ResumenDeRastreo(
+                gone_page_ids=[p.id for p in idas],
+                pages_gone=len(idas),
+                section_id=seccion.id,
+            ),
+            selecciones=[],
+            hallazgos=hallazgos,
+        ).run_for_site(sitio.id, section_id=seccion.id)
+
+        assert len(hallazgos.de_tipo("page_gone")) == 4
+        assert hallazgos.de_tipo("retirada_masiva_detenida") == []
+
+    @pytest.mark.asyncio
     async def test_should_not_retire_on_a_whole_site_pass(self):
         """Una pasada del sitio entero es lo que hace hoy quien cura a mano: no automatiza nada,
         avisa. Sin esto, pulsar «Rastrear ahora» podría vaciar corpus."""
