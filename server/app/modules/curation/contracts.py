@@ -42,6 +42,11 @@ FindingType = Literal[
     # no se ha tocado el corpus. Es una senal para quien cura, no una acusacion contra la
     # pagina: se retira sola cuando la pagina vuelve a aparecer.
     "page_gone",
+    # DIN.5: la automatizacion NO metio esta pagina al corpus porque el propio job acababa de
+    # decir que no se puede leer. La pagina sigue siendo candidata: resuelto el hallazgo, la
+    # pasada siguiente la ingiere sola. El motivo va en `signal` porque quien cura tiene que
+    # poder ver POR QUE no entro.
+    "auto_ingesta_detenida",
     # DIN.4: las bajas de esta pasada superan el umbral del ambito, asi que no se ha retirado
     # NADA. Protege de la clase de rastreo malo que `truncated` no capta —el portal que responde
     # 200 con una plantilla vacia, la redireccion masiva— y que sin esto vaciaria un corpus con

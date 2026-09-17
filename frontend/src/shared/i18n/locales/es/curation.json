@@ -123,6 +123,8 @@
   "site_courtesy_help": "La pausa y el respeto a robots.txt vienen puestos. Bajarlos es una decisión que queda registrada aquí.",
   "type_needs_javascript": "No legible sin JavaScript",
   "type_content_updated": "Actualizada en el portal",
+  "type_auto_ingesta_detenida": "Ingesta automática detenida",
+  "reason_auto_ingesta_detenida": "No entró al corpus: {{motivos}}",
   "type_page_gone": "Desaparecida del portal",
   "type_retirada_masiva_detenida": "Retirada masiva detenida",
   "reason_page_gone": "Ya no aparece en el portal y este apartado no retira solo: decide si sale del corpus",

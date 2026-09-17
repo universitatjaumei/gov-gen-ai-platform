@@ -34,6 +34,19 @@ NOTA_DE_PAGINA_QUE_VOLVIO = (
     "Retirado automáticamente: la página ha vuelto a aparecer en el portal."
 )
 
+#: DIN.5 — los hallazgos que detienen la ingesta automática. Son los de **legibilidad**: si el
+#: propio job acaba de decir que la página no se puede leer, meterla al corpus es meter ruido que
+#: el asistente citará. `thin` está dentro porque es como se manifiesta una extracción que se
+#: cortó; `stale` no, porque dice que la página es vieja y no que no se pueda leer — bloquear por
+#: eso dejaría fuera medio portal, que es justo lo que CUR.1 vino a corregir.
+#:
+#: Los nombres se cruzan con el registro de los detectores en un test: son cadenas, y una mal
+#: escrita no casa ningún hallazgo, no cierra la puerta nunca y **no da ningún síntoma**.
+TIPOS_BLOQUEANTES_POR_DEFECTO: frozenset[str] = frozenset({
+    "empty", "needs_javascript", "crawl_error", "thin",
+})
+CLAVE_TIPOS_BLOQUEANTES = "tipos_bloqueantes"
+
 
 # ──────────────────────────── Protocolos ────────────────────────────
 
@@ -96,6 +109,10 @@ class SiteQualitySummary:
     #: aquí `mark_gone` marcaba la página y ahí moría: un evento borrado seguía en el corpus
     #: respondiendo como si existiera.
     documents_auto_retired: int = 0
+    #: DIN.5 — páginas que la automatización **no** metió al corpus porque el propio job acababa
+    #: de decir que no se pueden leer. Sin esta cifra, «no entró nada» y «no había nada que
+    #: entrar» se leen igual.
+    pages_blocked_by_findings: int = 0
 
     @property
     def ambito(self) -> str:
@@ -180,8 +197,14 @@ class SiteQualityAnalysisJob:
         site_id: uuid.UUID,
         changed_page_ids: list,
         summary: SiteQualitySummary,
+        bloqueantes_por_pagina: dict[uuid.UUID, list[str]] | None = None,
     ) -> None:
-        """Vuelve a ingerir las páginas del corpus que han cambiado, y avisa de cada una."""
+        """Vuelve a ingerir las páginas del corpus que han cambiado, y avisa de cada una.
+
+        DIN.5 — **la puerta de calidad importa aquí más que en la ingesta**: la página ya está en
+        el corpus con texto bueno, y reemplazarlo por una extracción vacía es peor que no
+        actualizar. Se conserva la versión buena y queda el motivo.
+        """
         if not changed_page_ids or (self._watcher is None and self._watcher_factory is None):
             return
 
@@ -195,6 +218,19 @@ class SiteQualityAnalysisJob:
         for page_id in changed_page_ids:
             page = await session.get(HubCrawledPage, page_id)
             if page is None:
+                continue
+
+            motivos = (bloqueantes_por_pagina or {}).get(page_id)
+            if motivos:
+                summary.pages_blocked_by_findings += 1
+                await self._registrar_hallazgo(
+                    site_id,
+                    "auto_ingesta_detenida",
+                    severity="warning",
+                    page_id=page.id,
+                    source_url=page.url,
+                    signal={"motivos": motivos, "paso": "reingesta"},
+                )
                 continue
 
             documentos = (
@@ -229,6 +265,58 @@ class SiteQualityAnalysisJob:
             if actualizados and self._finding_repo is not None:
                 await self._avisar_de_la_actualizacion(site_id, page, actualizados)
 
+    # ──────────────────── DIN.5 — la puerta de calidad ────────────────────
+
+    async def _parametros_del_ambito(
+        self, session: Any, site_id: uuid.UUID, section_id: uuid.UUID | None
+    ) -> Any:
+        """Los criterios efectivos de esta pasada: los del sitio con los de su sección encima.
+
+        Es la cascada de DIN.1, y la usan las dos decisiones automáticas del job: qué detiene la
+        ingesta (DIN.5) y cuándo la salvaguarda de retirada dispara (DIN.4).
+        """
+        from server.app.modules.agents_hub.database.operational_models import (
+            HubWebSection,
+            HubWebSite,
+        )
+        from server.app.modules.curation.secciones import parametros_efectivos
+
+        sitio = await session.get(HubWebSite, site_id)
+        seccion = (
+            await session.get(HubWebSection, section_id) if section_id is not None else None
+        )
+        return parametros_efectivos(sitio, seccion)
+
+    @staticmethod
+    def _bloqueantes_por_pagina(
+        hallazgos: list, criterios: dict[str, Any]
+    ) -> dict[uuid.UUID, list[str]]:
+        """Qué hallazgo bloqueante tiene cada página **en esta pasada**.
+
+        Se leen los hallazgos que el propio job acaba de calcular dos pasos antes, no la base: es
+        lo que hay en memoria, y es exactamente lo que el curador vería al revisar esta pasada.
+
+        Los tipos son un criterio de juicio más, heredable sitio→sección (DIN.1): una lista
+        puesta **sustituye** al defecto, porque un criterio que sólo pudiera endurecerse no sería
+        configurable.
+        """
+        declarados = criterios.get(CLAVE_TIPOS_BLOQUEANTES)
+        bloqueantes = (
+            set(declarados) if declarados is not None else set(TIPOS_BLOQUEANTES_POR_DEFECTO)
+        )
+
+        por_pagina: dict[uuid.UUID, list[str]] = {}
+        for hallazgo in hallazgos:
+            tipo = getattr(hallazgo, "finding_type", None)
+            page_id = getattr(hallazgo, "page_id", None)
+            if page_id is None or tipo not in bloqueantes:
+                continue
+            if getattr(hallazgo, "status", "new") not in ("new", "confirmed"):
+                continue
+            if tipo not in por_pagina.setdefault(page_id, []):
+                por_pagina[page_id].append(tipo)
+        return por_pagina
+
     # ──────────────────── DIN.4 — retirar lo que desapareció ────────────────────
 
     async def _retirar_lo_que_desaparecio(
@@ -251,11 +339,7 @@ class SiteQualityAnalysisJob:
         * **La proporción es del ámbito**, no del sitio: cuatro bajas en un apartado de diez son
           el 40 % del apartado y el 4 % de un portal de cien.
         """
-        from server.app.modules.agents_hub.database.operational_models import (
-            HubWebSection,
-            HubWebSite,
-        )
-        from server.app.modules.curation.secciones import parametros_efectivos
+        from server.app.modules.agents_hub.database.operational_models import HubWebSection
 
         # El aviso de una página que volvió se retira siempre, incluso sin bajas nuevas: es la
         # única pasada que puede saberlo.
@@ -264,11 +348,10 @@ class SiteQualityAnalysisJob:
         if not gone_page_ids:
             return
 
-        sitio = await session.get(HubWebSite, site_id)
         seccion = (
             await session.get(HubWebSection, section_id) if section_id is not None else None
         )
-        efectivos = parametros_efectivos(sitio, seccion)
+        efectivos = await self._parametros_del_ambito(session, site_id, section_id)
 
         if not await self._la_proporcion_es_creible(
             session, site_id, efectivos, gone_page_ids, summary
@@ -626,8 +709,20 @@ class SiteQualityAnalysisJob:
             # Se reingiere **sólo donde ya estaba**: actualizar lo que alguien aprobó una vez no
             # es publicar lo que nadie ha aprobado. Y no en silencio: queda el aviso
             # `content_updated` para poder revisar qué cambió.
+            # DIN.5 — la puerta de calidad, con los criterios efectivos del ámbito (DIN.1).
+            efectivos_del_ambito = await self._parametros_del_ambito(
+                session, site_id, section_id
+            )
+            bloqueadas = self._bloqueantes_por_pagina(
+                all_findings, efectivos_del_ambito.criterios
+            )
+
             await self._reingerir_lo_que_cambio(
-                session, site_id, getattr(crawl_summary, "changed_page_ids", []), summary
+                session,
+                site_id,
+                getattr(crawl_summary, "changed_page_ids", []),
+                summary,
+                bloqueadas,
             )
 
             # ── 4. AUTO-INGESTA (páginas nuevas del diff) ──────────────────────
@@ -651,6 +746,24 @@ class SiteQualityAnalysisJob:
                         page = await session.get(HubCrawledPage, page_id)
                         if page is None:
                             continue
+
+                        # DIN.5 — la automatización no puede tener menos criterio que el
+                        # curador al que sustituye: si el job acaba de decir que esta página no
+                        # se puede leer, no entra. **No se marca nada**: sigue siendo candidata,
+                        # y resuelto el hallazgo la pasada siguiente la ingiere sola.
+                        motivos = bloqueadas.get(page_id)
+                        if motivos:
+                            summary.pages_blocked_by_findings += 1
+                            await self._registrar_hallazgo(
+                                site_id,
+                                "auto_ingesta_detenida",
+                                severity="warning",
+                                page_id=page.id,
+                                source_url=page.url,
+                                signal={"motivos": motivos, "paso": "auto-ingesta"},
+                            )
+                            continue
+
                         for sel in auto_sels:
                             if repo_de_selecciones.matches(
                                 sel, page.url, secciones=secciones

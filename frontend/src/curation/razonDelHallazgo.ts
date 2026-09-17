@@ -113,6 +113,17 @@ export function razonDelHallazgo(hallazgo: HallazgoConSenal, t: Traductor): stri
           })
     }
 
+    // DIN.5 — la puerta de calidad no la dejó entrar al corpus. El motivo es lo único que hace
+    // accionable el aviso: sin él, quien cura ve una página que no se publica y no sabe por qué.
+    case 'auto_ingesta_detenida': {
+      const motivos = Array.isArray(s.motivos) ? (s.motivos as string[]) : []
+      return t('reason_auto_ingesta_detenida', {
+        motivos: motivos
+          .map((m) => t(`type_${m}` as Parameters<typeof t>[0]))
+          .join(', '),
+      })
+    }
+
     default:
       return texto(s.explanation) ?? ''
   }

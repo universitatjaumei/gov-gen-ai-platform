@@ -123,6 +123,8 @@
   "site_courtesy_help": "The delay and robots.txt compliance are on by default. Lowering them is a decision recorded here.",
   "type_needs_javascript": "Not readable without JavaScript",
   "type_content_updated": "Updated on the portal",
+  "type_auto_ingesta_detenida": "Automatic ingestion stopped",
+  "reason_auto_ingesta_detenida": "Did not enter the corpus: {{motivos}}",
   "type_page_gone": "Gone from the portal",
   "type_retirada_masiva_detenida": "Mass retirement stopped",
   "reason_page_gone": "No longer on the portal and this section does not retire on its own: decide whether it leaves the corpus",
