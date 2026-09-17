@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 #: Los campos que **sí** se pueden escribir sobre una versión que ya no es borrador: son de otra
@@ -150,6 +151,78 @@ def _exigir_motivo_al_suspender(version: Any, cambios: dict[str, Any]) -> None:
         raise FuncionIncoherente(
             "suspender exige motivo: el bloque anclado a esta versión va a fallar en alto y "
             "tiene que poder decir por qué"
+        )
+
+
+async def ejecutar_funcion(
+    *,
+    contrato: Any,
+    code: str,
+    ficheros: dict[str, str] | None = None,
+    parametros: dict[str, Any] | None = None,
+    sandbox: Any,
+    timeout_seconds: int | None = None,
+) -> Any:
+    """Valida la entrada contra el contrato y **después** ejecuta (FUN.2).
+
+    El orden es la mitad del prompt: con la validación detrás, un ERP que cambia de formato se
+    manifiesta como un `KeyError` de pandas dentro de un subproceso; con la validación delante,
+    como «falta el slot datos». El espía de los tests comprueba que el sandbox no se toca cuando
+    la entrada no cumple.
+
+    **El protocolo del script no cambia** —`file_path`, `raw_text`, `options`—: cambiarlo
+    obligaría a reescribir los scripts que ya funcionan, que es lo que empuja al Shadow IT. Los
+    parámetros del contrato viajan dentro de `options`, que es donde el script ya los busca.
+
+    La salida se valida como `ExtractionResult`. Con el sandbox real no hace falta —lo construye
+    él—, pero en FUN.5 el `run` de un paquete de un tercero devuelve lo que haya escrito ese
+    tercero, y la costura tiene que aguantarlo sin reventar de forma opaca.
+    """
+    from server.app.modules.redaccion.contracts.funciones import validar_entrada
+    from server.app.modules.redaccion.pipelines.contracts import (
+        ExtractionProvenance,
+        ExtractionResult,
+        ExtractionWarning,
+    )
+
+    entrada = validar_entrada(contrato, ficheros=ficheros, parametros=parametros)
+
+    # El primer slot es el fichero que el protocolo actual pasa como `file_path`; el resto viaja
+    # en `options`, que es donde un script que ya funcionaba busca lo suyo.
+    primer_slot = contrato.slots[0].slot_id if getattr(contrato, "slots", None) else None
+    file_path = entrada.ficheros.get(primer_slot) if primer_slot else None
+    options: dict[str, Any] = {**entrada.parametros, "ficheros": entrada.ficheros}
+
+    salida = await sandbox.execute_extraction_script(
+        code=code,
+        file_path=file_path,
+        raw_text=None,
+        options=options,
+        timeout_seconds=timeout_seconds,
+    )
+
+    if isinstance(salida, ExtractionResult):
+        return salida
+
+    try:
+        return ExtractionResult.model_validate(salida)
+    except Exception as fallo:  # noqa: BLE001 — se convierte en aviso, no en excepción opaca
+        return ExtractionResult(
+            warnings=[
+                ExtractionWarning(
+                    code="SALIDA_FUERA_DE_CONTRATO",
+                    message=(
+                        "la función devolvió algo que no cumple el contrato de salida "
+                        f"(ExtractionResult): {fallo}"
+                    ),
+                    severity="error",
+                )
+            ],
+            provenance=ExtractionProvenance(
+                pipeline_id="funcion_catalogo",
+                source_ref=primer_slot or "",
+                extracted_at=datetime.now(timezone.utc),
+            ),
         )
 
 
