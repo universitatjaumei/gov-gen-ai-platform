@@ -16,10 +16,35 @@ Dos decisiones que estos tests fijan:
 """
 from __future__ import annotations
 
+import hashlib
+import os
+import subprocess
+import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
+
+
+def _casilla_de(palabra: str) -> int:
+    """La dimensión que representa un tema. **Estable entre procesos, y ésa es la gracia.**
+
+    Antes esto era `hash(palabra) % 1024`, y `hash()` de una cadena está aleatorizado por
+    proceso (PYTHONHASHSEED). O sea que en aproximadamente **1 de cada 1024 ejecuciones** dos
+    temas distintos caían en la misma casilla, quedaban a coseno 1 y el detector los agrupaba en
+    uno: `test_should_separate_unrelated_topics` esperaba dos huecos y veía uno. Un fallo cada
+    mil ejecuciones, en otro sitio cada vez, sin forma de reproducirlo — que es la peor forma de
+    rojo que puede tener una suite, porque enseña a relanzar CI en vez de a mirar.
+
+    `blake2b` no depende de la semilla del proceso: la misma palabra da la misma casilla hoy, en
+    CI y dentro de un año. Y si dos palabras llegaran a compartirla, `embed` lo dice en voz alta
+    en vez de devolver un resultado que parece bueno (ver abajo).
+    """
+    digest = hashlib.blake2b(palabra.encode("utf-8"), digest_size=8).digest()
+    return int.from_bytes(digest, "big") % _DIMENSIONES
+
+
+_DIMENSIONES = 1024
 
 
 class _EmbeddingPorTema:
@@ -28,15 +53,35 @@ class _EmbeddingPorTema:
     Las consultas que empiezan por el mismo término quedan a coseno 1; las que no, a 0. Es
     grosero a propósito — lo que se prueba es el mecanismo de agrupación, no la calidad de
     un modelo, misma postura que RAG.1 con el dorado.
+
+    **Una colisión no se tolera en silencio.** Con 1024 casillas y un digest fijo, dos palabras
+    podrían compartir casilla; si pasa, este doble haría indistinguibles dos temas que el caso
+    declara distintos y el test mediría otra cosa mientras aparenta medir lo suyo. Al ser el
+    digest fijo, además, ocurriría **siempre** y no una vez de cada mil: se ve la primera vez y
+    se arregla cambiando una palabra del caso.
     """
 
     model_name = "test/por-tema"
-    dimensions = 1024
+    dimensions = _DIMENSIONES
+
+    def __init__(self) -> None:
+        #: casilla -> palabra que la ocupó, sólo para detectar colisiones.
+        self._ocupadas: dict[int, str] = {}
 
     async def embed(self, text: str) -> list[float]:
-        vector = [0.0] * 1024
         primera = (text.strip().split() or ["_"])[0].lower()
-        vector[hash(primera) % 1024] = 1.0
+        casilla = _casilla_de(primera)
+
+        anterior = self._ocupadas.setdefault(casilla, primera)
+        if anterior != primera:
+            raise AssertionError(
+                f"«{primera}» y «{anterior}» caen en la misma casilla ({casilla}), así que este "
+                "doble las haría indistinguibles y el caso mediría otra cosa. Cambia una de las "
+                "dos palabras del escenario."
+            )
+
+        vector = [0.0] * _DIMENSIONES
+        vector[casilla] = 1.0
         return vector
 
 
@@ -129,6 +174,65 @@ class TestRecogidaDeSenales:
         senales = await recoger_senales(db_session, chatbot.id, dias=30)
 
         assert [s.query for s in senales] == ["dentro"]
+
+
+class TestElDobleNoDependeDelAzar:
+    """El doble de embeddings no puede cambiar de una ejecución a otra.
+
+    **Esto arregla un rojo real.** La suite completa con `-n0` —la configuración de CI— falló el
+    2026-09-18 en `test_should_separate_unrelated_topics`, pasaba al ejecutarla sola, pasaba con
+    su fichero entero, y las cinco ejecuciones anteriores de CI estaban verdes. Parecía estado
+    filtrado entre tests; no lo era. El doble hacía `hash(palabra) % 1024`, y `hash()` de una
+    cadena está **aleatorizado por proceso**: una vez de cada mil y pico, «dieta» y «teletreball»
+    caían en la misma casilla, el detector las agrupaba en un solo hueco y el caso —que espera
+    dos— se ponía rojo.
+
+    Un rojo que aparece una vez de cada mil y en otro sitio cada vez no se investiga: se
+    relanza. Por eso lo que se fija aquí no es el caso, es **la propiedad del doble**.
+    """
+
+    def test_la_casilla_de_un_tema_no_cambia_entre_procesos(self) -> None:
+        """Con `hash()` este test fallaba casi siempre: el valor cambiaba en cada ejecución."""
+        guion = (
+            "import hashlib;"
+            "print(int.from_bytes("
+            "hashlib.blake2b('dieta'.encode('utf-8'), digest_size=8).digest(), 'big') % 1024)"
+        )
+        salidas = set()
+        for semilla in ("0", "1", "12345"):
+            entorno = {**os.environ, "PYTHONHASHSEED": semilla}
+            salida = subprocess.run(
+                [sys.executable, "-c", guion],
+                capture_output=True, text=True, check=True, env=entorno,
+            )
+            salidas.add(salida.stdout.strip())
+
+        assert salidas == {str(_casilla_de("dieta"))}, (
+            "La casilla de un tema cambia según la semilla del proceso. Ése era exactamente el "
+            f"defecto: {salidas}. Un doble que depende del azar del intérprete produce un rojo "
+            "cada mil ejecuciones y en otro sitio cada vez."
+        )
+
+    def test_los_dos_temas_del_caso_no_comparten_casilla(self) -> None:
+        """Lo que el caso de abajo da por hecho, comprobado en vez de supuesto."""
+        assert _casilla_de("dieta") != _casilla_de("teletreball")
+
+    async def test_una_colision_se_dice_en_voz_alta(self) -> None:
+        """Si algún día dos palabras coincidieran, el doble tiene que romper, no mentir.
+
+        Se fuerza la colisión buscando por fuerza bruta una palabra que comparta casilla con
+        «dieta». Con 1024 casillas existe seguro, y al ser el digest fijo la búsqueda es
+        reproducible: este test no puede volverse intermitente.
+        """
+        objetivo = _casilla_de("dieta")
+        gemela = next(
+            p for p in (f"x{n}" for n in range(200_000)) if _casilla_de(p) == objetivo
+        )
+
+        doble = _EmbeddingPorTema()
+        await doble.embed("dieta a")
+        with pytest.raises(AssertionError, match="misma casilla"):
+            await doble.embed(f"{gemela} a")
 
 
 class TestAgrupacion:
