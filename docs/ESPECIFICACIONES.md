@@ -122,7 +122,7 @@ vive en un documento no es un invariante: es una intención.
 | I10 | **El contenido del modelo se lee con `texto_de`.** Gemini devuelve `content` como lista de bloques en cuanto hay más de una parte, y quien asume `str` falla más tarde y en otro sitio | `core/llm_text.py` + guardarraíl de USR.8 |
 | I11 | **Los ficheros de negocio se guardan por `StorageService`**, nunca con `open()`: el contenedor es efímero y el proveedor, cambiable | `core/storage.py`; regla de portabilidad |
 | I12 | **Todo lo que va al LLM desde el edge va anonimizado**, y el `model_factory` no anonimiza: recibe datos ya limpios | frontera edge/cloud de `AGENTS.md` |
-| I13 | **Código no aprobado no se ejecuta.** Auditoría AST + sandbox + aprobación humana antes de que un script corra | `redaccion/services/script_auditor.py`, `SANDBOX_SECURITY.md` |
+| I13 | **Código que no ha pasado el filtro no se ejecuta.** Auditoría AST sin hallazgos críticos + prueba en sandbox + declaración responsable, **y el filtro es automático**: la aprobación humana previa dejó de ser la puerta en FUN.3/FUN.4, porque la Instrucció 02/2026 la prohíbe como condición para compartir dentro del servicio. La persona entra **después**, en la revisión posterior, que puede pedir correcciones, reclasificar o suspender. La única aprobación previa que queda es el paso a nivel 3 | `redaccion/services/script_auditor.py`, `redaccion/funciones_service.py`, `redaccion/funciones_acciones.py`, `SANDBOX_SECURITY.md`, `CATALOGO_FUNCIONES.md` |
 | I14 | **El esquema lo define Alembic, y sólo Alembic.** La aplicación no crea tablas al arrancar; un modelo cambiado sin su migración es un fallo de CI, no una tabla aparecida | `alembic check` en CI tras `upgrade head`; `test_bd2_alembic_es_la_unica_fuente.py` |
 
 **Cómo se usa esta tabla.** Al escribir código nuevo, si tocas algo que aparece en la columna
@@ -528,6 +528,52 @@ plataforma no ha desaparecido y el asistente puede citarlo. No se implementa por
 decisión técnica — depende de quien publica el contenido. Las cuatro opciones y a quién le toca,
 en `docs/SECCIONES_DINAMICAS.md` §6.
 
+### 5.12 El catálogo de funciones
+
+**Qué hace.** Una extracción determinista —contar las filas de un fichero de gastos, leer los
+importes de un PDF— se escribe **una vez** como *función* con su contrato declarado, y las
+plantillas de informe la **referencian** por `función@versión` en vez de llevar el código
+copiado. Antes de FUN, aprobar un script lo incrustaba en el bloque de cada plantilla: dos
+plantillas con la misma extracción eran dos copias y dos aprobaciones, y un error se arreglaba N
+veces.
+
+**Lo que garantiza.**
+
+- **Registrar es compartir, y es automático** (nivel 2 de la Instrucció 02/2026): declaración
+  responsable + auditoría sin hallazgos críticos + sandbox superado, y la versión queda usable de
+  inmediato **sin que nadie la apruebe**. La revisión humana viene después, con muestreo
+  aleatorio, y puede pedir correcciones, reclasificar el alcance o suspender.
+- **Una versión registrada es inmutable y el anclaje aguanta**: publicar la v2 **no cambia
+  ninguna plantilla** anclada a la v1. Adoptar es una decisión de quien mantiene la plantilla.
+- **Nada falla en silencio**: una función retirada o suspendida hace fallar el bloque anclado en
+  alto, con el nombre y el motivo.
+- **Dos responsabilidades separadas**: suspender es de quien revisa, retirar de quien escribe, y
+  revisar es siempre de otra persona.
+- **Dos orígenes por el mismo camino**: *autoservicio* (el código vive en el catálogo, con
+  sandbox) y *empaquetado* (el código vive en el repositorio de un equipo y llega por *entry
+  point* `govgenai.funciones`, con anclaje por mayor de semver). Un solo contrato, un solo
+  validador, un solo resolutor.
+- **Se puede ejecutar desde fuera** con un PAT y el scope `funciones:execute`, con versión
+  explícita y un evento en el registro de actividad de IA — metadatos, nunca payloads.
+
+**Dónde vive.** `modules/redaccion/funciones_service.py`, `funciones_acciones.py`,
+`funciones_resolver.py`, `funciones_paquete.py`, `contracts/funciones.py`; routers
+`/api/v1/funciones` y `/api/v1/funciones/{id}/run`; catálogo y cola de revisión en
+`/redaccion/funciones`.
+
+**Madurez**: `construido` — ciclo completo recorrido contra la base de desarrollo (registrar sin
+aprobación, dos plantillas ancladas a v1, publicar v2 sin tocarlas, adoptar v2 en una, suspender
+con motivo y ver fallar sólo esa, reactivar), más el paquete demo instalado y desinstalado de
+verdad. Sin desplegar. El contrato completo está en `docs/CATALOGO_FUNCIONES.md`.
+
+**Abierto.** La **equivalencia con la regla 2 de la Instrucció** necesita un «sí» explícito de la
+UADTI y de la OIATI: la Instrucció prevé que el código del desarrollo ciudadano se quede en el
+equipo de la persona, y aquí se registra en la plataforma y corre sobre los datos
+institucionales. Es un régimen distinto —más controlado en unas cosas y más expuesto en otras— y
+la plataforma no puede decidir por su cuenta que equivale. La comparación honesta está en
+`docs/CATALOGO_FUNCIONES.md` §4. También pendiente: contrastar las reglas del auditor AST con las
+Guías Operativas Técnicas de la UADTI.
+
 ---
 
 ## 6. Fase 2 — Automatización documental
@@ -674,6 +720,11 @@ faltan:
   si algo hay que convertir, se convierte antes de llegar.
 - **No hay shims de compatibilidad.** Si una ruta o un símbolo se retira, se retira: el historial
   de git es la fuente de verdad del pasado.
+- **No aísla el código de una función empaquetada.** Una función que llega por *entry point*
+  corre **in-process, sin sandbox y con los datos del cliente**: la confianza está en quien la
+  instala en el despliegue, igual que en un plugin de pytest. Está aquí y no en la lista de lo
+  que falta porque es una decisión: fingir un aislamiento que no existe sería peor que decirlo.
+  Lo que sí se valida siempre es la entrada contra su contrato y la salida como `ExtractionResult`.
 
 ### 10.1 Y una cosa que no está aquí por decisión, sino porque no está hecha
 
