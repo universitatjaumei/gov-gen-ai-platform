@@ -10,6 +10,7 @@ import {
   useSaveScriptToPrivateTemplate,
   useSubmitScriptForReview,
 } from '@/shared/api/generated/redaccion-scripts/redaccion-scripts'
+import { useCategoriasDeDatos } from '@/shared/api/generated/actividad/actividad'
 import type {
   AnonymizeTestDataResponse,
   DescribeColumnsResponse,
@@ -28,6 +29,19 @@ type WizardStep = 1 | 2 | 3 | 4 | 5 | 6 | 7
 type TestDataKind = 'xlsx' | 'csv' | 'pdf_text'
 
 const STEP_COUNT = 7
+
+/** La semilla del vocabulario de categorías de datos, para cuando el catálogo de la organización
+ *  está vacío. **No es la lista cerrada**: el servidor acepta cualquier código y esta pantalla
+ *  deja escribir uno que no esté. Está aquí sólo para que la primera persona que declare no se
+ *  encuentre un formulario sin opciones. */
+const CATEGORIAS_SEMILLA = [
+  'sin_datos_personales',
+  'datos_identificativos',
+  'datos_academicos',
+  'datos_economicos_y_financieros',
+  'datos_de_contacto',
+  'sin_declarar',
+]
 
 /** El tipo con el que la plataforma trata el fichero de prueba, por su extensión.
  *
@@ -52,6 +66,23 @@ export function ScriptProposalWizardPage() {
   // mandaban `{bucket:'', key:''}` y el script se ejecutaba sin fichero.
   const [testDataKind, setTestDataKind] = useState<TestDataKind | null>(null)
   const [pdfElegido, setPdfElegido] = useState<File | null>(null)
+  // La declaración responsable (Instrucció 02/2026 §8.2). Vive aquí y no en la propuesta porque
+  // declarar es el acto de compartir: mientras el script es una propuesta sigue en el nivel 1,
+  // que es libre y no se declara. Sin esto, `save-to-private-template` respondía **422
+  // DECLARACION_INCOMPLETA** desde FUN.3 y el botón «Guardar» no guardaba nada.
+  const [finalidad, setFinalidad] = useState('')
+  const [nombreDeLaFuncion, setNombreDeLaFuncion] = useState('')
+  const [categorias, setCategorias] = useState<string[]>([])
+  const [otraCategoria, setOtraCategoria] = useState('')
+
+  // El catálogo de REG: se anuncia, no se impone. Si la consulta no trae nada —organización sin
+  // actividad registrada todavía— se ofrece la semilla del vocabulario, porque una lista vacía
+  // dejaría a la persona sin poder declarar y por tanto sin poder compartir.
+  const categoriasHook = useCategoriasDeDatos()
+  const delServidor = (
+    (categoriasHook.data as unknown as { codigo: string }[] | undefined) ?? []
+  ).map(c => c.codigo)
+  const categoriasConocidas = delServidor.length > 0 ? delServidor : CATEGORIAS_SEMILLA
 
   const proposeHook = useProposeScript()
   const describeHook = useDescribeTestData()
@@ -76,7 +107,11 @@ export function ScriptProposalWizardPage() {
   const hayFicheroDePrueba = !!refDePrueba?.key
 
   const auditPassed = proposal?.audit_result?.approved === true
-  const canSave = !!validated
+  // **La declaración es parte de poder guardar**, no una validación de formulario: el servidor
+  // la exige y sin ella la llamada es un 422. Comprobarla aquí cambia «el botón falla» por «el
+  // botón dice qué falta».
+  const declaracionCompleta = finalidad.trim().length > 0 && categorias.length > 0
+  const canSave = !!validated && declaracionCompleta
 
   // Auto-advance from step 1 → 2 when proposal arrives
   useEffect(() => {
@@ -143,9 +178,21 @@ export function ScriptProposalWizardPage() {
     validateHook.mutate({ proposalId: activeProposalId })
   }
 
+  /** La declaración, tal como la espera el registro. Se compone en un sitio para que los dos
+   *  caminos —guardar en plantilla propia y enviar a revisión de plataforma— manden lo mismo:
+   *  `approve` también registra en el catálogo desde FUN.3, así que si uno declarara y el otro
+   *  no, el hueco se mudaría de sitio en vez de cerrarse. */
+  function declaracion() {
+    return {
+      finalidad: finalidad.trim(),
+      categorias_datos: categorias,
+      nombre: nombreDeLaFuncion.trim() || null,
+    }
+  }
+
   function handleSave() {
     if (!activeProposalId || !canSave) return
-    saveHook.mutate({ proposalId: activeProposalId }, {})
+    saveHook.mutate({ proposalId: activeProposalId, data: declaracion() }, {})
   }
 
   function handleSubmitForReview() {
@@ -365,6 +412,100 @@ export function ScriptProposalWizardPage() {
       {step === 7 && (
         <div className="space-y-4">
           {testResult && <SandboxTestResultViewer result={testResult} />}
+
+          {/* La declaración responsable. Va **antes** de los botones a propósito: es la condición
+              para compartir, no una confirmación posterior. */}
+          <fieldset className="border rounded p-3 space-y-3">
+            <legend className="text-sm font-medium px-1">{t('declaracion.titulo')}</legend>
+
+            <p className="text-xs text-muted-foreground" data-testid="declaracion-porque">
+              {t('declaracion.porque')}
+            </p>
+
+            <label className="block space-y-1">
+              <span className="text-xs text-muted-foreground">{t('declaracion.finalidad')}</span>
+              <textarea
+                data-testid="declaracion-finalidad"
+                value={finalidad}
+                onChange={e => setFinalidad(e.target.value)}
+                rows={2}
+                placeholder={t('declaracion.finalidad_ejemplo')}
+                className="w-full text-sm border rounded p-2 bg-background"
+              />
+            </label>
+
+            <label className="block space-y-1">
+              <span className="text-xs text-muted-foreground">{t('declaracion.nombre')}</span>
+              <input
+                data-testid="declaracion-nombre"
+                value={nombreDeLaFuncion}
+                onChange={e => setNombreDeLaFuncion(e.target.value)}
+                placeholder={t('declaracion.nombre_ejemplo')}
+                className="w-full text-sm border rounded p-2 bg-background"
+              />
+            </label>
+
+            <div className="space-y-2" data-testid="declaracion-categorias">
+              <span className="text-xs text-muted-foreground">
+                {t('declaracion.categorias')}
+              </span>
+              <div className="flex gap-2 flex-wrap">
+                {categoriasConocidas.map(codigo => (
+                  <button
+                    key={codigo}
+                    type="button"
+                    data-testid={`categoria-${codigo}`}
+                    aria-pressed={categorias.includes(codigo)}
+                    onClick={() =>
+                      setCategorias(previas =>
+                        previas.includes(codigo)
+                          ? previas.filter(c => c !== codigo)
+                          : [...previas, codigo],
+                      )
+                    }
+                    className={`text-xs px-2 py-1 rounded border ${
+                      categorias.includes(codigo) ? 'bg-accent font-medium' : 'hover:bg-accent/50'
+                    }`}
+                  >
+                    {codigo}
+                  </button>
+                ))}
+              </div>
+              {/* El vocabulario es **abierto** (I4): si la categoría no está, se escribe. Cerrar
+                  la lista aquí convertiría algo que está para revisarse en un `Enum` de React. */}
+              <div className="flex gap-2 items-center">
+                <input
+                  data-testid="categoria-otra"
+                  value={otraCategoria}
+                  onChange={e => setOtraCategoria(e.target.value)}
+                  placeholder={t('declaracion.otra_categoria')}
+                  className="text-xs border rounded px-2 py-1 bg-background flex-1"
+                />
+                <button
+                  type="button"
+                  data-testid="categoria-otra-anadir"
+                  disabled={!otraCategoria.trim()}
+                  onClick={() => {
+                    const codigo = otraCategoria.trim()
+                    if (!codigo) return
+                    setCategorias(previas =>
+                      previas.includes(codigo) ? previas : [...previas, codigo],
+                    )
+                    setOtraCategoria('')
+                  }}
+                  className="text-xs px-2 py-1 rounded border disabled:opacity-50"
+                >
+                  {t('declaracion.anadir')}
+                </button>
+              </div>
+            </div>
+
+            {!declaracionCompleta && (
+              <p className="text-xs text-amber-700" data-testid="declaracion-incompleta">
+                {t('declaracion.incompleta')}
+              </p>
+            )}
+          </fieldset>
 
           <button
             type="button"

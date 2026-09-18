@@ -292,6 +292,18 @@ beforeEach(() => {
 // ScriptProposalWizardPage tests
 // --------------------------------------------------------------------------
 
+/** Rellena la declaración responsable del paso 7.
+ *
+ * Desde FUN.3 el registro la exige, así que **sin ella el botón de compartir está
+ * deshabilitado**: un test que no la rellene no mide el endpoint, mide el botón apagado. Lo
+ * fija `ElAsistenteDeclaraAntesDeCompartir.test.tsx`. */
+function declararParaPoderCompartir() {
+  fireEvent.change(screen.getByTestId('declaracion-finalidad'), {
+    target: { value: 'Extraer la tabla de gastos del ERP' },
+  })
+  fireEvent.click(screen.getByTestId('categoria-datos_economicos_y_financieros'))
+}
+
 describe('ScriptProposalWizardPage', () => {
   it('should_block_next_step_until_audit_passes', () => {
     vi.mocked(useProposeScript).mockReturnValue({
@@ -676,14 +688,21 @@ describe('ScriptProposalWizardPage', () => {
 
     wrap(<ScriptProposalWizardPage />, 'user')
 
-    const saveBtn = screen.queryByTestId('btn-save')
-    if (saveBtn) {
-      fireEvent.click(saveBtn)
-      expect(mockSaveToPrivateTemplate).toHaveBeenCalledWith(
-        expect.objectContaining({ proposalId: 'prop-1' }),
-        expect.anything(),
-      )
-    }
+    // `getByTestId` y no `queryByTestId` dentro de un `if`: con el `if`, un botón que
+    // desaparece dejaba el cuerpo del test sin ejecutar y el test pasaba sin comprobar nada.
+    declararParaPoderCompartir()
+    fireEvent.click(screen.getByTestId('btn-save'))
+
+    expect(mockSaveToPrivateTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proposalId: 'prop-1',
+        data: expect.objectContaining({
+          finalidad: 'Extraer la tabla de gastos del ERP',
+          categorias_datos: ['datos_economicos_y_financieros'],
+        }),
+      }),
+      expect.anything(),
+    )
   })
 
   it('should_call_submit_for_review_for_platform_target', () => {
@@ -724,19 +743,17 @@ describe('ScriptProposalWizardPage', () => {
     wrap(<ScriptProposalWizardPage />, 'admin')
 
     // Change target to platform
-    const targetSelect = screen.queryByTestId('select-target-owner-kind')
-    if (targetSelect) {
-      fireEvent.change(targetSelect, { target: { value: 'platform' } })
-    }
+    fireEvent.change(screen.getByTestId('select-target-owner-kind'), {
+      target: { value: 'platform' },
+    })
 
-    const submitBtn = screen.queryByTestId('btn-submit-for-review')
-    if (submitBtn) {
-      fireEvent.click(submitBtn)
-      expect(mockSubmitForReview).toHaveBeenCalledWith(
-        expect.objectContaining({ proposalId: 'prop-2' }),
-        expect.anything(),
-      )
-    }
+    declararParaPoderCompartir()
+    fireEvent.click(screen.getByTestId('btn-submit-for-review'))
+
+    expect(mockSubmitForReview).toHaveBeenCalledWith(
+      expect.objectContaining({ proposalId: 'prop-2' }),
+      expect.anything(),
+    )
   })
 })
 

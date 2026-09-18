@@ -235,57 +235,87 @@ sí llega a la revisión posterior, que es quien puede decidir ampliar la lista.
 
 ## 6. Llevar tu script al catálogo
 
-Para la persona referente de un servicio que ya tiene un script que funciona.
+Para la persona referente de un servicio que ya tiene un script que funciona. **Esta sección va
+por pantalla**: no hace falta escribir nada fuera del panel.
 
-Tu script de nivel 1 ya hace lo que tiene que hacer. Lo que el catálogo te pide es **declarar su
-contrato**, que es lo que permite que otra persona lo use sin leerlo.
+Tu script de nivel 1 ya hace lo que tiene que hacer. Lo que el catálogo te pide es **declararlo**,
+y eso es lo que permite que otra persona lo use sin leerlo.
 
-### Paso 1 — di qué ficheros necesita
+### El recorrido, paso a paso
 
-Cada fichero es un **slot** con nombre, clase y si es obligatorio:
+Entra en **Informes → Pedir un script** (`/redaccion/scripts/wizard`). El asistente tiene siete
+pasos y los cinco primeros ya existían; lo que cambia al final es que ahora declaras.
 
-```python
-slots=[
-    {"slot_id": "gastos", "kind": "excel", "required": True,
-     "label": {"es": "Fichero de gastos", "ca": "Fitxer de despeses"}}
-]
-```
+1. **Di qué necesitas, en tu idioma.** «Cuenta las filas del fichero mensual de gastos». El
+   modelo propone el código y lo pasa por el auditor antes de enseñártelo (§5).
+2. **Sube un fichero de prueba.** Es el tuyo, el de verdad.
+3. **Anonimízalo si lleva datos personales.** El asistente te dice qué columnas ha detectado; si
+   no hace falta, se puede omitir.
+4. **Ejecútalo en el sandbox** con ese fichero y mira el resultado.
+5. **Valida el resultado**: eres quien sabe si esa cifra es la correcta.
+6. **Declara** (el paso nuevo, y el que convierte tu script en una función compartida):
+   - **Para qué sirve** — una frase. Es lo que otra persona leerá en el catálogo para decidir si
+     le vale, y lo que quien revise leerá para juzgar si el alcance es el que dices.
+   - **Qué datos trata** — una o varias categorías. Salen del catálogo de tu organización, y si
+     la que necesitas no está, la escribes: el vocabulario está para revisarse, no para
+     encajarte.
+   - **Cómo se llamará** en el catálogo (opcional; si lo dejas en blanco se pone un nombre por
+     defecto).
+7. **Guardar.** Y ya está: tu función queda **registrada y usable**.
 
-Las clases son `excel`, `pdf`, `markdown` y `text`; el servidor manda al navegador qué extensiones
-acepta cada una, así que no hay que repetirlas.
+El botón de guardar no se activa hasta que hay finalidad y al menos una categoría. No es un
+formulario quisquilloso: **guardar es compartir**, y compartir sin declarar es exactamente lo que
+la Instrucció no permite.
 
-### Paso 2 — di qué parámetros acepta
+### Lo que pasa cuando pulsas guardar
 
-```python
-parametros=[
-    {"slot_id": "umbral", "field_type": "number", "label": {"es": "Umbral"}, "required": False}
-]
-```
+Nadie tiene que aprobártelo. El auditor ya leyó tu código sin ejecutarlo y el sandbox ya lo
+ejecutó con tus datos; con eso y tu declaración, la función entra en el catálogo como **v1
+registrada** y cualquier plantilla de tu organización puede referenciarla desde ese momento.
 
-Un parámetro **es** un descriptor de campo de interfaz, así que el formulario sale de aquí sin
-escribir nada en el frontend.
+Después aparecerá en **Revisión posterior**, y ahí otra persona puede pedirte correcciones,
+reclasificar su alcance o suspenderla si encuentra un problema. Mientras eso no pase, funciona —
+y si te la suspenden, el informe que la usaba falla diciendo el motivo, no en silencio.
 
-### Paso 3 — declara
+### Si necesitas corregirla
 
-```python
-finalidad="Contar las filas del fichero de gastos de un servicio",
-categorias_datos=["dades_pressupostaries"],
-```
+No edites la v1: **publica una v2**. Vuelve al asistente, pide el arreglo y guarda indicando que
+es una versión nueva de la misma función. Las plantillas ancladas a la v1 siguen ejecutando la v1
+hasta que su responsable decida adoptar la v2 — así un arreglo tuyo no cambia por sorpresa un
+informe que otra persona ya había revisado.
 
-### Paso 4 — el protocolo del script **no cambia**
+### El protocolo del script no cambia
 
-Sigues asignando `result`, y sigues recibiendo `file_path`, `raw_text` y `options`. Los parámetros
-del contrato llegan dentro de `options`, que es donde tu script ya los busca. No se te pide
+Sigues asignando `result`, y sigues recibiendo `file_path`, `raw_text` y `options`. No se te pide
 reescribir nada: cambiar el protocolo es lo que empuja a la gente a seguir trabajando por su
-cuenta.
+cuenta, y es justo lo que el catálogo existe para evitar.
 
-### Qué pasa al registrar
+### La misma cosa, en código
 
-El auditor lee tu código sin ejecutarlo (§5), el sandbox lo ejecuta una vez con tus datos de
-prueba, y si las dos cosas van bien tu función queda **registrada y usable**. Nadie tiene que
-aprobártela. Después aparecerá en la cola de revisión posterior, y ahí alguien puede pedirte
-correcciones, reclasificar su alcance o suspenderla si encuentra un problema — pero mientras eso
-no pase, funciona.
+Si vas a integrar por API o a empaquetar una función (§7), el contrato que la pantalla rellena por
+ti es éste:
+
+```python
+ContratoFuncion(
+    # Los ficheros que pide, cada uno con su clase: excel, pdf, markdown o text.
+    slots=[
+        {"slot_id": "gastos", "kind": "excel", "required": True,
+         "label": {"es": "Fichero de gastos", "ca": "Fitxer de despeses"}}
+    ],
+    # Los parámetros tipados. Un parámetro **es** un descriptor de campo de interfaz, así que el
+    # formulario sale de aquí sin escribir nada en el frontend.
+    parametros=[
+        {"slot_id": "umbral", "field_type": "number", "label": {"es": "Umbral"},
+         "required": False}
+    ],
+    # La declaración responsable, que en la pantalla son los dos campos del paso 6.
+    finalidad="Contar las filas del fichero de gastos de un servicio",
+    categorias_datos=["dades_pressupostaries"],
+)
+```
+
+Las extensiones que acepta cada `kind` las manda el servidor en el descriptor, así que no hay que
+repetirlas en ningún sitio.
 
 ---
 

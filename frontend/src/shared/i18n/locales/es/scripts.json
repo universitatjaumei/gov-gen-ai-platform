@@ -77,5 +77,17 @@
     "faker_provider": "Proveedor Faker",
     "no_columns": "Sin columnas detectadas"
   },
-  "access_denied": "Acceso denegado"
+  "access_denied": "Acceso denegado",
+  "declaracion": {
+    "anadir": "Añadir",
+    "categorias": "Qué datos trata",
+    "finalidad": "Para qué sirve",
+    "finalidad_ejemplo": "Extraer la tabla de gastos del fichero mensual del ERP",
+    "incompleta": "Indica para qué sirve y al menos una categoría de datos: sin eso no se puede compartir.",
+    "nombre": "Cómo se llamará en el catálogo (opcional)",
+    "nombre_ejemplo": "Extraer gastos del ERP",
+    "otra_categoria": "Otra categoría, si no está en la lista",
+    "porque": "Guardar este script lo comparte con tu servicio: a partir de ahí lo puede usar otra persona en sus informes. Por eso hay que decir para qué sirve y qué datos trata — no lo revisa nadie antes, así que la declaración es lo que permite revisarlo después.",
+    "titulo": "Declaración responsable"
+  }
 }
