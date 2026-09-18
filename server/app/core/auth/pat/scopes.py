@@ -28,6 +28,12 @@ ANONIMIZACION_USE = "anonimizacion:use"
 # —comprobar con la vara de la plataforma algo que se produjo fuera— y partirlo obligaria a
 # pedir tres permisos para un caso de uso. Los tres son de lectura o de computo sin efecto.
 VERIFICACIONES_USE = "verificaciones:use"
+# FUN.6: ejecutar una función del catálogo por API. **Emisible también por admin**, a diferencia
+# de `chatbots:write`: ejecutar una función de la propia organización es una capacidad de la
+# organización, y quien la registró ya decidió compartirla dentro del servicio (nivel 2 de la
+# Instrucció 02/2026). Lo que sigue reservado a la plataforma es promover una función a nivel 3,
+# y eso no se hace con un token.
+FUNCIONES_EXECUTE = "funciones:execute"
 
 ALL_SCOPES: frozenset[str] = frozenset(
     {
@@ -41,6 +47,7 @@ ALL_SCOPES: frozenset[str] = frozenset(
         ACTIVIDAD_WRITE,
         ANONIMIZACION_USE,
         VERIFICACIONES_USE,
+        FUNCIONES_EXECUTE,
     }
 )
 
