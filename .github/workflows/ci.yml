@@ -22,6 +22,22 @@ on:
 # cancelado. Es aceptable porque lo que se despliega es la punta de la rama, no un commit del
 # medio; si algún día hace falta el estado de cada commit —una bisección sobre resultados de
 # CI, por ejemplo— esto es lo primero que hay que quitar.
+# APER.8 — el alcance del GITHUB_TOKEN se declara aquí, y no se hereda de la organización.
+#
+# Sin esta línea lo decidía la configuración de `universitatjaumei`, que este repositorio no
+# gobierna. Y el momento importa: con el repositorio privado, quien abre una pull request es
+# alguien de dentro; **en público cualquiera puede abrir una desde un fork** y con ella ejecutar
+# todo esto. La diferencia entre un token que lee el código y uno que puede escribir en el
+# repositorio es, en ese contexto, toda la diferencia.
+#
+# `contents: read` basta para lo que hace CI: descargar el código y subir artefactos —
+# `upload-artifact` no usa este token—. Ningún job comenta en pull requests, publica releases ni
+# empuja ramas; el día que uno lo necesite, lo pide **ese job** y no el workflow entero. Lo
+# comprueba `server/tests/infra/test_aper8_los_workflows_declaran_sus_permisos.py`, que exige una
+# razón escrita para cada escritura.
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
