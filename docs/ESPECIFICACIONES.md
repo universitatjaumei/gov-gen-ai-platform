@@ -188,14 +188,39 @@ prefiere.
   la validación de forma y daría una preferencia que no prefiere ninguna versión de ninguna norma,
   en silencio.
 
-**Superficie.** `core/language_mode.py` · `hub_opciones_router` · `HubOrganizacion.default_language_mode`
-· `HubChatbot.language_mode`.
+Y dos garantías más, que son las que deciden qué lee quien pregunta:
 
-**Madurez**: `producción` — desplegado el 2026-09-07 (bloque LANG, 2026-09-03).
+- **La preferencia de lengua opera DENTRO de la misma vigencia, no por encima de ella** (VIS.4).
+  Entre dos versiones de una norma manda primero la vigencia y después la lengua: si la versión
+  confirmada por una persona sólo está en la otra lengua, se cita ésa y se advierte de la lengua;
+  nunca al revés. Citar en la lengua correcta algo que nadie ha confirmado que rija es un error de
+  fondo; citar lo confirmado en otra lengua es una incomodidad, y encima se avisa. `fixed:` no
+  entra en esto: filtra a una lengua por definición y ahí la vigencia no compite con nada.
+- **Si la norma citada está en otra lengua, se dice — en la lengua de la pregunta y en las dos
+  direcciones** (VIS.5). El aviso sale de la lengua de la **fuente**, no de la de la pregunta:
+  quien escribe en valencià ya sabe en qué lengua escribe, y lo que necesita saber es que el
+  enlace le lleva a un documento en castellano. Preguntar en castellano y recibir una norma en
+  valencià es el caso mayoritario del corpus real —232 de 334 documentos del asistente normativo
+  están en `val`— y antes era justo el que no avisaba.
+
+**Superficie.** `core/language_mode.py` · `hub_opciones_router` · `HubOrganizacion.default_language_mode`
+· `HubChatbot.language_mode` · `PreferLanguagePolicy` en `strategies/protocols.py` (el orden) ·
+`_build_translation_warning` en `api/v1/hub_chat.py` (el aviso) ·
+`services/language_detector.py` (el único punto que produce la lengua de una pregunta, y el que
+traduce el `ca` de `langdetect` al `val` del corpus).
+
+**Madurez**: `producción` — desplegado el 2026-09-07 (bloque LANG, 2026-09-03). El orden por
+vigencia y el aviso de lengua entraron antes, el 2026-08-25 (VIS.4 y VIS.5), y llevan en `main`
+desde entonces; lo que faltaba no era el despliegue, era escribir aquí qué garantizan.
 
 **Abierto.** Ningún despliegue monolingüe real lo ha usado todavía; el juicio sobre si el
 castellano de una respuesta fijada suena institucional o a traducción automática está pendiente de
 una persona (`pruebas_manuales/pruebas_manuales_bloqueLANG.bat`).
+
+Y el orden por vigencia **todavía no decide nada en el corpus de hoy**, porque casi ninguna norma
+tiene sus dos versiones emparejadas: 47 traducciones no declaran de qué norma son versión
+(`versio_idiomatica_de` nulo). La regla está escrita antes de que el corpus la necesite, a
+propósito — cuando lleguen los emparejamientos, nadie va a estar mirando esta parte del código.
 
 ---
 
