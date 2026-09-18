@@ -32,19 +32,20 @@ Tres módulos sobre una misma base:
 | **Informes** | Redacción asistida de informes: extracción determinista de PDF y hojas de cálculo, transformación declarativa de los datos, gráficos, y valoración escrita por el modelo y **aprobada o editada por una persona** antes de exportar. Cuando un documento es tan irregular que hay que programar su lectura, el código se audita y se ejecuta en un sandbox sin red. |
 | **Curación** | Rastreo del portal institucional, detección de contenido caducado o contradictorio, y selección de lo que entra al corpus. |
 
-**Los tres módulos de la tabla son funcionales**, y el de Informes cubre más de lo que su nombre
-sugiere: sirve a las fases de cualquier expediente, no sólo a un documento suelto.
+**Los tres módulos de la tabla son funcionales y completos en lo que cubren**, y el de Informes
+abarca más de lo que su nombre sugiere: sirve a las fases de cualquier expediente, no sólo a un
+documento suelto.
 
-Hay otros dos módulos previstos y ninguno de los dos está esperando a que alguien escriba su
-código. **Los dos empiezan en un despliegue real**, y por eso no están aquí:
+La hoja de ruta prevé dos módulos más, y de los dos falta código:
 
-- **Automatización de procesos** —flujos y RPA— necesita un **cliente de ejecución local**, porque
-  la plataforma no ejecuta nada en la máquina de quien la usa. Y antes que eso necesita lo que
-  ningún código resuelve: **identificar qué merece automatizarse**. Automatizar un proceso que nadie
-  ha examinado antes fija en código lo que había que simplificar.
-- **Gestor de expedientes** —tramitación con fases y acciones calculadas en el servidor— depende de
-  la **plataforma de gestión** de la institución que lo despliegue. Sin esa integración, un gestor de
-  expedientes es un archivador paralelo al que ya existe.
+- **Automatización de procesos** —flujos y RPA— necesita además un **cliente de ejecución local**,
+  porque la plataforma no ejecuta nada en la máquina de quien la usa.
+- **Gestor de expedientes** —tramitación con fases y acciones calculadas en el servidor— se apoya
+  en la **plataforma de gestión** de la institución que lo despliegue.
+
+Que no estén escritos todavía no es un retraso: **qué tienen que hacer exactamente lo definen un
+despliegue real y una necesidad identificada**, y escribirlos antes sería adivinarlo. Automatizar
+un proceso que nadie ha examinado antes fija en código lo que había que simplificar.
 
 Lo que hoy vive en `server/app/modules/automation/` es infraestructura que consume Informes, no un
 módulo de usuario: no tiene routers registrados ni interfaz. Alcance y plazos de los dos, en
