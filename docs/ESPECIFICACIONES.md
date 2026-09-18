@@ -124,6 +124,7 @@ vive en un documento no es un invariante: es una intención.
 | I12 | **Todo lo que va al LLM desde el edge va anonimizado**, y el `model_factory` no anonimiza: recibe datos ya limpios | frontera edge/cloud de `AGENTS.md` |
 | I13 | **Código que no ha pasado el filtro no se ejecuta.** Auditoría AST sin hallazgos críticos + prueba en sandbox + declaración responsable, **y el filtro es automático**: la aprobación humana previa dejó de ser la puerta en FUN.3/FUN.4, porque la Instrucció 02/2026 la prohíbe como condición para compartir dentro del servicio. La persona entra **después**, en la revisión posterior, que puede pedir correcciones, reclasificar o suspender. La única aprobación previa que queda es el paso a nivel 3 | `redaccion/services/script_auditor.py`, `redaccion/funciones_service.py`, `redaccion/funciones_acciones.py`, `SANDBOX_SECURITY.md`, `CATALOGO_FUNCIONES.md` |
 | I14 | **El esquema lo define Alembic, y sólo Alembic.** La aplicación no crea tablas al arrancar; un modelo cambiado sin su migración es un fallo de CI, no una tabla aparecida | `alembic check` en CI tras `upgrade head`; `test_bd2_alembic_es_la_unica_fuente.py` |
+| I15 | **El servidor sólo pide URL de la red pública, y lo comprueba en cada salto.** Una dirección privada, de *loopback* o de enlace local —el servidor de metadatos de la nube, los contenedores vecinos— no se pide, ni directamente ni **llegando a ella por una redirección**. La forma de la URL la validan los contratos de entrada (422 con motivo); el destino resuelto, cada petición. Hay una válvula de desarrollo, `CRAWLER_ALLOW_PRIVATE_TARGETS`, y **producción se niega a arrancar con ella puesta** | `core/red_publica.py` + `cliente_de_rastreo` en `modules/curation/spider.py`; los cuatro gates de `core/config.py`; `test_aper1_*` |
 
 **Cómo se usa esta tabla.** Al escribir código nuevo, si tocas algo que aparece en la columna
 derecha, el test correspondiente es el que te dirá si te has pasado. Si crees que un invariante
@@ -264,9 +265,15 @@ para que una persona decida qué entra al corpus.
 - Rastreo con cadencia, alta automática de páginas nuevas y reingesta de las cambiadas.
 - Los hallazgos se revisan **uno a uno**; nada entra al corpus sin decisión humana.
 - Salvaguardas contra el vaciado: una pasada parcial no puede dar de baja el resto del portal.
+- **El rastreo no sale de la red pública** (I15). Quien da de alta un sitio decide a dónde pide
+  el servidor, y basta ser administrador de una organización: hasta APER.1 eso alcanzaba la red
+  interna del despliegue y el texto volvía en el informe de reconocimiento. Ahora la dirección se
+  comprueba en **cada petición y cada redirección**, y una raíz privada se rechaza al darla de
+  alta con un 422 que dice por qué.
 
 **Superficie.** `modules/curation/` (`site_crawler.py`) · `curation_router` · pantallas
-`/curation/*`.
+`/curation/*` · `core/red_publica.py` y `cliente_de_rastreo`, el único sitio del módulo donde se
+construye un cliente HTTP.
 
 **Madurez**: `producción` — el portal real de la UJI, con sus trampas inventariadas (conmutador de
 idioma, http+https duplicados, la misma sección bajo dos prefijos, archivo por curso académico).
@@ -743,6 +750,12 @@ faltan:
 - **No comparte corpus entre chatbots.** Está decidido y no hay que volver a proponerlo.
 - **No lleva conversor de documentos en el servidor.** Al corpus entra `.md` conforme al contrato;
   si algo hay que convertir, se convierte antes de llegar.
+- **No rastrea portales de la red interna.** El rastreador sólo pide direcciones públicas (I15).
+  Esto **va a hacer falta** algún día —una intranet es un portal institucional como otro—, y
+  cuando haga falta es una decisión con su diseño: a quién se le permite, contra qué destinos y
+  con qué registro. Lo que no es, es quitar el guardia. La válvula
+  `CRAWLER_ALLOW_PRIVATE_TARGETS` existe para el portal de pruebas local y producción no arranca
+  con ella.
 - **No hay shims de compatibilidad.** Si una ruta o un símbolo se retira, se retira: el historial
   de git es la fuente de verdad del pasado.
 - **No aísla el código de una función empaquetada.** Una función que llega por *entry point*
