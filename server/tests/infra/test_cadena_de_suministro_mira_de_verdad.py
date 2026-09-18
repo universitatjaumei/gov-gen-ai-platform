@@ -140,15 +140,42 @@ def test_los_dos_escaneos_usan_la_lista_de_permitidos(job: dict[str, Any]) -> No
         )
 
 
+def _proyectos_con_lock() -> list[str]:
+    """Los proyectos con `uv.lock`, **recorriendo el árbol** y no una lista escrita a mano.
+
+    APER.9 lo cambió a esto, y la razón es que la cifra escrita a mano ya falló: decía «los dos
+    proyectos con lock propio» cuando había cuatro, y los dos que faltaban —`shared` y
+    `services/script_sandbox`— eran precisamente donde estaban los 30 avisos que encontró
+    Dependabot. Una lista que alguien tiene que acordarse de ampliar se queda corta; un recorrido
+    del árbol pone rojo el guardarraíl el día que nace el lock.
+    """
+    raiz = Path(__file__).resolve().parents[3]
+    rutas = {
+        lock.parent.relative_to(raiz).as_posix()
+        for patron in ("*/uv.lock", "*/*/uv.lock")
+        for lock in raiz.glob(patron)
+    }
+    return sorted(rutas)
+
+
 def test_las_dependencias_auditadas_son_las_del_lock(job: dict[str, Any]) -> None:
     """`uv export` sin `--locked` vuelve a resolver, y se audita otro conjunto."""
     export = _paso(job, "Export the locked dependency sets")
     run = export["run"]
-    assert run.count("uv export") == 2, (
-        "Se exportan los dos proyectos con lock propio: `server` y `mcp_server`. Si aparece un "
-        "tercero, entra aquí; si no, su árbol de dependencias no lo audita nadie."
+    proyectos = _proyectos_con_lock()
+    cuantos = len(proyectos)
+
+    faltan = [p for p in proyectos if f"--directory {p} " not in run]
+    assert not faltan, (
+        f"Estos proyectos tienen `uv.lock` y este job no los exporta: {faltan}. Su árbol de "
+        "dependencias no lo audita nadie — y así estuvieron `shared` y "
+        "`services/script_sandbox` hasta APER.9, con 30 avisos que sólo vio Dependabot."
     )
-    assert run.count("--locked") == 2, (
+    assert run.count("uv export") == cuantos, (
+        f"Se exportan los {cuantos} proyectos con lock propio ({', '.join(proyectos)}). Si "
+        "aparece uno nuevo, entra aquí; si no, su árbol de dependencias no lo audita nadie."
+    )
+    assert run.count("--locked") == cuantos, (
         "Cada `uv export` lleva `--locked`. Sin él uv **vuelve a resolver en silencio** y el "
         "informe describiría un conjunto de dependencias que el lock no declara: un informe "
         "que parece bueno y mide otra cosa. Es la misma avería que vivió 17 días con el lock "
@@ -161,14 +188,18 @@ def test_las_dependencias_auditadas_son_las_del_lock(job: dict[str, Any]) -> Non
     )
 
 
-def test_los_dos_proyectos_se_auditan_aunque_el_primero_encuentre_algo(
+def test_todos_los_proyectos_se_auditan_aunque_el_primero_encuentre_algo(
     job: dict[str, Any],
 ) -> None:
     """El agujero real de la primera ejecución: `mcp_server` no se auditó y nada lo dijo."""
     paso = _paso(job, "pip-audit")
     run = paso["run"]
-    assert run.count("uvx pip-audit") == 2, "Se auditan los dos proyectos."
-    assert run.count("|| rc=1") == 2, (
+    cuantos = len(_proyectos_con_lock())
+    assert run.count("uvx pip-audit") == cuantos, (
+        f"Se auditan los {cuantos} proyectos con lock. Exportar uno y no auditarlo deja el "
+        "fichero en el artefacto y el aviso sin mirar."
+    )
+    assert run.count("|| rc=1") == cuantos, (
         "Cada `pip-audit` tiene que capturar su propio fallo. Encadenados sin más, el shell "
         "aborta el paso en cuanto el primero encuentra algo —pip-audit sale con 1— y el "
         "segundo no llega a correr. Con `continue-on-error` encima, el job sigue en verde y el "

@@ -128,7 +128,7 @@ sustituir al primero. Y **ninguno estaba al día**: DEP.4 se cerró en el commit
 2026-09-10 y no constaba ni aquí ni en `HISTORIAL.md`. Si vuelve a hacer falta anotar un cursor
 nuevo, **se reescribe este párrafo**; lo viejo baja a «Lo anterior».
 
-**Cursor: Bloque APER — apertura del repositorio, 7 prompts. ✅ COMPLETO el 2026-09-18**, sus ocho prompts (APER.1–APER.8). El octavo se añadió sobre la marcha: B3 —los `permissions` de los workflows— estaba en el tramo «el día de abrir» por suponer que era trabajo de consola, y al preguntar el usuario si se podía desde el CLI resultó que es un cambio en el repositorio, o sea que va con su guardarraíl como todo lo demás.
+**Cursor: Bloque APER — apertura del repositorio, 7 prompts. ✅ COMPLETO el 2026-09-18**, sus nueve prompts (APER.1–APER.9). Los dos últimos no estaban previstos y los trajo el propio bloque: APER.8 porque B3 era código y no consola, y **APER.9 porque activar Dependabot destapó en trece minutos que el job `supply-chain` auditaba dos locks de cuatro** — y los dos que no miraba eran donde estaban los 30 avisos. El octavo se añadió sobre la marcha: B3 —los `permissions` de los workflows— estaba en el tramo «el día de abrir» por suponer que era trabajo de consola, y al preguntar el usuario si se podía desde el CLI resultó que es un cambio en el repositorio, o sea que va con su guardarraíl como todo lo demás.
 
 El bloque **no sale de `planificacion/fase1/`**: sale de la auditoría de seguridad y calidad
 previa a hacer público el repositorio (2026-09-18), cuyo informe vive en `_local/` porque

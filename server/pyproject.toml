@@ -150,25 +150,16 @@ local-models = [
     "torchvision",
     "sentence-transformers>=3.0.0",
 ]
-# APER.5 — por qué el lock se queda con `setuptools` 81.0.0 y no sube.
+# Aquí entra `torch`, y con él el techo `setuptools<82` que mantiene a `setuptools` en 81.0.0
+# con un aviso abierto (PYSEC-2026-3447 / CVE-2026-59890).
 #
-# `setuptools` 81.0.0 arrastra CVE-2026-59890 (MODERATE): al construir un *sdist*, una exclusión
-# de `MANIFEST.in` se puede saltar por colisión de normalización Unicode en macOS. Está arreglado
-# en la 83.0.0.
+# **La decisión, con su motivo, su firma y su caducidad, vive en `avisos_aceptados.toml`**, que
+# es el fichero que consulta la puerta de `ci.yml` y el que vigila
+# `test_dep7_las_aceptaciones_caducan.py`. No se repite aquí: APER.5 la copió entera antes de
+# ver que ya estaba tomada desde DEP.7, y tres copias de una razón divergen en semanas.
 #
-# **No se sube, y la razón es que el camino no es el que parece.** `torch` 2.11.0 —que entra por
-# este extra— declara `setuptools<82`, así que subir `setuptools` a 83 obliga a subir `torch` a
-# 2.14 y `torchvision` a 0.29. Medido: `uv lock --upgrade-package "setuptools>=83.0.0"` mueve las
-# tres a la vez. Eso es un cambio en la dependencia más pesada del proyecto —la que usan
-# `LocalEmbeddingService` (BGE-M3) y `LocalReranker`, con su índice de ruedas CPU propio— para
-# cerrar un aviso que **no alcanza a este código**: el servidor no construye paquetes, ni en
-# tiempo de ejecución ni en el despliegue, y el despliegue estándar no instala este extra
-# siquiera.
-#
-# La comprobación que toca hacer, y no volver a hacer a ojo: **cuando torch suba por cualquier
-# otra razón, `setuptools` sube con él**. Entonces se quita la exclusión de
-# `.github/dependabot.yml` y se borra este comentario. Hasta entonces, el aviso está decidido, no
-# olvidado.
+# Lo único que se añade desde aquí: al renovar esa aceptación, comprobar si `torch` ya levantó
+# el techo — `uv tree --invert --package setuptools` lo dice en una línea.
 # DEP.1: los dos extras que siguen. El criterio es el mismo que el de `local-models` —lo que
 # el despliegue estándar no ejecuta no se instala— pero aquí hay además un motivo de
 # seguridad: entre los dos arrastraban unos 19 de los 32 avisos de vulnerabilidad del

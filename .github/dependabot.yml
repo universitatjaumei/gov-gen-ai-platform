@@ -51,18 +51,15 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: "chore(deps)"
-    # APER.5 — `setuptools` se queda en 81.0.0 **a propósito**, no por olvido.
+    # `setuptools` se queda en 81.0.0 **a propósito**, no por olvido: lo retiene el techo
+    # `setuptools<82` de `torch` 2.11. La decisión está aceptada, firmada y **con caducidad** en
+    # `avisos_aceptados.toml` (PYSEC-2026-3447), que es el fichero canónico y el que vigila
+    # `test_dep7_las_aceptaciones_caducan.py`.
     #
-    # Su CVE-2026-59890 (MODERATE) es sobre construir un *sdist* en macOS, y este servidor no
-    # construye paquetes. El arreglo está en la 83, pero `torch` 2.11 declara `setuptools<82`,
-    # así que subirla arrastra `torch` a 2.14 y `torchvision` a 0.29 — la dependencia más pesada
-    # del proyecto, con su índice de ruedas propio— para cerrar un aviso que no alcanza a este
-    # código. La razón larga está en `server/pyproject.toml`, junto al extra `local-models`.
-    #
-    # **Se excluye para que no llegue la misma PR cada semana**, que es como se deja de leer a
-    # Dependabot. Cuando torch suba por otra razón, `setuptools` sube con él: entonces se quita
-    # esta exclusión. Ojo: esto **no** silencia una alerta de seguridad de GitHub sobre
-    # `setuptools`, que llegaría por otra vía y habría que valorar de nuevo.
+    # Se excluye **aquí** sólo para que no llegue la misma PR cada semana, que es como se deja de
+    # leer a Dependabot. Cuando torch levante el techo, `setuptools` sube con él y esta exclusión
+    # se retira. Ojo: esto **no** silencia una alerta de seguridad de GitHub sobre `setuptools`,
+    # que llega por otra vía y habría que valorar de nuevo.
     ignore:
       - dependency-name: setuptools
 
