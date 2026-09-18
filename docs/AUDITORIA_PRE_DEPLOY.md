@@ -6,8 +6,35 @@
 > paralelo con lectura directa del código (referencias `fichero:línea`), más verificación
 > de la validación del corpus ejecutando el pipeline real en seco.
 >
-> Este documento es la fuente de verdad del estado pre-deploy. Los bloques de remediación
-> se planifican como **SEC.8** en `planificacion/PROJECT_STATE.md`.
+> Este documento **fue** la fuente de verdad del estado pre-deploy. Los bloques de remediación
+> se planificaron como **SEC.8** en `planificacion/PROJECT_STATE.md`.
+
+> ## ⚠️ Lee esto antes que nada: este documento es un registro histórico
+>
+> Es la foto del **2026-08-10** y se conserva porque explica **por qué** el código es como es —
+> cada gate, cada `assert_org_access` y cada guardarraíl de este repositorio nació de un hallazgo
+> de aquí—. **No describe el estado actual.**
+>
+> Hasta el **2026-09-18** describía como abiertos hallazgos que los bloques SEC cerraron en
+> agosto, entre ellos que `SANDBOX_MODE=local` no tenía gate de producción (lo tiene desde
+> SEC.8.3, y un segundo desde SEC.9.6). Con el repositorio a punto de hacerse público, eso
+> significaba publicar una lista de vulnerabilidades ya cerradas con el aspecto de estar vivas,
+> en el documento con más pinta de autoridad del árbol. Es el hallazgo C5 de la auditoría previa
+> a abrir, y APER.7 lo cierra con **un estado por hallazgo comprobado contra el código**.
+>
+> Dónde está la verdad de hoy:
+>
+> | Para saber… | Mira… |
+> |---|---|
+> | qué garantiza la plataforma **ahora** | `docs/ESPECIFICACIONES.md` |
+> | en qué punto está el desarrollo | `planificacion/PROJECT_STATE.md` |
+> | por qué algo se hizo así | `planificacion/HISTORIAL.md` |
+> | qué se revisó antes de abrir el repositorio | la auditoría del 2026-09-18, en `_local/` (no viaja en el repositorio: describe dónde es débil el sistema) |
+>
+> Los marcadores de cada hallazgo (✅ cerrado · ▶ parcial · ⏳ abierto · ℹ️ informativo) son los
+> de la revisión del 2026-09-18 y llevan el bloque que lo cerró. Lo vigila
+> `server/tests/infra/test_aper7_la_auditoria_vieja_no_miente.py`, que no deja añadir un
+> hallazgo sin estado ni un estado sin hallazgo.
 
 ## Veredicto
 
@@ -27,15 +54,56 @@ local encaja en la redacción de informes, no en los chatbots.
 > y **Docling se retira del servidor** (al corpus solo entra `.md` del pipeline de curación),
 > lo que reduce la huella de memoria muy por debajo de lo que este informe estimaba.
 
-**Estado de remediación al cierre de esta auditoría:**
+**Estado de cada hallazgo, comprobado contra el código el 2026-09-18 (APER.7).**
 
-| Hallazgo | Estado |
-|---|---|
-| CR-1 · SuperAdmin sembrado en producción | ✅ **Arreglado** (gate a `ENVIRONMENT=development`) |
-| Bloqueante de ingesta del corpus (`us_assistents`) | ✅ **Arreglado** (generador + regeneración) |
-| CR-2 y familia IDOR (routers post-SEC) | ⏳ SEC.8 |
-| Resto de ALTO/MEDIO de seguridad | ⏳ SEC.8 |
-| Bloqueantes funcionales (temas en disco, crawler nulo, tests rotos) | ⏳ SEC.8 |
+Lo que sigue no es «lo que se recuerda haber arreglado»: cada fila se verificó abriendo el
+fichero. Las que siguen abiertas están abiertas de verdad, y ninguna es de seguridad.
+
+| Hallazgo | Estado | Evidencia / quién lo cerró |
+|---|---|---|
+| CR-1 · SuperAdmin sembrado en producción | ✅ | gate a `ENVIRONMENT=development` (SEC.8.0) |
+| CR-2 · IDOR horizontal sistémico | ✅ | la capa de tenencia (SEC.8.1) y, lo que lo mantiene cerrado, el inventario que **recorre** los routers en vez de listarlos (SEC.9.5) |
+| AL-1 · `export_task` cruza organizaciones | ✅ | `assert_chatbot_org_access` en `api/v1/hub_tasks.py:70` |
+| AL-2 · `submit_feedback` sin comprobar organización | ✅ | tres comprobaciones en `api/v1/hub_feedback.py` (`:119`, `:150`, `:210`) |
+| AL-3 · `routers/redaccion/` sin dueño | ✅ | `es_propietario` en `manifests_router.py:41`; el `_user` sin usar ya no existe; `get_template_version` acota (SEC.8.1) |
+| AL-4 · `SANDBOX_MODE=local` sin gate | ✅ | `core/config.py` lo rechaza en producción (SEC.8.3) **y** rechaza `TESTING=1`, que era la otra puerta (SEC.9.6) |
+| AL-5 · auditoría AST evadible | ✅ | SEC.8.3, con las evasiones de manual en rojo primero |
+| AL-6 · el widget embebe un Bearer privilegiado | ✅ | no queda ningún `Bearer` ni token en `frontend/src/widget/` |
+| AL-7 · path traversal en subidas de workspace | ✅ | `sanitizar_nombre` + `read_within_limit` en `workspaces_router.py:405` |
+| ME-1 · `X-Forwarded-For` por la izquierda | ✅ | se cuenta desde la derecha con `TRUSTED_PROXY_HOPS` (`core/rate_limit.py`) |
+| ME-2 · SAML laxo | ✅ | `strict`, `wantAssertionsSigned` y `validate_cert=True` (`core/auth/saml/settings.py:58,75,93`) |
+| ME-3 · `user_upload` sin comprobar el chatbot | ✅ | `api/v1/ingestion.py:40` |
+| ME-4 · el bypass admin cruza inquilinos | ✅ | `es_propietario` en `anonymization_router.py:103` |
+| ME-5 · subidas sin `validate_upload` | ✅ | SEC.8.6 |
+| ME-6 · `JWT_SECRET_KEY` de ejemplo admitido | ✅ | `_SECRETOS_DE_EJEMPLO` y longitud mínima en producción (SEC.8.4) |
+| ME-7 · sandbox sin `pids_limit` | ✅ | `pids_limit: 128` en los dos composes de producción |
+| BAJO · feedback y temas sin límite de peticiones | ⏳ | sigue sin límite; es el único de §1 que queda, y no es de aislamiento |
+| BAJO · `hub_themes` distingue 404/403 | ℹ️ | sigue igual; el UUID no se enumera y no filtra metadatos de organización |
+| BAJO · `edge_sync` sin autenticación | ✅ | **APER.2** le puso `Depends(get_current_user)` al router; sigue siendo un stub 501 (ver I4) |
+| BAJO · `hub_llm_configs` global | ✅ | una fila sin organización es de plataforma y la reserva el superadministrador (bloques MT) |
+| BAJO · bcrypt trunca a 72 bytes | ℹ️ | propiedad de bcrypt, no un defecto de este código |
+| B1 · temas en disco local | ✅ | PLAT.7, con `test_plat7_retirada_del_tema_en_json.py` |
+| B2 · la curación no podía rastrear | ✅ | SEC.8.8: el rastreo real; `_NullCrawler` sólo se menciona como lo que sustituyó |
+| B3 · 14 tests rotos en la raíz `tests/` | ✅ | la raíz `tests/` ya no existe |
+| I2 · `hub_ingestion_router` clasificado `cloud` siendo edge | ⏳ | sigue diciendo `Deploy: cloud`. No afecta hoy —el despliegue es `DEPLOY_MODE=all`— y es una decisión de la frontera edge/cloud, no un arreglo |
+| I3 · servicios edge leyendo modelos de config | ✅ | ningún módulo hace ya `session.get(HubChatbot)` ni `session.get(HubOrganizacion)` |
+| I4 · la sync API edge es un stub 501 | ▶ | sigue siendo un stub, **a propósito**: es Fase 3. Lo que cambió es que ya no es superficie anónima (APER.2) |
+| I5 · perfiles con UUID nulos | ✅ | resuelto el 2026-08-11; las dos factorías lanzan `NotImplementedError` |
+| I6 · `modules/automation` es código muerto | ▶ | el consumidor que citaba (`_legacy_nicegui`) **ya no existe**, retirado en NIC. Hoy son cinco ficheros y la automatización con superficie aterrizó en `modules/redaccion/` |
+| I7 · el widget esquiva el contrato | ✅ | no queda ningún `fetch(` a mano en `frontend/src/widget/` |
+| I8 · capa API paralela de anonimización | ✅ | `useAnonymizationApi.ts` ya no existe |
+| M1 · stubs post-MVP sin llamantes | ⏳ | no re-verificado en APER.7 |
+| M2 · `ThemeEditor.tsx` muerto | ⏳ | el fichero sigue en `frontend/src/components/ThemeEditor/` |
+| M3 · guardarraíl i18n sólo caza `hub.*` | ⏳ | no re-verificado en APER.7 |
+| M4 · DSN con reserva a credenciales de desarrollo | ✅ | AIS.8: en producción **falla** en vez de conectar con la credencial publicada (`database/db.py:46`) |
+| M5 · acciones decididas por estado en el frontend | ⏳ | no re-verificado en APER.7 |
+| M6 · residuos versionados | ✅ | `server/my_errores.txt` ya no existe |
+| M7 · tres servicios sin llamantes de producción | ⏳ | siguen sin llamante fuera de su propia definición |
+| M8 · `create_all` en cada arranque | ✅ | **BD.2**: el esquema lo define Alembic y sólo Alembic (invariante I14) |
+
+**Lo que queda abierto no es de seguridad**, con una excepción menor: el límite de peticiones en
+feedback y temas. El resto son clasificación (I2), alcance pendiente (I4, I6) y limpieza (M1, M2,
+M3, M5, M7). Tres de ellos no se re-verificaron en APER.7 y lo dicen.
 
 ---
 
@@ -43,7 +111,7 @@ local encaja en la redacción de informes, no en los chatbots.
 
 ### CRÍTICO
 
-**CR-1 · SuperAdmin con credencial pública sembrada en producción — ✅ ARREGLADO**
+✅ **CR-1 · SuperAdmin con credencial pública sembrada en producción — ✅ ARREGLADO**
 `server/app/database/seeds.py` + `server/app/main.py:161`.
 `seed_all()` corría en el `lifespan` en cualquier `ENVIRONMENT` y `seed_multitenancy_defaults()`
 sembraba `fabra@uji.es` / `admin1234` (hash bcrypt válido; credencial en el repo). En el primer
@@ -55,7 +123,7 @@ credencial conocida.
 `SUPERADMIN_EMAIL`/`SUPERADMIN_PASSWORD` y no hardcodea ninguna. Tests:
 `server/tests/unit/test_seed_environment_gate.py`.
 
-**CR-2 · IDOR horizontal sistémico en los routers "edge" (sin capa de tenancy) — ⏳**
+✅ **CR-2 · IDOR horizontal sistémico en los routers "edge" (sin capa de tenancy) — cerrado por SEC.8.1, y lo mantiene cerrado el inventario de SEC.9.5**
 Solo 6 ficheros importan `assert_org_access`/`scope_query_to_orgs`. Los routers añadidos tras
 SEC.2 se conformaron con `_require_admin`/`get_current_user` y **nunca resuelven
 `chatbot_id`/`site_id`/`organizacion_id` a su organización dueña**. Verificado por lectura:
@@ -80,47 +148,55 @@ que ya prohíbe `session.get(HubChatbot,...)` directo en `hub_chatbots_router` a
 
 ### ALTO
 
-- **AL-1 · `api/v1/hub_tasks.py:49-63` `export_task`** — barrera "dueño **o** admin" sin resolver
+- ✅ **AL-1 · `api/v1/hub_tasks.py:49-63` `export_task`** — barrera "dueño **o** admin" sin resolver
   `chatbot_id→org`: cualquier admin descarga en Markdown/PDF la conversación (dato personal) de
   otra organización con solo el `run_id`.
-- **AL-2 · `api/v1/hub_feedback.py:53-65` `submit_feedback` (POST)** — sin comprobación de org; el
+- ✅ **AL-2 · `api/v1/hub_feedback.py:53-65` `submit_feedback` (POST)** — sin comprobación de org; el
   servicio hace `UPDATE HubInteraction WHERE id == interaction_id` a ciegas. Cualquier usuario
   autenticado sobrescribe el feedback de cualquier interacción. Sin rate limit.
-- **AL-3 · `routers/redaccion/`** — `manifests_router.py:31-64` devuelve el `payload_json` de
+- ✅ **AL-3 · `routers/redaccion/`** — `manifests_router.py:31-64` devuelve el `payload_json` de
   cualquier UUID sin comprobar owner; `hub_redaccion_router.py:276-344` tiene el parámetro
   `_user` **sin usar** (lee/muta bloques de cualquier workspace); `get_template_version:472-486`
   devuelve la `spec` de plantillas privadas ajenas.
-- **AL-4 · `core/sandbox_client.py:488` `SANDBOX_MODE=local`** — sin gate de producción: ejecuta
+- ✅ **AL-4 · `core/sandbox_client.py:488` `SANDBOX_MODE=local`** — sin gate de producción: ejecuta
   scripts de usuario en el host heredando `os.environ` (JWT, DATABASE_URL, GOOGLE_API_KEY).
   Recomendación: que `get_settings()` rechace `local` en producción.
-- **AL-5 · `script_auditor.py`** — la auditoría AST es evadible (`__builtins__['eval'](...)`,
+  **Cerrado.** `get_settings()` lo rechaza desde SEC.8.3, y desde SEC.9.6 rechaza también
+  `TESTING=1`, que llegaba al mismo ejecutor local por otra puerta. APER.1 añadió un cuarto gate
+  con la misma forma. Lo fija `tests/core/test_sandbox_prod_gate.py`.
+- ✅ **AL-5 · `script_auditor.py`** — la auditoría AST es evadible (`__builtins__['eval'](...)`,
   traversal de dunders, `getattr`). Contenida por Docker en prod; encadenada con AL-4 es RCE.
-- **AL-6 · El widget embebe un Bearer privilegiado real** — `frontend/src/widget/main.tsx:22` +
+  **Cerrado por SEC.8.3**, con las evasiones de manual escritas en rojo primero. Y el eslabón del
+  encadenamiento —AL-4— también está cerrado, así que la cadena ya no existe.
+- ✅ **AL-6 · El widget embebe un Bearer privilegiado real** — `frontend/src/widget/main.tsx:22` +
   `hooks/useChat.ts:50` envían un JWT/PAT completo visible en el HTML embebido, con rol/orgs del
   dueño. El mecanismo `widget_api_key` (`chatbot_access.py:34,68-72`) está diseñado pero **no
   cableado**. (Coincide con el hallazgo funcional I7.)
-- **AL-7 · Path traversal en subida de inputs de workspace** —
+- ✅ **AL-7 · Path traversal en subida de inputs de workspace** —
   `workspaces_router.py:336-339` interpola `file.filename` del cliente sin sanitizar y **sin
   `validate_upload`** (ni límite de tamaño ni tipo). Usar `basename`/clave `uuid4`.
 
 ### MEDIO
 
-- **ME-1 · `core/rate_limit.py:89-92`** — `X-Forwarded-For` se toma por la izquierda (valor
+- ✅ **ME-1 · `core/rate_limit.py:89-92`** — `X-Forwarded-For` se toma por la izquierda (valor
   controlable por el cliente), lo que **anula el límite de fuerza bruta de login** falsificando
   la cabecera. ✅ **Arreglado**: se cuenta desde la derecha, tantos saltos como declare
   `TRUSTED_PROXY_HOPS`, y con 0 —expuesto directamente— la cabecera se ignora entera. En la VM
   el salto de confianza es el proxy inverso que termina TLS, así que ese número es
   **configuración del despliegue** (D.4-VM) y no algo que ponga la plataforma por ti.
-- **ME-2 · SAML** (`core/auth/saml/settings.py:85,51-57`) — `validate_cert=False` en el fetch de
+- ✅ **ME-2 · SAML** (`core/auth/saml/settings.py:85,51-57`) — `validate_cert=False` en el fetch de
   metadata (MITM) y `wantAssertionsSigned: False`. La firma sí se valida vía `OneLogin_Saml2_Auth`.
-- **ME-3 · `api/v1/ingestion.py` `user_upload`** — sin `assert_chatbot_access`: inyecta documentos
+- ✅ **ME-3 · `api/v1/ingestion.py` `user_upload`** — sin `assert_chatbot_access`: inyecta documentos
   y consume embeddings contra el chatbot de cualquier org.
-- **ME-4 · `routers/redaccion/anonymization_router.py:73-86`** — el bypass admin cruza tenants.
-- **ME-5 · Subidas de test-data sin `validate_upload`** (`scripts_router.py:267-305`) — DoS por
+- ✅ **ME-4 · `routers/redaccion/anonymization_router.py:73-86`** — el bypass admin cruza tenants.
+- ✅ **ME-5 · Subidas de test-data sin `validate_upload`** (`scripts_router.py:267-305`) — DoS por
   memoria en `file.read()` sin límite.
-- **ME-6 · `JWT_SECRET_KEY`** — exige que exista (bien) pero no rechaza el placeholder
+- ✅ **ME-6 · `JWT_SECRET_KEY`** — exige que exista (bien) pero no rechaza el placeholder
   `change-me-in-production` ni una longitud mínima en producción.
-- **ME-7 · Contenedor sandbox sin `pids_limit`** (`docker-compose.prod.yml:112-117`).
+  **Cerrado por SEC.8.4**: en producción se rechazan los secretos de ejemplo y los de menos de 32
+  caracteres. El valor del `.env.example` está en esa lista negra, precisamente porque está
+  publicado en el repositorio.
+- ✅ **ME-7 · Contenedor sandbox sin `pids_limit`** (`docker-compose.prod.yml:112-117`).
 
 ### BAJO / INFO
 
@@ -153,7 +229,7 @@ conocidos (pyjwt 2.10.1, python-multipart 0.0.21, cryptography 46.0.3; no se usa
 
 ### BLOQUEANTE PARA DEPLOY
 
-- **B1 · Temas en disco local relativo** — `hub_themes_router.py:127` (`THEMES_DIR =
+- ✅ **B1 · Temas en disco local relativo** — `hub_themes_router.py:127` (`THEMES_DIR =
   Path("data/themes")`, con `# en producción usar BD` escrito por el propio código). Los temas
   vivían en el sistema de ficheros del contenedor: se perdían al recrearlo —o sea en cada
   redespliegue— y no se compartían. **Tumbaba el arreglo del hallazgo #3 de MAN.2** (el widget
@@ -161,12 +237,12 @@ conocidos (pyjwt 2.10.1, python-multipart 0.0.21, cryptography 46.0.3; no se usa
   leyendo el JSON local. ✅ **Arreglado por PLAT.7**: el tema en JSON se retiró y `THEMES_DIR`
   ya no existe en `server/app`; lo vigila
   `server/tests/infra/test_plat7_retirada_del_tema_en_json.py`.
-- **B2 · La curación no puede rastrear en el despliegue estándar** — `main.py:94-99` construye el
+- ✅ **B2 · La curación no puede rastrear en el despliegue estándar** — `main.py:94-99` construye el
   job con `_NullCrawler()` y `detectors=[]`, y no existe mecanismo real de inyección
   (`SpiderFactory`/`SiteCrawler` sin ningún llamante de producción). `POST /hub/sites/{id}/crawl`
   siempre acaba en `"no spider configured"`. O se cablea, o se asume que la curación web queda
   fuera del v1 (decisión de alcance).
-- **B3 · 14 tests rotos/sin colectar en la raíz `tests/`** — 12 fallan porque importan rutas que
+- ✅ **B3 · 14 tests rotos/sin colectar en la raíz `tests/`** — 12 fallan porque importan rutas que
   CUR.1 movió a `modules/curation` sin actualizar los tests (**los spiders quedaron sin ningún
   test en la suite canónica**), y 2 errores de colección importan
   `partner_billing_service`/`partner_scripts_service` ya inexistentes. CI no lo ve (corre solo
@@ -175,17 +251,17 @@ conocidos (pyjwt 2.10.1, python-multipart 0.0.21, cryptography 46.0.3; no se usa
 
 ### IMPORTANTE
 
-- **I2 · `hub_ingestion_router` clasificado `cloud` siendo edge** (`:3`, `main.py:234`): importa
+- ⏳ **I2 · `hub_ingestion_router` clasificado `cloud` siendo edge** (`:3`, `main.py:234`): importa
   modelos operacionales solo-edge y el `IngestionWatcher`. En `DEPLOY_MODE=cloud` se serviría
   contra tablas inexistentes.
-- **I3 · Servicios/grafos edge leen modelos de config directamente** — `config_resolver.py:110-118`
+- ✅ **I3 · Servicios/grafos edge leen modelos de config directamente** — `config_resolver.py:110-118`
   (`session.get(HubChatbot)`/`HubOrganizacion`), `long_context_strategy.py:13`, `reranker.py:33`,
   `embedding_resolver.py:28`, `corpus/load.py:57`, `corpus/sync.py:70`. La regla es leer config vía
   `ConfigProvider`.
-- **I4 · La sync API edge es un stub 501** (`api/v1/edge_sync.py:60-69`); solo hay
+- ▶ **I4 · La sync API edge es un stub 501** (`api/v1/edge_sync.py:60-69`); solo hay
   `LocalConfigProvider`. `edge` y `cloud` separados hoy no son desplegables (el primer deploy será
   `DEPLOY_MODE=all`). Los DTOs conservan nombres pre-ROL (`partner_id`, `client_id`).
-- ~~**I5 · `PUBLIC_PORTAL_AGGREGATOR` con UUIDs nulos** (`graph_factory.py:156-171,204`): si un
+- ✅ ~~**I5 · `PUBLIC_PORTAL_AGGREGATOR` con UUIDs nulos** (`graph_factory.py:156-171,204`): si un
   chatbot selecciona este perfil, la recuperación consulta un `chatbot_id` nulo y devuelve vacío
   en silencio.~~ **Resuelto el 2026-08-11.** El alcance real era mayor: `PUBLIC_PORTAL_ROUTER`
   tenía el mismo defecto con `child_chatbot_ids=[]`, y el test de contrato de perfiles
@@ -193,33 +269,33 @@ conocidos (pyjwt 2.10.1, python-multipart 0.0.21, cryptography 46.0.3; no se usa
   diciendo qué falta y qué usar en su lugar, ninguno de los dos se ofrece ya en los selectores
   del panel, y el contrato se aplica solo a los perfiles de `PERFILES_SIN_CONFIGURAR` hacia
   fuera. Implementarlos sigue siendo una funcionalidad pendiente con su propio alcance.
-- **I6 · `modules/automation` es código muerto sin superficie** — sin router ni
+- ▶ **I6 · `modules/automation` es código muerto sin superficie** — sin router ni
   `frontend/src/automation/`; único consumidor `_legacy_nicegui`. Arrastra `token_service`/
   `api_key_service`. La "Fase 1 con automation" no tiene hoy ni API ni UI.
-- **I7 · El widget esquiva el contrato** (`widget/main.tsx:31`, `useChat.ts:51`, `ChatWidget.tsx:57`
+- ✅ **I7 · El widget esquiva el contrato** (`widget/main.tsx:31`, `useChat.ts:51`, `ChatWidget.tsx:57`
   usan `fetch` a mano). `GET /hub/themes/for-chatbot/{chatbot_id}` no está en los `openapi.json`
   presentes; **nada en CI verifica los endpoints que el widget consume por fetch**. (Los
   `openapi.json`/`generated/` están en `.gitignore` a propósito; CI regenera + valida con tsc.)
-- **I8 · `useAnonymizationApi.ts:7-28`** — capa API paralela a mano (fetch + interfaces propias)
+- ✅ **I8 · `useAnonymizationApi.ts:7-28`** — capa API paralela a mano (fetch + interfaces propias)
   que esquiva Orval y pierde el interceptor de auth de CAL.2.
 
 ### MENOR
 
-- **M1** · stubs post-MVP documentados sin llamantes (`anonymization/service.py:231-237`
+- ⏳ **M1** · stubs post-MVP documentados sin llamantes (`anonymization/service.py:231-237`
   `save_state`/`load_state`; `library_router.py:201` `key_id: "default"`).
-- **M2** · `ThemeEditor.tsx` es componente muerto (0 consumidores) y sus 16 claves `themeEditor.*`
+- ⏳ **M2** · `ThemeEditor.tsx` es componente muerto (0 consumidores) y sus 16 claves `themeEditor.*`
   no existen en ningún locale (default inline en castellano). Es el "editor aparcado".
-- **M3** · el guardarraíl anti-"clave solo como default" del namespace admin solo caza `hub.*`
+- ⏳ **M3** · el guardarraíl anti-"clave solo como default" del namespace admin solo caza `hub.*`
   (`adminI18nCoverage.test.ts:148`); `curation` sí tiene el guardarraíl completo. Paridad es/ca/en
   medida completa en los 7 namespaces.
-- **M4** · DSN con fallback hardcodeado a credenciales dev (`database/db.py:15`,
+- ✅ **M4** · DSN con fallback hardcodeado a credenciales dev (`database/db.py:15`,
   `agents_hub/database/connection.py:19`). En prod es mejor fallar que conectar en silencio.
-- **M5** · acciones decididas por estado en el frontend de curación (`FindingsPage.tsx:142-148`);
+- ⏳ **M5** · acciones decididas por estado en el frontend de curación (`FindingsPage.tsx:142-148`);
   presentacional (el backend valida), pero es el patrón que la regla HATEOAS proscribe.
-- **M6** · residuos versionados (`server/my_errores.txt`, scripts sueltos en `tests/`).
-- **M7** · `agent_service.py`, `knowledge_orchestrator_service.py`, `scheduler_service.py` sin
+- ✅ **M6** · residuos versionados (`server/my_errores.txt`, scripts sueltos en `tests/`).
+- ⏳ **M7** · `agent_service.py`, `knowledge_orchestrator_service.py`, `scheduler_service.py` sin
   llamantes de producción (solo `test_imports.py`).
-- **M8** · `create_all` en cada arranque (`main.py:50-61`) conviviendo con Alembic → puede
+- ✅ **M8** · `create_all` en cada arranque (`main.py:50-61`) conviviendo con Alembic → puede
   enmascarar drift modelos↔migraciones.
 
 ### Verificado correcto
