@@ -2,12 +2,15 @@
 Server core configuration.
 """
 
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parents[2] / ".env")
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -92,6 +95,20 @@ def get_settings() -> Settings:
         raise RuntimeError("JWT_SECRET_KEY environment variable is required")
     # sandbox_mode defaults to "local" when TESTING=1 to avoid Docker dependency in CI.
     default_sandbox_mode = "local" if os.getenv("TESTING") == "1" else "http"
+    # APER.3 — el valor por omisión de `ENVIRONMENT` es el **permisivo**: sin él no corre
+    # ninguno de los cuatro gates de producción y las semillas crean `admin@example.local` con
+    # una contraseña que está escrita en el repositorio. La imagen lo ancla a `production`
+    # (`Dockerfile`), así que aquí sólo queda el caso del host — y ahí `development` es lo
+    # correcto, pero **no puede ser silencioso**: un despliegue accidentalmente permisivo
+    # funciona perfectamente hasta que alguien lo aprovecha.
+    if os.getenv("ENVIRONMENT") is None:
+        logger.warning(
+            "ENVIRONMENT no está declarado: se asume 'development', que NO aplica los gates de "
+            "producción (secreto de ejemplo, sandbox local, TESTING, rastreo a la red privada) "
+            "y siembra la cuenta de administración de desarrollo. Si esto es un despliegue, "
+            "declara ENVIRONMENT=production."
+        )
+
     ajustes = Settings(
         jwt_secret_key=secret,
         jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
