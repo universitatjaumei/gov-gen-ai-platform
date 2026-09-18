@@ -13,9 +13,14 @@
 #    que es la regla del proyecto desde el 2026-09-02.
 #
 #    Ojo con la consecuencia: `target-branch` gobierna las actualizaciones **de versión**, que
-#    son las que configura este fichero. Las de **seguridad** las abre GitHub contra la rama por
-#    omisión del repositorio, que es `main`. Si aparece una, se revisa como lo que es —un
-#    despliegue— y no como un bump rutinario.
+#    son las que configura este fichero. Las de **seguridad** —activadas el 2026-09-18— las abre
+#    GitHub contra la rama por omisión del repositorio, que es `main`. Eso **no contradice** la
+#    regla: abrir la PR no hace nada, y mezclarla a `main` *es* la decisión de despliegue que la
+#    regla reserva a una persona. CI corre también en esas PR, así que tampoco entran sin
+#    comprobar. Lo que sí hay que hacer, y es mantenimiento y no riesgo: una PR así mezclada
+#    aterriza en `main` **sin haber pasado por `desarrollo`**, y las dos ramas divergen hasta que
+#    ese commit vuelve a `desarrollo`. Devuélvelo el mismo día, o el siguiente bloque arrancará
+#    sobre una base distinta de la que está desplegada.
 #
 # 2. **Un bump de `pyproject.toml` sin `uv lock` deja CI rojo.** Los dos pasos de instalación
 #    usan `uv sync --locked`, que falla si el lock no corresponde a su manifiesto. Dependabot

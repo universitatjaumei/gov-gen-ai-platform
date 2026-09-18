@@ -111,6 +111,11 @@ responsabilidad que una licencia no puede saltarse. Si tu organización necesita
 contractuales, la vía es un contrato de soporte con un proveedor —cosa que la licencia permite
 expresamente—, no una lectura optimista del §15.
 
+Y una cosa que la licencia no dice porque no le toca: **la Universitat Jaume I publica este código
+pero no presta servicio sobre él** —ni soporte, ni mantenimiento comprometido, ni despliegue para
+terceros—. Es el régimen con el que publica su software libre. Está en el README, en «Qué no
+acompaña a la publicación», y conviene tenerlo presente antes de construir un calendario encima.
+
 ## Qué significa para una compra pública
 
 - **Adquirir el programa no requiere licitación**: no hay precio ni contrato de licencia. Lo que se

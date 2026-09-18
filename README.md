@@ -32,11 +32,23 @@ Tres módulos sobre una misma base:
 | **Informes** | Redacción asistida de informes: extracción determinista de PDF y hojas de cálculo, transformación declarativa de los datos, gráficos, y valoración escrita por el modelo y **aprobada o editada por una persona** antes de exportar. Cuando un documento es tan irregular que hay que programar su lectura, el código se audita y se ejecuta en un sandbox sin red. |
 | **Curación** | Rastreo del portal institucional, detección de contenido caducado o contradictorio, y selección de lo que entra al corpus. |
 
-Hay otros dos módulos previstos que **todavía no existen**: **Automatización de procesos** —flujos
-y RPA, que depende del cliente de ejecución local— y **Gestor de expedientes** —tramitación con
-fases y acciones calculadas en el servidor—. Lo que hoy vive en `server/app/modules/automation/` es
-infraestructura que consume Informes, no un módulo de usuario: no tiene routers registrados ni
-interfaz. Alcance y plazos de los dos, en `docs/PRESENTACION_PROYECTO.md`.
+**Los tres módulos de la tabla son funcionales**, y el de Informes cubre más de lo que su nombre
+sugiere: sirve a las fases de cualquier expediente, no sólo a un documento suelto.
+
+Hay otros dos módulos previstos y ninguno de los dos está esperando a que alguien escriba su
+código. **Los dos empiezan en un despliegue real**, y por eso no están aquí:
+
+- **Automatización de procesos** —flujos y RPA— necesita un **cliente de ejecución local**, porque
+  la plataforma no ejecuta nada en la máquina de quien la usa. Y antes que eso necesita lo que
+  ningún código resuelve: **identificar qué merece automatizarse**. Automatizar un proceso que nadie
+  ha examinado antes fija en código lo que había que simplificar.
+- **Gestor de expedientes** —tramitación con fases y acciones calculadas en el servidor— depende de
+  la **plataforma de gestión** de la institución que lo despliegue. Sin esa integración, un gestor de
+  expedientes es un archivador paralelo al que ya existe.
+
+Lo que hoy vive en `server/app/modules/automation/` es infraestructura que consume Informes, no un
+módulo de usuario: no tiene routers registrados ni interfaz. Alcance y plazos de los dos, en
+`docs/PRESENTACION_PROYECTO.md`.
 
 La regla que ordena el diseño técnico: **el servidor decide, el cliente pinta**. El frontend no
 calcula qué acciones están permitidas, ni conoce a priori los campos de un formulario; los recibe.
@@ -154,7 +166,8 @@ es código vivo.
 
 La contrapartida honesta es que **la plataforma no ejecuta nada en la máquina de quien la usa**: no
 hay agente RPA, ni vigilancia de carpetas, correo o web, ni programador de flujos locales. Es
-trabajo pendiente sin código aquí; el mapa de lo que hubo, fichero a fichero, está en
+la frontera que describe «Tres módulos»: trabajo que arranca con un despliegue real,
+y hoy sin código aquí. El mapa de lo que hubo, fichero a fichero, está en
 [`docs/INVENTARIO_RETIRADA_LEGACY.md`](docs/INVENTARIO_RETIRADA_LEGACY.md).
 
 ## Gobernanza: un principal y tantos forks como organizaciones
@@ -231,6 +244,24 @@ aprueba traducciones y dos textos que dicen cosas parecidas acaban diciendo cosa
 >
 > You should have received a copy of the GNU Affero General Public License along with this program.
 > If not, see <https://www.gnu.org/licenses/>.
+
+### Qué no acompaña a la publicación
+
+La Universitat Jaume I **publica este código; no presta servicio sobre él**. Conviene decirlo aquí
+y no dejarlo a la lectura de los §15 y §16 de la licencia, porque son cosas distintas: aquéllos
+excluyen la garantía, y esto describe lo que la institución hace y lo que no. No hay soporte, ni
+mantenimiento comprometido, ni despliegue para terceros, ni atención de incidencias de instalaciones
+ajenas, ni plazo de respuesta para lo que llegue. **Es el régimen con el que la Universitat publica
+su software libre**, y no una reserva de este proyecto en particular.
+
+**Quien despliega es responsable de su instancia** (`SECURITY.md`). Si una organización necesita
+garantías, plazos o acompañamiento, la vía es contratar **servicios** —despliegue, adaptación,
+soporte, formación, corpus— con un proveedor: la licencia lo permite expresamente, y
+`docs/LICENCIA_ES.md` explica cómo encaja eso en una compra pública.
+
+Lo que sí hay: el repositorio acepta *issues* y *pull requests*, y `CONTRIBUTING.md` dice qué se
+acepta y cómo se prepara. Que se lean y se atiendan es la voluntad del proyecto, no un compromiso
+de servicio —y la diferencia importa el día que alguien planifique contando con ello—.
 
 ### Por qué AGPL y no GPL
 
