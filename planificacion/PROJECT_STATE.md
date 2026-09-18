@@ -128,7 +128,19 @@ sustituir al primero. Y **ninguno estaba al día**: DEP.4 se cerró en el commit
 2026-09-10 y no constaba ni aquí ni en `HISTORIAL.md`. Si vuelve a hacer falta anotar un cursor
 nuevo, **se reescribe este párrafo**; lo viejo baja a «Lo anterior».
 
-**Cursor: Bloque IMG ✅ COMPLETO el 2026-09-17**, su único prompt, con ejecución real en CI
+**Cursor: Bloque APER — apertura del repositorio, 7 prompts. En curso: APER.1 ✅.**
+
+El bloque **no sale de `planificacion/fase1/`**: sale de la auditoría de seguridad y calidad
+previa a hacer público el repositorio (2026-09-18), cuyo informe vive en `_local/` porque
+describe dónde es débil el sistema. De sus hallazgos, el usuario eligió ejecutar el tramo
+«antes de abrir»: **M1** (SSRF del rastreador, APER.1 ✅), **M2** (los dos stubs 501 de
+`edge_sync` como superficie sin guardia), **M4** (`ENVIRONMENT` seguro por omisión), el
+`npm audit fix`, el bump de `setuptools` en el lock, un `dependabot.yml` y corregir
+`docs/AUDITORIA_PRE_DEPLOY.md`, que sigue dando por abiertos hallazgos que los bloques SEC
+cerraron. **Ningún hallazgo era ALTO** y no hay nada que impida abrir; esto es el tramo que
+conviene cerrar antes de que el código sea público.
+
+**Lo anterior: Bloque IMG ✅ COMPLETO el 2026-09-17**, su único prompt, con ejecución real en CI
 **y el caso del incidente reproducido en rojo** (sin `uvicorn` en el manifiesto: la imagen
 construye, `docker run -d` da rc=127 y `executable file not found in $PATH`). El job `imagen` construye las cuatro imágenes con los `Dockerfile` del despliegue,
 migra con la recién construida y la arranca hasta `/health` 200; su guardarraíl

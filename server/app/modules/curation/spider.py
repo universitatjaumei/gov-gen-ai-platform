@@ -49,6 +49,32 @@ def _parece_descarga(url: str) -> bool:
     return ruta.endswith(_EXTENSIONES_NO_LEGIBLES)
 
 
+def cliente_de_rastreo(user_agent: str, *, transport: Any = None):
+    """El cliente con el que se pide cualquier página, y el único sitio donde se construye.
+
+    **Es el punto donde se cierra el SSRF de APER.1.** `hook_de_destino_publico` se dispara en
+    cada petición y `httpx` los dispara también en **cada salto de redirección**, así que un
+    portal público que redirige a `169.254.169.254` o a un contenedor vecino no lo alcanza.
+    Comprobar sólo la URL de entrada no habría servido: la redirección era la mitad del defecto.
+
+    Que haya **una** función que construye el cliente es lo que hace la protección auditable —un
+    `httpx.AsyncClient` suelto en este módulo la esquivaría sin que nada avisara—, y lo comprueba
+    un guardarraíl. El `transport` es el asiento de los tests: con `MockTransport` se prueba la
+    redirección sin red y con el hook de verdad puesto.
+    """
+    import httpx
+
+    from server.app.core.red_publica import hook_de_destino_publico
+
+    return httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=10.0,
+        headers={"User-Agent": user_agent},
+        transport=transport,
+        event_hooks={"request": [hook_de_destino_publico()]},
+    )
+
+
 #: Ninguna página de contenido necesita una URL así de larga. Es la red de seguridad contra las
 #: trampas de rastreador que no se dejen ver por sus parámetros.
 _LARGO_MAXIMO_DE_URL = 400
@@ -227,12 +253,7 @@ class GenericSpider:
         """La descarga a secas, sin cortesía: la usan `_fetch` y la lectura del `robots.txt`."""
         if self._fetch_fn is not None:
             return await self._fetch_fn(url)
-        import httpx
-        async with httpx.AsyncClient(
-            follow_redirects=True,
-            timeout=10.0,
-            headers={"User-Agent": self._cortesia.user_agent},
-        ) as client:
+        async with cliente_de_rastreo(self._cortesia.user_agent) as client:
             resp = await client.get(url)
             resp.raise_for_status()
             cabeceras = dict(resp.headers)

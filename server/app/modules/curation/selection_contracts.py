@@ -8,9 +8,31 @@ import re
 import uuid
 from datetime import datetime
 from typing import Any, Literal
-from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from server.app.core.red_publica import DestinoNoPublico, assert_forma_publica
+
+
+def _url_que_el_servidor_va_a_pedir(valor: str | None) -> str | None:
+    """APER.1 — la forma de una URL que el rastreador acabará pidiendo.
+
+    Se comprueba **aquí** y no sólo al descargar para que quien se equivoca al dar de alta un
+    sitio reciba un 422 con el motivo, en vez de un rastreo que devuelve cero páginas sin decir
+    por qué. La comprobación del destino resuelto va en cada petición —incluida cada
+    redirección—, porque la redirección la decide el servidor remoto y un contrato no la ve.
+
+    No resuelve el DNS a propósito: dar de alta un sitio no puede depender de que su servidor
+    esté respondiendo en ese instante, y un nombre que resuelve a una dirección privada lo para
+    el guardia de la descarga.
+    """
+    if valor is None:
+        return None
+    try:
+        assert_forma_publica(valor)
+    except DestinoNoPublico as exc:
+        raise ValueError(str(exc)) from exc
+    return valor
 
 
 class CrawlConfig(BaseModel):
@@ -144,6 +166,11 @@ class SiteCreate(BaseModel):
     crawl_interval_hours: int = 24
     crawl_config: CrawlConfig | None = None
 
+    #: El sitemap se pide igual que la raíz, así que se valida igual: era la puerta de al lado.
+    _valida_destinos = field_validator("root_url", "sitemap_url")(
+        classmethod(lambda cls, v: _url_que_el_servidor_va_a_pedir(v))
+    )
+
 
 class SitePatch(BaseModel):
     name: str | None = None
@@ -152,6 +179,11 @@ class SitePatch(BaseModel):
     audit_semantic_scope: str | None = None
     crawl_interval_hours: int | None = None
     crawl_config: CrawlConfig | None = None
+
+    #: Sin esto el `PATCH` sería el rodeo obvio para meter lo que el `POST` rechaza.
+    _valida_destinos = field_validator("root_url", "sitemap_url")(
+        classmethod(lambda cls, v: _url_que_el_servidor_va_a_pedir(v))
+    )
 
 
 class PageView(BaseModel):
@@ -405,9 +437,10 @@ class ReconnaissanceRequest(BaseModel):
     @field_validator("root_url")
     @classmethod
     def _debe_ser_una_url(cls, valor: str) -> str:
-        partes = urlparse(valor)
-        if partes.scheme not in {"http", "https"} or not partes.netloc:
-            raise ValueError("root_url debe ser una URL http(s) absoluta")
+        # APER.1 — antes esto comprobaba sólo esquema y `netloc`, así que
+        # `http://169.254.169.254/…` pasaba: el reconocimiento es el que **devuelve el texto
+        # leído**, o sea el más rentable de los dos endpoints para quien busca la red interna.
+        _url_que_el_servidor_va_a_pedir(valor)
         return valor
 
     @field_validator("url_regex_filter")
