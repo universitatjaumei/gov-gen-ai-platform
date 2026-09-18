@@ -85,6 +85,32 @@ class DeterministicExtractionNode:
             )
         return await self._resolvedor.resolver(funcion_ref.funcion_id, funcion_ref.version)
 
+    async def _ejecutar_ejecutable(
+        self, ejecutable: Any, *, ficheros: dict[str, str], parametros: dict[str, Any]
+    ) -> Any:
+        """Ejecuta lo que el resolutor resolvió, por el camino que le corresponde a su origen.
+
+        **La bifurcación mira el origen y no si `code` viene nulo.** Mirar el código funcionaría
+        hoy y mentiría el día que un autoservicio guarde su código fuera; el origen es lo que
+        dice de qué clase de función se trata, y es lo que el catálogo declara.
+
+        Sin esta bifurcación, una función de paquete mandaba al sandbox el `code=""` que
+        `como_opciones_del_pipeline()` devuelve cuando no hay código, y el bloque salía **vacío
+        sin error**: el informe se genera y no dice nada. Es el fallo más caro de este bloque
+        justamente porque no se ve.
+        """
+        if getattr(ejecutable, "origen", "autoservicio") == "paquete":
+            from server.app.modules.redaccion.funciones_paquete import ejecutar_empaquetada
+
+            return await ejecutar_empaquetada(
+                ejecutable.entry_point, ficheros=ficheros, parametros=parametros
+            )
+
+        raise NotImplementedError(
+            "una función de autoservicio se ejecuta por el pipeline del sandbox, que es el "
+            "camino de `__call__`; este método sólo enruta lo que no pasa por ahí"
+        )
+
     async def __call__(self, state: WorkspaceState) -> dict:
         if state.spec is None:
             return {}
@@ -142,17 +168,28 @@ class DeterministicExtractionNode:
                     })
                     new_block_outputs[block_id] = {"partial": {}}
                     continue
-                opciones.update(ejecutable.como_opciones_del_pipeline())
+                if ejecutable.origen != "paquete":
+                    opciones.update(ejecutable.como_opciones_del_pipeline())
 
-            inp = ExtractionInput(
-                source_kind=source_kind,
-                file_ref=file_ref,
-                options=opciones,
-            )
+            de_paquete = ejecutable is not None and ejecutable.origen == "paquete"
 
             try:
-                pipeline = self._factory.get(source_kind)
-                result = await _extraer(pipeline, inp)
+                if de_paquete:
+                    # In-process, sin sandbox y con el contrato validado delante. La frontera de
+                    # confianza está en quien instala el paquete, y así lo dice FUN.5.
+                    result = await self._ejecutar_ejecutable(
+                        ejecutable,
+                        ficheros=_ficheros_del_bloque(block_contract, file_ref),
+                        parametros=dict(opciones.get("parametros") or {}),
+                    )
+                else:
+                    inp = ExtractionInput(
+                        source_kind=source_kind,
+                        file_ref=file_ref,
+                        options=opciones,
+                    )
+                    pipeline = self._factory.get(source_kind)
+                    result = await _extraer(pipeline, inp)
             except Exception as exc:
                 new_warnings.append(ExtractionWarning(
                     block_id=block_id, message=str(exc), kind="extraction_error",
@@ -188,3 +225,24 @@ class DeterministicExtractionNode:
             })
 
         return {"blocks": updated_blocks, "warnings": new_warnings, "block_outputs": new_block_outputs}
+
+
+def _ficheros_del_bloque(block_contract: Any, file_ref: Any) -> dict[str, str]:
+    """Los ficheros que recibe una función de paquete, con el nombre de slot que su contrato usa.
+
+    El nodo trabaja con **un** fichero por bloque —así está montado desde 9R— mientras el
+    contrato de una función habla de slots con nombre. El puente es el `slot` que el bloque
+    declara; sin él no se inventa ninguno, y la validación de FUN.2 dirá «falta el slot X», que
+    es un error accionable y no un `KeyError` dentro del código de un tercero.
+    """
+    if file_ref is None:
+        return {}
+    opciones = getattr(block_contract, "options", None) or {}
+    slot = (
+        getattr(block_contract, "slot", None)
+        or opciones.get("slot")
+        or opciones.get("slot_id")
+    )
+    if not isinstance(slot, str) or not slot:
+        return {}
+    return {slot: str(getattr(file_ref, "key", file_ref))}

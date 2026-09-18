@@ -259,7 +259,24 @@ function FichaDeFuncion({ funcion, navegarARevision }: FichaProps) {
           <span data-testid="origen" data-origen={funcion.origen}>
             {t(`funciones.origen_${funcion.origen}`, funcion.origen)}
           </span>
-          {funcion.entry_point && <code className="font-mono">{funcion.entry_point}</code>}
+          {/* FUN.5 — de una función empaquetada lo que hace falta saber no es su ordinal
+              interno: es de qué paquete pip viene y qué versión está instalada. Sin eso, ante un
+              informe raro no hay forma de decidir si mirar el repositorio del equipo que la
+              mantiene o el despliegue que la instaló. */}
+          {funcion.origen === 'paquete' && funcion.distribucion && (
+            <span
+              data-testid="paquete"
+              data-distribucion={funcion.distribucion}
+              data-version-instalada={funcion.version_paquete_instalada ?? ''}
+              className="font-mono"
+            >
+              {funcion.distribucion}
+              {funcion.version_paquete_instalada ? ` ${funcion.version_paquete_instalada}` : ''}
+            </span>
+          )}
+          {funcion.origen !== 'paquete' && funcion.entry_point && (
+            <code className="font-mono">{funcion.entry_point}</code>
+          )}
         </div>
         {funcion.descripcion && <p className="text-sm">{funcion.descripcion}</p>}
       </header>

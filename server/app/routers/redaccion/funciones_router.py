@@ -93,6 +93,13 @@ class FuncionView(BaseModel):
     #: paquete».
     nivel: int
     entry_point: str | None = None
+    #: FUN.5 — de qué paquete pip viene, para las de origen `paquete`. Se deriva del
+    #: `entry_point` («distribución:nombre») y no se guarda aparte: sería el mismo hecho en dos
+    #: sitios, y el segundo se quedaría viejo.
+    distribucion: str | None = None
+    #: La versión semver **instalada** de la que está en servicio, que puede no ser la anclada
+    #: por una plantilla. Quien mira el catálogo necesita ver ésta, no el ordinal interno.
+    version_paquete_instalada: str | None = None
     publicada_en: Any = None
     valoracion_promocion: str | None = None
     #: FUN.4 — **señal**, no decisión: la Instrucció deja la valoración a personas.
@@ -244,6 +251,9 @@ def _vista_de_funcion(
     funcion: HubFuncion, versiones: list[HubFuncionVersion], principal: UserInfo
 ) -> FuncionView:
     candidata, motivos = candidata_a_nivel_3(funcion, versiones)
+    instalada = next(
+        (v for v in versiones if v.estado == "registrada" and v.version_paquete), None
+    )
     return FuncionView(
         id=funcion.id,
         nombre=funcion.nombre,
@@ -252,6 +262,10 @@ def _vista_de_funcion(
         origen=funcion.origen,
         nivel=funcion.nivel,
         entry_point=funcion.entry_point,
+        distribucion=(funcion.entry_point or "").split(":")[0] or None
+        if funcion.origen == "paquete"
+        else None,
+        version_paquete_instalada=instalada.version_paquete if instalada else None,
         publicada_en=funcion.publicada_en,
         valoracion_promocion=funcion.valoracion_promocion,
         candidata_nivel_3=candidata,

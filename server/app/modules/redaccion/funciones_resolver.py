@@ -50,6 +50,9 @@ class FuncionEjecutable:
     #: Sólo en origen `paquete` (FUN.5): la versión semver realmente instalada, que puede no ser
     #: la anclada. En autoservicio es `None` porque el anclaje es exacto.
     version_paquete: str | None = None
+    #: Sólo en origen `paquete`: por dónde llegar al `run` instalado. El callable no cabe en la
+    #: base de datos, así que lo que se guarda es su dirección y el proceso lo resuelve.
+    entry_point: str | None = None
 
     def como_opciones_del_pipeline(self) -> dict[str, Any]:
         """Lo que el pipeline de script espera. **El protocolo no cambia.**
@@ -112,6 +115,14 @@ class ResolvedorDeFuncion:
                 "anclada a una versión que no existe"
             )
 
+        if funcion.origen == "paquete":
+            # FUN.5 — **el anclaje de un paquete es por mayor, no exacto.** Es lo que compra el
+            # semver: instalar 1.3.0 no puede romper las plantillas ancladas a la versión del
+            # catálogo que trajo 1.2.0. Lo que sí rompe un mayor distinto, porque el contrato
+            # puede haber cambiado, y ejecutarlo en silencio cambiaría el significado de un
+            # informe sin decírselo a nadie.
+            return await self._resolver_paquete(funcion, fila)
+
         if fila.estado != "registrada":
             motivo = _POR_QUE_NO.get(fila.estado, f"está en estado «{fila.estado}»")
             detalle = ""
@@ -131,4 +142,73 @@ class ResolvedorDeFuncion:
             code_sha256=fila.code_sha256,
             contrato_entrada=dict(fila.contrato_entrada or {}),
             version_paquete=fila.version_paquete,
+        )
+
+    async def _resolver_paquete(self, funcion: Any, anclada: Any) -> FuncionEjecutable:
+        """La versión instalada **compatible** con la anclada, o un fallo que nombra los dos.
+
+        Se busca por mayor y no por ordinal: el ordinal del catálogo es interno y lo que el
+        paquete promete es su semver. Y el `FuncionEjecutable` que sale lleva la versión
+        **instalada exacta** con su hash, no la anclada: el `RunManifest` no puede decir que
+        corrió algo que no corrió.
+        """
+        from sqlalchemy import select
+
+        from server.app.modules.redaccion.database.models import HubFuncionVersion
+        from server.app.modules.redaccion.funciones_paquete import (
+            PaqueteIncoherente,
+            mayor_de,
+        )
+
+        try:
+            mayor_anclado = mayor_de(anclada.version_paquete or "")
+        except PaqueteIncoherente as exc:
+            raise FuncionNoEjecutable(
+                f"la versión {anclada.version} de «{funcion.nombre}» no dice a qué versión del "
+                f"paquete está anclada: {exc}"
+            ) from exc
+
+        instaladas = [
+            v
+            for v in (
+                await self._session.execute(
+                    select(HubFuncionVersion)
+                    .where(HubFuncionVersion.funcion_id == funcion.id)
+                    .where(HubFuncionVersion.estado == "registrada")
+                    # DET.1: dos versiones pueden compartir instante, así que se desempata.
+                    .order_by(HubFuncionVersion.version.desc(), HubFuncionVersion.id)
+                )
+            ).scalars().all()
+        ]
+
+        if not instaladas:
+            raise FuncionNoEjecutable(
+                f"«{funcion.nombre}» no tiene ninguna versión instalada: su paquete no está "
+                f"presente en este despliegue, así que todas sus versiones están "
+                f"«no_instalada». Instálalo o retira la referencia de la plantilla."
+            )
+
+        compatibles = [
+            v for v in instaladas if mayor_de(v.version_paquete or "0.0.0") == mayor_anclado
+        ]
+        if not compatibles:
+            mayores = sorted({mayor_de(v.version_paquete or "0.0.0") for v in instaladas})
+            raise FuncionNoEjecutable(
+                f"«{funcion.nombre}» está anclada al mayor {mayor_anclado} y lo instalado es "
+                f"el mayor {', '.join(str(m) for m in mayores)}. Un mayor distinto puede haber "
+                f"cambiado el contrato, así que no se ejecuta: o se instala una versión "
+                f"{mayor_anclado}.x, o se reancla la plantilla a la nueva tras revisarla."
+            )
+
+        elegida = compatibles[0]
+        return FuncionEjecutable(
+            funcion_id=funcion.id,
+            nombre=funcion.nombre,
+            version=elegida.version,
+            origen=funcion.origen,
+            code=None,
+            code_sha256=elegida.code_sha256,
+            contrato_entrada=dict(elegida.contrato_entrada or {}),
+            version_paquete=elegida.version_paquete,
+            entry_point=funcion.entry_point,
         )

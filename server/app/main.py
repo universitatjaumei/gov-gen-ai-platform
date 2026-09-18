@@ -326,6 +326,30 @@ async def lifespan(app: FastAPI):
         raise
 
 
+async def _sincronizar_funciones_de_paquete() -> None:
+    """Sincroniza `govgenai.funciones` con el catálogo. Falla en alto si un paquete es incoherente.
+
+    Abre su propia sesión, como el resto de pasos del arranque que escriben, y commitea: sin el
+    `commit` el trabajo se deshace al cerrar el contexto y el arranque diría «sincronizado» sin
+    haber escrito nada — es exactamente el defecto que DIN.7 encontró en el job de calidad.
+    """
+    from server.app.database.db import AsyncSessionLocal
+    from server.app.modules.redaccion.funciones_paquete import sincronizar_paquetes
+
+    async with AsyncSessionLocal() as session:
+        resumen = await sincronizar_paquetes(session)
+        await session.commit()
+
+    logger.info(
+        "Funciones empaquetadas: %s instaladas (%s nuevas, %s versiones nuevas, %s fuera de "
+        "servicio)",
+        len(resumen.entry_points),
+        resumen.funciones_nuevas,
+        resumen.versiones_nuevas,
+        resumen.versiones_desinstaladas,
+    )
+
+
 @asynccontextmanager
 async def _arranque(app: FastAPI):
     # Lo primero, antes de que nada tenga algo que decir: si se configurara después, los
@@ -359,6 +383,16 @@ async def _arranque(app: FastAPI):
     from server.app.modules.agents_hub.database.seeds import seed_hub_defaults
 
     await seed_hub_defaults()
+
+    # FUN.5 — poner el catálogo de funciones al día con los paquetes instalados. Va **después**
+    # de las semillas, porque escribe en la base, y **antes de servir**, porque sus dos fallos
+    # —un contrato incoherente, dos paquetes que declaran lo mismo— son de configuración del
+    # entorno: tienen que romper el arranque y no la primera plantilla que referencie la función.
+    #
+    # Y va cableado aquí y no en un script aparte por la lección de DIN.4: una capacidad que el
+    # arranque no llama no existe, y allí costó descubrir que la auto-ingesta llevaba meses sin
+    # correr en producción.
+    await _sincronizar_funciones_de_paquete()
 
     from server.app.services.model_fetcher import refresh_model_cache
     from server.app.services.pricing_service import update_prices_from_openrouter

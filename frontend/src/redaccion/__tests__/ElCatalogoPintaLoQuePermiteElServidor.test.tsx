@@ -394,3 +394,41 @@ describe('Lo que se acaba de cambiar se ve', () => {
     expect(onSuccess).toBeTypeOf('function')
   })
 })
+
+describe('Una funcion de paquete se distingue de una de autoservicio', () => {
+  /**
+   * FUN.5 — lo que quien mira el catálogo necesita saber de una función empaquetada no es su
+   * ordinal interno: es **de qué paquete pip viene y qué versión está instalada**. Sin eso, ante
+   * un informe que salió raro no hay forma de decidir si hay que mirar el código del equipo que
+   * la mantiene o el despliegue que la instaló.
+   *
+   * Y no ofrece versionar ni promover: se versiona con `pip` y ya es de plataforma. Eso lo
+   * decide el servidor, y aquí sólo se comprueba que la pantalla no se los invente.
+   */
+  it('dice su distribución y la versión instalada', async () => {
+    vi.mocked(useListarFunciones).mockReturnValue({
+      data: [
+        conAcciones(['adoptar_version', 'retirar'], {
+          nombre: 'contar_filas',
+          origen: 'paquete',
+          nivel: 3,
+          organizacion_id: null,
+          entry_point: 'paquete-funcion-demo:contar_filas',
+          distribucion: 'paquete-funcion-demo',
+          version_paquete_instalada: '1.3.0',
+          version: { version_paquete: '1.3.0', autoria: 'persona' },
+        }),
+      ],
+      isLoading: false,
+    } as never)
+
+    pintar(<CatalogoDeFuncionesPage />)
+
+    await waitFor(() => expect(screen.getByTestId('origen')).toHaveAttribute('data-origen', 'paquete'))
+    expect(screen.getByTestId('paquete')).toHaveAttribute('data-distribucion', 'paquete-funcion-demo')
+    expect(screen.getByTestId('paquete')).toHaveAttribute('data-version-instalada', '1.3.0')
+    expect(screen.queryByTestId('accion-versionar')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('accion-promover')).not.toBeInTheDocument()
+    expect(screen.getByTestId('accion-retirar')).toBeInTheDocument()
+  })
+})
