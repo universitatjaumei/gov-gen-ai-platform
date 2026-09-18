@@ -134,6 +134,10 @@ export function RevisionInteraccionesPage() {
     const note = (notes[interaction.id] ?? '').trim()
     // Un «mal» sin motivo no reformula nada: el backend lo rechaza con 422 y no tiene
     // sentido pedírselo. La nota es obligatoria justo donde sirve.
+    //
+    // La guarda se queda **además** del botón deshabilitado, y no en su lugar: el botón es lo
+    // que la persona ve y esto es lo que aguanta si alguien llama a `revisar` desde otro sitio.
+    // Lo que faltaba no era la guarda, era decirlo.
     if (verdict === 'bad' && !note) return
 
     enviarVeredicto(
@@ -396,16 +400,45 @@ export function RevisionInteraccionesPage() {
                           aria-label={t('hub.reports_review_note', 'Nota de revisión')}
                           className="flex-1 min-w-[16rem] rounded-md border bg-background px-2 py-1 text-sm"
                         />
-                        {VEREDICTOS.map((v) => (
-                          <button
-                            key={v.valor}
-                            onClick={() => revisar(interaction, v.valor)}
-                            disabled={enviandoVeredicto}
-                            className={`rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50 ${v.clase}`}
+                        {VEREDICTOS.map((v) => {
+                          // Un «mal» sin motivo no reformula nada, así que el botón no se
+                          // puede pulsar — pero **se dice por qué**. Antes era un `return`
+                          // silencioso en `revisar()`: se pulsaba, la fila no cambiaba y no
+                          // aparecía ningún motivo. Lo destapó la verificación en navegador.
+                          const faltaLaNota =
+                            v.valor === 'bad' && !(notes[interaction.id] ?? '').trim()
+                          return (
+                            <button
+                              key={v.valor}
+                              onClick={() => revisar(interaction, v.valor)}
+                              disabled={enviandoVeredicto || faltaLaNota}
+                              // El `title` no es decoración: es el único sitio donde el motivo
+                              // llega a quien usa un lector de pantalla sobre un botón gris.
+                              title={
+                                faltaLaNota
+                                  ? t(
+                                      'hub.reports_note_required',
+                                      'Escribe qué habría que cambiar: un «inadecuada» sin motivo no permite reformular nada',
+                                    )
+                                  : undefined
+                              }
+                              className={`rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed ${v.clase}`}
+                            >
+                              {t(v.clave, v.defecto)}
+                            </button>
+                          )
+                        })}
+                        {!(notes[interaction.id] ?? '').trim() && (
+                          <span
+                            data-testid="nota-obligatoria"
+                            className="text-xs text-muted-foreground"
                           >
-                            {t(v.clave, v.defecto)}
-                          </button>
-                        ))}
+                            {t(
+                              'hub.reports_note_required',
+                              'Escribe qué habría que cambiar: un «inadecuada» sin motivo no permite reformular nada',
+                            )}
+                          </span>
+                        )}
                       </div>
                     </td>
                   </tr>
