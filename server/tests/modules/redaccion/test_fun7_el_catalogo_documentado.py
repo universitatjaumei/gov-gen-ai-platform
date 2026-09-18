@@ -26,6 +26,21 @@ def documento() -> str:
 
 
 @pytest.fixture(scope="module")
+def prosa(documento: str) -> str:
+    """El documento con los espacios normalizados, para afirmar **frases**.
+
+    Afirmar una frase sobre el texto crudo la hace rehén de dónde parte la línea: al reescribir
+    §4 se rompió «en el nivel 2 no hay nada que aprobar» por un salto, y el guardarraíl dio rojo
+    sin que faltara nada. Colapsar los blancos mantiene la garantía —la frase está— y quita la
+    dependencia del formato. Lo estructural (encabezados, tablas) se sigue afirmando sobre el
+    crudo, donde el formato **sí** importa.
+    """
+    import re
+
+    return re.sub(r"\s+", " ", documento)
+
+
+@pytest.fixture(scope="module")
 def caja():
     from server.app.modules.redaccion.services.script_auditor import caja_de_herramientas
 
@@ -118,16 +133,19 @@ class TestLoQueElDocumentoTieneQueDecir:
     def test_should_have_the_section(self, documento, seccion):
         assert seccion in documento
 
-    def test_should_keep_the_honest_difference_with_the_instruccio(self, documento):
+    def test_should_keep_the_honest_difference_with_the_instruccio(self, prosa):
         """La diferencia con la regla 2 —el código va a los datos y no al equipo de la persona—
         y la petición explícita de un «sí» a UADTI y OIATI. Es la parte que un resumen
         entusiasta borraría primero."""
-        assert "La diferencia honesta con la regla 2" in documento
-        assert "UADTI" in documento and "OIATI" in documento
-        assert "no un silencio" in documento
+        assert "La diferencia honesta con la regla 2" in prosa
+        assert "UADTI" in prosa and "OIATI" in prosa
+        assert "no un silencio" in prosa
 
-    def test_should_ask_the_uadti_to_contrast_the_rules(self, documento):
-        assert "Guías Operativas Técnicas" in documento
+    def test_should_ask_the_uadti_to_contrast_the_rules(self, prosa):
+        assert "Guías Operativas Técnicas" in prosa
+        # Y el Anexo III.3, que es el que §8.4 cita para el análisis estático: citar sólo
+        # las Guías dejaba fuera la referencia concreta de la norma.
+        assert "Anexo III.3" in prosa
 
     def test_should_say_the_trust_boundary_without_softening_it(self, documento):
         """«Corre in-process, sin sandbox, y quien instala responde». Si esta frase se suaviza,
@@ -137,11 +155,54 @@ class TestLoQueElDocumentoTieneQueDecir:
         assert "No hay" in seccion and "aislamiento" in seccion
         assert "pip install" in seccion
 
-    def test_should_state_that_approving_is_not_a_review_outcome(self, documento):
+    def test_should_state_that_approving_is_not_a_review_outcome(self, prosa):
         """El invariante del nivel 2, escrito donde lo va a leer quien revise. Si el documento
         dijera que se «aprueba» una versión, la persona que revisa creería que su firma es lo que
         autoriza el uso."""
-        assert "no hay nada que aprobar" in documento
+        assert "no hay nada que aprobar" in prosa
 
-    def test_should_state_that_the_anchor_survives_publishing(self, documento):
-        assert "no cambia ninguna plantilla" in documento
+    def test_should_state_that_the_anchor_survives_publishing(self, prosa):
+        assert "no cambia ninguna plantilla" in prosa
+
+
+class TestLoQueElDocumentoNoPuedeDejarDePreguntar:
+    """Las tres preguntas que §4 le hace a la institución, y los tres huecos que confiesa.
+
+    Aparecieron al leer la Instrucció de verdad en vez del resumen que yo tenía escrito, y son
+    justo lo que una reescritura «para dejarlo más limpio» borraría primero: son las partes donde
+    el documento admite que la plataforma no puede decidir sola.
+    """
+
+    def test_should_not_equate_promotion_with_the_instruccios_level_three(self, prosa):
+        """El nivel 3 de la Instrucció es **salir** del desarrollo ciudadano, no promover dentro
+        del catálogo. Igualarlos haría creer que promover una función sustituye al circuito que la
+        norma prevé para lo que excede un servicio."""
+        assert "No tiene equivalente directo" in prosa
+
+    def test_should_ask_whether_this_is_citizen_development_at_all(self, prosa):
+        """La matriz de §4 de la Instrucció, que antes no se mencionaba y basta un criterio para
+        derivar el caso. Es la pregunta anterior a la de la regla 2."""
+        assert "¿esto es desarrollo ciudadano?" in prosa
+        assert "indicadores de seguimiento o cuadros de mando" in prosa
+
+    def test_should_frame_rule_two_as_end_or_means(self, prosa):
+        """La pregunta acotada. Sin acotarla, la conversación se queda en «es distinto» y no se
+        puede contestar."""
+        assert "como fin" in prosa and "como medio" in prosa
+        # Y el argumento que la hace contestable: la función no puede hablar con nada.
+        assert "no puede hablar con nada" in prosa
+
+    def test_should_confess_the_three_gaps_against_the_norm(self, prosa):
+        """Los huecos frente a la norma van en el documento y no en un cajón de mejoras: sin
+        plazo de revisión (§10), sin ruta a la OIATI (§9 y §8.4) y sin decidir quién suspende
+        (§9)."""
+        assert "Lo que la Instrucció exige y la plataforma todavía no hace" in prosa
+        assert "No hay plazo de revisión" in prosa
+        assert "No hay ruta automática a la OIATI" in prosa
+        assert "Responsable institucional de IA" in prosa
+
+    def test_should_name_the_simplified_integration_study(self, prosa):
+        """§8.2 pide la declaración **acompañada** de un estudio de integración simplificado
+        (Anexo I). La declaración del catálogo son dos campos, y eso se dice."""
+        assert "estudio de integración simplificado" in prosa
+        assert "Anexo I" in prosa

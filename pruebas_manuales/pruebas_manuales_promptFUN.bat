@@ -82,9 +82,10 @@ echo.
 echo  Y de paso, en la misma conversacion: las reglas del auditor AST (los 16
 echo  modulos permitidos, las 63 capacidades denegadas y las 6 reglas de
 echo  docs\CATALOGO_FUNCIONES.md seccion 5) se escribieron desde el analisis
-echo  del riesgo de un script de extraccion, NO desde las Guias Operativas
-echo  Tecnicas. Hay que contrastarlas. Si las Guias son mas estrictas en algo,
-echo  manda la Guia.
+echo  del riesgo de un script de extraccion, NO desde la norma. Hay que
+echo  contrastarlas con el ANEXO III.3 del Reglamento —que es el que la seccion
+echo  8.4 de la Instruccio cita para el analisis estatico— y con las Guias
+echo  Operativas Tecnicas. Si alguna es mas estricta en algo, manda la norma.
 echo.
 echo =========================================================================
 echo  LO QUE NO HACE FALTA QUE COMPRUEBES

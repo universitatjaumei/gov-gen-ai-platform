@@ -134,48 +134,122 @@ esperar a que alguien la desinstale.
 
 ## 4. Correspondencia con la Instrucció 02/2026
 
-Esta sección es para quien tenga que dar por bueno el diseño: la UADTI y la OIATI.
+Esta sección es para quien tenga que dar por bueno el diseño: la UADTI, la OIATI y el
+Responsable institucional de IA. Está escrita contra el texto de la Instrucció, y cita por
+sección para que se pueda contrastar.
 
-La Instrucció de desarrollo ciudadano *governat* define tres niveles según el alcance, y el
-catálogo los implementa así:
+### Los tres niveles
 
 | Instrucció | En el catálogo |
 |---|---|
-| **Nivel 1** — uso personal | Fuera de la plataforma. Un script que alguien usa en su equipo no pasa por aquí, y no tiene que hacerlo. |
-| **Nivel 2** — compartir dentro del servicio | **Registrar una función en una organización.** Filtro automático (declaración + auditoría + sandbox), uso inmediato, **sin aprobación humana previa**, y revisión posterior. |
-| **Nivel 3** — alcance superior al servicio | **Promoción a plataforma** (con valoración escrita del superadministrador) o **origen paquete** (lo instala quien opera el despliegue). |
+| **Nivel 1** — uso personal (§5) | Fuera de la plataforma. Un script que alguien usa en su equipo no pasa por aquí, y no tiene que hacerlo. |
+| **Nivel 2** — compartir dentro del servicio (§5, §8) | **Registrar una función en una organización.** Filtro automático (declaración + auditoría + sandbox), uso inmediato, **sin aprobación humana previa**, y revisión posterior. |
+| **Nivel 3** — alcance superior al servicio (§5, §7) | **No tiene equivalente directo, y conviene no confundirlo.** En la Instrucció, cruzar la frontera del servicio significa **salir** del desarrollo ciudadano: pasa a desarrollo corporativo o al embudo de innovación. La «promoción a plataforma» del catálogo es una decisión interna de alcance, no ese tránsito. |
+
+Esa tercera fila decía antes que el nivel 3 «es» la promoción o el origen paquete. No lo es: son
+cosas distintas que se parecen, y tratarlas como la misma haría creer que promover una función
+sustituye al circuito que la Instrucció prevé para lo que excede un servicio.
 
 ### Lo que el nivel 2 exige, y dónde está
 
-* **§8.2, declaración responsable**: es parte del contrato (`finalidad`, `categorias_datos`,
-  `declarada_por`). Sin ella la versión no se registra.
-* **§8.3, filtro automático**: auditoría AST sin hallazgos críticos + prueba en sandbox. Los
-  avisos **no bloquean** —eso sería aprobación previa por la puerta de atrás— pero constan.
-* **§8.4, revisión posterior**: cola de revisión con **muestreo aleatorio**, y cuatro resultados
-  posibles: `conforme`, `correcciones`, `reclasificada`, `suspendida`. **«Aprobada» no es uno de
-  ellos, y no lo es a propósito**: en el nivel 2 no hay nada que aprobar.
+* **§8.2, declaración responsable y registro**: es parte del contrato (`finalidad`,
+  `categorias_datos`, `declarada_por`). Sin ella la versión no se registra, y el botón de
+  guardar no se activa.
+* **§8.2, filtro automático con puesta en uso inmediata**: auditoría AST sin hallazgos críticos
+  + prueba en sandbox. Los avisos **no bloquean** —eso sería aprobación previa por la puerta de
+  atrás— pero constan, y son lo que la revisión posterior lee.
+* **§8.4, revisión posterior o por muestreo**: cola de revisión con **muestreo aleatorio**, y
+  cuatro resultados posibles: `conforme`, `correcciones`, `reclasificada`, `suspendida`.
+  **«Aprobada» no es uno de ellos, y no lo es a propósito**: en el nivel 2 no hay nada que
+  aprobar.
 * **La prohibición de la aprobación previa como condición para compartir** se hace cierta con un
   test que pide la misma versión a las dos superficies: aparece en la cola como `sin_revisar`
   **y** el resolutor la ejecuta, a la vez.
-* **§9, reparto de responsabilidades**: suspender es de quien revisa, retirar de quien escribe, y
-  revisar es siempre de otra persona.
+* **Regla 3, traza en la compartición**: no hay forma de compartir una función sin registrarla.
+* **Regla 1, ecosistema autorizado**: los 16 módulos permitidos y las 63 capacidades denegadas de
+  §5, servidos por API además de documentados.
+* **§7, el nivel 2 no pasa por el embudo de innovación**: el circuito del catálogo es interno y
+  no toca Teclab ni CEDIA. Estamos de acuerdo con el motivo que da la Instrucció — someter la
+  extracción de una tabla de gastos al embudo reproduciría la burocracia que empuja al *Shadow
+  IT*.
+
+### Lo que la Instrucció exige y la plataforma todavía no hace
+
+Va aquí y no en un apartado de mejoras porque son huecos frente a la norma, no ideas.
+
+1. **No hay plazo de revisión.** §10 encarga a las Guías Operativas Técnicas fijar un compromiso
+   de plazo máximo para la revisión posterior, «a fin de que el control no se convierta en un
+   cuello de botella». La cola ya muestra los días que lleva cada versión sin revisar; falta el
+   número a partir del cual avisa, y ese número lo fija la UADTI.
+2. **No hay ruta automática a la OIATI.** §9 le asigna validar el tratamiento de datos personales
+   y §8.4 la llama «cuando haya tratamiento de datos personales». La plataforma ya sabe qué
+   categorías declara cada función: con ese campo la cola podría encaminarse sola. Hoy no lo
+   hace.
+3. **Quién puede ordenar una suspensión no coincide.** En §9 es el Responsable institucional de
+   IA. En el catálogo, el administrador de la organización o el superadministrador. No está
+   dicho que esté mal — está dicho que hay que decidirlo, porque una suspensión detiene informes.
+
+Y una cuarta, de forma: **§8.2 pide la declaración responsable acompañada de un «estudio de
+integración simplificado» (Anexo I del Reglamento)**, y la declaración del catálogo son dos
+campos. Puede que el estudio de integración de la propia plataforma cubra los casos que se
+registran dentro de ella; puede que cada función necesite el suyo. Si lo necesita, los campos se
+añaden al formulario.
 
 ### La diferencia honesta con la regla 2 de la Instrucció
 
-La Instrucció prevé, para el desarrollo ciudadano, que **el código se quede en el equipo de la
-persona**. Aquí no ocurre eso: el código se registra en la plataforma y se ejecuta en el nodo
-institucional, sobre los datos institucionales.
+**La regla 2 dice tres cosas**, y antes esta sección sólo citaba la primera:
 
-Es un régimen **distinto**, no una interpretación laxa, y conviene decir en qué sentido:
+1. la automatización se ejecuta **en el equipo de la persona** que la usa,
+2. **con sus propias credenciales** y bajo su control,
+3. **no suplanta identidades ni centraliza credenciales**;
 
-* A favor: el código pasa por una auditoría estática, corre en un sandbox, queda versionado con su
-  hash, tiene declaración responsable, entra en una cola de revisión y deja rastro en el registro
-  de actividad de IA. Nada de eso existe cuando el script vive en el portátil de alguien.
-* En contra: los datos que trata son los institucionales y no una copia en un equipo personal, y
-  el código lo puede usar cualquiera de la organización sin que su autora lo sepa.
+y de ahí concluye que «la responsabilidad jurídica de lo que se introduce en los sistemas
+corporativos sigue recayendo en la persona que ejecuta la solución».
 
-**Esto necesita un «sí» explícito de la UADTI y de la OIATI**, no un silencio. La plataforma no
-puede decidir por su cuenta que su régimen es equivalente al que la Instrucció describe.
+**Dónde el catálogo no encaja**: la ejecución es central, no local. Eso es un hecho y no se
+matiza.
+
+**Dónde encaja mejor que el supuesto de la regla**: no hay credenciales que centralizar ni
+identidad que suplantar, porque **una función no puede hablar con nada**. El auditor le prohíbe
+`socket`, `requests`, `urllib`, `os`, `open` y `subprocess`, entre otras 63 capacidades; una
+función lee un fichero y devuelve cifras. El riesgo que la regla 2 mitiga —lo que se *introduce*
+en los sistemas corporativos— es estructuralmente imposible, no improbable.
+
+**La pregunta, acotada así para que se pueda contestar**: ¿la regla 2 exige la ejecución local
+**como fin**, o **como medio** para mantener la responsabilidad atribuible y las credenciales sin
+centralizar? Si es un medio, el catálogo llega al mismo fin por otro camino, y en auditabilidad
+por uno mejor: el código queda versionado con su hash, con declaración, con revisión y con rastro
+de cada ejecución, cosas que no existen cuando el script vive en el portátil de alguien. Si es un
+fin, hace falta una excepción escrita.
+
+### Y una pregunta anterior a todas: ¿esto es desarrollo ciudadano?
+
+La matriz de decisión de **§4** reparte entre desarrollo corporativo y desarrollo ciudadano, y
+**basta que un criterio caiga en la columna corporativa** para derivar el caso a la UADTI. Dos
+caen:
+
+* **Sensibilidad del dato.** La columna ciudadana dice «la solución no guarda datos fuera del
+  equipo local». Los ficheros que procesa una función del catálogo viven en el almacenamiento de
+  la plataforma.
+* **Valor de la información generada.** La columna ciudadana dice «resultados de uso interno y
+  acotado a la tarea del servicio», y el párrafo de cierre de §4 es explícito: cuando una
+  automatización empieza a generar **indicadores de seguimiento o cuadros de mando**, deja de ser
+  herramienta de productividad y debe derivarse a desarrollo corporativo. El módulo de informes
+  es, literalmente, para informes de seguimiento.
+
+**La lectura que proponemos**, y que nos parece la honesta: el catálogo **no es** una herramienta
+de desarrollo ciudadano pidiendo el nivel 2. Es **un sistema corporativo** —mantenido, versionado,
+auditado y desplegado por quien opera la plataforma— que aplica **dentro** la agilidad del nivel
+2: declaración, uso inmediato y revisión posterior en lugar de aprobación previa.
+
+Si esa lectura vale, la pregunta sobre la regla 2 casi desaparece: la regla 2 regula el desarrollo
+ciudadano, y esto no lo es. Lo que quedaría por decidir es **qué control previo** quiere la UADTI
+sobre un sistema corporativo que acepta código de sus usuarios, que es una conversación distinta
+y más sencilla que una excepción a una regla.
+
+**Nada de esto lo puede decidir la plataforma.** Hace falta un «sí» explícito de la UADTI y de la
+OIATI —y, para la regla 2, del Responsable institucional de IA, que es quien §9 faculta para
+autorizar el flujo simplificado de bajo riesgo—, no un silencio.
 
 ---
 
@@ -227,9 +301,11 @@ necesariamente peligroso —puede ser útil y faltar en la lista—, así que no
 sí llega a la revisión posterior, que es quien puede decidir ampliar la lista.
 
 > **Petición explícita a la UADTI**: estas reglas se escribieron desde el análisis del riesgo de
-> un script de extracción, no desde las Guías Operativas Técnicas. Hay que contrastarlas con
-> ellas. Si las Guías son más estrictas en algo, manda la Guía; si son más laxas, se queda lo
-> estricto y se dice por qué.
+> un script de extracción, no desde la norma. Hay que contrastarlas con **el Anexo III.3 del
+> Reglamento** —que es el que §8.4 de la Instrucció cita para el análisis estático— y con las
+> **Guías Operativas Técnicas**, que según §10 detallarán el ecosistema autorizado y el
+> procedimiento de revisión. Si alguna de las dos es más estricta en algo, manda la norma; si es
+> más laxa, se queda lo estricto y se dice por qué.
 
 ---
 
