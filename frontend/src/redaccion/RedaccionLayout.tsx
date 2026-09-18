@@ -30,6 +30,8 @@ const REDACCION_SUBNAV = [
   { key: 'nav_new_report', path: '/redaccion/wizard' },
   { key: 'nav_scripts_new', path: '/redaccion/scripts/wizard' },
   { key: 'nav_scripts_review', path: '/redaccion/scripts/review' },
+  { key: 'nav_funciones', path: '/redaccion/funciones' },
+  { key: 'nav_funciones_revision', path: '/redaccion/funciones/revision' },
 ] as const
 
 export function RedaccionLayout() {

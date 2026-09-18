@@ -43,6 +43,7 @@ from server.app.routers.hub_prompts_catalog_router import router as hub_prompts_
 from server.app.routers.redaccion.llm_drafts_router import router as llm_drafts_router
 from server.app.routers.redaccion.hub_redaccion_router import router as hub_redaccion_router
 from server.app.routers.redaccion.workspaces_router import router as redaccion_workspaces_router
+from server.app.routers.redaccion.funciones_router import router as redaccion_funciones_router
 from server.app.routers.redaccion.scripts_router import router as redaccion_scripts_router
 from server.app.routers.redaccion.charts_router import router as redaccion_charts_router
 from server.app.routers.redaccion.manifests_router import router as redaccion_manifests_router
@@ -452,6 +453,7 @@ def _register_edge(app: FastAPI) -> None:
     app.include_router(hub_redaccion_router, prefix="/api/v1")  # Deploy: edge
     app.include_router(redaccion_workspaces_router, prefix="/api/v1")  # Deploy: edge
     app.include_router(redaccion_scripts_router, prefix="/api/v1")  # Deploy: edge
+    app.include_router(redaccion_funciones_router, prefix="/api/v1")  # Deploy: edge
     app.include_router(redaccion_charts_router, prefix="/api/v1")  # Deploy: edge
     app.include_router(redaccion_manifests_router, prefix="/api/v1")  # Deploy: edge
     app.include_router(redaccion_copilot_router, prefix="/api/v1")  # Deploy: edge

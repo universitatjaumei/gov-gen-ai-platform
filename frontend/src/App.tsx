@@ -54,6 +54,8 @@ const GenericReportWizard = lazy(() => import('@/redaccion/pages/GenericReportWi
 const LLMDraftPreviewPage = lazy(() => import('@/redaccion/pages/LLMDraftPreviewPage').then(m => ({ default: m.LLMDraftPreviewPage })))
 const ScriptProposalWizardPage = lazy(() => import('@/redaccion/pages/ScriptProposalWizardPage').then(m => ({ default: m.ScriptProposalWizardPage })))
 const AdminScriptReviewQueuePage = lazy(() => import('@/redaccion/pages/AdminScriptReviewQueuePage').then(m => ({ default: m.AdminScriptReviewQueuePage })))
+const CatalogoDeFuncionesPage = lazy(() => import('@/redaccion/pages/CatalogoDeFuncionesPage').then(m => ({ default: m.CatalogoDeFuncionesPage })))
+const RevisionPosteriorPage = lazy(() => import('@/redaccion/pages/RevisionPosteriorPage').then(m => ({ default: m.RevisionPosteriorPage })))
 const WorkspacePreview = lazy(() => import('@/redaccion/preview/WorkspacePreview').then(m => ({ default: m.WorkspacePreview })))
 const WorkspacePage = lazy(() => import('@/redaccion/pages/WorkspacePage').then(m => ({ default: m.WorkspacePage })))
 
@@ -168,6 +170,8 @@ function App() {
                     <Route path="draft" element={<LLMDraftPreviewPage />} />
                     <Route path="scripts/wizard" element={<ScriptProposalWizardPage />} />
                     <Route path="scripts/review" element={<AdminScriptReviewQueuePage />} />
+                    <Route path="funciones" element={<CatalogoDeFuncionesPage />} />
+                    <Route path="funciones/revision" element={<RevisionPosteriorPage />} />
                   </Route>
                   {/* Fuera del layout: es una vista de impresión, sin navegación. */}
                   <Route path="/redaccion/workspaces/:id/preview" element={<WorkspacePreview />} />

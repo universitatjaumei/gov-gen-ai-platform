@@ -325,6 +325,12 @@ def consulta_de_catalogo(*, organizacion_id: uuid.UUID | None):
 
     Nunca las no publicadas de otra. Es la misma frontera de siempre, escrita una vez aquí para
     que el router, el resolutor y el catálogo del panel no la escriban cada uno a su manera.
+
+    **Trae su propio orden** (DET.1), y no por doctrina: sin `ORDER BY`, la misma consulta devolvió
+    el catálogo en otro orden después de una mutación durante la verificación de FUN.4, y la ficha
+    que se estaba leyendo cambió de sitio. En una pantalla con un botón de suspender, cambiar de
+    sitio significa pulsar sobre otra fila. El desempate por `id` es la otra mitad: dos funciones
+    creadas en el mismo instante —las de una migración— pueden alternarse sin él.
     """
     from sqlalchemy import or_, select
 
@@ -334,11 +340,14 @@ def consulta_de_catalogo(*, organizacion_id: uuid.UUID | None):
         HubFuncion.publicada_en.isnot(None),
         HubFuncion.organizacion_id.is_(None),
     )
+    orden = (HubFuncion.created_at, HubFuncion.id)
     if organizacion_id is None:
         # Sin organización sólo se ven las de plataforma: es lo que responde la tenencia a un
         # principal sin organización, y no «todas».
-        return select(HubFuncion).where(publicadas)
+        return select(HubFuncion).where(publicadas).order_by(*orden)
 
-    return select(HubFuncion).where(
-        or_(HubFuncion.organizacion_id == organizacion_id, publicadas)
+    return (
+        select(HubFuncion)
+        .where(or_(HubFuncion.organizacion_id == organizacion_id, publicadas))
+        .order_by(*orden)
     )

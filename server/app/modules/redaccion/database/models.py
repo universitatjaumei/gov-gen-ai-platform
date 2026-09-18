@@ -390,15 +390,30 @@ class HubFuncion(HubOperationalBase):
     def nivel(self) -> int:
         """El nivel de la Instrucció 02/2026, **derivado**.
 
-        Nivel 2 es «de mi organización y sin publicar»; nivel 3 es «publicada» o «de paquete».
-        Una columna `nivel` sería un tercer sitio donde vive el mismo hecho, y podría discrepar
-        de los otros dos — el defecto que MT.4 quitó de `is_global`.
+        Nivel 2 es «de mi organización y sin publicar»; nivel 3 es «de alcance superior al
+        servicio»: publicada, de paquete, **o sin organización**. Una columna `nivel` sería un
+        tercer sitio donde vive el mismo hecho, y podría discrepar de los otros dos — el defecto
+        que MT.4 quitó de `is_global`.
+
+        `organizacion_id IS NULL` cuenta como nivel 3 porque es lo que ya significa en las otras
+        dos superficies: `consulta_de_catalogo` la sirve a todas las organizaciones y
+        `acciones_permitidas` la trata como publicada. Sin esta rama, las cuatro funciones que la
+        migración de FUN.3 sacó de plantillas globales se pintaban «Nivel 2» —«de mi organización
+        y sin publicar»— encima de algo que ve cualquiera. Lo destapó la pantalla del catálogo.
         """
-        if self.origen == "paquete" or self.publicada_en is not None:
+        if (
+            self.origen == "paquete"
+            or self.publicada_en is not None
+            or self.organizacion_id is None
+        ):
             return 3
         return 2
 
-    @nivel.expression
+    # `inplace` y no `@nivel.expression` a secas: sin él, SQLAlchemy 2.0 construye un híbrido
+    # **nuevo** y lo deja en `_nivel_en_sql`, mientras `nivel` se queda sin expresión SQL — y
+    # entonces `select(HubFuncion.nivel)` intenta evaluar el getter de Python contra la clase.
+    # Era el caso: la expresión estaba escrita y no la usaba nadie.
+    @nivel.inplace.expression
     @classmethod
     def _nivel_en_sql(cls):
         from sqlalchemy import case
@@ -406,6 +421,7 @@ class HubFuncion(HubOperationalBase):
         return case(
             (cls.origen == "paquete", 3),
             (cls.publicada_en.isnot(None), 3),
+            (cls.organizacion_id.is_(None), 3),
             else_=2,
         )
 
