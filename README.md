@@ -303,12 +303,20 @@ también lo que impide que una mejora pagada con fondos públicos quede cerrada.
 
 ### La obligación del §13 sobre cada despliegue
 
-**Hecho a medias, y conviene decir qué mitad.** El servidor ya lo publica: `GET /api/v1/instancia`
-devuelve el `SOURCE_URL` que configure quien despliega, es **público y sin credencial** a
-propósito —la obligación es frente a quien usa el programa, incluida la ciudadanía que escribe en
-el widget—, y vacío significa «no hay enlace», que es lo correcto para quien despliega sin
-modificar (AIS.6, con su test). **Lo que falta es que se vea**: ninguna interfaz lo consume
-todavía, ni el panel ni el widget, y un enlace que nadie enseña no cumple el §13.
+**Hecho, y conviene decir de qué partes consta.** El servidor lo publica: `GET
+/api/v1/instancia` devuelve el `SOURCE_URL` que configure quien despliega, es **público y sin
+credencial** a propósito —la obligación es frente a quien usa el programa, incluida la ciudadanía
+que escribe en el widget— y vacío significa «no hay enlace», que es lo correcto para quien
+despliega sin modificar (AIS.6, con su test). **Y se ve**: el componente `EnlaceAlFuente` lo
+pinta en el pie del panel y en el pie del widget embebido, con tests de los dos caminos —con
+enlace y sin él—.
+
+Esta sección dijo durante un tiempo que faltaba enseñarlo, cuando ya se enseñaba. Es el error
+que más caro sale en un documento de licencia: afirmaba que este despliegue **incumple** una
+obligación que cumple. Lo corrigió la issue #41, que además destapó lo que sí faltaba y nadie
+había mirado: **no había forma de configurar la variable en el despliegue real**. El endpoint de
+producción devolvía vacío no porque se hubiera decidido, sino porque `SOURCE_URL` no llegaba al
+contenedor. Ahora entra por `deploy/vm/docker-compose.vm.yml` desde una variable del repositorio.
 
 Las tres condiciones, que no son opcionales:
 

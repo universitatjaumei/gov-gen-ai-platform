@@ -72,6 +72,12 @@ services:
       CORPUS_SITE_BASE_URL: ${CORPUS_SITE_BASE_URL:?falta CORPUS_SITE_BASE_URL}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?falta CORS_ALLOWED_ORIGINS}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # El enlace al fuente que exige el §13 de la AGPL (AIS.6, issue #41). **Sin tope de
+      # obligatoriedad a propósito**: vacía significa «sin enlace», que es lo correcto para
+      # quien despliega el código sin modificar. Quien sí lo modifica tiene que poder
+      # ponerla, y hasta la issue #41 no había por dónde: la configuración no secreta entra
+      # por aquí, y el `.env.runtime` sólo lleva lo que hay en `secretos.tsv`.
+      SOURCE_URL: ${SOURCE_URL:-}
     volumes:
       - /opt/govgenai/cloudsql:/cloudsql:ro
     depends_on:
