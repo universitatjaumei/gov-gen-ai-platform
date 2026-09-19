@@ -160,22 +160,24 @@ local-models = [
 #
 # Lo único que se añade desde aquí: al renovar esa aceptación, comprobar si `torch` ya levantó
 # el techo — `uv tree --invert --package setuptools` lo dice en una línea.
-# DEP.1: los dos extras que siguen. El criterio es el mismo que el de `local-models` —lo que
-# el despliegue estándar no ejecuta no se instala— pero aquí hay además un motivo de
-# seguridad: entre los dos arrastraban unos 19 de los 32 avisos de vulnerabilidad del
-# servidor, incluidos **los dos únicos sin versión corregida publicada** (`diskcache`, que
-# entra por ragas, y el propio `ragas`). Ésos no se arreglan subiendo: sólo dejando de
-# traerlos.
+# DEP.1: el extra que queda. El criterio es el mismo que el de `local-models` —lo que el
+# despliegue estándar no ejecuta no se instala— pero aquí hay además un motivo de seguridad:
+# arrastraba avisos de vulnerabilidad, incluidos **los dos únicos sin versión corregida
+# publicada** (`diskcache`, que entra por ragas, y el propio `ragas`). Ésos no se arreglan
+# subiendo: sólo dejando de traerlos.
 #
-# **No retiran ninguna capacidad, y ésa es la razón de que esto se pueda hacer sin tocar
-# código**: los dos consumidores ya envolvían su import en un `try/except ImportError` y
-# degradan a propósito. `agent_service` deja `Agent = None`; `rag_metrics` cae a una métrica
-# léxica de solapamiento, y su docstring ya decía que la evaluación es «a mano o de noche,
-# jamás bloqueando un PR». `test_dep1_lo_que_se_usa_esta_declarado.py` lo comprueba
-# bloqueando el import de verdad, en vez de suponerlo.
-agente-navegador = [
-    "browser-use>=0.1.0",
-]
+# **No retira ninguna capacidad**: `rag_metrics` envuelve su import en un `try/except
+# ImportError` y cae a una métrica léxica de solapamiento, y su docstring ya decía que la
+# evaluación es «a mano o de noche, jamás bloqueando un PR».
+# `test_dep1_lo_que_se_usa_esta_declarado.py` lo comprueba bloqueando el import de verdad, en
+# vez de suponerlo.
+#
+# **`agente-navegador` estuvo aquí y se retiró en APER.19.** Lo pedía un solo fichero,
+# `services/agent_service.py`, y a ése no lo llamaba nadie en producción: era el hallazgo M7
+# de la auditoría del 2026-08-10, «tres servicios sin llamantes». Su `browser-use` traía
+# `authlib`, `httplib2` y `mcp` — tres de los seis avisos abiertos el 2026-09-19, uno crítico.
+# Se fueron sin actualizar nada, dejando de depender. Si algún día hace falta un agente de
+# navegador, el código está en el historial de git y la decisión será otra.
 evaluacion = [
     "ragas>=0.2.0",
     "datasets>=3.0.0",
