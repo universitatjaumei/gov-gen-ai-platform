@@ -39,15 +39,18 @@ _SPIDER_POR_DEFECTO = "generic"
 class SiteCrawlerDispatcher:
     """Resuelve el spider de cada sitio y ejecuta su rastreo.
 
-    Cumple el mismo protocolo que consumía `SiteQualityAnalysisJob` (`crawl_site(site_id)`),
-    así que sustituir el crawler nulo por este no toca el job.
+    Cumple el mismo protocolo que consume `SiteQualityAnalysisJob`
+    —`crawl_site(site_id, section_id)`—, así que sustituir el crawler nulo por este no toca el
+    job. `section_id` acota la pasada a una sección del sitio (DIN.2).
     """
 
     def __init__(self, session_factory: Any, spider_factory: Any | None = None) -> None:
         self._session_factory = session_factory
         self._spiders = spider_factory or SpiderFactory()
 
-    async def crawl_site(self, site_id: uuid.UUID) -> SiteCrawlSummary:
+    async def crawl_site(
+        self, site_id: uuid.UUID, section_id: uuid.UUID | None = None
+    ) -> SiteCrawlSummary:
         async with self._session_factory() as session:
             site = await session.get(HubWebSite, site_id)
             if site is None:
@@ -68,7 +71,7 @@ class SiteCrawlerDispatcher:
                 signal_extractor=CrawlSignalExtractor(),
                 page_repo=CrawledPageRepo(session),
             )
-            resumen = await crawler.crawl_site(site_id)
+            resumen = await crawler.crawl_site(site_id, section_id=section_id)
             await session.commit()
             return resumen
 

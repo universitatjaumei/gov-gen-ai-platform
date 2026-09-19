@@ -18,6 +18,13 @@ on:
   push:
     branches: [main, desarrollo]
 
+# APER.8 — igual que en `ci.yml`: el alcance se declara y no se hereda de la organización.
+# Esto sólo lee el historial para recorrer los commits del tramo, así que `contents: read` es
+# exactamente lo que necesita — y este workflow corre en cada pull request, también las que
+# lleguen de un fork cuando el repositorio sea público.
+permissions:
+  contents: read
+
 jobs:
   signed-off-by:
     runs-on: ubuntu-latest

@@ -26,10 +26,17 @@ from server.app.modules.agents_hub.database.operational_models import HubCrawled
 from server.app.modules.curation.selection_contracts import (
     CandidatePageView,
     CrawlConfig,
+    CrawlRunView,
     PageContentView,
     PageView,
+    PaginaDePasadas,
+    PatternTestRequest,
+    PatternTestView,
     ReconnaissanceRequest,
     ReconnaissanceView,
+    SectionCreate,
+    SectionPatch,
+    SectionView,
     SelectionCreate,
     SelectionView,
     SiteCreate,
@@ -39,6 +46,7 @@ from server.app.modules.curation.selection_contracts import (
 from server.app.modules.curation.site_repo import (
     CorpusSelectionRepo,
     CrawledPageRepo,
+    WebSectionRepo,
     WebSiteRepo,
 )
 
@@ -343,6 +351,286 @@ async def list_site_pages(
     return result.scalars().all()
 
 
+# ──────────────────────── Secciones del sitio (DIN.3) ────────────────────────
+#
+# El apartado como dato, parametrizable **desde la curación**: es el motivo del bloque DIN.
+# Hasta aquí «añadir el apartado de becas» exigía crear un sitio entero con su
+# `url_regex_filter`, o sea acceso a la administración de sitios; con esto es un formulario.
+
+
+def _vista_de_seccion(site: Any, seccion: Any) -> SectionView:
+    """La sección con su cadencia resuelta y la bandera de si la hereda.
+
+    Se sirven las dos cifras a propósito: sin la bandera, cambiar la cadencia del sitio parecería
+    no hacer nada en las secciones que la heredan.
+    """
+    from server.app.modules.curation.secciones import parametros_efectivos
+
+    efectivos = parametros_efectivos(site, seccion)
+    return SectionView(
+        id=seccion.id,
+        site_id=seccion.site_id,
+        name=seccion.name,
+        pattern=seccion.pattern,
+        pattern_kind=seccion.pattern_kind,
+        crawl_interval_hours=seccion.crawl_interval_hours,
+        crawl_interval_hours_effective=efectivos.crawl_interval_hours,
+        crawl_interval_inherited=seccion.crawl_interval_hours is None,
+        mode=seccion.mode,
+        criteria_json=seccion.criteria_json,
+        owner=seccion.owner,
+        last_crawled_at=seccion.last_crawled_at,
+        is_active=seccion.is_active,
+        created_at=seccion.created_at,
+    )
+
+
+async def _sin_homonima(session: AsyncSession, nombre: str, operacion: Any) -> Any:
+    """Ejecuta el alta o la edición traduciendo la colisión de nombre a un 409.
+
+    **Lo destapó la verificación en navegador de DIN.3**: `UniqueConstraint(site_id, name)` hacía
+    bien su trabajo —la homónima no se guardaba— y su `IntegrityError` subía sin traducir, así
+    que la respuesta era un **500**. En pantalla eso es «algo se ha roto» cuando lo que pasa es
+    «ese nombre ya está usado», que es accionable. Mismo criterio que la retirada bloqueada.
+
+    No se pregunta antes si el nombre existe: la restricción de la base es la que decide, y una
+    comprobación previa sería una segunda regla que además tiene carrera.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    try:
+        return await operacion()
+    except IntegrityError as fallo:
+        # La transacción queda inutilizable tras el error: sin deshacerla, la siguiente consulta
+        # de esta petición fallaría por algo que no tiene nada que ver con la causa.
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Ya hay una sección llamada «{nombre}» en este sitio",
+        ) from fallo
+
+
+async def _seccion_de_este_sitio(
+    session: AsyncSession, site_id: uuid.UUID, section_id: uuid.UUID
+) -> Any:
+    """La sección, si es de este sitio. Una ajena es un 404, no un cambio."""
+    seccion = await WebSectionRepo(session).get(section_id)
+    if seccion is None or seccion.site_id != site_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Section not found"
+        )
+    return seccion
+
+
+@router.get(
+    "/hub/sites/{site_id}/sections",
+    response_model=list[SectionView],
+    operation_id="listSiteSections",
+)
+async def list_site_sections(
+    site_id: uuid.UUID,
+    current_user: UserInfo = Depends(_require_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Las secciones de un sitio, con su cadencia efectiva (DIN.3).
+
+    Deploy: edge. La tenencia llega por el sitio, como en el resto del módulo.
+    """
+    site = await assert_site_org_access(session, site_id, current_user)
+    secciones = await WebSectionRepo(session).list_by_site(site_id)
+    return [_vista_de_seccion(site, s) for s in secciones]
+
+
+@router.post(
+    "/hub/sites/{site_id}/sections",
+    response_model=SectionView,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="createSiteSection",
+)
+async def create_site_section(
+    site_id: uuid.UUID,
+    body: SectionCreate,
+    current_user: UserInfo = Depends(_require_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Da de alta una sección del sitio.
+
+    Deploy: edge. `mode` nace en `manual` a propósito: la primera pasada de un apartado la
+    revisa una persona, y sólo después se automatiza («curación una vez, automatización
+    después»).
+    """
+    site = await assert_site_org_access(session, site_id, current_user)
+    seccion = await _sin_homonima(
+        session,
+        body.name,
+        lambda: WebSectionRepo(session).create(
+            site_id=site_id,
+            name=body.name,
+            pattern=body.pattern,
+            pattern_kind=body.pattern_kind,
+            crawl_interval_hours=body.crawl_interval_hours,
+            mode=body.mode,
+            criteria_json=body.criteria_json,
+            owner=body.owner,
+        ),
+    )
+    await session.commit()
+    return _vista_de_seccion(site, seccion)
+
+
+@router.patch(
+    "/hub/sites/{site_id}/sections/{section_id}",
+    response_model=SectionView,
+    operation_id="patchSiteSection",
+)
+async def patch_site_section(
+    site_id: uuid.UUID,
+    section_id: uuid.UUID,
+    body: SectionPatch,
+    current_user: UserInfo = Depends(_require_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Edita una sección, la activa o la desactiva.
+
+    Deploy: edge. `heredar_cadencia` es lo que devuelve la cadencia al valor del sitio: un nulo
+    a secas significaría «no lo toques», y colapsar los dos dejaría imposible volver a heredar.
+    """
+    site = await assert_site_org_access(session, site_id, current_user)
+    await _seccion_de_este_sitio(session, site_id, section_id)
+
+    campos = body.model_dump(exclude_none=True, exclude={"heredar_cadencia"})
+    if body.heredar_cadencia:
+        campos["crawl_interval_hours"] = None
+    # Renombrar también puede colisionar, y por la misma restricción.
+    seccion = await _sin_homonima(
+        session,
+        campos.get("name", ""),
+        lambda: WebSectionRepo(session).update(section_id, **campos),
+    )
+    await session.commit()
+    return _vista_de_seccion(site, seccion)
+
+
+@router.delete(
+    "/hub/sites/{site_id}/sections/{section_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    operation_id="deleteSiteSection",
+)
+async def delete_site_section(
+    site_id: uuid.UUID,
+    section_id: uuid.UUID,
+    current_user: UserInfo = Depends(_require_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Borra una sección, **sólo si no tiene selecciones colgando**.
+
+    Deploy: edge. Con `section_id` puesto el patrón efectivo lo manda la sección: borrarla
+    dejaría la selección apuntando a un ámbito que no existe, y con la auto-retirada de DIN.4
+    detrás eso no es un dato huérfano, es corpus que se vacía. Si las tiene, se desactiva — y el
+    mensaje lo dice.
+    """
+    await assert_site_org_access(session, site_id, current_user)
+    await _seccion_de_este_sitio(session, site_id, section_id)
+
+    from server.app.modules.agents_hub.database.operational_models import HubCorpusSelection
+
+    colgando = (
+        await session.execute(
+            select(HubCorpusSelection).where(HubCorpusSelection.section_id == section_id)
+        )
+    ).scalars().all()
+    if colgando:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"{len(colgando)} selección(es) de corpus apuntan a esta sección: "
+                "desactívala en vez de borrarla, o quita antes esas selecciones"
+            ),
+        )
+
+    await WebSectionRepo(session).delete(section_id)
+    await session.commit()
+
+
+@router.get(
+    "/hub/sites/{site_id}/runs",
+    response_model=PaginaDePasadas,
+    operation_id="listSiteRuns",
+)
+async def list_site_runs(
+    site_id: uuid.UUID,
+    section_id: uuid.UUID | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=20, ge=1, le=100),
+    current_user: UserInfo = Depends(_require_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """El diario de las pasadas de un sitio, filtrable por sección (DIN.6).
+
+    Deploy: edge. El `summary` del job se calculaba, se devolvía y se perdía; con DIN.4 y DIN.5
+    encima, esto es el único sitio donde se puede ver que la salvaguarda paró una retirada o que
+    la puerta de calidad dejó fuera cinco páginas.
+
+    **Orden con desempate por `id`** (DET.1): dos pasadas pueden compartir `started_at` al
+    microsegundo, y sin desempate paginar devuelve una fila en dos páginas y otra en ninguna.
+    """
+    from sqlalchemy import func
+
+    from server.app.modules.agents_hub.database.operational_models import HubCrawlRun
+
+    await assert_site_org_access(session, site_id, current_user)
+
+    base = select(HubCrawlRun).where(HubCrawlRun.site_id == site_id)
+    if section_id is not None:
+        base = base.where(HubCrawlRun.section_id == section_id)
+
+    total = (
+        await session.execute(select(func.count()).select_from(base.subquery()))
+    ).scalar_one()
+    filas = (
+        await session.execute(
+            base.order_by(HubCrawlRun.started_at.desc(), HubCrawlRun.id.desc())
+            .offset((page - 1) * size)
+            .limit(size)
+        )
+    ).scalars().all()
+
+    return PaginaDePasadas(
+        total=total, items=[CrawlRunView.model_validate(f) for f in filas]
+    )
+
+
+@router.post(
+    "/hub/sites/{site_id}/sections/test-pattern",
+    response_model=PatternTestView,
+    operation_id="testSectionPattern",
+)
+async def test_section_pattern(
+    site_id: uuid.UUID,
+    body: PatternTestRequest,
+    current_user: UserInfo = Depends(_require_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Cuántas páginas **ya rastreadas** casarían este patrón, y una muestra (DIN.3).
+
+    Deploy: edge. No escribe nada. Es lo que evita el regex que compila y no casa nada: hoy eso
+    sólo se descubre cuando la pasada siguiente no ingiere nada, y como la ingesta automática es
+    silenciosa, se descubre tarde.
+    """
+    await assert_site_org_access(session, site_id, current_user)
+
+    from server.app.modules.curation.secciones import casa_patron
+
+    paginas = (
+        await session.execute(
+            select(HubCrawledPage).where(HubCrawledPage.site_id == site_id)
+        )
+    ).scalars().all()
+
+    casan = [p.url for p in paginas if casa_patron(body.pattern_kind, body.pattern, p.url)]
+    return PatternTestView(matched=len(casan), total=len(paginas), sample=casan[:10])
+
+
 # ──────────────────────── CRUD de selecciones ────────────────────────
 
 
@@ -364,6 +652,10 @@ async def create_selection(
     """
     await assert_chatbot_org_access(session, chatbot_id, current_user)
     await assert_site_org_access(session, body.site_id, current_user)
+    # DIN.3 — apuntar a una sección de OTRO sitio haría que el patrón efectivo no tuviera nada
+    # que ver con las páginas de esta selección: se comprueba aquí, no al rastrear.
+    if body.section_id is not None:
+        await _seccion_de_este_sitio(session, body.site_id, body.section_id)
     repo = CorpusSelectionRepo(session)
     sel = await repo.create(
         chatbot_id=chatbot_id,
@@ -371,6 +663,7 @@ async def create_selection(
         rule_type=body.rule_type,
         rule_value=body.rule_value,
         auto_ingest_new=body.auto_ingest_new,
+        section_id=body.section_id,
     )
     await session.commit()
     return sel

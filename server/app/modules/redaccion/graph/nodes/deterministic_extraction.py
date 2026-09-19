@@ -67,8 +67,49 @@ class DeterministicExtractionNode:
     con el resto (el CoreGraph NO aborta).
     """
 
-    def __init__(self, factory: Any) -> None:
+    def __init__(self, factory: Any, resolvedor: Any = None) -> None:
         self._factory = factory
+        # FUN.3 — quien traduce `funcion@versión` en algo ejecutable. Opcional para que un
+        # bloque sin función —`excel_pipeline` y compañía— siga funcionando sin catálogo, y
+        # porque los tests del nodo que no usan scripts no tienen por qué construirlo.
+        self._resolvedor = resolvedor
+
+    async def _resolver_funcion(self, funcion_ref: Any) -> Any:
+        """La versión anclada, o un fallo que nombra la función y el motivo."""
+        from server.app.modules.redaccion.funciones_resolver import FuncionNoEjecutable
+
+        if self._resolvedor is None:
+            raise FuncionNoEjecutable(
+                "el bloque referencia una función del catálogo y este grafo se construyó sin "
+                "resolutor: el informe no puede ejecutarla"
+            )
+        return await self._resolvedor.resolver(funcion_ref.funcion_id, funcion_ref.version)
+
+    async def _ejecutar_ejecutable(
+        self, ejecutable: Any, *, ficheros: dict[str, str], parametros: dict[str, Any]
+    ) -> Any:
+        """Ejecuta lo que el resolutor resolvió, por el camino que le corresponde a su origen.
+
+        **La bifurcación mira el origen y no si `code` viene nulo.** Mirar el código funcionaría
+        hoy y mentiría el día que un autoservicio guarde su código fuera; el origen es lo que
+        dice de qué clase de función se trata, y es lo que el catálogo declara.
+
+        Sin esta bifurcación, una función de paquete mandaba al sandbox el `code=""` que
+        `como_opciones_del_pipeline()` devuelve cuando no hay código, y el bloque salía **vacío
+        sin error**: el informe se genera y no dice nada. Es el fallo más caro de este bloque
+        justamente porque no se ve.
+        """
+        if getattr(ejecutable, "origen", "autoservicio") == "paquete":
+            from server.app.modules.redaccion.funciones_paquete import ejecutar_empaquetada
+
+            return await ejecutar_empaquetada(
+                ejecutable.entry_point, ficheros=ficheros, parametros=parametros
+            )
+
+        raise NotImplementedError(
+            "una función de autoservicio se ejecuta por el pipeline del sandbox, que es el "
+            "camino de `__call__`; este método sólo enruta lo que no pasa por ahí"
+        )
 
     async def __call__(self, state: WorkspaceState) -> dict:
         if state.spec is None:
@@ -101,15 +142,54 @@ class DeterministicExtractionNode:
             # PRO.3 — las opciones del bloque viajan al pipeline. Iba `options={}`, así que el
             # código del script aprobado no llegaba nunca y el pipeline respondía
             # `SCRIPT_NOT_APPROVED`: el síntoma acusaba a la aprobación, que estaba bien.
-            inp = ExtractionInput(
-                source_kind=source_kind,
-                file_ref=file_ref,
-                options=dict(getattr(block_contract, "options", {}) or {}),
-            )
+            opciones = dict(getattr(block_contract, "options", {}) or {})
+
+            # FUN.3 — el código ya no viene en el bloque: viene del catálogo. El nodo no sabe de
+            # orígenes; le pide «lo ejecutable» al resolutor, que en FUN.5 sabrá además resolver
+            # una función empaquetada sin que esto cambie.
+            funcion_ref = getattr(block_contract, "funcion_ref", None)
+            ejecutable = None
+            if funcion_ref is not None:
+                try:
+                    ejecutable = await self._resolver_funcion(funcion_ref)
+                except Exception as exc:
+                    # EN ALTO y con el motivo: una función retirada o suspendida no puede
+                    # dejar el bloque vacío en silencio (la lección de los perfiles sin
+                    # configurar).
+                    new_warnings.append(ExtractionWarning(
+                        block_id=block_id, message=str(exc), kind="funcion_no_ejecutable",
+                    ))
+                    updated_blocks[block_id] = updated_blocks[block_id].model_copy(update={
+                        "status": "failed",
+                        "failure_kind": "extraction_failed",
+                        "last_error_message": str(exc)[:500],
+                        "last_updated_by": "system",
+                        "updated_at": now,
+                    })
+                    new_block_outputs[block_id] = {"partial": {}}
+                    continue
+                if ejecutable.origen != "paquete":
+                    opciones.update(ejecutable.como_opciones_del_pipeline())
+
+            de_paquete = ejecutable is not None and ejecutable.origen == "paquete"
 
             try:
-                pipeline = self._factory.get(source_kind)
-                result = await _extraer(pipeline, inp)
+                if de_paquete:
+                    # In-process, sin sandbox y con el contrato validado delante. La frontera de
+                    # confianza está en quien instala el paquete, y así lo dice FUN.5.
+                    result = await self._ejecutar_ejecutable(
+                        ejecutable,
+                        ficheros=_ficheros_del_bloque(block_contract, file_ref),
+                        parametros=dict(opciones.get("parametros") or {}),
+                    )
+                else:
+                    inp = ExtractionInput(
+                        source_kind=source_kind,
+                        file_ref=file_ref,
+                        options=opciones,
+                    )
+                    pipeline = self._factory.get(source_kind)
+                    result = await _extraer(pipeline, inp)
             except Exception as exc:
                 new_warnings.append(ExtractionWarning(
                     block_id=block_id, message=str(exc), kind="extraction_error",
@@ -145,3 +225,24 @@ class DeterministicExtractionNode:
             })
 
         return {"blocks": updated_blocks, "warnings": new_warnings, "block_outputs": new_block_outputs}
+
+
+def _ficheros_del_bloque(block_contract: Any, file_ref: Any) -> dict[str, str]:
+    """Los ficheros que recibe una función de paquete, con el nombre de slot que su contrato usa.
+
+    El nodo trabaja con **un** fichero por bloque —así está montado desde 9R— mientras el
+    contrato de una función habla de slots con nombre. El puente es el `slot` que el bloque
+    declara; sin él no se inventa ninguno, y la validación de FUN.2 dirá «falta el slot X», que
+    es un error accionable y no un `KeyError` dentro del código de un tercero.
+    """
+    if file_ref is None:
+        return {}
+    opciones = getattr(block_contract, "options", None) or {}
+    slot = (
+        getattr(block_contract, "slot", None)
+        or opciones.get("slot")
+        or opciones.get("slot_id")
+    )
+    if not isinstance(slot, str) or not slot:
+        return {}
+    return {slot: str(getattr(file_ref, "key", file_ref))}

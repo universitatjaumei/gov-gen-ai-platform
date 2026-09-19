@@ -100,8 +100,39 @@ política. Una política que nadie comprueba se incumple sin que nadie lo note.
 | [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) | La plantilla del *pull request*. Su primera pregunta es «¿por qué esto es generalizable?», que es la que decide si el cambio entra en el principal o se queda en el fork. |
 | [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE) | Fallo y propuesta. Preguntan por el fork y el modo de despliegue, que es lo primero que hace falta saber en un proyecto multiorganización: el mismo código se comporta distinto según cómo esté configurado. |
 | [`SECURITY.md`](SECURITY.md) | Cómo comunicar un fallo de seguridad **en privado**. No abras un issue público para algo explotable: lo convierte en instrucciones para quien todavía no ha actualizado. |
-| [`.github/CODEOWNERS`](.github/CODEOWNERS) | Qué exige revisión de mantenedor: el núcleo, la frontera entre organizaciones, las migraciones y los guardarraíles. Romper cualquiera de esos afecta a todos los despliegues a la vez. |
+| [`.github/CODEOWNERS`](.github/CODEOWNERS) | A quién se le **pide** revisión automáticamente: el núcleo, la frontera entre organizaciones, las migraciones y los guardarraíles. Romper cualquiera de esos afecta a todos los despliegues a la vez. Pedirla no es exigirla — ver «Cómo está protegida `main`» aquí debajo. |
 | [`DCO`](DCO) | El certificado de origen, explicado más arriba. |
+
+### Cómo está protegida `main`
+
+`main` **es el disparador del despliegue**: `deploy.yml` arranca con `push: branches: [main]` y
+sólo con eso. Por eso el trabajo se empuja a `desarrollo` —que se comprueba y no despliega— y
+pasar a `main` es una decisión aparte. Lo hace cumplir un *ruleset* de GitHub que exige:
+
+- **Pull request siempre.** No se empuja a `main` directamente, ni se borra, ni se reescribe
+  (`deletion` y `non_fast_forward`).
+- **Tres comprobaciones en verde**: `Lint & Test (Python 3.13)`, `API Contract (OpenAPI → Orval →
+  TypeScript)` y `signed-off-by`.
+- **Cero aprobaciones**, y esto necesita explicación.
+
+**Por qué cero y no una.** Hasta el 2026-09-18 pedía una aprobación y revisión de propietario de
+código. Con **un solo mantenedor** eso es imposible de cumplir —en GitHub nadie aprueba su propia
+*pull request*—, así que la única salida era el *bypass* de administrador… **que no se salta la
+aprobación: se salta el ruleset entero, comprobaciones incluidas**. O sea que el único camino
+practicable era el que además apagaba CI.
+
+Con las aprobaciones en cero se mezcla por el camino normal y **las tres comprobaciones pasan a
+ser obligatorias de verdad**. Es más estricto en la práctica que exigir una revisión que nadie
+puede dar.
+
+**Esto se revierte en cuanto haya un segundo mantenedor**: se vuelve a
+`required_approving_review_count: 1` y a `require_code_owner_review: true`. Es una línea en el
+ruleset y es lo primero que hay que hacer al ampliar el equipo.
+
+**Y no afecta a quien contribuye desde fuera.** Sin permiso de escritura no se mezcla nada: una
+contribución externa llega como *pull request* desde un *fork* y la mezcla alguien del proyecto,
+con las tres comprobaciones en verde. Lo que se ha quitado es la ficción de un segundo revisor
+que hoy no existe, no la revisión.
 
 ### Cómo se prepara la contribución
 

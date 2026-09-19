@@ -68,6 +68,54 @@ class SiteCrawlSummary:
     new_page_ids: list[uuid.UUID] = field(default_factory=list)
     changed_page_ids: list[uuid.UUID] = field(default_factory=list)
     gone_page_ids: list[uuid.UUID] = field(default_factory=list)
+    #: DIN.2 — qué ámbito cubrió esta pasada: la sección, o el sitio entero. El job y el diario
+    #: de DIN.6 tienen que poder decirlo, y la auto-retirada de DIN.4 decide con ello.
+    section_id: uuid.UUID | None = None
+
+    @property
+    def ambito(self) -> str:
+        return "sitio" if self.section_id is None else str(self.section_id)
+
+
+class _AmbitoDesconocido(RuntimeError):
+    """Se ha pedido rastrear una sección que no existe, o que no es de este sitio."""
+
+
+@dataclass
+class _FuenteDelAmbito:
+    """El sitio tal y como lo ve el spider en esta pasada (DIN.2).
+
+    El ámbito viaja **dentro de `config_json`**, que es el camino que ya recorre
+    `url_regex_filter`: así el protocolo del spider no cambia y el filtro de la sección se
+    aplica **además** del del sitio —la valla del dominio es del sitio; el apartado, de la
+    sección—. Los criterios son los efectivos de DIN.1, así que un apartado puede recortar la
+    plantilla con otro selector que su portal.
+    """
+
+    id: uuid.UUID
+    root_url: str
+    sitemap_url: str | None
+    config_json: dict[str, Any]
+    crawl_frontier: dict[str, Any] | None
+
+
+@dataclass
+class _Ambito:
+    """Los parámetros resueltos de la pasada y, si la hay, la sección a la que pertenecen."""
+
+    efectivos: Any
+    seccion: Any | None
+
+    @property
+    def section_id(self) -> uuid.UUID | None:
+        return self.efectivos.section_id
+
+    @property
+    def es_sitio_entero(self) -> bool:
+        return self.efectivos.es_sitio_entero
+
+    def en_ambito(self, url: str) -> bool:
+        return self.efectivos.en_ambito(url)
 
 
 class _Spider(Protocol):
@@ -103,27 +151,55 @@ class SiteCrawler:
         self._signals = signal_extractor
         self._pages = page_repo
 
-    async def crawl_site(self, site_id: uuid.UUID) -> SiteCrawlSummary:
+    async def crawl_site(
+        self, site_id: uuid.UUID, section_id: uuid.UUID | None = None
+    ) -> SiteCrawlSummary:
+        """Rastrea un ámbito del sitio: una sección, o el sitio entero si no se dice otra cosa.
+
+        **El censo se acota al ámbito rastreado** (DIN.2). Mientras el sitio *era* el apartado,
+        comparar lo visto contra todas sus páginas era correcto; con varias secciones de
+        cadencias distintas, una pasada completa de `/eventos` declararía baja el resto del
+        portal — y con la auto-retirada de DIN.4 encima, eso vacía corpus.
+        """
         site = await self._session.get(HubWebSite, site_id)
         if site is None:
             return SiteCrawlSummary(errors=[f"site {site_id} not found"])
+
+        try:
+            fuente, parametros = await self._ambito(site, section_id)
+        except _AmbitoDesconocido as exc:
+            # No se degrada a «el sitio entero»: eso sería una pasada de sección que declara
+            # baja el portal.
+            return SiteCrawlSummary(errors=[str(exc)])
 
         now = datetime.now(timezone.utc)
 
         # 1. Conjunto de URLs objetivo: unión(sitemap, enlaces descubiertos por el spider).
         try:
-            target_urls, sitemap_map, recorrido = await self._discover_urls(site)
+            target_urls, sitemap_map, recorrido = await self._discover_urls(fuente)
         except Exception as exc:  # fallo global del crawl → el sitio queda en error
             site.status = "error"
             site.error_message = str(exc)
             await self._session.flush()
-            return SiteCrawlSummary(errors=[str(exc)])
+            return SiteCrawlSummary(errors=[str(exc)], section_id=parametros.section_id)
 
-        # Estado previo para el diff.
-        existing_pages = await self._pages.list_by_site(site_id, status="active")
+        # El recorrido ve de paso lo que no es del ámbito —la raíz nunca lleva filtro y el menú
+        # de cada página enlaza al portal entero—, y fuera del ámbito no se declara **nada**: ni
+        # baja ni cambio.
+        target_urls = {u for u in target_urls if parametros.en_ambito(u)}
+
+        # Estado previo para el diff, **acotado**: las páginas del sitio que casan el ámbito que
+        # se ha rastreado. Fuera de él, esta pasada no ha mirado y no puede concluir.
+        existing_pages = [
+            p
+            for p in await self._pages.list_by_site(site_id, status="active")
+            if parametros.en_ambito(p.url)
+        ]
         existing_by_url = {p.url: p for p in existing_pages}
 
-        summary = SiteCrawlSummary(pages_total=len(target_urls))
+        summary = SiteCrawlSummary(
+            pages_total=len(target_urls), section_id=parametros.section_id
+        )
         # El recorrido del spider ya puede venir truncado por páginas o por presupuesto de
         # tiempo (RAS.1). Eso viaja hasta aquí porque cambia lo que se puede concluir.
         summary.truncated = getattr(recorrido, "stop_reason", None) is not None
@@ -177,7 +253,7 @@ class SiteCrawler:
                     status="active",
                     error_message=None,
                     sitemap_lastmod=sitemap_map.get(url),
-                    **self._page_fields(url, body, headers, site),
+                    **self._page_fields(url, body, headers, fuente),
                     content_hash=content_hash,
                 )
             except Exception as exc:  # noqa: BLE001
@@ -221,7 +297,7 @@ class SiteCrawler:
         # 2.ter. La plantilla que ningún selector declara, reconocida por repetición (CUR.3): una
         # línea que sale igual en casi todas las páginas del sitio es menú, no contenido. Se hace
         # aquí, con todas las páginas leídas, porque es lo único que permite verlo.
-        await self._quitar_la_plantilla_repetida(site, summary)
+        await self._quitar_la_plantilla_repetida(fuente, summary)
 
         # 3. Diff de sitemap: bajas (páginas activas que ya no aparecen).
         #
@@ -235,14 +311,53 @@ class SiteCrawler:
                 summary.pages_gone = await self._pages.mark_gone(gone_ids)
                 summary.gone_page_ids = gone_ids
 
-        # 4. Cierre del sitio, guardando la cola si quedó algo por ver (RAS.3).
-        site.last_crawled_at = now
+        # 4. Cierre del ámbito, guardando la cola si quedó algo por ver (RAS.3).
         site.status = "active"
         site.error_message = None
-        site.crawl_frontier = self._cola_a_guardar(recorrido, summary)
+        if parametros.es_sitio_entero:
+            site.last_crawled_at = now
+            site.crawl_frontier = self._cola_a_guardar(recorrido, summary)
+        else:
+            # El reloj de la sección es suyo; el del sitio **no se toca**: diciendo que se vio
+            # todo cuando sólo se vio un apartado, el resto del portal se quedaría sin rastrear.
+            #
+            # Y la cola tampoco: vive en la fila del sitio y es de un recorrido del sitio
+            # entero. Si una pasada de `/jornadas` la escribiera, la siguiente de `/eventos`
+            # arrancaría por la mitad del recorrido ajeno y —con el censo acotado— creería haber
+            # visto su ámbito sin haberlo visto. Una sección es pequeña por definición: si se
+            # trunca, la siguiente pasada empieza de nuevo.
+            parametros.seccion.last_crawled_at = now
         await self._session.flush()
 
         return summary
+
+    async def _ambito(
+        self, site: HubWebSite, section_id: uuid.UUID | None
+    ) -> tuple[Any, _Ambito]:
+        """La fuente con la que se rastrea y los parámetros efectivos del ámbito (DIN.2)."""
+        from server.app.modules.agents_hub.database.operational_models import HubWebSection
+        from server.app.modules.curation.secciones import parametros_efectivos
+
+        seccion = None
+        if section_id is not None:
+            seccion = await self._session.get(HubWebSection, section_id)
+            if seccion is None or seccion.site_id != site.id:
+                raise _AmbitoDesconocido(
+                    f"la sección {section_id} no es de el sitio {site.id}"
+                )
+
+        efectivos = parametros_efectivos(site, seccion)
+        fuente = _FuenteDelAmbito(
+            id=site.id,
+            root_url=site.root_url,
+            sitemap_url=site.sitemap_url,
+            config_json=efectivos.config_de_rastreo(),
+            # Una pasada de sección no reanuda la cola del sitio ni la escribe: ver el cierre.
+            # Se lee con `getattr` igual que la lee el spider: la cola es de RAS.3 y hay dobles
+            # de sitio anteriores a ella.
+            crawl_frontier=getattr(site, "crawl_frontier", None) if seccion is None else None,
+        )
+        return fuente, _Ambito(efectivos=efectivos, seccion=seccion)
 
     async def _quitar_la_plantilla_repetida(
         self, site: Any, summary: SiteCrawlSummary
@@ -315,7 +430,7 @@ class SiteCrawler:
         }
 
     async def _discover_urls(
-        self, site: HubWebSite
+        self, site: _FuenteDelAmbito
     ) -> tuple[set[str], dict[str, datetime | None], Any]:
         """Unión de URLs del spider y del sitemap; el mapa de lastmod y el recorrido en bruto."""
         crawl_result = await self._spider.crawl(site)

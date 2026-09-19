@@ -13,8 +13,11 @@ como transitiva de otro—, y el único que **ninguno de los guardarrailes que h
 
 * `test_dep1_no_hay_dependencias_de_rebote.py` busca **imports** no declarados. `uvicorn` no se
   importa en ninguna parte del código: se invoca como ejecutable. Invisible.
-* **CI no lo vio** porque instala con `--all-extras`, así que `uvicorn` estaba ahí. El conjunto
-  que se despliega —base, sin extras— **no lo prueba nadie**.
+* **CI no lo vio** porque `Lint & Test` instala con `--all-extras`, así que `uvicorn` estaba
+  ahí. El conjunto que se despliega —base, sin extras— no lo probaba nadie **hasta IMG.1**, que
+  añadió el job `imagen`: construye la imagen del despliegue y la arranca. Este fichero se
+  queda porque contesta en milisegundos y sin Docker lo que allí cuesta una construcción
+  entera, y porque señala el manifiesto en vez de un contenedor que murió.
 * Y una comprobación de que la aplicación *importa* con el conjunto base tampoco lo habría
   cazado, porque importar funciona: lo que falta es el proceso que la arranca. Se comprobó ese
   día, pasó en verde, y producción seguía rota.

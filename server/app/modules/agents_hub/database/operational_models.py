@@ -61,6 +61,144 @@ class HubWebSite(HubOperationalBase):
     )
 
 
+class HubWebSection(HubOperationalBase):
+    """Sección o bloque dentro de un sitio: el apartado como **dato** (DIN.1).
+
+    Hasta aquí un apartado se expresaba creando un `HubWebSite` entero con su
+    `url_regex_filter` (RAS.5). Tenía una razón —cada apartado tiene un responsable
+    distinto, que aquí es la columna `owner`— pero duplicaba `root_url`, sitemap,
+    cortesía y criterios de juicio, y hacía que «añadir el apartado de becas» fuera un
+    alta técnica en vez de un formulario de quien cura.
+
+    Los campos están en inglés como los de `HubWebSite`, para leerse como su vecina.
+    Llega a su organización **por el sitio**: no tiene `organizacion_id`, y eso es lo
+    que dice su fila en `docs/MULTITENENCIA.md`.
+
+    **Nulo hereda**: `crawl_interval_hours` y `criteria_json` vacíos valen los del
+    sitio; lo resuelve `curation/secciones.parametros_efectivos`. `mode` lleva
+    `CheckConstraint` —dos valores estables con consumidor en el código— y
+    `criteria_json` no: son vocabulario que crecerá, como los criterios de sitio de
+    CUR.2.1.
+    """
+
+    __tablename__ = "hub_web_sections"
+    __table_args__ = (
+        UniqueConstraint("site_id", "name", name="uq_section_site_name"),
+        CheckConstraint(
+            "pattern_kind IN ('path_prefix', 'regex')", name="ck_section_pattern_kind"
+        ),
+        CheckConstraint("mode IN ('manual', 'automatic')", name="ck_section_mode"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    site_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_web_sites.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    #: El nombre que le da quien cura: «Jornadas», «Eventos».
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: Lo que delimita la sección. Se valida al guardar (`secciones.validar_patron`): un regex
+    #: que no compila rompería todos los rastreos y el fallo saldría lejos del formulario.
+    pattern: Mapped[str] = mapped_column(String(2048), nullable=False)
+    pattern_kind: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="path_prefix"
+    )
+    #: NULL = hereda la cadencia del sitio.
+    crawl_interval_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: El defecto es `manual` **a propósito**, al contrario que `auto_ingest_new` (que nació
+    #: con default `True`): una sección nueva no automatiza hasta que alguien lo dice. Es el
+    #: principio del bloque, «curación una vez, automatización después».
+    mode: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
+    #: Overrides de criterios de juicio sobre los del sitio; NULL = hereda. Se funden **clave a
+    #: clave**: un override de `stale_days` no puede borrar el umbral de retirada del sitio.
+    criteria_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    #: Responsable del apartado: la razón original de RAS.5 para partir por sitios, que aquí es
+    #: un campo y no una tabla nueva.
+    owner: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: La sección tiene su propio reloj: es lo que permite cadencias distintas en un mismo sitio.
+    last_crawled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class HubCrawlRun(HubOperationalBase):
+    """El diario de una pasada de curación: qué ámbito cubrió y qué hizo (DIN.6).
+
+    El `summary` del job se calculaba, se devolvía y **se perdía**. La confianza en una
+    automatización se construye pudiendo auditarla barata: si quien cura no ve lo que
+    hizo, la apagará al primer susto — y tendrá razón.
+
+    **Por qué una tabla nueva y no `hub_ingestion_jobs`** (el prompt pedía comprobarlo
+    antes): aquélla es de **un documento** —`chatbot_id` NOT NULL, `source_url`,
+    `chunks_processed`— y una pasada no tiene chatbot (puede tocar varios, o ninguno) ni
+    una URL; lo que tiene es un sitio, una sección y un diff. Encajarla ahí exigiría un
+    `chatbot_id` inventado y un `source_url` que no es una URL, y el listado de trabajos
+    de ingesta pasaría a mezclar dos cosas que nadie querría ver juntas.
+
+    `section_id` es `SET NULL` y va con `scope_label` al lado a propósito: **el diario es
+    historia**, y una historia que se reescribe cuando alguien borra una sección no sirve
+    para auditar nada. Con la etiqueta, la fila sigue diciendo qué cubrió.
+    """
+
+    __tablename__ = "hub_crawl_runs"
+    __table_args__ = (
+        Index("ix_hub_crawl_runs_site_started", "site_id", "started_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    site_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_web_sites.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    section_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_web_sections.id", ondelete="SET NULL", name="fk_run_section"),
+        nullable=True,
+        index=True,
+    )
+    #: Qué cubrió la pasada, en texto: el nombre de la sección, o «sitio». Sobrevive al borrado
+    #: de la sección, que es lo que hace que el diario siga siendo historia.
+    scope_label: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    pages_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pages_new: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pages_changed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pages_gone: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pages_error: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    documents_auto_ingested: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    documents_reingested: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    documents_auto_retired: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pages_blocked_by_findings: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    findings_retired: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    #: El rastreo no vio el ámbito entero, y por qué (RAS.1). Mientras sea cierto no hay bajas.
+    truncated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    stop_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    #: Los errores de la pasada, tal cual. Un contador diría cuántos y no cuáles.
+    errors: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class HubCrawledPage(HubOperationalBase):
     """Página rastreada de un sitio. Acumula señales de frescura y flags de higiene."""
 
@@ -176,6 +314,19 @@ class HubCorpusSelection(HubOperationalBase):
     )
     rule_type: Mapped[str] = mapped_column(String(20), nullable=False)
     rule_value: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    #: DIN.3 — apunta a una sección del sitio en vez de repetir su patrón. **Cuando está puesto,
+    #: el patrón efectivo es el de la sección y `rule_value` se ignora**: dos sitios de verdad de
+    #: la misma regla —el patrón de la sección y este valor— divergirían en cuanto alguien
+    #: editara uno. Nulo = la regla vale por sí misma, que es el camino de siempre.
+    #: `RESTRICT` y no `CASCADE`: borrar una sección no puede llevarse por delante la selección
+    #: que apunta a ella. Con la auto-retirada de DIN.4 detrás, perder la selección no es perder
+    #: una fila: es dejar de mantener lo que ya está en el corpus.
+    section_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hub_web_sections.id", ondelete="RESTRICT", name="fk_selection_section"),
+        nullable=True,
+        index=True,
+    )
     auto_ingest_new: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

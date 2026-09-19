@@ -230,6 +230,62 @@ describe('RevisionInteraccionesPage — revisión (REV.1)', () => {
     expect(mutate).not.toHaveBeenCalled()
   })
 
+  it('should_say_why_a_bad_verdict_is_blocked_instead_of_doing_nothing', async () => {
+    /** El defecto que salió verificando RHR.1 en navegador.
+     *
+     * `revisar()` hacía `if (verdict === 'bad' && !note) return` — no mandaba nada al servidor,
+     * que es correcto, y **no se lo decía a nadie**: se pulsaba «Inadecuada», la fila no cambiaba
+     * y no aparecía ningún motivo. La única pista vivía en el *placeholder* del campo, que
+     * desaparece en cuanto escribes una letra.
+     *
+     * El test de al lado (`should_not_send_a_bad_verdict_without_a_note`) afirma **la mitad que
+     * pasa con el defecto**: que la llamada no ocurre. Esta es la otra mitad, y es la que
+     * convierte «no pasa nada» en «falta la nota». Mismo patrón que el catálogo de funciones y
+     * el asistente de scripts: el botón deshabilitado y el motivo a la vista.
+     */
+    vi.mocked(useReviewInteractionApiV1HubFeedbackInteractionsInteractionIdReviewPatch).mockReturnValue(
+      { mutate: vi.fn(), isPending: false } as any,
+    )
+
+    renderPage()
+    await waitFor(() => screen.getByText('How does Python work?'))
+
+    const inadecuada = screen.getAllByRole('button', { name: /inadecuada/i })[0]
+    expect(inadecuada).toBeDisabled()
+    // Y el motivo, legible y no sólo un botón gris: el `title` lo lee también quien usa
+    // lector de pantalla.
+    expect(inadecuada).toHaveAttribute('title')
+    expect(screen.getAllByTestId('nota-obligatoria')[0]).toBeInTheDocument()
+
+    // Los otros dos veredictos no exigen nota y siguen disponibles.
+    expect(screen.getAllByRole('button', { name: /adecuada/i })[0]).not.toBeDisabled()
+  })
+
+  it('should_enable_the_bad_verdict_once_the_note_is_written', async () => {
+    const mutate = vi.fn()
+    vi.mocked(useReviewInteractionApiV1HubFeedbackInteractionsInteractionIdReviewPatch).mockReturnValue(
+      { mutate, isPending: false } as any,
+    )
+
+    renderPage()
+    await waitFor(() => screen.getByText('How does Python work?'))
+
+    fireEvent.change(screen.getAllByLabelText(/nota de revisión/i)[0], {
+      target: { value: 'La respuesta cita un artículo derogado' },
+    })
+    const inadecuada = screen.getAllByRole('button', { name: /inadecuada/i })[0]
+    expect(inadecuada).not.toBeDisabled()
+
+    fireEvent.click(inadecuada)
+
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { verdict: 'bad', note: 'La respuesta cita un artículo derogado' },
+      }),
+      expect.anything(),
+    )
+  })
+
   it('should_export_the_verdict_columns_to_csv', async () => {
     let exportado: Blob | null = null
     vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {

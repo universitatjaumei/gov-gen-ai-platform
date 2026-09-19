@@ -7,12 +7,14 @@ descubrir, y los entry points son el mecanismo entero del bloque—. El efecto c
 `readme = "README.md"`. El `Dockerfile` copiaba al *builder* sólo `pyproject.toml` y `uv.lock`,
 así que la construcción abortaba con `OSError: Readme file does not exist: README.md`.
 
-**Ningún test lo vio, y no por descuido**: `ci.yml` no construye imágenes, y en local se instala
-sobre un árbol completo donde el fichero siempre está. El error sólo aparece en un contexto de
-construcción recortado, que es exactamente el de producción.
+**Ningún test lo vio, y no por descuido**: cuando pasó, `ci.yml` no construía imágenes, y en
+local se instala sobre un árbol completo donde el fichero siempre está. El error sólo aparece en
+un contexto de construcción recortado, que es exactamente el de producción.
 
-Esto **no sustituye a IMG.1** —construir y arrancar la imagen en CI, que es lo único que lo cubre
-entero— sino que caza la clase concreta que ya mordió, y cuesta milisegundos en vez de minutos.
+**Desde IMG.1 el job `imagen` de `ci.yml` construye las cuatro imágenes y arranca la de la
+aplicación**, así que la clase entera ya está cubierta en CI. Esto se queda porque cuesta
+milisegundos en vez de minutos y señala el arreglo exacto —qué `COPY` falta— en vez de un
+`OSError` al final de una construcción.
 """
 
 from __future__ import annotations
@@ -69,7 +71,8 @@ def test_el_builder_copia_lo_que_hatchling_necesita_leer() -> None:
         f"`server/pyproject.toml` declara `readme = \"{readme}\"` y tiene `[build-system]`, así "
         f"que `uv sync` construye el wheel y hatchling **abre ese fichero**. El builder del "
         f"`Dockerfile` copia {sorted(copiadas)}, que no lo incluye.\n\n"
-        f"La construcción de la imagen falla con `OSError: Readme file does not exist`, y no lo "
-        f"ve ningún otro test: CI no construye imágenes y en local el árbol está completo.\n"
+        f"La construcción de la imagen falla con `OSError: Readme file does not exist`. El job "
+        f"`imagen` de CI también lo cazaría, pero minutos después y con un error del final de la "
+        f"construcción en vez del `COPY` que falta.\n"
         f"Arreglo: añadir `{esperada}` al `COPY` del builder."
     )

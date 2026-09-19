@@ -15,19 +15,31 @@ import { resolve } from 'node:path'
  * se separa del contrato.
  */
 
-const TIPOS_QUE_EMITE_EL_BACKEND = [
-  'version_series',
-  'superseded',
-  'duplicate',
-  'contradiction',
-  'empty',
-  'thin',
-  'stale',
-  'crawl_error',
-  'orphan_page',
-  'needs_javascript',
-  'content_updated',
-]
+/**
+ * DIN.4 — la lista se **lee del contrato**, no se escribe aquí.
+ *
+ * Estaba a mano, y eso convertía este guardarraíl en la misma cosa contra la que existe: al
+ * añadir `page_gone` y `retirada_masiva_detenida` el test habría seguido verde con la pantalla
+ * incapaz de nombrarlos. Los tipos que cuelgan de un chatbot (`content_gap`, `revisio_vencuda`,
+ * `copia_divergent`) se excluyen: no salen de auditar páginas y no se listan en esta pantalla,
+ * que filtra hallazgos de sitio.
+ */
+const TIPOS_DE_CHATBOT = ['content_gap', 'revisio_vencuda', 'copia_divergent']
+
+function tiposQueEmiteElBackend(): string[] {
+  const contrato = readFileSync(
+    resolve(__dirname, '../../../../server/app/modules/curation/contracts.py'),
+    'utf8',
+  )
+  const literal = contrato.match(/FindingType = Literal\[([\s\S]*?)\n\]/)
+  if (!literal) throw new Error('no se encontró FindingType en contracts.py')
+
+  return [...literal[1].matchAll(/^\s*"([a-z_]+)",/gm)]
+    .map((m) => m[1])
+    .filter((tipo) => !TIPOS_DE_CHATBOT.includes(tipo))
+}
+
+const TIPOS_QUE_EMITE_EL_BACKEND = tiposQueEmiteElBackend()
 
 describe('los tipos de hallazgo de la pantalla', () => {
   it('el filtro ofrece todos los que el backend puede emitir', () => {

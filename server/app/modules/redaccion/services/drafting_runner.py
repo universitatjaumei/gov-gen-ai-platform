@@ -66,6 +66,7 @@ def construir_grafo(
     transformar datos es **programar**, así que va con el nivel 2.
     """
     from server.app.core.storage import get_storage_service
+    from server.app.modules.redaccion.funciones_resolver import ResolvedorDeFuncion
     from server.app.modules.redaccion.graph.core_graph import build_core_graph
     from server.app.modules.redaccion.pipelines.factory import build_default_factory
 
@@ -78,6 +79,10 @@ def construir_grafo(
         etl_llm=etl_llm,
         etl_model_name=etl_model_name,
         etl_system_prompt=etl_system_prompt,
+        # FUN.3 — sin esto, un bloque que referencia una función del catálogo fallaría en alto
+        # diciendo que el grafo se construyó sin resolutor. Es mejor que ejecutar nada en
+        # silencio, pero es un fallo: el sitio donde se pasa es éste, y hay un test que lo fija.
+        resolvedor_de_funciones=ResolvedorDeFuncion(session),
     )
 
 

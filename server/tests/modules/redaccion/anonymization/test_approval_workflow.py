@@ -181,6 +181,20 @@ def approval_app(tmp_path):
         async def get(self, model: type, key: Any) -> Any | None:
             return state.get(model.__name__, {}).get(str(key))
 
+        async def execute(self, stmt: Any) -> Any:
+            """FUN.3 — el registro en el catálogo pide el ordinal siguiente de la función.
+
+            Este doble no sabe de SQL, y lo que necesita la prueba es que el registro ocurra:
+            la primera versión de una función nueva es la 1, y el ordinal de verdad lo prueban
+            los tests del catálogo contra Postgres.
+            """
+
+            class _R:
+                def scalar_one(self_inner) -> int:  # noqa: N805
+                    return 1
+
+            return _R()
+
     async def _override_session():
         yield _FakeSession()
 
@@ -268,11 +282,23 @@ def test_save_to_private_template_creates_new_version(approval_app) -> None:
         target_template_id=template.id,
     )
 
-    response = client.post(f"/api/v1/redaccion/scripts/{proposal.id}/save-to-private-template")
-    assert response.status_code == 200
+    # FUN.3 — registrar en el catálogo exige la declaración responsable (Instrucció §8.2).
+    response = client.post(
+        f"/api/v1/redaccion/scripts/{proposal.id}/save-to-private-template",
+        json={
+            "finalidad": "Extraer la tabla de gastos del ERP",
+            "categorias_datos": ["datos_economicos_y_financieros"],
+            "nombre": "Extraer gastos",
+        },
+    )
+    assert response.status_code == 200, response.text
     body = response.json()
     assert body["proposal_id"] == str(proposal.id)
     assert body["template_id"] == str(template.id)
+    # Y devuelve qué función quedó registrada: antes no había nada que devolver, porque el
+    # código se copiaba en la plantilla y no tenía identidad.
+    assert body["funcion_id"] is not None
+    assert body["funcion_version"] == 1
 
     # Una nueva versión fue creada en el estado
     versions = state.get("HubReportTemplateVersion", {})
@@ -284,7 +310,10 @@ def test_save_to_private_template_creates_new_version(approval_app) -> None:
 
     # La propuesta pasa a approved
     p = state["HubScriptProposal"][str(proposal.id)]
-    assert p.status == "approved"
+    # FUN.3 — `registrada` y no `approved`: la propuesta cumplió su papel (fue la prueba en
+    # sandbox) y lo que queda vivo es la versión del catálogo. Nadie aprobó nada: en el nivel 2
+    # de la Instrucció la aprobación previa está prohibida como condición para compartir.
+    assert p.status == "registrada"
 
 
 # ---------------------------------------------------------------------------

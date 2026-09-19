@@ -35,6 +35,20 @@ vi.mock('@/shared/api/generated/hub-sites/hub-sites', () => ({
 
 vi.mock('@/shared/api/download', () => ({ descargarConAutorizacion: vi.fn() }))
 
+// DIN.7 — `SitesPage` resuelve de qué organización es el sitio que se crea (sin ella el
+// servidor responde 403). El hook se dobla aquí porque este fichero no prueba esa elección:
+// la prueba `ElAltaDeSitioDiceSuOrganizacion` sí, y sin el doble la pantalla lanzaría la
+// consulta real de organizaciones.
+vi.mock('@/shared/organizacion/useOrganizacionElegida', () => ({
+  useOrganizacionElegida: () => ({
+    organizaciones: [{ id: 'org-1', name: 'Organización' }],
+    elegida: 'org-1',
+    elegir: vi.fn(),
+    hayVarias: false,
+  }),
+}))
+
+
 beforeAll(async () => {
   await i18n.changeLanguage('es')
 })

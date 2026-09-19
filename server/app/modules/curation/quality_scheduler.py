@@ -1,45 +1,108 @@
-"""Scheduler de calidad de contenido web (9Q.5).
+"""Scheduler de calidad de contenido web (9Q.5, ampliado en DIN.2).
 
 Deploy: edge.
 
-Mantiene un APScheduler que, cada N horas, selecciona los HubWebSite activos
-cuyo crawl_interval_hours haya vencido y lanza SiteQualityAnalysisJob.run_for_site.
+Mantiene un APScheduler que, cada N horas, selecciona los **ámbitos** vencidos y lanza
+`SiteQualityAnalysisJob.run_for_site` sobre cada uno. Un ámbito es una sección de un sitio
+(DIN.1) o, en un sitio sin secciones, el sitio entero — que es el comportamiento de siempre.
 
-La función _get_due_sites está expuesta para facilitar los tests unitarios.
+La función `_get_due_scopes` está expuesta para facilitar los tests unitarios.
 """
 from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-async def _get_due_sites(session: Any, now: datetime) -> list:
-    """Retorna los HubWebSite activos cuyo intervalo de crawl ha vencido.
+@dataclass(frozen=True)
+class AmbitoVencido:
+    """Lo que hay que rastrear: un sitio, con su sección si la pasada es de una sección."""
 
-    Un sitio es «debido» si:
-    - last_crawled_at es None (nunca rastreado), o
-    - now - last_crawled_at >= crawl_interval_hours.
+    site: Any
+    section: Any | None = None
+
+    @property
+    def site_id(self) -> uuid.UUID:
+        return self.site.id
+
+    @property
+    def section_id(self) -> uuid.UUID | None:
+        return None if self.section is None else self.section.id
+
+    @property
+    def ambito(self) -> str:
+        return "sitio" if self.section is None else str(self.section.id)
+
+
+def _ha_vencido(last_crawled_at: datetime | None, intervalo: int, now: datetime) -> bool:
+    """Nunca rastreado vence, igual que un sitio nuevo; si no, cuando pasa su intervalo."""
+    if last_crawled_at is None:
+        return True
+    return now - last_crawled_at >= timedelta(hours=intervalo)
+
+
+async def _get_due_scopes(session: Any, now: datetime) -> list[AmbitoVencido]:
+    """Los ámbitos vencidos: secciones por su cadencia efectiva, sitios sin secciones por la suya.
+
+    **Un sitio con secciones vence por sección, no además como sitio.** Si venciera por los dos
+    caminos, cada pasada del sitio entero volvería a rastrear lo que la sección acaba de mirar, y
+    con cadencias distintas eso es el doble de peticiones contra el mismo servidor. Lo que queda
+    fuera de toda sección sigue en manos de quien cura, con el rastreo del sitio a mano.
+
+    Cada sección lleva **su propio reloj** (`last_crawled_at`): es lo que permite que un apartado
+    de eventos se mire cada seis horas y el resto del portal cada semana.
     """
     from sqlalchemy import select
 
-    from server.app.modules.agents_hub.database.operational_models import HubWebSite
+    from server.app.modules.agents_hub.database.operational_models import (
+        HubWebSection,
+        HubWebSite,
+    )
+    from server.app.modules.curation.secciones import parametros_efectivos
 
-    stmt = select(HubWebSite).where(HubWebSite.status == "active")
-    result = await session.execute(stmt)
-    sites = result.scalars().all()
+    sites = (
+        (await session.execute(select(HubWebSite).where(HubWebSite.status == "active")))
+        .scalars()
+        .all()
+    )
+    if not sites:
+        return []
 
-    due: list = []
+    secciones = (
+        (
+            await session.execute(
+                select(HubWebSection)
+                .where(HubWebSection.site_id.in_([s.id for s in sites]))
+                .where(HubWebSection.is_active.is_(True))
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    # El filtro de `is_active` se comprueba también aquí, y no es redundancia defensiva: es lo
+    # que hace comprobable en un test sin base de datos que una sección desactivada no vence.
+    por_sitio: dict[Any, list] = {}
+    for seccion in secciones:
+        if seccion.is_active:
+            por_sitio.setdefault(seccion.site_id, []).append(seccion)
+
+    due: list[AmbitoVencido] = []
     for site in sites:
-        if site.last_crawled_at is None:
-            due.append(site)
-        else:
-            elapsed = now - site.last_crawled_at
-            if elapsed >= timedelta(hours=site.crawl_interval_hours):
-                due.append(site)
+        suyas = por_sitio.get(site.id, [])
+        if not suyas:
+            if _ha_vencido(site.last_crawled_at, site.crawl_interval_hours, now):
+                due.append(AmbitoVencido(site=site))
+            continue
+        for seccion in suyas:
+            intervalo = parametros_efectivos(site, seccion).crawl_interval_hours
+            if _ha_vencido(seccion.last_crawled_at, intervalo, now):
+                due.append(AmbitoVencido(site=site, section=seccion))
     return due
 
 
@@ -72,16 +135,16 @@ def create_quality_scheduler(
         now = datetime.now(timezone.utc)
         try:
             async with session_factory() as session:
-                due_sites = await _get_due_sites(session, now)
+                due = await _get_due_scopes(session, now)
         except Exception as exc:
-            logger.exception("[QualityScheduler] Failed to get due sites: %s", exc)
+            logger.exception("[QualityScheduler] Failed to get due scopes: %s", exc)
             return
 
-        logger.info("[QualityScheduler] %d sites due for quality check", len(due_sites))
-        for site in due_sites:
+        logger.info("[QualityScheduler] %d scopes due for quality check", len(due))
+        for ambito in due:
             asyncio.create_task(
-                _run_site_safe(site_quality_job, site.id),
-                name=f"quality-{site.id}",
+                _run_site_safe(site_quality_job, ambito.site_id, ambito.section_id),
+                name=f"quality-{ambito.site_id}-{ambito.ambito}",
             )
 
     scheduler.add_job(
@@ -97,13 +160,17 @@ def create_quality_scheduler(
 async def _run_site_safe(
     site_quality_job: Any,
     site_id: uuid.UUID,
+    section_id: uuid.UUID | None = None,
 ) -> None:
-    """Ejecuta el job de calidad para un sitio sin propagar excepciones."""
+    """Ejecuta el job de calidad para un ámbito sin propagar excepciones."""
+    ambito = "sitio" if section_id is None else str(section_id)
     try:
-        summary = await site_quality_job.run_for_site(site_id)
+        summary = await site_quality_job.run_for_site(site_id, section_id=section_id)
         logger.info(
-            "[QualityScheduler] site %s done: new=%d superseded=%d auto_ingested=%d errors=%d",
+            "[QualityScheduler] site %s (%s) done: new=%d superseded=%d auto_ingested=%d "
+            "errors=%d",
             site_id,
+            ambito,
             summary.pages_new,
             summary.pages_marked_superseded,
             summary.documents_auto_ingested,
@@ -111,6 +178,13 @@ async def _run_site_safe(
         )
         if summary.errors:
             for err in summary.errors:
-                logger.warning("[QualityScheduler] site %s error: %s", site_id, err)
+                logger.warning(
+                    "[QualityScheduler] site %s (%s) error: %s", site_id, ambito, err
+                )
     except Exception as exc:
-        logger.exception("[QualityScheduler] Unexpected failure for site %s: %s", site_id, exc)
+        logger.exception(
+            "[QualityScheduler] Unexpected failure for site %s (%s): %s",
+            site_id,
+            ambito,
+            exc,
+        )

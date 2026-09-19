@@ -43,6 +43,8 @@ from server.app.routers.hub_prompts_catalog_router import router as hub_prompts_
 from server.app.routers.redaccion.llm_drafts_router import router as llm_drafts_router
 from server.app.routers.redaccion.hub_redaccion_router import router as hub_redaccion_router
 from server.app.routers.redaccion.workspaces_router import router as redaccion_workspaces_router
+from server.app.routers.redaccion.funciones_router import router as redaccion_funciones_router
+from server.app.routers.redaccion.funciones_run_router import router as redaccion_funciones_run_router
 from server.app.routers.redaccion.scripts_router import router as redaccion_scripts_router
 from server.app.routers.redaccion.charts_router import router as redaccion_charts_router
 from server.app.routers.redaccion.manifests_router import router as redaccion_manifests_router
@@ -115,6 +117,7 @@ def _start_quality_scheduler():
             create_async_engine,
             create_session_factory,
         )
+        from server.app.modules.curation.diario import DiarioDePasadas
         from server.app.modules.curation.quality_job import (
             SiteQualityAnalysisJob,
         )
@@ -164,10 +167,19 @@ def _start_quality_scheduler():
                 run_semantic=settings.content_quality_semantic_enabled,
             ),
             watcher=None,
-            selection_repo=_NullSelectionRepo(),
+            # DIN.4 — el repositorio y el retirador se resuelven **con la sesión de cada
+            # pasada**. Aquí iba un repositorio nulo que devolvía lista vacía a todo, y con él
+            # la auto-ingesta de 9Q.7 no ha corrido nunca en producción.
+            selection_repo=None,
+            selection_repo_factory=_repo_de_selecciones,
+            retirer_factory=_retirador_del_corpus,
             run_semantic=settings.content_quality_semantic_enabled,
             watcher_factory=_watcher_para,
             finding_repo=_RepoDeHallazgosDelJob(hub_session_factory),
+            # DIN.6 — el diario. Con su propia transacción, como el repositorio de avisos: es
+            # información sobre algo que ya pasó, y perderla por un rollback del job sería
+            # perder justo el rastro del problema.
+            run_log=DiarioDePasadas(hub_session_factory),
         )
 
         scheduler = create_quality_scheduler(
@@ -216,14 +228,36 @@ class _RepoDeHallazgosDelJob:
             return resultado
 
 
-class _NullSelectionRepo:
-    """Selection repo stub para el arranque sin configuración completa."""
+def _repo_de_selecciones(session: Any) -> Any:
+    """El repositorio de selecciones de la pasada de calidad (DIN.4).
 
-    async def list_by_site(self, site_id):  # noqa: ANN001
-        return []
+    **Aquí iba `_NullSelectionRepo`, que devolvía lista vacía a todo.** Era un sustituto puesto
+    porque el repositorio real necesita una sesión y el job se construye al arrancar — pero con
+    él, el paso de auto-ingesta de 9Q.7 preguntaba «¿qué selecciones tiene este sitio?» y la
+    respuesta era siempre «ninguna»: la auto-ingesta de páginas nuevas no ha corrido nunca en
+    producción. Con una fábrica, el job resuelve el repositorio con la sesión de cada pasada.
+    """
+    from server.app.modules.curation.site_repo import CorpusSelectionRepo
 
-    def matches(self, selection, page_url: str) -> bool:
-        return False
+    return CorpusSelectionRepo(session)
+
+
+def _retirador_del_corpus(session: Any) -> Any:
+    """Quien sabe retirar del corpus los documentos de una página (DIN.4).
+
+    Es el mismo `CorpusSelectionService` del endpoint manual de retirada, y por eso no hace
+    falta un segundo camino: `retire_page` borra documentos y *chunks*, y no necesita watcher
+    —retirar no ingiere nada—.
+    """
+    from server.app.modules.curation.selection_service import CorpusSelectionService
+    from server.app.modules.curation.site_repo import (
+        CorpusSelectionRepo,
+        CrawledPageRepo,
+    )
+
+    return CorpusSelectionService(
+        session, CrawledPageRepo(session), CorpusSelectionRepo(session), watcher=None
+    )
 
 
 async def _fail_zombie_jobs() -> None:
@@ -293,6 +327,30 @@ async def lifespan(app: FastAPI):
         raise
 
 
+async def _sincronizar_funciones_de_paquete() -> None:
+    """Sincroniza `govgenai.funciones` con el catálogo. Falla en alto si un paquete es incoherente.
+
+    Abre su propia sesión, como el resto de pasos del arranque que escriben, y commitea: sin el
+    `commit` el trabajo se deshace al cerrar el contexto y el arranque diría «sincronizado» sin
+    haber escrito nada — es exactamente el defecto que DIN.7 encontró en el job de calidad.
+    """
+    from server.app.database.db import AsyncSessionLocal
+    from server.app.modules.redaccion.funciones_paquete import sincronizar_paquetes
+
+    async with AsyncSessionLocal() as session:
+        resumen = await sincronizar_paquetes(session)
+        await session.commit()
+
+    logger.info(
+        "Funciones empaquetadas: %s instaladas (%s nuevas, %s versiones nuevas, %s fuera de "
+        "servicio)",
+        len(resumen.entry_points),
+        resumen.funciones_nuevas,
+        resumen.versiones_nuevas,
+        resumen.versiones_desinstaladas,
+    )
+
+
 @asynccontextmanager
 async def _arranque(app: FastAPI):
     # Lo primero, antes de que nada tenga algo que decir: si se configurara después, los
@@ -326,6 +384,16 @@ async def _arranque(app: FastAPI):
     from server.app.modules.agents_hub.database.seeds import seed_hub_defaults
 
     await seed_hub_defaults()
+
+    # FUN.5 — poner el catálogo de funciones al día con los paquetes instalados. Va **después**
+    # de las semillas, porque escribe en la base, y **antes de servir**, porque sus dos fallos
+    # —un contrato incoherente, dos paquetes que declaran lo mismo— son de configuración del
+    # entorno: tienen que romper el arranque y no la primera plantilla que referencie la función.
+    #
+    # Y va cableado aquí y no en un script aparte por la lección de DIN.4: una capacidad que el
+    # arranque no llama no existe, y allí costó descubrir que la auto-ingesta llevaba meses sin
+    # correr en producción.
+    await _sincronizar_funciones_de_paquete()
 
     from server.app.services.model_fetcher import refresh_model_cache
     from server.app.services.pricing_service import update_prices_from_openrouter
@@ -420,6 +488,8 @@ def _register_edge(app: FastAPI) -> None:
     app.include_router(hub_redaccion_router, prefix="/api/v1")  # Deploy: edge
     app.include_router(redaccion_workspaces_router, prefix="/api/v1")  # Deploy: edge
     app.include_router(redaccion_scripts_router, prefix="/api/v1")  # Deploy: edge
+    app.include_router(redaccion_funciones_router, prefix="/api/v1")  # Deploy: edge
+    app.include_router(redaccion_funciones_run_router, prefix="/api/v1")  # Deploy: edge
     app.include_router(redaccion_charts_router, prefix="/api/v1")  # Deploy: edge
     app.include_router(redaccion_manifests_router, prefix="/api/v1")  # Deploy: edge
     app.include_router(redaccion_copilot_router, prefix="/api/v1")  # Deploy: edge

@@ -1,0 +1,164 @@
+# Actualizaciones de dependencias (APER.6)
+#
+# Hallazgo B4 de la auditoría previa a abrir el repositorio: no había nada que avisara de una
+# dependencia vulnerable. Las dos que APER.4 y la auditoría encontraron —`js-yaml` por `orval` y
+# `@vitest/mocker` por `vitest`— llevaban meses ahí, y nadie las vio hasta que alguien miró a mano.
+#
+# ──────────────────────────────────────────────────────────────────────────────────────────────
+# DOS COSAS QUE HAY QUE SABER ANTES DE TOCAR ESTE FICHERO
+#
+# 1. `target-branch: desarrollo` NO es cosmético. `deploy.yml` dispara con
+#    `push: branches: [main]` y sólo con eso, así que una PR de actualización contra `main`
+#    **despliega producción al mezclarse**. Contra `desarrollo` se comprueba y no se despliega,
+#    que es la regla del proyecto desde el 2026-09-02.
+#
+#    Ojo con la consecuencia: `target-branch` gobierna las actualizaciones **de versión**, que
+#    son las que configura este fichero. Las de **seguridad** —activadas el 2026-09-18— las abre
+#    GitHub contra la rama por omisión del repositorio, que es `main`. Eso **no contradice** la
+#    regla: abrir la PR no hace nada, y mezclarla a `main` *es* la decisión de despliegue que la
+#    regla reserva a una persona. CI corre también en esas PR, así que tampoco entran sin
+#    comprobar. Lo que sí hay que hacer, y es mantenimiento y no riesgo: una PR así mezclada
+#    aterriza en `main` **sin haber pasado por `desarrollo`**, y las dos ramas divergen hasta que
+#    ese commit vuelve a `desarrollo`. Devuélvelo el mismo día, o el siguiente bloque arrancará
+#    sobre una base distinta de la que está desplegada.
+#
+# 2. **Un bump de `pyproject.toml` sin `uv lock` deja CI rojo.** Los dos pasos de instalación
+#    usan `uv sync --locked`, que falla si el lock no corresponde a su manifiesto. Dependabot
+#    actualiza el lock en el mismo commit, pero eso hay que comprobarlo en la primera PR de cada
+#    proyecto: si llega un manifiesto sin su lock, la PR no se mezcla, se completa.
+#
+# Los grupos están para que esto no llegue como veinte PR sueltas: una por ecosistema y semana,
+# que es revisable. Los ecosistemas y las rutas los comprueba
+# `server/tests/infra/test_aper6_dependabot_vigila_lo_que_existe.py`; lo que **no** puede
+# comprobar un test local es que GitHub acepte los nombres de ecosistema, así que tras el primer
+# push hay que mirar la pestaña Dependabot del repositorio — una configuración inválida no hace
+# nada y no avisa, que es la peor forma de fallar.
+# ──────────────────────────────────────────────────────────────────────────────────────────────
+
+version: 2
+
+updates:
+  # ─── Python, los cuatro proyectos con uv ───────────────────────────────────────────────────
+  - package-ecosystem: uv
+    directory: /server
+    target-branch: desarrollo
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      servidor:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(deps)"
+    # `setuptools` se queda en 81.0.0 **a propósito**, no por olvido: lo retiene el techo
+    # `setuptools<82` de `torch` 2.11. La decisión está aceptada, firmada y **con caducidad** en
+    # `avisos_aceptados.toml` (PYSEC-2026-3447), que es el fichero canónico y el que vigila
+    # `test_dep7_las_aceptaciones_caducan.py`.
+    #
+    # Se excluye **aquí** sólo para que no llegue la misma PR cada semana, que es como se deja de
+    # leer a Dependabot. Cuando torch levante el techo, `setuptools` sube con él y esta exclusión
+    # se retira. Ojo: esto **no** silencia una alerta de seguridad de GitHub sobre `setuptools`,
+    # que llega por otra vía y habría que valorar de nuevo.
+    ignore:
+      - dependency-name: setuptools
+
+  - package-ecosystem: uv
+    directory: /mcp_server
+    target-branch: desarrollo
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      mcp:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: uv
+    directory: /services/script_sandbox
+    target-branch: desarrollo
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      sandbox:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: uv
+    directory: /shared
+    target-branch: desarrollo
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      compartido:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ─── El frontend ───────────────────────────────────────────────────────────────────────────
+  #
+  # Separado en dos grupos a propósito: lo que se sirve al navegador y lo que sólo compila o
+  # prueba. Los cinco avisos de la auditoría eran todos de herramientas de desarrollo, y leerlos
+  # mezclados con un bump de React haría que se revisaran igual de rápido, que es lo que sobra.
+  - package-ecosystem: npm
+    directory: /frontend
+    target-branch: desarrollo
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      lo-que-se-sirve:
+        dependency-type: production
+        patterns: ["*"]
+      herramientas:
+        dependency-type: development
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ─── Las acciones de los workflows ─────────────────────────────────────────────────────────
+  #
+  # Con el repositorio público esto deja de ser higiene y pasa a ser superficie: una acción de
+  # tercero corre con el `GITHUB_TOKEN` del repositorio.
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: desarrollo
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      acciones:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(ci)"
+
+  # ─── Las imágenes base ─────────────────────────────────────────────────────────────────────
+  #
+  # Una por Dockerfile: Dependabot mira la instrucción `FROM`, no el compose. Las etiquetas
+  # `:latest` de `docker-compose.prod.yml` quedan fuera de aquí a propósito; eso es el hallazgo
+  # B5 y se arregla fijando versiones, no vigilando un `latest` que por definición se mueve.
+  - package-ecosystem: docker
+    directories:
+      - /
+      - /frontend
+      - /mcp_server
+      - /services/script_sandbox
+    target-branch: desarrollo
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 4
+    groups:
+      imagenes-base:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(deps)"

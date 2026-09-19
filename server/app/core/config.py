@@ -2,12 +2,15 @@
 Server core configuration.
 """
 
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parents[2] / ".env")
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -29,6 +32,11 @@ class Settings:
     # Cortesía del rastreo (RAS.1) — quien vea el tráfico en sus registros tiene que poder
     # saber quién es y a quién escribir. Va en el User-Agent de cada petición.
     crawler_contact: str = ""
+    # APER.1 — la válvula que permite rastrear direcciones de la red privada. Existe porque
+    # verificar curación sin salir a internet se hace con un `http.server` en 127.0.0.1, que es
+    # justo lo que el guardia bloquea; sin una forma declarada de permitirlo, el guardia se
+    # acabaría apagando entero. En producción **impide arrancar** (ver el gate de abajo).
+    crawler_allow_private_targets: bool = False
     # SSO SAML (AUTH.1) — Service Provider genérico SAML 2.0
     saml_enabled: bool = False
     saml_sp_entity_id: str = ""
@@ -87,6 +95,20 @@ def get_settings() -> Settings:
         raise RuntimeError("JWT_SECRET_KEY environment variable is required")
     # sandbox_mode defaults to "local" when TESTING=1 to avoid Docker dependency in CI.
     default_sandbox_mode = "local" if os.getenv("TESTING") == "1" else "http"
+    # APER.3 — el valor por omisión de `ENVIRONMENT` es el **permisivo**: sin él no corre
+    # ninguno de los cuatro gates de producción y las semillas crean `admin@example.local` con
+    # una contraseña que está escrita en el repositorio. La imagen lo ancla a `production`
+    # (`Dockerfile`), así que aquí sólo queda el caso del host — y ahí `development` es lo
+    # correcto, pero **no puede ser silencioso**: un despliegue accidentalmente permisivo
+    # funciona perfectamente hasta que alguien lo aprovecha.
+    if os.getenv("ENVIRONMENT") is None:
+        logger.warning(
+            "ENVIRONMENT no está declarado: se asume 'development', que NO aplica los gates de "
+            "producción (secreto de ejemplo, sandbox local, TESTING, rastreo a la red privada) "
+            "y siembra la cuenta de administración de desarrollo. Si esto es un despliegue, "
+            "declara ENVIRONMENT=production."
+        )
+
     ajustes = Settings(
         jwt_secret_key=secret,
         jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
@@ -103,6 +125,10 @@ def get_settings() -> Settings:
         content_quality_interval_hours=int(os.getenv("CONTENT_QUALITY_INTERVAL_HOURS", "24")),
         content_quality_semantic_enabled=os.getenv("CONTENT_QUALITY_SEMANTIC_ENABLED", "true").lower() != "false",
         crawler_contact=os.getenv("CRAWLER_CONTACT", ""),
+        crawler_allow_private_targets=os.getenv("CRAWLER_ALLOW_PRIVATE_TARGETS", "")
+        .strip()
+        .lower()
+        == "true",
         saml_enabled=os.getenv("SAML_ENABLED", "false").lower() == "true",
         saml_sp_entity_id=os.getenv("SAML_SP_ENTITY_ID", ""),
         saml_sp_acs_url=os.getenv("SAML_SP_ACS_URL", ""),
@@ -196,4 +222,16 @@ def _assert_configuracion_de_produccion(ajustes: Settings) -> None:
             "TESTING=1 en producción hace que el sandbox use el ejecutor local aunque "
             "SANDBOX_MODE sea 'http', así que los scripts correrían en el host. "
             "Quita TESTING del entorno de producción."
+        )
+
+    # APER.1 — la misma forma que los tres de arriba, y por la misma razón: una variable que
+    # desactiva una protección no da ningún síntoma mientras nadie la aprovecha. Con ella puesta
+    # el rastreador vuelve a poder pedir `169.254.169.254` y los contenedores vecinos, o sea que
+    # el hallazgo M1 queda reabierto por configuración.
+    if ajustes.crawler_allow_private_targets:
+        raise RuntimeError(
+            "CRAWLER_ALLOW_PRIVATE_TARGETS=true permite que el rastreador pida direcciones "
+            "de la red privada del servidor —el servidor de metadatos de la nube, los "
+            "contenedores vecinos—. Es una válvula de desarrollo para el portal de pruebas "
+            "local: quítala del entorno de producción."
         )

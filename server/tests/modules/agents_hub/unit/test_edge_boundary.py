@@ -64,6 +64,18 @@ def test_operational_base_contains_only_operational_models() -> None:
         "hub_web_sites",
         "hub_crawled_pages",
         "hub_corpus_selections",
+        # Bloque DIN — el apartado como dato y el diario de sus pasadas. Operacionales sin
+        # discusión: una sección delimita contenido del cliente y sus criterios de juicio, y el
+        # diario dice qué se hizo con el corpus de ese cliente. Ninguna de las dos se sincroniza
+        # cloud→edge.
+        "hub_web_sections",
+        "hub_crawl_runs",
+        # Bloque FUN — el catálogo de funciones deterministas. Operacional y no configuración
+        # aunque tenga cascada de plataforma: `hub_funcion_versiones.code` y su declaración
+        # responsable son texto escrito por una persona de la organización, que es el criterio
+        # con el que `hub_lexicon_pairs` acabó en este lado.
+        "hub_funciones",
+        "hub_funcion_versiones",
         # Módulo redacción (edge, 9R) — procesan expedientes del cliente
         "hub_report_templates",
         "hub_report_template_versions",

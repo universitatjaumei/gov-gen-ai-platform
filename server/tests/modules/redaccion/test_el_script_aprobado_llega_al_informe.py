@@ -1,4 +1,12 @@
-"""PRO.3 — un script aprobado tiene que extraer datos dentro de un informe.
+"""PRO.3 — un script registrado tiene que extraer datos dentro de un informe.
+
+**Reescrito en FUN.3**: lo que la plantilla lleva ya no es el código, es `funcion_ref`. Las
+cuatro lecciones de PRO.3 siguen valiendo tal cual —son de la costura, no del sitio donde vive el
+código— y por eso el fichero se migra en vez de borrarse: el bloque tiene que tener la forma que
+lee el contrato, el nodo tiene que pasar las opciones, tiene que llamar a `extract_async`, y el
+artefacto tiene que asignarse a un bloque `admin_script`. Lo que cambia es de dónde sale el
+código: del catálogo, resuelto por `funcion_ref`.
+
 
 La cola de aprobación acaba incrustando el script en una plantilla, y ahí se cortaba el
 camino por cuatro sitios a la vez, ninguno de ellos visible desde la cola:
@@ -19,6 +27,7 @@ entre ellas sin recorrer nunca.
 """
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 
 import pytest
@@ -42,7 +51,7 @@ class TestFormaDelBloqueIncrustado:
 
         spec = _embed_script_block(
             {"sections": [{"id": "s1", "title": "Principal", "block_ids": []}], "blocks": {}},
-            _CODIGO,
+            {"funcion_id": str(_FUNCION_ID), "version": 1},
             "b-script",
         )
 
@@ -51,7 +60,10 @@ class TestFormaDelBloqueIncrustado:
         bloque = DeterministicDataBlock.model_validate(bruto)
 
         assert bloque.source_pipeline == "admin_script"
-        assert bloque.options["code"] == _CODIGO
+        # FUN.3 — referencia, no copia: el código ya no está en el bloque.
+        assert bloque.funcion_ref.funcion_id == _FUNCION_ID
+        assert bloque.funcion_ref.version == 1
+        assert "code" not in bloque.options
         assert bloque.title
 
     def test_should_dejar_la_plantilla_legible_por_el_grafo(self) -> None:
@@ -60,7 +72,7 @@ class TestFormaDelBloqueIncrustado:
         from server.app.routers.redaccion.scripts_router import _embed_script_block
 
         base = _spec_base().model_dump(mode="json")
-        spec = ReportTemplateSpec.model_validate(_embed_script_block(base, _CODIGO, "b-script"))
+        spec = ReportTemplateSpec.model_validate(_embed_script_block(base, {"funcion_id": str(_FUNCION_ID), "version": 1}, "b-script"))
 
         bloque = next(b for b in spec.blocks if b.id == "b-script")
         assert bloque.kind == "DETERMINISTIC_DATA"
@@ -84,7 +96,7 @@ class TestPlantillaVaciaAlAprobar:
         from server.app.routers.redaccion.scripts_router import _embed_script_block
 
         spec = ReportTemplateSpec.model_validate(
-            _embed_script_block({}, _CODIGO, "b-script", test_data_kind="xlsx")
+            _embed_script_block({}, {"funcion_id": str(_FUNCION_ID), "version": 1}, "b-script", test_data_kind="xlsx")
         )
 
         bloque = next(b for b in spec.blocks if b.id == "b-script")
@@ -103,7 +115,7 @@ class TestPlantillaVaciaAlAprobar:
 
         for kind, esperado in (("xlsx", "excel"), ("csv", "csv"), ("pdf_text", "pdf")):
             spec = ReportTemplateSpec.model_validate(
-                _embed_script_block({}, _CODIGO, "b-script", test_data_kind=kind)
+                _embed_script_block({}, {"funcion_id": str(_FUNCION_ID), "version": 1}, "b-script", test_data_kind=kind)
             )
             slots = list(spec.input_contract.required_slots)
             assert slots[0].kind == esperado, kind
@@ -119,7 +131,7 @@ class TestPlantillaVaciaAlAprobar:
         ).model_dump(mode="json")
 
         spec = ReportTemplateSpec.model_validate(
-            _embed_script_block(base, _CODIGO, "b-script", test_data_kind="xlsx")
+            _embed_script_block(base, {"funcion_id": str(_FUNCION_ID), "version": 1}, "b-script", test_data_kind="xlsx")
         )
 
         ids = {b.id for b in spec.blocks}
@@ -164,16 +176,45 @@ def _spec_base(bloques=None, slot_kind: str = "excel"):
     )
 
 
-def _spec_con_script(slot_kind: str = "excel", con_codigo: bool = True):
+#: FUN.3 — la función que la plantilla referencia en estos tests.
+_FUNCION_ID = uuid.UUID("11111111-2222-3333-4444-555555555555")
+
+
+def _spec_con_script(slot_kind: str = "excel", version: int = 1):
     from server.app.modules.redaccion.contracts.blocks import DeterministicDataBlock
 
     bloque = DeterministicDataBlock(
         id="b-script",
         title="Datos del script",
         source_pipeline="admin_script",
-        options={"code": _CODIGO, "approved": True} if con_codigo else {},
+        # FUN.3 — referencia, no copia. El código lo trae el resolutor.
+        funcion_ref={"funcion_id": str(_FUNCION_ID), "version": version},
     )
     return _spec_base(bloques=[bloque], slot_kind=slot_kind)
+
+
+class _ResolvedorDeUno:
+    """Resuelve siempre la misma función, con el código de estos tests."""
+
+    def __init__(self, code: str | None = _CODIGO, falla: Exception | None = None) -> None:
+        self._code = code
+        self._falla = falla
+
+    async def resolver(self, funcion_id, version):
+        if self._falla is not None:
+            raise self._falla
+        from server.app.modules.redaccion.funciones_resolver import FuncionEjecutable
+        from server.app.modules.redaccion.funciones_service import sha256_del_codigo
+
+        return FuncionEjecutable(
+            funcion_id=funcion_id,
+            nombre="Contar filas",
+            version=version,
+            origen="autoservicio",
+            code=self._code,
+            code_sha256=sha256_del_codigo(self._code or ""),
+            contrato_entrada={},
+        )
 
 
 def _estado(spec, ruta: str):
@@ -229,7 +270,8 @@ async def test_should_ejecutar_el_script_aprobado_del_bloque(tmp_path: Path) -> 
     pd.DataFrame({"a": [1, 2, 3]}).to_excel(fichero, index=False)
 
     nodo = DeterministicExtractionNode(
-        _FactoriaDeUno(AdminScriptExtractionPipeline(client=LocalSandboxClient()))
+        _FactoriaDeUno(AdminScriptExtractionPipeline(client=LocalSandboxClient())),
+        resolvedor=_ResolvedorDeUno(),
     )
 
     salida = await nodo(_estado(_spec_con_script(), str(fichero)))
@@ -273,10 +315,12 @@ async def test_should_pasar_las_opciones_del_bloque_al_pipeline(tmp_path: Path) 
     fichero = tmp_path / "datos.xlsx"
     fichero.write_bytes(b"x")
 
-    await DeterministicExtractionNode(_FactoriaDeUno(_Espia()))(
-        _estado(_spec_con_script(), str(fichero))
-    )
+    await DeterministicExtractionNode(
+        _FactoriaDeUno(_Espia()), resolvedor=_ResolvedorDeUno()
+    )(_estado(_spec_con_script(), str(fichero)))
 
+    # FUN.3 — el código llega al pipeline **resuelto del catálogo**: el protocolo del script no
+    # cambia, cambia de dónde sale.
     assert recibido["options"]["code"] == _CODIGO
     assert recibido["options"]["approved"] is True
     assert recibido["file_ref"].key == str(fichero)
@@ -303,7 +347,11 @@ async def test_should_asignar_el_artefacto_sea_del_tipo_que_sea(tmp_path: Path) 
 
 @pytest.mark.asyncio
 async def test_should_avisar_cuando_el_bloque_no_trae_script(tmp_path: Path) -> None:
-    """Un bloque `admin_script` sin código es un error de la plantilla, no del script."""
+    """Una función que no se puede resolver es un error del catálogo, no del script.
+
+    FUN.3 — antes esto era «un bloque sin código»; ahora el bloque siempre referencia una
+    función, así que el caso equivalente es que esa función no se pueda ejecutar. Y el bloque
+    falla **en alto y con el motivo**, que es lo que permite arreglarlo."""
     from server.app.core.sandbox_client import LocalSandboxClient
     from server.app.modules.redaccion.graph.nodes.deterministic_extraction import (
         DeterministicExtractionNode,
@@ -312,17 +360,28 @@ async def test_should_avisar_cuando_el_bloque_no_trae_script(tmp_path: Path) -> 
         AdminScriptExtractionPipeline,
     )
 
-    spec = _spec_con_script(con_codigo=False)
+    from server.app.modules.redaccion.funciones_resolver import FuncionNoEjecutable
+
+    spec = _spec_con_script()
 
     fichero = tmp_path / "datos.xlsx"
     fichero.write_bytes(b"x")
 
     salida = await DeterministicExtractionNode(
-        _FactoriaDeUno(AdminScriptExtractionPipeline(client=LocalSandboxClient()))
+        _FactoriaDeUno(AdminScriptExtractionPipeline(client=LocalSandboxClient())),
+        resolvedor=_ResolvedorDeUno(
+            falla=FuncionNoEjecutable(
+                "la versión 1 de «Contar filas» no se puede ejecutar: está suspendida — "
+                "motivo: lee una ruta absoluta"
+            )
+        ),
     )(_estado(spec, str(fichero)))
 
     avisos = [w.kind for w in salida["warnings"]]
-    assert "script_empty" in avisos or "script_not_approved" in avisos
+    assert "funcion_no_ejecutable" in avisos
+    # El motivo viaja hasta el aviso: sin él, quien mira el informe no sabe qué arreglar.
+    assert "ruta absoluta" in salida["warnings"][-1].message
+    assert salida["blocks"]["b-script"].status == "failed"
 
 
 # ---------------------------------------------------------------------------

@@ -45,6 +45,7 @@ def build_core_graph(
     etl_system_prompt: str | None = None,
     pii_detector: Any = None,
     faker_generator: Any = None,
+    resolvedor_de_funciones: Any = None,
 ):
     """Construye y compila el DraftingCoreGraph.
 
@@ -55,6 +56,9 @@ def build_core_graph(
         llm_service: instancia compatible con LLMService Protocol.
         manifest_repo: instancia compatible con RunManifestRepo (opcional; no persiste sin él).
         tracing_service: instancia compatible con TracingService (por defecto: NoOp).
+        resolvedor_de_funciones: `ResolvedorDeFuncion` (FUN.3). Sin él, un bloque que
+            referencia una función del catálogo falla en alto diciéndolo — que es mejor que
+            ejecutar nada en silencio, pero en producción hay que pasarlo.
 
     Returns:
         Grafo compilado listo para invocar con `await graph.ainvoke(state)`.
@@ -64,7 +68,9 @@ def build_core_graph(
     load_node = LoadTemplateNode(template_version_repo)
     validate_node = ValidateInputContractNode()
     normalize_node = FileNormalizationNode(storage_service)
-    extract_node = DeterministicExtractionNode(extraction_factory)
+    extract_node = DeterministicExtractionNode(
+        extraction_factory, resolvedor=resolvedor_de_funciones
+    )
     transform_node = DataTransformationNode(
         llm_service=etl_llm,
         model_name=etl_model_name,

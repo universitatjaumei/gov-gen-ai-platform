@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
@@ -15,6 +15,8 @@ import {
 } from '@/shared/api/generated/hub-sites/hub-sites'
 import type { ReconnaissanceView, SiteView } from '@/shared/api/generated/model'
 import { descargarConAutorizacion } from '@/shared/api/download'
+import { useOrganizacionElegida } from '@/shared/organizacion/useOrganizacionElegida'
+import { SectionsPanel } from './SectionsPanel'
 
 const siteSchema = z.object({
   name: z.string().min(1),
@@ -69,6 +71,11 @@ export function SitesPage() {
   const { t: tc } = useTranslation('common')
   const qc = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
+  // DIN.3 — las secciones de un sitio se despliegan bajo su fila: son trabajo de curación sobre
+  // un sitio ya dado de alta, no parte del alta.
+  const [sitioDesplegado, setSitioDesplegado] = useState<string | null>(null)
+  // REV.10 — la misma elección de organización que el resto del panel, no un selector nuevo.
+  const { elegida: organizacionElegida } = useOrganizacionElegida()
 
   const { data: sites = [], isLoading } = useListSites()
   const createMutation = useCreateSite({
@@ -160,6 +167,16 @@ export function SitesPage() {
 
   const onSubmit = (data: SiteFormValues) => {
     createMutation.mutate({
+      // De quién es el sitio. `POST /hub/sites` lo recibe como parámetro de consulta y sin él
+      // responde **403 «Indica la organización del sitio»** a quien no sea superadministrador
+      // (SEC.8.1: sin organización el sitio queda fuera de toda cascada y de todo listado
+      // acotado). La pantalla no lo enviaba, así que un administrador de organización **no podía
+      // crear un sitio desde la interfaz** — y es la única forma de crearlo. Lo destapó el
+      // montaje de la verificación de DIN.7.
+      //
+      // Sin organización elegida no se inventa ninguna: un superadministrador puede querer un
+      // sitio de plataforma, y ésa es su decisión, no la de esta pantalla.
+      ...(organizacionElegida ? { params: { organizacion_id: organizacionElegida } } : {}),
       data: {
         name: data.name,
         root_url: data.root_url,
@@ -218,7 +235,8 @@ export function SitesPage() {
             </thead>
             <tbody>
               {(sites as SiteView[]).map((site) => (
-                <tr key={site.id} className="border-b hover:bg-accent/30">
+                <Fragment key={site.id}>
+                <tr className="border-b hover:bg-accent/30">
                   <td className="py-2 pr-4 font-medium">{site.name}</td>
                   <td className="py-2 pr-4 text-xs text-muted-foreground truncate max-w-xs">{site.root_url}</td>
                   <td className="py-2 pr-4 text-xs">
@@ -255,6 +273,20 @@ export function SitesPage() {
                     >
                       {t('crawl_now')}
                     </button>
+                    {/* DIN.3 — parametrizar los apartados del sitio: es lo que convierte
+                        «añadir el apartado de becas» en un formulario. */}
+                    <button
+                      className="text-xs px-2 py-1 rounded border hover:bg-accent"
+                      data-testid={`btn-secciones-${site.id}`}
+                      aria-expanded={sitioDesplegado === site.id}
+                      onClick={() =>
+                        setSitioDesplegado((abierto) =>
+                          abierto === site.id ? null : site.id,
+                        )
+                      }
+                    >
+                      {t('sections_title')}
+                    </button>
                     <button
                       className="text-xs px-2 py-1 rounded border text-destructive hover:bg-destructive/10"
                       onClick={() => deleteMutation.mutate({ siteId: site.id })}
@@ -264,6 +296,14 @@ export function SitesPage() {
                     </button>
                   </td>
                 </tr>
+                {sitioDesplegado === site.id && (
+                  <tr className="border-b bg-accent/10">
+                    <td colSpan={6} className="py-3 px-2">
+                      <SectionsPanel siteId={site.id} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

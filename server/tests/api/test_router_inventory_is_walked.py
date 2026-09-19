@@ -67,8 +67,12 @@ _SIN_ACOTAR = {
     # `hub_agents_router.py` estuvo aquí hasta SEC.9.6, que le puso el filtro por el
     # `workspace_id` de la ruta y `assert_chatbot_org_access`. Ya no necesita exención.
     "edge_sync.py": (
-        "dos stubs 501. **Cuando se implemente nace abierto si nadie mira**: GET /edge/config "
-        "está diseñado para servir un snapshot de configuración cloud"
+        "dos stubs 501: no leen nada, así que no hay nada que acotar. La exención es sobre la "
+        "**tenencia**, y sólo sobre ella: APER.2 les puso `Depends(get_current_user)` en el "
+        "router, porque la razón que había aquí antes —«cuando se implemente nace abierto si "
+        "nadie mira»— describía un riesgo real y lo dejaba anotado en vez de cerrarlo. Cuando "
+        "GET /edge/config sirva de verdad la instantánea del cloud, esta exención deja de valer "
+        "y hay que releerla"
     ),
     # REG.3 — mismo caso que `charts_router`: no lee nada, así que no hay nada que acotar.
     "anonimizacion_router.py": (

@@ -22,6 +22,22 @@ on:
 # cancelado. Es aceptable porque lo que se despliega es la punta de la rama, no un commit del
 # medio; si algún día hace falta el estado de cada commit —una bisección sobre resultados de
 # CI, por ejemplo— esto es lo primero que hay que quitar.
+# APER.8 — el alcance del GITHUB_TOKEN se declara aquí, y no se hereda de la organización.
+#
+# Sin esta línea lo decidía la configuración de `universitatjaumei`, que este repositorio no
+# gobierna. Y el momento importa: con el repositorio privado, quien abre una pull request es
+# alguien de dentro; **en público cualquiera puede abrir una desde un fork** y con ella ejecutar
+# todo esto. La diferencia entre un token que lee el código y uno que puede escribir en el
+# repositorio es, en ese contexto, toda la diferencia.
+#
+# `contents: read` basta para lo que hace CI: descargar el código y subir artefactos —
+# `upload-artifact` no usa este token—. Ningún job comenta en pull requests, publica releases ni
+# empuja ramas; el día que uno lo necesite, lo pide **ese job** y no el workflow entero. Lo
+# comprueba `server/tests/infra/test_aper8_los_workflows_declaran_sus_permisos.py`, que exige una
+# razón escrita para cada escritura.
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -420,6 +436,20 @@ jobs:
       #
       # Medido en local el 2026-09-08: 408 dependencias en `server`, 38 en `mcp_server`, cero
       # editables en los dos.
+      #
+      # APER.9 — **son cuatro proyectos con lock, no dos.** Esto exportaba `server` y
+      # `mcp_server`, que son justamente los dos que estaban limpios, y dejaba fuera
+      # `shared/uv.lock` y `services/script_sandbox/uv.lock`. Lo destapó Dependabot a los trece
+      # minutos de activarlo: 30 avisos, ninguno en lo que este job miraba. Y el peor de los dos
+      # huecos era el sandbox, porque **su lock se despliega**: es el contenedor que ejecuta los
+      # scripts, y llevaba `cryptography` 48.0.0 y `pillow` 12.2.0 (7 y 26 vulnerabilidades
+      # conocidas según OSV, de las que la pestaña de GitHub sólo señalaba 2).
+      #
+      # `shared` es un proyecto propio y su código se excluye igual que el de los otros; lo que
+      # se audita son sus dependencias, que es por donde entraban `pillow` y `cryptography`.
+      # Que un lock nuevo no pueda volver a quedarse fuera lo fija
+      # `test_las_dependencias_auditadas_son_las_del_lock`, que **cuenta los `uv.lock` del árbol**
+      # en vez de una cifra escrita a mano.
       - name: Export the locked dependency sets
         run: |
           mkdir -p sbom
@@ -429,6 +459,12 @@ jobs:
           uv export --directory mcp_server --locked --no-dev --no-hashes \
             --no-emit-project \
             --format requirements-txt -o "$GITHUB_WORKSPACE/sbom/mcp-requirements.txt"
+          uv export --directory shared --locked --no-dev --no-hashes \
+            --no-emit-project \
+            --format requirements-txt -o "$GITHUB_WORKSPACE/sbom/shared-requirements.txt"
+          uv export --directory services/script_sandbox --locked --no-dev --no-hashes \
+            --no-emit-project \
+            --format requirements-txt -o "$GITHUB_WORKSPACE/sbom/sandbox-requirements.txt"
 
       # Sin versión pinada, a propósito y al revés que gitleaks: pip-audit consulta la base de
       # avisos viva de PyPI, así que lo que importa es que la herramienta siga al día. De cada
@@ -455,6 +491,10 @@ jobs:
             --format json --output sbom/pip-audit-server.json --progress-spinner off || rc=1
           uvx pip-audit -r sbom/mcp-requirements.txt \
             --format json --output sbom/pip-audit-mcp.json --progress-spinner off || rc=1
+          uvx pip-audit -r sbom/shared-requirements.txt \
+            --format json --output sbom/pip-audit-shared.json --progress-spinner off || rc=1
+          uvx pip-audit -r sbom/sandbox-requirements.txt \
+            --format json --output sbom/pip-audit-sandbox.json --progress-spinner off || rc=1
           exit $rc
 
       # **BLOQUEA**, y el criterio está escrito entero en el guion y en `avisos_aceptados.toml`:
@@ -475,6 +515,7 @@ jobs:
         run: |
           python scripts/puerta_de_avisos.py \
             sbom/pip-audit-server.json sbom/pip-audit-mcp.json \
+            sbom/pip-audit-shared.json sbom/pip-audit-sandbox.json \
             --aceptados avisos_aceptados.toml \
             --resumen "$GITHUB_STEP_SUMMARY"
 
@@ -600,3 +641,143 @@ jobs:
           name: supply-chain
           path: sbom/
           retention-days: 90
+
+  # ---------------------------------------------------------------------------------------
+  # La imagen que se despliega, construida y ARRANCADA.
+  #
+  # **Nace de tumbar producción 35 minutos el 2026-09-15**, y lo que hay que recordar no es el
+  # paquete sino la clase de agujero: el único conjunto de dependencias que se despliega —el
+  # base, `uv sync --frozen --no-dev`, sin extras— era el único que no probaba nadie.
+  #
+  # | Comprobación                                   | Qué instala        | ¿Vio el fallo? |
+  # |------------------------------------------------|--------------------|----------------|
+  # | `Lint & Test`                                   | `--all-extras`     | No             |
+  # | `test_dep1_no_hay_dependencias_de_rebote.py`    | —                  | No: mira imports, y `uvicorn` se invoca |
+  # | Comprobar que la app IMPORTA con el conjunto base | base             | No: importar funcionaba |
+  # | `test_dep8_…_ejecutables_del_dockerfile…`       | —                  | Sí, pero sólo el `CMD` |
+  # | Construir la imagen y levantarla                | base, como el despliegue | Sí     |
+  #
+  # Por eso este job **arranca** el contenedor y no se conforma con construirlo: el 15-09 la
+  # imagen se construyó perfectamente y el contenedor murió con `executable file not found`.
+  #
+  # **Las cuatro imágenes se construyen siempre** —construir es barato y caza un `Dockerfile`
+  # roto: el del frontend dejó de construir el 2026-09-16 por un `[build-system]` añadido en
+  # otro sitio, y se descubrió a mano a un paso del merge— pero **sólo se arranca la de la
+  # aplicación**, que es la única con una comprobación de salud que significa algo aquí: el
+  # frontend sirve estáticos, el sandbox y el MCP necesitan una red y una configuración que
+  # este job no monta.
+  #
+  # **No publica nada.** Construir para comprobar y publicar para desplegar son cosas
+  # distintas; mezclarlas metería en CI permisos de escritura sobre el registro.
+  #
+  # Lo fija `server/tests/infra/test_img1_ci_construye_y_arranca_la_imagen.py`, que lee de
+  # `deploy.yml` qué imágenes y qué `Dockerfile` usa el despliegue en vez de copiarlos aquí.
+  # ---------------------------------------------------------------------------------------
+  imagen:
+    name: Imagen — se construye y arranca
+    runs-on: ubuntu-latest
+    needs: contract
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: govgenai
+          POSTGRES_USER: govgenai
+          POSTGRES_PASSWORD: govgenai_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U govgenai"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DSN_ASYNC: postgresql+asyncpg://govgenai:govgenai_ci@localhost:5432/govgenai
+      DSN_SYNC: postgresql+psycopg2://govgenai:govgenai_ci@localhost:5432/govgenai
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # `frontend/src/shared/api/generated/` está en `.gitignore` a propósito: lo genera Orval
+      # desde `openapi.json`, así que **no viaja en el repositorio** y `docker build ./frontend`
+      # a secas falla con veinte «Cannot find module '@/shared/api/generated/...'». El primer
+      # despliegue murió exactamente ahí. Se descarga del job `contract`, que ya lo generó, en
+      # vez de repetir aquí la instalación del backend y de node: es la misma secuencia y
+      # duplicarla es cómo empiezan a divergir.
+      - name: Descargar el cliente de la API generado
+        uses: actions/download-artifact@v8
+        with:
+          name: generated-api-client
+          path: frontend/src/shared/api/generated/
+
+      - name: Construir las cuatro imágenes con los Dockerfile del despliegue
+        run: |
+          set -euo pipefail
+          docker build -t govgenai/app:ci      -f Dockerfile .
+          docker build -t govgenai/frontend:ci -f frontend/Dockerfile frontend
+          docker build -t govgenai/sandbox:ci  -f services/script_sandbox/Dockerfile services/script_sandbox
+          docker build -t govgenai/mcp:ci      -f mcp_server/Dockerfile mcp_server
+
+      # El arranque consulta la base —trabajos zombis y sembrado— así que sin migrar, el
+      # contenedor moriría por una razón distinta de la que este job vigila. Lo hace la MISMA
+      # imagen, igual que el servicio `migrate` de `docker-compose.prod.yml`.
+      - name: Aplicar las migraciones con la imagen recién construida
+        run: |
+          set -euo pipefail
+          docker run --rm --network host \
+            -e DATABASE_URL="$DSN_ASYNC" \
+            -e DATABASE_URL_SYNC="$DSN_SYNC" \
+            -w /app/server \
+            govgenai/app:ci alembic upgrade head
+
+      # `ENVIRONMENT=production` a propósito: es el entorno que se despliega, y el que activa
+      # los tres gates de `core/config.py` —secreto real, sandbox no local, sin `TESTING`—. Con
+      # `development` este job comprobaría que arranca algo que no es lo que se sirve.
+      #
+      # El criterio de «sirve» es el del paso «Comprobar que sirve, y volver atrás si no» de
+      # `deploy.yml`: `/health` en 200, con reintentos. Dos definiciones acabarían divergiendo.
+      - name: Arrancar la imagen y esperar a que sirva
+        run: |
+          set -euo pipefail
+          docker run -d --name govgenai_ci_app --network host \
+            -e DATABASE_URL="$DSN_ASYNC" \
+            -e DATABASE_URL_SYNC="$DSN_SYNC" \
+            -e JWT_SECRET_KEY=ci-imagen-secreto-que-no-firma-nada-real-32 \
+            -e ENVIRONMENT=production \
+            -e LOG_LEVEL=INFO \
+            govgenai/app:ci
+
+          # Tres minutos de margen, y no por prudencia genérica: el arranque refresca la caché
+          # de modelos y los precios contra dos APIs externas **antes** de servir, y esas
+          # llamadas no llevan `timeout` propio (el de aiohttp por omisión son 5 minutos). Con
+          # la red del runner lenta o cortada, un margen corto pondría este job rojo por prisa
+          # y no por avería, que es la peor forma de gastar un guardarraíl.
+          ok=0
+          for intento in $(seq 1 30); do
+            codigo="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/health || true)"
+            if [ "$codigo" = "200" ]; then ok=1; break; fi
+            echo "intento $intento: /health devolvió ${codigo:-sin respuesta}"
+            sleep 6
+          done
+
+          if [ "$ok" != "1" ]; then
+            echo "::error::La imagen se construyó pero el contenedor no llegó a servir /health"
+            docker logs govgenai_ci_app
+            exit 1
+          fi
+          echo "/health responde 200 desde la imagen que se despliega"
+
+      # Cuánto ha costado, escrito donde se lee sin descargar nada. La decisión de dónde corre
+      # este job se toma con esta medida delante, no antes de tenerla.
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo "## Imagen"
+            echo ""
+            echo "Cuatro imágenes construidas con los \`Dockerfile\` del despliegue;"
+            echo "la de la aplicación, migrada y arrancada hasta \`/health\` 200."
+          } >> "$GITHUB_STEP_SUMMARY"

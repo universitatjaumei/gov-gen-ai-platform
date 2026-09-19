@@ -21,6 +21,7 @@ from server.app.modules.curation.cortesia import (
     clasificar_fallo,
     cortesia_desde_config,
 )
+from server.app.modules.curation.secciones import predicado_de_ambito
 
 
 #: Tope de páginas que se guardan en memoria para no volver a pedirlas. Con ~50 KB de HTML por
@@ -46,6 +47,32 @@ _TIPOS_LEGIBLES = ("text/html", "application/xhtml", "text/plain", "text/markdow
 def _parece_descarga(url: str) -> bool:
     ruta = urlparse(url).path.lower()
     return ruta.endswith(_EXTENSIONES_NO_LEGIBLES)
+
+
+def cliente_de_rastreo(user_agent: str, *, transport: Any = None):
+    """El cliente con el que se pide cualquier página, y el único sitio donde se construye.
+
+    **Es el punto donde se cierra el SSRF de APER.1.** `hook_de_destino_publico` se dispara en
+    cada petición y `httpx` los dispara también en **cada salto de redirección**, así que un
+    portal público que redirige a `169.254.169.254` o a un contenedor vecino no lo alcanza.
+    Comprobar sólo la URL de entrada no habría servido: la redirección era la mitad del defecto.
+
+    Que haya **una** función que construye el cliente es lo que hace la protección auditable —un
+    `httpx.AsyncClient` suelto en este módulo la esquivaría sin que nada avisara—, y lo comprueba
+    un guardarraíl. El `transport` es el asiento de los tests: con `MockTransport` se prueba la
+    redirección sin red y con el hook de verdad puesto.
+    """
+    import httpx
+
+    from server.app.core.red_publica import hook_de_destino_publico
+
+    return httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=10.0,
+        headers={"User-Agent": user_agent},
+        transport=transport,
+        event_hooks={"request": [hook_de_destino_publico()]},
+    )
 
 
 #: Ninguna página de contenido necesita una URL así de larga. Es la red de seguridad contra las
@@ -226,12 +253,7 @@ class GenericSpider:
         """La descarga a secas, sin cortesía: la usan `_fetch` y la lectura del `robots.txt`."""
         if self._fetch_fn is not None:
             return await self._fetch_fn(url)
-        import httpx
-        async with httpx.AsyncClient(
-            follow_redirects=True,
-            timeout=10.0,
-            headers={"User-Agent": self._cortesia.user_agent},
-        ) as client:
+        async with cliente_de_rastreo(self._cortesia.user_agent) as client:
             resp = await client.get(url)
             resp.raise_for_status()
             cabeceras = dict(resp.headers)
@@ -298,6 +320,10 @@ class GenericSpider:
         empezado = self._cortesia._reloj()
 
         regex = re.compile(url_regex_filter) if url_regex_filter else None
+        # DIN.2 — el apartado dentro de la valla. El filtro del sitio acota el dominio y este
+        # acota la sección **dentro** de él: se aplican los dos, no uno en lugar del otro. Sin
+        # ámbito declarado esto es siempre cierto, que es el rastreo de siempre.
+        en_ambito = predicado_de_ambito(config)
         base_netloc = urlparse(source.root_url).netloc
 
         # Cola BFS: pares (url, profundidad). Si el sitio guarda una cola de una ejecución
@@ -397,6 +423,8 @@ class GenericSpider:
                 if urlparse(link).netloc != base_netloc:
                     continue
                 if regex and not regex.search(link):
+                    continue
+                if not en_ambito(link):
                     continue
                 if _parece_descarga(link):
                     # Se ve en la URL, así que ni se pide: es tráfico que no aporta nada y, si se

@@ -1,15 +1,30 @@
 """Stub API de sincronización Edge.
 
 Deploy: shared
+
+**APER.2 — exige identidad aunque todavía no haga nada.** Las dos rutas estaban registradas sin
+**ninguna** dependencia y respondían 501 a cualquiera. El riesgo no era lo que hacen hoy: era que
+`GET /edge/config` está diseñado para servir una instantánea de la configuración del cloud y
+**nace abierto si nadie mira** el día que alguien la implemente. Con la guarda puesta ahora, no
+hay que acordarse entonces — y acordarse es justo lo que falla.
+
+La credencial **definitiva** es de Fase 3: el plan habla de una `edge_api_key` por nodo, que no
+existe. Hasta que exista se exige la identidad que ya hay; quien implemente la sync tendrá que
+elegir la credencial a conciencia, con la puerta ya cerrada.
 """
 
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/edge", tags=["edge-sync"])
+from server.app.api.deps import get_current_user
+
+# La guarda va en el router entero: una ruta nueva aquí la hereda en vez de estrenarse abierta.
+router = APIRouter(
+    prefix="/edge", tags=["edge-sync"], dependencies=[Depends(get_current_user)]
+)
 
 
 class EdgeClientOut(BaseModel):

@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import get_current_user, get_session, require_module
@@ -235,10 +235,31 @@ class ValidateTestResultResponse(BaseModel):
 
 # --- 9R.5.6 DTOs ---
 
+class DeclaracionResponsable(BaseModel):
+    """Lo que hay que declarar para compartir una función (Instrucció 02/2026 §8.2).
+
+    FUN.3 — va en el cuerpo del **registro** y no en la propuesta porque declarar es el acto de
+    compartir: mientras el script es sólo una propuesta, sigue en el nivel 1 de la Instrucció, que
+    es libre y no se declara.
+
+    `funcion_id` publica una versión nueva de una función que ya existe en vez de crear otra: es
+    lo que convierte «arreglar un script» en «publicar v2» sin tocar lo anclado a v1.
+    """
+
+    finalidad: str = ""
+    categorias_datos: list[str] = Field(default_factory=list)
+    nombre: str | None = None
+    funcion_id: uuid.UUID | None = None
+
+
 class SaveToPrivateTemplateResponse(BaseModel):
     proposal_id: uuid.UUID
     template_id: uuid.UUID
     new_version_id: uuid.UUID
+    #: FUN.3 — qué función quedó registrada y en qué versión. Antes no había nada que devolver:
+    #: el código se copiaba en la plantilla y no tenía identidad.
+    funcion_id: uuid.UUID | None = None
+    funcion_version: int | None = None
 
 
 class SubmitForReviewResponse(BaseModel):
@@ -529,12 +550,17 @@ _SLOT_DEL_SCRIPT = "datos_del_script"
 
 def _embed_script_block(
     spec_json: dict,
-    code: str,
+    funcion_ref: dict,
     block_id: str,
     *,
     test_data_kind: str | None = None,
 ) -> dict:
-    """Incrusta el script aprobado como bloque determinista de la plantilla.
+    """Añade a la plantilla un bloque que **referencia** la función del catálogo.
+
+    FUN.3 — esto incrustaba el código (`options={"code": …, "approved": True}`), y ahí estaba el
+    defecto que el bloque FUN viene a corregir: dos plantillas que necesitaban la misma
+    extracción llevaban dos copias, y un error se arreglaba dos veces. Ahora lleva
+    `funcion_ref`, y el código vive una sola vez en el catálogo.
 
     PRO.3 — dos cosas que estaban mal, y ninguna se veía al aprobar:
 
@@ -557,7 +583,8 @@ def _embed_script_block(
         "kind": "DETERMINISTIC_DATA",
         "title": "Script de extracción",
         "source_pipeline": "admin_script",
-        "options": {"code": code, "approved": True},
+        "funcion_ref": funcion_ref,
+        "options": {},
         "depends_on": [],
     }
     # `blocks` es una **lista** en el contrato. Aquí se escribía un diccionario cuando la
@@ -660,16 +687,85 @@ def _validar_spec(spec: dict) -> None:
                 "code": "TEMPLATE_SPEC_INVALID",
                 "message": (
                     "La plantilla de destino no puede alojar el script: la versión resultante "
-                    f"no valida ({fallo.error_count()} errores). Revisa la plantilla."
+                    f"no valida ({fallo.error_count()} errores) en "
+                    f"{', '.join('.'.join(str(p) for p in e['loc']) for e in fallo.errors()[:5])}"
                 ),
             },
         ) from fallo
 
 
+async def _registrar_en_el_catalogo(
+    session: Any,
+    proposal: HubScriptProposal,
+    *,
+    declaracion: "DeclaracionResponsable",
+    organizacion_id: uuid.UUID | None,
+    declarada_por: uuid.UUID,
+) -> dict:
+    """Registra el script de la propuesta como versión del catálogo y devuelve su referencia.
+
+    FUN.3 — es el paso que sustituye a la copia. Lo que llega aquí ya pasó el auditor sin
+    hallazgos críticos y la prueba en sandbox (lo comprueba quien llama); lo que añade el
+    registro es la **declaración responsable** y la identidad: a partir de ahora la función tiene
+    nombre, versión y hash, y el manifiesto puede decir qué corrió.
+    """
+    from server.app.modules.redaccion.contracts.funciones import ContratoFuncion
+    from server.app.modules.redaccion.funciones_service import (
+        FuncionIncoherente,
+        registrar_version,
+    )
+
+    slots = []
+    kind = _SLOT_POR_TIPO_DE_PRUEBA.get(proposal.test_data_kind or "", None)
+    if kind:
+        slots.append({"slot_id": _SLOT_DEL_SCRIPT, "kind": kind, "required": True})
+
+    try:
+        contrato = ContratoFuncion(
+            slots=slots,
+            parametros=[],
+            finalidad=declaracion.finalidad,
+            categorias_datos=list(declaracion.categorias_datos),
+        )
+    except ValidationError as fallo:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "DECLARACION_INCOMPLETA",
+                "message": (
+                    "La declaración responsable no está completa: la Instrucció 02/2026 exige "
+                    f"registrarla antes de compartir (§8.2). {fallo.error_count()} problema(s)."
+                ),
+            },
+        ) from fallo
+
+    try:
+        funcion, version = await registrar_version(
+            session,
+            nombre=declaracion.nombre or f"Script de {proposal.test_data_kind or 'extracción'}",
+            organizacion_id=organizacion_id,
+            code=proposal.code,
+            contrato=contrato,
+            declarada_por=declarada_por,
+            audit_result=proposal.audit_result_json,
+            # La IA la propuso, o la trajo una persona de su equipo. No hay ninguna rama «si lo
+            # escribió la IA»: los dos caminos pasaron por el mismo auditor y el mismo sandbox.
+            autoria="persona" if proposal.prompt_nl is None else "ia",
+            funcion_id=declaracion.funcion_id,
+        )
+    except FuncionIncoherente as fallo:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "FUNCION_INCOHERENTE", "message": str(fallo)},
+        ) from fallo
+
+    return {"funcion_id": str(funcion.id), "version": version.version}
+
+
 async def _create_template_version(
     session: Any,
     template: HubReportTemplate,
-    code: str,
+    funcion_ref: dict,
     created_by_uuid: uuid.UUID,
     test_data_kind: str | None = None,
 ) -> HubReportTemplateVersion:
@@ -680,7 +776,7 @@ async def _create_template_version(
     next_version_num = (current_version.version + 1) if current_version else 1
     new_block_id = str(uuid.uuid4())
     new_spec = _embed_script_block(
-        base_spec, code, new_block_id, test_data_kind=test_data_kind
+        base_spec, funcion_ref, new_block_id, test_data_kind=test_data_kind
     )
     # La versión que se guarda tiene que poder leerse: si no valida, el fallo aparecería lejos
     # —un 500 al abrir la plantilla— y con la propuesta ya marcada como aprobada.
@@ -800,10 +896,18 @@ async def validate_test_result(
 )
 async def save_to_private_template(
     proposal_id: uuid.UUID,
+    body: DeclaracionResponsable | None = None,
     user: UserInfo = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> SaveToPrivateTemplateResponse:
-    """Incrusta el script aprobado en una plantilla privada del proposer."""
+    """Registra el script en el catálogo y lo referencia desde una plantilla del proposer.
+
+    FUN.3 — **esto es el nivel 2 de la Instrucció 02/2026 completo**: declaración responsable,
+    auditoría sin hallazgos críticos y prueba en sandbox, todo automático, y uso inmediato. No
+    hay ninguna aprobación humana en este camino, y no la hay a propósito: la Instrucció la
+    prohíbe como condición para compartir dentro del servicio. La persona entra después, en la
+    revisión posterior (FUN.4).
+    """
     proposal = await _load_proposal(proposal_id, session)
     proposer_uuid = _user_to_uuid(user.user_id)
     if proposal.proposer_user_id != proposer_uuid:
@@ -832,11 +936,20 @@ async def save_to_private_template(
     if template.owner_id != proposer_uuid:
         raise HTTPException(status_code=403, detail="Not the owner of the target template")
 
+    funcion_ref = await _registrar_en_el_catalogo(
+        session,
+        proposal,
+        declaracion=body or DeclaracionResponsable(),
+        organizacion_id=getattr(template, "organizacion_id", None),
+        declarada_por=proposer_uuid,
+    )
     new_version = await _create_template_version(
-        session, template, proposal.code, proposer_uuid, proposal.test_data_kind
+        session, template, funcion_ref, proposer_uuid, proposal.test_data_kind
     )
 
-    proposal.status = "approved"
+    # `registrada` y no `approved`: la propuesta ya cumplió su papel —fue la prueba en sandbox— y
+    # lo que queda vivo es la versión del catálogo.
+    proposal.status = "registrada"
     proposal.reviewer_user_id = proposer_uuid
     proposal.reviewed_at = datetime.now(timezone.utc)
     # antes del commit: expire_on_commit dejaría estos atributos expirados
@@ -848,6 +961,8 @@ async def save_to_private_template(
         proposal_id=proposal_id,
         template_id=template_id,
         new_version_id=new_version_id,
+        funcion_id=uuid.UUID(funcion_ref["funcion_id"]),
+        funcion_version=funcion_ref["version"],
     )
 
 
@@ -1023,8 +1138,18 @@ async def approve_script_proposal(
         raise HTTPException(status_code=404, detail="Target global template not found")
 
     admin_uuid = _user_to_uuid(user.user_id)
+    funcion_ref = await _registrar_en_el_catalogo(
+        session,
+        proposal,
+        declaracion=DeclaracionResponsable(
+            finalidad=body.review_note or "Script de extracción de plantilla de plataforma",
+            categorias_datos=["sin_datos_personales"],
+        ),
+        organizacion_id=getattr(template, "organizacion_id", None),
+        declarada_por=admin_uuid,
+    )
     new_version = await _create_template_version(
-        session, template, proposal.code, admin_uuid, proposal.test_data_kind
+        session, template, funcion_ref, admin_uuid, proposal.test_data_kind
     )
 
     proposal.status = "approved"

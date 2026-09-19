@@ -41,7 +41,9 @@ class _FakeSiteCrawler:
         self._raises = raises
         self.called_site_ids: list[uuid.UUID] = []
 
-    async def crawl_site(self, site_id: uuid.UUID) -> _FakeSiteCrawlSummary:
+    async def crawl_site(
+        self, site_id: uuid.UUID, section_id: uuid.UUID | None = None
+    ) -> _FakeSiteCrawlSummary:
         self.called_site_ids.append(site_id)
         if self._raises:
             raise self._raises
@@ -108,13 +110,32 @@ class _FakeSession:
 
     def __init__(self, pages: dict[uuid.UUID, _FakePage] | None = None) -> None:
         self._pages = pages or {}
+        self.confirmada = False
 
     async def get(self, model: type, pk: uuid.UUID) -> Any:
         # Devolvemos una _FakePage si la clave existe, independientemente del modelo
         return self._pages.get(pk)
 
+    async def execute(self, stmt: Any) -> Any:
+        """DIN.4 — el paso de auto-retirada consulta los avisos `page_gone` abiertos. Estos
+        tests no siembran ninguno, así que la respuesta es vacía."""
+
+        class _R:
+            def scalars(self_inner) -> Any:  # noqa: N805
+                return self_inner
+
+            def all(self_inner) -> list:  # noqa: N805
+                return []
+
+        return _R()
+
     async def flush(self) -> None:
         return None
+
+    async def commit(self) -> None:
+        """DIN.7 — el job **confirma** su sesión al terminar. No lo hacía, y por eso perdía el
+        `quality_score` y las supersesiones que escribe aquí mismo."""
+        self.confirmada = True
 
 
 @asynccontextmanager
@@ -139,7 +160,13 @@ class _FakeSelectionRepo:
     async def list_by_site(self, site_id: uuid.UUID) -> list[_FakeSelection]:
         return [s for s in self._selections if s.site_id == site_id]
 
-    def matches(self, selection: _FakeSelection, page_url: str) -> bool:
+    async def secciones_de(self, selections: list) -> dict:
+        """DIN.3 — ninguna de estas selecciones apunta a una sección."""
+        return {}
+
+    def matches(
+        self, selection: _FakeSelection, page_url: str, *, secciones: dict | None = None
+    ) -> bool:
         if selection.rule_type == "path_prefix" and selection.rule_value:
             from urllib.parse import urlparse
             return urlparse(page_url).path.startswith(selection.rule_value)
@@ -182,10 +209,18 @@ class _FakeSiteModel:
 
 
 class _FakeSchedulerSession:
-    def __init__(self, sites: list[_FakeSiteModel]) -> None:
+    """Responde sitios o secciones según la entidad que pida la consulta (DIN.2)."""
+
+    def __init__(
+        self, sites: list[_FakeSiteModel], sections: list | None = None
+    ) -> None:
         self._sites = sites
+        self._sections = sections or []
 
     async def execute(self, stmt: Any) -> Any:
+        entidad = stmt.column_descriptions[0]["entity"].__name__
+        if entidad == "HubWebSection":
+            return _FakeSchedulerResult(self._sections)
         return _FakeSchedulerResult(self._sites)
 
 
@@ -438,8 +473,12 @@ async def test_run_for_site_crawl_failure_returns_errors():
 
 @pytest.mark.asyncio
 async def test_scheduler_get_due_sites_by_interval():
-    """_get_due_sites retorna solo sitios cuyo crawl_interval_hours ha vencido."""
-    from server.app.modules.curation.quality_scheduler import _get_due_sites
+    """Un sitio sin secciones vence por su `crawl_interval_hours`, como siempre.
+
+    DIN.2 sustituyó `_get_due_sites` por `_get_due_scopes`, que devuelve **ámbitos**: un sitio
+    sin secciones sigue siendo uno de ellos, y ése es el caso de este test.
+    """
+    from server.app.modules.curation.quality_scheduler import _get_due_scopes
 
     site_due = _FakeSiteModel(
         crawl_interval_hours=24,
@@ -451,23 +490,23 @@ async def test_scheduler_get_due_sites_by_interval():
     )
     session = _FakeSchedulerSession([site_due, site_not_due])
 
-    due = await _get_due_sites(session, NOW)
+    due = await _get_due_scopes(session, NOW)
 
-    assert site_due in due
-    assert site_not_due not in due
+    assert [a.site for a in due] == [site_due]
+    assert due[0].section_id is None
 
 
 @pytest.mark.asyncio
 async def test_scheduler_get_due_sites_never_crawled():
-    """_get_due_sites retorna sitios que nunca han sido rastreados (last_crawled_at=None)."""
-    from server.app.modules.curation.quality_scheduler import _get_due_sites
+    """Un sitio nunca rastreado (last_crawled_at=None) vence."""
+    from server.app.modules.curation.quality_scheduler import _get_due_scopes
 
     site_new = _FakeSiteModel(crawl_interval_hours=24, last_crawled_at=None)
     session = _FakeSchedulerSession([site_new])
 
-    due = await _get_due_sites(session, NOW)
+    due = await _get_due_scopes(session, NOW)
 
-    assert site_new in due
+    assert [a.site for a in due] == [site_new]
 
 
 @pytest.mark.asyncio

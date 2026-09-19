@@ -289,7 +289,9 @@ def _job_con(modulo: Any, detectores: list, run_semantic: bool = True) -> Any:
         changed_page_ids: list = []
 
     class _Rastreador:
-        async def crawl_site(self, site_id: uuid.UUID) -> Any:
+        async def crawl_site(
+            self, site_id: uuid.UUID, section_id: uuid.UUID | None = None
+        ) -> Any:
             return _ResumenDeRastreo()
 
     class _SesionDeJob(_Sesion):

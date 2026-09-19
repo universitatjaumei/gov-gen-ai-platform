@@ -122,8 +122,9 @@ vive en un documento no es un invariante: es una intención.
 | I10 | **El contenido del modelo se lee con `texto_de`.** Gemini devuelve `content` como lista de bloques en cuanto hay más de una parte, y quien asume `str` falla más tarde y en otro sitio | `core/llm_text.py` + guardarraíl de USR.8 |
 | I11 | **Los ficheros de negocio se guardan por `StorageService`**, nunca con `open()`: el contenedor es efímero y el proveedor, cambiable | `core/storage.py`; regla de portabilidad |
 | I12 | **Todo lo que va al LLM desde el edge va anonimizado**, y el `model_factory` no anonimiza: recibe datos ya limpios | frontera edge/cloud de `AGENTS.md` |
-| I13 | **Código no aprobado no se ejecuta.** Auditoría AST + sandbox + aprobación humana antes de que un script corra | `redaccion/services/script_auditor.py`, `SANDBOX_SECURITY.md` |
+| I13 | **Código que no ha pasado el filtro no se ejecuta.** Auditoría AST sin hallazgos críticos + prueba en sandbox + declaración responsable, **y el filtro es automático**: la aprobación humana previa dejó de ser la puerta en FUN.3/FUN.4, porque la Instrucció 02/2026 la prohíbe como condición para compartir dentro del servicio. La persona entra **después**, en la revisión posterior, que puede pedir correcciones, reclasificar o suspender. La única aprobación previa que queda es el paso a nivel 3 | `redaccion/services/script_auditor.py`, `redaccion/funciones_service.py`, `redaccion/funciones_acciones.py`, `SANDBOX_SECURITY.md`, `CATALOGO_FUNCIONES.md` |
 | I14 | **El esquema lo define Alembic, y sólo Alembic.** La aplicación no crea tablas al arrancar; un modelo cambiado sin su migración es un fallo de CI, no una tabla aparecida | `alembic check` en CI tras `upgrade head`; `test_bd2_alembic_es_la_unica_fuente.py` |
+| I15 | **El servidor sólo pide URL de la red pública, y lo comprueba en cada salto.** Una dirección privada, de *loopback* o de enlace local —el servidor de metadatos de la nube, los contenedores vecinos— no se pide, ni directamente ni **llegando a ella por una redirección**. La forma de la URL la validan los contratos de entrada (422 con motivo); el destino resuelto, cada petición. Hay una válvula de desarrollo, `CRAWLER_ALLOW_PRIVATE_TARGETS`, y **producción se niega a arrancar con ella puesta** | `core/red_publica.py` + `cliente_de_rastreo` en `modules/curation/spider.py`; los cuatro gates de `core/config.py`; `test_aper1_*` |
 
 **Cómo se usa esta tabla.** Al escribir código nuevo, si tocas algo que aparece en la columna
 derecha, el test correspondiente es el que te dirá si te has pasado. Si crees que un invariante
@@ -188,14 +189,39 @@ prefiere.
   la validación de forma y daría una preferencia que no prefiere ninguna versión de ninguna norma,
   en silencio.
 
-**Superficie.** `core/language_mode.py` · `hub_opciones_router` · `HubOrganizacion.default_language_mode`
-· `HubChatbot.language_mode`.
+Y dos garantías más, que son las que deciden qué lee quien pregunta:
 
-**Madurez**: `producción` — desplegado el 2026-09-07 (bloque LANG, 2026-09-03).
+- **La preferencia de lengua opera DENTRO de la misma vigencia, no por encima de ella** (VIS.4).
+  Entre dos versiones de una norma manda primero la vigencia y después la lengua: si la versión
+  confirmada por una persona sólo está en la otra lengua, se cita ésa y se advierte de la lengua;
+  nunca al revés. Citar en la lengua correcta algo que nadie ha confirmado que rija es un error de
+  fondo; citar lo confirmado en otra lengua es una incomodidad, y encima se avisa. `fixed:` no
+  entra en esto: filtra a una lengua por definición y ahí la vigencia no compite con nada.
+- **Si la norma citada está en otra lengua, se dice — en la lengua de la pregunta y en las dos
+  direcciones** (VIS.5). El aviso sale de la lengua de la **fuente**, no de la de la pregunta:
+  quien escribe en valencià ya sabe en qué lengua escribe, y lo que necesita saber es que el
+  enlace le lleva a un documento en castellano. Preguntar en castellano y recibir una norma en
+  valencià es el caso mayoritario del corpus real —232 de 334 documentos del asistente normativo
+  están en `val`— y antes era justo el que no avisaba.
+
+**Superficie.** `core/language_mode.py` · `hub_opciones_router` · `HubOrganizacion.default_language_mode`
+· `HubChatbot.language_mode` · `PreferLanguagePolicy` en `strategies/protocols.py` (el orden) ·
+`_build_translation_warning` en `api/v1/hub_chat.py` (el aviso) ·
+`services/language_detector.py` (el único punto que produce la lengua de una pregunta, y el que
+traduce el `ca` de `langdetect` al `val` del corpus).
+
+**Madurez**: `producción` — desplegado el 2026-09-07 (bloque LANG, 2026-09-03). El orden por
+vigencia y el aviso de lengua entraron antes, el 2026-08-25 (VIS.4 y VIS.5), y llevan en `main`
+desde entonces; lo que faltaba no era el despliegue, era escribir aquí qué garantizan.
 
 **Abierto.** Ningún despliegue monolingüe real lo ha usado todavía; el juicio sobre si el
 castellano de una respuesta fijada suena institucional o a traducción automática está pendiente de
 una persona (`pruebas_manuales/pruebas_manuales_bloqueLANG.bat`).
+
+Y el orden por vigencia **todavía no decide nada en el corpus de hoy**, porque casi ninguna norma
+tiene sus dos versiones emparejadas: 47 traducciones no declaran de qué norma son versión
+(`versio_idiomatica_de` nulo). La regla está escrita antes de que el corpus la necesite, a
+propósito — cuando lleguen los emparejamientos, nadie va a estar mirando esta parte del código.
 
 ---
 
@@ -239,17 +265,21 @@ para que una persona decida qué entra al corpus.
 - Rastreo con cadencia, alta automática de páginas nuevas y reingesta de las cambiadas.
 - Los hallazgos se revisan **uno a uno**; nada entra al corpus sin decisión humana.
 - Salvaguardas contra el vaciado: una pasada parcial no puede dar de baja el resto del portal.
+- **El rastreo no sale de la red pública** (I15). Quien da de alta un sitio decide a dónde pide
+  el servidor, y basta ser administrador de una organización: hasta APER.1 eso alcanzaba la red
+  interna del despliegue y el texto volvía en el informe de reconocimiento. Ahora la dirección se
+  comprueba en **cada petición y cada redirección**, y una raíz privada se rechaza al darla de
+  alta con un 422 que dice por qué.
 
 **Superficie.** `modules/curation/` (`site_crawler.py`) · `curation_router` · pantallas
-`/curation/*`.
+`/curation/*` · `core/red_publica.py` y `cliente_de_rastreo`, el único sitio del módulo donde se
+construye un cliente HTTP.
 
 **Madurez**: `producción` — el portal real de la UJI, con sus trampas inventariadas (conmutador de
 idioma, http+https duplicados, la misma sección bajo dos prefijos, archivo por curso académico).
 
-**Abierto.** Bloque **DIN**: parametrizar apartados como *secciones* dentro del proceso de
-curación, con censo acotado por sección. La trampa que el bloque evita está medida:
-`site_crawler.py` compara contra las páginas de **todo** el sitio, así que una pasada de sección
-completa declararía baja el resto del portal.
+**Y encima de esto**, §5.11 añade el apartado que se mantiene solo: la misma curación, acotada a
+una sección del portal y con el ciclo de vida cerrado.
 
 ---
 
@@ -496,6 +526,88 @@ Probado y verificado en vivo con un PAT real y una sesión MCP real.
 
 ---
 
+---
+
+### 5.11 Apartados que se mantienen solos
+
+**Qué hace.** Un apartado del portal que se actualiza de forma permanente —jornadas, eventos,
+becas— se parametriza como **sección** dentro del proceso de curación, con su patrón, su cadencia
+y su responsable, y a partir de ahí la plataforma lo mantiene: ingiere lo nuevo, reingiere lo que
+cambió y retira lo que desapareció.
+
+**Garantiza.**
+- **Curación una vez, automatización después.** Una sección nace en modo `manual` y sólo automatiza
+  cuando alguien lo dice. En `manual`, una baja deja un aviso y **no toca el corpus**.
+- **El censo se acota al ámbito rastreado.** Una pasada de sección compara contra las páginas de
+  esa sección; fuera del ámbito no declara nada, ni baja ni cambio.
+- **Nada entra al corpus con hallazgos bloqueantes**: la automatización no tiene menos criterio
+  que el curador al que sustituye. La página bloqueada sigue siendo candidata.
+- **Ninguna retirada masiva silenciosa**: por encima del umbral del ámbito (30 % por defecto) no
+  se retira nada y queda el aviso con las cifras.
+- **Todo lo que hace queda escrito** en un diario por pasada, con el ámbito que cubrió.
+- Los parámetros de una sección **heredan del sitio**: nulo hereda, y lo puesto gana.
+
+**Superficie.** `modules/curation/secciones.py`, `quality_job.py`, `diario.py` ·
+`hub_web_sections`, `hub_crawl_runs` · `hub_sites_router` (`/hub/sites/{id}/sections`, `/runs`) ·
+panel de secciones y diario en `/curation/sites`.
+
+**Madurez**: `construido` — ciclo completo verificado contra un portal controlado (nueva que
+entra, cambiada que se reingiere, desaparecida que se retira, y el resto del sitio intacto). Sin
+desplegar. La receta está en `docs/SECCIONES_DINAMICAS.md`.
+
+**Abierto.** La **caducidad editorial**: un evento que ya ocurrió sigue publicado, así que para la
+plataforma no ha desaparecido y el asistente puede citarlo. No se implementa porque no es una
+decisión técnica — depende de quien publica el contenido. Las cuatro opciones y a quién le toca,
+en `docs/SECCIONES_DINAMICAS.md` §6.
+
+### 5.12 El catálogo de funciones
+
+**Qué hace.** Una extracción determinista —contar las filas de un fichero de gastos, leer los
+importes de un PDF— se escribe **una vez** como *función* con su contrato declarado, y las
+plantillas de informe la **referencian** por `función@versión` en vez de llevar el código
+copiado. Antes de FUN, aprobar un script lo incrustaba en el bloque de cada plantilla: dos
+plantillas con la misma extracción eran dos copias y dos aprobaciones, y un error se arreglaba N
+veces.
+
+**Lo que garantiza.**
+
+- **Registrar es compartir, y es automático** (nivel 2 de la Instrucció 02/2026): declaración
+  responsable + auditoría sin hallazgos críticos + sandbox superado, y la versión queda usable de
+  inmediato **sin que nadie la apruebe**. La revisión humana viene después, con muestreo
+  aleatorio, y puede pedir correcciones, reclasificar el alcance o suspender.
+- **Una versión registrada es inmutable y el anclaje aguanta**: publicar la v2 **no cambia
+  ninguna plantilla** anclada a la v1. Adoptar es una decisión de quien mantiene la plantilla.
+- **Nada falla en silencio**: una función retirada o suspendida hace fallar el bloque anclado en
+  alto, con el nombre y el motivo.
+- **Dos responsabilidades separadas**: suspender es de quien revisa, retirar de quien escribe, y
+  revisar es siempre de otra persona.
+- **Dos orígenes por el mismo camino**: *autoservicio* (el código vive en el catálogo, con
+  sandbox) y *empaquetado* (el código vive en el repositorio de un equipo y llega por *entry
+  point* `govgenai.funciones`, con anclaje por mayor de semver). Un solo contrato, un solo
+  validador, un solo resolutor.
+- **Se puede ejecutar desde fuera** con un PAT y el scope `funciones:execute`, con versión
+  explícita y un evento en el registro de actividad de IA — metadatos, nunca payloads.
+
+**Dónde vive.** `modules/redaccion/funciones_service.py`, `funciones_acciones.py`,
+`funciones_resolver.py`, `funciones_paquete.py`, `contracts/funciones.py`; routers
+`/api/v1/funciones` y `/api/v1/funciones/{id}/run`; catálogo y cola de revisión en
+`/redaccion/funciones`.
+
+**Madurez**: `construido` — ciclo completo recorrido contra la base de desarrollo (registrar sin
+aprobación, dos plantillas ancladas a v1, publicar v2 sin tocarlas, adoptar v2 en una, suspender
+con motivo y ver fallar sólo esa, reactivar), más el paquete demo instalado y desinstalado de
+verdad. Sin desplegar. El contrato completo está en `docs/CATALOGO_FUNCIONES.md`.
+
+**Abierto.** La **equivalencia con la regla 2 de la Instrucció** necesita un «sí» explícito de la
+UADTI y de la OIATI: la Instrucció prevé que el código del desarrollo ciudadano se quede en el
+equipo de la persona, y aquí se registra en la plataforma y corre sobre los datos
+institucionales. Es un régimen distinto —más controlado en unas cosas y más expuesto en otras— y
+la plataforma no puede decidir por su cuenta que equivale. La comparación honesta está en
+`docs/CATALOGO_FUNCIONES.md` §4. También pendiente: contrastar las reglas del auditor AST con las
+Guías Operativas Técnicas de la UADTI.
+
+---
+
 ## 6. Fase 2 — Automatización documental
 
 **Propósito.** Llevar la automatización de AutomatIA al servidor: extracción de documentos,
@@ -604,6 +716,10 @@ a quien llega de fuera:
   integrador real.
 - `test_profile_contract.py` — todo perfil que no esté declarado sin configurar tiene que compilar
   y ejecutar.
+- `test_img1_ci_construye_y_arranca_la_imagen.py` — que el job `imagen` siga construyendo **los
+  `Dockerfile` del despliegue**, sin extras y sin dependencias de desarrollo, y arrancando el
+  contenedor hasta `/health`. El conjunto de dependencias que se despliega era el único que no
+  probaba nadie, y eso costó 35 minutos de producción caída el 2026-09-15.
 - Gate de regresión de recuperación: falla si `recall@5`, `recall@10` o `MRR` bajan más de 0,02
   respecto a la línea base versionada.
 
@@ -634,8 +750,19 @@ faltan:
 - **No comparte corpus entre chatbots.** Está decidido y no hay que volver a proponerlo.
 - **No lleva conversor de documentos en el servidor.** Al corpus entra `.md` conforme al contrato;
   si algo hay que convertir, se convierte antes de llegar.
+- **No rastrea portales de la red interna.** El rastreador sólo pide direcciones públicas (I15).
+  Esto **va a hacer falta** algún día —una intranet es un portal institucional como otro—, y
+  cuando haga falta es una decisión con su diseño: a quién se le permite, contra qué destinos y
+  con qué registro. Lo que no es, es quitar el guardia. La válvula
+  `CRAWLER_ALLOW_PRIVATE_TARGETS` existe para el portal de pruebas local y producción no arranca
+  con ella.
 - **No hay shims de compatibilidad.** Si una ruta o un símbolo se retira, se retira: el historial
   de git es la fuente de verdad del pasado.
+- **No aísla el código de una función empaquetada.** Una función que llega por *entry point*
+  corre **in-process, sin sandbox y con los datos del cliente**: la confianza está en quien la
+  instala en el despliegue, igual que en un plugin de pytest. Está aquí y no en la lista de lo
+  que falta porque es una decisión: fingir un aislamiento que no existe sería peor que decirlo.
+  Lo que sí se valida siempre es la entrada contra su contrato y la salida como `ExtractionResult`.
 
 ### 10.1 Y una cosa que no está aquí por decisión, sino porque no está hecha
 

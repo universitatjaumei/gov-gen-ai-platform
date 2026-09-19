@@ -102,3 +102,129 @@ es una rendija; lo que falta es levantar la imagen.
   necesita.
 - **No sustituye al escaneo de la cadena de suministro.** DEP.7 vigila vulnerabilidades; esto
   vigila que lo que se despliega arranque. Son preguntas distintas y por eso son jobs distintos.
+
+---
+
+## Ejecutado el 2026-09-17 — el job `imagen`
+
+**Lo que quedó montado**, en `ci.yml`, con `needs: contract`:
+
+1. **Las cuatro imágenes se construyen** con los `Dockerfile` y los contextos del despliegue.
+2. **Sólo se arranca la de la aplicación**, que es la única con una comprobación de salud que
+   signifique algo sin montar red ni configuración: el frontend sirve estáticos y el *sandbox* y
+   el MCP necesitan una red que este job no levanta. Construir las tres, sí: es barato y caza un
+   `Dockerfile` roto, que es justo lo que pasó el 2026-09-16.
+3. **Migra con la imagen recién construida** (`alembic upgrade head`), como el servicio `migrate`
+   de `docker-compose.prod.yml`. Sin eso el arranque muere en la primera consulta y el job se
+   pondría rojo por una razón distinta de la que existe para vigilar.
+4. **Arranca con `ENVIRONMENT=production`**, que es lo que se despliega y lo que activa los tres
+   gates de `core/config.py`, y espera a `/health` con reintentos: el mismo criterio del paso
+   «Comprobar que sirve, y volver atrás si no» de `deploy.yml`.
+5. **El cliente de la API se descarga del job `contract`** en vez de volver a instalar uv y node
+   aquí. `frontend/src/shared/api/generated/` no viaja en el repositorio, y `docker build
+   ./frontend` a secas falla con veinte «Cannot find module»: es donde murió el primer
+   despliegue.
+
+**El guardarraíl es `server/tests/infra/test_img1_ci_construye_y_arranca_la_imagen.py`**, y lee de
+`deploy.yml` qué imágenes y qué `Dockerfile` usa el despliegue **en vez de copiarlos**: si el
+despliegue añade una imagen o mueve un fichero, este test se entera. Copiar la lista es cómo
+empiezan las dos verdades.
+
+### Las cinco mutaciones, comprobadas una a una
+
+| Mutación | Resultado |
+|---|---|
+| `--all-extras` dentro del job | rojo |
+| `continue-on-error` en el paso que arranca | rojo |
+| construir `Dockerfile.test` en vez del del despliegue | rojo (2 tests) |
+| construir y **no** arrancar | rojo |
+| acotar el job con un `if` | rojo |
+
+**Y la cuarta se quedó VERDE en la primera versión**, que es el hallazgo de método de este
+prompt: la comprobación preguntaba si el script contenía `docker run`, y el paso de migraciones
+también ejecuta uno. Quitar el arranque de la aplicación no se notaba. Ahora la pregunta es
+`docker run -d` **de una etiqueta que este mismo job acaba de construir**, y el caso está escrito
+como test. Es otra vez la misma lección: un guardarraíl sólo ve la pregunta que le hicieron.
+
+### La medida, y la decisión que sale de ella (2026-09-17)
+
+**La secuencia entera, ejecutada en local** con Docker Desktop (motor Linux), en frío y contra un
+Postgres desechable en su propia red —la base de desarrollo no se tocó—:
+
+| Paso | Tiempo |
+|---|---|
+| Construir `app` | 166 s |
+| Construir `frontend` | 66 s |
+| Construir `sandbox` | 59 s |
+| Construir `mcp` | 18 s |
+| Migrar con la imagen recién construida | 6 s |
+| Arrancar hasta `/health` 200 | ~20 s |
+| **Total** | **≈ 5,6 min** |
+
+Y sirvió para lo que una medición sirve además de dar un número: **la secuencia funciona de punta
+a punta**. El contenedor arrancó con `ENVIRONMENT=production` y el registro salió con **0 errores
+y 0 avisos**, `Application startup complete`, el sembrado **omitiendo los datos de desarrollo**
+como debe fuera de desarrollo, y los dos refrescos de arranque resolviendo sin credenciales por su
+lista de reserva.
+
+### La ejecución real, que corrigió la medida local (run `35214706322`, `desarrollo`)
+
+**El job pasó en verde a la primera, y tardó 2 min 45 s.** Por pasos:
+
+| Paso | Tiempo |
+|---|---|
+| Levantar el Postgres de servicio | 32 s |
+| Descargar el cliente de la API de `contract` | 1 s |
+| **Construir las cuatro imágenes** | **111 s** |
+| Migrar con la imagen recién construida | 4 s |
+| Arrancar y esperar a `/health` | 12 s |
+
+**La medida local sobreestimaba por casi el doble** —5,6 min contra 2,75—, y conviene saber por
+qué antes de fiarse de la siguiente: Docker Desktop sobre Windows es más lento que un runner
+Linux, y el contexto de construcción de aquí lleva `_local/` y `htmlcov/`, que no están en el
+checkout. **Sirvió para dimensionar y para saber que la secuencia funciona; para decidir, no.**
+
+**Y la decisión que la medida local justificaba con un argumento equivocado sigue siendo la misma,
+ahora con el argumento bueno.** Se escribió que el job «pasaría a ser el camino crítico y añadiría
+2-3 min»: **no lo es**. `contract` (3,33) + `imagen` (2,75) = **6,1 min**, y `Lint & Test` solo ya
+gasta **7,87** — el total del run fue 7,93 min, que es el de siempre. **El job es gratis en reloj
+de pared.**
+
+**Decisión: corre en cada ejecución del flujo, sin `if`.** Además de no costar nada, acotarlo a
+`main` no protegería: `deploy.yml` dispara **con ese mismo push y en paralelo**, así que un rojo
+allí llegaría tarde. El valor entero está en cazarlo en `desarrollo`, antes del merge.
+
+**La palanca, escrita por si algún día deja de ser gratis**: sólo la imagen del frontend necesita
+el cliente generado, así que partir el job quitaría el `needs` a las otras tres. Hoy no hace
+falta: un job se lee mejor que dos.
+
+### El caso real, reproducido: el job también falla cuando debe fallar
+
+**Quitado `uvicorn` del manifiesto y relockeado**, `uv tree --invert` enseña lo que hacía falta
+para que el caso fuera el de verdad: ya sólo llega por `mcp → browser-use`, y `browser-use` vive
+en el extra `agente-navegador`. O sea, **fuera del conjunto base** — la situación exacta que DEP.1
+creó sin querer el 2026-09-15.
+
+Con esa mutación:
+
+| Paso | Resultado |
+|---|---|
+| `docker build` | **verde**, 142 s — un job que sólo construyera no vería nada |
+| `docker run -d` | **rc=127**, y el contenedor ni llega a arrancar |
+| El error | `exec: "uvicorn": executable file not found in $PATH` |
+| `curl /health` | sin respuesta |
+
+Es el mensaje del incidente, palabra por palabra. Y **falla en el `docker run -d`**, antes incluso
+de la espera: con `set -euo pipefail` el paso muere ahí, así que el job se pone rojo en segundos y
+con el error exacto en el registro.
+
+El manifiesto y el lock se restauraron; el árbol quedó limpio.
+
+**La otra clase de fallo —la imagen que no construye, como la del 2026-09-16— la cubre el propio
+`docker build`**, y además la caza antes y más barato
+`test_la_imagen_puede_construir_el_wheel.py`, que dice qué `COPY` falta en vez de dejar un
+`OSError` al final de la construcción.
+
+**Lo único que no se ha hecho** es esa misma mutación **dentro de CI**, y se decidió no hacerla:
+exige empujar un defecto a propósito a una rama compartida o abrir un *pull request* de mentira, y
+el job ya ha demostrado en la máquina de GitHub que hace lo que aquí hace.

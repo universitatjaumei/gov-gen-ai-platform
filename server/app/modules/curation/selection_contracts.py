@@ -8,9 +8,31 @@ import re
 import uuid
 from datetime import datetime
 from typing import Any, Literal
-from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from server.app.core.red_publica import DestinoNoPublico, assert_forma_publica
+
+
+def _url_que_el_servidor_va_a_pedir(valor: str | None) -> str | None:
+    """APER.1 — la forma de una URL que el rastreador acabará pidiendo.
+
+    Se comprueba **aquí** y no sólo al descargar para que quien se equivoca al dar de alta un
+    sitio reciba un 422 con el motivo, en vez de un rastreo que devuelve cero páginas sin decir
+    por qué. La comprobación del destino resuelto va en cada petición —incluida cada
+    redirección—, porque la redirección la decide el servidor remoto y un contrato no la ve.
+
+    No resuelve el DNS a propósito: dar de alta un sitio no puede depender de que su servidor
+    esté respondiendo en ese instante, y un nombre que resuelve a una dirección privada lo para
+    el guardia de la descarga.
+    """
+    if valor is None:
+        return None
+    try:
+        assert_forma_publica(valor)
+    except DestinoNoPublico as exc:
+        raise ValueError(str(exc)) from exc
+    return valor
 
 
 class CrawlConfig(BaseModel):
@@ -144,6 +166,11 @@ class SiteCreate(BaseModel):
     crawl_interval_hours: int = 24
     crawl_config: CrawlConfig | None = None
 
+    #: El sitemap se pide igual que la raíz, así que se valida igual: era la puerta de al lado.
+    _valida_destinos = field_validator("root_url", "sitemap_url")(
+        classmethod(lambda cls, v: _url_que_el_servidor_va_a_pedir(v))
+    )
+
 
 class SitePatch(BaseModel):
     name: str | None = None
@@ -152,6 +179,11 @@ class SitePatch(BaseModel):
     audit_semantic_scope: str | None = None
     crawl_interval_hours: int | None = None
     crawl_config: CrawlConfig | None = None
+
+    #: Sin esto el `PATCH` sería el rodeo obvio para meter lo que el `POST` rechaza.
+    _valida_destinos = field_validator("root_url", "sitemap_url")(
+        classmethod(lambda cls, v: _url_que_el_servidor_va_a_pedir(v))
+    )
 
 
 class PageView(BaseModel):
@@ -198,8 +230,175 @@ class SelectionView(BaseModel):
     rule_value: str | None
     auto_ingest_new: bool
     created_at: datetime
+    #: DIN.3 — cuando apunta a una sección, el patrón efectivo es el de la sección y
+    #: `rule_value` se ignora: dos sitios de verdad de la misma regla divergirían.
+    section_id: uuid.UUID | None = None
 
     model_config = {"from_attributes": True}
+
+
+# ──────────────────────── Secciones de un sitio (DIN.1–DIN.3) ────────────────────────
+
+
+class SectionCreate(BaseModel):
+    """Lo que hace falta para dar de alta un apartado: un nombre y lo que lo delimita.
+
+    El patrón se valida aquí además de en el repositorio, y las dos validaciones llaman a la
+    misma función: `secciones.validar_patron`. Un regex que no compila rompería todos los
+    rastreos de la sección y el fallo saldría lejos del formulario donde se escribió, que es la
+    lección de `CrawlConfig` en RAS.5.
+    """
+
+    name: str = Field(min_length=1, max_length=255)
+    pattern: str = Field(min_length=1, max_length=2048)
+    pattern_kind: Literal["path_prefix", "regex"] = "path_prefix"
+    #: Nulo = hereda la cadencia del sitio (DIN.1).
+    crawl_interval_hours: int | None = Field(default=None, ge=1, le=8_760)
+    #: `manual` a propósito: una sección nueva no automatiza hasta que alguien lo dice.
+    mode: Literal["manual", "automatic"] = "manual"
+    criteria_json: dict[str, Any] | None = None
+    owner: str | None = Field(default=None, max_length=255)
+
+    @model_validator(mode="after")
+    def _el_patron_tiene_que_servir(self) -> "SectionCreate":
+        from server.app.modules.curation.secciones import PatronInvalido, validar_patron
+
+        try:
+            validar_patron(self.pattern_kind, self.pattern)
+        except PatronInvalido as fallo:
+            raise ValueError(str(fallo)) from fallo
+        return self
+
+
+class SectionPatch(BaseModel):
+    """Los campos editables de una sección. Ausente = no se toca; nulo en la cadencia = hereda.
+
+    `crawl_interval_hours` no puede distinguir «no lo toques» de «vuelve a heredarlo» con un solo
+    nulo, así que se usa `heredar_cadencia` para lo segundo: colapsarlos dejaría imposible vaciar
+    un valor puesto, que es el mismo problema que `core/ambito.py` resuelve con la distinción
+    entre `None` y `0`.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    pattern: str | None = Field(default=None, min_length=1, max_length=2048)
+    pattern_kind: Literal["path_prefix", "regex"] | None = None
+    crawl_interval_hours: int | None = Field(default=None, ge=1, le=8_760)
+    heredar_cadencia: bool = False
+    mode: Literal["manual", "automatic"] | None = None
+    criteria_json: dict[str, Any] | None = None
+    owner: str | None = Field(default=None, max_length=255)
+    is_active: bool | None = None
+
+    @model_validator(mode="after")
+    def _el_patron_tiene_que_servir(self) -> "SectionPatch":
+        from server.app.modules.curation.secciones import PatronInvalido, validar_patron
+
+        if self.pattern is None and self.pattern_kind is None:
+            return self
+        if self.pattern is None:
+            # Cambiar sólo la clase de patrón dejaría el patrón viejo interpretado de otra forma
+            # sin que nadie lo hubiera revisado: se piden los dos juntos.
+            raise ValueError(
+                "para cambiar la clase de patrón hay que enviar también el patrón"
+            )
+        try:
+            validar_patron(self.pattern_kind or "path_prefix", self.pattern)
+        except PatronInvalido as fallo:
+            raise ValueError(str(fallo)) from fallo
+        return self
+
+
+class SectionView(BaseModel):
+    """Una sección tal y como la ve quien cura.
+
+    **La cadencia se sirve dos veces a propósito**: la propia (nula si hereda) y la efectiva, con
+    una bandera que dice cuál es cuál. Sin la bandera, cambiar la cadencia del sitio parecería no
+    hacer nada en las secciones que la heredan — y quien cura no tendría forma de saber cuál de
+    las dos está mirando.
+    """
+
+    id: uuid.UUID
+    site_id: uuid.UUID
+    name: str
+    pattern: str
+    pattern_kind: str
+    crawl_interval_hours: int | None
+    crawl_interval_hours_effective: int
+    crawl_interval_inherited: bool
+    mode: str
+    criteria_json: dict[str, Any] | None
+    owner: str | None
+    last_crawled_at: datetime | None
+    is_active: bool
+    created_at: datetime
+
+
+class PatternTestRequest(BaseModel):
+    """Probar el patrón **antes** de guardar la sección (DIN.3)."""
+
+    pattern: str = Field(min_length=1, max_length=2048)
+    pattern_kind: Literal["path_prefix", "regex"] = "path_prefix"
+
+    @model_validator(mode="after")
+    def _el_patron_tiene_que_servir(self) -> "PatternTestRequest":
+        from server.app.modules.curation.secciones import PatronInvalido, validar_patron
+
+        try:
+            validar_patron(self.pattern_kind, self.pattern)
+        except PatronInvalido as fallo:
+            raise ValueError(str(fallo)) from fallo
+        return self
+
+
+class CrawlRunView(BaseModel):
+    """Una pasada, tal y como la lee quien cura (DIN.6).
+
+    `scope_label` va al lado de `section_id` porque el diario es **historia**: si alguien borra
+    la sección, la fila tiene que seguir diciendo qué cubrió.
+    """
+
+    id: uuid.UUID
+    site_id: uuid.UUID
+    section_id: uuid.UUID | None
+    scope_label: str
+    started_at: datetime
+    finished_at: datetime
+    pages_total: int
+    pages_new: int
+    pages_changed: int
+    pages_gone: int
+    pages_error: int
+    documents_auto_ingested: int
+    documents_reingested: int
+    documents_auto_retired: int
+    pages_blocked_by_findings: int
+    findings_retired: int
+    truncated: bool
+    stop_reason: str | None
+    errors: list[str] = Field(default_factory=list)
+
+    model_config = {"from_attributes": True}
+
+
+class PaginaDePasadas(BaseModel):
+    """Una página del diario. El total va aparte porque la tabla lo necesita para paginar."""
+
+    total: int
+    items: list[CrawlRunView]
+
+
+class PatternTestView(BaseModel):
+    """Cuántas páginas **ya rastreadas** casarían, y una muestra.
+
+    Es lo que evita el regex que compila y no casa nada, que hoy sólo se descubre cuando la
+    pasada siguiente no ingiere nada — y como la ingesta automática es silenciosa, se descubre
+    tarde.
+    """
+
+    matched: int
+    total: int
+    #: Una muestra y no el volcado: la pantalla tiene que caber.
+    sample: list[str] = Field(default_factory=list)
 
 
 #: Los tipos de regla que `SelectionRepo.matches` sabe evaluar. Cualquier otro se guardaba
@@ -214,6 +413,9 @@ class SelectionCreate(BaseModel):
     rule_type: TiposDeRegla
     rule_value: str | None = None
     auto_ingest_new: bool = True
+    #: DIN.3 — apuntar a una sección en vez de repetir su patrón. Con esto puesto, el patrón
+    #: efectivo es el de la sección y `rule_value` se ignora.
+    section_id: uuid.UUID | None = None
 
 
 class ReconnaissanceRequest(BaseModel):
@@ -235,9 +437,10 @@ class ReconnaissanceRequest(BaseModel):
     @field_validator("root_url")
     @classmethod
     def _debe_ser_una_url(cls, valor: str) -> str:
-        partes = urlparse(valor)
-        if partes.scheme not in {"http", "https"} or not partes.netloc:
-            raise ValueError("root_url debe ser una URL http(s) absoluta")
+        # APER.1 — antes esto comprobaba sólo esquema y `netloc`, así que
+        # `http://169.254.169.254/…` pasaba: el reconocimiento es el que **devuelve el texto
+        # leído**, o sea el más rentable de los dos endpoints para quien busca la red interna.
+        _url_que_el_servidor_va_a_pedir(valor)
         return valor
 
     @field_validator("url_regex_filter")

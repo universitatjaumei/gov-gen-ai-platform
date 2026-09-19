@@ -59,6 +59,9 @@ def _fake_selection(**kw):
     m.site_id = kw.get("site_id", uuid.uuid4())
     m.rule_type = kw.get("rule_type", "path_prefix")
     m.rule_value = kw.get("rule_value", "/temas/")
+    # DIN.3 — la selección puede apuntar a una sección; estas no lo hacen. Con un `MagicMock` el
+    # valor por defecto sería un mock y la validación de la respuesta lo rechazaría.
+    m.section_id = kw.get("section_id", None)
     m.auto_ingest_new = kw.get("auto_ingest_new", True)
     m.created_at = kw.get("created_at", __import__("datetime").datetime.utcnow())
     return m
