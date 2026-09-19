@@ -1,5 +1,5 @@
 # Stage 1: Builder — compila el SPA con Vite (misma major que CI, ver ci.yml)
-FROM node:24-alpine AS builder
+FROM node:25-alpine AS builder
 
 WORKDIR /app
 
@@ -30,7 +30,7 @@ RUN npm run build
 
 
 # Stage 2: Runtime — nginx sirviendo los estáticos + proxy same-origin del API
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.29-alpine AS runtime
 
 # El `dist` va al SUBDIRECTORIO del prefijo, no a la raíz. Así `/panel/assets/x.js`
 # es un fichero que existe de verdad y no el `index.html` devuelto por el fallback

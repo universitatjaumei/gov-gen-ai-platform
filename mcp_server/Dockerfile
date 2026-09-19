@@ -6,7 +6,7 @@
 #
 # El transporte y el modelo de autenticación están en `http_server.py`: streamable HTTP, sin
 # sesión, y el PAT lo presenta cada cliente en su petición. Aquí no se configura ningún token.
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 WORKDIR /srv/mcp
 
