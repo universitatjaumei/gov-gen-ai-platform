@@ -806,6 +806,67 @@ jobs:
           fi
           echo "/health responde 200 desde la imagen que se despliega"
 
+      # Issue #44 — y esto hay que EJECUTARLO. Que el `Dockerfile` diga
+      # `nginxinc/nginx-unprivileged` comprueba la intención; como qué usuario acaba corriendo
+      # el proceso depende también de la imagen base y de si algo la sobreescribe, y eso sólo
+      # lo dice el contenedor en marcha. La imagen ya está construida en el paso de arriba, así
+      # que esto cuesta segundos.
+      #
+      # Se comprueban las dos cosas que la issue pide: que no sea root y que siga sirviendo.
+      - name: El frontend arranca sin privilegios y sirve
+        run: |
+          set -euo pipefail
+          # `--add-host app:127.0.0.1` no es un apaño: **sin él el contenedor no arranca**, y
+          # eso es de siempre, no del cambio de imagen. nginx resuelve los `upstream` al cargar
+          # la configuración, y `nginx.conf` reenvía `/api/` a `app`; si ese nombre no existe,
+          # muere con `host not found in upstream "app"`. En el despliegue lo resuelve la red
+          # del compose. Aquí basta con que el nombre resuelva: lo que se comprueba es el
+          # usuario y que los estáticos se sirvan, no el reenvío, que necesitaría el backend.
+          docker run -d --name govgenai_ci_frontend --add-host app:127.0.0.1             -p 8080:8080 govgenai/frontend:ci
+
+          quien="$(docker exec govgenai_ci_frontend id || true)"
+          echo "el contenedor del frontend corre como: $quien"
+          case "$quien" in
+            *uid=0*)
+              echo "::error::El frontend corre como root dentro del contenedor ($quien)"
+              docker logs govgenai_ci_frontend
+              exit 1
+              ;;
+            uid=*) ;;
+            *)
+              echo "::error::No se ha podido leer el usuario del contenedor: «$quien»"
+              docker logs govgenai_ci_frontend
+              exit 1
+              ;;
+          esac
+
+          ok=0
+          for intento in $(seq 1 15); do
+            codigo="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/healthz || true)"
+            if [ "$codigo" = "200" ]; then ok=1; break; fi
+            echo "intento $intento: /healthz devolvió ${codigo:-sin respuesta}"
+            sleep 2
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::El frontend no llegó a servir /healthz en el 8080"
+            docker logs govgenai_ci_frontend
+            exit 1
+          fi
+
+          # Y que el panel se sirve de verdad, no sólo la sonda: `/panel/` tiene que devolver
+          # el `index.html`, que es lo que rompería un cambio de puerto a medias.
+          codigo="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/panel/ || true)"
+          if [ "$codigo" != "200" ]; then
+            echo "::error::/panel/ devolvió $codigo en vez de 200"
+            docker logs govgenai_ci_frontend
+            exit 1
+          fi
+          echo "frontend sin privilegios, /healthz y /panel/ a 200"
+
+      - name: Retirar el contenedor del frontend
+        if: always()
+        run: docker rm -f govgenai_ci_frontend || true
+
       # Cuánto ha costado, escrito donde se lee sin descargar nada. La decisión de dónde corre
       # este job se toma con esta medida delante, no antes de tenerla.
       - name: Resumen
@@ -815,5 +876,6 @@ jobs:
             echo "## Imagen"
             echo ""
             echo "Cuatro imágenes construidas con los \`Dockerfile\` del despliegue;"
-            echo "la de la aplicación, migrada y arrancada hasta \`/health\` 200."
+            echo "la de la aplicación, migrada y arrancada hasta \`/health\` 200,"
+            echo "y la del frontend arrancada sin privilegios hasta \`/panel/\` 200."
           } >> "$GITHUB_STEP_SUMMARY"

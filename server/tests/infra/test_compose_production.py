@@ -51,13 +51,19 @@ def test_compose_prod_frontend_builds_with_relative_api_url() -> None:
     assert build_args["VITE_API_URL"] == ""
 
 
-def test_compose_prod_frontend_exposes_port_80() -> None:
+def test_compose_prod_frontend_publica_el_80_contra_el_8080() -> None:
+    """Fuera el 80, dentro el 8080 (issue #44).
+
+    El contenedor dejó de escuchar en el 80 al pasar a `nginx-unprivileged`, porque dentro de
+    un contenedor los puertos por debajo del 1024 exigen privilegios. Lo que se publica hacia
+    fuera no cambia: quien abra el compose sigue entrando por el 80.
+    """
     compose = _load_compose("docker-compose.prod.yml")
     svc = compose["services"]["frontend"]
 
     ports = [str(p) for p in svc.get("ports", [])]
-    assert any(p.endswith("80:80") or p == "80:80" for p in ports), \
-        f"frontend debe publicar el puerto 80, encontrado: {ports}"
+    assert any(p.endswith("80:8080") for p in ports), \
+        f"frontend debe publicar el 80 contra el 8080 del contenedor, encontrado: {ports}"
 
 
 def test_compose_prod_frontend_has_healthcheck() -> None:

@@ -322,7 +322,7 @@ Caddy mandaba al frontend todo lo que no fuera API ni salud. El reparto de ahora
 | `normativa.uji.es/pdf/…`, `/img/…`, `/widget.iife.js` | PDF, imágenes y el widget | el bucket |
 | `normativa.uji.es/api/*` | la API | `app:8000` |
 | `normativa.uji.es/health` | la salud | `app:8000` |
-| `normativa.uji.es/panel/` | **el panel de gestión, y el login** | `frontend:80` |
+| `normativa.uji.es/panel/` | **el panel de gestión, y el login** | `frontend:8080` |
 
 **El nombre provisional sirve exactamente lo mismo**, panel incluido, y con el mismo prefijo. No
 es economía de configuración: `base` es de tiempo de compilación, así que la imagen del frontend

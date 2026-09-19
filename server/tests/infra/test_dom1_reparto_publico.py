@@ -86,7 +86,11 @@ def _fragmento(texto: str, nombre: str) -> str:
 def test_la_raiz_no_va_al_panel() -> None:
     """Es el motivo del bloque: el dominio enseñaba el login."""
     cuerpo = _fragmento(_texto(CADDYFILE), "govgenai_rutas")
-    al_frontend = _activas(cuerpo, "frontend:80")
+    # `frontend:8080` desde la issue #44: la imagen corre sin privilegios y por
+    # debajo del 1024 haría falta root. Y el puerto va **entero** a propósito:
+    # buscar `frontend:80` seguía casando con `frontend:8080` por subcadena, así
+    # que este test pasó el cambio de puerto sin comprobar nada.
+    al_frontend = _activas(cuerpo, "frontend:8080")
     assert al_frontend, "El panel tiene que seguir sirviéndose desde algún sitio."
     for linea in al_frontend:
         assert "handle" not in linea, (
@@ -101,7 +105,7 @@ def test_la_raiz_no_va_al_panel() -> None:
     )
     resto = cuerpo[catch_all.end() :]
     hasta_cierre = resto[: resto.index("\n\t}")]
-    assert "frontend:80" not in hasta_cierre, (
+    assert "frontend:8080" not in hasta_cierre, (
         "El catch-all manda al bucket. Si manda al frontend, la raíz del dominio vuelve a ser "
         "el login, que es justo lo que DOM.1 corrige."
     )
