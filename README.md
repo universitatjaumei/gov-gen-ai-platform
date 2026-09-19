@@ -145,7 +145,12 @@ retiró el 2026-09-04**: no lo usaba ni CI, ni el despliegue, ni el `Dockerfile`
   escribir código. Lo vigila un test: si algo de ahí deja de ser verdad, la suite se pone roja.
 - `docs/PRESENTACION_PROYECTO.md` — qué hace la plataforma, qué está construido y verificado, y
   qué está previsto. Es el documento para leer primero si vienes de fuera.
-- `docs/Arquitectura.md` — qué es la plataforma y qué principios la rigen.
+- `docs/Arquitectura.md` — cómo está construida: los módulos que existen, las dos fronteras
+  —cloud/edge y organización—, los datos, la recuperación y el despliegue. Reescrito el
+  2026-09-19; hasta entonces describía el estado objetivo de antes de integrar los dos proyectos
+  de origen.
+- `docs/GUIA_DE_USO.md` — qué hace cada rol con la plataforma ya instalada: del alta de una
+  organización a un asistente publicado, un informe aprobado o un portal curado.
 - `docs/MARCO_GOBERNANZA_IA.md` — gobernanza, trazabilidad y protección de datos.
 - `docs/LICENCIA_ES.md` — la AGPL explicada en español: qué permite, qué obliga y qué no, y qué
   significa para un pliego.
@@ -228,6 +233,12 @@ Este programa se distribuye bajo la **GNU Affero General Public License v3.0 o p
 (`AGPL-3.0-or-later`). El texto completo está en `LICENSE`, íntegro y sin modificar: la propia
 licencia permite copiarla literalmente pero no alterarla, así que la procedencia y el propósito se
 declaran aquí y no dentro de ella.
+
+**Una sola licencia, y conviene decirlo porque la planificación previó otra cosa.** Hoy el
+programa se distribuye únicamente bajo AGPL, y lo que se contrata son **servicios**, no licencias.
+La planificación de enero de 2026 previó además una licencia dual comercial para *partners*: sigue
+siendo posible —la titularidad es de una sola persona jurídica— y **no se ha ejercido**. Si lees
+«dual-license» en un documento de planificación, es eso y no dos regímenes en vigor.
 
 Para quien tenga que decidir si su administración puede usar o desplegar esto, `docs/LICENCIA_ES.md`
 explica en español qué permite la licencia, qué obliga, **qué no obliga** y qué significa para un

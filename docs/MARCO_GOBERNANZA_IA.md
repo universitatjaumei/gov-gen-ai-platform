@@ -9,7 +9,8 @@
 >
 > **Relación con otros documentos**: este marco es la referencia interna. La presentación del
 > proyecto para lectores externos es `PRESENTACION_PROYECTO.md`; su proyección hacia consorcios y
-> financiación europea vive en `docs/EU_GOVERNANCE_CONCEPT_NOTE.md` y `docs/EU_GOVERNANCE_TOPICS.md`.
+> financiación europea **no está versionada** y se mantiene fuera del repositorio a propósito, así
+> que no la busques en `docs/`.
 > Las reglas de arquitectura que lo implementan son vinculantes para los agentes de desarrollo vía
 > `AGENTS.md`. El estado detallado de cada mecanismo se sigue en `planificacion/PROJECT_STATE.md`.
 
@@ -472,8 +473,9 @@ fuera de la plataforma. Se enumeran aquí para que la frontera quede explícita:
 - `PRESENTACION_PROYECTO.md` — presentación del proyecto, módulos y estado de desarrollo para
   lectores externos.
 - `AGENTS.md` — reglas de arquitectura vinculantes que implementan este marco.
-- `docs/EU_GOVERNANCE_CONCEPT_NOTE.md` y `docs/EU_GOVERNANCE_TOPICS.md` — proyección del marco hacia
-  consorcios y financiación europea.
+- La proyección del marco hacia consorcios y financiación europea **no está versionada**: se
+  mantiene fuera del repositorio a propósito, y por eso no aparece aquí con una ruta que quien
+  clone no tendría.
 - `docs/GOVERNANCA_PER_API.md` — inventario, mecanismo a mecanismo, de qué comprueba y registra la
   plataforma y qué de ello es accesible por API para aplicaciones desarrolladas fuera (en
   valenciano, preparado para la Unidad de Análisis y Desarrollo TI).

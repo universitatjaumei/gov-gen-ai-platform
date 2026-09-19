@@ -26,7 +26,9 @@ todas envejecen igual:
 | [`MARCO_DESARROLLO_AGENTICO.md`](MARCO_DESARROLLO_AGENTICO.md) | **El método** con el que se desarrolla esto, escrito para poder aplicarse a otros proyectos: principios, permisos de autoaceptación, TDD, guardarraíles, y cómo montarlo en un proyecto nuevo. Con bibliografía y comparación con los marcos publicados |
 | [`ESPECIFICACIONES.md`](ESPECIFICACIONES.md) | **Qué garantiza el sistema**, capacidad por capacidad, con sus invariantes y dónde se hacen cumplir. El documento para quien va a escribir código |
 | [`PRESENTACION_PROYECTO.md`](PRESENTACION_PROYECTO.md) | Qué hace la plataforma, qué está construido y verificado, y qué está previsto. El documento para quien llega de fuera |
-| [`Arquitectura.md`](Arquitectura.md) | Qué es la plataforma y qué principios la rigen: módulos, roles, privacidad, frontera cloud/edge, stack |
+| [`Arquitectura.md`](Arquitectura.md) | **Cómo está construida**: los módulos que existen, las dos fronteras —cloud/edge y organización—, datos, recuperación, frontend, despliegue y stack medido |
+| [`GUIA_DE_USO.md`](GUIA_DE_USO.md) | Qué hace cada rol con la plataforma ya instalada: del alta de una organización a un asistente publicado, un informe aprobado o un portal curado |
+| [`MULTITENENCIA.md`](MULTITENENCIA.md) | Inventario del ámbito **tabla por tabla**: qué es de la plataforma, qué de cada organización y por qué camino se llega a ella. Lo mantiene honesto su propio test |
 | [`../AGENTS.md`](../AGENTS.md) | Las reglas duras para agentes de programación, y de paso el contrato de estilo del proyecto |
 | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Cómo se trabaja aquí |
 
@@ -54,7 +56,9 @@ todas envejecen igual:
 | [`NIVELES_DE_MODELO.md`](NIVELES_DE_MODELO.md) | Referencia viva — los niveles (*tiers*) de modelo y qué actividad usa cada uno |
 | [`DEPURAR_CONTEXTO_RAG.md`](DEPURAR_CONTEXTO_RAG.md) | Referencia viva — cómo depurar qué contexto llegó al modelo |
 | [`CURACION_MULTIORGANIZACION.md`](CURACION_MULTIORGANIZACION.md) | Referencia viva — la curación con varias organizaciones |
+| [`SECCIONES_DINAMICAS.md`](SECCIONES_DINAMICAS.md) | Referencia viva — los apartados parametrizables de un sitio y el ciclo de vida de su ingesta |
 | [`CASO_CURACION_ESCOLA_DOCTORAT.md`](CASO_CURACION_ESCOLA_DOCTORAT.md) | Referencia viva — caso guía de curación, extremo a extremo |
+| [`RUNBOOK_REINGESTA.md`](RUNBOOK_REINGESTA.md) | Referencia viva — cómo se reingiere el corpus, y qué comprobar después |
 
 ## Informes, scripts y sandbox
 
@@ -62,6 +66,7 @@ todas envejecen igual:
 |---|---|
 | [`REDACCION_CONTRACT_FIRST.md`](REDACCION_CONTRACT_FIRST.md) | Referencia viva — el contrato del módulo de Informes: plantillas, extracción, `DraftingCoreGraph`, `RunManifest` |
 | [`CASO_INFORME_SEGUIMIENTO.md`](CASO_INFORME_SEGUIMIENTO.md) | Referencia viva — el caso guía del módulo, con las dos reglas duras que salieron de él |
+| [`CATALOGO_FUNCIONES.md`](CATALOGO_FUNCIONES.md) | Referencia viva — el catálogo de funciones deterministas compartidas: contrato, versionado, los tres niveles y la revisión posterior |
 | [`SANDBOX_SECURITY.md`](SANDBOX_SECURITY.md) | Referencia viva — las ocho capas de aislamiento del código generado. La capa 8 (gVisor) **la pone el aprovisionamiento de la VM** desde D.0.doc, con el comando que comprueba que está: la daba la plataforma y ahora es configuración nuestra |
 
 ## Plataforma y operación
@@ -69,10 +74,13 @@ todas envejecen igual:
 | Documento | Clase |
 |---|---|
 | [`MCP_SERVER.md`](MCP_SERVER.md) | Referencia viva — el servidor MCP, sus dos transportes y su toolset |
+| [`REGISTRO_ACTIVIDAD_IA.md`](REGISTRO_ACTIVIDAD_IA.md) | Referencia viva — la plataforma como registro de actividad IA de la institución: qué se declara, qué no se guarda y con qué catálogo |
+| [`WIDGET_INCRUSTACION.md`](WIDGET_INCRUSTACION.md) | Referencia viva — cómo se incrusta el widget, qué viaja en el HTML y cómo se revoca la credencial de sitio |
 | [`A11Y_GUIDELINES.md`](A11Y_GUIDELINES.md) · [`A11Y_CHECKLIST.md`](A11Y_CHECKLIST.md) | Referencia viva — accesibilidad: criterios y lista de comprobación |
 | [`PRUEBAS_MANUALES.md`](PRUEBAS_MANUALES.md) | Referencia viva — qué se prueba a mano y qué no, con la matriz por módulo |
 | [`METODOLOGIA_AGENTICA.md`](METODOLOGIA_AGENTICA.md) | Referencia viva — cómo se ejecuta el desarrollo por bloques |
 | [`GESTOR_EXPEDIENTES.md`](GESTOR_EXPEDIENTES.md) | Referencia viva — el módulo previsto para 2027-2028; todavía no existe |
+| [`INVENTARIO_RETIRADA_LEGACY.md`](INVENTARIO_RETIRADA_LEGACY.md) | Registro — el mapa, fichero a fichero, de lo que tenía el cliente NiceGUI retirado el 2026-09-04: qué estaba cubierto, dónde, y qué se fue sin equivalente. Es lo que hay que leer antes de escribir el nodo de ejecución local |
 | [`DESPLIEGUE_PROTOTIPO_GCP.md`](DESPLIEGUE_PROTOTIPO_GCP.md) | Referencia viva — el despliegue mínimo del prototipo. No sustituye al bloque Deploy |
 | [`chatbots-publicos/`](chatbots-publicos/) | Referencia viva — cómo se embebe el widget: plantilla CSS, tema de ejemplo y página de demostración |
 | [`ejemplos/`](ejemplos/) | Referencia viva — ficheros de ejemplo (FAQ del corpus) |
@@ -92,6 +100,7 @@ Se leen por su fecha. Ninguna se actualiza: si una decisión cambia, la sustituy
 | [`DECISION_CURACION_SEPARADA.md`](DECISION_CURACION_SEPARADA.md) | La curación como módulo propio |
 | [`DECISION_RENDERIZADO_RASTREO.md`](DECISION_RENDERIZADO_RASTREO.md) | Cómo se renderiza al rastrear un portal |
 | [`DECISION_OPENWEBUI_CARCASA_CHAT.md`](DECISION_OPENWEBUI_CARCASA_CHAT.md) | **Descartar** OpenWebUI como carcasa de chat |
+| [`DECISION_IDENTIDAD_DE_ADMINISTRACION.md`](DECISION_IDENTIDAD_DE_ADMINISTRACION.md) | Quién es una cuenta de administración, y por qué la autoridad del rol es configuración |
 | [`RAG_SUSTITUCION_DEPENDENCIAS.md`](RAG_SUSTITUCION_DEPENDENCIAS.md) | Qué dependencias de recuperación se sustituyeron y por qué |
 
 ## Mediciones
@@ -111,6 +120,8 @@ Ciertas en su fecha. Se leen como historia del proyecto, no como estado.
 
 | Documento | Fecha del corte |
 |---|---|
+| [`EVOLUCIO_I_ASPECTES_PENDENTS.md`](EVOLUCIO_I_ASPECTES_PENDENTS.md) | 2026-09-02 — Qué se habló con la Unidad de Análisis y Desarrollo y en qué quedó cada propuesta (en valenciano). Dos se convirtieron en los bloques REG y DIN; la tercera quedó aplazada y razonada |
+| [`DATOS_DEL_PILOTO.md`](DATOS_DEL_PILOTO.md) | 2026-08-31 — Qué datos llegaron al piloto y por qué, con el criterio y las cifras medidas |
 | [`VALORACION_PROYECTO.md`](VALORACION_PROYECTO.md) | 2026-08-24 — Valoración del proyecto. Lleva **dos notas de estado**: su §3 y su §2.3 describen fallos y deudas ya cerrados |
 | [`AUDITORIA_PRE_DEPLOY.md`](AUDITORIA_PRE_DEPLOY.md) | 2026-08-10 — Auditoría previa al despliegue. Sus nueve hallazgos los cerró el bloque SEC.8 |
 | [`COMPARATIVA_ETL_LEGACY.md`](COMPARATIVA_ETL_LEGACY.md) · [`COMPARATIVA_LEGACY_INFORMES.md`](COMPARATIVA_LEGACY_INFORMES.md) · [`COMPARATIVA_PROMPTS_LEGACY.md`](COMPARATIVA_PROMPTS_LEGACY.md) | Qué hacía el legacy NiceGUI frente a lo nuevo, módulo a módulo. **Se conservan porque ese código ya no está en el árbol**: son el único registro dentro del repositorio de las decisiones que el legacy tenía mejor resueltas |

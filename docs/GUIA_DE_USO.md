@@ -121,8 +121,10 @@ Dos modos en uso:
 
 Los perfiles de grafo público y qué hace cada uno: [`GRAPH_PROFILES.md`](GRAPH_PROFILES.md).
 
-`/hub/valores-por-defecto` fija lo que heredan los asistentes nuevos, para no repetir la misma
-configuración en cada uno.
+`/hub/valores-por-defecto` fija los valores de la organización que heredan sus asistentes
+—troceado, presupuesto de contexto, reescritura de la consulta, lengua—, para no repetir la misma
+configuración en cada uno. Un campo que se deja sin poner **vuelve a heredar** el defecto de
+plataforma, que no es lo mismo que ponerlo a cero.
 
 ### 3.2 Cargar el corpus
 
@@ -247,8 +249,15 @@ entregable principal es el informe de auditoría del portal, tenga o no un chatb
 | `/curation/findings` | Los hallazgos: contenido caducado, contradictorio, insuficiente, con revisión vencida |
 | `/curation/publish` | Decidir qué se publica y qué entra al corpus |
 
-**No hay ingesta automática de web a corpus**, y es deliberado: una página nueva es una señal
-para quien cura, no un disparador. Quien decide qué entra es una persona.
+**Curación una vez, automatización después.** No hay ingesta automática de nada que nadie haya
+aprobado: quien decide qué entra es una persona, y una página nueva es una señal para quien cura,
+no un disparador.
+
+Lo que sí hay, desde el bloque DIN, es **mantenimiento automático dentro del ámbito que alguien
+aprobó una vez**. Un apartado que se renueva solo —jornadas, eventos, becas— se parametriza en
+**Sitios → Secciones del sitio**, **nace en modo `manual`** y hay que pasarlo a `automatic` a
+mano. En `manual`, una baja deja un aviso y no toca el corpus. Paso a paso:
+[`SECCIONES_DINAMICAS.md`](SECCIONES_DINAMICAS.md).
 
 El rastreo es cortés por construcción —pausa por *host*, `robots.txt` leído una vez por hora— y
 el servidor **sólo pide direcciones de la red pública**, comprobado en cada salto y también a
@@ -256,7 +265,6 @@ través de redirecciones.
 
 Recorrido completo y real: [`CASO_CURACION_ESCOLA_DOCTORAT.md`](CASO_CURACION_ESCOLA_DOCTORAT.md).
 Con varias organizaciones: [`CURACION_MULTIORGANIZACION.md`](CURACION_MULTIORGANIZACION.md).
-Los apartados dinámicos y su ciclo de vida: [`SECCIONES_DINAMICAS.md`](SECCIONES_DINAMICAS.md).
 Cómo probarlo sin salir a internet:
 [`../pruebas_manuales/`](../pruebas_manuales/) y el guion del bloque de curación.
 
@@ -306,3 +314,9 @@ La lista completa y razonada está en `ESPECIFICACIONES.md` §10.
 | Depurar por qué un asistente contestó lo que contestó | [`DEPURAR_CONTEXTO_RAG.md`](DEPURAR_CONTEXTO_RAG.md) |
 | Saber qué se prueba a mano y qué no | [`PRUEBAS_MANUALES.md`](PRUEBAS_MANUALES.md) |
 | Contribuir código | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) |
+
+> **Sobre [`chatbots-publicos/guia-pruebas-e2e.md`](chatbots-publicos/guia-pruebas-e2e.md)**: es
+> un **guion de pruebas** del módulo de chatbots, pantalla a pantalla, y es **del 2026-05-13**.
+> Sigue siendo útil como recorrido exhaustivo, pero es anterior a media docena de bloques —entre
+> ellos el módulo Plataforma, las personas con contraseña local y la retirada de la ingesta de
+> PDF—, así que sus detalles concretos hay que contrastarlos con esta guía.

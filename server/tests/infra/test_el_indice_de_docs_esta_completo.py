@@ -104,18 +104,11 @@ class TestElIndiceLosListaATodos:
             "corresponda por clase (referencia viva, decisión o instantánea)."
         )
 
-    def test_should_not_list_a_document_that_does_not_exist(self, indice: str):
-        """El índice tampoco puede inventarse documentos: el error simétrico del anterior."""
-        rotos = [
-            nombre
-            for nombre in re.findall(r"`([A-Za-z0-9_-]+\.md)`|\(([A-Za-z0-9_-]+\.md)\)", indice)
-            for nombre in [next(filter(None, nombre), "")]
-            if nombre and f"docs/{nombre}" not in _versionados()
-        ]
-        assert rotos == [], (
-            "docs/README.md nombra documentos que el repositorio no tiene:\n  "
-            + "\n  ".join(sorted(set(rotos)))
-        )
+    # El error simétrico —que el índice ENLACE algo que no existe— ya lo cubre
+    # `test_repo3_el_indice_de_docs_no_miente.py`, y aquí no se repite. Comprobarlo sobre los
+    # nombres sueltos, y no sobre los enlaces, sería además incorrecto: el índice **nombra a
+    # propósito** los cuatro documentos que REPO.3 retiró, para decir dónde se leen, y cita
+    # `PROJECT_STATE.md` y `HISTORIAL.md`, que viven en `planificacion/`.
 
 
 class TestNadieMandaALeerLoQueNoEsta:

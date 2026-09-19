@@ -95,7 +95,7 @@ PublicGraphConfig efectiva → GraphFactory → CoreGraph
 ### 2. Ingestión de documentos
 
 - **Ingestión por URL**: el `IngestionScheduler` rastrea periódicamente las URLs registradas en `HubIngestionSource` y actualiza el corpus si el contenido cambia (por hash).
-- **Ingestión por archivo**: subida de PDF directa vía `/api/v1/hub/ingestion/{chatbot_id}/documents` con procesado Docling → Markdown → chunks.
+- **Ingestión por archivo**: subida de un `.md` conforme al contrato del corpus vía `/api/v1/hub/ingestion/upload` → chunks. **Desde EXT.1 (2026-08-11) un PDF devuelve 415** y dice a dónde ir: la conversión vive en el pipeline de curación, que es donde está el OCR. Ver [`../CONTRATO_MD_CORPUS.md`](../CONTRATO_MD_CORPUS.md).
 - **Temporal (upload de usuario)**: un usuario final puede subir un PDF que se chunkeará como contexto temporal (`is_temporary=True`) ligado a su `owner_id`.
 - Cada documento se almacena en `HubDocument` (Markdown completo) y sus fragmentos en `HubDocumentChunk` (con embedding vectorial pgvector dim 1024).
 

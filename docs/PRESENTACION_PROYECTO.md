@@ -312,7 +312,8 @@ lo que hay que leer con cuidado:
   uno amplio que mezcla normas de cursos distintos.
 
 El detalle, con la configuración de cada asistente y la tabla consulta a consulta, está en
-`docs/INFORME_CHATBOTS_NORMATIVA_Y_GERENCIA.html`.
+[`docs/mediciones/`](mediciones/README.md) — en particular el cierre del bloque HIB y la
+configuración de apertura del piloto, cada una con su fecha.
 
 **Lo que queda para entrar en fase de validación.** Los dos puntos de infraestructura que esta
 lista tenía —desplegar en producción y publicar el sitio del corpus— **están hechos** desde el 31
@@ -459,8 +460,13 @@ el corpus normativo esa línea ya está trazada: las traducciones automáticas v
 
 ## 8. Licencia y distribución
 
-**AGPL-3.0-or-later** con licencia dual comercial para partners, adoptada en agosto de 2026 con
-la Universitat Jaume I como titular. La autoinstalación en un paso ya está resuelta, que era el
+**AGPL-3.0-or-later**, adoptada en agosto de 2026 con la Universitat Jaume I como titular. Es la
+única licencia bajo la que el programa se distribuye hoy; lo que se contrata, si una
+administración necesita garantías o acompañamiento, son **servicios** —despliegue, adaptación,
+soporte, formación, corpus—, que la licencia permite expresamente. La planificación de enero de
+2026 previó además una **licencia dual comercial** para *partners*: sigue siendo posible —la
+titularidad es de una sola persona jurídica, que es lo que técnicamente lo permite— y **no se ha
+ejercido**. La autoinstalación en un paso ya está resuelta, que era el
 prerrequisito real de la distribución: un proyecto que no se puede instalar sin su autor no es
 software libre en la práctica. El objetivo es que otra administración pueda levantar la plataforma
 en su propia infraestructura, con su corpus y su identidad visual, sin depender del equipo
@@ -490,10 +496,11 @@ la norma aplicable ha sido desplazada— sin pedirle a nadie que se fíe.
 
 | Documento | Qué contiene |
 |---|---|
-| `docs/Arquitectura.md` | Arquitectura funcional y técnica: módulos, roles, frontera cloud/edge/local, privacidad, decisiones estructurales |
+| `docs/ESPECIFICACIONES.md` | Qué garantiza el sistema, capacidad por capacidad, con sus invariantes y dónde se hace cumplir cada uno. El documento para quien va a escribir código |
+| `docs/Arquitectura.md` | Arquitectura funcional y técnica **como está construida**: módulos, roles, las dos fronteras, datos, recuperación, despliegue y decisiones estructurales |
+| `docs/GUIA_DE_USO.md` | Qué hace cada rol con la plataforma ya instalada, módulo a módulo |
 | `docs/MARCO_GOBERNANZA_IA.md` | Marco normativo interno: principios de gobernanza, mecanismos que los implementan, evidencia generada y clasificación de riesgo por caso de uso |
-| `docs/EU_GOVERNANCE_CONCEPT_NOTE.md` | Proyección del marco de gobernanza hacia consorcios y financiación europea |
-| `docs/INFORME_CHATBOTS_NORMATIVA_Y_GERENCIA.html` | Configuración de los tres asistentes, pruebas realizadas y comparación con el sistema anterior, consulta a consulta |
+| `docs/mediciones/` | Las mediciones fechadas del piloto: anchura de la recuperación, por qué el asistente no contesta, cuánto contexto conviene inyectar y qué decidió cada valor de apertura |
 | `docs/MULTITENENCIA.md` | Inventario del ámbito tabla por tabla: qué es de la plataforma, qué de cada organización y por qué camino se llega a ella |
 | `docs/METODOLOGIA_AGENTICA.md` | Cómo se desarrolla: ejecución por bloques, verificación en navegador y qué se reserva al juicio humano |
 | `docs/CONTRATO_MD_CORPUS.md` | Contrato del material que entra al corpus, y el pipeline de curación que lo produce |
