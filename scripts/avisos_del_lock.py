@@ -64,12 +64,16 @@ def _arreglos(vuln_id: str, paquete: str) -> list[str]:
     `querybatch` devuelve sólo identificadores, así que hace falta una segunda llamada por
     aviso. Son pocas —los avisos de un lock sano se cuentan con los dedos— y el resultado
     decide si algo bloquea o informa, que es justo lo que no se puede aproximar.
+
+    **Y por eso un fallo de red se propaga (APER.23).** Aquí había un
+    `except (URLError, TimeoutError): return []`, y la lista vacía es exactamente el valor que
+    significa «este aviso no tiene corrección publicada». O sea que un OSV lento convertía un
+    aviso **corregible** en uno **incorregible**, la puerta lo dejaba pasar y el informe salía
+    en verde sin que nada lo dijera. La frase de arriba ya avisaba de que este dato no se puede
+    aproximar; el `except` la contradecía. Un auditor que no ha podido auditar tiene que caerse.
     """
-    try:
-        with urllib.request.urlopen(OSV_VULN + vuln_id, timeout=60) as respuesta:
-            detalle = json.load(respuesta)
-    except (urllib.error.URLError, TimeoutError):
-        return []
+    with urllib.request.urlopen(OSV_VULN + vuln_id, timeout=60) as respuesta:
+        detalle = json.load(respuesta)
 
     versiones: list[str] = []
     for afectado in detalle.get("affected", []):
@@ -113,6 +117,19 @@ def main(argv: list[str] | None = None) -> int:
     resultados: list[dict] = []
     for inicio in range(0, len(consultas), POR_LOTE):
         resultados.extend(_consulta(consultas[inicio : inicio + POR_LOTE]))
+
+    # **El emparejado es por posición, así que la posición se comprueba (APER.23).** Abajo hay
+    # un `zip(nombres, resultados)`: si OSV devolviera menos resultados que consultas, `zip` se
+    # pararía en el más corto sin decir nada y cada aviso quedaría colgado del paquete
+    # equivocado. Un informe que acusa a `jinja2` de lo de `torch` tiene el mismo aspecto que
+    # uno bueno, y ésta es la única línea que puede distinguirlos.
+    if len(resultados) != len(consultas):
+        print(
+            f"::error::OSV devolvió {len(resultados)} resultados para {len(consultas)} "
+            "consultas. El informe se empareja por posición, así que con esto no se puede "
+            "decir de qué paquete es cada aviso."
+        )
+        return 1
 
     dependencias = []
     for nombre, resultado in zip(nombres, resultados):

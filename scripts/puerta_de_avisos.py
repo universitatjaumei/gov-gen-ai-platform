@@ -169,9 +169,19 @@ def main(argv: list[str] | None = None) -> int:
 
     # El completo CONTIENE al desplegado, así que se resta: sin esto cada aviso saldría dos
     # veces y el informe engañaría sobre cuántos hay.
-    ya_dichos = {a.id for a in avisos}
+    #
+    # **La clave es `(paquete, id)`, la misma con la que agrupa `lee_informe` (APER.23).** Antes
+    # se restaba sólo por `id`, y un identificador puede afectar a **dos paquetes distintos**:
+    # cuando eso pasaba, encontrarlo en el conjunto desplegado borraba también al otro paquete
+    # de la lista informativa, que desaparecía sin dejar rastro. Una clave más corta que la de
+    # agrupación no quita duplicados, quita filas buenas.
+    ya_dichos = {(a.paquete, a.id) for a in avisos}
     solo_en_el_lock = sorted(
-        {a.id: a for a in del_lock if a.id not in ya_dichos}.values(),
+        {
+            (a.paquete, a.id): a
+            for a in del_lock
+            if (a.paquete, a.id) not in ya_dichos
+        }.values(),
         key=lambda a: (a.paquete, a.id),
     )
 
