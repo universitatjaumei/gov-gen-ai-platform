@@ -178,7 +178,13 @@ jobs:
           construir_si_falta sandbox ./services/script_sandbox ./services/script_sandbox/Dockerfile "$SHA"
           construir_si_falta mcp ./mcp_server ./mcp_server/Dockerfile "$SHA"
 
-          echo "app=$BASE/app:$SHA"       >> "$GITHUB_OUTPUT"
+          # La del servidor lleva `$SUFIJO` porque es la única que puede tener variante, y hay
+          # que desplegar **la etiqueta que se acaba de publicar**, no la que se supone. Sin
+          # esto, con el interruptor puesto se sube `app:$SHA-local-models` y a la VM se le pasa
+          # `app:$SHA`, que en esta ejecución no ha construido nadie: o falla al tirar de ella,
+          # o arrastra en silencio la imagen sin modelos de un despliegue anterior del mismo
+          # commit — que es exactamente el fallo que el sufijo venía a cerrar.
+          echo "app=$BASE/app:$SHA$SUFIJO" >> "$GITHUB_OUTPUT"
           echo "frontend=$BASE/frontend:$SHA" >> "$GITHUB_OUTPUT"
           echo "sandbox=$BASE/sandbox:$SHA"   >> "$GITHUB_OUTPUT"
           echo "mcp=$BASE/mcp:$SHA"           >> "$GITHUB_OUTPUT"

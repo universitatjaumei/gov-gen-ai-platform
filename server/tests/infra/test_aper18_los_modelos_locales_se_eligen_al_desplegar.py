@@ -19,6 +19,7 @@ el sitio equivocado.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -103,6 +104,43 @@ class TestLaVarianteVaEnLaEtiqueta:
             "`construir_si_falta` no reconstruye si la etiqueta ya existe, y la etiqueta es el "
             "SHA: activar el extra y redespliegar el mismo commit se llevaría la imagen "
             "anterior, sin modelos, y sin decir nada."
+        )
+
+    def test_se_despliega_la_etiqueta_que_se_ha_publicado(
+        self, paso_de_construccion: str
+    ) -> None:
+        """La que se construye y la que se le anuncia al despliegue tienen que ser **la misma**.
+
+        Es el agujero que dejó la primera versión de APER.18: el sufijo estaba en la etiqueta
+        que se **publica** y no en la que se **anuncia**, así que con el interruptor puesto se
+        subía `app:$SHA-local-models` y a la VM se le pasaba `app:$SHA`. El mismo fallo que el
+        sufijo venía a cerrar, una línea más abajo.
+
+        Y con la misma forma traicionera: si un despliegue estándar anterior del mismo commit
+        publicó `app:$SHA`, activar el interruptor arrastraría **esa** imagen —la que no lleva
+        modelos— sin decir nada; y si no lo publicó, el despliegue se cae tirando de una
+        etiqueta que esta ejecución no ha construido.
+
+        Se comprueba **comparando las dos expresiones de etiqueta**, no buscando `SUFIJO` en la
+        segunda: lo que importa es que coincidan, se llame como se llame la variable.
+        """
+        construida = re.search(
+            r"^\s*construir_si_falta\s+app\s+\S+\s+\S+\s+\"([^\"]+)\"",
+            paso_de_construccion,
+            re.MULTILINE,
+        )
+        assert construida, "no encuentro con qué etiqueta se construye la imagen del servidor"
+
+        anunciada = re.search(
+            r"^\s*echo\s+\"app=[^:\"]+:([^\"]+)\"", paso_de_construccion, re.MULTILINE
+        )
+        assert anunciada, "no encuentro qué etiqueta se le anuncia al paso de despliegue"
+
+        assert construida.group(1) == anunciada.group(1), (
+            f"Se publica `app:{construida.group(1)}` y se despliega `app:{anunciada.group(1)}`. "
+            "Con el interruptor de modelos locales puesto son etiquetas distintas, así que la "
+            "VM tira de una imagen que esta ejecución no ha construido: o falla, o arrastra en "
+            "silencio la imagen sin modelos de un despliegue anterior del mismo commit."
         )
 
     def test_solo_la_imagen_del_servidor_lo_recibe(self, paso_de_construccion: str) -> None:
