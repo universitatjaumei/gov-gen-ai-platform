@@ -56,7 +56,7 @@ async def test_should_queue_the_generation_for_the_workspace():
         salida = await run_workspace(
             workspace_id=workspace_id,
             background_tasks=tareas,
-            user=UserInfo(user_id="1", email="fabra@uji.es", role="superadmin"),
+            user=UserInfo(user_id="1", email="admin@example.local", role="superadmin"),
             session=session,
         )
     finally:

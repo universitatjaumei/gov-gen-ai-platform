@@ -39,7 +39,7 @@ echo.
 echo ------------------------------------------------------------
 echo  COMPROBACION 2 - Elegir el modelo de un chatbot
 echo ------------------------------------------------------------
-echo  Abre http://localhost:5173/hub/chatbots y entra como fabra@uji.es
+echo  Abre http://localhost:5173/hub/chatbots y entra como admin@example.local
 echo.
 echo  a) Pulsa sobre "Chatbot Demo" para editarlo.
 echo  b) Debe haber un desplegable "Modelo de lenguaje" y debe venir

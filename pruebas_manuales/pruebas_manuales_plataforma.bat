@@ -52,7 +52,7 @@ echo       uv run --project server uvicorn server.app.main:app --port 8000
 echo  4. Frontend (desde frontend\):
 echo       npm run dev
 echo  5. Sesion iniciada en http://localhost:5173/login como
-echo     fabra@uji.es (SuperAdmin) o el admin de desarrollo.
+echo     admin@example.local (SuperAdmin) o el admin de desarrollo.
 echo.
 pause
 goto :EOF

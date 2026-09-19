@@ -55,7 +55,7 @@ async def test_superadmin_de_desarrollo_es_dueno_de_su_propio_workspace(db_url):
     engine = create_async_engine(db_url)
     try:
         async with AsyncSession(engine) as session:
-            user = UserInfo(user_id="1", email="fabra@uji.es", role="superadmin")
+            user = UserInfo(user_id="1", email="admin@example.local", role="superadmin")
             version_id = await _plantilla_version(session)
 
             workspace = HubWorkspace(
@@ -79,7 +79,7 @@ async def test_otro_usuario_sigue_sin_poder_leer_el_workspace_ajeno(db_url):
     engine = create_async_engine(db_url)
     try:
         async with AsyncSession(engine) as session:
-            owner = UserInfo(user_id="1", email="fabra@uji.es", role="superadmin")
+            owner = UserInfo(user_id="1", email="admin@example.local", role="superadmin")
             intruso = UserInfo(user_id="2", email="otro@uji.es", role="superadmin")
             version_id = await _plantilla_version(session)
 

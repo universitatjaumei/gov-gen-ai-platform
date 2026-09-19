@@ -30,7 +30,7 @@ from server.app.modules.redaccion.database.models import (
 from server.app.routers.redaccion._actor import user_to_uuid
 from server.app.routers.redaccion.workspaces_router import run_workspace
 
-_USUARIO = UserInfo(user_id="1", email="fabra@uji.es", role="superadmin")
+_USUARIO = UserInfo(user_id="1", email="admin@example.local", role="superadmin")
 
 
 class _Tareas:

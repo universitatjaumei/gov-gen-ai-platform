@@ -114,12 +114,12 @@ async def test_should_say_when_nothing_is_pending():
 async def test_should_anonymise_the_warnings():
     """Los avisos los escribe el grafo sobre datos del cliente, y el modelo puede estar en la nube."""
     texto = await _contexto(
-        _workspace(warnings=[{"message": "El fichero de 12345678Z (fabra@uji.es) no tiene tablas"}]),
+        _workspace(warnings=[{"message": "El fichero de 12345678Z (admin@example.local) no tiene tablas"}]),
         [_bloque("t_datos", "DETERMINISTIC_DATA", "extracted")],
     )
 
     assert "12345678Z" not in texto
-    assert "fabra@uji.es" not in texto
+    assert "admin@example.local" not in texto
     # Pero el aviso sigue diciendo algo útil.
     assert "tablas" in texto
 

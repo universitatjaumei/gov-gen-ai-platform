@@ -28,7 +28,7 @@ async def _interaccion(session, chatbot_id: uuid.UUID):
 
     fila = HubInteraction(
         chatbot_id=chatbot_id,
-        user_id="fabra@uji.es",
+        user_id="admin@example.local",
         user_message="com justifique una dieta?",
         assistant_message="Segons la circular...",
     )

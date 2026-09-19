@@ -22,7 +22,7 @@ from server.app.routers.hub_activity_prompts_router import (
 
 pytestmark = pytest.mark.asyncio
 
-_ADMIN = UserInfo(user_id="1", email="fabra@uji.es", role="superadmin")
+_ADMIN = UserInfo(user_id="1", email="admin@example.local", role="superadmin")
 
 
 async def test_should_guardar_y_leer_el_override_con_sesion_real(db_url) -> None:

@@ -58,7 +58,7 @@ function mockFetch(responder: (url: string) => { ok: boolean; status: number; bo
 }
 
 function rellenarYEnviar(password = 'C0l0m3r426!') {
-  fireEvent.change(screen.getByLabelText('Usuario'), { target: { value: 'fabra@uji.es' } })
+  fireEvent.change(screen.getByLabelText('Usuario'), { target: { value: 'admin@example.local' } })
   fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: password } })
   fireEvent.submit(screen.getByRole('button', { name: 'Entrar' }).closest('form')!)
 }

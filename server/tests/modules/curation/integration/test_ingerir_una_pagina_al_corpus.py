@@ -32,7 +32,7 @@ def _app(sesion: Any) -> FastAPI:
 
     async def _usuario():
         return UserInfo(
-            user_id=str(uuid.uuid4()), email="fabra@uji.es", role="admin",
+            user_id=str(uuid.uuid4()), email="admin@example.local", role="admin",
             organizacion_ids=(str(_ORG),),
         )
 

@@ -24,7 +24,7 @@ pause
 echo.
 echo [Pasos en la interfaz - navegador]
 echo  1. Abre http://localhost:5173/login
-echo  2. Login como SuperAdmin: fabra@uji.es / admin1234
+echo  2. Login como SuperAdmin: admin@example.local / admin1234
 echo     -^> Entra. En el sub-nav del Hub aparece "Organizaciones" (no "Clientes").
 echo  3. Ve a http://localhost:5173/hub/organizaciones
 echo     -^> Lista de organizaciones. Boton "Nueva organizacion".

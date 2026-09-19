@@ -30,7 +30,7 @@ from server.app.routers.redaccion.llm_drafts_router import (
     approve_as_template,
 )
 
-_USUARIO = UserInfo(user_id="1", email="fabra@uji.es", role="superadmin")
+_USUARIO = UserInfo(user_id="1", email="admin@example.local", role="superadmin")
 
 
 def _borrador() -> ReportTemplateDraft:

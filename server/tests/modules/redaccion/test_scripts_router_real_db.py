@@ -109,8 +109,8 @@ async def test_ciclo_completo_propuesta_hasta_aprobada_en_bd_real(db_url):
     engine = create_async_engine(db_url)
     try:
         async with AsyncSession(engine) as session:
-            proposer = UserInfo(user_id="1", email="fabra@uji.es", role="superadmin")
-            admin = UserInfo(user_id="1", email="fabra@uji.es", role="superadmin")
+            proposer = UserInfo(user_id="1", email="admin@example.local", role="superadmin")
+            admin = UserInfo(user_id="1", email="admin@example.local", role="superadmin")
             sandbox = LocalSandboxClient()
             almacen = _AlmacenDePrueba()
 
@@ -176,8 +176,8 @@ async def test_reject_devuelve_el_proposal_id_correcto_en_bd_real(db_url):
     engine = create_async_engine(db_url)
     try:
         async with AsyncSession(engine) as session:
-            proposer = UserInfo(user_id="1", email="fabra@uji.es", role="superadmin")
-            admin = UserInfo(user_id="1", email="fabra@uji.es", role="superadmin")
+            proposer = UserInfo(user_id="1", email="admin@example.local", role="superadmin")
+            admin = UserInfo(user_id="1", email="admin@example.local", role="superadmin")
 
             proposal_id = await _propuesta_platform(session, proposer.user_id)
             proposal = await session.get(HubScriptProposal, proposal_id)

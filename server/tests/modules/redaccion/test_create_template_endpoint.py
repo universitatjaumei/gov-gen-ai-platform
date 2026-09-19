@@ -29,7 +29,7 @@ async def test_create_template_no_expira_la_version_antes_de_leerla(db_url):
     engine = create_async_engine(db_url)
     try:
         async with AsyncSession(engine) as session:
-            user = UserInfo(user_id="1", email="fabra@uji.es", role="superadmin")
+            user = UserInfo(user_id="1", email="admin@example.local", role="superadmin")
 
             result = await create_template(
                 body=TemplateCreateIn(name="Plantilla de prueba Camino 3"),
