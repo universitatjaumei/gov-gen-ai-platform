@@ -144,21 +144,39 @@ jobs:
           BASE="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_AR_REPO }}"
           SHA="${{ steps.etiqueta.outputs.valor }}"
 
+          # APER.18 — los modelos locales se eligen aquí, con la variable `GOVGENAI_EXTRAS_APP`
+          # del repositorio (vacía = despliegue estándar; `local-models` = con la pila local).
+          # La elección es de cada institución, así que vive en su configuración y no en el
+          # código.
+          EXTRAS_APP=""
+          SUFIJO=""
+          if [ -n "${{ vars.GOVGENAI_EXTRAS_APP }}" ]; then
+            EXTRAS_APP="--extra ${{ vars.GOVGENAI_EXTRAS_APP }}"
+            # **La variante va en la etiqueta, y no es cosmético.** `construir_si_falta` no
+            # reconstruye si la etiqueta ya está publicada, y la etiqueta es el SHA del commit:
+            # sin este sufijo, activar la variable y redespliegar el mismo commit se llevaría la
+            # imagen anterior —la que no lleva modelos— sin decir nada. Es el fallo que se busca
+            # una hora en el sitio equivocado.
+            SUFIJO="-${{ vars.GOVGENAI_EXTRAS_APP }}"
+            echo "Construyendo la imagen del servidor con el extra: ${{ vars.GOVGENAI_EXTRAS_APP }}"
+          fi
+
           # Si la etiqueta ya existe —un redespliegue o una vuelta atrás— no se reconstruye.
           construir_si_falta() {
-            local nombre="$1" contexto="$2" dockerfile="$3"
-            if gcloud artifacts docker images describe "$BASE/$nombre:$SHA" >/dev/null 2>&1; then
-              echo "  $nombre:$SHA ya está publicada"
+            local nombre="$1" contexto="$2" dockerfile="$3" etiqueta="$4" argumentos="${5:-}"
+            if gcloud artifacts docker images describe "$BASE/$nombre:$etiqueta" >/dev/null 2>&1; then
+              echo "  $nombre:$etiqueta ya está publicada"
               return
             fi
-            docker build -t "$BASE/$nombre:$SHA" -f "$dockerfile" "$contexto"
-            docker push "$BASE/$nombre:$SHA"
+            # shellcheck disable=SC2086 — `argumentos` tiene que partirse en palabras.
+            docker build $argumentos -t "$BASE/$nombre:$etiqueta" -f "$dockerfile" "$contexto"
+            docker push "$BASE/$nombre:$etiqueta"
           }
 
-          construir_si_falta app . Dockerfile
-          construir_si_falta frontend ./frontend ./frontend/Dockerfile
-          construir_si_falta sandbox ./services/script_sandbox ./services/script_sandbox/Dockerfile
-          construir_si_falta mcp ./mcp_server ./mcp_server/Dockerfile
+          construir_si_falta app . Dockerfile "$SHA$SUFIJO" "--build-arg EXTRAS_APP=$EXTRAS_APP"
+          construir_si_falta frontend ./frontend ./frontend/Dockerfile "$SHA"
+          construir_si_falta sandbox ./services/script_sandbox ./services/script_sandbox/Dockerfile "$SHA"
+          construir_si_falta mcp ./mcp_server ./mcp_server/Dockerfile "$SHA"
 
           echo "app=$BASE/app:$SHA"       >> "$GITHUB_OUTPUT"
           echo "frontend=$BASE/frontend:$SHA" >> "$GITHUB_OUTPUT"

@@ -18,8 +18,29 @@ COPY shared/ ./shared/
 COPY server/pyproject.toml server/uv.lock server/README.md ./server/
 
 WORKDIR /app/server
+
+# APER.18 — la pila de modelos locales se elige **al construir**, no editando este fichero.
+#
+# `local-models` (`torch`, `torchvision`, `sentence-transformers`) es lo que hace funcionar los
+# embeddings BGE-M3 y el reranker **en la propia máquina**, sin que los datos salgan a una API.
+# Se conserva porque es lo que permite que otra administración despliegue con modelos locales, y
+# **no se instala por omisión** porque son cientos de megas y una VM mayor: el `pyproject`
+# documenta 216 MB de `sentence-transformers` y 172 de `torch`, y que entre los tres se llevaban
+# casi todo el tiempo de arranque.
+#
+# Vacío por omisión, o el despliegue estándar engordaría por un interruptor que nadie tocó. Para
+# activarlo:
+#
+#     docker build --build-arg EXTRAS_APP="--extra local-models" .
+#
+# En el despliegue lo pone `deploy.yml` desde una variable del repositorio, así que la elección
+# es de cada institución y no del código. **Y la variante va en la etiqueta de la imagen**: sin
+# eso, activar el interruptor y redespliegar el mismo commit se llevaría la imagen anterior, sin
+# modelos, y en silencio.
+ARG EXTRAS_APP=""
+
 # --no-editable convierte automatia-shared en paquete regular (no hace falta shared/ en runtime)
-RUN uv sync --frozen --no-dev --no-editable
+RUN uv sync --frozen --no-dev --no-editable ${EXTRAS_APP}
 
 
 # Stage 2: Runtime — imagen mínima sin herramientas de build

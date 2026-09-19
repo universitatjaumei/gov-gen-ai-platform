@@ -94,8 +94,22 @@ def _imagenes_del_despliegue() -> list[tuple[str, str, str]]:
     guardarraíl tiene que enterarse. Copiar la lista aquí es cómo empiezan las dos verdades.
     """
     texto = DESPLIEGUE.read_text(encoding="utf-8")
+    # Los tres primeros argumentos son `(nombre, contexto, dockerfile)` y eso no ha cambiado;
+    # lo que viene detrás sí puede crecer. APER.18 le añadió la etiqueta y los argumentos de
+    # construcción —para que los modelos locales se elijan al desplegar— y esta expresión
+    # exigía que la línea **acabara** en el tercero, así que dejó de casar. Eso fue el
+    # guardarraíl funcionando: avisó de que el despliegue había cambiado de forma.
+    #
+    # **`[^\S\n]` y no `\s`, y esto costó un rato.** `\s` incluye el salto de línea, así que un
+    # `(?:\s+\S+)*` tolerante se comía las tres líneas siguientes: cada llamada casaba por
+    # separado pero `findall` devolvía **una**. Lo cazó el auto-chequeo de abajo, que compara
+    # contra cuatro; sin él, los tests de este fichero habrían pasado en verde comparando una
+    # imagen y dando por buenas las otras tres.
     encontradas = re.findall(
-        r"^\s*construir_si_falta\s+(\S+)\s+(\S+)\s+(\S+)\s*$", texto, re.MULTILINE
+        r"^[^\S\n]*construir_si_falta[^\S\n]+(\S+)[^\S\n]+(\S+)[^\S\n]+(\S+)"
+        r"(?:[^\S\n]+\S+)*[^\S\n]*$",
+        texto,
+        re.MULTILINE,
     )
     assert encontradas, (
         "No se ha encontrado ninguna llamada a `construir_si_falta` en deploy.yml. O el "
