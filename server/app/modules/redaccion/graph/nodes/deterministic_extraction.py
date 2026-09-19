@@ -67,8 +67,12 @@ class DeterministicExtractionNode:
     con el resto (el CoreGraph NO aborta).
     """
 
-    def __init__(self, factory: Any, resolvedor: Any = None) -> None:
+    def __init__(self, factory: Any, resolvedor: Any = None, almacen: Any = None) -> None:
         self._factory = factory
+        # APER.14 — con el contrato nuevo, una función empaquetada pide su fichero al
+        # almacenamiento en vez de abrir la ruta que le den. Sin esto, 
+        # diría «no hay almacenamiento» y el bloque fallaría con un motivo de cableado.
+        self._almacen = almacen
         # FUN.3 — quien traduce `funcion@versión` en algo ejecutable. Opcional para que un
         # bloque sin función —`excel_pipeline` y compañía— siga funcionando sin catálogo, y
         # porque los tests del nodo que no usan scripts no tienen por qué construirlo.
@@ -103,7 +107,10 @@ class DeterministicExtractionNode:
             from server.app.modules.redaccion.funciones_paquete import ejecutar_empaquetada
 
             return await ejecutar_empaquetada(
-                ejecutable.entry_point, ficheros=ficheros, parametros=parametros
+                ejecutable.entry_point,
+                ficheros=ficheros,
+                parametros=parametros,
+                almacen=self._almacen,
             )
 
         raise NotImplementedError(
@@ -179,7 +186,7 @@ class DeterministicExtractionNode:
                     # confianza está en quien instala el paquete, y así lo dice FUN.5.
                     result = await self._ejecutar_ejecutable(
                         ejecutable,
-                        ficheros=_ficheros_del_bloque(block_contract, file_ref),
+                        ficheros=_ficheros_del_bloque(ejecutable, file_ref),
                         parametros=dict(opciones.get("parametros") or {}),
                     )
                 else:
@@ -227,22 +234,50 @@ class DeterministicExtractionNode:
         return {"blocks": updated_blocks, "warnings": new_warnings, "block_outputs": new_block_outputs}
 
 
-def _ficheros_del_bloque(block_contract: Any, file_ref: Any) -> dict[str, str]:
-    """Los ficheros que recibe una función de paquete, con el nombre de slot que su contrato usa.
+class SlotAmbiguo(ValueError):
+    """La función declara varios slots y el bloque trae un fichero: no se adivina cuál."""
+
+
+def _ficheros_del_bloque(ejecutable: Any, file_ref: Any) -> dict[str, str]:
+    """Los ficheros que recibe una función de paquete, con el nombre de slot **que ella declara**.
 
     El nodo trabaja con **un** fichero por bloque —así está montado desde 9R— mientras el
-    contrato de una función habla de slots con nombre. El puente es el `slot` que el bloque
-    declara; sin él no se inventa ninguno, y la validación de FUN.2 dirá «falta el slot X», que
-    es un error accionable y no un `KeyError` dentro del código de un tercero.
+    contrato de una función habla de slots con nombre. El puente es el contrato de la función,
+    que el resolutor ya trae en `contrato_entrada`.
+
+    **Antes miraba el bloque, y por eso no funcionaba nunca (APER.15).** Buscaba
+    `block_contract.slot` —un campo que `blocks.py` no tiene— o `options["slot"]`, que ya está
+    ocupado: `manual_pipeline` lo usa como **diccionario** y esto exigía `str`. Devolvía `{}`
+    siempre, así que una función empaquetada con slot obligatorio fallaba la validación antes de
+    ejecutarse: FUN.5 resolvía y enrutaba bien, y la entrada no llegaba.
+
+    Y propagar el slot de la **especificación** no habría servido: `datos_del_script` y `gastos`
+    son espacios de nombres distintos y nada los mapea. El que manda es el de la función.
+
+    **Con varios slots se falla, no se adivina.** Poner el fichero en el primero que aparezca
+    daría un resultado —el de gastos leído como plantilla— y un resultado equivocado es peor que
+    un error: nadie lo revisa. El día que un bloque necesite alimentar dos slots, lo tendrá que
+    declarar, y este error es el que lo pedirá.
     """
     if file_ref is None:
         return {}
-    opciones = getattr(block_contract, "options", None) or {}
-    slot = (
-        getattr(block_contract, "slot", None)
-        or opciones.get("slot")
-        or opciones.get("slot_id")
-    )
-    if not isinstance(slot, str) or not slot:
+
+    contrato = getattr(ejecutable, "contrato_entrada", None) or {}
+    declarados = [
+        (s.get("slot_id") if isinstance(s, dict) else getattr(s, "slot_id", None))
+        for s in (contrato.get("slots") or [])
+    ]
+    declarados = [s for s in declarados if s]
+
+    if not declarados:
+        # Una función que sólo toma parámetros es legítima: no hay dónde poner el fichero.
         return {}
-    return {slot: str(getattr(file_ref, "key", file_ref))}
+    if len(declarados) > 1:
+        raise SlotAmbiguo(
+            f"la función declara {len(declarados)} slots ({', '.join(declarados)}) y el bloque "
+            "trae un solo fichero, así que no se puede decidir a cuál va. Hace falta que el "
+            "bloque declare el destino: adivinarlo daría un resultado con el fichero en el "
+            "slot equivocado."
+        )
+
+    return {declarados[0]: str(getattr(file_ref, "key", file_ref))}
