@@ -75,11 +75,35 @@ jobs:
           shopt -s nocasematch
           fallan=0
           revisados=0
+          saltados=0
           for sha in $(git rev-list --no-merges "$BASE".."$HEAD"); do
-            revisados=$((revisados + 1))
             mensaje="$(git show -s --format='%B' "$sha")"
             autor="$(git show -s --format='%an <%ae>' "$sha")"
+            correo="$(git show -s --format='%ae' "$sha")"
             rotulo="$(git show -s --format='%h %s' "$sha")"
+
+            # APER.13 — Dependabot queda exento, y la razón es lo que el DCO certifica.
+            #
+            # «I have the right to submit it under the open source license indicated in the
+            # file», dice el DCO. Eso lo certifica **una persona** sobre código que aporta.
+            # Un robot que sube un número de versión en un `uv.lock` no aporta código de
+            # nadie: reordena una resolución de dependencias. No hay autoría que certificar, y
+            # exigirle una firma que no puede dar sólo conseguía que **ninguna** de sus PR se
+            # pudiera mezclar — trece a la vez el 2026-09-19, todas en rojo por esto.
+            #
+            # Lo que NO se relaja: la responsabilidad sigue siendo de quien mezcla, y sus PR
+            # pasan los mismos checks que las demás. Y la exención es por **correo del autor**,
+            # no por nombre: el nombre lo puede poner cualquiera en un commit.
+            #
+            # `saltados` se cuenta aparte y se dice en voz alta, porque una exención que no se
+            # ve en el registro es una exención que nadie vuelve a revisar.
+            if [[ "$correo" == *"[bot]@users.noreply.github.com" ]]; then
+              echo "::notice::$rotulo — exento del DCO: commit de robot ($correo)"
+              saltados=$((saltados + 1))
+              continue
+            fi
+
+            revisados=$((revisados + 1))
 
             # Coincidencia nativa de bash, sin tuberías: `grep -q` cierra la tubería antes de
             # tiempo y en algunos entornos aborta, lo que daba falsos rechazos.
@@ -102,3 +126,6 @@ jobs:
             exit 1
           fi
           echo "$revisados commit(s) revisados, todos firmados."
+          if [ "$saltados" -gt 0 ]; then
+            echo "$saltados commit(s) de robot exentos (ver la razón en este fichero)."
+          fi

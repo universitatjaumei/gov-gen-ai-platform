@@ -164,3 +164,30 @@ class TestLlegaEnLotesRevisables:
         for entrada in entradas:
             eco = entrada["package-ecosystem"]
             assert entrada.get("groups"), f"{eco} no agrupa: llegaría como PR sueltas"
+
+    def test_los_grupos_no_se_llevan_los_saltos_de_version_mayor(
+        self, entradas: list[dict]
+    ) -> None:
+        """APER.13 — agrupar **todo** produjo un lote que no se podía revisar ni mezclar.
+
+        La primera tanda llegó con `patterns: ["*"]` sin límite de tipo: una PR con **33
+        paquetes**, seis saltos de versión mayor y **dos rebajas** que no se veían en el muro de
+        changelogs —`browser-use` de 0.11.3 a 0.5.5 habiendo 0.13.10, y `ragas` de 0.4.3 a
+        0.3.1 cuando 0.4.3 es la última—. No eran actualizaciones: eran el precio de resolver 33
+        cosas a la vez, y el resolutor sacrificó esas dos para encajar el resto.
+
+        Con el límite, un mayor llega en su propia PR y se juzga solo. Es la única forma de
+        decidir sobre un `openai` 2→3.
+        """
+        for entrada in entradas:
+            eco = entrada["package-ecosystem"]
+            for nombre, grupo in entrada["groups"].items():
+                tipos = grupo.get("update-types")
+                assert tipos, (
+                    f"{eco}/{nombre} agrupa sin declarar `update-types`, así que se llevaría "
+                    "también los saltos de versión mayor."
+                )
+                assert set(tipos) <= {"minor", "patch"}, (
+                    f"{eco}/{nombre} agrupa {tipos}. Un `major` dentro de un grupo hace el lote "
+                    "irrevisable y puede arrastrar rebajas de otros paquetes."
+                )
