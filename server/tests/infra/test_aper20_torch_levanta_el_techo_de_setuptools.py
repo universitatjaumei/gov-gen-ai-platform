@@ -89,8 +89,11 @@ class TestElTechoEstaLevantado:
 class TestLaAceptacionSeRetira:
     """Lo que de verdad vigila este fichero: que una decisión con fecha no sobreviva a su razón."""
 
+    # `staticmethod` y no método de instancia: `pytest` 9.1 deprecó las *fixtures* de ámbito
+    # de clase declaradas como método de instancia, y además ésta no usa `self`.
+    @staticmethod
     @pytest.fixture(scope="class")
-    def aceptados(self) -> list[dict]:
+    def aceptados() -> list[dict]:
         if not ACEPTADOS.is_file():
             return []
         return tomllib.loads(ACEPTADOS.read_text(encoding="utf-8")).get("aviso", [])

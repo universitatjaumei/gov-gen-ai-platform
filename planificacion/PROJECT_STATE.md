@@ -128,7 +128,7 @@ sustituir al primero. Y **ninguno estaba al día**: DEP.4 se cerró en el commit
 2026-09-10 y no constaba ni aquí ni en `HISTORIAL.md`. Si vuelve a hacer falta anotar un cursor
 nuevo, **se reescribe este párrafo**; lo viejo baja a «Lo anterior».
 
-**Cursor: Bloque APER — apertura del repositorio. ▶ EN CURSO, 20 prompts cerrados (APER.1–APER.20)**; los trece primeros **desplegados el 2026-09-19** en la PR #27, y de APER.14 en adelante están **commiteados en `desarrollo` sin empujar**.
+**Cursor: Bloque APER — apertura del repositorio. ▶ EN CURSO, 21 prompts cerrados (APER.1–APER.21)**; los trece primeros **desplegados el 2026-09-19** en la PR #27, y de APER.14 en adelante están **commiteados en `desarrollo` sin empujar**.
 
 El bloque empezó con siete prompts y va por veinte, y **eso no es desviación: es lo que pasa cuando encender un medidor destapa lo que no medía**. Los trece añadidos, por lo que los trajo:
 
@@ -138,10 +138,12 @@ El bloque empezó con siete prompts y va por veinte, y **eso no es desviación: 
 * **La suite completa del cierre** destapó un *flake* de 1 entre 1024 (APER.10) que el paralelismo escondía, y **la suite rota de `shared` resultó ser el 81% de un paquete muerto de AutomatIA** (APER.12).
 * **APER.17** nació de que `pip-audit` **instala** lo que audita y con `torch` no termina: se sustituyó por consultas a OSV por lotes, segundos en vez de cuartos de hora.
 * **APER.18** lo pidió el usuario: los modelos locales no se suben en el despliegue por tamaño, pero otras administraciones los querrán, así que el extra se **elige al desplegar** (`EXTRAS_APP`). Su defecto lo encontró el usuario leyendo el diff —la imagen construía una etiqueta y anunciaba otra— y se cerró en APER.18b.
-* **APER.19 y APER.20** son el tramo de dependencias: retirar el agente de navegador quitó **22 de los 34 avisos sin actualizar nada**, y subir `torch` cerró **cinco de los siete** que quedaban, porque la aceptación de `setuptools` llevaba escrita su condición de salida y se cumplió.
+* **APER.19, APER.20 y APER.21** son el tramo de dependencias, y entre los tres llevaron los avisos del lock de **34 a 4**: retirar el agente de navegador quitó 22 **sin actualizar nada**, subir `torch` cerró cinco más —la aceptación de `setuptools` llevaba escrita su condición de salida y se cumplió— y `pytest` y `datasets` cerraron los tres últimos que tenían corrección. Los 4 que quedan **no la tienen publicada**.
 * **APER.8** se añadió al preguntar el usuario si los `permissions` de los workflows se podían tocar desde el CLI: estaban en el tramo «el día de abrir» por suponer que era trabajo de consola, y resultó ser un cambio en el repositorio, o sea que va con su guardarraíl como todo lo demás.
 
-**Dónde está la seguridad de la cadena de suministro ahora mismo, medido el 2026-09-19**: los cuatro conjuntos que se despliegan (289 paquetes) están a **cero avisos**, y la puerta pasa en verde **sin ninguna aceptación** en `avisos_aceptados.toml`. En el lock quedan 7 avisos fuera del despliegue: cuatro **sin corrección publicada** (`diskcache`, `ragas`) y tres que sí la tienen (`datasets`, `pytest`) y son el prompt siguiente.
+**Dónde está la seguridad de la cadena de suministro ahora mismo, medido el 2026-09-19**: los cuatro conjuntos que se despliegan (289 paquetes) están a **cero avisos**, y la puerta pasa en verde **sin ninguna aceptación** en `avisos_aceptados.toml`. En el lock quedan 4 avisos, todos fuera del despliegue y **ninguno con corrección publicada** (`diskcache` y `ragas`, dos cada uno). O sea que **no queda ningún aviso corregible sin decidir**, que es el listón que se puede sostener; «cero avisos» no lo es mientras dependamos de paquetes que no publican arreglo.
+
+**Lo que queda pendiente de comprobación**: la suite completa (`uv run pytest tests`) **no se ha ejecutado** desde estas subidas. Se lanzó y el sistema la paró por falta de memoria antes de que produjera una sola línea, así que no hay nada que leer en ella. Lo que sí está medido: `tests/infra` entero más los ocho ficheros de *embeddings* y reranker, **1.001 tests en verde** con la pila de APER.20, y `tests/infra` otra vez —**919 en verde**— ya con `pytest` 9.1.1.
 
 El bloque **no sale de `planificacion/fase1/`**: sale de la auditoría de seguridad y calidad
 previa a hacer público el repositorio (2026-09-18), cuyo informe vive en `_local/` porque
