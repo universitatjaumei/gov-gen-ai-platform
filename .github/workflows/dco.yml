@@ -76,6 +76,18 @@ jobs:
           fallan=0
           revisados=0
           saltados=0
+
+          # Los robots exentos, uno por línea y con el correo **exacto** (APER.26). Antes esto
+          # era un comodín, `*"[bot]@users.noreply.github.com"`, y el comentario de abajo decía
+          # que eximir por correo era seguro porque «el nombre lo puede poner cualquiera». El
+          # correo también: un `git config user.email` y cualquiera firmaba como
+          # `loquesea[bot]@users.noreply.github.com` y se saltaba el DCO entero.
+          #
+          # Una lista exacta no vuelve el dato infalsificable —sigue siendo texto en un commit—
+          # pero deja la exención **estrecha y visible**: para usarla hay que escribir este
+          # correo concreto, que es el de una cuenta conocida, y eso se ve en el `git log`.
+          # Añadir un robot aquí es un cambio en el repositorio, con su PR y su revisión.
+          ROBOTS_EXENTOS="49699333+dependabot[bot]@users.noreply.github.com"
           for sha in $(git rev-list --no-merges "$BASE".."$HEAD"); do
             mensaje="$(git show -s --format='%B' "$sha")"
             autor="$(git show -s --format='%an <%ae>' "$sha")"
@@ -92,12 +104,15 @@ jobs:
             # pudiera mezclar — trece a la vez el 2026-09-19, todas en rojo por esto.
             #
             # Lo que NO se relaja: la responsabilidad sigue siendo de quien mezcla, y sus PR
-            # pasan los mismos checks que las demás. Y la exención es por **correo del autor**,
-            # no por nombre: el nombre lo puede poner cualquiera en un commit.
+            # pasan los mismos checks que las demás.
             #
             # `saltados` se cuenta aparte y se dice en voz alta, porque una exención que no se
             # ve en el registro es una exención que nadie vuelve a revisar.
-            if [[ "$correo" == *"[bot]@users.noreply.github.com" ]]; then
+            #
+            # La comparación es contra la lista exacta de arriba (APER.26). `$correo` va entre
+            # comillas dentro del patrón **a propósito**: sin ellas, el `[bot]` del correo sería
+            # una clase de caracteres de glob y casaría con una sola letra de «b», «o» o «t».
+            if [[ " $ROBOTS_EXENTOS " == *" $correo "* ]]; then
               echo "::notice::$rotulo — exento del DCO: commit de robot ($correo)"
               saltados=$((saltados + 1))
               continue

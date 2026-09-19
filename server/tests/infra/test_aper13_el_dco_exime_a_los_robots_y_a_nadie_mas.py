@@ -40,18 +40,32 @@ def guion() -> str:
 
 class TestLaExencionEsLaQueSeDecidio:
 
-    def test_se_exime_por_correo_y_no_por_nombre(self, guion: str) -> None:
-        """El nombre de autor lo elige quien commitea; el correo de la cuenta, no.
+    # Aquí estuvo `test_se_exime_por_correo_y_no_por_nombre`, y **su premisa era falsa**.
+    # Decía: «el nombre de autor lo elige quien commitea; el correo de la cuenta, no», y exigía
+    # que la exención mirase el correo contra `*[bot]@users.noreply.github.com`. Pero el correo
+    # del autor lo elige quien commitea **exactamente igual** que el nombre: basta un
+    # `git config user.email`. O sea que el test no vigilaba un agujero, **lo fijaba**.
+    #
+    # Lo retiró **APER.26**, que estrechó la exención a una lista exacta. Lo que comprueba
+    # ahora que sigue siendo una exención y no un agujero es
+    # `test_aper26_la_exencion_del_dco_no_es_un_comodin.py`, que **ejecuta** el guion contra un
+    # repositorio de prueba con un commit de impostor. Un test que mira si una cadena está en
+    # un fichero no podía distinguir los dos casos, porque la cadena era la misma.
 
-        Con una comprobación por nombre, cualquiera podría firmar como «dependabot[bot]» y
-        saltarse el DCO. Es la diferencia entre una exención y un agujero.
+    def test_la_exencion_es_una_lista_cerrada(self, guion: str) -> None:
+        """Lo que sí se puede leer del texto: que no haya vuelto un comodín.
+
+        Es un aviso temprano y barato, no la comprobación de verdad — ésa ejecuta el guion en
+        APER.26. Vale la pena porque un comodín se reintroduce en una línea y se lee igual de
+        bien que una lista.
         """
-        assert '"$correo"' in guion, (
-            "La exención no mira el correo del autor. Si mira el nombre, cualquiera puede "
-            "ponerse el del robot y saltarse el DCO."
+        assert "ROBOTS_EXENTOS" in guion, (
+            "la exención ya no sale de una lista con nombre, así que no se puede leer de un "
+            "vistazo a quién exime"
         )
-        assert "[bot]@users.noreply.github.com" in guion, (
-            "La exención no está acotada a los correos de cuenta de robot de GitHub."
+        assert '== *"[bot]@' not in guion, (
+            "ha vuelto un comodín sobre el correo del autor. Eso no exime a un robot: exime a "
+            "cualquiera que escriba ese correo, y escribirlo es un `git config`."
         )
 
     def test_la_exencion_se_dice_en_el_registro(self, guion: str) -> None:
