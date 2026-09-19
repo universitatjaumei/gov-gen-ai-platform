@@ -475,8 +475,14 @@ original.
 Dos consecuencias de esa licencia ya están implementadas, y no son trámite: **la procedencia de
 cada aportación se certifica** en el propio historial —una comprobación automática rechaza lo que
 no la lleve, y la regla se aplica también al mantenedor, porque quien se exceptúa de su política
-la deja sin fuerza— y **el enlace al código fuente que exige el artículo 13 de la AGPL viaja con
-la aplicación**, incluido el widget que se incrusta en webs ajenas, que es el caso que se olvida.
+la deja sin fuerza— y **el enlace al código fuente que exige el artículo 13 de la AGPL lo publica
+el servidor**, en un endpoint público y tomado de la configuración de cada despliegue, no de una
+URL fija que haría incumplir a todo fork modificado.
+
+> **Precisión de la revisión del 19 de septiembre de 2026**: ese enlace lo *sirve* la API y
+> **todavía no lo enseña ninguna interfaz**, ni el panel ni el widget embebido —que es el caso
+> que se olvida—. Está a medias, y el texto anterior daba por hecha la mitad que falta.
+
 El repositorio permanece privado hasta la apertura prevista.
 
 ## 9. Cómo verlo

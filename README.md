@@ -81,7 +81,7 @@ cada variable para quien prefiera rellenarlas a mano.
 ```bash
 scripts/generate_env.sh              # genera .env, server/.env y frontend/.env con secretos
 docker compose up -d postgres        # el servicio se llama postgres, no db
-cd server; uv sync --extra local-models --extra shared
+cd server; uv sync --extra shared    # añade --extra local-models si quieres los modelos en tu máquina
 uv run alembic upgrade head
 uv run uvicorn app.main:app --port 8000
 ```
@@ -89,13 +89,29 @@ uv run uvicorn app.main:app --port 8000
 Y el frontend, en otra terminal:
 
 ```bash
-cd frontend; npm install; npm run dev     # http://localhost:5173
+cd frontend; npm install
+npm run generate:api                      # obligatorio en un clon nuevo: el cliente no se versiona
+npm run dev                               # http://localhost:5173
 ```
 
-En Windows, `arranque.bat` hace las dos cosas.
+`npm run generate:api` necesita el `openapi.json` que exporta el backend
+(`cd server; uv run python export_openapi.py`); sin ese paso, `npm run dev` falla con veinte
+«Cannot find module `@/shared/api/generated/…`». Es lo que cuenta «El contrato es la fuente de
+verdad», más abajo.
 
-El primer arranque del backend tarda varios minutos: carga los modelos locales de embedding y
-reranking. Hasta que no escriba `Application startup complete` no responde.
+En Windows, `arranque.bat` levanta el backend y el frontend de una vez — pero no genera el
+cliente, que se hace una sola vez.
+
+**Embeddings: en tu máquina o por API.** `--extra local-models` instala `torch` y BGE-M3, que es
+lo que permite que el texto no salga de la institución — y son cientos de megas y un arranque de
+varios minutos la primera vez, mientras carga los modelos; hasta que el servidor no escriba
+`Application startup complete`, no responde. Sin ese extra el arranque es inmediato y los
+embeddings se configuran contra un proveedor por API. **Cuál se usa lo decide la configuración, no
+la instalación**: lo que decide el extra es si la pila local está disponible.
+
+Esto de arriba es el camino corto. La instalación completa —incluido `scripts/setup.sh`, que
+levanta el conjunto en un paso, y el interruptor de modelos locales en el despliegue— está en
+[`docs/INSTALACION.md`](docs/INSTALACION.md).
 
 ## Tests
 
@@ -287,7 +303,14 @@ también lo que impide que una mejora pagada con fondos públicos quede cerrada.
 
 ### La obligación del §13 sobre cada despliegue
 
-Pendiente de implementar, y con tres condiciones que no son opcionales:
+**Hecho a medias, y conviene decir qué mitad.** El servidor ya lo publica: `GET /api/v1/instancia`
+devuelve el `SOURCE_URL` que configure quien despliega, es **público y sin credencial** a
+propósito —la obligación es frente a quien usa el programa, incluida la ciudadanía que escribe en
+el widget—, y vacío significa «no hay enlace», que es lo correcto para quien despliega sin
+modificar (AIS.6, con su test). **Lo que falta es que se vea**: ninguna interfaz lo consume
+todavía, ni el panel ni el widget, y un enlace que nadie enseña no cumple el §13.
+
+Las tres condiciones, que no son opcionales:
 
 - **Va en la interfaz del despliegue**, no en este README. La obligación es de quien ejecuta la
   versión modificada, frente a los usuarios de **esa instancia**.

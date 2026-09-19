@@ -567,10 +567,14 @@ local vale `uv lock --check`, no `uv sync` a secas, que relockea y por tanto sie
 
 Por qué AGPL y no GPL: por el §13. Quien despliegue una versión modificada **como servicio en
 red** tiene que ofrecer su código fuente a quien la use, y siendo el destinatario otras
-administraciones, es lo que impide que una mejora pagada con fondos públicos quede cerrada. Dos
-consecuencias están implementadas: la procedencia de cada aportación se certifica (DCO) y el
-enlace al fuente viaja con la aplicación por configuración (`SOURCE_URL`), **incluido el widget
-embebido**, que es el caso que se olvida.
+administraciones, es lo que impide que una mejora pagada con fondos públicos quede cerrada.
+
+Dos consecuencias, y sólo una está entera. La procedencia de cada aportación **se certifica** con
+DCO, y lo comprueba un *workflow*. El enlace al fuente **lo sirve el servidor** —`GET
+/api/v1/instancia`, público y sin credencial, tomado de `SOURCE_URL` y no de una URL fija, porque
+el §13 pide el *Corresponding Source* de esa versión— pero **ninguna interfaz lo enseña
+todavía**, ni el panel ni el widget embebido, que es el caso que se olvida. Un enlace que nadie
+ve no cumple la obligación: está a medias y así consta en el `README`.
 
 **Gobernanza: un principal y tantos forks como organizaciones.** Cada organización que despliegue
 trabaja sobre su fork; lo generalizable se pide que suba al principal por *pull request*. La

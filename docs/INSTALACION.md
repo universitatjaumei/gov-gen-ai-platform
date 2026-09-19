@@ -80,10 +80,29 @@ Y el frontend, en otra terminal:
 ```bash
 cd frontend
 npm install
+npm run generate:api                     # OBLIGATORIO en un clon nuevo, ver abajo
 npm run dev                              # http://localhost:5173
 ```
 
-En Windows, `arranque.bat` hace las dos cosas.
+**`npm run generate:api` no es opcional la primera vez.** El cliente TypeScript de la API lo
+genera Orval desde `openapi.json` y **no viaja en el repositorio** —está en `.gitignore` a
+propósito: es código generado, no código que se edita—. Sin ese paso, `npm run dev` falla con
+veinte «Cannot find module `@/shared/api/generated/...`», que no es un problema del frontend sino
+la arquitectura *contract-first* diciendo que el contrato se genera. El primer despliegue en GCP
+murió exactamente ahí.
+
+Necesita el `openapi.json`, que lo exporta el backend:
+
+```bash
+cd server;   uv run python export_openapi.py
+cd frontend; npm run generate:api
+```
+
+Hay que repetirlo **cada vez que cambie la API**. Un trabajo de CI se pone rojo si el cliente
+generado no cuadra con el contrato.
+
+En Windows, `arranque.bat` levanta el backend y el frontend, pero **no genera el cliente**: eso se
+hace una vez, a mano.
 
 `docker-compose.yml` levanta además `minio`, `clickhouse`, `redis`, `langfuse` y `script-sandbox`
 si los necesitas; `postgres` es el único imprescindible para arrancar.
@@ -172,7 +191,7 @@ lo impide mientras no se haga.
 | `DEPLOY_MODE` | `cloud`, `edge` o `all` (por omisión). Decide qué routers se registran |
 | `LOCAL_USER_LOGIN_ENABLED` | Contraseña local mientras el SSO institucional no esté conectado |
 | `SAML_*` | El SSO, cuando lo haya |
-| `SOURCE_URL` | El enlace al código fuente que exige el §13 de la AGPL. **Apunta a tu versión**, no al repositorio principal |
+| `SOURCE_URL` | El enlace al código fuente que exige el §13 de la AGPL si has modificado el programa. **Apunta a tu versión** —tu fork, en el commit desplegado—, no al repositorio principal. Lo sirve `GET /api/v1/instancia`, público y sin credencial; vacío significa «sin enlace». Hoy **ninguna interfaz lo enseña todavía** |
 | `DEV_ADMIN_EMAIL` · `DEV_ADMIN_PASSWORD` | La cuenta que siembra el arranque en `development`. Sin ponerlas hay valores por omisión que **sólo valen en local** |
 | `TRUSTED_PROXY_HOPS` | Cuántos proxies de confianza hay delante. Suponerlo es como se falsifica una IP de origen |
 
@@ -221,6 +240,9 @@ inicia sesión con la cuenta que creaste, y comprueba que aterrizas en un módul
   comprobar con `uv sync` a secas no sirve: relockea y siempre pasa. Lo que dice la verdad es
   `uv lock --check`.
 - **El puerto 8000 puede quedar ocupado** por un uvicorn anterior que no murió del todo.
+- **«Cannot find module `@/shared/api/generated/…`» no se arregla borrando `node_modules`**: falta
+  generar el cliente de la API (§3). Es lo primero que hay que descartar ante veinte errores de
+  importación en el frontend.
 
 ---
 
