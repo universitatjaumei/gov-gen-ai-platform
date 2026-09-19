@@ -53,20 +53,34 @@ CONTRATO = ContratoFuncion(
 )
 
 
-def contar_filas(entrada: EntradaValidada) -> ExtractionResult:
+async def contar_filas(entrada: EntradaValidada) -> ExtractionResult:
     """Cuenta las filas del fichero de gastos.
 
-    `entrada.ficheros["gastos"]` está garantizado: el contrato lo declara obligatorio y la
-    plataforma valida antes de llamar. Por eso no hay un `if` defensivo aquí — y si lo hubiera,
-    escondería el día en que la validación deje de correr (la lección de
-    `una_guarda_defensiva_esconde_un_bug`).
+    El slot `gastos` está garantizado: el contrato lo declara obligatorio y la plataforma valida
+    antes de llamar. Por eso no hay un `if` defensivo aquí — y si lo hubiera, escondería el día
+    en que la validación deje de correr (la lección de `una_guarda_defensiva_esconde_un_bug`).
+
+    **Es `async` porque lee un fichero**, y leerlo es pedírselo al almacenamiento. Un `run`
+    síncrono sigue valiendo —la plataforma lo manda a un hilo— pero en cuanto hay entrada que
+    abrir, ésta es la forma natural.
     """
     import openpyxl
 
-    libro = openpyxl.load_workbook(entrada.ficheros["gastos"], read_only=True)
-    hoja = libro.active
-    # `max_row` cuenta la cabecera, que no es un gasto.
-    filas = max((hoja.max_row or 1) - 1, 0)
+    # **La referencia no se abre: la resuelve la plataforma** (APER.14). `entrada.ficheros`
+    # guarda la clave del almacenamiento —que es lo que se cita en la procedencia— y
+    # `entrada.fichero(slot)` entrega una ruta local que existe mientras dure el bloque y se
+    # borra al salir. Antes esto hacía `load_workbook(entrada.ficheros["gastos"])`, y eso no
+    # funcionaba con un almacén que no fuera de ficheros y dejaba que quien llamara eligiera
+    # qué fichero del servidor se abría.
+    #
+    # El recuento va **dentro** del bloque: con `read_only` openpyxl lee de forma perezosa, así
+    # que fuera el fichero ya no existiría.
+    async with entrada.fichero("gastos") as ruta:
+        libro = openpyxl.load_workbook(ruta, read_only=True)
+        hoja = libro.active
+        # `max_row` cuenta la cabecera, que no es un gasto.
+        filas = max((hoja.max_row or 1) - 1, 0)
+        libro.close()
 
     return ExtractionResult(
         tables=[],

@@ -27,7 +27,11 @@ Nada aquí sabe de «informe»: el catálogo es pieza compartida.
 """
 from __future__ import annotations
 
-from typing import Any, Literal
+import shutil
+import tempfile
+from contextlib import asynccontextmanager
+from pathlib import Path, PurePosixPath
+from typing import Any, AsyncIterator, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -146,10 +150,68 @@ class ContratoFuncion(BaseModel):
 
 
 class EntradaValidada(BaseModel):
-    """Lo que se le pasa a una función una vez comprobado contra su contrato."""
+    """Lo que se le pasa a una función una vez comprobado contra su contrato.
+
+    **`ficheros` son referencias, no rutas, y no se abren.** Guardan lo que pidió quien llama
+    —una clave del almacenamiento de la organización— y sirven para la **procedencia**: un
+    informe cita de dónde salió cada cifra, y meses después esa cita tiene que seguir
+    significando algo, cosa que una ruta temporal no hace.
+
+    Para **leer** el fichero está `fichero(slot)`, y la diferencia no es de estilo (APER.14).
+    Antes `ficheros` contenía una cadena que el paquete abría con `open()`, y eso tenía dos
+    consecuencias: con `STORAGE_BACKEND=gcs` una clave de GCS no es una ruta local y la función
+    no funcionaba, y con el backend de ficheros **quien llamaba elegía qué fichero del servidor
+    se abría**. Ahora resuelve la plataforma, contra el almacenamiento y con la clave validada.
+    """
+
+    model_config = {"arbitrary_types_allowed": True}
 
     ficheros: dict[str, str] = Field(default_factory=dict)
     parametros: dict[str, Any] = Field(default_factory=dict)
+    #: El almacenamiento con el que se resuelven las referencias. Lo pone la plataforma al
+    #: construir la entrada; un test de un paquete puede inyectar un doble.
+    almacen: Any = Field(default=None, exclude=True, repr=False)
+
+    @asynccontextmanager
+    async def fichero(self, slot_id: str) -> AsyncIterator[Path]:
+        """La referencia del slot, materializada en una ruta local que existe mientras dure el
+        bloque.
+
+            async with entrada.fichero("gastos") as ruta:
+                libro = openpyxl.load_workbook(ruta)
+
+        Se entrega una **ruta** y no un objeto de fichero porque es lo que quieren las
+        bibliotecas de análisis (`openpyxl`, `pandas.read_excel`, `pdfplumber`), y pelearse con
+        eso sería empujar a cada paquete a escribir su propio temporal.
+
+        **Se borra al salir**, y no es cortesía: el contenedor es efímero y un temporal que
+        sobrevive es una copia del documento de un cliente esperando a que alguien la encuentre.
+        """
+        try:
+            referencia = self.ficheros[slot_id]
+        except KeyError as fallo:
+            raise KeyError(
+                f"el slot «{slot_id}» no está en esta entrada: la plataforma valida el contrato "
+                "antes de llamar, así que pedirlo aquí es pedir algo que la función no declaró"
+            ) from fallo
+
+        if self.almacen is None:
+            raise RuntimeError(
+                f"no hay almacenamiento con el que resolver «{slot_id}». La plataforma lo "
+                "inyecta al ejecutar; si estás probando el paquete, pásale un doble en "
+                "`EntradaValidada(almacen=…)`."
+            )
+
+        contenido = await self.almacen.get(referencia)
+
+        # El sufijo se conserva porque muchas bibliotecas deciden el formato por la extensión.
+        sufijo = PurePosixPath(referencia).suffix
+        destino = Path(tempfile.mkdtemp(prefix="govgenai-funcion-")) / f"entrada{sufijo}"
+        try:
+            destino.write_bytes(contenido)
+            yield destino
+        finally:
+            shutil.rmtree(destino.parent, ignore_errors=True)
 
 
 class FormularioDeFuncion(BaseModel):
@@ -207,6 +269,7 @@ def validar_entrada(
     *,
     ficheros: dict[str, str] | None = None,
     parametros: dict[str, Any] | None = None,
+    almacen: Any = None,
 ) -> EntradaValidada:
     """La entrada comprobada contra el contrato, **antes** de invocar nada.
 
@@ -238,7 +301,7 @@ def validar_entrada(
         if presente:
             _comprobar_tipo(parametro, parametros[parametro.slot_id])
 
-    return EntradaValidada(ficheros=ficheros, parametros=parametros)
+    return EntradaValidada(ficheros=ficheros, parametros=parametros, almacen=almacen)
 
 
 def _comprobar_tipo(parametro: ParametroDeFuncion, valor: Any) -> None:
