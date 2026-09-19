@@ -27,6 +27,7 @@ todas envejecen igual:
 | [`ESPECIFICACIONES.md`](ESPECIFICACIONES.md) | **Qué garantiza el sistema**, capacidad por capacidad, con sus invariantes y dónde se hacen cumplir. El documento para quien va a escribir código |
 | [`PRESENTACION_PROYECTO.md`](PRESENTACION_PROYECTO.md) | Qué hace la plataforma, qué está construido y verificado, y qué está previsto. El documento para quien llega de fuera |
 | [`Arquitectura.md`](Arquitectura.md) | **Cómo está construida**: los módulos que existen, las dos fronteras —cloud/edge y organización—, datos, recuperación, frontend, despliegue y stack medido |
+| [`INSTALACION.md`](INSTALACION.md) | De clonar a un sistema que responde: los dos caminos, la elección de **modelos locales o por API** con lo que cuesta cada una, las variables que importan y las trampas conocidas |
 | [`GUIA_DE_USO.md`](GUIA_DE_USO.md) | Qué hace cada rol con la plataforma ya instalada: del alta de una organización a un asistente publicado, un informe aprobado o un portal curado |
 | [`MULTITENENCIA.md`](MULTITENENCIA.md) | Inventario del ámbito **tabla por tabla**: qué es de la plataforma, qué de cada organización y por qué camino se llega a ella. Lo mantiene honesto su propio test |
 | [`../AGENTS.md`](../AGENTS.md) | Las reglas duras para agentes de programación, y de paso el contrato de estilo del proyecto |

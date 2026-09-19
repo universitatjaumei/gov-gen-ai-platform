@@ -149,6 +149,8 @@ retiró el 2026-09-04**: no lo usaba ni CI, ni el despliegue, ni el `Dockerfile`
   —cloud/edge y organización—, los datos, la recuperación y el despliegue. Reescrito el
   2026-09-19; hasta entonces describía el estado objetivo de antes de integrar los dos proyectos
   de origen.
+- `docs/INSTALACION.md` — de clonar a un sistema que responde, con la elección de modelos
+  locales o por API y lo que cuesta cada una. Amplía el «Arrancar en local» de aquí arriba.
 - `docs/GUIA_DE_USO.md` — qué hace cada rol con la plataforma ya instalada: del alta de una
   organización a un asistente publicado, un informe aprobado o un portal curado.
 - `docs/MARCO_GOBERNANZA_IA.md` — gobernanza, trazabilidad y protección de datos.

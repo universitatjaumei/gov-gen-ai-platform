@@ -4,8 +4,8 @@
 > instalada y arrancada**: qué hace un superadministrador el primer día, y cómo se llega desde
 > ahí a un asistente publicado, un informe aprobado o un portal curado.
 >
-> **Esto no es la instalación.** Para levantarla en local, «Arrancar en local» del `README` de la
-> raíz. Para el despliegue del prototipo,
+> **Esto no es la instalación.** Para levantarla, [`INSTALACION.md`](INSTALACION.md) —incluida la
+> elección de modelos locales o por API—. Para el despliegue del prototipo,
 > [`DESPLIEGUE_PROTOTIPO_GCP.md`](DESPLIEGUE_PROTOTIPO_GCP.md).
 >
 > **Esto tampoco es la especificación.** Aquí está el recorrido; lo que el sistema **garantiza**,

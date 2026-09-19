@@ -498,6 +498,7 @@ la norma aplicable ha sido desplazada— sin pedirle a nadie que se fíe.
 |---|---|
 | `docs/ESPECIFICACIONES.md` | Qué garantiza el sistema, capacidad por capacidad, con sus invariantes y dónde se hace cumplir cada uno. El documento para quien va a escribir código |
 | `docs/Arquitectura.md` | Arquitectura funcional y técnica **como está construida**: módulos, roles, las dos fronteras, datos, recuperación, despliegue y decisiones estructurales |
+| `docs/INSTALACION.md` | De clonar a un sistema que responde, con la elección de modelos locales o por API |
 | `docs/GUIA_DE_USO.md` | Qué hace cada rol con la plataforma ya instalada, módulo a módulo |
 | `docs/MARCO_GOBERNANZA_IA.md` | Marco normativo interno: principios de gobernanza, mecanismos que los implementan, evidencia generada y clasificación de riesgo por caso de uso |
 | `docs/mediciones/` | Las mediciones fechadas del piloto: anchura de la recuperación, por qué el asistente no contesta, cuánto contexto conviene inyectar y qué decidió cada valor de apertura |
