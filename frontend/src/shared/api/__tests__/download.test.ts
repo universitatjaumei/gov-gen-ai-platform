@@ -24,7 +24,11 @@ describe('descargar un fichero protegido', () => {
     clicado = null
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:falso')
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    // `no-this-alias` desactivada aquí con motivo: el espía necesita saber **sobre qué
+    // ancla** se hizo clic, y eso es `this`. Una función flecha no tendría `this` propio, así
+    // que cumplir la regla obligaría a dejar de comprobar lo único que este test comprueba.
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
       clicado = this
     })
   })

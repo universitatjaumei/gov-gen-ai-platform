@@ -18,7 +18,7 @@ export default defineConfig({
           path: './src/shared/api/client.ts',
           name: 'customInstance',
         },
-        header: (info) =>
+        header: () =>
           `// ARCHIVO AUTOGENERADO — NO EDITAR MANUALMENTE\n// Fuente: openapi.json\n// Regenerar: npm run generate:api\n`,
       },
     },

@@ -1,46 +1,14 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+/**
+ * El proveedor de sesión, y sólo él (issue #47).
+ *
+ * El contexto, los tipos y el troceado del token están en `authState.ts`, y el hook en
+ * `useAuth.ts`. El corte es por Fast Refresh: un fichero que exporta componentes **y otra cosa**
+ * remonta el árbol entero en cada cambio, y se pierde el estado de la pantalla. Quien consume
+ * esto entra por `@/shared/auth`, así que el reparto no se nota desde fuera.
+ */
+import { useState, useCallback, type ReactNode } from 'react'
 
-export interface AuthUser {
-  user_id: string
-  email: string
-  role: string
-}
-
-interface AuthState {
-  user: AuthUser | null
-  isAuthenticated: boolean
-  login: (token: string) => void
-  logout: () => void
-}
-
-const AuthContext = createContext<AuthState | null>(null)
-
-const TOKEN_KEY = 'access_token'
-
-function parseJwtPayload(token: string): AuthUser | null {
-  try {
-    const base64 = token.split('.')[1]
-    const json = atob(base64.replace(/-/g, '+').replace(/_/g, '/'))
-    const payload = JSON.parse(json) as Record<string, unknown>
-    const user_id = (payload['user_id'] ?? payload['sub']) as unknown
-    const { email, role, exp } = payload
-    if (typeof user_id !== 'string' || typeof email !== 'string' || typeof role !== 'string') {
-      return null
-    }
-    // Check if token is expired
-    if (typeof exp === 'number' && exp * 1000 < Date.now()) {
-      return null
-    }
-    return { user_id, email, role }
-  } catch {
-    return null
-  }
-}
-
-function loadStoredUser(): AuthUser | null {
-  const token = localStorage.getItem(TOKEN_KEY)
-  return token ? parseJwtPayload(token) : null
-}
+import { AuthContext, TOKEN_KEY, loadStoredUser, parseJwtPayload, type AuthUser } from './authState'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(loadStoredUser)
@@ -63,10 +31,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   )
-}
-
-export function useAuth(): AuthState {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
-  return ctx
 }
