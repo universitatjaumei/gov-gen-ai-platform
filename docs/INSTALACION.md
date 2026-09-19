@@ -135,12 +135,6 @@ reconstruye si la etiqueta ya está publicada, y la etiqueta es el SHA del commi
 `-local-models`, activar el interruptor y redesplegar el mismo commit se llevaría la imagen
 anterior —la que no lleva modelos— **y sin decir nada**.
 
-> ⚠️ **Al 2026-09-19, activar la variable en el despliegue de GCP todavía no basta**: el paso que
-> construye publica `app:$SHA-local-models` y el que despliega recibe `app:$SHA`, así que la VM
-> tira de una etiqueta que esa ejecución no ha construido. Construir a mano con `--build-arg`, que
-> es lo de arriba, **sí funciona**. Cuando el despliegue entregue la misma etiqueta que publica,
-> esta nota sobra.
-
 En **desarrollo**, el interruptor equivalente es el extra de uv:
 
 ```bash
