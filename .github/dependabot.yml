@@ -60,17 +60,10 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: "chore(deps)"
-    # `setuptools` se queda en 81.0.0 **a propósito**, no por olvido: lo retiene el techo
-    # `setuptools<82` de `torch` 2.11. La decisión está aceptada, firmada y **con caducidad** en
-    # `avisos_aceptados.toml` (PYSEC-2026-3447), que es el fichero canónico y el que vigila
-    # `test_dep7_las_aceptaciones_caducan.py`.
-    #
-    # Se excluye **aquí** sólo para que no llegue la misma PR cada semana, que es como se deja de
-    # leer a Dependabot. Cuando torch levante el techo, `setuptools` sube con él y esta exclusión
-    # se retira. Ojo: esto **no** silencia una alerta de seguridad de GitHub sobre `setuptools`,
-    # que llega por otra vía y habría que valorar de nuevo.
-    ignore:
-      - dependency-name: setuptools
+    # Aquí estuvo una exclusión de `setuptools`, puesta «sólo para que no llegue la misma PR cada
+    # semana» mientras el techo `setuptools<82` de `torch` 2.11 hacía inaplicable la corrección.
+    # **APER.20 la retiró** al subir torch a 2.14, que ya no pone techo: ahora esa PR sí se puede
+    # aplicar, así que silenciarla sería perder el aviso en vez de ahorrarse ruido.
 
   - package-ecosystem: uv
     directory: /mcp_server

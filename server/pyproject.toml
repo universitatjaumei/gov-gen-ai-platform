@@ -150,16 +150,19 @@ local-models = [
     "torchvision",
     "sentence-transformers>=3.0.0",
 ]
-# Aquí entra `torch`, y con él el techo `setuptools<82` que mantiene a `setuptools` en 81.0.0
-# con un aviso abierto (PYSEC-2026-3447 / CVE-2026-59890).
+# **El techo de `setuptools` ya no está, y la aceptación tampoco (APER.20).** `torch` 2.11
+# declaraba `setuptools<82` y eso retenía a `setuptools` en 81.0.0 con un aviso abierto
+# (PYSEC-2026-3447), aceptado con fecha en `avisos_aceptados.toml`. La condición de salida
+# escrita allí era «cuando torch suba por cualquier otra razón, `setuptools` sube con él»: torch
+# 2.13 la cumplió —declara `setuptools>=77.0.3`, sin tope— y de paso corrige su propio aviso.
 #
-# **La decisión, con su motivo, su firma y su caducidad, vive en `avisos_aceptados.toml`**, que
-# es el fichero que consulta la puerta de `ci.yml` y el que vigila
-# `test_dep7_las_aceptaciones_caducan.py`. No se repite aquí: APER.5 la copió entera antes de
-# ver que ya estaba tomada desde DEP.7, y tres copias de una razón divergen en semanas.
+# Así que la aceptación se ha **retirado**, no renovado. Una aceptación caducada se renueva sin
+# mirar, y ahí es donde una decisión con fecha se convierte en una exclusión permanente con otro
+# nombre. Lo vigila `test_aper20_torch_levanta_el_techo_de_setuptools.py`.
 #
-# Lo único que se añade desde aquí: al renovar esa aceptación, comprobar si `torch` ya levantó
-# el techo — `uv tree --invert --package setuptools` lo dice en una línea.
+# Y un detalle que se midió y contradecía lo que parecía obvio: **`setuptools` sí llega al
+# despliegue estándar**, por `spacy` y `thinc`, no sólo por `torch`. Por eso la subida movía algo
+# fuera del extra, y fue el único cambio en el conjunto desplegado.
 # DEP.1: el extra que queda. El criterio es el mismo que el de `local-models` —lo que el
 # despliegue estándar no ejecuta no se instala— pero aquí hay además un motivo de seguridad:
 # arrastraba avisos de vulnerabilidad, incluidos **los dos únicos sin versión corregida
