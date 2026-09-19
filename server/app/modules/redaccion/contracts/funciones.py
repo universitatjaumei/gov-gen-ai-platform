@@ -27,6 +27,7 @@ Nada aquí sabe de «informe»: el catálogo es pieza compartida.
 """
 from __future__ import annotations
 
+import asyncio
 import shutil
 import tempfile
 from contextlib import asynccontextmanager
@@ -206,12 +207,24 @@ class EntradaValidada(BaseModel):
 
         # El sufijo se conserva porque muchas bibliotecas deciden el formato por la extensión.
         sufijo = PurePosixPath(referencia).suffix
-        destino = Path(tempfile.mkdtemp(prefix="govgenai-funcion-")) / f"entrada{sufijo}"
+
+        # **Crear el temporal, escribirlo y borrarlo van a un hilo (APER.25).** Esto corre en la
+        # ruta de una petición, y las tres son operaciones de disco síncronas: mientras
+        # trabajan, el bucle no atiende a nadie más. El tamaño no lo decidimos nosotros, lo
+        # decide el documento que suba el cliente, así que la regla de asincronía total de
+        # `AGENTS.md` aplica aquí aunque en un fichero de prueba de dos kilobytes no se note.
+        def _materializar() -> Path:
+            ruta = Path(tempfile.mkdtemp(prefix="govgenai-funcion-")) / f"entrada{sufijo}"
+            ruta.write_bytes(contenido)
+            return ruta
+
+        destino = await asyncio.to_thread(_materializar)
         try:
-            destino.write_bytes(contenido)
             yield destino
         finally:
-            shutil.rmtree(destino.parent, ignore_errors=True)
+            # En el `finally`, o sea que corre siempre: borrar un árbol también es trabajo de
+            # disco, y no se hace en el bucle.
+            await asyncio.to_thread(shutil.rmtree, destino.parent, ignore_errors=True)
 
 
 class FormularioDeFuncion(BaseModel):
