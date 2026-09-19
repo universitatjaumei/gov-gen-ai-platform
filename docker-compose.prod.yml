@@ -77,7 +77,10 @@ services:
     restart: unless-stopped
 
   ollama:
-    image: ollama/ollama:latest
+    # Fijada (issue #43): con `:latest` no se puede saber qué versión corre ni volver a la
+    # anterior, que son las dos preguntas de cualquier incidente. Dependabot vigila `docker`,
+    # así que subirla será una PR y no una sorpresa.
+    image: ollama/ollama:0.34.2
     container_name: govgenai_ollama
     volumes:
       - ollama_data:/root/.ollama
@@ -186,7 +189,17 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio:latest
+    # **Fijada, y en quay.io (issue #43).** Dos cosas a la vez. Con `:latest` no se puede
+    # saber qué versión corre ni volver a la anterior. Y además `minio/minio` **ya no se puede
+    # tirar de Docker Hub sin credenciales**: medido el 2026-09-19, el registro responde 401 a
+    # un token anónimo y la API del Hub responde 404 al repositorio, mientras `ollama/ollama`
+    # responde 200 por las dos vías. MinIO publica en quay.io, y la imagen de allí es el
+    # **mismo build** (mismo `commit-id`) que la que había en la caché local.
+    #
+    # O sea que esto no era sólo poco reproducible: no arrancaba para quien lo copiara. Cuidado
+    # al comprobarlo, que aquí casi cuela: `docker run minio/minio:latest` funciona si la
+    # máquina tiene una copia vieja en caché, y eso no dice nada del registro.
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: govgenai_minio_prod
     command: server /data --console-address ":9001"
     environment:
