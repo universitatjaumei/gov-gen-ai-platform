@@ -162,18 +162,26 @@ jobs:
           fi
 
           # Si la etiqueta ya existe —un redespliegue o una vuelta atrás— no se reconstruye.
+          #
+          # **Los argumentos extra van sueltos, no en una cadena (APER.22).** Antes se pasaban
+          # como un quinto parámetro y se soltaban sin comillas para que el shell los partiera:
+          # `docker build $argumentos ...`. Funcionaba mientras ningún valor llevara espacios, y
+          # el del interruptor los lleva —`--extra local-models`—, así que `docker build` recibía
+          # `EXTRAS_APP=--extra` y un `local-models` suelto como segundo contexto, y fallaba.
+          # Con `shift 4` y `"$@"` cada argumento llega tal cual lo escribió quien llama, que es
+          # lo que hay que hacer siempre que un valor pueda contener un espacio.
           construir_si_falta() {
-            local nombre="$1" contexto="$2" dockerfile="$3" etiqueta="$4" argumentos="${5:-}"
+            local nombre="$1" contexto="$2" dockerfile="$3" etiqueta="$4"
+            shift 4
             if gcloud artifacts docker images describe "$BASE/$nombre:$etiqueta" >/dev/null 2>&1; then
               echo "  $nombre:$etiqueta ya está publicada"
               return
             fi
-            # shellcheck disable=SC2086 — `argumentos` tiene que partirse en palabras.
-            docker build $argumentos -t "$BASE/$nombre:$etiqueta" -f "$dockerfile" "$contexto"
+            docker build "$@" -t "$BASE/$nombre:$etiqueta" -f "$dockerfile" "$contexto"
             docker push "$BASE/$nombre:$etiqueta"
           }
 
-          construir_si_falta app . Dockerfile "$SHA$SUFIJO" "--build-arg EXTRAS_APP=$EXTRAS_APP"
+          construir_si_falta app . Dockerfile "$SHA$SUFIJO" --build-arg "EXTRAS_APP=$EXTRAS_APP"
           construir_si_falta frontend ./frontend ./frontend/Dockerfile "$SHA"
           construir_si_falta sandbox ./services/script_sandbox ./services/script_sandbox/Dockerfile "$SHA"
           construir_si_falta mcp ./mcp_server ./mcp_server/Dockerfile "$SHA"

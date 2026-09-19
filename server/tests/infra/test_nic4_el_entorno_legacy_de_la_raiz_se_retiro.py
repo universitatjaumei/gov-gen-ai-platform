@@ -204,8 +204,11 @@ class TestElI18nDelLegacySeFue:
 class TestElArranqueSigueArrancandoAlgoQueExiste:
     """El prompt pedía «comprobar si sigue arrancando algo que exista». Sí, y por eso se queda."""
 
+    # `staticmethod` porque `pytest` 9.1 deprecó las *fixtures* de ámbito de clase declaradas
+    # como método de instancia, y ésta no usa `self`.
+    @staticmethod
     @pytest.fixture(scope="class")
-    def arranque(self) -> str:
+    def arranque() -> str:
         return (RAIZ / "arranque.bat").read_text(encoding="latin-1")
 
     def test_should_launch_the_server_project(self, arranque: str):

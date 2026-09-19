@@ -198,8 +198,11 @@ class TestElAuditorDelLockLeeLoQueTieneQueLeer:
 class TestElJobExportaLosDosConjuntos:
     """Y el workflow tiene que pedirlos, o el guion no los recibe."""
 
+    # `staticmethod` porque `pytest` 9.1 deprecó las *fixtures* de ámbito de clase declaradas
+    # como método de instancia, y ésta no usa `self`.
+    @staticmethod
     @pytest.fixture(scope="class")
-    def paso_export(self) -> str:
+    def paso_export() -> str:
         import yaml
 
         ci = yaml.safe_load((RAIZ / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
