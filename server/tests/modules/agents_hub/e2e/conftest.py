@@ -9,6 +9,13 @@ dejó 12 organizaciones y chatbots residuales (TST.2). Lo vigila
 Nota de diseño: todos los fixtures de BD tienen scope="function" para
 evitar conflictos de event loop entre pytest-asyncio y httpx.AsyncClient.
 """
+# ── Orden de importación obligatorio, no reordenar ─────────────────────────────
+# `langchain_text_splitters` arrastra `sentence_transformers` → torch. En Windows, cargar torch
+# DESPUÉS de haber abierto una conexión asyncpg aborta el proceso con «Windows fatal exception:
+# access violation»; al revés funciona. Diagnosticado el 2026-07-29. Este fichero crea un motor,
+# así que le toca (APER.16).
+import langchain_text_splitters  # noqa: F401  ← debe ir primero
+
 import os
 import uuid
 

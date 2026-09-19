@@ -8,6 +8,13 @@ Los tests que tocan BD (``db``) usan el PostgreSQL de desarrollo (localhost:5432
 limpian las filas creadas en el teardown.
 """
 
+# ── Orden de importación obligatorio, no reordenar ─────────────────────────────
+# `langchain_text_splitters` arrastra `sentence_transformers` → torch. En Windows, cargar torch
+# DESPUÉS de haber abierto una conexión asyncpg aborta el proceso con «Windows fatal exception:
+# access violation»; al revés funciona. Diagnosticado el 2026-07-29. Este fichero crea un motor,
+# así que le toca (APER.16).
+import langchain_text_splitters  # noqa: F401  ← debe ir primero
+
 import base64
 import datetime as dt
 from types import SimpleNamespace

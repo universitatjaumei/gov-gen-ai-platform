@@ -1,5 +1,21 @@
-"""Fixtures para los tests del módulo redacción (9R)."""
+"""Fixtures para los tests del módulo redacción (9R).
+
+Lleva además el mismo orden de importación que sus hermanos de `agents_hub` y `curation`, por la
+razón que está escrita abajo y que no es opcional en Windows.
+"""
 from __future__ import annotations
+
+# ── Orden de importación obligatorio, no reordenar ─────────────────────────────
+# `langchain_text_splitters` arrastra `sentence_transformers` → torch. En Windows, cargar torch
+# DESPUÉS de haber abierto una conexión asyncpg aborta el proceso con «Windows fatal exception:
+# access violation»; al revés funciona. Diagnosticado el 2026-07-29 y reducido a dos líneas:
+#
+#     asyncpg connect  →  import langchain_text_splitters   ⇒ access violation
+#
+# Este fichero lo perdió al ganar su `db_session` —los dos hermanos sí lo tienen—, así que la
+# suite de redacción podía tumbar el proceso en la plataforma de desarrollo de este proyecto.
+# Lo señaló la revisión automática de la PR del despliegue (APER.16).
+import langchain_text_splitters  # noqa: F401  ← debe ir primero
 
 from pathlib import Path
 
