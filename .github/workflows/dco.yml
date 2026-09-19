@@ -75,11 +75,50 @@ jobs:
           shopt -s nocasematch
           fallan=0
           revisados=0
+          saltados=0
+
+          # Los robots exentos, uno por línea y con el correo **exacto** (APER.26). Antes esto
+          # era un comodín, `*"[bot]@users.noreply.github.com"`, y el comentario de abajo decía
+          # que eximir por correo era seguro porque «el nombre lo puede poner cualquiera». El
+          # correo también: un `git config user.email` y cualquiera firmaba como
+          # `loquesea[bot]@users.noreply.github.com` y se saltaba el DCO entero.
+          #
+          # Una lista exacta no vuelve el dato infalsificable —sigue siendo texto en un commit—
+          # pero deja la exención **estrecha y visible**: para usarla hay que escribir este
+          # correo concreto, que es el de una cuenta conocida, y eso se ve en el `git log`.
+          # Añadir un robot aquí es un cambio en el repositorio, con su PR y su revisión.
+          ROBOTS_EXENTOS="49699333+dependabot[bot]@users.noreply.github.com"
           for sha in $(git rev-list --no-merges "$BASE".."$HEAD"); do
-            revisados=$((revisados + 1))
             mensaje="$(git show -s --format='%B' "$sha")"
             autor="$(git show -s --format='%an <%ae>' "$sha")"
+            correo="$(git show -s --format='%ae' "$sha")"
             rotulo="$(git show -s --format='%h %s' "$sha")"
+
+            # APER.13 — Dependabot queda exento, y la razón es lo que el DCO certifica.
+            #
+            # «I have the right to submit it under the open source license indicated in the
+            # file», dice el DCO. Eso lo certifica **una persona** sobre código que aporta.
+            # Un robot que sube un número de versión en un `uv.lock` no aporta código de
+            # nadie: reordena una resolución de dependencias. No hay autoría que certificar, y
+            # exigirle una firma que no puede dar sólo conseguía que **ninguna** de sus PR se
+            # pudiera mezclar — trece a la vez el 2026-09-19, todas en rojo por esto.
+            #
+            # Lo que NO se relaja: la responsabilidad sigue siendo de quien mezcla, y sus PR
+            # pasan los mismos checks que las demás.
+            #
+            # `saltados` se cuenta aparte y se dice en voz alta, porque una exención que no se
+            # ve en el registro es una exención que nadie vuelve a revisar.
+            #
+            # La comparación es contra la lista exacta de arriba (APER.26). `$correo` va entre
+            # comillas dentro del patrón **a propósito**: sin ellas, el `[bot]` del correo sería
+            # una clase de caracteres de glob y casaría con una sola letra de «b», «o» o «t».
+            if [[ " $ROBOTS_EXENTOS " == *" $correo "* ]]; then
+              echo "::notice::$rotulo — exento del DCO: commit de robot ($correo)"
+              saltados=$((saltados + 1))
+              continue
+            fi
+
+            revisados=$((revisados + 1))
 
             # Coincidencia nativa de bash, sin tuberías: `grep -q` cierra la tubería antes de
             # tiempo y en algunos entornos aborta, lo que daba falsos rechazos.
@@ -102,3 +141,6 @@ jobs:
             exit 1
           fi
           echo "$revisados commit(s) revisados, todos firmados."
+          if [ "$saltados" -gt 0 ]; then
+            echo "$saltados commit(s) de robot exentos (ver la razón en este fichero)."
+          fi

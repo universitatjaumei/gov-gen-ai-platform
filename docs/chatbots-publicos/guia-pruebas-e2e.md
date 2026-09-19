@@ -90,22 +90,29 @@ Antes de empezar, estos son los términos que aparecen a lo largo de la guía:
 
 ### 0.2 Iniciar sesión
 
-El panel de administración requiere autenticación. Las credenciales de desarrollo son:
+El panel de administración requiere autenticación. **Las credenciales no están escritas aquí, y
+no es descuido**: este documento se publica, y una contraseña en un fichero versionado es una
+contraseña quemada el día que alguien no la cambia.
 
-| Campo | Valor |
-|---|---|
-| Email | `fabra@uji.es` |
-| Contraseña | `admin1234` |
+De dónde salen, según cómo hayas instalado:
+
+| Instalación | Quién crea la cuenta | Dónde está la credencial |
+|---|---|---|
+| Desarrollo (`ENVIRONMENT=development`) | El sembrado automático del arranque | `DEV_ADMIN_EMAIL` y `DEV_ADMIN_PASSWORD` de tu `.env`. Sin ponerlas, `admin@example.local` y una contraseña por omisión que **sólo vale en local** |
+| Cualquier otra | `scripts/setup.sh`, que la pide al instalar | La que tú diste (`SUPERADMIN_EMAIL` / `SUPERADMIN_PASSWORD` en modo no interactivo) |
+
+El sembrado de desarrollo **sólo corre con `ENVIRONMENT=development`**: una instalación de
+producción no tiene esa cuenta.
 
 Inicia sesión en `http://localhost:5173/login` (o la ruta de acceso que muestre el panel).
 
 > **Para pruebas con curl:** algunas pruebas de esta guía usan llamadas directas a la API.
-> Para obtener el token de acceso, ejecuta en una terminal:
+> Sustituye `$EMAIL` y `$PASSWORD` por los tuyos y ejecuta en una terminal:
 >
 > ```bash
 > curl -s -X POST http://localhost:8000/api/v1/auth/token/admin \
 >   -H "Content-Type: application/json" \
->   -d '{"email": "fabra@uji.es", "password": "admin1234"}'
+>   -d "{\"email\": \"$EMAIL\", \"password\": \"$PASSWORD\"}"
 > ```
 >
 > La respuesta tendrá el formato `{"access_token": "eyJ...", "token_type": "bearer"}`.

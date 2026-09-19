@@ -47,8 +47,8 @@ def test_services_api_key_import():
     assert get_api_key is not None
 
 
-def test_agent_service_import():
-    """Verifica que agent_service se importa correctamente."""
-    from server.app.services.agent_service import BrowserAgentWrapper, AgentResult
-    assert BrowserAgentWrapper is not None
-    assert AgentResult is not None
+# `test_agent_service_import` estuvo aquí y se fue con su servicio en APER.19: `agent_service`
+# era el único importador de `browser-use` y no tenía llamantes de producción —el hallazgo M7 de
+# la auditoría del 2026-08-10—. Un test que sólo comprueba que un módulo muerto importa mantiene
+# vivo el módulo, que es justo lo que hacía. Lo que queda es
+# `tests/infra/test_aper19_el_agente_navegador_se_retiro.py`, que comprueba lo contrario.

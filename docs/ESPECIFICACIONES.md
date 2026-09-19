@@ -697,6 +697,10 @@ a quien llega de fuera:
 - `tests/api/test_tenant_isolation.py` y `test_mt16_aislamiento_dos_organizaciones.py` — I5.
 - `tests/core/test_mt7_el_inventario_esta_escrito.py` — el inventario de multitenencia no puede
   quedarse viejo.
+- `tests/infra/test_el_indice_de_docs_esta_completo.py` — que el índice de `docs/` los liste a
+  todos y que ninguna página mande a leer una ruta `docs/…` que quien clona no tiene. Es la otra
+  mitad de la pregunta que hacía el de REPO.3, que sólo miraba los enlaces markdown: las dos
+  referencias muertas de la portada estaban escritas entre acentos graves y **pasaban en verde**.
 - `tests/infra/test_suite_hygiene.py` — mocks sobre clases, `create_all` sobre la base del
   desarrollador, imports a módulos que ya no existen.
 - El guardarraíl de I10 en `test_usr8_el_flujo_del_chat_siempre_termina.py`.

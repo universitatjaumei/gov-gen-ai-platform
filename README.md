@@ -81,7 +81,7 @@ cada variable para quien prefiera rellenarlas a mano.
 ```bash
 scripts/generate_env.sh              # genera .env, server/.env y frontend/.env con secretos
 docker compose up -d postgres        # el servicio se llama postgres, no db
-cd server; uv sync --extra local-models --extra shared
+cd server; uv sync --extra shared    # añade --extra local-models si quieres los modelos en tu máquina
 uv run alembic upgrade head
 uv run uvicorn app.main:app --port 8000
 ```
@@ -89,13 +89,29 @@ uv run uvicorn app.main:app --port 8000
 Y el frontend, en otra terminal:
 
 ```bash
-cd frontend; npm install; npm run dev     # http://localhost:5173
+cd frontend; npm install
+npm run generate:api                      # obligatorio en un clon nuevo: el cliente no se versiona
+npm run dev                               # http://localhost:5173
 ```
 
-En Windows, `arranque.bat` hace las dos cosas.
+`npm run generate:api` necesita el `openapi.json` que exporta el backend
+(`cd server; uv run python export_openapi.py`); sin ese paso, `npm run dev` falla con veinte
+«Cannot find module `@/shared/api/generated/…`». Es lo que cuenta «El contrato es la fuente de
+verdad», más abajo.
 
-El primer arranque del backend tarda varios minutos: carga los modelos locales de embedding y
-reranking. Hasta que no escriba `Application startup complete` no responde.
+En Windows, `arranque.bat` levanta el backend y el frontend de una vez — pero no genera el
+cliente, que se hace una sola vez.
+
+**Embeddings: en tu máquina o por API.** `--extra local-models` instala `torch` y BGE-M3, que es
+lo que permite que el texto no salga de la institución — y son cientos de megas y un arranque de
+varios minutos la primera vez, mientras carga los modelos; hasta que el servidor no escriba
+`Application startup complete`, no responde. Sin ese extra el arranque es inmediato y los
+embeddings se configuran contra un proveedor por API. **Cuál se usa lo decide la configuración, no
+la instalación**: lo que decide el extra es si la pila local está disponible.
+
+Esto de arriba es el camino corto. La instalación completa —incluido `scripts/setup.sh`, que
+levanta el conjunto en un paso, y el interruptor de modelos locales en el despliegue— está en
+[`docs/INSTALACION.md`](docs/INSTALACION.md).
 
 ## Tests
 
@@ -145,7 +161,14 @@ retiró el 2026-09-04**: no lo usaba ni CI, ni el despliegue, ni el `Dockerfile`
   escribir código. Lo vigila un test: si algo de ahí deja de ser verdad, la suite se pone roja.
 - `docs/PRESENTACION_PROYECTO.md` — qué hace la plataforma, qué está construido y verificado, y
   qué está previsto. Es el documento para leer primero si vienes de fuera.
-- `docs/Arquitectura.md` — qué es la plataforma y qué principios la rigen.
+- `docs/Arquitectura.md` — cómo está construida: los módulos que existen, las dos fronteras
+  —cloud/edge y organización—, los datos, la recuperación y el despliegue. Reescrito el
+  2026-09-19; hasta entonces describía el estado objetivo de antes de integrar los dos proyectos
+  de origen.
+- `docs/INSTALACION.md` — de clonar a un sistema que responde, con la elección de modelos
+  locales o por API y lo que cuesta cada una. Amplía el «Arrancar en local» de aquí arriba.
+- `docs/GUIA_DE_USO.md` — qué hace cada rol con la plataforma ya instalada: del alta de una
+  organización a un asistente publicado, un informe aprobado o un portal curado.
 - `docs/MARCO_GOBERNANZA_IA.md` — gobernanza, trazabilidad y protección de datos.
 - `docs/LICENCIA_ES.md` — la AGPL explicada en español: qué permite, qué obliga y qué no, y qué
   significa para un pliego.
@@ -229,6 +252,12 @@ Este programa se distribuye bajo la **GNU Affero General Public License v3.0 o p
 licencia permite copiarla literalmente pero no alterarla, así que la procedencia y el propósito se
 declaran aquí y no dentro de ella.
 
+**Una sola licencia, y conviene decirlo porque la planificación previó otra cosa.** Hoy el
+programa se distribuye únicamente bajo AGPL, y lo que se contrata son **servicios**, no licencias.
+La planificación de enero de 2026 previó además una licencia dual comercial para *partners*: sigue
+siendo posible —la titularidad es de una sola persona jurídica— y **no se ha ejercido**. Si lees
+«dual-license» en un documento de planificación, es eso y no dos regímenes en vigor.
+
 Para quien tenga que decidir si su administración puede usar o desplegar esto, `docs/LICENCIA_ES.md`
 explica en español qué permite la licencia, qué obliga, **qué no obliga** y qué significa para un
 pliego. Es un documento informativo y lo dice: no es una traducción de la licencia, porque la FSF no
@@ -274,7 +303,14 @@ también lo que impide que una mejora pagada con fondos públicos quede cerrada.
 
 ### La obligación del §13 sobre cada despliegue
 
-Pendiente de implementar, y con tres condiciones que no son opcionales:
+**Hecho a medias, y conviene decir qué mitad.** El servidor ya lo publica: `GET /api/v1/instancia`
+devuelve el `SOURCE_URL` que configure quien despliega, es **público y sin credencial** a
+propósito —la obligación es frente a quien usa el programa, incluida la ciudadanía que escribe en
+el widget—, y vacío significa «no hay enlace», que es lo correcto para quien despliega sin
+modificar (AIS.6, con su test). **Lo que falta es que se vea**: ninguna interfaz lo consume
+todavía, ni el panel ni el widget, y un enlace que nadie enseña no cumple el §13.
+
+Las tres condiciones, que no son opcionales:
 
 - **Va en la interfaz del despliegue**, no en este README. La obligación es de quien ejecuta la
   versión modificada, frente a los usuarios de **esa instancia**.

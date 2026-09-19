@@ -1,7 +1,11 @@
 # RAG: relación de sustitución de código propio por dependencias maduras
 
 > **Fecha**: 2026-07-24
-> **Estado**: Aceptado — vista transversal del Bloque RAG e ingesta
+> **Estado**: Aceptado — vista transversal del Bloque RAG e ingesta. **Su parte de Docling quedó
+> revertida**: EXT.3 retiró Docling del servidor el 2026-08-11 y `AGENTS.md` prohíbe
+> reintroducirlo, así que donde este documento recomienda «consolidar parsers en Docling» manda
+> [`DECISION_EXTRACCION_Y_DESPLIEGUE.md`](DECISION_EXTRACCION_Y_DESPLIEGUE.md). El resto sigue en
+> pie.
 > **Fuentes**: código real (`server/app/modules/agents_hub/`), `pyproject.toml`,
 > `docs/COMPARATIVA_RAG_LAMB.md`, `docs/DECISION_OPENWEBUI_CARCASA_CHAT.md` (§6),
 > `planificacion/Plan_TDD_Fase1.md` (Bloque RAG, Bloque ING).

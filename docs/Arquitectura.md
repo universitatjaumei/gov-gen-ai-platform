@@ -1,916 +1,639 @@
 # Arquitectura de Gov Gen AI Platform
 
-> \*\*Estado objetivo de arquitectura\*\* para la plataforma \*\*Gov Gen AI\*\*: AutomatIA, AI Agents Hub y Gestor de Expedientes.
+> **Clase: referencia viva.** Describe la plataforma **como está construida**, no como se
+> proyectó. Si contradice al código, es un fallo de este documento y hay que arreglarlo.
 >
-> Este documento consolida la arquitectura funcional y técnica, elimina reiteraciones derivadas de iteraciones previas y mantiene el nivel de detalle necesario para desarrollo, gobierno técnico y comunicación institucional.
+> **Revisión completa: 2026-09-19.** La versión anterior era el documento de estado objetivo de
+> enero de 2026, escrito antes de integrar los dos proyectos de origen, y para entonces afirmaba
+> cosas que habían dejado de ser ciertas —Docling en la ingesta, Bitbucket Pipelines, un
+> `local-runner/` en el árbol, módulos que no existen— mientras callaba tres módulos construidos.
+> §17 cuenta qué se corrigió y por qué se reescribió en lugar de parchearse.
+>
+> **Qué NO está aquí.** Las **garantías** del sistema, capacidad por capacidad, con sus
+> invariantes y dónde se hacen cumplir: [`ESPECIFICACIONES.md`](ESPECIFICACIONES.md) —el
+> documento para leer antes de escribir código—. Las **reglas duras** que obligan a un agente de
+> programación: [`../AGENTS.md`](../AGENTS.md). El **estado del desarrollo**:
+> [`../planificacion/PROJECT_STATE.md`](../planificacion/PROJECT_STATE.md). Este documento
+> explica **la forma del sistema y por qué tiene esa forma**.
 
-\---
+---
 
-## 1\. Alcance y propósito
+## 1. Para qué existe esta arquitectura
 
-Este documento describe la **arquitectura funcional y técnica** de la plataforma **Gov Gen AI** en su estado objetivo. La plataforma integra tres módulos principales:
+La plataforma tiene que servir a **varias administraciones distintas** sin que ninguna vea los
+datos de otra, y tiene que poder desplegarse **dentro de la nube de la institución** cuando el
+requisito regulatorio no admite otra cosa. Casi todo lo que sigue sale de ahí.
 
-1. **AI Agents Hub**, orientado a chatbots públicos, agentes identificados, RAG, ingesta documental y asistencia avanzada a usuarios.
-2. **AutomatIA**, orientado a automatización de procesos internos, flujos, scripts, RPA y procesamiento documental.
-3. **Gestor de Expedientes**, orientado a la tramitación administrativa multi-fase, auditable, con supervisión humana y trazabilidad regulatoria.
+Un sistema hecho para una sola institución no necesitaría la jerarquía Plataforma → Organización
+→ Chatbot, ni dos bases ORM separadas, ni una clasificación de routers en `cloud` y `edge`
+vigilada por tests. Las tendría como lujo. Aquí son el requisito.
 
-Su propósito es servir como **fuente única de verdad arquitectónica** para:
+El segundo motor del diseño es la **conformidad por diseño**: las obligaciones jurídicas
+—Reglamento (UE) 2024/1689, RGPD, Leyes 39/2015 y 40/2015, ENS— no se documentan aparte del
+sistema, se incorporan a su construcción y se traducen en comprobaciones ejecutables. De ahí
+salen decisiones que de otro modo parecerían caprichos: que el determinismo se prefiera al modelo
+generativo siempre que alcance, que ninguna afirmación se emita sin cita a su fuente, y que la
+respuesta de indisponibilidad sea una función del sistema y no un fallo. El desarrollo del
+principio está en [`MARCO_GOBERNANZA_IA.md`](MARCO_GOBERNANZA_IA.md).
 
-* Equipos de desarrollo.
-* Órgano de gobierno técnico del proyecto.
-* Instituciones públicas usuarias o colaboradoras.
-* Partners tecnológicos que desplieguen, mantengan o integren la plataforma.
+---
 
-### 1.1 Qué define este documento
+## 2. La regla que ordena el diseño: el servidor decide, el cliente pinta
 
-Este documento define:
+Es la restricción de la que se derivan las demás, y está escrita como regla maestra en
+`AGENTS.md`:
 
-* Los **principios arquitectónicos transversales**.
-* La **arquitectura modular** de la plataforma.
-* El modelo de **roles, entidades y responsabilidades**.
-* La frontera **Cloud / Edge / Local Runner**.
-* El modelo de **privacidad, soberanía del dato y memoria persistente**.
-* El stack tecnológico de referencia.
-* La integración de AI Agents Hub y Gestor de Expedientes dentro de la plataforma común.
-* Las decisiones estratégicas adoptadas y las pendientes.
-* El roadmap consolidado de implementación.
+- El frontend **no calcula qué acciones están permitidas**. No hay código como
+  `if (fase === 'revision') mostrarBoton()`. El servidor evalúa estado y rol y manda la lista
+  —`acciones_permitidas` cuando exista el gestor de expedientes, banderas por fila en lo que hay
+  hoy—; React itera sobre ella.
+- El frontend **no conoce a priori los campos** de un formulario de función o de script. Recibe
+  un contrato de interfaz y construye el formulario iterando sobre él (*server-driven UI*).
+- El frontend **no define tipos de datos a mano**: salen del contrato OpenAPI vía Orval, y un
+  trabajo de CI se pone rojo si el cliente generado no cuadra.
 
-### 1.2 Qué no define este documento
+La razón no es purismo. Una regla de negocio duplicada en dos lenguajes divergirá, y cuando
+divergen **el cliente es el que miente**, porque es el que el usuario ve. Con esto hay un solo
+sitio donde una regla puede estar mal.
 
-Este documento no define:
+---
 
-* Tareas técnicas concretas, prompts TDD ni código de implementación.
-* El detalle operativo de despliegue: variables de entorno, scripts de inicialización, configuración de CI/CD o runbooks.
-* El estado exacto de implementación de cada módulo en cada commit.
-* El detalle exhaustivo de planes TDD por fase.
+## 3. Principios transversales
 
-Esos contenidos deben residir en documentos específicos como:
+### 3.1 Determinista primero
 
-* `PLAN\_DESARROLLO.md`
-* `Plan\_TDD\_Fase1.md`, `Plan\_TDD\_Fase2.md`, `Plan\_TDD\_Fase3.md`
-* `ROADMAP.md`
-* `PLAN\_OPEN\_CORE\_SERVER.md`
-* `PLAN\_LLM\_MULTIPROVEEDOR.md`
-* Documentación técnica de cada módulo en el repositorio.
+Donde un cálculo puede hacerse con código, se hace con código. El modelo generativo entra donde
+hace falta lenguaje: redactar una valoración, proponer una transformación, explicar un hallazgo.
 
-### 1.3 Carácter de las decisiones arquitectónicas
+En el módulo de Informes eso es literal: las tablas de un informe las produce una función
+determinista y versionada, y lo que escribe el modelo es la **valoración** que acompaña a esa
+tabla, sujeta a aprobación humana. Un número que aparece en un informe institucional no sale de
+un modelo de lenguaje.
 
-Las decisiones recogidas en las secciones de:
+### 3.2 La supervisión humana es estructura, no aviso
 
-* Principios arquitectónicos transversales.
-* Roles y responsabilidades.
-* Privacidad y soberanía del dato.
-* Frontera Cloud / Edge / Local Runner.
-* Integración modular de AutomatIA, AI Agents Hub y Gestor de Expedientes.
+No hay un *banner* que diga «revise los resultados». Hay estados en la base de datos que no
+avanzan sin que alguien los avance, y registro de quién lo hizo. El borrador de un informe no se
+exporta sin aprobación; un documento del corpus tiene cola de vigencia y constancia de quién la
+comprobó; una función compartida pasa por revisión posterior que puede pedir correcciones,
+reclasificar o suspender.
 
-se consideran **decisiones arquitectónicas estructurales**. Cualquier cambio que las contradiga debe justificarse en revisión arquitectónica y reflejarse en este documento antes de su ejecución.
+### 3.3 El contrato es la fuente de verdad
 
-El resto del documento es revisable sprint a sprint conforme evolucione la implementación.
+`openapi.json` lo genera el servidor; el cliente TypeScript se deriva de él. No se escribe a
+mano. La validación del formulario en el cliente se alinea con el contrato del servidor
+(`react-hook-form` + `zodResolver`), no lo reinterpreta.
 
-\---
+### 3.4 Conformidad como código
 
-## 2\. Resumen ejecutivo
+Cada garantía que el sistema promete tiene un sitio donde se hace cumplir y un test que lo
+comprueba. La tabla de invariantes de `ESPECIFICACIONES.md` §4 es literalmente esa lista, con la
+columna «se hace cumplir en». Un invariante que sólo vive en un documento no es un invariante: es
+una intención.
 
-**Gov Gen AI Platform** es una plataforma de inteligencia artificial para instituciones públicas. Combina automatización, asistencia conversacional, generación de documentos, conexión con sistemas corporativos y tramitación administrativa auditable.
+### 3.5 Multiorganización desde la primera tabla
 
-La plataforma se organiza en tres módulos:
+Toda tabla de configuración declara a quién pertenecen sus datos, y una que no lo declare pone
+rojo un guardarraíl. No es una capa que se añade: es una columna que se decide al crear la tabla.
+El inventario está en [`MULTITENENCIA.md`](MULTITENENCIA.md).
 
-|Módulo|Propósito principal|Capacidades clave|
-|-|-|-|
-|**AutomatIA (automatización determinista)**|Automatización de procesos internos|Flujos, ETL, scripts generados, RPA, extracción documental, ejecución local cuando sea necesario|
-|**AI Agents Hub**|Atención y asistencia mediante IA|Chatbots públicos, agentes identificados, RAG, Docling, LangGraph, RAGAS, widget web, modo agente|
-|**Gestor de Expedientes**|Tramitación administrativa asistida por IA|Tipos de expediente, fases, acciones, HITL, audit, explicabilidad, integración con gestores externos|
+---
 
-El objetivo de AI Agents Hub es doble:
+## 4. Las dos fronteras
 
-* **Información pública:** chatbots multilingües integrados en webs institucionales para resolver dudas frecuentes de forma masiva.
-* **Trabajo asistido:** agentes identificados que ayudan a personal interno, estudiantes o usuarios autorizados a realizar tareas complejas, conectando normativa, documentos propios y datos corporativos.
+Condicionan cualquier código nuevo. Son independientes entre sí y se confunden con facilidad.
 
-La plataforma adopta una arquitectura **servidor-first**, con frontend React unificado y un **agente de ejecución local** ligero únicamente para casos en los que sea imprescindible ejecutar acciones en la máquina o red local del usuario.
+### 4.1 Cloud / Edge — qué puede salir de la institución
 
-El modelo de licenciamiento recomendado es **dual-license**:
+El sistema se despliega de dos maneras con **el mismo código**:
 
-* **AGPLv3** para instituciones públicas, uso autoalojado y cumplimiento de objetivos de acceso abierto.
-* **Licencia comercial** para partners que requieran soporte, SLA, integraciones premium o incorporación en productos privativos.
-
-\---
-
-## 3\. Principios arquitectónicos transversales
-
-Estos principios aplican a todos los módulos de la plataforma.
-
-### 3.1 Determinista-first
-
-La IA genera **propuestas**, pero el acto administrativo o la acción oficial debe ser siempre **determinista, verificable y reproducible**.
-
-La capa de inteligencia —LLM, RAG, razonamiento, generación de scripts o propuestas— puede ser no determinista. La ejecución oficial, sin embargo, debe apoyarse en artefactos controlados:
-
-* Scripts firmados.
-* Plantillas validadas.
-* Transiciones de estado auditadas.
-* Versiones concretas de modelos, prompts y configuración.
-
-Implicaciones de diseño:
-
-* Toda decisión administrativa con efectos hacia terceros debe poder reejecutarse con el mismo input y obtener el mismo resultado.
-* Los grafos de orquestación separan con claridad la **propuesta** de la **ejecución**.
-* Las acciones automatizadas generadas por IA pasan por validación antes de ejecutarse.
-* El registro de auditoría conserva la justificación de la propuesta y el artefacto exacto ejecutado.
-* En el Gestor de Expedientes, la resolución administrativa se apoya en acciones trazables, no en una respuesta efímera del modelo.
-
-### 3.2 Human-in-the-Loop como parte estructural
-
-La supervisión humana no es un complemento posterior, sino un elemento estructural de la arquitectura.
-
-Ninguna decisión sustantiva sale al exterior sin un punto explícito de supervisión humana cuando el contexto, la política o el riesgo lo exigen.
-
-Aplicación:
-
-* Los grafos de tramitación incluyen nodos humanos configurables como puntos de parada, revisión o aprobación.
-* Los borradores generados por IA pasan por refinamiento iterativo antes de exportarse como documento final.
-* Los paneles de supervisión exponen bandejas de aprobaciones pendientes por usuario o rol.
-* Las aprobaciones, correcciones y rechazos alimentan el aprendizaje controlado del sistema.
-* El sistema sólo aprende de interacciones humanas validadas, no de sus propias salidas sin supervisión.
-
-### 3.3 Ejecución diferenciada Cloud / Edge / Local Runner
-
-La plataforma debe poder desplegarse desde un mismo codebase en distintos modos, según la sensibilidad del dato y las necesidades de la institución.
-
-|Modo|Descripción|
-|-|-|
-|**Cloud-only**|Toda la lógica corre en la infraestructura del operador o partner. Los datos se anonimizan antes de enviarse a LLM externos cuando la política aplicable lo exija.|
-|**Edge + Cloud**|La lógica operacional se ejecuta en un nodo Edge dentro de la nube o infraestructura de la Organización. El Cloud conserva configuración administrativa y métricas anonimizadas.|
-|**Servidor + Local Runner**|El servidor orquesta y gobierna. Un agente local sin interfaz ejecuta tareas que requieren acceso a recursos locales del usuario, como carpetas, red interna o automatización RPA local.|
-
-Reglas duras:
-
-* La **capa de inteligencia** puede ejecutarse en Cloud o Edge, pero no en el agente local.
-* La **capa de ejecución determinista** puede ejecutarse en Edge o mediante Local Runner.
-* El agente local ejecuta únicamente trabajos validados, firmados y asignados desde el servidor.
-* Un módulo Edge no debe importar código de un módulo Cloud.
-* La frontera se gobierna por configuración y proveedores abstraídos, por ejemplo:
-
-  * `DEPLOY\_MODE=cloud`
-  * `DEPLOY\_MODE=edge`
-  * `DEPLOY\_MODE=all`
-  * `ConfigProvider`
-  * `StorageService`
-  * `EmbeddingService`
-
-### 3.4 Autoaprendizaje controlado y memoria persistente
-
-La plataforma adopta una filosofía de aprendizaje controlado: el sistema acumula experiencia a partir de interacciones validadas por humanos, pero no aprende silenciosamente de cualquier salida generada.
-
-Principios:
-
-* **Aprendizaje sólo desde validación humana.** Correcciones, aprobaciones y rechazos explícitos son la fuente legítima de aprendizaje.
-* **Skill \& Script Library.** El sistema mantiene una biblioteca de procedimientos reutilizables:
-
-  * **Skills:** patrones generalizables de actuación.
-  * **Scripts:** artefactos deterministas ejecutables.
-* **Memoria de estilo.** Preferencias de redacción, tono y estructura se almacenan separadas de datos identificativos.
-* **Learning Trace.** Toda skill o preferencia debe rastrearse hasta la interacción humana que la originó.
-* **Opt-in y revocabilidad.** Las capacidades aprendidas pueden revisarse, desactivarse o eliminarse.
-
-La implementación concreta —modelos de datos, extracción de patrones, nodos LangGraph y servicios asociados— corresponde a los planes técnicos de desarrollo.
-
-\---
-
-## 4\. Arquitectura funcional
-
-### 4.1 Modos de uso
-
-La plataforma adapta su interfaz y capacidades al contexto del usuario.
-
-|Característica|Chatbot público|Agente identificado|Gestor de Expedientes|
-|-|-|-|-|
-|**Acceso**|Anónimo y abierto|Identificado mediante SSO institucional (SAML 2.0)|Identificado y autorizado|
-|**Interfaz**|Widget compacto integrado en la web|Interfaz expandida con documentos, dropzone y previsualización|Pantallas de tramitación, bandejas y timeline|
-|**Capacidades**|FAQs, normativa, orientación general|RAG, PDFs de usuario, datos corporativos, informes|Fases, acciones, aprobaciones, audit, integración con gestor externo|
-|**Idiomas**|Catalán, castellano e inglés|Adaptación dinámica al idioma del usuario|Según configuración institucional|
-|**Riesgo**|Bajo o medio|Medio|Medio o alto, según tipo de expediente|
-|**Supervisión humana**|Feedback y validación por informadores|Refinamiento iterativo|HITL obligatorio cuando la fase lo exija|
-
-### 4.2 Casos de uso principales
-
-#### Chatbot público
-
-* Responder dudas frecuentes.
-* Guiar sobre normativa, plazos, procedimientos o servicios.
-* Ofrecer atención multilingüe.
-* Recoger feedback de calidad.
-* Operar sin acceso a datos personales del usuario salvo configuración explícita.
-
-#### Agente identificado
-
-* Analizar documentación aportada por el usuario.
-* Cruzar normativa, evidencias y datos corporativos.
-* Generar borradores de informes, memorias o justificaciones.
-* Permitir refinamiento humano antes de exportar.
-* Conectar con sistemas internos mediante MCP u otros adaptadores.
-
-#### Gestor de Expedientes
-
-* Crear y tramitar expedientes administrativos.
-* Ejecutar acciones automáticas y humanas por fases.
-* Mantener auditabilidad completa.
-* Integrarse con Oracle u otros gestores existentes.
-* Generar informes de trazabilidad y cumplimiento.
-
-\---
-
-## 5\. Roles, entidades y responsabilidades
-
-La nomenclatura institucional queda consolidada en cuatro identificadores:
-
-|Identificador|Tipo|Ámbito|Responsabilidad principal|
-|-|-|-|-|
-|**SuperAdmin**|Rol|Plataforma global|Administra proveedores LLM, modelos, parámetros globales, seguridad, observabilidad, motores base y políticas globales. No gestiona contenido institucional ordinario.|
-|**Admin**|Rol|Una o varias Organizaciones|Configura chatbots, agentes, knowledge bases, prompts, plantillas visuales, políticas de privacidad, tipos de expediente e integraciones.|
-|**Organización**|Entidad de datos|Institución|Agrupa usuarios, chatbots, knowledge bases, fuentes de ingesta, tipos de expediente, políticas, branding e integraciones.|
-|**User**|Rol|Sesión de usuario|Usa chatbots, agentes o expedientes. Puede actuar como aprobador HITL si tiene responsabilidad asignada. No accede a configuración.|
-
-### 5.1 Mapeo de migración terminológica
-
-|Nomenclatura anterior|Nomenclatura actual|Naturaleza|
-|-|-|-|
-|Admin global|**SuperAdmin**|Rol|
-|Partner|**Admin**|Rol|
-|Client / Cliente|**Organización**|Entidad de datos|
-|End User|**User**|Rol|
-
-### 5.2 Separación de responsabilidades
-
-* El **SuperAdmin** administra la plataforma, no los contenidos de cada Organización.
-* El **Admin** configura y mantiene los servicios funcionales de sus Organizaciones.
-* La **Organización** es la frontera de datos, políticas, branding e integraciones.
-* El **User** consume el servicio y puede validar o aprobar acciones en el bucle HITL.
-
-\---
-
-## 6\. Arquitectura técnica unificada
-
-### 6.1 Visión general
-
-La plataforma se implementa como una arquitectura modular sobre un backend común FastAPI + PostgreSQL, con frontend React unificado y servicios compartidos.
-
-```text
-GOV GEN AI PLATFORM
-├── Core Services
-│   ├── LLM Gateway / Model Factory
-│   ├── Dynamic Prompts
-│   ├── Auth OIDC/SAML
-│   ├── Multi-tenancy
-│   ├── MCP Client
-│   ├── Audit / Logging
-│   ├── Config API
-│   └── Job Queue
-├── Module: automation/
-│   ├── Flows y ETL
-│   ├── Processors LLM / Script / RPA
-│   ├── Custom Scripts
-│   ├── Extracción documental
-│   └── Gestión de flujos
-├── Module: agents\_hub/
-│   ├── RAG híbrido
-│   ├── Docling PDF + web
-│   ├── LangGraph chatbot / agente
-│   ├── Configuración de chatbots
-│   ├── RAGAS evaluation
-│   └── Widget embed
-└── Module: expedientes/
-    ├── Tipos de expediente
-    ├── Fases y acciones
-    ├── HITL
-    ├── Audit RIA
-    └── Integración con gestores externos
-```
-
-### 6.2 Servicios compartidos
-
-|Servicio|Uso transversal|
-|-|-|
-|**LLM Gateway / Model Factory**|Abstrae proveedores, modelos, versiones y parámetros de inferencia.|
-|**Dynamic Prompts**|Centraliza prompts editables desde base de datos y versionables por contexto.|
-|**Auth SSO (SAML 2.0) + PAT**|Identidad institucional (SAML 2.0) para humanos y Personal Access Tokens revocables para clientes máquina (p. ej. servidor MCP). OIDC queda como opción futura.|
-|**Multi-tenancy**|Aislamiento lógico por Organización, aplicado en el token (claim de Organización) y en un filtro obligatorio por consulta. Ningún acceso a datos de otra Organización sin rol global.|
-|**MCP Client**|Conexión segura con sistemas corporativos, como Oracle u otros endpoints.|
-|**Audit / Logging**|Trazabilidad de acciones, decisiones, artefactos, prompts, modelos y aprobaciones.|
-|**Job Queue**|Ejecución asíncrona de trabajos y coordinación con runners locales.|
-|**Config API**|Exposición controlada de configuración a módulos y nodos Edge.|
-
-### 6.3 Capas técnicas
-
-#### A. Capa de inteligencia y orquestación
-
-* **LangGraph** como orquestador de lógica agéntica, flujos conversacionales y expedientes multi-fase.
-* **Model Selector** para asignar modelos por instancia, chatbot, agente o proceso.
-* **Dynamic Prompts** para prompts editables por Admin o SuperAdmin según ámbito.
-* **Bucle de refinamiento humano** mediante nodos de espera y aprobación.
-
-#### B. Capa de datos y conocimiento
-
-* **Docling** para conversión de PDFs y sitios web a Markdown estructurado.
-* **Playwright** para lectura de webs dinámicas cuando sea necesario.
-* **PostgreSQL + pgvector** para vectores, metadatos y datos relacionales.
-* **Búsqueda híbrida** combinando similitud semántica y palabras clave.
-* **Caching \& hashing** para evitar reprocesar documentos o páginas no modificadas.
-
-#### C. Conectividad institucional
-
-* **MCP como mecanismo preferente** para consultar datos en tiempo real.
-* Adaptadores REST configurables cuando MCP no esté disponible.
-* Integraciones por tipo de expediente o chatbot, no necesariamente globales.
-
-#### D. Supervisión humana
-
-* Paneles React segmentados por rol.
-* Bandejas de aprobación HITL.
-* Validación de respuestas, borradores, resoluciones y acciones.
-* Feedback humano como fuente del aprendizaje controlado.
-
-\---
-
-## 7\. Módulo AI Agents Hub
-
-AI Agents Hub se integra como módulo de Gov Gen AI Platform, no como proyecto independiente.
-
-### 7.1 Justificación de la integración
-
-El solapamiento técnico con AutomatIA hace preferible una implementación común:
-
-|Componente|Estado / necesidad|Decisión|
-|-|-|-|
-|LLM Gateway / Model Factory|Necesario en ambos módulos|Compartido|
-|Dynamic Prompts|Necesario en ambos módulos|Compartido|
-|Multi-tenancy|Necesario para Organizaciones|Compartido|
-|MCP Client|Necesario para datos corporativos|Implementación única|
-|Auth SSO SAML 2.0 + PAT|Necesario para agentes identificados y clientes máquina|Implementación única|
-|PostgreSQL|Base común de plataforma|Extender schema existente|
-|pgvector|Necesario para RAG|Añadir al PostgreSQL común|
-
-
-
-### 7.2 Capacidades principales del Hub
-
-* Chatbot público embebible mediante iframe/widget.
-* Modo agente expandido para usuarios identificados.
-* Ingesta documental con Docling.
-* RAG híbrido sobre PostgreSQL + pgvector.
-* Ingesta prioritaria de documentos subidos por el usuario.
-* LangGraph con modo dual: chatbot / agente.
-* Evaluación RAGAS.
-* Feedback de usuario.
-* Panel Admin para prompts, modelos, knowledge bases, temas y métricas.
-
-### 7.3 Fases específicas del Hub dentro de la plataforma común
-
-Al integrarse en la plataforma, algunas fases originales se eliminan o reducen:
-
-|Fase original Hub|Nuevo estado|Razón|
-|-|-|-|
-|Docker, uv, PostgreSQL setup|Eliminada|Heredado de plataforma|
-|Auth OIDC/SAML|Integrada|Servicio común|
-|Schema BD completo|Reducida|Sólo tablas específicas Hub|
-|Docling, LangGraph, RAGAS|Mantenida|Núcleo funcional del Hub|
-|API endpoints|Reducida|Nuevas rutas en FastAPI existente|
-|Tests, CI/CD, observabilidad|Integrada|Framework común|
-|React frontend|Mantenida y ampliada|Frontend unificado|
-|Autoinstalación|Fusionada|Docker Compose común|
-
-### 7.4 Estrategia de ingesta y calidad del corpus
-
-La calidad del corpus indexado es un requisito de fiabilidad jurídica: en un chatbot de administración pública, una norma con ruido de conversión citada con autoridad es peor que la ausencia de respuesta. Por ello:
-
-* **Ingesta de corpus curado como vía principal.** El contenido normativo se descarga, se convierte a Markdown y se **revisa por un humano fuera de la aplicación** antes de indexarlo. La plataforma importa el corpus curado preservando su procedencia (URL de origen, hash del documento original, idioma, versión del conversor, revisor y fecha, vigencia `valid_from`/`valid_to`). La conversión pesada (Docling) no vive en la ruta de petición.
-* **Revisión humana obligatoria para contenido normativo (`regulation`).** Para FAQs o información pública genérica se admite una vía más ligera.
-* **El scraper autónomo integrado se reserva a fuentes web estructuradas y homogéneas**, donde la extracción por selectores es fiable; no es la vía general para normativa heterogénea en PDF.
-* **Auditoría de calidad continua (post-ingesta):** detección de contenido obsoleto, duplicado o contradictorio, con recuperación consciente de calidad (páginas superseded excluidas). Es complementaria a la revisión previa, no la sustituye.
-
-La procedencia preservada habilita citas trazables y los *snapshots* temporales (`as_of_date`) necesarios para resolver expedientes con la normativa vigente en su momento.
-
-### 7.5 Estrategia de recuperación y evolución agéntica
-
-Decisiones adoptadas el 2026-07-15 a partir de la comparativa arquitectónica con LAMB (`docs/COMPARATIVA_RAG_LAMB.md`); su implementación se planifica en el Bloque RAG de `planificacion/Plan_TDD_Fase1.md`:
-
-* **Búsqueda híbrida real.** Rama vectorial (pgvector con índice HNSW, distancia coseno) + rama léxica (full-text search de PostgreSQL, `tsvector`/GIN con ranking) fusionadas por Reciprocal Rank Fusion, con **reranking cross-encoder** (BGE-reranker-v2-m3, misma familia que el embedding BGE-M3) activable por chatbot. La rama léxica cubre lo que los embeddings pierden en dominio administrativo: siglas, códigos de procedimiento, nombres de convocatorias y artículos de normativa.
-* **Representación con contexto.** Los chunks se embeben enriquecidos con el título del documento y su jerarquía de cabeceras (*contextual retrieval*); el chunking *parent-child* (small-to-big: hijo pequeño para buscar, sección padre como evidencia) está disponible por configuración. Cada chunk registra el modelo y la dimensión de embedding con que fue generado, y existe una ruta de re-embedding masivo — cambiar de modelo de embedding es una operación soportada, no una migración ad-hoc.
-* **Calidad medible antes que mejoras.** Dataset dorado de consultas por chatbot con métricas puras de recuperación (recall@k, MRR) como gate de CI; ninguna mejora del retriever se adopta sin comparar contra la baseline. RAGAS queda para evaluación periódica de fidelidad y los *test scenarios* por chatbot (ejecución del pipeline real con veredicto humano) complementan la evaluación end-to-end. El feedback negativo y los fallbacks sin cita alimentan la detección de **huecos de corpus** (integrada con la auditoría de calidad de §7.4).
-* **La consulta se reescribe antes de buscar.** En conversaciones multivuelta, un modelo pequeño y rápido reformula la consulta con el contexto del historial (con fallback al último mensaje); el retrieval nunca depende solo del último turno.
-* **Pipeline gobernado con escalada agéntica, no dicotomía.** El pipeline RAG determinista (barato, trazable, citable) es la vía por defecto para el volumen de consultas informacionales; el modo agéntico (`MD_AGENT_SELECTOR`, herramientas de listado/lectura de documentos) es la **escalada** cuando la evidencia recuperada no supera el quality gate. La recuperación se diseña como **herramienta consumible por agentes**: las inversiones en índice híbrido, reranking y calidad del corpus sirven igual al pipeline actual y a cualquier orquestación agéntica futura, mientras que se evita deliberadamente la sofisticación de pipeline (multi-hop cableado, cadenas de reescritura) que un bucle agéntico sustituye con menos código.
-
-\---
-
-## 8\. Módulo AutomatIA
-
-AutomatIA es el módulo de automatización de procesos internos de la plataforma.
-
-### 8.1 Capacidades principales
-
-* Definición de flujos y procesos.
-* Procesadores LLM, scripts, RPA y APIs.
-* Extracción documental.
-* Generación y ejecución controlada de scripts.
-* Triggers sobre recursos locales o servidor.
-* Job Queue compartida.
-* Ejecución local mediante runner cuando sea necesario.
-
-### 8.2 Migración servidor-first
-
-La lógica de negocio se consolida en el servidor FastAPI. El antiguo cliente NiceGUI **se retiró completo el 2026-09-04** (bloque NIC): `client_app/`, su cuarentena `_legacy_nicegui/` y el entorno Python de la raíz que sólo existía para sostenerlo. El frontend es React, y el mapa de lo que hubo está en [`INVENTARIO_RETIRADA_LEGACY.md`](INVENTARIO_RETIRADA_LEGACY.md).
-
-La migración se realizará módulo a módulo, con cobertura TDD. La lógica más crítica ya situada en servidor —LLM Gateway, estrategias LLM, prompts y configuración— se mantiene y se amplía.
-
-La migración **no es un port en bloque**. Buena parte del valor de generación del AutomatIA original (generación y adaptación de scripts, ETL, gráficos, extracción documental) ya está reimplementado en el servidor o ha quedado superado por los agentes de IA generales; portarlo tal cual aporta poco. El valor duradero que un agente conversacional no reemplaza es la **ejecución determinista, desatendida, firmada y auditable** dentro del perímetro de la institución (triggers, watchers, runner del Edge, gobernanza). La migración es, por tanto, **selectiva y guiada por casos de uso reales**, no exhaustiva.
-
-### 8.3 Modelo de triggers
-
-La definición de cualquier trigger se realiza desde la UI React en el servidor. La ejecución depende del recurso monitorizado:
-
-|Trigger|Ejecutado por|
-|-|-|
-|Folder watcher sobre carpeta local|Agente de ejecución local|
-|Email watcher sobre cliente local|Agente de ejecución local|
-|Email watcher sobre servidor IMAP/Exchange|Servidor FastAPI|
-|Webhook / HTTP entrante|Servidor FastAPI|
-|Cron / scheduled|Servidor FastAPI|
-
-Si un trigger local no dispone de agente instalado o activo, queda en estado **pendiente de runner**, siguiendo un patrón similar a GitLab Runner o GitHub Actions self-hosted runner.
-
-\---
-
-## 9\. Módulo Gestor de Expedientes
-
-El Gestor de Expedientes es el módulo de tramitación administrativa de la plataforma.
-
-Aprovecha:
-
-* LangGraph del Hub.
-* Docling y pgvector para documentos.
-* Metaprogramación y ejecución determinista de AutomatIA.
-* Servicios comunes de identidad, auditoría, configuración y MCP.
-
-### 9.1 Modos de operación
-
-|Modo|Descripción|Caso de uso|
-|-|-|-|
-|**Integración**|Se conecta vía API/MCP a un gestor existente y añade capa de IA|Coexistencia con Oracle u otros sistemas actuales|
-|**Nativo**|Gestiona el expediente directamente en la plataforma|Nuevas tramitaciones o migración progresiva|
-
-### 9.2 Principios de diseño del módulo
-
-* **API-first** para integrarse con gestores existentes.
-* **Función y responsable explícitos** en cada tipo, fase y acción.
-* **HITL configurable** por fase o acción.
-* **Auditabilidad completa** de transiciones, decisiones y artefactos.
-* **Determinismo** en las acciones con efectos administrativos.
-* **Explicabilidad** de las decisiones asistidas por IA.
-
-### 9.3 Modelo de datos conceptual
-
-Tablas principales en PostgreSQL:
-
-|Tabla|Propósito|
-|-|-|
-|`tipos\_expediente`|Catálogo de tramitaciones configurables. Incluye fases y acciones.|
-|`expedientes`|Instancias concretas de tramitación.|
-|`fases\_expediente`|Estado de cada fase para un expediente.|
-|`acciones\_fase`|Acciones configuradas dentro de cada fase.|
-|`ejecuciones\_accion`|Historial de ejecuciones, resultados, código ejecutado y explicación.|
-|`documentos\_expediente`|Documentos vinculados al expediente.|
-|`audit\_expediente`|Log inmutable de transiciones y decisiones.|
-
-Campos estructurales obligatorios:
-
-* `funcion`: descripción legible de qué hace una fase o acción.
-* `responsable\_rol`: rol responsable de ejecutar o aprobar.
-* `responsable\_usuario\_id`: usuario responsable, cuando aplique.
-* `estado`: pendiente, en curso, aprobada, rechazada u otros estados definidos.
-* `hash\_integridad`: garantía de integridad del registro de auditoría.
-
-### 9.4 Motor de procesos
-
-Cada tipo de expediente se representa como un grafo LangGraph con estado persistido en PostgreSQL.
-
-Esto permite:
-
-* Suspender y reanudar trámites.
-* Mantener checkpoints.
-* Esperar intervención humana.
-* Reintentar acciones automáticas.
-* Generar informes de trazabilidad.
-
-Nodos estándar:
-
-|Nodo|Función|Responsable|Reutiliza|
-|-|-|-|-|
-|`NodoLLM`|Genera propuesta de análisis o resolución|Sistema IA|LLM Gateway|
-|`NodoScript`|Ejecuta script determinista|Sistema|AutomatIA|
-|`NodoHuman`|Espera aprobación/rechazo humano|Rol configurado|Breakpoints LangGraph|
-|`NodoRPA`|Ejecuta navegación o RPA|Sistema / agente local|Playwright + Local Runner|
-|`NodoAPIExterna`|Llama a gestor externo|Sistema|MCP Client|
-|`NodoNotificacion`|Notifica al siguiente responsable|Sistema|Job Queue|
-
-Estado conceptual:
-
-```python
-class ExpedienteState(TypedDict):
-    expediente\_id: str
-    tipo: str
-    fase\_actual: str
-    datos: dict
-    documentos: list\[str]
-    historial\_acciones: list
-    pendiente\_humano: bool
-    responsable\_actual: str
-    explicacion\_ia: str
-```
-
-### 9.5 API del módulo
-
-Rutas bajo `/expedientes`:
-
-```http
-GET    /expedientes/tipos/
-GET    /expedientes/tipos/{tipo\_id}
-POST   /expedientes/
-GET    /expedientes/
-GET    /expedientes/{id}
-DELETE /expedientes/{id}
-POST   /expedientes/{id}/avanzar
-POST   /expedientes/{id}/aprobar
-POST   /expedientes/{id}/rechazar
-GET    /expedientes/{id}/pendiente
-POST   /expedientes/{id}/sincronizar
-POST   /expedientes/{id}/publicar
-GET    /expedientes/{id}/audit
-GET    /expedientes/{id}/informe
-GET    /expedientes/pendientes/mios
-GET    /expedientes/pendientes/rol/{rol}
-```
-
-### 9.6 Integración con gestores externos
-
-Cada tipo de expediente puede configurar su adaptador activo.
-
-```python
-class AdaptadorGestorExterno(Protocol):
-    async def consultar\_expediente(self, ref\_externa: str) -> dict: ...
-    async def crear\_tramitacion(self, tipo: str, datos: dict) -> str: ...
-    async def actualizar\_estado(self, ref\_externa: str, estado: dict) -> bool: ...
-    async def obtener\_documentos(self, ref\_externa: str) -> list\[bytes]: ...
-```
-
-Adaptadores previstos:
-
-|Adaptador|Sistema|Mecanismo|
-|-|-|-|
-|`AdaptadorOracle`|Oracle institucional|MCP Client|
-|`AdaptadorREST`|APIs REST genéricas|HTTP + JSON config|
-|`AdaptadorNativo`|Plataforma propia|Directo en PostgreSQL|
-
-### 9.7 Cumplimiento del Reglamento de IA de la UE
-
-|Requisito|Implementación arquitectónica|
-|-|-|
-|Transparencia|Cada ejecución guarda explicación, inputs relevantes, modelo, prompt y artefacto usado.|
-|Supervisión humana|`NodoHuman` configurable en cualquier fase.|
-|Determinismo|Separación entre propuesta IA y ejecución validada.|
-|Trazabilidad|`audit\_expediente` inmutable y endpoint de informe.|
-|Exactitud|Evaluaciones tipo RAGAS aplicables a resoluciones generadas.|
-|Gobernanza|Políticas por Organización, tipo de expediente y acción.|
-
-\---
-
-## 10\. Frontend React unificado
-
-El frontend React sustituye a interfaces anteriores y cubre todas las superficies web de la plataforma.
-
-### 10.1 Interfaces incluidas
-
-|Interfaz|Usuarios|Notas|
-|-|-|-|
-|Widget chatbot público|Ciudadanía, usuarios anónimos|Embebible mediante iframe o script controlado|
-|Modo agente expandido|Personal identificado|Dropzone, live preview, refinamiento iterativo|
-|Panel Admin Hub|Admins|Prompts, modelos, knowledge bases, RAGAS, temas|
-|UI Automation|Usuarios internos|Flujos, extracción PDF, scripts, RPA|
-|Panel plataforma|SuperAdmins|LLM configs, tenants, auditoría, seguridad|
-|Gestor de Expedientes|Users, responsables y Admins|Lista, detalle, bandejas, configurador|
-
-### 10.2 Sistema de templates visuales
-
-La personalización estética sigue un modelo de herencia en cascada:
-
-```text
-Plataforma
-└── Organización
-    └── Chatbot / Agente / Interfaz específica
-```
-
-|Nivel|Configura|Define|
-|-|-|-|
-|Plataforma|SuperAdmin|Paleta base, fuentes, defaults globales|
-|Organización|Admin|Logo, colores corporativos, tipografía institucional|
-|Chatbot / agente|Admin|Posición widget, avatar, mensaje inicial, overrides visuales|
-
-Regla de herencia:
-
-* Una instancia sin configuración propia hereda la de la Organización.
-* Una Organización sin configuración propia hereda los defaults de plataforma.
-* El nivel más específico sobrescribe al más general.
-
-\---
-
-## 11\. Seguridad, privacidad y soberanía del dato
-
-### 11.1 Soberanía y aislamiento
-
-* Los documentos, vectores y metadatos residen en PostgreSQL controlado por la institución o el operador autorizado.
-* Los documentos subidos por un usuario para una tarea concreta son temporales y accesibles únicamente por ese usuario y por los procesos autorizados.
-* En despliegue Edge + Cloud, los datos operacionales viven en el nodo Edge institucional.
-* El Cloud conserva únicamente configuración administrativa y métricas anonimizadas cuando así lo exija el despliegue.
-
-### 11.2 Privacidad selectiva por políticas
-
-La anonimización no se aplica indiscriminadamente. Se gobierna por políticas configurables con prioridad de lo específico sobre lo general.
-
-|Nivel|Política|Comportamiento|
-|-|-|-|
-|Organización|`default\_privacy\_policy`|Activa o desactiva anonimización por defecto.|
-|Tipo de expediente / proceso|`requires\_anonymization`|Fuerza anonimización aunque la Organización no la tenga por defecto.|
-|Chatbot / agente|`anonymize\_output`|Controla anonimización en una instancia concreta.|
-
-La política aplicada a cada ejecución queda registrada en auditoría junto a:
-
-* Modelo invocado.
-* Prompt y versión.
-* Usuario o rol responsable.
-* Artefactos ejecutados.
-* Decisiones humanas asociadas.
-
-### 11.3 Vault de identidades en Edge
-
-Cuando la privacidad está activa y el despliegue es Edge + Cloud:
-
-* El Vault de identidades reside exclusivamente en el nodo Edge.
-* La anonimización se ejecuta antes de llamar a LLMs o APIs externas.
-* La rehidratación ocurre sólo en Edge, en el último paso antes de responder al usuario.
-* Cloud y proveedores LLM externos no ven datos identificativos reales.
-
-En despliegue Cloud-only, el Vault reside en la misma instancia que la aplicación; las garantías se sostienen por contrato, configuración y controles de seguridad, no por separación física.
-
-### 11.4 Memoria de estilo compatible con privacidad
-
-La memoria de preferencias se construye sobre texto re-anonimizado.
-
-El sistema puede aprender:
-
-* Estilo de redacción.
-* Estructura preferida de informes.
-* Tono institucional.
-* Preferencias de formato.
-
-Pero no debe memorizar nombres reales, identificadores personales o datos sensibles asociados a expedientes.
-
-### 11.5 Gobernanza y feedback
-
-* El feedback público se usa para medir calidad y mejorar RAG.
-* El feedback validado por humanos puede alimentar skills o memoria, si la política lo permite.
-* Toda mejora aprendida debe ser trazable, revisable y revocable.
-
-\---
-
-## 12\. Modelo de datos unificado
-
-La plataforma utiliza PostgreSQL como base común. El schema existente de AutomatIA se extiende con tablas específicas del Hub y del Gestor de Expedientes.
-
-### 12.1 Núcleo común
-
-|Área|Tablas / conceptos|
-|-|-|
-|Identidad y tenancy|`users`, `organizations`, roles, permisos|
-|Configuración IA|`llm\_configs`, `model\_profiles`, `prompts`|
-|Ejecución|`executions`, `jobs`, `audit\_logs`|
-|Integraciones|`mcp\_connections`, conectores, credenciales seguras|
-
-### 12.2 AI Agents Hub
-
-|Tabla|Propósito|
-|-|-|
-|`chatbots`|Instancias públicas o privadas de chatbot/agente|
-|`knowledge\_bases`|Bases de conocimiento por Organización o servicio|
-|`documents`|Documentos ingeridos|
-|`document\_chunks`|Fragmentos vectorizados con metadatos|
-|`conversations`|Sesiones conversacionales|
-|`messages`|Mensajes de usuario y asistente|
-|`feedback\_ratings`|Valoraciones y comentarios|
-|`ragas\_evaluations`|Métricas de calidad RAG|
-
-### 12.3 Gestor de Expedientes
-
-|Tabla|Propósito|
-|-|-|
-|`tipos\_expediente`|Plantillas de tramitación|
-|`expedientes`|Expedientes concretos|
-|`fases\_expediente`|Estado de fases|
-|`acciones\_fase`|Acciones configuradas|
-|`ejecuciones\_accion`|Historial de ejecución|
-|`documentos\_expediente`|Documentos vinculados|
-|`audit\_expediente`|Trazabilidad inmutable|
-
-\---
-
-## 13\. Stack tecnológico de referencia
-
-### 13.1 Backend y orquestación
-
-|Componente|Tecnología|
-|-|-|
-|Lenguaje|Python 3.11+|
-|Gestión de paquetes|`uv`|
-|API|FastAPI|
-|ORM|SQLAlchemy 2.0 Async|
-|Orquestación agéntica|LangGraph|
-|Jobs|Job Queue propia de AutomatIA; Celery/Redis sólo si el volumen lo justifica|
-
-### 13.2 Inteligencia artificial y RAG
-
-|Componente|Tecnología|
-|-|-|
-|LLMs|Proveedores múltiples mediante Model Factory|
-|Modelos locales|Soporte mediante selector de modelos cuando aplique|
-|Ingesta|Docling|
-|Web dinámica|Playwright|
-|Embeddings|BGE-M3 u otros modelos libres adecuados para contexto multilingüe y técnico (modelo y dimensión registrados por chunk)|
-|Búsqueda vectorial|pgvector con índice HNSW (coseno)|
-|Búsqueda léxica|Full-text search de PostgreSQL (`tsvector` + GIN), fusión RRF con la vectorial|
-|Reranking|Cross-encoder BGE-reranker-v2-m3, activable por chatbot|
-|Evaluación|RAGAS (periódica) + dataset dorado de recuperación (recall@k, MRR) como gate de CI + test scenarios con veredicto humano|
-
-### 13.3 Almacenamiento y conectividad
-
-|Componente|Tecnología|
-|-|-|
-|Base relacional|PostgreSQL|
-|Vectores|pgvector|
-|Objetos / ficheros|S3 compatible, MinIO u opción cloud equivalente|
-|Integraciones|MCP, REST, conectores específicos|
-
-### 13.4 Frontend
-
-|Componente|Tecnología|
-|-|-|
-|Framework|React|
-|Build tool|Vite|
-|Estilos|Tailwind CSS|
-|Temas|CSS Custom Properties|
-|Internacionalización|i18next|
-
-### 13.5 Infraestructura y DevOps
-
-|Componente|Tecnología|
-|-|-|
-|Contenedores|Docker, Docker Compose|
-|CI/CD|Bitbucket Pipelines|
-|Despliegue|Cloud, on-premise o Edge según institución|
-|Portabilidad|Servicios abstraídos y configuración por entorno|
-
-### 13.6 Justificación técnica
-
-* **Soberanía:** PostgreSQL, Docker y despliegue on-premise/Edge permiten control institucional.
-* **Flexibilidad:** Model Factory evita dependencia de un único proveedor LLM.
-* **Calidad:** TDD y evaluación RAGAS reducen errores y alucinaciones.
-* **Portabilidad:** S3 compatible, proveedores abstraídos y despliegue por configuración.
-* **Mantenibilidad:** Backend común y frontend unificado reducen duplicidades.
-
-\---
-
-## 14\. Licenciamiento y modelo de distribución
-
-La plataforma adopta un modelo **dual-license**:
-
-|AGPLv3|Licencia comercial|
-|-|-|
-|Instituciones públicas|Partners comerciales|
-|Auto-hosted / on-premise|Soporte y SLA|
-|Acceso amplio al código|Integraciones premium|
-|Contribuciones obligatorias en uso en red|Uso en productos privativos|
-|Alineado con objetivos de subvención|Modelo de negocio para partners|
-
-\---
-
-## 15\. Estructura de repositorio recomendada
-
-Se recomienda monorepo mientras el equipo de desarrollo sea común y la coordinación entre módulos sea intensa.
-
-```text
-gov-gen-ai/
-├── server/
-│   ├── app/
-│   │   ├── core/
-│   │   │   ├── llm/
-│   │   │   ├── auth/
-│   │   │   ├── tenancy/
-│   │   │   ├── mcp/
-│   │   │   ├── audit/
-│   │   │   └── jobs/
-│   │   ├── modules/
-│   │   │   ├── automation/
-│   │   │   ├── agents\_hub/
-│   │   │   └── expedientes/
-│   │   └── api/
-│   └── migrations/
-├── frontend/
-│   ├── src/widget/
-│   ├── src/agent/
-│   ├── src/admin/
-│   ├── src/automation/
-│   └── src/expedientes/
-├── local-runner/
-│   ├── runner/
-│   └── installers/
-├── shared/
-│   └── contracts/
-└── docs/
-```
-
-El monorepo facilita:
-
-* Evolución coordinada de contratos API.
-* Refactorización transversal.
-* Reutilización de tipos y esquemas.
-* CI/CD común.
-
-Repos separados pueden reconsiderarse si el widget público, el runner local o una distribución comercial requieren ciclos de vida independientes.
-
-\---
-
-## 16\. Roadmap consolidado — Hitos funcionales (ajustado)
-
-| Fecha estimada | Hito | Descripción |
+| Modo | Dónde corre la lógica que toca datos del cliente | Qué guarda el cloud |
 |---|---|---|
-| **Ene–Jun 2026** | Base plataforma + backend Hub (solo dev / estabilización) | Consolidación de la base común y del backend Hub: RAG/ingesta, LangGraph, endpoints, evaluación y observabilidad/feedback, con foco en estabilidad y deuda técnica mínima (trabajo en solitario). |
-| **Jul–Ago 2026** | **Temas v0 (branding mínimo) + preparación piloto** | Entregar **Temas v0** para que el piloto y el repositorio ya sean presentables: **presets + variables CSS + cascada Plataforma→Organización→Chatbot** aplicada a **widget y panel Admin**, sin editor visual aún. En paralelo, cerrar las piezas necesarias para el piloto de chatbots públicos (ingesta/spiders/configuración). |
-| **Sep 2026** | **Piloto chatbots públicos + apertura repositorio (AGPLv3)** | Primer piloto de **chatbots públicos** con widget embebible multilingüe y configuración admin operativa, ya con branding mínimo (Temas v0). Apertura del repositorio bajo AGPLv3. Objetivo: **piloto listo antes de octubre**. |
-| **Oct–Nov 2026** | **Fase 1.B: Identidad + Temas v1 (editor) + hardening cloud** | Activar autenticación institucional (OIDC/SAML) para modo identificado y completar **Temas v1** con **editor visual** (gestión avanzada), junto con hardening operativo (secretos/CI/CD/observabilidad y preparación de despliegue estable). |
-| **Oct–Nov 2026** | **Fase 1.C: Privacidad NER + workspace (base)** | Privacidad selectiva (anonimización reversible NER) aplicada a workspaces e informes (no al chatbot público), Focus Mode/infra UI reutilizable y pipeline base de redacción asistida con trazabilidad. |
-| **Antes de dic 2026** | **Agentes de informes (piloto)** | Agentes de redacción end‑to‑end para usuarios identificados: subida de documentos, borrador con citas trazables, exportación maquetada (DOCX/ODT) y destino opcional si aplica. Objetivo: **antes de diciembre**. |
-| **Ene–Jun 2027** | **Fase 2 (desarrollo): Automatización + Thin Client** | Desarrollo de Thin Client/Local Runner y sandbox distribuido; migración/fortalecimiento de automatización server-first y servicios transversales hasta estado beta usable. |
-| **Jul–Dic 2027** | **Fase 3 (desarrollo): Gestor de Expedientes** | Motor de expedientes (schema/CRUD + LangGraph con checkpointing + HITL), auditoría/explicabilidad y frontend de expedientes, integraciones institucionales (MCP) + capa ENI/ENS hasta pre‑producción (staging). |
-| **Ene–Jun 2028** | **Producción (Fases 2 y 3)** | Despliegue en producción de automatización distribuida y expedientes: hardening, seguridad/ENS, monitorización, rendimiento, operación (runbooks) y soporte real. |
-| **Jul–Dic 2028** | Escalado y ampliación progresiva | Ajustes post‑producción, ampliación de usuarios/organizaciones/expedientes y activación gradual de funcionalidades diferidas según demanda y métricas. |
+| **Cloud-only** | En el servidor del proveedor. Los datos se anonimizan antes de llegar al modelo. | Todo. Protección de datos por contrato. |
+| **Edge + Cloud** | En un *edge node* dentro de la nube de la institución. | Sólo configuración administrativa y métricas anonimizadas. |
 
-### Definiciones rápidas
+Lo que sostiene la frontera, y no es una promesa contractual sino código:
 
-- **Temas v0 (jul–ago 2026)**: presets + variables CSS (CSS Custom Properties) + cascada Plataforma→Organización→Chatbot aplicada en widget y panel Admin (sin editor).
-- **Temas v1 (oct–nov 2026)**: editor visual de temas + gestión avanzada, manteniendo la cascada.
+- **Dos `DeclarativeBase` separadas.** `HubConfigBase` (14 modelos) es configuración y se
+  sincroniza cloud→edge. `HubOperationalBase` (24 modelos: 15 de `agents_hub` y 9 de
+  `redaccion`) son datos del cliente y viven sólo en el edge. **Sin `relationship()` que las cruce**: si un servicio operacional necesita un
+  chatbot, consulta por `chatbot_id`; no navega por `.chatbot`. Las FK con `ondelete="CASCADE"`
+  se conservan, la navegación ORM no.
+- **`DEPLOY_MODE`** (`cloud` | `edge` | `all`, por omisión `all`) decide qué routers se registran
+  en el arranque. `server/app/main.py` los reparte en `_register_cloud` (16 routers) y
+  `_register_edge` (22). Un router nuevo se etiqueta en su docstring —`Deploy: cloud|edge|shared`—
+  y se registra en una de las dos funciones o en las dos.
+- **Un módulo edge no importa desde un módulo cloud.** La configuración se lee por
+  `ConfigProvider` (`modules/agents_hub/services/config_provider.py`), no importando modelos de
+  configuración. Lo comprueba `test_ais3_direccion_de_los_imports.py`.
+- **`edge_sync_router`** (`/api/v1/edge/config`, `/api/v1/edge/telemetry`) es la única superficie
+  que ve los dos mundos. Está servida por el cloud y consumida por el edge.
+- **La anonimización previa al LLM es responsabilidad del edge.** `model_factory` recibe datos ya
+  anonimizados; no anonimiza.
 
-\---
+Qué está en cada lado: los grafos de LangGraph, el *task runner*, la ingesta, la recuperación,
+`modules/redaccion/` y `modules/automation/` íntegros son **edge**, porque tocan documentos y
+expedientes del cliente. La gestión de organizaciones, chatbots, modelos, prompts, temas,
+personas y tokens es **cloud**, porque es configuración. Si algo toca las dos cosas, casi siempre
+hay que partirlo en dos servicios.
 
-## 17\. Decisiones adoptadas
+### 4.2 Organización — quién puede ver qué
 
-### 17.1 Arquitectura
+Toda tabla de `HubConfigBase` declara su ámbito en `__ambito__`, y hay **cuatro**:
 
-* AI Agents Hub y Gestor de Expedientes se integran como módulos de Gov Gen AI Platform.
-* La arquitectura es servidor-first.
-* React sustituye al cliente NiceGUI como frontend principal. **Hecho**: el NiceGUI se retiró completo el 2026-09-04.
-* Se introduce un Local Runner sin UI para ejecución local controlada. **Previsto, sin código**: lo que había se retiró con el NiceGUI porque llevaba tiempo sin compilar. Ver `ESPECIFICACIONES.md` §10.1.
-* PostgreSQL es la base común; pgvector se añade para RAG.
-* LangGraph se utiliza tanto para agentes como para expedientes.
-* El Job Queue existente se reutiliza antes de introducir Celery/Redis.
-* La autenticación institucional se implementa con SSO SAML 2.0 + PAT revocables para clientes máquina; OIDC queda como opción futura.
-* La ingesta de corpus curado con revisión humana previa es la vía principal para contenido normativo; el scraper autónomo se reserva a fuentes web estructuradas.
-* La migración del AutomatIA legacy es selectiva y guiada por casos de uso, no un port en bloque.
+| Ámbito | Qué significa | Columna |
+|---|---|---|
+| `plataforma` | Una sola configuración para la instalación entera. | — |
+| `organizacion` | Siempre de una organización. | `organizacion_id` NOT NULL |
+| `heredable` | **Nulo = de la plataforma, y se hereda.** | `organizacion_id` nullable |
+| `derivada` | La organización se alcanza por otra tabla. | la que diga `via` |
 
-### 17.2 Seguridad y privacidad
+Son cuatro y no tres porque varias tablas llegan a su organización por otra tabla
+(`hub_prompt_templates` por su chatbot), y meterlas en «de organización» diría que tienen una
+columna que no tienen.
 
-* La anonimización es selectiva por políticas, no automática en todos los casos.
-* El Vault de identidades reside en Edge cuando el despliegue lo exige.
-* La memoria de estilo se construye sobre texto re-anonimizado.
-* La auditoría registra política aplicada, modelo, prompt, artefactos y aprobación humana.
-* El aislamiento multi-tenant se aplica en la capa de token (claim de Organización) y en un filtro obligatorio por consulta; ningún acceso a datos de otra Organización sin rol global.
+**Dos capas que no se confunden**, y es el error más fácil de cometer aquí:
 
-### 17.3 Producto y distribución
+- `core/auth/tenancy.py` decide **quién puede ver qué** —403 y acotación de listados—. Recibe un
+  principal.
+- `core/ambito.py` decide **qué fila gana** cuando la configuración está puesta en dos niveles.
+  No recibe principal. Resuelve **campo a campo**, no fila entera: con reemplazo de fila, una
+  organización que quisiera cambiar un color tendría que repetir la configuración completa.
 
-* Se adopta dual-license AGPLv3 + comercial.
-* El repositorio público se orienta a instituciones y cumplimiento de acceso abierto.
-* La fase comercial se difiere hasta que el producto institucional esté maduro.
-* El diseñador visual low-code de expedientes se difiere a v2.
+El objetivo de diseño, dicho en concreto: **que una Diputación pueda desplegar una instancia para
+varios municipios**. Lo que no es: esto no convierte la instalación en multiinstancia. Sigue
+siendo una base de datos con organizaciones dentro; la separación **física** es el modo edge.
 
-\---
+---
 
-## 18\. Decisiones pendientes
+## 5. Los módulos
 
-|Decisión|Impacto|
-|-|-|
-|Nombre definitivo de la plataforma|Marca institucional y comercialización futura|
-|Política concreta de publicación AGPLv3|Repositorio público, contribuciones y gestión de forks|
-|Catálogo inicial de tipos de expediente|Validación funcional con usuarios reales|
-|Profundidad del diseñador low-code|Roadmap v2 del Gestor de Expedientes|
-|Alcance de la migración de AutomatIA legacy|Esfuerzo de Fase 2 frente al valor real en el piloto|
-|Institución y tipo de expediente piloto de la Fase 3|Compromiso previo antes de invertir en el Gestor de Expedientes|
-|Acceso a APIs de UJI / Gestión 400 y specs ENI/ENS|Viabilidad de la Subfase 3.C (dependencia externa)|
+Ficheros versionados el 2026-09-19, para dar escala. Lo que importa de estas cifras es que
+`redaccion/` es casi tan grande como `agents_hub/` y que `automation/` no es un módulo, son cinco
+ficheros.
 
-\---
+| Módulo | Backend | Frontend | Qué es |
+|---|---|---|---|
+| `agents_hub` | 109 | `admin/` 64 · `widget/` 6 | Asistentes, corpus, ingesta, recuperación, evaluación |
+| `redaccion` | 101 | `redaccion/` 57 | Informes, plantillas, funciones, scripts, anonimización |
+| `curation` | 31 | `curation/` 27 | Rastreo de portales, hallazgos, publicación |
+| `automation` | 5 | — | Infraestructura que consume Informes; **no es módulo de usuario** |
 
+### 5.1 Chatbots — `modules/agents_hub/`
 
+Asistentes que responden sobre la normativa de una organización **citando la norma**, y que
+**callan** cuando no tienen fundamento. Publicables como widget embebible en una web ajena o
+como agente identificado dentro del panel.
+
+Un `CoreGraph` de LangGraph con cuatro **estrategias enchufables por eje**: recuperación, fusión,
+plantilla de respuesta y política de lengua. Los perfiles públicos y qué hace cada uno:
+[`GRAPH_PROFILES.md`](GRAPH_PROFILES.md).
+
+Dos modos de recuperación en uso: `RAG` —híbrido vectorial + texto completo, con desempate
+determinista— y `MD_AGENT_SELECTOR`, donde el modelo lee documentos enteros con *tools*. Detalle
+en §9.
+
+### 5.2 Informes — `modules/redaccion/`
+
+Abarca más de lo que su nombre sugiere: sirve a las fases de cualquier expediente, no sólo a un
+documento suelto. Su contrato completo está en
+[`REDACCION_CONTRACT_FIRST.md`](REDACCION_CONTRACT_FIRST.md).
+
+Las piezas: contratos de plantilla, extracción determinista de PDF (`pdfplumber`) y hojas de
+cálculo, transformación declarativa de datos, gráficos, `DraftingCoreGraph` para la redacción
+asistida, `LLMSpecService` y un `RunManifest` firmado que deja constancia de qué produjo cada
+ejecución.
+
+Cuando un documento es tan irregular que hay que **programar su lectura**, ese código pasa por
+auditoría estática graduada (aceptable / advertencia / crítico, con número de línea) y se ejecuta
+en un **sandbox sin red** —`services/script_sandbox`, un microservicio aparte—. El filtro es
+automático; la persona entra después, en la revisión posterior. El catálogo de funciones
+compartidas y sus tres niveles: [`CATALOGO_FUNCIONES.md`](CATALOGO_FUNCIONES.md).
+
+### 5.3 Curación — `modules/curation/`
+
+Es **previa** al asistente, y por eso es módulo propio y no una utilidad del RAG
+([`DECISION_CURACION_SEPARADA.md`](DECISION_CURACION_SEPARADA.md)): rastrea el portal
+institucional, detecta contenido caducado o contradictorio, y sostiene la decisión de qué entra
+al corpus.
+
+**Curación una vez, automatización después.** No hay ingesta automática **de nada que nadie haya
+aprobado**; hay **mantenimiento automático dentro del ámbito que una persona aprobó una vez**, que
+es lo que añadió el bloque DIN: un apartado del portal —jornadas, becas— nace en modo `manual` y
+pasa a `automatic` a mano, y mientras está en `manual` una baja deja un aviso y no toca el corpus.
+Una página nueva fuera de ese ámbito es una señal para quien cura, no
+un disparador. La salida principal es el informe de auditoría, que vale por sí solo sin que haya
+ningún chatbot detrás; la higiene del corpus es el efecto secundario.
+
+Los apartados de un sitio son parametrizables y tienen ciclo de vida propio:
+[`SECCIONES_DINAMICAS.md`](SECCIONES_DINAMICAS.md). Con varias organizaciones:
+[`CURACION_MULTIORGANIZACION.md`](CURACION_MULTIORGANIZACION.md).
+
+### 5.4 `automation`, que no es un módulo de usuario
+
+Cinco ficheros —`cortex.py`, `extraction_strategies.py` y el `llm_gateway` de
+`infrastructure/`— que consume Informes. **No tiene routers registrados ni interfaz.** Lo que la
+planificación llamaba «automatización» aterrizó en `redaccion/`, y es la ruta que más veces se
+escribe de memoria y no existe.
+
+### 5.5 Registro de actividad y verificaciones
+
+Dos capacidades que la plataforma ofrece **hacia fuera**, para aplicaciones desarrolladas por
+otros equipos de la institución:
+
+- **Registro de actividad IA** —`routers/actividad_router.py` y `core/actividad_categorias.py`—:
+  una herramienta de fuera declara que ha usado IA y queda registrada. Metadatos sí, *payloads*
+  no. Detalle en [`REGISTRO_ACTIVIDAD_IA.md`](REGISTRO_ACTIVIDAD_IA.md).
+- **Verificaciones como servicio** —`routers/verificaciones_router.py`—: comprobar citas,
+  vigencia y auditoría estática por API, con *scope* propio.
+
+Su «módulo» no es un paquete Python: es una fila de `hub_platform_modules`, o sea una unidad de
+licencia. Qué comprueba y registra la plataforma, y qué de ello es accesible por API:
+[`GOVERNANCA_PER_API.md`](GOVERNANCA_PER_API.md).
+
+### 5.6 Qué está previsto y no tiene código
+
+Dos módulos de la hoja de ruta, y de los dos falta código:
+
+- **Automatización de procesos** —flujos y RPA— necesita además un **cliente de ejecución
+  local**, porque la plataforma no ejecuta nada en la máquina de quien la usa. No hay agente RPA,
+  ni vigilancia de carpetas, correo o web, ni programador de flujos locales: se retiró el
+  2026-09-04 con el cliente NiceGUI porque llevaba tiempo sin compilar. El mapa de lo que hubo,
+  fichero a fichero, está en
+  [`INVENTARIO_RETIRADA_LEGACY.md`](INVENTARIO_RETIRADA_LEGACY.md).
+- **Gestor de expedientes** —tramitación con fases y acciones calculadas en el servidor— se apoya
+  en la plataforma de gestión de la institución que lo despliegue.
+  [`GESTOR_EXPEDIENTES.md`](GESTOR_EXPEDIENTES.md).
+
+Que no estén escritos no es un retraso. **Qué tienen que hacer exactamente lo definen un
+despliegue real y una necesidad identificada**, y escribirlos antes sería adivinarlo: automatizar
+un proceso que nadie ha examinado fija en código lo que había que simplificar.
+
+---
+
+## 6. Roles, módulos de licencia y cascada
+
+**Cuatro roles** (`core/auth/models.py`):
+
+| Rol | Alcance |
+|---|---|
+| `superadmin` | La plataforma: proveedores de LLM, organizaciones, módulos, tokens. |
+| `admin` | Crea y configura asistentes de **sus** organizaciones. |
+| `informer` | Supervisa y valida respuestas de la IA. |
+| `user` | Usuario final del asistente o del informe. |
+
+Una lista de organizaciones vacía significa **cosas opuestas según el rol**, y es deliberado: en
+un `superadmin` es el comodín «todas»; en cualquier otro es «ninguna». Si «vacío = todas» valiera
+para todos, un `admin` al que se le olvidara poblar el *claim* volvería a verlo todo.
+
+**Seis módulos de licencia** (`core/auth/modulos.py`), que son filas de catálogo y no `Enum`:
+`chatbots`, `curacion`, `informes`, `personas`, `registro`, `plataforma`. Se exigen con
+`require_module`, y **un docstring no autoriza nada**: declarar un módulo obliga a exigirlo. El
+`superadmin` entra en todos sin concesión explícita —hacerlo depender de una fila deja una
+instalación recién creada con su superadministrador encerrado fuera—.
+
+`personas` y `registro` están separados de `plataforma` por el mismo criterio: administrar a las
+personas de tu organización no es administrar la plataforma, y meterlo ahí obligaba a dar los
+modelos de LLM y los tokens para poder dar lo primero.
+
+**La cascada de configuración** es Plataforma → Organización → Chatbot, y la resuelve
+`core/ambito.py` campo a campo, distinguiendo `None` («heredar») de `""` («lo quiero vacío») —sin
+lo cual no se puede vaciar un valor heredado desde la pantalla—.
+
+---
+
+## 7. Anatomía del backend
+
+```
+server/app/
+├── main.py            reparte los routers en _register_cloud / _register_edge según DEPLOY_MODE
+├── routers/           la superficie HTTP, cada uno etiquetado `Deploy: cloud|edge|shared`
+│   └── redaccion/     los routers del módulo de Informes
+├── core/              lo compartido: auth, ambito, storage, config, red_publica,
+│                      language_mode, llm_text, sandbox_client, quotas, rate_limit
+├── modules/
+│   ├── agents_hub/    database/ (los dos Base) · agent/ (grafos) · ingestion/ · services/
+│   ├── redaccion/     contracts/ · database/ · pipelines/ · graph/ · services/
+│   ├── curation/      spider, calidad de contenido, publicación
+│   └── automation/    cortex, estrategias de extracción, llm_gateway
+├── services/          agent, library, pricing, scheduler, token, manifest_signature
+└── scripts/           bootstrap.py — sembrado idempotente de primera instalación
+
+server/migrations/     99 revisiones de Alembic (fuera de `app/`, que es donde se busca)
+```
+
+Tres piezas que conviene localizar porque se buscan en el sitio equivocado:
+
+- `model_factory`, `embedding_service`, `embedding_resolver` y `config_provider` viven en
+  `modules/agents_hub/services/`, no en `core/`.
+- El *LLM gateway* está en `modules/automation/infrastructure/llm_gateway.py`.
+- El **registro** (bloque REG) no dejó paquete: su código son `routers/actividad_router.py` y
+  `core/actividad_categorias.py`.
+
+**Asincronía total**: prohibidos los métodos síncronos para I/O en el servidor. **Sin instanciar
+servicios a mano**: inyección con `Depends`.
+
+---
+
+## 8. Datos
+
+**PostgreSQL 16 + pgvector.** La URL se lee **únicamente** de `DATABASE_URL` (async) y
+`DATABASE_URL_SYNC` (Alembic): no hay host, puerto, usuario ni contraseña en el código.
+
+**El esquema lo define Alembic, y sólo Alembic** (invariante I14, bloque BD.2). La aplicación
+**no crea tablas al arrancar**. Hasta BD.2 el arranque hacía `create_all` además de lo que
+Alembic aplica, y esa segunda fuente **nunca borra lo que dejó de estar declarado**: así quedaron
+36 tablas de modelos retirados en la base de desarrollo sin que nada lo dijera, y tres columnas
+`nullable=True` en su migración y `NOT NULL` en su modelo durante semanas, también en producción.
+
+Consecuencias prácticas: un modelo nuevo o cambiado va **con su migración en el mismo commit**
+—`alembic check` corre en CI después de `alembic upgrade head`—, y `nullable=` se escribe
+explícito en las columnas que importan, porque `Mapped[datetime]` sin él es `NOT NULL` por
+deducción de la anotación y así nacieron las tres columnas divergentes.
+
+Los tests siguen creando sus bases desechables con `create_all`; eso no es la aplicación, y un
+guardarraíl vigila la diferencia.
+
+**Ficheros de negocio: `fsspec` obligatorio.** Nada de `open()` para PDFs subidos, resultados de
+procesamiento o adjuntos: se usa `StorageService` (`core/storage.py`) inyectado con `Depends`. El
+proveedor se elige por variable de entorno —`file`, `s3`/MinIO o `gcs`— y el código no se acopla
+a ninguno. Las escrituras en `/tmp` sólo valen como buffer dentro de una misma petición y se
+borran al terminar.
+
+---
+
+## 9. Recuperación
+
+La estrategia completa, con sus mediciones, está en los bloques ING.0, VIS y SYNC de
+`planificacion/Plan_TDD_Fase1.md`; aquí va lo que condiciona el código.
+
+**Tres niveles**: fragmento, documento e índice de materias. La selección escalonada por
+metadatos acota primero por materia y sólo después busca dentro, que es lo que permite que un
+corpus normativo grande no devuelva ruido.
+
+**Híbrido**: búsqueda vectorial (pgvector, índice HNSW, coseno) fusionada por RRF con búsqueda
+léxica de PostgreSQL (`tsvector` + GIN), y **desempate determinista** para que dos fragmentos
+empatados no cambien de orden entre ejecuciones.
+
+**Embeddings a 1024 dimensiones**, y no es un número arbitrario: es el único valor que sirve a la
+vez a BGE-M3 en local (nativo) y a Google en la nube (rango flexible), así que cambiar de
+proveedor no obliga a migrar la columna `Vector(1024)` ni a reconstruir el índice. El servicio se
+**resuelve desde la configuración** (`embedding_resolver.py`): sin configuración, el local; con
+una fila de `hub_llm_configs` de propósito `embedding`, el adaptador del tipo de proveedor que
+diga. Misma imagen, distinta fila. **Sin *fallback* silencioso**: si el proveedor configurado no
+se sabe hablar, error explícito, porque degradar a local sin avisar dejaría medio corpus en un
+espacio vectorial y medio en otro, y el coseno entre ambos no da error, da resultados malos.
+
+**El reranker es opcional por chatbot** y hoy está **apagado en el asistente de normativa por
+medición**, no por omisión. [`DECISION_MODELOS_EMBEDDING_RERANKER.md`](DECISION_MODELOS_EMBEDDING_RERANKER.md).
+
+Dos reglas duras del corpus, y violar cualquiera convierte «reclasificar» en «reindexar»:
+
+- **El vocabulario es dato, no código.** Ámbitos, submaterias, rangos y colectivos viven en tabla
+  versionada, con `vigent` y `substituit_per_codi` para renombrar y fusionar. Prohibido
+  expresarlos como `Enum` de Python, `CheckConstraint` o lista literal. Los **ejes** sí son
+  estructura y van en `StrEnum`: añadir un eje exige de todos modos código que lo consuma.
+- **La taxonomía nunca entra en el texto que se embebe.** En `embedding_text` sólo va contexto
+  **estructural** —título del documento y jerarquía de encabezados—, que es estable. Reclasificar
+  debe costar un `UPDATE`; si un cambio de etiqueta obliga a re-embeber, algo se ha colado en el
+  texto embebido. Los pares bilingües del dominio (`despesa`/`gasto`) son puente **léxico** y van
+  al `tsvector`, que se regenera con una sentencia SQL; un embedding necesita GPU y horas.
+
+**Al corpus sólo entra `.md`** conforme a [`CONTRATO_MD_CORPUS.md`](CONTRATO_MD_CORPUS.md). Un
+PDF en el endpoint de ingesta devuelve **415** y dice a dónde ir: la conversión vive en el
+pipeline de curación, que es donde está el OCR y donde se declara lo transcrito
+automáticamente. **Docling se retiró** y no se reintroduce
+([`DECISION_EXTRACCION_Y_DESPLIEGUE.md`](DECISION_EXTRACCION_Y_DESPLIEGUE.md)); el contexto
+temporal que sube una persona se extrae con `pdfplumber`.
+
+---
+
+## 10. Frontend
+
+React 19 + TypeScript + Vite, Tailwind, `i18next` (`ca` / `es` / `en`), `react-hook-form` con
+`zodResolver`, y el cliente de API generado por Orval. **Ningún string de la UI va en el código**:
+todo pasa por i18n.
+
+```
+frontend/src/
+├── admin/       panel de Chatbots y de Plataforma
+├── curation/    curación de portales
+├── redaccion/   informes, funciones y scripts
+├── widget/      el chatbot público embebible
+├── shared/      i18n, cliente generado, componentes comunes, auth
+└── themes/      la cascada visual
+```
+
+El mapa de rutas, que es la forma real del producto:
+
+| Ruta | Módulo exigido | Qué hay |
+|---|---|---|
+| `/` | — | Aterriza en el **primer módulo concedido**, no en `/hub` fijo: quien sólo hace informes entra en informes |
+| `/hub/*` | `chatbots` | chatbots · valores por defecto · documentos · vigencia · revisión de interacciones · prompts · escenarios de prueba |
+| `/redaccion/*` | `informes` | *builder* de plantillas · asistente · borrador · scripts (propuesta y revisión) · catálogo de funciones · espacios de trabajo |
+| `/curation/*` | `curacion` | sitios · auditoría · hallazgos · publicación |
+| `/personas` | `personas` | las personas de la organización |
+| `/registro` | `registro` | el registro de actividad IA |
+| `/plataforma/*` | `plataforma` | organizaciones · modelos · prompts de actividad · tokens · módulos · identidad visual |
+
+Dos decisiones que se ven en esa tabla. **Las rutas viejas no redirigen**: `AGENTS.md` prohíbe
+los *shims*, así que cuando «Modelos LLM» salió de `/hub` a `/plataforma` no quedó una
+redirección detrás. Y **una dirección que no existe se dice, no se redirige**: con un aterrizaje
+en el comodín, cualquier URL equivocada acababa en el primer módulo concedido, o sea un 404
+disfrazado.
+
+El widget se construye aparte (`npm run build:widget`) y se incrusta con una clave pública por
+asistente. Cómo: [`WIDGET_INCRUSTACION.md`](WIDGET_INCRUSTACION.md) y
+[`chatbots-publicos/`](chatbots-publicos/).
+
+Accesibilidad WCAG 2.2 AA con trabajo propio en CI:
+[`A11Y_GUIDELINES.md`](A11Y_GUIDELINES.md) · [`A11Y_CHECKLIST.md`](A11Y_CHECKLIST.md).
+
+---
+
+## 11. Servicios transversales
+
+| Servicio | Dónde | Nota |
+|---|---|---|
+| **Almacenamiento** | `core/storage.py` | `fsspec`: `file`, S3/MinIO o GCS por configuración |
+| **Modelos de chat** | `agents_hub/services/model_factory.py` | Adaptador por `provider_type`; añadir un modelo es un `UPDATE`, sólo un protocolo nuevo exige código |
+| **Niveles de modelo** | [`NIVELES_DE_MODELO.md`](NIVELES_DE_MODELO.md) | El nivel es un **papel**, no un modelo: dos niveles pueden apuntar al mismo |
+| **Lectura del LLM** | `core/llm_text.py` | `texto_de` obligatorio: Gemini devuelve `content` como lista de bloques en cuanto hay más de una parte |
+| **Sandbox de scripts** | `services/script_sandbox` + `core/sandbox_client.py` | Microservicio aislado, ocho capas; la octava (gVisor) la pone el aprovisionamiento de la VM. [`SANDBOX_SECURITY.md`](SANDBOX_SECURITY.md) |
+| **Servidor MCP** | `mcp_server/` | Dos transportes, stdio y remoto. **No importa `server/app`**. [`MCP_SERVER.md`](MCP_SERVER.md) |
+| **Observabilidad** | Langfuse | Trazas de las llamadas al modelo |
+
+---
+
+## 12. Seguridad y privacidad
+
+- **Tres vías de autenticación**: SSO SAML 2.0 para personas, contraseña local mientras el SSO no
+  esté (`LOCAL_USER_LOGIN_ENABLED`), y **PAT revocables** con *scopes* para clientes máquina —que
+  es lo que consume el servidor MCP—. OIDC queda como opción futura.
+- **Anonimización selectiva por políticas**, no automática en todo: NER reversible en informes y
+  espacios de trabajo, y no en el chatbot público, que no recibe datos personales por diseño.
+- **Los secretos se guardan por referencia, no por valor.** Una credencial de proveedor declara
+  *dónde* está el secreto —nombre de variable de entorno, o ADC—, no el secreto. Así un volcado
+  de la base o la sincronización cloud→edge dejan de ser sensibles por construcción.
+- **El servidor sólo pide URL de la red pública**, y lo comprueba **en cada salto**: una
+  dirección privada, de *loopback* o de enlace local —el servidor de metadatos de la nube, los
+  contenedores vecinos— no se pide, ni directamente ni llegando a ella por una redirección
+  (`core/red_publica.py`). Hay una válvula de desarrollo y **producción se niega a arrancar con
+  ella puesta**.
+- **Cabeceras de seguridad, límites de tasa y cuotas** en `core/security_headers.py`,
+  `core/rate_limit.py` y `core/quotas.py`. El límite de saltos de proxy de confianza es
+  configuración (`TRUSTED_PROXY_HOPS`), porque suponerlo es como se falsifica una IP de origen.
+- **Código que no ha pasado el filtro no se ejecuta** (invariante I13): auditoría AST sin
+  hallazgos críticos, prueba en sandbox y declaración responsable.
+
+Quien despliega es responsable de su instancia (`SECURITY.md`).
+
+---
+
+## 13. Despliegue y entrega
+
+**Una VM de GCP con Docker Compose**, y no una plataforma de contenedores efímeros. La decisión
+está medida: lo que pesa es `torch`, y con modelos locales el arranque en frío de un contenedor
+que puede destruirse en cualquier momento no sale a cuenta. Qué se descartó exactamente y con qué
+números, en [`DECISION_EXTRACCION_Y_DESPLIEGUE.md`](DECISION_EXTRACCION_Y_DESPLIEGUE.md) §2 —que
+es el documento que puede nombrarlo, porque es el que lo descartó; un guardarraíl impide que el
+nombre del destino viejo se cuele en los demás—. El código sigue
+siendo portable: nada se acopla al proveedor, y cambiar a MinIO + PostgreSQL local o a AWS es
+cambiar variables de entorno.
+
+**Dos ficheros de Compose.** `docker-compose.yml` levanta sólo la infraestructura de desarrollo
+—`postgres`, `minio`, `clickhouse`, `redis`, `langfuse`, `script-sandbox`— y la aplicación corre
+en la máquina de quien desarrolla. `docker-compose.prod.yml` levanta el conjunto: `app`,
+`frontend`, `ollama`, `script-sandbox`, `migrate`, `langfuse`, `postgres`, `minio`.
+
+**Tres *workflows* de GitHub Actions**:
+
+| Workflow | Cuándo | Qué hace |
+|---|---|---|
+| `ci.yml` | cada *push* y PR | Cinco trabajos: `test` (lint + suite completa + `alembic check` + puertas de control de acceso y regresión de recuperación), `contract` (OpenAPI → Orval → TypeScript + tests de frontend), `a11y`, `supply-chain` (auditoría de dependencias y secretos) e `imagen` (construye las imágenes del despliegue, migra con la recién construida y la arranca hasta `/health`) |
+| `dco.yml` | cada PR | Exige `Signed-off-by` en cada commit |
+| `deploy.yml` | *push* a `main`, y sólo eso | Despliega la punta de `main` a la VM |
+
+Tres decisiones gobiernan el despliegue, y las tres salen de incidentes reales: **sin claves de
+larga vida** (Workload Identity Federation, no un JSON en los secretos del repositorio), **la
+etiqueta de la imagen es el SHA del commit y nunca `latest`** —con `latest` no se puede saber qué
+corre ni volver atrás, que son las dos preguntas de un incidente—, y **las migraciones van antes
+de cambiar la imagen, en un paso propio y visible**.
+
+**Se trabaja en `desarrollo`; `main` es para desplegar.** `deploy.yml` dispara con *push* a
+`main` y sólo con eso, así que empujar a `desarrollo` comprueba pero no despliega. CI y DCO sí
+corren en `desarrollo`. La regla nació el 2026-09-02, después de que un commit que sólo tocaba un
+guion de publicación desplegara producción entera.
+
+**Todos los commits van firmados** (`git commit -s`, DCO 1.1). La firma es del autor humano, no
+del agente: la línea que importa certifica procedencia, y sólo la puede certificar una persona.
+
+Para arrancar en local, el `README` de la raíz. El despliegue del prototipo, paso a paso:
+[`DESPLIEGUE_PROTOTIPO_GCP.md`](DESPLIEGUE_PROTOTIPO_GCP.md). Cómo se prueba lo que no puede
+probar una máquina: [`PRUEBAS_MANUALES.md`](PRUEBAS_MANUALES.md).
+
+---
+
+## 14. Stack, medido el 2026-09-19
+
+| Capa | Qué |
+|---|---|
+| Lenguaje | **Python 3.13** (`.python-version`, la imagen y CI; el manifiesto declara `>=3.11` como suelo) |
+| Paquetes | `uv`. **Cuatro proyectos**: `server/`, `shared/`, `mcp_server/`, `services/script_sandbox/`. **No hay proyecto Python en la raíz** |
+| API | FastAPI · SQLAlchemy 2.0 async · Alembic · Pydantic 2 · `uvicorn` |
+| Orquestación | LangGraph |
+| Base de datos | PostgreSQL 16 + pgvector (HNSW, coseno) + *full-text search* (`tsvector` + GIN) |
+| Embeddings | BGE-M3 local o API, a 1024 dimensiones, resuelto por configuración |
+| Reordenación | *cross-encoder* BGE-reranker-v2-m3, activable por chatbot |
+| Extracción | `pdfplumber`. Web dinámica con Playwright |
+| Ficheros | `fsspec`: `file` · S3/MinIO · GCS |
+| Frontend | React 19 · TypeScript · Vite · Tailwind 4 · i18next · TanStack Query · Orval · Zod |
+| Pruebas | pytest (CI con `-n0` a propósito: el paralelismo esconde el estado filtrado entre tests) · vitest · axe |
+| Contenedores | Docker + Compose |
+| CI/CD | **GitHub Actions** |
+| Observabilidad | Langfuse |
+
+Las dependencias se relockean **en el mismo commit** que las cambia: CI instala con
+`uv sync --locked`, y sin ese flag `uv sync` vuelve a resolver en silencio. Para comprobar en
+local vale `uv lock --check`, no `uv sync` a secas, que relockea y por tanto siempre pasa.
+
+---
+
+## 15. Licencia y distribución
+
+**AGPL-3.0-or-later**, con la **Universitat Jaume I** como titular. El texto vinculante es
+`LICENSE`; explicado en español, con lo que obliga y lo que **no** obliga:
+[`LICENCIA_ES.md`](LICENCIA_ES.md).
+
+Por qué AGPL y no GPL: por el §13. Quien despliegue una versión modificada **como servicio en
+red** tiene que ofrecer su código fuente a quien la use, y siendo el destinatario otras
+administraciones, es lo que impide que una mejora pagada con fondos públicos quede cerrada.
+
+Dos consecuencias, y sólo una está entera. La procedencia de cada aportación **se certifica** con
+DCO, y lo comprueba un *workflow*. El enlace al fuente **lo sirve el servidor** —`GET
+/api/v1/instancia`, público y sin credencial, tomado de `SOURCE_URL` y no de una URL fija, porque
+el §13 pide el *Corresponding Source* de esa versión— pero **ninguna interfaz lo enseña
+todavía**, ni el panel ni el widget embebido, que es el caso que se olvida. Un enlace que nadie
+ve no cumple la obligación: está a medias y así consta en el `README`.
+
+**Gobernanza: un principal y tantos forks como organizaciones.** Cada organización que despliegue
+trabaja sobre su fork; lo generalizable se pide que suba al principal por *pull request*. La
+regla vale igual para la UJI, donde nació el proyecto: alojar no es dirigir. El detalle está en
+el `README` y en `CONTRIBUTING.md`.
+
+**Sobre la licencia dual comercial.** La planificación de enero de 2026 adoptó un modelo
+AGPLv3 + licencia comercial para *partners*, y esa posibilidad **sigue abierta y no se ha
+ejercido**: la titularidad es de una sola persona jurídica, que es lo que técnicamente la
+permite. Lo que hay hoy es una sola licencia, la AGPL, y lo que se contrata son **servicios**
+—despliegue, adaptación, soporte, formación, corpus—, que la licencia permite expresamente. Este
+documento lo dice porque hasta el 2026-09-19 afirmaba en dos sitios que el modelo *era* dual, sin
+que existiera oferta comercial alguna, y en un repositorio público eso es una afirmación que
+alguien acabaría citando en un pliego.
+
+---
+
+## 16. Decisiones estructurales
+
+Las decisiones de las secciones 2, 3, 4 y 6 —la regla del servidor que decide, los principios
+transversales, las dos fronteras y el modelo de roles— son **estructurales**: un cambio que las
+contradiga no es un *commit*, es una decisión de arquitectura con su documento.
+
+El registro numerado, con estado y fecha, está en [`DECISIONES.md`](DECISIONES.md), que también
+dice cuándo hace falta un documento de decisión y cuándo basta una fila del historial. Ninguna
+decisión se actualiza: si cambia, la sustituye otra que la cite.
+
+**Lo que este documento no decide y conviene no dar por cerrado**: qué tipos de expediente
+inicia el gestor cuando se escriba, y con qué sistema de gestión institucional se integra. Las
+dos esperan un despliegue real, y §5.6 explica por qué esperar es la decisión y no la falta de
+ella.
+
+---
+
+## 17. Procedencia de este documento
+
+Hasta el 2026-09-19 esta página era el **estado objetivo** escrito en enero de 2026, antes de
+integrar AI Agents Hub y AutomatIA en el monorepo. Se reescribió, y no se parcheó, porque el
+problema no eran sus erratas sino su **tiempo verbal**: describía un sistema por construir, con
+un roadmap por trimestres y una sección de «decisiones pendientes», mientras el README lo
+anunciaba como la puerta técnica de entrada al repositorio.
+
+Lo que decía y no era cierto, para que no vuelva por copia de una versión antigua:
+
+| Decía | Es |
+|---|---|
+| Ingesta con **Docling** (cinco sitios) | `pdfplumber`; Docling se retiró en EXT.3 y `AGENTS.md` prohíbe reintroducirlo |
+| CI/CD con **Bitbucket Pipelines** | GitHub Actions, tres *workflows* |
+| **Python 3.11+** | 3.13 en `.python-version`, la imagen y CI |
+| Modelo de licenciamiento **dual-license** | Una licencia, AGPL; la dual es una posibilidad abierta y no ejercida (§15) |
+| Un árbol con `local-runner/`, `modules/expedientes/`, `frontend/src/agent/`, `frontend/src/automation/` y `server/app/api/` | Ninguno existe. `AGENTS.md` ya advertía que son las rutas que se escriben de memoria |
+| Tres módulos: Hub, AutomatIA y Expedientes | Tres construidos —Chatbots, Informes, Curación— y dos previstos sin código |
+| «Job Queue propia de AutomatIA» | No existe tal cosa: lo periódico va con APScheduler (`services/scheduler_service.py` para modelos y precios, `curation/quality_scheduler.py` para la revisión de portales) y lo disparado por una petición, con los *background tasks* de FastAPI |
+| Un roadmap por trimestres hasta 2028 | El estado vivo está en `PROJECT_STATE.md` y el pendiente, como *issues* |
+
+Y lo que **callaba**: el módulo de Informes entero, la curación como producto propio, el registro
+de actividad IA, las verificaciones por API, la multitenencia con sus cuatro ámbitos, la política
+de lengua, y que el esquema lo define Alembic y sólo Alembic.
+
+Lo que se conserva del documento original, porque resultó verdadero: los principios
+transversales, la frontera Cloud/Edge, el modelo de roles y la orientación servidor-first. El
+texto anterior se lee en el historial de git.

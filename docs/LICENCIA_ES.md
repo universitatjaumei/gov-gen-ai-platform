@@ -135,6 +135,21 @@ acompaña a la publicación», y conviene tenerlo presente antes de construir un
   proveedor de modelos) son requisitos de arquitectura del proyecto, no extras. Un pliego puede
   exigirlos y comprobarlos.
 
+## ¿Y una licencia comercial?
+
+**Hoy hay una sola licencia, la AGPL, y es la que se aplica a todo el mundo.** Nadie tiene que
+negociar nada para usar, desplegar o modificar el programa.
+
+Dicho eso, conviene no dar por imposible lo que la titularidad permite: al ser de **una sola
+persona jurídica**, la UJI podría ofrecer además el mismo código bajo otra licencia a quien
+necesitara integrarlo en un producto privativo —lo que se llama licencia dual—. La planificación
+del proyecto lo previó en enero de 2026 y **no se ha ejercido**: no hay oferta comercial, ni
+precio, ni condiciones.
+
+Se dice aquí para que nadie lea «dual-license» en un documento de planificación y concluya que
+existen dos regímenes. Existe uno. Y para un pliego lo que importa es lo anterior: **lo que se
+contrata son servicios, no licencias**.
+
 ## Titularidad
 
 Copyright © 2026 **Universitat Jaume I de Castelló**. Desarrollado en el grupo de investigación

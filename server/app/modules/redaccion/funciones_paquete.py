@@ -343,6 +343,7 @@ async def ejecutar_empaquetada(
     *,
     ficheros: dict[str, str] | None = None,
     parametros: dict[str, Any] | None = None,
+    almacen: Any = None,
 ) -> ExtractionResult:
     """Valida la entrada y llama al `run` del paquete. **La validación va delante.**
 
@@ -362,7 +363,7 @@ async def ejecutar_empaquetada(
         )
 
     entrada = validar_entrada(
-        descriptor.contrato, ficheros=ficheros, parametros=parametros
+        descriptor.contrato, ficheros=ficheros, parametros=parametros, almacen=almacen
     )
 
     if inspect.iscoroutinefunction(descriptor.run):

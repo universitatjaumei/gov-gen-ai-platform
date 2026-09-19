@@ -62,8 +62,9 @@ NOMBRES_PROHIBIDOS: frozenset[str] = frozenset({
 # graduación: `FORBIDDEN_IMPORTS` (denegación explícita) frente a «no está en la lista
 # blanca» (denegación por defecto). Un `import csv` es un hueco en una lista y lo puede
 # aceptar una persona; un `import os`, `socket` o `requests` es una capacidad —sistema
-# operativo, red, deserialización— y no se acepta mirándola. Portado de
-# `automatia_shared/core/security.py:FORBIDDEN_IMPORTS`.
+# operativo, red, deserialización— y no se acepta mirándola. Portado del `FORBIDDEN_IMPORTS` de
+# la app de AutomatIA, que vivía en `automatia_shared/core/security.py` y se retiró en APER.12
+# —era código sin importador—; si hace falta compararlo, está en el historial de git.
 MODULOS_PROHIBIDOS: frozenset[str] = frozenset({
     "os", "sys", "subprocess", "shutil", "platform",
     "importlib", "socket", "ssl", "http", "urllib", "requests", "httpx",
@@ -76,7 +77,7 @@ MODULOS_PROHIBIDOS: frozenset[str] = frozenset({
 # `nicegui` se queda en la lista **aunque el paquete ya no esté instalado** (NIC.4 lo retiró
 # como dependencia). Es una lista de prohibidos: quitar una entrada nunca la mejora, y si
 # alguien reinstalara el paquete, un script generado podría abrir una ventana desde el
-# servidor. Lo mismo en `automatia_shared.core.security:FORBIDDEN_IMPORTS`.
+# servidor. La lista del legacy decía lo mismo, y esta es ya la única que queda.
 
 # Módulos permitidos (lista blanca)
 WHITELIST_MODULES: frozenset[str] = frozenset({

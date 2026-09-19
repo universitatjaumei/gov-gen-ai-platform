@@ -35,7 +35,12 @@ MANIFIESTO = RAIZ / "server" / "pyproject.toml"
 DOCKERFILE = RAIZ / "Dockerfile"
 
 #: Los extras que DEP.1 crea. Ninguno debe instalarse en el despliegue estándar.
-EXTRAS_OPCIONALES = ("agente-navegador", "evaluacion")
+#:
+#: `agente-navegador` estuvo aquí y lo retiró **APER.19**: su `browser-use` lo pedía un solo
+#: fichero sin llamantes de producción, y traía `authlib`, `httplib2` y `mcp` —tres avisos de
+#: seguridad, uno crítico—. La idea de DEP.1 no cambia; lo que desaparece es uno de sus dos
+#: ejemplos.
+EXTRAS_OPCIONALES = ("evaluacion",)
 
 
 @pytest.fixture(scope="module")
@@ -114,13 +119,10 @@ class TestLosOpcionalesDegradanDeVerdad:
             else:
                 sys.modules.pop(modulo, None)
 
-    def test_agent_service_deja_agent_a_none_sin_browser_use(self) -> None:
-        modulo = self._sin(("browser_use",), "server.app.services.agent_service")
-        assert modulo.Agent is None, (
-            "`agent_service` tiene que dejar `Agent = None` cuando `browser_use` no está. Si "
-            "el import pasa a ser incondicional, sacar `browser-use` a un extra tumba el "
-            "arranque en vez de degradar."
-        )
+    # `test_agent_service_deja_agent_a_none_sin_browser_use` estuvo aquí y se fue con su
+    # servicio en APER.19. Comprobaba que `agent_service` degradaba sin `browser_use`; ahora no
+    # hay ni servicio ni extra que degradar, y lo que vigila que no vuelvan es
+    # `test_aper19_el_agente_navegador_se_retiro.py`.
 
     def test_rag_metrics_cae_a_la_metrica_lexica_sin_ragas(self) -> None:
         modulo = self._sin(
@@ -159,12 +161,14 @@ class TestElDespliegueNoInstalaLosExtras:
                 f"aplicación no necesita para funcionar, pero **no retira la capacidad**: se "
                 f"instala con `uv sync --extra {nombre}`."
             )
-        assert "browser-use" in _nombres(extras["agente-navegador"])
         assert {"ragas", "datasets"} <= _nombres(extras["evaluacion"])
 
     def test_los_opcionales_no_siguen_en_el_conjunto_por_defecto(self, manifiesto: dict) -> None:
         base = _nombres(manifiesto["project"]["dependencies"])
-        for paquete in ("browser-use", "ragas", "datasets"):
+        # `browser-use` ya no está en ninguna parte (APER.19), así que aquí quedan los de
+        # `evaluacion`. Se comprueba igual: declarar algo en un extra y dejarlo también en la
+        # base no quita nada, porque se instala igual.
+        for paquete in ("ragas", "datasets"):
             assert paquete not in base, (
                 f"`{paquete}` sigue en las dependencias base. Declararlo en un extra y dejarlo "
                 f"también aquí no quita nada: se instala igual."

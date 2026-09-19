@@ -28,7 +28,15 @@
 #    proyecto: si llega un manifiesto sin su lock, la PR no se mezcla, se completa.
 #
 # Los grupos están para que esto no llegue como veinte PR sueltas: una por ecosistema y semana,
-# que es revisable. Los ecosistemas y las rutas los comprueba
+# que es revisable. **Y agrupan sólo `minor` y `patch`, a propósito.** La primera tanda se
+# configuró sin ese límite y produjo una PR con **33 paquetes a la vez**, seis saltos de versión
+# mayor y —lo que no se ve en un muro de changelogs— **dos rebajas**: `browser-use` de 0.11.3 a
+# 0.5.5 teniendo 0.13.10 disponible, y `ragas` de 0.4.3 a 0.3.1 cuando 0.4.3 es la última. No
+# eran actualizaciones: era el precio de resolver 33 cosas juntas, y el resolutor sacrificó esas
+# dos para encajar el resto. Un lote así no se puede revisar ni mezclar por partes.
+#
+# Con el límite puesto, cada salto mayor llega en su propia PR y se juzga solo, que es la única
+# forma de decidir sobre un `openai` 2→3 o un `pandas` 2→3. Los ecosistemas y las rutas los comprueba
 # `server/tests/infra/test_aper6_dependabot_vigila_lo_que_existe.py`; lo que **no** puede
 # comprobar un test local es que GitHub acepte los nombres de ecosistema, así que tras el primer
 # push hay que mirar la pestaña Dependabot del repositorio — una configuración inválida no hace
@@ -48,20 +56,14 @@ updates:
     open-pull-requests-limit: 5
     groups:
       servidor:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
     commit-message:
       prefix: "chore(deps)"
-    # `setuptools` se queda en 81.0.0 **a propósito**, no por olvido: lo retiene el techo
-    # `setuptools<82` de `torch` 2.11. La decisión está aceptada, firmada y **con caducidad** en
-    # `avisos_aceptados.toml` (PYSEC-2026-3447), que es el fichero canónico y el que vigila
-    # `test_dep7_las_aceptaciones_caducan.py`.
-    #
-    # Se excluye **aquí** sólo para que no llegue la misma PR cada semana, que es como se deja de
-    # leer a Dependabot. Cuando torch levante el techo, `setuptools` sube con él y esta exclusión
-    # se retira. Ojo: esto **no** silencia una alerta de seguridad de GitHub sobre `setuptools`,
-    # que llega por otra vía y habría que valorar de nuevo.
-    ignore:
-      - dependency-name: setuptools
+    # Aquí estuvo una exclusión de `setuptools`, puesta «sólo para que no llegue la misma PR cada
+    # semana» mientras el techo `setuptools<82` de `torch` 2.11 hacía inaplicable la corrección.
+    # **APER.20 la retiró** al subir torch a 2.14, que ya no pone techo: ahora esa PR sí se puede
+    # aplicar, así que silenciarla sería perder el aviso en vez de ahorrarse ruido.
 
   - package-ecosystem: uv
     directory: /mcp_server
@@ -72,6 +74,7 @@ updates:
     open-pull-requests-limit: 3
     groups:
       mcp:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
     commit-message:
       prefix: "chore(deps)"
@@ -85,6 +88,7 @@ updates:
     open-pull-requests-limit: 3
     groups:
       sandbox:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
     commit-message:
       prefix: "chore(deps)"
@@ -98,6 +102,7 @@ updates:
     open-pull-requests-limit: 3
     groups:
       compartido:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
     commit-message:
       prefix: "chore(deps)"
@@ -116,9 +121,11 @@ updates:
     open-pull-requests-limit: 5
     groups:
       lo-que-se-sirve:
+        update-types: ["minor", "patch"]
         dependency-type: production
         patterns: ["*"]
       herramientas:
+        update-types: ["minor", "patch"]
         dependency-type: development
         patterns: ["*"]
     commit-message:
@@ -137,6 +144,7 @@ updates:
     open-pull-requests-limit: 5
     groups:
       acciones:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
     commit-message:
       prefix: "chore(ci)"
@@ -159,6 +167,7 @@ updates:
     open-pull-requests-limit: 4
     groups:
       imagenes-base:
+        update-types: ["minor", "patch"]
         patterns: ["*"]
     commit-message:
       prefix: "chore(deps)"

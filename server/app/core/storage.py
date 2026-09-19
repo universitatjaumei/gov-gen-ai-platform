@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from functools import lru_cache
 from typing import Protocol, runtime_checkable
 
@@ -27,6 +28,42 @@ class StorageService(Protocol):
     async def exists(self, key: str) -> bool: ...
 
 
+class ClaveNoValida(ValueError):
+    """La clave se sale del bucket, así que no se resuelve."""
+
+
+def validar_clave(key: str) -> str:
+    """Una clave de almacenamiento no puede salirse del bucket (APER.14).
+
+    `_full_path` concatenaba `bucket/key` sin mirar nada, así que un `../../etc/passwd` resolvía
+    fuera del bucket — con el backend `file` de desarrollo, en el sistema de ficheros del
+    servidor. Se comprueba **aquí** y no en cada llamante porque el riesgo no es de un módulo:
+    es de cualquiera que reciba una clave de fuera, y ya hubo un caso (SEC.8.2, el nombre de
+    fichero de una subida).
+
+    `sanitizar_nombre` no sirve para esto: aquella reduce a un nombre plano, y una clave lleva
+    barras legítimas (`ingestion/job.pdf`). Lo que aquí se prohíbe es **salirse**: rutas
+    absolutas, unidades de Windows y cualquier `..` una vez normalizada.
+    """
+    bruto = (key or "").strip()
+    if not bruto:
+        raise ClaveNoValida("la clave está vacía")
+
+    # Las dos convenciones: el llamante puede ser Windows y el servidor POSIX, o al revés.
+    normalizada = bruto.replace("\\", "/")
+    # Un `%2e%2e` no es un `..` para nosotros, pero sí para quien decodifique la clave luego.
+    if "%2e" in normalizada.lower() or "%2f" in normalizada.lower():
+        raise ClaveNoValida(f"«{key}» lleva separadores codificados")
+
+    if normalizada.startswith("/") or re.match(r"^[A-Za-z]:", normalizada):
+        raise ClaveNoValida(f"«{key}» es una ruta absoluta, no una clave del bucket")
+
+    if any(segmento == ".." for segmento in normalizada.split("/")):
+        raise ClaveNoValida(f"«{key}» sube de nivel: una clave no se sale del bucket")
+
+    return key
+
+
 class FsspecStorageService:
 
     def __init__(self, backend: str, bucket: str, **kwargs) -> None:
@@ -35,7 +72,8 @@ class FsspecStorageService:
         self._fs = fsspec.filesystem(backend, **kwargs)
 
     def _full_path(self, key: str) -> str:
-        return f"{self._bucket}/{key}"
+        # APER.14 — la clave se valida aquí, que es por donde pasan las cuatro operaciones.
+        return f"{self._bucket}/{validar_clave(key)}"
 
     async def put(self, key: str, data: bytes) -> None:
         path = self._full_path(key)

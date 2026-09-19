@@ -69,7 +69,11 @@ def build_core_graph(
     validate_node = ValidateInputContractNode()
     normalize_node = FileNormalizationNode(storage_service)
     extract_node = DeterministicExtractionNode(
-        extraction_factory, resolvedor=resolvedor_de_funciones
+        extraction_factory,
+        resolvedor=resolvedor_de_funciones,
+        # El mismo almacenamiento que usa la normalización: una función empaquetada resuelve su
+        # entrada por aquí desde APER.14, en vez de abrir la ruta que le llegue.
+        almacen=storage_service,
     )
     transform_node = DataTransformationNode(
         llm_service=etl_llm,

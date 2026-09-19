@@ -9,12 +9,6 @@ from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from automatia_shared.enums import TaskStatus, TriggerType, StepType, ScriptStatus, AutomationType
-from automatia_shared.contracts.ui_contract import (
-    DataContract, 
-    OutputSchema, 
-    OutputField,
-    UIContract
-)
 from .accounts import AdminProfileDTO, PartnerProfileDTO, ClientProfileDTO
 from .trigger_payloads import (
     TriggerPayloadMeta,
@@ -118,7 +112,7 @@ class ExtractionResult(BaseModel):
     # Validación contra contrato
     validation_errors: List[str] = Field(
         default_factory=list,
-        description="Errores si los datos no cumplen el OutputSchema esperado"
+        description="Errores si los datos no cumplen el esquema de salida esperado"
     )
 
     @classmethod
@@ -230,10 +224,6 @@ __all__ = [
     "LicenseInfo",
     "BillingRecord",
     "AutomationBlueprintDTO",
-    "DataContract",
-    "OutputSchema",
-    "OutputField",
-    "UIContract",
     "AdminProfileDTO",
     "PartnerProfileDTO",
     "ClientProfileDTO",

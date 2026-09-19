@@ -21,6 +21,7 @@ puede probarlo, y la plataforma se queda con el contrato, la revisión y la traz
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 
 from server.app.modules.redaccion.contracts.funciones import (
@@ -53,20 +54,33 @@ CONTRATO = ContratoFuncion(
 )
 
 
-def contar_filas(entrada: EntradaValidada) -> ExtractionResult:
+async def contar_filas(entrada: EntradaValidada) -> ExtractionResult:
     """Cuenta las filas del fichero de gastos.
 
-    `entrada.ficheros["gastos"]` está garantizado: el contrato lo declara obligatorio y la
-    plataforma valida antes de llamar. Por eso no hay un `if` defensivo aquí — y si lo hubiera,
-    escondería el día en que la validación deje de correr (la lección de
-    `una_guarda_defensiva_esconde_un_bug`).
-    """
-    import openpyxl
+    El slot `gastos` está garantizado: el contrato lo declara obligatorio y la plataforma valida
+    antes de llamar. Por eso no hay un `if` defensivo aquí — y si lo hubiera, escondería el día
+    en que la validación deje de correr (la lección de `una_guarda_defensiva_esconde_un_bug`).
 
-    libro = openpyxl.load_workbook(entrada.ficheros["gastos"], read_only=True)
-    hoja = libro.active
-    # `max_row` cuenta la cabecera, que no es un gasto.
-    filas = max((hoja.max_row or 1) - 1, 0)
+    **Es `async` porque lee un fichero**, y leerlo es pedírselo al almacenamiento. Un `run`
+    síncrono sigue valiendo —la plataforma lo manda a un hilo— pero en cuanto hay entrada que
+    abrir, ésta es la forma natural.
+    """
+    # **La referencia no se abre: la resuelve la plataforma** (APER.14). `entrada.ficheros`
+    # guarda la clave del almacenamiento —que es lo que se cita en la procedencia— y
+    # `entrada.fichero(slot)` entrega una ruta local que existe mientras dure el bloque y se
+    # borra al salir. Antes esto hacía `load_workbook(entrada.ficheros["gastos"])`, y eso no
+    # funcionaba con un almacén que no fuera de ficheros y dejaba que quien llamara eligiera
+    # qué fichero del servidor se abría.
+    #
+    # El recuento va **dentro** del bloque: con `read_only` openpyxl lee de forma perezosa, así
+    # que fuera el fichero ya no existiría.
+    # **La lectura va a un hilo (APER.25), y aquí importa el doble**: esto es lo que copia quien
+    # escribe una función nueva. `openpyxl` lee de forma síncrona, así que sin esto una hoja
+    # grande deja el servidor sin atender peticiones mientras la parsea. El trabajo sigue
+    # **dentro** del `async with`, porque con `read_only` la lectura es perezosa y fuera del
+    # bloque el fichero ya no existe.
+    async with entrada.fichero("gastos") as ruta:
+        filas = await asyncio.to_thread(_contar_filas, ruta)
 
     return ExtractionResult(
         tables=[],
@@ -79,6 +93,26 @@ def contar_filas(entrada: EntradaValidada) -> ExtractionResult:
             extracted_at=datetime.now(timezone.utc),
         ),
     )
+
+
+def _contar_filas(ruta) -> int:
+    """El trabajo síncrono, en una función aparte para poder mandarlo a un hilo entero.
+
+    Partirlo así —y no envolver sólo `load_workbook`— es lo que hace que el recuento perezoso de
+    `read_only` también corra fuera del bucle. Envolver la apertura y dejar el barrido de filas
+    en la corrutina habría dejado el bloqueo donde estaba, sólo que más difícil de ver.
+    """
+    # El import sigue siendo perezoso, como estaba: `openpyxl` es dependencia del paquete de
+    # demostración, no del servidor, y cargarlo al importar el módulo lo metería en el arranque.
+    import openpyxl
+
+    libro = openpyxl.load_workbook(ruta, read_only=True)
+    try:
+        hoja = libro.active
+        # `max_row` cuenta la cabecera, que no es un gasto.
+        return max((hoja.max_row or 1) - 1, 0)
+    finally:
+        libro.close()
 
 
 #: A esto apunta el *entry point*. El nombre y la versión los lee el catálogo; la versión tiene

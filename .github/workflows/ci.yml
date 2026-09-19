@@ -466,6 +466,24 @@ jobs:
             --no-emit-project \
             --format requirements-txt -o "$GITHUB_WORKSPACE/sbom/sandbox-requirements.txt"
 
+          # APER.17 — y el conjunto COMPLETO del lock: con extras y con `dev`. No se despliega,
+          # así que no bloquea; se audita porque es lo que describe el lock y lo que ve
+          # Dependabot. Sin esto, el job auditaba 200 paquetes de los 438 de `server` y el verde
+          # no decía su alcance: el 2026-09-19 Dependabot informó de un `authlib` crítico
+          # mientras este job estaba en verde, y las dos cosas eran ciertas.
+          for proyecto in server mcp_server shared services/script_sandbox; do
+            nombre="$(echo "$proyecto" | tr '/' '-')"
+            # Los paquetes locales se quitan del fichero: `pip-audit` instala lo que lee,
+            # y un `-e ./tests/fixtures/...` lo hace fallar entero con «not a valid
+            # editable requirement» — medido antes de empujar esto. Auditar código propio
+            # contra una base de CVE de terceros tampoco diría nada.
+            uv export --directory "$proyecto" --locked --all-extras --no-hashes \
+              --no-emit-project --no-emit-package automatia-shared \
+              --no-emit-package govgenai-demo-perfil \
+              --format requirements-txt \
+              -o "$GITHUB_WORKSPACE/sbom/completo-$nombre-requirements.txt"
+          done
+
       # Sin versión pinada, a propósito y al revés que gitleaks: pip-audit consulta la base de
       # avisos viva de PyPI, así que lo que importa es que la herramienta siga al día. De cada
       # ejecución lo que queda registrado es el informe, no la versión del escáner.
@@ -495,6 +513,19 @@ jobs:
             --format json --output sbom/pip-audit-shared.json --progress-spinner off || rc=1
           uvx pip-audit -r sbom/sandbox-requirements.txt \
             --format json --output sbom/pip-audit-sandbox.json --progress-spinner off || rc=1
+          # APER.17 — el conjunto completo NO se audita con `pip-audit`, y la razón se midió:
+          # `pip-audit -r` **instala** lo que lee para resolverlo, y estos ficheros llevan
+          # `torch` y sus ruedas — más de quince minutos sin producir informe. Aquí no hay nada
+          # que resolver (el export viene pinchado a `nombre==versión`), así que se pregunta a
+          # OSV por lotes, que es la misma base que `pip-audit` consulta por omisión: 14
+          # segundos para 435 paquetes, y los mismos diez hallazgos que reporta Dependabot.
+          #
+          # La salida imita la de `pip-audit --format json`, así que la puerta la lee igual.
+          for proyecto in server mcp_server shared services-script_sandbox; do
+            python scripts/avisos_del_lock.py \
+              "sbom/completo-$proyecto-requirements.txt" \
+              --salida "sbom/pip-audit-completo-$proyecto.json" || rc=1
+          done
           exit $rc
 
       # **BLOQUEA**, y el criterio está escrito entero en el guion y en `avisos_aceptados.toml`:
@@ -516,6 +547,11 @@ jobs:
           python scripts/puerta_de_avisos.py \
             sbom/pip-audit-server.json sbom/pip-audit-mcp.json \
             sbom/pip-audit-shared.json sbom/pip-audit-sandbox.json \
+            --informativos \
+              sbom/pip-audit-completo-server.json \
+              sbom/pip-audit-completo-mcp_server.json \
+              sbom/pip-audit-completo-shared.json \
+              sbom/pip-audit-completo-services-script_sandbox.json \
             --aceptados avisos_aceptados.toml \
             --resumen "$GITHUB_STEP_SUMMARY"
 

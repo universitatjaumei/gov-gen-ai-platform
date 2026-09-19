@@ -93,6 +93,23 @@ request* y también los de cada *push* a `main`, y falla si falta la firma o si 
 autor del commit. Queda fuera el historial anterior al 2026-08-21, que es cuando se adoptó la
 política. Una política que nadie comprueba se incumple sin que nadie lo note.
 
+**La única excepción son los robots, y tiene una razón.** Los commits cuyo autor es una cuenta de
+robot de GitHub —`…[bot]@users.noreply.github.com`, en la práctica Dependabot— están exentos. Lo
+que el DCO certifica es «tengo derecho a aportar esto bajo la licencia del fichero», y eso lo
+afirma **una persona** sobre código que aporta; un robot que sube un número de versión en un
+`uv.lock` no aporta código de nadie, reordena una resolución de dependencias. No hay autoría que
+certificar.
+
+Y exigírselo tenía un precio medido: el 2026-09-19 había **trece *pull requests* de Dependabot
+abiertas y ninguna se podía mezclar**, todas en rojo por esta línea. Un requisito que hace
+imposible el camino bueno se acaba apagando entero, y eso sí habría sido perder el DCO.
+
+Lo que **no** se relaja: la exención va por **correo** y no por nombre —el nombre de autor lo
+elige quien commitea—, se deja constancia en el registro de CI cada vez que se aplica, sus *pull
+requests* pasan los mismos checks que las demás, y **la responsabilidad es de quien mezcla**. Lo
+vigila `server/tests/infra/test_aper13_el_dco_exime_a_los_robots_y_a_nadie_mas.py`, que comprueba
+además que para las personas no ha cambiado nada.
+
 ### Dónde está cada pieza del proceso
 
 | Fichero | Para qué |

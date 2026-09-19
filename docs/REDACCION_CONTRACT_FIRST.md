@@ -335,9 +335,13 @@ como contexto al LLM en tiempo de redacción.
 
 ### PDF → markdown sintético
 
-Para PDFs, el flujo no regenera el PDF: extrae markdown con Docling, lo
+Para PDFs, el flujo no regenera el PDF: extrae markdown con **`pdfplumber`**, lo
 anonimiza y persiste un `.md`. Justificación: el pipeline de scripts trabaja
 sobre `raw_text`, y regenerar el PDF añade coste sin valor en el MVP.
+
+> **EXT.2 (2026-08-11)**: la extracción era Docling y pasó a `pdfplumber`. El alcance no cambió
+> —Docling corría aquí **sin OCR**—, y Docling se retiró del servidor entero; el OCR vive en el
+> pipeline de curación. Ver [`DECISION_EXTRACCION_Y_DESPLIEGUE.md`](DECISION_EXTRACCION_Y_DESPLIEGUE.md).
 
 ### Modelos spaCy
 

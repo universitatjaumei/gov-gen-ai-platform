@@ -30,6 +30,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+
+from server.app.core.storage import StorageService, get_storage_service
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -180,6 +182,9 @@ async def ejecutar_funcion_por_api(
     principal: UserInfo = Depends(require_pat_scopes(FUNCIONES_EXECUTE)),
     session: AsyncSession = Depends(get_session),
     sandbox: SandboxClient = Depends(get_sandbox_client),
+    # APER.14 — con esto una función empaquetada **no abre la ruta que le den**: la referencia
+    # se resuelve contra el almacenamiento de la organización, con la clave validada.
+    almacen: StorageService = Depends(get_storage_service),
 ) -> EjecutarResponse:
     """Ejecuta `funcion@version` con la entrada dada, y lo anota en el registro de actividad."""
     organizacion = organizacion_unica_de(principal)
@@ -222,6 +227,7 @@ async def ejecutar_funcion_por_api(
                 funcion.entry_point or "",
                 ficheros=body.ficheros,
                 parametros=body.parametros,
+                almacen=almacen,
             )
         except EntradaNoCumpleElContrato as fallo:
             raise HTTPException(status_code=422, detail=str(fallo)) from fallo

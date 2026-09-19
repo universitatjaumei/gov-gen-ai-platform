@@ -35,20 +35,17 @@
 # deliberadamente un poco incómodo: si renovar fuera gratis, la lista crecería sola y volveríamos
 # a tener una lista de exclusiones con otro nombre.
 
-[[aviso]]
-id = "PYSEC-2026-3447"
-paquete = "setuptools"
-motivo = """
-La corrección existe (setuptools 83.0.0) pero NO se puede aplicar: `torch` 2.11.0 declara
-`setuptools<82`, así que subirlo exige subir `torch`, que es la dependencia más pesada del árbol
-y entra por el extra `local-models`. Aceptarlo aquí es lo honesto mientras ese techo siga puesto;
-lo que no sería honesto es apagar la puerta por él.
-
-Alcance real: `setuptools` es herramienta de construcción. Llega al árbol como dependencia de
-`spacy`, `thinc` y `torch`, y no se ejecuta al atender una petición.
-
-Al renovar, comprobar primero si `torch` ya ha levantado el techo: `uv tree --invert --package
-setuptools` lo dice en una línea.
-"""
-acepta = "Modesto Fabra"
-caduca = "2026-12-15"
+# ---------------------------------------------------------------------------------------------
+# **Ahora mismo no hay ninguna aceptación, y eso es el estado bueno, no un fichero a medias.**
+#
+# Hubo una: PYSEC-2026-3447, sobre `setuptools`, aceptada en DEP.7 porque la corrección estaba
+# en la 83.0.0 y `torch` 2.11 declaraba `setuptools<82`. Su motivo llevaba escrita la condición
+# de salida —«al renovar, comprobar primero si `torch` ya ha levantado el techo»— y **APER.20 la
+# encontró cumplida**: torch 2.13 declara `setuptools>=77.0.3` sin tope. Se subieron los dos y la
+# aceptación se **retiró**, que es lo que tenía que pasarle. El historial de git guarda su texto.
+#
+# La lección va aquí y no en un mensaje de commit: lo fácil no es aceptar un aviso, es **renovar
+# la aceptación sin volver a mirar** cuando llega la fecha. Ese día la lista deja de ser una lista
+# de decisiones y vuelve a ser una lista de exclusiones con mejor letra, que es justo lo que este
+# fichero existe para evitar.
+# ---------------------------------------------------------------------------------------------

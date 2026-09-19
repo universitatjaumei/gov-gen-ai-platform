@@ -1,19 +1,24 @@
 [project]
 name = "automatia-shared"
 version = "0.1.0"
-description = "Shared DTOs, enums, validators and utilities for AutomatIA"
+description = "DTOs, enums y firma criptográfica compartidos entre el servidor y sus clientes"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [
     {name = "AutomatIA Team"}
 ]
+# Dos dependencias, y son exactamente las que importa el código que queda: `pydantic` para los
+# DTO y `cryptography` para la firma de manifiestos. El resto es biblioteca estándar.
+#
+# Había cuatro más —`pymupdf`, `pdfplumber`, `pandas` y `filelock`— y ninguna la usaba el código
+# vivo: eran de `core/execution_manager.py`, `core/pdf_reader.py` y `core/consolidator.py`, la
+# maquinaria del agente de ejecución local de AutomatIA que se retiró en APER.12. Y no era
+# gratis tenerlas: **`pdfplumber` metía `pillow`, que era el origen de 19 de los 28 avisos de
+# seguridad que Dependabot encontró en este lock**. Se fueron sin actualizar nada, dejando de
+# depender de ellas.
 dependencies = [
     "pydantic>=2.0.0",
-    "pymupdf>=1.23.0",
-    "pdfplumber>=0.10.0",
-    "pandas>=2.0.0",
-    "filelock>=3.13.0",
     "cryptography>=42.0.0",
 ]
 
