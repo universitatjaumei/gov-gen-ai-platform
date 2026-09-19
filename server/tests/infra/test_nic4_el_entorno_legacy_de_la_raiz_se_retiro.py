@@ -184,8 +184,16 @@ class TestElI18nDelLegacySeFue:
         Un símbolo re-exportado desde un `__init__` sobrevive a que nadie lo importe por su
         nombre: `from automatia_shared.core import t` seguiría funcionando, y el módulo seguiría
         pareciendo vivo.
+
+        **APER.12 retiró `automatia_shared/core/` entero**, así que hoy esto se cumple por la vía
+        más contundente: no hay paquete del que re-exportar. La comprobación se queda —y admite
+        las dos situaciones— porque lo que afirma es la garantía, no la forma de cumplirla: si
+        alguien reconstruyera ese paquete, esto tiene que seguir mirando.
         """
         init = RAIZ / "shared" / "automatia_shared" / "core" / "__init__.py"
+        if not init.exists():
+            return
+
         texto = init.read_text(encoding="utf-8")
         for simbolo in ("i18n", "I18nManager"):
             assert f"import {simbolo}" not in texto and f" {simbolo}," not in texto, (
