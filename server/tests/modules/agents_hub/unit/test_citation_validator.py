@@ -1,6 +1,5 @@
 """Tests del post-validador de citas -- TDD."""
 import uuid
-from unittest.mock import MagicMock
 
 from server.app.modules.agents_hub.services.retrieval.types import Source
 

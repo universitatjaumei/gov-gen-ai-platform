@@ -9,7 +9,6 @@ import pytest
 
 from server.app.modules.redaccion.contracts.inputs import InputContract, InputSlot
 from server.app.modules.redaccion.contracts.runtime import (
-    ExtractionWarning,
     InputArtifact,
     WorkspaceState,
 )
@@ -18,7 +17,6 @@ from server.app.modules.redaccion.contracts.template import (
     ExportPolicy,
     ReportTemplateSpec,
     ReviewPolicy,
-    SectionContract,
 )
 from server.app.modules.redaccion.contracts.ui import ReportUIContract
 

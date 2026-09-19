@@ -22,7 +22,6 @@ import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 
 from server.app.core.auth.models import UserInfo
 from server.app.routers.library_router import router as library_router

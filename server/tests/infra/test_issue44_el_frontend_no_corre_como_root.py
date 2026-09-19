@@ -84,7 +84,7 @@ class TestElPuertoEsUnaSolaVerdad:
             f"el `Dockerfile` no expone el {PUERTO}"
         )
         sonda = next(
-            (l for l in dockerfile.splitlines() if "healthz" in l), ""
+            (linea for linea in dockerfile.splitlines() if "healthz" in linea), ""
         )
         assert f":{PUERTO}/healthz" in sonda, (
             f"la sonda de salud apunta a «{sonda.strip()}». Si sigue llamando al 80, el "

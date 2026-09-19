@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, inspect
 
 
 def _sync_url() -> str:

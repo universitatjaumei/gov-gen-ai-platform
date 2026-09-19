@@ -4,9 +4,8 @@ Deben fallar con ImportError o AttributeError hasta que se implemente
 HubDocument en operational_models.py (Prompt 9CBis.2).
 """
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +78,6 @@ class TestHubDocumentModel:
 
     def test_hub_document_source_kind_values(self):
         """source_kind acepta upload, crawler y manual."""
-        from server.app.modules.agents_hub.database.operational_models import HubDocument
         # Solo comprobamos que el campo existe; la restriccion CHECK se valida en BD
         doc = _minimal_doc(source_kind="upload")
         assert doc.source_kind == "upload"

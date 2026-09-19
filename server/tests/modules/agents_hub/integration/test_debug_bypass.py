@@ -17,16 +17,16 @@ Tres decisiones que estos tests fijan:
 """
 from __future__ import annotations
 
-# SEC.2: el chat y la ingesta exigen que el principal gestione la organizacion del
-# chatbot. Estos tests prueban otra cosa, asi que doble y token comparten organizacion;
-# la tenencia tiene su propio gate en `tests/api/test_tenant_isolation.py`.
-ORG_PRUEBA = "00000000-0000-0000-0000-00000000dead"
-
 import uuid
 
 import pytest
 
 from server.tests.dobles import completar_chatbot
+
+# SEC.2: el chat y la ingesta exigen que el principal gestione la organizacion del
+# chatbot. Estos tests prueban otra cosa, asi que doble y token comparten organizacion;
+# la tenencia tiene su propio gate en `tests/api/test_tenant_isolation.py`.
+ORG_PRUEBA = "00000000-0000-0000-0000-00000000dead"
 
 
 class _LLMEspia:

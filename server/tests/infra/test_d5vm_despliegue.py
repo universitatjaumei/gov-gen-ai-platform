@@ -190,8 +190,8 @@ def test_la_vuelta_atras_restaura_el_fichero_entero_y_sin_variables_remotas() ->
         "La vuelta atrás restaura el fichero de configuración entero."
     )
     activas = [
-        l for l in texto.splitlines()
-        if "sed -i" in l and "GOVGENAI_IMAGE" in l and not l.strip().startswith("#")
+        linea for linea in texto.splitlines()
+        if "sed -i" in linea and "GOVGENAI_IMAGE" in linea and not linea.strip().startswith("#")
     ]
     assert not activas, f"La vuelta atrás no debe reescribir la imagen con sed: {activas}"
     assert "\\${" not in texto, (
@@ -208,8 +208,8 @@ def test_la_comprobacion_de_docs_mide_la_api_y_no_el_frontend() -> None:
     """
     texto = _texto(WORKFLOW)
     lineas = [
-        l for l in texto.splitlines()
-        if 'HOST/docs' in l and not l.strip().startswith("#")
+        linea for linea in texto.splitlines()
+        if 'HOST/docs' in linea and not linea.strip().startswith("#")
     ]
     assert not lineas, (
         f"No se puede comprobar el /docs de la raíz: lo sirve el frontend. {lineas}"
@@ -275,8 +275,8 @@ def test_no_se_despliega_con_git_pull_en_la_maquina() -> None:
     texto = _texto(WORKFLOW)
     # Sólo líneas activas: el comentario de cabecera explica por qué NO se hace así.
     activas = [
-        l for l in texto.splitlines()
-        if "git pull" in l and not l.strip().startswith("#")
+        linea for linea in texto.splitlines()
+        if "git pull" in linea and not linea.strip().startswith("#")
     ]
     assert not activas, (
         "Con `git pull` lo que corre depende del estado del disco de la máquina y no de un "
@@ -288,8 +288,8 @@ def test_el_despliegue_no_ejecuta_la_suite() -> None:
     texto = _texto(WORKFLOW)
     for orden in ("pytest", "npm test", "vitest"):
         activas = [
-            l for l in texto.splitlines()
-            if orden in l and not l.strip().startswith("#")
+            linea for linea in texto.splitlines()
+            if orden in linea and not linea.strip().startswith("#")
         ]
         assert not activas, (
             f"La suite corre en ci.yml sobre el mismo commit; repetirla aquí alarga el "
@@ -354,8 +354,8 @@ def test_la_cuenta_de_despliegue_puede_actuar_como_la_de_la_maquina() -> None:
     )
     assert "VM_SA" in texto, "El permiso tiene que concederse sobre la cuenta de la VM."
     proyecto_entero = [
-        l for l in texto.splitlines()
-        if "projects add-iam-policy-binding" in l and "serviceAccountUser" in l
+        linea for linea in texto.splitlines()
+        if "projects add-iam-policy-binding" in linea and "serviceAccountUser" in linea
     ]
     assert not proyecto_entero, (
         f"`serviceAccountUser` no se concede a nivel de proyecto: {proyecto_entero}"
@@ -375,8 +375,8 @@ def test_refrescar_los_metadatos_usa_un_rol_propio_y_no_el_de_administrador() ->
     # Sólo líneas activas: el comentario que justifica la decisión también nombra el rol
     # que se descarta.
     admin = [
-        l for l in texto.splitlines()
-        if "roles/compute.instanceAdmin" in l and not l.strip().startswith("#")
+        linea for linea in texto.splitlines()
+        if "roles/compute.instanceAdmin" in linea and not linea.strip().startswith("#")
     ]
     assert not admin, (
         f"No se concede administración de instancias: basta un rol propio. {admin}"

@@ -103,7 +103,7 @@ class TestOpenAPIInMemory:
         chatbot_schemas = [k for k in schemas if "chatbot" in k.lower()]
         assert len(chatbot_schemas) > 0, (
             "No se encontraron schemas de Chatbot en components.schemas.\n"
-            f"Schemas disponibles:\n  " + "\n  ".join(sorted(schemas.keys()))
+            "Schemas disponibles:\n  " + "\n  ".join(sorted(schemas.keys()))
         )
 
     def test_schema_has_client_schemas(self):
@@ -114,7 +114,7 @@ class TestOpenAPIInMemory:
         client_schemas = [k for k in schemas if "client" in k.lower()]
         assert len(client_schemas) > 0, (
             "No se encontraron schemas de Client en components.schemas.\n"
-            f"Schemas disponibles:\n  " + "\n  ".join(sorted(schemas.keys()))
+            "Schemas disponibles:\n  " + "\n  ".join(sorted(schemas.keys()))
         )
 
     def test_schema_has_llmconfig_schemas(self):
@@ -125,7 +125,7 @@ class TestOpenAPIInMemory:
         llm_schemas = [k for k in schemas if "llm" in k.lower() or "model" in k.lower()]
         assert len(llm_schemas) > 0, (
             "No se encontraron schemas de LLMConfig en components.schemas.\n"
-            f"Schemas disponibles:\n  " + "\n  ".join(sorted(schemas.keys()))
+            "Schemas disponibles:\n  " + "\n  ".join(sorted(schemas.keys()))
         )
 
 

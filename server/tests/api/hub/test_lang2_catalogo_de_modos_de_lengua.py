@@ -83,7 +83,7 @@ class TestElCatalogoDeLenguas:
         async with _cliente(_principal()) as c:
             lenguas = (await c.get("/api/v1/hub/opciones/lengua")).json()["lenguas"]
 
-        codigos = [l["codigo"] for l in lenguas]
+        codigos = [lengua["codigo"] for lengua in lenguas]
         assert "val" in codigos
         assert "ca" not in codigos, (
             "el corpus llama `val` al valenciano; ofrecer `ca` daría una preferencia que no "
@@ -94,12 +94,12 @@ class TestElCatalogoDeLenguas:
         async with _cliente(_principal()) as c:
             lenguas = (await c.get("/api/v1/hub/opciones/lengua")).json()["lenguas"]
 
-        assert {"val", "es", "en"} <= {l["codigo"] for l in lenguas}
+        assert {"val", "es", "en"} <= {lengua["codigo"] for lengua in lenguas}
 
     async def test_should_carry_a_label_for_each_language(self):
         """El nombre de cada lengua **en esa lengua**: quien busca la suya la reconoce escrita así."""
         async with _cliente(_principal()) as c:
-            lenguas = {l["codigo"]: l for l in (await c.get("/api/v1/hub/opciones/lengua")).json()["lenguas"]}
+            lenguas = {elemento["codigo"]: elemento for elemento in (await c.get("/api/v1/hub/opciones/lengua")).json()["lenguas"]}
 
         assert lenguas["val"]["etiqueta"] == "Valencià"
         assert lenguas["es"]["etiqueta"] == "Castellano"

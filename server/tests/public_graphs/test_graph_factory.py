@@ -36,7 +36,7 @@ _PATCH_CFG = (
 def _mock_language():
     lang = MagicMock()
     lang.detect = MagicMock(return_value="es")
-    lang.filter_items = MagicMock(side_effect=lambda l, items: items)
+    lang.filter_items = MagicMock(side_effect=lambda _lengua, items: items)
     lang.should_warn_translation = MagicMock(return_value=False)
     return lang
 

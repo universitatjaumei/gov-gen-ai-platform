@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 
 import pandas as pd
-import pytest
 
 from server.app.modules.redaccion.pipelines.contracts import (
     ExtractionInput,

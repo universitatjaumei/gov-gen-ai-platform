@@ -50,7 +50,7 @@ def _versionados(*patrones: str) -> list[str]:
         text=True,
         check=True,
     )
-    return [l for l in salida.stdout.splitlines() if l.strip()]
+    return [linea for linea in salida.stdout.splitlines() if linea.strip()]
 
 
 class TestNiceGuiNoEsDependenciaDeNadie:

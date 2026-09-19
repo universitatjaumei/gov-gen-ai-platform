@@ -1,5 +1,4 @@
 """HIB.G — las tres métricas que se calculan solas cuando la fuente esperada es estructurada."""
-import pytest
 
 from server.app.modules.agents_hub.evaluation.escenario_contrato import (
     Escenario,

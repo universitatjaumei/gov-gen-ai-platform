@@ -85,8 +85,8 @@ def test_el_guion_mira_la_respuesta_de_lo_que_crea() -> None:
 
     # Ningún POST puede ir a /dev/null: ahí es donde se pierde el motivo del fallo.
     perdidos = [
-        l for l in texto.splitlines()
-        if "llamar POST" in l and "/dev/null" in l and not l.strip().startswith("#")
+        linea for linea in texto.splitlines()
+        if "llamar POST" in linea and "/dev/null" in linea and not linea.strip().startswith("#")
     ]
     assert not perdidos, f"Un POST cuya respuesta se descarta puede fallar en silencio: {perdidos}"
 
@@ -96,8 +96,8 @@ def test_la_comprobacion_de_salud_no_fija_una_sola_region() -> None:
     todas, que para un extremo público es la respuesta honesta."""
     texto = _texto(VIGILANCIA)
     activas = [
-        l for l in texto.splitlines()
-        if "selectedRegions" in l and not l.strip().startswith("#")
+        linea for linea in texto.splitlines()
+        if "selectedRegions" in linea and not linea.strip().startswith("#")
     ]
     assert not activas, (
         f"`selectedRegions` con una sola región hace que la creación falle con 400: {activas}"
@@ -140,8 +140,8 @@ def test_el_guion_no_depende_de_python() -> None:
     """Se ejecuta desde la máquina de quien despliega, y en Git Bash no hay `python3`."""
     texto = _texto(VIGILANCIA)
     activas = [
-        l for l in texto.splitlines()
-        if "python3" in l and not l.strip().startswith("#")
+        linea for linea in texto.splitlines()
+        if "python3" in linea and not linea.strip().startswith("#")
     ]
     assert not activas, f"El guion sigue dependiendo de python3: {activas}"
 

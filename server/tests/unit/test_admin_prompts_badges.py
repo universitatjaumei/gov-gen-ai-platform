@@ -1,4 +1,3 @@
-import pytest
 
 class TestTierBadges:
     """Tests para los badges de tier en la lista de prompts."""

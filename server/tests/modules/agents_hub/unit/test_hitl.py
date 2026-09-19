@@ -1,6 +1,6 @@
 """Tests para el bucle Human-in-the-Loop (Prompt 4.11)."""
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 
 class TestHumanInTheLoop:

@@ -11,13 +11,11 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
 
 from server.app.modules.redaccion.contracts.manifest import (
     AIBlockSummary,
     DraftingRunManifest,
     ExtractedBlockSummary,
-    InputContractValidationResult,
     UploadedDocumentInfo,
 )
 from server.app.modules.redaccion.contracts.runtime import ApprovalRecord

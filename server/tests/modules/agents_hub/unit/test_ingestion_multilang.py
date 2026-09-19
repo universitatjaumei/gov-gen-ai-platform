@@ -127,7 +127,6 @@ class TestMultiLanguageDocumentCoexistence:
         encontraría el doc ES y lo borraría.
         """
         from server.app.modules.agents_hub.ingestion.watcher import IngestionWatcher
-        from server.app.modules.agents_hub.database.operational_models import HubDocument
 
         chatbot_id = uuid.uuid4()
 

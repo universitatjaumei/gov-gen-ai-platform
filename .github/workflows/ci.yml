@@ -122,8 +122,17 @@ jobs:
       - name: Install dependencies (--locked, el lock tiene que cuadrar con pyproject)
         run: uv sync --locked --all-extras
 
+      # **`app` y `tests`, los dos (issue #48).** Durante meses esto lintaba sólo `app`, y
+      # `tests` acumuló 225 avisos: 146 imports que ya no apuntaban a nada, 46 variables
+      # llamadas `l` dentro de comprensiones que deciden qué mide un guardarraíl, y una docena
+      # de f-strings sin sustitución en mensajes de aserto.
+      #
+      # La suite de este proyecto no es código de segunda: los guardarraíles viven ahí y son el
+      # mecanismo con el que se hace cumplir media especificación. Un import muerto o una
+      # comprensión mal leída son justo los defectos que hacen que un guardarraíl mida menos de
+      # lo que dice, que es el modo de fallo recurrente de este repositorio.
       - name: Lint (ruff)
-        run: uv run ruff check app/
+        run: uv run ruff check app/ tests/
 
       # El contrato OpenAPI está en `.gitignore` —es un artefacto generado, no se edita a
       # mano— y `tests/test_openapi_export.py` comprueba que existe y que es OpenAPI 3.x.

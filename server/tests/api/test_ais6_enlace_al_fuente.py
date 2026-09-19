@@ -1,7 +1,6 @@
 """AIS.6 — El §13 de la AGPL: el enlace al fuente sale del despliegue, no del código."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 

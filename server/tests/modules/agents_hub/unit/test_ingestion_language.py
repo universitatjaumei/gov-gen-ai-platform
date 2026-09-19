@@ -1,7 +1,7 @@
 """Tests TDD — Etiquetado de idioma en la ingestión (Prompt 9.8.1)."""
 import uuid
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class TestProcessSourceLanguageDetection:

@@ -4,9 +4,7 @@ Deben fallar con AttributeError hasta que se implementen retrieval_mode,
 kind y parent_chatbot_id en config_models.py (Prompt 9CBis.2).
 """
 import uuid
-from unittest.mock import MagicMock
 
-import pytest
 
 
 # ---------------------------------------------------------------------------

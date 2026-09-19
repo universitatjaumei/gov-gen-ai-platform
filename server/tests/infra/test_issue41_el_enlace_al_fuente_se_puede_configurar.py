@@ -57,7 +57,7 @@ def test_el_despliegue_la_escribe_en_la_configuracion() -> None:
     """Y que salga de una variable del repositorio, no de una constante en el workflow."""
     texto = DEPLOY.read_text(encoding="utf-8")
     linea = next(
-        (l for l in texto.splitlines() if l.strip().startswith("SOURCE_URL=")), None
+        (linea for linea in texto.splitlines() if linea.strip().startswith("SOURCE_URL=")), None
     )
     assert linea is not None, (
         "`deploy.yml` no escribe `SOURCE_URL` en `.env.despliegue`, así que el compose nunca la "

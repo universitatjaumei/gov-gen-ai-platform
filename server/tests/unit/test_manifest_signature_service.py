@@ -6,7 +6,7 @@ Valida la firma de manifiestos, manejo de errores y logging de auditoría.
 
 import os
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from server.app.services.manifest_signature_service import (
     ManifestSignatureService,

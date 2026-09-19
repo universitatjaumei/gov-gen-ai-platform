@@ -10,9 +10,8 @@ re-embedding, y cambiar el texto sí.
 """
 from __future__ import annotations
 
-import json
 import uuid
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 import pytest
 

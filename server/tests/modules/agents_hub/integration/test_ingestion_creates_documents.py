@@ -7,9 +7,8 @@ Verifica el contrato del Prompt 9CBis.8:
   - re-ingestión con contenido diferente reemplaza doc y chunks
 """
 import uuid
-from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -26,7 +25,9 @@ def _make_session_for_new_doc() -> AsyncMock:
     second_exec = MagicMock()
     second_exec.scalars = MagicMock(return_value=iter([]))
     third_exec = MagicMock()  # DELETE chunks
-    fourth_exec = MagicMock()  # DELETE old chunks
+    # Aquí había un `fourth_exec` para «DELETE old chunks» que nadie usaba: el
+    # `side_effect` de abajo sólo lista tres respuestas. No era una aserción perdida,
+    # era el doble de un cuarto `execute` que el código dejó de hacer.
     session.begin_nested = MagicMock(return_value=AsyncMock())
     # RAG.8: el watcher consulta la config de troceado; sin chatbot en BD, la cascada
     # devuelve los defaults de plataforma, que es el camino realista para estos tests.

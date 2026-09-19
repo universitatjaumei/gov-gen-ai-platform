@@ -463,7 +463,6 @@ class TestEndpointYComando:
         """Un hallazgo que nadie puede ver es codigo muerto: el endpoint de 9Q filtra por
         SITIO y un hueco no tiene sitio, asi que sin este listado se escribirian hallazgos
         que no aparecen en ninguna cola."""
-        from unittest.mock import AsyncMock, patch
 
         from fastapi import FastAPI
         from httpx import ASGITransport, AsyncClient

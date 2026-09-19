@@ -146,10 +146,6 @@ def test_user_can_create_generic_report_from_natural_language():
     GREEN: it must transition to 'drafting' (graph started) or 'in_review'
            once the pipeline completes synchronously / async notification.
     """
-    workspace_id = uuid.uuid4()
-    template_id = uuid.uuid4()
-    version_id = uuid.uuid4()
-
     saved_objects: list = []
 
     async def _fake_add(obj):

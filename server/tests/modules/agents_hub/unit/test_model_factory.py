@@ -88,8 +88,10 @@ class TestModelFactory:
             g_cls.return_value = Mock(spec=["provider"])
             o_cls.return_value = Mock(spec=["provider"])
 
-            model_g = _build_model(config_google)
-            model_o = _build_model(config_openai)
+            # Se llaman por su efecto: lo que se comprueba abajo es que cada clase se
+            # instanció una vez, no lo que devolvieron.
+            _build_model(config_google)
+            _build_model(config_openai)
 
         g_cls.assert_called_once()
         o_cls.assert_called_once()

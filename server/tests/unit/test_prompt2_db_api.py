@@ -1,8 +1,6 @@
 import pytest
-from sqlmodel import SQLModel, create_engine, Session
+from sqlmodel import SQLModel
 from sqlmodel.pool import StaticPool
-from datetime import datetime
-from typing import List
 
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession

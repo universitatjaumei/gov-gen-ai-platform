@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -36,7 +36,6 @@ def _make_finding(**overrides):
 class TestContentFindingContract:
 
     def test_content_finding_is_frozen(self) -> None:
-        from server.app.modules.curation.contracts import ContentFinding
 
         finding = _make_finding()
         with pytest.raises(Exception):
@@ -63,7 +62,6 @@ class TestContentFindingContract:
             _make_finding(confidence=1.01)
 
     def test_all_finding_types_accepted(self) -> None:
-        from server.app.modules.curation.contracts import ContentFinding
 
         types = [
             "superseded", "duplicate", "contradiction", "empty",
@@ -207,7 +205,7 @@ class TestContentFindingRepo:
         session = self._make_mock_session(existing_orm=None)
         repo = ContentFindingRepo(session)
 
-        result = await repo.upsert(finding)
+        await repo.upsert(finding)
 
         session.add.assert_called_once()
         session.flush.assert_called()

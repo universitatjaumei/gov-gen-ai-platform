@@ -1,5 +1,4 @@
 """Tests para el chunker de markdown."""
-import pytest
 
 
 class TestMarkdownChunker:

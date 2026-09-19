@@ -6,7 +6,7 @@ desarrollo.
 """
 import uuid
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 
 @pytest.fixture

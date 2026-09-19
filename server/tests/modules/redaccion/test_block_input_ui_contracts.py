@@ -10,8 +10,6 @@ from pydantic import TypeAdapter, ValidationError
 
 from server.app.modules.redaccion.contracts.blocks import (
     AIAssistedTextBlock,
-    AISummaryBlock,
-    AIRewriteBlock,
     BlockContract,
     ChartBlock,
     CitationBlock,
@@ -19,7 +17,6 @@ from server.app.modules.redaccion.contracts.blocks import (
     ReviewGateBlock,
     StaticTextBlock,
     TableBlock,
-    UserInputBlock,
 )
 from server.app.modules.redaccion.contracts.inputs import InputContract, InputSlot
 from server.app.modules.redaccion.contracts.ui import (

@@ -1,5 +1,4 @@
 """Tests para el servicio de observabilidad LangFuse."""
-import pytest
 from unittest.mock import patch, MagicMock
 
 

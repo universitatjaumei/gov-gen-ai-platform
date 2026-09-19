@@ -24,8 +24,6 @@ Así que aquí se fija lo que se **midió contra el servicio real** el 2026-08-2
 """
 from __future__ import annotations
 
-import json
-import uuid
 
 import pytest
 

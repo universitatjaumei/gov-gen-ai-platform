@@ -5,9 +5,7 @@ es de este directorio.
 """
 from __future__ import annotations
 
-import uuid
 
-import pytest
 
 
 class TestLaCredencialContraLaBaseDeDatos:

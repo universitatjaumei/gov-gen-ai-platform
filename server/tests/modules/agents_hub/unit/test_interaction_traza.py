@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import uuid
 
-import pytest
 
 from server.app.modules.agents_hub.evaluation.traza import (
     CLAVES_DE_TRAZA,

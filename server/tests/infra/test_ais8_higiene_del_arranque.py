@@ -23,8 +23,6 @@ mal, no dejan nada con lo que volver.
 from __future__ import annotations
 
 import ast
-import os
-import re
 from pathlib import Path
 
 import pytest

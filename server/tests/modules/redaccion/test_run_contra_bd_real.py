@@ -127,7 +127,6 @@ async def test_should_actually_persist_the_uploaded_input(db_url):
     que SQLAlchemy no emitía UPDATE. Visto en VER.4: la extracción no encontraba el Excel
     que se acababa de subir, y el informe salía sin datos.
     """
-    from server.app.core.storage import StorageService
     from server.app.routers.redaccion.workspaces_router import upload_workspace_input
 
     class _FicheroFalso:

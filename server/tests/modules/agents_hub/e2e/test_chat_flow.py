@@ -21,7 +21,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from langchain_core.messages import AIMessage
 from sqlalchemy import select
 
 from server.app.modules.agents_hub.agent.public_graphs.core.config_resolver import (
@@ -144,7 +143,7 @@ class TestChatFlowE2E:
                 ) as response:
                     assert response.status_code == 200
                     assert "text/event-stream" in response.headers.get("content-type", "")
-                    lines = [l async for l in response.aiter_lines()]
+                    lines = [elemento async for elemento in response.aiter_lines()]
 
         events = _parse_sse_lines(lines)
         token_events = [(e, p) for e, p in events if e == "token"]
@@ -202,7 +201,7 @@ class TestChatFlowE2E:
                     json={"message": "Pregunta de prueba"},
                     headers=auth_headers,
                 ) as response:
-                    lines = [l async for l in response.aiter_lines()]
+                    lines = [elemento async for elemento in response.aiter_lines()]
 
         events = _parse_sse_lines(lines)
         done_events = [(e, p) for e, p in events if e == "done"]
@@ -267,7 +266,7 @@ class TestExportFlowE2E:
                     json={"message": "Genera un informe"},
                     headers=auth_headers,
                 ) as response:
-                    lines = [l async for l in response.aiter_lines()]
+                    lines = [elemento async for elemento in response.aiter_lines()]
 
                 events = _parse_sse_lines(lines)
                 done_events = [(e, p) for e, p in events if e == "done"]
@@ -333,7 +332,7 @@ class TestExportFlowE2E:
                     json={"message": "Mensaje privado"},
                     headers=auth_headers,
                 ) as response:
-                    lines = [l async for l in response.aiter_lines()]
+                    lines = [elemento async for elemento in response.aiter_lines()]
 
                 events = _parse_sse_lines(lines)
                 done_events = [(e, p) for e, p in events if e == "done"]

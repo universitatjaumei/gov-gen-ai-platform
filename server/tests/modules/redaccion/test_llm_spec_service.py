@@ -7,7 +7,6 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 
 _MINIMAL_DRAFT_JSON = {
     "proposed_profile": "GENERIC_REPORT",
