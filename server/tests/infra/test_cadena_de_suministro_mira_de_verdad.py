@@ -171,11 +171,24 @@ def test_las_dependencias_auditadas_son_las_del_lock(job: dict[str, Any]) -> Non
         "dependencias no lo audita nadie — y así estuvieron `shared` y "
         "`services/script_sandbox` hasta APER.9, con 30 avisos que sólo vio Dependabot."
     )
-    assert run.count("uv export") == cuantos, (
-        f"Se exportan los {cuantos} proyectos con lock propio ({', '.join(proyectos)}). Si "
-        "aparece uno nuevo, entra aquí; si no, su árbol de dependencias no lo audita nadie."
+    # APER.17 — se exportan **dos** conjuntos: el que se despliega (bloquea) y el completo del
+    # lock (informa). El segundo va en un bucle sobre los proyectos, así que contar ocurrencias
+    # dejó de decir nada: lo que importa es que estén los dos, y que cada uno se reconozca por
+    # el flag que lo define.
+    assert run.count("uv export") >= cuantos, (
+        f"Se esperaban al menos {cuantos} exports, uno por proyecto con lock "
+        f"({', '.join(proyectos)})."
     )
-    assert run.count("--locked") == cuantos, (
+    assert "--no-dev" in run, (
+        "Falta el conjunto que se despliega: es el único que puede bloquear, porque es el que "
+        "corre en producción."
+    )
+    assert "--all-extras" in run, (
+        "Falta el conjunto completo del lock (APER.17). Sin él el job audita las dependencias "
+        "base y el verde no dice su alcance — 200 paquetes de 438 en `server`—, que es cómo "
+        "Dependabot informó de un `authlib` crítico con este job en verde."
+    )
+    assert run.count("--locked") >= cuantos, (
         "Cada `uv export` lleva `--locked`. Sin él uv **vuelve a resolver en silencio** y el "
         "informe describiría un conjunto de dependencias que el lock no declara: un informe "
         "que parece bueno y mide otra cosa. Es la misma avería que vivió 17 días con el lock "
@@ -195,11 +208,16 @@ def test_todos_los_proyectos_se_auditan_aunque_el_primero_encuentre_algo(
     paso = _paso(job, "pip-audit")
     run = paso["run"]
     cuantos = len(_proyectos_con_lock())
-    assert run.count("uvx pip-audit") == cuantos, (
-        f"Se auditan los {cuantos} proyectos con lock. Exportar uno y no auditarlo deja el "
-        "fichero en el artefacto y el aviso sin mirar."
+    assert run.count("uvx pip-audit") >= cuantos, (
+        f"Se auditan al menos los {cuantos} proyectos con lock. Exportar uno y no auditarlo "
+        "deja el fichero en el artefacto y el aviso sin mirar."
     )
-    assert run.count("|| rc=1") == cuantos, (
+    # APER.17 — el conjunto completo se audita en un bucle, así que la cuenta exacta ya no
+    # significa nada; lo que no puede faltar es que cada `pip-audit` capture su propio fallo.
+    assert "pip-audit-completo-" in run, (
+        "No se audita el conjunto completo del lock, sólo el que se despliega."
+    )
+    assert run.count("|| rc=1") >= cuantos, (
         "Cada `pip-audit` tiene que capturar su propio fallo. Encadenados sin más, el shell "
         "aborta el paso en cuanto el primero encuentra algo —pip-audit sale con 1— y el "
         "segundo no llega a correr. Con `continue-on-error` encima, el job sigue en verde y el "

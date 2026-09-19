@@ -113,7 +113,23 @@ def main(argv: list[str] | None = None) -> int:
             flujo.reconfigure(encoding="utf-8", errors="replace")
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("informes", nargs="+", type=Path, help="JSON de pip-audit")
+    parser.add_argument(
+        "informes",
+        nargs="+",
+        type=Path,
+        help="JSON de pip-audit del conjunto QUE SE DESPLIEGA. Sólo éstos pueden bloquear.",
+    )
+    parser.add_argument(
+        "--informativos",
+        nargs="*",
+        type=Path,
+        default=[],
+        metavar="INFORME",
+        help=(
+            "JSON de pip-audit del conjunto COMPLETO del lock (con extras y dev). Informan y "
+            "nunca bloquean: son dependencias que el lock describe y el despliegue no instala."
+        ),
+    )
     parser.add_argument("--aceptados", type=Path, required=True)
     parser.add_argument("--resumen", type=Path, help="Fichero donde volcar el resumen Markdown")
     args = parser.parse_args(argv)
@@ -121,20 +137,51 @@ def main(argv: list[str] | None = None) -> int:
     hoy = dt.date.today()
     aceptados, caducados = lee_aceptados(args.aceptados, hoy)
 
-    avisos: list[Aviso] = []
-    for informe in args.informes:
-        if not informe.is_file():
-            # Un informe que falta no es «cero avisos»: es una auditoría que no corrió. Esta
-            # distinción es literalmente el agujero que la primera ejecución del job destapó,
-            # cuando `mcp_server` no se auditó y el único síntoma fue un fichero ausente.
-            print(f"::error::Falta el informe {informe}. La auditoría no llegó a ejecutarse.")
-            return 1
-        avisos.extend(lee_informe(informe))
+    def _leer(rutas: list[Path]) -> list[Aviso] | None:
+        """Los avisos de una lista de informes, o `None` si falta alguno.
+
+        Un informe que falta no es «cero avisos»: es una auditoría que no corrió. Esta
+        distinción es literalmente el agujero que la primera ejecución del job destapó, cuando
+        `mcp_server` no se auditó y el único síntoma fue un fichero ausente.
+        """
+        reunidos: list[Aviso] = []
+        for informe in rutas:
+            if not informe.is_file():
+                print(f"::error::Falta el informe {informe}. La auditoría no llegó a ejecutarse.")
+                return None
+            reunidos.extend(lee_informe(informe))
+        return reunidos
+
+    avisos = _leer(args.informes)
+    if avisos is None:
+        return 1
+
+    # APER.17 — el conjunto completo del lock. **No bloquea**: son dependencias que el lock
+    # describe y la imagen no instala (extras como `agente-navegador` o `local-models`, y el
+    # grupo `dev`). Auditar lo que se despliega es lo correcto; lo que no valía era que el verde
+    # no dijera su alcance —200 paquetes de 438— mientras Dependabot informaba de críticos.
+    del_lock = _leer(list(args.informativos))
+    if del_lock is None:
+        return 1
 
     bloquean = [a for a in avisos if a.tiene_correccion and a.id not in aceptados]
     informan = [a for a in avisos if not a.tiene_correccion or a.id in aceptados]
 
-    lineas = ["## Puerta de avisos (Python)", ""]
+    # El completo CONTIENE al desplegado, así que se resta: sin esto cada aviso saldría dos
+    # veces y el informe engañaría sobre cuántos hay.
+    ya_dichos = {a.id for a in avisos}
+    solo_en_el_lock = sorted(
+        {a.id: a for a in del_lock if a.id not in ya_dichos}.values(),
+        key=lambda a: (a.paquete, a.id),
+    )
+
+    lineas = [
+        "## Puerta de avisos (Python)",
+        "",
+        "Bloquea sobre el conjunto **que se despliega** (sin extras y sin `dev`). El conjunto "
+        "completo del lock se informa aparte, más abajo.",
+        "",
+    ]
     if bloquean:
         lineas += [f"**BLOQUEA: {len(bloquean)} aviso(s) con corrección publicada y sin aceptar.**", ""]
         lineas += [f"- {_linea(a)}" for a in bloquean]
@@ -152,6 +199,21 @@ def main(argv: list[str] | None = None) -> int:
         lineas += [
             f"- {_linea(a)}" + (" *(aceptado)*" if a.id in aceptados else "") for a in informan
         ]
+
+    if solo_en_el_lock:
+        lineas += [
+            "",
+            f"**En el lock pero fuera del despliegue ({len(solo_en_el_lock)})** — informan y no "
+            "bloquean:",
+            "",
+            "La imagen se instala sin extras y sin `dev`, así que estos paquetes **no se "
+            "instalan** en producción. Se listan porque el lock los describe y porque son los "
+            "que Dependabot ve: si esta sección crece, la pregunta es si el extra que los trae "
+            "sigue haciendo falta — retirar un extra quita sus avisos de raíz, que es lo que "
+            "pasó con `pdfplumber` y `pillow` en APER.12.",
+            "",
+        ]
+        lineas += [f"- {_linea(a)}" for a in solo_en_el_lock]
 
     if caducados:
         lineas += [
