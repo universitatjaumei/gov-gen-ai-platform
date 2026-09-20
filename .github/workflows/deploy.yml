@@ -96,7 +96,10 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SA }}
 
-      - uses: google-github-actions/setup-gcloud@v2
+      # v3 (PR #56). Comparados los dos `action.yml`: retira `skip_tool_cache` y añade
+      # `cache`, y este paso **no pasa ninguna entrada**, así que nada de lo que cambia le
+      # afecta. Como en `auth`, el cambio de fondo es el runtime: node20 a node24.
+      - uses: google-github-actions/setup-gcloud@v3
 
       - name: Configurar Docker para Artifact Registry
         run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
