@@ -70,7 +70,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      # v7, como los otros seis usos del repositorio. Este se quedó en v4 cuando el commit
+      # del 2026-08-21 subió las demás, y estuvo un mes así: el repositorio ejecutando dos
+      # versiones de la misma acción según el workflow, y la que se quedó atrás era la del
+      # despliegue — la que menos corre y la que más cuesta depurar. Lo vigila
+      # `tests/infra/test_las_acciones_no_van_a_dos_versiones.py`.
+      - uses: actions/checkout@v7
 
       - name: Etiqueta a desplegar
         id: etiqueta
