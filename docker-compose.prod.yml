@@ -70,7 +70,11 @@ services:
       app:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/healthz"]
+      # 8080, como el `listen` de nginx y el mapeo de arriba. Esta sonda es **del compose** y
+      # sobreescribe la del `Dockerfile`, así que se le escapó al cambio de la issue #44:
+      # llamaba al 80, donde nginx ya no escucha, y el servicio habría quedado `unhealthy`
+      # para siempre con el panel funcionando. Lo encontró la revisión de la PR #73.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/healthz"]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -107,6 +107,31 @@ class TestElPuertoEsUnaSolaVerdad:
             f"así que el lado derecho tiene que ser {PUERTO}."
         )
 
+    def test_nada_del_servicio_frontend_sigue_hablando_del_puerto_viejo(self) -> None:
+        """Y aquí la lección, que vale más que el arreglo.
+
+        La primera versión de esta clase **enumeraba** los sitios donde vive el puerto y se dejó
+        uno: el `healthcheck` del propio compose, que sobreescribe el del `Dockerfile` y seguía
+        llamando al 80. El panel habría funcionado y el servicio habría quedado `unhealthy` para
+        siempre — nada falla, pero todo lo que dependa de `service_healthy` se queda esperando.
+        Lo encontró la revisión de la PR #73.
+
+        Así que esto **no enumera**: mira el bloque entero del servicio y exige que ningún
+        puerto que no sea el bueno aparezca en él.
+        """
+        datos = yaml.safe_load(COMPOSE_PROD.read_text(encoding="utf-8"))
+        bloque = yaml.safe_dump(datos["services"]["frontend"], allow_unicode=True)
+        sospechosas = [
+            linea
+            for linea in bloque.splitlines()
+            if re.search(r"127\.0\.0\.1(?::(\d+))?/|localhost(?::(\d+))?/", linea)
+            and f":{PUERTO}/" not in linea
+        ]
+        assert not sospechosas, (
+            f"en el servicio `frontend` hay direcciones que no usan el {PUERTO}: {sospechosas}. "
+            "Dentro del contenedor, una URL sin puerto es el 80, y ahí ya no escucha nadie."
+        )
+
 
 def test_ci_arranca_el_frontend_y_le_pregunta_quien_es() -> None:
     """Lo único que demuestra que no corre como root es ejecutarlo.
