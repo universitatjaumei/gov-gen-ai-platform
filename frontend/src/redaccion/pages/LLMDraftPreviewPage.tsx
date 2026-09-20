@@ -7,9 +7,13 @@ import {
   useApproveAsWorkspace,
   useDescribeSampleFile,
 } from '@/shared/api/generated/redaccion-llm-drafts/redaccion-llm-drafts'
+// `ReportTemplateDraft`, uno y no dos. Hasta `fastapi` 0.141 el esquema emitía
+// `…Input` y `…Output` para este modelo, y eran **idénticos campo por campo**: la partición
+// venía de un `DataTransformBlock` que también se duplicaba sin diferencia. La versión nueva lo
+// reconoce y emite un solo esquema, así que el formato del dato **no ha cambiado**; lo que
+// cambia es el nombre que genera Orval. Comprobado comparando los tres ficheros generados.
 import type {
-  ReportTemplateDraftOutput,
-  ReportTemplateDraftInput,
+  ReportTemplateDraft,
   ReportTemplateDraftValidationResult,
   MuestraDeDatos,
 } from '@/shared/api/generated/model'
@@ -77,8 +81,8 @@ export function LLMDraftPreviewPage() {
    * se podía tirar: había que volver a escribir el prompt entero. Con una copia local, corregir
    * una referencia y revalidar cuesta una llamada barata a `/validate` y ninguna al modelo.
    */
-  const [borrador, setBorrador] = useState<ReportTemplateDraftOutput | null>(null)
-  const propuestaDelModelo = proposedRaw as unknown as ReportTemplateDraftOutput | undefined
+  const [borrador, setBorrador] = useState<ReportTemplateDraft | null>(null)
+  const propuestaDelModelo = proposedRaw as unknown as ReportTemplateDraft | undefined
   const validation = validationRaw as unknown as ReportTemplateDraftValidationResult | undefined
   const isApproving = isApprovingTemplate || isApprovingWorkspace
   const canApprove = !!borrador && !isValidating && (!validation || validation.ok === true)
@@ -89,7 +93,7 @@ export function LLMDraftPreviewPage() {
 
   useEffect(() => {
     if (borrador) {
-      validateMutate({ data: borrador as unknown as ReportTemplateDraftInput })
+      validateMutate({ data: borrador as unknown as ReportTemplateDraft })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [borrador])
@@ -118,7 +122,7 @@ export function LLMDraftPreviewPage() {
     if (!borrador || !canApprove) return
     // Se aprueba **el borrador corregido**, no lo que devolvió el modelo.
     const name = draftName || tR('draft_default_name')
-    const data = { draft: borrador as unknown as ReportTemplateDraftInput, name }
+    const data = { draft: borrador as unknown as ReportTemplateDraft, name }
     if (mode === 'template') approveTemplate({ data })
     else approveWorkspace({ data })
   }
