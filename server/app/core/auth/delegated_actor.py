@@ -25,7 +25,7 @@ documentada, no implementada.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import jwt as pyjwt
 from fastapi import HTTPException, status
@@ -61,7 +61,16 @@ class EffectiveActor:
 
     @classmethod
     def desde_principal(cls, principal: UserInfo, **cambios) -> "EffectiveActor":
-        base = dict(
+        """El actor que corresponde a un principal, con los cambios que se pidan encima.
+
+        **Se construye y luego se reemplaza, en vez de juntarlo todo en un `dict`** (issue #49).
+        La version anterior metia los seis campos en un diccionario y lo desplegaba con `**`, y
+        eso tiene un coste que no se ve: el tipo del diccionario es la **union** de los tipos de
+        sus valores -`str | tuple[str, ...] | bool`- asi que al pasar por `cls(**base)` cada
+        campo llega tipado como esa union y nadie puede comprobar que `delegated` recibe un
+        booleano y no una tupla. `replace` conserva el tipo de cada uno.
+        """
+        actor = cls(
             subject_id=principal.user_id,
             email=principal.email,
             role=principal.role,
@@ -69,8 +78,7 @@ class EffectiveActor:
             saml_groups=tuple(principal.saml_groups),
             delegated=False,
         )
-        base.update(cambios)
-        return cls(**base)
+        return replace(actor, **cambios) if cambios else actor
 
 
 def _rechazar(motivo: str) -> HTTPException:

@@ -148,6 +148,17 @@ jobs:
       - name: Lint (ruff)
         run: uv run ruff check app/ tests/
 
+      # **Comprobación de tipos, por módulo (issue #49).** El alcance NO está aquí: está en
+      # `[tool.pyright]` de `server/pyproject.toml`, que es donde se lee junto con la razón de
+      # cada ampliación. Hoy cubre `app/core/`, que es lo compartido y lo que más se importa.
+      #
+      # Encenderlo sobre el árbol entero daría cientos de avisos y acabaría desactivado, que es
+      # como mueren estas herramientas. Se amplía módulo a módulo, cada uno con su commit, y el
+      # siguiente está escrito en el manifiesto para que ampliar no dependa de que alguien se
+      # acuerde.
+      - name: Tipos (pyright, por módulo)
+        run: uv run pyright
+
       # El contrato OpenAPI está en `.gitignore` —es un artefacto generado, no se edita a
       # mano— y `tests/test_openapi_export.py` comprueba que existe y que es OpenAPI 3.x.
       # Mientras CI corría el 42% de la suite ese fichero no se colectaba; al pasar a

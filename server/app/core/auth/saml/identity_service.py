@@ -27,6 +27,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import select
+from sqlmodel import col
 
 from server.app.core.auth.models import UserInfo
 from server.app.core.auth.saml.role_mapping import resolve_role
@@ -135,7 +136,7 @@ class SamlIdentityService:
 
         superadmin = (
             await self.session.execute(
-                select(SuperAdminAccount).where(SuperAdminAccount.email == email)
+                select(SuperAdminAccount).where(col(SuperAdminAccount.email) == email)
             )
         ).scalars().first()
         grupos = _grupos(attributes)
@@ -155,7 +156,7 @@ class SamlIdentityService:
         # levantar que reencontrar a quien entra con una cuenta indeterminada de las dos.
         admin = (
             await self.session.execute(
-                select(AdminAccount).where(AdminAccount.email == email)
+                select(AdminAccount).where(col(AdminAccount.email) == email)
             )
         ).scalars().one_or_none()
         if admin and admin.is_active:

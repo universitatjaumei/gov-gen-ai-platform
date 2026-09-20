@@ -420,14 +420,15 @@ pasó de 2 a 5 el 2026-09-07, al elegir la variante B y aparecer REPO.4 y REPO.5
 |---|---|---|---|
 | ~~1~~ ✅ | ~~**USR**~~ (+4 arreglos) | 7+4 | **Cierra una exposición viva**: en producción hay siete superadministradores, seis de ellos probadores del piloto, con **la misma contraseña** y sin poder cambiarla ellos mismos. Y el piloto ya está abierto mientras el IdP no tiene fecha |
 | ~~1~~ ✅ | ~~**LANG**~~ | 2 | Dos prompts, y el mando ya existe sin consumidor (`language_mode` viaja por toda la cascada y nadie lo lee). Hacerlo después de que haya datos puestos añade una migración |
-| 3 | **REG** | 6 | Lo pidió la reunión de desarrollo del 31-08 y **esperaba el despliegue** (REG.4, el MCP remoto, sólo existe con el servidor accesible desde fuera — ya lo está). Desbloquea VAS y FUN.6 |
-| 4 | **VAS** | 4 | El mejor ratio del plan: los tres candidatos ya existen como función interna y sólo necesitan superficie |
-| 5 | **NIC** | 5 | Cierra la Fase 1. Se puede esperar sin coste porque nada de lo planificado toca `client_app/`. **NIC.5 lo ejecuta el usuario** |
+| ~~3~~ ✅ | ~~**REG**~~ | 6 (9 ✅) | Lo pidió la reunión de desarrollo del 31-08 y **esperaba el despliegue** (REG.4, el MCP remoto, sólo existe con el servidor accesible desde fuera — ya lo está). Desbloquea VAS y FUN.6 |
+| ~~4~~ ✅ | ~~**VAS**~~ | 4 | El mejor ratio del plan: los tres candidatos ya existen como función interna y sólo necesitan superficie |
+| ~~5~~ ✅ | ~~**NIC**~~ | 5 (4 ✅ + NIC.5 del usuario) | Cierra la Fase 1. Se puede esperar sin coste porque nada de lo planificado toca `client_app/`. **NIC.5 lo ejecuta el usuario** |
 | 6 ▶ | **REPO** | 5 (4 ✅) | **Sólo queda REPO.2.** REPO.3 y REPO.5 ✅ el 2026-09-07; **REPO.1 ✅ el 2026-09-15** (historial filtrado y empujado, variante D) con su **purga de GitHub verificada el 2026-09-16** —los cuatro huérfanos dan 422 y `git fetch` no los descarga—; **REPO.4 ✅ el 2026-09-16**. **La puerta para abrir el repositorio ya cayó**: lo único que queda antes de `Settings → Danger Zone → Change visibility` es REPO.2, que son los OTROS dos repositorios y no bloquea a éste. |
 | ~~7~~ ✅ | ~~**DEP**~~ | 7 | **COMPLETO en código el 2026-09-15**, los siete. Falta sólo el push que demuestre la puerta en una ejecución real, que es decisión del usuario. El árbol del servidor pasa de **408 a 197 dependencias** y el de producción del frontend de **21 avisos (13 altos) a cero**. **DEP.4 se cerró midiendo, no confiando**: `camelot-py` 2.0 saca `pypdf` del árbol entero, y de los **2 PDF de 20** cuya extracción cambia, mirados celda a celda, **en los dos la versión vieja era la equivocada** —una cabecera de dos niveles colapsada y una portada de 28×2 que no era tabla, sino un falso positivo que la 2.0 rechaza bien—. **DEP.3 se cerró midiendo y su premisa resultó FALSA**: `starlette` sube a 1.6.0 sin tocar `fastapi` y sus 5 avisos desaparecen, pero `app.routes` **sigue plano** y los 14 tests que enumeran rutas **pasan**, así que no se reescribió ninguno — el `_IncludedRouter` que el prompt daba por hecho no aparece con `fastapi` 0.136.0. **Queda sólo DEP.7**, ya desbloqueado. **Lo que DEP.1 destapó y no estaba previsto**: al sacar `browser-use` y `ragas` aparecieron **tres paquetes usados y no declarados** —`python-multipart`, `langchain`, `beautifulsoup4`— más `langchain-community`, que sostiene Ollama. Entra un guardarraíl que los caza todos de golpe |
+| ~~—~~ ✅ | ~~**IMG**~~ | 1 | **No tenía fila y sí prompt** (issue #5). El job `imagen` construye las cuatro imágenes con los `Dockerfile` del despliegue, migra con la recién construida y la arranca hasta `/health` 200. Cerrado el 2026-09-17 |
 | ~~8~~ ✅ | ~~**PLG**~~ | 3 | Responde al correo de desarrollo pidiendo plugins. Después de LANG, que tocan la misma factoría |
-| 9 | **DIN** | 7 | Bueno y no urgente: su premisa resultó falsa en dos tercios —el rastreo con cadencia y la auto-ingesta ya existen— |
-| 10 | **FUN** | 7 | El más grande y el de más diseño; FUN.6 necesita REG, que a estas alturas ya está |
+| ~~9~~ ✅ | ~~**DIN**~~ | 7 | Bueno y no urgente: su premisa resultó falsa en dos tercios —el rastreo con cadencia y la auto-ingesta ya existen— |
+| ~~10~~ ✅ | ~~**FUN**~~ | 7 (9 ✅) | El más grande y el de más diseño; FUN.6 necesita REG, que a estas alturas ya está |
 | — | **PRC** | 6 | **No se puede programar**: espera las fichas validadas por los servicios y que el equipo del catálogo habilite la consulta de descarga. **En paralelo y a tandas**, conforme lleguen |
 
 ### Dónde se trabaja: la rama `desarrollo` (decisión del usuario, 2026-09-02)
@@ -950,12 +951,13 @@ tiene nada que ver con el código legacy.
 1. **Las pruebas manuales del Bloque INF**: `pruebas_manuales/pruebas_manuales_bloqueINF.bat`, cinco
    pasos. Lo irreducible: si el texto que la IA escribió sobre las tablas reales dice algo cierto, si
    el DOCX se lee, y los permisos por módulo, que necesitan dos cuentas.
-2. **REPO.1 y REPO.2** — NIC ya está cerrado, así que están desbloqueados. Los pasos están en
-   `planificacion/fase1/61_BLOQUE_REPO.md`, versionados a propósito: el guion detallado vivía en
-   `_local/`, que es ignorada y de usar y tirar. **REPO.1 arranca con tres preguntas a UADTI**
-   (rol y quién aprueba la creación, permisos base de la organización, y plan) que no se pueden
-   averiguar desde fuera. Y **el respaldo ya está hecho** —11,1 MB, «complete history»— pero
-   **sigue en el portátil**, que es justo donde no debe estar.
+2. **REPO.2** — retirar los otros dos repositorios antiguos. **REPO.1 ya está hecho** (issue
+   #5: esta entrada decía lo contrario): historial filtrado y empujado el 2026-09-15, con la
+   purga de GitHub **verificada** el 2026-09-16 —los cuatro huérfanos dan 422 y `git fetch` no
+   los descarga—. Los pasos de REPO.2 están en `planificacion/fase1/61_BLOQUE_REPO.md`,
+   versionados a propósito: el guion detallado vivía en `_local/`, que es ignorada y de usar y
+   tirar. Y **el respaldo sigue en el portátil**, que es justo donde no debe estar; eso no ha
+   cambiado.
 3. **El Camino 3 de redacción, sin verificar del todo** — *trasladado aquí por REPO.3 al retirar
    `docs/PRUEBAS_PENDIENTES.md`, 2026-09-07*. Falta un borrador real con bloques
    `AI_ASSISTED_TEXT` (vía `/redaccion/llm-drafts/approve-as-workspace`), la anonimización con

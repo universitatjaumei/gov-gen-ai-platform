@@ -121,6 +121,7 @@ dev = [
     # dejado sin probar justo lo que puede fallar: que un paquete REAL se encuentre.
     # La imagen no lo lleva: el Dockerfile instala con `--no-dev`.
     "govgenai-demo-perfil",
+    "pyright>=1.1",
 ]
 
 [[tool.uv.index]]
@@ -275,3 +276,39 @@ MD_AGENT_SELECTOR = "server.app.modules.agents_hub.agent.public_graphs.strategie
 "language.default" = "server.app.modules.agents_hub.agent.public_graphs.strategies.nucleo:default_language"
 "language.neutral" = "server.app.modules.agents_hub.agent.public_graphs.strategies.nucleo:neutral_language"
 "language.strict" = "server.app.modules.agents_hub.agent.public_graphs.strategies.nucleo:strict_language"
+
+# ---------------------------------------------------------------------------
+# Comprobación de tipos (issue #49). **Por módulo, y el alcance está aquí escrito.**
+#
+# Encenderlo sobre el árbol entero daría cientos de avisos y acabaría desactivado, que es como
+# mueren estas herramientas. Se empieza por `app/core/`, que es lo compartido y lo que más se
+# importa, y se amplía módulo a módulo con su commit.
+#
+# **Por qué aquí importa más que en otro proyecto.** La frontera edge/cloud se expresa con
+# protocolos —`ConfigProvider`, `EmbeddingService`—, y un protocolo que nadie comprueba es una
+# promesa de firma que sólo se verifica ejecutando el camino: una implementación que no la cumple
+# del todo falla en el despliegue donde ese camino sí se recorre. Hay precedente: la regla de leer
+# el contenido del modelo con `texto_de` nació de un defecto de tipos —Gemini devuelve `content`
+# como lista de bloques cuando hay más de una parte— que un comprobador habría señalado en el
+# fichero donde estaba, y no más tarde y en otro sitio.
+#
+# `extraPaths` con la raíz del repositorio porque el código se importa como `server.app.…` y este
+# manifiesto vive dentro de `server/`: sin esa línea, pyright no resuelve **ni uno** de sus
+# propios imports y devuelve 51 errores que no son errores.
+#
+# **SIGUIENTE MÓDULO: `app/routers/`.** Elegido midiendo y no a ojo — el 2026-09-20, con esta
+# misma configuración: `routers` 8 errores en 34 ficheros, `api` 6 en 7, `database` 5 en 4,
+# `modules/automation` 14 en 5, `services` 17 en 8. `routers` sale de los más baratos **y** es
+# donde vive el contrato con el frontend, que es donde un tipo equivocado se paga dos veces.
+# Después, por coste: `api`, `database`, `modules/automation`, `services`.
+#
+# Ampliar es añadir el directorio a `include`, dejarlo en cero y commitearlo aparte. Que el
+# siguiente esté escrito aquí es lo que hace que no dependa de que alguien se acuerde; lo vigila
+# `tests/infra/test_issue49_los_tipos_se_comprueban_por_modulo.py`.
+[tool.pyright]
+include = ["app/core"]
+extraPaths = [".."]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.13"
+typeCheckingMode = "basic"
