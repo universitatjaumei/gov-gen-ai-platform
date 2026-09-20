@@ -425,9 +425,8 @@ class TestElRouterEsEdgeYEstaRegistrado:
 
     def test_should_expose_the_endpoint_with_an_explicit_operation_id(self):
         from server.app.main import app
+        from server.tests.rutas import operaciones
 
-        rutas = {
-            getattr(r, "path", ""): getattr(r, "operation_id", None) for r in app.routes
-        }
+        rutas = operaciones(app)
         assert "/api/v1/verificaciones/citas" in rutas
         assert rutas["/api/v1/verificaciones/citas"]

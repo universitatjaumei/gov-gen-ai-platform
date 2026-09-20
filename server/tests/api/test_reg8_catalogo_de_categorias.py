@@ -338,10 +338,9 @@ class TestElCatalogoNoRechazaNada:
 
     def test_should_expose_the_endpoint_with_an_explicit_operation_id(self):
         from server.app.main import app
+        from server.tests.rutas import operaciones
 
-        operaciones = {
-            getattr(r, "path", ""): getattr(r, "operation_id", None) for r in app.routes
-        }
+        operaciones = operaciones(app)
         assert "/api/v1/actividad/categorias" in operaciones
         assert operaciones["/api/v1/actividad/categorias"]
 

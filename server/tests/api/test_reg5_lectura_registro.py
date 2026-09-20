@@ -373,12 +373,9 @@ class TestElContratoDeLaLectura:
     )
     def test_should_expose_each_endpoint_with_an_explicit_operation_id(self, ruta: str):
         from server.app.main import app
+        from server.tests.rutas import operaciones_por_metodo
 
-        operaciones = {
-            (getattr(r, "path", ""), metodo): getattr(r, "operation_id", None)
-            for r in app.routes
-            for metodo in getattr(r, "methods", set())
-        }
+        operaciones = operaciones_por_metodo(app)
         assert (ruta, "GET") in operaciones
         assert operaciones[(ruta, "GET")], (
             "REG.6 consume estos endpoints por los hooks que Orval genera del `operation_id`."
