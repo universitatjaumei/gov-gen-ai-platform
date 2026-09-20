@@ -104,11 +104,11 @@ def test_ningun_fichero_vivo_nombra_al_dueno_anterior() -> None:
     assert not culpables, (
         f"Estos ficheros VIVOS todavía nombran a '{DUENO_ANTERIOR}':\n  - "
         + "\n  - ".join(culpables)
-        + f"\n\nEl repositorio es de `universitatjaumei` desde el 2026-09-10. Un fichero que "
-        f"nombra al dueño anterior manda a quien lo lee a una URL que sólo funciona por "
-        f"redirección, y esa redirección desaparece el día que alguien registre ese nombre.\n"
-        f"Si el fichero es REGISTRO —cuenta lo que pasó— va en la lista `REGISTRO` de este "
-        f"mismo test, con su razón."
+        + "\n\nEl repositorio es de `universitatjaumei` desde el 2026-09-10. Un fichero que "
+        "nombra al dueño anterior manda a quien lo lee a una URL que sólo funciona por "
+        "redirección, y esa redirección desaparece el día que alguien registre ese nombre.\n"
+        "Si el fichero es REGISTRO —cuenta lo que pasó— va en la lista `REGISTRO` de este "
+        "mismo test, con su razón."
     )
 
 

@@ -25,7 +25,7 @@ from server.app.modules.redaccion.database.models import (
 )
 from server.app.routers.redaccion.hub_redaccion_router import get_template_ui_contract
 
-_USUARIO = UserInfo(user_id="1", email="fabra@uji.es", role="superadmin")
+_USUARIO = UserInfo(user_id="1", email="admin@example.local", role="superadmin")
 
 def _spec_ya_guardada() -> dict:
     """Una spec como las que ya están en la base: con su slot obligatorio de markdown y

@@ -12,17 +12,15 @@ Cubre:
 """
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 
 from server.app.modules.redaccion.contracts.runtime import (
     BlockState,
-    Citation,
     WorkspaceState,
 )
 from server.app.modules.redaccion.graph.nodes.ai_assist_draft import AIAssistDraftNode
@@ -57,10 +55,14 @@ def _now() -> datetime:
 
 def _make_cell_mock(
     text: str,
-    l: float = 10.0,
-    t: float = 20.0,
-    r: float = 110.0,
-    b: float = 40.0,
+    # Las cuatro coordenadas de la caja. Se renombran las cuatro y no sólo la `l` —que es la
+    # que `E741` señala por confundirse con un `1`— porque una firma con tres letras y una
+    # palabra se lee peor que cuatro palabras. El `.l` de la biblioteca sigue llamándose `.l`,
+    # y eso se ve en la línea de asignación de abajo, que es donde hace falta saberlo.
+    izquierda: float = 10.0,
+    arriba: float = 20.0,
+    derecha: float = 110.0,
+    abajo: float = 40.0,
     col_span: int = 1,
     row_span: int = 1,
 ) -> MagicMock:
@@ -69,7 +71,7 @@ def _make_cell_mock(
     cell.col_span = col_span
     cell.row_span = row_span
     bbox = MagicMock()
-    bbox.l, bbox.t, bbox.r, bbox.b = l, t, r, b
+    bbox.l, bbox.t, bbox.r, bbox.b = izquierda, arriba, derecha, abajo
     cell.bbox = bbox
     return cell
 
@@ -77,16 +79,16 @@ def _make_cell_mock(
 def _make_table_mock(
     page_no: int,
     grid: list[list[Any]],
-    l: float = 0.0,
-    t: float = 0.0,
-    r: float = 500.0,
-    b: float = 200.0,
+    izquierda: float = 0.0,
+    arriba: float = 0.0,
+    derecha: float = 500.0,
+    abajo: float = 200.0,
 ) -> MagicMock:
     tbl = MagicMock()
     prov = MagicMock()
     prov.page_no = page_no
     bbox = MagicMock()
-    bbox.l, bbox.t, bbox.r, bbox.b = l, t, r, b
+    bbox.l, bbox.t, bbox.r, bbox.b = izquierda, arriba, derecha, abajo
     prov.bbox = bbox
     tbl.prov = [prov]
     data = MagicMock()

@@ -118,7 +118,7 @@ def test_las_listas_no_llevan_acentos_graves() -> None:
     **comentario**. Lo cazó el test que ejecuta el plan en seco, no leer el fichero.
     """
     for nombre in ("TABLAS", "PROHIBIDAS"):
-        con_acento = [l for l in _bloque(nombre).splitlines() if "`" in l]
+        con_acento = [linea for linea in _bloque(nombre).splitlines() if "`" in linea]
         assert not con_acento, (
             f"Acento grave en {nombre}: bash lo ejecutaría como orden. {con_acento}"
         )
@@ -206,8 +206,8 @@ def test_cada_tabla_lleva_su_filtro_y_ninguna_se_volca_entera() -> None:
     """
     texto = _texto()
     activas = [
-        l for l in texto.splitlines()
-        if "pg_dump" in l and not l.strip().startswith("#")
+        linea for linea in texto.splitlines()
+        if "pg_dump" in linea and not linea.strip().startswith("#")
     ]
     assert not activas, f"`pg_dump` no puede filtrar filas; usa `\\copy` con WHERE: {activas}"
     assert "\\\\copy (SELECT $seleccion FROM $tabla WHERE $filtro)" in texto, (
@@ -295,10 +295,10 @@ def test_no_desactiva_las_comprobaciones_de_la_base() -> None:
     """
     texto = _texto()
     activas = [
-        l for l in texto.splitlines()
-        if "session_replication_role" in l
-        and not l.strip().startswith("#")
-        and "echo" not in l
+        linea for linea in texto.splitlines()
+        if "session_replication_role" in linea
+        and not linea.strip().startswith("#")
+        and "echo" not in linea
     ]
     assert not activas, f"No se desactivan los disparadores: {activas}"
 

@@ -49,7 +49,7 @@ async def test_el_borrado_registra_cuanto_corpus_se_llevo(monkeypatch, caplog):
     with caplog.at_level(logging.INFO, logger=router_mod.__name__):
         await router_mod.delete_chatbot(
             chatbot_id=chatbot_id,
-            user=UserInfo(user_id="1", email="fabra@uji.es", role="superadmin"),
+            user=UserInfo(user_id="1", email="admin@example.local", role="superadmin"),
             session=_SesionQueNoHaceNada(),
         )
 
@@ -98,7 +98,7 @@ async def test_un_borrado_sin_corpus_tambien_deja_rastro(monkeypatch, caplog):
     with caplog.at_level(logging.INFO, logger=router_mod.__name__):
         await router_mod.delete_chatbot(
             chatbot_id=uuid.uuid4(),
-            user=UserInfo(user_id="1", email="fabra@uji.es", role="superadmin"),
+            user=UserInfo(user_id="1", email="admin@example.local", role="superadmin"),
             session=_SesionQueNoHaceNada(),
         )
 

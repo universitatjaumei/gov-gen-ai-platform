@@ -19,7 +19,7 @@ echo      (el servicio se llama "postgres". Un "up -d" completo choca en
 echo       9000/9001 con el MinIO del stack de produccion si esta levantado)
 echo   3. Backend arrancado desde la raiz del proyecto, en el puerto 8000:
 echo        cd C:\Users\fabra\Documents\AI_agents_hub
-echo        set CRAWLER_CONTACT=fabra@uji.es
+echo        set CRAWLER_CONTACT=admin@example.local
 echo        uv run --project server uvicorn server.app.main:app --port 8000
 echo      OJO: tarda 2-4 minutos en arrancar (carga torch). Hasta que no
 echo      escriba "Application startup complete" no responde.

@@ -11,10 +11,8 @@ Parte 5 (endpoints) que pueden testarse en aislamiento:
 """
 from __future__ import annotations
 
-import json
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -136,7 +134,6 @@ async def test_describe_test_data_suggests_iban_provider_for_iban_column(
 @pytest.fixture
 def test_app(tmp_path, monkeypatch):
     """App FastAPI con sesión mockeada y storage local."""
-    import os
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 

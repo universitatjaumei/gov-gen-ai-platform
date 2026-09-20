@@ -1,5 +1,4 @@
 """Tests para el detector de idioma."""
-import pytest
 
 
 class TestLanguageDetector:

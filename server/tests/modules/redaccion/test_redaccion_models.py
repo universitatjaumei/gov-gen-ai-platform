@@ -5,8 +5,7 @@ columnas, constraints y configuraciones correctas antes de la migración real.
 """
 from __future__ import annotations
 
-import pytest
-from sqlalchemy import UniqueConstraint, inspect as sa_inspect
+from sqlalchemy import UniqueConstraint
 
 
 class TestRedaccionTableSchema:
@@ -14,13 +13,6 @@ class TestRedaccionTableSchema:
         return table.columns[name]
 
     def test_alembic_upgrade_head_creates_new_tables(self):
-        from server.app.modules.redaccion.database.models import (
-            HubReportTemplate,
-            HubReportTemplateVersion,
-            HubWorkspace,
-            HubWorkspaceBlock,
-            HubRunManifest,
-        )
         expected_tables = {
             "hub_report_templates",
             "hub_report_template_versions",

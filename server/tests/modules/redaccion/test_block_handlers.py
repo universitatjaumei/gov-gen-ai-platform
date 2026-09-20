@@ -78,7 +78,6 @@ class TestBlockHandlerContract:
     def test_data_block_requires_extraction_source(self):
         from server.app.modules.redaccion.blocks.handlers import (
             DeterministicDataHandler,
-            BlockHandlerValidationError,
         )
         from server.app.modules.redaccion.contracts.blocks import DeterministicDataBlock
         handler = DeterministicDataHandler()

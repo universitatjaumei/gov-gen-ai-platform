@@ -1,6 +1,6 @@
 ﻿"""Tests para el orquestador de tareas y sÃ­ntesis (Prompt 4.9)."""
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 
 class TestTaskRunner:

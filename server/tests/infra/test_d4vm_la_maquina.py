@@ -109,8 +109,8 @@ def test_solo_el_sandbox_corre_bajo_gvisor() -> None:
     texto = _texto(COMPOSE)
     # Sólo líneas activas: el comentario que explica la decisión también nombra la directiva.
     activas = [
-        l for l in texto.splitlines()
-        if "runtime: runsc" in l and not l.strip().startswith("#")
+        linea for linea in texto.splitlines()
+        if "runtime: runsc" in linea and not linea.strip().startswith("#")
     ]
     assert len(activas) == 1, (
         f"`runtime: runsc` está activo {len(activas)} veces. Va sólo en el sandbox: es el "
@@ -191,7 +191,7 @@ def test_la_limpieza_de_sockets_comprueba_que_no_haya_proxy_corriendo() -> None:
     assert "/opt/govgenai/cloudsql" in texto and "rm -rf" in texto, (
         "Falta la limpieza de sockets huérfanos en ExecStartPre."
     )
-    limpieza = [l for l in texto.splitlines() if "rm -rf" in l and "cloudsql" in l]
+    limpieza = [linea for linea in texto.splitlines() if "rm -rf" in linea and "cloudsql" in linea]
     assert limpieza, "No se encuentra la línea de limpieza."
     for linea in limpieza:
         assert "govgenai_sql_proxy" in linea and "status=running" in linea, (
@@ -220,8 +220,8 @@ def test_el_proxy_no_repite_las_cabeceras_de_seguridad_de_la_aplicacion() -> Non
                      "X-Content-Type-Options", "Referrer-Policy"):
         # Se permite nombrarla en un comentario que explica por qué NO se pone.
         activas = [
-            l for l in texto.splitlines()
-            if cabecera in l and not l.strip().startswith("#")
+            linea for linea in texto.splitlines()
+            if cabecera in linea and not linea.strip().startswith("#")
         ]
         assert not activas, (
             f"{cabecera} la pone `server/app/core/security_headers.py`. Repetirla aquí crea "
@@ -240,7 +240,7 @@ def test_el_proxy_pasa_la_api_y_la_salud_a_la_aplicacion() -> None:
 
 def test_el_proxy_no_abre_docs_porque_lo_cierra_la_aplicacion() -> None:
     texto = _texto(CADDYFILE)
-    activas = [l for l in texto.splitlines() if "/docs" in l and not l.strip().startswith("#")]
+    activas = [linea for linea in texto.splitlines() if "/docs" in linea and not linea.strip().startswith("#")]
     assert not activas, f"`/docs` lo apaga SEC.7 en la aplicación; no se enruta aquí: {activas}"
 
 
@@ -271,7 +271,7 @@ def test_la_unidad_systemd_levanta_la_pila_y_baja_los_secretos_antes() -> None:
 def test_el_22_no_queda_abierto_al_mundo() -> None:
     texto = _texto(PROVISION)
     assert "35.235.240.0/20" in texto, "El SSH tiene que entrar sólo por el rango de IAP."
-    reglas_22 = [l for l in texto.splitlines() if "tcp:22" in l]
+    reglas_22 = [linea for linea in texto.splitlines() if "tcp:22" in linea]
     assert reglas_22, "No se encuentra la regla del 22."
     for linea in reglas_22:
         assert "0.0.0.0/0" not in linea, f"22 abierto a Internet: {linea.strip()}"

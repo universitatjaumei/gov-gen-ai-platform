@@ -20,7 +20,6 @@ experimento les faltaban. Una estrategia nueva las habría vuelto a dejar fuera.
 """
 import uuid
 
-import pytest
 
 from server.app.modules.agents_hub.services.retrieval.vector_strategy import (
     VectorRetrievalStrategy,

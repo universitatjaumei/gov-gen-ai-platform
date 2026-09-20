@@ -55,14 +55,14 @@ def test_should_say_the_same_scope_as_the_code():
     daba un falso rojo — lo dio, de hecho, la primera vez que corrió este test.
     """
     lineas = [
-        l
-        for l in DOCUMENTO.read_text(encoding="utf-8").splitlines()
-        if l.startswith("| `")
+        linea
+        for linea in DOCUMENTO.read_text(encoding="utf-8").splitlines()
+        if linea.startswith("| `")
     ]
 
     discrepantes: list[str] = []
     for tabla, ambito in sorted(_tablas_declaradas().items()):
-        fila = next((l for l in lineas if re.search(rf"`{re.escape(tabla)}`", l)), None)
+        fila = next((linea for linea in lineas if re.search(rf"`{re.escape(tabla)}`", linea)), None)
         if fila is None:
             continue  # lo cubre el test de arriba
         if ambito.value not in fila:

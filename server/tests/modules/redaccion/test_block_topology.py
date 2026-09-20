@@ -294,7 +294,6 @@ class TestBlockDependencyChecks:
         assert "b_data" not in blocking_ok
 
     def test_block_outputs_persisted_to_workspace_state(self):
-        from server.app.modules.redaccion.contracts.runtime import WorkspaceState
         ws = _make_workspace()
         assert hasattr(ws, "block_outputs")
         assert isinstance(ws.block_outputs, dict)

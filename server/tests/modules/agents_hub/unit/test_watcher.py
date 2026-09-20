@@ -1,7 +1,7 @@
 """Tests para el watcher de ingestión."""
 import uuid
 import pytest
-from unittest.mock import AsyncMock, Mock, MagicMock, patch
+from unittest.mock import AsyncMock, Mock, MagicMock
 
 
 class TestIngestionWatcher:

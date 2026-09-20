@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import FastAPI
@@ -90,7 +90,7 @@ def _app(sesion: Any) -> FastAPI:
 
     async def _usuario():
         return UserInfo(
-            user_id=str(uuid.uuid4()), email="fabra@uji.es", role="admin",
+            user_id=str(uuid.uuid4()), email="admin@example.local", role="admin",
             organizacion_ids=(str(_ORG),),
         )
 

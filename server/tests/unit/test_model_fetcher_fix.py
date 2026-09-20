@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch
-from server.app.services.model_fetcher import get_models_for_provider, fetch_google_models
+from server.app.services.model_fetcher import fetch_google_models
 
 @pytest.mark.asyncio
 async def test_fetch_google_models_fallback():

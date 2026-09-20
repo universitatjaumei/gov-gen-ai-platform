@@ -97,7 +97,6 @@ class _FakeFindingRepo:
         self._by_key: dict[tuple, Any] = {}
 
     def _key(self, finding: Any) -> tuple:
-        from server.app.modules.curation.contracts import ContentFinding
 
         return (
             finding.site_id,

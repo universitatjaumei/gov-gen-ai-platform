@@ -293,10 +293,10 @@ class TestNadieMasLeeElContenidoEnBruto:
         sospechosa = re.compile(r"\.content\s+if\s+hasattr\(")
 
         encontradas = [
-            f"{f.relative_to(raiz).as_posix()}:{n}: {l.strip()}"
+            f"{f.relative_to(raiz).as_posix()}:{n}: {linea.strip()}"
             for f in raiz.rglob("*.py")
-            for n, l in enumerate(f.read_text(encoding="utf-8").splitlines(), 1)
-            if sospechosa.search(l)
+            for n, linea in enumerate(f.read_text(encoding="utf-8").splitlines(), 1)
+            if sospechosa.search(linea)
         ]
 
         assert not encontradas, (

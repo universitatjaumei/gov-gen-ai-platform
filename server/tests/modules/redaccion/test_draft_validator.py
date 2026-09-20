@@ -4,7 +4,6 @@ Tests RED → GREEN.
 """
 from __future__ import annotations
 
-import pytest
 
 from server.app.modules.redaccion.contracts.blocks import (
     AIAssistedTextBlock,
@@ -12,7 +11,6 @@ from server.app.modules.redaccion.contracts.blocks import (
     DeterministicDataBlock,
     ReviewGateBlock,
     StaticTextBlock,
-    TableBlock,
 )
 from server.app.modules.redaccion.contracts.block_io import BlockReference
 from server.app.modules.redaccion.contracts.drafts import ReportTemplateDraft

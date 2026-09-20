@@ -96,11 +96,20 @@ class TestParaLasPersonasNoCambiaNada:
         assert "exit 1" in guion, "el paso ya no falla cuando encuentra un commit sin firmar"
 
     def test_sigue_revisando_las_dos_ramas_y_las_pull_requests(self) -> None:
-        """La política valía también para `main` y `desarrollo`, y eso no lo toca APER.13."""
+        """La política vale para `main` y `desarrollo`, y eso no lo toca APER.13.
+
+        **Este test fijaba `pull_request: [main]` y se amplió el 2026-09-20.** No porque la
+        política cambiara, sino porque así escrita dejaba fuera justo a quien esta exención
+        existe para desbloquear: Dependabot abre sus PR contra `desarrollo`, y sin ese
+        disparador **no se le ejecutaba el DCO ni ninguna otra cosa**. Había veinte PR suyas
+        con cero comprobaciones. Lo vigila
+        `test_las_pr_a_desarrollo_tambien_se_comprueban.py`, que saca la lista de ramas del
+        propio `dependabot.yml` en vez de escribirla a mano.
+        """
         datos = yaml.safe_load(DCO.read_text(encoding="utf-8"))
         disparadores = datos[True] if True in datos else datos["on"]
         assert set(disparadores["push"]["branches"]) == {"main", "desarrollo"}
-        assert disparadores["pull_request"]["branches"] == ["main"]
+        assert set(disparadores["pull_request"]["branches"]) == {"main", "desarrollo"}
 
 
 class TestLaRazonEstaEscrita:

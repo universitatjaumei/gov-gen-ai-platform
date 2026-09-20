@@ -14,7 +14,6 @@ documento → metadatos del fragmento → `Source.metadata` → `EvidenceItem.me
 """
 from __future__ import annotations
 
-import pytest
 
 
 class TestLaAutoridadViajaConElFragmento:

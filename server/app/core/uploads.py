@@ -18,7 +18,7 @@ import re
 import tempfile
 import unicodedata
 from enum import Enum
-from typing import IO
+from typing import IO, NoReturn
 
 from fastapi import HTTPException, UploadFile, status
 
@@ -168,7 +168,7 @@ def assert_within_document_quota(documentos_actuales: int) -> None:
         )
 
 
-def _rechazar(detalle: str) -> None:
+def _rechazar(detalle: str) -> NoReturn:
     raise HTTPException(
         status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=detalle
     )

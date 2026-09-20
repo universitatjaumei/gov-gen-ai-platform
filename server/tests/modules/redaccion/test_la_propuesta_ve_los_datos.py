@@ -64,7 +64,7 @@ class TestElResumenDeLaMuestra:
 
         csv = (
             "nombre,dni,correo,importe\n"
-            "Modesto Fabra,12345678Z,fabra@uji.es,100\n"
+            "Modesto Fabra,12345678Z,admin@example.local,100\n"
             "Ana Garcia Lopez,87654321X,ana@uji.es,200\n"
         ).encode("utf-8")
 
@@ -72,7 +72,7 @@ class TestElResumenDeLaMuestra:
         plano = str(muestra.primeras_filas)
 
         assert "12345678Z" not in plano
-        assert "fabra@uji.es" not in plano
+        assert "admin@example.local" not in plano
         # Las columnas **sí** se conservan: son estructura, no dato personal, y son justo lo
         # que el modelo necesita para no inventarse nombres de campo.
         assert muestra.columnas == ["nombre", "dni", "correo", "importe"]

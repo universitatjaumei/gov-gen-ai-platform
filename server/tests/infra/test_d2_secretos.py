@@ -189,7 +189,7 @@ def test_todo_valor_capturado_de_gcloud_se_limpia() -> None:
     assert "limpiar()" in crear, "Falta la función que limpia lo capturado de gcloud."
     for captura in ("connectionName", "govgenai-db-password"):
         linea = next(
-            (l for l in crear.splitlines() if captura in l and "$(" in l or captura in l),
+            (linea for linea in crear.splitlines() if captura in linea and "$(" in linea or captura in linea),
             "",
         )
         assert linea, f"No se encontró la captura de {captura}"

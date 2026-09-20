@@ -1,7 +1,6 @@
 """Tests de integración para rutas protegidas con JWT."""
 from unittest.mock import patch
 
-import pytest
 from fastapi import FastAPI, Depends
 from fastapi.testclient import TestClient
 

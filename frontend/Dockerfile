@@ -30,7 +30,22 @@ RUN npm run build
 
 
 # Stage 2: Runtime — nginx sirviendo los estáticos + proxy same-origin del API
-FROM nginx:1.27-alpine AS runtime
+#
+# **Sin privilegios (issue #44).** La imagen oficial de nginx arranca como root, y ésta era
+# la única de las cuatro del proyecto que no declaraba usuario —las otras van con `appuser`
+# o `65534`—. No es un agujero, es defensa en profundidad: el día que una vulnerabilidad de
+# nginx permita ejecutar algo, la diferencia entre hacerlo como root o como un usuario sin
+# privilegios es la diferencia entre un susto y un incidente. Y esto se publica como ejemplo
+# de despliegue para administraciones, así que es lo que copiará quien lo tome de plantilla.
+#
+# **Añadir `USER` a la imagen oficial no era la alternativa barata: no arranca.** Dentro de
+# un contenedor, escuchar por debajo del 1024 exige root o `CAP_NET_BIND_SERVICE`. Por eso
+# esta imagen escucha en el **8080**, y por eso el cambio toca cinco ficheros y no uno:
+# `nginx.conf`, el `EXPOSE` y la sonda de aquí, el `reverse_proxy` del `Caddyfile` y el
+# mapeo del compose de producción. Son cinco sitios y un solo número; lo comprueba
+# `server/tests/infra/test_issue44_el_frontend_no_corre_como_root.py`, porque si uno se
+# queda atrás el panel devuelve 502 y el fallo aparece en el despliegue, no aquí.
+FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
 
 # El `dist` va al SUBDIRECTORIO del prefijo, no a la raíz. Así `/panel/assets/x.js`
 # es un fichero que existe de verdad y no el `index.html` devuelto por el fallback
@@ -41,8 +56,8 @@ COPY --from=builder /app/dist /usr/share/nginx/html/panel
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=5 \
-    CMD wget --no-verbose --tries=1 --spider http://127.0.0.1/healthz || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/healthz || exit 1
 
-EXPOSE 80
+EXPOSE 8080
 
 CMD ["nginx", "-g", "daemon off;"]

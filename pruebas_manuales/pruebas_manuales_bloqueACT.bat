@@ -41,7 +41,7 @@ echo ---------------------------------------------------------------
 echo  COMPROBACION 2 - La misma norma en las dos lenguas
 echo ---------------------------------------------------------------
 echo  Entra en http://localhost:5173/login
-echo     usuario: fabra@uji.es    contrasena: admin1234
+echo     usuario: admin@example.local    contrasena: admin1234
 echo  Abre el asistente "Normativa UJI" y pregunta DOS VECES lo mismo:
 echo.
 echo     (en castellano)  Que dice el reglamento sobre teletrabajo del PTGAS?

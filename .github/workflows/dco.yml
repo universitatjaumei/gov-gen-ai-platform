@@ -14,7 +14,21 @@ name: DCO
 
 on:
   pull_request:
-    branches: [main]
+    # `desarrollo` está aquí porque **Dependabot abre sus PR contra esa rama** y, sin esta
+    # línea, no se le ejecutaba nada: el 2026-09-20 había **veinte PR suyas con cero
+    # comprobaciones**. Una PR sin checks no sale en rojo, sale en blanco, que se parece bastante
+    # a un verde cuando se mira por encima.
+    #
+    # Son dos decisiones correctas que juntas dejaban un hueco: Dependabot apunta a `desarrollo`
+    # para no abrir PR contra la rama que despliega, y esto escuchaba sólo `main` porque el
+    # trabajo humano llega a `desarrollo` **empujado**, y el disparador de `push` ya lo cubre.
+    # Para el robot no vale: su código sólo existe en la rama de la PR hasta que alguien mezcla.
+    #
+    # No duplica ejecuciones. Lo que una persona abre es `desarrollo → main`, que ya estaba
+    # cubierto; las PR **contra** `desarrollo` son hoy sólo las del robot. Y el grupo de
+    # concurrencia lleva `github.ref`, que en una PR es `refs/pull/N/merge`: grupo distinto del
+    # de un empujón, así que tampoco se cancelan entre sí.
+    branches: [main, desarrollo]
   push:
     branches: [main, desarrollo]
 

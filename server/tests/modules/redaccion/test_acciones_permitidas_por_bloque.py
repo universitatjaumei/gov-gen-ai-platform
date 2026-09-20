@@ -39,7 +39,7 @@ from server.app.routers.redaccion.hub_redaccion_router import (
     patch_workspace_block,
 )
 
-_USUARIO = UserInfo(user_id="1", email="fabra@uji.es", role="superadmin")
+_USUARIO = UserInfo(user_id="1", email="admin@example.local", role="superadmin")
 
 
 async def _workspace_con_bloque(session, *, status: str, failure_kind: str | None = None):

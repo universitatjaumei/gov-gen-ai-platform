@@ -29,7 +29,7 @@ vi.mock('@/shared/api/generated/hub-redaccion/hub-redaccion', () => ({
 }))
 
 vi.mock('@/shared/auth', () => ({
-  useAuth: () => ({ user: { role: 'superadmin', email: 'fabra@uji.es' } }),
+  useAuth: () => ({ user: { role: 'superadmin', email: 'admin@example.local' } }),
 }))
 
 const PLANTILLA = {

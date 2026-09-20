@@ -85,7 +85,10 @@ def configurar_logging() -> None:
     manejadores que haya —los de uvicorn, que llega antes— y sólo se añade uno si no hay ninguno.
     El resultado en producción es el mismo y deja de pisar a nadie.
 
-    El nivel sale de `LOG_LEVEL`, que ya está en el compose de producción y en `.env.example`.
+    El nivel sale de `LOG_LEVEL`. Esta frase decía que estaba «en el compose de producción y
+    en `.env.example`», y en `.env.example` **no estaba**: se escribió a la vez que la
+    intención y nadie volvió a mirarlo. Ahora sí (issue #42), junto con las otras seis que
+    el código leía sin que ningún inventario las declarara.
     """
     nivel = getattr(logging, (os.getenv("LOG_LEVEL") or "INFO").upper(), logging.INFO)
     formato = logging.Formatter("%(asctime)s %(levelname)-8s %(name)s — %(message)s")

@@ -15,14 +15,14 @@ Dos cosas que estos tests fijan y que son fáciles de hacer mal:
 from __future__ import annotations
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 # SEC.2: el chat y la ingesta exigen que el principal gestione la organizacion del
 # chatbot. Estos tests prueban otra cosa, asi que doble y token comparten organizacion;
 # la tenencia tiene su propio gate en `tests/api/test_tenant_isolation.py`.
 ORG_PRUEBA = "00000000-0000-0000-0000-00000000dead"
-
-import pytest
 
 
 class _Embedding:
@@ -42,7 +42,7 @@ class _Provider:
 
 
 DOCUMENTO_LARGO = "\n\n".join(
-    [f"# Reglament\n"]
+    ["# Reglament\n"]
     + [f"##### Article {i}. Objecte {{#art-{i}}}\n\n" + ("text " * 120) for i in range(1, 9)]
 )
 

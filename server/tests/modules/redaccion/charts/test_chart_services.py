@@ -18,7 +18,6 @@ from server.app.modules.redaccion.services.charts.chart_renderer import render_c
 from server.app.modules.redaccion.services.charts.chart_factory import ChartFactory
 from server.app.modules.redaccion.contracts.blocks import ChartBlock, ChartBlockConfig
 from server.app.modules.redaccion.blocks.handlers import ChartHandler
-from server.app.modules.redaccion.contracts.runtime import WorkspaceState, BlockState
 
 
 # ---------------------------------------------------------------------------

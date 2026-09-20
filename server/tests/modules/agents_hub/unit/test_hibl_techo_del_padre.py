@@ -63,7 +63,6 @@ Deploy: edge
 """
 from __future__ import annotations
 
-import pytest
 
 from server.app.modules.agents_hub.ingestion.chunker import MarkdownChunker
 

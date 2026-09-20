@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useSearchParams } from 'react-router-dom'
-import { AuthProvider, useAuth } from '../AuthContext'
+import { AuthProvider } from '../AuthContext'
+import { useAuth } from '../useAuth'
 import { PrivateRoute } from '../PrivateRoute'
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +

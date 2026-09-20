@@ -1,5 +1,4 @@
 """Tests de importacion para server."""
-import pytest
 
 
 def test_database_models_import():

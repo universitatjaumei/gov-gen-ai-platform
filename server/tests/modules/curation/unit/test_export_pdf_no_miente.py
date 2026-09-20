@@ -47,7 +47,7 @@ async def _exportar(salida: bytes):
         return await export_site_report(
             site_id=uuid.uuid4(),
             report_format="pdf",
-            current_user=UserInfo(user_id="1", email="fabra@uji.es", role="superadmin"),
+            current_user=UserInfo(user_id="1", email="admin@example.local", role="superadmin"),
             builder=_Constructor(),
             exporter=_exportador(salida),
             session=AsyncMock(),

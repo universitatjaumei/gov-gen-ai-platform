@@ -12,7 +12,6 @@ Decisión del usuario (2026-08-20): **por módulos concedidos, no por rol nuevo*
 """
 from __future__ import annotations
 
-import uuid
 
 import pytest
 from fastapi import HTTPException

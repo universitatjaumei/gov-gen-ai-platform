@@ -15,7 +15,8 @@ Tres cosas que se leen mal si no están dichas:
   La ausencia se lee como un olvido si no está explicada, así que el contrato **rechaza** un
   campo de contraseña en vez de ignorarlo en silencio.
 - **El correo es la clave del reencuentro**, así que se normaliza al guardar y al buscar.
-  `Fabra@UJI.es` y `fabra@uji.es` tienen que ser la misma persona, o el alta manual no sirve.
+  `Persona@Example.ORG` y `persona@example.org` tienen que ser la misma persona, o el alta
+  manual no sirve.
 - **`is_active = false` niega la entrada**, no solo oculta la fila del listado. La columna
   existía desde AUTH.2 y **nadie la miraba**: una persona desactivada seguía entrando.
 """

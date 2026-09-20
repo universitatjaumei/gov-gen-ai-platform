@@ -135,7 +135,7 @@ class TestLaProyeccionEsDerivada:
             termino_normativo="contracte menor de subministrament",
             origen="reformulacion",
         )
-        await aprobar_par(db_session, par.id, revisado_por="fabra@uji.es")
+        await aprobar_par(db_session, par.id, revisado_por="admin@example.local")
 
         await proyectar_lexico(db_session, organizacion_id=seed_org)
 
@@ -159,7 +159,7 @@ class TestLaProyeccionEsDerivada:
             termino_normativo="contracte menor de subministrament",
             origen="reformulacion",
         )
-        await aprobar_par(db_session, par.id, revisado_por="fabra@uji.es")
+        await aprobar_par(db_session, par.id, revisado_por="admin@example.local")
         await proyectar_lexico(db_session, organizacion_id=seed_org)
         primera = [t.bilingual_terms for t in await _trozos(db_session, documento.id)]
 
@@ -191,10 +191,10 @@ class TestLaProyeccionEsDerivada:
             termino_normativo="contracte menor de subministrament",
             origen="reformulacion",
         )
-        await aprobar_par(db_session, par.id, revisado_por="fabra@uji.es")
+        await aprobar_par(db_session, par.id, revisado_por="admin@example.local")
         await proyectar_lexico(db_session, organizacion_id=seed_org)
 
-        await rechazar_par(db_session, par.id, revisado_por="fabra@uji.es")
+        await rechazar_par(db_session, par.id, revisado_por="admin@example.local")
         await proyectar_lexico(db_session, organizacion_id=seed_org)
 
         trozos = await _trozos(db_session, documento.id)
@@ -222,7 +222,7 @@ class TestElLexicoNoEntraEnElEmbedding:
             termino_normativo="contracte menor de subministrament",
             origen="reformulacion",
         )
-        await aprobar_par(db_session, par.id, revisado_por="fabra@uji.es")
+        await aprobar_par(db_session, par.id, revisado_por="admin@example.local")
         antes = [t.embedding_text for t in await _trozos(db_session, documento.id)]
 
         await proyectar_lexico(db_session, organizacion_id=seed_org)
@@ -259,7 +259,7 @@ class TestElParAprobadoHaceEncontrarElDocumento:
             termino_normativo="contracte menor de subministrament",
             origen="reformulacion",
         )
-        await aprobar_par(db_session, par.id, revisado_por="fabra@uji.es")
+        await aprobar_par(db_session, par.id, revisado_por="admin@example.local")
         await proyectar_lexico(db_session, organizacion_id=seed_org)
 
         despues = await retriever.keyword_search(
@@ -287,7 +287,7 @@ class TestLosParesNoSeFiltranEntreOrganizaciones:
             termino_normativo="contracte menor de subministrament",
             origen="reformulacion",
         )
-        await aprobar_par(db_session, par.id, revisado_por="fabra@uji.es")
+        await aprobar_par(db_session, par.id, revisado_por="admin@example.local")
 
         # Se proyecta la OTRA organización: no debe tocar nada de esta.
         otra_org = await _organizacion(db_session, "Otra org")

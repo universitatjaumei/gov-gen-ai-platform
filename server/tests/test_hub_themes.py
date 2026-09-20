@@ -1,9 +1,6 @@
 """Tests para el sistema de temas (hub_themes_router)."""
 import pytest
-import uuid
 
-from pathlib import Path
-from unittest.mock import patch
 
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient

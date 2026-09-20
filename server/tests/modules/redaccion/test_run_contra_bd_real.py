@@ -30,7 +30,7 @@ from server.app.modules.redaccion.database.models import (
 from server.app.routers.redaccion._actor import user_to_uuid
 from server.app.routers.redaccion.workspaces_router import run_workspace
 
-_USUARIO = UserInfo(user_id="1", email="fabra@uji.es", role="superadmin")
+_USUARIO = UserInfo(user_id="1", email="admin@example.local", role="superadmin")
 
 
 class _Tareas:
@@ -127,7 +127,6 @@ async def test_should_actually_persist_the_uploaded_input(db_url):
     que SQLAlchemy no emitía UPDATE. Visto en VER.4: la extracción no encontraba el Excel
     que se acababa de subir, y el informe salía sin datos.
     """
-    from server.app.core.storage import StorageService
     from server.app.routers.redaccion.workspaces_router import upload_workspace_input
 
     class _FicheroFalso:

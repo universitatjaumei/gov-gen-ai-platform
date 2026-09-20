@@ -6,10 +6,8 @@ Cubren los 6 endpoints nuevos:
 """
 from __future__ import annotations
 
-import hashlib
-import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
@@ -224,7 +222,6 @@ def approval_app(tmp_path):
 
 def test_save_to_private_template_requires_audit_pass(approval_app) -> None:
     client, state, user_holder = approval_app
-    from server.app.api.deps import get_current_user
     from server.app.core.auth.models import UserInfo
 
     user_uuid = uuid.uuid4()

@@ -11,7 +11,6 @@ from server.app.modules.redaccion.contracts.inputs import InputContract, InputSl
 from server.app.modules.redaccion.contracts.runtime import (
     BlockState,
     ExtractionWarning,
-    InputArtifact,
     WorkspaceState,
 )
 from server.app.modules.redaccion.contracts.template import (
@@ -26,7 +25,6 @@ from server.app.modules.redaccion.pipelines.contracts import (
     ExtractionResult,
     ExtractedMetric,
     ExtractedTable,
-    ExtractionWarning as PipelineWarning,
 )
 
 

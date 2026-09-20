@@ -13,14 +13,14 @@ la clave termina en `.md`, y `run_job` ya no escribe un fichero temporal para qu
 conversor lo abra — lee el contenido del almacén y lo pasa como texto.
 """
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # SEC.2: el chat y la ingesta exigen que el principal gestione la organizacion del
 # chatbot. Estos tests prueban otra cosa, asi que doble y token comparten organizacion;
 # la tenencia tiene su propio gate en `tests/api/test_tenant_isolation.py`.
 ORG_PRUEBA = "00000000-0000-0000-0000-00000000dead"
-
-import pytest
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -208,8 +208,6 @@ class TestWatcherStorageIntegration:
 
         created_tmp_paths = []
 
-        original_process = watcher.process_source
-
         async def process_and_capture(source_url, *args, **kwargs):
             created_tmp_paths.append(source_url)
             raise RuntimeError("Fallo simulado en Docling")
@@ -358,7 +356,6 @@ class TestUploadEndpointStorageIntegration:
 
     def test_upload_does_not_write_to_tmp_directly(self) -> None:
         """El handler no crea ficheros en /tmp directamente (usa StorageService)."""
-        import tempfile
         from fastapi.testclient import TestClient
 
         mock_storage = AsyncMock()

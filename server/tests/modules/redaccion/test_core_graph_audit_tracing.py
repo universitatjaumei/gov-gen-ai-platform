@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -172,7 +172,6 @@ class TestTracingService:
 
     @pytest.mark.asyncio
     async def test_ai_node_records_model_and_token_attributes_on_span(self) -> None:
-        from server.app.modules.redaccion.contracts.runtime import BlockState
         from server.app.modules.redaccion.graph.tracing import traced_node
 
         tracing, span = _mock_tracing()

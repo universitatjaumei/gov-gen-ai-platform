@@ -96,7 +96,7 @@ class TestElNucleoNoDependeDeLaCapaHttp:
         assert culpables == [], (
             "core/ importando de routers/ es la jerarquía al revés: la autenticación pasa a "
             "depender de la capa HTTP de un módulo, y core deja de poder leerse como base "
-            f"estable.\n  " + "\n  ".join(culpables)
+            "estable.\n  " + "\n  ".join(culpables)
         )
 
 
@@ -114,7 +114,7 @@ class TestElNucleoSoloArrastraLoQueYaArrastraba:
         assert nuevos == [], (
             "core/ ha empezado a importar de modules/ algo que no importaba. La lista es una "
             "deuda heredada que sólo puede encoger, no un sitio donde apuntar dependencias "
-            f"nuevas:\n  " + "\n  ".join(nuevos)
+            "nuevas:\n  " + "\n  ".join(nuevos)
         )
 
     def test_should_shrink_the_list_when_something_stops_being_imported(self):
@@ -150,7 +150,7 @@ class TestUnModuloNoTiraDeOtroSinDeclararlo:
 
         assert culpables == [], (
             "estos módulos se importan entre sí sin estar declarado en "
-            f"_MODULO_PUEDE_IMPORTAR:\n  " + "\n  ".join(culpables)
+            "_MODULO_PUEDE_IMPORTAR:\n  " + "\n  ".join(culpables)
         )
 
     def test_should_keep_the_base_layer_independent(self):

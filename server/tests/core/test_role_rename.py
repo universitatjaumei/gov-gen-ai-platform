@@ -12,7 +12,7 @@ import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from server.app.api.deps import get_current_user, require_admin, require_superadmin
+from server.app.api.deps import require_admin, require_superadmin
 from server.app.core.auth import UserInfo, create_token
 from server.app.core.auth.models import UserRole
 

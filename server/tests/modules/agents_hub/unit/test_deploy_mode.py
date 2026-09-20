@@ -2,7 +2,6 @@ import os
 from unittest.mock import patch
 
 import pytest
-from fastapi import FastAPI
 
 
 def test_deploy_mode_invalid_raises():

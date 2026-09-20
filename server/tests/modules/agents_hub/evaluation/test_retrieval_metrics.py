@@ -8,7 +8,6 @@ permite que el gate corra en segundos y que RAGAS quede para evaluación periód
 """
 from __future__ import annotations
 
-import json
 
 import pytest
 

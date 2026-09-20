@@ -5,7 +5,20 @@ adaptaciones:
 
 - FakerGenerator extraído a `faker_generator.py` (separación de responsabilidades).
 - EncryptionService eliminado: el determinismo se obtiene por instancia
-  (mismo input → mismo fake), no por persistencia cifrada (TODO post-MVP).
+  (mismo input → mismo fake), **y no por persistencia cifrada, que es una decisión
+  tomada y no un pendiente**. Aquí ponía `TODO post-MVP`, y eso contradecía lo que
+  ya estaba escrito dos ficheros más allá: `run_context.py` lleva como regla dura
+  que «los mapas forward/reverse NUNCA se persisten en BD; viven sólo en memoria»,
+  y `service.py` guarda el motivo —decisión del 2026-08-24: el piloto no trata
+  datos de ciudadanos y la anonimización es configurable, así que no hay bóveda
+  cifrada antes del piloto— junto con el nombre del trabajo que la traerá el día
+  que haga falta: **F2.A.4 (Vault Edge)**.
+
+  La consecuencia práctica, que es lo que importa al usar esto: **la reversión vale
+  dentro de una ejecución y no después**. Un reinicio se lleva el mapa, y eso es lo
+  buscado, no una limitación que alguien vaya a arreglar sin decirlo. Si algún día
+  la correspondencia tiene que sobrevivir a un reinicio, eso es F2.A.4 y se decide
+  allí, con quien la vaya a consumir delante.
 - Sin acoplamiento a enterprise_audit_service: la auditoría se delega al
   llamador (workspace_audit_events para flujos de redacción).
 - Mantenido el fallback explícito sin spaCy (degrada a regex con warning).

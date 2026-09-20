@@ -267,6 +267,13 @@ jobs:
           set -euo pipefail
           # Estas NO son credenciales: son identificadores y rutas. Los secretos los baja la
           # propia máquina de Secret Manager (D.2) y nunca pasan por aquí.
+          #
+          # `GOVGENAI_SOURCE_URL` sin definir deja la línea vacía, y eso es lo que se quiere:
+          # el §13 obliga a quien ejecuta una versión **modificada**, así que un despliegue
+          # sin modificar no tiene enlace que ofrecer. Sale de una variable del repositorio
+          # y no de una constante porque lo que hay que ofrecer es el fuente de **esa**
+          # versión: una URL fija al principal haría que un fork incumpliera creyendo que
+          # cumple (issue #41).
           gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap --quiet \
             --command "sudo tee ${DESTINO}/.env.despliegue > /dev/null <<'EOF'
           GOVGENAI_IMAGE=${{ steps.imagenes.outputs.app }}
@@ -282,6 +289,7 @@ jobs:
           CORS_ALLOWED_ORIGINS=${{ vars.CORS_ALLOWED_ORIGINS }}
           CORPUS_BUCKET=${{ vars.CORPUS_BUCKET }}
           GOVGENAI_HOST_INSTITUCIONAL=${{ vars.GOVGENAI_HOST_INSTITUCIONAL }}
+          SOURCE_URL=${{ vars.GOVGENAI_SOURCE_URL }}
           DEPLOY_MODE=all
           EOF
           sudo chmod 644 ${DESTINO}/.env.despliegue"

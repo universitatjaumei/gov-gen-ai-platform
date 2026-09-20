@@ -6,7 +6,6 @@ import uuid
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
-import pandas as pd
 import pytest
 
 from server.app.modules.redaccion.blocks.handlers import DataTransformHandler
@@ -152,7 +151,8 @@ class TestDataTransformHandler:
             "operations": [{"op": "filter", "col": "units", "comparator": ">", "value": 15}],
         })
         llm = MagicMock()
-        llm_resp = MagicMock(); llm_resp.content = ops_json
+        llm_resp = MagicMock()
+        llm_resp.content = ops_json
         llm.ainvoke = AsyncMock(return_value=llm_resp)
 
         cfg = DataTransformBlockConfig(

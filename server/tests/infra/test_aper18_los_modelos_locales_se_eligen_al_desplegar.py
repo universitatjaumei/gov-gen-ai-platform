@@ -60,7 +60,7 @@ class TestLaImagenAdmiteElExtra:
 
     def test_el_sync_lo_usa(self, dockerfile: str) -> None:
         linea = next(
-            (l for l in dockerfile.splitlines() if l.startswith("RUN uv sync")), None
+            (linea for linea in dockerfile.splitlines() if linea.startswith("RUN uv sync")), None
         )
         assert linea is not None, "no encuentro el `uv sync` de la imagen"
         assert "${EXTRAS_APP}" in linea, (
@@ -71,7 +71,7 @@ class TestLaImagenAdmiteElExtra:
     def test_por_omision_no_instala_nada_extra(self, dockerfile: str) -> None:
         """El despliegue estándar se queda como está: sin `torch` y sin VM mayor."""
         declaracion = next(
-            l.strip() for l in dockerfile.splitlines() if l.strip().startswith("ARG EXTRAS_APP")
+            linea.strip() for linea in dockerfile.splitlines() if linea.strip().startswith("ARG EXTRAS_APP")
         )
         assert declaracion in ('ARG EXTRAS_APP=""', "ARG EXTRAS_APP="), (
             f"El valor por omisión no está vacío: «{declaracion}». El despliegue estándar no "
@@ -146,11 +146,11 @@ class TestLaVarianteVaEnLaEtiqueta:
     def test_solo_la_imagen_del_servidor_lo_recibe(self, paso_de_construccion: str) -> None:
         """El frontend, el sandbox y el MCP no tienen ese extra: pasárselo sería ruido."""
         lineas = [
-            l.strip() for l in paso_de_construccion.splitlines()
-            if l.strip().startswith("construir_si_falta")
+            linea.strip() for linea in paso_de_construccion.splitlines()
+            if linea.strip().startswith("construir_si_falta")
         ]
         assert lineas, "no encuentro las llamadas que construyen cada imagen"
-        con_extra = [l for l in lineas if "EXTRAS" in l or "SUFIJO" in l or "VARIANTE" in l]
+        con_extra = [linea for linea in lineas if "EXTRAS" in linea or "SUFIJO" in linea or "VARIANTE" in linea]
         assert len(con_extra) <= 1, (
             f"Más de una imagen recibe el extra: {con_extra}. Sólo la del servidor lo tiene."
         )

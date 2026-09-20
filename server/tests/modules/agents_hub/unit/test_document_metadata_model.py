@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from sqlalchemy import CheckConstraint, Index
+from sqlalchemy import CheckConstraint
 
 
 def _make_document(**kwargs):

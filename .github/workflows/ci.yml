@@ -9,7 +9,21 @@ on:
     # cada push, que no es lo que se quería evitar.
     branches: [main, desarrollo]
   pull_request:
-    branches: [main]
+    # `desarrollo` está aquí porque **Dependabot abre sus PR contra esa rama** y, sin esta
+    # línea, no se le ejecutaba nada: el 2026-09-20 había **veinte PR suyas con cero
+    # comprobaciones**. Una PR sin checks no sale en rojo, sale en blanco, que se parece bastante
+    # a un verde cuando se mira por encima.
+    #
+    # Son dos decisiones correctas que juntas dejaban un hueco: Dependabot apunta a `desarrollo`
+    # para no abrir PR contra la rama que despliega, y esto escuchaba sólo `main` porque el
+    # trabajo humano llega a `desarrollo` **empujado**, y el disparador de `push` ya lo cubre.
+    # Para el robot no vale: su código sólo existe en la rama de la PR hasta que alguien mezcla.
+    #
+    # No duplica ejecuciones. Lo que una persona abre es `desarrollo → main`, que ya estaba
+    # cubierto; las PR **contra** `desarrollo` son hoy sólo las del robot. Y el grupo de
+    # concurrencia lleva `github.ref`, que en una PR es `refs/pull/N/merge`: grupo distinto del
+    # de un empujón, así que tampoco se cancelan entre sí.
+    branches: [main, desarrollo]
 
 # Un `push` que llega mientras corre el anterior lo cancela, en vez de pagar los dos.
 #
@@ -122,8 +136,28 @@ jobs:
       - name: Install dependencies (--locked, el lock tiene que cuadrar con pyproject)
         run: uv sync --locked --all-extras
 
+      # **`app` y `tests`, los dos (issue #48).** Durante meses esto lintaba sólo `app`, y
+      # `tests` acumuló 225 avisos: 146 imports que ya no apuntaban a nada, 46 variables
+      # llamadas `l` dentro de comprensiones que deciden qué mide un guardarraíl, y una docena
+      # de f-strings sin sustitución en mensajes de aserto.
+      #
+      # La suite de este proyecto no es código de segunda: los guardarraíles viven ahí y son el
+      # mecanismo con el que se hace cumplir media especificación. Un import muerto o una
+      # comprensión mal leída son justo los defectos que hacen que un guardarraíl mida menos de
+      # lo que dice, que es el modo de fallo recurrente de este repositorio.
       - name: Lint (ruff)
-        run: uv run ruff check app/
+        run: uv run ruff check app/ tests/
+
+      # **Comprobación de tipos, por módulo (issue #49).** El alcance NO está aquí: está en
+      # `[tool.pyright]` de `server/pyproject.toml`, que es donde se lee junto con la razón de
+      # cada ampliación. Hoy cubre `app/core/`, que es lo compartido y lo que más se importa.
+      #
+      # Encenderlo sobre el árbol entero daría cientos de avisos y acabaría desactivado, que es
+      # como mueren estas herramientas. Se amplía módulo a módulo, cada uno con su commit, y el
+      # siguiente está escrito en el manifiesto para que ampliar no dependa de que alguien se
+      # acuerde.
+      - name: Tipos (pyright, por módulo)
+        run: uv run pyright
 
       # El contrato OpenAPI está en `.gitignore` —es un artefacto generado, no se edita a
       # mano— y `tests/test_openapi_export.py` comprueba que existe y que es OpenAPI 3.x.
@@ -806,6 +840,67 @@ jobs:
           fi
           echo "/health responde 200 desde la imagen que se despliega"
 
+      # Issue #44 — y esto hay que EJECUTARLO. Que el `Dockerfile` diga
+      # `nginxinc/nginx-unprivileged` comprueba la intención; como qué usuario acaba corriendo
+      # el proceso depende también de la imagen base y de si algo la sobreescribe, y eso sólo
+      # lo dice el contenedor en marcha. La imagen ya está construida en el paso de arriba, así
+      # que esto cuesta segundos.
+      #
+      # Se comprueban las dos cosas que la issue pide: que no sea root y que siga sirviendo.
+      - name: El frontend arranca sin privilegios y sirve
+        run: |
+          set -euo pipefail
+          # `--add-host app:127.0.0.1` no es un apaño: **sin él el contenedor no arranca**, y
+          # eso es de siempre, no del cambio de imagen. nginx resuelve los `upstream` al cargar
+          # la configuración, y `nginx.conf` reenvía `/api/` a `app`; si ese nombre no existe,
+          # muere con `host not found in upstream "app"`. En el despliegue lo resuelve la red
+          # del compose. Aquí basta con que el nombre resuelva: lo que se comprueba es el
+          # usuario y que los estáticos se sirvan, no el reenvío, que necesitaría el backend.
+          docker run -d --name govgenai_ci_frontend --add-host app:127.0.0.1             -p 8080:8080 govgenai/frontend:ci
+
+          quien="$(docker exec govgenai_ci_frontend id || true)"
+          echo "el contenedor del frontend corre como: $quien"
+          case "$quien" in
+            *uid=0*)
+              echo "::error::El frontend corre como root dentro del contenedor ($quien)"
+              docker logs govgenai_ci_frontend
+              exit 1
+              ;;
+            uid=*) ;;
+            *)
+              echo "::error::No se ha podido leer el usuario del contenedor: «$quien»"
+              docker logs govgenai_ci_frontend
+              exit 1
+              ;;
+          esac
+
+          ok=0
+          for intento in $(seq 1 15); do
+            codigo="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/healthz || true)"
+            if [ "$codigo" = "200" ]; then ok=1; break; fi
+            echo "intento $intento: /healthz devolvió ${codigo:-sin respuesta}"
+            sleep 2
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::El frontend no llegó a servir /healthz en el 8080"
+            docker logs govgenai_ci_frontend
+            exit 1
+          fi
+
+          # Y que el panel se sirve de verdad, no sólo la sonda: `/panel/` tiene que devolver
+          # el `index.html`, que es lo que rompería un cambio de puerto a medias.
+          codigo="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/panel/ || true)"
+          if [ "$codigo" != "200" ]; then
+            echo "::error::/panel/ devolvió $codigo en vez de 200"
+            docker logs govgenai_ci_frontend
+            exit 1
+          fi
+          echo "frontend sin privilegios, /healthz y /panel/ a 200"
+
+      - name: Retirar el contenedor del frontend
+        if: always()
+        run: docker rm -f govgenai_ci_frontend || true
+
       # Cuánto ha costado, escrito donde se lee sin descargar nada. La decisión de dónde corre
       # este job se toma con esta medida delante, no antes de tenerla.
       - name: Resumen
@@ -815,5 +910,6 @@ jobs:
             echo "## Imagen"
             echo ""
             echo "Cuatro imágenes construidas con los \`Dockerfile\` del despliegue;"
-            echo "la de la aplicación, migrada y arrancada hasta \`/health\` 200."
+            echo "la de la aplicación, migrada y arrancada hasta \`/health\` 200,"
+            echo "y la del frontend arrancada sin privilegios hasta \`/panel/\` 200."
           } >> "$GITHUB_STEP_SUMMARY"

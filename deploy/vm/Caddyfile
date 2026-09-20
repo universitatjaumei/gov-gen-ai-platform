@@ -67,7 +67,7 @@
 	# sus recursos.
 	@panel path /panel /panel/*
 	handle @panel {
-		reverse_proxy frontend:80
+		reverse_proxy frontend:8080
 	}
 
 	# El MCP remoto (REG.4). **Sin despojar el prefijo**: el SDK sirve el transporte en

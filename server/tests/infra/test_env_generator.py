@@ -9,7 +9,6 @@ import re
 import subprocess
 from pathlib import Path
 
-import pytest
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
 _ROOT = Path(__file__).parent.parent.parent.parent

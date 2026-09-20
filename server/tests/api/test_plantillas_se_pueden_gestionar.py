@@ -34,7 +34,7 @@ from server.app.routers.redaccion.hub_redaccion_router import (
     WorkspaceCreateIn,
 )
 
-_ADMIN = UserInfo(user_id="1", email="fabra@uji.es", role="superadmin")
+_ADMIN = UserInfo(user_id="1", email="admin@example.local", role="superadmin")
 
 
 async def _crear(session, nombre: str):

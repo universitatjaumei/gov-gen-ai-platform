@@ -1,12 +1,10 @@
 
 import pytest
-from sqlmodel import SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.exc import IntegrityError
-from datetime import datetime, timezone
-import asyncio
+from datetime import datetime
 
 # We'll import SuperAdminAccount once it exists
 # from server.app.database.models import SuperAdminAccount 

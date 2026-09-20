@@ -68,7 +68,7 @@ class TestLaCascada:
             _organizacion(default_user_daily_token_quota=5_000),
         )
 
-        usuario_dia = [l for l in limites if l.subject_type == "user" and l.ventana == "day"]
+        usuario_dia = [limite for limite in limites if limite.subject_type == "user" and limite.ventana == "day"]
         assert usuario_dia and usuario_dia[0].limite == 5_000
 
     def test_should_let_the_chatbot_override_the_org_default(self):
@@ -80,7 +80,7 @@ class TestLaCascada:
             _organizacion(default_user_daily_token_quota=5_000),
         )
 
-        usuario_dia = [l for l in limites if l.subject_type == "user" and l.ventana == "day"]
+        usuario_dia = [limite for limite in limites if limite.subject_type == "user" and limite.ventana == "day"]
         assert usuario_dia[0].limite == 100
 
     def test_should_treat_zero_as_unlimited_and_none_as_inherit(self):
@@ -92,14 +92,14 @@ class TestLaCascada:
             _chatbot(user_daily_token_quota=0),
             _organizacion(default_user_daily_token_quota=5_000),
         )
-        assert not [l for l in sin_limite if l.subject_type == "user"]
+        assert not [elemento for elemento in sin_limite if elemento.subject_type == "user"]
 
         heredado = limites_aplicables(
             _actor(),
             _chatbot(user_daily_token_quota=None),
             _organizacion(default_user_daily_token_quota=5_000),
         )
-        assert [l for l in heredado if l.subject_type == "user"]
+        assert [elemento for elemento in heredado if elemento.subject_type == "user"]
 
     def test_should_produce_no_limits_when_nobody_configured_any(self):
         from server.app.core.quotas import limites_aplicables
@@ -115,8 +115,8 @@ class TestLaCascada:
         con_sesion = limites_aplicables(_actor(), chatbot, _organizacion())
         anonimo = limites_aplicables(None, chatbot, _organizacion(), ip="1.2.3.4")
 
-        assert not [l for l in con_sesion if l.subject_type == "ip"]
-        assert [l for l in anonimo if l.subject_type == "ip"]
+        assert not [elemento for elemento in con_sesion if elemento.subject_type == "ip"]
+        assert [elemento for elemento in anonimo if elemento.subject_type == "ip"]
 
     def test_should_check_subjects_in_the_documented_order(self):
         """Usuario/día → usuario/mes → chatbot/día → organización/mes → IP/día."""
@@ -130,7 +130,7 @@ class TestLaCascada:
             ip="1.2.3.4",
         )
 
-        assert [(l.subject_type, l.ventana) for l in limites] == [
+        assert [(limite.subject_type, limite.ventana) for limite in limites] == [
             ("user", "day"),
             ("user", "month"),
             ("chatbot", "day"),

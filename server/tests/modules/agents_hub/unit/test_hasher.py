@@ -1,5 +1,4 @@
 """Tests para el hasher de documentos."""
-import pytest
 
 
 class TestDocumentHasher:

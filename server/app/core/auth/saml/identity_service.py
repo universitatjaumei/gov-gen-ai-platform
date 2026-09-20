@@ -27,6 +27,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import select
+from sqlmodel import col
 
 from server.app.core.auth.models import UserInfo
 from server.app.core.auth.saml.role_mapping import resolve_role
@@ -126,15 +127,16 @@ class SamlIdentityService:
                 f"SAML assertion missing email attribute '{settings.saml_attr_email}'"
             )
         # La misma normalización que usa el alta manual (IDE.3), importada de allí y no
-        # reescrita: si las dos se separan, una persona dada de alta como `Fabra@UJI.es` deja
-        # de ser la que llega del IdP como `fabra@uji.es`, y el alta se queda muerta.
+        # reescrita: si las dos se separan, una persona dada de alta como `Persona@Example.ORG`
+        # deja de ser la que llega del IdP como `persona@example.org`, y el alta se
+        # queda muerta.
         from server.app.core.identidad import normalizar_correo
 
         email = normalizar_correo(email)
 
         superadmin = (
             await self.session.execute(
-                select(SuperAdminAccount).where(SuperAdminAccount.email == email)
+                select(SuperAdminAccount).where(col(SuperAdminAccount.email) == email)
             )
         ).scalars().first()
         grupos = _grupos(attributes)
@@ -154,7 +156,7 @@ class SamlIdentityService:
         # levantar que reencontrar a quien entra con una cuenta indeterminada de las dos.
         admin = (
             await self.session.execute(
-                select(AdminAccount).where(AdminAccount.email == email)
+                select(AdminAccount).where(col(AdminAccount.email) == email)
             )
         ).scalars().one_or_none()
         if admin and admin.is_active:
