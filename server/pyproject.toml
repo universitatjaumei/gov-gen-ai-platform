@@ -5,7 +5,7 @@ authors = [{ name = "Modesto Fabra", email = "fabra@uji.es" }]
 license = "AGPL-3.0-or-later"
 description = "AutomatIA Brain Server - SaaS AI Services"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "automatia-shared",
     # DEP.1 (arreglado el 2026-09-15, tras tumbar produccion) — `uvicorn` es lo que EJECUTA la
