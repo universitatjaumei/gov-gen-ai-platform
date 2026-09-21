@@ -15,8 +15,6 @@ from server.app.api.deps import get_current_user, get_session
 
 _ADMIN = UserInfo(user_id="00000000-0000-0000-0000-000000000001",
                   email="admin@test.com", role="admin")
-_PARTNER = UserInfo(user_id="00000000-0000-0000-0000-000000000002",
-                    email="partner@test.com", role="superadmin")
 _USER = UserInfo(user_id="00000000-0000-0000-0000-000000000003",
                  email="user@test.com", role="user")
 
@@ -162,10 +160,25 @@ class TestLLMDraftsRouter:
         assert "version_id" in data
         assert data["name"] == "Informe Anual 2026"
 
-    def test_non_admin_cannot_save_global_template(self, client):
-        """Partner with is_global=True → 403."""
+    def test_solo_la_plataforma_crea_plantillas_globales(self, client):
+        """Un admin de organización con `is_global=True` → 403 (issue #90).
+
+        **Este test afirmaba el defecto.** Se llamaba
+        `test_non_admin_cannot_save_global_template` y su docstring decía «Partner with
+        is_global=True → 403», pero el usuario que usaba era un `role="superadmin"`: el
+        vocabulario viejo llamaba «partner» al superadministrador. Así que el test se leía como
+        «un no-admin no puede» y en realidad afirmaba «la plataforma no puede» — que es justo lo
+        que había que arreglar. Código y medida se daban la razón, como en el issue #84.
+
+        Su fixture se retiró al corregirlo: era el único sitio que lo usaba.
+
+        Ahora comprueba lo que dice el modelo: `owner_kind="platform"` es nivel plataforma, y ese
+        nivel es del superadministrador. El caso bueno del superadministrador y el del admin con
+        sus propias plantillas están en
+        `test_issue90_lo_global_lo_crea_la_plataforma.py`.
+        """
         session = _mock_session()
-        app.dependency_overrides[get_current_user] = lambda: _PARTNER
+        app.dependency_overrides[get_current_user] = lambda: _ADMIN
         app.dependency_overrides[get_session] = _session_dep(session)
 
         resp = client.post(
