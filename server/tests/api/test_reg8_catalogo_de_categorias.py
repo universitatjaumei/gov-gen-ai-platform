@@ -340,9 +340,15 @@ class TestElCatalogoNoRechazaNada:
         from server.app.main import app
         from server.tests.rutas import operaciones
 
-        operaciones = operaciones(app)
-        assert "/api/v1/actividad/categorias" in operaciones
-        assert operaciones["/api/v1/actividad/categorias"]
+        # `rutas` y no `operaciones`: la variable local no se llama igual que la función que la
+        # produce. Tal y como estaba **funcionaba** —el import dentro de la función liga el
+        # nombre local antes de que la asignación lo lea, comprobado con una reproducción
+        # mínima— pero queda a un refactor de romperse: si alguien sube ese import al nivel del
+        # módulo, la misma línea lanza `UnboundLocalError` y el test deja de poder ejecutarse.
+        # Lo señaló la revisión de la PR #76, con el diagnóstico equivocado y el arreglo bueno.
+        rutas = operaciones(app)
+        assert "/api/v1/actividad/categorias" in rutas
+        assert rutas["/api/v1/actividad/categorias"]
 
 
 class TestElRegistroSeSiembraConUnPuntoDePartida:
