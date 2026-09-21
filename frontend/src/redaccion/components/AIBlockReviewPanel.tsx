@@ -6,7 +6,10 @@ import {
   usePatchWorkspaceBlock,
   getGetWorkspaceByIdQueryKey,
 } from '@/shared/api/generated/hub-redaccion/hub-redaccion'
-import { useEditBlock } from '@/shared/api/generated/redaccion-workspaces/redaccion-workspaces'
+import {
+  useEditBlock,
+  useResumeWorkspace,
+} from '@/shared/api/generated/redaccion-workspaces/redaccion-workspaces'
 import type { WorkspaceOut } from '@/shared/api/generated/model'
 import { StatusBadge } from '@/shared/components/StatusBadge'
 import { mapBlockStatusToUserLabel } from '../utils/statusLabels'
@@ -71,6 +74,16 @@ export function AIBlockReviewPanel({ workspaceId }: Props) {
   const workspace = workspaceRaw as unknown as WorkspaceOut | undefined
   const { mutate: patchBlock, isPending } = usePatchWorkspaceBlock()
   const { mutate: editarBloque, isPending: guardando } = useEditBlock()
+  /**
+   * Issue #85 — continuar el informe cuando la revisión ha acabado.
+   *
+   * El endpoint existía, el hook estaba generado y **nadie lo llamaba**: el informe se
+   * quedaba en `in_review` para siempre y la barra de progreso no pasaba de ahí. Vista
+   * previa y exportación funcionaban igual, así que el síntoma era sólo que el estado
+   * mentía — y un estado que miente contamina todo lo que se observe después.
+   */
+  const { mutate: continuar, isPending: continuando } = useResumeWorkspace()
+  const [errorAlContinuar, setErrorAlContinuar] = useState('')
 
   if (isLoading) return <div>{t('loading')}</div>
   if (!workspace) return null
@@ -119,9 +132,51 @@ export function AIBlockReviewPanel({ workspaceId }: Props) {
       )}
 
       {todoAprobado && (
-        <p data-testid="ready-for-assembly" className="text-sm text-green-700 font-medium">
-          {tR('review.all_approved')}
-        </p>
+        <div className="space-y-2">
+          <p data-testid="ready-for-assembly" className="text-sm text-green-700 font-medium">
+            {tR('review.all_approved')}
+          </p>
+          {/* Botón y no automático (issue #85): un efecto sobre `todoAprobado` se dispararía
+              más de una vez y el endpoint responde 409 en cuanto el informe sale de
+              `in_review`. Quien revisa decide cuándo seguir.
+
+              **El rótulo dice «ensamblar», no «continuar» ni «generar».** Los dos están ya
+              cogidos y se pintan en esta misma pantalla —`common.continue` es el botón del
+              formulario de datos de partida y `workspace_generate` es «Generar informe»—, así
+              que habría habido dos botones con nombre accesible ambiguo a la vez. Lo destapó
+              `WorkspacePage.test.tsx` con «Found multiple elements with the role button and
+              name /continuar/i», que era un problema de interfaz antes que de test. Y
+              «ensamblar» es el verbo que este panel ya usa: el anuncio de al lado dice «listo
+              para ensamblar». */}
+          <button
+            type="button"
+            data-testid="btn-continuar"
+            disabled={continuando}
+            onClick={() => {
+              setErrorAlContinuar('')
+              continuar(
+                { workspaceId },
+                {
+                  ...refrescar,
+                  onError: (fallo: unknown) =>
+                    setErrorAlContinuar((fallo as Error)?.message || t('error')),
+                },
+              )
+            }}
+            className="px-3 py-1.5 text-sm bg-green-600 text-white rounded disabled:opacity-50"
+          >
+            {continuando ? t('loading') : tR('review.assemble')}
+          </button>
+          {errorAlContinuar && (
+            <p
+              data-testid="error-al-continuar"
+              role="alert"
+              className="text-xs text-destructive"
+            >
+              {errorAlContinuar}
+            </p>
+          )}
+        </div>
       )}
 
       {regenerado && (

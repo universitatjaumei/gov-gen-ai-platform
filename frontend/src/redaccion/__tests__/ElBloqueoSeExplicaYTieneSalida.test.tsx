@@ -35,6 +35,7 @@ vi.mock('@/shared/api/generated/hub-redaccion/hub-redaccion', () => ({
   usePatchWorkspaceBlock: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }))
 vi.mock('@/shared/api/generated/redaccion-workspaces/redaccion-workspaces', () => ({
+  useResumeWorkspace: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useRunWorkspace: vi.fn(),
   useUploadWorkspaceInput: vi.fn(),
   useEditBlock: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
