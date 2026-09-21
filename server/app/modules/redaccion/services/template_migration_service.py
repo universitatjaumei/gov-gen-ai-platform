@@ -60,7 +60,21 @@ class CompatibilityConflictError(Exception):
 # ---------------------------------------------------------------------------
 
 def _required_slot_ids(spec_json: dict) -> set[str]:
-    inputs = spec_json.get("proposed_inputs", {})
+    """Los `slot_id` obligatorios de una **spec** guardada.
+
+    **`input_contract`, no `proposed_inputs`.** Aquí llegan `spec_json` de
+    `HubReportTemplateVersion`, y una `ReportTemplateSpec` declara `input_contract`;
+    `proposed_inputs` es la clave del **borrador del modelo** (`ReportTemplateDraft`). Leer la
+    del borrador hacía que el `.get()` no encontrara nada, el `{}` por omisión hiciera el resto y
+    `_compute_breaking_changes` devolviera **siempre** vacío: migrar no avisaba nunca.
+
+    Las dos claves envuelven el **mismo tipo** (`InputContract`), o sea que confundirlas no da
+    error de tipos. Y no lo cazó el test que existía porque su fixture construía la forma del
+    borrador, así que código y medida se daban la razón. Lo fija ahora
+    `test_issue84_los_cambios_rompedores_miran_la_clave_de_la_spec.py`, que además afirma sobre
+    los contratos cuál es la clave de cada uno.
+    """
+    inputs = spec_json.get("input_contract", {})
     return {slot["slot_id"] for slot in inputs.get("required_slots", [])}
 
 

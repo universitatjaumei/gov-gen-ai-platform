@@ -23,12 +23,27 @@ def _now() -> datetime:
 
 
 def _spec(required_slots: list[str] | None = None) -> dict:
+    """Un `spec_json` de `HubReportTemplateVersion`.
+
+    **`input_contract` y no `proposed_inputs`** (issue #84). Este ayudante escribía
+    `proposed_inputs`, que es la clave del **borrador del modelo**, y con ella
+    `test_migrate_returns_409_when_input_contract_breaking_change` pasaba **sin comprobar nada**:
+    el servicio leía la misma clave equivocada, así que código y medida se daban la razón y
+    ninguno tocaba la realidad. El nombre del test ya decía `input_contract`.
+
+    Ojo: las demás claves de aquí abajo siguen siendo del borrador (`proposed_profile`,
+    `rationale`, `model_used`…) y **ninguna la lee ningún test de este fichero**. No se tocan para
+    no reescribir diez tests por nada, pero **este ayudante no es una spec fiel**: si algún test
+    futuro necesita una, la forma real está en
+    `test_issue84_los_cambios_rompedores_miran_la_clave_de_la_spec.py`, copiada del catálogo
+    versionado.
+    """
     slots = required_slots or []
     return {
         "proposed_profile": "GENERIC_REPORT",
         "proposed_sections": [],
         "proposed_blocks": [],
-        "proposed_inputs": {
+        "input_contract": {
             "required_slots": [
                 {"slot_id": s, "kind": "excel", "label": {"es": s}, "required": True}
                 for s in slots
