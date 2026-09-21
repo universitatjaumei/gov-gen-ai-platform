@@ -70,7 +70,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      # v7, como los otros seis usos del repositorio. Este se quedó en v4 cuando el commit
+      # del 2026-08-21 subió las demás, y estuvo un mes así: el repositorio ejecutando dos
+      # versiones de la misma acción según el workflow, y la que se quedó atrás era la del
+      # despliegue — la que menos corre y la que más cuesta depurar. Lo vigila
+      # `tests/infra/test_las_acciones_no_van_a_dos_versiones.py`.
+      - uses: actions/checkout@v7
 
       - name: Etiqueta a desplegar
         id: etiqueta
@@ -81,12 +86,20 @@ jobs:
           echo "Desplegando $ETIQUETA"
 
       - name: Autenticarse en GCP (sin claves)
-        uses: google-github-actions/auth@v2
+        # v3 (PR #59 de Dependabot). Su nota de versión dice «remove old parameters» sin
+        # decir cuáles, así que se comparó el `action.yml` de las dos: lo que desaparece es
+        # `backoff`, `backoff_limit` y `retries`, y aquí no se pasa ninguno. Las dos
+        # entradas que sí se usan —`workload_identity_provider` y `service_account`— siguen
+        # existiendo. El cambio de fondo es el runtime, de node20 a node24.
+        uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SA }}
 
-      - uses: google-github-actions/setup-gcloud@v2
+      # v3 (PR #56). Comparados los dos `action.yml`: retira `skip_tool_cache` y añade
+      # `cache`, y este paso **no pasa ninguna entrada**, así que nada de lo que cambia le
+      # afecta. Como en `auth`, el cambio de fondo es el runtime: node20 a node24.
+      - uses: google-github-actions/setup-gcloud@v3
 
       - name: Configurar Docker para Artifact Registry
         run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
@@ -105,7 +118,7 @@ jobs:
       # porque son workflows distintos; si algún día divergen, el síntoma es este mismo error.
       # ---------------------------------------------------------------------
       - name: Instalar uv
-        uses: astral-sh/setup-uv@v10.0.1
+        uses: astral-sh/setup-uv@v10.1.0
         with:
           version: "latest"
 

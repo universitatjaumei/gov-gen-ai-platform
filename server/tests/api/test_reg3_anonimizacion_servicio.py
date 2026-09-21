@@ -282,10 +282,9 @@ class TestElRouterEsEdgeYEstaRegistrado:
     )
     def test_should_expose_each_endpoint_with_an_explicit_operation_id(self, ruta: str):
         from server.app.main import app
+        from server.tests.rutas import operaciones
 
-        rutas = {
-            getattr(r, "path", ""): getattr(r, "operation_id", None) for r in app.routes
-        }
+        rutas = operaciones(app)
         assert ruta in rutas
         assert rutas[ruta], (
             "sin `operation_id` explícito el cliente generado hereda un nombre ilegible."

@@ -312,3 +312,24 @@ venvPath = "."
 venv = ".venv"
 pythonVersion = "3.13"
 typeCheckingMode = "basic"
+
+# ---------------------------------------------------------------------------
+# El conjunto de reglas de `ruff`, **declarado y no heredado**.
+#
+# Hasta el 2026-09-20 no había ninguna sección `[tool.ruff]` en todo el repositorio: el proyecto
+# vivía del conjunto **por omisión** de la herramienta. Y el día que `ruff` pasó de 0.14 a 0.16
+# ese conjunto creció: `ruff check app tests` pasó de **0 a 2.312 errores** sin que cambiara una
+# línea de código. No es que el código empeorara; es que el linter se convirtió en otra
+# herramienta sin que nadie lo decidiera.
+#
+# Estas cuatro familias son exactamente las que 0.14 aplicaba por omisión, así que declararlas
+# **no cambia lo que se exige hoy**: lo hace explícito, y evita que la próxima subida vuelva a
+# redefinir en silencio qué significa «la suite está limpia».
+#
+# **Ampliar es una decisión, y aquí está la medida para tomarla**: con el conjunto ampliado de
+# 0.16 salen 2.312 avisos, de los que **1.526 los arregla la herramienta**. Los tres grupos más
+# grandes son `I001` (imports sin ordenar, 856), `B008` (llamada en argumento por defecto, 484)
+# y `UP017` (`datetime.UTC`, 305). Adoptarlos es del mismo tipo de trabajo que la issue #48 y
+# merece su propio prompt, no colarse en una subida de dependencias.
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

@@ -145,8 +145,9 @@ class TestElRouterEstaRegistrado:
 
     def test_should_be_served_by_the_application(self):
         from server.app.main import app
+        from server.tests.rutas import caminos
 
-        rutas = {getattr(r, "path", "") for r in app.routes}
+        rutas = caminos(app)
         assert "/api/v1/hub/opciones/lengua" in rutas
 
     def test_should_be_registered_as_cloud(self):
