@@ -130,6 +130,31 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      # `typescript` 7.0.x, y **sólo** la 7.0.x.
+      #
+      # La 7 es el port nativo, y sobre el compilador no hay nada que objetar: con la 7.0.2
+      # instalada `tsc` pasa limpio en los dos tsconfig, `tsc -b` construye, `vite build` genera
+      # el paquete y la suite entera pasa. **Lo que muere es `eslint`**: ocho paquetes de
+      # `typescript-eslint` declaran `typescript >=4.8.4 <6.1.0` como par obligatorio y la 8.70.0
+      # —la última estable, no hay una 9— sigue en ese rango. Arranca y se cae con
+      # «typescript-eslint does not support TS 7.0».
+      #
+      # Y no se vería: `npm install` sólo avisa (`ERESOLVE overriding peer dependency`) y
+      # devuelve 0, y aquí **ESLint no corre en CI** todavía (issue #47). La subida entraría en
+      # verde dejando el linter inservible.
+      #
+      # Se acota a `7.0.x` a propósito, y no a la mayor entera: el issue de seguimiento de
+      # typescript-eslint (typescript-eslint#10940) apunta a **TS >=7.1**, así que cuando llegue
+      # la 7.1 queremos que Dependabot la proponga.
+      #
+      # **Cómo se retira**: cuando `typescript-eslint` publique una estable cuyo par de
+      # `typescript` admita la 7. Se comprueba con
+      # `npm view typescript-eslint peerDependencies.typescript`. Lo vigila
+      # `frontend/src/__tests__/paresObligatoriosSeCumplen.test.ts`, que pondría rojo el lock si
+      # la subida entrara sin que el par se cumpla.
+      - dependency-name: typescript
+        versions: ["7.0.x"]
 
   # ─── Las acciones de los workflows ─────────────────────────────────────────────────────────
   #
