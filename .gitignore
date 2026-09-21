@@ -61,6 +61,30 @@ nul
 .nicegui/
 data/
 outputs/
+
+# Excepción acotada: las dos plantillas demo SÍ se versionan.
+#
+# El `data/` de arriba está para directorios que se llenan en ejecución —`./data`,
+# `server/data`, el `data/themes` que crea `hub_themes_router`— y se llevaba por delante
+# `server/app/data/` de rebote. Efecto: las plantillas demo **no estaban en git**, así que no
+# estaban en el checkout de CI ni en la imagen, y `bootstrap --con-demo` **no podía sembrar nada
+# en ningún despliegue** — probablemente por eso producción tenía cero plantillas.
+#
+# Y lo afirmaban al revés tres sitios a la vez: el docstring de `bootstrap.py` dice que se leen de
+# «ficheros **versionados**… así la demo se revisa en un diff y es la misma en todos los
+# despliegues». Ahora es verdad.
+#
+# La excepción está escrita para que **sólo** puedan entrar los `.json` de esa carpeta: se
+# reabre el directorio para que git descienda, se vuelve a cerrar lo que hay dentro, y se reabre
+# únicamente el patrón de ficheros. Lo que se exporta ahí lo limita `CATALOGO` en
+# `exportar_plantillas_demo.py` —dos entradas— y lo vigila
+# `test_no_se_exporta_nada_que_no_este_en_la_lista`, así que ninguna plantilla de pruebas puede
+# colarse por aquí.
+!server/app/data/
+server/app/data/*
+!server/app/data/plantillas_demo/
+server/app/data/plantillas_demo/*
+!server/app/data/plantillas_demo/*.json
 *.log
 *.sqlite
 *.db

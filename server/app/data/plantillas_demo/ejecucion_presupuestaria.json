@@ -1,0 +1,309 @@
+{
+  "descripcion": null,
+  "nombre": "Ejecución presupuestaria",
+  "nombre_origen": "GUI3 ejecucion presupuestaria",
+  "razon": "Ejercita la cadena entera sobre una hoja de cálculo: hueco `excel`, conversión de importes en formato español, columna calculada, orden, tabla, gráfico y resumen de IA con revisión. Se renombra porque `GUI3` es el nombre de un prompt de verificación, no de un producto. Su juego de datos está en `pruebas_manuales/datos/ejecucion_presupuestaria_demo.xlsx`.",
+  "report_profile": "GENERIC_REPORT",
+  "version_vigente": 1,
+  "versiones": [
+    {
+      "spec_json": {
+        "ai_block_policy": "allowed",
+        "blocks": [
+          {
+            "content": "Este informe detalla la ejecución presupuestaria a partir de los datos proporcionados, calculando el porcentaje de ejecución sobre el crédito inicial y presentando los resultados de forma tabular y gráfica.",
+            "depends_on": [],
+            "id": "b1_intro_text",
+            "kind": "STATIC_TEXT",
+            "order": 1,
+            "required": false,
+            "title": "Propósito del Informe"
+          },
+          {
+            "depends_on": [],
+            "id": "b2_raw_data",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {},
+            "order": 2,
+            "required": false,
+            "source_pipeline": "excel",
+            "title": "Datos de Ejecución Presupuestaria (Origen)"
+          },
+          {
+            "config": {
+              "mode": "deterministic",
+              "nl_instruction": null,
+              "operations": [
+                {
+                  "columns": [
+                    "Credito Inicial",
+                    "Obligaciones Reconocidas"
+                  ],
+                  "decimal_separator": ",",
+                  "op": "to_number",
+                  "strip": [
+                    "€",
+                    "EUR"
+                  ],
+                  "thousands_separator": "."
+                }
+              ],
+              "source_block_ref": {
+                "block_id": "b2_raw_data",
+                "field_path": null,
+                "projection": "raw"
+              }
+            },
+            "depends_on": [],
+            "id": "b3_clean_numbers",
+            "kind": "DATA_TRANSFORM",
+            "order": 3,
+            "required": false,
+            "title": "Convertir Importes a Número"
+          },
+          {
+            "config": {
+              "mode": "deterministic",
+              "nl_instruction": null,
+              "operations": [
+                {
+                  "left": "Obligaciones Reconocidas",
+                  "op": "compute_column",
+                  "operator": "/",
+                  "right": "Credito Inicial",
+                  "round_to": 2,
+                  "scale": 100.0,
+                  "target": "Porcentaje Ejecucion"
+                }
+              ],
+              "source_block_ref": {
+                "block_id": "b3_clean_numbers",
+                "field_path": null,
+                "projection": "raw"
+              }
+            },
+            "depends_on": [],
+            "id": "b4_calculate_percentage",
+            "kind": "DATA_TRANSFORM",
+            "order": 4,
+            "required": false,
+            "title": "Calcular Porcentaje de Ejecución"
+          },
+          {
+            "config": {
+              "mode": "deterministic",
+              "nl_instruction": null,
+              "operations": [
+                {
+                  "ascending": false,
+                  "by": [
+                    "Porcentaje Ejecucion"
+                  ],
+                  "op": "sort_rows"
+                }
+              ],
+              "source_block_ref": {
+                "block_id": "b4_calculate_percentage",
+                "field_path": null,
+                "projection": "raw"
+              }
+            },
+            "depends_on": [],
+            "id": "b5_sort_data",
+            "kind": "DATA_TRANSFORM",
+            "order": 5,
+            "required": false,
+            "title": "Ordenar por Porcentaje de Ejecución"
+          },
+          {
+            "data_block_ref": "b5_sort_data",
+            "depends_on": [],
+            "id": "b6_results_table",
+            "kind": "TABLE",
+            "order": 6,
+            "required": false,
+            "title": "Tabla de Ejecución Presupuestaria"
+          },
+          {
+            "config": {
+              "aggregation": "none",
+              "bins": null,
+              "chart_type": "barh",
+              "color_by": null,
+              "label_column": null,
+              "mode": "deterministic",
+              "nl_prompt": null,
+              "number_format": "es",
+              "output_format": "png",
+              "palette": "viridis",
+              "show_grid": true,
+              "show_legend": true,
+              "show_values": true,
+              "size": [
+                10.0,
+                6.0
+              ],
+              "size_column": null,
+              "sort": "desc",
+              "style": "whitegrid",
+              "title": "Porcentaje de Ejecución Presupuestaria por Concepto",
+              "value_column": null,
+              "value_format": "{:,.2f}",
+              "x_axis": "Porcentaje Ejecucion",
+              "x_label": "Porcentaje de Ejecución (%)",
+              "y_axis": "Concepto",
+              "y_label": "Concepto Presupuestario"
+            },
+            "data_block_ref": "b5_sort_data",
+            "depends_on": [],
+            "id": "b7_execution_chart",
+            "kind": "CHART",
+            "order": 7,
+            "required": false,
+            "title": "Gráfico de Ejecución Presupuestaria"
+          },
+          {
+            "ai_prompt_template_id": "generic_report_v1",
+            "depends_on": [],
+            "id": "b8_ai_summary",
+            "kind": "AI_SUMMARY",
+            "order": 8,
+            "required": false,
+            "review_policy_id": "required",
+            "title": "Resumen de la Ejecución Presupuestaria"
+          },
+          {
+            "depends_on": [],
+            "id": "b9_review_ai",
+            "kind": "REVIEW_GATE",
+            "order": 9,
+            "required": false,
+            "review_policy_id": "required",
+            "title": "Revisión del Resumen Generado por IA"
+          }
+        ],
+        "export_policy": "docx",
+        "input_contract": {
+          "optional_slots": [],
+          "required_slots": [
+            {
+              "kind": "excel",
+              "label": {
+                "ca": "Full de càlcul d'execució pressupostària",
+                "en": "Budget execution spreadsheet",
+                "es": "Hoja de cálculo de ejecución presupuestaria"
+              },
+              "max_size_mb": null,
+              "multiple": false,
+              "required": true,
+              "slot_id": "budget_data",
+              "validation": null
+            }
+          ]
+        },
+        "review_policy": "required",
+        "sections": [
+          {
+            "block_ids": [
+              "b1_intro_text"
+            ],
+            "id": "s1_introduction",
+            "order": 1,
+            "title": "Introducción"
+          },
+          {
+            "block_ids": [
+              "b2_raw_data",
+              "b3_clean_numbers",
+              "b4_calculate_percentage",
+              "b5_sort_data"
+            ],
+            "id": "s2_data_processing",
+            "order": 2,
+            "title": "Procesamiento de Datos Presupuestarios"
+          },
+          {
+            "block_ids": [
+              "b6_results_table",
+              "b7_execution_chart"
+            ],
+            "id": "s3_results",
+            "order": 3,
+            "title": "Resultados de Ejecución Presupuestaria"
+          },
+          {
+            "block_ids": [
+              "b8_ai_summary",
+              "b9_review_ai"
+            ],
+            "id": "s4_summary_and_review",
+            "order": 4,
+            "title": "Resumen y Revisión"
+          }
+        ],
+        "ui_contract": {
+          "ai_review_panel_enabled": true,
+          "block_editor_enabled": true,
+          "dropzones": [
+            {
+              "accept": [
+                ".xlsx",
+                ".xls"
+              ],
+              "label": {
+                "ca": "Full de càlcul d'execució pressupostària",
+                "en": "Budget execution spreadsheet",
+                "es": "Hoja de cálculo de ejecución presupuestaria"
+              },
+              "max_size_mb": null,
+              "multiple": false,
+              "slot_id": "budget_data"
+            }
+          ],
+          "manual_fields": [],
+          "preview_layout": "markdown",
+          "wizard_steps": [
+            {
+              "block_ids": [
+                "b1_intro_text"
+              ],
+              "id": "s1_introduction",
+              "order": 1,
+              "title": "Introducción"
+            },
+            {
+              "block_ids": [
+                "b2_raw_data",
+                "b3_clean_numbers",
+                "b4_calculate_percentage",
+                "b5_sort_data"
+              ],
+              "id": "s2_data_processing",
+              "order": 2,
+              "title": "Procesamiento de Datos Presupuestarios"
+            },
+            {
+              "block_ids": [
+                "b6_results_table",
+                "b7_execution_chart"
+              ],
+              "id": "s3_results",
+              "order": 3,
+              "title": "Resultados de Ejecución Presupuestaria"
+            },
+            {
+              "block_ids": [
+                "b8_ai_summary",
+                "b9_review_ai"
+              ],
+              "id": "s4_summary_and_review",
+              "order": 4,
+              "title": "Resumen y Revisión"
+            }
+          ]
+        }
+      },
+      "version": 1
+    }
+  ]
+}

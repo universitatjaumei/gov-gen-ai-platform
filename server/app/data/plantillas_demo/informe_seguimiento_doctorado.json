@@ -1,0 +1,733 @@
+{
+  "descripcion": null,
+  "nombre": "Informe anual de seguimiento — Doctorado (criterios 1 y 2)",
+  "nombre_origen": "Informe anual de seguimiento — Doctorado (criterios 1 y 2)",
+  "razon": "El caso guía del módulo: tablas deterministas por plantilla más valoración de la IA con revisión humana obligatoria. Es la plantilla de la que salieron las dos reglas duras del módulo de informes.",
+  "report_profile": "GENERIC_REPORT",
+  "version_vigente": 2,
+  "versiones": [
+    {
+      "spec_json": {
+        "ai_block_policy": "allowed",
+        "blocks": [
+          {
+            "id": "t_tabla_1_1",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 1.1"
+            },
+            "order": 1,
+            "source_pipeline": "md_table",
+            "title": "Tabla 1.1 Número de plazas del programa"
+          },
+          {
+            "data_block_ref": "t_tabla_1_1",
+            "id": "tab_tabla_1_1",
+            "kind": "TABLE",
+            "order": 2,
+            "title": "Número de plazas del programa"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_1_1"
+            ],
+            "id": "v_tabla_1_1",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 3,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 1.1"
+          },
+          {
+            "id": "t_tabla_1_2",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 1.2"
+            },
+            "order": 4,
+            "source_pipeline": "md_table",
+            "title": "Tabla 1.2 Evolución de la matrícula"
+          },
+          {
+            "data_block_ref": "t_tabla_1_2",
+            "id": "tab_tabla_1_2",
+            "kind": "TABLE",
+            "order": 5,
+            "title": "Evolución de la matrícula"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_1_2"
+            ],
+            "id": "v_tabla_1_2",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 6,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 1.2"
+          },
+          {
+            "id": "t_tabla_1_3",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 1.3"
+            },
+            "order": 7,
+            "source_pipeline": "md_table",
+            "title": "Tabla 1.3 Indicadores de organización de los estudios"
+          },
+          {
+            "data_block_ref": "t_tabla_1_3",
+            "id": "tab_tabla_1_3",
+            "kind": "TABLE",
+            "order": 8,
+            "title": "Indicadores de organización de los estudios"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_1_3"
+            ],
+            "id": "v_tabla_1_3",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 9,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 1.3"
+          },
+          {
+            "id": "t_tabla_1_4_1",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 1.4.1"
+            },
+            "order": 10,
+            "source_pipeline": "md_table",
+            "title": "Tabla 1.4.1 Satisfacción con las actividades formativas (doctorandos)"
+          },
+          {
+            "data_block_ref": "t_tabla_1_4_1",
+            "id": "tab_tabla_1_4_1",
+            "kind": "TABLE",
+            "order": 11,
+            "title": "Satisfacción con las actividades formativas (doctorandos)"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_1_4_1"
+            ],
+            "id": "v_tabla_1_4_1",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 12,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 1.4.1"
+          },
+          {
+            "id": "t_tabla_1_4_2",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 1.4.2"
+            },
+            "order": 13,
+            "source_pipeline": "md_table",
+            "title": "Tabla 1.4.2 Satisfacción con las actividades formativas (tutores y directores)"
+          },
+          {
+            "data_block_ref": "t_tabla_1_4_2",
+            "id": "tab_tabla_1_4_2",
+            "kind": "TABLE",
+            "order": 14,
+            "title": "Satisfacción con las actividades formativas (tutores y directores)"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_1_4_2"
+            ],
+            "id": "v_tabla_1_4_2",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 15,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 1.4.2"
+          },
+          {
+            "id": "t_tabla_1_5_1",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 1.5.1"
+            },
+            "order": 16,
+            "source_pipeline": "md_table",
+            "title": "Tabla 1.5.1 Satisfacción con el programa (doctorandos)"
+          },
+          {
+            "data_block_ref": "t_tabla_1_5_1",
+            "id": "tab_tabla_1_5_1",
+            "kind": "TABLE",
+            "order": 17,
+            "title": "Satisfacción con el programa (doctorandos)"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_1_5_1"
+            ],
+            "id": "v_tabla_1_5_1",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 18,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 1.5.1"
+          },
+          {
+            "id": "t_tabla_1_5_2",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 1.5.2"
+            },
+            "order": 19,
+            "source_pipeline": "md_table",
+            "title": "Tabla 1.5.2 Satisfacción con el programa (tutores y directores)"
+          },
+          {
+            "data_block_ref": "t_tabla_1_5_2",
+            "id": "tab_tabla_1_5_2",
+            "kind": "TABLE",
+            "order": 20,
+            "title": "Satisfacción con el programa (tutores y directores)"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_1_5_2"
+            ],
+            "id": "v_tabla_1_5_2",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 21,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 1.5.2"
+          },
+          {
+            "id": "t_tabla_2_1",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 2.1"
+            },
+            "order": 22,
+            "source_pipeline": "md_table",
+            "title": "Tabla 2.1 Información pública del programa"
+          },
+          {
+            "data_block_ref": "t_tabla_2_1",
+            "id": "tab_tabla_2_1",
+            "kind": "TABLE",
+            "order": 23,
+            "title": "Información pública del programa"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_2_1"
+            ],
+            "id": "v_tabla_2_1",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 24,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 2.1"
+          },
+          {
+            "id": "t_tabla_2_2",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 2.2"
+            },
+            "order": 25,
+            "source_pipeline": "md_table",
+            "title": "Tabla 2.2 Satisfacción con la información pública"
+          },
+          {
+            "data_block_ref": "t_tabla_2_2",
+            "id": "tab_tabla_2_2",
+            "kind": "TABLE",
+            "order": 26,
+            "title": "Satisfacción con la información pública"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_2_2"
+            ],
+            "id": "v_tabla_2_2",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 27,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 2.2"
+          },
+          {
+            "field_type": "number",
+            "id": "campo_movilidad",
+            "kind": "USER_INPUT",
+            "order": 28,
+            "title": "Porcentaje de estudiantado con movilidad"
+          },
+          {
+            "field_type": "text",
+            "id": "campo_destinos",
+            "kind": "USER_INPUT",
+            "order": 29,
+            "title": "Destinos de las estancias"
+          },
+          {
+            "field_type": "text",
+            "id": "campo_quejas",
+            "kind": "USER_INPUT",
+            "order": 30,
+            "title": "Consultas, quejas o sugerencias"
+          },
+          {
+            "field_type": "text",
+            "id": "campo_reacreditacion",
+            "kind": "USER_INPUT",
+            "order": 31,
+            "title": "¿Hubo reacreditación en el curso?"
+          },
+          {
+            "id": "gate",
+            "kind": "REVIEW_GATE",
+            "order": 32,
+            "review_policy_id": "required",
+            "title": "Revisión del coordinador"
+          }
+        ],
+        "export_policy": "docx",
+        "input_contract": {
+          "optional_slots": [],
+          "required_slots": [
+            {
+              "kind": "markdown",
+              "label": {
+                "ca": "Informe resum del programa",
+                "en": "Programme summary",
+                "es": "Informe resumen del programa"
+              },
+              "slot_id": "datos"
+            }
+          ]
+        },
+        "review_policy": "required",
+        "sections": [
+          {
+            "id": "a1",
+            "order": 1,
+            "title": "Criterio 1. Organización y desarrollo"
+          },
+          {
+            "id": "a2",
+            "order": 2,
+            "title": "Criterio 2. Información y transparencia"
+          }
+        ],
+        "ui_contract": {
+          "ai_review_panel_enabled": true,
+          "block_editor_enabled": true,
+          "dropzones": [
+            {
+              "accept": [
+                ".md"
+              ],
+              "label": {
+                "ca": "Informe resum del programa",
+                "en": "Programme summary",
+                "es": "Informe resumen del programa"
+              },
+              "max_size_mb": null,
+              "multiple": false,
+              "slot_id": "datos"
+            }
+          ],
+          "manual_fields": [],
+          "preview_layout": "markdown",
+          "wizard_steps": []
+        }
+      },
+      "version": 1
+    },
+    {
+      "spec_json": {
+        "ai_block_policy": "allowed",
+        "blocks": [
+          {
+            "id": "t_tabla_1_1",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 1.1"
+            },
+            "order": 1,
+            "source_pipeline": "md_table",
+            "title": "Tabla 1.1 Número de plazas del programa"
+          },
+          {
+            "data_block_ref": "t_tabla_1_1",
+            "id": "tab_tabla_1_1",
+            "kind": "TABLE",
+            "order": 2,
+            "title": "Número de plazas del programa"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_1_1"
+            ],
+            "id": "v_tabla_1_1",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 3,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 1.1"
+          },
+          {
+            "id": "t_tabla_1_2",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 1.2"
+            },
+            "order": 4,
+            "source_pipeline": "md_table",
+            "title": "Tabla 1.2 Evolución de la matrícula"
+          },
+          {
+            "data_block_ref": "t_tabla_1_2",
+            "id": "tab_tabla_1_2",
+            "kind": "TABLE",
+            "order": 5,
+            "title": "Evolución de la matrícula"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_1_2"
+            ],
+            "id": "v_tabla_1_2",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 6,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 1.2"
+          },
+          {
+            "id": "t_tabla_1_3",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 1.3"
+            },
+            "order": 7,
+            "source_pipeline": "md_table",
+            "title": "Tabla 1.3 Indicadores de organización de los estudios"
+          },
+          {
+            "data_block_ref": "t_tabla_1_3",
+            "id": "tab_tabla_1_3",
+            "kind": "TABLE",
+            "order": 8,
+            "title": "Indicadores de organización de los estudios"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_1_3"
+            ],
+            "id": "v_tabla_1_3",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 9,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 1.3"
+          },
+          {
+            "id": "t_tabla_1_4_1",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 1.4.1"
+            },
+            "order": 10,
+            "source_pipeline": "md_table",
+            "title": "Tabla 1.4.1 Satisfacción con las actividades formativas (doctorandos)"
+          },
+          {
+            "data_block_ref": "t_tabla_1_4_1",
+            "id": "tab_tabla_1_4_1",
+            "kind": "TABLE",
+            "order": 11,
+            "title": "Satisfacción con las actividades formativas (doctorandos)"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_1_4_1"
+            ],
+            "id": "v_tabla_1_4_1",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 12,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 1.4.1"
+          },
+          {
+            "id": "t_tabla_1_4_2",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 1.4.2"
+            },
+            "order": 13,
+            "source_pipeline": "md_table",
+            "title": "Tabla 1.4.2 Satisfacción con las actividades formativas (tutores y directores)"
+          },
+          {
+            "data_block_ref": "t_tabla_1_4_2",
+            "id": "tab_tabla_1_4_2",
+            "kind": "TABLE",
+            "order": 14,
+            "title": "Satisfacción con las actividades formativas (tutores y directores)"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_1_4_2"
+            ],
+            "id": "v_tabla_1_4_2",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 15,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 1.4.2"
+          },
+          {
+            "id": "t_tabla_1_5_1",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 1.5.1"
+            },
+            "order": 16,
+            "source_pipeline": "md_table",
+            "title": "Tabla 1.5.1 Satisfacción con el programa (doctorandos)"
+          },
+          {
+            "data_block_ref": "t_tabla_1_5_1",
+            "id": "tab_tabla_1_5_1",
+            "kind": "TABLE",
+            "order": 17,
+            "title": "Satisfacción con el programa (doctorandos)"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_1_5_1"
+            ],
+            "id": "v_tabla_1_5_1",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 18,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 1.5.1"
+          },
+          {
+            "id": "t_tabla_1_5_2",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 1.5.2"
+            },
+            "order": 19,
+            "source_pipeline": "md_table",
+            "title": "Tabla 1.5.2 Satisfacción con el programa (tutores y directores)"
+          },
+          {
+            "data_block_ref": "t_tabla_1_5_2",
+            "id": "tab_tabla_1_5_2",
+            "kind": "TABLE",
+            "order": 20,
+            "title": "Satisfacción con el programa (tutores y directores)"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_1_5_2"
+            ],
+            "id": "v_tabla_1_5_2",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 21,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 1.5.2"
+          },
+          {
+            "id": "t_tabla_2_1",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 2.1"
+            },
+            "order": 22,
+            "source_pipeline": "md_table",
+            "title": "Tabla 2.1 Información pública del programa"
+          },
+          {
+            "data_block_ref": "t_tabla_2_1",
+            "id": "tab_tabla_2_1",
+            "kind": "TABLE",
+            "order": 23,
+            "title": "Información pública del programa"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_2_1"
+            ],
+            "id": "v_tabla_2_1",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 24,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 2.1"
+          },
+          {
+            "id": "t_tabla_2_2",
+            "kind": "DETERMINISTIC_DATA",
+            "options": {
+              "table": "Tabla 2.2"
+            },
+            "order": 25,
+            "source_pipeline": "md_table",
+            "title": "Tabla 2.2 Satisfacción con la información pública"
+          },
+          {
+            "data_block_ref": "t_tabla_2_2",
+            "id": "tab_tabla_2_2",
+            "kind": "TABLE",
+            "order": 26,
+            "title": "Satisfacción con la información pública"
+          },
+          {
+            "ai_prompt_template_id": "valoracion_de_tendencia_v1",
+            "data_block_refs": [
+              "t_tabla_2_2"
+            ],
+            "id": "v_tabla_2_2",
+            "kind": "AI_ASSISTED_TEXT",
+            "order": 27,
+            "review_policy_id": "required",
+            "title": "Valoración de Tabla 2.2"
+          },
+          {
+            "field_type": "number",
+            "id": "campo_movilidad",
+            "kind": "USER_INPUT",
+            "order": 28,
+            "title": "Porcentaje de estudiantado con movilidad"
+          },
+          {
+            "field_type": "text",
+            "id": "campo_destinos",
+            "kind": "USER_INPUT",
+            "order": 29,
+            "title": "Destinos de las estancias"
+          },
+          {
+            "field_type": "text",
+            "id": "campo_quejas",
+            "kind": "USER_INPUT",
+            "order": 30,
+            "title": "Consultas, quejas o sugerencias"
+          },
+          {
+            "field_type": "text",
+            "id": "campo_reacreditacion",
+            "kind": "USER_INPUT",
+            "order": 31,
+            "title": "¿Hubo reacreditación en el curso?"
+          },
+          {
+            "id": "gate",
+            "kind": "REVIEW_GATE",
+            "order": 32,
+            "review_policy_id": "required",
+            "title": "Revisión del coordinador"
+          }
+        ],
+        "export_policy": "docx",
+        "input_contract": {
+          "optional_slots": [],
+          "required_slots": [
+            {
+              "kind": "markdown",
+              "label": {
+                "ca": "Informe resum del programa",
+                "en": "Programme summary",
+                "es": "Informe resumen del programa"
+              },
+              "slot_id": "datos"
+            }
+          ]
+        },
+        "review_policy": "required",
+        "sections": [
+          {
+            "block_ids": [
+              "tab_tabla_1_1",
+              "v_tabla_1_1",
+              "tab_tabla_1_2",
+              "v_tabla_1_2",
+              "tab_tabla_1_3",
+              "v_tabla_1_3",
+              "tab_tabla_1_4_1",
+              "v_tabla_1_4_1",
+              "tab_tabla_1_4_2",
+              "v_tabla_1_4_2",
+              "tab_tabla_1_5_1",
+              "v_tabla_1_5_1",
+              "tab_tabla_1_5_2",
+              "v_tabla_1_5_2"
+            ],
+            "id": "a1",
+            "order": 1,
+            "title": "Criterio 1. Organización y desarrollo"
+          },
+          {
+            "block_ids": [
+              "tab_tabla_2_1",
+              "v_tabla_2_1",
+              "tab_tabla_2_2",
+              "v_tabla_2_2"
+            ],
+            "id": "a2",
+            "order": 2,
+            "title": "Criterio 2. Información y transparencia"
+          },
+          {
+            "block_ids": [
+              "campo_movilidad",
+              "campo_destinos",
+              "campo_quejas",
+              "campo_reacreditacion"
+            ],
+            "id": "a3",
+            "order": 3,
+            "title": "Datos aportados por la coordinación"
+          }
+        ],
+        "ui_contract": {
+          "ai_review_panel_enabled": true,
+          "block_editor_enabled": true,
+          "dropzones": [
+            {
+              "accept": [
+                ".md"
+              ],
+              "label": {
+                "ca": "Informe resum del programa",
+                "en": "Programme summary",
+                "es": "Informe resumen del programa"
+              },
+              "max_size_mb": null,
+              "multiple": false,
+              "slot_id": "datos"
+            }
+          ],
+          "manual_fields": [],
+          "preview_layout": "markdown",
+          "wizard_steps": []
+        }
+      },
+      "version": 2
+    }
+  ]
+}
