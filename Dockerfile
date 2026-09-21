@@ -40,6 +40,21 @@ WORKDIR /app/server
 ARG EXTRAS_APP=""
 
 # --no-editable convierte automatia-shared en paquete regular (no hace falta shared/ en runtime)
+# **`--frozen` aquí, y `--locked` en las imágenes del MCP y del sandbox.** No es incoherencia:
+# es que en esta imagen `--locked` **no puede funcionar**, y conviene que esté escrito para que
+# nadie lo «arregle» por simetría.
+#
+# Los dos flags usan el lock sin volver a resolver, que es lo que se quiere —una imagen
+# construida meses después no puede traer versiones que nadie probó—, y `--locked` comprueba
+# además que el lock cuadre con su manifiesto. Pero para comprobarlo necesita **los metadatos de
+# todos los miembros del workspace**, y uno de ellos es un paquete de pruebas
+# (`tests/fixtures/paquete_perfil_demo`) que esta imagen **no copia a propósito**. Medido: con
+# `--locked` la construcción muere en `error: Failed to generate package metadata for
+# `govgenai-demo-perfil==0.1.0 @ editable+tests/fixtures/paquete_perfil_demo``.
+#
+# Lo que `--frozen` no da —avisar de que el lock no cuadra con el manifiesto— lo dan aquí CI y
+# el despliegue, que instalan con `uv sync --locked`, y el job de cadena de suministro, que hace
+# `uv export --locked` de los cuatro proyectos.
 RUN uv sync --frozen --no-dev --no-editable ${EXTRAS_APP}
 
 

@@ -20,9 +20,19 @@ FROM python:3.13-slim
 WORKDIR /srv/mcp
 
 COPY pyproject.toml uv.lock ./
-# `--frozen` y no `--locked`: el lock manda y no se vuelve a resolver. Sin esto, una imagen
-# construida meses después podría traer versiones que nadie probó.
-RUN pip install --no-cache-dir uv && uv sync --frozen --no-dev
+# `--locked` y no `--frozen`. **Los dos usan el lock sin volver a resolver**, que es lo que se
+# quiere aquí —una imagen construida meses después no puede traer versiones que nadie probó—,
+# pero sólo `--locked` comprueba además que el lock **cuadre con su manifiesto**.
+#
+# Medido, porque la diferencia no se ve leyendo los nombres: con `--frozen` y una dependencia
+# añadida al `pyproject.toml` sin relockear, la construcción **pasa en verde y esa dependencia
+# no llega a la imagen**. Comprobado añadiendo `tabulate>=0.9` al manifiesto del sandbox:
+# `--frozen` construyó y `find_spec('tabulate')` daba `None`; `--locked` rompe con
+# «error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided».
+#
+# Es además el flag que ya usaban CI y el despliegue, así que las imágenes comprobaban menos
+# que quien las construye.
+RUN pip install --no-cache-dir uv && uv sync --locked --no-dev
 
 COPY config.py api_client.py errors.py resources.py server.py http_server.py ./
 COPY tools/ ./tools/

@@ -21,8 +21,24 @@ WORKDIR /srv/sandbox
 
 COPY pyproject.toml ./
 COPY uv.lock* ./
-RUN pip install --no-cache-dir uv && uv sync --frozen --no-dev || \
-    (pip install --no-cache-dir uv && uv sync --no-dev)
+# `--locked` y no `--frozen`. **Los dos usan el lock sin volver a resolver**, que es lo que se
+# quiere aquí —una imagen construida meses después no puede traer versiones que nadie probó—,
+# pero sólo `--locked` comprueba además que el lock **cuadre con su manifiesto**.
+#
+# Medido, porque la diferencia no se ve leyendo los nombres: con `--frozen` y una dependencia
+# añadida al `pyproject.toml` sin relockear, la construcción **pasa en verde y esa dependencia
+# no llega a la imagen**. Comprobado añadiendo `tabulate>=0.9` al manifiesto del sandbox:
+# `--frozen` construyó y `find_spec('tabulate')` daba `None`; `--locked` rompe con
+# «error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided».
+#
+# Es además el flag que ya usaban CI y el despliegue, así que las imágenes comprobaban menos
+# que quien las construye.
+#
+# **Aquí había además una reserva —`|| (pip install uv && uv sync --no-dev)`— y se retiró.** Si
+# el primer `uv sync` fallaba, la segunda rama **volvía a resolver** y la imagen salía con
+# versiones que nadie había fijado ni probado: justo lo que el lock existe para impedir, y con la
+# construcción en verde. Comprobado con `--no-cache` y sin reserva que el primero se vale solo.
+RUN pip install --no-cache-dir uv && uv sync --locked --no-dev
 
 COPY sandbox/ ./sandbox/
 
