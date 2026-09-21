@@ -38,13 +38,22 @@ def rutas_servidas(app: Any) -> Iterator[tuple[str, Any]]:
     yield from _recorre(getattr(app, "routes", ()), set(), "")
 
 
-def _recorre(rutas: Any, vistos: set[int], prefijo: str) -> Iterator[tuple[str, Any]]:
+def _recorre(
+    rutas: Any, vistos: set[tuple[int, str]], prefijo: str
+) -> Iterator[tuple[str, Any]]:
     for ruta in rutas or ():
-        # Un router puede estar incluido dos veces —`cloud` y `edge` comparten alguno— y sin
-        # esto saldría repetido; con una referencia circular, no acabaría.
-        if id(ruta) in vistos:
+        # **La clave lleva el prefijo, y no sólo la identidad del objeto.** La primera versión
+        # deduplicaba por `id(ruta)` a secas, y eso es incorrecto en cuanto un mismo router se
+        # incluya **dos veces bajo prefijos distintos**: el segundo juego de rutas se perdería
+        # entero y en silencio. Hoy no pasa —medido: 38 inclusiones y ninguna repetida con
+        # prefijo distinto— así que el defecto era latente, y lo habría cazado
+        # `test_el_recorrido_de_rutas_ve_lo_que_el_contrato_declara`, que compara con el
+        # esquema. Pero un recorrido que pierde rutas según cómo estén montadas no es un
+        # recorrido. Con el prefijo dentro, una referencia circular sigue parándose.
+        clave = (id(ruta), prefijo)
+        if clave in vistos:
             continue
-        vistos.add(id(ruta))
+        vistos.add(clave)
 
         interno = getattr(ruta, "original_router", None)
         if interno is not None:
