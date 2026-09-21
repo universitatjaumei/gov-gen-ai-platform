@@ -32,6 +32,7 @@ vi.mock('@/shared/api/download', () => ({
   descargarConAutorizacion: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock('@/shared/api/generated/redaccion-workspaces/redaccion-workspaces', () => ({
+  useResumeWorkspace: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useRunWorkspace: vi.fn(),
   useUploadWorkspaceInput: vi.fn(),
   useApproveBlock: vi.fn(),

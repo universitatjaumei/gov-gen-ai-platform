@@ -135,6 +135,7 @@
   "preview_print": "Imprimir / Exportar PDF",
   "review": {
     "all_approved": "Todos los apartados aprobados — listo para ensamblar",
+    "assemble": "Ensamblar el informe",
     "approve": "Aprobar",
     "edit": "Editar",
     "edit_label": "Texto del apartado",

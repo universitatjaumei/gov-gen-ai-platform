@@ -135,6 +135,7 @@
   "preview_print": "Print / Export PDF",
   "review": {
     "all_approved": "All passages approved — ready to assemble",
+    "assemble": "Assemble the report",
     "approve": "Approve",
     "edit": "Rewrite",
     "edit_label": "Passage text",

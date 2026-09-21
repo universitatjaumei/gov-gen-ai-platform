@@ -46,13 +46,15 @@ Claude Code  ──stdio──►  mcp_server/ (FastMCP)  ──HTTPS + PAT─�
 
 ### Nota dev/prod (edge vs cloud)
 
-En desarrollo (`DEPLOY_MODE=all`) el chat (**edge**) y la configuración de
-plantillas/chatbots (**cloud**/edge) conviven en el mismo servidor, así que un único
-`GOVGENAI_API_BASE_URL` cubre todas las tools. En despliegue real son **superficies
-distintas**: `test_chat` apunta al **edge** (cliente), mientras que las tools de
-chatbots son **cloud** (admin/partner) y las de plantillas, **edge**. Si edge y cloud
-tienen URLs distintas, hoy se registran dos instancias del servidor MCP con
-`GOVGENAI_API_BASE_URL` distinto (una por superficie).
+Las tools no viven todas en la misma superficie: `test_chat` apunta al **edge** (cliente), las
+de chatbots son **cloud** (admin/partner) y las de plantillas, **edge**. En un despliegue donde
+edge y cloud tuvieran URLs distintas harían falta dos instancias del servidor MCP, una por
+`GOVGENAI_API_BASE_URL`.
+
+**Hoy no es el caso, ni en desarrollo ni en producción.** Las dos corren con `DEPLOY_MODE=all`
+—lo fija `deploy.yml` al desplegar y lo repite el `docker-compose` de la VM—, así que un único
+`GOVGENAI_API_BASE_URL` cubre todas las tools. La partición de arriba es la que habrá que
+atender el día que se separen, no una descripción de lo que hay.
 
 ---
 
@@ -68,10 +70,18 @@ tienen URLs distintas, hoy se registran dos instancias del servidor MCP con
 
 ### Cómo emitir el PAT
 
-Desde la UI del hub (Bloque AUTH, prompt AUTH.4): **`/hub/access-tokens`** →
+Desde el panel (Bloque AUTH, prompt AUTH.4): **`/plataforma/tokens`** →
 "Crear token". Elige los **scopes** según lo que vayas a hacer (ver mapa abajo),
 opcionalmente una caducidad, y **copia el token en claro** (se muestra una sola vez).
 El token es revocable desde la misma pantalla.
+
+> **La pantalla ofrece cinco de los once scopes del catálogo**: `redaccion:templates:read`,
+> `redaccion:templates:write`, `chatbots:read`, `chatbots:write` y `chat:test`. Los seis
+> restantes —`chat:debug`, `chat:onbehalf`, `actividad:write`, `anonimizacion:use`,
+> `verificaciones:use` y `funciones:execute`— existen en el catálogo del servidor y hoy **sólo
+> se emiten llamando a `POST /api/v1/auth/pats`** con una sesión de administración. Dicho de
+> otro modo: **las tools del transporte HTTP no se pueden habilitar desde el panel**, que es
+> justo el paso que bloquea a quien llega de fuera.
 
 > Recuerda: un **partner** no puede emitir el scope `chatbots:write` (la mutación
 > in-place de chatbots en producción se reserva a admin; ver §8, valoración 2 del análisis previo).
@@ -89,9 +99,23 @@ El token es revocable desde la misma pantalla.
 | `chat:test` | `test_chat` |
 | `chat:debug` | inspección del prompt final (`debug_bypass`) — enseña el system prompt entero |
 | `chat:onbehalf` | preguntar **en nombre de otra persona** (cabecera `X-GovGenAI-Actor`) |
+| `funciones:execute` | ninguna tool MCP: ejecutar una función del catálogo es hoy sólo `POST /api/v1/funciones/{id}/run` |
 
 Emite el PAT con el conjunto mínimo de scopes para la tarea. Las tools de lectura no
 necesitan scopes de escritura.
+
+**Este mapa dice qué pedir, no dónde se comprueba**, y la diferencia importa cuando se depura un
+403 que no llega. La comprobación es desigual: de las cinco tools de plantillas, sólo
+`get_template_spec` exige `redaccion:templates:read` y `publish_template_version` exige
+`redaccion:templates:write`. `list_templates`, `validate_template_draft` y `create_template`
+pasan por **rol** —administrador o superadministrador— y no miran ningún scope, así que un PAT
+emitido por un administrador crea plantillas aunque no lleve `redaccion:templates:write`. Y
+`chatbots:read`/`chatbots:write` no se comprueban como scope en ningún endpoint: los routers de
+chatbots piden rol y módulo. Emite igualmente el conjunto mínimo — es lo que seguirá siendo
+cierto el día que la comprobación se cierre, y mientras tanto no cuesta nada.
+
+**Los scopes sólo acotan a los PAT.** Una sesión humana (JWT) no se filtra por scope; el techo
+que la limita es su rol.
 
 `chat:onbehalf` es el más delicado de los tres últimos: habilita que el portador del token
 declare quién pregunta. Sin él, la cabecera se ignora **sin error** y todo queda atribuido al
@@ -109,8 +133,9 @@ integración de una sola persona no debe llevarlo.
 | `anonimizacion:use` | `detectar_pii`, `anonimizar_texto` |
 | `verificaciones:use` | `verificar_citas`, `consultar_vigencia`, `auditar_codigo`, `reglas_de_auditoria` |
 
-Los tres scopes los puede emitir tanto un superadministrador como un administrador de
-organización. `verificaciones:use` es **uno para los tres servicios** y no uno por servicio: son la misma capacidad —comprobar con la vara de la plataforma algo que se produjo fuera— y
+Los tres scopes los admite el catálogo del servidor tanto para un superadministrador como para un
+administrador de organización, pero **la pantalla de tokens no los ofrece**: hoy se emiten
+llamando a `POST /api/v1/auth/pats`. `verificaciones:use` es **uno para los tres servicios** y no uno por servicio: son la misma capacidad —comprobar con la vara de la plataforma algo que se produjo fuera— y
 partirlo obligaría a pedir tres permisos para un caso de uso. `chatbots:write` es la excepción, y por un motivo concreto: muta un chatbot en
 producción in-place. Registrar actividad añade metadatos y no muta nada.
 
@@ -222,7 +247,7 @@ claude mcp add govgenai \
   (devuelve el diff, no aplica). Esto cumple la regla HITL de
   `REDACCION_CONTRACT_FIRST.md` con el admin como aprobador.
 - **PAT revocable y con scopes.** Cada token porta un techo de scopes por rol y puede
-  revocarse al instante desde `/hub/access-tokens`. El servidor MCP nunca persiste el
+  revocarse al instante desde `/plataforma/tokens`. El servidor MCP nunca persiste el
   PAT: lo lee del entorno en cada arranque.
 - **Versionado append-only de plantillas.** `publish_template_version` solo añade; una
   versión publicada jamás se muta.
@@ -257,7 +282,9 @@ claude mcp add govgenai \
 **Chat de prueba (MCP.4)** — `test_chat(chatbot_id, message, lang?)`: lanza una
 pregunta y devuelve `answer` + `sources` (consume el stream SSE del endpoint de chat).
 
-Detalle de firmas y efectos en [`mcp_server/README.md`](../mcp_server/README.md).
+Detalle de firmas y efectos en [`mcp_server/README.md`](../mcp_server/README.md) — **que cubre
+sólo el transporte stdio**: se escribió al cerrar MCP.4 y no conoce el transporte HTTP ni sus
+siete tools de actividad y verificaciones. Para ésas, este documento es la referencia.
 
 ---
 
@@ -268,7 +295,7 @@ validar de extremo a extremo con un PAT real:
 
 1. Arranca la plataforma (`docker compose up -d`) y asegúrate de que la API responde
    en `GOVGENAI_API_BASE_URL`.
-2. Emite un PAT desde **`/hub/access-tokens`** con scopes `chat:test` (+ `chatbots:read`
+2. Emite un PAT desde **`/plataforma/tokens`** con scopes `chat:test` (+ `chatbots:read`
    para inspeccionar). Copia el token.
 3. Registra el servidor con el comando `claude mcp add` de la §4, usando ese PAT.
 4. En Claude Code: `list_chatbots()` para obtener un `chatbot_id` existente.

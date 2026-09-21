@@ -27,6 +27,7 @@ vi.mock('@/shared/api/generated/hub-redaccion/hub-redaccion', () => ({
 }))
 
 vi.mock('@/shared/api/generated/redaccion-workspaces/redaccion-workspaces', () => ({
+  useResumeWorkspace: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useEditBlock: vi.fn(),
 }))
 

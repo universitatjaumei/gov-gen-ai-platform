@@ -67,6 +67,7 @@ todas envejecen igual:
 |---|---|
 | [`REDACCION_CONTRACT_FIRST.md`](REDACCION_CONTRACT_FIRST.md) | Referencia viva — el contrato del módulo de Informes: plantillas, extracción, `DraftingCoreGraph`, `RunManifest` |
 | [`CASO_INFORME_SEGUIMIENTO.md`](CASO_INFORME_SEGUIMIENTO.md) | Referencia viva — el caso guía del módulo, con las dos reglas duras que salieron de él |
+| [`ESQUEMA_PLANTILLA_INFORME.md`](ESQUEMA_PLANTILLA_INFORME.md) | Referencia viva — el esquema de una plantilla en prosa: las siete claves, los once bloques, las tres cadenas de datos y las tres capas de validación |
 | [`CATALOGO_FUNCIONES.md`](CATALOGO_FUNCIONES.md) | Referencia viva — el catálogo de funciones deterministas compartidas: contrato, versionado, los tres niveles y la revisión posterior |
 | [`SANDBOX_SECURITY.md`](SANDBOX_SECURITY.md) | Referencia viva — las ocho capas de aislamiento del código generado. La capa 8 (gVisor) **la pone el aprovisionamiento de la VM** desde D.0.doc, con el comando que comprueba que está: la daba la plataforma y ahora es configuración nuestra |
 

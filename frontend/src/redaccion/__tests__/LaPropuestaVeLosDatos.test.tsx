@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import i18n from '@/shared/i18n'
 import { LLMDraftPreviewPage } from '../pages/LLMDraftPreviewPage'
@@ -52,11 +53,18 @@ beforeEach(() => {
   vi.mocked(useDescribeSampleFile).mockReturnValue({ mutate: describir, isPending: false } as never)
 })
 
+/**
+ * Con `MemoryRouter` desde el issue #87: la pagina llama a `useNavigate`, que solo funciona
+ * dentro de un Router. Sin rutas de destino, porque aqui no se comprueba la navegacion — eso lo
+ * hace `Issue87AprobarConfirmaYNavega.test.tsx`—: hace falta solo el contexto para que monte.
+ */
 function pintar() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
-      <LLMDraftPreviewPage />
+      <MemoryRouter>
+        <LLMDraftPreviewPage />
+      </MemoryRouter>
     </QueryClientProvider>,
   )
 }

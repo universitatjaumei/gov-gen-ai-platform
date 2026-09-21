@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import {
   useProposeLlmDraft,
   useValidateLlmDraft,
@@ -28,6 +29,7 @@ import {
 export function LLMDraftPreviewPage() {
   const { t } = useTranslation('common')
   const { t: tR } = useTranslation('redaccion')
+  const navigate = useNavigate()
   const { user } = useAuth()
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin'
 
@@ -53,6 +55,8 @@ export function LLMDraftPreviewPage() {
    */
   const [muestra, setMuestra] = useState<MuestraDeDatos | null>(null)
   const [errorDeMuestra, setErrorDeMuestra] = useState('')
+  /** Issue #87 — un fallo al aprobar tambien era invisible. Misma convencion que arriba. */
+  const [errorDeAprobacion, setErrorDeAprobacion] = useState('')
   const { mutate: describirFichero, isPending: leyendoFichero } = useDescribeSampleFile()
 
   function elegirFichero(fichero: File | undefined) {
@@ -118,13 +122,46 @@ export function LLMDraftPreviewPage() {
     })
   }
 
+  /**
+   * Aprobar lleva a lo que se acaba de crear (issue #87).
+   *
+   * Antes esto disparaba la mutación y terminaba: la plantilla se creaba de verdad y en pantalla
+   * no cambiaba nada, así que había que ir a `/redaccion/builder` para saber si había
+   * funcionado. El único cambio visible era que el botón se rehabilitaba — indistinguible de un
+   * botón roto. Es el mismo fallo que VER.4 arregló en `GenericReportWizard`, y el remedio se
+   * copia de allí.
+   *
+   * **Los dos destinos no son el mismo.** Una plantilla se va a ver al catálogo; un informe se
+   * abre por su identificador, que es lo que devuelve `ApproveAsWorkspaceResponse`.
+   *
+   * Y el error va aquí y no aparte porque tenía la misma forma: un fallo de la mutación también
+   * era invisible.
+   */
   function handleApprove() {
     if (!borrador || !canApprove) return
+    setErrorDeAprobacion('')
     // Se aprueba **el borrador corregido**, no lo que devolvió el modelo.
     const name = draftName || tR('draft_default_name')
     const data = { draft: borrador as unknown as ReportTemplateDraft, name }
-    if (mode === 'template') approveTemplate({ data })
-    else approveWorkspace({ data })
+    const alFallar = {
+      onError: (fallo: unknown) =>
+        setErrorDeAprobacion((fallo as Error)?.message || t('error')),
+    }
+    if (mode === 'template') {
+      approveTemplate(
+        { data },
+        { ...alFallar, onSuccess: () => navigate('/redaccion/builder') },
+      )
+    } else {
+      approveWorkspace(
+        { data },
+        {
+          ...alFallar,
+          onSuccess: (creado) =>
+            navigate(`/redaccion/workspaces/${(creado as { workspace_id: string }).workspace_id}`),
+        },
+      )
+    }
   }
 
   return (
@@ -346,6 +383,14 @@ export function LLMDraftPreviewPage() {
           >
             {isApproving ? t('loading') : tR('draft_approve')}
           </button>
+
+          {/* Issue #87 — un fallo al aprobar se dice aquí, donde se pulsó. Mismo `role="alert"`
+              que el error del fichero de muestra: la página ya tenía convención. */}
+          {errorDeAprobacion && (
+            <p data-testid="error-de-aprobacion" role="alert" className="text-xs text-destructive">
+              {errorDeAprobacion}
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -14,7 +14,7 @@ la API** (igual que el frontend): se autentica con un **PAT** y no importa nada 
 | Variable | Obligatoria | Descripción |
 |---|---|---|
 | `GOVGENAI_API_BASE_URL` | sí | URL base de la API, p. ej. `http://localhost:8000` |
-| `GOVGENAI_PAT` | sí | Personal Access Token (`pat_<prefix>_<secret>`), emitido en `/hub/access-tokens` |
+| `GOVGENAI_PAT` | sí | Personal Access Token (`pat_<prefix>_<secret>`), emitido en `/plataforma/tokens` |
 | `GOVGENAI_GRAPH_PROFILES_PATH` | no | Ruta a `GRAPH_PROFILES.md` (por defecto `<repo>/docs/GRAPH_PROFILES.md`) |
 
 Si falta alguna obligatoria, el servidor falla al arrancar con un mensaje claro.

@@ -135,6 +135,7 @@
   "preview_print": "Imprimir / Exportar PDF",
   "review": {
     "all_approved": "Tots els apartats aprovats — a punt per a assemblar",
+    "assemble": "Ensambla l'informe",
     "approve": "Aprova",
     "edit": "Edita",
     "edit_label": "Text de l’apartat",

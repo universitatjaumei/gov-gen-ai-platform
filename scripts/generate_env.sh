@@ -169,7 +169,7 @@ MAX_DOCUMENTS_PER_CHATBOT=0
 
 # === CONECTIVIDAD INSTITUCIONAL (servidor MCP — mcp_server/) ===
 # El servidor MCP es un proceso aparte (cliente stdio para Claude Code / IDEs).
-# Emite un Personal Access Token desde /hub/access-tokens tras el primer login
+# Emite un Personal Access Token desde /plataforma/tokens tras el primer login
 # y arráncalo con esas dos variables (no van en el .env de la app):
 # GOVGENAI_API_BASE_URL=http://localhost:8000
 # GOVGENAI_PAT=pat_...

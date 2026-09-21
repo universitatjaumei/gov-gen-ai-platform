@@ -52,8 +52,17 @@ def test_no_se_exporta_nada_que_no_este_en_la_lista() -> None:
     Si apareciera un `PRO4 plantilla con transformacion.json`, alguien habría exportado a mano
     y el catálogo del producto dejaría de ser lo que dice el código.
     """
-    if not DATOS.is_dir():
-        pytest.skip("todavía no se ha exportado nada")
+    # **Sin `skip` si la carpeta no está.** Este `pytest.skip` —y el de
+    # `test_lo_exportado_tiene_contenido_y_no_un_spec_vacio`— dejaban el fichero **en verde sin
+    # comprobar nada en CI**, porque `.gitignore` excluía `server/app/data/` de rebote con su
+    # `data/` y los ficheros nunca llegaban al checkout. Meses así: el guardarraíl que debía
+    # vigilar el catálogo se saltaba a sí mismo justo donde hacía falta, y nadie lo notó hasta que
+    # un test del issue #84 **afirmó** en vez de saltar. Ahora los ficheros están versionados, así
+    # que no estar es un defecto y se dice.
+    assert DATOS.is_dir(), (
+        f"no existe {DATOS}. Las plantillas demo están versionadas desde el 2026-09-21: si no "
+        "están en el árbol, `bootstrap --con-demo` no puede sembrar nada en ningún despliegue."
+    )
     declarados = {p.fichero for p in CATALOGO}
     presentes = {f.name for f in DATOS.glob("*.json")}
     de_mas = presentes - declarados
@@ -147,9 +156,13 @@ def test_el_documento_conserva_el_spec_tal_cual() -> None:
 
 
 def test_lo_exportado_tiene_contenido_y_no_un_spec_vacio() -> None:
-    if not DATOS.is_dir() or not list(DATOS.glob("*.json")):
-        pytest.skip("todavía no se ha exportado nada")
-    for fichero in DATOS.glob("*.json"):
+    ficheros = sorted(DATOS.glob("*.json")) if DATOS.is_dir() else []
+    # Por lo mismo que arriba: si no hay ficheros, eso **es** el hallazgo.
+    assert ficheros, (
+        f"no hay ninguna plantilla demo en {DATOS}, y están versionadas: sin ellas la siembra "
+        "del catálogo no hace nada"
+    )
+    for fichero in ficheros:
         documento = json.loads(fichero.read_text(encoding="utf-8"))
         assert documento["versiones"], f"{fichero.name} no tiene versiones"
         for version in documento["versiones"]:
