@@ -1,4 +1,11 @@
-FROM python:3.12-slim
+# **3.13, la misma que la imagen del servidor.** Estuvo en 3.12 sin que nadie lo decidiera.
+# El manifiesto dice `>=3.12`, así que la 3.13 lo cumple y **no se aprieta la declaración**.
+#
+# Comprobado construyendo y arrancando: Python 3.13.15, `/health` a **200** igual que con la
+# 3.12, y las bibliotecas pesadas en la misma versión (`pandas` 3.0.6, `numpy` 2.5.3,
+# `matplotlib` 3.11.2). Hacía falta comprobarlo a mano porque el job `imagen` de CI
+# **construye esta imagen y no la arranca**.
+FROM python:3.13-slim
 
 # Dependencias del sistema mínimas (libgomp1 lo necesita numpy/pandas en algunos entornos).
 RUN apt-get update && apt-get install -y --no-install-recommends \
