@@ -4,6 +4,7 @@
  */
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import i18n from '@/shared/i18n'
 
@@ -58,9 +59,19 @@ const SAMPLE_DRAFT = {
   prompt_version: '1.0',
 }
 
+/**
+ * Con `MemoryRouter` desde el issue #87: la página llama a `useNavigate`, que sólo funciona
+ * dentro de un Router. Aquí no se declaran rutas de destino porque estos tests no comprueban la
+ * navegación — eso lo hace `Issue87AprobarConfirmaYNavega.test.tsx`—; sólo hacen falta el
+ * contexto para que monte.
+ */
 function wrap(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>)
+  return render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </QueryClientProvider>
+  )
 }
 
 beforeAll(async () => {
@@ -149,8 +160,13 @@ describe('LLMDraftPreviewPage', () => {
     fireEvent.click(screen.getByTestId('mode-template'))
     fireEvent.click(screen.getByTestId('btn-approve'))
 
+    // Segundo argumento desde el issue #87: la llamada lleva ahora `onSuccess`/`onError`.
+    // Aquí se admite con `expect.anything()` en vez de afirmarlo, porque lo que este test
+    // comprueba es **qué mutación se llama y con qué datos**; que esas devoluciones hagan
+    // lo suyo lo comprueba `Issue87AprobarConfirmaYNavega.test.tsx`.
     expect(mockApproveTemplate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ draft: SAMPLE_DRAFT }) }),
+      expect.anything(),
     )
   })
 
@@ -167,8 +183,13 @@ describe('LLMDraftPreviewPage', () => {
     // Default mode is 'workspace' — click approve directly
     fireEvent.click(screen.getByTestId('btn-approve'))
 
+    // Segundo argumento desde el issue #87: la llamada lleva ahora `onSuccess`/`onError`.
+    // Aquí se admite con `expect.anything()` en vez de afirmarlo, porque lo que este test
+    // comprueba es **qué mutación se llama y con qué datos**; que esas devoluciones hagan
+    // lo suyo lo comprueba `Issue87AprobarConfirmaYNavega.test.tsx`.
     expect(mockApproveWorkspace).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ draft: SAMPLE_DRAFT }) }),
+      expect.anything(),
     )
   })
 
