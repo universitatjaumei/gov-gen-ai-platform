@@ -23,11 +23,12 @@
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
-    "baseUrl": ".",
+    // Sin `baseUrl`: TypeScript 7 lo retiró (TS5102) y `paths` ya va escrito relativo
+    // (`./src/*`), que es como la 7 lo resuelve. Nadie importa desnudo (`from 'src/...'`),
+    // que era lo otro que `baseUrl` habilitaba, así que no cambia ninguna resolución.
     "paths": {
       "@/*": ["./src/*"]
-    },
-    "ignoreDeprecations": "6.0"
+    }
   },
   "include": ["src"]
 }

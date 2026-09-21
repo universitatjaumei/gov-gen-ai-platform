@@ -6,14 +6,33 @@
 #
 # El transporte y el modelo de autenticación están en `http_server.py`: streamable HTTP, sin
 # sesión, y el PAT lo presenta cada cliente en su petición. Aquí no se configura ningún token.
-FROM python:3.12-slim
+# **3.13, la misma que la imagen del servidor.** Estuvo en 3.12 sin que nadie lo decidiera:
+# la aplicación se movió a la 3.13 y esta se quedó. El manifiesto dice `>=3.11`, así que la
+# 3.13 lo cumple y **no se aprieta la declaración** — apretar la del servidor a
+# `>=3.13,<3.14` fue una decisión medida, por cómo Dependabot resuelve sus *splits*, y el
+# trabajo de este proyecto pasa hoy.
+#
+# Comprobado construyendo y arrancando: Python 3.13.15, y `/mcp` responde **421** igual que
+# con la 3.12 —el guardián de host, o sea la aplicación en pie—. No es un cambio a ciegas
+# porque el job `imagen` de CI **construye esta imagen y no la arranca**.
+FROM python:3.13-slim
 
 WORKDIR /srv/mcp
 
 COPY pyproject.toml uv.lock ./
-# `--frozen` y no `--locked`: el lock manda y no se vuelve a resolver. Sin esto, una imagen
-# construida meses después podría traer versiones que nadie probó.
-RUN pip install --no-cache-dir uv && uv sync --frozen --no-dev
+# `--locked` y no `--frozen`. **Los dos usan el lock sin volver a resolver**, que es lo que se
+# quiere aquí —una imagen construida meses después no puede traer versiones que nadie probó—,
+# pero sólo `--locked` comprueba además que el lock **cuadre con su manifiesto**.
+#
+# Medido, porque la diferencia no se ve leyendo los nombres: con `--frozen` y una dependencia
+# añadida al `pyproject.toml` sin relockear, la construcción **pasa en verde y esa dependencia
+# no llega a la imagen**. Comprobado añadiendo `tabulate>=0.9` al manifiesto del sandbox:
+# `--frozen` construyó y `find_spec('tabulate')` daba `None`; `--locked` rompe con
+# «error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided».
+#
+# Es además el flag que ya usaban CI y el despliegue, así que las imágenes comprobaban menos
+# que quien las construye.
+RUN pip install --no-cache-dir uv && uv sync --locked --no-dev
 
 COPY config.py api_client.py errors.py resources.py server.py http_server.py ./
 COPY tools/ ./tools/

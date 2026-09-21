@@ -1,4 +1,11 @@
-FROM python:3.12-slim
+# **3.13, la misma que la imagen del servidor.** Estuvo en 3.12 sin que nadie lo decidiera.
+# El manifiesto dice `>=3.12`, así que la 3.13 lo cumple y **no se aprieta la declaración**.
+#
+# Comprobado construyendo y arrancando: Python 3.13.15, `/health` a **200** igual que con la
+# 3.12, y las bibliotecas pesadas en la misma versión (`pandas` 3.0.6, `numpy` 2.5.3,
+# `matplotlib` 3.11.2). Hacía falta comprobarlo a mano porque el job `imagen` de CI
+# **construye esta imagen y no la arranca**.
+FROM python:3.13-slim
 
 # Dependencias del sistema mínimas (libgomp1 lo necesita numpy/pandas en algunos entornos).
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -14,8 +21,24 @@ WORKDIR /srv/sandbox
 
 COPY pyproject.toml ./
 COPY uv.lock* ./
-RUN pip install --no-cache-dir uv && uv sync --frozen --no-dev || \
-    (pip install --no-cache-dir uv && uv sync --no-dev)
+# `--locked` y no `--frozen`. **Los dos usan el lock sin volver a resolver**, que es lo que se
+# quiere aquí —una imagen construida meses después no puede traer versiones que nadie probó—,
+# pero sólo `--locked` comprueba además que el lock **cuadre con su manifiesto**.
+#
+# Medido, porque la diferencia no se ve leyendo los nombres: con `--frozen` y una dependencia
+# añadida al `pyproject.toml` sin relockear, la construcción **pasa en verde y esa dependencia
+# no llega a la imagen**. Comprobado añadiendo `tabulate>=0.9` al manifiesto del sandbox:
+# `--frozen` construyó y `find_spec('tabulate')` daba `None`; `--locked` rompe con
+# «error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided».
+#
+# Es además el flag que ya usaban CI y el despliegue, así que las imágenes comprobaban menos
+# que quien las construye.
+#
+# **Aquí había además una reserva —`|| (pip install uv && uv sync --no-dev)`— y se retiró.** Si
+# el primer `uv sync` fallaba, la segunda rama **volvía a resolver** y la imagen salía con
+# versiones que nadie había fijado ni probado: justo lo que el lock existe para impedir, y con la
+# construcción en verde. Comprobado con `--no-cache` y sin reserva que el primero se vale solo.
+RUN pip install --no-cache-dir uv && uv sync --locked --no-dev
 
 COPY sandbox/ ./sandbox/
 

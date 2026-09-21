@@ -1,4 +1,13 @@
-import '@testing-library/jest-dom'
+// **`/vitest`, no la entrada por omisión.** La entrada `.` de `jest-dom` sólo hace
+// `/// <reference path="jest.d.ts" />`: amplía el espacio de nombres de **Jest**. La que declara
+// `declare module 'vitest'` es `@testing-library/jest-dom/vitest`.
+//
+// Con vitest 4 el import por omisión funcionaba **por casualidad**, porque su `Assertion`
+// heredaba de los tipos de Jest. Vitest 5 dejó de hacerlo y aparecieron **288 errores `TS2339`
+// en 31 ficheros**, todos «Property 'toBeInTheDocument' does not exist». No es que `jest-dom`
+// cambiara: es que este import nunca fue el correcto para vitest, y se notó al quitarse la
+// coincidencia que lo sostenía.
+import '@testing-library/jest-dom/vitest'
 import { afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
 
