@@ -142,14 +142,26 @@ class SamlIdentityService:
         grupos = _grupos(attributes)
 
         if superadmin and superadmin.is_active:
-            # Sin organizaciones a propósito: en un superadmin el vacío es el comodín
-            # «todas» (SEC.2), no «ninguna».
-            return UserInfo(
+            # **Los valores se leen ANTES de confirmar.** Con `expire_on_commit` puesto —que es
+            # lo que usa la sesión de los routers— el `commit` expira el objeto, y leer
+            # `admin_id` o `email` después dispara una recarga perezosa que en contexto asíncrono
+            # revienta con `MissingGreenlet`. Lo destaparon dos tests que ya existían.
+            identidad = UserInfo(
                 user_id=str(superadmin.admin_id),
                 email=superadmin.email,
+                # Sin organizaciones a propósito: en un superadmin el vacío es el comodín
+                # «todas» (SEC.2), no «ninguna».
                 role="superadmin",
                 saml_groups=grupos,
             )
+
+            # Issue #102 — esta rama **retornaba antes** de llegar al aprovisionamiento, que es
+            # donde se anotaba la entrada. Resultado: entrar por SSO siendo superadministrador
+            # no dejaba rastro, y `last_login_at IS NULL` decide si una fila se puede borrar.
+            superadmin.last_login_at = datetime.now(timezone.utc)
+            self.session.add(superadmin)
+            await self.session.commit()
+            return identidad
 
         # `one_or_none()` por lo mismo que en `login_admin` (USR.5): `adminaccount.email` es
         # único, así que aquí no puede haber dos filas — y si alguna vez las hubiera, es mejor
@@ -160,15 +172,23 @@ class SamlIdentityService:
             )
         ).scalars().one_or_none()
         if admin and admin.is_active:
-            # Las mismas organizaciones que el login local le daría: entrar por el IdP no
-            # puede significar entrar con menos permisos de los que la cuenta ya tiene.
-            return UserInfo(
+            # Antes de confirmar, por lo mismo que arriba: el `commit` expira el objeto y leer
+            # sus atributos después dispara una recarga perezosa.
+            identidad = UserInfo(
                 user_id=admin.partner_id,
                 email=admin.email,
                 role="admin",
+                # Las mismas organizaciones que el login local le daría: entrar por el IdP no
+                # puede significar entrar con menos permisos de los que la cuenta ya tiene.
                 organizacion_ids=await self._orgs_del_admin(admin.partner_id),
                 saml_groups=grupos,
             )
+
+            # Issue #102 — misma razón que en la rama del superadministrador de arriba.
+            admin.last_login_at = datetime.now(timezone.utc)
+            self.session.add(admin)
+            await self.session.commit()
+            return identidad
 
         return await self._provision_sso_user(nameid, attributes, email)
 

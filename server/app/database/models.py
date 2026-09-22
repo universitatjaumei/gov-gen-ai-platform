@@ -11,7 +11,7 @@ Estos modelos se almacenan en brain_server.db y contienen:
 from datetime import datetime
 from typing import Optional, Dict, List, Any
 from sqlmodel import SQLModel, Field, Column
-from sqlalchemy import JSON, Text
+from sqlalchemy import JSON, DateTime, Text
 from automatia_shared.enums import ScreenshotPolicyEnum, AutomationType
 from pydantic import field_validator, ConfigDict
 
@@ -137,6 +137,20 @@ class SuperAdminAccount(SQLModel, table=True):
     hashed_password: str = Field(nullable=False)
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    #: Cuándo entró por última vez (issue #102). **Nulo = todavía no ha entrado**, que es un
+    #: estado legítimo de una cuenta recién creada.
+    #:
+    #: No es un dato cosmético: `last_login_at IS NULL` es la regla de «se creó a mano y no se
+    #: ha usado», y decide si una fila se puede borrar (REV.8). Sin esta columna, la pantalla de
+    #: Personas decía «Nunca ha entrado» del superadministrador que entra a diario — cierto
+    #: sobre el dato y falso sobre la realidad.
+    #:
+    #: **Con zona horaria**, como la de `HubUser`: lo que se escribe es
+    #: `datetime.now(timezone.utc)`, y una columna sin zona la guardaría descolgada de su huso.
+    #: Dos columnas que significan lo mismo y se declaran distinto acaban comparándose mal.
+    last_login_at: Optional[datetime] = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
 
     @field_validator("email", mode="before")
     @classmethod
@@ -179,6 +193,11 @@ class AdminAccount(SQLModel, table=True):
     credits_balance: int = Field(default=0)
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    #: Cuándo entró por última vez (issue #102). Misma razón, misma semántica y **mismo tipo con
+    #: zona** que en `SuperAdminAccount`: nulo es «todavía no ha entrado».
+    last_login_at: Optional[datetime] = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
 
 
 class ClientAccount(SQLModel, table=True):
