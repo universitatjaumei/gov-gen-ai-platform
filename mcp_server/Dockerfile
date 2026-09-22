@@ -48,4 +48,22 @@ EXPOSE 8080
 
 # `--factory` porque `app` es una función: la aplicación se construye al arrancar, cuando las
 # variables de entorno ya están, y no al importar el módulo.
+# La sonda de salud (issue #91). Sin ella el contenedor salía `Up` sin estado de salud, que es
+# indistinguible de sano: si se quedara sirviendo errores, nadie se enteraría hasta intentar
+# usarlo.
+#
+# **Cualquier respuesta HTTP es estar vivo; lo que es estar muerto es no responder.** La
+# respuesta sana del MCP **no es un 200**: un `GET /mcp` sin la cabecera del transporte devuelve
+# **406**, y desde un host que no esté en `GOVGENAI_MCP_ALLOWED_HOSTS` —como `127.0.0.1` aquí
+# dentro— devuelve **421**. Una sonda que esperase 200 se pondría roja con el servicio en pie.
+#
+# En Python y no con `curl` porque esta imagen no lo lleva. `request()` levanta
+# `ConnectionRefusedError` si no hay nadie escuchando, que es el único caso que debe fallar.
+#
+# `--factory` importa aquí: la aplicación se construye **al arrancar**, no al importar, así que
+# un fallo de construcción sólo se ve con el proceso en marcha. Por eso la sonda vale y una
+# comprobación de la imagen construida no.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD python -c "import http.client,sys; c=http.client.HTTPConnection('127.0.0.1',8080,timeout=5); c.request('GET','/mcp'); sys.exit(0 if c.getresponse().status else 1)"
+
 CMD ["uvicorn", "http_server:app", "--factory", "--host", "0.0.0.0", "--port", "8080"]

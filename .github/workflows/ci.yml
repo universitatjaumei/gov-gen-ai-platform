@@ -901,6 +901,85 @@ jobs:
         if: always()
         run: docker rm -f govgenai_ci_frontend || true
 
+      # Issue #91 — las otras dos imágenes se construían y no se arrancaban, así que su verde
+      # decía «compila» y no «arranca». Es la forma exacta del incidente del 2026-09-15:
+      # `uvicorn` no estaba declarado, la imagen construía y `docker run` daba `rc=127`.
+      - name: El sandbox arranca y sirve
+        run: |
+          set -euo pipefail
+          docker run -d --name govgenai_ci_sandbox -p 5000:5000 govgenai/sandbox:ci
+
+          ok=0
+          for intento in $(seq 1 15); do
+            codigo="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5000/health || true)"
+            if [ "$codigo" = "200" ]; then ok=1; break; fi
+            echo "intento $intento: /health devolvió ${codigo:-sin respuesta}"
+            sleep 2
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::El sandbox no llegó a servir /health en el 5000"
+            docker logs govgenai_ci_sandbox
+            exit 1
+          fi
+          echo "sandbox arrancado, /health a 200"
+
+      - name: Retirar el contenedor del sandbox
+        if: always()
+        run: docker rm -f govgenai_ci_sandbox || true
+
+      # **Aquí no se espera un 200, y hay que leerlo antes de "arreglarlo".**
+      #
+      # La respuesta sana del MCP no es un 200: un `GET /mcp` sin la cabecera del transporte
+      # devuelve **406**, y desde un host que no esté en `GOVGENAI_MCP_ALLOWED_HOSTS` devuelve
+      # **421**. Las dos significan «en pie»; lo que significa «muerto» es **no responder**.
+      # Un paso que exigiera 200 se pondría rojo con el servicio sano.
+      #
+      # Y es `--factory`: la aplicación se construye **al arrancar**, no al importar, así que un
+      # fallo de construcción sólo se ve con el proceso en marcha. Por eso este paso vale y
+      # comprobar la imagen construida no.
+      - name: El MCP arranca y responde
+        run: |
+          set -euo pipefail
+          docker run -d --name govgenai_ci_mcp -p 8081:8080 \
+            -e GOVGENAI_API_BASE_URL=http://localhost:8000 \
+            -e GOVGENAI_MCP_ALLOWED_HOSTS=localhost:8081 \
+            govgenai/mcp:ci
+
+          ok=0
+          for intento in $(seq 1 15); do
+            codigo="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8081/mcp || true)"
+            case "$codigo" in
+              "" | 000) echo "intento $intento: sin respuesta" ;;
+              *) echo "el MCP responde con $codigo: está en pie"; ok=1 ;;
+            esac
+            [ "$ok" = "1" ] && break
+            sleep 2
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::El MCP no llegó a responder en el 8080"
+            docker logs govgenai_ci_mcp
+            exit 1
+          fi
+
+          # Y que la sonda del propio `Dockerfile` diga que está sano, que es la que decide en
+          # producción. Comprobar la ruta a mano y no la sonda dejaría la sonda sin probar.
+          for intento in $(seq 1 20); do
+            salud="$(docker inspect -f '{{.State.Health.Status}}' govgenai_ci_mcp 2>/dev/null || echo sin-sonda)"
+            [ "$salud" = "healthy" ] && break
+            echo "intento $intento: la sonda dice «$salud»"
+            sleep 3
+          done
+          if [ "$salud" != "healthy" ]; then
+            echo "::error::El HEALTHCHECK del MCP no llega a «healthy» (dice «$salud»)"
+            docker logs govgenai_ci_mcp
+            exit 1
+          fi
+          echo "MCP en pie y su HEALTHCHECK en healthy"
+
+      - name: Retirar el contenedor del MCP
+        if: always()
+        run: docker rm -f govgenai_ci_mcp || true
+
       # Cuánto ha costado, escrito donde se lee sin descargar nada. La decisión de dónde corre
       # este job se toma con esta medida delante, no antes de tenerla.
       - name: Resumen
@@ -909,7 +988,13 @@ jobs:
           {
             echo "## Imagen"
             echo ""
-            echo "Cuatro imágenes construidas con los \`Dockerfile\` del despliegue;"
-            echo "la de la aplicación, migrada y arrancada hasta \`/health\` 200,"
-            echo "y la del frontend arrancada sin privilegios hasta \`/panel/\` 200."
+            echo "**Las cuatro imágenes construidas Y arrancadas** con los \`Dockerfile\` del"
+            echo "despliegue (issue #91; antes se arrancaban dos y el resumen decía «las"
+            echo "cuatro», que se leía como «las cuatro comprobadas»):"
+            echo ""
+            echo "- \`app\`: migrada y arrancada hasta \`/health\` 200."
+            echo "- \`frontend\`: arrancada sin privilegios hasta \`/panel/\` 200."
+            echo "- \`sandbox\`: arrancada hasta \`/health\` 200."
+            echo "- \`mcp\`: arrancada hasta responder —406 o 421 son \"en pie\"; lo que"
+            echo "  significa \"muerto\" es no responder— y con su \`HEALTHCHECK\` en healthy."
           } >> "$GITHUB_STEP_SUMMARY"
