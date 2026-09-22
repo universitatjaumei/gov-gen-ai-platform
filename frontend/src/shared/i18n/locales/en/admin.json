@@ -451,7 +451,12 @@
         "superadmin": "Install account"
       },
       "organizacion": "Organisation",
-      "sin_organizacion": "No organisation"
+      "sin_organizacion": "No organisation",
+      "modulos": "Modules",
+      "modulos_del_alta": "Modules they will have access to",
+      "pista_modulos": "The role says what someone can do; the module, where they can go. With no module ticked, this person will not be able to enter anywhere.",
+      "sin_acceso": "No access",
+      "sin_acceso_ayuda": "This person has a role but no module grant, so they cannot enter anywhere. Grant them here when creating the person, or from Platform -> Modules."
     },
     "modulos_nav": "Modules",
     "modulos": {

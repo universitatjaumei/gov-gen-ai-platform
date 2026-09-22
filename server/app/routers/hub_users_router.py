@@ -36,13 +36,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.app.api.deps import require_role
 from server.app.core.auth.models import UserInfo, UserRole
+from server.app.core.auth.modulos_service import TIPO_USUARIO
 from server.app.core.auth.tenancy import (
     assert_org_access,
     puede_acceder,
     scope_query_to_orgs,
 )
 from server.app.core.security import hash_password
-from server.app.modules.agents_hub.database.config_models import HubModuleGrant, HubUser
+from server.app.modules.agents_hub.database.config_models import (
+    HubModuleGrant,
+    HubPlatformModule,
+    HubUser,
+)
 from server.app.modules.agents_hub.database.connection import get_async_session
 
 router = APIRouter(prefix="/hub/users", tags=["hub-users"])
@@ -58,7 +63,7 @@ _ROLES = tuple(r.value for r in UserRole)
 # AIS.3 — la definición se fue a `core/identidad.py`. Vivía aquí y la importaba el ACS de SAML,
 # o sea `core/` dependiendo de un router. Se re-exporta porque es el nombre que usa el resto de
 # este fichero; quien la necesite fuera, la trae de `core`.
-from server.app.core.identidad import normalizar_correo  # noqa: E402
+from server.app.core.identidad import normalizar_correo, user_to_uuid  # noqa: E402
 
 # USR.1 — **el mismo contrato de contraseña, no un segundo con el mismo mínimo escrito otra
 # vez**: dos validaciones que hoy dicen `min_length=12` acabarían diciendo cosas distintas, y la
@@ -97,6 +102,16 @@ class UsuarioRead(BaseModel):
     #: Falso en las cuentas de arranque de `superadminaccount`: viven en otra tabla y su
     #: contraseña no se toca desde esta pantalla.
     puede_fijar_contrasena: bool = False
+    #: Los módulos que esta persona tiene concedidos **directamente** (issue #100). No incluye lo
+    #: que le llegue por un grupo del IdP: eso depende de la aserción con la que entre y no se
+    #: puede resolver desde un listado.
+    modulos_concedidos: list[str] = Field(default_factory=list)
+    #: Si esta persona no puede entrar en **ningún** módulo. Lo decide el servidor, igual que
+    #: `puede_borrarse`: un `if (role !== 'superadmin' && modulos.length === 0)` en React sería
+    #: la regla escrita por segunda vez, y se rompería el día que otro rol entre por su rol.
+    #:
+    #: Falso en el superadministrador, que entra en todo por su rol y no tiene fila de concesión.
+    sin_acceso_a_modulos: bool = False
 
 
 class CapacidadesDePersonas(BaseModel):
@@ -120,8 +135,34 @@ class UsuarioCreate(BaseModel):
     role: str = UserRole.USER.value
     organizacion_id: uuid.UUID | None = None
     is_active: bool = True
+    #: Los módulos que se conceden **en el mismo acto** (issue #100). Conceder vivía sólo en otra
+    #: pantalla, así que era un segundo viaje que se olvidaba: en producción la tabla de
+    #: concesiones estuvo vacía semanas y nadie podía entrar en nada.
+    #:
+    #: Vacía es válido: no se obliga a conceder para crear, y quien ya llamaba sigue llamando
+    #: igual.
+    modulos: list[str] = Field(default_factory=list)
 
     model_config = {"extra": "forbid"}
+
+    @field_validator("modulos")
+    @classmethod
+    def _modulos_limpios(cls, valor: list[str]) -> list[str]:
+        """Sin repetidos y sin vacíos, conservando el orden en que se eligieron.
+
+        Un repetido haría que la segunda concesión diera 409 y el alta quedara a medias —la
+        persona creada y sus módulos a medio poner—, que es peor que rechazarlo aquí. Los
+        códigos **no se comprueban contra el catálogo** en el modelo: eso lo hace `conceder`,
+        que es donde vive esa regla, y duplicarla aquí sería tenerla en dos sitios.
+        """
+        limpios: list[str] = []
+        for codigo in valor:
+            corto = codigo.strip()
+            if not corto:
+                raise ValueError("hay un código de módulo vacío")
+            if corto not in limpios:
+                limpios.append(corto)
+        return limpios
 
     @field_validator("email")
     @classmethod
@@ -181,6 +222,7 @@ def _a_lectura(
     *,
     motivo_no_borrable: str | None = None,
     quien: UserInfo | None = None,
+    modulos: list[str] | None = None,
 ) -> UsuarioRead:
     """El DTO de una persona, **con qué puede hacer con ella quien pregunta**.
 
@@ -210,7 +252,49 @@ def _a_lectura(
         puede_fijar_contrasena=(
             puede_acceder(quien, fila.organizacion_id) if quien is not None else False
         ),
+        modulos_concedidos=list(modulos or ()),
+        # Sin `modulos` **no se marca**: es el fallo seguro y el mismo criterio que
+        # `puede_fijar_contrasena`. Un aviso que no aparece se puede añadir; uno que aparece sin
+        # fundamento enseña a ignorarlos.
+        sin_acceso_a_modulos=(
+            modulos is not None
+            and not modulos
+            and fila.role != UserRole.SUPERADMIN.value
+        ),
     )
+
+
+async def _concesiones_por_sujeto(
+    session: AsyncSession, ids: list[uuid.UUID]
+) -> dict[str, list[str]]:
+    """Qué módulos tiene cada persona, **en una sola consulta**.
+
+    Una por persona sería N+1 sobre una pantalla que se abre en cada sesión. Y la clave es la
+    que guarda la tabla: `user_to_uuid` del `id` de la fila, no el `id` a secas — el endpoint que
+    concede ya lo convierte antes de escribir, y leerlo de otra forma no encontraría nada.
+
+    Con la lista vacía **no se consulta**: `IN ()` es un error en algunos motores, y además no
+    hay nada que preguntar.
+    """
+    if not ids:
+        return {}
+
+    claves = {str(user_to_uuid(str(i))): str(i) for i in ids}
+    filas = (
+        await session.execute(
+            select(HubModuleGrant.subject_id, HubModuleGrant.module_code).where(
+                HubModuleGrant.subject_type == TIPO_USUARIO,
+                HubModuleGrant.subject_id.in_(list(claves)),
+            )
+        )
+    ).all()
+
+    por_persona: dict[str, list[str]] = {}
+    for clave, codigo in filas:
+        persona = claves.get(str(clave))
+        if persona is not None:
+            por_persona.setdefault(persona, []).append(codigo)
+    return {persona: sorted(codigos) for persona, codigos in por_persona.items()}
 
 
 async def _superadmins_de_arranque(session: AsyncSession) -> list[UsuarioRead]:
@@ -333,7 +417,12 @@ async def list_users(
     """
     consulta = scope_query_to_orgs(select(HubUser), user, HubUser).order_by(HubUser.email)
     filas = (await session.execute(consulta)).scalars().all()
-    personas = [_a_lectura(f, quien=user) for f in filas]
+    # En una sola consulta para todas: es la pantalla donde se ve que alguien se quedó sin
+    # acceso, y hacerlo persona a persona la volvería lenta justo cuando hay gente que mirar.
+    concesiones = await _concesiones_por_sujeto(session, [f.id for f in filas])
+    personas = [
+        _a_lectura(f, quien=user, modulos=concesiones.get(str(f.id), [])) for f in filas
+    ]
     if user.role != UserRole.SUPERADMIN.value:
         return personas
     return await _superadmins_de_arranque(session) + personas
@@ -360,6 +449,11 @@ async def create_user(
             detail=f"Ya hay una persona con el correo {body.email}",
         )
 
+    # **Antes de crear nada.** Si un código no vale y la persona ya existiera, el reintento daría
+    # 409 por el correo y quedaría creada sin sus módulos: el estado a medias que este orden
+    # evita. Validar primero cuesta una consulta y quita esa clase entera de problema.
+    await _comprobar_modulos(session, body.modulos)
+
     fila = HubUser(
         id=uuid.uuid4(),
         email=body.email,
@@ -374,7 +468,76 @@ async def create_user(
     session.add(fila)
     await session.commit()
     await session.refresh(fila)
-    return _a_lectura(fila, quien=user)
+
+    concedidos = await _conceder_al_dar_de_alta(session, fila, body.modulos, quien=user)
+    return _a_lectura(fila, quien=user, modulos=concedidos)
+
+
+async def _comprobar_modulos(session: AsyncSession, codigos: list[str]) -> None:
+    """Que todos estén en el catálogo y vigentes, o 400 diciendo cuáles no.
+
+    Son las dos reglas de `conceder`, consultadas al catálogo y no copiadas como lista: conceder
+    un módulo retirado no daría acceso a nada, así que aceptarlo en silencio crearía una persona
+    que cree tener acceso y no lo tiene.
+    """
+    if not codigos:
+        return
+
+    vigentes = {
+        codigo
+        for (codigo,) in (
+            await session.execute(
+                select(HubPlatformModule.code).where(
+                    HubPlatformModule.code.in_(codigos),
+                    HubPlatformModule.vigente.is_(True),
+                )
+            )
+        ).all()
+    }
+    invalidos = [c for c in codigos if c not in vigentes]
+    if invalidos:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Estos módulos no están en el catálogo o están retirados: "
+                f"{', '.join(invalidos)}"
+            ),
+        )
+
+
+async def _conceder_al_dar_de_alta(
+    session: AsyncSession,
+    fila: HubUser,
+    codigos: list[str],
+    *,
+    quien: UserInfo,
+) -> list[str]:
+    """Escribe las concesiones de una persona recién creada.
+
+    Los códigos ya vienen comprobados por `_comprobar_modulos`, que corre **antes** de crear a
+    nadie: así un código malo no deja una persona creada y sin sus módulos.
+
+    **La clave que se guarda es `user_to_uuid` del id**, igual que en `conceder`: es la que
+    consulta `modulos_del_usuario`, y escribir el id a secas dejaría una fila que la resolución
+    no encuentra.
+    """
+    if not codigos:
+        return []
+
+    sujeto = str(user_to_uuid(str(fila.id)))
+    ahora = datetime.now(timezone.utc)
+    for codigo in codigos:
+        session.add(
+            HubModuleGrant(
+                subject_type=TIPO_USUARIO,
+                subject_id=sujeto,
+                module_code=codigo,
+                granted_by=quien.user_id,
+                granted_at=ahora,
+            )
+        )
+    await session.commit()
+    return sorted(codigos)
 
 
 @router.patch("/{user_id}", response_model=UsuarioRead)

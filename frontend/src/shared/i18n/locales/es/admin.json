@@ -451,7 +451,12 @@
         "superadmin": "Cuenta de instalación"
       },
       "organizacion": "Organización",
-      "sin_organizacion": "Sin organización"
+      "sin_organizacion": "Sin organización",
+      "modulos": "Módulos",
+      "modulos_del_alta": "Módulos a los que tendrá acceso",
+      "pista_modulos": "El rol dice qué puede hacer; el módulo, dónde puede entrar. Sin ningún módulo marcado, esta persona no podrá entrar en nada.",
+      "sin_acceso": "Sin acceso",
+      "sin_acceso_ayuda": "Esta persona tiene rol pero ninguna concesión de módulo, así que no puede entrar en ninguna parte. Concédeselos aquí al darla de alta, o desde Plataforma → Módulos."
     },
     "modulos_nav": "Módulos",
     "modulos": {
