@@ -87,7 +87,15 @@ export function UsuariosPage() {
   const [modulosDelAlta, setModulosDelAlta] = useState<string[]>([])
   // El catálogo es dato del servidor. Si los códigos estuvieran escritos aquí, añadir un módulo
   // exigiría tocar el frontend, que es lo que la regla del catálogo-como-dato viene a evitar.
-  const { data: catalogoDeModulos } = useGetCatalogoApiV1HubModulosCatalogoGet()
+  //
+  // **Sólo se pide a quien puede crear.** `get_catalogo` está protegido con
+  // `_require_superadmin`, y esta pantalla también la ven los administradores de organización
+  // —listan personas y fijan contraseñas (USR.9)—. Sin la condición, el hook les disparaba un
+  // 403 en cada carga con los reintentos de React Query encima. Y la condición sale de lo que
+  // el servidor concede, no de un `rol === 'superadmin'` escrito aquí.
+  const { data: catalogoDeModulos } = useGetCatalogoApiV1HubModulosCatalogoGet({
+    query: { enabled: puede('crear') },
+  })
   const modulosVigentes = (catalogoDeModulos ?? []).filter((m) => m.vigente)
 
   function alternarModulo(codigo: string) {

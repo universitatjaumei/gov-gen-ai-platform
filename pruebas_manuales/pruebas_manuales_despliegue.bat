@@ -41,7 +41,7 @@ echo  PASO 1 - Dominio y certificado
 echo ----------------------------------------------------------
 echo.
 curl -s -o nul -w "   raiz:          %%{http_code}\n" %SITIO%/
-curl -s -o nul -w "   salud del API: %%{http_code}\n" %SITIO%/api/v1/health
+curl -s -o nul -w "   salud:         %%{http_code}\n" %SITIO%/health
 echo.
 echo   Certificado (fijate en la fecha de caducidad):
 curl -s -v %SITIO%/ 2>&1 | findstr /I "expire issuer subject:"
@@ -64,7 +64,7 @@ echo   El mismo dominio sirve el sitio publico y el panel. Comprueba
 echo   que cada ruta la atiende quien debe.
 echo.
 curl -s -o nul -w "   sitio publico:  %%{http_code}\n" %SITIO%/
-curl -s -o nul -w "   panel:          %%{http_code}\n" %SITIO%/hub
+curl -s -o nul -w "   panel:          %%{http_code}\n" %SITIO%/panel/
 curl -s -o nul -w "   API sin sesion: %%{http_code}\n" %SITIO%/api/v1/hub/sites
 echo.
 echo QUE DEBES VER: sitio y panel 200, y la API 401 (pide sesion).

@@ -104,11 +104,41 @@ class TestSeLePuedePreguntarAUnDespliegue:
 
         Una versión que a veces es `None` obliga a quien la lee a tratar el caso, y acaba
         mostrándose en blanco justo cuando hace falta: al reportar un fallo.
+
+        **El `cache_clear()` no es higiene, es lo que hace que esto pruebe algo.** `version()`
+        está cacheada con `lru_cache`, así que sin vaciarla devuelve lo que se resolvió en la
+        primera llamada del proceso —otro test de este mismo fichero la llama antes— y el
+        camino del fichero no se ejercita. Medido: fijando la variable a un valor inventado,
+        borrándola y volviendo a llamar, **seguía devolviendo el inventado**.
+
+        Da la casualidad de que aquí los dos caminos responden lo mismo, así que el test pasaba
+        igual. Un verde por casualidad, que es la peor clase.
         """
         from server.app.core import version as modulo
 
         monkeypatch.delenv("GOVGENAI_VERSION", raising=False)
-        assert modulo.version() == _version_declarada()
+        modulo.version.cache_clear()
+        try:
+            assert modulo.version() == _version_declarada()
+        finally:
+            # Y se vacía también al salir: si no, el valor resuelto sin variable se quedaría
+            # cacheado para los tests que corran después en este mismo proceso.
+            modulo.version.cache_clear()
+
+    def test_la_variable_de_la_imagen_gana_al_fichero(self, monkeypatch) -> None:
+        """El otro camino, que sin esto no lo probaba nadie.
+
+        Es el que usa producción: la versión va estampada en la imagen. Si el fichero ganara,
+        una imagen diría la versión del árbol de quien la construyó y no la suya.
+        """
+        from server.app.core import version as modulo
+
+        monkeypatch.setenv("GOVGENAI_VERSION", "9.9.9+de-la-imagen")
+        modulo.version.cache_clear()
+        try:
+            assert modulo.version() == "9.9.9+de-la-imagen"
+        finally:
+            modulo.version.cache_clear()
 
 
 class TestLaImagenLlevaLaVersionEstampada:
