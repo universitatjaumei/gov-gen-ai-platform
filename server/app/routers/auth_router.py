@@ -77,6 +77,38 @@ async def _orgs_del_admin(session, partner_id: str) -> tuple[str, ...]:
     return tuple(str(fila) for fila in filas.all())
 
 
+class ProveedoresSSO(BaseModel):
+    """Qué puertas de identidad federada hay abiertas ahora mismo."""
+
+    saml: bool
+    google: bool
+
+
+@router.get("/sso-providers", response_model=ProveedoresSSO, operation_id="proveedoresSSO")
+async def proveedores_sso() -> ProveedoresSSO:
+    """Qué botones de SSO debe pintar la pantalla de acceso.
+
+    **Se pregunta al servidor en tiempo de ejecución, y no se decide en el build** (issue #95).
+    La pantalla de acceso decidía el botón de SAML con `import.meta.env.VITE_SAML_ENABLED`, una
+    variable de **build**, y el despliegue **no la pasa**: el `Dockerfile` del frontend sólo
+    declara `VITE_API_URL` y `VITE_BASE_PATH`, así que en el bundle de producción esa condición
+    es siempre falsa y **el botón no aparecería nunca**. No se había notado porque el SAML está
+    apagado.
+
+    Con esto, encender un proveedor es poner sus secretos y reiniciar la aplicación: no hace
+    falta reconstruir el frontend para que aparezca su botón. Y los dos botones pasan a decidirse
+    por el mismo sitio, en vez de por dos mecanismos de los que uno no funcionaba.
+
+    **No dice nada que no sea público**: si hay botón se ve al mirar la pantalla. No expone
+    identificadores, dominios ni secretos.
+    """
+    ajustes = get_settings()
+    return ProveedoresSSO(
+        saml=ajustes.saml_enabled,
+        google=ajustes.google_login_enabled,
+    )
+
+
 @router.post("/superadmin/login", response_model=TokenResponse)
 async def login_superadmin(
     body: LoginRequest,

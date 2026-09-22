@@ -6,7 +6,9 @@ import {
   getLoginAdminApiV1AuthAdminLoginPostUrl,
   getLoginSuperadminApiV1AuthSuperadminLoginPostUrl,
   getLoginUsuarioUrl,
+  useProveedoresSSO,
 } from '@/shared/api/generated/auth/auth'
+import { getLoginConGoogleUrl } from '@/shared/api/generated/auth-google/auth-google'
 import { apiBaseUrl as API_BASE } from '@/shared/api/client'
 
 // Las rutas se toman de lo generado por Orval desde `openapi.json`, no se escriben a mano.
@@ -54,7 +56,20 @@ function OjoTachado() {
 }
 
 export function LoginPage() {
-  const SAML_ENABLED = import.meta.env.VITE_SAML_ENABLED === 'true'
+  /**
+   * **Qué botones de SSO hay, se lo pregunta al servidor** (issue #95).
+   *
+   * Antes esto era `import.meta.env.VITE_SAML_ENABLED`, una variable de **build**, y el
+   * despliegue **no la pasa**: el `Dockerfile` del frontend sólo declara `VITE_API_URL` y
+   * `VITE_BASE_PATH`, así que en producción la condición era siempre falsa y **el botón de SSO
+   * no aparecía nunca**. No se había notado porque el SAML está apagado.
+   *
+   * Con `useProveedoresSSO`, encender un proveedor es poner sus secretos y reiniciar la
+   * aplicación: no hay que reconstruir el frontend para que salga su botón.
+   */
+  const { data: proveedores } = useProveedoresSSO()
+  const SAML_ENABLED = proveedores?.saml === true
+  const GOOGLE_ENABLED = proveedores?.google === true
   const { t } = useTranslation('admin')
   const { t: ta } = useTranslation('auth')
   const { login } = useAuth()
@@ -105,6 +120,23 @@ export function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="w-full max-w-sm space-y-4 p-8 rounded-lg border bg-card shadow-sm">
         <h1 className="text-2xl font-semibold">{t('login.title')}</h1>
+        {GOOGLE_ENABLED && (
+          <button
+            type="button"
+            data-testid="btn-entrar-con-google"
+            onClick={() => { window.location.href = `${API_BASE}${getLoginConGoogleUrl()}` }}
+            className="w-full py-2 px-4 border rounded-md text-sm font-medium bg-card hover:bg-accent/30"
+          >
+            {ta('google_button')}
+          </button>
+        )}
+        {(GOOGLE_ENABLED || SAML_ENABLED) && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            {ta('sso_divider')}
+            <span className="h-px flex-1 bg-border" />
+          </div>
+        )}
         {SAML_ENABLED && (
           <>
             <button
@@ -114,11 +146,6 @@ export function LoginPage() {
             >
               {ta('sso_button')}
             </button>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="h-px flex-1 bg-border" />
-              {ta('sso_divider')}
-              <span className="h-px flex-1 bg-border" />
-            </div>
           </>
         )}
         <form onSubmit={handleSubmit} className="space-y-4">

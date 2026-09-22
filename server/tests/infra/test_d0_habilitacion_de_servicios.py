@@ -37,10 +37,17 @@ _ENTRADA = re.compile(r'^\s*"([a-z0-9.-]+\.googleapis\.com)\|([^"]*)"\s*$', re.M
 _HOST_EN_CODIGO = re.compile(r"https://([a-z0-9-]+\.googleapis\.com)")
 
 #: Hosts que aparecen en el código y **no son servicios habilitables**, así que no pertenecen
-#: a la lista. Hoy sólo uno: `https://www.googleapis.com/auth/cloud-platform` es el ámbito de
-#: OAuth con el que se pide el token (`reranker.py`), no una API que se enciende. Se excluye
-#: aquí y no en la expresión regular para que la exclusión tenga que justificarse.
-_NO_SON_SERVICIOS = frozenset({"www.googleapis.com"})
+#: a la lista. Se excluyen aquí y no en la expresión regular para que la exclusión tenga que
+#: justificarse.
+#:
+#: - `www.googleapis.com` — `https://www.googleapis.com/auth/cloud-platform` es el **ámbito** de
+#:   OAuth con el que se pide el token (`reranker.py`), no una API que se enciende.
+#: - `oauth2.googleapis.com` — el endpoint de canje de token de OAuth 2.0
+#:   (`core/auth/google_oidc.py`, issue #95). Es infraestructura **global** de identidad de
+#:   Google, disponible siempre y sin nada que habilitar por proyecto: lo que se aprovisiona para
+#:   ese login es un cliente OAuth y su pantalla de consentimiento, que no son APIs. Si algún día
+#:   apareciera aquí un 403, no se arregla habilitando un servicio.
+_NO_SON_SERVICIOS = frozenset({"www.googleapis.com", "oauth2.googleapis.com"})
 
 
 def _run(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:

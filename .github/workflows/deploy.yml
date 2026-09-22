@@ -303,6 +303,7 @@ jobs:
           CORPUS_BUCKET=${{ vars.CORPUS_BUCKET }}
           GOVGENAI_HOST_INSTITUCIONAL=${{ vars.GOVGENAI_HOST_INSTITUCIONAL }}
           SOURCE_URL=${{ vars.GOVGENAI_SOURCE_URL }}
+          GOOGLE_OAUTH_ALLOWED_DOMAIN=${{ vars.GOOGLE_OAUTH_ALLOWED_DOMAIN }}
           DEPLOY_MODE=all
           EOF
           sudo chmod 644 ${DESTINO}/.env.despliegue"

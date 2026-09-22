@@ -80,6 +80,25 @@ class Settings:
     # panel. El defecto es `true` **ahora**; cuando el SSO esté en marcha, el defecto es lo
     # primero que hay que darle la vuelta.
     local_user_login_enabled: bool = True
+    # === Login con la cuenta institucional de Google (OIDC) ===
+    #
+    # **El dominio es la autorización, no una comodidad.** Sin comprobar `hd` en el servidor,
+    # cualquier cuenta de Google del mundo entra: es el fallo clásico de esta integración. Y va
+    # en el servidor **aunque** la pantalla de consentimiento esté en «Interna», porque eso es
+    # configuración de una consola que alguien puede cambiar, y una decisión de autorización no
+    # se delega a una casilla. Sin dominio declarado, el login queda apagado.
+    google_oauth_client_id: str = ""
+    google_oauth_client_secret: str = ""
+    google_oauth_allowed_domain: str = ""
+
+    @property
+    def google_login_enabled(self) -> bool:
+        """Las tres piezas, o nada. Un login a medio configurar es peor que ninguno."""
+        return bool(
+            self.google_oauth_client_id
+            and self.google_oauth_client_secret
+            and self.google_oauth_allowed_domain
+        )
     # Subidas (SEC.6) — límite de tamaño y cuota de documentos por chatbot
     max_upload_mb: int = 10
     max_documents_per_chatbot: int = 0  # 0 = sin límite
@@ -148,6 +167,9 @@ def get_settings() -> Settings:
         identity_role_authority=os.getenv("IDENTITY_ROLE_AUTHORITY", "app").strip().lower(),
         local_user_login_enabled=os.getenv("LOCAL_USER_LOGIN_ENABLED", "true").lower()
         == "true",
+        google_oauth_client_id=os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip(),
+        google_oauth_client_secret=os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip(),
+        google_oauth_allowed_domain=os.getenv("GOOGLE_OAUTH_ALLOWED_DOMAIN", "").strip().lower(),
         max_upload_mb=int(os.getenv("MAX_UPLOAD_MB", "10")),
         max_documents_per_chatbot=int(os.getenv("MAX_DOCUMENTS_PER_CHATBOT", "0")),
     )

@@ -30,6 +30,7 @@ from server.app.api.v1.hub_tasks import router as hub_tasks_router
 from server.app.api.v1.ingestion import router as ingestion_router
 from server.app.api.v1.edge_sync import router as edge_sync_router
 from server.app.routers.auth_router import router as auth_router
+from server.app.routers.google_auth_router import router as google_auth_router
 from server.app.routers.saml_auth_router import router as saml_auth_router
 from server.app.routers.pat_router import router as pat_router
 from server.app.routers.library_router import router as library_router
@@ -462,6 +463,7 @@ if DEPLOY_MODE not in ("cloud", "edge", "all"):
 def _register_cloud(app: FastAPI) -> None:
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(saml_auth_router, prefix="/api/v1")  # Deploy: cloud
+    app.include_router(google_auth_router, prefix="/api/v1")  # Deploy: cloud
     app.include_router(pat_router, prefix="/api/v1")  # Deploy: cloud
     app.include_router(library_router, prefix="/api")
     app.include_router(hub_chatbots_router, prefix="/api/v1")
