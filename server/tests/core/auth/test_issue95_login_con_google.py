@@ -60,6 +60,9 @@ def configurado(monkeypatch):
     monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "cliente-de-prueba.apps.googleusercontent.com")
     monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "secreto-de-prueba")
     monkeypatch.setenv("GOOGLE_OAUTH_ALLOWED_DOMAIN", "uji.es")
+    monkeypatch.setenv(
+        "GOOGLE_OAUTH_REDIRECT_URI", "https://normativa.uji.es/api/v1/auth/google/callback"
+    )
     monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-at-least-32-characters-long")
 
 
@@ -68,6 +71,7 @@ def sin_configurar(monkeypatch):
     monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_ID", raising=False)
     monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
     monkeypatch.delenv("GOOGLE_OAUTH_ALLOWED_DOMAIN", raising=False)
+    monkeypatch.delenv("GOOGLE_OAUTH_REDIRECT_URI", raising=False)
 
 
 class TestSinConfigurar:
@@ -89,7 +93,12 @@ class TestElInicio:
         q = parse_qs(destino.query)
         assert q["response_type"] == ["code"], "flujo de código de autorización, no implícito"
         assert q["client_id"] == ["cliente-de-prueba.apps.googleusercontent.com"]
-        assert q["redirect_uri"][0].endswith("/api/v1/auth/google/callback")
+        # **El declarado, tal cual.** No se compara el final sino el valor entero: Google
+        # exige coincidencia carácter a carácter, y derivarlo daría `http://` porque esta
+        # aplicación no honra las cabeceras del proxy.
+        assert q["redirect_uri"] == [
+            "https://normativa.uji.es/api/v1/auth/google/callback"
+        ], q["redirect_uri"]
         for ambito in ("openid", "email", "profile"):
             assert ambito in q["scope"][0], f"falta el ámbito {ambito}"
         assert q["state"][0], "sin `state` no hay defensa contra CSRF"

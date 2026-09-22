@@ -6,9 +6,10 @@ Dos rutas: una que manda a Google y otra que recibe la vuelta. Todo lo que decid
 `core/auth/google_oidc.py`; aquí sólo se cablea.
 
 **Apagado significa 404.** Es la convención de `/user/login`: un 403 confirmaría que la ruta está
-ahí, apagada, y eso es información que no hace falta dar. Y hace falta que las **tres** piezas
-estén puestas —identificador, secreto y dominio— porque un login a medio configurar es peor que
-ninguno: sin dominio no habría autorización que comprobar.
+ahí, apagada, y eso es información que no hace falta dar. Y hacen falta las **cuatro** piezas
+—identificador, secreto, dominio y URL de vuelta— porque un login a medio configurar es peor
+que ninguno: sin dominio no habría autorización que comprobar, y sin URL de vuelta declarada
+Google rechazaría el canje.
 
 **El aprovisionamiento no se duplica.** `SamlIdentityService.resolve_session` ya resuelve un
 correo en una `UserInfo`: busca superadministrador, luego administrador con sus organizaciones, y
@@ -20,7 +21,7 @@ mientras no se haga queda dicho aquí para que nadie crea que esto entra por SAM
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,24 +41,29 @@ def _ajustes_o_404():
     return ajustes
 
 
-def _url_de_vuelta(request: Request) -> str:
-    """El `redirect_uri` que se declara en Google, construido desde la petición.
+def _url_de_vuelta() -> str:
+    """El `redirect_uri` que se registró en Google, **declarado y no derivado**.
 
-    Se construye y no se configura para que no haya dos sitios que puedan discrepar: si esto se
-    escribiera a mano en una variable, un cambio de dominio dejaría el login roto con un mensaje
-    de Google que no explica nada («redirect_uri_mismatch»).
+    Derivarlo de la petición con `request.url_for()` era la primera versión y **estaba mal**:
+    esta aplicación no arranca con `--proxy-headers` ni `FORWARDED_ALLOW_IPS`, y el defecto de
+    uvicorn sólo confía en `127.0.0.1` mientras Caddy conecta desde la red de Docker. Las
+    cabeceras reenviadas no se honran, así que el esquema derivado es `http://` — y Google
+    rechaza un `redirect_uri` sin TLS que no sea `localhost`, además de exigir coincidencia
+    carácter a carácter con lo registrado.
+
+    Declararlo es lo que hace el SAML con `SAML_SP_ACS_URL`, por este mismo motivo.
     """
-    return str(request.url_for("google_callback"))
+    return get_settings().google_oauth_redirect_uri
 
 
 @router.get("/login", operation_id="loginConGoogle")
-async def google_login(request: Request):
+async def google_login():
     """Manda a Google. La respuesta es una redirección, no un JSON."""
     ajustes = _ajustes_o_404()
     return RedirectResponse(
         url=google_oidc.url_de_autorizacion(
             client_id=ajustes.google_oauth_client_id,
-            redirect_uri=_url_de_vuelta(request),
+            redirect_uri=_url_de_vuelta(),
             dominio=ajustes.google_oauth_allowed_domain,
             state=google_oidc.crear_state(),
         ),
@@ -67,7 +73,6 @@ async def google_login(request: Request):
 
 @router.get("/callback", name="google_callback", operation_id="callbackDeGoogle")
 async def google_callback(
-    request: Request,
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
@@ -105,7 +110,7 @@ async def google_callback(
             code,
             client_id=ajustes.google_oauth_client_id,
             client_secret=ajustes.google_oauth_client_secret,
-            redirect_uri=_url_de_vuelta(request),
+            redirect_uri=_url_de_vuelta(),
         )
     except google_oidc.ErrorDeIdentidad as exc:
         raise HTTPException(
