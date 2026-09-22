@@ -208,3 +208,61 @@ class TestElState:
             resp = cliente.get(_CALLBACK, params={"code": "x"}, follow_redirects=False)
 
         assert resp.status_code in (400, 403, 422), resp.status_code
+
+
+class TestElTokenEsParaEsteCliente:
+    """`aud` e `iss`, comprobados **porque** la firma no se verifica.
+
+    Lo señaló la revisión automática de la PR #101, y su diagnóstico era **falso**: decía que
+    PyJWT rechazaría el token por no pasar `audience`, y que eso rompería producción. Medido con
+    PyJWT 2.14.0: con `verify_signature` en `False`, PyJWT **apaga también** el resto de
+    comprobaciones, así que decodificaba sin levantar. El login habría funcionado.
+
+    Pero el remedio que proponía es correcto por otra razón. Si la exención de la firma se apoya
+    en «este token vino de Google para nosotros», comprobar que el propio token lo dice es barato
+    y cierra el hueco de que algún día llegue por otra vía. En el camino bueno no puede fallar:
+    Google pone nuestro `client_id` en `aud` por construcción.
+    """
+
+    _CLIENTE = "cliente-de-prueba.apps.googleusercontent.com"
+
+    def _token(self, **cambios) -> str:
+        import jwt as pyjwt
+
+        claims = {
+            "aud": self._CLIENTE,
+            "iss": "https://accounts.google.com",
+            "email": "persona@uji.es",
+            "email_verified": True,
+            "hd": "uji.es",
+            **cambios,
+        }
+        return pyjwt.encode(claims, "una-clave-de-al-menos-32-caracteres-para-hs256", algorithm="HS256")
+
+    def test_un_token_para_otro_cliente_no_vale(self) -> None:
+        from server.app.core.auth.google_oidc import ErrorDeIdentidad, claims_del_id_token
+
+        with pytest.raises(ErrorDeIdentidad):
+            claims_del_id_token(self._token(aud="otro-cliente"), client_id=self._CLIENTE)
+
+    def test_un_token_de_otro_emisor_no_vale(self) -> None:
+        from server.app.core.auth.google_oidc import ErrorDeIdentidad, claims_del_id_token
+
+        with pytest.raises(ErrorDeIdentidad):
+            claims_del_id_token(
+                self._token(iss="https://accounts.example.org"), client_id=self._CLIENTE
+            )
+
+    def test_los_dos_emisores_de_google_valen(self) -> None:
+        """Google emite `iss` con y sin esquema. Fijar sólo uno rechazaría tokens buenos."""
+        from server.app.core.auth.google_oidc import claims_del_id_token
+
+        for emisor in ("https://accounts.google.com", "accounts.google.com"):
+            claims = claims_del_id_token(self._token(iss=emisor), client_id=self._CLIENTE)
+            assert claims["email"] == "persona@uji.es"
+
+    def test_el_camino_bueno_pasa(self) -> None:
+        from server.app.core.auth.google_oidc import claims_del_id_token
+
+        claims = claims_del_id_token(self._token(), client_id=self._CLIENTE)
+        assert claims["hd"] == "uji.es"

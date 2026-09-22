@@ -47,6 +47,12 @@ _VIDA_DEL_STATE = timedelta(minutes=10)
 
 _ALGORITMO = "HS256"
 
+#: Los dos valores de `iss` que Google emite, con y sin esquema. Son los dos válidos y hay que
+#: admitir ambos: fijar sólo uno rechazaría tokens buenos.
+_EMISORES_DE_GOOGLE = frozenset(
+    {"https://accounts.google.com", "accounts.google.com"}
+)
+
 
 class ErrorDeIdentidad(Exception):
     """La cuenta no puede entrar. El motivo va en el mensaje, para el registro, no para quien entra."""
@@ -140,11 +146,44 @@ async def canjear_codigo(
     if not id_token:
         raise ErrorDeIdentidad("la respuesta de Google no trae `id_token`")
 
-    # Sin verificar firma, y está razonado en el docstring del módulo: el token viene del canje
-    # por HTTPS contra Google, autenticado con el secreto de cliente. `verify_signature` en
-    # `False` es una decisión, no un descuido, y las dos condiciones que la sostienen están
-    # escritas arriba.
-    return pyjwt.decode(id_token, options={"verify_signature": False})
+    return claims_del_id_token(id_token, client_id=client_id)
+
+
+def claims_del_id_token(id_token: str, *, client_id: str) -> dict:
+    """Las *claims* del ID token, con `aud` e `iss` comprobados.
+
+    **La firma no se verifica**, y está razonado en el docstring del módulo: el token viene del
+    canje por HTTPS contra Google, autenticado con el secreto de cliente.
+
+    **Pero `aud` e `iss` sí**, y precisamente *porque* la firma no se verifica. Si la exención se
+    apoya en «este token vino de Google para nosotros», comprobar que lo dice el propio token es
+    barato y cierra el hueco de que algún día llegue por otra vía: un token emitido para **otro
+    cliente** no vale aquí aunque sea legítimo.
+
+    En el camino bueno no puede fallar —Google pone nuestro `client_id` en `aud` por
+    construcción—, y ése es el punto: una comprobación que sólo se activa cuando algo va mal.
+
+    Nota sobre PyJWT, medida y no supuesta: con `verify_signature` en `False`, PyJWT **también
+    apaga** el resto de comprobaciones, así que un `aud` presente sin `audience` **no** levanta
+    (comprobado con 2.14.0). O sea que esto no arregla un fallo: añade una comprobación que no
+    había.
+    """
+    try:
+        claims = pyjwt.decode(
+            id_token,
+            options={"verify_signature": False, "verify_aud": True},
+            audience=client_id,
+        )
+    except pyjwt.PyJWTError as exc:
+        raise ErrorDeIdentidad(f"el ID token no es para este cliente: {exc}") from exc
+
+    # `iss` se comprueba a mano porque Google emite **dos** valores válidos y el parámetro de
+    # PyJWT admite uno.
+    emisor = claims.get("iss", "")
+    if emisor not in _EMISORES_DE_GOOGLE:
+        raise ErrorDeIdentidad(f"el ID token no lo emitió Google, sino «{emisor}»")
+
+    return claims
 
 
 def identidad_de_las_claims(claims: dict, *, dominio_admitido: str) -> tuple[str, str]:

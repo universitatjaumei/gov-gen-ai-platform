@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import i18n from '@/shared/i18n'
 import { AuthProvider } from '@/shared/auth'
@@ -35,13 +36,24 @@ afterEach(() => {
   loginSpy.mockClear()
 })
 
+/**
+ * Con `QueryClientProvider` desde el issue #95: la pantalla pregunta al servidor qué proveedores
+ * de SSO hay encendidos (`useProveedoresSSO`), y eso es react-query. Antes no usaba ninguno, por
+ * eso estos tests montaban sin proveedor.
+ *
+ * Un cliente por render, sin reintentos: compartirlo entre tests filtraría la caché de uno al
+ * siguiente, que es la clase de estado compartido que CI busca con `-n0`.
+ */
 function renderLogin() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <MemoryRouter>
-      <AuthProvider>
-        <LoginPage />
-      </AuthProvider>
-    </MemoryRouter>,
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>
+        <AuthProvider>
+          <LoginPage />
+        </AuthProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 
