@@ -36,7 +36,7 @@
 >
 > | Qué | Decidido |
 > |---|---|
-> | Proyecto GCP | `uji-teclab` (los 14 servicios ya habilitados por D.0) |
+> | Proyecto GCP | `<PROYECTO_GCP>` (los 14 servicios ya habilitados por D.0) |
 > | Región y zona | **`europe-southwest1`** (Madrid) — latencia y el dato en España |
 > | Tipo de VM | **`e2-small`** (2 GB), que la medición de D.4.0 dejó holgado (345 MB de RSS) |
 > | Cloud SQL | **`db-g1-small`** (1,7 GB), elegido por el agente: los ~14.500 fragmentos a 1.024 dimensiones son unos 60 MB de vectores y el índice HNSW cabe de sobra, mientras `db-f1-micro` (0,6 GB) iría al límite. Subir de nivel es un reinicio, así que empezar pequeño no cierra ninguna puerta |
@@ -324,7 +324,7 @@ anónimo guarda `prompt_tokens`/`completion_tokens` igual que el autenticado.
 ```
 ENVIRONMENT=production
 STORAGE_BACKEND=gcs
-STORAGE_BUCKET=govgenai-prod
+STORAGE_BUCKET=<BUCKET_DOCS>
 DEPLOY_MODE=all   # o edge / cloud según el nodo
 ```
 
@@ -340,7 +340,7 @@ DEPLOY_MODE=all   # o edge / cloud según el nodo
     - --set-secrets=DATABASE_URL=govgenai-db-url-async:latest
     - --set-secrets=LANGFUSE_PUBLIC_KEY=govgenai-langfuse-pub:latest
     - --set-secrets=LANGFUSE_SECRET_KEY=govgenai-langfuse-sec:latest
-    - --set-env-vars=ENVIRONMENT=production,STORAGE_BACKEND=gcs,STORAGE_BUCKET=govgenai-prod
+    - --set-env-vars=ENVIRONMENT=production,STORAGE_BACKEND=gcs,STORAGE_BUCKET=<BUCKET_DOCS>
 ```
 
 **Checklist de seguridad**:
@@ -369,15 +369,15 @@ DEPLOY_MODE=all   # o edge / cloud según el nodo
 
 ```bash
 # Crear instancia (una sola vez)
-gcloud sql instances create govgenai-prod \
+gcloud sql instances create <INSTANCIA_SQL> \
   --database-version=POSTGRES_16 \
   --tier=db-g1-small \
   --region=europe-southwest1 \
   --enable-google-private-path
 
 # Crear BD y usuario
-gcloud sql databases create govgenai --instance=govgenai-prod
-gcloud sql users create govgenai --instance=govgenai-prod --password=<secret>
+gcloud sql databases create govgenai --instance=<INSTANCIA_SQL>
+gcloud sql users create govgenai --instance=<INSTANCIA_SQL> --password=<secret>
 
 # Habilitar extensión pgvector (ejecutar en psql conectado vía Cloud SQL Auth Proxy)
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -409,7 +409,7 @@ postgresql+asyncpg:///govgenai?host=/cloudsql/PROJECT_ID:REGION:INSTANCE_NAME
 **Backup antes de migrar**:
 
 ```bash
-gcloud sql backups create --instance=govgenai-prod --async
+gcloud sql backups create --instance=<INSTANCIA_SQL> --async
 ```
 
 **Tests requeridos**:
@@ -612,7 +612,7 @@ gcloud run deploy govgenai-api \
   --max-instances=10 \
   --memory=1Gi \
   --cpu=2 \
-  --add-cloudsql-instances=PROJECT:europe-southwest1:govgenai-prod \
+  --add-cloudsql-instances=PROJECT:europe-southwest1:<INSTANCIA_SQL> \
   --no-allow-unauthenticated  # el API no es público; el widget usa API key
 ```
 

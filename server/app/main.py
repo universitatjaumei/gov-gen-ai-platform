@@ -19,6 +19,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from server.app.core.cors import politica_cors
+from server.app.core.version import version
 from server.app.core.security_headers import (
     SecurityHeadersMiddleware,
     urls_de_documentacion,
@@ -536,5 +537,15 @@ async def instancia() -> dict:
 
     Vacía = sin enlace: quien despliega el código **sin modificar** no queda sujeto a esta
     obligación concreta, así que forzar un valor sería inventarse un requisito.
+
+    **Y `version`**, que es lo que permite preguntarle a un despliegue en marcha qué ejecuta.
+    Va aquí y no en `/health` porque `/health` es una sonda de vida —la consume un supervisor que
+    sólo mira el código de estado— mientras que este endpoint ya declara ser los metadatos
+    públicos de este despliegue, que es justo lo que una versión es. Y por la misma razón que el
+    enlace: público y sin credencial, porque quien reporta un fallo desde el widget embebido
+    tiene que poder decir en qué versión le pasó.
     """
-    return {"source_url": (os.getenv("SOURCE_URL") or "").strip() or None}
+    return {
+        "source_url": (os.getenv("SOURCE_URL") or "").strip() or None,
+        "version": version(),
+    }

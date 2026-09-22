@@ -451,7 +451,12 @@
         "superadmin": "Compte d’instal·lació"
       },
       "organizacion": "Organització",
-      "sin_organizacion": "Sense organització"
+      "sin_organizacion": "Sense organització",
+      "modulos": "Mòduls",
+      "modulos_del_alta": "Mòduls als quals tindrà accés",
+      "pista_modulos": "El rol diu què pot fer; el mòdul, on pot entrar. Sense cap mòdul marcat, aquesta persona no podrà entrar enlloc.",
+      "sin_acceso": "Sense accés",
+      "sin_acceso_ayuda": "Aquesta persona té rol però cap concessió de mòdul, així que no pot entrar enlloc. Concedeix-los-hi ací en donar-la d'alta, o des de Plataforma → Mòduls."
     },
     "modulos_nav": "Mòduls",
     "modulos": {

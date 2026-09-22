@@ -1,5 +1,16 @@
 # Plan de Implementación TDD - AI Chatbots Hub (v3.0 - Prompts Atómicos)
 
+> **Aviso de lectura — esto es un plan, no una descripcion del sistema.**
+>
+> Escrito en futuro y **antes de decisiones que despues se revirtieron**. Las dos mayores: el
+> cliente NiceGUI, retirado entero el 2026-09-04 con 574 ficheros, y Docling, retirado en el
+> bloque EXT.3. Lo que este documento da por hecho puede no existir en el arbol.
+>
+> No se ha enmendado a proposito: un plan corregido a posteriori para que parezca acertado deja de
+> servir para lo unico que sirve un plan viejo, que es entender por que se decidio lo que se
+> decidio. Para saber que hace el sistema **hoy**: [`../docs/ESPECIFICACIONES.md`](../docs/ESPECIFICACIONES.md).
+
+
 ---
 
 > ## ⚠ NOTA DE ADAPTACIÓN — Gov Gen AI Platform (actualizado 2026-04-22)
@@ -8228,7 +8239,7 @@ El handler valida que `public_api_key` coincide con el `chatbot_id` en la tabla.
 ```
 ENVIRONMENT=production
 STORAGE_BACKEND=gcs
-STORAGE_BUCKET=govgenai-prod
+STORAGE_BUCKET=<BUCKET_DOCS>
 DEPLOY_MODE=all   # o edge / cloud según el nodo
 ```
 
@@ -8244,7 +8255,7 @@ DEPLOY_MODE=all   # o edge / cloud según el nodo
     - --set-secrets=DATABASE_URL=govgenai-db-url-async:latest
     - --set-secrets=LANGFUSE_PUBLIC_KEY=govgenai-langfuse-pub:latest
     - --set-secrets=LANGFUSE_SECRET_KEY=govgenai-langfuse-sec:latest
-    - --set-env-vars=ENVIRONMENT=production,STORAGE_BACKEND=gcs,STORAGE_BUCKET=govgenai-prod
+    - --set-env-vars=ENVIRONMENT=production,STORAGE_BACKEND=gcs,STORAGE_BUCKET=<BUCKET_DOCS>
 ```
 
 **Checklist de seguridad**:
@@ -8271,15 +8282,15 @@ DEPLOY_MODE=all   # o edge / cloud según el nodo
 
 ```bash
 # Crear instancia (una sola vez)
-gcloud sql instances create govgenai-prod \
+gcloud sql instances create <INSTANCIA_SQL> \
   --database-version=POSTGRES_16 \
   --tier=db-g1-small \
   --region=europe-southwest1 \
   --enable-google-private-path
 
 # Crear BD y usuario
-gcloud sql databases create govgenai --instance=govgenai-prod
-gcloud sql users create govgenai --instance=govgenai-prod --password=<secret>
+gcloud sql databases create govgenai --instance=<INSTANCIA_SQL>
+gcloud sql users create govgenai --instance=<INSTANCIA_SQL> --password=<secret>
 
 # Habilitar extensión pgvector (ejecutar en psql conectado vía Cloud SQL Auth Proxy)
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -8311,7 +8322,7 @@ postgresql+asyncpg:///govgenai?host=/cloudsql/PROJECT_ID:REGION:INSTANCE_NAME
 **Backup antes de migrar**:
 
 ```bash
-gcloud sql backups create --instance=govgenai-prod --async
+gcloud sql backups create --instance=<INSTANCIA_SQL> --async
 ```
 
 **Tests requeridos**:
@@ -8376,7 +8387,7 @@ gcloud run deploy govgenai-api \
   --max-instances=10 \
   --memory=1Gi \
   --cpu=2 \
-  --add-cloudsql-instances=PROJECT:europe-southwest1:govgenai-prod \
+  --add-cloudsql-instances=PROJECT:europe-southwest1:<INSTANCIA_SQL> \
   --no-allow-unauthenticated  # el API no es público; el widget usa API key
 ```
 

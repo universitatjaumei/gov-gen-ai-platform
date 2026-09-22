@@ -402,6 +402,46 @@ Un `200` con las tres herramientas en el cuerpo es la señal buena. Un **421** e
 
 ---
 
+## 3.octies Si el superadministrador pierde su contraseña (issue #96)
+
+**No hay recuperación por producto, y es a propósito.** `bootstrap` no rehashea —para que
+reejecutar la instalación no revierta un cambio posterior—, el endpoint de cambiar contraseña es
+sólo superadministrador y por tanto no puede ayudarle a él mismo, y la plataforma **no envía
+correo**, así que no hay autoservicio posible. Tampoco lo arregla el login con Google: el login
+local se conserva **como reserva**, justo para entrar cuando Google o su configuración fallen.
+
+La vía es un guion que se ejecuta **en la máquina**, dentro del contenedor:
+
+```
+gcloud compute ssh <VM> --zone <ZONA> --tunnel-through-iap
+sudo docker compose --env-file /opt/govgenai/.env.despliegue \
+  -f /opt/govgenai/docker-compose.vm.yml --profile migrate run --rm \
+  --entrypoint python migrate -m server.app.scripts.restablecer_superadmin \
+  --email <CORREO>
+```
+
+Pide la contraseña **dos veces por entrada estándar** y no la muestra. Tres cosas que conviene
+saber antes de usarlo:
+
+- **Su autorización no es un rol: es tener acceso a la máquina.** SSH por IAP, `sudo` y `docker`.
+  Añadirle un rol no añadiría seguridad, porque quien puede ejecutar `docker exec` ahí ya puede
+  escribir en la base. Por eso es un guion y no una pantalla.
+- **Se niega a crear.** Si el correo no existe, falla. Es lo contrario que `bootstrap`, y
+  deliberado: crear una cuenta a partir de una errata sería el agujero que este guion no puede
+  tener.
+- **No acepta la contraseña como argumento.** Quedaría en el historial del *shell* y sería
+  visible en `ps` mientras corre.
+
+Deja traza en el registro de la aplicación diciendo a quién y cuándo, **nunca la contraseña ni su
+hash**. Hoy esa traza va al registro que recoge el *ops-agent*; no hay tabla de auditoría en el
+esquema, y crearla excede lo que esta issue resolvía.
+
+**La alternativa sin código sigue sobre la mesa**: un segundo superadministrador elimina el punto
+único de fallo, porque dos pueden restablecerse mutuamente con el endpoint que ya existe. El coste
+es multiplicar la cuenta más poderosa. Es decisión de gobierno, no técnica.
+
+---
+
 ## 4. Lo que este prototipo deja fuera a propósito
 
 - ~~**Dominio propio.**~~ **Ya no**: `normativa.uji.es` sirve el sitio y la API desde el

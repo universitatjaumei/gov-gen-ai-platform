@@ -209,6 +209,15 @@ _PUEDEN_LEER_EL_DSN = {
     # Igual que la anterior, pero para su propia BD con las migraciones aplicadas: deriva el
     # DSN de administración y crea una base aparte.
     "tests/infra/test_bootstrap_seed.py",
+    # Los dos de abajo hacen lo mismo que el anterior y por la misma razón: ejercitan un guion
+    # **como subproceso** contra una base que tiene que estar migrada, así que necesitan el DSN
+    # de administración para crearla y darle al subproceso su propia `DATABASE_URL`. La fixture
+    # desechable no sirve aquí: da una sesión, no una URL que otro proceso pueda abrir.
+    #
+    # Las dos crean una base con nombre único (`test_issue97_*`, `test_issue96_*`) y la borran
+    # al terminar, que es la regla de no tocar nunca la base del desarrollador.
+    "tests/infra/test_issue97_sembrar_el_catalogo_no_pide_credenciales.py",
+    "tests/infra/test_issue96_restablecer_el_superadministrador.py",
     # Inspecciona el esquema real ya migrado —sólo lectura, y se salta si no hay BD—: es lo
     # que comprueba que el renombrado de tablas se aplicó de verdad.
     "tests/api/test_migration_rename.py",

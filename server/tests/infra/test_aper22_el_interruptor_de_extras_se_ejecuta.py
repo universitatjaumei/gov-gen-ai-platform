@@ -88,6 +88,15 @@ def _construir(tmp_path: Path, extras: str) -> list[list[str]]:
     _ejecutable(STUB_DOCKER, binarios / "docker")
     _ejecutable(STUB_GCLOUD, binarios / "gcloud")
 
+    # El bloque se ejecuta con `cwd=tmp_path`, y desde VER lee el fichero `VERSION` de la raíz
+    # para estamparlo en la imagen. Sin copiarlo aquí el bloque muere en esa línea con
+    # `set -euo pipefail` y los seis tests de este fichero se caen por una causa que no es la
+    # suya. Se copia **el real** y no un valor inventado: así el test también comprueba que lo
+    # que llega al `--build-arg` es lo que dice la fuente única.
+    (tmp_path / "VERSION").write_text(
+        (RAIZ / "VERSION").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+
     registro = tmp_path / "docker.jsonl"
     registro.touch()
     guion = tmp_path / "bloque.sh"
@@ -138,6 +147,20 @@ class TestConElInterruptorPuesto:
             f"`--build-arg` recibe «{valor}» en vez de «EXTRAS_APP=--extra local-models». Si "
             f"acaba en `--extra`, el valor se ha partido por el espacio y `local-models` anda "
             f"suelto por la lista: {argv}"
+        )
+
+    def test_la_version_llega_estampada_a_la_imagen(self, argv: list[str]) -> None:
+        """Y **ejecutándolo**, que es distinto de que el YAML contenga la cadena.
+
+        `test_ver_la_version_es_una_sola_y_se_puede_preguntar.py` comprueba que `deploy.yml`
+        menciona `GOVGENAI_VERSION=`, y eso es un `grep`: pasó en verde mientras este bloque
+        moría en la línea que lee el fichero. Un guardarraíl que lee texto no puede decir si el
+        texto se ejecuta.
+        """
+        esperado = f"GOVGENAI_VERSION={(RAIZ / 'VERSION').read_text(encoding='utf-8').strip()}"
+        assert esperado in argv, (
+            f"la imagen del servidor no recibe «{esperado}», así que se construiría con el valor "
+            f"por defecto y **mentiría sobre su versión**: {argv}"
         )
 
     def test_no_queda_ningun_argumento_suelto(self, argv: list[str]) -> None:

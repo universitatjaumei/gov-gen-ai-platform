@@ -504,11 +504,11 @@ cuanto exista un fork.
 4. AMPLIAR LA AUTENTICACION A LOS DOS NOMBRES, antes de empujar. Aditivo, sin ventana de rotura:
    gh variable list -> copiar los 12 pares al nuevo (gh variable set ... --repo universitatjaumei/...)
    gcloud iam workload-identity-pools providers update-oidc modestofabra-gov-gen-ai-platform \
-     --project=uji-teclab --location=global --workload-identity-pool=github \
+     --project=<PROYECTO_GCP> --location=global --workload-identity-pool=github \
      --attribute-condition="assertion.repository=='ModestoFabra/gov-gen-ai-platform' || assertion.repository=='universitatjaumei/gov-gen-ai-platform'"
-   gcloud iam service-accounts add-iam-policy-binding govgenai-deploy@uji-teclab.iam.gserviceaccount.com \
-     --project=uji-teclab --role=roles/iam.workloadIdentityUser \
-     --member="principalSet://iam.googleapis.com/projects/618806480921/locations/global/workloadIdentityPools/github/attribute.repository/universitatjaumei/gov-gen-ai-platform"
+   gcloud iam service-accounts add-iam-policy-binding govgenai-deploy@<PROYECTO_GCP>.iam.gserviceaccount.com \
+     --project=<PROYECTO_GCP> --role=roles/iam.workloadIdentityUser \
+     --member="principalSet://iam.googleapis.com/projects/<NUMERO_DE_PROYECTO>/locations/global/workloadIdentityPools/github/attribute.repository/universitatjaumei/gov-gen-ai-platform"
    Los dos anclajes estan medidos el 2026-09-07 y son los dos sitios que llevan el nombre. El
    codigo NO se toca: `deploy.yml` lee el proveedor de una variable y el nombre del recurso no
    cambia.

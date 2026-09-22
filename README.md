@@ -183,6 +183,22 @@ retiró el 2026-09-04**: no lo usaba ni CI, ni el despliegue, ni el `Dockerfile`
 
 ## Estado
 
+**Esto es un proyecto experimental, y conviene leerlo antes de planificar nada con él.** Se
+publica para que pueda instalarse y probarse, no como un producto sobre el que montar un servicio.
+La **instalación de referencia** es la de la Universitat Jaume I, que es donde se despliega en
+continuo y donde aparecen los fallos primero.
+
+La versión lo dice: el proyecto está en `0.x` **a propósito**, y ahí se queda. En *semantic
+versioning* eso significa que cualquier cosa puede romperse entre versiones, que es lo honesto
+cuando no hay compromiso de compatibilidad ni de soporte. Se etiqueta **por acontecimiento y no
+por calendario**: no hay cadencia prometida. El esquema completo está en
+[`docs/VERSIONADO.md`](docs/VERSIONADO.md), y a un despliegue en marcha se le puede preguntar
+—sin credencial— en `GET /api/v1/instancia`.
+
+Numerar sin prometer soporte no es una contradicción: el número es **descripción, no promesa**.
+Sirve para que quien instale sepa qué ejecuta y para que un informe de fallo sea comprobable. Lo
+que la Universitat hace y lo que no está más abajo, en «Qué no acompaña a la publicación».
+
 En desarrollo activo, y **la migración desde la aplicación NiceGUI original terminó el
 2026-09-04**: `client_app/` y `_legacy_nicegui/` se retiraron completos, 574 ficheros, porque
 llevaban tiempo sin compilar y nada en producción dependía de ellos. Todo lo que queda en el árbol

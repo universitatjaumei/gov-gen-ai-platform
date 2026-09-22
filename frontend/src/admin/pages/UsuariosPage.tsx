@@ -13,6 +13,7 @@ import {
   useCapacidadesDePersonas,
   getListUsersApiV1HubUsersGetQueryKey,
 } from '@/shared/api/generated/hub-users/hub-users'
+import { useGetCatalogoApiV1HubModulosCatalogoGet } from '@/shared/api/generated/hub-modulos/hub-modulos'
 import type { UsuarioRead } from '@/shared/api/generated/model'
 import { useAutoridadDelRol } from '@/shared/auth/useAutoridadDelRol'
 import { useOrganizacionElegida } from '@/shared/organizacion/useOrganizacionElegida'
@@ -80,6 +81,20 @@ export function UsuariosPage() {
   const [email, setEmail] = useState('')
   const [rol, setRol] = useState<string>('user')
   const [nombre, setNombre] = useState('')
+  // Los módulos que se conceden en el mismo acto (issue #100). Conceder vivía sólo en
+  // Plataforma → Módulos, o sea un segundo viaje, y el segundo viaje se olvida: en producción
+  // la tabla de concesiones estuvo vacía semanas y nadie podía entrar en nada.
+  const [modulosDelAlta, setModulosDelAlta] = useState<string[]>([])
+  // El catálogo es dato del servidor. Si los códigos estuvieran escritos aquí, añadir un módulo
+  // exigiría tocar el frontend, que es lo que la regla del catálogo-como-dato viene a evitar.
+  const { data: catalogoDeModulos } = useGetCatalogoApiV1HubModulosCatalogoGet()
+  const modulosVigentes = (catalogoDeModulos ?? []).filter((m) => m.vigente)
+
+  function alternarModulo(codigo: string) {
+    setModulosDelAlta((antes) =>
+      antes.includes(codigo) ? antes.filter((c) => c !== codigo) : [...antes, codigo]
+    )
+  }
   /** La fila que espera confirmación de borrado. Estado de la pantalla, no del servidor. */
   const [porConfirmar, setPorConfirmar] = useState<string | null>(null)
   /** La fila cuyo formulario de contraseña está abierto, y la que acaba de guardarla (USR.3). */
@@ -120,6 +135,7 @@ export function UsuariosPage() {
           role: rol,
           display_name: nombre || null,
           organizacion_id: organizacionDelAlta || null,
+          modulos: modulosDelAlta,
         },
       },
       {
@@ -127,6 +143,7 @@ export function UsuariosPage() {
           setEmail('')
           setNombre('')
           setRol('user')
+          setModulosDelAlta([])
           invalidar()
         },
       }
@@ -260,6 +277,30 @@ export function UsuariosPage() {
             </select>
           </div>
         )}
+        {modulosVigentes.length > 0 && (
+          <fieldset className="flex w-full flex-col gap-1">
+            <legend className="text-sm font-medium">
+              {t('plataforma.usuarios.modulos_del_alta')}
+            </legend>
+            {/* Iterando el catálogo del servidor: los códigos no se escriben aquí. */}
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {modulosVigentes.map((m) => (
+                <label key={m.code} className="flex items-center gap-1.5 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={modulosDelAlta.includes(m.code)}
+                    onChange={() => alternarModulo(m.code)}
+                  />
+                  {m.label}
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t('plataforma.usuarios.pista_modulos')}
+            </p>
+          </fieldset>
+        )}
+
         <button
           type="submit"
           disabled={creando}
@@ -286,6 +327,7 @@ export function UsuariosPage() {
               <th>{t('plataforma.usuarios.rol')}</th>
               <th>{t('plataforma.usuarios.organizacion')}</th>
               <th>{t('plataforma.usuarios.origen')}</th>
+              <th>{t('plataforma.usuarios.modulos')}</th>
               <th>{t('plataforma.usuarios.ultimo_acceso')}</th>
               <th>{t('plataforma.usuarios.estado')}</th>
               <th />
@@ -308,6 +350,27 @@ export function UsuariosPage() {
                     que falte. */}
                 <td>{nombreDeOrganizacion(persona.organizacion_id)}</td>
                 <td>{t(`plataforma.usuarios.origenes.${persona.origen}` as Parameters<typeof t>[0])}</td>
+                {/* En qué módulos puede entrar, y el aviso si en ninguno (issue #100).
+
+                    **El aviso lo decide el servidor**, en `sin_acceso_a_modulos`. Aquí no se
+                    mira `modulos_concedidos.length === 0`: el superadministrador entra por su
+                    rol con la lista vacía, y esa regla vive en el servidor. Escribirla aquí
+                    sería tenerla dos veces. */}
+                <td data-testid={`modulos-${persona.id}`}>
+                  {persona.sin_acceso_a_modulos ? (
+                    <span
+                      data-testid={`sin-acceso-${persona.id}`}
+                      className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900"
+                      title={t('plataforma.usuarios.sin_acceso_ayuda')}
+                    >
+                      {t('plataforma.usuarios.sin_acceso')}
+                    </span>
+                  ) : (persona.modulos_concedidos ?? []).length > 0 ? (
+                    (persona.modulos_concedidos ?? []).join(', ')
+                  ) : (
+                    '—'
+                  )}
+                </td>
                 {/* «Nunca» y no una celda vacía: que alguien no haya entrado todavía es lo
                     normal en una fila creada a mano, no un dato que falte. */}
                 <td>

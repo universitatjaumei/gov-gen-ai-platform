@@ -84,6 +84,7 @@ todas envejecen igual:
 | [`GESTOR_EXPEDIENTES.md`](GESTOR_EXPEDIENTES.md) | Referencia viva — el módulo previsto para 2027-2028; todavía no existe |
 | [`INVENTARIO_RETIRADA_LEGACY.md`](INVENTARIO_RETIRADA_LEGACY.md) | Registro — el mapa, fichero a fichero, de lo que tenía el cliente NiceGUI retirado el 2026-09-04: qué estaba cubierto, dónde, y qué se fue sin equivalente. Es lo que hay que leer antes de escribir el nodo de ejecución local |
 | [`DESPLIEGUE_PROTOTIPO_GCP.md`](DESPLIEGUE_PROTOTIPO_GCP.md) | Referencia viva — el despliegue mínimo del prototipo. No sustituye al bloque Deploy |
+| [`VERSIONADO.md`](VERSIONADO.md) | Referencia viva — qué significa el número de versión, dónde vive y cuándo cambia. Por qué se queda en `0.x` y por qué se etiqueta por acontecimiento y no por calendario |
 | [`chatbots-publicos/`](chatbots-publicos/) | Referencia viva — cómo se embebe el widget: plantilla CSS, tema de ejemplo y página de demostración |
 | [`ejemplos/`](ejemplos/) | Referencia viva — ficheros de ejemplo (FAQ del corpus) |
 

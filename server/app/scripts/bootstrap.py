@@ -23,7 +23,7 @@ import sys
 import uuid
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from server.app.core.security import hash_password
 from server.app.database.models import SuperAdminAccount
@@ -176,8 +176,18 @@ async def _sembrar_plantilla_demo(session, documento: dict, autor_id: uuid.UUID)
     return True
 
 
+class _YaHayOtroSuperadmin(RuntimeError):
+    """Se ha pedido crear un superadministrador y ya existe otro con distinto correo."""
+
+
 async def _sembrar(
-    email: str, password: str, nombre: str, url: str | None, con_demo: bool = False
+    email: str,
+    password: str,
+    nombre: str,
+    url: str | None,
+    con_demo: bool = False,
+    solo_demo: bool = False,
+    permitir_otro_superadmin: bool = False,
 ) -> _Informe:
     informe = _Informe()
     engine = create_async_engine(url)
@@ -186,130 +196,149 @@ async def _sembrar(
     try:
         async with session_factory() as session:
             # --- SuperAdmin ------------------------------------------------
-            existente = (
-                await session.execute(
-                    select(SuperAdminAccount).where(SuperAdminAccount.email == email)
-                )
-            ).scalar_one_or_none()
-
-            if existente is None:
-                session.add(
-                    SuperAdminAccount(
-                        name=nombre,
-                        email=email,
-                        hashed_password=hash_password(password),
-                        is_active=True,
-                    )
-                )
-                informe.registrar(f"SuperAdmin {email}", True)
-            else:
-                # No se rehashea ni se pisa: si el admin cambió la contraseña
-                # después de instalar, reejecutar setup.sh no debe revertirla.
-                informe.registrar(f"SuperAdmin {email}", False)
-
-            # --- Proveedor y configuración de LLM ---------------------------
-            provider = await session.get(HubProvider, PROVIDER_ID)
-            if provider is None:
-                provider = HubProvider(
-                    id=PROVIDER_ID,
-                    name="Ollama (local)",
-                    provider_type="openai_compatible",
-                    base_url="http://ollama:11434/v1",
-                )
-                session.add(provider)
-                informe.registrar(f"Proveedor '{PROVIDER_ID}'", True)
-            else:
-                informe.registrar(f"Proveedor '{PROVIDER_ID}'", False)
-
-            llm_config = (
-                await session.execute(
-                    select(HubLLMConfig).where(HubLLMConfig.provider == PROVIDER_ID)
-                )
-            ).scalars().first()
-
-            if llm_config is None:
-                llm_config = HubLLMConfig(
-                    id=uuid.uuid4(),
-                    provider=PROVIDER_ID,
-                    model_name="llama3.1:8b",
-                    label="Modelo local por defecto",
-                    tier=1,
-                    is_default=True,
-                )
-                session.add(llm_config)
-                informe.registrar("Configuración de LLM por defecto", True)
-            else:
-                informe.registrar("Configuración de LLM por defecto", False)
-
-            # --- Organización ------------------------------------------------
-            organizacion = (
-                await session.execute(
-                    select(HubOrganizacion).where(
-                        HubOrganizacion.name == ORGANIZACION_NOMBRE
-                    )
-                )
-            ).scalar_one_or_none()
-
-            if organizacion is None:
-                organizacion = HubOrganizacion(
-                    id=uuid.uuid4(),
-                    name=ORGANIZACION_NOMBRE,
-                    partner_id=ORGANIZACION_PARTNER_ID,
-                )
-                session.add(organizacion)
-                informe.registrar(f"Organización '{ORGANIZACION_NOMBRE}'", True)
-            else:
-                informe.registrar(f"Organización '{ORGANIZACION_NOMBRE}'", False)
-
-            # Necesario para disponer de los ids antes de referenciarlos.
-            await session.flush()
-
-            # --- Chatbot de ejemplo ------------------------------------------
-            chatbot = (
-                await session.execute(
-                    select(HubChatbot).where(HubChatbot.name == CHATBOT_NOMBRE)
-                )
-            ).scalar_one_or_none()
-
-            if chatbot is None:
-                chatbot = HubChatbot(
-                    id=uuid.uuid4(),
-                    organizacion_id=organizacion.id,
-                    llm_config_id=llm_config.id,
-                    name=CHATBOT_NOMBRE,
-                    system_prompt=SYSTEM_PROMPT,
-                )
-                session.add(chatbot)
-                await session.flush()
-                informe.registrar(f"Chatbot '{CHATBOT_NOMBRE}'", True)
-            else:
-                informe.registrar(f"Chatbot '{CHATBOT_NOMBRE}'", False)
-
-            # --- Prompts de bienvenida (es, ca, en) ---------------------------
-            for idioma, texto in PROMPTS_BIENVENIDA.items():
-                existente_prompt = (
+            # Con `--solo-demo` no se toca ninguna cuenta ni la configuración: sembrar un
+            # catálogo no es instalar, y mezclarlos es lo que obligaba a dar credenciales para
+            # algo que no las usa.
+            if not solo_demo:
+                existente = (
                     await session.execute(
-                        select(HubPromptTemplate).where(
-                            HubPromptTemplate.chatbot_id == chatbot.id,
-                            HubPromptTemplate.slug == PROMPT_SLUG,
-                            HubPromptTemplate.language == idioma,
+                        select(SuperAdminAccount).where(SuperAdminAccount.email == email)
+                    )
+                ).scalar_one_or_none()
+
+                if existente is None:
+                    # **Crear el primero es el trabajo; crear otro es casi siempre una errata.**
+                    # Se busca por correo, así que un carácter de más creaba una segunda cuenta
+                    # con la contraseña de quien se equivocó, en silencio y con éxito. Una
+                    # instalación nueva no tiene ninguno, así que este corte no la afecta.
+                    cuantos = (
+                        await session.execute(
+                            select(func.count()).select_from(SuperAdminAccount)
+                        )
+                    ).scalar_one()
+                    if cuantos and not permitir_otro_superadmin:
+                        raise _YaHayOtroSuperadmin(
+                            f"ya hay {cuantos} superadministrador(es) y «{email}» no es ninguno "
+                            "de ellos. Si el correo lleva una errata, corrígelo; si de verdad "
+                            "quieres otra cuenta, pásale `--permitir-otro-superadmin`."
+                        )
+                    session.add(
+                        SuperAdminAccount(
+                            name=nombre,
+                            email=email,
+                            hashed_password=hash_password(password),
+                            is_active=True,
+                        )
+                    )
+                    informe.registrar(f"SuperAdmin {email}", True)
+                else:
+                    # No se rehashea ni se pisa: si el admin cambió la contraseña
+                    # después de instalar, reejecutar setup.sh no debe revertirla.
+                    informe.registrar(f"SuperAdmin {email}", False)
+
+                # --- Proveedor y configuración de LLM ---------------------------
+                provider = await session.get(HubProvider, PROVIDER_ID)
+                if provider is None:
+                    provider = HubProvider(
+                        id=PROVIDER_ID,
+                        name="Ollama (local)",
+                        provider_type="openai_compatible",
+                        base_url="http://ollama:11434/v1",
+                    )
+                    session.add(provider)
+                    informe.registrar(f"Proveedor '{PROVIDER_ID}'", True)
+                else:
+                    informe.registrar(f"Proveedor '{PROVIDER_ID}'", False)
+
+                llm_config = (
+                    await session.execute(
+                        select(HubLLMConfig).where(HubLLMConfig.provider == PROVIDER_ID)
+                    )
+                ).scalars().first()
+
+                if llm_config is None:
+                    llm_config = HubLLMConfig(
+                        id=uuid.uuid4(),
+                        provider=PROVIDER_ID,
+                        model_name="llama3.1:8b",
+                        label="Modelo local por defecto",
+                        tier=1,
+                        is_default=True,
+                    )
+                    session.add(llm_config)
+                    informe.registrar("Configuración de LLM por defecto", True)
+                else:
+                    informe.registrar("Configuración de LLM por defecto", False)
+
+                # --- Organización ------------------------------------------------
+                organizacion = (
+                    await session.execute(
+                        select(HubOrganizacion).where(
+                            HubOrganizacion.name == ORGANIZACION_NOMBRE
                         )
                     )
                 ).scalar_one_or_none()
 
-                if existente_prompt is None:
-                    session.add(
-                        HubPromptTemplate(
-                            id=uuid.uuid4(),
-                            chatbot_id=chatbot.id,
-                            slug=PROMPT_SLUG,
-                            language=idioma,
-                            template_text=texto,
-                        )
+                if organizacion is None:
+                    organizacion = HubOrganizacion(
+                        id=uuid.uuid4(),
+                        name=ORGANIZACION_NOMBRE,
+                        partner_id=ORGANIZACION_PARTNER_ID,
                     )
-                    informe.registrar(f"Prompt de bienvenida [{idioma}]", True)
+                    session.add(organizacion)
+                    informe.registrar(f"Organización '{ORGANIZACION_NOMBRE}'", True)
                 else:
-                    informe.registrar(f"Prompt de bienvenida [{idioma}]", False)
+                    informe.registrar(f"Organización '{ORGANIZACION_NOMBRE}'", False)
+
+                # Necesario para disponer de los ids antes de referenciarlos.
+                await session.flush()
+
+                # --- Chatbot de ejemplo ------------------------------------------
+                chatbot = (
+                    await session.execute(
+                        select(HubChatbot).where(HubChatbot.name == CHATBOT_NOMBRE)
+                    )
+                ).scalar_one_or_none()
+
+                if chatbot is None:
+                    chatbot = HubChatbot(
+                        id=uuid.uuid4(),
+                        organizacion_id=organizacion.id,
+                        llm_config_id=llm_config.id,
+                        name=CHATBOT_NOMBRE,
+                        system_prompt=SYSTEM_PROMPT,
+                    )
+                    session.add(chatbot)
+                    await session.flush()
+                    informe.registrar(f"Chatbot '{CHATBOT_NOMBRE}'", True)
+                else:
+                    informe.registrar(f"Chatbot '{CHATBOT_NOMBRE}'", False)
+
+                # --- Prompts de bienvenida (es, ca, en) ---------------------------
+                for idioma, texto in PROMPTS_BIENVENIDA.items():
+                    existente_prompt = (
+                        await session.execute(
+                            select(HubPromptTemplate).where(
+                                HubPromptTemplate.chatbot_id == chatbot.id,
+                                HubPromptTemplate.slug == PROMPT_SLUG,
+                                HubPromptTemplate.language == idioma,
+                            )
+                        )
+                    ).scalar_one_or_none()
+
+                    if existente_prompt is None:
+                        session.add(
+                            HubPromptTemplate(
+                                id=uuid.uuid4(),
+                                chatbot_id=chatbot.id,
+                                slug=PROMPT_SLUG,
+                                language=idioma,
+                                template_text=texto,
+                            )
+                        )
+                        informe.registrar(f"Prompt de bienvenida [{idioma}]", True)
+                    else:
+                        informe.registrar(f"Prompt de bienvenida [{idioma}]", False)
 
             # --- Catálogo de plantillas demo (D.7) ---------------------------
             #
@@ -361,34 +390,64 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "las quiera no debe tener que borrarlas."
         ),
     )
+    parser.add_argument(
+        "--solo-demo",
+        action="store_true",
+        help=(
+            "Siembra ÚNICAMENTE el catálogo de plantillas demo, sin tocar cuentas ni "
+            "configuración, y sin pedir credenciales. Pensado para ser un paso del "
+            "despliegue: es idempotente y no necesita que nadie entre por SSH."
+        ),
+    )
+    parser.add_argument(
+        "--permitir-otro-superadmin",
+        action="store_true",
+        help=(
+            "Permite CREAR un superadministrador aunque ya exista alguno. Sin esto el guion "
+            "se niega, porque una errata en el correo crearía uno nuevo en silencio con la "
+            "contraseña que se teclee."
+        ),
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
 
-    faltan = [
-        nombre
-        for nombre, valor in (
-            ("--superadmin-email", args.superadmin_email),
-            ("--superadmin-password", args.superadmin_password),
-        )
-        if not valor
-    ]
-    if faltan:
-        print(f"ERROR: faltan argumentos obligatorios: {', '.join(faltan)}", file=sys.stderr)
-        return 2
+    # Con `--solo-demo` **no se piden credenciales**, y ésa es toda la gracia: el catálogo se
+    # firma con `AUTOR_DEL_SEMBRADO` y no con la cuenta del superadministrador, así que pedirlas
+    # era una puerta compartida entre dos trabajos que no tienen nada que ver. En producción
+    # `SUPERADMIN_EMAIL` y `SUPERADMIN_PASSWORD` no existen, y por eso la siembra se quedó sin
+    # hacer desde el primer despliegue (issue #97).
+    if not args.solo_demo:
+        faltan = [
+            nombre
+            for nombre, valor in (
+                ("--superadmin-email", args.superadmin_email),
+                ("--superadmin-password", args.superadmin_password),
+            )
+            if not valor
+        ]
+        if faltan:
+            print(f"ERROR: faltan argumentos obligatorios: {', '.join(faltan)}", file=sys.stderr)
+            return 2
 
-    print("Sembrando la instalación...")
-    informe = asyncio.run(
-        _sembrar(
-            email=args.superadmin_email,
-            password=args.superadmin_password,
-            nombre=args.superadmin_name,
-            url=args.database_url,
-            con_demo=args.con_demo,
+    print("Sembrando el catálogo..." if args.solo_demo else "Sembrando la instalación...")
+    try:
+        informe = asyncio.run(
+            _sembrar(
+                email=args.superadmin_email,
+                password=args.superadmin_password,
+                nombre=args.superadmin_name,
+                url=args.database_url,
+                con_demo=args.con_demo or args.solo_demo,
+                solo_demo=args.solo_demo,
+                permitir_otro_superadmin=args.permitir_otro_superadmin,
+            )
         )
-    )
+    except _YaHayOtroSuperadmin as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 3
     informe.imprimir()
     return 0
 
