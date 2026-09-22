@@ -80,6 +80,37 @@ class Settings:
     # panel. El defecto es `true` **ahora**; cuando el SSO esté en marcha, el defecto es lo
     # primero que hay que darle la vuelta.
     local_user_login_enabled: bool = True
+    # === Login con la cuenta institucional de Google (OIDC) ===
+    #
+    # **El dominio es la autorización, no una comodidad.** Sin comprobar `hd` en el servidor,
+    # cualquier cuenta de Google del mundo entra: es el fallo clásico de esta integración. Y va
+    # en el servidor **aunque** la pantalla de consentimiento esté en «Interna», porque eso es
+    # configuración de una consola que alguien puede cambiar, y una decisión de autorización no
+    # se delega a una casilla. Sin dominio declarado, el login queda apagado.
+    google_oauth_client_id: str = ""
+    google_oauth_client_secret: str = ""
+    google_oauth_allowed_domain: str = ""
+    #: La URL de vuelta, **declarada y no derivada de la petición**.
+    #:
+    #: Google exige que coincida **carácter a carácter** con la registrada en la consola, así que
+    #: declararla convierte esa coincidencia en algo estructural en vez de una esperanza.
+    #:
+    #: Y derivarla aquí **no funcionaría**: esta aplicación no arranca con `--proxy-headers` ni
+    #: con `FORWARDED_ALLOW_IPS`, y el defecto de uvicorn sólo confía en `127.0.0.1` mientras
+    #: Caddy conecta desde la red de Docker. O sea que `request.url_for()` construiría `http://`
+    #: y Google rechaza un `redirect_uri` sin TLS que no sea `localhost`. Es el mismo motivo por
+    #: el que el SAML declara `SAML_SP_ACS_URL` en vez de deducirla.
+    google_oauth_redirect_uri: str = ""
+
+    @property
+    def google_login_enabled(self) -> bool:
+        """Las cuatro piezas, o nada. Un login a medio configurar es peor que ninguno."""
+        return bool(
+            self.google_oauth_client_id
+            and self.google_oauth_client_secret
+            and self.google_oauth_allowed_domain
+            and self.google_oauth_redirect_uri
+        )
     # Subidas (SEC.6) — límite de tamaño y cuota de documentos por chatbot
     max_upload_mb: int = 10
     max_documents_per_chatbot: int = 0  # 0 = sin límite
@@ -148,6 +179,10 @@ def get_settings() -> Settings:
         identity_role_authority=os.getenv("IDENTITY_ROLE_AUTHORITY", "app").strip().lower(),
         local_user_login_enabled=os.getenv("LOCAL_USER_LOGIN_ENABLED", "true").lower()
         == "true",
+        google_oauth_client_id=os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip(),
+        google_oauth_client_secret=os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip(),
+        google_oauth_allowed_domain=os.getenv("GOOGLE_OAUTH_ALLOWED_DOMAIN", "").strip().lower(),
+        google_oauth_redirect_uri=os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "").strip(),
         max_upload_mb=int(os.getenv("MAX_UPLOAD_MB", "10")),
         max_documents_per_chatbot=int(os.getenv("MAX_DOCUMENTS_PER_CHATBOT", "0")),
     )

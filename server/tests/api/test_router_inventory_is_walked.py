@@ -43,6 +43,15 @@ _SENALES_DE_ACOTADO = (
 _SIN_ACOTAR = {
     "auth_router.py": "emite el token; antes de tenerlo no hay organizaciones que acotar",
     "saml_auth_router.py": "ACS y metadata del IdP: la credencial es la aserción firmada",
+    "google_auth_router.py": (
+        "las dos rutas son PREVIAS a tener token: mandar a Google y recibir la vuelta. No "
+        "hay principal del que leer organizaciones, así que no hay nada que acotar. Lo que "
+        "sí decide —y está en `core/auth/google_oidc.py` con sus tests— es que la cuenta "
+        "pertenezca a la organización de Google admitida, comprobando el *claim* `hd`: esa "
+        "es la autorización de esta puerta, y no acotar un listado. Quien entra por aquí "
+        "sale con la misma `UserInfo` que el login local, resuelta por el mismo servicio de "
+        "identidad, así que su acotación la hacen los routers que use después"
+    ),
     "charts_router.py": "sin estado — dibuja con los datos que le manda el propio llamante",
     "pat_router.py": "acota por propiedad del token (owner_id); su ámbito lo resuelve PatService",
     # USR.9 — esta razón decía «los cuatro endpoints son de superadministrador. Cuando MT.9

@@ -206,9 +206,27 @@ async def approve_as_template(
     user: UserInfo = Depends(_require_admin),
     session: AsyncSession = Depends(get_session),
 ) -> ApproveAsTemplateResponse:
-    """Persiste el draft como plantilla. Solo admin/superadmin. is_global requiere admin."""
-    if body.is_global and user.role != "admin":
-        raise HTTPException(status_code=403, detail="Only admin can create global templates")
+    """Persiste el draft como plantilla. Admin o superadmin; **lo global, sólo la plataforma**.
+
+    **La condición estaba invertida** (issue #90): era `user.role != "admin"`, y como
+    `_require_admin` deja pasar a los dos roles, eso bloqueaba precisamente al
+    superadministrador y **dejaba al administrador de organización escribir una fila de nivel
+    plataforma** —`owner_kind="platform"`, nueve líneas más abajo— que ven todas las demás
+    organizaciones. Un ámbito inferior escribiendo por encima del suyo, saltándose las dos capas
+    de `docs/MULTITENENCIA.md`.
+
+    Lo decía este mismo endpoint: global significa plataforma, y la plataforma es el
+    superadministrador (`core/auth/models.py`: «gestiona la plataforma global»).
+
+    **Se pregunta por la capacidad y no por la cadena del rol.** `user.role != "admin"` se queda
+    corto en cuanto el conjunto de roles crece, y sin avisar; `is_superadmin` dice lo que se
+    quiere comprobar.
+    """
+    if body.is_global and not user.is_superadmin:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo un superadministrador puede crear plantillas de plataforma",
+        )
 
     result = DraftValidator().validate(body.draft)
     if not result.ok:
