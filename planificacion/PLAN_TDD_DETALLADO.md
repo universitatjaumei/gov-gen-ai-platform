@@ -1,5 +1,16 @@
 # Plan de Implementación TDD - AI Chatbots Hub (v3.0 - Prompts Atómicos)
 
+> **Aviso de lectura — esto es un plan, no una descripcion del sistema.**
+>
+> Escrito en futuro y **antes de decisiones que despues se revirtieron**. Las dos mayores: el
+> cliente NiceGUI, retirado entero el 2026-09-04 con 574 ficheros, y Docling, retirado en el
+> bloque EXT.3. Lo que este documento da por hecho puede no existir en el arbol.
+>
+> No se ha enmendado a proposito: un plan corregido a posteriori para que parezca acertado deja de
+> servir para lo unico que sirve un plan viejo, que es entender por que se decidio lo que se
+> decidio. Para saber que hace el sistema **hoy**: [`../docs/ESPECIFICACIONES.md`](../docs/ESPECIFICACIONES.md).
+
+
 ---
 
 > ## ⚠ NOTA DE ADAPTACIÓN — Gov Gen AI Platform (actualizado 2026-04-22)

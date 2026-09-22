@@ -17,7 +17,27 @@ manuales— vive en `docs/`.
 | `PLAN_TDD_DETALLADO.md` | Prompts detallados de las fases iniciales. |
 | `Plan_TDD_Fase1.md` | **El índice** de la Fase 1 — hub informativo, personalización y redacción. Es el plan en curso. Eran 27.449 líneas en un fichero; ahora cada bloque y cada fase viven en `fase1/`, con su número de orden delante. |
 | `fase1/` | Un fichero por bloque o fase: los prompts, sus tests mínimos y su verificación. Es lo que se lee para implementar, y lo que se puede revisar en un *pull request*. |
-| `Plan_TDD_Fase2.md`, `Plan_TDD_Fase3.md` | Fases posteriores, aún sin abrir. |
+| `Plan_TDD_Fase2.md`, `Plan_TDD_Fase3.md` | Fases posteriores, aún sin abrir. **Escritas antes de decisiones que después se revirtieron**: ver el aviso de abajo. |
+
+## Si llegas de fuera: esto es un registro, no una descripción
+
+Los documentos de plan están escritos **en futuro**, y algunos describen caminos que se
+recorrieron a medias o no se recorrieron. Los dos mayores:
+
+- **El cliente NiceGUI**, que se retiró entero el 2026-09-04 junto con 574 ficheros. `Plan_TDD_Fase2.md`
+  se titula «Automatización, Thin Client y Migración NiceGUI» y no queda nada de eso en el árbol.
+- **Docling**, retirado en el bloque EXT.3. Al corpus sólo entra `.md` conforme a
+  [`../docs/CONTRATO_MD_CORPUS.md`](../docs/CONTRATO_MD_CORPUS.md), y el contexto se extrae con
+  pdfplumber.
+
+Son **473 menciones repartidas en 27 ficheros**, y no se han corregido a propósito. Un plan
+enmendado a posteriori para que parezca acertado deja de servir para lo único que sirve un plan
+viejo: entender por qué se decidió lo que se decidió, y qué costó averiguar que estaba mal. Que
+`HISTORIAL.md` hable de NiceGUI es correcto, porque pasó.
+
+**Lo que NO debes hacer es leer un plan como si describiera el sistema de hoy.** Para eso están
+[`../docs/ESPECIFICACIONES.md`](../docs/ESPECIFICACIONES.md) (qué garantiza), `../AGENTS.md` (dónde
+vive cada cosa) y el código.
 
 ## Cómo se usan
 

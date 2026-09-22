@@ -1,5 +1,16 @@
 ﻿# Plan TDD — Fase 2: Automatización, Thin Client y Migración NiceGUI
 
+> **Aviso de lectura — esto es un plan, no una descripcion del sistema.**
+>
+> Escrito en futuro y **antes de decisiones que despues se revirtieron**. Las dos mayores: el
+> cliente NiceGUI, retirado entero el 2026-09-04 con 574 ficheros, y Docling, retirado en el
+> bloque EXT.3. Lo que este documento da por hecho puede no existir en el arbol.
+>
+> No se ha enmendado a proposito: un plan corregido a posteriori para que parezca acertado deja de
+> servir para lo unico que sirve un plan viejo, que es entender por que se decidio lo que se
+> decidio. Para saber que hace el sistema **hoy**: [`../docs/ESPECIFICACIONES.md`](../docs/ESPECIFICACIONES.md).
+
+
 > Actualizado: 2026-05-04. Generado dividiendo `PLAN_TDD_DETALLADO.md` en tres archivos por fase funcional.
 
 ## Propósito
