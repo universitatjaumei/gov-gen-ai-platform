@@ -78,6 +78,14 @@ services:
       # ponerla, y hasta la issue #41 no había por dónde: la configuración no secreta entra
       # por aquí, y el `.env.runtime` sólo lleva lo que hay en `secretos.tsv`.
       SOURCE_URL: ${SOURCE_URL:-}
+      # Login con la cuenta institucional de Google (issue #95). **El identificador y el secreto
+      # NO están aquí**: ésos son credenciales y entran por `.env.runtime` desde `secretos.tsv`.
+      # Estas dos son configuración no secreta y por eso van por esta lista.
+      #
+      # Vacías a propósito por omisión: sin las cuatro piezas el login se apaga entero y la ruta
+      # responde 404. Un login a medio configurar es peor que ninguno.
+      GOOGLE_OAUTH_ALLOWED_DOMAIN: ${GOOGLE_OAUTH_ALLOWED_DOMAIN:-}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-}
     volumes:
       - /opt/govgenai/cloudsql:/cloudsql:ro
     depends_on:
