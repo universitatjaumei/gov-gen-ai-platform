@@ -194,7 +194,16 @@ jobs:
             docker push "$BASE/$nombre:$etiqueta"
           }
 
-          construir_si_falta app . Dockerfile "$SHA$SUFIJO" --build-arg "EXTRAS_APP=$EXTRAS_APP"
+          # La versión sale del fichero `VERSION` de la raíz, que es la fuente única, y se
+          # estampa en la imagen. Sin esto la imagen de producción se construiría con el defecto
+          # y **mentiría sobre su versión**, que es peor que no llevarla: quien reporte un fallo
+          # diría un número que no corresponde a lo que ejecuta.
+          VERSION_DEL_DESPLIEGUE="$(tr -d '[:space:]' < VERSION)"
+          echo "  versión: $VERSION_DEL_DESPLIEGUE"
+
+          construir_si_falta app . Dockerfile "$SHA$SUFIJO" \
+            --build-arg "EXTRAS_APP=$EXTRAS_APP" \
+            --build-arg "GOVGENAI_VERSION=$VERSION_DEL_DESPLIEGUE"
           construir_si_falta frontend ./frontend ./frontend/Dockerfile "$SHA"
           construir_si_falta sandbox ./services/script_sandbox ./services/script_sandbox/Dockerfile "$SHA"
           construir_si_falta mcp ./mcp_server ./mcp_server/Dockerfile "$SHA"

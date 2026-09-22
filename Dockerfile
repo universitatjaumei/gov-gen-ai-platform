@@ -95,6 +95,16 @@ ENV PYTHONUNBUFFERED=1
 # necesite la imagen en modo desarrollo lo sobrescribe al arrancarla, que es un acto explícito.
 ENV ENVIRONMENT=production
 
+# La versión del despliegue, estampada al construir. `deploy.yml` la pasa con `--build-arg`
+# leyéndola del fichero `VERSION` de la raíz, que es la fuente única.
+#
+# El ARG tiene que volcarse a ENV: un ARG sólo vive durante la construcción, así que declararlo
+# sin esta línea dejaría la imagen sin saber qué versión es, y el endpoint diría «desconocida».
+# El defecto no es una versión plausible a propósito — si aparece en un informe de fallo, lo que
+# hay que arreglar es el empaquetado y no el número.
+ARG GOVGENAI_VERSION="0.0.0+desconocida"
+ENV GOVGENAI_VERSION=${GOVGENAI_VERSION}
+
 # hub_themes_router crea data/themes (ruta relativa a WORKDIR) al importarse;
 # /app es de root hasta aquí, así que appuser necesita este directorio ya
 # creado y con permisos antes de arrancar (si no, PermissionError en el import).

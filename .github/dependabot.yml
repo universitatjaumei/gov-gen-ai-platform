@@ -43,6 +43,21 @@
 # nada y no avisa, que es la peor forma de fallar.
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 
+#
+# ─── CADENCIA: MENSUAL, y por que se bajo de semanal (2026-09-22) ─────────────────────────────
+#
+# Semanal tenia sentido mientras se recuperaban cuatro meses de atraso. Pasado eso, semanal por
+# siete ecosistemas es una cola que no se vacia nunca, y una lista que no se vacia se acaba
+# aprobando en bloque — que es justo lo que estos grupos venian a evitar.
+#
+# **Esto NO toca las actualizaciones de seguridad.** Son otro canal: las abre GitHub contra la
+# rama por omision en cuanto hay aviso, y siguen siendo inmediatas. Son dos relojes para dos
+# urgencias distintas, y confundirlos seria retrasar un arreglo de seguridad un mes.
+#
+# La cadencia de las *releases* NO esta comprometida: el proyecto es experimental y no promete
+# ni soporte ni fechas (README, «Que no acompana a la publicacion»). Se etiqueta por
+# acontecimiento. Ver `docs/VERSIONADO.md`.
+
 version: 2
 
 updates:
@@ -51,8 +66,7 @@ updates:
     directory: /server
     target-branch: desarrollo
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     open-pull-requests-limit: 5
     groups:
       servidor:
@@ -69,8 +83,7 @@ updates:
     directory: /mcp_server
     target-branch: desarrollo
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     open-pull-requests-limit: 3
     groups:
       mcp:
@@ -83,8 +96,7 @@ updates:
     directory: /services/script_sandbox
     target-branch: desarrollo
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     open-pull-requests-limit: 3
     groups:
       sandbox:
@@ -97,8 +109,7 @@ updates:
     directory: /shared
     target-branch: desarrollo
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     open-pull-requests-limit: 3
     groups:
       compartido:
@@ -116,8 +127,7 @@ updates:
     directory: /frontend
     target-branch: desarrollo
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     open-pull-requests-limit: 5
     groups:
       lo-que-se-sirve:
@@ -164,8 +174,7 @@ updates:
     directory: /
     target-branch: desarrollo
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     open-pull-requests-limit: 5
     groups:
       acciones:
@@ -187,8 +196,7 @@ updates:
       - /services/script_sandbox
     target-branch: desarrollo
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     open-pull-requests-limit: 4
     groups:
       imagenes-base:

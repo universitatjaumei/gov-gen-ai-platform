@@ -7,7 +7,7 @@
     "type": "git",
     "url": "https://github.com/universitatjaumei/gov-gen-ai-platform"
   },
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
