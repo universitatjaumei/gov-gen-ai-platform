@@ -362,6 +362,29 @@ jobs:
             --command "cd ${DESTINO} && sudo docker compose --env-file ${DESTINO}/.env.despliegue \
               -f ${DESTINO}/docker-compose.vm.yml --profile migrate run --rm --entrypoint alembic migrate current"
 
+      # Sembrar el catálogo de plantillas, que hasta el 2026-09-22 **no se hacía nunca**.
+      #
+      # `bootstrap` exigía `--superadmin-email` y `--superadmin-password` para cualquier trabajo,
+      # y en producción esas variables no existen: la siembra sólo podía hacerla una persona por
+      # SSH aportando credenciales a mano, así que no se hacía. Producción llevaba desde el
+      # primer despliegue con **cero plantillas** sin que nada lo dijera.
+      #
+      # `--solo-demo` no pide credenciales —el catálogo se firma con `AUTOR_DEL_SEMBRADO`, no con
+      # la cuenta del superadministrador— y es idempotente, así que puede correr en cada
+      # despliegue (issue #97).
+      #
+      # Va **después de las migraciones y antes de cambiar la imagen**, por la misma razón que
+      # ellas: si falla, el despliegue se detiene aquí y la imagen vieja sigue sirviendo. Y con
+      # la salida en el log, porque una siembra silenciosa que no siembra nada es exactamente lo
+      # que nos tuvo meses con el catálogo vacío.
+      - name: Sembrar el catálogo de plantillas (idempotente)
+        run: |
+          set -euo pipefail
+          gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap --quiet \
+            --command "cd ${DESTINO} && sudo docker compose --env-file ${DESTINO}/.env.despliegue \
+              -f ${DESTINO}/docker-compose.vm.yml --profile migrate run --rm \
+              --entrypoint python migrate -m server.app.scripts.bootstrap --solo-demo"
+
       - name: Desplegar
         run: |
           gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap --quiet \
