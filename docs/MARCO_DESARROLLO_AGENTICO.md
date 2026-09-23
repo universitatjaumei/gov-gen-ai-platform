@@ -792,6 +792,65 @@ entera, con su reinicio y su aviso de vigilancia. **[n=1]** La regla que lo cier
 fichero de despliegue no lleva la rama de desarrollo en su disparador**. Si algún día aparece ahí,
 la separación desaparece.
 
+### 7.4 Los avisos que emite la forja también son una puerta
+
+Las puertas de §7.1 miran el árbol: el código, los *locks*, el contrato. Pero una forja moderna
+—GitHub, GitLab— emite además avisos **que no están en el árbol** y que ninguna puerta local puede
+ver: alertas de vulnerabilidad sobre las dependencias, *pull requests* de actualización abiertas
+por un robot, y revisiones de código automáticas.
+
+Esos avisos tienen un problema que no tienen los tests: **no fallan**. Se acumulan en una pestaña,
+y revisarlos depende de que alguien se acuerde. En este proyecto la frase que lo describió fue
+literal: «lo voy viendo y te voy diciendo, pero si se me pasa o se me olvida se queda por
+revisar». Es la definición de un control que existe y no actúa, y la misma lección que §6: **se
+cumple donde está mecanizado y se escapa donde sólo estaba escrito**. **[n=1]**
+
+**Lo que hay que entender antes de mecanizarlo es dónde se calcula cada aviso**, porque de ahí sale
+el diseño y no de la preferencia por bloquear pronto:
+
+| Aviso | Contra qué se calcula | Dónde puede exigirse |
+|---|---|---|
+| Alertas de vulnerabilidad | La **rama por omisión** | Al mezclar a la principal, no antes |
+| Revisión automática de código | La *pull request* | Antes de mezclar |
+| *Pull requests* de actualización | Nada; simplemente existen | En ningún sitio: se informan |
+
+La primera fila es la que sorprende. Como la alerta se calcula contra la rama por omisión, **un
+arreglo que vive en la rama de desarrollo no la cierra**: seguirá abierta hasta que se mezcle. Una
+puerta que bloqueara la *pull request* por «hay alertas abiertas» dejaría roja precisamente a la
+que las corrige — y un punto muerto se resuelve siempre igual, desactivando la puerta. Por eso las
+alertas se exigen **decididas al desplegar**, que es el primer instante en que la foto es cierta.
+
+La tercera fila es la tentación contraria: bloquear por una actualización pendiente parece
+riguroso y sólo enseña a saltarse la puerta. Una actualización que espera no es un defecto. Lo que
+hace falta es que esté **a la vista en el mismo sitio y el mismo momento** en que se mira todo lo
+demás.
+
+**Y hay un detalle de temporización que decide si el control sirve o es decorativo.** La revisión
+automática comenta **cuando termina**, que suele ser después de que la integración continua haya
+pasado. Un control que sólo corriera con el *push* daría verde en el único instante en que todavía
+no había nada que ver, y no volvería a ejecutarse jamás. Tiene que escuchar también los eventos de
+revisión, de modo que cada comentario que llega vuelva a calcular el estado. **[n=1]**
+
+Tres reglas más, cada una contra un modo de degradarse:
+
+- **Una sola lista de aceptaciones.** Un aviso que no se puede corregir —porque no hay versión
+  corregida— se acepta por escrito, con motivo, firma y **caducidad**, en el mismo fichero que ya
+  usa la puerta de dependencias (§7.1). Inventar una segunda lista para los avisos de la forja
+  deja dos fuentes que se contradicen, y la que caduca es la que pierde.
+- **Resolver el hilo es el acto que cuenta.** Un comentario de revisión automática puede ser
+  cierto o falso —en este proyecto los ha habido de los dos—, así que lo que se exige no es
+  obedecerlo sino **decidir sobre él**. Cerrar el hilo es lo que separa «lo he leído y decido que
+  no» de «no lo he visto», y es lo único de las dos cosas que se puede comprobar.
+- **«No pude mirar» no es «no hay nada».** Si la interfaz de la forja responde con un error de
+  permisos, una llamada sin comprobar deja la lista vacía y el control informa de cero avisos
+  **en verde**. Es exactamente la trampa de §6.3, y aquí es más fácil de cometer porque el error
+  llega de fuera. La comprobación del error tiene que poner el paso en rojo, no escribir una
+  advertencia en el registro.
+
+**Lo generalizable**: donde una herramienta externa emite avisos que nadie está obligado a mirar,
+el marco exige una puerta que los mire por ti, colocada en el momento en que el dato ya es cierto,
+y una lista escrita —con caducidad— para lo que se decide no arreglar.
+
 ---
 
 ## 8. Apertura del repositorio

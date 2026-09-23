@@ -39,8 +39,8 @@ documento suelto.
 La hoja de ruta pública, por temas y con estado y enlazada a las *issues* y a los hitos, está en
 [`ROADMAP.md`](ROADMAP.md), por temas y con estado.
 
-Prevé dos líneas más, y de las dos falta código. Las dos se replantearon el 2026-09-23, y lo que
-cambió no es el plazo sino el alcance:
+Prevé dos líneas más, y de las dos falta código. A las dos las define tanto lo que harán como lo
+que deliberadamente no harán:
 
 - **Automatización gobernada.** No un cliente de ejecución local: los agentes de propósito general
   ya ejecutan en el puesto de trabajo mejor de lo que lo haría un cliente propio. Lo que falta es
@@ -163,11 +163,9 @@ planificacion/          plan de desarrollo, cursor del trabajo e historial
 pruebas_manuales/       guiones .bat de lo que sólo puede juzgar una persona
 ```
 
-**No hay proyecto Python en la raíz.** Había uno —se llamaba `automatia`, declaraba sesenta
-dependencias empezando por `nicegui==3.4.1` y arrastraba un `uv.lock` de 1,6 MB— y **NIC.4 lo
-retiró el 2026-09-04**: no lo usaba ni CI, ni el despliegue, ni el `Dockerfile`, que trabajan con
-`server/pyproject.toml`. Los proyectos uv son cuatro: `server/`, `shared/`, `mcp_server/` y
-`services/script_sandbox/`. Cada comando se lanza con `--project` o desde su directorio.
+**No hay proyecto Python en la raíz.** Los proyectos uv son cuatro —`server/`, `shared/`,
+`mcp_server/` y `services/script_sandbox/`—, y cada comando se lanza con `--project` o desde su
+directorio. CI, el despliegue y el `Dockerfile` trabajan con `server/pyproject.toml`.
 
 ## Documentación
 
@@ -177,9 +175,7 @@ retiró el 2026-09-04**: no lo usaba ni CI, ni el despliegue, ni el `Dockerfile`
 - `docs/PRESENTACION_PROYECTO.md` — qué hace la plataforma, qué está construido y verificado, y
   qué está previsto. Es el documento para leer primero si vienes de fuera.
 - `docs/Arquitectura.md` — cómo está construida: los módulos que existen, las dos fronteras
-  —cloud/edge y organización—, los datos, la recuperación y el despliegue. Reescrito el
-  2026-09-19; hasta entonces describía el estado objetivo de antes de integrar los dos proyectos
-  de origen.
+  —cloud/edge y organización—, los datos, la recuperación y el despliegue.
 - `docs/INSTALACION.md` — de clonar a un sistema que responde, con la elección de modelos
   locales o por API y lo que cuesta cada una. Amplía el «Arrancar en local» de aquí arriba.
 - `docs/GUIA_DE_USO.md` — qué hace cada rol con la plataforma ya instalada: del alta de una
@@ -214,16 +210,13 @@ Numerar sin prometer soporte no es una contradicción: el número es **descripci
 Sirve para que quien instale sepa qué ejecuta y para que un informe de fallo sea comprobable. Lo
 que la Universitat hace y lo que no está más abajo, en «Qué no acompaña a la publicación».
 
-En desarrollo activo, y **la migración desde la aplicación NiceGUI original terminó el
-2026-09-04**: `client_app/` y `_legacy_nicegui/` se retiraron completos, 574 ficheros, porque
-llevaban tiempo sin compilar y nada en producción dependía de ellos. Todo lo que queda en el árbol
-es código vivo.
+Está en desarrollo activo, y todo lo que queda en el árbol es código vivo.
 
-La contrapartida honesta es que **la plataforma no ejecuta nada en la máquina de quien la usa**: no
-hay agente RPA, ni vigilancia de carpetas, correo o web, ni programador de flujos locales. Es
-la frontera que describe «Tres módulos»: trabajo que arranca con un despliegue real,
-y hoy sin código aquí. El mapa de lo que hubo, fichero a fichero, está en
-[`docs/INVENTARIO_RETIRADA_LEGACY.md`](docs/INVENTARIO_RETIRADA_LEGACY.md).
+Conviene conocer un límite antes de planificar sobre ella: **la plataforma no ejecuta nada en la
+máquina de quien la usa**. No hay agente RPA, ni vigilancia de carpetas, correo o web, ni
+programador de flujos locales, y no está previsto que los haya: los agentes de propósito general
+ya ejecutan en el puesto de trabajo, y lo que esta plataforma aporta es la gobernanza de lo que
+hacen —registro, anonimización, evidencia de supervisión—.
 
 ## Gobernanza: un principal y tantos forks como organizaciones
 
@@ -283,11 +276,10 @@ Este programa se distribuye bajo la **GNU Affero General Public License v3.0 o p
 licencia permite copiarla literalmente pero no alterarla, así que la procedencia y el propósito se
 declaran aquí y no dentro de ella.
 
-**Una sola licencia, y conviene decirlo porque la planificación previó otra cosa.** Hoy el
-programa se distribuye únicamente bajo AGPL, y lo que se contrata son **servicios**, no licencias.
-La planificación de enero de 2026 previó además una licencia dual comercial para *partners*: sigue
-siendo posible —la titularidad es de una sola persona jurídica— y **no se ha ejercido**. Si lees
-«dual-license» en un documento de planificación, es eso y no dos regímenes en vigor.
+**Una sola licencia.** El programa se distribuye únicamente bajo AGPL, y lo que se contrata son
+**servicios**, no licencias. Si lees «dual-license» en algún documento de `planificacion/`, es una
+posibilidad que la titularidad única permite y que **no se ha ejercido** — no un segundo régimen
+en vigor.
 
 Para quien tenga que decidir si su administración puede usar o desplegar esto, `docs/LICENCIA_ES.md`
 explica en español qué permite la licencia, qué obliga, **qué no obliga** y qué significa para un
@@ -334,20 +326,16 @@ también lo que impide que una mejora pagada con fondos públicos quede cerrada.
 
 ### La obligación del §13 sobre cada despliegue
 
-**Hecho, y conviene decir de qué partes consta.** El servidor lo publica: `GET
-/api/v1/instancia` devuelve el `SOURCE_URL` que configure quien despliega, es **público y sin
-credencial** a propósito —la obligación es frente a quien usa el programa, incluida la ciudadanía
-que escribe en el widget— y vacío significa «no hay enlace», que es lo correcto para quien
-despliega sin modificar (AIS.6, con su test). **Y se ve**: el componente `EnlaceAlFuente` lo
-pinta en el pie del panel y en el pie del widget embebido, con tests de los dos caminos —con
-enlace y sin él—.
+**Está cumplida, y consta de dos piezas.** El servidor lo publica: `GET /api/v1/instancia`
+devuelve el `SOURCE_URL` que configure quien despliega, es **público y sin credencial** a
+propósito —la obligación es frente a quien usa el programa, incluida la ciudadanía que escribe en
+el widget— y vacío significa «no hay enlace», que es lo correcto para quien despliega sin
+modificar. **Y se ve**: el componente `EnlaceAlFuente` lo pinta en el pie del panel y en el pie
+del widget embebido, con tests de los dos caminos —con enlace y sin él—.
 
-Esta sección dijo durante un tiempo que faltaba enseñarlo, cuando ya se enseñaba. Es el error
-que más caro sale en un documento de licencia: afirmaba que este despliegue **incumple** una
-obligación que cumple. Lo corrigió la issue #41, que además destapó lo que sí faltaba y nadie
-había mirado: **no había forma de configurar la variable en el despliegue real**. El endpoint de
-producción devolvía vacío no porque se hubiera decidido, sino porque `SOURCE_URL` no llegaba al
-contenedor. Ahora entra por `deploy/vm/docker-compose.vm.yml` desde una variable del repositorio.
+`SOURCE_URL` llega al contenedor desde una variable del repositorio, por
+`deploy/vm/docker-compose.vm.yml`. Ese paso es la parte que se olvida: sin él, el endpoint
+responde vacío siempre y nada falla, que es el modo silencioso de incumplir esta obligación.
 
 Las tres condiciones, que no son opcionales:
 
