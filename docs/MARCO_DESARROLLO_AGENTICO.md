@@ -4,9 +4,10 @@
 > que otros proyectos del Teclab puedan adoptarlo. No es una propuesta teórica: es lo que ha quedado
 > tras varios meses de ensayo y error en un proyecto real, contrastado con lo que hay publicado.
 >
-> **Escrito el 2026-09-03, revisado el 2026-09-23** al migrar el plan de una lista de prompts a
-> *issues* y una hoja de ruta (§4.7). **Ámbito**: desarrollo de software con agentes de
-> programación bajo supervisión humana.
+> **Escrito el 2026-09-03, revisado el 2026-09-23**, cuando el plan **empezó** a migrar de una
+> lista de prompts a *issues* y una hoja de ruta. La migración está a medias a propósito y §4.7
+> dice exactamente por dónde va. **Ámbito**: desarrollo de software con agentes de programación
+> bajo supervisión humana.
 >
 > **Quien dirige este desarrollo es jurista y no sabe programar**, y eso es la condición del
 > experimento y no un dato de autoría: §1.5.
@@ -40,7 +41,7 @@ equipo decidir qué adoptar tal cual y qué tratar como hipótesis.
 
 | Término | Qué significa aquí |
 |---|---|
-| **Prompt** | Una instrucción de trabajo para el agente, escrita con sus tests y su criterio de cierre. Fue la unidad mínima del plan; hoy ese papel lo hace una *issue* (§4.7) |
+| **Prompt** | Una instrucción de trabajo para el agente, escrita con sus tests y su criterio de cierre. Es la unidad mínima del plan; en el trabajo nuevo ese papel lo hace una *issue*, y los dos conviven (§4.7) |
 | **Bloque** | Un conjunto de pasos que entrega algo utilizable. Es la unidad de interacción con el humano, y lo sigue siendo con *issues* |
 | **Cursor** | El documento que dice en qué bloque y en qué paso está el desarrollo ahora mismo |
 | **Guardarraíl** | Un test de la suite que falla cuando un documento del proyecto deja de ser verdad |
@@ -369,11 +370,11 @@ confundido. **[n=1]**
 
 ### 4.3 El plan: especificaciones en forma de prompts TDD
 
-> **Esto fue la primera forma del plan, y ya no es la única.** El trabajo pendiente de este
-> proyecto vive hoy en *issues* agrupadas en hitos; qué lo cambió y qué se conservó está en §4.7.
-> El apartado se queda entero porque **lo que describe sigue valiendo**: es el andamiaje que
-> permite dirigir un desarrollo sin saber programar, y los tres detalles del final son
-> transferibles a una *issue* tal cual.
+> **Ésta fue la primera forma del plan, y ya no es la única.** El trabajo **nuevo** de este
+> proyecto vive en *issues* agrupadas en hitos, mientras la Fase 1 sigue ejecutándose con sus
+> prompts: los dos conviven, y §4.7 dice por qué. El apartado se queda entero porque **lo que
+> describe sigue valiendo** —es el andamiaje que permite dirigir un desarrollo sin saber
+> programar— y los tres detalles del final son transferibles a una *issue* tal cual.
 
 El trabajo pendiente se escribe como **instrucciones ejecutables**, agrupadas en bloques. Cada
 prompt lleva su objetivo, sus tests mínimos enumerados y su verificación de cierre. El ejemplo es el
@@ -501,19 +502,32 @@ La forma coincide: hay convergencia real en la industria hacia «principios → 
 conviene defender ante otro equipo es **TDD obligatorio**, porque es la que hace que el resto sea
 comprobable y no una declaración de intenciones.
 
-### 4.7 El plan cambió de forma: de lista de prompts a *issues*
+### 4.7 El plan está cambiando de forma: de lista de prompts a *issues*
 
 Este apartado existe porque el documento describiría un método que el proyecto ya no sigue del
 todo. Y porque **la transición es probablemente lo más útil que hay aquí para otro equipo**: no la
 foto final, sino qué la disparó y qué se conservó al cruzarla. **[n=1]**
 
+**Y está a medias, a propósito**, que es el dato que más conviene no maquillar:
+
+| Plan | Estado a 2026-09-23 |
+|---|---|
+| `Plan_TDD_Fase1.md` | **Sigue en prompts**, y es el único cursor vivo del proyecto |
+| `Plan_Contrato_OpenAPI.md` | Completo; no tiene cursor |
+| Fases 2 y 3 | **Cerradas y sustituidas** por `ROADMAP.md` y los hitos de *issues*. No se ejecutarán como estaban escritas |
+
+Así que lo honesto no es «migramos», sino **«migramos lo que aún no estaba en marcha, y dejamos
+correr lo que sí»**. Reescribir la Fase 1 en *issues* sólo por uniformidad habría costado trabajo
+sin comprar garantía, que es la misma razón por la que §11.3 dice qué no copiar.
+
 **Lo que había.** Un documento de planificación por fase, partido en un fichero por bloque, con los
 prompts TDD que describe §4.3. El cursor decía en qué prompt estábamos. Funcionó durante meses y
 construyó casi todo lo que hoy está en producción.
 
-**Lo que hay.** Las *issues* de GitHub agrupadas en hitos, y una hoja de ruta pública por temas.
-`planificacion/` sigue en el repositorio pero ya **no dirige**: es registro, y lleva su propio
-aviso de lectura para que nadie lo confunda con una descripción del sistema de hoy.
+**Lo que hay para lo nuevo.** Las *issues* de GitHub agrupadas en hitos, y una hoja de ruta pública
+por temas. Se ejecutan **igual que un prompt** —RED → GREEN → REFACTOR, verificaciones de cierre,
+un commit firmado por *issue*—; lo que cambia es dónde está escrito el alcance, y que al cerrar se
+cierra la *issue* en vez de mover un cursor.
 
 **Qué lo disparó, y son tres cosas que conviene distinguir:**
 
@@ -543,7 +557,7 @@ del plan:
 | Los **guardarraíles** (§6) | — |
 | El **historial** (§4.4) | — |
 | El **registro de decisiones** (§4.5) | — |
-| El **cursor** (§4.4) | Pierde peso: lo que estaba en él lo dicen ahora el estado de las *issues* y los hitos |
+| El **cursor** (§4.4) | Sigue vivo para la Fase 1; para lo nuevo, su papel lo hacen el estado de las *issues* y los hitos |
 
 **La lección, dicha como hipótesis y no como resultado.** El andamiaje que necesita quien empieza
 —prompts escritos con sus tests enumerados— **no es el mismo que necesita a los seis meses**, y
@@ -552,8 +566,9 @@ si al migrar a *issues* se hubieran perdido los tests escalonados o los guardarr
 transición habría sido un retroceso disfrazado de modernización.
 
 **Y una consecuencia mecánica que costó once *issues* abiertas.** Con el plan en un fichero, un
-paso cerrado se marcaba a mano. Con *issues*, cerrar es automático **sólo si el commit lleva la
-palabra que GitHub entiende** (`Closes #N`); un asunto `fix(#N):` no cierra nada. Durante un tiempo
+paso cerrado se marcaba a mano. Con *issues*, cerrar es automático **sólo si aparece una palabra de
+cierre** —`Closes`, `Fixes` o `Resolves` seguidas de `#N`— **en el cuerpo del commit o en el de la
+*pull request***; un asunto `fix(#N):` no cierra nada. Durante un tiempo
 la lista de *issues* anunció defectos ya resueltos y desplegados, que es justo lo primero que mira
 quien llega. Lo arregla un guardarraíl en la integración continua, y es un buen ejemplo de la regla
 general: **al cambiar de mecanismo hay que preguntarse qué hacía el anterior que el nuevo no hace
@@ -565,8 +580,8 @@ solo**.
 
 ### 5.1 El bloque es la unidad de interacción
 
-Un bloque es un conjunto de pasos que entrega algo utilizable —prompts al principio, *issues* de un
-hito hoy (§4.7); el concepto no cambió al cambiar el artefacto—. Una vez arrancado, el agente **no
+Un bloque es un conjunto de pasos que entrega algo utilizable —prompts en la Fase 1, *issues* de un
+hito en lo nuevo (§4.7); el concepto no cambia con el artefacto—. Una vez arrancado, el agente **no
 informa hasta cerrarlo** y no pide confirmación entre pasos.
 
 Esto es lo que hace rentable el método, y encaja con el reparto que mide Anthropic: el humano en la

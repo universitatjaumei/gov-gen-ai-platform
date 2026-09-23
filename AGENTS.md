@@ -39,8 +39,8 @@ verificación en navegador si toca UI.
 (`git commit -s`), sin `Co-Authored-By` y **sin push**. Es lo que hace reversible un bloque largo:
 si el prompt 5 rompe lo que hizo el 3, hay un punto exacto al que volver.
 
-**Si el commit resuelve una issue, su cuerpo lleva `Closes #N`.** Un asunto `fix(#92):` no la
-cierra, así que se acumulan issues abiertas ya resueltas en producción — pasó con once. Lo
+**Si el commit resuelve una issue, lleva `Closes #N`** en su cuerpo o en el de la PR. Un asunto
+`fix(#92):` no cierra nada, y se acumulan issues resueltas y abiertas: pasó con once. Lo
 comprueba CI.
 
 ### Se trabaja en `desarrollo`; `main` es para desplegar
