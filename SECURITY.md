@@ -7,8 +7,16 @@ comuniquen **en privado primero**.
 
 ## Cómo comunicar un fallo
 
-Escribe a **fabra@uji.es** con el asunto `[SEGURIDAD]`. Si prefieres cifrar, dilo en un primer
-mensaje sin detalles y se acuerda la vía.
+**La vía preferida es el aviso privado de GitHub**, en la pestaña *Security* del repositorio:
+
+👉 **[Report a vulnerability](https://github.com/universitatjaumei/gov-gen-ai-platform/security/advisories/new)**
+
+Es privado entre quien avisa y quien mantiene, queda asociado al repositorio en vez de a un buzón,
+y desemboca en el aviso público que hay que publicar al corregirlo. Que no dependa de una persona
+concreta es justamente lo que se busca: un correo se pierde cuando alguien cambia de puesto.
+
+Si prefieres el correo, o el aviso de GitHub no te sirve, escribe a **fabra@uji.es** con el asunto
+`[SEGURIDAD]`. Si quieres cifrar, dilo en un primer mensaje sin detalles y se acuerda la vía.
 
 **No abras un issue público** para un fallo explotable. Un issue es visible para cualquiera,
 incluidos los despliegues que todavía no han actualizado, y convierte el aviso en instrucciones.
@@ -38,9 +46,10 @@ Se sigue divulgación coordinada:
 
 1. Se acuerda contigo una fecha de publicación, normalmente **90 días** desde el aviso o antes si
    ya hay corrección disponible.
-2. Se publica el arreglo y, con él, una nota que describa el fallo y a partir de qué versión está
-   corregido — porque **quien despliega necesita saber si le afecta**, y sin esa nota no puede
-   decidir si actualizar corre prisa.
+2. Se publica el arreglo y, con él, un **aviso de seguridad** en la pestaña *Security* del
+   repositorio, que describa el fallo y a partir de qué versión está corregido — porque **quien
+   despliega necesita saber si le afecta**, y sin esa nota no puede decidir si actualizar corre
+   prisa. Publicado ahí, además, llega a quien tenga un *fork* aunque no siga el proyecto.
 3. Se te acredita por nombre si quieres. Dilo, y con qué nombre.
 
 Si el fallo ya está siendo explotado o es público, se acelera todo y se avisa cuanto antes.
