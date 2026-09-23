@@ -828,8 +828,26 @@ demás.
 **Y hay un detalle de temporización que decide si el control sirve o es decorativo.** La revisión
 automática comenta **cuando termina**, que suele ser después de que la integración continua haya
 pasado. Un control que sólo corriera con el *push* daría verde en el único instante en que todavía
-no había nada que ver, y no volvería a ejecutarse jamás. Tiene que escuchar también los eventos de
-revisión, de modo que cada comentario que llega vuelva a calcular el estado. **[n=1]**
+no había nada que ver.
+
+Lo natural sería que cada comentario y cada resolución volvieran a calcular el estado. **Este
+proyecto lo intentó y las dos vías estaban cerradas**, y merece contarse porque el resultado
+importa más que el detalle:
+
+- No había ningún evento que la automatización admitiera **para la resolución de un comentario**.
+  El que parecía obvio existe como aviso de la forja pero no como disparador, y ponerlo no dio un
+  error de validación: dejó el control **sin arrancar**.
+- Los eventos que **sí** existían llegaban retenidos a la espera de aprobación, porque quien los
+  emite es el propio revisor automático y cuenta como agente externo. El ajuste que lo gobierna
+  sólo era accesible con el repositorio ya público.
+
+De ahí sale la regla, que es lo generalizable: **antes de construir una puerta sobre una señal
+externa, comprueba que puedes reevaluarla después de actuar sobre ella.** Si puedes, es una
+vigilancia. Si no puedes, es una **foto** — sigue valiendo, porque una foto a tiempo es mejor que
+ninguna, pero entonces hay tres consecuencias que no son opcionales: se documenta como foto, el
+mensaje de error dice cómo volver a calcularla, y **no se convierte en comprobación obligatoria**.
+Una foto vieja que puede quedarse en rojo legítimamente acaba enseñando a usar la excepción de
+administrador, y eso desactiva de paso todas las demás puertas. **[n=1]**
 
 Tres reglas más, cada una contra un modo de degradarse:
 
@@ -993,6 +1011,32 @@ que se arreglara como **clase** en vez de como caso. La segunda vez ya existía 
 para evitarlo, y no se usó en los ocho sitios que lo necesitaban.
 
 Regla: **a la segunda vez, guardarraíl.** No a la tercera.
+
+### 9.8 La configuración inválida no se rechaza: se ignora
+
+Un test que falla dice qué pasa y dónde. Una **configuración** que la plataforma no entiende no
+suele hacer eso: la acepta y no hace nada, o crea una ejecución vacía que parece un fallo de otra
+cosa. No hay línea que señalar, y lo que se ve es ausencia — que es lo más difícil de notar.
+
+Ha pasado dos veces aquí, y en las dos el fichero se veía perfectamente bien:
+
+- Los **nombres de ecosistema** del robot de dependencias. Un nombre que la plataforma no reconoce
+  deja esa entrada sin efecto y **no avisa**: la única forma de saberlo es abrir el panel después
+  del primer envío y mirar si el robot hizo algo.
+- Un **disparador inexistente** en un flujo de automatización. Existía como aviso de la forja pero
+  no como disparador. En lugar de rechazar el fichero, la plataforma dejó el flujo sin arrancar:
+  una ejecución **sin ningún paso**, marcada como fallo, repetida en cada envío. El síntoma no
+  apuntaba a la causa.
+
+Lo que las dos comparten es que **un test local sí puede comprobarlas**, y por el mismo método:
+la lista de valores admitidos se escribe en el guardarraíl, con la fecha en que se copió de la
+documentación, y el test compara contra ella. No es elegante —hay que revisarla si la plataforma
+añade valores—, pero convierte un fallo silencioso en un rojo con el nombre delante, y el modo de
+fallo del propio guardarraíl es benigno: un falso rojo que se arregla añadiendo una línea.
+
+Regla: **si un fichero de configuración lo interpreta un tercero, el conjunto de valores válidos
+es parte del proyecto.** Escribirlo cuesta diez minutos; averiguarlo por ausencia costó un commit
+las dos veces.
 
 ---
 
