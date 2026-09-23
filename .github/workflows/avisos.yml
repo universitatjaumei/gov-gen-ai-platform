@@ -2,21 +2,40 @@
 #
 # El job `supply-chain` de `ci.yml` ya audita los cinco locks en cada commit y bloquea, con
 # `avisos_aceptados.toml` como única puerta de salida. Lo que ese job **no puede** ver es lo que
-# no está en el árbol: las alertas de la pestaña Dependabot, las PR de actualización pendientes y
-# los informes de Copilot. Eso se quedaba por revisar cuando a alguien se le pasaba, y esto lo
+# no está en el árbol: las PR de actualización que abre Dependabot y los informes de la revisión
+# automática de código. Eso se quedaba por revisar cuando a alguien se le pasaba, y esto lo
 # mecaniza.
 #
-# ─── POR QUÉ LAS ALERTAS SE MIRAN DESPUÉS DE MEZCLAR Y NO ANTES ───────────────────────────────
+# ─── LO QUE ESTE WORKFLOW **NO** HACE, Y POR QUÉ ──────────────────────────────────────────────
 #
-# Dependabot calcula sus alertas contra la **rama por omisión**, `main`. Un arreglo que vive en
-# `desarrollo` no las cierra: siguen abiertas hasta que se mezclan. Una puerta que bloqueara la PR
-# por «hay alertas abiertas» dejaría roja justamente a la PR que las corrige, y un punto muerto se
-# resuelve siempre igual: desactivando la puerta. Así que el reparto sigue a la física del dato.
+# Aquí hubo un tercer control: reconciliar las **alertas de la pestaña Dependabot** con las
+# decisiones escritas en `avisos_aceptados.toml`, de modo que ninguna alerta se quedara abierta
+# sin que alguien la hubiera decidido. Se construyó, se estrenó, y se retiró el 2026-09-23. Las
+# tres cosas que lo explican, por orden:
 #
-#   · Antes de mezclar → lo que se puede calcular de la rama. Lo hace `supply-chain`; aquí se
-#     añade lo que también es pre-merge por naturaleza: que los informes de Copilot estén
-#     atendidos.
-#   · Al empujar a `main` (= al desplegar) → ninguna alerta puede quedar **sin decidir**.
+#  1. **El `GITHUB_TOKEN` de Actions no alcanza a las alertas de Dependabot.** No es cuestión de
+#     permisos del workflow: `security-events: read` cubre el análisis de código y los secretos,
+#     no esto. La primera ejecución real sobre `main` respondió «403 Resource not accessible by
+#     integration».
+#
+#  2. **La alternativa era un token propio**, de grano fino y con un solo permiso. Se pidió y
+#     quedó pendiente de aprobación de la organización. No se insistió, por dos razones que
+#     valen más que el control: no pedir una excepción a una política de credenciales que existe
+#     por algo, y **conservar que este repositorio no tenga ni un secreto** — hoy despliega con
+#     federación de identidad, sin claves que custodiar, rotar o revocar.
+#
+#  3. **Lo esencial no se pierde.** Las vulnerabilidades las sigue bloqueando `supply-chain` en
+#     cada commit, auditando los cinco locks sin ningún token. Lo que se pierde es la
+#     reconciliación con la pestaña: que una alerta pueda quedarse ahí sin decidir. Eso vuelve a
+#     depender de que alguien mire, y conviene no disimularlo.
+#
+# **Lo que hizo bien mientras existió**, y por lo que se cuenta aquí: comprobaba el error de la
+# llamada. Sin esa comprobación habría informado de **cero alertas en verde, para siempre**,
+# dando tranquilidad falsa sobre vulnerabilidades — el guardarraíl que pasa en el vacío, en su
+# peor versión. El 403 se supo porque el paso estaba escrito para no poder callárselo.
+#
+# Si algún día la organización admite tokens de grano fino, vuelve: está en el historial de git,
+# completo y con sus tests.
 #
 # ─── EL CHECK DE COPILOT ES UNA FOTO, NO UNA VIGILANCIA ───────────────────────────────────────
 #
@@ -42,15 +61,14 @@
 #
 # ─── LO QUE NO SE PUEDE OLVIDAR AL TOCAR ESTE FICHERO ─────────────────────────────────────────
 #
-# Que el paso distinga **«no pude mirar» de «no hay nada»**. Si la API responde 403, un `gh api`
-# sin comprobar deja la variable vacía y el job informa de cero alertas en verde. Este proyecto ya
-# se comió un guardarraíl que recorría un directorio inexistente y pasaba en verde. Lo vigila
+# Que cada paso distinga **«no pude mirar» de «no hay nada»**. Una llamada sin comprobar deja la
+# variable vacía y el job informa de cero en verde. Lo vigila
 # `server/tests/infra/test_los_avisos_de_github_se_revisan.py`.
 
 name: Avisos
 
 on:
-  # El despliegue. Es el primer instante en que la foto de las alertas es cierta.
+  # El despliegue: el momento en que se mira todo lo demás.
   push:
     branches: [main]
   # La puerta de mezcla, para los informes de Copilot.
@@ -59,122 +77,23 @@ on:
     types: [submitted]
   pull_request_review_comment:
     types: [created]
-  # Una alerta puede aparecer un martes sin que nadie toque el repositorio en dos semanas.
+  # Por si nadie toca el repositorio en dos semanas.
   schedule:
     - cron: "0 7 * * 1"
   workflow_dispatch:
 
-# Sólo lee avisos. No tiene por qué poder cambiar nada.
+# Sólo lee avisos. No tiene por qué poder cambiar nada, y no usa ningún secreto.
 permissions:
   contents: read
   pull-requests: read
-  security-events: read
 
 jobs:
-  alertas:
-    name: Ninguna alerta de Dependabot queda sin decidir
+  dependabot:
+    name: Las actualizaciones que esperan, a la vista
     if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-
-      - name: Las alertas abiertas están todas corregidas, descartadas o aceptadas
-        env:
-          # **El `GITHUB_TOKEN` de Actions NO alcanza a las alertas de Dependabot**, y no hay
-          # permiso que lo arregle: `security-events: read` cubre el análisis de código y los
-          # secretos, no esto. Lo dijo la primera ejecución real sobre `main`, con un
-          # «403 Resource not accessible by integration».
-          #
-          # Y lo dijo **porque el paso comprueba el error**. Sin esa comprobación habría
-          # informado de cero alertas en verde, para siempre, dando tranquilidad falsa sobre
-          # vulnerabilidades: el guardarraíl que pasa en el vacío, en su peor versión.
-          #
-          # `AVISOS_TOKEN` es un token propio de grano fino, acotado a este repositorio y con un
-          # solo permiso, `Dependabot alerts: read`. La caída a `github.token` está para que el
-          # workflow no se rompa si falta, pero entonces el paso falla con su 403 y lo dice: es
-          # una avería visible, no un apagado silencioso.
-          GH_TOKEN: ${{ secrets.AVISOS_TOKEN || github.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-
-          # El `if !` no es estilo: si la API responde 403 —el alcance del token de Actions sobre
-          # Dependabot no es igual en todos los repositorios— un `gh api` suelto deja la lista
-          # vacía y este paso diría «no hay alertas» en verde.
-          # `--paginate` no es cosmético: la API devuelve 100 como mucho, y una alerta sin decidir
-          # en la segunda página haría pasar este job en verde — el mismo falso negativo que la
-          # puerta existe para evitar, entrando por la puerta de al lado.
-          if ! ALERTAS="$(gh api --paginate "repos/$REPO/dependabot/alerts?state=open&per_page=100" --jq '.[] | [.security_advisory.ghsa_id, .dependency.package.ecosystem + "/" + .dependency.package.name, .security_advisory.severity, .dependency.scope, .html_url] | @tsv' 2>&1)"; then
-            echo "::error::No se han podido leer las alertas de Dependabot. Esto NO quiere decir que no haya."
-            echo "$ALERTAS"
-            echo ""
-            echo "Si es un 403, falta el secreto \`AVISOS_TOKEN\` o ha caducado. El"
-            echo "\`GITHUB_TOKEN\` de Actions NO alcanza a las alertas de Dependabot, y no hay"
-            echo "permiso de workflow que lo arregle. Hace falta un token de grano fino acotado"
-            echo "a este repositorio, con un solo permiso —\`Dependabot alerts: read\`— guardado"
-            echo "como secreto \`AVISOS_TOKEN\`. Dejarlo así convertiría esta puerta en un adorno."
-            exit 1
-          fi
-
-          # Los avisos que este repositorio ya decidió aceptar, con su motivo, su firma y su
-          # fecha de caducidad. Es el MISMO fichero que usa `supply-chain`: dos listas de
-          # exclusiones que se contradicen es peor que ninguna.
-          #
-          # **Y las vencidas no cuentan.** `test_dep7_las_aceptaciones_caducan.py` pone rojo
-          # cuando una caduca, pero corre con la suite, y este workflow corre además los lunes
-          # sin que nadie toque el repositorio: ahí, leer sólo el `id` daría por decidida una
-          # aceptación vencida. La caducidad es lo único que obliga a volver a mirar.
-          ACEPTADOS="$(python3 -c "
-          import datetime, pathlib, tomllib
-          t = pathlib.Path('avisos_aceptados.toml')
-          d = tomllib.loads(t.read_text(encoding='utf-8')) if t.is_file() else {}
-          hoy = datetime.date.today()
-          def vigente(a):
-              c = a.get('caduca')
-              if isinstance(c, datetime.datetime):
-                  c = c.date()
-              elif isinstance(c, str):
-                  c = datetime.date.fromisoformat(c)
-              return c is not None and c >= hoy
-          print('\n'.join(a['id'] for a in d.get('aviso', []) if a.get('id') and vigente(a)))
-          ")"
-
-          echo "## Alertas de Dependabot" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          if [ -z "$ALERTAS" ]; then
-            echo "Ninguna abierta." >> "$GITHUB_STEP_SUMMARY"
-            echo "ninguna alerta abierta"
-            exit 0
-          fi
-
-          echo "| Aviso | Paquete | Gravedad | Alcance | Decidido |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|---|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
-
-          SIN_DECIDIR=""
-          while IFS=$'\t' read -r ghsa paquete gravedad alcance url; do
-            [ -n "$ghsa" ] || continue
-            if printf '%s\n' "$ACEPTADOS" | grep -qxF "$ghsa"; then
-              decidido="aceptado en \`avisos_aceptados.toml\`"
-            else
-              decidido="**NO**"
-              SIN_DECIDIR="$SIN_DECIDIR $ghsa($paquete)"
-            fi
-            echo "| [$ghsa]($url) | $paquete | $gravedad | $alcance | $decidido |" >> "$GITHUB_STEP_SUMMARY"
-          done <<< "$ALERTAS"
-
-          if [ -n "$SIN_DECIDIR" ]; then
-            echo "::error::Hay alertas de Dependabot sin decidir:$SIN_DECIDIR"
-            echo ""
-            echo "Una alerta abierta tiene tres finales legítimos, y quedarse quieta no es ninguno:"
-            echo "  1. Se corrige subiendo el paquete."
-            echo "  2. Se descarta en GitHub con motivo, si el código vulnerable no se usa."
-            echo "  3. Se acepta en \`avisos_aceptados.toml\` con motivo, firma y caducidad."
-            exit 1
-          fi
-          echo "todas las alertas abiertas están decididas"
-
-      - name: Las PR de Dependabot que esperan (informa, no bloquea)
+      - name: Las PR de Dependabot pendientes
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -183,18 +102,21 @@ jobs:
 
           # `--limit` explícito: sin él son 30 y la lista se truncaría en silencio, que en un
           # resumen cuya única función es «estén a la vista» sería peor que no mostrarlo.
+          #
+          # Y el `if !`, porque un fallo tragado aquí se lee exactamente igual que «no hay nada
+          # pendiente», que es la única afirmación que este paso hace.
           if ! PRS="$(gh pr list --repo "$REPO" --app dependabot --state open --limit 100 --json number,title,createdAt --jq '.[] | "\(.number)\t\(.title)\t\(.createdAt[:10])"' 2>&1)"; then
-            echo "::error::No se han podido leer las PR de Dependabot."
+            echo "::error::No se han podido leer las PR de Dependabot. Esto NO quiere decir que no haya."
             echo "$PRS"
             exit 1
           fi
 
-          echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "## PR de Dependabot pendientes" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
           if [ -z "$PRS" ]; then
             echo "Ninguna." >> "$GITHUB_STEP_SUMMARY"
+            echo "ninguna PR de Dependabot pendiente"
             exit 0
           fi
 
@@ -207,6 +129,11 @@ jobs:
             [ -n "$numero" ] || continue
             echo "| #$numero | $fecha | $titulo |" >> "$GITHUB_STEP_SUMMARY"
           done <<< "$PRS"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> Las **alertas** de vulnerabilidad no se listan aquí: el token de Actions no" >> "$GITHUB_STEP_SUMMARY"
+          echo "> alcanza a leerlas. Quien bloquea por vulnerabilidad es \`supply-chain\`, en cada" >> "$GITHUB_STEP_SUMMARY"
+          echo "> commit y sobre los cinco locks. La pestaña Dependabot hay que mirarla a mano." >> "$GITHUB_STEP_SUMMARY"
 
   copilot:
     name: Los informes de Copilot están atendidos

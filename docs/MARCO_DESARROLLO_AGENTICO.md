@@ -817,8 +817,27 @@ el diseño y no de la preferencia por bloquear pronto:
 La primera fila es la que sorprende. Como la alerta se calcula contra la rama por omisión, **un
 arreglo que vive en la rama de desarrollo no la cierra**: seguirá abierta hasta que se mezcle. Una
 puerta que bloqueara la *pull request* por «hay alertas abiertas» dejaría roja precisamente a la
-que las corrige — y un punto muerto se resuelve siempre igual, desactivando la puerta. Por eso las
-alertas se exigen **decididas al desplegar**, que es el primer instante en que la foto es cierta.
+que las corrige — y un punto muerto se resuelve siempre igual, desactivando la puerta. Por eso el
+sitio de esa exigencia es **el despliegue**, que es el primer instante en que la foto es cierta.
+
+**Y esa primera fila es también la que este proyecto no llegó a mecanizar, por una razón que
+merece contarse.** Se construyó, se estrenó, y en su primera ejecución real respondió un error de
+permisos: **el testigo automático de la integración continua no alcanzaba a leer las alertas**, y
+no había permiso del flujo que lo arreglara. La alternativa era una credencial propia, de sólo
+lectura y un solo permiso; se pidió, quedó pendiente de aprobación de la organización, y **se
+decidió retirar el control en vez de insistir**. Dos razones, y las dos pesan más que el control:
+no pedir una excepción a una política de credenciales que existe por algo, y conservar que el
+repositorio **no tuviera ninguna credencial guardada** — desplegaba con federación de identidad, y
+esa propiedad se pierde con el primer secreto y ya no se recupera.
+
+Lo generalizable no es el detalle de la plataforma, es el orden de la decisión: **la frontera de
+credenciales es parte del diseño de una puerta, no un trámite posterior**. Antes de construirla
+conviene saber con qué permiso se va a leer la señal, y si conseguirlo exige una excepción, ésa es
+una pregunta de gobernanza y no de ingeniería — con una respuesta legítima que es «entonces no hay
+puerta». Aquí lo esencial no se perdió, porque las vulnerabilidades las sigue bloqueando la
+auditoría de los *locks*, que no necesita credencial alguna; lo que se perdió es la reconciliación
+con la pestaña, y decirlo en voz alta es la diferencia entre un hueco conocido y un hueco
+disimulado. **[n=1]**
 
 La tercera fila es la tentación contraria: bloquear por una actualización pendiente parece
 riguroso y sólo enseña a saltarse la puerta. Una actualización que espera no es un defecto. Lo que
@@ -865,9 +884,19 @@ Tres reglas más, cada una contra un modo de degradarse:
   llega de fuera. La comprobación del error tiene que poner el paso en rojo, no escribir una
   advertencia en el registro.
 
+  Esta regla **no es hipotética, y es la que pagó el viaje**: fue precisamente esa comprobación la
+  que descubrió que el testigo automático no alcanzaba a leer las alertas. Sin ella, el control
+  habría informado de cero alertas en verde de forma indefinida, dando **tranquilidad falsa sobre
+  vulnerabilidades**, que es la peor clase de verde que puede tener un proyecto. El control acabó
+  retirándose, pero el modo en que se descubrió que no servía es el único motivo por el que se
+  supo a tiempo.
+
 **Lo generalizable**: donde una herramienta externa emite avisos que nadie está obligado a mirar,
 el marco exige una puerta que los mire por ti, colocada en el momento en que el dato ya es cierto,
-y una lista escrita —con caducidad— para lo que se decide no arreglar.
+y una lista escrita —con caducidad— para lo que se decide no arreglar. Y cuando esa puerta no se
+puede construir —porque la señal no se puede leer, o leerla exigiría una excepción que no procede
+pedir—, la respuesta del marco no es una puerta aparente: es **retirarla y anotar el hueco**. Un
+control que no puede mirar es peor que ninguno, porque el hueco deja de verse.
 
 ---
 

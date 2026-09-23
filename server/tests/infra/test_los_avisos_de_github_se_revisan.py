@@ -3,45 +3,37 @@
 **De dónde sale.** El 2026-09-23, antes de abrir el repositorio, el mantenedor lo dijo así: «lo
 voy viendo y te voy diciendo, pero si se me pasa o se me olvida se queda por revisar». Es la
 descripción exacta de un control que existe y no actúa. Este proyecto ya tiene la lección escrita
-—`docs/` la registra como «se cumple donde está mecanizado y se escapa donde sólo estaba
-escrito»—, así que la respuesta no podía ser una línea más en `AGENTS.md`.
+—«se cumple donde está mecanizado y se escapa donde sólo estaba escrito»—, así que la respuesta no
+podía ser una línea más en `AGENTS.md`.
 
 **Lo que ya estaba mecanizado, y por eso no se rehace.** El job `supply-chain` de `ci.yml` audita
 los cinco locks en **cada** commit y bloquea; `avisos_aceptados.toml` es su única puerta de
-salida, con cinco campos y caducidad; `test_dep7_las_aceptaciones_caducan.py` impide que esa
-lista crezca en silencio. Nada de eso se duplica aquí: este workflow **reutiliza el mismo
-fichero** de aceptaciones. Dos listas de exclusiones que dicen cosas distintas es peor que
-ninguna.
+salida, con cinco campos y caducidad; `test_dep7_las_aceptaciones_caducan.py` impide que esa lista
+crezca en silencio.
 
-**Lo que faltaba es todo lo que vive del lado de GitHub** y no se puede calcular desde el árbol:
-las alertas de la pestaña Dependabot, las PR de actualización pendientes y los informes de
-Copilot.
+**Lo que faltaba es lo que vive del lado de GitHub** y no se puede calcular desde el árbol: las PR
+de actualización pendientes y los informes de la revisión automática de código.
 
-**Por qué las alertas se comprueban DESPUÉS de mezclar y no antes.** Dependabot calcula sus
-alertas contra la **rama por omisión**, que aquí es `main`. Un arreglo que vive en `desarrollo`
-no puede cerrarlas: seguirán abiertas hasta que se mezclen. Una puerta que bloqueara la PR por
-«hay alertas abiertas» dejaría roja precisamente a la PR que las corrige, y un punto muerto se
-resuelve siempre igual —desactivando la puerta—. Así que el reparto sigue a la física del dato:
+**Hubo un tercer control y se retiró el mismo día.** Reconciliaba las alertas de la pestaña
+Dependabot con `avisos_aceptados.toml`. No pudo ser: el `GITHUB_TOKEN` de Actions **no alcanza a
+esas alertas** —«403 Resource not accessible by integration» en su primera ejecución real— y no
+hay permiso de workflow que lo arregle. La alternativa, un token propio, quedó pendiente de
+aprobación de la organización, y se decidió no insistir: ni pedir excepción a una política de
+credenciales, ni romper que este repositorio **no tenga ni un secreto**. Lo esencial no se
+pierde, porque las vulnerabilidades las bloquea `supply-chain` sin ningún token; lo que se pierde
+es la reconciliación con la pestaña, y eso vuelve a depender de que alguien mire.
 
-* **Antes de mezclar** se comprueba lo que se puede calcular de la rama. Eso ya lo hace
-  `supply-chain`, y aquí se añade lo que también es pre-merge por naturaleza: que los informes de
-  Copilot estén atendidos.
-* **Al mezclar a `main`** —que es cuando se despliega— se exige que **ninguna alerta quede sin
-  decidir**: o corregida, o descartada en GitHub con motivo, o aceptada en
-  `avisos_aceptados.toml` con firma y fecha de caducidad.
+Ese episodio dejó la lección que este fichero defiende por encima de las demás: **el paso
+distingue «no pude mirar» de «no hay nada»**. El 403 se supo porque la llamada comprobaba su
+error. Sin esa comprobación, el job habría informado de cero alertas **en verde, para siempre**,
+dando tranquilidad falsa sobre vulnerabilidades. Este proyecto ya se comió un guardarraíl que
+recorría un directorio inexistente y pasaba en verde.
 
-**Y los hilos de Copilot se comprueban con un disparador propio.** Copilot comenta cuando
-termina, que suele ser después de que CI haya pasado. Un control que sólo corriera con el `push`
-daría verde antes de que existiera el comentario, y nadie volvería a mirarlo: por eso el
-workflow escucha también `pull_request_review` y `pull_request_review_comment`. Es la diferencia
-entre comprobar y haber comprobado en el único instante en que no había nada que ver.
-
-**La propiedad que este fichero defiende por encima de las demás**: que el workflow distinga
-**«no pude mirar» de «no hay nada»**. Si la API de alertas responde 403 —y puede, porque el
-alcance del token de Actions sobre Dependabot no es el mismo en todos los repositorios—, el paso
-tiene que ponerse rojo, no reportar cero. Este proyecto ya se comió un guardarraíl que recorría
-un directorio inexistente y pasaba en verde, y la lección quedó escrita: **un medidor que no mira
-nada pasa en verde**.
+**Y los hilos de Copilot son una foto, no una vigilancia.** Copilot comenta cuando termina, que
+suele ser después de que CI haya pasado, y no hay forma de que el check se entere: resolver un
+hilo no emite ningún evento que Actions admita, y los runs que dispara Copilot llegan retenidos a
+la espera de aprobación. El check dice la verdad del instante en que corre y se recalcula con un
+push o a mano — por eso no debe ser una comprobación obligatoria.
 """
 
 from __future__ import annotations
@@ -75,8 +67,7 @@ _EVENTOS_DE_ACTIONS = frozenset(
 def texto() -> str:
     assert WORKFLOW.is_file(), (
         f"Falta {WORKFLOW.relative_to(RAIZ).as_posix()}. Es lo único que revisa los avisos que "
-        f"GitHub emite y que no se pueden calcular desde el árbol: alertas de Dependabot, PR de "
-        f"actualización pendientes e informes de Copilot."
+        f"GitHub emite y que no se pueden calcular desde el árbol."
     )
     return WORKFLOW.read_text(encoding="utf-8")
 
@@ -101,12 +92,36 @@ def test_el_medidor_lee_el_workflow(datos: dict) -> None:
     )
 
 
-def test_las_alertas_se_revisan_al_desplegar(datos: dict) -> None:
+def test_no_se_usa_un_disparador_que_no_existe(datos: dict) -> None:
+    """`pull_request_review_thread` es un webhook, pero **no** un disparador de Actions.
+
+    Esto se intentó y se midió el 2026-09-23. La revisión automática señaló —con razón— que
+    resolver un hilo no emite `pull_request_review` (`submitted`) ni `pull_request_review_comment`
+    (`created`), así que el check se quedaba rojo después de hacer exactamente lo que pedía. El
+    arreglo obvio era escuchar `pull_request_review_thread`, que **existe como webhook**.
+
+    **No existe como disparador de `on:`.** Y un `on:` con un evento desconocido no da un error de
+    validación: crea una ejecución **sin ningún job** que aparece como fallo, y la deja así en
+    cada push. Costó un commit averiguarlo, y sin este test costaría otro dentro de seis meses.
+
+    El test mira los disparadores **parseados**, no el texto: nombrar el evento en un comentario
+    para explicar por qué no se usa es justamente lo que hay que hacer, y una comprobación sobre
+    el texto lo confundiría con usarlo. Al mirar la lista entera caza cualquier otro inventado.
+    """
+    invalidos = sorted(set(_disparadores(datos)) - _EVENTOS_DE_ACTIONS)
+    assert not invalidos, (
+        f"el workflow declara disparadores que Actions no admite: {invalidos}. Un `on:` con un "
+        f"evento desconocido no da error de validación: deja el workflow **sin arrancar**, con "
+        f"una ejecución sin ningún job marcada como fallo en cada push. Pasó con "
+        f"`pull_request_review_thread`, que existe como webhook y no como disparador."
+    )
+
+
+def test_las_actualizaciones_pendientes_se_ven_al_desplegar(datos: dict) -> None:
     ramas = (_disparadores(datos).get("push") or {}).get("branches") or []
     assert "main" in ramas, (
-        "el workflow no corre al empujar a `main`. Las alertas de Dependabot se calculan contra "
-        "la rama por omisión, así que ése es el primer instante en que la foto es cierta — y "
-        "coincide con el despliegue, que es cuando se pidió la revisión."
+        "el workflow no corre al empujar a `main`. Ése es el momento en que se mira todo lo "
+        "demás, y es donde se pidió que las actualizaciones pendientes estuvieran a la vista."
     )
 
 
@@ -121,74 +136,15 @@ def test_los_informes_de_copilot_se_revisan_antes_de_mezclar(datos: dict) -> Non
     ]
     assert not faltan, (
         f"el workflow no escucha {faltan}. Copilot comenta cuando termina, normalmente después "
-        f"de que CI haya pasado: sin estos disparadores el control daría verde en el único "
-        f"instante en que todavía no había nada que ver, y no volvería a ejecutarse."
-    )
-
-
-def test_no_se_usa_un_disparador_que_no_existe(datos: dict) -> None:
-    """`pull_request_review_thread` es un webhook, pero **no** un disparador de Actions.
-
-    Esto se intentó y se midió el 2026-09-23. La revisión automática señaló —con razón— que
-    resolver un hilo no emite `pull_request_review` (`submitted`) ni `pull_request_review_comment`
-    (`created`), así que el check se quedaba rojo después de hacer exactamente lo que pedía. El
-    arreglo obvio era escuchar `pull_request_review_thread`, que **existe como webhook**.
-
-    **No existe como disparador de `on:`.** GitHub no lo incluye en la lista de eventos que
-    disparan workflows, y un `on:` con un evento desconocido no da un error de validación: crea
-    una ejecución **sin ningún job** que aparece como fallo, y la deja así en cada push. Costó un
-    commit averiguarlo, y sin este test costaría otro dentro de seis meses.
-
-    Lo que hay en su lugar está escrito en la cabecera del workflow: el check es una **foto**, no
-    una vigilancia, y se vuelve a calcular con un push o a mano.
-
-    El test comprueba los disparadores **parseados**, no el texto: nombrar el evento en un
-    comentario para explicar por qué no se usa es justamente lo que hay que hacer, y una
-    comprobación sobre el texto lo confundiría con usarlo. Y al mirar la lista entera caza
-    cualquier otro evento inventado, no sólo éste.
-    """
-    disparadores = set(_disparadores(datos))
-    invalidos = sorted(disparadores - _EVENTOS_DE_ACTIONS)
-    assert not invalidos, (
-        f"el workflow declara disparadores que Actions no admite: {invalidos}. Un `on:` con un "
-        f"evento desconocido no da error de validación: deja el workflow **sin arrancar**, con "
-        f"una ejecución sin ningún job marcada como fallo en cada push. Pasó con "
-        f"`pull_request_review_thread`, que existe como webhook y no como disparador."
-    )
-
-
-def test_las_alertas_se_leen_todas(texto: str) -> None:
-    """Una alerta en la segunda página es una alerta que no existe para este job."""
-    llamada = re.search(r"gh api[^\n]*dependabot/alerts[^\n]*", texto)
-    assert llamada, "no se encuentra la llamada a `dependabot/alerts`"
-    assert "--paginate" in llamada.group(0), (
-        "la llamada a `dependabot/alerts` no pagina. La API devuelve como mucho 100 por página: "
-        "con más alertas abiertas, una sin decidir que caiga en la segunda haría pasar el job en "
-        "verde. Es el mismo falso negativo que esta puerta existe para evitar, entrando por la "
-        "puerta de al lado."
-    )
-
-
-def test_una_aceptacion_caducada_no_cuenta_como_decidida(texto: str) -> None:
-    """La caducidad es lo que hace que la lista se revise; ignorarla la vacía de sentido.
-
-    `test_dep7_las_aceptaciones_caducan.py` pone rojo cuando una aceptación vence, pero corre con
-    la suite — y este workflow corre además **los lunes sin que nadie toque el repositorio**. En
-    esa ejecución, leer sólo el `id` daría por decidida una aceptación vencida y nadie se
-    enteraría hasta el siguiente commit.
-    """
-    assert "caduca" in texto, (
-        "el workflow lee `avisos_aceptados.toml` sin mirar `caduca`, así que una aceptación "
-        "vencida seguiría contando como decidida. La caducidad es lo único que obliga a volver a "
-        "mirar una aceptación: una lista que no caduca es una lista de exclusiones con mejor "
-        "prosa."
+        f"de que CI haya pasado: sin estos disparadores el control tendría una sola oportunidad "
+        f"de mirar, y sería la única en que todavía no había nada que ver."
     )
 
 
 def test_hay_una_revision_periodica(datos: dict) -> None:
     assert _disparadores(datos).get("schedule"), (
-        "no hay `schedule`. Una alerta puede aparecer un martes sin que nadie toque el "
-        "repositorio en dos semanas, y entonces ningún disparador por evento la vería."
+        "no hay `schedule`. Una actualización puede quedarse esperando dos semanas sin que nadie "
+        "toque el repositorio, y entonces ningún disparador por evento la mostraría."
     )
 
 
@@ -204,60 +160,57 @@ def test_declara_permisos_y_no_pide_escritura(datos: dict) -> None:
     )
 
 
-def test_reutiliza_el_fichero_de_aceptaciones(texto: str) -> None:
-    assert "avisos_aceptados.toml" in texto, (
-        "el workflow no lee `avisos_aceptados.toml`. Ése es el sitio donde este proyecto decide "
-        "qué aviso se acepta y hasta cuándo, con los cinco campos que vigila DEP.7. Inventar "
-        "aquí una segunda lista de exclusiones dejaría dos fuentes que se contradicen, y la "
-        "que caduca es la que perdería."
+def test_no_usa_ningun_secreto(texto: str) -> None:
+    """Este repositorio no tiene ni un secreto, y esa propiedad se conserva a propósito.
+
+    El despliegue a GCP funciona con federación de identidad —sin claves que custodiar, rotar o
+    revocar—, y las catorce entradas de configuración son variables, no secretos. Cuando la
+    reconciliación de alertas necesitó un token propio, se retiró el control antes que introducir
+    el primer secreto y pedir una excepción a la política de credenciales de la organización.
+
+    Si alguna vez hace falta uno de verdad, que sea una decisión y no una deriva: este test se
+    pone rojo y obliga a escribir por qué.
+    """
+    usos = re.findall(r"secrets\.[A-Za-z_][A-Za-z0-9_]*", texto)
+    assert not usos, (
+        f"el workflow usa {sorted(set(usos))}. Este repositorio no tiene ningún secreto: "
+        f"despliega con federación de identidad y sus catorce entradas de configuración son "
+        f"variables. Introducir el primero es una decisión que se escribe, no un cambio de línea."
     )
 
 
 def test_no_mirar_no_es_no_haber_nada(texto: str) -> None:
-    """La llamada a la API de alertas tiene que tener su rama de error, y tiene que ser roja."""
-    llamada = re.search(
-        r"^(?P<sangria>\s*)if\s+!\s+[A-Z_]+=\"\$\(gh api [^\n]*dependabot/alerts",
-        texto,
-        re.MULTILINE,
-    )
-    assert llamada, (
-        "no se encuentra la llamada a `dependabot/alerts` protegida por un `if !`. Si la API "
-        "responde 403 —y puede, porque el alcance del token de Actions sobre Dependabot no es "
-        "igual en todos los repositorios—, un `gh api` sin comprobar deja la lista vacía y el "
-        "paso pasa en verde diciendo que no hay alertas. Es el modo de fallo que este proyecto "
-        "ya vio: un medidor que no mira nada pasa en verde."
-    )
+    """Toda llamada a la API tiene su rama de error, y esa rama es roja.
 
-    # Y la rama de error tiene que terminar el paso, no sólo avisar.
-    despues = texto[llamada.end() : llamada.end() + 900]
-    assert "::error::" in despues and "exit 1" in despues, (
-        "la llamada a `dependabot/alerts` está protegida, pero su rama de error no pone el paso "
-        "en rojo. Un aviso en el log que no falla el job es indistinguible de no haberlo mirado."
-    )
-
-
-def test_las_alertas_se_leen_con_un_token_que_alcanza(datos: dict) -> None:
-    """El `GITHUB_TOKEN` de Actions no llega a las alertas de Dependabot, y no hay permiso que lo
-    arregle.
-
-    Medido en la primera ejecución real sobre `main`, el 2026-09-23: «403 Resource not accessible
-    by integration». `security-events: read` cubre el análisis de código y los secretos, no esto.
-
-    Lo que hace falta es un token de grano fino acotado al repositorio con un solo permiso. Este
-    test existe porque el camino de vuelta es tentador y silencioso: quitar el secreto deja el
-    workflow *funcionando*, sólo que fallando siempre — y alguien podría «arreglarlo» devolviendo
-    `github.token`, que es como se apaga una puerta sin apagarla.
+    No es una preferencia de estilo: es lo que hizo que se supiera que el token de Actions no
+    alcanza a las alertas de Dependabot. La llamada comprobó su error y el job dijo «403». Sin la
+    comprobación habría dicho «ninguna alerta abierta», en verde, indefinidamente.
     """
-    paso = next(
-        p
-        for p in datos["jobs"]["alertas"]["steps"]
-        if "alertas abiertas" in p.get("name", "")
+    # Se mira línea a línea y no con dos conteos globales. Un primer intento comparaba «cuántas
+    # protegidas» contra «cuántas hay», y **no cazaba nada**: los dos patrones anclaban al
+    # principio de línea, así que al quitar el `if !` la llamada desaparecía de los dos lados a
+    # la vez y la igualdad seguía cumpliéndose. Es el caso de libro de un medidor que mide su
+    # propio reflejo.
+    invocacion = re.compile(r"\bgh (?:api|pr) ")
+    protegida = re.compile(r"^\s*if\s+!\s+[A-Z_]+=\"\$\(gh (?:api|pr) ")
+
+    lineas = [
+        linea
+        for linea in texto.splitlines()
+        if invocacion.search(linea) and not linea.lstrip().startswith("#")
+    ]
+    assert lineas, (
+        "no se encuentra ninguna llamada a `gh api` ni `gh pr`. O el workflow dejó de consultar "
+        "nada, o el patrón dejó de reconocer cómo se escriben: en los dos casos, los test de "
+        "abajo estarían comprobando el vacío."
     )
-    token = str(paso.get("env", {}).get("GH_TOKEN", ""))
-    assert "secrets.AVISOS_TOKEN" in token, (
-        f"el paso de alertas usa `{token}`. El token de Actions no alcanza a las alertas de "
-        f"Dependabot: con él, este paso no puede hacer otra cosa que fallar con un 403. Hace "
-        f"falta `secrets.AVISOS_TOKEN`."
+
+    sin_proteger = [linea.strip()[:90] for linea in lineas if not protegida.match(linea)]
+    assert not sin_proteger, (
+        f"estas llamadas no comprueban su error: {sin_proteger}. Una llamada suelta deja la "
+        f"variable vacía cuando falla, y el paso informa de cero **en verde**. Así se supo que "
+        f"el token de Actions no alcanza a las alertas de Dependabot: porque la llamada sí lo "
+        f"comprobaba."
     )
 
 
@@ -265,7 +218,8 @@ def test_ninguna_llamada_a_avisos_se_silencia(texto: str) -> None:
     silenciadas = [
         linea.strip()
         for linea in texto.splitlines()
-        if "gh api" in linea and ("|| true" in linea or "2>/dev/null" in linea)
+        if re.search(r"\bgh (api|pr)\b", linea)
+        and ("|| true" in linea or "2>/dev/null" in linea)
     ]
     assert not silenciadas, (
         f"hay llamadas a la API con el error silenciado: {silenciadas}. Un fallo tragado aquí se "
