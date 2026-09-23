@@ -130,6 +130,27 @@ class TestLaSondaDelMcpDistingueVivoDeMuerto:
             "la sonda dice que está vivo con NADA escuchando: no vigila nada"
         )
 
+    def test_un_500_es_estar_muerto(self) -> None:
+        """**El hueco de la primera versión**, señalado en la revisión de la PR #110.
+
+        La sonda hacía `sys.exit(0 if status else 1)`, y cualquier entero no nulo es verdadero:
+        un MCP que arrancara y respondiera 500 por un fallo de la aplicación seguiría `healthy`
+        y **no dispararía la reversión** que #91 venía a cubrir.
+
+        Mi razonamiento era «cualquier respuesta significa que el proceso está en pie», y eso es
+        cierto del proceso y falso del servicio. Lo que importa es si sirve.
+        """
+        with _Responde(500) as servidor:
+            assert not _sonda_dice_vivo(servidor.puerto), (
+                "la sonda da por sano un 500: el MCP puede estar roto y el despliegue no "
+                "revertirá"
+            )
+
+    def test_un_404_tambien_es_estar_muerto(self) -> None:
+        """Si `/mcp` deja de existir, el servicio no sirve aunque el proceso viva."""
+        with _Responde(404) as servidor:
+            assert not _sonda_dice_vivo(servidor.puerto)
+
 
 class TestLasDosImagenesTienenSonda:
     def test_el_mcp_declara_healthcheck_en_su_dockerfile(self) -> None:

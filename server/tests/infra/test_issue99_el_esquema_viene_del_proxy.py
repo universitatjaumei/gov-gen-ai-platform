@@ -112,6 +112,48 @@ class TestElDespliegueLoDejaPuesto:
             "aplicación cree estar sirviendo. Acótalo a la red desde la que conecta Caddy."
         )
 
+    def test_no_confia_en_la_red_del_sandbox(self) -> None:
+        """**El agujero que dejó la primera versión**, señalado en la revisión de la PR #110.
+
+        Yo justifiqué un `/12` entero diciendo «a uvicorn no se llega desde fuera porque `app`
+        no publica puertos». Era cierto y estaba **incompleto**: no hace falta llegar desde fuera
+        si ya hay un contenedor hostil dentro. El servicio `app` está en **las dos** redes, y en
+        `sandbox-net` corre `script-sandbox`, que ejecuta **código de usuario no confiable**.
+
+        Con el `/12`, un script podía alcanzar `app:8000` y poner sus propias cabeceras
+        `X-Forwarded-*`, que uvicorn honraría por venir de una dirección «de confianza».
+        """
+        import ipaddress
+
+        compose = yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))
+        redes = compose.get("networks") or {}
+
+        sandbox = redes.get("sandbox-net") or {}
+        config = (sandbox.get("ipam") or {}).get("config") or []
+        assert config, (
+            "`sandbox-net` no declara subred, así que Docker se la asigna y **no se puede "
+            "demostrar** que quede fuera del rango de confianza. Declárala."
+        )
+        del_sandbox = ipaddress.ip_network(config[0]["subnet"])
+
+        valor = str(_entorno_de_la_aplicacion().get(_VARIABLE, ""))
+        for trozo in (t.strip() for t in valor.split(",") if t.strip()):
+            confiada = ipaddress.ip_network(trozo, strict=False)
+            assert not confiada.overlaps(del_sandbox), (
+                f"el rango de confianza «{confiada}» incluye la red del sandbox "
+                f"«{del_sandbox}», donde corre código de usuario no confiable: desde ahí se "
+                "pueden falsificar las cabeceras del proxy"
+            )
+
+    def test_la_red_del_proxy_esta_declarada(self) -> None:
+        """Sin subred declarada, el valor de confianza es una conjetura sobre lo que Docker haga."""
+        compose = yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))
+        config = ((compose.get("networks") or {}).get("default") or {}).get("ipam") or {}
+        assert config.get("config"), (
+            "la red `default` no declara subred, así que `FORWARDED_ALLOW_IPS` no puede "
+            "acotarse a ella con certeza"
+        )
+
     def test_el_valor_es_una_red_privada(self) -> None:
         """Que lo acotado sea de verdad privado, y no un rango cualquiera escrito con prisa."""
         import ipaddress
