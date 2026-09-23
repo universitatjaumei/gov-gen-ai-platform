@@ -18,12 +18,27 @@
 #     atendidos.
 #   · Al empujar a `main` (= al desplegar) → ninguna alerta puede quedar **sin decidir**.
 #
-# ─── POR QUÉ HAY DISPARADORES DE REVISIÓN ─────────────────────────────────────────────────────
+# ─── EL CHECK DE COPILOT ES UNA FOTO, NO UNA VIGILANCIA ───────────────────────────────────────
 #
-# Copilot comenta cuando termina, que suele ser **después** de que CI haya pasado. Un control que
-# sólo corriera con el `push` daría verde en el único instante en que todavía no había nada que
-# ver, y no volvería a ejecutarse nunca. Por eso escucha también los eventos de revisión: cada
-# comentario que llega vuelve a calcular el estado.
+# Copilot comenta cuando termina, que suele ser **después** de que CI haya pasado. Lo suyo sería
+# que cada comentario y cada resolución volvieran a calcular el estado. **Se intentó, y las dos
+# vías están cerradas.** Medido el 2026-09-23, y escrito aquí para que nadie lo reintente:
+#
+#  1. **Resolver un hilo no emite ningún evento que Actions admita.** `pull_request_review`
+#     (`submitted`) y `pull_request_review_comment` (`created`) no cubren la resolución, y
+#     `pull_request_review_thread` —que sí existe como webhook— **no está en la lista de eventos
+#     que disparan workflows**. Ponerlo en `on:` no da error de validación: deja el workflow sin
+#     arrancar, con una ejecución sin jobs marcada como fallo en cada push. Costó un commit.
+#
+#  2. **Los runs que dispara Copilot quedan retenidos.** Llegan como `action_required` porque el
+#     actor es `Copilot` y el repositorio exige aprobación para contribuyentes externos. El ajuste
+#     que lo gobierna **no es accesible mientras el repositorio sea privado**: la API responde
+#     «Fork PR approval is not allowed for private repositories». Conviene revisarlo al abrirlo.
+#
+# Consecuencia, y hay que ser honesto con ella: en la ejecución que abre la PR este check dice la
+# verdad del instante en que corre, que suele ser **antes** de que Copilot haya comentado. Se
+# vuelve a calcular con el siguiente push, o a mano (`gh run rerun`). **Por eso no debe ser un
+# check obligatorio**: una foto vieja no puede gobernar un merge.
 #
 # ─── LO QUE NO SE PUEDE OLVIDAR AL TOCAR ESTE FICHERO ─────────────────────────────────────────
 #
@@ -44,11 +59,6 @@ on:
     types: [submitted]
   pull_request_review_comment:
     types: [created]
-  # Y `resolved`, que es el que cierra el bucle. Sin él, resolver un hilo no emite nada: el check
-  # se quedaría rojo justo después de haber hecho lo que pide, y una puerta que no se puede abrir
-  # obedeciéndola se acaba saltando.
-  pull_request_review_thread:
-    types: [resolved, unresolved]
   # Una alerta puede aparecer un martes sin que nadie toque el repositorio en dos semanas.
   schedule:
     - cron: "0 7 * * 1"
@@ -186,7 +196,7 @@ jobs:
 
   copilot:
     name: Los informes de Copilot están atendidos
-    if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment' || github.event_name == 'pull_request_review_thread'
+    if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment'
     runs-on: ubuntu-latest
     steps:
       - name: Ningún comentario de Copilot queda sin resolver
@@ -239,4 +249,8 @@ jobs:
           echo ""
           echo "Resuelve cada hilo tras decidir sobre él —arreglándolo o rebatiéndolo—. Un hilo"
           echo "vivo y sin respuesta no distingue un hallazgo pendiente de uno que nadie miró."
+          echo ""
+          echo "Resolver no vuelve a ejecutar esto: no hay ningún evento de Actions que se emita"
+          echo "al resolver un hilo (ver la cabecera del workflow). Después de resolver, este"
+          echo "check se pone verde con el siguiente push o con \`gh run rerun --failed\`."
           exit 1

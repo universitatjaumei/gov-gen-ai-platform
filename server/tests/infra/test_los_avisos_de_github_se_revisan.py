@@ -55,6 +55,21 @@ import yaml
 RAIZ = Path(__file__).resolve().parents[3]
 WORKFLOW = RAIZ / ".github" / "workflows" / "avisos.yml"
 
+#: Los eventos que GitHub Actions admite en `on:`. Copiada de «Events that trigger workflows» el
+#: 2026-09-23. No es decorativa: un evento que no esté en esta lista **no falla la validación**,
+#: deja el workflow sin arrancar. Si GitHub añade uno nuevo y aquí falta, este test da un falso
+#: rojo con el nombre delante, que es un modo de fallo barato de diagnosticar.
+_EVENTOS_DE_ACTIONS = frozenset(
+    {
+        "branch_protection_rule", "check_run", "check_suite", "create", "delete", "deployment",
+        "deployment_status", "discussion", "discussion_comment", "fork", "gollum",
+        "issue_comment", "issues", "label", "merge_group", "milestone", "page_build", "public",
+        "pull_request", "pull_request_review", "pull_request_review_comment",
+        "pull_request_target", "push", "registry_package", "release", "repository_dispatch",
+        "schedule", "status", "watch", "workflow_call", "workflow_dispatch", "workflow_run",
+    }
+)
+
 
 @pytest.fixture(scope="module")
 def texto() -> str:
@@ -111,34 +126,34 @@ def test_los_informes_de_copilot_se_revisan_antes_de_mezclar(datos: dict) -> Non
     )
 
 
-def test_resolver_un_hilo_vuelve_a_ejecutar_la_comprobacion(datos: dict) -> None:
-    """Sin esto la puerta no es una puerta: es un bloqueo del que no se puede salir.
+def test_no_se_usa_un_disparador_que_no_existe(datos: dict) -> None:
+    """`pull_request_review_thread` es un webhook, pero **no** un disparador de Actions.
 
-    Lo encontró la revisión automática sobre la primera versión de este workflow, que escuchaba
-    `pull_request_review` (`submitted`) y `pull_request_review_comment` (`created`) y nada más.
-    **Resolver un hilo no emite ninguno de los dos.** Así que el flujo previsto —Copilot comenta,
-    el check se pone rojo, decides, resuelves— terminaba con el check **todavía rojo**, y sólo
-    volvía a calcularse con un push nuevo o a mano. Una puerta que no se puede abrir haciendo lo
-    que pide se acaba saltando, que es la forma habitual de perder un control.
+    Esto se intentó y se midió el 2026-09-23. La revisión automática señaló —con razón— que
+    resolver un hilo no emite `pull_request_review` (`submitted`) ni `pull_request_review_comment`
+    (`created`), así que el check se quedaba rojo después de hacer exactamente lo que pedía. El
+    arreglo obvio era escuchar `pull_request_review_thread`, que **existe como webhook**.
 
-    El evento que sí lo emite es `pull_request_review_thread`.
+    **No existe como disparador de `on:`.** GitHub no lo incluye en la lista de eventos que
+    disparan workflows, y un `on:` con un evento desconocido no da un error de validación: crea
+    una ejecución **sin ningún job** que aparece como fallo, y la deja así en cada push. Costó un
+    commit averiguarlo, y sin este test costaría otro dentro de seis meses.
+
+    Lo que hay en su lugar está escrito en la cabecera del workflow: el check es una **foto**, no
+    una vigilancia, y se vuelve a calcular con un push o a mano.
+
+    El test comprueba los disparadores **parseados**, no el texto: nombrar el evento en un
+    comentario para explicar por qué no se usa es justamente lo que hay que hacer, y una
+    comprobación sobre el texto lo confundiría con usarlo. Y al mirar la lista entera caza
+    cualquier otro evento inventado, no sólo éste.
     """
-    disparadores = _disparadores(datos)
-    evento = disparadores.get("pull_request_review_thread")
-    assert evento is not None, (
-        "el workflow no escucha `pull_request_review_thread`. Resolver un hilo no emite "
-        "`pull_request_review` ni `pull_request_review_comment`, así que el check se quedaría "
-        "rojo después de haber hecho exactamente lo que pide."
-    )
-    assert "resolved" in (evento.get("types") or []), (
-        f"`pull_request_review_thread` no escucha `resolved`: {evento}"
-    )
-
-    # Y el job tiene que aceptar ese evento, o el disparador no serviría de nada.
-    condicion = datos["jobs"]["copilot"].get("if", "")
-    assert "pull_request_review_thread" in condicion, (
-        "el disparador existe pero la condición del job `copilot` no lo admite, así que el "
-        "workflow arrancaría y no ejecutaría nada. El check se quedaría igual de rojo."
+    disparadores = set(_disparadores(datos))
+    invalidos = sorted(disparadores - _EVENTOS_DE_ACTIONS)
+    assert not invalidos, (
+        f"el workflow declara disparadores que Actions no admite: {invalidos}. Un `on:` con un "
+        f"evento desconocido no da error de validación: deja el workflow **sin arrancar**, con "
+        f"una ejecución sin ningún job marcada como fallo en cada push. Pasó con "
+        f"`pull_request_review_thread`, que existe como webhook y no como disparador."
     )
 
 
