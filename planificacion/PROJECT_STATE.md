@@ -5,6 +5,27 @@
 
 ---
 
+## Lo que viene después de la Fase 1: el roadmap, no los planes de fase
+
+**Los planes `Plan_TDD_Fase2.md` y `Plan_TDD_Fase3.md` se cerraron el 2026-09-23 y no se van a
+ejecutar.** Lo que falta por construir vive ahora en **[`../ROADMAP.md`](../ROADMAP.md)** y en los
+hitos de GitHub, con una *issue* por unidad de trabajo en vez de un prompt por paso:
+
+| Tema del roadmap | Hitos | Qué sustituye |
+|---|---|---|
+| **Automatización gobernada** (tema 4) | 9–12, *issues* AUT.1–AUT.13 (#112–#124) | La Fase 2. 2.B quedó vacía con NIC, 2.C está hecha bajo otros nombres y **2.A se descarta** |
+| **Trámites asistidos con IA** (tema 8) | 13–16, *issues* TRA.1–TRA.13 (#126–#138) | La Fase 3. **No se construye gestor de expedientes**: el institucional es la fuente de verdad y la plataforma no cambia nunca su estado |
+
+**Cómo se ejecutan.** Igual que un prompt: RED → GREEN → REFACTOR, verificaciones de cierre, un
+commit firmado por *issue* con su número en el asunto. Lo que cambia es dónde está escrito el
+alcance —en la *issue*, no en `fase1/`— y que al cerrar se actualiza esta tabla y se cierra la
+*issue*, en vez de mover un cursor.
+
+Los prompts de la **Fase 1** siguen donde estaban y se ejecutan como siempre; su cursor es el de
+la sección siguiente.
+
+---
+
 ## Planes activos
 
 ### Plan_Contrato_OpenAPI.md — Alineación Backend/Frontend con OpenAPI + Orval

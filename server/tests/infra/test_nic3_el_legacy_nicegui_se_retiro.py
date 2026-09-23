@@ -118,19 +118,26 @@ class TestNadaApuntaALoRetirado:
 class TestLaDocumentacionDejaDePrometerElAgente:
     """La mitad que se olvida: si el código se va, los documentos tienen que dejar de afirmarlo."""
 
-    def test_should_say_in_agents_that_the_local_agent_has_no_code(self):
+    def test_should_say_in_agents_that_the_local_agent_will_not_be_built(self):
         """`AGENTS.md` describía `client_app/` como el agente de ejecución local.
 
         Si sigue diciéndolo, quien llegue de fuera buscará un directorio que no existe — y quien
         planifique creerá que hay una base sobre la que seguir.
+
+        **La afirmación se endureció el 2026-09-23** (issue #112). Hasta entonces bastaba con
+        decir que el agente no tenía código, porque era un hueco; ahora es una **decisión**, y lo
+        que hay que impedir es que alguien lo lea como trabajo pendiente y lo proponga. Un test
+        que siguiera aceptando «sin código en el repositorio» pasaría en verde con el documento
+        diciendo lo contrario de lo que se decidió.
         """
         texto = (RAIZ / "AGENTS.md").read_text(encoding="utf-8")
 
         assert "client_app/` ← SOLO agente de ejecución local" not in texto, (
             "el mapa de módulos sigue describiendo `client_app/` como si existiera"
         )
-        assert "sin código en el repositorio" in texto or "no tiene código" in texto, (
-            "`AGENTS.md` tiene que decir que el agente local es trabajo pendiente sin código"
+        assert "no se hace" in texto and "No lo propongas" in texto, (
+            "`AGENTS.md` tiene que decir que el agente local **no se hace** y que no se proponga. "
+            "Es una decisión (ESPECIFICACIONES.md §10), no trabajo pendiente."
         )
 
     def test_should_record_it_in_the_specification(self):

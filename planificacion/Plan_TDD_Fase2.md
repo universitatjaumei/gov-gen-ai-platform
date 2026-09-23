@@ -1,5 +1,22 @@
 ﻿# Plan TDD — Fase 2: Automatización, Thin Client y Migración NiceGUI
 
+> # ⛔ PLAN CERRADO — 2026-09-23
+>
+> **Este plan no se va a ejecutar.** Lo sustituye el tema 4 de [`../ROADMAP.md`](../ROADMAP.md),
+> «Automatización gobernada», con cuatro hitos y trece *issues* en GitHub. Se conserva porque
+> explica cómo se llegó hasta aquí, y se lee como historia.
+>
+> Qué pasó con cada subfase, medido contra el árbol el 2026-09-23:
+>
+> | Subfase | Qué proponía | Qué pasó |
+> |---|---|---|
+> | **2.A** | Agente de ejecución local, sandbox distribuido, emparejamiento seguro | **Descartada.** Los agentes de propósito general con navegador y escritorio ya cubren ese terreno. Es un límite deliberado: `docs/ESPECIFICACIONES.md` §10 |
+> | **2.B** | Migrar la interfaz NiceGUI a React | **Vacía.** El bloque NIC retiró el cliente entero el 2026-09-04 |
+> | **2.C** | Migrar servicios, *Script Registry*, IA frugal, MCP Client | **Hecha bajo otros nombres.** El registro de scripts es el bloque FUN; el *sandbox*, la auditoría AST y el `RunManifest` existen desde la fase 1; y el «MCP Client» se resolvió al revés: la plataforma **es** servidor MCP. Sin hacer: las fábricas como nodos de LangGraph y los puentes semánticos, sin demanda |
+>
+> Lo que sí falta, y no estaba en este plan, es **registrar lo que corre fuera** y **ampliar el
+> catálogo de funciones a tareas completas**. Eso es lo que hay en el roadmap.
+
 > **Aviso de lectura — esto es un plan, no una descripcion del sistema.**
 >
 > Escrito en futuro y **antes de decisiones que despues se revirtieron**. Las dos mayores: el
