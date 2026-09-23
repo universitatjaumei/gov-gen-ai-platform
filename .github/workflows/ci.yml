@@ -1013,3 +1013,74 @@ jobs:
             echo "- \`mcp\`: arrancada hasta responder —406 o 421 son \"en pie\"; lo que"
             echo "  significa \"muerto\" es no responder— y con su \`HEALTHCHECK\` en healthy."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Una issue arreglada se cierra al llegar a producción, y no cuando alguien se acuerda.
+  #
+  # **De dónde sale.** El 2026-09-23, con el repositorio a punto de abrirse, había **once issues
+  # abiertas cuyo arreglo ya estaba en `main` y desplegado** — entre ellas «el comando de arranque
+  # del README no arranca», que es de lo primero que lee quien llega. La lista de issues anunciaba
+  # defectos resueltos.
+  #
+  # La causa no fue despiste: los commits escribían `fix(#92):` en el asunto, y eso **GitHub no lo
+  # trata como palabra de cierre**. Sólo `Closes`/`Fixes`/`Resolves #N` cierran, y sólo al llegar a
+  # la rama por omisión. Con la palabra puesta, la mezcla a `main` las cierra sola: el momento
+  # exacto en que el arreglo existe para quien lo sufría.
+  #
+  # Sólo en PR **hacia `main`**, que es esa mezcla. En una PR contra `desarrollo` no aplica: ahí el
+  # arreglo todavía no está en producción.
+  issues-cerradas:
+    name: Las issues que se arreglan se cierran
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Cada issue que esta PR arregla se cerrará al mezclar
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CUERPO: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+
+          # Los mensajes de los commits que esta PR trae, más el cuerpo de la PR: GitHub acepta
+          # la palabra de cierre en cualquiera de los dos.
+          MENSAJES="$(git log --format='%B' origin/${{ github.base_ref }}..HEAD)"
+          TODO="$MENSAJES
+          $CUERPO"
+
+          # Lo que se lee como «esta PR arregla la issue N»: el prefijo Conventional con la issue
+          # entre paréntesis, que es como este repositorio los escribe.
+          ARREGLADAS="$(printf '%s' "$MENSAJES" \
+            | grep -oiE '^(feat|fix|perf|refactor)\(#[0-9]+\)' \
+            | grep -oE '[0-9]+' | sort -u || true)"
+
+          # Y lo que de verdad cierra: las palabras que GitHub entiende.
+          CIERRAN="$(printf '%s' "$TODO" \
+            | grep -oiE '(clos(e|es|ed)|fix(es|ed)?|resolv(e|es|ed))[[:space:]]+#[0-9]+' \
+            | grep -oE '[0-9]+' | sort -u || true)"
+
+          echo "referenciadas como arregladas: ${ARREGLADAS:-ninguna}"
+          echo "con palabra de cierre:         ${CIERRAN:-ninguna}"
+
+          FALTAN=""
+          for n in $ARREGLADAS; do
+            # Una issue ya cerrada no necesita palabra: se cerró a mano o en otra PR.
+            estado="$(gh issue view "$n" --json state --jq .state 2>/dev/null || echo DESCONOCIDA)"
+            if [ "$estado" = "CLOSED" ] || [ "$estado" = "DESCONOCIDA" ]; then continue; fi
+            printf '%s\n' "$CIERRAN" | grep -qx "$n" || FALTAN="$FALTAN #$n"
+          done
+
+          if [ -n "$FALTAN" ]; then
+            echo "::error::Esta PR arregla$FALTAN y esas issues NO se cerrarán al mezclar."
+            echo ""
+            echo "Un asunto \`fix(#N):\` no es palabra de cierre para GitHub. Añade \`Closes #N\`"
+            echo "al cuerpo del commit o de la PR, o cierra la issue a mano si ya no aplica."
+            exit 1
+          fi
+          echo "todas las issues que esta PR arregla se cerrarán al mezclar"

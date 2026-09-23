@@ -148,10 +148,15 @@ class TestLosDosDocumentosDeMcpSeUnificaron:
         "CAMBIOS_PLANIFICACION.md",
         "PRUEBAS_PENDIENTES.md",
         "PLAN_CHATBOTS_E_INGESTA_LOCAL.md",
+        # Añadido el 2026-09-23 (issue #127). Describía un gestor híbrido con flujos por
+        # arrastrar y soltar, Celery, Playwright en el navegador de la persona y generación de
+        # scripts en tiempo de ejecución: cinco cosas que contradicen decisiones tomadas. Lo
+        # sustituye `DECISION_TRAMITES_ASISTIDOS.md`.
+        "GESTOR_EXPEDIENTES.md",
     ],
 )
 def test_should_have_withdrawn_the_spent_documents(retirado: str):
-    """Los cuatro que REPO.3 retira, con la razón en el commit y el resumen en el historial.
+    """Los que se retiran, con la razón en el commit y el resumen en el historial.
 
     Se listan aquí a propósito, al contrario que en los tests de arriba: es el criterio de done
     de **este** prompt, no una propiedad permanente, y sirve para que el triaje no quede a medias.

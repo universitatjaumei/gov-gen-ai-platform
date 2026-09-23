@@ -5,9 +5,13 @@
 Gov Gen AI Platform es el resultado de integrar **AI Agents Hub** (chatbots RAG, LangGraph) y **AutomatIA**
 (automatización, scripts, RPA) en un monorepo. El plan de desarrollo completo está en `planificacion/PLAN_DESARROLLO.md`.
 
-**El cliente NiceGUI se retiró completo el 2026-09-04** (bloque NIC): `client_app/` y `_legacy_nicegui/` ya no existen, y con ellos se fueron 574 ficheros. No se estaba conservando un agente que funcionaba —el motor por el que ejecutaban sus vigilantes importaba dos módulos que ya no existían— y nada en producción dependía de él.
+**El cliente NiceGUI se retiró completo el 2026-09-04** (bloque NIC): `client_app/` y `_legacy_nicegui/` ya no existen, y con ellos 574 ficheros. Nada en producción dependía de él, y lo que hubo está fichero a fichero en `docs/INVENTARIO_RETIRADA_LEGACY.md`.
 
-**El agente de ejecución local es trabajo pendiente sin código en el repositorio.** Cuando haya que desarrollarlo, el mapa es `docs/INVENTARIO_RETIRADA_LEGACY.md`, que dice fichero a fichero qué tenía equivalente y dónde; el código está en el **historial de git** de este repositorio, en la carpeta `AutomatIA` y en el *bundle* de GenGov.
+**El agente de ejecución local no se hace, y es una decisión del 2026-09-23**, no un hueco: ni RPA, ni vigilantes de carpeta, correo o web, ni programador de flujos locales, ni *thin client*. Lo cubren los agentes de propósito general; lo que la plataforma aporta es gobernanza. **No lo propongas.** Razón en `docs/ESPECIFICACIONES.md` §10 y tema 4 de `ROADMAP.md`.
+
+**Tampoco se hace un gestor de expedientes** (misma fecha): el de la institución es la fuente de verdad y la plataforma **nunca cambia su estado**. Lo que se construye son **trámites asistidos** —un workspace de Informes con referencia al expediente—. Tema 8 de `ROADMAP.md`.
+
+**La hoja de ruta pública es `ROADMAP.md`**: `planificacion/` dirige el desarrollo y `ROADMAP.md` lo cuenta fuera.
 
 ---
 
@@ -34,6 +38,10 @@ verificación en navegador si toca UI.
 **Un commit Conventional por prompt**, con el identificador del prompt en el asunto, **firmado**
 (`git commit -s`), sin `Co-Authored-By` y **sin push**. Es lo que hace reversible un bloque largo:
 si el prompt 5 rompe lo que hizo el 3, hay un punto exacto al que volver.
+
+**Si el commit resuelve una issue, su cuerpo lleva `Closes #N`.** Un asunto `fix(#92):` no la
+cierra, así que se acumulan issues abiertas ya resueltas en producción — pasó con once. Lo
+comprueba CI.
 
 ### Se trabaja en `desarrollo`; `main` es para desplegar
 
@@ -193,9 +201,7 @@ y su código son `routers/actividad_router.py` y `core/actividad_categorias.py`.
 que se escriben de memoria; un guardarraíl comprueba que las que cita este fichero existan, y
 saltó con las tres.
 
-**No hay nodo de ejecución local.** El agente RPA, los vigilantes de carpeta, correo y web, y el
-programador de flujos locales **no tienen código en este repositorio** desde el 2026-09-04. Si un
-plan los da por hechos, el plan está desactualizado; ver `docs/INVENTARIO_RETIRADA_LEGACY.md`.
+**Si un plan da por hecho el nodo de ejecución local, el plan está desactualizado.**
 
 ---
 

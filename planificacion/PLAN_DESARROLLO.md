@@ -435,6 +435,11 @@ para el padrón que use el LLM local y lea estos PDFs"* y ejecuta la configuraci
 
 # FASE FUNCIONAL 2 — Automatización y Thin Client
 
+> **⛔ Cerrada el 2026-09-23.** La sustituye «Automatización gobernada», tema 4 de
+> [`../ROADMAP.md`](../ROADMAP.md): 2.B quedó vacía al retirar el cliente NiceGUI, 2.C está hecha
+> bajo otros nombres (bloque FUN, *sandbox*, `RunManifest`, registro de actividad, verificaciones
+> por MCP) y **2.A se descarta**. Detalle en la cabecera de `Plan_TDD_Fase2.md`.
+
 *Duración estimada: 8–10 semanas | Agosto–Octubre 2026*
 *Prerequisito: Fase 1 desplegada en piloto*
 
@@ -509,6 +514,11 @@ automatización que requieren recursos locales (ver §2.3 docs/Arquitectura.md).
 ---
 
 # FASE FUNCIONAL 3 — Gestor de Expedientes e Integración Institucional
+
+> **⛔ Cerrada el 2026-09-23.** **No se construye un gestor de expedientes**: el de la institución
+> es la fuente de verdad del procedimiento y la plataforma no cambia nunca su estado. La sustituye
+> «Trámites asistidos con IA», tema 8 de [`../ROADMAP.md`](../ROADMAP.md). Detalle, con qué cae y
+> qué sobrevive, en la cabecera de `Plan_TDD_Fase3.md`.
 
 *Duración estimada: 9–10 semanas | Octubre 2026 – Enero 2027*
 *Prerequisitos: Fase 2 completada (servicios migrados, Thin Client, MCP Client)*

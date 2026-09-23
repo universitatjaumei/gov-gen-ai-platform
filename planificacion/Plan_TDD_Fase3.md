@@ -1,5 +1,34 @@
 ﻿# Plan TDD — Fase 3: Gestor de Expedientes e Integración Institucional
 
+> # ⛔ PLAN CERRADO — 2026-09-23
+>
+> **Este plan no se va a ejecutar.** Lo sustituye el tema 8 de [`../ROADMAP.md`](../ROADMAP.md),
+> «Trámites asistidos con IA», con cuatro hitos y trece *issues* en GitHub. Se conserva porque
+> explica cómo se llegó hasta aquí, y se lee como historia.
+>
+> **La decisión: no se construye un gestor de expedientes.** Las administraciones ya tienen uno, y
+> es la fuente de verdad del procedimiento —sus fases, su estado, quién firma, la notificación, la
+> evidencia de interoperabilidad—. Lo que falta no es otro gestor sino **fases concretas
+> asistidas** (baremación, informe de fase, resolución) que el gestor pueda invocar, y **la
+> plataforma no cambia nunca el estado del procedimiento**.
+>
+> Este plan ya lo había adoptado a medias: la nota del 2026-09-01 en su FASE 12 hacía del gestor
+> institucional la fuente de verdad y de las fases con IA plantillas del motor de redacción. Lo
+> que no hizo fue sacar la consecuencia, y por eso E1–E5 seguían construyendo tablas de
+> expedientes, grafo con *checkpointing*, bandeja de aprobaciones y adaptadores.
+>
+> | Qué | Qué pasó |
+> |---|---|
+> | **E1** esquema, **E2** motor con *checkpointing*, **E4** frontend de expedientes | **Caen.** El workspace del motor de informes ya suspende en las puertas de revisión y tiene su pantalla |
+> | **E5** adaptadores UJI y Gestión 400, capa ENI/ENS | **Cae.** ENI, CSV y DIR3 son del gestor, que ya los cumple; la plataforma entrega documento y *hash* |
+> | **FASE 17** agente analista · **3B.5** vigencia a fecha de referencia | **Sobreviven** como **bloques de plantilla** de la resolución |
+> | **3B.6** auditoría de equidad | **Aplazada** hasta que haya base jurídica para tratar datos de colectivo |
+> | **3C.0** invariante de ejecución edge | **Se cumple sin agente**: el gestor y la plataforma están en el mismo perímetro institucional |
+>
+> Y una regla nueva que este plan no tenía: **la baremación es determinista y siempre verificada
+> por una persona**. El modelo extrae hechos y redacta la motivación; los hechos los verifica
+> alguien y la puntuación la calcula una función con el baremo como dato versionado.
+
 > **Aviso de lectura — esto es un plan, no una descripcion del sistema.**
 >
 > Escrito en futuro y **antes de decisiones que despues se revirtieron**. Las dos mayores: el

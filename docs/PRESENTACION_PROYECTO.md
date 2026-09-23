@@ -339,27 +339,45 @@ la que **no hay mecanismo construido**, y por eso está aquí y no en la tabla d
 
 ## 6. Lo que viene
 
-**Cliente de ejecución local (2027).** Un agente ligero instalable en el puesto de trabajo, para
-los casos en que un proceso debe tocar sistemas que no exponen API: el sistema central orquesta y
-el agente local ejecuta. Es la infraestructura que necesita el módulo siguiente.
+Las dos líneas que siguen se replantearon el 23 de septiembre de 2026, y lo que cambió no fue el
+plazo sino el alcance. Merece explicarse, porque el motivo vale para cualquier administración que
+se plantee lo mismo: **en los dos casos habíamos previsto construir una pieza que ya existe fuera,
+y lo que de verdad faltaba era la gobernanza alrededor.** El detalle, con sus hitos y sus issues,
+está en `ROADMAP.md`.
 
-**Gestor de Expedientes (2027-2028).** La pieza de mayor valor regulatorio, y la que todavía no
-existe: tramitación administrativa asistida con fases y acciones **calculadas en el servidor**
-según rol, fase y estado —de modo que el sistema solo ofrece lo que la norma autoriza—, auditoría
-encadenada con valor probatorio, fotografía de la normativa aplicable en la fecha de referencia
-(Ley 39/2015), auditoría de equidad y integración con los gestores corporativos existentes.
+**Automatización gobernada.** La previsión era un cliente ligero instalable en el puesto de
+trabajo que ejecutara automatizaciones y capturas de pantalla. Se descarta: los agentes de
+propósito general con acceso al navegador y al escritorio ya hacen eso, y además lo hacen en el
+régimen que las normas de desarrollo ciudadano reservan al uso personal, en el equipo de la
+persona y con sus credenciales. Lo que no dan, y lo que una institución necesita en cuanto una
+automatización se comparte, es saber **cuáles circulan, quién las usa y con qué versión**: un
+cuaderno se registra por su hash con su declaración responsable sin que la plataforma lo ejecute,
+un agente puede pasar el código por la auditoría estática y el texto por la anonimización antes de
+enviarlo a un modelo, y cada uso queda en el registro de actividad.
 
-Y conviene decirlo aquí y no descubrirlo después: el gestor de expedientes **sí toca actuación
-administrativa**, así que no hereda la clasificación de riesgo de los asistentes informativos.
-Tendrá que recorrer el procedimiento desde el principio, con su propia clasificación y, si esa
-clasificación lo exige, con evaluación de impacto en la protección de datos. Los asistentes de
-hoy no la necesitan porque informan citando norma publicada; ése es el motivo, y deja de valer en
-cuanto el sistema participa en una decisión.
+**Trámites asistidos con IA.** La previsión era un gestor de expedientes completo. Se descarta por
+la misma razón: las administraciones ya tienen uno, y es la fuente de verdad del procedimiento
+—sus fases, su estado, quién firma, la notificación, la evidencia de interoperabilidad—. Lo que
+falta no es otro gestor sino **fases concretas asistidas**: baremar, redactar un informe técnico,
+redactar una resolución, con las mismas garantías del módulo de informes. Un trámite se crea a mano
+en la plataforma o lo crea el gestor por API, y el resultado —documento, datos y evidencia— vuelve
+al expediente. **La plataforma no cambia nunca el estado del procedimiento**: valida contenido, no
+resuelve. Que esa frontera esté escrita es lo que evita gestionar lo mismo desde dos sitios.
+
+Y conviene decirlo aquí y no descubrirlo después: los trámites asistidos **sí tocan actuación
+administrativa**, y una baremación evalúa a personas, así que no heredan la clasificación de riesgo
+de los asistentes informativos. Tendrán que recorrer el procedimiento desde el principio, con su
+propia clasificación y, si esa clasificación lo exige, con evaluación de impacto en la protección
+de datos, **antes de que entre ningún dato real**. Los asistentes de hoy no la necesitan porque
+informan citando norma publicada; ése es el motivo, y deja de valer en cuanto el sistema participa
+en una decisión. De ahí una regla que ya está fijada: en una baremación el modelo extrae hechos y
+redacta la motivación, pero **no puntúa nunca** —los hechos los verifica una persona y la
+puntuación la calcula una función determinista con el baremo como dato versionado—.
 
 **Hitos orientativos, en la escala de §5.1**: entrada en **validación** de los asistentes
 informativos durante el cuarto trimestre de 2026, sujeta al estudio de integración; apertura del
 repositorio público en la misma ventana; **explotación** no antes de que exista auditoría de
-seguridad independiente; cliente local y gestor de expedientes en experimentación durante
+seguridad independiente; automatización gobernada y trámites asistidos en experimentación durante
 2027-2028.
 
 Las fechas son orientativas y las dependencias no: ninguna de ellas depende sólo del desarrollo,

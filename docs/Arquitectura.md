@@ -261,9 +261,10 @@ Dos módulos de la hoja de ruta, y de los dos falta código:
   2026-09-04 con el cliente NiceGUI porque llevaba tiempo sin compilar. El mapa de lo que hubo,
   fichero a fichero, está en
   [`INVENTARIO_RETIRADA_LEGACY.md`](INVENTARIO_RETIRADA_LEGACY.md).
-- **Gestor de expedientes** —tramitación con fases y acciones calculadas en el servidor— se apoya
-  en la plataforma de gestión de la institución que lo despliegue.
-  [`GESTOR_EXPEDIENTES.md`](GESTOR_EXPEDIENTES.md).
+- **Trámites asistidos con IA** —baremación, informe de fase, redacción de resolución— que el
+  gestor de expedientes de la institución invoca, o que se crean a mano. **No se construye un
+  gestor**: el suyo es la fuente de verdad del procedimiento y la plataforma no cambia nunca su
+  estado. [`DECISION_TRAMITES_ASISTIDOS.md`](DECISION_TRAMITES_ASISTIDOS.md).
 
 Que no estén escritos no es un retraso. **Qué tienen que hacer exactamente lo definen un
 despliegue real y una necesidad identificada**, y escribirlos antes sería adivinarlo: automatizar

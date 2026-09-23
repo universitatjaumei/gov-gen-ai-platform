@@ -17,9 +17,13 @@ manuales— vive en `docs/`.
 | `PLAN_TDD_DETALLADO.md` | Prompts detallados de las fases iniciales. |
 | `Plan_TDD_Fase1.md` | **El índice** de la Fase 1 — hub informativo, personalización y redacción. Es el plan en curso. Eran 27.449 líneas en un fichero; ahora cada bloque y cada fase viven en `fase1/`, con su número de orden delante. |
 | `fase1/` | Un fichero por bloque o fase: los prompts, sus tests mínimos y su verificación. Es lo que se lee para implementar, y lo que se puede revisar en un *pull request*. |
-| `Plan_TDD_Fase2.md`, `Plan_TDD_Fase3.md` | Fases posteriores, aún sin abrir. **Escritas antes de decisiones que después se revirtieron**: ver el aviso de abajo. La hoja de ruta pública, por temas y con estado, es [`../ROADMAP.md`](../ROADMAP.md); la fase 2 se replanteó allí el 2026-09-23 como «automatización gobernada», con cuatro hitos en GitHub. |
+| `Plan_TDD_Fase2.md`, `Plan_TDD_Fase3.md` | **Cerrados el 2026-09-23 y no se van a ejecutar.** Los sustituyen los temas 4 («automatización gobernada») y 8 («trámites asistidos con IA») de [`../ROADMAP.md`](../ROADMAP.md), cada uno con cuatro hitos en GitHub. Se conservan como historia: la cabecera de cada uno dice qué cayó, qué se hizo bajo otro nombre y qué sobrevive. |
 
 ## Si llegas de fuera: esto es un registro, no una descripción
+
+**La hoja de ruta pública es [`../ROADMAP.md`](../ROADMAP.md)**, por temas y con estado, enlazada a
+las *issues* y a los hitos de GitHub. Esta carpeta dirige el desarrollo; el roadmap lo cuenta hacia
+fuera. Si lo que buscas es qué está previsto construir, empieza por ahí.
 
 Los documentos de plan están escritos **en futuro**, y algunos describen caminos que se
 recorrieron a medias o no se recorrieron. Los dos mayores:

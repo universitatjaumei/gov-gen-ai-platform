@@ -190,15 +190,16 @@ que hoy no existe, no la revisión.
 
 ```
 server/        FastAPI (AGPLv3) — modules/{automation,agents_hub,redaccion,expedientes}, core/, services/, api/, routers/, migrations/
-frontend/      React + Vite + TS (MIT) — src/{admin,widget,agent,redaccion,shared}
+frontend/      React + Vite + TS (MIT) — src/{admin,curation,redaccion,widget,shared}
 mcp_server/    Servidor MCP, stdio y remoto (paquete uv autocontenido, sin imports de server/app)
 shared/        Tipos y contratos compartidos
 ```
 
-**No hay cliente de escritorio ni agente de ejecución local.** La aplicación NiceGUI original
-(`client_app/`) y su cuarentena (`_legacy_nicegui/`) **se retiraron completas el 2026-09-04**, 574
-ficheros: llevaba tiempo sin compilar y nada en producción dependía de ella. El agente local es
-trabajo pendiente **sin código aquí**; el mapa de lo que hubo está en
+**No hay cliente de escritorio ni agente de ejecución local, y no va a haberlo.** La aplicación
+NiceGUI original (`client_app/`) y su cuarentena (`_legacy_nicegui/`) **se retiraron completas el
+2026-09-04**, 574 ficheros: llevaba tiempo sin compilar y nada en producción dependía de ella. El
+**2026-09-23 se decidió no reconstruirlo**: es un límite deliberado (`docs/ESPECIFICACIONES.md`
+§10), no una tarea pendiente, así que no hace falta proponerlo. El mapa de lo que hubo está en
 `docs/INVENTARIO_RETIRADA_LEGACY.md`.
 
 ---
