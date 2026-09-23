@@ -39,9 +39,12 @@ verificación en navegador si toca UI.
 (`git commit -s`), sin `Co-Authored-By` y **sin push**. Es lo que hace reversible un bloque largo:
 si el prompt 5 rompe lo que hizo el 3, hay un punto exacto al que volver.
 
-**Si el commit resuelve una issue, su cuerpo lleva `Closes #N`.** Un asunto `fix(#92):` no la
-cierra, así que se acumulan issues abiertas ya resueltas en producción — pasó con once. Lo
-comprueba CI.
+**Si el commit resuelve una issue, lleva `Closes #N`** en su cuerpo o en el de la PR. Un asunto
+`fix(#92):` no cierra nada, y se acumulan resueltas y abiertas: pasó con once. Lo comprueba CI.
+
+**Los avisos de GitHub los revisa `avisos.yml`, no tu memoria**: alertas de Dependabot al
+desplegar, hilos de Copilot al mezclar. Tras decidir sobre un comentario de Copilot —arreglarlo o
+rebatirlo— **resuelve el hilo**; si no, la PR queda roja. Razón en el test homónimo.
 
 ### Se trabaja en `desarrollo`; `main` es para desplegar
 
@@ -124,14 +127,10 @@ siguen ahí con su contexto y sus mensajes de commit, y esa referencia viaja con
 se puede perder.
 
 **Hubo una cuarentena, `_legacy_nicegui/`, y se retiró el 2026-09-04 junto con `client_app/`.**
-Servía para tener el NiceGUI a mano mientras el código nuevo se estabilizaba contra escenarios
-reales, y durante meses valió la pena. Lo que la volvió inútil fue medirla: cuando llegó el momento
-de mover el resto, **48 de los 67 ficheros candidatos tenían quien los importara** y el bloqueo era
-transitivo, así que la cuarentena no se vaciaba fichero a fichero; y el propio `client_app/` ya no
-compilaba —28 imports activos hacia diez ficheros que bloques anteriores habían movido allí sin
-reapuntar a sus importadores—. Una cuarentena que nadie puede vaciar y que contiene código que no
-arranca no es referencia, es ruido con aspecto de código vivo. Está en
-`docs/INVENTARIO_RETIRADA_LEGACY.md` §4 y §5, con la medición.
+Dejó de servir cuando se midió: 48 de los 67 ficheros candidatos tenían quien los importara, así
+que no se vaciaba fichero a fichero, y el propio `client_app/` ya no compilaba. Una cuarentena que
+nadie puede vaciar y que contiene código que no arranca no es referencia, es ruido con aspecto de
+código vivo. La medición está en `docs/INVENTARIO_RETIRADA_LEGACY.md` §4 y §5.
 
 **No la reconstruyas.** Si necesitas ver cómo lo hacía el NiceGUI: `git log --diff-filter=D --
 client_app/`, la carpeta `AutomatIA` o el *bundle* de GenGov. Lo que **no** se hace es volver a

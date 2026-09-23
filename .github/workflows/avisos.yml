@@ -1,0 +1,256 @@
+# Los avisos que emite GitHub, revisados solos
+#
+# El job `supply-chain` de `ci.yml` ya audita los cinco locks en cada commit y bloquea, con
+# `avisos_aceptados.toml` como única puerta de salida. Lo que ese job **no puede** ver es lo que
+# no está en el árbol: las alertas de la pestaña Dependabot, las PR de actualización pendientes y
+# los informes de Copilot. Eso se quedaba por revisar cuando a alguien se le pasaba, y esto lo
+# mecaniza.
+#
+# ─── POR QUÉ LAS ALERTAS SE MIRAN DESPUÉS DE MEZCLAR Y NO ANTES ───────────────────────────────
+#
+# Dependabot calcula sus alertas contra la **rama por omisión**, `main`. Un arreglo que vive en
+# `desarrollo` no las cierra: siguen abiertas hasta que se mezclan. Una puerta que bloqueara la PR
+# por «hay alertas abiertas» dejaría roja justamente a la PR que las corrige, y un punto muerto se
+# resuelve siempre igual: desactivando la puerta. Así que el reparto sigue a la física del dato.
+#
+#   · Antes de mezclar → lo que se puede calcular de la rama. Lo hace `supply-chain`; aquí se
+#     añade lo que también es pre-merge por naturaleza: que los informes de Copilot estén
+#     atendidos.
+#   · Al empujar a `main` (= al desplegar) → ninguna alerta puede quedar **sin decidir**.
+#
+# ─── EL CHECK DE COPILOT ES UNA FOTO, NO UNA VIGILANCIA ───────────────────────────────────────
+#
+# Copilot comenta cuando termina, que suele ser **después** de que CI haya pasado. Lo suyo sería
+# que cada comentario y cada resolución volvieran a calcular el estado. **Se intentó, y las dos
+# vías están cerradas.** Medido el 2026-09-23, y escrito aquí para que nadie lo reintente:
+#
+#  1. **Resolver un hilo no emite ningún evento que Actions admita.** `pull_request_review`
+#     (`submitted`) y `pull_request_review_comment` (`created`) no cubren la resolución, y
+#     `pull_request_review_thread` —que sí existe como webhook— **no está en la lista de eventos
+#     que disparan workflows**. Ponerlo en `on:` no da error de validación: deja el workflow sin
+#     arrancar, con una ejecución sin jobs marcada como fallo en cada push. Costó un commit.
+#
+#  2. **Los runs que dispara Copilot quedan retenidos.** Llegan como `action_required` porque el
+#     actor es `Copilot` y el repositorio exige aprobación para contribuyentes externos. El ajuste
+#     que lo gobierna **no es accesible mientras el repositorio sea privado**: la API responde
+#     «Fork PR approval is not allowed for private repositories». Conviene revisarlo al abrirlo.
+#
+# Consecuencia, y hay que ser honesto con ella: en la ejecución que abre la PR este check dice la
+# verdad del instante en que corre, que suele ser **antes** de que Copilot haya comentado. Se
+# vuelve a calcular con el siguiente push, o a mano (`gh run rerun`). **Por eso no debe ser un
+# check obligatorio**: una foto vieja no puede gobernar un merge.
+#
+# ─── LO QUE NO SE PUEDE OLVIDAR AL TOCAR ESTE FICHERO ─────────────────────────────────────────
+#
+# Que el paso distinga **«no pude mirar» de «no hay nada»**. Si la API responde 403, un `gh api`
+# sin comprobar deja la variable vacía y el job informa de cero alertas en verde. Este proyecto ya
+# se comió un guardarraíl que recorría un directorio inexistente y pasaba en verde. Lo vigila
+# `server/tests/infra/test_los_avisos_de_github_se_revisan.py`.
+
+name: Avisos
+
+on:
+  # El despliegue. Es el primer instante en que la foto de las alertas es cierta.
+  push:
+    branches: [main]
+  # La puerta de mezcla, para los informes de Copilot.
+  pull_request:
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created]
+  # Una alerta puede aparecer un martes sin que nadie toque el repositorio en dos semanas.
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+# Sólo lee avisos. No tiene por qué poder cambiar nada.
+permissions:
+  contents: read
+  pull-requests: read
+  security-events: read
+
+jobs:
+  alertas:
+    name: Ninguna alerta de Dependabot queda sin decidir
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Las alertas abiertas están todas corregidas, descartadas o aceptadas
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # El `if !` no es estilo: si la API responde 403 —el alcance del token de Actions sobre
+          # Dependabot no es igual en todos los repositorios— un `gh api` suelto deja la lista
+          # vacía y este paso diría «no hay alertas» en verde.
+          # `--paginate` no es cosmético: la API devuelve 100 como mucho, y una alerta sin decidir
+          # en la segunda página haría pasar este job en verde — el mismo falso negativo que la
+          # puerta existe para evitar, entrando por la puerta de al lado.
+          if ! ALERTAS="$(gh api --paginate "repos/$REPO/dependabot/alerts?state=open&per_page=100" --jq '.[] | [.security_advisory.ghsa_id, .dependency.package.ecosystem + "/" + .dependency.package.name, .security_advisory.severity, .dependency.scope, .html_url] | @tsv' 2>&1)"; then
+            echo "::error::No se han podido leer las alertas de Dependabot. Esto NO quiere decir que no haya."
+            echo "$ALERTAS"
+            echo ""
+            echo "Si es un 403: el \`GITHUB_TOKEN\` de Actions no alcanza a las alertas de este"
+            echo "repositorio. Hace falta un token propio con permiso de lectura sobre Dependabot"
+            echo "alerts, guardado como secreto y pasado en \`GH_TOKEN\`. Dejarlo como está"
+            echo "convertiría esta puerta en un adorno."
+            exit 1
+          fi
+
+          # Los avisos que este repositorio ya decidió aceptar, con su motivo, su firma y su
+          # fecha de caducidad. Es el MISMO fichero que usa `supply-chain`: dos listas de
+          # exclusiones que se contradicen es peor que ninguna.
+          #
+          # **Y las vencidas no cuentan.** `test_dep7_las_aceptaciones_caducan.py` pone rojo
+          # cuando una caduca, pero corre con la suite, y este workflow corre además los lunes
+          # sin que nadie toque el repositorio: ahí, leer sólo el `id` daría por decidida una
+          # aceptación vencida. La caducidad es lo único que obliga a volver a mirar.
+          ACEPTADOS="$(python3 -c "
+          import datetime, pathlib, tomllib
+          t = pathlib.Path('avisos_aceptados.toml')
+          d = tomllib.loads(t.read_text(encoding='utf-8')) if t.is_file() else {}
+          hoy = datetime.date.today()
+          def vigente(a):
+              c = a.get('caduca')
+              if isinstance(c, datetime.datetime):
+                  c = c.date()
+              elif isinstance(c, str):
+                  c = datetime.date.fromisoformat(c)
+              return c is not None and c >= hoy
+          print('\n'.join(a['id'] for a in d.get('aviso', []) if a.get('id') and vigente(a)))
+          ")"
+
+          echo "## Alertas de Dependabot" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -z "$ALERTAS" ]; then
+            echo "Ninguna abierta." >> "$GITHUB_STEP_SUMMARY"
+            echo "ninguna alerta abierta"
+            exit 0
+          fi
+
+          echo "| Aviso | Paquete | Gravedad | Alcance | Decidido |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+
+          SIN_DECIDIR=""
+          while IFS=$'\t' read -r ghsa paquete gravedad alcance url; do
+            [ -n "$ghsa" ] || continue
+            if printf '%s\n' "$ACEPTADOS" | grep -qxF "$ghsa"; then
+              decidido="aceptado en \`avisos_aceptados.toml\`"
+            else
+              decidido="**NO**"
+              SIN_DECIDIR="$SIN_DECIDIR $ghsa($paquete)"
+            fi
+            echo "| [$ghsa]($url) | $paquete | $gravedad | $alcance | $decidido |" >> "$GITHUB_STEP_SUMMARY"
+          done <<< "$ALERTAS"
+
+          if [ -n "$SIN_DECIDIR" ]; then
+            echo "::error::Hay alertas de Dependabot sin decidir:$SIN_DECIDIR"
+            echo ""
+            echo "Una alerta abierta tiene tres finales legítimos, y quedarse quieta no es ninguno:"
+            echo "  1. Se corrige subiendo el paquete."
+            echo "  2. Se descarta en GitHub con motivo, si el código vulnerable no se usa."
+            echo "  3. Se acepta en \`avisos_aceptados.toml\` con motivo, firma y caducidad."
+            exit 1
+          fi
+          echo "todas las alertas abiertas están decididas"
+
+      - name: Las PR de Dependabot que esperan (informa, no bloquea)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # `--limit` explícito: sin él son 30 y la lista se truncaría en silencio, que en un
+          # resumen cuya única función es «estén a la vista» sería peor que no mostrarlo.
+          if ! PRS="$(gh pr list --repo "$REPO" --app dependabot --state open --limit 100 --json number,title,createdAt --jq '.[] | "\(.number)\t\(.title)\t\(.createdAt[:10])"' 2>&1)"; then
+            echo "::error::No se han podido leer las PR de Dependabot."
+            echo "$PRS"
+            exit 1
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## PR de Dependabot pendientes" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -z "$PRS" ]; then
+            echo "Ninguna." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # No bloquea a propósito: una actualización pendiente no es un defecto, y bloquear el
+          # despliegue por ella sólo enseñaría a saltarse la puerta. Lo que hace falta es que
+          # estén a la vista en el mismo sitio y el mismo momento en que se mira todo lo demás.
+          echo "| PR | Desde | Título |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          while IFS=$'\t' read -r numero titulo fecha; do
+            [ -n "$numero" ] || continue
+            echo "| #$numero | $fecha | $titulo |" >> "$GITHUB_STEP_SUMMARY"
+          done <<< "$PRS"
+
+  copilot:
+    name: Los informes de Copilot están atendidos
+    if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ningún comentario de Copilot queda sin resolver
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if ! HILOS="$(gh api graphql -F owner='${{ github.repository_owner }}' -F nombre='${{ github.event.repository.name }}' -F numero='${{ github.event.pull_request.number }}' -f query='
+            query($owner: String!, $nombre: String!, $numero: Int!) {
+              repository(owner: $owner, name: $nombre) {
+                pullRequest(number: $numero) {
+                  reviewThreads(first: 100) {
+                    nodes {
+                      isResolved
+                      isOutdated
+                      comments(first: 1) { nodes { author { login } path } }
+                    }
+                  }
+                }
+              }
+            }' --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not) | select(.isOutdated | not) | select(.comments.nodes[0].author.login | test("copilot"; "i")) | .comments.nodes[0].path' 2>&1)"; then
+            echo "::error::No se han podido leer los hilos de revisión de esta PR."
+            echo "$HILOS"
+            exit 1
+          fi
+
+          echo "## Informes de Copilot" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -z "$HILOS" ]; then
+            echo "Ningún comentario sin resolver." >> "$GITHUB_STEP_SUMMARY"
+            echo "ningún comentario de Copilot sin resolver"
+            exit 0
+          fi
+
+          CUANTOS="$(printf '%s\n' "$HILOS" | grep -c . )"
+          echo "**$CUANTOS sin resolver:**" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$HILOS" | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
+
+          # Los hilos obsoletos quedan fuera: si el código que comentaban ya cambió, el
+          # comentario dejó de describir la PR. Los vivos, no: resolverlos es el acto explícito
+          # que separa «lo he leído y decido que no» de «no lo he visto».
+          #
+          # Y no todos los hallazgos de Copilot son ciertos —en la PR #110 uno era falso y se
+          # rebatió midiéndolo contra producción—. Resolverlo también cierra ése: lo que este
+          # paso exige es el juicio, no la obediencia.
+          echo "::error::Quedan $CUANTOS comentarios de Copilot sin resolver en esta PR."
+          echo ""
+          echo "Resuelve cada hilo tras decidir sobre él —arreglándolo o rebatiéndolo—. Un hilo"
+          echo "vivo y sin respuesta no distingue un hallazgo pendiente de uno que nadie miró."
+          echo ""
+          echo "Resolver no vuelve a ejecutar esto: no hay ningún evento de Actions que se emita"
+          echo "al resolver un hilo (ver la cabecera del workflow). Después de resolver, este"
+          echo "check se pone verde con el siguiente push o con \`gh run rerun --failed\`."
+          exit 1

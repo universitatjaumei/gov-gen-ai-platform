@@ -4,9 +4,10 @@
 > que otros proyectos del Teclab puedan adoptarlo. No es una propuesta teórica: es lo que ha quedado
 > tras varios meses de ensayo y error en un proyecto real, contrastado con lo que hay publicado.
 >
-> **Escrito el 2026-09-03, revisado el 2026-09-23** al migrar el plan de una lista de prompts a
-> *issues* y una hoja de ruta (§4.7). **Ámbito**: desarrollo de software con agentes de
-> programación bajo supervisión humana.
+> **Escrito el 2026-09-03, revisado el 2026-09-23**, cuando el plan **empezó** a migrar de una
+> lista de prompts a *issues* y una hoja de ruta. La migración está a medias a propósito y §4.7
+> dice exactamente por dónde va. **Ámbito**: desarrollo de software con agentes de programación
+> bajo supervisión humana.
 >
 > **Quien dirige este desarrollo es jurista y no sabe programar**, y eso es la condición del
 > experimento y no un dato de autoría: §1.5.
@@ -40,7 +41,7 @@ equipo decidir qué adoptar tal cual y qué tratar como hipótesis.
 
 | Término | Qué significa aquí |
 |---|---|
-| **Prompt** | Una instrucción de trabajo para el agente, escrita con sus tests y su criterio de cierre. Fue la unidad mínima del plan; hoy ese papel lo hace una *issue* (§4.7) |
+| **Prompt** | Una instrucción de trabajo para el agente, escrita con sus tests y su criterio de cierre. Es la unidad mínima del plan; en el trabajo nuevo ese papel lo hace una *issue*, y los dos conviven (§4.7) |
 | **Bloque** | Un conjunto de pasos que entrega algo utilizable. Es la unidad de interacción con el humano, y lo sigue siendo con *issues* |
 | **Cursor** | El documento que dice en qué bloque y en qué paso está el desarrollo ahora mismo |
 | **Guardarraíl** | Un test de la suite que falla cuando un documento del proyecto deja de ser verdad |
@@ -369,11 +370,11 @@ confundido. **[n=1]**
 
 ### 4.3 El plan: especificaciones en forma de prompts TDD
 
-> **Esto fue la primera forma del plan, y ya no es la única.** El trabajo pendiente de este
-> proyecto vive hoy en *issues* agrupadas en hitos; qué lo cambió y qué se conservó está en §4.7.
-> El apartado se queda entero porque **lo que describe sigue valiendo**: es el andamiaje que
-> permite dirigir un desarrollo sin saber programar, y los tres detalles del final son
-> transferibles a una *issue* tal cual.
+> **Ésta fue la primera forma del plan, y ya no es la única.** El trabajo **nuevo** de este
+> proyecto vive en *issues* agrupadas en hitos, mientras la Fase 1 sigue ejecutándose con sus
+> prompts: los dos conviven, y §4.7 dice por qué. El apartado se queda entero porque **lo que
+> describe sigue valiendo** —es el andamiaje que permite dirigir un desarrollo sin saber
+> programar— y los tres detalles del final son transferibles a una *issue* tal cual.
 
 El trabajo pendiente se escribe como **instrucciones ejecutables**, agrupadas en bloques. Cada
 prompt lleva su objetivo, sus tests mínimos enumerados y su verificación de cierre. El ejemplo es el
@@ -501,19 +502,32 @@ La forma coincide: hay convergencia real en la industria hacia «principios → 
 conviene defender ante otro equipo es **TDD obligatorio**, porque es la que hace que el resto sea
 comprobable y no una declaración de intenciones.
 
-### 4.7 El plan cambió de forma: de lista de prompts a *issues*
+### 4.7 El plan está cambiando de forma: de lista de prompts a *issues*
 
 Este apartado existe porque el documento describiría un método que el proyecto ya no sigue del
 todo. Y porque **la transición es probablemente lo más útil que hay aquí para otro equipo**: no la
 foto final, sino qué la disparó y qué se conservó al cruzarla. **[n=1]**
 
+**Y está a medias, a propósito**, que es el dato que más conviene no maquillar:
+
+| Plan | Estado a 2026-09-23 |
+|---|---|
+| `Plan_TDD_Fase1.md` | **Sigue en prompts**, y es el único cursor vivo del proyecto |
+| `Plan_Contrato_OpenAPI.md` | Completo; no tiene cursor |
+| Fases 2 y 3 | **Cerradas y sustituidas** por `ROADMAP.md` y los hitos de *issues*. No se ejecutarán como estaban escritas |
+
+Así que lo honesto no es «migramos», sino **«migramos lo que aún no estaba en marcha, y dejamos
+correr lo que sí»**. Reescribir la Fase 1 en *issues* sólo por uniformidad habría costado trabajo
+sin comprar garantía, que es la misma razón por la que §11.3 dice qué no copiar.
+
 **Lo que había.** Un documento de planificación por fase, partido en un fichero por bloque, con los
 prompts TDD que describe §4.3. El cursor decía en qué prompt estábamos. Funcionó durante meses y
 construyó casi todo lo que hoy está en producción.
 
-**Lo que hay.** Las *issues* de GitHub agrupadas en hitos, y una hoja de ruta pública por temas.
-`planificacion/` sigue en el repositorio pero ya **no dirige**: es registro, y lleva su propio
-aviso de lectura para que nadie lo confunda con una descripción del sistema de hoy.
+**Lo que hay para lo nuevo.** Las *issues* de GitHub agrupadas en hitos, y una hoja de ruta pública
+por temas. Se ejecutan **igual que un prompt** —RED → GREEN → REFACTOR, verificaciones de cierre,
+un commit firmado por *issue*—; lo que cambia es dónde está escrito el alcance, y que al cerrar se
+cierra la *issue* en vez de mover un cursor.
 
 **Qué lo disparó, y son tres cosas que conviene distinguir:**
 
@@ -543,7 +557,7 @@ del plan:
 | Los **guardarraíles** (§6) | — |
 | El **historial** (§4.4) | — |
 | El **registro de decisiones** (§4.5) | — |
-| El **cursor** (§4.4) | Pierde peso: lo que estaba en él lo dicen ahora el estado de las *issues* y los hitos |
+| El **cursor** (§4.4) | Sigue vivo para la Fase 1; para lo nuevo, su papel lo hacen el estado de las *issues* y los hitos |
 
 **La lección, dicha como hipótesis y no como resultado.** El andamiaje que necesita quien empieza
 —prompts escritos con sus tests enumerados— **no es el mismo que necesita a los seis meses**, y
@@ -552,8 +566,9 @@ si al migrar a *issues* se hubieran perdido los tests escalonados o los guardarr
 transición habría sido un retroceso disfrazado de modernización.
 
 **Y una consecuencia mecánica que costó once *issues* abiertas.** Con el plan en un fichero, un
-paso cerrado se marcaba a mano. Con *issues*, cerrar es automático **sólo si el commit lleva la
-palabra que GitHub entiende** (`Closes #N`); un asunto `fix(#N):` no cierra nada. Durante un tiempo
+paso cerrado se marcaba a mano. Con *issues*, cerrar es automático **sólo si aparece una palabra de
+cierre** —`Closes`, `Fixes` o `Resolves` seguidas de `#N`— **en el cuerpo del commit o en el de la
+*pull request***; un asunto `fix(#N):` no cierra nada. Durante un tiempo
 la lista de *issues* anunció defectos ya resueltos y desplegados, que es justo lo primero que mira
 quien llega. Lo arregla un guardarraíl en la integración continua, y es un buen ejemplo de la regla
 general: **al cambiar de mecanismo hay que preguntarse qué hacía el anterior que el nuevo no hace
@@ -565,8 +580,8 @@ solo**.
 
 ### 5.1 El bloque es la unidad de interacción
 
-Un bloque es un conjunto de pasos que entrega algo utilizable —prompts al principio, *issues* de un
-hito hoy (§4.7); el concepto no cambió al cambiar el artefacto—. Una vez arrancado, el agente **no
+Un bloque es un conjunto de pasos que entrega algo utilizable —prompts en la Fase 1, *issues* de un
+hito en lo nuevo (§4.7); el concepto no cambia con el artefacto—. Una vez arrancado, el agente **no
 informa hasta cerrarlo** y no pide confirmación entre pasos.
 
 Esto es lo que hace rentable el método, y encaja con el reparto que mide Anthropic: el humano en la
@@ -777,6 +792,83 @@ entera, con su reinicio y su aviso de vigilancia. **[n=1]** La regla que lo cier
 fichero de despliegue no lleva la rama de desarrollo en su disparador**. Si algún día aparece ahí,
 la separación desaparece.
 
+### 7.4 Los avisos que emite la forja también son una puerta
+
+Las puertas de §7.1 miran el árbol: el código, los *locks*, el contrato. Pero una forja moderna
+—GitHub, GitLab— emite además avisos **que no están en el árbol** y que ninguna puerta local puede
+ver: alertas de vulnerabilidad sobre las dependencias, *pull requests* de actualización abiertas
+por un robot, y revisiones de código automáticas.
+
+Esos avisos tienen un problema que no tienen los tests: **no fallan**. Se acumulan en una pestaña,
+y revisarlos depende de que alguien se acuerde. En este proyecto la frase que lo describió fue
+literal: «lo voy viendo y te voy diciendo, pero si se me pasa o se me olvida se queda por
+revisar». Es la definición de un control que existe y no actúa, y la misma lección que §6: **se
+cumple donde está mecanizado y se escapa donde sólo estaba escrito**. **[n=1]**
+
+**Lo que hay que entender antes de mecanizarlo es dónde se calcula cada aviso**, porque de ahí sale
+el diseño y no de la preferencia por bloquear pronto:
+
+| Aviso | Contra qué se calcula | Dónde puede exigirse |
+|---|---|---|
+| Alertas de vulnerabilidad | La **rama por omisión** | Al mezclar a la principal, no antes |
+| Revisión automática de código | La *pull request* | Antes de mezclar |
+| *Pull requests* de actualización | Nada; simplemente existen | En ningún sitio: se informan |
+
+La primera fila es la que sorprende. Como la alerta se calcula contra la rama por omisión, **un
+arreglo que vive en la rama de desarrollo no la cierra**: seguirá abierta hasta que se mezcle. Una
+puerta que bloqueara la *pull request* por «hay alertas abiertas» dejaría roja precisamente a la
+que las corrige — y un punto muerto se resuelve siempre igual, desactivando la puerta. Por eso las
+alertas se exigen **decididas al desplegar**, que es el primer instante en que la foto es cierta.
+
+La tercera fila es la tentación contraria: bloquear por una actualización pendiente parece
+riguroso y sólo enseña a saltarse la puerta. Una actualización que espera no es un defecto. Lo que
+hace falta es que esté **a la vista en el mismo sitio y el mismo momento** en que se mira todo lo
+demás.
+
+**Y hay un detalle de temporización que decide si el control sirve o es decorativo.** La revisión
+automática comenta **cuando termina**, que suele ser después de que la integración continua haya
+pasado. Un control que sólo corriera con el *push* daría verde en el único instante en que todavía
+no había nada que ver.
+
+Lo natural sería que cada comentario y cada resolución volvieran a calcular el estado. **Este
+proyecto lo intentó y las dos vías estaban cerradas**, y merece contarse porque el resultado
+importa más que el detalle:
+
+- No había ningún evento que la automatización admitiera **para la resolución de un comentario**.
+  El que parecía obvio existe como aviso de la forja pero no como disparador, y ponerlo no dio un
+  error de validación: dejó el control **sin arrancar**.
+- Los eventos que **sí** existían llegaban retenidos a la espera de aprobación, porque quien los
+  emite es el propio revisor automático y cuenta como agente externo. El ajuste que lo gobierna
+  sólo era accesible con el repositorio ya público.
+
+De ahí sale la regla, que es lo generalizable: **antes de construir una puerta sobre una señal
+externa, comprueba que puedes reevaluarla después de actuar sobre ella.** Si puedes, es una
+vigilancia. Si no puedes, es una **foto** — sigue valiendo, porque una foto a tiempo es mejor que
+ninguna, pero entonces hay tres consecuencias que no son opcionales: se documenta como foto, el
+mensaje de error dice cómo volver a calcularla, y **no se convierte en comprobación obligatoria**.
+Una foto vieja que puede quedarse en rojo legítimamente acaba enseñando a usar la excepción de
+administrador, y eso desactiva de paso todas las demás puertas. **[n=1]**
+
+Tres reglas más, cada una contra un modo de degradarse:
+
+- **Una sola lista de aceptaciones.** Un aviso que no se puede corregir —porque no hay versión
+  corregida— se acepta por escrito, con motivo, firma y **caducidad**, en el mismo fichero que ya
+  usa la puerta de dependencias (§7.1). Inventar una segunda lista para los avisos de la forja
+  deja dos fuentes que se contradicen, y la que caduca es la que pierde.
+- **Resolver el hilo es el acto que cuenta.** Un comentario de revisión automática puede ser
+  cierto o falso —en este proyecto los ha habido de los dos—, así que lo que se exige no es
+  obedecerlo sino **decidir sobre él**. Cerrar el hilo es lo que separa «lo he leído y decido que
+  no» de «no lo he visto», y es lo único de las dos cosas que se puede comprobar.
+- **«No pude mirar» no es «no hay nada».** Si la interfaz de la forja responde con un error de
+  permisos, una llamada sin comprobar deja la lista vacía y el control informa de cero avisos
+  **en verde**. Es exactamente la trampa de §6.3, y aquí es más fácil de cometer porque el error
+  llega de fuera. La comprobación del error tiene que poner el paso en rojo, no escribir una
+  advertencia en el registro.
+
+**Lo generalizable**: donde una herramienta externa emite avisos que nadie está obligado a mirar,
+el marco exige una puerta que los mire por ti, colocada en el momento en que el dato ya es cierto,
+y una lista escrita —con caducidad— para lo que se decide no arreglar.
+
 ---
 
 ## 8. Apertura del repositorio
@@ -919,6 +1011,32 @@ que se arreglara como **clase** en vez de como caso. La segunda vez ya existía 
 para evitarlo, y no se usó en los ocho sitios que lo necesitaban.
 
 Regla: **a la segunda vez, guardarraíl.** No a la tercera.
+
+### 9.8 La configuración inválida no se rechaza: se ignora
+
+Un test que falla dice qué pasa y dónde. Una **configuración** que la plataforma no entiende no
+suele hacer eso: la acepta y no hace nada, o crea una ejecución vacía que parece un fallo de otra
+cosa. No hay línea que señalar, y lo que se ve es ausencia — que es lo más difícil de notar.
+
+Ha pasado dos veces aquí, y en las dos el fichero se veía perfectamente bien:
+
+- Los **nombres de ecosistema** del robot de dependencias. Un nombre que la plataforma no reconoce
+  deja esa entrada sin efecto y **no avisa**: la única forma de saberlo es abrir el panel después
+  del primer envío y mirar si el robot hizo algo.
+- Un **disparador inexistente** en un flujo de automatización. Existía como aviso de la forja pero
+  no como disparador. En lugar de rechazar el fichero, la plataforma dejó el flujo sin arrancar:
+  una ejecución **sin ningún paso**, marcada como fallo, repetida en cada envío. El síntoma no
+  apuntaba a la causa.
+
+Lo que las dos comparten es que **un test local sí puede comprobarlas**, y por el mismo método:
+la lista de valores admitidos se escribe en el guardarraíl, con la fecha en que se copió de la
+documentación, y el test compara contra ella. No es elegante —hay que revisarla si la plataforma
+añade valores—, pero convierte un fallo silencioso en un rojo con el nombre delante, y el modo de
+fallo del propio guardarraíl es benigno: un falso rojo que se arregla añadiendo una línea.
+
+Regla: **si un fichero de configuración lo interpreta un tercero, el conjunto de valores válidos
+es parte del proyecto.** Escribirlo cuesta diez minutos; averiguarlo por ausencia costó un commit
+las dos veces.
 
 ---
 

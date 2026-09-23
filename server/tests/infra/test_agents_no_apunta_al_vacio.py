@@ -132,16 +132,31 @@ class TestNoVuelveLaDuplicacion:
         )
 
     def test_should_stay_under_the_size_that_motivated_the_split(self, agents: str):
-        """No es un límite estético: es la señal de que el relato ha vuelto al fichero.
+        """Un cable trampa contra el relato, no un presupuesto de bytes.
 
-        El estudio empírico sobre ficheros de contexto para agentes encuentra que la longitud
-        moderada funciona mejor y que los agentes se saltan el contenido verboso. 40 KB era
-        demasiado; 33 sigue siendo mucho, y lo honesto es dejar el listón donde está para que no
-        vuelva a crecer sin que nadie lo note.
+        **Qué está comprobado y qué no.** Comprobado: que la prosa histórica vuelve sola a este
+        fichero —el listón saltó tres veces el 2026-09-23 y las tres veces lo que sobraba era
+        narración de algo retirado, no una regla—. No comprobado: que el punto exacto sea 36, ni
+        44, ni ningún otro. El estudio sobre ficheros de contexto encuentra que la longitud
+        moderada funciona mejor y que los agentes se saltan lo verboso, pero no da una cifra para
+        este fichero, y fingir que sí la da sería inventar una medida.
+
+        **Por eso el número se eligió el 2026-09-23 por su holgura y no por su exactitud.** Estuvo
+        en 36 porque era donde el fichero estaba al partirlo, y acabó regulando de más: tres
+        reglas legítimas seguidas obligaron a recortar prosa buena para hacerles sitio, con seis
+        bytes de margen. Un listón que se toca al añadir cualquier regla no mide el relato, mide
+        el calendario — y el remedio que enseña es el equivocado: quitar adjetivos en vez de mover
+        razonamiento.
+
+        **Cuando esto se ponga rojo, la respuesta correcta sigue siendo la misma**: llevar el
+        razonamiento largo a un documento aparte que este fichero enlace. Si la única forma de
+        volver bajo el listón fuera recortar reglas, entonces el listón está mal y toca revisarlo
+        otra vez, no comprimir hasta que quepa.
         """
         kb = len(agents.encode("utf-8")) / 1024
-        assert kb < 36, (
-            f"`AGENTS.md` ha crecido a {kb:.1f} KB. Se partió desde 40 KB porque el 28 % "
-            "duplicaba la metodología. Si una regla nueva necesita más de unas líneas de "
-            "razonamiento, ese razonamiento va a un documento aparte que este fichero enlace."
+        assert kb < 44, (
+            f"`AGENTS.md` ha crecido a {kb:.1f} KB. Antes de recortar, mira qué hay dentro: si lo "
+            "que sobra es el relato de algo retirado, va al historial de git o al documento que "
+            "lo cuenta entero. Si lo que sobra son reglas, el listón está mal puesto y se "
+            "revisa; comprimir prosa hasta que quepa es lo único que no arregla nada."
         )

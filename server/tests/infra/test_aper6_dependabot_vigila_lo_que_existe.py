@@ -28,8 +28,10 @@ import yaml
 RAIZ = Path(__file__).resolve().parents[3]
 CONFIG = RAIZ / ".github" / "dependabot.yml"
 
-#: Los nombres que GitHub documenta y que este repositorio usa. La lista está para cazar un typo
-#: (`github_actions` por `github-actions`), no para ser exhaustiva.
+#: Los nombres que GitHub documenta y que este repositorio usa, copiados el 2026-09-18. La lista
+#: está para cazar un typo (`github_actions` por `github-actions`), no para ser exhaustiva: un
+#: nombre que GitHub no reconoce deja su entrada sin efecto **y no avisa**, que es el modo de
+#: fallo del §9.8 del marco. La fecha está para saber contra qué documentación se comparó.
 ECOSISTEMAS_CONOCIDOS = {"uv", "pip", "npm", "github-actions", "docker"}
 
 #: Qué fichero tiene que haber en la ruta para que vigilarla signifique algo.
