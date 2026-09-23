@@ -190,7 +190,8 @@ se retiraron el 2026-09-04 con `client_app/`**, y no porque se den por buenas: *
 probar**. Pedirle a una persona que instale un agente inexistente es la peor clase de prueba
 pendiente, porque parece trabajo y no se puede ni empezar.
 
-Cuando el agente local se desarrolle, estas dos filas vuelven. Ver `docs/ESPECIFICACIONES.md` §10.
+**Y no vuelven**: el 2026-09-23 se decidió no construir el agente local. Es un límite deliberado,
+no una tarea aplazada. Ver `docs/ESPECIFICACIONES.md` §10.
 
 ### Despliegue `DEPLOY_MODE=cloud|edge`
 
