@@ -124,24 +124,48 @@ por Alembic, dependencias auditadas por lotes y reversión automática. Los hito
 recogen lo que queda antes y después de abrir. La numeración es `0.x` a propósito y no se promete
 cadencia ni soporte: [`docs/VERSIONADO.md`](docs/VERSIONADO.md).
 
-### 8. Gestor de expedientes y malla agéntica — Por revisar
+### 8. Trámites asistidos con IA — En curso
 
-La pieza de mayor valor regulatorio y la que no existe: tramitación asistida con fases y acciones
-**calculadas en el servidor** según rol, fase y estado, auditoría encadenada, fotografía de la
-normativa en la fecha de referencia e integración con los gestores corporativos. El plan está en
-`planificacion/Plan_TDD_Fase3.md` y **se escribió antes de las decisiones del tema 4**, así que se
-revisará con el mismo criterio antes de abrir ningún hito.
+**Sustituye al «Gestor de expedientes» de la fase 3 del plan original.** Las administraciones ya
+tienen un gestor de expedientes, y es la fuente de verdad del procedimiento: sus fases, su estado,
+quién firma, la notificación, la evidencia de interoperabilidad. Construir otro era duplicarlo.
+Lo que hace falta, y lo que la plataforma aporta, es un conjunto de **trámites con IA**
+—baremación, informe de fase, redacción de resolución— que siguen las pautas del módulo de
+informes y que se pueden **crear a mano en la plataforma o desde el gestor por API**. Las
+primeras pruebas se hacen a mano.
 
-Lo que ya está fijado y condiciona el diseño, y no cambia con la revisión:
+El vínculo entre los dos sistemas se resuelve con un principio: **el estado del procedimiento
+tiene un solo dueño, el gestor, y la plataforma nunca lo cambia.** La plataforma posee sólo la
+ejecución del trámite —que es un workspace del motor de informes con referencia al expediente—
+y su evidencia. Validar en la plataforma es validar el contenido generado; el acto administrativo
+sigue en el gestor.
 
-- el frontend **nunca** calcula qué acciones caben; el servidor devuelve `acciones_permitidas`;
+| Hito | Estado | Qué entrega | Issues |
+|---|---|---|---|
+| [1 — Cerrar el gestor de expedientes como producto](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/13) | Previsto | La especificación, la presentación y el plan de fase 3 describen trámites asistidos; el documento del gestor híbrido se retira y lo sustituye una decisión fechada | [#126](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/126), [#127](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/127) |
+| [2 — El trámite invocable, a mano y desde el gestor](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/14) | Previsto | Contrato y catálogo de trámites; creación a mano o por API con referencia externa e idempotencia; estado con `acciones_permitidas` y callback firmado; enlace profundo de revisión, semántica de «validar» y retención; salida estructurada con hash | [#128](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/128), [#129](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/129), [#130](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/130), [#131](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/131), [#132](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/132) |
+| [3 — Las tres clases de trámite](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/15) | Previsto | **Baremación determinista y siempre verificada por una persona** (el modelo extrae hechos, la persona los verifica, una función puntúa con el baremo como dato, el modelo motiva leyendo la tabla); informe de fase; resolución con la normativa aplicable a fecha de referencia. Todas con datos sintéticos | [#138](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/138), [#133](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/133), [#134](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/134) |
+| [4 — Decisiones de la institución](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/16) | **Bloqueado** | Qué gestor, qué puede hacer y con qué entorno de pruebas; clasificación de riesgo de la baremación y evaluación de impacto antes de cualquier dato real; qué vale «validar» en el procedimiento y cuánto se conservan los documentos | [#135](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/135), [#136](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/136), [#137](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/137) |
+
+Orden recomendado: 1, y después 2 y 3 en paralelo con datos sintéticos, empezando por el informe
+de fase, que es la clase de menor riesgo y con la que se prueban los dos modos. El hito 4 no
+bloquea el diseño; bloquea el paso a datos reales y al modo API. Si el gestor institucional no
+puede llamar hacia fuera, **el modo manual es el vínculo**, y se construye igual.
+
+Lo que se conserva del plan de la fase 3 y condiciona el diseño:
+
+- el frontend **nunca** calcula qué acciones caben; el servidor devuelve `acciones_permitidas`,
+  ahora sobre la ejecución del trámite, que es lo único que la plataforma posee;
 - **el cloud orquesta, el edge ejecuta**, donde «edge» es el servidor desplegado en la nube de la
-  institución, no un proceso en el puesto de trabajo;
-- las fases referencian `plantilla@versión` y `función@versión`, nunca código incrustado.
+  institución; con el gestor en el mismo perímetro se cumple sin agente;
+- los trámites referencian `plantilla@versión` y `función@versión`, nunca código incrustado;
+- el agente analista y la vigencia a fecha de referencia sobreviven como **bloques de plantilla**
+  de la resolución; la auditoría de equidad se aplaza hasta que haya base jurídica para los datos
+  de colectivo.
 
-Prerrequisito externo: los sistemas institucionales de tramitación, que no se pueden simular en
-local. Y una advertencia que conviene no descubrir después: este módulo **sí toca actuación
-administrativa**, así que no hereda la clasificación de riesgo de los asistentes informativos.
+Y la advertencia que conviene no descubrir después: este tema **sí toca actuación
+administrativa**, y la baremación evalúa a personas, así que no hereda la clasificación de riesgo
+de los asistentes informativos. Recorre su propio procedimiento, y ningún dato real entra antes.
 
 ## Lo que no se hace
 
@@ -154,6 +178,12 @@ Límites deliberados, con su razón en
 - **Acceder a la nube personal de la persona con credenciales centralizadas** (unidades y
   documentos compartidos). La persona sube y descarga; lo que necesite sus credenciales corre
   fuera y se registra.
+- **Un gestor de expedientes propio.** El de la institución es la fuente de verdad del
+  procedimiento y la plataforma no cambia nunca su estado: entrega trámites asistidos y su
+  evidencia. Es la decisión del tema 8 y entra en la especificación con
+  [#126](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/126).
+- **Puntuar personas con un modelo.** La baremación es determinista, con el baremo como dato y una
+  función que puntúa hechos verificados por una persona; el modelo extrae y motiva, nunca puntúa.
 - Asesoramiento jurídico, decisiones automáticas, código de motor generado en tiempo de
   ejecución, corpus compartido entre chatbots, conversión de documentos en el servidor, rastreo de
   redes internas, capas de compatibilidad.
