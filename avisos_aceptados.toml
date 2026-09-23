@@ -36,9 +36,10 @@
 # a tener una lista de exclusiones con otro nombre.
 
 # ---------------------------------------------------------------------------------------------
-# **Ahora mismo no hay ninguna aceptación, y eso es el estado bueno, no un fichero a medias.**
+# **Las dos aceptaciones de abajo son las únicas, y las dos son del mismo tipo: aviso sin versión
+# corregida publicada sobre un paquete que la imagen desplegada no instala.**
 #
-# Hubo una: PYSEC-2026-3447, sobre `setuptools`, aceptada en DEP.7 porque la corrección estaba
+# Antes hubo otra: PYSEC-2026-3447, sobre `setuptools`, aceptada en DEP.7 porque la corrección estaba
 # en la 83.0.0 y `torch` 2.11 declaraba `setuptools<82`. Su motivo llevaba escrita la condición
 # de salida —«al renovar, comprobar primero si `torch` ya ha levantado el techo»— y **APER.20 la
 # encontró cumplida**: torch 2.13 declara `setuptools>=77.0.3` sin tope. Se subieron los dos y la
@@ -49,3 +50,48 @@
 # de decisiones y vuelve a ser una lista de exclusiones con mejor letra, que es justo lo que este
 # fichero existe para evitar.
 # ---------------------------------------------------------------------------------------------
+
+[[aviso]]
+id = "GHSA-w8v5-vhqr-4h9v"
+paquete = "diskcache"
+motivo = """
+Deserialización insegura: `diskcache` usa `pickle` por omisión, y quien tenga escritura en el
+directorio de caché consigue ejecución de código. **No hay versión corregida publicada**, así que
+subir no es una opción y el único final posible era éste o retirar quien lo trae.
+
+Y no lo trae nadie que se despliegue: entra sólo como transitiva de `ragas`, que vive en el extra
+`evaluacion` de `server/pyproject.toml`. DEP.1 creó ese extra por este motivo exacto. La imagen se
+construye con `uv sync --frozen --no-dev --no-editable ${EXTRAS_APP}` y `GOVGENAI_EXTRAS_APP` está
+sin definir, así que el extra no entra. Comprobado dentro del contenedor de producción el
+2026-09-23: `diskcache: no instalado`.
+
+Dependabot lo marca `runtime` porque lee el lock, que describe todos los extras; no sabe cuáles
+instala el despliegue. Inventario en la issue #141.
+
+**Al renovar, comprobar dos cosas, y en este orden**: si ya hay versión corregida —entonces se
+sube y esta entrada se retira—, y si `GOVGENAI_EXTRAS_APP` sigue sin incluir `evaluacion`. Si
+alguien añadió ese extra a un despliegue, el paquete pasó a estar instalado y esta aceptación deja
+de valer.
+"""
+acepta = "Modesto Fabra"
+caduca = "2027-03-01"
+
+[[aviso]]
+id = "GHSA-95ww-475f-pr4f"
+paquete = "ragas"
+motivo = """
+SSRF en el módulo de *multi-modal faithfulness*, en el rango 0.2.3–0.4.3, que incluye a la última
+publicada. **No hay versión corregida**, de modo que subir tampoco resuelve nada aquí.
+
+`ragas` está en el extra `evaluacion` y no se instala en el despliegue —verificado en el
+contenedor el 2026-09-23: `ragas: no instalado`—, y su import en el código de evaluación está
+envuelto en `try/except ImportError` con caída a una métrica léxica. Se conserva porque la
+evaluación con métricas de RAG se usa a mano contra el lote `ujirag-2024`; retirarlo por dos
+avisos que no alcanzan a producción sería pagar capacidad por ruido.
+
+**Al renovar**: mirar si el aviso ya tiene corrección, y si el módulo afectado sigue sin usarse
+—la evaluación de este proyecto no llama a las métricas multimodales—. Si alguna de las dos cosas
+cambió, esta entrada se retira o se sustituye por la subida.
+"""
+acepta = "Modesto Fabra"
+caduca = "2027-03-01"
