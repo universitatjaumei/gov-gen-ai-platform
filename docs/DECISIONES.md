@@ -62,6 +62,7 @@ alternativa se consideró.
 | 4 | [Frontera de la extracción y forma del despliegue](DECISION_EXTRACCION_Y_DESPLIEGUE.md) | 2026-08-10 | Aceptada y aplicada. **Sustituye** a la sección de servicios de computación pesada de `AGENTS.md` |
 | 5 | [No se instala navegador sin cabeza para el rastreo](DECISION_RENDERIZADO_RASTREO.md) | 2026-08-18 | Decidida con la medición delante. **Se revisa** si un apartado da un sondeo distinto |
 | 6 | [Quién es una cuenta de administración](DECISION_IDENTIDAD_DE_ADMINISTRACION.md) | 2026-09-03 | Aceptada y aplicada; USR.9 cerró el hueco que dejaba anotado |
+| 7 | [Trámites asistidos, no gestor de expedientes](DECISION_TRAMITES_ASISTIDOS.md) | 2026-09-23 | Aceptada, sin construir. **Sustituye** a `GESTOR_EXPEDIENTES.md` y cierra la Fase 3 del plan |
 
 ## Decisiones que viven en otro sitio, y por qué
 

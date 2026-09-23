@@ -82,7 +82,7 @@ todas envejecen igual:
 | [`A11Y_GUIDELINES.md`](A11Y_GUIDELINES.md) · [`A11Y_CHECKLIST.md`](A11Y_CHECKLIST.md) | Referencia viva — accesibilidad: criterios y lista de comprobación |
 | [`PRUEBAS_MANUALES.md`](PRUEBAS_MANUALES.md) | Referencia viva — qué se prueba a mano y qué no, con la matriz por módulo |
 | [`METODOLOGIA_AGENTICA.md`](METODOLOGIA_AGENTICA.md) | Referencia viva — cómo se ejecuta el desarrollo por bloques |
-| [`GESTOR_EXPEDIENTES.md`](GESTOR_EXPEDIENTES.md) | Referencia viva — el módulo previsto para 2027-2028; todavía no existe |
+| [`DECISION_TRAMITES_ASISTIDOS.md`](DECISION_TRAMITES_ASISTIDOS.md) | Decisión — **no se construye un gestor de expedientes**: se construyen trámites que el gestor de la institución invoca. El principio del dueño único del estado, las cinco piezas del vínculo y la regla de la baremación |
 | [`INVENTARIO_RETIRADA_LEGACY.md`](INVENTARIO_RETIRADA_LEGACY.md) | Registro — el mapa, fichero a fichero, de lo que tenía el cliente NiceGUI retirado el 2026-09-04: qué estaba cubierto, dónde, y qué se fue sin equivalente. Es lo que hay que leer antes de escribir el nodo de ejecución local |
 | [`DESPLIEGUE_PROTOTIPO_GCP.md`](DESPLIEGUE_PROTOTIPO_GCP.md) | Referencia viva — el despliegue mínimo del prototipo. No sustituye al bloque Deploy |
 | [`VERSIONADO.md`](VERSIONADO.md) | Referencia viva — qué significa el número de versión, dónde vive y cuándo cambia. Por qué se queda en `0.x` y por qué se etiqueta por acontecimiento y no por calendario |
