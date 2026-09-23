@@ -36,6 +36,10 @@ Tres módulos sobre una misma base:
 abarca más de lo que su nombre sugiere: sirve a las fases de cualquier expediente, no sólo a un
 documento suelto.
 
+La hoja de ruta pública, por temas y con estado y enlazada a las *issues* y a los hitos, está en
+[`ROADMAP.md`](ROADMAP.md). En ella la automatización se replanteó el 2026-09-23 como
+**automatización gobernada** (tema 4), y el párrafo que sigue se actualiza con su primer hito.
+
 La hoja de ruta prevé dos módulos más, y de los dos falta código:
 
 - **Automatización de procesos** —flujos y RPA— necesita además un **cliente de ejecución local**,
@@ -83,8 +87,15 @@ scripts/generate_env.sh              # genera .env, server/.env y frontend/.env 
 docker compose up -d postgres        # el servicio se llama postgres, no db
 cd server; uv sync --extra shared    # añade --extra local-models si quieres los modelos en tu máquina
 uv run alembic upgrade head
-uv run uvicorn app.main:app --port 8000
+cd ..                                # el backend arranca DESDE LA RAÍZ, ver la nota de abajo
+uv run --project server uvicorn server.app.main:app --port 8000
 ```
+
+> **Desde la raíz, y con `server.app.main:app`.** La aplicación importa `server.*` en absoluto,
+> así que necesita la raíz del repositorio en el camino de importación; desde `server/` falla con
+> `ModuleNotFoundError: No module named 'server'`. Es el mismo módulo y el mismo directorio que
+> usa la imagen de producción (`Dockerfile`), a propósito: dos formas de arrancar la misma
+> aplicación es cómo una se queda atrás sin que nadie lo note.
 
 Y el frontend, en otra terminal:
 

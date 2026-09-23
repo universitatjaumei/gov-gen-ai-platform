@@ -2,7 +2,7 @@
 name = "script-sandbox"
 version = "0.1.0"
 description = "Microservicio aislado que ejecuta scripts Python aprobados en un subproceso efímero."
-requires-python = ">=3.12"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "fastapi>=0.110",
     "pydantic>=2.6",

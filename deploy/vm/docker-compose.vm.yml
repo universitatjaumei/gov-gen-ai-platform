@@ -65,15 +65,17 @@ services:
       # del login con Google— y el siguiente en morder sería el SAML, que reconstruye la URL
       # actual para validar el `Destination` y el `Recipient` de la aserción.
       #
-      # **Acotado y no `*`.** Con `*` cualquier cliente decidiría el esquema que la aplicación
-      # cree estar sirviendo, y de ahí salen suplantaciones y enlaces envenenados. Se fía del
-      # pool privado de Docker, que es de donde viene Caddy; a uvicorn no se llega desde fuera
-      # porque **el servicio `app` no publica ningún puerto**: sólo Caddy publica el 80 y el 443.
+      # **Acotado a la red del proxy, y sólo a ella.** La primera versión ponía `172.16.0.0/12`
+      # —el pool privado entero— con el argumento de que a uvicorn no se llega desde fuera
+      # porque `app` no publica puertos. Era cierto y **estaba incompleto**: no hace falta llegar
+      # desde fuera si ya hay un contenedor hostil dentro. `app` está en **las dos** redes, y en
+      # `sandbox-net` corre `script-sandbox`, que ejecuta código de usuario no confiable: desde
+      # ahí se alcanza `app:8000` con una dirección que aquel `/12` daba por buena, y con ella se
+      # podían falsificar las cabeceras del proxy. Lo señaló la revisión de la PR #110.
       #
-      # No se declara una subred concreta para la red `default` a propósito: cambiarla obligaría
-      # a recrear la red en el despliegue, y una colisión con el direccionamiento de la máquina
-      # se pagaría con un despliegue caído.
-      FORWARDED_ALLOW_IPS: 172.16.0.0/12
+      # Ahora es la subred de `default`, donde vive Caddy y no vive el sandbox. Nunca `*`: con
+      # `*` cualquier cliente decide el esquema que la aplicación cree estar sirviendo.
+      FORWARDED_ALLOW_IPS: 172.28.0.0/24
       # El estado va fuera de la máquina, a propósito: el disco de la VM no guarda nada
       # que duela perder.
       STORAGE_BACKEND: gcs
@@ -254,12 +256,26 @@ services:
       - mcp
     restart: unless-stopped
 
+# Las dos redes declaran subred **a propósito**, y no es cosmética: `FORWARDED_ALLOW_IPS` se
+# acota a la de `default`, y sin subredes fijas eso sería una conjetura sobre lo que Docker
+# asigne. Con ellas se puede demostrar que la red del sandbox queda fuera.
+#
+# Rangos del pool privado que Docker usa para redes de usuario, elegidos altos para no chocar
+# con las redes por defecto (`bridge` suele coger 172.17.0.0/16).
 networks:
   default:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
   sandbox-net:
     # Sin salida a internet ni resolución hacia otros servicios: la capa 3 del modelo de
     # seguridad del sandbox.
     internal: true
+    # Declarada y **separada de la de arriba** para que uvicorn no confíe en ella: aquí corre
+    # código de usuario, y desde aquí se llega a `app:8000` porque `app` está en las dos redes.
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
 
 volumes:
   caddy_data:

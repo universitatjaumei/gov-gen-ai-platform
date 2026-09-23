@@ -3,7 +3,7 @@ name = "automatia-shared"
 version = "0.1.0"
 description = "DTOs, enums y firma criptográfica compartidos entre el servidor y sus clientes"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13,<3.14"
 license = "MIT"
 authors = [
     {name = "AutomatIA Team"}

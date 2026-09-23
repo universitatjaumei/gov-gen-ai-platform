@@ -32,6 +32,7 @@ todas envejecen igual:
 | [`MULTITENENCIA.md`](MULTITENENCIA.md) | Inventario del ámbito **tabla por tabla**: qué es de la plataforma, qué de cada organización y por qué camino se llega a ella. Lo mantiene honesto su propio test |
 | [`../AGENTS.md`](../AGENTS.md) | Las reglas duras para agentes de programación, y de paso el contrato de estilo del proyecto |
 | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Cómo se trabaja aquí |
+| [`../ROADMAP.md`](../ROADMAP.md) | **La hoja de ruta pública**: qué hay, qué se construye, qué espera una decisión ajena y qué no se hace, por temas y con estado, enlazada a las *issues* y a los hitos |
 
 ## Gobernanza, conformidad y licencia
 

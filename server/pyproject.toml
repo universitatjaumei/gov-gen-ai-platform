@@ -91,7 +91,7 @@ dependencies = [
     #
     # El techo SE QUEDA en `<8`: `requests` no avisa, **asegura**, asi que un chardet 8
     # levantaria un AssertionError al importar `requests`. Sin techo, el proximo
-    # `uv lock --upgrade` lo traeria y rompeia el arranque entero.
+    # `uv lock --upgrade` lo traeria y romperia el arranque entero.
     "chardet>=5.1.0,<8",
     "pdfplumber>=0.11.0",
     "spacy>=3.7",

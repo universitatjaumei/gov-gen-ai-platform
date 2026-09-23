@@ -17,7 +17,7 @@ manuales— vive en `docs/`.
 | `PLAN_TDD_DETALLADO.md` | Prompts detallados de las fases iniciales. |
 | `Plan_TDD_Fase1.md` | **El índice** de la Fase 1 — hub informativo, personalización y redacción. Es el plan en curso. Eran 27.449 líneas en un fichero; ahora cada bloque y cada fase viven en `fase1/`, con su número de orden delante. |
 | `fase1/` | Un fichero por bloque o fase: los prompts, sus tests mínimos y su verificación. Es lo que se lee para implementar, y lo que se puede revisar en un *pull request*. |
-| `Plan_TDD_Fase2.md`, `Plan_TDD_Fase3.md` | Fases posteriores, aún sin abrir. **Escritas antes de decisiones que después se revirtieron**: ver el aviso de abajo. |
+| `Plan_TDD_Fase2.md`, `Plan_TDD_Fase3.md` | Fases posteriores, aún sin abrir. **Escritas antes de decisiones que después se revirtieron**: ver el aviso de abajo. La hoja de ruta pública, por temas y con estado, es [`../ROADMAP.md`](../ROADMAP.md); la fase 2 se replanteó allí el 2026-09-23 como «automatización gobernada», con cuatro hitos en GitHub. |
 
 ## Si llegas de fuera: esto es un registro, no una descripción
 

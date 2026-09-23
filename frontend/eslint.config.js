@@ -32,6 +32,42 @@ export default defineConfig([
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
       ],
+
+      // --- Las tres reglas que sí cazan defectos, como AVISO y con techo (issue #47) ---
+      //
+      // `set-state-in-effect` (bucles de renderizado), `exhaustive-deps` (estado que se queda
+      // viejo) y `refs` (acceso durante el render) son defectos de verdad, y hay **20
+      // repartidos en 15 componentes**. Arreglarlos cambia comportamiento en tiempo de
+      // ejecución y cada uno pide verificarse en navegador: es un bloque propio, no un efecto
+      // colateral de encender el linter.
+      //
+      // Se dejan en `warn` y el `npm run lint` de CI corre con `--max-warnings` fijado en la
+      // cifra de hoy. Así **un hallazgo nuevo tumba el job** aunque los viejos sigan ahí, que es
+      // lo que hace que esto no sea barrer debajo de la alfombra. El techo se baja en su issue.
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/exhaustive-deps': 'warn',
+      'react-hooks/refs': 'warn',
+
+      // Informativo del compilador de React —«compilación omitida por librería incompatible»—:
+      // no es un defecto, es que el compilador no puede optimizar ese trozo.
+      'react-hooks/incompatible-library': 'warn',
+
+      // Fast Refresh es una comodidad **del desarrollo local**, no una regla de corrección: no
+      // afecta a lo que se construye ni a lo que se sirve. Los diez restantes son ficheros que
+      // exportan un componente y su *hook* —el idioma de un proveedor de contexto—, y sacarlos
+      // a ficheros aparte es un refactor de diez ficheros a cambio de nada en producción.
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+    },
+  },
+
+  // En los tests, `any` es el idioma: un *mock* se tipa así y forzar un tipo exacto obliga a
+  // reescribir la firma del doble cada vez que cambia la real. **Medido antes de decidirlo**:
+  // los 61 `no-explicit-any` del proyecto estaban **todos aquí** y producción tenía **cero**,
+  // así que esto no tapa nada — describe dónde está permitido y dónde no (issue #47).
+  {
+    files: ['**/__tests__/**', '**/*.test.{ts,tsx}', 'src/test-setup.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
     },
   },
 ])

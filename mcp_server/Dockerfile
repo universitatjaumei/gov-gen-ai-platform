@@ -52,18 +52,27 @@ EXPOSE 8080
 # indistinguible de sano: si se quedara sirviendo errores, nadie se enteraría hasta intentar
 # usarlo.
 #
-# **Cualquier respuesta HTTP es estar vivo; lo que es estar muerto es no responder.** La
-# respuesta sana del MCP **no es un 200**: un `GET /mcp` sin la cabecera del transporte devuelve
-# **406**, y desde un host que no esté en `GOVGENAI_MCP_ALLOWED_HOSTS` —como `127.0.0.1` aquí
-# dentro— devuelve **421**. Una sonda que esperase 200 se pondría roja con el servicio en pie.
+# **La respuesta sana del MCP no es un 200**, y por eso el conjunto se escribe entero: un
+# `GET /mcp` sin la cabecera del transporte devuelve **406**, y desde un host que no esté en
+# `GOVGENAI_MCP_ALLOWED_HOSTS` —como `127.0.0.1` aquí dentro— devuelve **421**. Una sonda que
+# esperase 200 se pondría roja con el servicio en pie.
+#
+# **Y se acota a esos tres.** La primera versión aceptaba cualquier código —`0 if status else 1`,
+# y todo entero no nulo es verdadero—, así que un MCP que arrancara y respondiera 500 por un
+# fallo de la aplicación seguía `healthy` y no disparaba la reversión que esto venía a cubrir.
+# El razonamiento «cualquier respuesta significa que el proceso está en pie» es cierto del
+# proceso y falso del servicio, y lo que importa es si sirve. Lo señaló la revisión de la PR #110.
+#
+# Si una versión futura del transporte contesta otro código a esta petición, esto se pondrá rojo:
+# es lo que se quiere: que el conjunto se revise a conciencia y no que se ensanche solo.
 #
 # En Python y no con `curl` porque esta imagen no lo lleva. `request()` levanta
-# `ConnectionRefusedError` si no hay nadie escuchando, que es el único caso que debe fallar.
+# `ConnectionRefusedError` si no hay nadie escuchando, que sigue siendo «muerto».
 #
 # `--factory` importa aquí: la aplicación se construye **al arrancar**, no al importar, así que
 # un fallo de construcción sólo se ve con el proceso en marcha. Por eso la sonda vale y una
 # comprobación de la imagen construida no.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD python -c "import http.client,sys; c=http.client.HTTPConnection('127.0.0.1',8080,timeout=5); c.request('GET','/mcp'); sys.exit(0 if c.getresponse().status else 1)"
+    CMD python -c "import http.client,sys; c=http.client.HTTPConnection('127.0.0.1',8080,timeout=5); c.request('GET','/mcp'); sys.exit(0 if c.getresponse().status in (200,406,421) else 1)"
 
 CMD ["uvicorn", "http_server:app", "--factory", "--host", "0.0.0.0", "--port", "8080"]

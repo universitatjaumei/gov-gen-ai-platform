@@ -72,8 +72,18 @@ docker compose up -d postgres            # el servicio se llama `postgres`, no `
 cd server
 uv sync --extra shared                   # ver §4 antes de decidir si añades --extra local-models
 uv run alembic upgrade head
-uv run uvicorn app.main:app --port 8000
+cd ..                                    # el backend arranca DESDE LA RAÍZ
+uv run --project server uvicorn server.app.main:app --port 8000
 ```
+
+> **Por qué desde la raíz y con `server.app.main:app`.** La aplicación importa `server.*` en
+> absoluto y necesita la raíz en el camino de importación. Ejecutado desde `server/` —como decía
+> este documento hasta el 2026-09-23— falla con `ModuleNotFoundError: No module named 'server'`,
+> que es un error sin pista de que la causa es el directorio.
+>
+> Es el mismo módulo y el mismo directorio que usa la imagen de producción, y eso se comprueba:
+> `test_issue92_el_comando_de_arranque_documentado_funciona.py` cruza este comando con el `CMD`
+> del `Dockerfile`, para que no puedan volver a separarse.
 
 Y el frontend, en otra terminal:
 

@@ -20,10 +20,14 @@ sólo conseguiría que el 401 del servidor llegara disfrazado de avería nuestra
 propia credencial. A cambio, el proxy inverso puede repartir sin afinidad y un reinicio del
 servicio no deja clientes con una sesión que ya no existe.
 
-*Respuestas JSON* en vez de SSE. Estas tres tools son petición y respuesta, sin progreso ni
-elicitación que haya que ir emitiendo; y un flujo SSE a través de un proxy inverso funciona sólo
-si alguien se acordó de desactivar el buffering, que es una avería silenciosa esperando su
-momento.
+*Respuestas JSON* en vez de SSE. Las tools que monta este servidor son petición y respuesta, sin
+progreso ni elicitación que haya que ir emitiendo; y un flujo SSE a través de un proxy inverso
+funciona sólo si alguien se acordó de desactivar el buffering, que es una avería silenciosa
+esperando su momento.
+
+**Cuáles son, no cuántas**: las que registren las llamadas a `register_*_tools` de más abajo.
+Este docstring daba una cantidad fija que se quedó corta, y era el sitio que más engañaba
+porque estaba en el código: ni leyéndolo se salía del error (issue #89).
 
 **El paquete sigue sin importar `server/app`** (regla de MCP.1, con test): es un cliente HTTP más,
 como el frontend, y eso es lo que le permite desplegarse como el proceso pequeño que es.
