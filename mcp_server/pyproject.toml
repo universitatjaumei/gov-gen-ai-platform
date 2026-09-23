@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = [{ name = "Modesto Fabra", email = "fabra@uji.es" }]
 license = "AGPL-3.0-or-later"
 description = "Servidor MCP stdio para autoría de plantillas y configuración de chatbots de Gov Gen AI Platform."
-requires-python = ">=3.11"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     # DEP.5 — el techo `<2` es deuda declarada, no una preferencia. `mcp` 2.x **renombra
     # `FastMCP` a `MCPServer`** y cambia más API: al subir sin techo, los cuatro ficheros de
