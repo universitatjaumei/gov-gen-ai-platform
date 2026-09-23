@@ -359,9 +359,18 @@ autenticara contra GCS —el `reverse_proxy` a secas no lo hace— y es un cambi
 
 Desde REG.4 la pila lleva un servicio más, `mcp`, y el proxy le manda `/mcp`. Es un servidor
 **MCP** con transporte *streamable HTTP*: un cliente compatible —Claude Code, entre otros— se
-conecta a `https://normativa.uji.es/mcp` y obtiene tres herramientas que hablan con la API de la
-plataforma: registrar un uso de IA en el registro de actividad, detectar datos personales en un
-texto y anonimizarlo.
+conecta a `https://normativa.uji.es/mcp` y obtiene las herramientas que hablan con la API de la
+plataforma, en dos juegos:
+
+| Juego | Herramientas |
+|---|---|
+| Registro de actividad (REG.4) | `registrar_actividad`, `detectar_pii`, `anonimizar_texto` |
+| Verificaciones (VAS) | `verificar_citas`, `consultar_vigencia`, `auditar_codigo`, `reglas_de_auditoria` |
+
+**La lista se comprueba sola.** `test_issue89_las_herramientas_del_mcp_no_se_cuentan_a_mano.py`
+cruza esta tabla con lo que `http_server` registra de verdad, y se pone rojo si alguna falta. La
+versión anterior de este documento daba una cantidad fija, congelada en REG.4, cuando VAS ya
+había añadido otro juego.
 
 **Lo que hay que entender antes de tocarlo: este servicio no tiene credencial propia.** El
 servidor MCP que ya existía es de línea de comandos, mono-usuario, y lee su token de una variable
@@ -397,8 +406,13 @@ ausencia.
 curl -si https://normativa.uji.es/mcp -X POST     -H 'Accept: application/json, text/event-stream'     -H 'Content-Type: application/json'     -H 'Authorization: Bearer pat_...'     -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | head -1
 ```
 
-Un `200` con las tres herramientas en el cuerpo es la señal buena. Un **421** es la cabecera
-`Host` fuera de la lista de admitidos; un **502**, el contenedor sin arrancar.
+Un `200` cuyo cuerpo traiga **las herramientas de la tabla de arriba** es la señal buena. Un
+**421** es la cabecera `Host` fuera de la lista de admitidos; un **502**, el contenedor sin
+arrancar.
+
+Se remite a la tabla y no se repite una cantidad **a propósito**: aquí se daba una cantidad
+fija, y eso no era un dato desactualizado sino **un criterio de aceptación equivocado** — quien
+comprobara un despliegue veía otra cosa y no sabía si estaba bien.
 
 ---
 
