@@ -70,5 +70,10 @@
     "typescript-eslint": "^8.70.0",
     "vite": "^8.3.0",
     "vitest": "^5.0.1"
+  },
+  "overrides": {
+    "@scalar/json-magic": {
+      "undici": "^7.29.0"
+    }
   }
 }
