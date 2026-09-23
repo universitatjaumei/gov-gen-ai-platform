@@ -26,7 +26,6 @@ Tres cosas para leerlo bien:
 | **En curso** | Hay trabajo abierto con *issues* asignadas |
 | **Previsto** | Diseñado y encolado; no empezado |
 | **Bloqueado** | Espera una decisión o un prerrequisito **externo al proyecto** |
-| **Por revisar** | Planificado antes de decisiones que lo cambian; pendiente de reescribir |
 | **No se hace** | Descartado a propósito, para que nadie lo construya creyendo que falta |
 
 ## Temas
@@ -78,7 +77,7 @@ autorizado, revisión posterior y anonimización**. A eso se dedican los cuatro 
 
 | Hito | Estado | Qué entrega | Issues |
 |---|---|---|---|
-| [1 — Cerrar lo que ya no se hace](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/9) | Previsto | La especificación declara como límite deliberado que no se ejecuta nada en el equipo de quien la usa; los planes de fase 2 se cierran | [#112](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/112), [#113](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/113) |
+| [1 — Cerrar lo que ya no se hace](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/9) | ✅ Completo | La especificación declara como límite deliberado que no se ejecuta nada en el equipo de quien la usa; los planes de fase 2 se cierran | [#112](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/112), [#113](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/113) |
 | [2 — Registrar lo que corre fuera](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/10) | Previsto | Funciones de **origen externo** (un cuaderno se registra por su hash sin ejecutarlo); paquete MCP y *skill* de gobernanza para agentes de código; registro de la ejecución de un cuaderno en tres líneas; depósito del manifiesto de una ejecución hecha fuera | [#114](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/114), [#115](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/115), [#124](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/124), [#116](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/116) |
 | [3 — Funciones de tarea](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/11) | Previsto | Una función produce **ficheros**; red saliente sólo hacia **orígenes declarados**; el ecosistema de módulos ampliado y vigilado; los dos cuadernos reales como casos guía con datos sintéticos | [#117](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/117), [#118](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/118), [#119](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/119), [#120](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/120) |
 | [4 — Decisiones de la institución](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/12) | **Bloqueado** | El régimen de ejecución frente a la regla de soberanía local; la lista del ecosistema autorizado y el plazo de revisión; quién revisa, quién suspende y la ruta a protección de datos | [#121](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/121), [#122](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/122), [#123](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/123) |
@@ -142,7 +141,7 @@ sigue en el gestor.
 
 | Hito | Estado | Qué entrega | Issues |
 |---|---|---|---|
-| [1 — Cerrar el gestor de expedientes como producto](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/13) | Previsto | La especificación, la presentación y el plan de fase 3 describen trámites asistidos; el documento del gestor híbrido se retira y lo sustituye una decisión fechada | [#126](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/126), [#127](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/127) |
+| [1 — Cerrar el gestor de expedientes como producto](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/13) | ✅ Completo | La especificación, la presentación y el plan de fase 3 describen trámites asistidos; el documento del gestor híbrido se retira y lo sustituye una decisión fechada | [#126](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/126), [#127](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/127) |
 | [2 — El trámite invocable, a mano y desde el gestor](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/14) | Previsto | Contrato y catálogo de trámites; creación a mano o por API con referencia externa e idempotencia; estado con `acciones_permitidas` y callback firmado; enlace profundo de revisión, semántica de «validar» y retención; salida estructurada con hash | [#128](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/128), [#129](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/129), [#130](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/130), [#131](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/131), [#132](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/132) |
 | [3 — Las tres clases de trámite](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/15) | Previsto | **Baremación determinista y siempre verificada por una persona** (el modelo extrae hechos, la persona los verifica, una función puntúa con el baremo como dato, el modelo motiva leyendo la tabla); informe de fase; resolución con la normativa aplicable a fecha de referencia. Todas con datos sintéticos | [#138](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/138), [#133](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/133), [#134](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/134) |
 | [4 — Decisiones de la institución](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/16) | **Bloqueado** | Qué gestor, qué puede hacer y con qué entorno de pruebas; clasificación de riesgo de la baremación y evaluación de impacto antes de cualquier dato real; qué vale «validar» en el procedimiento y cuánto se conservan los documentos | [#135](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/135), [#136](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/136), [#137](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/137) |
@@ -166,6 +165,9 @@ Lo que se conserva del plan de la fase 3 y condiciona el diseño:
 Y la advertencia que conviene no descubrir después: este tema **sí toca actuación
 administrativa**, y la baremación evalúa a personas, así que no hereda la clasificación de riesgo
 de los asistentes informativos. Recorre su propio procedimiento, y ningún dato real entra antes.
+
+El razonamiento completo, con las cinco piezas del vínculo y cómo se dan de alta más tipos de
+trámite, está en [`docs/DECISION_TRAMITES_ASISTIDOS.md`](docs/DECISION_TRAMITES_ASISTIDOS.md).
 
 ## Lo que no se hace
 
