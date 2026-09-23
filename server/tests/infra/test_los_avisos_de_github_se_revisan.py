@@ -111,6 +111,65 @@ def test_los_informes_de_copilot_se_revisan_antes_de_mezclar(datos: dict) -> Non
     )
 
 
+def test_resolver_un_hilo_vuelve_a_ejecutar_la_comprobacion(datos: dict) -> None:
+    """Sin esto la puerta no es una puerta: es un bloqueo del que no se puede salir.
+
+    Lo encontró la revisión automática sobre la primera versión de este workflow, que escuchaba
+    `pull_request_review` (`submitted`) y `pull_request_review_comment` (`created`) y nada más.
+    **Resolver un hilo no emite ninguno de los dos.** Así que el flujo previsto —Copilot comenta,
+    el check se pone rojo, decides, resuelves— terminaba con el check **todavía rojo**, y sólo
+    volvía a calcularse con un push nuevo o a mano. Una puerta que no se puede abrir haciendo lo
+    que pide se acaba saltando, que es la forma habitual de perder un control.
+
+    El evento que sí lo emite es `pull_request_review_thread`.
+    """
+    disparadores = _disparadores(datos)
+    evento = disparadores.get("pull_request_review_thread")
+    assert evento is not None, (
+        "el workflow no escucha `pull_request_review_thread`. Resolver un hilo no emite "
+        "`pull_request_review` ni `pull_request_review_comment`, así que el check se quedaría "
+        "rojo después de haber hecho exactamente lo que pide."
+    )
+    assert "resolved" in (evento.get("types") or []), (
+        f"`pull_request_review_thread` no escucha `resolved`: {evento}"
+    )
+
+    # Y el job tiene que aceptar ese evento, o el disparador no serviría de nada.
+    condicion = datos["jobs"]["copilot"].get("if", "")
+    assert "pull_request_review_thread" in condicion, (
+        "el disparador existe pero la condición del job `copilot` no lo admite, así que el "
+        "workflow arrancaría y no ejecutaría nada. El check se quedaría igual de rojo."
+    )
+
+
+def test_las_alertas_se_leen_todas(texto: str) -> None:
+    """Una alerta en la segunda página es una alerta que no existe para este job."""
+    llamada = re.search(r"gh api[^\n]*dependabot/alerts[^\n]*", texto)
+    assert llamada, "no se encuentra la llamada a `dependabot/alerts`"
+    assert "--paginate" in llamada.group(0), (
+        "la llamada a `dependabot/alerts` no pagina. La API devuelve como mucho 100 por página: "
+        "con más alertas abiertas, una sin decidir que caiga en la segunda haría pasar el job en "
+        "verde. Es el mismo falso negativo que esta puerta existe para evitar, entrando por la "
+        "puerta de al lado."
+    )
+
+
+def test_una_aceptacion_caducada_no_cuenta_como_decidida(texto: str) -> None:
+    """La caducidad es lo que hace que la lista se revise; ignorarla la vacía de sentido.
+
+    `test_dep7_las_aceptaciones_caducan.py` pone rojo cuando una aceptación vence, pero corre con
+    la suite — y este workflow corre además **los lunes sin que nadie toque el repositorio**. En
+    esa ejecución, leer sólo el `id` daría por decidida una aceptación vencida y nadie se
+    enteraría hasta el siguiente commit.
+    """
+    assert "caduca" in texto, (
+        "el workflow lee `avisos_aceptados.toml` sin mirar `caduca`, así que una aceptación "
+        "vencida seguiría contando como decidida. La caducidad es lo único que obliga a volver a "
+        "mirar una aceptación: una lista que no caduca es una lista de exclusiones con mejor "
+        "prosa."
+    )
+
+
 def test_hay_una_revision_periodica(datos: dict) -> None:
     assert _disparadores(datos).get("schedule"), (
         "no hay `schedule`. Una alerta puede aparecer un martes sin que nadie toque el "

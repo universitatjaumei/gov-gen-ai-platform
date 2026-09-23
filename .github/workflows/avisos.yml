@@ -44,6 +44,11 @@ on:
     types: [submitted]
   pull_request_review_comment:
     types: [created]
+  # Y `resolved`, que es el que cierra el bucle. Sin él, resolver un hilo no emite nada: el check
+  # se quedaría rojo justo después de haber hecho lo que pide, y una puerta que no se puede abrir
+  # obedeciéndola se acaba saltando.
+  pull_request_review_thread:
+    types: [resolved, unresolved]
   # Una alerta puede aparecer un martes sin que nadie toque el repositorio en dos semanas.
   schedule:
     - cron: "0 7 * * 1"
@@ -73,7 +78,10 @@ jobs:
           # El `if !` no es estilo: si la API responde 403 —el alcance del token de Actions sobre
           # Dependabot no es igual en todos los repositorios— un `gh api` suelto deja la lista
           # vacía y este paso diría «no hay alertas» en verde.
-          if ! ALERTAS="$(gh api "repos/$REPO/dependabot/alerts?state=open&per_page=100" --jq '.[] | [.security_advisory.ghsa_id, .dependency.package.ecosystem + "/" + .dependency.package.name, .security_advisory.severity, .dependency.scope, .html_url] | @tsv' 2>&1)"; then
+          # `--paginate` no es cosmético: la API devuelve 100 como mucho, y una alerta sin decidir
+          # en la segunda página haría pasar este job en verde — el mismo falso negativo que la
+          # puerta existe para evitar, entrando por la puerta de al lado.
+          if ! ALERTAS="$(gh api --paginate "repos/$REPO/dependabot/alerts?state=open&per_page=100" --jq '.[] | [.security_advisory.ghsa_id, .dependency.package.ecosystem + "/" + .dependency.package.name, .security_advisory.severity, .dependency.scope, .html_url] | @tsv' 2>&1)"; then
             echo "::error::No se han podido leer las alertas de Dependabot. Esto NO quiere decir que no haya."
             echo "$ALERTAS"
             echo ""
@@ -87,11 +95,24 @@ jobs:
           # Los avisos que este repositorio ya decidió aceptar, con su motivo, su firma y su
           # fecha de caducidad. Es el MISMO fichero que usa `supply-chain`: dos listas de
           # exclusiones que se contradicen es peor que ninguna.
+          #
+          # **Y las vencidas no cuentan.** `test_dep7_las_aceptaciones_caducan.py` pone rojo
+          # cuando una caduca, pero corre con la suite, y este workflow corre además los lunes
+          # sin que nadie toque el repositorio: ahí, leer sólo el `id` daría por decidida una
+          # aceptación vencida. La caducidad es lo único que obliga a volver a mirar.
           ACEPTADOS="$(python3 -c "
-          import pathlib, tomllib
+          import datetime, pathlib, tomllib
           t = pathlib.Path('avisos_aceptados.toml')
           d = tomllib.loads(t.read_text(encoding='utf-8')) if t.is_file() else {}
-          print('\n'.join(a['id'] for a in d.get('aviso', []) if a.get('id')))
+          hoy = datetime.date.today()
+          def vigente(a):
+              c = a.get('caduca')
+              if isinstance(c, datetime.datetime):
+                  c = c.date()
+              elif isinstance(c, str):
+                  c = datetime.date.fromisoformat(c)
+              return c is not None and c >= hoy
+          print('\n'.join(a['id'] for a in d.get('aviso', []) if a.get('id') and vigente(a)))
           ")"
 
           echo "## Alertas de Dependabot" >> "$GITHUB_STEP_SUMMARY"
@@ -136,7 +157,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          if ! PRS="$(gh pr list --repo "$REPO" --app dependabot --state open --json number,title,createdAt --jq '.[] | "\(.number)\t\(.title)\t\(.createdAt[:10])"' 2>&1)"; then
+          # `--limit` explícito: sin él son 30 y la lista se truncaría en silencio, que en un
+          # resumen cuya única función es «estén a la vista» sería peor que no mostrarlo.
+          if ! PRS="$(gh pr list --repo "$REPO" --app dependabot --state open --limit 100 --json number,title,createdAt --jq '.[] | "\(.number)\t\(.title)\t\(.createdAt[:10])"' 2>&1)"; then
             echo "::error::No se han podido leer las PR de Dependabot."
             echo "$PRS"
             exit 1
@@ -163,7 +186,7 @@ jobs:
 
   copilot:
     name: Los informes de Copilot están atendidos
-    if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment'
+    if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment' || github.event_name == 'pull_request_review_thread'
     runs-on: ubuntu-latest
     steps:
       - name: Ningún comentario de Copilot queda sin resolver
