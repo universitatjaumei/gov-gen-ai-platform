@@ -7,7 +7,11 @@ Gov Gen AI Platform es el resultado de integrar **AI Agents Hub** (chatbots RAG,
 
 **El cliente NiceGUI se retiró completo el 2026-09-04** (bloque NIC): `client_app/` y `_legacy_nicegui/` ya no existen, y con ellos se fueron 574 ficheros. No se estaba conservando un agente que funcionaba —el motor por el que ejecutaban sus vigilantes importaba dos módulos que ya no existían— y nada en producción dependía de él.
 
-**El agente de ejecución local es trabajo pendiente sin código en el repositorio.** Cuando haya que desarrollarlo, el mapa es `docs/INVENTARIO_RETIRADA_LEGACY.md`, que dice fichero a fichero qué tenía equivalente y dónde; el código está en el **historial de git** de este repositorio, en la carpeta `AutomatIA` y en el *bundle* de GenGov.
+**El agente de ejecución local no se hace, y es una decisión del 2026-09-23**, no un hueco: ni RPA, ni vigilantes de carpeta, correo o web, ni programador de flujos locales, ni *thin client*. Lo cubren los agentes de propósito general; lo que la plataforma aporta es gobernanza. No lo propongas. Está en `docs/ESPECIFICACIONES.md` §10 y en el tema 4 de `ROADMAP.md`; lo que hubo, fichero a fichero, en `docs/INVENTARIO_RETIRADA_LEGACY.md`.
+
+**Tampoco se hace un gestor de expedientes** (misma fecha): el de la institución es la fuente de verdad del procedimiento y la plataforma **nunca cambia su estado**. Lo que se construye son **trámites asistidos** —un workspace del motor de informes con referencia al expediente, creado a mano o por API—. Tema 8 de `ROADMAP.md`.
+
+**La hoja de ruta pública es `ROADMAP.md`**, por temas y con estado, enlazada a las *issues* y a los hitos. `planificacion/` dirige el desarrollo; `ROADMAP.md` lo cuenta hacia fuera.
 
 ---
 
@@ -193,9 +197,10 @@ y su código son `routers/actividad_router.py` y `core/actividad_categorias.py`.
 que se escriben de memoria; un guardarraíl comprueba que las que cita este fichero existan, y
 saltó con las tres.
 
-**No hay nodo de ejecución local.** El agente RPA, los vigilantes de carpeta, correo y web, y el
-programador de flujos locales **no tienen código en este repositorio** desde el 2026-09-04. Si un
-plan los da por hechos, el plan está desactualizado; ver `docs/INVENTARIO_RETIRADA_LEGACY.md`.
+**No hay nodo de ejecución local, y no va a haberlo.** El agente RPA, los vigilantes de carpeta,
+correo y web, y el programador de flujos locales **no tienen código en este repositorio** desde el
+2026-09-04, y el 2026-09-23 se decidió **no construirlos**. Si un plan los da por hechos, el plan
+está desactualizado; ver `docs/ESPECIFICACIONES.md` §10.
 
 ---
 

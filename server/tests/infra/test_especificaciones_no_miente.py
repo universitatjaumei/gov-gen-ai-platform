@@ -73,7 +73,11 @@ _FICHEROS_CITADOS = (
     "planificacion/PROJECT_STATE.md",
     "planificacion/HISTORIAL.md",
     "planificacion/Plan_TDD_Fase1.md",
-    "planificacion/Plan_TDD_Fase2.md",
+    # `Plan_TDD_Fase2.md` salió de esta lista el 2026-09-23: §6 dejó de citarlo al replantear la
+    # fase 2 como «automatización gobernada», y lo que la sustituye es `ROADMAP.md`. El fichero
+    # sigue en el árbol como documento de diseño con historia; lo que ya no hace es sostener una
+    # afirmación de la especificación.
+    "ROADMAP.md",
     "AGENTS.md",
     "CONTRIBUTING.md",
     "deploy/vm/Caddyfile",

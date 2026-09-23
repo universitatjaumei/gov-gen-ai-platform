@@ -37,23 +37,27 @@ abarca más de lo que su nombre sugiere: sirve a las fases de cualquier expedien
 documento suelto.
 
 La hoja de ruta pública, por temas y con estado y enlazada a las *issues* y a los hitos, está en
-[`ROADMAP.md`](ROADMAP.md). En ella la automatización se replanteó el 2026-09-23 como
-**automatización gobernada** (tema 4), y el párrafo que sigue se actualiza con su primer hito.
+[`ROADMAP.md`](ROADMAP.md), por temas y con estado.
 
-La hoja de ruta prevé dos módulos más, y de los dos falta código:
+Prevé dos líneas más, y de las dos falta código. Las dos se replantearon el 2026-09-23, y lo que
+cambió no es el plazo sino el alcance:
 
-- **Automatización de procesos** —flujos y RPA— necesita además un **cliente de ejecución local**,
-  porque la plataforma no ejecuta nada en la máquina de quien la usa.
-- **Gestor de expedientes** —tramitación con fases y acciones calculadas en el servidor— se apoya
-  en la **plataforma de gestión** de la institución que lo despliegue.
+- **Automatización gobernada.** No un cliente de ejecución local: los agentes de propósito general
+  ya ejecutan en el puesto de trabajo mejor de lo que lo haría un cliente propio. Lo que falta es
+  **saber qué automatizaciones circulan** —registrar un cuaderno por su hash sin ejecutarlo, que
+  un agente use la anonimización y el registro de actividad, y que una función del catálogo pueda
+  producir ficheros—.
+- **Trámites asistidos con IA.** No un gestor de expedientes: las administraciones ya tienen uno,
+  y es la fuente de verdad del procedimiento. Lo que falta son **trámites** —baremación, informe
+  de fase, resolución— que se crean a mano o los crea el gestor por API, y cuyo resultado vuelve
+  al expediente. La plataforma no cambia nunca el estado del procedimiento.
 
 Que no estén escritos todavía no es un retraso: **qué tienen que hacer exactamente lo definen un
 despliegue real y una necesidad identificada**, y escribirlos antes sería adivinarlo. Automatizar
 un proceso que nadie ha examinado antes fija en código lo que había que simplificar.
 
 Lo que hoy vive en `server/app/modules/automation/` es infraestructura que consume Informes, no un
-módulo de usuario: no tiene routers registrados ni interfaz. Alcance y plazos de los dos, en
-`docs/PRESENTACION_PROYECTO.md`.
+módulo de usuario: no tiene routers registrados ni interfaz.
 
 La regla que ordena el diseño técnico: **el servidor decide, el cliente pinta**. El frontend no
 calcula qué acciones están permitidas, ni conoce a priori los campos de un formulario; los recibe.

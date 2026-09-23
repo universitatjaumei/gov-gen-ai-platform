@@ -302,12 +302,10 @@ gráficos, manifiestos) · [`REDACCION_CONTRACT_FIRST.md`](REDACCION_CONTRACT_FI
 
 **Madurez**: `construido` — utilizable de punta a punta; el caso guía es el informe de seguimiento.
 
-**Abierto.** Bloque **FUN**, el más grande del plan: hoy el código aprobado **se incrusta copiado**
-en cada plantilla (`scripts_router.py`), así que dos plantillas con la misma extracción son dos
-copias y dos aprobaciones, y un bug se arregla N veces. El bloque lo convierte en catálogo
-versionado con referencia `funcion_id@versión`, con **doble origen** (autoservicio y paquete por
-*entry point*), y se alinea con el nivel 2 de la Instrucció 02/2026 de desarrollo ciudadano
-gobernado.
+**Cerrado por el bloque FUN**, y merece recordarse porque explica §5.12: hasta entonces el código
+aprobado **se incrustaba copiado** en cada plantilla, así que dos plantillas con la misma
+extracción eran dos copias y dos aprobaciones, y un error se arreglaba N veces. Hoy se referencia
+por `funcion_id@versión`.
 
 ---
 
@@ -608,49 +606,67 @@ Guías Operativas Técnicas de la UADTI.
 
 ---
 
-## 6. Fase 2 — Automatización documental
+## 6. Automatización gobernada
 
-**Propósito.** Llevar la automatización de AutomatIA al servidor: extracción de documentos,
-puentes semánticos, fábricas como nodos de LangGraph y el sandbox distribuido edge ↔ *thin client*.
+**Propósito.** Que una organización sepa qué automatizaciones circulan, quién las usa y con qué
+versión, sin ejecutarlas necesariamente. **Sustituye a la «Fase 2 — Automatización documental»**
+el 2026-09-23: de aquel plan, la migración de la interfaz quedó vacía al retirar el cliente
+NiceGUI, y la de servicios está hecha bajo otros nombres —el catálogo de funciones (§5.12), el
+sandbox, el `RunManifest`, el registro de actividad y las verificaciones por API y MCP (§5.9,
+§5.10)—. Lo único que quedaba era el agente de ejecución local, y **se descarta** (§10).
 
-**Lo que ya está especificado** en `planificacion/Plan_TDD_Fase2.md`: extracción con estrategias
-enchufables, `RunManifest` + `AuditService` + registro unificado de scripts, principio
-**determinista-first** (las fábricas son nodos del grafo, no llamadas al modelo), y puentes
-semánticos multicontexto.
+**Lo que falta, y que es el tema 4 de [`ROADMAP.md`](../ROADMAP.md)**:
 
-**Lo que está diferido a propósito.** RPA web: se movió a v2 porque exige navegador en el edge y su
-superficie de riesgo es de otro orden.
+- **Funciones de origen externo**: un cuaderno o un script que corre fuera se registra por su
+  hash, con declaración responsable y sin ejecutarlo. Registrar es el canal de compartición; la
+  plataforma no puede impedir que se ejecute fuera, y lo dice.
+- **Gobernanza para agentes de código**: configuración MCP y *skill* publicadas, para que usar
+  `auditar_codigo`, `anonimizar_texto` y `registrar_actividad` sea el camino fácil. Por MCP el
+  cumplimiento es **voluntario**, y eso no se disimula.
+- **Funciones de tarea**: artefactos de salida, red saliente sólo hacia **orígenes declarados** y
+  el ecosistema de módulos ampliado. Abrir la red debilita el argumento de §5.12 («una función no
+  puede hablar con nada»), así que es una **clase distinta**, visible y con revisión en plazo.
 
-**Madurez**: `previsto`. Partes ya construidas en Fase 1 —el sandbox, la auditoría AST, el
-`RunManifest`, la extracción con `pdfplumber`— y **no hay que reimplementarlas**: el plan lo dice
-explícitamente en su sección de reutilización.
+**Madurez**: `previsto`, sobre una base `construido`: lo que ejecuta ya existe.
 
-**Lo que hay que decidir antes de ejecutar.** La frontera exacta entre `modules/automation/` y
-`modules/redaccion/`: hoy comparten la idea de «ejecutar algo determinista sobre un documento» y
-dos catálogos de scripts sería el defecto de FUN otra vez, un nivel más arriba.
+**Abierto.** El régimen de ejecución, la lista del ecosistema autorizado y quién asume la
+revisión posterior son decisiones de la institución, no del código.
 
 ---
 
-## 7. Fase 3 — Expedientes y malla agéntica
+## 7. Trámites asistidos con IA
 
-**Propósito.** Gestor de expedientes integrado por MCP, agente analista sobre base vectorial de
-normativa, adaptadores institucionales (Gestión 400, capa ENI/ENS) y el **edge node híbrido**.
+**Propósito.** Que una fase de un procedimiento pueda apoyarse en la IA —baremar, redactar un
+informe técnico, redactar una resolución— con las garantías del módulo de informes, y que el
+resultado vuelva al expediente. **Sustituye al «Gestor de expedientes» de la Fase 3** el
+2026-09-23: las administraciones ya tienen gestor, y construir otro lo duplicaba. El plan
+anterior lo había adoptado a medias —su nota del 2026-09-01 ya hacía del gestor institucional la
+fuente de verdad— pero seguía construyendo tablas de expedientes, grafo con checkpointing,
+bandeja de aprobaciones y adaptadores que leen y publican.
 
-**Garantías que la fase debe cumplir**, ya escritas y que condicionan el diseño de Fase 1:
+**Garantías que el módulo debe cumplir**, y que condicionan el diseño de hoy:
 
-- **HATEOAS estricto en expedientes**: el frontend **nunca** calcula qué acciones caben. El backend
-  es la máquina de estado y devuelve `acciones_permitidas` evaluando fase, estado y rol (I6). Un
-  usuario sin permisos recibe un array vacío.
-- **El cloud orquesta, el edge ejecuta**: cualquier ejecución determinista orquestada por el grafo
-  se delega al edge node por WebSocket. No es una optimización, es el requisito regulatorio.
-- **Las fases de expediente referencian `plantilla@versión` y `función@versión`**, nunca código
-  incrustado. Esta restricción se escribió el mismo día que el bloque FUN y por eso se retiró
-  `ejecuciones_accion.codigo_ejecutado`, que duplicaba sandbox, auditoría y aprobación.
+- **El estado del procedimiento tiene un solo dueño, el gestor.** La plataforma **no lo cambia
+  nunca**: entrega un resultado y su evidencia. Validar aquí valida el contenido generado; el
+  acto administrativo —firmar, notificar, avanzar de fase— sigue en el gestor.
+- **HATEOAS estricto**: el frontend **nunca** calcula qué acciones caben. El servidor devuelve
+  `acciones_permitidas` sobre la ejecución del trámite, que es lo único que la plataforma posee,
+  evaluando estado, clase y rol (I6). Quien no tenga el módulo recibe un array vacío.
+- **El cloud orquesta, el edge ejecuta**: con el gestor y la plataforma en el mismo perímetro
+  institucional se cumple sin agente ni WebSocket. Es dónde está la máquina, no un programa en el
+  escritorio (§10).
+- **Un trámite referencia `plantilla@versión` y `función@versión`**, nunca código incrustado.
+- **Dos modos de creación y el mismo rastro**: a mano en la plataforma, indicando la referencia
+  del expediente, o desde el gestor por API. El manual es el primero y es también el repliegue si
+  el gestor no puede llamar hacia fuera.
+- **La baremación es determinista y siempre verificada por una persona** (§10).
 
-**Madurez**: `previsto`. Prerrequisito externo: la integración con sistemas institucionales
-(G400, ENI) no se puede simular en local.
+**Madurez**: `previsto`. Prerrequisito externo: qué gestor, qué puede hacer y con qué entorno de
+pruebas. **Ningún dato real entra** antes de que el uso esté clasificado: este módulo sí toca
+actuación administrativa y la baremación evalúa a personas, así que no hereda la clasificación de
+riesgo de los asistentes informativos.
 
-**Lo que aún no tiene TDD desarrollado**: la subfase 3.B entera. Está enumerada, no especificada.
+El detalle, con sus hitos, en el tema 8 de [`ROADMAP.md`](../ROADMAP.md).
 
 ---
 
@@ -660,22 +676,21 @@ El detalle vivo —qué bloque, qué prompt, qué modelo sugerido— está en
 [`PROJECT_STATE.md`](../planificacion/PROJECT_STATE.md), que es la fuente de verdad del progreso.
 Aquí sólo el mapa, para que quien llegue sepa dónde puede aportar:
 
-| Bloque | Qué resuelve | Depende de |
+La vista pública, por temas y con estado, es [`ROADMAP.md`](../ROADMAP.md), que enlaza cada tema
+con sus *issues* y sus hitos. Aquí sólo lo que queda por construir y de qué depende:
+
+| Qué | Qué resuelve | Depende de |
 |---|---|---|
-| **REG** | La plataforma como registro de actividad IA, con API y MCP remoto | Nada; ya desplegado el servidor |
-| **VAS** | Verificaciones como servicio: citas, vigencia y auditoría de código por API | REG (scopes y evento) |
-| **NIC** | Retirada del legacy NiceGUI, con inventario delante | Nada |
-| **REPO** | Repositorio limpio, sin objetos huérfanos. **Ventana: antes del primer fork** | Después de NIC |
-| **PLG** | Perfiles y estrategias por *entry points* | Después de LANG (misma factoría) |
-| **DIN** | Secciones parametrizables y ciclo de vida de la ingesta | Nada |
-| **FUN** | Catálogo de funciones deterministas versionadas | FUN.6 necesita REG |
+| **Automatización gobernada** (§6) | Registrar lo que corre fuera y ampliar el catálogo a tareas completas | Decisiones de la institución para el paso a régimen definitivo |
+| **Trámites asistidos** (§7) | Baremación, informe de fase y resolución invocables desde el gestor | Qué gestor y con qué entorno; clasificación de riesgo antes de datos reales |
 | **RHR** | Revisión humana de respuestas — **el hueco medido de la abstención** | Anotación por lotes |
 | **PRC** | El catálogo de procedimientos en el asistente | **Bloqueado**: fichas validadas + consulta de descarga |
+| **MT.8** | Vista y permisos por organización, segunda fase de la multitenencia | El piloto en marcha |
 
 **Los mejores puntos de entrada para alguien de fuera**, por criterio de alcance cerrado y riesgo
-bajo: **VAS** (los tres candidatos ya existen como función interna y sólo necesitan superficie) y
-**DIN** (independiente de todo, y su premisa resultó falsa en dos tercios, así que hay menos por
-construir de lo que parece).
+bajo: el **registro de cuadernos externos** del tema 4 (no ejecuta nada, y ataca un problema real
+de cualquier organización que trabaje con cuadernos) y el **informe de fase** del tema 8, que
+reutiliza entero el módulo de informes y sirve para probar lo demás.
 
 ---
 
@@ -767,23 +782,28 @@ faltan:
   instala en el despliegue, igual que en un plugin de pytest. Está aquí y no en la lista de lo
   que falta porque es una decisión: fingir un aislamiento que no existe sería peor que decirlo.
   Lo que sí se valida siempre es la entrada contra su contrato y la salida como `ExtractionResult`.
-
-### 10.1 Y una cosa que no está aquí por decisión, sino porque no está hecha
-
-**No ejecuta nada en la máquina de quien la usa.** No hay agente de ejecución local: ni RPA, ni
-vigilancia de carpetas, de correo o de web, ni programador de flujos locales.
-
-Va en su propio apartado a propósito, porque **no es un límite deliberado como los seis de
-arriba**: aquellos están escritos para que nadie los implemente creyendo que faltan, y este sí
-falta. La diferencia importa para quien planifique — proponer un agente local no es contradecir la
-especificación; proponer un conversor de documentos en el servidor, sí.
-
-Existió como aplicación NiceGUI y **se retiró completa el 2026-09-04** (bloque NIC), 574 ficheros,
-porque llevaba tiempo sin compilar —el motor por el que ejecutaban sus dos vigilantes importaba
-módulos que ya no estaban— y nada en producción dependía de ella. Lo que había, fichero a fichero y
-con qué tiene equivalente hoy, está en
-[`INVENTARIO_RETIRADA_LEGACY.md`](INVENTARIO_RETIRADA_LEGACY.md); el código, en el historial de git
-de este repositorio, en la carpeta `AutomatIA` y en el *bundle* de GenGov.
+- **No ejecuta nada en la máquina de quien la usa.** Sin agente de ejecución local: ni RPA, ni
+  vigilancia de carpetas, de correo o de web, ni programador de flujos locales, ni *thin client*.
+  **Decidido el 2026-09-23**, y hasta entonces este punto vivía aparte porque era un hueco y no
+  una decisión. Lo que lo cierra es que los agentes de propósito general con acceso al navegador
+  y al escritorio ya cubren ese terreno, en el régimen que las normas de desarrollo ciudadano
+  reservan al uso personal; lo que ellos no dan —registro, ecosistema autorizado, revisión
+  posterior, anonimización— es lo que la plataforma aporta, y es el tema 4 de
+  [`ROADMAP.md`](../ROADMAP.md). Existió como aplicación NiceGUI y se retiró completa el
+  2026-09-04 (574 ficheros), con el mapa fichero a fichero en
+  [`INVENTARIO_RETIRADA_LEGACY.md`](INVENTARIO_RETIRADA_LEGACY.md).
+- **No accede a la nube personal de quien la usa** con credenciales centralizadas: unidades y
+  documentos compartidos. La persona sube y descarga; lo que necesite sus credenciales corre
+  fuera y se registra. Es el corolario del punto anterior, y lo que las normas de desarrollo
+  ciudadano llaman soberanía local.
+- **No lleva un gestor de expedientes.** El de la institución es la fuente de verdad del
+  procedimiento, y la plataforma **no cambia nunca su estado**: entrega trámites asistidos
+  —baremación, informe de fase, resolución— con su evidencia, y quien decide qué hacer con el
+  resultado es el gestor. Decidido el 2026-09-23; es §7 y el tema 8 de [`ROADMAP.md`](../ROADMAP.md).
+- **No puntúa personas con un modelo.** En una baremación el modelo extrae hechos y redacta la
+  motivación; los hechos los verifica una persona y la puntuación la calcula una función
+  determinista con el baremo como dato versionado. Es la regla «las tablas las calcula código»
+  (§5.5) aplicada a algo que evalúa a personas, y por tanto no negociable.
 
 **Consecuencia para la frontera edge-cloud**, que conviene no malinterpretar: el «modo edge» de
 `AGENTS.md` es el servidor desplegado **en la nube del cliente**, no un proceso en su puesto de
