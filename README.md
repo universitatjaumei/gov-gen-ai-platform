@@ -36,6 +36,10 @@ Tres módulos sobre una misma base:
 abarca más de lo que su nombre sugiere: sirve a las fases de cualquier expediente, no sólo a un
 documento suelto.
 
+La hoja de ruta pública, por temas y con estado y enlazada a las *issues* y a los hitos, está en
+[`ROADMAP.md`](ROADMAP.md). En ella la automatización se replanteó el 2026-09-23 como
+**automatización gobernada** (tema 4), y el párrafo que sigue se actualiza con su primer hito.
+
 La hoja de ruta prevé dos módulos más, y de los dos falta código:
 
 - **Automatización de procesos** —flujos y RPA— necesita además un **cliente de ejecución local**,
