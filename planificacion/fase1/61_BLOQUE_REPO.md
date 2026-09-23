@@ -602,18 +602,20 @@ cuanto exista un fork.
 # PROMPT REPO.2 — Lo hace el usuario
 # Deploy: n/a
 
-ModestoFabra/cgm-remote-monitor — fork publico de nightscout/cgm-remote-monitor. Comprobado el
-2026-08-21: 1 commit por delante (un merge traido del original) y 902 por detras, SIN TRABAJO PROPIO,
-sin actividad desde 2020. Borrar sin mas; no afecta al proyecto original.
+Son dos repositorios previos, y NO SE NOMBRAN AQUI a proposito: uno es personal y ajeno por
+completo a este proyecto, y publicar su nombre permitiria inferir informacion privada de un
+tercero. Los nombres y los pasos exactos viven en `_local/LIMPIEZA_REPOSITORIOS_GITHUB.md`, que
+no esta versionado.
 
-ModestoFabra/GenGov — privado, es el predecesor de este repositorio y contiene 44
-llm_anonymized_input_*.txt, la misma exposicion. El archivo local ya existe y no hay que clonar nada:
-la carpeta Documents\AutomatIA ES un clon suyo, al dia (HEAD e5be141 = la punta en GitHub), 305
-commits, una rama, sin tags. Borrarlo de GitHub no pierde historia.
+Lo que si conviene dejar escrito aqui, porque es la parte reutilizable:
 
-Antes de borrarlo, limpiar los volcados en ese clon —para poder reclonar si algo sale mal—:
-rm -f logs/*.txt  y  git filter-repo --path logs --invert-paths --force
-Y guardar un bundle en un disco externo si la historia de enero-marzo importa: sera la unica copia.
+- Uno es un fork publico SIN TRABAJO PROPIO y sin actividad desde hace anos. Borrar sin mas; no
+  afecta al proyecto del que salio.
+- El otro es el predecesor privado de este repositorio y contiene los mismos volcados que
+  motivaron la limpieza de REPO.1. Su clon local ya es el archivo real, asi que borrarlo de
+  GitHub no pierde historia — pero ANTES hay que limpiar los volcados en ese clon
+  (`git filter-repo --path logs --invert-paths --force`) y guardar un bundle fuera, porque pasa
+  a ser la unica copia.
 ```
 
 
