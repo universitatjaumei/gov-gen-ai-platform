@@ -80,7 +80,20 @@ jobs:
 
       - name: Las alertas abiertas están todas corregidas, descartadas o aceptadas
         env:
-          GH_TOKEN: ${{ github.token }}
+          # **El `GITHUB_TOKEN` de Actions NO alcanza a las alertas de Dependabot**, y no hay
+          # permiso que lo arregle: `security-events: read` cubre el análisis de código y los
+          # secretos, no esto. Lo dijo la primera ejecución real sobre `main`, con un
+          # «403 Resource not accessible by integration».
+          #
+          # Y lo dijo **porque el paso comprueba el error**. Sin esa comprobación habría
+          # informado de cero alertas en verde, para siempre, dando tranquilidad falsa sobre
+          # vulnerabilidades: el guardarraíl que pasa en el vacío, en su peor versión.
+          #
+          # `AVISOS_TOKEN` es un token propio de grano fino, acotado a este repositorio y con un
+          # solo permiso, `Dependabot alerts: read`. La caída a `github.token` está para que el
+          # workflow no se rompa si falta, pero entonces el paso falla con su 403 y lo dice: es
+          # una avería visible, no un apagado silencioso.
+          GH_TOKEN: ${{ secrets.AVISOS_TOKEN || github.token }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -95,10 +108,11 @@ jobs:
             echo "::error::No se han podido leer las alertas de Dependabot. Esto NO quiere decir que no haya."
             echo "$ALERTAS"
             echo ""
-            echo "Si es un 403: el \`GITHUB_TOKEN\` de Actions no alcanza a las alertas de este"
-            echo "repositorio. Hace falta un token propio con permiso de lectura sobre Dependabot"
-            echo "alerts, guardado como secreto y pasado en \`GH_TOKEN\`. Dejarlo como está"
-            echo "convertiría esta puerta en un adorno."
+            echo "Si es un 403, falta el secreto \`AVISOS_TOKEN\` o ha caducado. El"
+            echo "\`GITHUB_TOKEN\` de Actions NO alcanza a las alertas de Dependabot, y no hay"
+            echo "permiso de workflow que lo arregle. Hace falta un token de grano fino acotado"
+            echo "a este repositorio, con un solo permiso —\`Dependabot alerts: read\`— guardado"
+            echo "como secreto \`AVISOS_TOKEN\`. Dejarlo así convertiría esta puerta en un adorno."
             exit 1
           fi
 

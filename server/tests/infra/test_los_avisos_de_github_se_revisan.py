@@ -236,6 +236,31 @@ def test_no_mirar_no_es_no_haber_nada(texto: str) -> None:
     )
 
 
+def test_las_alertas_se_leen_con_un_token_que_alcanza(datos: dict) -> None:
+    """El `GITHUB_TOKEN` de Actions no llega a las alertas de Dependabot, y no hay permiso que lo
+    arregle.
+
+    Medido en la primera ejecución real sobre `main`, el 2026-09-23: «403 Resource not accessible
+    by integration». `security-events: read` cubre el análisis de código y los secretos, no esto.
+
+    Lo que hace falta es un token de grano fino acotado al repositorio con un solo permiso. Este
+    test existe porque el camino de vuelta es tentador y silencioso: quitar el secreto deja el
+    workflow *funcionando*, sólo que fallando siempre — y alguien podría «arreglarlo» devolviendo
+    `github.token`, que es como se apaga una puerta sin apagarla.
+    """
+    paso = next(
+        p
+        for p in datos["jobs"]["alertas"]["steps"]
+        if "alertas abiertas" in p.get("name", "")
+    )
+    token = str(paso.get("env", {}).get("GH_TOKEN", ""))
+    assert "secrets.AVISOS_TOKEN" in token, (
+        f"el paso de alertas usa `{token}`. El token de Actions no alcanza a las alertas de "
+        f"Dependabot: con él, este paso no puede hacer otra cosa que fallar con un 403. Hace "
+        f"falta `secrets.AVISOS_TOKEN`."
+    )
+
+
 def test_ninguna_llamada_a_avisos_se_silencia(texto: str) -> None:
     silenciadas = [
         linea.strip()
