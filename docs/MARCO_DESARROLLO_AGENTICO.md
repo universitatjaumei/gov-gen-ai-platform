@@ -4,8 +4,12 @@
 > que otros proyectos del Teclab puedan adoptarlo. No es una propuesta teórica: es lo que ha quedado
 > tras varios meses de ensayo y error en un proyecto real, contrastado con lo que hay publicado.
 >
-> **Fecha**: 2026-09-03. **Ámbito**: desarrollo de software con agentes de programación bajo
-> supervisión humana.
+> **Escrito el 2026-09-03, revisado el 2026-09-23** al migrar el plan de una lista de prompts a
+> *issues* y una hoja de ruta (§4.7). **Ámbito**: desarrollo de software con agentes de
+> programación bajo supervisión humana.
+>
+> **Quien dirige este desarrollo es jurista y no sabe programar**, y eso es la condición del
+> experimento y no un dato de autoría: §1.5.
 
 ---
 
@@ -36,9 +40,9 @@ equipo decidir qué adoptar tal cual y qué tratar como hipótesis.
 
 | Término | Qué significa aquí |
 |---|---|
-| **Prompt** | Una instrucción de trabajo para el agente, escrita con sus tests y su criterio de cierre. Es la unidad mínima del plan |
-| **Bloque** | Un conjunto de prompts que entrega algo utilizable. Es la unidad de interacción con el humano |
-| **Cursor** | El documento que dice en qué bloque y en qué prompt está el desarrollo ahora mismo |
+| **Prompt** | Una instrucción de trabajo para el agente, escrita con sus tests y su criterio de cierre. Fue la unidad mínima del plan; hoy ese papel lo hace una *issue* (§4.7) |
+| **Bloque** | Un conjunto de pasos que entrega algo utilizable. Es la unidad de interacción con el humano, y lo sigue siendo con *issues* |
+| **Cursor** | El documento que dice en qué bloque y en qué paso está el desarrollo ahora mismo |
 | **Guardarraíl** | Un test de la suite que falla cuando un documento del proyecto deja de ser verdad |
 
 ---
@@ -111,6 +115,38 @@ En la industria circulan al menos dos taxonomías de autonomía para agentes: un
 estilo de la conducción autónoma, y otra de seis con controles alineados al riesgo. Coinciden en un
 punto: **el nivel máximo no es apropiado para producción hoy**, porque los mecanismos de control
 que lo harían seguro no existen todavía. **[Convención]**
+
+### 1.5 De dónde sale esto, y por qué importa decirlo
+
+**Quien dirige este desarrollo es jurista y no sabe programar.** No es una anécdota de autoría: es
+la condición del experimento, y conviene ponerla delante porque cambia cómo hay que leer todo lo
+que sigue.
+
+El proyecto nació con tres preguntas a la vez:
+
+1. **¿Puede construir software quien conoce una materia y no sabe programar?** Es la promesa que
+   se le atribuye a los agentes, y casi nunca se pone a prueba en condiciones reales: con una
+   institución detrás, datos de verdad, y la obligación de que lo construido siga funcionando
+   dentro de dos años.
+2. **¿Se puede gobernar la IA en la administración pública con garantías demostrables?** No
+   declaradas en un documento, sino incorporadas al sistema y comprobadas por tests. Es lo que la
+   plataforma hace, y el método es lo que permitió hacerlo.
+3. **¿Qué método hace falta para las dos cosas a la vez?** Ninguna de las dos se resuelve con la
+   herramienta. La primera necesita salvaguardas que suplan lo que quien dirige no puede revisar
+   línea a línea; la segunda, que esas salvaguardas dejen evidencia.
+
+**Esto es lo que convierte a este documento en algo más que un método más**, y también lo que lo
+hace más frágil: es **[n=1]** en el sentido fuerte —una persona, un proyecto, un dominio—, y quien
+lo lea debe tratarlo como hipótesis contrastable, no como resultado.
+
+**La consecuencia práctica, y es la tesis de §1.1 vista del revés.** Si el método importa más que
+la herramienta, entonces **la falta de conocimiento de programación no se compensa con un modelo
+mejor, sino con mecanismos que hagan visible lo que uno no sabe mirar**. De ahí salen, y no de una
+preferencia estética, las tres cosas que este marco repite: que nada se reporte sin medirlo (P2),
+que la documentación se ponga roja cuando miente (P6), y que §9 catalogue los errores en vez de
+esconderlos. Quien no puede auditar el código **tiene que poder auditar el proceso**.
+
+Y de ahí sale también que el método haya cambiado con el tiempo, que es lo que cuenta §4.7.
 
 ---
 
@@ -253,7 +289,7 @@ conteste la de otro (P4).
 |---|---|---|
 | **Reglas** (`AGENTS.md`) | ¿Cómo se trabaja aquí? ¿Qué está prohibido? | Rara vez |
 | **Especificaciones** | ¿Qué **garantiza** el sistema? ¿Qué no puedo romper? | Cuando cambia una garantía |
-| **Plan** (prompts TDD) | ¿Qué falta, y en qué orden? | Al planificar |
+| **Plan** (prompts TDD, o *issues*) | ¿Qué falta, y en qué orden? | Al planificar |
 | **Cursor** | ¿Dónde estamos ahora mismo? | En cada paso |
 | **Historial** | ¿Por qué esto está así? ¿Qué se midió? | En cada paso, añadiendo |
 | **Registro de decisiones** | ¿Por qué no se hizo de la otra manera? | Cuando se descarta una alternativa |
@@ -332,6 +368,12 @@ mueve el despliegue**, no el cierre del trabajo. Esta última regla se aprendió
 confundido. **[n=1]**
 
 ### 4.3 El plan: especificaciones en forma de prompts TDD
+
+> **Esto fue la primera forma del plan, y ya no es la única.** El trabajo pendiente de este
+> proyecto vive hoy en *issues* agrupadas en hitos; qué lo cambió y qué se conservó está en §4.7.
+> El apartado se queda entero porque **lo que describe sigue valiendo**: es el andamiaje que
+> permite dirigir un desarrollo sin saber programar, y los tres detalles del final son
+> transferibles a una *issue* tal cual.
 
 El trabajo pendiente se escribe como **instrucciones ejecutables**, agrupadas en bloques. Cada
 prompt lleva su objetivo, sus tests mínimos enumerados y su verificación de cierre. El ejemplo es el
@@ -459,13 +501,72 @@ La forma coincide: hay convergencia real en la industria hacia «principios → 
 conviene defender ante otro equipo es **TDD obligatorio**, porque es la que hace que el resto sea
 comprobable y no una declaración de intenciones.
 
+### 4.7 El plan cambió de forma: de lista de prompts a *issues*
+
+Este apartado existe porque el documento describiría un método que el proyecto ya no sigue del
+todo. Y porque **la transición es probablemente lo más útil que hay aquí para otro equipo**: no la
+foto final, sino qué la disparó y qué se conservó al cruzarla. **[n=1]**
+
+**Lo que había.** Un documento de planificación por fase, partido en un fichero por bloque, con los
+prompts TDD que describe §4.3. El cursor decía en qué prompt estábamos. Funcionó durante meses y
+construyó casi todo lo que hoy está en producción.
+
+**Lo que hay.** Las *issues* de GitHub agrupadas en hitos, y una hoja de ruta pública por temas.
+`planificacion/` sigue en el repositorio pero ya **no dirige**: es registro, y lleva su propio
+aviso de lectura para que nadie lo confunda con una descripción del sistema de hoy.
+
+**Qué lo disparó, y son tres cosas que conviene distinguir:**
+
+1. **Cambió la naturaleza del trabajo.** Un plan de prompts contesta «¿qué falta construir, y en
+   qué orden?». Llega un momento en que la pregunta pasa a ser «¿qué ha aparecido que hay que
+   arreglar?», y ahí una lista escrita por adelantado es el artefacto equivocado: los defectos no
+   se planifican, se descubren. La señal fue concreta —empezaron a abrirse más *issues* de las que
+   el plan preveía— y tardamos en leerla.
+2. **Creció la competencia de quien dirige.** Al principio, escribir el trabajo como prompts con
+   sus tests enumerados **era el andamiaje que permitía dirigir sin saber programar**: obligaba a
+   decidir por adelantado qué tenía que ser cierto, que es una decisión de criterio y no de
+   código. Con los meses, esa decisión se podía tomar ya sobre una *issue* bien escrita, sin
+   redactar el prompt entero. El andamiaje dejó de hacer falta porque cumplió su función.
+3. **Llegó gente de fuera.** Un plan en un fichero no se comenta por línea, no se asigna, no se
+   cierra solo al desplegar y no lo entiende quien llega. Las *issues* son el estándar que esa
+   gente ya conoce, y el coste de no usarlo lo paga siempre el que llega.
+
+**Qué se conservó, que es la parte que importa.** Nada de lo que da garantías dependía del formato
+del plan:
+
+| Se conserva | Cambió |
+|---|---|
+| El **bloque** como unidad de interacción (§5.1) | Un bloque ya no es una lista de prompts: es un **hito** con sus *issues* |
+| El bucle **RED → GREEN → REFACTOR** y el commit por paso | — |
+| Los **tests escalonados** (§5.4) y la verificación en navegador (§5.5) | — |
+| El **informe de cierre** (§5.6) | — |
+| Los **guardarraíles** (§6) | — |
+| El **historial** (§4.4) | — |
+| El **registro de decisiones** (§4.5) | — |
+| El **cursor** (§4.4) | Pierde peso: lo que estaba en él lo dicen ahora el estado de las *issues* y los hitos |
+
+**La lección, dicha como hipótesis y no como resultado.** El andamiaje que necesita quien empieza
+—prompts escritos con sus tests enumerados— **no es el mismo que necesita a los seis meses**, y
+mantenerlo por inercia cuesta trabajo sin comprar garantía. Lo que no cambia son las salvaguardas:
+si al migrar a *issues* se hubieran perdido los tests escalonados o los guardarraíles, la
+transición habría sido un retroceso disfrazado de modernización.
+
+**Y una consecuencia mecánica que costó once *issues* abiertas.** Con el plan en un fichero, un
+paso cerrado se marcaba a mano. Con *issues*, cerrar es automático **sólo si el commit lleva la
+palabra que GitHub entiende** (`Closes #N`); un asunto `fix(#N):` no cierra nada. Durante un tiempo
+la lista de *issues* anunció defectos ya resueltos y desplegados, que es justo lo primero que mira
+quien llega. Lo arregla un guardarraíl en la integración continua, y es un buen ejemplo de la regla
+general: **al cambiar de mecanismo hay que preguntarse qué hacía el anterior que el nuevo no hace
+solo**.
+
 ---
 
 ## 5. El ciclo de trabajo
 
 ### 5.1 El bloque es la unidad de interacción
 
-Un bloque es un conjunto de prompts que entrega algo utilizable. Una vez arrancado, el agente **no
+Un bloque es un conjunto de pasos que entrega algo utilizable —prompts al principio, *issues* de un
+hito hoy (§4.7); el concepto no cambió al cambiar el artefacto—. Una vez arrancado, el agente **no
 informa hasta cerrarlo** y no pide confirmación entre pasos.
 
 Esto es lo que hace rentable el método, y encaja con el reparto que mide Anthropic: el humano en la
@@ -859,7 +960,7 @@ que tirar:
 | 1 | **Permisos y guarda, con sus tests** | Antes de que el agente ejecute nada |
 | 2 | **`AGENTS.md` mínimo**: reglas duras, comandos del proyecto, prohibiciones | Es lo que el agente lee antes de escribir |
 | 3 | **Integración continua con lint, tests y *lock* verificado** | Sin esto, TDD es una intención |
-| 4 | **El primer bloque de prompts TDD** | Un bloque pequeño, para calibrar el método |
+| 4 | **El primer bloque**, como prompts TDD | Un bloque pequeño, para calibrar el método. Ver abajo por qué prompts y no *issues* al empezar |
 | 5 | **Cursor e historial** | En cuanto haya dos bloques |
 | 6 | **Registro de decisiones** | A la primera alternativa descartada |
 | 7 | **Especificaciones** | Cuando haya capacidades que garanticen algo |
@@ -869,6 +970,16 @@ que tirar:
 **Las especificaciones van en el paso 7 y no en el 1.** Escribir garantías antes de tener nada
 que garantizar produce un documento que hay que reescribir entero al segundo bloque. Primero se
 construye; cuando algo garantiza algo, se escribe.
+
+**Y el paso 4 va en prompts aunque acabes en *issues*** (§4.7). Parece un rodeo —¿por qué no
+empezar ya con el estándar?— y la razón es que los dos artefactos no sirven para lo mismo al
+principio: un prompt con sus tests enumerados **obliga a decidir por adelantado qué tiene que ser
+cierto**, y esa es la decisión que no se puede delegar en el agente. Una *issue* admite quedarse en
+«arregla esto», que es exactamente lo que produce tests que confirman lo que el código ya hace.
+
+El cambio llega solo, y con señal: cuando la pregunta deja de ser «¿qué falta construir?» y pasa a
+ser «¿qué ha aparecido que arreglar?», el plan escrito por adelantado estorba. Ahí se migra — y se
+comprueba que ninguna salvaguarda se quedó por el camino.
 
 ### 11.2 El prompt de arranque
 
