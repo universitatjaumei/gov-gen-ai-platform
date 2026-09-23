@@ -86,6 +86,32 @@ describe('node va a una sola versión', () => {
     ).toHaveLength(1)
   })
 
+  it('`@types/node` va a la misma major que el node que se ejecuta', () => {
+    // Dependabot abre esto una y otra vez —#78 primero, #106 después— y la respuesta es
+    // siempre la misma, así que se mecaniza en vez de repetirla a mano.
+    //
+    // Los tipos describen las APIs de una línea de Node. Con `@types/node` en 26 y Node 24 en
+    // marcha, TypeScript **da por buena** una API que en tiempo de ejecución no existe: el
+    // error aparece al ejecutar, no al compilar, que es justo el orden que un sistema de tipos
+    // viene a invertir.
+    //
+    // Y no se retira aunque no lo importe nadie: TypeScript carga `node_modules/@types/*`
+    // automáticamente. Eso es lo que lo hace un falso positivo de cualquier barrido de
+    // dependencias sin usar.
+    const pkg = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf8'))
+    const declarado = pkg.devDependencies?.['@types/node']
+    expect(declarado, '`@types/node` no está declarado').toBeTruthy()
+
+    const majorDeLosTipos = declarado.replace(/^[^\d]*/, '').split('.')[0]
+    const majoresDeNode = [...new Set(fijacionesDeNode().map((f) => f.version.split('.')[0]))]
+
+    expect(
+      majoresDeNode,
+      `\`@types/node\` está en ${majorDeLosTipos} y node se fija en ${majoresDeNode.join(', ')}. ` +
+        'Los tipos siguen al node que se ejecuta: se suben cuando suba él, no antes.',
+    ).toEqual([majorDeLosTipos])
+  })
+
   it('la versión de node que se fija la admite `vitest`', () => {
     const engine = engineDeVitest()
     const incumplen = fijacionesDeNode().filter(
