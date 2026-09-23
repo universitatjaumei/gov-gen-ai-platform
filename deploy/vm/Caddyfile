@@ -106,6 +106,52 @@
 		# organización con otro bucket.
 		reverse_proxy https://{$CORPUS_BUCKET}.storage.googleapis.com {
 			header_up Host {upstream_hostport}
+
+			# El error del *bucket* no sale al público (issue #104).
+			#
+			# Sin esto, una dirección que no existe —`/hub`, `/login`, un marcador viejo—
+			# devolvía el XML de Google Cloud Storage **con el nombre del bucket dentro**:
+			# `<Details>No such object: …/hub</Details>`. Tres cosas mal a la vez: lo ve
+			# cualquiera que se equivoque de enlace, filtra el identificador que REPO.5 saca de
+			# la documentación para no repartir el inventario de qué sondear, y un XML de un
+			# proveedor de nube en un dominio institucional parece una avería.
+			#
+			# Se interceptan 404 **y 403**: GCS contesta 403 cuando el objeto no existe y el
+			# listado está denegado, y ese cuerpo también nombra el bucket.
+			#
+			# **Se conserva el código de estado**, no se devuelve 200: una página bonita con 200
+			# le diría a los buscadores y a quien enlaza que la dirección existe.
+			@error_del_bucket status 404 403
+			handle_response @error_del_bucket {
+				header Content-Type "text/html; charset=utf-8"
+				respond <<HTML
+					<!DOCTYPE html>
+					<html lang="ca">
+					<head>
+					<meta charset="utf-8">
+					<meta name="viewport" content="width=device-width, initial-scale=1">
+					<title>Aquesta adreça no existeix</title>
+					<style>
+					body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;margin:0;
+					 background:#fff;color:#1f2933;display:flex;min-height:100vh;
+					 align-items:center;justify-content:center;padding:1.5rem}
+					main{max-width:34rem}
+					h1{color:#002744;font-size:1.4rem;margin:0 0 .75rem}
+					p{margin:0 0 .75rem;line-height:1.5}
+					a{color:#002744}
+					</style>
+					</head>
+					<body>
+					<main>
+					<h1>Aquesta adreça no existeix</h1>
+					<p>L'adreça a què has arribat no correspon a cap pàgina d'aquest lloc.
+					Comprova l'enllaç per si està incomplet.</p>
+					<p><a href="/">Anar a l'inici</a> · <a href="/cercador">Cercador de normativa</a></p>
+					</main>
+					</body>
+					</html>
+					HTML {rp.status_code}
+			}
 		}
 	}
 

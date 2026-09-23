@@ -57,4 +57,14 @@ ENV PATH="/srv/sandbox/.venv/bin:$PATH"
 USER 65534:65534
 EXPOSE 5000
 
+# La sonda de salud (issue #91). El compose ya declaraba una para este servicio; ponerla también
+# en el `Dockerfile` hace que valga para cualquiera que despliegue esto con otro orquestador,
+# que es la misma razón por la que `app` y `frontend` la traen en el suyo.
+#
+# Aquí sí se espera un 200: `/health` del sandbox responde 200 y no tiene guardián de host, al
+# contrario que el MCP. En Python porque esta imagen corre como 65534 con el sistema de ficheros
+# en sólo lectura y sin red, y no conviene añadirle `curl` para esto.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD python -c "import http.client,sys; c=http.client.HTTPConnection('127.0.0.1',5000,timeout=5); c.request('GET','/health'); sys.exit(0 if c.getresponse().status == 200 else 1)"
+
 CMD ["uvicorn", "sandbox.main:app", "--host", "0.0.0.0", "--port", "5000"]

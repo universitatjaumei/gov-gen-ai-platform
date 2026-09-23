@@ -444,6 +444,22 @@ jobs:
               --quiet --command "sudo docker exec govgenai_app curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/docs" | tr -d '\r\n')"
             echo "la aplicacion sirve /docs con codigo $interno (se espera 404)"
             [ "$interno" = "404" ] || { echo "::error::la aplicacion expone /docs"; ok=0; }
+
+            # El MCP (issue #91). No lo miraba nadie: podía quedarse sirviendo errores con
+            # Docker diciendo `Up`, y la reversión automática no se disparaba.
+            #
+            # Se lee **su sonda**, no una ruta a mano, porque la sonda es la que decide en
+            # producción y comprobar otra cosa la dejaría sin probar. `--factory` hace que la
+            # aplicación se construya al arrancar, así que un fallo de construcción sólo se ve
+            # con el proceso en marcha.
+            #
+            # `starting` cuenta como fallo a propósito: si tras el reinicio y la espera sigue
+            # arrancando, algo va mal. `sin-sonda` también, porque significa que la imagen
+            # desplegada es anterior a este arreglo o que alguien quitó el HEALTHCHECK.
+            salud_mcp="$(gcloud compute ssh "$VM_NOMBRE" --zone "$VM_ZONA" --tunnel-through-iap \
+              --quiet --command "sudo docker inspect -f '{{.State.Health.Status}}' govgenai_mcp 2>/dev/null || echo sin-sonda" | tr -d '\r\n')"
+            echo "el MCP dice estar «$salud_mcp» (se espera healthy)"
+            [ "$salud_mcp" = "healthy" ] || { echo "::error::el MCP no esta sano: $salud_mcp"; ok=0; }
           fi
 
           if [ "$ok" != "1" ]; then

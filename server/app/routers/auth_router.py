@@ -143,6 +143,14 @@ async def login_superadmin(
         email=superadmin.email,
         role=UserRole.SUPERADMIN.value,
     )
+
+    # Issue #102 — esta puerta no anotaba, y la pantalla de Personas decía «Nunca ha entrado»
+    # de quien entra a diario. No es cosmético: `last_login_at IS NULL` decide si una fila se
+    # puede borrar (REV.8), así que una cuenta que se usa todos los días parecía sin estrenar.
+    superadmin.last_login_at = datetime.now(timezone.utc)
+    session.add(superadmin)
+    await session.commit()
+
     return TokenResponse(access_token=create_token(user_info))
 
 
@@ -197,6 +205,12 @@ async def login_admin(
         role=UserRole.ADMIN.value,
         organizacion_ids=await _orgs_del_admin(session, admin.partner_id),
     )
+
+    # Issue #102 — igual que en `login_superadmin`: esta puerta tampoco anotaba.
+    admin.last_login_at = datetime.now(timezone.utc)
+    session.add(admin)
+    await session.commit()
+
     return TokenResponse(access_token=create_token(user_info))
 
 

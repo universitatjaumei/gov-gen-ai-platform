@@ -328,7 +328,10 @@ async def _superadmins_de_arranque(session: AsyncSession) -> list[UsuarioRead]:
             origen=ORIGEN_SUPERADMIN_DE_ARRANQUE,
             created_at=cuenta.created_at,
             created_by=None,
-            last_login_at=None,
+            # Issue #102 — el dato real. Antes iba `None` fijo, y la pantalla lo pintaba como
+            # «Nunca ha entrado» del superadministrador que entra a diario: una afirmación
+            # sobre algo que no se medía. La columna existe desde este mismo arreglo.
+            last_login_at=cuenta.last_login_at,
             puede_borrarse=False,
             motivo_no_borrable=MOTIVO_OTRA_TABLA,
         )

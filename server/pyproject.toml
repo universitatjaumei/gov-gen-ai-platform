@@ -84,9 +84,15 @@ dependencies = [
     "s3fs>=2024.6.0",
     "pandas>=2.0.0",
     "camelot-py>=0.11.0",
-    # camelot-py pide `chardet>=5.1.0` sin techo, y `requests` avisa por cada arranque si
-    # encuentra chardet >= 6 (`RequestsDependencyWarning`). El techo satisface a los dos.
-    "chardet>=5.1.0,<6",
+    # camelot-py pide `chardet>=5.1.0` sin techo y `requests` comprueba el rango al
+    # importarse. El techo era `<6` porque `requests` capaba ahi; MEDIDO el 2026-09-22
+    # sobre requests 2.34.2, su `check_compatibility` acepta `>= 3.0.2, < 8.0.0`, asi que
+    # el motivo de `<6` ya no existe y chardet 7 no avisa de nada.
+    #
+    # El techo SE QUEDA en `<8`: `requests` no avisa, **asegura**, asi que un chardet 8
+    # levantaria un AssertionError al importar `requests`. Sin techo, el proximo
+    # `uv lock --upgrade` lo traeria y rompeia el arranque entero.
+    "chardet>=5.1.0,<8",
     "pdfplumber>=0.11.0",
     "spacy>=3.7",
     "faker>=22.0",

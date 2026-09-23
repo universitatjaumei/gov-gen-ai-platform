@@ -77,7 +77,10 @@ function persona(cambios: Partial<UsuarioRead> = {}): UsuarioRead {
 
 const crear = vi.fn()
 
-function montar(personas: UsuarioRead[]) {
+function montar(
+  personas: UsuarioRead[],
+  acciones: string[] = ['listar', 'crear', 'editar', 'borrar']
+) {
   vi.mocked(useListUsersApiV1HubUsersGet).mockReturnValue({
     data: personas,
     isLoading: false,
@@ -97,7 +100,7 @@ function montar(personas: UsuarioRead[]) {
     isPending: false,
   } as never)
   vi.mocked(useCapacidadesDePersonas).mockReturnValue({
-    data: { acciones_permitidas: ['listar', 'crear', 'editar', 'borrar'] },
+    data: { acciones_permitidas: acciones },
     isLoading: false,
   } as never)
   vi.mocked(useGetCatalogoApiV1HubModulosCatalogoGet).mockReturnValue({
@@ -161,6 +164,30 @@ describe('Los módulos se eligen al dar de alta', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dar de alta' }))
 
     expect(crear.mock.calls[0][0].data.modulos).toEqual([])
+  })
+})
+
+describe('El catálogo sólo se pide a quien puede crear personas', () => {
+  /**
+   * `get_catalogo` está protegido con `_require_superadmin`, pero esta pantalla **también la ven
+   * los administradores de organización**: pueden listar personas y fijar contraseñas (USR.9).
+   *
+   * Sin condición, el hook se dispara igual para ellos: un 403 en cada carga de la pantalla, con
+   * los reintentos de React Query encima. Lo señaló la revisión automática de la PR #105 y era
+   * cierto — lo introduje con el propio arreglo del #100.
+   */
+  it('no lo pide si quien mira no puede crear', () => {
+    montar([], ['listar', 'fijar_contrasena'])
+
+    const opciones = vi.mocked(useGetCatalogoApiV1HubModulosCatalogoGet).mock.calls[0]?.[0]
+    expect(opciones?.query?.enabled).toBe(false)
+  })
+
+  it('sí lo pide a quien puede crear', () => {
+    montar([])
+
+    const opciones = vi.mocked(useGetCatalogoApiV1HubModulosCatalogoGet).mock.calls[0]?.[0]
+    expect(opciones?.query?.enabled).toBe(true)
   })
 })
 

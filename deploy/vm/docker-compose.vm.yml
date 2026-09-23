@@ -57,6 +57,23 @@ services:
     environment:
       ENVIRONMENT: production
       DEPLOY_MODE: ${DEPLOY_MODE:-all}
+      # De quién se fía uvicorn para leer `X-Forwarded-Proto` (issue #99).
+      #
+      # Su defecto es `127.0.0.1`, y **Caddy conecta desde la red de Docker**, así que la
+      # cabecera llegaba y no se honraba: toda URL deducida de la petición salía con `http://`
+      # aunque el cliente hubiera entrado por `https://`. Ya mordió una vez —el `redirect_uri`
+      # del login con Google— y el siguiente en morder sería el SAML, que reconstruye la URL
+      # actual para validar el `Destination` y el `Recipient` de la aserción.
+      #
+      # **Acotado y no `*`.** Con `*` cualquier cliente decidiría el esquema que la aplicación
+      # cree estar sirviendo, y de ahí salen suplantaciones y enlaces envenenados. Se fía del
+      # pool privado de Docker, que es de donde viene Caddy; a uvicorn no se llega desde fuera
+      # porque **el servicio `app` no publica ningún puerto**: sólo Caddy publica el 80 y el 443.
+      #
+      # No se declara una subred concreta para la red `default` a propósito: cambiarla obligaría
+      # a recrear la red en el despliegue, y una colisión con el direccionamiento de la máquina
+      # se pagaría con un despliegue caído.
+      FORWARDED_ALLOW_IPS: 172.16.0.0/12
       # El estado va fuera de la máquina, a propósito: el disco de la VM no guarda nada
       # que duela perder.
       STORAGE_BACKEND: gcs
