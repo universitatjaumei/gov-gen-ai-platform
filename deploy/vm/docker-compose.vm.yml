@@ -132,7 +132,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 576M
+          memory: 768M
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
@@ -213,22 +213,29 @@ services:
     # SEC.8.3: los límites de CPU y memoria no acotan el número de procesos, así que una
     # fork-bomb agota los PID del host sin salirse de su presupuesto de memoria.
     pids_limit: 128
-    # **El techo de memoria bajó de 512M a 384M el 2026-09-24, y no fue una decisión sobre el
-    # sandbox: fue el precio de que `app` necesitara 576M.** En una `e2-small` el presupuesto
-    # está agotado y no había de dónde sacarlos.
+    # ⚠️ **192M es un préstamo, no un dimensionamiento. Y tiene condición de salida.**
     #
-    # Hay que saber qué se perdió: este número **no es holgura, es la cuota de los scripts de
-    # usuario**. El sandbox consume 91 MiB en reposo, así que 384M sigue siendo cuatro veces eso
-    # — pero un guion de informes que procese una hoja de cálculo grande tiene ahora 128 MB menos
-    # de margen, y cuando alguno falle por memoria, ésta es la línea que lo explica.
+    # El 2026-09-24 este techo pasó de 512M a 192M para dárselos a `app`, que se quedaba sin
+    # memoria atendiendo consultas del chat y dejaba el widget colgado. En una `e2-small` el
+    # presupuesto está agotado y no había otro sitio de donde sacarlos.
     #
-    # El siguiente ajuste ya no tendrá de dónde robar. Entonces la conversación deja de ser cómo
-    # repartir 2 GB y pasa a ser si la máquina se ha quedado pequeña (issue #149).
+    # **Se decidió porque hoy nadie ejecuta scripts**: el proyecto está en fase de
+    # experimentación y el sandbox lleva su cuota parada, consumiendo 91 MiB en reposo. Con 192M
+    # arranca y responde a su health check, que es todo lo que hace falta mientras no se use.
+    #
+    # **Qué se rompe cuando la condición deje de ser cierta.** Este número no es holgura: es la
+    # cuota de memoria de los scripts de usuario. Un guion de informes que procese una hoja de
+    # cálculo de cierto tamaño morirá por OOM con 192M, y el síntoma que verá quien lo ejecute
+    # será «el script falla» sin decir por qué. Esta línea es la explicación.
+    #
+    # **La salida está decidida**: el día que se abra a usuarios que suban scripts, la VM sube a
+    # `e2-medium` (4 GB) y este techo vuelve a 512M. Está en la issue #149 con la factura hecha
+    # —unos 14 USD más al mes— para que sea una decisión y no una sorpresa.
     deploy:
       resources:
         limits:
           cpus: '1.0'
-          memory: 384M
+          memory: 192M
           pids: 128
     restart: unless-stopped
 
