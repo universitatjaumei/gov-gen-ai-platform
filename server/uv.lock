@@ -918,16 +918,16 @@ wheels = [
 
 [[package]]
 name = "fsspec"
-version = "2026.2.0"
+version = "2026.9.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/51/7c/f60c259dcbf4f0c47cc4ddb8f7720d2dcdc8888c8e5ad84c73ea4531cc5b/fsspec-2026.2.0.tar.gz", hash = "sha256:6544e34b16869f5aacd5b90bdf1a71acb37792ea3ddf6125ee69a22a53fb8bff", size = 313441, upload-time = "2026-02-05T21:50:53.743Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/77/cd/9be253869fc42e764de7f3dedd6969af7d44ff9c3375214a3442a6f3fc08/fsspec-2026.9.0.tar.gz", hash = "sha256:0f08147951c8cb31d844c3547d631053b127863b60be04cf06e121333ee0e2fe", size = 333545, upload-time = "2026-09-18T17:50:42.825Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e6/ab/fb21f4c939bb440104cc2b396d3be1d9b7a9fd3c6c2a53d98c45b3d7c954/fsspec-2026.2.0-py3-none-any.whl", hash = "sha256:98de475b5cb3bd66bedd5c4679e87b4fdfe1a3bf4d707b151b3c07e58c9a2437", size = 202505, upload-time = "2026-02-05T21:50:51.819Z" },
+    { url = "https://files.pythonhosted.org/packages/6c/c0/a98505f18594f1bce828bb159cec0fcf9860562f1a2c85913409fc8f3d9e/fsspec-2026.9.0-py3-none-any.whl", hash = "sha256:8dd6e646e99ea382bd85f97a45e6b526a442d79423a7dc673f1e2756d05fcb5f", size = 221738, upload-time = "2026-09-18T17:50:41.341Z" },
 ]
 
 [[package]]
 name = "gcsfs"
-version = "2026.2.0"
+version = "2026.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -939,9 +939,9 @@ dependencies = [
     { name = "google-cloud-storage-control" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8c/91/e7a2f237d51436a4fc947f30f039d2c277bb4f4ce02f86628ba0a094a3ce/gcsfs-2026.2.0.tar.gz", hash = "sha256:d58a885d9e9c6227742b86da419c7a458e1f33c1de016e826ea2909f6338ed84", size = 163376, upload-time = "2026-02-06T18:35:52.217Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d0/08/cb32ace6483b8016e8954f009f133799d299dc1bb35b310ced04bd46a925/gcsfs-2026.8.1.tar.gz", hash = "sha256:738da7dcc74817c7668d032f932598482a23cce1b061c537e54278be44d2fff8", size = 1090574, upload-time = "2026-09-11T08:02:18.931Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9c/6b/c2f68ac51229fc94f094c7f802648fc1de3d19af36434def5e64c0caa32b/gcsfs-2026.2.0-py3-none-any.whl", hash = "sha256:407feaa2af0de81ebce44ea7e6f68598a3753e5e42257b61d6a9f8c0d6d4754e", size = 57557, upload-time = "2026-02-06T18:35:51.09Z" },
+    { url = "https://files.pythonhosted.org/packages/04/e1/1db9ecfb9f22a71624413ee158b933c18538aacfde77acbb7413cea21a6e/gcsfs-2026.8.1-py3-none-any.whl", hash = "sha256:66e6316690b17e1887a4f4bc0902eee53f5b3fd860cc3f0377d65c5be3313b1f", size = 91383, upload-time = "2026-09-11T08:02:17.135Z" },
 ]
 
 [[package]]
@@ -1074,7 +1074,7 @@ wheels = [
 
 [[package]]
 name = "google-cloud-storage"
-version = "3.10.1"
+version = "3.14.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "google-api-core" },
@@ -1084,9 +1084,9 @@ dependencies = [
     { name = "google-resumable-media" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4c/47/205eb8e9a1739b5345843e5a425775cbdc472cc38e7eda082ba5b8d02450/google_cloud_storage-3.10.1.tar.gz", hash = "sha256:97db9aa4460727982040edd2bd13ff3d5e2260b5331ad22895802da1fc2a5286", size = 17309950, upload-time = "2026-03-23T09:35:23.409Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/19/06/33e124df40437c292c7d666616d890c12cfea5b83842acf5be7dc3fde016/google_cloud_storage-3.14.1.tar.gz", hash = "sha256:b24e74b493c60b19b83462933a83bb831e45b6ca4924b0d75eac8e176b58b3a7", size = 17348933, upload-time = "2026-09-08T17:10:11.871Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ad/ff/ca9ab2417fa913d75aae38bf40bf856bb2749a604b2e0f701b37cfcd23cc/google_cloud_storage-3.10.1-py3-none-any.whl", hash = "sha256:a72f656759b7b99bda700f901adcb3425a828d4a29f911bc26b3ea79c5b1217f", size = 324453, upload-time = "2026-03-23T09:35:21.368Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/65/7201c1816ae46e0b4e70a3ce61e5121963315dc9df2e00fcb8897a3d0926/google_cloud_storage-3.14.1-py3-none-any.whl", hash = "sha256:8f0fe2b74bd80ddcbd67247a3b47b81035a0a4f448569ed358fa40a46c940118", size = 343228, upload-time = "2026-09-08T17:10:09.833Z" },
 ]
 
 [[package]]
@@ -1538,16 +1538,16 @@ wheels = [
 
 [[package]]
 name = "langchain"
-version = "1.4.1"
+version = "1.4.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "langchain-core" },
     { name = "langgraph" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a3/fb/f7753db556d9c35d86dce414bea29224be3e60e6f19e887213cfabb84bef/langchain-1.4.1.tar.gz", hash = "sha256:5080fc66792a4c97ec20898006b740dc008f8777a46ff8c6f05b4ff8132928af", size = 729989, upload-time = "2026-09-16T17:06:46.253Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1c/ff/670036674e669b81c0ddba77e1f012c099eda7b7d1251b973e5367d2824e/langchain-1.4.2.tar.gz", hash = "sha256:5b476418cacbfb8f0da6e63b3b263eefdcec13b48abd6117565a25728ec10b77", size = 735715, upload-time = "2026-09-18T17:31:11.42Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5a/53/c1c5ea7dd660c1100bf37c0433c25a14926bd4704bc172356f12ad38c8e4/langchain-1.4.1-py3-none-any.whl", hash = "sha256:1286dd89c7fe2c552ba5b058fae16576e0acc8b0a5c1d060edc24d7d1f9230b7", size = 161821, upload-time = "2026-09-16T17:06:45.113Z" },
+    { url = "https://files.pythonhosted.org/packages/85/86/cc13651cfda820d96ca8c612538166334935e8cf4331a31f5dd369d27760/langchain-1.4.2-py3-none-any.whl", hash = "sha256:30a27c34cfa0004bf659dcdef488b99a9b90acb08bcc514a5a74264755da536c", size = 163740, upload-time = "2026-09-18T17:31:10.056Z" },
 ]
 
 [[package]]
@@ -1592,7 +1592,7 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.6.2"
+version = "1.6.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -1606,9 +1606,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "uuid-utils" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/89/7b/406b4a8dd43dd01f69e04aafdee206809a2097134b2f944e12802eae7948/langchain_core-1.6.2.tar.gz", hash = "sha256:1ec6d3a98f7c8cdbb5bb0deff86e7ca37e16bf4f8f49f022d10723656c62352d", size = 1004390, upload-time = "2026-09-04T21:29:22.769Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5d/ed/a9c3711721031d3ed8cbd681f90a856538965d1036dc5dd6ed1e48dcc569/langchain_core-1.6.4.tar.gz", hash = "sha256:c1caae770d991bb6f2376bad791970bf77bb29abd1f15823fa9ea7dbac080fa0", size = 1006637, upload-time = "2026-09-21T15:51:08.174Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a8/62/d3fb7c215cb2f237c3fe84880bf347a38deafef6033b6d5f1339ba8ca401/langchain_core-1.6.2-py3-none-any.whl", hash = "sha256:21e6c7cf097c68b777fd69ea00864f09bd9ca76ac73e3e3fa14e1ee366eb4711", size = 571690, upload-time = "2026-09-04T21:29:21.175Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/f2/41435d9a5448c52a0388f75741edb979fde7415eaa820d6a42878cad7e38/langchain_core-1.6.4-py3-none-any.whl", hash = "sha256:2f940c83f787676ad4dc651d49d053c7ec34bda5a6afcd224da2863ff53a0b84", size = 571970, upload-time = "2026-09-21T15:51:06.555Z" },
 ]
 
 [[package]]
@@ -2967,16 +2967,16 @@ wheels = [
 
 [[package]]
 name = "s3fs"
-version = "2026.2.0"
+version = "2026.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiobotocore" },
     { name = "aiohttp" },
     { name = "fsspec" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fa/be/392c8c5e0da9bfa139e41084690dd49a5e3e931099f78f52d3f6070105c6/s3fs-2026.2.0.tar.gz", hash = "sha256:91cb2a9f76e35643b76eeac3f47a6165172bb3def671f76b9111c8dd5779a2ac", size = 84152, upload-time = "2026-02-05T21:57:57.968Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f7/fe/ab89ab94cc1293849bc1a60876b589007bdd43f59a06ca309e717bd45dc7/s3fs-2026.9.0.tar.gz", hash = "sha256:ec078ff0122d28fd21d36ea4987794e4f42ecd6e8785eeaa083208771c1464e5", size = 89163, upload-time = "2026-09-18T19:02:54.117Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/57/e1/64c264db50b68de8a438b60ceeb921b2f22da3ebb7ad6255150225d0beac/s3fs-2026.2.0-py3-none-any.whl", hash = "sha256:65198835b86b1d5771112b0085d1da52a6ede36508b1aaa6cae2aedc765dfe10", size = 31328, upload-time = "2026-02-05T21:57:56.532Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/9c/15fb18bd708949dc953fe120be8d3c7a1b1b140c2592a9c81ce7961e9ecf/s3fs-2026.9.0-py3-none-any.whl", hash = "sha256:eb185fd98e20a1c9375087d9b2a6ef506f0cd01ae0c0c94efc79f88403fb81fe", size = 33126, upload-time = "2026-09-18T19:02:52.933Z" },
 ]
 
 [[package]]
@@ -3403,13 +3403,13 @@ resolution-markers = [
     "sys_platform == 'darwin'",
 ]
 dependencies = [
-    { name = "filelock", marker = "sys_platform == 'darwin'" },
-    { name = "fsspec", marker = "sys_platform == 'darwin'" },
-    { name = "jinja2", marker = "sys_platform == 'darwin'" },
-    { name = "networkx", marker = "sys_platform == 'darwin'" },
-    { name = "setuptools", marker = "sys_platform == 'darwin'" },
-    { name = "sympy", marker = "sys_platform == 'darwin'" },
-    { name = "typing-extensions", marker = "sys_platform == 'darwin'" },
+    { name = "filelock" },
+    { name = "fsspec" },
+    { name = "jinja2" },
+    { name = "networkx" },
+    { name = "setuptools" },
+    { name = "sympy" },
+    { name = "typing-extensions" },
 ]
 wheels = [
     { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.14.0-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:caf6359d64c0074bcb9f8641a169239118c8165a0a0fef79110c72bfd6474bec", upload-time = "2026-09-02T00:26:15Z" },
@@ -3423,13 +3423,13 @@ resolution-markers = [
     "sys_platform != 'darwin'",
 ]
 dependencies = [
-    { name = "filelock", marker = "sys_platform != 'darwin'" },
-    { name = "fsspec", marker = "sys_platform != 'darwin'" },
-    { name = "jinja2", marker = "sys_platform != 'darwin'" },
-    { name = "networkx", marker = "sys_platform != 'darwin'" },
-    { name = "setuptools", marker = "sys_platform != 'darwin'" },
-    { name = "sympy", marker = "sys_platform != 'darwin'" },
-    { name = "typing-extensions", marker = "sys_platform != 'darwin'" },
+    { name = "filelock" },
+    { name = "fsspec" },
+    { name = "jinja2" },
+    { name = "networkx" },
+    { name = "setuptools" },
+    { name = "sympy" },
+    { name = "typing-extensions" },
 ]
 wheels = [
     { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.14.0%2Bcpu-cp313-cp313-linux_s390x.whl", hash = "sha256:d87cfff3af33c937b88c9bc6c0dfa17f2156e2599f63447c696f2345928b518a", upload-time = "2026-09-02T18:31:55Z" },
@@ -3447,9 +3447,9 @@ resolution-markers = [
     "sys_platform == 'darwin'",
 ]
 dependencies = [
-    { name = "numpy", marker = "sys_platform == 'darwin'" },
-    { name = "pillow", marker = "sys_platform == 'darwin'" },
-    { name = "torch", version = "2.14.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
+    { name = "numpy" },
+    { name = "pillow" },
+    { name = "torch", version = "2.14.0", source = { registry = "https://download.pytorch.org/whl/cpu" } },
 ]
 wheels = [
     { url = "https://download-r2.pytorch.org/whl/cpu/torchvision-0.29.0-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:183378c36c216d51234d542cb10edab98b262483db1535515899cb8668f4c395", upload-time = "2026-09-02T00:27:50Z" },
@@ -3463,9 +3463,9 @@ resolution-markers = [
     "sys_platform != 'darwin'",
 ]
 dependencies = [
-    { name = "numpy", marker = "sys_platform != 'darwin'" },
-    { name = "pillow", marker = "sys_platform != 'darwin'" },
-    { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
+    { name = "numpy" },
+    { name = "pillow" },
+    { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" } },
 ]
 wheels = [
     { url = "https://download-r2.pytorch.org/whl/cpu/torchvision-0.29.0%2Bcpu-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:4d5138e00e117cfd5b7fe70af57d65d00abff2ce9f8581dc97805ecc62a510f5", upload-time = "2026-09-02T00:27:44Z" },
