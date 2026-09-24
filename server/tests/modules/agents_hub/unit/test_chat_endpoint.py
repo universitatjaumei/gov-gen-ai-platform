@@ -468,7 +468,16 @@ class TestChatEndpointSSE:
         assert len(error_events) == 1
         _, error_payload = error_events[0]
         assert "message" in error_payload
-        assert "LangGraph internal error" in error_payload["message"]
+        # Issue #147: el cliente recibe un mensaje estable, **no** el texto de la excepción.
+        # Este test comprobaba lo contrario —que `LangGraph internal error` llegara al
+        # cliente— y esa afirmación era el defecto escrito como especificación: el widget del
+        # chatbot es público, así que cualquiera podía provocar un error y leer el detalle
+        # interno. Lo que se conserva del test es lo que sí importaba: que haya un evento
+        # `error` y que no haya `done` detrás.
+        from server.app.api.v1.hub_chat import MENSAJE_DE_ERROR
+
+        assert error_payload["message"] == MENSAJE_DE_ERROR
+        assert "LangGraph internal error" not in error_payload["message"]
         # No debe haber evento done tras el error
         done_events = [(e, p) for e, p in events if e == "done"]
         assert len(done_events) == 0

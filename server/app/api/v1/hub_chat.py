@@ -136,6 +136,19 @@ def puede_depurar(request: Request, user: UserInfo) -> bool:
     return user.role in (UserRole.ADMIN.value, UserRole.SUPERADMIN.value)
 
 
+#: Lo único que el cliente recibe cuando el turno falla (issue #147).
+#:
+#: Antes iba `str(exc)`, y el widget del chatbot es **público**: cualquiera podía provocar un
+#: error y leer el mensaje de una excepción de base de datos, una ruta del contenedor o la
+#: respuesta cruda del proveedor de modelo. El cliente tiene que saber que hubo un error; cuál,
+#: no. El detalle va al registro, que es donde lo necesita quien lo arregla.
+#:
+#: Es texto fijo a propósito y no un mensaje por chatbot: éste no es el «no tengo información»
+#: de UX.4 —que sí es del chatbot y va en su lengua— sino una avería del servicio. Si algún día
+#: hay que traducirlo, el sitio es el cliente, que ya sabe en qué lengua está.
+MENSAJE_DE_ERROR = "S'ha produït un error en processar la consulta."
+
+
 def _sse(event: str, payload: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
@@ -603,8 +616,12 @@ async def chat_stream(
                         uso["completion"] += salida
                         uso["source"] = "provider"
 
-        except Exception as exc:  # noqa: BLE001
-            yield _sse("error", {"message": str(exc)})
+        except Exception:  # noqa: BLE001
+            # Issue #147: el detalle va al registro, no al cliente. Este manejador ni siquiera
+            # registraba, así que el único que no se enteraba de qué había fallado era quien
+            # tenía que arreglarlo.
+            logger.exception("El turno de chat falló durante el grafo; el cliente recibe `error`.")
+            yield _sse("error", {"message": MENSAJE_DE_ERROR})
             return
 
         # USR.8 — **todo esto va dentro de su propio `try`**, y no es simetría: guardar la
@@ -711,11 +728,11 @@ async def chat_stream(
                     "reformulada": reformulada,
                 },
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             logger.exception(
                 "El turno de chat falló después del grafo; el cliente recibe `error`."
             )
-            yield _sse("error", {"message": str(exc)})
+            yield _sse("error", {"message": MENSAJE_DE_ERROR})
             return
 
     return StreamingResponse(

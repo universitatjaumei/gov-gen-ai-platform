@@ -28,11 +28,17 @@ def _documento(relative_path: str | None = "REG-048_sindicatura.md", url: str = 
 class TestCitaAlSitioPublicado:
 
     def test_should_cite_the_pdf_when_no_site_is_configured(self, monkeypatch):
+        """Sin sitio publicado se cita el PDF, y **sin ancla** (issue #15).
+
+        Hasta el 2026-09-24 esta rama devolvía `…x.pdf#art-9`. El razonamiento de por qué eso
+        era fabricar un puntero está en
+        `test_should_not_compose_an_anchor_onto_a_target_that_cannot_serve_it`.
+        """
         monkeypatch.delenv(BASE_DEL_SITIO, raising=False)
 
         url = url_de_cita(_documento(), {"ancora": "art-9"})
 
-        assert url == "https://uji.es/x.pdf#art-9"
+        assert url == "https://uji.es/x.pdf"
 
     def test_should_cite_the_published_page_with_its_anchor(self, monkeypatch):
         monkeypatch.setenv(BASE_DEL_SITIO, SITIO)
@@ -64,7 +70,41 @@ class TestCitaAlSitioPublicado:
 
         url = url_de_cita(_documento(relative_path=None), {"ancora": "art-9"})
 
-        assert url == "https://uji.es/x.pdf#art-9"
+        assert url == "https://uji.es/x.pdf"
+
+    def test_should_not_compose_an_anchor_onto_a_target_that_cannot_serve_it(
+        self, monkeypatch
+    ):
+        """Issue #15. Un `#art-9` sobre un PDF es un puntero fabricado.
+
+        **El ancla la componemos nosotros**, a partir de los encabezados del `.md` que ingerimos.
+        Sólo la sirve quien publica ese `.md` como HTML, que es nuestro sitio — lo dice el propio
+        `url_de_cita`: «es el único que tiene anclas». Pegada a un PDF no lleva a ninguna parte:
+        el visor ignora un fragmento que no entiende y el lector aterriza en la primera página
+        creyendo que va al artículo 9.
+
+        Y eso es justo lo que `citation_validator` existe para impedir. Su regla está escrita:
+        «degradar al documento pierde precisión y no veracidad; componer un ancla que nadie leyó
+        sería fabricar un puntero». El contrato la aplicaba sobre lo que decía el modelo, y
+        resulta que el puntero lo fabricábamos nosotros un paso antes.
+
+        **Por qué esto arregla el caso medido.** Las normas propias de Gerencia daban cero aciertos
+        de ancla, y la issue lo diagnostica como defecto «de publicación, no de recuperación»:
+        se publican sin fragmento direccionable. Son exactamente las que caen por esta rama. Al
+        no llevar ancla la evidencia, cualquier cita anclada que emita el modelo se degrada sola
+        con la lógica que ya existe, sin tocar el validador.
+
+        El mismo criterio ya estaba aplicado una rama más arriba: al diario oficial sólo se le
+        compone ancla si es el BOE, y si no, se quita.
+        """
+        monkeypatch.setenv(BASE_DEL_SITIO, SITIO)
+
+        for ancora in ("art-9", "da-1", "Primer"):
+            url = url_de_cita(_documento(relative_path=None), {"ancora": ancora})
+            assert "#" not in url, (
+                f"se ha compuesto `#{ancora}` sobre {url}. Ese destino no sirve el fragmento: "
+                f"la cita aparenta una precisión que no tiene."
+            )
 
     def test_should_strip_the_directory_from_the_relative_path(self, monkeypatch):
         monkeypatch.setenv(BASE_DEL_SITIO, SITIO)
