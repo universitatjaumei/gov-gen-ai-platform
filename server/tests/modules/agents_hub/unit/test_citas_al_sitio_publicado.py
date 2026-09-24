@@ -106,6 +106,42 @@ class TestCitaAlSitioPublicado:
                 f"la cita aparenta una precisión que no tiene."
             )
 
+    def test_should_not_hand_back_something_that_is_not_a_url(self, monkeypatch):
+        """Issue #14. Un nombre de fichero no es un enlace, y enlazarlo es peor que no citar.
+
+        **Medido en producción el 2026-09-24**: de 2.607 URL de cita del corpus, **37 no eran
+        URL** sino nombres de fichero —`20050715_UJI_GER_Circular_11_05_….md`—, porque eso es
+        lo que esos documentos llevan en `canonical_url`. La cita salía como
+        `[Circular 11/05](20050715_UJI_GER_….md)`, que en un navegador no lleva a ninguna parte.
+
+        Y es la peor forma de fallar de las tres que hay: no da error, se ve como un enlace
+        normal, y **aparenta verificación**. El fundamento existe para poder contrastarlo; un
+        enlace que no se puede seguir obliga a creerse al asistente, que es justo lo que este
+        proyecto no quiere.
+
+        Devolver `None` hace que el contrato de citas no tenga a dónde enlazar ese documento,
+        así que lo cita **sin enlace**. Se pierde comodidad y no veracidad — la misma regla que
+        `citation_validator` aplica al degradar un ancla: «componer un puntero que nadie puede
+        seguir» no es una opción.
+
+        La comprobación es de forma y no de existencia: que empiece por `http://` o `https://`.
+        Si la ruta resuelve o no lo dice el detector de enlaces, que sale a la red; esto sólo
+        impide emitir algo que ni siquiera es una dirección.
+        """
+        monkeypatch.setenv(BASE_DEL_SITIO, SITIO)
+
+        for no_url in (
+            "20050715_UJI_GER_Circular_11_05_atencios_protocol_laries.md",
+            "carpeta/documento.pdf",
+            "   ",
+            "",
+        ):
+            documento = _documento(relative_path=None, url=no_url)
+            assert url_de_cita(documento, {"ancora": "art-9"}) is None, (
+                f"`{no_url}` se ha devuelto como URL de cita. No es una dirección: enlazarla "
+                f"produce un enlace muerto con aspecto de enlace bueno."
+            )
+
     def test_should_strip_the_directory_from_the_relative_path(self, monkeypatch):
         monkeypatch.setenv(BASE_DEL_SITIO, SITIO)
 
