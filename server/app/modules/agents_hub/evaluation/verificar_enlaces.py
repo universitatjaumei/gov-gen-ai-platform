@@ -73,6 +73,15 @@ async def comprobar_enlaces(
         pagina, _, ancla = url.partition("#")
         por_pagina[pagina].append(ancla)
 
+    # `Semaphore(0)` no es «sin límite»: deja todas las tareas esperando para siempre, y el
+    # medidor se cuelga sin decir por qué. Un cero llega solo desde `--concurrencia 0`, que es
+    # justo lo que alguien escribiría creyendo que significa «sin tope».
+    if concurrencia < 1:
+        raise ValueError(
+            f"concurrencia={concurrencia}: tiene que ser al menos 1. Un cero no quita el límite, "
+            f"deja la comprobación colgada indefinidamente."
+        )
+
     limite = asyncio.Semaphore(concurrencia)
     hallazgos: list[Hallazgo] = []
 
@@ -140,18 +149,24 @@ async def _run(args: argparse.Namespace) -> int:
             # recuperar con `url_de_cita(documento, metadata)` —es lo que hace
             # `vector_strategy`—. Comprobar la de ingesta daría un informe sobre unas URL que
             # nadie llega a pinchar.
+            #
+            # **Y se recorre en flujo, sin materializar la consulta entera.** La primera versión
+            # hacía `.all()` sobre la unión completa, que en este corpus son cientos de miles de
+            # filas de objetos ORM: exactamente la clase de consulta que el 2026-09-24 se comió
+            # la memoria de la VM y dejó el sitio caído 50 minutos. Con los techos de la issue
+            # #149 ya no tumbaría la máquina —moriría el contenedor—, pero morir tampoco es el
+            # objetivo. `stream()` mantiene en memoria una fila cada vez.
             consulta = (
                 select(HubDocument, HubDocumentChunk.chunk_metadata)
                 .join(HubDocumentChunk, HubDocumentChunk.document_id == HubDocument.id)
                 .where(HubDocument.chatbot_id == args.chatbot_id)
             )
-            urls = sorted(
-                {
-                    u
-                    for documento, metadata in (await session.execute(consulta)).all()
-                    if (u := url_de_cita(documento, metadata or {}))
-                }
-            )
+            vistas: set[str] = set()
+            async for documento, metadata in await session.stream(consulta):
+                u = url_de_cita(documento, metadata or {})
+                if u:
+                    vistas.add(u)
+            urls = sorted(vistas)
     finally:
         await engine.dispose()
 

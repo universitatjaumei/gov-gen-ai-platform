@@ -108,6 +108,22 @@ class TestElMedidorNoMienteSolo:
         assert [h.motivo for h in hallazgos] == ["no_resuelve"]
         assert "TimeoutError" in hallazgos[0].detalle
 
+    async def test_una_concurrencia_de_cero_no_deja_la_comprobacion_colgada(self):
+        """`Semaphore(0)` no es «sin límite»: es «nadie pasa nunca».
+
+        Lo señaló la revisión automática, y el camino hasta el fallo es corto y plausible:
+        alguien escribe `--concurrencia 0` creyendo que quita el tope, y el medidor se queda
+        esperando indefinidamente **sin decir por qué**. Un cuelgue silencioso es peor que un
+        error: parece que está trabajando.
+        """
+        import pytest as _pytest
+
+        async def fetch(url: str) -> tuple[int, str]:  # pragma: no cover
+            raise AssertionError("no debería llegar a pedirse nada")
+
+        with _pytest.raises(ValueError, match="al menos 1"):
+            await comprobar_enlaces(["https://x.es/a.html"], fetch, concurrencia=0)
+
     async def test_sin_urls_no_hay_hallazgos_y_tampoco_peticiones(self):
         async def fetch(url: str) -> tuple[int, str]:  # pragma: no cover
             raise AssertionError("no debería pedirse nada")

@@ -146,7 +146,7 @@ def puede_depurar(request: Request, user: UserInfo) -> bool:
 #: Es texto fijo a propósito y no un mensaje por chatbot: éste no es el «no tengo información»
 #: de UX.4 —que sí es del chatbot y va en su lengua— sino una avería del servicio. Si algún día
 #: hay que traducirlo, el sitio es el cliente, que ya sabe en qué lengua está.
-MENSAJE_DE_ERROR = "S'ha produit un error en processar la consulta."
+MENSAJE_DE_ERROR = "S'ha produït un error en processar la consulta."
 
 
 def _sse(event: str, payload: dict) -> str:
