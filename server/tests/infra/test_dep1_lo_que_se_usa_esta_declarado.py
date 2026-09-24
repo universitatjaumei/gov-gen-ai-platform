@@ -40,7 +40,11 @@ DOCKERFILE = RAIZ / "Dockerfile"
 #: fichero sin llamantes de producción, y traía `authlib`, `httplib2` y `mcp` —tres avisos de
 #: seguridad, uno crítico—. La idea de DEP.1 no cambia; lo que desaparece es uno de sus dos
 #: ejemplos.
-EXTRAS_OPCIONALES = ("evaluacion",)
+#: Los extras que existen para **no** estar en el despliegue estándar. `evaluacion` estuvo aquí y
+#: se fue el 2026-09-24 con `ragas`, que se retiró del proyecto entero. Queda `local-models`, que
+#: sí retira capacidad de verdad —los modelos en la máquina— y por eso es un extra y no una
+#: dependencia. Lo que impide que `ragas` vuelva es `test_dep2_ragas_se_retiro.py`.
+EXTRAS_OPCIONALES = ("local-models",)
 
 
 @pytest.fixture(scope="module")
@@ -124,15 +128,13 @@ class TestLosOpcionalesDegradanDeVerdad:
     # hay ni servicio ni extra que degradar, y lo que vigila que no vuelvan es
     # `test_aper19_el_agente_navegador_se_retiro.py`.
 
-    def test_rag_metrics_cae_a_la_metrica_lexica_sin_ragas(self) -> None:
-        modulo = self._sin(
-            ("ragas", "datasets"), "server.app.modules.agents_hub.evaluation.rag_metrics"
-        )
-        assert modulo._RAGAS_AVAILABLE is False, (
-            "`rag_metrics` tiene que caer a la métrica léxica cuando falta RAGAS. Su propia "
-            "docstring dice que la evaluación es «a mano o de noche, jamás bloqueando un PR»: "
-            "por eso puede vivir en un extra."
-        )
+    # `test_rag_metrics_cae_a_la_metrica_lexica_sin_ragas` estuvo aquí y se fue con su módulo el
+    # 2026-09-24. Comprobaba que `rag_metrics` degradaba sin RAGAS; ahora no hay ni módulo ni
+    # extra que degradar. Se retiró porque **sus dos funciones no tenían ningún llamador fuera
+    # de los tests**, y esos tests simulaban la llamada a RAGAS: la capacidad que parecía estar
+    # ahí no se ejecutaba en ninguna parte. De paso se fueron las dos únicas alertas de
+    # seguridad abiertas del repositorio, que entraban por `ragas` y no tenían corrección
+    # publicada. Lo vigila `test_dep2_ragas_se_retiro.py`.
 
 
 class TestElDespliegueNoInstalaLosExtras:
@@ -161,14 +163,19 @@ class TestElDespliegueNoInstalaLosExtras:
                 f"aplicación no necesita para funcionar, pero **no retira la capacidad**: se "
                 f"instala con `uv sync --extra {nombre}`."
             )
-        assert {"ragas", "datasets"} <= _nombres(extras["evaluacion"])
+        assert "torch" in _nombres(extras["local-models"]), (
+            "el extra `local-models` ya no declara `torch`. Es lo que lo hace caro y lo que "
+            "justifica que sea un extra: si deja de estar, o la pila local se fue a otro sitio "
+            "o el extra se quedó vacío, y las dos cosas hay que decidirlas."
+        )
 
     def test_los_opcionales_no_siguen_en_el_conjunto_por_defecto(self, manifiesto: dict) -> None:
         base = _nombres(manifiesto["project"]["dependencies"])
-        # `browser-use` ya no está en ninguna parte (APER.19), así que aquí quedan los de
-        # `evaluacion`. Se comprueba igual: declarar algo en un extra y dejarlo también en la
-        # base no quita nada, porque se instala igual.
-        for paquete in ("ragas", "datasets"):
+        # `browser-use` ya no está en ninguna parte (APER.19) y `ragas` tampoco desde el
+        # 2026-09-24, así que aquí queda la pila de modelos locales. Se comprueba igual:
+        # declarar algo en un extra y dejarlo también en la base no quita nada, porque se
+        # instala igual.
+        for paquete in ("torch", "sentence-transformers"):
             assert paquete not in base, (
                 f"`{paquete}` sigue en las dependencias base. Declararlo en un extra y dejarlo "
                 f"también aquí no quita nada: se instala igual."

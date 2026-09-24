@@ -170,17 +170,25 @@ local-models = [
 # Y un detalle que se midió y contradecía lo que parecía obvio: **`setuptools` sí llega al
 # despliegue estándar**, por `spacy` y `thinc`, no sólo por `torch`. Por eso la subida movía algo
 # fuera del extra, y fue el único cambio en el conjunto desplegado.
-# DEP.1: el extra que queda. El criterio es el mismo que el de `local-models` —lo que el
-# despliegue estándar no ejecuta no se instala— pero aquí hay además un motivo de seguridad:
-# arrastraba avisos de vulnerabilidad, incluidos **los dos únicos sin versión corregida
-# publicada** (`diskcache`, que entra por ragas, y el propio `ragas`). Ésos no se arreglan
-# subiendo: sólo dejando de traerlos.
+# **El extra `evaluacion` estuvo aquí y se retiró el 2026-09-24, con `ragas` y `datasets`
+# dentro.** DEP.1 lo había creado para sacarlos del conjunto por defecto; ahora no están en
+# ninguno.
 #
-# **No retira ninguna capacidad**: `rag_metrics` envuelve su import en un `try/except
-# ImportError` y cae a una métrica léxica de solapamiento, y su docstring ya decía que la
-# evaluación es «a mano o de noche, jamás bloqueando un PR».
-# `test_dep1_lo_que_se_usa_esta_declarado.py` lo comprueba bloqueando el import de verdad, en
-# vez de suponerlo.
+# **La razón no fueron los avisos, aunque se los llevó todos.** `ragas` traía los dos únicos
+# avisos sin versión corregida publicada del repositorio —el suyo y el de `diskcache`, que
+# entraba detrás—, y su proveedor no había respondido a la comunicación del fallo, así que la
+# corrección no iba a llegar. Pero eso sólo hacía la decisión más fácil: lo que la justificó es
+# que **sus dos funciones no tenían ningún llamador fuera de los tests**, y esos tests simulaban
+# la llamada a RAGAS. Era una capacidad que figuraba en el manifiesto y no se ejecutaba en
+# ninguna parte.
+#
+# **Lo que sí mide la calidad del RAG se queda, y no usa RAGAS**: `retrieval_metrics.py`
+# (recall@k y MRR, funciones puras), el dataset dorado con su línea base y su gate de CI, y las
+# tres comprobaciones de cita de `escenario_metricas.py`. Lo que no hay —medición automática de
+# la calidad de la *respuesta*— tampoco lo había con RAGAS instalado, y su sitio es la issue del
+# backlog sobre revisión humana de respuestas.
+#
+# Lo que impide que vuelva sin decidirlo es `tests/infra/test_dep2_ragas_se_retiro.py`.
 #
 # **`agente-navegador` estuvo aquí y se retiró en APER.19.** Lo pedía un solo fichero,
 # `services/agent_service.py`, y a ése no lo llamaba nadie en producción: era el hallazgo M7
@@ -188,10 +196,6 @@ local-models = [
 # `authlib`, `httplib2` y `mcp` — tres de los seis avisos abiertos el 2026-09-19, uno crítico.
 # Se fueron sin actualizar nada, dejando de depender. Si algún día hace falta un agente de
 # navegador, el código está en el historial de git y la decisión será otra.
-evaluacion = [
-    "ragas>=0.2.0",
-    "datasets>=3.0.0",
-]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

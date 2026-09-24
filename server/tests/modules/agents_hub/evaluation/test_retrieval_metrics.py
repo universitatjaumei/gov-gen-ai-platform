@@ -313,26 +313,3 @@ class TestGate:
         veredicto = check_gate(self._informe(0.5, 0.5, 0.5), None)
         assert veredicto.passed is True
         assert "sin baseline" in veredicto.summary.lower()
-
-
-# ───────────────────────── RAGAS fuera de CI ─────────────────────────
-
-
-class TestRagasFueraDeCI:
-
-    def test_el_modulo_documenta_que_no_es_un_gate(self):
-        import server.app.modules.agents_hub.evaluation.rag_metrics as mod
-
-        doc = (mod.__doc__ or "").lower()
-        assert "ci" in doc
-        assert "periódica" in doc or "periodica" in doc
-
-    def test_el_fallback_no_se_traga_el_motivo(self):
-        """`except Exception: pass` esconde por qué se degradó a la métrica léxica."""
-        from pathlib import Path
-
-        import server.app.modules.agents_hub.evaluation.rag_metrics as mod
-
-        fuente = Path(mod.__file__).read_text(encoding="utf-8")
-        assert "except Exception:\n            pass" not in fuente
-        assert "logger" in fuente
