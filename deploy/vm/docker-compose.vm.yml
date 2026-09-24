@@ -121,13 +121,18 @@ services:
       - default
       - sandbox-net
     # Issue #149 — 332 MiB medidos. Es el que mas crece —ingesta, extraccion de PDF, informes— y
-    # el que se llevo la maquina el 2026-09-24. El techo va holgado sobre lo observado pero NO
-    # sobra: si la ingesta lo alcanza, lo correcto es que muera el contenedor y se vea, no que se
-    # ahogue la VM.
+    # el que se llevo la maquina el 2026-09-24. Si la ingesta alcanza el techo, lo correcto es
+    # que muera el contenedor y se vea, no que se ahogue la VM.
+    #
+    # **Estuvo en 448M durante una hora y era demasiado poco.** Los 332 MiB que se midieron para
+    # dimensionarlo eran EN REPOSO; una consulta real del chat añade mas de 130 y el contenedor
+    # murio por OOM dos veces en dos minutos, dejando el chat colgado en «Preparando la consulta».
+    # La leccion es del metodo, no del numero: **medir en reposo no dimensiona nada**. Lo que hay
+    # que medir es el pico bajo la carga que el servicio atiende de verdad.
     deploy:
       resources:
         limits:
-          memory: 448M
+          memory: 576M
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
@@ -208,11 +213,22 @@ services:
     # SEC.8.3: los límites de CPU y memoria no acotan el número de procesos, así que una
     # fork-bomb agota los PID del host sin salirse de su presupuesto de memoria.
     pids_limit: 128
+    # **El techo de memoria bajó de 512M a 384M el 2026-09-24, y no fue una decisión sobre el
+    # sandbox: fue el precio de que `app` necesitara 576M.** En una `e2-small` el presupuesto
+    # está agotado y no había de dónde sacarlos.
+    #
+    # Hay que saber qué se perdió: este número **no es holgura, es la cuota de los scripts de
+    # usuario**. El sandbox consume 91 MiB en reposo, así que 384M sigue siendo cuatro veces eso
+    # — pero un guion de informes que procese una hoja de cálculo grande tiene ahora 128 MB menos
+    # de margen, y cuando alguno falle por memoria, ésta es la línea que lo explica.
+    #
+    # El siguiente ajuste ya no tendrá de dónde robar. Entonces la conversación deja de ser cómo
+    # repartir 2 GB y pasa a ser si la máquina se ha quedado pequeña (issue #149).
     deploy:
       resources:
         limits:
           cpus: '1.0'
-          memory: 512M
+          memory: 384M
           pids: 128
     restart: unless-stopped
 
