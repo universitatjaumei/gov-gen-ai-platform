@@ -31,7 +31,7 @@ Es el camino de quien va a levantar la plataforma, no a desarrollarla. Levanta e
 completo en contenedores.
 
 ```bash
-git clone <repositorio> && cd gov-gen-ai-platform
+git clone <repositorio> && cd teclab-govgenai
 scripts/generate_env.sh          # genera .env, server/.env y frontend/.env con secretos nuevos
 scripts/setup.sh                 # instalación de primera vez
 ```

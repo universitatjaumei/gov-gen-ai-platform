@@ -9,7 +9,7 @@ comuniquen **en privado primero**.
 
 **La vía preferida es el aviso privado de GitHub**, en la pestaña *Security* del repositorio:
 
-👉 **[Report a vulnerability](https://github.com/universitatjaumei/gov-gen-ai-platform/security/advisories/new)**
+👉 **[Report a vulnerability](https://github.com/universitatjaumei/teclab-govgenai/security/advisories/new)**
 
 Es privado entre quien avisa y quien mantiene, queda asociado al repositorio en vez de a un buzón,
 y desemboca en el aviso público que hay que publicar al corregirlo. Que no dependa de una persona

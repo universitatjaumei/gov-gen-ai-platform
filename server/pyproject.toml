@@ -108,7 +108,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/universitatjaumei/gov-gen-ai-platform"
+Repository = "https://github.com/universitatjaumei/teclab-govgenai"
 
 [dependency-groups]
 dev = [
