@@ -47,6 +47,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
+    # Issue #149 — 12 MiB medidos. Proceso pequeno y estable: abre el tunel y poco mas.
+    deploy:
+      resources:
+        limits:
+          memory: 32M
     restart: unless-stopped
 
   app:
@@ -115,6 +120,14 @@ services:
     networks:
       - default
       - sandbox-net
+    # Issue #149 — 332 MiB medidos. Es el que mas crece —ingesta, extraccion de PDF, informes— y
+    # el que se llevo la maquina el 2026-09-24. El techo va holgado sobre lo observado pero NO
+    # sobra: si la ingesta lo alcanza, lo correcto es que muera el contenedor y se vea, no que se
+    # ahogue la VM.
+    deploy:
+      resources:
+        limits:
+          memory: 448M
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
@@ -140,11 +153,23 @@ services:
     depends_on:
       cloud-sql-proxy:
         condition: service_healthy
+    # Issue #149 — Corre una vez al desplegar y termina. Lleva techo igual: «se ejecuta una vez»
+    # no es «no puede portarse mal», y una migracion sobre una tabla grande es justamente un
+    # riesgo de memoria.
+    deploy:
+      resources:
+        limits:
+          memory: 96M
     restart: "no"
 
   frontend:
     image: ${GOVGENAI_FRONTEND_IMAGE:?falta GOVGENAI_FRONTEND_IMAGE}
     container_name: govgenai_frontend
+    # Issue #149 — 7 MiB medidos. Sirve ficheros estaticos.
+    deploy:
+      resources:
+        limits:
+          memory: 32M
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
@@ -220,6 +245,11 @@ services:
       GOVGENAI_MCP_ALLOWED_HOSTS: ${GOVGENAI_HOST:?falta GOVGENAI_HOST},${GOVGENAI_HOST_INSTITUCIONAL:-}
     depends_on:
       - app
+    # Issue #149 — 71 MiB medidos.
+    deploy:
+      resources:
+        limits:
+          memory: 96M
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
@@ -254,6 +284,11 @@ services:
       - app
       - frontend
       - mcp
+    # Issue #149 — 36 MiB medidos.
+    deploy:
+      resources:
+        limits:
+          memory: 48M
     restart: unless-stopped
 
 # Las dos redes declaran subred **a propósito**, y no es cosmética: `FORWARDED_ALLOW_IPS` se
