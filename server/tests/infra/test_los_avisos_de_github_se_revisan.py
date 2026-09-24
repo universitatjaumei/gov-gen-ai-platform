@@ -170,12 +170,49 @@ def test_no_usa_ningun_secreto(texto: str) -> None:
 
     Si alguna vez hace falta uno de verdad, que sea una decisión y no una deriva: este test se
     pone rojo y obliga a escribir por qué.
+
+    La primera versión buscaba `secrets.NOMBRE` con una expresión regular, y **tenía un agujero**
+    que señaló la revisión automática: las expresiones de GitHub admiten también la forma
+    indexada, `secrets['NOMBRE']`, y de propina `toJSON(secrets)`. Un patrón que enumera formas
+    sintácticas se queda corto en cuanto aparece una que no se te ocurrió.
+
+    Así que la comprobación va al revés: se extraen **todas** las expresiones `${{ … }}` del
+    fichero y se exige que ninguna nombre el contexto `secrets`, sea como sea que lo escriba. Es
+    la diferencia entre prohibir las formas que conoces y prohibir lo que de verdad quieres
+    prohibir.
     """
-    usos = re.findall(r"secrets\.[A-Za-z_][A-Za-z0-9_]*", texto)
-    assert not usos, (
-        f"el workflow usa {sorted(set(usos))}. Este repositorio no tiene ningún secreto: "
-        f"despliega con federación de identidad y sus catorce entradas de configuración son "
-        f"variables. Introducir el primero es una decisión que se escribe, no un cambio de línea."
+    expresiones = re.findall(r"\$\{\{(.*?)\}\}", texto, re.DOTALL)
+    assert expresiones, (
+        "no se ha encontrado ninguna expresión `${{ … }}` en el workflow. O dejó de usarlas, o "
+        "el patrón dejó de reconocerlas: en el segundo caso este test aprobaría cualquier cosa."
+    )
+
+    con_secretos = [e.strip()[:80] for e in expresiones if re.search(r"\bsecrets\b", e)]
+    assert not con_secretos, (
+        f"estas expresiones usan el contexto `secrets`: {con_secretos}. Este repositorio no "
+        f"tiene ningún secreto: despliega con federación de identidad y sus catorce entradas de "
+        f"configuración son variables. Introducir el primero es una decisión que se escribe, no "
+        f"un cambio de línea."
+    )
+
+
+def test_el_hueco_se_dice_tambien_cuando_no_hay_nada_que_contar(texto: str) -> None:
+    """El aviso de que las alertas no se miran tiene que salir en los dos caminos.
+
+    La primera versión lo escribía sólo después de listar las PR pendientes, así que **el día que
+    no hubiera ninguna** —el caso tranquilo, el que más se repite— el resumen decía «Ninguna.» y
+    nada más. Un informe que en su mes más tranquilo omite justo la parte que no cubre se lee como
+    tranquilidad completa, y no lo es. Lo señaló la revisión automática.
+    """
+    assert "aviso_del_hueco()" in texto, (
+        "el aviso del hueco ya no está factorizado en una función. Se sacó a una a propósito: "
+        "duplicado en dos ramas, se corrige una y se olvida la otra."
+    )
+    invocaciones = len(re.findall(r"^\s*aviso_del_hueco\s*$", texto, re.MULTILINE))
+    assert invocaciones >= 2, (
+        f"el aviso del hueco se invoca {invocaciones} vez/veces. Tiene que salir en los dos "
+        f"caminos —haya PR pendientes o no—, porque el camino silencioso es precisamente el que "
+        f"más se lee y el que más engaña si se calla lo que no cubre."
     )
 
 
@@ -194,11 +231,13 @@ def test_no_mirar_no_es_no_haber_nada(texto: str) -> None:
     invocacion = re.compile(r"\bgh (?:api|pr) ")
     protegida = re.compile(r"^\s*if\s+!\s+[A-Z_]+=\"\$\(gh (?:api|pr) ")
 
-    lineas = [
-        linea
-        for linea in texto.splitlines()
+    todas = texto.splitlines()
+    indices = [
+        i
+        for i, linea in enumerate(todas)
         if invocacion.search(linea) and not linea.lstrip().startswith("#")
     ]
+    lineas = [todas[i] for i in indices]
     assert lineas, (
         "no se encuentra ninguna llamada a `gh api` ni `gh pr`. O el workflow dejó de consultar "
         "nada, o el patrón dejó de reconocer cómo se escriben: en los dos casos, los test de "
@@ -212,6 +251,29 @@ def test_no_mirar_no_es_no_haber_nada(texto: str) -> None:
         f"el token de Actions no alcanza a las alertas de Dependabot: porque la llamada sí lo "
         f"comprobaba."
     )
+
+    # Y comprobar el error no basta: la rama tiene que **terminar el paso**. Un `echo` de aviso
+    # dentro de un job que acaba en verde es indistinguible de no haber mirado, que es justo lo
+    # que este fichero defiende. Esta comprobación estaba en la primera versión, se perdió al
+    # reescribir el test, y la echó de menos la revisión automática.
+    #
+    # Se recorre hasta el `fi` que cierra el bloque, no una ventana de N caracteres. Con ventana
+    # fija fallaba en falso: la consulta GraphQL ocupa veinte líneas entre el `if !` y su rama de
+    # error, y ninguna cifra redonda vale para las dos llamadas a la vez.
+    for i, linea in zip(indices, lineas):
+        cierre = next(
+            (j for j in range(i + 1, len(todas)) if todas[j].strip() == "fi"), None
+        )
+        assert cierre is not None, (
+            f"la llamada `{linea.strip()[:70]}` abre un `if !` que no se cierra con un `fi`. O "
+            f"el guion está roto, o este test ya no sabe leerlo."
+        )
+        rama = "\n".join(todas[i:cierre])
+        assert "::error::" in rama and "exit 1" in rama, (
+            f"la llamada `{linea.strip()[:70]}` comprueba su error pero su rama no pone el paso "
+            f"en rojo. Hace falta un `::error::` y un `exit 1`: avisar en el registro y seguir "
+            f"adelante deja el job verde, y un verde es lo único que nadie va a mirar."
+        )
 
 
 def test_ninguna_llamada_a_avisos_se_silencia(texto: str) -> None:

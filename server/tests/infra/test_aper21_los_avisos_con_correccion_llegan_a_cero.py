@@ -12,13 +12,19 @@ Los otros tres **sí tienen corrección**, y ésos no tenían excusa:
   corrección estaba en la 9.0.3; `uv` resolvió la 9.1.1 porque nada la acota, y se deja así en
   vez de fijarla a la 9.0.3: pinchar una versión para que la cifra cuadre con el aviso es la
   clase de acotación que luego nadie recuerda por qué está.
-* `datasets` 4.8.4 → 5.0.1 (PYSEC-2026-3716), que entra por `ragas` en el extra `evaluacion`.
-  Cruza un mayor, y `ragas` 0.4.3 lo acepta: la resolución no movió ningún otro paquete.
+* `datasets` 4.8.4 → 5.0.1 (PYSEC-2026-3716), que entraba por `ragas` en el extra `evaluacion`.
+  Cruzaba un mayor, y `ragas` 0.4.3 lo aceptaba: la resolución no movió ningún otro paquete.
 
 **Por qué merece un prompt propio en vez de ir con APER.20.** Los dos tocan cómo se comprueba
-todo lo demás: `pytest` **es** el que ejecuta la suite, y `datasets` cruza un mayor. Meterlos en
-el mismo commit que la subida de `torch` habría hecho que un rojo no dijese cuál de las dos cosas
-lo causó. Es la misma razón por la que este proyecto hace un commit por prompt.
+todo lo demás: `pytest` **es** el que ejecuta la suite, y `datasets` cruzaba un mayor. Meterlos
+en el mismo commit que la subida de `torch` habría hecho que un rojo no dijese cuál de las dos
+cosas lo causó. Es la misma razón por la que este proyecto hace un commit por prompt.
+
+**Y el 2026-09-24 los cuatro sin corrección se fueron con su paquete.** `ragas` se retiró entero
+—con `datasets` y `diskcache` detrás— porque sus dos funciones no tenían ningún llamador fuera de
+los tests. Los tests que vigilaban `datasets` y el extra `evaluacion` se han borrado aquí, que es
+lo que ellos mismos pedían que se hiciera si eso pasaba. Lo que impide que vuelvan es
+`test_dep2_ragas_se_retiro.py`.
 
 **Lo que este fichero vigila no es «estar al día», que sería una carrera imposible de ganar**:
 es que **ningún aviso con corrección publicada se quede sin decidir**. Un aviso corregible tiene
@@ -29,7 +35,6 @@ vale es el tercero, quedarse quieto porque nadie lo mira.
 from __future__ import annotations
 
 import re
-import tomllib
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[3]
@@ -48,11 +53,6 @@ def _tupla(version: str) -> tuple[int, ...]:
     return tuple(int(p) for p in re.findall(r"\d+", version.split("+")[0])[:3])
 
 
-def _nombre(requisito: str) -> str:
-    """`ragas>=0.2.0` → `ragas`. Sin marcadores, extras ni comparadores."""
-    return re.split(r"[\[<>=!~; ]", requisito, maxsplit=1)[0].strip().lower()
-
-
 class TestLosDosQueSePodianSubir:
 
     def test_pytest_esta_al_menos_en_9_0_3(self) -> None:
@@ -63,48 +63,15 @@ class TestLosDosQueSePodianSubir:
             "dependencia de `dev`: no llega al despliegue, pero sí a cada ejecución de CI."
         )
 
-    def test_datasets_esta_al_menos_en_5_0_1(self) -> None:
-        version = _version_en_el_lock("datasets")
-        assert version is not None, (
-            "`datasets` ha desaparecido del lock. Si es porque se retiró el extra `evaluacion`, "
-            "el aviso también se fue y este test sobra; bórralo diciendo por qué."
-        )
-        assert _tupla(version) >= (5, 0, 1), (
-            f"`datasets` está en {version}, y PYSEC-2026-3716 se corrige en la 5.0.1."
-        )
-
-
-class TestLoQueSiguePendienteEstaDicho:
-    """`diskcache` y `ragas` se quedan, y la diferencia importa.
-
-    No es lo mismo «no lo hemos mirado» que «no hay nada que aplicar». Estos cuatro avisos no
-    tienen versión corregida publicada, así que la puerta los informa a propósito. Este test
-    existe para que, el día que **sí** la tengan, alguien tenga que venir aquí y decidir: si se
-    corrigen y nadie sube, el rojo aparece en la puerta, no aquí.
-    """
-
-    def test_los_dos_paquetes_sin_correccion_siguen_siendo_del_extra(self) -> None:
-        """Se lee el TOML, no se parte el texto.
-
-        La primera versión de este test buscaba `ragas` en la mitad del fichero anterior a
-        `[project.optional-dependencies]`, y se puso roja: ahí hay **dos comentarios** que
-        nombran a `ragas` explicando precisamente que se fue al extra. El test afirmaba lo
-        contrario de lo que pasaba, y el defecto era del medidor.
-        """
-        manifiesto = tomllib.loads(
-            (RAIZ / "server" / "pyproject.toml").read_text(encoding="utf-8")
-        )
-        base = {_nombre(d) for d in manifiesto["project"]["dependencies"]}
-        extras = manifiesto["project"].get("optional-dependencies", {})
-        del_extra = {_nombre(d) for d in extras.get("evaluacion", [])}
-
-        assert "ragas" in del_extra, (
-            "`ragas` ya no está en el extra `evaluacion`. Si se ha retirado entero, sus cuatro "
-            "avisos sin corrección se fueron con él y esta clase entera sobra; bórrala diciendo "
-            "por qué."
-        )
-        assert "ragas" not in base, (
-            "`ragas` ha pasado a las dependencias base. Entonces `diskcache` y sus dos avisos "
-            "**sin corrección publicada** entran en el conjunto que se despliega, y la puerta "
-            "pasa de informar a tener que bloquear."
-        )
+    # `test_datasets_esta_al_menos_en_5_0_1` y la clase `TestLoQueSiguePendienteEstaDicho`
+    # estuvieron aquí y se fueron el 2026-09-24, que es exactamente lo que sus propios mensajes
+    # de fallo pedían: «si es porque se retiró el extra `evaluacion`, el aviso también se fue y
+    # este test sobra; bórralo diciendo por qué».
+    #
+    # El porqué: `ragas` se retiró entero, y con él `datasets` y `diskcache`. No fue por los
+    # avisos —aunque se llevó los cuatro, los dos únicos sin corrección publicada del
+    # repositorio—, sino porque **sus dos funciones no tenían ningún llamador fuera de los
+    # tests**, y esos tests simulaban la llamada. Era una capacidad que parecía estar y no se
+    # ejecutaba en ninguna parte.
+    #
+    # Lo que impide que vuelvan sin decidirlo es `test_dep2_ragas_se_retiro.py`.

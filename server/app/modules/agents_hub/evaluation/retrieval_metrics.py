@@ -1,8 +1,14 @@
 """Métricas de recuperación (RAG.1). Deploy: edge.
 
 **Funciones puras sobre listas de identificadores: sin LLM, sin red y sin BD.** Es lo que
-permite que el gate de CI corra en segundos y se ejecute en cada cambio del retriever;
-RAGAS (`rag_metrics.py`) mide otra cosa y es evaluación periódica, nunca un gate.
+permite que el gate de CI corra en segundos y se ejecute en cada cambio del retriever.
+
+Desde el 2026-09-24 esto es **toda** la medición automática de calidad que hay, junto con las
+tres comprobaciones de cita de `escenario_metricas.py`. Aquí hubo también un `rag_metrics.py`
+con métricas de RAGAS —fidelidad y relevancia, con LLM— y se retiró porque sus dos funciones no
+tenían ningún llamador fuera de los tests. Lo que mide este fichero es la **recuperación**: si
+salió lo que tenía que salir. La calidad de la *respuesta* no se mide sola, y su sitio es la
+revisión humana.
 
 Los identificadores pueden ser URLs canónicas o ids de documento: a las métricas les da
 igual, siempre que el dorado y lo recuperado usen el mismo eje.

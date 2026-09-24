@@ -114,8 +114,21 @@ jobs:
           echo "## PR de Dependabot pendientes" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
+          # El aviso del hueco se escribe **antes** de mirar si hay PR, y por eso va aquí y no al
+          # final. En la primera versión colgaba del camino «sí hay PR», de modo que el día que
+          # no hubiera ninguna —el caso tranquilo, el que más se repite— el resumen habría dicho
+          # «Ninguna.» y nada más: lectura de mes tranquilo para un informe al que justamente le
+          # falta media foto. Lo señaló la revisión automática.
+          aviso_del_hueco() {
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> Las **alertas** de vulnerabilidad no se listan aquí: el token de Actions no" >> "$GITHUB_STEP_SUMMARY"
+            echo "> alcanza a leerlas. Quien bloquea por vulnerabilidad es \`supply-chain\`, en cada" >> "$GITHUB_STEP_SUMMARY"
+            echo "> commit y sobre los cinco locks. La pestaña Dependabot hay que mirarla a mano." >> "$GITHUB_STEP_SUMMARY"
+          }
+
           if [ -z "$PRS" ]; then
             echo "Ninguna." >> "$GITHUB_STEP_SUMMARY"
+            aviso_del_hueco
             echo "ninguna PR de Dependabot pendiente"
             exit 0
           fi
@@ -130,10 +143,7 @@ jobs:
             echo "| #$numero | $fecha | $titulo |" >> "$GITHUB_STEP_SUMMARY"
           done <<< "$PRS"
 
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "> Las **alertas** de vulnerabilidad no se listan aquí: el token de Actions no" >> "$GITHUB_STEP_SUMMARY"
-          echo "> alcanza a leerlas. Quien bloquea por vulnerabilidad es \`supply-chain\`, en cada" >> "$GITHUB_STEP_SUMMARY"
-          echo "> commit y sobre los cinco locks. La pestaña Dependabot hay que mirarla a mano." >> "$GITHUB_STEP_SUMMARY"
+          aviso_del_hueco
 
   copilot:
     name: Los informes de Copilot están atendidos

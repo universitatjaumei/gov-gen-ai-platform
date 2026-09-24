@@ -820,9 +820,9 @@ puerta que bloqueara la *pull request* por «hay alertas abiertas» dejaría roj
 que las corrige — y un punto muerto se resuelve siempre igual, desactivando la puerta. Por eso el
 sitio de esa exigencia es **el despliegue**, que es el primer instante en que la foto es cierta.
 
-**Y esa primera fila es también la que este proyecto no llegó a mecanizar, por una razón que
-merece contarse.** Se construyó, se estrenó, y en su primera ejecución real respondió un error de
-permisos: **el testigo automático de la integración continua no alcanzaba a leer las alertas**, y
+**Y esa primera fila es también la que este proyecto construyó y acabó retirando, por una razón
+que merece contarse.** Se escribió entera, con sus tests, y en su primera ejecución real respondió
+un error de permisos: **el testigo automático de la integración continua no alcanzaba a leer las alertas**, y
 no había permiso del flujo que lo arreglara. La alternativa era una credencial propia, de sólo
 lectura y un solo permiso; se pidió, quedó pendiente de aprobación de la organización, y **se
 decidió retirar el control en vez de insistir**. Dos razones, y las dos pesan más que el control:
