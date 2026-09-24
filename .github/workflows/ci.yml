@@ -1065,22 +1065,39 @@ jobs:
             | grep -oiE '(clos(e|es|ed)|fix(es|ed)?|resolv(e|es|ed))[[:space:]]+#[0-9]+' \
             | grep -oE '[0-9]+' | sort -u || true)"
 
+          # Y lo que se declara **avance sin cierre**, que es un caso normal y que la primera
+          # versión de esta puerta no sabía expresar: un commit `feat(#14)` que entrega el
+          # detector pero no lo ejecuta **avanza** la issue y no la termina. Sin esta vía, la
+          # única forma de poner la puerta en verde era cerrar una issue sin terminarla o
+          # reescribir el asunto del commit — o sea, mentir o rehacer el historial.
+          #
+          # Silencio sigue siendo rojo. Lo que se exige es que se diga una de las dos cosas.
+          PARCIALES="$(printf '%s' "$TODO" \
+            | grep -oiE '(parte de|avanza|refs?)[[:space:]]+#[0-9]+' \
+            | grep -oE '[0-9]+' | sort -u || true)"
+
           echo "referenciadas como arregladas: ${ARREGLADAS:-ninguna}"
           echo "con palabra de cierre:         ${CIERRAN:-ninguna}"
+          echo "declaradas como avance:        ${PARCIALES:-ninguna}"
 
           FALTAN=""
           for n in $ARREGLADAS; do
             # Una issue ya cerrada no necesita palabra: se cerró a mano o en otra PR.
             estado="$(gh issue view "$n" --json state --jq .state 2>/dev/null || echo DESCONOCIDA)"
             if [ "$estado" = "CLOSED" ] || [ "$estado" = "DESCONOCIDA" ]; then continue; fi
+            printf '%s\n' "$PARCIALES" | grep -qx "$n" && continue
             printf '%s\n' "$CIERRAN" | grep -qx "$n" || FALTAN="$FALTAN #$n"
           done
 
           if [ -n "$FALTAN" ]; then
             echo "::error::Esta PR arregla$FALTAN y esas issues NO se cerrarán al mezclar."
             echo ""
-            echo "Un asunto \`fix(#N):\` no es palabra de cierre para GitHub. Añade \`Closes #N\`"
-            echo "al cuerpo del commit o de la PR, o cierra la issue a mano si ya no aplica."
+            echo "Un asunto \`fix(#N):\` no es palabra de cierre para GitHub. Hay dos salidas, y"
+            echo "las dos consisten en decir qué pasa con la issue:"
+            echo "  · \`Closes #N\` en el cuerpo del commit o de la PR, si queda terminada."
+            echo "  · \`Parte de #N\` si esto la avanza pero no la cierra."
+            echo "Quedarse callado no es una opción: es como se acumulan issues resueltas y"
+            echo "abiertas, que es lo que esta puerta vino a evitar."
             exit 1
           fi
           echo "todas las issues que esta PR arregla se cerrarán al mezclar"
