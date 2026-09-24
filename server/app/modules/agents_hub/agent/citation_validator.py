@@ -5,10 +5,30 @@ import unicodedata
 
 from server.app.core.llm_text import texto_de
 
-_MD_LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+# Issue #148 — los dos límites no son estética: quitan un coste **cuadrático**.
+#
+# Sin ellos, el motor arranca en cada `[` del texto y, si no encuentra cierre, escanea hasta el
+# final: con *m* corchetes sobre *n* caracteres, O(n·m). Medido sobre un texto de sólo corchetes,
+# antes y después de acotar:
+#
+#     n=16.000    1.358 ms → 133 ms          n=64.000   32.671 ms → 515 ms
+#
+# Es decir, **32 segundos** en el peor caso de 64.000 caracteres, que es una respuesta larga del
+# modelo. Doblar la entrada multiplicaba el tiempo por cuatro.
+#
+# **500 para el título** porque ninguno real se acerca —el más largo del corpus, con fecha y
+# órgano, no llega a 200— y **2.048 para la URL** porque es lo que cabe en `source_url`, que es
+# `String(2048)`: una más larga no está en la base y no puede ser una cita recuperada.
+#
+# El intercambio está escrito y probado en `test_issue148_…`: un enlace que pase del límite deja
+# de contar como cita. No existe en ninguna respuesta real, y el precio de no acotarlo es que el
+# proceso se quede segundos leyendo corchetes.
+_MD_LINK = re.compile(r"\[([^\]]{1,500})\]\(([^)]{1,2048})\)")
 # Un corchete que NO va seguido de parentesis: la forma en la que el modelo cita cuando se
 # deja la URL. Se excluye el salto de linea para no tragarse dos citas de parrafos distintos.
-_CORCHETE_SIN_ENLACE = re.compile(r"\[([^\]\n]+)\](?!\()")
+# El mismo límite y por la misma razón (#148). Ésta era la peor de las dos: 68 segundos sobre
+# 64.000 caracteres, frente a 898 ms acotada.
+_CORCHETE_SIN_ENLACE = re.compile(r"\[([^\]\n]{1,500})\](?!\()")
 
 NO_CITATION_FALLBACK = (
     "No tengo informacion suficiente en los documentos disponibles para responder a "

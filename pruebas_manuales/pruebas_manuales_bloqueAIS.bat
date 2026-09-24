@@ -71,7 +71,7 @@ echo.
 echo   AHORA, para verlo funcionando:
 echo   1. Para el servidor (Ctrl+C).
 echo   2. Anade a server\.env esta linea:
-echo        SOURCE_URL=https://github.com/universitatjaumei/gov-gen-ai-platform
+echo        SOURCE_URL=https://github.com/universitatjaumei/teclab-govgenai
 echo   3. Arranca el servidor otra vez.
 echo   4. Recarga el panel: http://localhost:5173
 echo.

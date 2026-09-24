@@ -36,11 +36,11 @@ Chatbots de recuperación aumentada sobre el corpus normativo de la institución
 resolubles, aviso de vigencia, política de lengua y trazas por petición. Evaluación con lote
 dorado y veredicto humano.
 
-Abierto: revisión humana de las respuestas ([#8](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/8));
-el catálogo de procedimientos en el mismo asistente ([#12](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/12),
+Abierto: revisión humana de las respuestas ([#8](https://github.com/universitatjaumei/teclab-govgenai/issues/8));
+el catálogo de procedimientos en el mismo asistente ([#12](https://github.com/universitatjaumei/teclab-govgenai/issues/12),
 **bloqueado** por las fichas validadas y la consulta de descarga); orden vigencia→lengua y aviso
-de traducción ([#9](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/9)); reordenador
-por API y su medición en valenciano ([#10](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/10)).
+de traducción ([#9](https://github.com/universitatjaumei/teclab-govgenai/issues/9)); reordenador
+por API y su medición en valenciano ([#10](https://github.com/universitatjaumei/teclab-govgenai/issues/10)).
 
 ### 2. Corpus normativo y curación de portales — En producción
 
@@ -61,7 +61,7 @@ point*), registro sin aprobación previa y revisión posterior por muestreo. Det
 [`docs/CATALOGO_FUNCIONES.md`](docs/CATALOGO_FUNCIONES.md).
 
 Abierto: los campos de entrada manual de una plantilla sin dónde rellenarse
-([#86](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/86)). La ampliación del
+([#86](https://github.com/universitatjaumei/teclab-govgenai/issues/86)). La ampliación del
 catálogo a tareas completas es el tema 4.
 
 ### 4. Automatización gobernada — En curso
@@ -77,10 +77,10 @@ autorizado, revisión posterior y anonimización**. A eso se dedican los cuatro 
 
 | Hito | Estado | Qué entrega | Issues |
 |---|---|---|---|
-| [1 — Cerrar lo que ya no se hace](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/9) | ✅ Completo | La especificación declara como límite deliberado que no se ejecuta nada en el equipo de quien la usa; los planes de fase 2 se cierran | [#112](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/112), [#113](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/113) |
-| [2 — Registrar lo que corre fuera](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/10) | Previsto | Funciones de **origen externo** (un cuaderno se registra por su hash sin ejecutarlo); paquete MCP y *skill* de gobernanza para agentes de código; registro de la ejecución de un cuaderno en tres líneas; depósito del manifiesto de una ejecución hecha fuera | [#114](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/114), [#115](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/115), [#124](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/124), [#116](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/116) |
-| [3 — Funciones de tarea](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/11) | Previsto | Una función produce **ficheros**; red saliente sólo hacia **orígenes declarados**; el ecosistema de módulos ampliado y vigilado; los dos cuadernos reales como casos guía con datos sintéticos | [#117](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/117), [#118](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/118), [#119](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/119), [#120](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/120) |
-| [4 — Decisiones de la institución](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/12) | **Bloqueado** | El régimen de ejecución frente a la regla de soberanía local; la lista del ecosistema autorizado y el plazo de revisión; quién revisa, quién suspende y la ruta a protección de datos | [#121](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/121), [#122](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/122), [#123](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/123) |
+| [1 — Cerrar lo que ya no se hace](https://github.com/universitatjaumei/teclab-govgenai/milestone/9) | ✅ Completo | La especificación declara como límite deliberado que no se ejecuta nada en el equipo de quien la usa; los planes de fase 2 se cierran | [#112](https://github.com/universitatjaumei/teclab-govgenai/issues/112), [#113](https://github.com/universitatjaumei/teclab-govgenai/issues/113) |
+| [2 — Registrar lo que corre fuera](https://github.com/universitatjaumei/teclab-govgenai/milestone/10) | Previsto | Funciones de **origen externo** (un cuaderno se registra por su hash sin ejecutarlo); paquete MCP y *skill* de gobernanza para agentes de código; registro de la ejecución de un cuaderno en tres líneas; depósito del manifiesto de una ejecución hecha fuera | [#114](https://github.com/universitatjaumei/teclab-govgenai/issues/114), [#115](https://github.com/universitatjaumei/teclab-govgenai/issues/115), [#124](https://github.com/universitatjaumei/teclab-govgenai/issues/124), [#116](https://github.com/universitatjaumei/teclab-govgenai/issues/116) |
+| [3 — Funciones de tarea](https://github.com/universitatjaumei/teclab-govgenai/milestone/11) | Previsto | Una función produce **ficheros**; red saliente sólo hacia **orígenes declarados**; el ecosistema de módulos ampliado y vigilado; los dos cuadernos reales como casos guía con datos sintéticos | [#117](https://github.com/universitatjaumei/teclab-govgenai/issues/117), [#118](https://github.com/universitatjaumei/teclab-govgenai/issues/118), [#119](https://github.com/universitatjaumei/teclab-govgenai/issues/119), [#120](https://github.com/universitatjaumei/teclab-govgenai/issues/120) |
+| [4 — Decisiones de la institución](https://github.com/universitatjaumei/teclab-govgenai/milestone/12) | **Bloqueado** | El régimen de ejecución frente a la regla de soberanía local; la lista del ecosistema autorizado y el plazo de revisión; quién revisa, quién suspende y la ruta a protección de datos | [#121](https://github.com/universitatjaumei/teclab-govgenai/issues/121), [#122](https://github.com/universitatjaumei/teclab-govgenai/issues/122), [#123](https://github.com/universitatjaumei/teclab-govgenai/issues/123) |
 
 El orden recomendado es 1, 2, 3: el hito 2 es el más barato y ataca el problema real de una
 organización que trabaja con cuadernos, saber cuáles circulan; el 3 es el de más diseño. El 4 no
@@ -107,19 +107,19 @@ Entrada con la cuenta institucional, roles separados de los módulos concedidos,
 organización con inventario tabla a tabla y cascada de configuración plataforma → organización →
 chatbot. Detalle en [`docs/MULTITENENCIA.md`](docs/MULTITENENCIA.md).
 
-Abierto, en el hito [Bloque 1 — dar de alta a una persona](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/5):
-conceder módulos donde se da de alta ([#100](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/100)),
-la siembra del catálogo sin contraseña ([#97](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/97)) y
-el guion de emergencia del superadministrador ([#96](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/96)).
+Abierto, en el hito [Bloque 1 — dar de alta a una persona](https://github.com/universitatjaumei/teclab-govgenai/milestone/5):
+conceder módulos donde se da de alta ([#100](https://github.com/universitatjaumei/teclab-govgenai/issues/100)),
+la siembra del catálogo sin contraseña ([#97](https://github.com/universitatjaumei/teclab-govgenai/issues/97)) y
+el guion de emergencia del superadministrador ([#96](https://github.com/universitatjaumei/teclab-govgenai/issues/96)).
 La segunda fase de la multitenencia, vista y permisos por organización, espera al piloto
-([#11](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/11)).
+([#11](https://github.com/universitatjaumei/teclab-govgenai/issues/11)).
 
 ### 7. Operación, despliegue y apertura del repositorio — En curso
 
 Despliegue en máquina virtual con imágenes construidas y arrancadas en CI, esquema gobernado sólo
 por Alembic, dependencias auditadas por lotes y reversión automática. Los hitos
-[Bloque 2 — lo que ya costó una caída](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/6) y
-[Bloque 3 — lo que verá quien instale](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/7)
+[Bloque 2 — lo que ya costó una caída](https://github.com/universitatjaumei/teclab-govgenai/milestone/6) y
+[Bloque 3 — lo que verá quien instale](https://github.com/universitatjaumei/teclab-govgenai/milestone/7)
 recogen lo que queda antes y después de abrir. La numeración es `0.x` a propósito y no se promete
 cadencia ni soporte: [`docs/VERSIONADO.md`](docs/VERSIONADO.md).
 
@@ -141,10 +141,10 @@ sigue en el gestor.
 
 | Hito | Estado | Qué entrega | Issues |
 |---|---|---|---|
-| [1 — Cerrar el gestor de expedientes como producto](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/13) | ✅ Completo | La especificación, la presentación y el plan de fase 3 describen trámites asistidos; el documento del gestor híbrido se retira y lo sustituye una decisión fechada | [#126](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/126), [#127](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/127) |
-| [2 — El trámite invocable, a mano y desde el gestor](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/14) | Previsto | Contrato y catálogo de trámites; creación a mano o por API con referencia externa e idempotencia; estado con `acciones_permitidas` y callback firmado; enlace profundo de revisión, semántica de «validar» y retención; salida estructurada con hash | [#128](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/128), [#129](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/129), [#130](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/130), [#131](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/131), [#132](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/132) |
-| [3 — Las tres clases de trámite](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/15) | Previsto | **Baremación determinista y siempre verificada por una persona** (el modelo extrae hechos, la persona los verifica, una función puntúa con el baremo como dato, el modelo motiva leyendo la tabla); informe de fase; resolución con la normativa aplicable a fecha de referencia. Todas con datos sintéticos | [#138](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/138), [#133](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/133), [#134](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/134) |
-| [4 — Decisiones de la institución](https://github.com/universitatjaumei/gov-gen-ai-platform/milestone/16) | **Bloqueado** | Qué gestor, qué puede hacer y con qué entorno de pruebas; clasificación de riesgo de la baremación y evaluación de impacto antes de cualquier dato real; qué vale «validar» en el procedimiento y cuánto se conservan los documentos | [#135](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/135), [#136](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/136), [#137](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/137) |
+| [1 — Cerrar el gestor de expedientes como producto](https://github.com/universitatjaumei/teclab-govgenai/milestone/13) | ✅ Completo | La especificación, la presentación y el plan de fase 3 describen trámites asistidos; el documento del gestor híbrido se retira y lo sustituye una decisión fechada | [#126](https://github.com/universitatjaumei/teclab-govgenai/issues/126), [#127](https://github.com/universitatjaumei/teclab-govgenai/issues/127) |
+| [2 — El trámite invocable, a mano y desde el gestor](https://github.com/universitatjaumei/teclab-govgenai/milestone/14) | Previsto | Contrato y catálogo de trámites; creación a mano o por API con referencia externa e idempotencia; estado con `acciones_permitidas` y callback firmado; enlace profundo de revisión, semántica de «validar» y retención; salida estructurada con hash | [#128](https://github.com/universitatjaumei/teclab-govgenai/issues/128), [#129](https://github.com/universitatjaumei/teclab-govgenai/issues/129), [#130](https://github.com/universitatjaumei/teclab-govgenai/issues/130), [#131](https://github.com/universitatjaumei/teclab-govgenai/issues/131), [#132](https://github.com/universitatjaumei/teclab-govgenai/issues/132) |
+| [3 — Las tres clases de trámite](https://github.com/universitatjaumei/teclab-govgenai/milestone/15) | Previsto | **Baremación determinista y siempre verificada por una persona** (el modelo extrae hechos, la persona los verifica, una función puntúa con el baremo como dato, el modelo motiva leyendo la tabla); informe de fase; resolución con la normativa aplicable a fecha de referencia. Todas con datos sintéticos | [#138](https://github.com/universitatjaumei/teclab-govgenai/issues/138), [#133](https://github.com/universitatjaumei/teclab-govgenai/issues/133), [#134](https://github.com/universitatjaumei/teclab-govgenai/issues/134) |
+| [4 — Decisiones de la institución](https://github.com/universitatjaumei/teclab-govgenai/milestone/16) | **Bloqueado** | Qué gestor, qué puede hacer y con qué entorno de pruebas; clasificación de riesgo de la baremación y evaluación de impacto antes de cualquier dato real; qué vale «validar» en el procedimiento y cuánto se conservan los documentos | [#135](https://github.com/universitatjaumei/teclab-govgenai/issues/135), [#136](https://github.com/universitatjaumei/teclab-govgenai/issues/136), [#137](https://github.com/universitatjaumei/teclab-govgenai/issues/137) |
 
 Orden recomendado: 1, y después 2 y 3 en paralelo con datos sintéticos, empezando por el informe
 de fase, que es la clase de menor riesgo y con la que se prueban los dos modos. El hito 4 no
@@ -176,14 +176,14 @@ Límites deliberados, con su razón en
 
 - **Ejecutar en el equipo de quien la usa**: ni agente local, ni RPA, ni vigilantes de carpeta,
   correo o web, ni programador de flujos locales, ni *thin client*. Es la decisión del tema 4 y
-  entra en la especificación con [#112](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/112).
+  entra en la especificación con [#112](https://github.com/universitatjaumei/teclab-govgenai/issues/112).
 - **Acceder a la nube personal de la persona con credenciales centralizadas** (unidades y
   documentos compartidos). La persona sube y descarga; lo que necesite sus credenciales corre
   fuera y se registra.
 - **Un gestor de expedientes propio.** El de la institución es la fuente de verdad del
   procedimiento y la plataforma no cambia nunca su estado: entrega trámites asistidos y su
   evidencia. Es la decisión del tema 8 y entra en la especificación con
-  [#126](https://github.com/universitatjaumei/gov-gen-ai-platform/issues/126).
+  [#126](https://github.com/universitatjaumei/teclab-govgenai/issues/126).
 - **Puntuar personas con un modelo.** La baremación es determinista, con el baremo como dato y una
   función que puntúa hechos verificados por una persona; el modelo extrae y motiva, nunca puntúa.
 - Asesoramiento jurídico, decisiones automáticas, código de motor generado en tiempo de
@@ -193,7 +193,7 @@ Límites deliberados, con su razón en
 ## Cómo contribuir
 
 Las *issues* marcadas
-[`good first issue`](https://github.com/universitatjaumei/gov-gen-ai-platform/issues?q=is%3Aopen+label%3A%22good+first+issue%22)
+[`good first issue`](https://github.com/universitatjaumei/teclab-govgenai/issues?q=is%3Aopen+label%3A%22good+first+issue%22)
 son puntos de entrada con alcance cerrado. Las marcadas `blocked` esperan algo externo y no
 admiten código todavía. El método de trabajo, la firma de los *commits* y las reglas de la casa
 están en [`CONTRIBUTING.md`](CONTRIBUTING.md) y [`AGENTS.md`](AGENTS.md).

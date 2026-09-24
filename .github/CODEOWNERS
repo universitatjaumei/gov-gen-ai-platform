@@ -13,7 +13,7 @@
 # la revisión de todo, y nadie se entera hasta que hace falta. Para un repositorio institucional
 # que va a abrirse no se sostiene. (Quién era está en el historial de git, que es su sitio.)
 #
-# El equipo es `gov-gen-ai-platform-maintainers`, y lo comprueba
+# El equipo es `teclab-govgenai-maintainers`, y lo comprueba
 # `server/tests/infra/test_repo4_no_se_nombra_al_dueno_anterior.py` — que prohíbe volver a poner
 # un `@usuario` individual, porque «retirar el nombre viejo» se podría hacer cambiando una persona
 # por otra y el problema seguiría igual.
@@ -21,31 +21,31 @@
 # **Si el equipo dejara de existir, CODEOWNERS no pediría revisión a nadie y no daría ningún
 # error.** Por eso el test comprueba también que la organización del equipo es la correcta.
 
-*                                   @universitatjaumei/gov-gen-ai-platform-maintainers
+*                                   @universitatjaumei/teclab-govgenai-maintainers
 
 # El núcleo: autenticación, tenencia, ámbito, almacenamiento e identidad. Es la capa que un fork
 # no debería tocar, y la que decide quién ve los datos de quién.
-/server/app/core/                   @universitatjaumei/gov-gen-ai-platform-maintainers
+/server/app/core/                   @universitatjaumei/teclab-govgenai-maintainers
 
 # La frontera entre organizaciones y el esquema que la sostiene. Una columna mal declarada aquí
 # no da síntoma: simplemente deja de acotar.
-/server/app/modules/agents_hub/database/  @universitatjaumei/gov-gen-ai-platform-maintainers
-/docs/MULTITENENCIA.md              @universitatjaumei/gov-gen-ai-platform-maintainers
+/server/app/modules/agents_hub/database/  @universitatjaumei/teclab-govgenai-maintainers
+/docs/MULTITENENCIA.md              @universitatjaumei/teclab-govgenai-maintainers
 
 # Migraciones. Se aplican una vez y sobre datos vivos: un `downgrade` mal escrito se descubre el
 # día que hace falta.
-/server/migrations/                 @universitatjaumei/gov-gen-ai-platform-maintainers
+/server/migrations/                 @universitatjaumei/teclab-govgenai-maintainers
 
 # Los guardarraíles. Un test que se relaja deja de proteger sin que nada se ponga en rojo — que
 # es, por definición, el cambio más difícil de detectar en una revisión.
-/server/tests/api/test_tenant_isolation.py              @universitatjaumei/gov-gen-ai-platform-maintainers
-/server/tests/api/test_router_inventory_is_walked.py    @universitatjaumei/gov-gen-ai-platform-maintainers
-/server/tests/infra/                                    @universitatjaumei/gov-gen-ai-platform-maintainers
-/.github/workflows/                                     @universitatjaumei/gov-gen-ai-platform-maintainers
+/server/tests/api/test_tenant_isolation.py              @universitatjaumei/teclab-govgenai-maintainers
+/server/tests/api/test_router_inventory_is_walked.py    @universitatjaumei/teclab-govgenai-maintainers
+/server/tests/infra/                                    @universitatjaumei/teclab-govgenai-maintainers
+/.github/workflows/                                     @universitatjaumei/teclab-govgenai-maintainers
 
 # Licencia y gobernanza.
-/LICENSE                            @universitatjaumei/gov-gen-ai-platform-maintainers
-/DCO                                @universitatjaumei/gov-gen-ai-platform-maintainers
-/CONTRIBUTING.md                    @universitatjaumei/gov-gen-ai-platform-maintainers
-/SECURITY.md                        @universitatjaumei/gov-gen-ai-platform-maintainers
-/AGENTS.md                          @universitatjaumei/gov-gen-ai-platform-maintainers
+/LICENSE                            @universitatjaumei/teclab-govgenai-maintainers
+/DCO                                @universitatjaumei/teclab-govgenai-maintainers
+/CONTRIBUTING.md                    @universitatjaumei/teclab-govgenai-maintainers
+/SECURITY.md                        @universitatjaumei/teclab-govgenai-maintainers
+/AGENTS.md                          @universitatjaumei/teclab-govgenai-maintainers

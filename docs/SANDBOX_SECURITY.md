@@ -111,6 +111,21 @@ tmpfs:
 
 Evita que un script malicioso agote la CPU, la memoria o el disco del host.
 
+> **El despliegue de referencia lleva hoy 192M, no 512M, y conviene saber por qué.** Los dos
+> *compose* autoinstalables —`docker-compose.yml` y `docker-compose.prod.yml`— mantienen los 512M
+> que esta capa describe; quien instale la plataforma los tiene. La desviación es sólo de la VM de
+> la UJI (`deploy/vm/docker-compose.vm.yml`): el 2026-09-24 el contenedor de la aplicación se
+> quedó sin memoria atendiendo consultas del chat, y en una `e2-small` de 2 GB no había de dónde
+> sacarla salvo de aquí.
+>
+> **Es un préstamo con condición de salida escrita**, no un cambio del modelo de seguridad: se
+> pudo hacer porque hoy nadie ejecuta scripts en esa instalación, y el día que se abra a usuarios
+> que los suban, la VM sube de tipo y este techo vuelve a 512M. Está en la línea de al lado del
+> propio techo, en el compose, y en la issue #149 con la factura hecha.
+>
+> Lo que sí cambia mientras dure: **un guion que necesite más de 192M morirá por OOM** en esa
+> instalación. Las otras siete capas no se tocan.
+
 ### Capa 8 — gVisor en la VM (la pone el aprovisionamiento)
 
 **Esta capa la daba la plataforma y ahora la ponemos nosotros.** Hasta el 2026-08-10 el destino era un servicio gestionado que ejecuta los contenedores sobre gVisor sin que nadie lo pida; el destino pasó a ser una **VM con Docker Compose** (`DECISION_EXTRACCION_Y_DESPLIEGUE.md` §2), y ahí **no está salvo que se configure**. Se configura: es la única capa que mitiga una fuga del kernel del host, y las suposiciones del modelo dicen que la auditoría AST es *bypassable*.

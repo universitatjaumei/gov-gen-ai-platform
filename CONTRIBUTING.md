@@ -18,7 +18,7 @@ Antes de *cómo* se contribuye, **dónde**.
 
 | Repositorio | Papel | Qué entra |
 |---|---|---|
-| GitHub — `universitatjaumei/gov-gen-ai-platform` | **Principal** (*upstream*) | Lo que sirve a cualquier organización que despliegue la plataforma. |
+| GitHub — `universitatjaumei/teclab-govgenai` | **Principal** (*upstream*) | Lo que sirve a cualquier organización que despliegue la plataforma. |
 | El fork de cada organización que despliega | **Despliegue y desarrollo propio** | Su configuración, sus integraciones internas, y los desarrollos que responden a necesidades suyas. |
 
 El proyecto nace de la actividad investigadora del grupo **INNOVAP** (Derecho Público e Innovación)

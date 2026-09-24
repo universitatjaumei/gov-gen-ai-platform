@@ -150,23 +150,55 @@ async def _run(args: argparse.Namespace) -> int:
             # `vector_strategy`—. Comprobar la de ingesta daría un informe sobre unas URL que
             # nadie llega a pinchar.
             #
-            # **Y se recorre en flujo, sin materializar la consulta entera.** La primera versión
-            # hacía `.all()` sobre la unión completa, que en este corpus son cientos de miles de
-            # filas de objetos ORM: exactamente la clase de consulta que el 2026-09-24 se comió
-            # la memoria de la VM y dejó el sitio caído 50 minutos. Con los techos de la issue
-            # #149 ya no tumbaría la máquina —moriría el contenedor—, pero morir tampoco es el
-            # objetivo. `stream()` mantiene en memoria una fila cada vez.
-            consulta = (
-                select(HubDocument, HubDocumentChunk.chunk_metadata)
-                .join(HubDocumentChunk, HubDocumentChunk.document_id == HubDocument.id)
-                .where(HubDocument.chatbot_id == args.chatbot_id)
-            )
+            # **Dos consultas, y la pesada devuelve columnas planas.** Hubo dos intentos peores
+            # antes de éste, y los dos merecen quedar escritos porque el segundo parecía el
+            # arreglo del primero:
+            #
+            #  1. `.all()` sobre la unión completa de documentos y fragmentos. Cientos de miles
+            #     de filas de objetos ORM de golpe: es la consulta que el 2026-09-24 se comió la
+            #     memoria de la VM y dejó el sitio caído 50 minutos.
+            #  2. La misma unión con `stream()`, que parecía resolverlo. **No lo resolvía**: las
+            #     filas llegan de una en una, pero cada una construye un objeto ORM que la sesión
+            #     retiene en su mapa de identidad, así que la memoria crece igual. Murió por OOM
+            #     contra el corpus real, dentro de un contenedor con 256 MB — que es donde tenía
+            #     que morir.
+            #
+            # Lo que sí funciona es no pedir objetos. Los documentos son unos cientos y caben;
+            # los fragmentos son cientos de miles, pero de ellos sólo hace falta el par
+            # `(documento, ancla)` **distinto**, que son unos pocos miles de tuplas planas.
+            documentos = {
+                d.id: d
+                for d in (
+                    await session.execute(
+                        select(HubDocument).where(HubDocument.chatbot_id == args.chatbot_id)
+                    )
+                )
+                .scalars()
+                .all()
+            }
+
+            ancora = HubDocumentChunk.chunk_metadata["ancora"].astext
+            pares = (
+                await session.execute(
+                    select(HubDocumentChunk.document_id, ancora)
+                    .where(HubDocumentChunk.document_id.in_(documentos))
+                    .distinct()
+                )
+            ).all()
+
             vistas: set[str] = set()
-            async for documento, metadata in await session.stream(consulta):
-                u = url_de_cita(documento, metadata or {})
+            for doc_id, anc in pares:
+                documento = documentos.get(doc_id)
+                if documento is None:
+                    continue
+                u = url_de_cita(documento, {"ancora": anc} if anc else {})
                 if u:
                     vistas.add(u)
             urls = sorted(vistas)
+            print(
+                f"{len(documentos)} documentos · {len(pares)} pares documento/ancla",
+                file=sys.stderr,
+            )
     finally:
         await engine.dispose()
 

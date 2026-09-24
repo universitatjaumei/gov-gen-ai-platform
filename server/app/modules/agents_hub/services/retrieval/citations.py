@@ -73,6 +73,29 @@ def _url_en_el_diario_oficial(documento, metadata: dict | None) -> str:
     return base.split("#", 1)[0]
 
 
+def _solo_si_es_url(valor: str | None) -> str | None:
+    """`valor` si es una dirección; `None` si no lo es (issue #14).
+
+    **Medido en producción el 2026-09-24**: de 2.607 URL de cita del corpus, 37 no eran URL sino
+    nombres de fichero —`20050715_UJI_GER_Circular_11_05_….md`—, porque eso es lo que esos
+    documentos llevan en `canonical_url`. La cita salía como `[Circular 11/05](20050715_….md)`,
+    que en un navegador no lleva a ninguna parte.
+
+    Es la peor de las tres formas de fallar que tiene un enlace: no da error, se ve como un
+    enlace normal, y **aparenta verificación**. Devolver `None` hace que el contrato de citas no
+    tenga a dónde enlazar y cite el documento **sin enlace** — se pierde comodidad y no
+    veracidad, que es la misma regla con la que `citation_validator` degrada un ancla.
+
+    La comprobación es de forma y no de existencia. Si la dirección resuelve o no lo dice
+    `evaluacion/verificar_enlaces.py`, que sale a la red; esto sólo impide emitir algo que ni
+    siquiera es una dirección.
+    """
+    if not valor:
+        return None
+    limpio = valor.strip()
+    return limpio if limpio.startswith(("http://", "https://")) else None
+
+
 def url_de_cita(documento, metadata: dict | None) -> str | None:
     """URL a la que apunta la cita, en este orden de preferencia.
 
@@ -81,12 +104,12 @@ def url_de_cita(documento, metadata: dict | None) -> str | None:
     3. **El PDF**, que es lo que había antes de PUB.3.
     """
     if _es_externa(documento):
-        return _url_en_el_diario_oficial(documento, metadata)
+        return _solo_si_es_url(_url_en_el_diario_oficial(documento, metadata))
 
     base = (os.getenv(BASE_DEL_SITIO) or "").strip().rstrip("/")
     slug = _slug_de(documento) if base else None
     if base and slug:
-        return f"{base}/html/{slug}.html{_fragmento(metadata)}"
+        return _solo_si_es_url(f"{base}/html/{slug}.html{_fragmento(metadata)}")
 
     # Issue #15: aquí se cita el PDF, y **sin ancla**. El ancla la componemos nosotros a partir
     # de los encabezados del `.md` ingerido, así que sólo la sirve quien publica ese `.md` como
@@ -102,7 +125,7 @@ def url_de_cita(documento, metadata: dict | None) -> str | None:
     # Sin ancla en la evidencia, una cita anclada del modelo se degrada sola con la lógica que
     # ya existe. No hace falta tocar el validador.
     canonica = getattr(documento, "canonical_url", None)
-    return _sin_ancla(canonica)
+    return _solo_si_es_url(_sin_ancla(canonica))
 
 
 def _fragmento(metadata: dict | None) -> str:
