@@ -87,12 +87,32 @@ def url_de_cita(documento, metadata: dict | None) -> str | None:
     slug = _slug_de(documento) if base else None
     if base and slug:
         return f"{base}/html/{slug}.html{_fragmento(metadata)}"
-    return with_anchor(getattr(documento, "canonical_url", None), metadata)
+
+    # Issue #15: aquí se cita el PDF, y **sin ancla**. El ancla la componemos nosotros a partir
+    # de los encabezados del `.md` ingerido, así que sólo la sirve quien publica ese `.md` como
+    # HTML — nuestro sitio, que es la rama de arriba. Pegada a un PDF no lleva a ninguna parte:
+    # el visor ignora el fragmento que no entiende y el lector aterriza en la primera página
+    # creyendo que va al artículo.
+    #
+    # Es el mismo criterio que la rama del diario oficial aplica una función más arriba —sólo
+    # compone ancla si el destino es el BOE, y si no la quita—, y el que `citation_validator`
+    # defiende para lo que dice el modelo: «componer un ancla que nadie leyó sería fabricar un
+    # puntero». El puntero lo fabricábamos aquí, un paso antes de que el contrato mirase.
+    #
+    # Sin ancla en la evidencia, una cita anclada del modelo se degrada sola con la lógica que
+    # ya existe. No hace falta tocar el validador.
+    canonica = getattr(documento, "canonical_url", None)
+    return _sin_ancla(canonica)
 
 
 def _fragmento(metadata: dict | None) -> str:
     ancora = (metadata or {}).get("ancora")
     return f"#{ancora}" if ancora else ""
+
+
+def _sin_ancla(url: str | None) -> str | None:
+    """La URL sin fragmento. `None` y cadena vacía se devuelven tal cual."""
+    return url.split("#", 1)[0] if url else url
 
 
 def with_anchor(url: str | None, metadata: dict | None) -> str | None:
