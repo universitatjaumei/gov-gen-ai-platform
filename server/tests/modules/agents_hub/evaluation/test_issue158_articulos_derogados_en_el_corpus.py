@@ -191,6 +191,55 @@ class TestElMedidorNoPuedeCallar:
         assert sin_designacion == ["CAPÍTULO III"]
 
 
+class TestDistingueElCasoBuenoDelMalo:
+    """Un precepto derogado en el corpus no es, por sí solo, un defecto.
+
+    **Lo enseñó la reingesta del 2026-09-25.** Antes de ella, los arts. 35-41 del RD 887/2006
+    estaban en el corpus con su articulado íntegro y sin marca: 243 fragmentos que el recuperador
+    no distinguía de derecho vigente. Después, los mismos artículos siguen ahí —el §5 del contrato
+    **manda** conservar el encabezado y el ancla, porque quitarlos rompería enlaces publicados—
+    pero con un solo fragmento que dice «(Derogado)» y su fecha.
+
+    Y el detector daba **la misma cifra en los dos casos**: «12 preceptos». O sea que el informe
+    era idéntico antes y después de arreglar el problema que el detector existe para vigilar. Un
+    medidor que no separa el caso bueno del malo no sirve para vigilar nada: el día que el
+    convertidor vuelva a copiar articulado muerto, dirá otra vez 12 y nadie lo notará.
+    """
+
+    def test_un_derogado_declarado_no_es_un_defecto(self):
+        preceptos = [Precepto("Artículo 35. Ámbito objetivo", "art-35", 1, declarado=True)]
+
+        hallazgos, _ = cruzar(preceptos, {"articulo 35": "2019-03-30"})
+
+        assert [h.declarado for h in hallazgos] == [True]
+
+    def test_un_derogado_sin_declarar_si_lo_es(self):
+        preceptos = [Precepto("Artículo 35. Ámbito objetivo", "art-35", 7)]
+
+        hallazgos, _ = cruzar(preceptos, {"articulo 35": "2019-03-30"})
+
+        assert [h.declarado for h in hallazgos] == [False]
+
+    def test_lo_que_no_se_declara_es_lo_que_hace_fallar_al_cli(self):
+        """El código de salida tiene que hablar del defecto, no del inventario.
+
+        Si el CLI fallara por haber preceptos derogados, fallaría para siempre —los 12 se quedan
+        en el corpus a propósito— y un rojo permanente se ignora igual que un verde permanente.
+        """
+        from server.app.modules.agents_hub.evaluation.detectar_derogados import cuantos_sin_declarar
+
+        todos_declarados = [
+            Derogado("articulo 35", "Artículo 35", "art-35", 1, "2019-03-30", declarado=True),
+            Derogado("articulo 36", "Artículo 36", "art-36", 1, "2019-03-30", declarado=True),
+        ]
+        assert cuantos_sin_declarar(todos_declarados) == 0
+
+        con_uno_crudo = todos_declarados + [
+            Derogado("articulo 37", "Artículo 37", "art-37", 9, "2019-03-30", declarado=False)
+        ]
+        assert cuantos_sin_declarar(con_uno_crudo) == 1
+
+
 class TestElCruce:
 
     def test_un_precepto_caducado_es_un_hallazgo_con_su_fecha(self):
@@ -205,6 +254,7 @@ class TestElCruce:
                 ancla="art-35",
                 fragmentos=7,
                 caducado_el="2019-03-30",
+                declarado=False,
             )
         ]
 

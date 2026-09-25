@@ -32,7 +32,7 @@
 #
 #   1. **La suma de las RESERVAS tiene que caber.** Son 976M de 3.924M: lo que la pila usa de
 #      verdad en reposo son 511M medidos, asi que hay margen para el crecimiento normal.
-#   2. **La suma de los TECHOS no cabe, y esta bien.** Son 4.128M. Cada techo dimensiona el pico
+#   2. **La suma de los TECHOS no cabe, y esta bien.** Son 3.616M. Cada techo dimensiona el pico
 #      *de ese* proceso, no su parte del total, porque los picos no son concurrentes: `migrate`
 #      corre una vez al desplegar y termina; el pico de `app` es la reingesta del corpus, que es
 #      manual; el de `script-sandbox` solo existe mientras alguien ejecuta un guion.
@@ -40,11 +40,18 @@
 # **Que se rompe si la sobreasignacion se pasa de la raya.** Cuando varios llegan al pico a la
 # vez, el que mata ya no es el cgroup del contenedor sino el OOM del kernel, y ese elige a su
 # criterio: se cambia un fallo acotado y atribuible por uno global e impredecible. Es lo que paso
-# el 2026-09-24. Por eso el peor caso realista esta contado: reingesta (2.560) + un guion pesado
-# (512) + el resto en reposo (~200) son 3.272M, que caben en los 3.924M menos lo del sistema.
+# el 2026-09-24.
 #
-# Al cambiar un techo se rehace esa cuenta. Si el peor caso deja de caber, el numero que sobra no
-# es el techo: es la maquina.
+# Por eso el peor caso concurrente **no se cuenta aqui, se comprueba**: `app` en su pico (la
+# reingesta, que es manual) mas `script-sandbox` en el suyo (un guion pesado) mas el resto en su
+# reserva. Lo vigila `test_el_peor_caso_concurrente_cabe`, y existe porque la primera version de
+# este bloque traia la suma mal hecha —se pasaba por 56 MiB— y nadie lo habria notado: un
+# comentario con una cuenta envejece en silencio en cuanto alguien sube un techo.
+#
+# Y la RAM de la maquina **tampoco se escribe aqui**: sale de `scripts/gcp_provision_vm.sh`, que
+# es quien la crea. Durante unas horas este fichero dio por hecha una `e2-medium` mientras el
+# aprovisionador seguia creando una `e2-small`; los dos guardarrailes pasaban en verde porque
+# miraban ficheros distintos.
 # ---------------------------------------------------------------------------------------------
 
 name: govgenai-vm
@@ -170,13 +177,19 @@ services:
     # MAS PEQUENA —198 fragmentos— llego a 475 MiB, y la Ley 9/2017 —4.330 fragmentos— murio con
     # exit 137. Un documento es la unidad minima de carga, o sea que no se puede trocear mas.
     #
-    # El techo es 2560M porque el pico de la reingesta no coincide con nada: es manual, y mientras
-    # corre el servicio solo atiende consultas. Si aun asi no cabe, muere el contenedor efimero de
-    # la reingesta —acotado y visible— y no la VM entera, que es justo lo que paso el 2026-09-24.
+    # El techo son 2048M: CUATRO VECES el pico real de la reingesta, que fueron 475 MiB medidos.
+    # Estuvo un rato en 2560M y la revision de la PR #166 hizo la resta que yo no habia hecho: el
+    # peor caso concurrente —reingesta 2.560 + un guion pesado 512 + el resto en su reserva 208—
+    # daba 3.280 MiB contra los 3.224 utiles, o sea que el caso documentado como seguro se pasaba
+    # por 56. Ahora la cuenta esta comprobada por `test_el_peor_caso_concurrente_cabe`, que es
+    # donde tiene que vivir: un comentario con una suma envejece sin avisar.
+    #
+    # Si aun asi no cabe, muere el contenedor efimero de la reingesta —acotado y visible— y no la
+    # VM entera, que es justo lo que paso el 2026-09-24.
     deploy:
       resources:
         limits:
-          memory: 2560M
+          memory: 2048M
         reservations:
           memory: 512M
     restart: unless-stopped

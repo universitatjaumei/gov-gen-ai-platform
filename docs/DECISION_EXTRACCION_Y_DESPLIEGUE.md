@@ -147,9 +147,15 @@ cargándose `torch` y `transformers`, pero no por nuestro código: `langchain_co
 `try: from transformers import GPT2TokenizerFast / except ImportError` para decidir si sabe
 contar tokens. Sin el extra esos paquetes no están, el `except` salta y no se carga nada.
 
-**Para la VM**: con ~345 MB de aplicación más el sandbox y el sistema, **`e2-small` (2 GB) es
-holgado**; `e2-medium` solo haría falta si se instalara el extra —o sea, en un edge con
-modelos locales—.
+**Para la VM**: con ~345 MB de aplicación más el sandbox y el sistema, **`e2-small` (2 GB) era
+holgado para servir**, y lo fue durante meses.
+
+**Se pasó a `e2-medium` el 2026-09-25, y no por servir sino por mantener** — que es justo la
+distinción que esta medición no hacía. La reingesta del corpus la ejecuta el cargador con una
+transacción por asistente, así que retiene en memoria todo lo que va a escribir: la Ley 9/2017
+—4.330 fragmentos— murió con exit 137 contra un techo de 768M, y un documento es la unidad mínima
+de carga, o sea que no había forma de trocearlo más. En `e2-small` no quedaba de dónde sacar esa
+memoria. El extra `local-models` sigue sin instalarse aquí.
 
 ---
 

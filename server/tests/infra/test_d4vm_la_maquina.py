@@ -311,10 +311,55 @@ def test_la_ip_es_estatica_porque_el_nombre_del_host_depende_de_ella() -> None:
 
 
 def test_el_tamano_de_la_maquina_es_el_medido() -> None:
+    """El tipo se comprueba en la ASIGNACIÓN, no como cadena suelta en el fichero.
+
+    **Este test pasó en verde sobre una afirmación falsa el 2026-09-25.** Decía
+    `assert "e2-small" in texto`, y cuando el aprovisionador pasó a crear una `e2-medium` siguió
+    pasando: la cadena `e2-small` seguía en la prosa que explica por qué fue suficiente durante
+    meses. O sea que el guardarraíl dejó de describir lo que el guion hace y nadie se enteró,
+    porque un verde no llama la atención de nadie.
+
+    Buscar una cadena en un fichero no es comprobar una configuración. Lo que manda es la línea
+    que asigna, y es lo que se mira.
+    """
     texto = _texto(PROVISION)
-    assert "e2-small" in texto
+    asignado = re.search(r'^TIPO="([a-z0-9-]+)"', texto, re.MULTILINE)
+    assert asignado, "no se encuentra la línea `TIPO=` del aprovisionador"
+    assert asignado.group(1) == "e2-medium", (
+        f"el aprovisionador crea una `{asignado.group(1)}` y el reparto de memoria del compose "
+        f"está dimensionado para una `e2-medium` (ver "
+        f"test_issue149_los_contenedores_tienen_techo_de_memoria.py, que deduce la RAM de aquí). "
+        f"Si el tipo cambia a propósito, cambia los dos."
+    )
     assert "345 MB" in texto, (
         "El tamaño se justifica con la medición de D.4.0, no con una estimación."
+    )
+    assert "4.330 fragmentos" in texto, (
+        "Y el salto a `e2-medium` se justifica con lo que no cupo —la reingesta del corpus—, no "
+        "con «por si acaso»."
+    )
+
+
+def test_el_tipo_de_maquina_no_se_puede_sobrescribir_a_uno_sin_medir() -> None:
+    """El valor por defecto no basta: el guion acepta `--machine-type`.
+
+    **Lo señaló la revisión de la PR #167.** De poco sirve que `TIPO=` sea el bueno si alguien
+    recrea la máquina con `--machine-type e2-small`: saldría una VM de 1.976 MiB mientras el
+    compose reparte techos para 3.924 y su guardarraíl deduce la RAM **de este mismo fichero**.
+    Es el desajuste que la PR anterior arregló, reintroducido por la puerta de al lado.
+
+    Que el tipo por defecto sea correcto es una cosa; que no se pueda pedir otro que nadie ha
+    medido es la que de verdad sostiene el reparto.
+    """
+    texto = _texto(PROVISION)
+    assert "TIPOS_SOPORTADOS" in texto, (
+        "el guion acepta `--machine-type` sin comprobar que sea un tipo con la RAM medida. "
+        "Un tipo desconocido deja el reparto de memoria del compose describiendo una máquina "
+        "que no existe."
+    )
+    assert re.search(r"--machine-type \$TIPO no está soportado", texto), (
+        "la validación tiene que fallar con un mensaje que diga qué pasa y por qué, no con un "
+        "error genérico: quien recrea una VM no suele ser quien escribió el reparto."
     )
 
 

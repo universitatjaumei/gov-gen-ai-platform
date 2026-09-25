@@ -111,7 +111,12 @@ tmpfs:
 
 Evita que un script malicioso agote la CPU, la memoria o el disco del host.
 
-> **El despliegue de referencia lleva hoy 192M, no 512M, y conviene saber por qué.** Los dos
+> **El préstamo se saldó el 2026-09-25 y el despliegue de referencia vuelve a 512M.** La VM
+> subió a `e2-medium`, así que ya no hace falta quitarle memoria a esta capa. Lo que sigue
+> queda escrito porque explica cómo se pide prestado sin cambiar el modelo de seguridad, y
+> cómo se devuelve.
+>
+> **El despliegue de referencia llevó 192M en vez de 512M entre el 24 y el 25 de septiembre.** Los dos
 > *compose* autoinstalables —`docker-compose.yml` y `docker-compose.prod.yml`— mantienen los 512M
 > que esta capa describe; quien instale la plataforma los tiene. La desviación es sólo de la VM de
 > la UJI (`deploy/vm/docker-compose.vm.yml`): el 2026-09-24 el contenedor de la aplicación se

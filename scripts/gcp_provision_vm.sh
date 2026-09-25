@@ -5,15 +5,25 @@
 # no se puede volver a crear igual cuando haga falta.
 #
 # Tamaño MEDIDO, no estimado (EXT.3 y D.4.0): sin el extra `local-models`, que es este
-# despliegue, la aplicación son 345 MB de RSS. `e2-small` (2 GB) es holgado. `e2-medium` sólo
-# haría falta en un edge que instale los modelos locales.
+# despliegue, la aplicación son 345 MB de RSS. Con eso `e2-small` (2 GB) era holgado para
+# SERVIR, y lo fue durante meses.
+#
+# `e2-medium` (4 GB) desde el 2026-09-25, y no por servir: por MANTENER. La reingesta del corpus
+# la hace el cargador con una transacción por asistente, así que retiene en memoria todo lo que
+# va a escribir; la Ley 9/2017 —4.330 fragmentos— murió con exit 137 contra un techo de 768M, y
+# un documento es la unidad mínima de carga, o sea que no había forma de trocearlo más. En
+# `e2-small` no quedaba de dónde sacar la memoria: los techos ya sumaban 1.264 de 1.976 MiB.
+#
+# Este valor es la FUENTE de la que `test_issue149_los_contenedores_tienen_techo_de_memoria.py`
+# deduce cuánta RAM hay, para que el reparto del compose y la máquina real no puedan divergir.
+# Cambiarlo aquí cambia lo que ese guardarraíl exige. Esa es la idea.
 #
 # El estado vive fuera de la máquina a propósito: la base en Cloud SQL y los documentos en GCS.
 # El disco de la VM sólo guarda sistema, imágenes y logs, así que perderla no pierde nada.
 #
 # Uso:
 #   scripts/gcp_provision_vm.sh --project <ID> [--zone europe-southwest1-b]
-#                               [--machine-type e2-small] [--bucket <BUCKET>]
+#                               [--machine-type e2-medium] [--bucket <BUCKET>]
 #                               [--name govgenai-vm] [--dry-run]
 
 set -euo pipefail
@@ -23,7 +33,7 @@ STARTUP="$RAIZ/deploy/vm/startup.sh"
 
 PROYECTO=""
 ZONA="europe-southwest1-b"
-TIPO="e2-small"
+TIPO="e2-medium"
 NOMBRE="govgenai-vm"
 BUCKET=""
 SA_NOMBRE="govgenai-vm"
@@ -57,6 +67,27 @@ if [ -z "$PROYECTO" ]; then
   uso
   exit 2
 fi
+
+# El tipo se valida contra los que el reparto de memoria tiene medidos, y lo señaló la revisión de
+# la PR #167: de nada sirve que el valor por defecto sea el bueno si `--machine-type e2-small`
+# recrea una máquina de 1.976 MiB mientras el compose reparte techos para 3.924. El guardarraíl
+# deduce la RAM de este fichero, así que aceptar aquí un tipo que ese guardarraíl no conoce
+# reproduce exactamente el desajuste que todo esto existe para impedir.
+#
+# Para añadir un tipo hacen falta dos cosas, y en este orden: medir su RAM utilizable con
+# `free -m` en la máquina —no deducirla de los GB nominales, que el sistema se queda una parte— y
+# darla de alta en RAM_UTILIZABLE_MIB del test. Entonces se añade aquí.
+TIPOS_SOPORTADOS="e2-medium"
+case " $TIPOS_SOPORTADOS " in
+  *" $TIPO "*) ;;
+  *)
+    echo "ERROR: --machine-type $TIPO no está soportado por este despliegue." >&2
+    echo "       Soportados: $TIPOS_SOPORTADOS" >&2
+    echo "       El reparto de memoria de deploy/vm/docker-compose.vm.yml está dimensionado" >&2
+    echo "       para la RAM de esos tipos, y su guardarraíl la deduce de este fichero." >&2
+    exit 2
+    ;;
+esac
 
 REGION="${ZONA%-*}"
 SA_EMAIL="$SA_NOMBRE@$PROYECTO.iam.gserviceaccount.com"

@@ -48,11 +48,17 @@ from dataclasses import dataclass
 from datetime import date
 
 #: Un precepto del corpus, tal y como el corpus lo guarda.
+#:
+#: `declarado` es si el corpus **dice** que no rige: la clase `.derogat` del ancla, que la ingesta
+#: guarda en `chunk_metadata['estat']`, o la marca «(Derogado)»/«(Suprimido)» en el texto. Es la
+#: diferencia entre el caso bueno y el malo, y sin ella el informe es el mismo antes y después de
+#: arreglar el problema.
 @dataclass(frozen=True)
 class Precepto:
     encabezado: str
     ancla: str
     fragmentos: int
+    declarado: bool = False
 
 
 @dataclass(frozen=True)
@@ -62,6 +68,18 @@ class Derogado:
     ancla: str
     fragmentos: int
     caducado_el: str
+    declarado: bool = False
+
+
+def cuantos_sin_declarar(hallazgos: list[Derogado]) -> int:
+    """Los que el corpus guarda **como si rigieran**, que es el defecto de verdad.
+
+    Es lo que decide el código de salida del CLI. Fallar por haber preceptos derogados sería
+    fallar para siempre —el §5 del contrato manda conservarlos, con su encabezado y su ancla,
+    porque quitarlos rompería enlaces publicados—, y un rojo permanente se ignora exactamente
+    igual que un verde permanente.
+    """
+    return sum(1 for h in hallazgos if not h.declarado)
 
 
 # El BOE escribe `Artículo\xa035` en unas normas y `Artículo 35` en otras; el corpus arrastra lo que
@@ -161,7 +179,9 @@ def cruzar(
             continue
         if clave in caducados:
             hallazgos.append(
-                Derogado(clave, p.encabezado, p.ancla, p.fragmentos, caducados[clave])
+                Derogado(
+                    clave, p.encabezado, p.ancla, p.fragmentos, caducados[clave], p.declarado
+                )
             )
     return hallazgos, sin_designacion
 
@@ -185,13 +205,38 @@ def _descargar_xml(identificador: str, timeout: float = 120.0) -> str:
 _IDENTIFICADOR = re.compile(r"(BOE-A-\d{4}-\d+)")
 
 
-def _preceptos_del_documento(metadatos_por_ancla: dict[str, tuple[str, int]]) -> list[Precepto]:
-    """Las anclas de una norma, ya con su encabezado y su número de fragmentos."""
-    return [Precepto(enc, ancla, n) for ancla, (enc, n) in sorted(metadatos_por_ancla.items())]
+# ─────────────── Cómo dice el corpus que un precepto no rige ───────────────
+#
+# Dos formas, y valen las dos. La clase `.derogat` del ancla —que la ingesta guarda en
+# `chunk_metadata['estat']`— es la estructurada, y la única que puede leer el recuperador. La marca
+# en el texto es la que traen los preceptos que el BOE suprime dejando una `<version>` nueva, que
+# por tanto llegan sin clase en el ancla.
+#
+# **Una sola definición de cada una, y la señaló la revisión de la PR #167.** La primera versión
+# traía un `re.compile` en Python *además* del patrón escrito a mano dentro de la consulta, y el
+# CLI usaba el de la consulta: dos gramáticas independientes de lo mismo, de las cuales una no la
+# ejecutaba nadie. Eso no es redundancia, es una divergencia esperando a ocurrir — y ya había
+# empezado. Ahora el patrón es esta constante y la usa quien pregunta, que es la base de datos.
+ESTADOS_QUE_DECLARAN = ("derogat", "suprimit")
+
+#: Sintaxis de expresión regular POSIX, que es la que entiende el `~*` de Postgres. No se compila
+#: en Python porque en Python no la usa nadie: la pregunta se hace en la base para no traerse el
+#: contenido de decenas de miles de fragmentos.
+PATRON_MARCA = r"\*\*\((derogad|suprimid)"
+
+
+def _preceptos_del_documento(
+    metadatos_por_ancla: dict[str, tuple[str, int, bool]],
+) -> list[Precepto]:
+    """Las anclas de una norma, con su encabezado, sus fragmentos y si el corpus las declara."""
+    return [
+        Precepto(enc, ancla, n, declarado)
+        for ancla, (enc, n, declarado) in sorted(metadatos_por_ancla.items())
+    ]
 
 
 async def _run(args: argparse.Namespace) -> int:
-    from sqlalchemy import func, select
+    from sqlalchemy import func, or_ as sa_or, select
 
     from server.app.modules.agents_hub.database.connection import (
         create_async_engine,
@@ -205,7 +250,7 @@ async def _run(args: argparse.Namespace) -> int:
     engine = create_async_engine()
     factory = create_session_factory(engine)
     # `{identificador del BOE: {ancla: (encabezado, n_fragmentos)}}`, y el título para el informe.
-    por_norma: dict[str, dict[str, tuple[str, int]]] = defaultdict(dict)
+    por_norma: dict[str, dict[str, tuple[str, int, bool]]] = defaultdict(dict)
     titulos: dict[str, str] = {}
     fuera_de_alcance: dict[str, int] = defaultdict(int)
     try:
@@ -250,6 +295,26 @@ async def _run(args: argparse.Namespace) -> int:
                     .order_by(HubDocumentChunk.document_id, ancora)
                 )
             ).all()
+            # Si el corpus DICE que ese precepto no rige. Se agrupa en la base y no se traen los
+            # textos: lo unico que hace falta es un booleano por ancla, y traer el contenido de
+            # decenas de miles de fragmentos es la forma de consulta que tumbo la VM.
+            estado = HubDocumentChunk.chunk_metadata["estat"].astext
+            declarados = {
+                (doc_id, anc)
+                for doc_id, anc in (
+                    await session.execute(
+                        select(HubDocumentChunk.document_id, ancora)
+                        .where(
+                            HubDocumentChunk.document_id.in_(documentos),
+                            sa_or(
+                                estado.in_(ESTADOS_QUE_DECLARAN),
+                                HubDocumentChunk.content.op("~*")(PATRON_MARCA),
+                            ),
+                        )
+                        .distinct()
+                    )
+                ).all()
+            }
     finally:
         await engine.dispose()
 
@@ -274,10 +339,14 @@ async def _run(args: argparse.Namespace) -> int:
             if k.startswith("header_") and k.removeprefix("header_").isdigit()
         ]
         encabezado = max(encabezados)[1] if encabezados else ""
-        por_norma[ident.group(1)][anc] = (encabezado, conteos.get((doc_id, anc), 0))
+        por_norma[ident.group(1)][anc] = (
+            encabezado,
+            conteos.get((doc_id, anc), 0),
+            (doc_id, anc) in declarados,
+        )
 
     hoy = date.today()
-    total_hallazgos = total_dudas = 0
+    total_hallazgos = total_dudas = total_sin_declarar = 0
     for ident, por_ancla in sorted(por_norma.items()):
         try:
             xml = _descargar_xml(ident)
@@ -291,9 +360,18 @@ async def _run(args: argparse.Namespace) -> int:
         preceptos = _preceptos_del_documento(por_ancla)
         hallazgos, sin_encabezado = cruzar(preceptos, caducados)
         for h in hallazgos:
+            # **La distinción que importa.** `SIN_DECLARAR` es el defecto: el corpus guarda el
+            # articulado como si rigiera. `declarado` es el caso correcto —el §5 del contrato
+            # manda conservar el precepto con su encabezado y su ancla— y se dice igualmente,
+            # porque conviene saber cuáles son.
+            #
+            # Sin separarlos, este informe era **idéntico antes y después** de la reingesta del
+            # 2026-09-25: doce preceptos las dos veces, con 243 fragmentos de articulado muerto la
+            # primera y 48 marcados la segunda. Un medidor que no distingue el caso bueno del malo
+            # no sirve para vigilar, que es justo para lo que existe.
             print(
-                f"derogado\t{ident}\t{h.ancla}\t{h.caducado_el}\t{h.fragmentos} fragmentos"
-                f"\t{h.encabezado[:90]}"
+                f"{'declarado' if h.declarado else 'SIN_DECLARAR'}\t{ident}\t{h.ancla}"
+                f"\t{h.caducado_el}\t{h.fragmentos} fragmentos\t{h.encabezado[:90]}"
             )
         # Reemplazos: el corpus puede traer la versión vieja, la nueva o las dos, y desde aquí no
         # se distingue. Se dicen para que alguien mire, no se cuentan como derogados.
@@ -303,10 +381,12 @@ async def _run(args: argparse.Namespace) -> int:
                 f"\t{h.encabezado[:90]}\tbloque caducado y otro vivo con el mismo titulo"
             )
         total_hallazgos += len(hallazgos)
+        total_sin_declarar += cuantos_sin_declarar(hallazgos)
         total_dudas += len(sin_titulo) + len(sin_encabezado)
         print(
             f"# {ident}: {len(por_ancla)} preceptos · {len(caducados)} bloques caducados en el BOE"
-            f" · {len(hallazgos)} en el corpus · {len(sin_titulo) + len(sin_encabezado)} sin leer"
+            f" · {len(hallazgos)} en el corpus ({cuantos_sin_declarar(hallazgos)} sin declarar)"
+            f" · {len(sin_titulo) + len(sin_encabezado)} sin leer"
             f"\t{titulos.get(ident, '')[:60]}",
             file=sys.stderr,
         )
@@ -315,11 +395,15 @@ async def _run(args: argparse.Namespace) -> int:
         print(f"# fuera de alcance: {n} preceptos · {titulo[:80]}", file=sys.stderr)
     print(
         f"{total_hallazgos} preceptos con el bloque caducado en el BOE, de {len(por_norma)} normas"
+        f" — de ellos {total_sin_declarar} SIN DECLARAR, que es el defecto"
         f" ({total_dudas} designaciones no legibles, {len(fuera_de_alcance)} normas sin texto "
         f"consolidado en el BOE)",
         file=sys.stderr,
     )
-    return 1 if total_hallazgos else 0
+    # Falla por el defecto, no por el inventario. Los preceptos derogados se quedan en el corpus a
+    # propósito, así que fallar por tenerlos sería un rojo permanente — y un rojo permanente se
+    # ignora exactamente igual que un verde permanente.
+    return 1 if total_sin_declarar else 0
 
 
 def main(argv: list[str] | None = None) -> int:
