@@ -14,6 +14,39 @@
 # `scripts/vm_fetch_secrets.sh` desde Secret Manager (D.2). No hay ningún `.env` en la máquina
 # mantenido a mano.
 
+# ---------------------------------------------------------------------------------------------
+# LA MEMORIA SE SOBREASIGNA A PROPOSITO (2026-09-25)
+#
+# Hasta hoy los techos se repartian como si fueran cuotas: sumaban 1.264M de los 1.976M de una
+# `e2-small` y sobraba casi la mitad sin que nadie pudiera usarla. Eso confunde dos cosas:
+#
+#   * `limits.memory` es un **techo por contenedor**, no una reserva. Docker no aparta nada: solo
+#     mata al contenedor que lo supere. Repartir la RAM entre techos deja memoria ociosa que
+#     ningun proceso puede tocar ni en su pico.
+#   * `reservations.memory` **si** es lo que el contenedor espera usar. Compose lo aplica tambien
+#     fuera de Swarm —comprobado en la VM: `limits: 300M` / `reservations: 100M` llegan al
+#     contenedor como `Memory=314572800` y `MemoryReservation=104857600`—, y el kernel lo usa
+#     para decidir a quien aprieta cuando hay presion.
+#
+# De ahi las dos reglas, y la asimetria entre ellas es el punto:
+#
+#   1. **La suma de las RESERVAS tiene que caber.** Son 976M de 3.924M: lo que la pila usa de
+#      verdad en reposo son 511M medidos, asi que hay margen para el crecimiento normal.
+#   2. **La suma de los TECHOS no cabe, y esta bien.** Son 4.128M. Cada techo dimensiona el pico
+#      *de ese* proceso, no su parte del total, porque los picos no son concurrentes: `migrate`
+#      corre una vez al desplegar y termina; el pico de `app` es la reingesta del corpus, que es
+#      manual; el de `script-sandbox` solo existe mientras alguien ejecuta un guion.
+#
+# **Que se rompe si la sobreasignacion se pasa de la raya.** Cuando varios llegan al pico a la
+# vez, el que mata ya no es el cgroup del contenedor sino el OOM del kernel, y ese elige a su
+# criterio: se cambia un fallo acotado y atribuible por uno global e impredecible. Es lo que paso
+# el 2026-09-24. Por eso el peor caso realista esta contado: reingesta (2.560) + un guion pesado
+# (512) + el resto en reposo (~200) son 3.272M, que caben en los 3.924M menos lo del sistema.
+#
+# Al cambiar un techo se rehace esa cuenta. Si el peor caso deja de caber, el numero que sobra no
+# es el techo: es la maquina.
+# ---------------------------------------------------------------------------------------------
+
 name: govgenai-vm
 
 x-imagen: &imagen
@@ -51,6 +84,8 @@ services:
     deploy:
       resources:
         limits:
+          memory: 96M
+        reservations:
           memory: 32M
     restart: unless-stopped
 
@@ -129,10 +164,21 @@ services:
     # murio por OOM dos veces en dos minutos, dejando el chat colgado en «Preparando la consulta».
     # La leccion es del metodo, no del numero: **medir en reposo no dimensiona nada**. Lo que hay
     # que medir es el pico bajo la carga que el servicio atiende de verdad.
+    #
+    # **Y 768M tampoco bastaban para reingerir** (2026-09-25). El cargador del corpus confirma una
+    # transaccion por asistente, asi que retiene en memoria todo lo que va a escribir: la norma
+    # MAS PEQUENA —198 fragmentos— llego a 475 MiB, y la Ley 9/2017 —4.330 fragmentos— murio con
+    # exit 137. Un documento es la unidad minima de carga, o sea que no se puede trocear mas.
+    #
+    # El techo es 2560M porque el pico de la reingesta no coincide con nada: es manual, y mientras
+    # corre el servicio solo atiende consultas. Si aun asi no cabe, muere el contenedor efimero de
+    # la reingesta —acotado y visible— y no la VM entera, que es justo lo que paso el 2026-09-24.
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 2560M
+        reservations:
+          memory: 512M
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
@@ -164,7 +210,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 96M
+          memory: 512M
+        reservations:
+          memory: 128M
     restart: "no"
 
   frontend:
@@ -174,6 +222,8 @@ services:
     deploy:
       resources:
         limits:
+          memory: 64M
+        reservations:
           memory: 32M
     restart: unless-stopped
 
@@ -228,15 +278,17 @@ services:
     # cálculo de cierto tamaño morirá por OOM con 192M, y el síntoma que verá quien lo ejecute
     # será «el script falla» sin decir por qué. Esta línea es la explicación.
     #
-    # **La salida está decidida**: el día que se abra a usuarios que suban scripts, la VM sube a
-    # `e2-medium` (4 GB) y este techo vuelve a 512M. Está en la issue #149 con la factura hecha
-    # —unos 14 USD más al mes— para que sea una decisión y no una sorpresa.
+    # **La salida estaba decidida y se ha ejecutado el 2026-09-25**: la VM subió a `e2-medium`
+    # (4 GB) —no por los scripts, sino porque la reingesta del corpus no cabía— y este techo
+    # vuelve a sus 512M. El préstamo queda saldado; la issue #149 llevaba la factura hecha.
     deploy:
       resources:
         limits:
           cpus: '1.0'
-          memory: 192M
+          memory: 512M
           pids: 128
+        reservations:
+          memory: 128M
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
@@ -272,6 +324,8 @@ services:
     deploy:
       resources:
         limits:
+          memory: 256M
+        reservations:
           memory: 96M
     restart: unless-stopped
 
@@ -311,6 +365,8 @@ services:
     deploy:
       resources:
         limits:
+          memory: 128M
+        reservations:
           memory: 48M
     restart: unless-stopped
 

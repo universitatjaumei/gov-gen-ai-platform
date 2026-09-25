@@ -27,9 +27,25 @@ cuando ya no se puede entrar.
 
 **Lo que este test NO hace es fijar las cifras.** Comprobar que `app` tiene exactamente 768M
 convertiría cualquier ajuste futuro en un rojo que se arregla editando el test, que es la forma
-habitual de que un guardarraíl deje de proteger. Lo que fija es lo que no puede volver a pasar:
-que un servicio de larga vida corra **sin techo**, y que la suma de los techos supere lo que la
-máquina tiene.
+habitual de que un guardarraíl deje de proteger. Lo que fija es lo que no puede volver a pasar.
+
+**Y lo que no puede volver a pasar cambió el 2026-09-25**, cuando la memoria pasó a
+sobreasignarse: los techos ya no se reparten como cuotas, porque `limits.memory` no aparta nada
+—Docker sólo mata a quien lo supera— y repartirlos dejaba media máquina ociosa que nadie podía
+tocar ni en su pico. Con 1.264 MiB repartidos de 1.976, la reingesta del corpus murió por OOM
+contra su techo mientras sobraban 700 MiB sin dueño.
+
+Las cuatro cosas que se comprueban ahora:
+
+1. que ningún servicio de larga vida corra **sin techo**;
+2. que todo el que tenga techo **declare su reserva** —si no, el punto 3 pasaría sobre una lista
+   vacía, que es el modo silencioso en que un guardarraíl deja de mirar—;
+3. que la suma de las **reservas** quepa, porque ésa sí es la promesa de uso sostenido;
+4. y que **ningún techo suelto** supere la máquina entera, que es lo que convierte la
+   sobreasignación en barra libre.
+
+La suma de los techos, en cambio, **excede la RAM a propósito**: el razonamiento de por qué los
+picos no coinciden está escrito en la cabecera del propio compose, que es donde se cambia.
 """
 
 from __future__ import annotations
@@ -43,9 +59,14 @@ import yaml
 RAIZ = Path(__file__).resolve().parents[3]
 COMPOSE = RAIZ / "deploy" / "vm" / "docker-compose.vm.yml"
 
-#: Lo que la `e2-small` tiene. Si la máquina cambia, este número cambia con ella — y el test de
-#: la suma es el que obliga a mirarlo.
-MEMORIA_DE_LA_VM_MIB = 1976
+#: Lo que la máquina tiene. Si cambia, este número cambia con ella — y los dos test de abajo son
+#: los que obligan a mirarlo.
+#:
+#: **`e2-medium` desde el 2026-09-25.** Estuvo en `e2-small` (1.976 MiB) hasta que la reingesta
+#: del corpus no cupo: el cargador confirma una transacción por asistente, así que retiene todo lo
+#: que va a escribir, y la Ley 9/2017 —4.330 fragmentos— murió con exit 137 contra un techo de
+#: 768M. Un documento es la unidad mínima de carga, o sea que no había forma de trocearlo más.
+MEMORIA_DE_LA_VM_MIB = 3924
 
 #: Lo que se deja libre para el sistema operativo, `dockerd`, los agentes de Google y la caché de
 #: disco. No es un margen de cortesía: los agentes fueron lo primero que murió el 2026-09-24, y
@@ -83,6 +104,21 @@ def _techo(servicio: dict) -> str | None:
     )
 
 
+def _reserva(servicio: dict) -> str | None:
+    """Lo que el contenedor declara que espera usar; `reservations.memory` del compose.
+
+    Compose la aplica también fuera de Swarm, comprobado en la VM: un servicio con
+    `limits: 300M` / `reservations: 100M` llega al contenedor como `Memory=314572800` y
+    `MemoryReservation=104857600`.
+    """
+    return (
+        (servicio.get("deploy") or {})
+        .get("resources", {})
+        .get("reservations", {})
+        .get("memory")
+    )
+
+
 def test_el_medidor_lee_los_servicios(servicios: dict) -> None:
     # Sin esto, un fichero que dejara de parsearse como se espera haría pasar en verde a los dos
     # test de abajo sobre un diccionario vacío.
@@ -107,20 +143,84 @@ def test_todo_servicio_de_larga_vida_tiene_techo_de_memoria(servicios: dict) -> 
     )
 
 
-def test_los_techos_caben_en_la_maquina(servicios: dict) -> None:
-    techos = {
-        nombre: _a_mib(t)
+def test_todo_servicio_con_techo_declara_su_reserva(servicios: dict) -> None:
+    """Sin esto, el test de la suma de reservas pasa en verde sobre una lista vacía.
+
+    Es el fallo que ya se ha pagado dos veces en este repositorio: un guardarraíl que recorre algo
+    que no existe no falla, **da verde**, y un verde no llama la atención de nadie. Aquí bastaría
+    con que alguien quitara los bloques `reservations` para que «las reservas caben» fuera cierto
+    y completamente vacío de contenido.
+
+    Y hay un motivo de fondo: sin reserva declarada, un contenedor sólo tiene techo, y el techo
+    está sobreasignado a propósito. Es decir, no habría ningún número que diga lo que ese servicio
+    espera usar de verdad, que es lo único con lo que se puede comprobar que la máquina no está
+    sobrevendida en el caso normal.
+    """
+    sin_reserva = [
+        nombre
         for nombre, servicio in servicios.items()
-        if (t := _techo(servicio))
+        if _techo(servicio) and not _reserva(servicio)
+    ]
+
+    assert not sin_reserva, (
+        f"estos servicios tienen techo pero no declaran reserva: {sin_reserva}. El techo está "
+        f"sobreasignado a propósito —los picos no coinciden—, así que la reserva es el único "
+        f"número que dice cuánto espera usar cada uno en marcha normal. Sin ella no se puede "
+        f"comprobar que la máquina aguanta, y el test que lo comprueba pasaría sobre una lista "
+        f"vacía sin enterarse."
+    )
+
+
+def test_las_reservas_caben_en_la_maquina(servicios: dict) -> None:
+    """Lo que tiene que caber son las RESERVAS, no los techos.
+
+    **Este test comprobaba la suma de los techos y se cambió el 2026-09-25.** No porque estorbara
+    —un guardarraíl que estorba se arregla, no se afloja— sino porque medía lo que no era.
+    `limits.memory` es un techo por contenedor y Docker **no aparta** esa memoria: sólo mata a
+    quien lo supere. Exigir que los techos sumen menos que la RAM reparte la máquina en cuotas y
+    deja ociosa la mitad, que es lo que pasaba: 1.264 MiB repartidos de 1.976, y la reingesta del
+    corpus muriendo por OOM contra un techo de 768 mientras sobraban 700 que nadie podía tocar.
+
+    Lo que sí es una promesa de uso es `reservations.memory`, y Compose lo aplica también fuera de
+    Swarm. Si las reservas no caben, la máquina está sobrevendida de verdad.
+    """
+    reservas = {
+        nombre: _a_mib(r)
+        for nombre, servicio in servicios.items()
+        if (r := _reserva(servicio))
     }
-    total = sum(techos.values())
+    total = sum(reservas.values())
     disponible = MEMORIA_DE_LA_VM_MIB - RESERVA_DEL_SISTEMA_MIB
 
     assert total <= disponible, (
-        f"los techos suman {total} MiB y la máquina deja {disponible} MiB para contenedores "
+        f"las reservas suman {total} MiB y la máquina deja {disponible} MiB para contenedores "
         f"({MEMORIA_DE_LA_VM_MIB} menos {RESERVA_DEL_SISTEMA_MIB} de reserva). Reparto actual: "
-        f"{techos}.\n\n"
-        f"Unos techos que no caben no protegen de nada: cada contenedor cree tener permiso para "
-        f"crecer hasta el suyo, y si varios lo hacen a la vez el que muere es el sistema. O se "
-        f"bajan, o la máquina tiene que crecer — y eso último es una decisión con factura."
+        f"{reservas}.\n\n"
+        f"Una reserva es lo que el contenedor espera usar de forma sostenida. Si la suma no cabe, "
+        f"la máquina está sobrevendida en el caso NORMAL, no en el pico — y eso no se arregla "
+        f"escalonando picos: o se bajan, o la máquina tiene que crecer."
+    )
+
+
+def test_ningun_techo_suelto_supera_la_maquina(servicios: dict) -> None:
+    """Sobreasignar es repartir picos que no coinciden; no es dar barra libre a uno solo.
+
+    La sobreasignación se sostiene sobre que los picos no son concurrentes. Ese argumento deja de
+    valer en cuanto **un** contenedor puede, él solo, agotar la máquina: entonces el que mata ya no
+    es el cgroup sino el OOM del kernel, que elige a su criterio y se lleva por delante a los
+    agentes de Google — que fueron los primeros en caer el 2026-09-24 y son justo los que permiten
+    diagnosticar cuando ya no se puede entrar.
+    """
+    disponible = MEMORIA_DE_LA_VM_MIB - RESERVA_DEL_SISTEMA_MIB
+    pasados = {
+        nombre: _a_mib(t)
+        for nombre, servicio in servicios.items()
+        if (t := _techo(servicio)) and _a_mib(t) > disponible
+    }
+
+    assert not pasados, (
+        f"estos techos superan por sí solos lo que la máquina deja para contenedores "
+        f"({disponible} MiB): {pasados}.\n\n"
+        f"Un techo así no acota nada: el contenedor llega al límite de la máquina antes que al "
+        f"suyo, y entonces no muere él, muere el sistema."
     )
