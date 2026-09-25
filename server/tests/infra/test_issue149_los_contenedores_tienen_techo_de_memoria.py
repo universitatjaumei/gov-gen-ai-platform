@@ -59,14 +59,39 @@ import yaml
 RAIZ = Path(__file__).resolve().parents[3]
 COMPOSE = RAIZ / "deploy" / "vm" / "docker-compose.vm.yml"
 
-#: Lo que la máquina tiene. Si cambia, este número cambia con ella — y los dos test de abajo son
-#: los que obligan a mirarlo.
-#:
-#: **`e2-medium` desde el 2026-09-25.** Estuvo en `e2-small` (1.976 MiB) hasta que la reingesta
-#: del corpus no cupo: el cargador confirma una transacción por asistente, así que retiene todo lo
-#: que va a escribir, y la Ley 9/2017 —4.330 fragmentos— murió con exit 137 contra un techo de
-#: 768M. Un documento es la unidad mínima de carga, o sea que no había forma de trocearlo más.
-MEMORIA_DE_LA_VM_MIB = 3924
+#: El aprovisionador versionado: la única fuente de qué máquina se crea.
+PROVISION = RAIZ / "scripts" / "gcp_provision_vm.sh"
+
+#: RAM **utilizable** de cada tipo, que no es la nominal: una `e2-small` de 2 GB deja 1.976 MiB
+#: y una `e2-medium` de 4 GB deja 3.924, medidos con `free -m` en la propia máquina.
+RAM_UTILIZABLE_MIB = {"e2-small": 1976, "e2-medium": 3924}
+
+
+def _tipo_de_maquina() -> str:
+    """El tipo que crea el aprovisionador, leído de él y no copiado aquí.
+
+    **Lo señaló la revisión de la PR #166 y tenía razón.** La primera versión llevaba
+    `MEMORIA_DE_LA_VM_MIB = 3924` escrito a mano, mientras `gcp_provision_vm.sh` seguía creando
+    una `e2-small`. Los dos guardarraíles pasaban en verde porque miraban ficheros distintos, y
+    entre los dos afirmaban cosas incompatibles: una VM recreada habría tenido 1.976 MiB con un
+    techo de 2.560M para `app`, o sea el mismo OOM que este fichero existe para impedir.
+
+    Es la misma trampa que ya costó una lección: dos comprobaciones que se contradicen no fallan,
+    porque ninguna ve a la otra. Derivarlo de una sola fuente es lo que lo hace imposible.
+    """
+    texto = PROVISION.read_text(encoding="utf-8")
+    m = re.search(r'^TIPO="([a-z0-9-]+)"', texto, re.MULTILINE)
+    assert m, f"no se encuentra `TIPO=` en {PROVISION.name}; este test ya no sabe leerlo"
+    tipo = m.group(1)
+    assert tipo in RAM_UTILIZABLE_MIB, (
+        f"el aprovisionador crea una `{tipo}` y aquí no está medida su RAM utilizable. "
+        f"Mídela con `free -m` en la máquina y añádela a RAM_UTILIZABLE_MIB — no la deduzcas "
+        f"de los GB nominales, porque el sistema se queda una parte."
+    )
+    return tipo
+
+
+MEMORIA_DE_LA_VM_MIB = RAM_UTILIZABLE_MIB[_tipo_de_maquina()]
 
 #: Lo que se deja libre para el sistema operativo, `dockerd`, los agentes de Google y la caché de
 #: disco. No es un margen de cortesía: los agentes fueron lo primero que murió el 2026-09-24, y
@@ -199,6 +224,45 @@ def test_las_reservas_caben_en_la_maquina(servicios: dict) -> None:
         f"Una reserva es lo que el contenedor espera usar de forma sostenida. Si la suma no cabe, "
         f"la máquina está sobrevendida en el caso NORMAL, no en el pico — y eso no se arregla "
         f"escalonando picos: o se bajan, o la máquina tiene que crecer."
+    )
+
+
+#: Los que pueden estar en su pico A LA VEZ. La reingesta del corpus es manual y puede coincidir
+#: con alguien ejecutando un guion; `migrate` no entra porque corre durante el despliegue, cuando
+#: nadie está reingiriendo.
+PICOS_QUE_COINCIDEN = ("app", "script-sandbox")
+
+
+def test_el_peor_caso_concurrente_cabe(servicios: dict) -> None:
+    """La sobreasignación se sostiene sobre una cuenta, y la cuenta tiene que estar comprobada.
+
+    **Lo pidió la revisión de la PR #166 y tenía razón dos veces.** Primero porque una cuenta que
+    vive sólo en un comentario envejece sin avisar: alguien sube un techo, el comentario sigue
+    diciendo que cabe, y nadie lo suma otra vez. Y segundo porque **la cuenta estaba mal**: decía
+    que 2.560 + 512 + 200 = 3.272 MiB cabían en «3.924 menos lo del sistema», que son 3.224. Se
+    pasaba por 48 MiB, o sea que el peor caso documentado como seguro era exactamente el OOM
+    global que este fichero existe para impedir.
+
+    El arreglo no fue reescribir el comentario: fue bajar el techo de `app` a 2.048M —cuatro veces
+    el pico medido en la reingesta real, que fueron 475 MiB— y comprobarlo aquí.
+    """
+    picos = {n: _a_mib(_techo(servicios[n])) for n in PICOS_QUE_COINCIDEN if n in servicios}
+    # Los demás no están en su pico, pero sí consumiendo lo que reservaron.
+    resto = {
+        n: _a_mib(r)
+        for n, s in servicios.items()
+        if n not in PICOS_QUE_COINCIDEN and (r := _reserva(s))
+    }
+    total = sum(picos.values()) + sum(resto.values())
+    disponible = MEMORIA_DE_LA_VM_MIB - RESERVA_DEL_SISTEMA_MIB
+
+    assert picos, f"no se han encontrado los servicios {PICOS_QUE_COINCIDEN} en el compose"
+    assert total <= disponible, (
+        f"el peor caso concurrente suma {total} MiB y la máquina deja {disponible}. "
+        f"Picos simultáneos: {picos}; el resto en su reserva: {resto}.\n\n"
+        f"Cuando varios llegan al pico a la vez, el que mata ya no es el cgroup del contenedor "
+        f"sino el OOM del kernel, y ése elige a su criterio: se cambia un fallo acotado y "
+        f"atribuible por uno global. Es lo que pasó el 2026-09-24."
     )
 
 
