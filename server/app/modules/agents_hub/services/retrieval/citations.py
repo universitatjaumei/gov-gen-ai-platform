@@ -8,7 +8,6 @@ que sale la respuesta, no el documento de 40 páginas.
 from __future__ import annotations
 
 import os
-import re
 
 # ── Cita al sitio publicado (PUB.3) ───────────────────────────────────────────────────
 #
@@ -47,10 +46,29 @@ def _slug_de(documento) -> str | None:
 # La señal es explícita en el corpus y no hay que deducirla de la URL ni del título.
 TIPO_EXTERNA = "norma_externa"
 
-# El BOE ancla los artículos de su texto consolidado como `#a118`. Sólo se traduce eso:
-# para disposiciones adicionales o transitorias usa otra forma, y **un ancla inventada es
-# peor que ninguna** —lleva a un punto que no existe sin que se note—.
-_ARTICULO = re.compile(r"^art-(\d+)$")
+# **Aquí se tradujo `art-118` a `#a118` hasta el 2026-09-24, y era una regla inventada.**
+#
+# El principio que la acompañaba era bueno —«un ancla inventada es peor que ninguna: lleva a un
+# punto que no existe sin que se note»— y el hecho, falso: se daba por supuesto que el BOE ancla
+# siempre los artículos por su número. **No lo hace.** Usa dos esquemas según la norma, y sólo
+# coinciden en los artículos de un dígito:
+#
+#     Ley Orgánica 6/2001    #a110  → Artículo 110   (el ancla ES el número de artículo)
+#     Ley 9/2017 Contratos   #a1-10 → Artículo 18    (identificador de bloque; el propio BOE lo
+#                                                     marca como «[Bloque 26: #a1-10]»)
+#
+# El barrido del corpus encontró **785 anclas rotas, todas del BOE y ninguna de nuestro sitio**,
+# concentradas en nueve normas. De la Ley de Contratos salieron 338: exactamente todos sus
+# artículos del 10 en adelante, porque la regla acertaba del 1 al 9 y fallaba en el resto.
+#
+# Y ni el esquema bueno es seguro: en la 6/2001 el `#a114` no existe porque ese artículo está
+# derogado.
+#
+# **No hay fórmula que arregle esto**: para saber qué ancla lleva al artículo 18 hay que leer la
+# página. Mientras no se lea, se cita la norma **sin fragmento** — el enlace lleva a la cabecera
+# del documento correcto en vez de a un punto equivocado del documento correcto.
+#
+# Resolverlas en la ingesta es viable y tiene issue propia.
 
 
 def _es_externa(documento) -> bool:
@@ -66,10 +84,6 @@ def _url_en_el_diario_oficial(documento, metadata: dict | None) -> str:
         or getattr(documento, "canonical_url", None)
         or ""
     )
-    ancora = (metadata or {}).get("ancora") or ""
-    articulo = _ARTICULO.match(str(ancora))
-    if articulo and "boe.es" in base:
-        return f"{base.split('#', 1)[0]}#a{articulo.group(1)}"
     return base.split("#", 1)[0]
 
 

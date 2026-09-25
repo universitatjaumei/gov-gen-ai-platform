@@ -54,13 +54,40 @@ class TestNormaExterna:
         assert SITIO not in url, "cito nuestro sitio una norma que no tiene pagina alli"
         assert url.startswith(BOE_ACT)
 
-    def test_should_point_at_the_article_in_the_boe(self, monkeypatch):
-        """El BOE ancla los artículos como `#a118`, no como `#art-118`."""
+    def test_should_not_compose_an_anchor_for_the_boe_either(self, monkeypatch):
+        """Issue #152. El ancla del BOE **no se puede calcular** desde el número de artículo.
+
+        Este test decía lo contrario —que `art-118` compone `#a118`— y esa regla acertaba en los
+        nueve primeros artículos de cada ley y fallaba en todos los demás. **785 anclas rotas**
+        salieron del barrido del corpus, todas del BOE y ninguna de nuestro sitio.
+
+        **Lo medido el 2026-09-24**, que es lo que tumba la regla: el BOE usa **dos esquemas**
+        según la norma, y sólo coinciden en los artículos de un dígito.
+
+            Ley Orgánica 6/2001   #a110  → Artículo 110     (el ancla ES el artículo)
+            Ley 9/2017 Contratos  #a1-10 → Artículo 18      (el ancla es un identificador de
+                                                             bloque, y el propio BOE lo marca
+                                                             como «[Bloque 26: #a1-10]»)
+
+        De la 9/2017 salieron 338 anclas rotas: exactamente todos sus artículos del 10 en
+        adelante. Y en la 6/2001, `#a114` no existe porque ese artículo está derogado — así que
+        ni siquiera el esquema bueno es seguro.
+
+        No hay otra fórmula que arreglarlo: para saber qué ancla lleva al artículo 18 hay que
+        **leer la página**. Mientras no se lea, se cita la norma sin fragmento — que es la regla
+        que este módulo ya tenía escrita y que aquí se aplica de verdad: «un ancla inventada es
+        peor que ninguna, lleva a un punto que no existe sin que se note».
+
+        Resolverlas en la ingesta es viable y tiene su propia issue.
+        """
         monkeypatch.setenv(BASE_DEL_SITIO, SITIO)
 
-        url = url_de_cita(_externa(), {"ancora": "art-118"})
-
-        assert url == f"{BOE_ACT}#a118"
+        for ancora in ("art-118", "art-1", "art-9", "art-18"):
+            url = url_de_cita(_externa(), {"ancora": ancora})
+            assert url == BOE_ACT, (
+                f"se ha compuesto un ancla para `{ancora}`: {url}. El ancla del BOE no se deduce "
+                f"del número de artículo."
+            )
 
     def test_should_not_invent_an_anchor_the_gazette_does_not_use(self, monkeypatch):
         """Sólo se traduce `art-N`. Para disposiciones el BOE usa otra forma y no se adivina:
