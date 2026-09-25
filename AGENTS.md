@@ -46,6 +46,14 @@ si el prompt 5 rompe lo que hizo el 3, hay un punto exacto al que volver.
 desplegar, hilos de Copilot al mezclar. Tras decidir sobre un comentario de Copilot —arreglarlo o
 rebatirlo— **resuelve el hilo**; si no, la PR queda roja. Razón en el test homónimo.
 
+**Una issue resuelta a medias se retitula por lo que queda, no por lo que se encontró**, y lo ya
+hecho va **arriba del cuerpo**, no en un comentario al final. Una issue abierta cuyo título dice
+«Ningún contenedor tiene límite de memoria» afirma eso mientras siga abierta, aunque los techos
+lleven dos días desplegados — y el backlog es lo primero que lee quien evalúa el proyecto. Pasó:
+un análisis externo puntuó la disponibilidad sobre un defecto corregido, leyendo #149 y #2. Es el
+mismo defecto que obligó a renombrar un hito, y la misma regla que `docs/ESPECIFICACIONES.md`:
+**un rótulo que miente hace que nadie mire lo que hay dentro.**
+
 ### Se trabaja en `desarrollo`; `main` es para desplegar
 
 **Nunca commitees ni empujes a `main`.** `deploy.yml` dispara con `push: branches: [main]` y sólo
