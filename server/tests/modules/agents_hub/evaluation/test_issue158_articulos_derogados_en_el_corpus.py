@@ -63,15 +63,19 @@ class TestLaDesignacionSaleDelEncabezado:
         assert designacion("Artículo\xa035") == designacion("Artículo 35")
 
     def test_sin_espacio_ninguno_tambien_cruza(self):
-        """El corpus guarda `Artículo1. Objeto de la Ley` —**sin espacio**— en la Ley 39/2015 y en
-        la Ley 40/2015: el convertidor borró el espacio duro en vez de sustituirlo.
+        """La base guarda `Artículo1. Objeto de la Ley`, **sin separador**, en la Ley 39/2015 y en
+        la Ley 40/2015.
 
-        Lo caza este detector el 2026-09-25, y sólo porque lleva la cuenta de las designaciones
-        que no consigue leer: eran 292 de esas dos leyes. Si no la llevara, el cruce habría dado
-        cero para ambas —es decir, «ningún artículo derogado»— sin fallar ni una vez.
+        El `.md` sí lo trae: escribe `Artículo\xa01.` con espacio duro, que es como titula el BOE
+        esas dos normas. Quien lo borra es **nuestra ingesta**: `MarkdownHeaderTextSplitter` filtra
+        el encabezado con `str.isprintable`, y `'\xa0'.isprintable()` es `False`. Tiene issue
+        aparte, porque el encabezado mutilado es lo que el modelo lee como contexto.
 
-        Aquí se tolera para que el cruce no mienta. El encabezado mal formado es un defecto del
-        convertidor y se arregla allí.
+        Lo caza este detector el 2026-09-25, y sólo porque lleva la cuenta de las designaciones que
+        no consigue leer: eran 292 de esas dos leyes. Sin esa cuenta, el cruce habría dado cero
+        para ambas —es decir, «ningún artículo derogado»— sin fallar ni una vez.
+
+        Aquí se tolera para que el cruce no mienta mientras la ingesta no se arregle.
         """
         assert designacion("Artículo1. Objeto de la Ley") == designacion("Artículo 1. Objeto")
 
