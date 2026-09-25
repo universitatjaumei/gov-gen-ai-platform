@@ -68,6 +68,27 @@ if [ -z "$PROYECTO" ]; then
   exit 2
 fi
 
+# El tipo se valida contra los que el reparto de memoria tiene medidos, y lo señaló la revisión de
+# la PR #167: de nada sirve que el valor por defecto sea el bueno si `--machine-type e2-small`
+# recrea una máquina de 1.976 MiB mientras el compose reparte techos para 3.924. El guardarraíl
+# deduce la RAM de este fichero, así que aceptar aquí un tipo que ese guardarraíl no conoce
+# reproduce exactamente el desajuste que todo esto existe para impedir.
+#
+# Para añadir un tipo hacen falta dos cosas, y en este orden: medir su RAM utilizable con
+# `free -m` en la máquina —no deducirla de los GB nominales, que el sistema se queda una parte— y
+# darla de alta en RAM_UTILIZABLE_MIB del test. Entonces se añade aquí.
+TIPOS_SOPORTADOS="e2-medium"
+case " $TIPOS_SOPORTADOS " in
+  *" $TIPO "*) ;;
+  *)
+    echo "ERROR: --machine-type $TIPO no está soportado por este despliegue." >&2
+    echo "       Soportados: $TIPOS_SOPORTADOS" >&2
+    echo "       El reparto de memoria de deploy/vm/docker-compose.vm.yml está dimensionado" >&2
+    echo "       para la RAM de esos tipos, y su guardarraíl la deduce de este fichero." >&2
+    exit 2
+    ;;
+esac
+
 REGION="${ZONA%-*}"
 SA_EMAIL="$SA_NOMBRE@$PROYECTO.iam.gserviceaccount.com"
 ETIQUETA="govgenai"

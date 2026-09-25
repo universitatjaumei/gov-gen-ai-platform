@@ -246,7 +246,17 @@ def test_el_peor_caso_concurrente_cabe(servicios: dict) -> None:
     El arreglo no fue reescribir el comentario: fue bajar el techo de `app` a 2.048M —cuatro veces
     el pico medido en la reingesta real, que fueron 475 MiB— y comprobarlo aquí.
     """
-    picos = {n: _a_mib(_techo(servicios[n])) for n in PICOS_QUE_COINCIDEN if n in servicios}
+    # **Los dos tienen que estar, y lo señaló la revisión de la PR #167.** Con un `if n in
+    # servicios` bastaba con que `app` existiera: si alguien renombrara o quitara
+    # `script-sandbox`, su pico desaparecía de la cuenta **y el test seguía en verde**, afirmando
+    # que cabe un peor caso del que ya no forma parte el segundo sumando.
+    faltan = [n for n in PICOS_QUE_COINCIDEN if n not in servicios]
+    assert not faltan, (
+        f"estos servicios se declaran como picos concurrentes y no están en el compose: {faltan}. "
+        f"O el compose cambió de forma, o hay que revisar PICOS_QUE_COINCIDEN — lo que no vale es "
+        f"seguir sumando sin ellos, porque entonces la cuenta sale y no significa nada."
+    )
+    picos = {n: _a_mib(_techo(servicios[n])) for n in PICOS_QUE_COINCIDEN}
     # Los demás no están en su pico, pero sí consumiendo lo que reservaron.
     resto = {
         n: _a_mib(r)
@@ -256,7 +266,6 @@ def test_el_peor_caso_concurrente_cabe(servicios: dict) -> None:
     total = sum(picos.values()) + sum(resto.values())
     disponible = MEMORIA_DE_LA_VM_MIB - RESERVA_DEL_SISTEMA_MIB
 
-    assert picos, f"no se han encontrado los servicios {PICOS_QUE_COINCIDEN} en el compose"
     assert total <= disponible, (
         f"el peor caso concurrente suma {total} MiB y la máquina deja {disponible}. "
         f"Picos simultáneos: {picos}; el resto en su reserva: {resto}.\n\n"

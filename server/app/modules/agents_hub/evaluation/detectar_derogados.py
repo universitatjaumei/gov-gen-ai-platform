@@ -205,19 +205,24 @@ def _descargar_xml(identificador: str, timeout: float = 120.0) -> str:
 _IDENTIFICADOR = re.compile(r"(BOE-A-\d{4}-\d+)")
 
 
-#: Cómo dice el corpus que un precepto no rige. La clase `.derogat` del ancla —que la ingesta
-#: guarda en `chunk_metadata['estat']`— es la forma estructurada, y la que puede leer el
-#: recuperador. La marca en el texto es la que traen los preceptos que el BOE suprime dejando una
-#: `<version>` nueva, y que por tanto llegan sin clase en el ancla. Valen las dos.
+# ─────────────── Cómo dice el corpus que un precepto no rige ───────────────
+#
+# Dos formas, y valen las dos. La clase `.derogat` del ancla —que la ingesta guarda en
+# `chunk_metadata['estat']`— es la estructurada, y la única que puede leer el recuperador. La marca
+# en el texto es la que traen los preceptos que el BOE suprime dejando una `<version>` nueva, que
+# por tanto llegan sin clase en el ancla.
+#
+# **Una sola definición de cada una, y la señaló la revisión de la PR #167.** La primera versión
+# traía un `re.compile` en Python *además* del patrón escrito a mano dentro de la consulta, y el
+# CLI usaba el de la consulta: dos gramáticas independientes de lo mismo, de las cuales una no la
+# ejecutaba nadie. Eso no es redundancia, es una divergencia esperando a ocurrir — y ya había
+# empezado. Ahora el patrón es esta constante y la usa quien pregunta, que es la base de datos.
 ESTADOS_QUE_DECLARAN = ("derogat", "suprimit")
-_MARCA_EN_EL_TEXTO = re.compile(r"\*\*\((derogad|suprimid)", re.IGNORECASE)
 
-
-def declara_que_no_rige(estados: set, textos: list[str]) -> bool:
-    """Si el corpus dice, de alguna de las dos formas, que ese precepto no está en vigor."""
-    if estados & set(ESTADOS_QUE_DECLARAN):
-        return True
-    return any(_MARCA_EN_EL_TEXTO.search(t or "") for t in textos)
+#: Sintaxis de expresión regular POSIX, que es la que entiende el `~*` de Postgres. No se compila
+#: en Python porque en Python no la usa nadie: la pregunta se hace en la base para no traerse el
+#: contenido de decenas de miles de fragmentos.
+PATRON_MARCA = r"\*\*\((derogad|suprimid)"
 
 
 def _preceptos_del_documento(
@@ -303,9 +308,7 @@ async def _run(args: argparse.Namespace) -> int:
                             HubDocumentChunk.document_id.in_(documentos),
                             sa_or(
                                 estado.in_(ESTADOS_QUE_DECLARAN),
-                                HubDocumentChunk.content.op("~*")(
-                                    r"\*\*\((derogad|suprimid)"
-                                ),
+                                HubDocumentChunk.content.op("~*")(PATRON_MARCA),
                             ),
                         )
                         .distinct()

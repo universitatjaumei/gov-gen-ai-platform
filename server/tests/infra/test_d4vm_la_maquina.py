@@ -340,6 +340,29 @@ def test_el_tamano_de_la_maquina_es_el_medido() -> None:
     )
 
 
+def test_el_tipo_de_maquina_no_se_puede_sobrescribir_a_uno_sin_medir() -> None:
+    """El valor por defecto no basta: el guion acepta `--machine-type`.
+
+    **Lo señaló la revisión de la PR #167.** De poco sirve que `TIPO=` sea el bueno si alguien
+    recrea la máquina con `--machine-type e2-small`: saldría una VM de 1.976 MiB mientras el
+    compose reparte techos para 3.924 y su guardarraíl deduce la RAM **de este mismo fichero**.
+    Es el desajuste que la PR anterior arregló, reintroducido por la puerta de al lado.
+
+    Que el tipo por defecto sea correcto es una cosa; que no se pueda pedir otro que nadie ha
+    medido es la que de verdad sostiene el reparto.
+    """
+    texto = _texto(PROVISION)
+    assert "TIPOS_SOPORTADOS" in texto, (
+        "el guion acepta `--machine-type` sin comprobar que sea un tipo con la RAM medida. "
+        "Un tipo desconocido deja el reparto de memoria del compose describiendo una máquina "
+        "que no existe."
+    )
+    assert re.search(r"--machine-type \$TIPO no está soportado", texto), (
+        "la validación tiene que fallar con un mensaje que diga qué pasa y por qué, no con un "
+        "error genérico: quien recrea una VM no suele ser quien escribió el reparto."
+    )
+
+
 def test_el_aprovisionamiento_exige_proyecto_y_su_plan_en_seco_no_toca_nada() -> None:
     sin_proyecto = subprocess.run(
         [_BASH, str(PROVISION), "--dry-run"],
