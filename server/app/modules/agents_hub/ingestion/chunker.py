@@ -113,6 +113,39 @@ class NoopEnricher:
         return ""
 
 
+# Todos los separadores de la categoría Unicode `Zs` menos el espacio ASCII. Es un conjunto
+# cerrado: Unicode no añade caracteres a esta categoría.
+_SEPARADORES_RAROS = str.maketrans(
+    {
+        c: " "
+        for c in "\xa0           "
+        "   　"
+    }
+)
+
+
+def normalizar_separadores(texto: str) -> str:
+    """Todo separador Unicode pasa a ser un espacio normal (issue #164).
+
+    **Hay que hacerlo antes de partir por encabezados, no después.**
+    `MarkdownHeaderTextSplitter` limpia la línea del encabezado con
+    `"".join(filter(str.isprintable, linea))`, y `str.isprintable` da por no imprimible cualquier
+    separador de la categoría `Zs` que no sea el espacio ASCII. O sea que no lo sustituye: **lo
+    borra**, y el hueco ya no se puede recuperar sin inventárselo.
+
+    Pasó, y en producción: el BOE titula la Ley 39/2015 y la Ley 40/2015 con `Artículo\xa01.`, y
+    la base guardaba `Artículo1. Objeto de la Ley` en **343 encabezados de 7 normas**. El
+    encabezado no es decoración —es el contexto estructural que viaja al modelo en
+    `embedding_text` y lo que se enseña junto a la cita—, y `articulo1` tampoco es el mismo token
+    que `artículo 1` para la búsqueda de texto completo.
+
+    Se aplica al documento entero y no sólo a sus encabezados: el espacio duro abunda también en
+    el cuerpo del BOE («artículo\xa020 de la Ley»), y normalizar sólo el rótulo dejaría el mismo
+    artículo escrito de dos maneras dentro del mismo fragmento.
+    """
+    return texto.translate(_SEPARADORES_RAROS)
+
+
 def strip_anchor_tokens(texto: str) -> str:
     """Quita los tokens `{#...}` del texto visible.
 
@@ -430,7 +463,9 @@ class MarkdownChunker:
         base_metadata = metadata or {}
 
         chunks: list[Chunk] = []
-        for doc in self.md_splitter.split_text(content):
+        # Issue #164: antes de partir, porque el splitter **borra** los separadores raros del
+        # encabezado en vez de sustituirlos, y después ya no hay hueco que recuperar.
+        for doc in self.md_splitter.split_text(normalizar_separadores(content)):
             encabezados, ruta, ancora, clases = self._limpiar_encabezados(doc.metadata)
             estado = next((c for c in clases if c in ESTADOS_CONSOLIDACION), None)
             comun = {
