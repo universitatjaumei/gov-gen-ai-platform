@@ -131,6 +131,53 @@ class TestElMedidorNoMienteSolo:
         assert await comprobar_enlaces([], fetch) == []
 
 
+class TestNoMideUnSistemaQueNoExiste:
+    """El detector se niega a medir si no está configurado como el despliegue.
+
+    **Pasó el 2026-09-25.** Se ejecutó en un contenedor de un solo uso con
+    `--env-file /opt/govgenai/.env.runtime`, y `CORPUS_SITE_BASE_URL` **no está ahí**: vive en el
+    bloque `environment:` del compose. Sin ella, `url_de_cita` se salta la rama del sitio
+    publicado y compone la URL del PDF del portal.
+
+    El informe que salió de ahí decía **292 URL con 2 fallos**. Lo real eran **7.696 con 0**. Y la
+    diferencia no era de matiz: la ejecución sesgada **no comprobó ni una** de las miles de anclas
+    de nuestro sitio, que eran justamente las que el informe daba por buenas.
+
+    Lo importante es cómo falló: un medidor mal configurado **no da error, da una cifra más
+    pequeña y creíble**. Por eso esto termina el proceso en vez de avisar por la salida de error.
+    """
+
+    def test_sin_el_sitio_configurado_se_niega_a_medir(self):
+        import pytest as _pytest
+
+        from server.app.modules.agents_hub.evaluation.verificar_enlaces import (
+            comprobar_que_mide_lo_desplegado,
+        )
+
+        for vacio in (None, "", "   "):
+            with _pytest.raises(SystemExit, match="CORPUS_SITE_BASE_URL"):
+                comprobar_que_mide_lo_desplegado(vacio, sin_sitio_publicado=False)
+
+    def test_con_el_sitio_configurado_sigue_adelante(self):
+        from server.app.modules.agents_hub.evaluation.verificar_enlaces import (
+            comprobar_que_mide_lo_desplegado,
+        )
+
+        assert comprobar_que_mide_lo_desplegado("https://normativa.uji.es", False) is None
+
+    def test_un_despliegue_sin_sitio_lo_declara_y_pasa(self):
+        """No es un cerrojo: hay despliegues que legítimamente no publican sitio.
+
+        `citations.py` lo dice —vacía significa desactivado—, así que la bandera no es un rodeo:
+        convierte el hueco en una declaración de quien ejecuta.
+        """
+        from server.app.modules.agents_hub.evaluation.verificar_enlaces import (
+            comprobar_que_mide_lo_desplegado,
+        )
+
+        assert comprobar_que_mide_lo_desplegado(None, sin_sitio_publicado=True) is None
+
+
 class TestElCliNoSeCuelaEnCI:
 
     def test_el_modulo_no_sale_a_la_red_al_importarse(self):

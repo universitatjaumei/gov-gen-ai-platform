@@ -110,6 +110,45 @@ async def comprobar_enlaces(
     return hallazgos
 
 
+def comprobar_que_mide_lo_desplegado(base: str | None, sin_sitio_publicado: bool) -> None:
+    """Se niega a medir si falta `CORPUS_SITE_BASE_URL` y nadie ha dicho que falte a propósito.
+
+    **Pasó el 2026-09-25 y el resultado engañó.** El detector se ejecutó en un contenedor de un
+    solo uso al que se le pasaba `/opt/govgenai/.env.runtime`, y esa variable **no está ahí**:
+    vive en el bloque `environment:` del compose. Sin ella, `url_de_cita` se salta la rama del
+    sitio publicado y compone la URL del PDF del portal.
+
+    O sea que midió **un sistema que no existe**, y no lo dijo. Dio 292 URL con 2 fallos, que es
+    un resultado pequeño y creíble; lo real eran **7.696 URL con 0 fallos**. De paso dejó sin
+    comprobar las miles de anclas de nuestro sitio, que son justamente las que el informe
+    afirmaba estar bien.
+
+    Un medidor mal configurado no da error: da una cifra más cómoda. Por eso esto **falla** en vez
+    de avisar — un aviso por la salida de error se pierde entre el resto.
+
+    **Y no es un cerrojo**: un despliegue sin sitio publicado es una configuración soportada —el
+    propio `citations.py` dice que vacía significa desactivado—. Para ése está la bandera, que
+    convierte el hueco en una declaración.
+    """
+    if base and base.strip():
+        return
+    if sin_sitio_publicado:
+        print(
+            "AVISO: sin sitio publicado; las normas propias se comprobaran contra su PDF.",
+            file=sys.stderr,
+        )
+        return
+    raise SystemExit(
+        "CORPUS_SITE_BASE_URL no esta definida, asi que las normas propias se citarian contra "
+        "el PDF del portal y no contra el sitio publicado: se estaria midiendo un sistema "
+        "distinto del que hay desplegado.\n\n"
+        "Ojo: en la VM esa variable NO esta en `/opt/govgenai/.env.runtime`, esta en el bloque "
+        "`environment:` del compose. Para un contenedor de un solo uso hay que pasarla a mano:\n"
+        "    -e CORPUS_SITE_BASE_URL=$(docker exec govgenai_app printenv CORPUS_SITE_BASE_URL)\n\n"
+        "Si el despliegue de verdad no publica sitio, dilo con `--sin-sitio-publicado`."
+    )
+
+
 async def _fetch_real(timeout: float = 15.0) -> Fetch:
     """El acceso HTTP de verdad. `httpx` se importa aquí y no arriba: la lógica del veredicto
     corre en CI y no tiene por qué arrastrar la red."""
@@ -125,7 +164,14 @@ async def _fetch_real(timeout: float = 15.0) -> Fetch:
 
 
 async def _run(args: argparse.Namespace) -> int:
+    import os
+
     from sqlalchemy import select
+
+    # Lo primero, antes de tocar la base: si esto midiera otra configuracion, el resto sobra.
+    comprobar_que_mide_lo_desplegado(
+        os.getenv("CORPUS_SITE_BASE_URL"), args.sin_sitio_publicado
+    )
 
     from server.app.modules.agents_hub.database.connection import (
         create_async_engine,
@@ -224,6 +270,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--chatbot-id", required=True, type=uuid.UUID, dest="chatbot_id")
     parser.add_argument("--limite", type=int, default=0, help="0 = sin limite")
     parser.add_argument("--concurrencia", type=int, default=8)
+    parser.add_argument(
+        "--sin-sitio-publicado",
+        action="store_true",
+        dest="sin_sitio_publicado",
+        help="el despliegue no publica sitio de corpus; las normas propias se citan por su PDF",
+    )
     return asyncio.run(_run(parser.parse_args(argv)))
 
 
