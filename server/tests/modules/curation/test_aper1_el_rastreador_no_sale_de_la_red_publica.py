@@ -13,6 +13,8 @@ Dos niveles, y hacen falta los dos:
   de verdad. El contrato no puede verla, porque la redirección la decide el servidor remoto.
 """
 
+import inspect
+
 import httpx
 import pytest
 from pydantic import ValidationError
@@ -208,3 +210,26 @@ class TestNoHayOtraPuerta:
         cliente = cliente_de_rastreo("GovGenAI-Curacion/test")
         hooks = cliente.event_hooks["request"]
         assert hooks, "el cliente de rastreo no lleva ningún hook de petición"
+
+    def test_la_fabrica_instala_el_transporte_que_cierra_el_rebinding(self) -> None:
+        """Y el hook tampoco basta, que es el defecto de la issue #161.
+
+        Un hook mira la petición y la deja seguir; quien resuelve el nombre para abrir el socket
+        es el **transporte**. Mientras el cliente llevara sólo el hook, entre la comprobación y la
+        conexión quedaba una ventana para que un DNS hostil contestara otra cosa — y en esta VM
+        esa otra cosa es el servidor de metadatos de GCP.
+
+        Se comprueba el cableado y no la implementación: sin esto, quitar el transporte dejaría
+        todos los demás test de este fichero en verde, porque el hook sigue ahí y sigue haciendo
+        lo suyo. Sería exactamente el agujero de antes, sin que nada avisara.
+        """
+        cliente = cliente_de_rastreo("GovGenAI-Curacion/test")
+
+        transporte = cliente._transport
+        assert hasattr(transporte, "handle_async_request"), "no hay transporte que inspeccionar"
+        origen = inspect.getsource(type(transporte).handle_async_request)
+        assert "fijar_destino_validado" in origen, (
+            "el cliente de rastreo no lleva el transporte que conecta a la dirección ya "
+            "validada. Sin él vuelve a haber una resolución de DNS entre comprobar y conectar, "
+            "que es la ventana del rebinding (issue #161)."
+        )
