@@ -27,11 +27,16 @@ import caAuth from './locales/ca/auth.json'
 export const SUPPORTED_LANGUAGES = ['es', 'ca', 'en'] as const
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number]
 
-i18n
-  .use(LanguageDetector)
-  .use(initReactI18next)
-  .init({
-    resources: {
+/**
+ * La configuración de i18next, exportada para que se pueda **probar la de verdad**.
+ *
+ * Lo señaló la revisión de la PR #168: el test de la issue #16 montaba su propia instancia con
+ * las opciones copiadas a mano, así que seguía en verde aunque aquí cambiara el orden de
+ * detección, el idioma de reserva o el tratamiento de las variantes regionales. Comprobaba una
+ * copia, que es una forma cómoda de no comprobar nada.
+ */
+export const OPCIONES_I18N = {
+  resources: {
       es: { common: esCommon, chat: esChat, admin: esAdmin, scripts: esScripts, redaccion: esRedaccion, curation: esCuration, auth: esAuth },
       ca: { common: caCommon, chat: caChat, admin: caAdmin, scripts: caScripts, redaccion: caRedaccion, curation: caCuration, auth: caAuth },
       en: { common: enCommon, chat: enChat, admin: enAdmin, scripts: enScripts, redaccion: enRedaccion, curation: enCuration, auth: enAuth },
@@ -40,7 +45,7 @@ i18n
       'ca-ES': ['ca', 'es'],
       default: ['es'],
     },
-    supportedLngs: SUPPORTED_LANGUAGES,
+    supportedLngs: [...SUPPORTED_LANGUAGES],
     ns: ['common', 'chat', 'admin', 'scripts', 'redaccion', 'curation', 'auth'],
     defaultNS: 'common',
     interpolation: { escapeValue: false },
@@ -48,6 +53,8 @@ i18n
       order: ['localStorage', 'navigator'],
       caches: ['localStorage'],
     },
-  })
+}
+
+i18n.use(LanguageDetector).use(initReactI18next).init(OPCIONES_I18N)
 
 export default i18n

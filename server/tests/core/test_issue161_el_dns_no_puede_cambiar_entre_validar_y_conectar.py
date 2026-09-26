@@ -128,6 +128,71 @@ class TestLaVentanaDelRebinding:
             await fijar_destino_validado(_peticion("https://portal.example/x"), resolver=resolver)
 
 
+class TestLaUrlLogicaSobreviveALaConexion:
+    """La IP es para el socket; la URL que ve el resto del sistema sigue siendo la del portal.
+
+    **Regresión introducida y cazada por la revisión de la PR #168.** La primera versión dejaba la
+    petición apuntando a la IP y ahí se quedaba, así que `GenericSpider._descargar` guardaba
+    `str(resp.url)` —ya con la IP— como `x-final-url`, y `crawl()` usa ese valor para deduplicar
+    y para filtrar por dominio. Cada página con nombre se habría registrado como
+    `https://93.184.216.34/…`: deduplicación rota, filtro de dominio roto y enlaces resueltos
+    contra la dirección.
+
+    **Y los test de curación no lo vieron** porque montan `MockTransport`, que no pasa por este
+    transporte. El camino real no estaba cubierto por ninguno, que es justo como se cuela una
+    regresión de esta clase.
+    """
+
+    async def test_tras_la_peticion_la_url_vuelve_a_ser_la_del_portal(self, monkeypatch):
+        import httpx
+
+        from server.app.core.red_publica import transporte_a_la_direccion_validada
+
+        visto: dict[str, str] = {}
+
+        async def falso(self, request):
+            # Aquí es donde se abre el socket: tiene que ir a la dirección validada.
+            visto["al_conectar"] = request.url.host
+            visto["sni"] = request.extensions.get("sni_hostname", "")
+            visto["host"] = request.headers.get("Host", "")
+            return httpx.Response(200, request=request)
+
+        monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", falso)
+
+        transporte = transporte_a_la_direccion_validada(resolver=_resolvedor(["93.184.216.34"]))
+        peticion = _peticion("https://portal.example/seccion?a=1")
+        respuesta = await transporte.handle_async_request(peticion)
+
+        assert visto["al_conectar"] == "93.184.216.34", "no se conectó a la dirección validada"
+        assert visto["sni"] == "portal.example"
+        assert visto["host"] == "portal.example"
+        assert str(respuesta.url) == "https://portal.example/seccion?a=1", (
+            "la URL de la respuesta lleva la dirección en vez del portal: el rastreador la usa "
+            "como URL canónica para deduplicar y para filtrar por dominio."
+        )
+        assert str(peticion.url) == "https://portal.example/seccion?a=1"
+
+    async def test_la_url_se_restaura_aunque_la_peticion_falle(self, monkeypatch):
+        """Si sólo se restaurara en el camino bueno, un error dejaría la petición apuntando a la
+        IP — y es justo el objeto que httpx reutiliza para reintentos y redirecciones."""
+        import httpx
+
+        from server.app.core.red_publica import transporte_a_la_direccion_validada
+
+        async def falso(self, request):
+            raise httpx.ConnectError("no hay nadie al otro lado")
+
+        monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", falso)
+
+        transporte = transporte_a_la_direccion_validada(resolver=_resolvedor(["93.184.216.34"]))
+        peticion = _peticion("https://portal.example/x")
+
+        with pytest.raises(httpx.ConnectError):
+            await transporte.handle_async_request(peticion)
+
+        assert str(peticion.url) == "https://portal.example/x"
+
+
 class TestLoQueNoDebeRomper:
 
     async def test_una_direccion_literal_no_se_resuelve(self):

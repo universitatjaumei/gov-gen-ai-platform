@@ -259,8 +259,24 @@ def transporte_a_la_direccion_validada(*, resolver: Resolvedor | None = None, **
 
     class _Transporte(httpx.AsyncHTTPTransport):
         async def handle_async_request(self, request):
+            # **La dirección es para el socket; la URL lógica sigue siendo la del portal.**
+            #
+            # Lo señaló la revisión de la PR #168 y era una regresión de verdad: dejar la
+            # petición apuntando a la dirección se filtra a `Response.url`, que es lo que
+            # `GenericSpider._descargar` guarda como `x-final-url` y lo que `crawl()` usa para
+            # deduplicar y para filtrar por dominio. Cada página con nombre se habría registrado
+            # como `https://93.184.216.34/…`.
+            #
+            # Se restaura en `finally` y no al final del camino bueno: httpx **reutiliza este
+            # mismo objeto** para los reintentos y para construir la siguiente petición de una
+            # redirección, así que dejarlo con la dirección tras un error sería peor que no
+            # restaurarlo nunca.
+            original = request.url
             await fijar_destino_validado(request, resolver=resolver)
-            return await super().handle_async_request(request)
+            try:
+                return await super().handle_async_request(request)
+            finally:
+                request.url = original
 
     return _Transporte(**kwargs)
 

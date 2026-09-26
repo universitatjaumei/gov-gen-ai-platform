@@ -276,13 +276,18 @@ class TestElMedidorNoPuedeCallar:
             "<version/></bloque>"
             '<bloque id="au" tipo="precepto" fecha_caducidad="20190330" titulo="Artículo único">'
             "<version/></bloque>"
+            '<bloque id="n4" tipo="precepto" fecha_caducidad="20190330" titulo="Norma cuarta">'
+            "<version/></bloque>"
             "</texto></documento>"
         )
 
         caducados, sin_designacion, _ = bloques_caducados(xml, HOY)
 
-        assert caducados == {"articulo 35": "2019-03-30"}
-        assert sin_designacion == ["Artículo único"]
+        # «Artículo único» ya se lee —lo pidió la revisión de la PR #168—, así que el bloque que
+        # de verdad no se entiende es otro. Si se usara «Artículo único» aquí, este test estaría
+        # comprobando la cuenta de ilegibles con algo que dejó de serlo.
+        assert caducados == {"articulo 35": "2019-03-30", "articulo unico": "2019-03-30"}
+        assert sin_designacion == ["Norma cuarta"]
 
     def test_los_preceptos_del_corpus_sin_designacion_se_cuentan_aparte(self):
         """Y **un rótulo de estructura no cuenta como laguna**, que es lo que se separó el

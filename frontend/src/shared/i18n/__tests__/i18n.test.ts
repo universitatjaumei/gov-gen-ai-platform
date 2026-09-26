@@ -1,10 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { createInstance } from 'i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
-import i18n, { SUPPORTED_LANGUAGES } from '../index'
-import esCommon from '../locales/es/common.json'
-import caCommon from '../locales/ca/common.json'
-import enCommon from '../locales/en/common.json'
+import i18n, { OPCIONES_I18N, SUPPORTED_LANGUAGES } from '../index'
 
 beforeAll(async () => {
   await i18n.changeLanguage('es')
@@ -28,19 +25,14 @@ async function idiomaDetectado(idiomaDelNavegador: string): Promise<string> {
   })
   window.localStorage.clear()
 
+  // **Las opciones son las de producción, no una copia.** Lo señaló la revisión de la PR #168:
+  // con la configuración duplicada aquí, este test seguía en verde aunque `index.ts` cambiara el
+  // orden de detección o el idioma de reserva. Lo único que se cambia es la caché, porque
+  // guardar en `localStorage` haría que la primera detección contaminara las siguientes.
   const instancia = createInstance()
   await instancia.use(LanguageDetector).init({
-    resources: {
-      es: { common: esCommon },
-      ca: { common: caCommon },
-      en: { common: enCommon },
-    },
-    fallbackLng: { 'ca-ES': ['ca', 'es'], default: ['es'] },
-    supportedLngs: SUPPORTED_LANGUAGES as unknown as string[],
-    ns: ['common'],
-    defaultNS: 'common',
-    interpolation: { escapeValue: false },
-    detection: { order: ['localStorage', 'navigator'], caches: [] },
+    ...OPCIONES_I18N,
+    detection: { ...OPCIONES_I18N.detection, caches: [] },
   })
   return instancia.t('loading')
 }

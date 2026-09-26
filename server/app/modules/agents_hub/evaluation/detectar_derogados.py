@@ -90,6 +90,13 @@ def cuantos_sin_declarar(hallazgos: list[Derogado]) -> int:
 _ARTICULO = re.compile(
     r"^articulo\s*(\d{1,4})\s*(bis|ter|quater|quinquies|sexies)?(?:\s*[.,]|\s|$)"
 )
+
+#: «Artículo único» es la forma que usan los reales decretos que aprueban un reglamento: su
+#: articulado entero es uno solo. No lleva número, así que no cae en `_ARTICULO`, y la revisión
+#: de la PR #168 señaló que seguía sin leerse. Hoy no oculta ningún hallazgo —los tres casos del
+#: corpus están en normas sin texto consolidado en el BOE— pero es un precepto citable y
+#: derogable como cualquier otro.
+_ARTICULO_UNICO = re.compile(r"^articulo\s+unico(?:\s*[.,]|\s|$)")
 # ─────────────── Ordinales de disposición ───────────────
 #
 # **Portado de `converteix_boe.py`, que ya resuelve las 84 formas que aparecen de verdad en estas
@@ -176,6 +183,8 @@ def designacion(encabezado: str) -> str | None:
     plano = unicodedata.normalize("NFD", encabezado)
     plano = "".join(c for c in plano if not unicodedata.combining(c))
     plano = re.sub(r"\s+", " ", plano).strip().lower()
+    if _ARTICULO_UNICO.match(plano):
+        return "articulo unico"
     if m := _ARTICULO.match(plano):
         return f"articulo {m.group(1)}" + (f" {m.group(2)}" if m.group(2) else "")
     if m := _DISPOSICION.match(plano):
