@@ -240,6 +240,43 @@ class TestDistingueElCasoBuenoDelMalo:
         assert cuantos_sin_declarar(con_uno_crudo) == 1
 
 
+class TestUnaRenumeracionNoEsUnaDerogacion:
+    """El caso de la d.f. quinta de la Ley 47/2003, que lo destapó leyendo la ley.
+
+    En 2021 el BOE insertó una disposición final quinta nueva —la del Informe de Impacto de
+    Género— y la de entrada en vigor, que era la quinta, pasó a **sexta**. En el XML eso es un
+    bloque `dfquinta` caducado y un bloque `df` con una `<version>` nueva.
+
+    **No hay ningún precepto derogado**: hay un número que se ha movido, y el precepto que lo
+    tenía sigue vivo con otro. Leerlo como derogación hizo que el bloque muerto se quedara el
+    ancla buena (`df-5`), que la disposición vigente saliera como `df-5-2`, y que encima llevara
+    una nota diciendo que «el texto oficial numera esta unidad igual que una anterior», **que es
+    falso**: el BOE sólo tiene una. La duplicidad la fabricaba el convertidor.
+
+    Aquí se fija lo que el detector debe decir de eso, que depende de **cuántas anclas trae el
+    corpus**: con una, el convertidor resolvió bien y no hay nada que mirar.
+    """
+
+    def test_el_caso_sale_aparte_y_no_como_derogado(self):
+        """Marcarlo como derogado diría que una disposición vigente no rige."""
+        xml = (
+            '<documento><texto>'
+            '<bloque id="dfquinta" tipo="precepto" fecha_caducidad="20201231" '
+            'titulo="Disposición final quinta"><version/></bloque>'
+            '<bloque id="df" tipo="precepto" titulo="Disposición final quinta ">'
+            "<version/></bloque>"
+            "</texto></documento>"
+        )
+
+        caducados, _, sustituidas = bloques_caducados(xml, HOY)
+        hallazgos, _ = cruzar(
+            [Precepto("Disposición final quinta", "df-5", 2)], caducados
+        )
+
+        assert hallazgos == []
+        assert "disposicion final quinta" in sustituidas
+
+
 class TestElCruce:
 
     def test_un_precepto_caducado_es_un_hallazgo_con_su_fecha(self):

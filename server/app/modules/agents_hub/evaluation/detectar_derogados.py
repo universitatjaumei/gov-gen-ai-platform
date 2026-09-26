@@ -373,13 +373,28 @@ async def _run(args: argparse.Namespace) -> int:
                 f"{'declarado' if h.declarado else 'SIN_DECLARAR'}\t{ident}\t{h.ancla}"
                 f"\t{h.caducado_el}\t{h.fragmentos} fragmentos\t{h.encabezado[:90]}"
             )
-        # Reemplazos: el corpus puede traer la versión vieja, la nueva o las dos, y desde aquí no
-        # se distingue. Se dicen para que alguien mire, no se cuentan como derogados.
-        for h in cruzar(preceptos, sustituidas)[0]:
-            print(
-                f"revisar\t{ident}\t{h.ancla}\t{h.caducado_el}\t{h.fragmentos} fragmentos"
-                f"\t{h.encabezado[:90]}\tbloque caducado y otro vivo con el mismo titulo"
-            )
+        # **Renumeraciones.** Un bloque caducado cuya designación tiene además un bloque vivo no
+        # es una derogación: el BOE insertó un precepto nuevo con ese número y el que lo tenía
+        # pasó al siguiente. Pasó con la d.f. quinta de la Ley 47/2003, que en 2021 dejó de ser
+        # «Entrada en vigor» para ser la del Informe de Impacto de Género.
+        #
+        # **Lo que hay que mirar es si el corpus se quedó con las dos.** Si trae una sola ancla
+        # para esa designación, el convertidor resolvió bien y no hay nada que hacer; decirlo
+        # igualmente sería ruido con aspecto de hallazgo, y a la tercera vez que alguien lo mire
+        # sin encontrar nada dejará de mirarlo. Si trae dos, una es la numeración vieja.
+        renumeradas = cruzar(preceptos, sustituidas)[0]
+        por_designacion: dict[str, list[Derogado]] = defaultdict(list)
+        for h in renumeradas:
+            por_designacion[h.designacion].append(h)
+        for designacion_repetida, cuales in sorted(por_designacion.items()):
+            if len(cuales) < 2:
+                continue
+            for h in cuales:
+                print(
+                    f"revisar\t{ident}\t{h.ancla}\t{h.caducado_el}\t{h.fragmentos} fragmentos"
+                    f"\t{h.encabezado[:90]}\tel corpus trae {len(cuales)} anclas para "
+                    f"«{designacion_repetida}», y el BOE renumero: una es la numeracion vieja"
+                )
         total_hallazgos += len(hallazgos)
         total_sin_declarar += cuantos_sin_declarar(hallazgos)
         total_dudas += len(sin_titulo) + len(sin_encabezado)
