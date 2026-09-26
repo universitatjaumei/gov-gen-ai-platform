@@ -90,12 +90,78 @@ def cuantos_sin_declarar(hallazgos: list[Derogado]) -> int:
 _ARTICULO = re.compile(
     r"^articulo\s*(\d{1,4})\s*(bis|ter|quater|quinquies|sexies)?(?:\s*[.,]|\s|$)"
 )
+# ─────────────── Ordinales de disposición ───────────────
+#
+# **Portado de `converteix_boe.py`, que ya resuelve las 84 formas que aparecen de verdad en estas
+# normas.** El BOE escribe lo mismo de tres maneras —«vigesimoprimera», «vigésima primera» y
+# «décimo primera»— y las tres tienen que dar el MISMO número, que es lo que va a la clave del
+# cruce. Si no, la misma disposición produce dos claves y el cruce se parte en dos sin dar error.
+#
+# De ahí que la clave sea numérica (`disposicion adicional 21`) y no el texto: es lo único que no
+# depende de cómo esté escrita.
+_UNIDADES = {
+    "primera": 1, "primer": 1, "segunda": 2, "segundo": 2, "tercera": 3, "tercero": 3,
+    "cuarta": 4, "cuarto": 4, "quinta": 5, "quinto": 5, "sexta": 6, "sexto": 6,
+    "septima": 7, "septimo": 7, "octava": 8, "octavo": 8, "novena": 9, "noveno": 9,
+}
+_DECENAS = {
+    "decima": 10, "decimo": 10, "vigesima": 20, "vigesimo": 20, "trigesima": 30,
+    "trigesimo": 30, "cuadragesima": 40, "cuadragesimo": 40, "quincuagesima": 50,
+    "quincuagesimo": 50, "sexagesima": 60, "sexagesimo": 60,
+}
+#: Las que no se descomponen.
+_SUELTAS = {"unica": 1, "unico": 1, "undecima": 11, "duodecima": 12}
+
+
+def numero_ordinal(texto: str) -> tuple[int | None, str]:
+    """«quincuagésima séptima» → (57, ""). El sufijo recoge el `bis`, que es otra disposición."""
+    t = texto.strip()
+    sufijo = ""
+    if t.endswith("[sic]"):
+        t = t[:-5].strip()
+    for extra in ("bis", "ter", "quater"):
+        if t.endswith(" " + extra):
+            sufijo, t = f" {extra}", t[: -len(extra) - 1].strip()
+    if t in _SUELTAS:
+        return _SUELTAS[t], sufijo
+    partes = t.split()
+    if len(partes) == 1:
+        p = partes[0]
+        if p in _UNIDADES:
+            return _UNIDADES[p], sufijo
+        if p in _DECENAS:
+            return _DECENAS[p], sufijo
+        for raiz, decena in _DECENAS.items():
+            if p.startswith(raiz[:-1]):  # decim-, vigesim-, trigesim-
+                # La vocal de unión se comporta de dos maneras y las dos aparecen en el BOE:
+                # «decimo|tercera» la pone y «decim|octava» la comparte con la unidad. Se prueban
+                # las tres lecturas en vez de adivinar una.
+                for cand in (cua := p[len(raiz) - 1 :], cua[1:] if cua[:1] == "o" else "", "o" + cua):
+                    if cand in _UNIDADES:
+                        return decena + _UNIDADES[cand], sufijo
+        return None, sufijo
+    if len(partes) == 2 and partes[0] in _DECENAS and partes[1] in _UNIDADES:
+        return _DECENAS[partes[0]] + _UNIDADES[partes[1]], sufijo
+    return None, sufijo
+
+
 _DISPOSICION = re.compile(
-    r"^(disposicion\s+(?:adicional|transitoria|derogatoria|final)\s+"
-    r"(?:unica|primera|segunda|tercera|cuarta|quinta|sexta|septima|octava|novena|decima"
-    r"|undecima|duodecima|decimo\s*\w{4,12}|vigesimo\s*\w{0,12}|vigesima))"
-    r"(?:\s*[.,]|$)"
+    r"^disposicion\s+(adicional|transitoria|derogatoria|final)\s*([a-z\s\[\]]{0,40}?)(?:\s*[.,]|$)"
 )
+
+#: Rótulos de estructura. No designan ningún precepto, así que no tener designación es lo
+#: correcto y **no es una laguna de cobertura**. Mientras fueran en el mismo saco que los
+#: preceptos ilegibles, el número no decía nada.
+_ROTULO = re.compile(
+    r"^(preambulo|seccion|subseccion|anexo|capitulo|titulo|libro|parte)\b"
+)
+
+
+def no_es_precepto(encabezado: str) -> bool:
+    """Si el encabezado es un rótulo de estructura y no un precepto citable."""
+    plano = unicodedata.normalize("NFD", encabezado or "")
+    plano = "".join(c for c in plano if not unicodedata.combining(c))
+    return bool(_ROTULO.match(re.sub(r"\s+", " ", plano).strip().lower()))
 
 
 def designacion(encabezado: str) -> str | None:
@@ -113,7 +179,12 @@ def designacion(encabezado: str) -> str | None:
     if m := _ARTICULO.match(plano):
         return f"articulo {m.group(1)}" + (f" {m.group(2)}" if m.group(2) else "")
     if m := _DISPOSICION.match(plano):
-        return re.sub(r"\s+", " ", m.group(1))
+        familia, ordinal = m.group(1), re.sub(r"\s+", " ", m.group(2)).strip()
+        # Sin ordinal es la única, que es como la ancla el corpus: `dd-1`.
+        numero, sufijo = numero_ordinal(ordinal) if ordinal else (1, "")
+        if numero is None:
+            return None
+        return f"disposicion {familia} {numero}{sufijo}"
     return None
 
 
@@ -168,14 +239,23 @@ def bloques_caducados(
 
 def cruzar(
     preceptos: list[Precepto], caducados: dict[str, str]
-) -> tuple[list[Derogado], list[str]]:
-    """Los preceptos del corpus que el BOE ha caducado, y los encabezados que no se pudieron leer."""
+) -> tuple[list[Derogado], list[str], list[str]]:
+    """`(hallazgos, ilegibles, no_aplican)`.
+
+    **La tercera lista se separó de la segunda el 2026-09-26, y es lo que permitió cerrar la
+    cuenta.** Antes iban juntas bajo «designaciones no legibles», y con 120 no se podía saber si
+    era mucho o era cero: un preámbulo no es cobertura que falte, una disposición trigésima sí.
+    Medido entonces: de 174, **41 eran rótulos de estructura** y 79 preceptos de verdad.
+    """
     hallazgos: list[Derogado] = []
     sin_designacion: list[str] = []
+    no_aplican: list[str] = []
     for p in preceptos:
         clave = designacion(p.encabezado)
         if clave is None:
-            sin_designacion.append(p.encabezado)
+            (no_aplican if no_es_precepto(p.encabezado) else sin_designacion).append(
+                p.encabezado
+            )
             continue
         if clave in caducados:
             hallazgos.append(
@@ -183,7 +263,7 @@ def cruzar(
                     clave, p.encabezado, p.ancla, p.fragmentos, caducados[clave], p.declarado
                 )
             )
-    return hallazgos, sin_designacion
+    return hallazgos, sin_designacion, no_aplican
 
 
 def _descargar_xml(identificador: str, timeout: float = 120.0) -> str:
@@ -346,7 +426,7 @@ async def _run(args: argparse.Namespace) -> int:
         )
 
     hoy = date.today()
-    total_hallazgos = total_dudas = total_sin_declarar = 0
+    total_hallazgos = total_dudas = total_sin_declarar = total_no_aplican = 0
     for ident, por_ancla in sorted(por_norma.items()):
         try:
             xml = _descargar_xml(ident)
@@ -358,7 +438,7 @@ async def _run(args: argparse.Namespace) -> int:
             continue
         caducados, sin_titulo, sustituidas = bloques_caducados(xml, hoy)
         preceptos = _preceptos_del_documento(por_ancla)
-        hallazgos, sin_encabezado = cruzar(preceptos, caducados)
+        hallazgos, sin_encabezado, no_aplican = cruzar(preceptos, caducados)
         for h in hallazgos:
             # **La distinción que importa.** `SIN_DECLARAR` es el defecto: el corpus guarda el
             # articulado como si rigiera. `declarado` es el caso correcto —el §5 del contrato
@@ -398,10 +478,12 @@ async def _run(args: argparse.Namespace) -> int:
         total_hallazgos += len(hallazgos)
         total_sin_declarar += cuantos_sin_declarar(hallazgos)
         total_dudas += len(sin_titulo) + len(sin_encabezado)
+        total_no_aplican += len(no_aplican)
         print(
             f"# {ident}: {len(por_ancla)} preceptos · {len(caducados)} bloques caducados en el BOE"
             f" · {len(hallazgos)} en el corpus ({cuantos_sin_declarar(hallazgos)} sin declarar)"
             f" · {len(sin_titulo) + len(sin_encabezado)} sin leer"
+            f" · {len(no_aplican)} rotulos que no son preceptos"
             f"\t{titulos.get(ident, '')[:60]}",
             file=sys.stderr,
         )
@@ -411,8 +493,10 @@ async def _run(args: argparse.Namespace) -> int:
     print(
         f"{total_hallazgos} preceptos con el bloque caducado en el BOE, de {len(por_norma)} normas"
         f" — de ellos {total_sin_declarar} SIN DECLARAR, que es el defecto"
-        f" ({total_dudas} designaciones no legibles, {len(fuera_de_alcance)} normas sin texto "
-        f"consolidado en el BOE)",
+        f"\n  Cobertura: {total_dudas} preceptos que NO se saben leer"
+        f" (eso es lo unico que falta por cubrir),"
+        f" {total_no_aplican} rotulos que no son preceptos,"
+        f" {len(fuera_de_alcance)} normas sin texto consolidado en el BOE",
         file=sys.stderr,
     )
     # Falla por el defecto, no por el inventario. Los preceptos derogados se quedan en el corpus a
