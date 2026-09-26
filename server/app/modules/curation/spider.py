@@ -64,13 +64,24 @@ def cliente_de_rastreo(user_agent: str, *, transport: Any = None):
     """
     import httpx
 
-    from server.app.core.red_publica import hook_de_destino_publico
+    from server.app.core.red_publica import (
+        hook_de_destino_publico,
+        transporte_a_la_direccion_validada,
+    )
 
+    # **Dos capas, y hacen cosas distintas (issue #161).** El hook valida pronto y es quien da el
+    # mensaje de por qué no se pide una URL, redirecciones incluidas. Pero un hook **no puede
+    # cerrar el DNS rebinding**: mira la petición y la deja seguir, y quien resuelve el nombre
+    # para conectar es el transporte. Por eso el transporte vuelve a comprobar y **conecta a la
+    # dirección que acaba de validar**, que es el único punto donde esa ventana se cierra.
+    #
+    # Sí, eso resuelve el nombre dos veces. Es esfuerzo duplicado, no criterio duplicado: la
+    # seguridad la garantiza la segunda, porque es la que decide a dónde se abre el socket.
     return httpx.AsyncClient(
         follow_redirects=True,
         timeout=10.0,
         headers={"User-Agent": user_agent},
-        transport=transport,
+        transport=transport if transport is not None else transporte_a_la_direccion_validada(),
         event_hooks={"request": [hook_de_destino_publico()]},
     )
 

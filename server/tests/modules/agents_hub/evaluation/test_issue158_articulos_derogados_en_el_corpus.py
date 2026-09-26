@@ -54,7 +54,7 @@ class TestLaDesignacionSaleDelEncabezado:
         disposición frente a 9.192 de artículo."""
         assert (
             designacion("Disposición adicional primera. Régimen jurídico de los convenios")
-            == "disposicion adicional primera"
+            == "disposicion adicional 1"
         )
 
     def test_el_espacio_duro_no_crea_una_designacion_distinta(self):
@@ -86,6 +86,110 @@ class TestLaDesignacionSaleDelEncabezado:
     def test_lo_que_no_es_un_precepto_no_se_inventa_designacion(self):
         assert designacion("CAPÍTULO III. Disposiciones comunes") is None
         assert designacion("") is None
+
+
+class TestLosOrdinalesCompuestos:
+    """Las disposiciones altas se nombran con ordinales compuestos, y son la mayoría del residuo.
+
+    **Medido el 2026-09-26**: de las 174 designaciones que el detector no sabía leer, **79 eran
+    preceptos de verdad** y casi todas del mismo patrón —«vigésima primera», «trigésima novena»,
+    «cuadragésima séptima»—. La Ley 9/2017 llega a la quincuagésima séptima.
+
+    No hay que inventar nada: `converteix_boe.py` ya resuelve las **84 formas** que aparecen de
+    verdad en estas normas, y esta es la misma lógica. La clave es **numérica** a propósito,
+    porque el BOE escribe lo mismo de tres maneras —«vigesimoprimera», «vigésima primera» y
+    «décimo primera»— y las tres tienen que dar el mismo número o el cruce se parte en dos.
+    """
+
+    def test_la_forma_partida(self):
+        assert designacion("Disposición adicional vigésima primera. Contratos") == (
+            "disposicion adicional 21"
+        )
+
+    def test_la_forma_junta(self):
+        assert designacion("Disposición adicional vigesimoprimera") == (
+            "disposicion adicional 21"
+        )
+
+    def test_las_tres_grafias_dan_lo_mismo(self):
+        """Es la razón de que la clave sea un número y no el texto."""
+        assert (
+            designacion("Disposición adicional decimotercera")
+            == designacion("Disposición adicional décima tercera")
+            == designacion("Disposición adicional décimo tercera")
+            == "disposicion adicional 13"
+        )
+
+    def test_las_decenas_altas(self):
+        assert designacion("Disposición adicional cuadragésima séptima") == (
+            "disposicion adicional 47"
+        )
+        assert designacion("Disposición adicional quincuagésima séptima [sic]") == (
+            "disposicion adicional 57"
+        )
+
+    def test_el_bis_es_una_disposicion_distinta(self):
+        """«Disposición adicional novena bis» no es la novena: tiene ancla propia."""
+        assert designacion("Disposición adicional quinta bis. Infraestructuras") == (
+            "disposicion adicional 5 bis"
+        )
+        assert designacion("Disposición adicional quinta") == "disposicion adicional 5"
+
+    def test_sin_ordinal_es_la_unica(self):
+        """«Disposición derogatoria» a secas, cuando sólo hay una, es la única — y así la ancla
+        el corpus, como `dd-1`."""
+        assert designacion("Disposición derogatoria") == "disposicion derogatoria 1"
+        assert designacion("Disposición derogatoria única") == "disposicion derogatoria 1"
+
+    def test_las_mayusculas_no_crean_una_designacion_distinta(self):
+        assert designacion("DISPOSICIÓN TRANSITORIA") == designacion(
+            "Disposición transitoria"
+        )
+
+
+class TestLoQueNoAplicaNoEsUnaLaguna:
+    """Un preámbulo no es cobertura que falte; una disposición trigésima sí.
+
+    **Mientras fueran en el mismo saco, el número no decía nada** — y por eso la issue #158 no se
+    podía cerrar: 120 «designaciones no legibles» no permitía saber si era mucho o era cero. De
+    las 174 medidas, **41 eran rótulos estructurales** que no designan ningún precepto y 54 eran
+    de normas sin texto consolidado en el BOE.
+    """
+
+    def test_los_rotulos_estructurales_no_son_preceptos(self):
+        from server.app.modules.agents_hub.evaluation.detectar_derogados import no_es_precepto
+
+        for rotulo in (
+            "Preámbulo",
+            "SECCIÓN 1. La Carta Europea del Investigador",
+            "ANEXO I. Clasificación de personal",
+            "CAPÍTULO III. Disposiciones comunes",
+            "TÍTULO VI. Del Registro Público",
+        ):
+            assert no_es_precepto(rotulo), rotulo
+
+    def test_un_precepto_de_verdad_no_se_descarta_como_rotulo(self):
+        from server.app.modules.agents_hub.evaluation.detectar_derogados import no_es_precepto
+
+        for enc in (
+            "Artículo 35. Ámbito objetivo",
+            "Disposición adicional trigésima novena. Régimen de contratación",
+            "Artículo 1 del anexo",
+        ):
+            assert not no_es_precepto(enc), enc
+
+    def test_el_cruce_los_devuelve_separados(self):
+        preceptos = [
+            Precepto("Artículo 35. Ámbito objetivo", "art-35", 7),
+            Precepto("Preámbulo", "preambul", 3),
+            Precepto("Vaya usted a saber", "raro-1", 1),
+        ]
+
+        hallazgos, ilegibles, no_aplican = cruzar(preceptos, {"articulo 35": "2019-03-30"})
+
+        assert [h.ancla for h in hallazgos] == ["art-35"]
+        assert ilegibles == ["Vaya usted a saber"]
+        assert no_aplican == ["Preámbulo"]
 
 
 class TestQueCuentaComoCaducado:
@@ -141,7 +245,7 @@ class TestQueCuentaComoCaducado:
         caducados, _, sustituidas = bloques_caducados(xml, HOY)
 
         assert caducados == {}
-        assert sustituidas == {"disposicion final quinta": "2020-12-31"}
+        assert sustituidas == {"disposicion final 5": "2020-12-31"}
 
     def test_un_bloque_que_no_es_precepto_no_se_mira(self):
         xml = (
@@ -172,23 +276,33 @@ class TestElMedidorNoPuedeCallar:
             "<version/></bloque>"
             '<bloque id="au" tipo="precepto" fecha_caducidad="20190330" titulo="Artículo único">'
             "<version/></bloque>"
+            '<bloque id="n4" tipo="precepto" fecha_caducidad="20190330" titulo="Norma cuarta">'
+            "<version/></bloque>"
             "</texto></documento>"
         )
 
         caducados, sin_designacion, _ = bloques_caducados(xml, HOY)
 
-        assert caducados == {"articulo 35": "2019-03-30"}
-        assert sin_designacion == ["Artículo único"]
+        # «Artículo único» ya se lee —lo pidió la revisión de la PR #168—, así que el bloque que
+        # de verdad no se entiende es otro. Si se usara «Artículo único» aquí, este test estaría
+        # comprobando la cuenta de ilegibles con algo que dejó de serlo.
+        assert caducados == {"articulo 35": "2019-03-30", "articulo unico": "2019-03-30"}
+        assert sin_designacion == ["Norma cuarta"]
 
     def test_los_preceptos_del_corpus_sin_designacion_se_cuentan_aparte(self):
+        """Y **un rótulo de estructura no cuenta como laguna**, que es lo que se separó el
+        2026-09-26: «CAPÍTULO III» no designa ningún precepto, así que no saber leerlo no es
+        cobertura que falte. Lo que cuenta es lo que **parece** un precepto y no se entiende."""
         preceptos = [
             Precepto("Artículo 35. Ámbito objetivo", "art-35", 7),
             Precepto("CAPÍTULO III", "cap-3", 2),
+            Precepto("Norma cuarta. De la contabilidad", "norma-4", 1),
         ]
 
-        _, sin_designacion = cruzar(preceptos, {"articulo 35": "2019-03-30"})
+        _, sin_designacion, no_aplican = cruzar(preceptos, {"articulo 35": "2019-03-30"})
 
-        assert sin_designacion == ["CAPÍTULO III"]
+        assert sin_designacion == ["Norma cuarta. De la contabilidad"]
+        assert no_aplican == ["CAPÍTULO III"]
 
 
 class TestDistingueElCasoBuenoDelMalo:
@@ -209,14 +323,14 @@ class TestDistingueElCasoBuenoDelMalo:
     def test_un_derogado_declarado_no_es_un_defecto(self):
         preceptos = [Precepto("Artículo 35. Ámbito objetivo", "art-35", 1, declarado=True)]
 
-        hallazgos, _ = cruzar(preceptos, {"articulo 35": "2019-03-30"})
+        hallazgos, _, _ = cruzar(preceptos, {"articulo 35": "2019-03-30"})
 
         assert [h.declarado for h in hallazgos] == [True]
 
     def test_un_derogado_sin_declarar_si_lo_es(self):
         preceptos = [Precepto("Artículo 35. Ámbito objetivo", "art-35", 7)]
 
-        hallazgos, _ = cruzar(preceptos, {"articulo 35": "2019-03-30"})
+        hallazgos, _, _ = cruzar(preceptos, {"articulo 35": "2019-03-30"})
 
         assert [h.declarado for h in hallazgos] == [False]
 
@@ -240,12 +354,49 @@ class TestDistingueElCasoBuenoDelMalo:
         assert cuantos_sin_declarar(con_uno_crudo) == 1
 
 
+class TestUnaRenumeracionNoEsUnaDerogacion:
+    """El caso de la d.f. quinta de la Ley 47/2003, que lo destapó leyendo la ley.
+
+    En 2021 el BOE insertó una disposición final quinta nueva —la del Informe de Impacto de
+    Género— y la de entrada en vigor, que era la quinta, pasó a **sexta**. En el XML eso es un
+    bloque `dfquinta` caducado y un bloque `df` con una `<version>` nueva.
+
+    **No hay ningún precepto derogado**: hay un número que se ha movido, y el precepto que lo
+    tenía sigue vivo con otro. Leerlo como derogación hizo que el bloque muerto se quedara el
+    ancla buena (`df-5`), que la disposición vigente saliera como `df-5-2`, y que encima llevara
+    una nota diciendo que «el texto oficial numera esta unidad igual que una anterior», **que es
+    falso**: el BOE sólo tiene una. La duplicidad la fabricaba el convertidor.
+
+    Aquí se fija lo que el detector debe decir de eso, que depende de **cuántas anclas trae el
+    corpus**: con una, el convertidor resolvió bien y no hay nada que mirar.
+    """
+
+    def test_el_caso_sale_aparte_y_no_como_derogado(self):
+        """Marcarlo como derogado diría que una disposición vigente no rige."""
+        xml = (
+            '<documento><texto>'
+            '<bloque id="dfquinta" tipo="precepto" fecha_caducidad="20201231" '
+            'titulo="Disposición final quinta"><version/></bloque>'
+            '<bloque id="df" tipo="precepto" titulo="Disposición final quinta ">'
+            "<version/></bloque>"
+            "</texto></documento>"
+        )
+
+        caducados, _, sustituidas = bloques_caducados(xml, HOY)
+        hallazgos, _, _ = cruzar(
+            [Precepto("Disposición final quinta", "df-5", 2)], caducados
+        )
+
+        assert hallazgos == []
+        assert "disposicion final 5" in sustituidas
+
+
 class TestElCruce:
 
     def test_un_precepto_caducado_es_un_hallazgo_con_su_fecha(self):
         preceptos = [Precepto("Artículo 35. Ámbito objetivo", "art-35", 7)]
 
-        hallazgos, _ = cruzar(preceptos, {"articulo 35": "2019-03-30"})
+        hallazgos, _, _ = cruzar(preceptos, {"articulo 35": "2019-03-30"})
 
         assert hallazgos == [
             Derogado(
@@ -261,19 +412,19 @@ class TestElCruce:
     def test_un_precepto_vigente_no_lo_es(self):
         preceptos = [Precepto("Artículo 42. Régimen general de garantías", "art-42", 3)]
 
-        hallazgos, _ = cruzar(preceptos, {"articulo 35": "2019-03-30"})
+        hallazgos, _, _ = cruzar(preceptos, {"articulo 35": "2019-03-30"})
 
         assert hallazgos == []
 
     def test_una_disposicion_caducada_tambien_se_detecta(self):
         preceptos = [Precepto("Disposición adicional primera. Régimen", "da-1", 2)]
 
-        hallazgos, _ = cruzar(preceptos, {"disposicion adicional primera": "2019-03-30"})
+        hallazgos, _, _ = cruzar(preceptos, {"disposicion adicional 1": "2019-03-30"})
 
         assert [h.ancla for h in hallazgos] == ["da-1"]
 
     def test_sin_preceptos_no_hay_hallazgos(self):
-        hallazgos, sin_designacion = cruzar([], {"articulo 35": "2019-03-30"})
+        hallazgos, sin_designacion, _ = cruzar([], {"articulo 35": "2019-03-30"})
 
         assert hallazgos == []
         assert sin_designacion == []

@@ -21,11 +21,18 @@ reconocimiento. Es el hallazgo M1 de la auditoría previa a abrir el repositorio
   que un portal público que redirige a una dirección privada no la alcanza. Comprobar sólo la URL
   de entrada no habría servido de nada, y es la mitad del defecto que se escapaba.
 
-**Lo que NO cierra, dicho aquí para que nadie lo suponga.** No cierra el *DNS rebinding*: entre
-resolver el nombre y abrir la conexión, httpx resuelve otra vez, y un DNS hostil puede devolver
-algo distinto en esa segunda vuelta. Cerrarlo exige conectar a la dirección ya resuelta —un
-transporte propio con `sni_hostname`— y eso es otro trabajo. Lo que sí cierra es el caso fácil:
-un nombre que publica una dirección privada, o las dos a la vez.
+**Y el DNS rebinding, cerrado el 2026-09-26 (issue #161).** Este fichero decía, con razón, que no
+lo cerraba: entre resolver el nombre y abrir la conexión httpx resolvía otra vez, y un DNS hostil
+podía contestar una dirección pública a la primera pregunta y `169.254.169.254` a la segunda. En
+la VM de GCP esa segunda respuesta llega al servidor de metadatos, donde están las credenciales de
+la cuenta de servicio.
+
+El problema no era qué se comprobaba sino **cuándo**, así que no se arregla comprobando mejor:
+`fijar_destino_validado` resuelve **una vez** y deja la petición apuntando a esa dirección, con el
+nombre conservado en `sni_hostname` y en la cabecera `Host` para que el certificado siga
+validándose contra quien debe. Va en el **transporte** y no en un hook, porque un hook mira la
+petición y la deja seguir: quien abre el socket es el transporte, y ahí es donde la ventana se
+cierra.
 
 **La válvula, y por qué existe.** Verificar curación sin salir a internet se hace con un
 `http.server` en `127.0.0.1`, que es justo lo que esto bloquea. Sin una forma declarada de
@@ -175,6 +182,103 @@ async def assert_destino_publico(url: str, *, resolver: Resolvedor | None = None
                 f"«{host}» resuelve a {texto}, que no es una dirección de la red pública. "
                 "El servidor no pide direcciones de su propia red."
             )
+
+
+async def _direcciones_publicas(host: str, resolver: Resolvedor) -> list[str]:
+    """Las direcciones del nombre, **todas** comprobadas. Levanta si alguna no es pública."""
+    try:
+        direcciones = await resolver(host)
+    except Exception as exc:  # noqa: BLE001 — cualquier fallo de resolución es un «no»
+        raise DestinoNoPublico(
+            f"«{host}» no se puede resolver ({type(exc).__name__}), así que no se pide. "
+            "Un nombre que no resuelve tampoco se puede rastrear."
+        ) from exc
+
+    if not direcciones:
+        raise DestinoNoPublico(f"«{host}» no resuelve a ninguna dirección.")
+
+    for texto in direcciones:
+        direccion = _direccion_o_none(texto)
+        if direccion is None or not _es_publica(direccion):
+            raise DestinoNoPublico(
+                f"«{host}» resuelve a {texto}, que no es una dirección de la red pública. "
+                "El servidor no pide direcciones de su propia red."
+            )
+    return direcciones
+
+
+async def fijar_destino_validado(request, *, resolver: Resolvedor | None = None) -> None:
+    """Deja la petición apuntando a la dirección **que se acaba de validar** (issue #161).
+
+    **Cierra la ventana del DNS rebinding, que hasta hoy estaba admitida por escrito en este
+    mismo fichero.** El problema no era qué se comprobaba sino *cuándo*: por buena que fuera la
+    comprobación, `httpx` resolvía el nombre otra vez para conectar, y un DNS hostil podía
+    contestar una dirección pública a la primera pregunta y `169.254.169.254` a la segunda. En
+    esta VM, esa segunda respuesta llega al servidor de metadatos de GCP, donde están las
+    credenciales de la cuenta de servicio.
+
+    Se resuelve **una sola vez** y se conecta a eso: la URL pasa a llevar la dirección, y el
+    nombre sobrevive en `sni_hostname` y en la cabecera `Host`. Las dos cosas son necesarias y no
+    son cosmética — el certificado se valida contra el nombre, y un servidor que aloja varios
+    sitios decide por la cabecera—. Cambiar la URL a secas convertiría un arreglo de seguridad en
+    una avería.
+
+    Se aplica en **cada** petición, redirecciones incluidas, porque va en el transporte.
+    """
+    assert_forma_publica(str(request.url))
+
+    host = request.url.host
+    if not host or _direccion_o_none(host) is not None:
+        return  # Una dirección literal ya la decidió `assert_forma_publica`.
+
+    if _valvula_abierta():
+        logger.warning(
+            "CRAWLER_ALLOW_PRIVATE_TARGETS está puesta: no se comprueba el destino de %s", host
+        )
+        return
+
+    direcciones = await _direcciones_publicas(host, resolver or _resolver_por_dns)
+
+    # La cabecera lleva el puerto sólo si la URL lo llevaba explícito; si no, se omite, que es lo
+    # que espera el otro extremo para los puertos por defecto.
+    autoridad = host if request.url.port is None else f"{host}:{request.url.port}"
+    request.url = request.url.copy_with(host=direcciones[0])
+    request.headers["Host"] = autoridad
+    request.extensions = {**request.extensions, "sni_hostname": host}
+
+
+def transporte_a_la_direccion_validada(*, resolver: Resolvedor | None = None, **kwargs):
+    """El transporte de `httpx` que conecta a la dirección ya comprobada.
+
+    Va en el transporte y no en un hook de petición porque **un hook no puede impedir la segunda
+    resolución**: mira la petición y la deja seguir, y quien conecta es el transporte. Aquí se
+    reescribe el destino antes de abrir la conexión, que es el único sitio donde la ventana se
+    cierra de verdad.
+    """
+    import httpx
+
+    class _Transporte(httpx.AsyncHTTPTransport):
+        async def handle_async_request(self, request):
+            # **La dirección es para el socket; la URL lógica sigue siendo la del portal.**
+            #
+            # Lo señaló la revisión de la PR #168 y era una regresión de verdad: dejar la
+            # petición apuntando a la dirección se filtra a `Response.url`, que es lo que
+            # `GenericSpider._descargar` guarda como `x-final-url` y lo que `crawl()` usa para
+            # deduplicar y para filtrar por dominio. Cada página con nombre se habría registrado
+            # como `https://93.184.216.34/…`.
+            #
+            # Se restaura en `finally` y no al final del camino bueno: httpx **reutiliza este
+            # mismo objeto** para los reintentos y para construir la siguiente petición de una
+            # redirección, así que dejarlo con la dirección tras un error sería peor que no
+            # restaurarlo nunca.
+            original = request.url
+            await fijar_destino_validado(request, resolver=resolver)
+            try:
+                return await super().handle_async_request(request)
+            finally:
+                request.url = original
+
+    return _Transporte(**kwargs)
 
 
 def hook_de_destino_publico(*, resolver: Resolvedor | None = None):
