@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -460,14 +460,18 @@ class IngestionWatcher:
         a eso por una barra de progreso no sale a cuenta hoy. El consumidor en vivo es
         `progress_callback`, que es por donde informa la carga masiva por consola.
         """
+        # Issue #159 — el candado va ANTES de nada, y decide en una sola operación.
+        if not await tomar_job(self._session, job_id):
+            logger.info(
+                "El job %s ya estaba en curso o terminado: no se procesa otra vez.", job_id
+            )
+            return
+
         job = await self._session.get(HubIngestionJob, job_id)
         if not job:
             return
 
         seguimiento = SeguimientoDeJob(self._anotar_progreso(job, progress_callback))
-        job.status = "running"
-        job.processing_started_at = datetime.now(timezone.utc)
-        await self._session.commit()
 
         tmp_path: str | None = None
         error: Exception | None = None
@@ -536,6 +540,42 @@ class IngestionWatcher:
                 logger.error("No se pudo guardar el estado 'failed' del job %s: %s", job_id, save_err, exc_info=True)
         else:
             await self._session.commit()
+
+
+#: Desde qué estados se puede empezar a procesar un job. `failed` entra a propósito: si no, un
+#: fallo transitorio dejaría el documento fuera del corpus para siempre y la única salida sería
+#: volver a subirlo.
+ESTADOS_QUE_SE_PUEDEN_TOMAR = ("pending", "failed")
+
+
+async def tomar_job(session: AsyncSession, job_id: uuid.UUID) -> bool:
+    """Marca el job como `running` y dice si **este** llamante se lo ha quedado (issue #159).
+
+    **Decide en una sola operación de base de datos, y ésa es toda la gracia.** Comprobar el
+    estado y escribirlo después deja una ventana entre la lectura y la escritura; dos tareas de
+    `BackgroundTasks` corren en el mismo bucle de eventos y ceden el control en cada `await`, así
+    que en esa ventana cabe una tarea entera. El `UPDATE ... WHERE status IN (...)` lo resuelve el
+    servidor: quien obtiene `rowcount == 1` se lo queda y el otro se va.
+
+    **Qué evita.** `run_job` no miraba el estado: ponía `running` y procesaba. Dos invocaciones
+    sobre el mismo `job_id` ingerían el documento **dos veces**, y unos fragmentos duplicados en
+    el corpus no se notan y no se deshacen solos — es peor que una consulta lenta, que al menos
+    se ve.
+
+    **Y un job atascado en `running` no queda bloqueado para siempre por un cronómetro**: el
+    estado lo decide quien reintente, poniéndolo en `failed`, y no una regla de caducidad que
+    habría que acertar.
+    """
+    resultado = await session.execute(
+        update(HubIngestionJob)
+        .where(
+            HubIngestionJob.id == job_id,
+            HubIngestionJob.status.in_(ESTADOS_QUE_SE_PUEDEN_TOMAR),
+        )
+        .values(status="running", processing_started_at=datetime.now(timezone.utc))
+    )
+    await session.commit()
+    return (resultado.rowcount or 0) == 1
 
 
 async def cleanup_temporary_chunks(session: AsyncSession, ttl_hours: int = 24) -> int:
