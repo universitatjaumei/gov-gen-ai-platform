@@ -539,15 +539,23 @@ class IngestionWatcher:
 
 
 async def cleanup_temporary_chunks(session: AsyncSession, ttl_hours: int = 24) -> int:
-    """Elimina chunks temporales que han superado el TTL."""
+    """Elimina los fragmentos temporales que han superado su tiempo de vida.
+
+    **Se borra en SQL, y el filtro entero va en el `WHERE` (issue #159).** La versión anterior
+    traía **todos** los fragmentos temporales de `hub_document_chunks` —163.762 filas en el corpus
+    de hoy— como objetos ORM, y comparaba la fecha **en Python**. Tres cosas mal a la vez: el
+    recorrido no tenía límite, cada objeto arrastra su vector de 3.072 dimensiones, y la
+    condición que de verdad reducía el conjunto se evaluaba después de haberlo traído entero.
+
+    Es la misma forma que dejó la VM 50 minutos sin responder el 2026-09-24, en una función que
+    además **borra**: un fallo aquí no se queda en una consulta lenta.
+    """
     cutoff = datetime.now(timezone.utc) - timedelta(hours=ttl_hours)
-    result = await session.execute(
-        select(HubDocumentChunk).where(HubDocumentChunk.is_temporary)
+    resultado = await session.execute(
+        delete(HubDocumentChunk).where(
+            HubDocumentChunk.is_temporary,
+            HubDocumentChunk.created_at < cutoff,
+        )
     )
-    deleted = 0
-    for chunk in result.scalars():
-        if chunk.is_temporary and chunk.created_at < cutoff:
-            await session.delete(chunk)
-            deleted += 1
     await session.commit()
-    return deleted
+    return resultado.rowcount or 0
